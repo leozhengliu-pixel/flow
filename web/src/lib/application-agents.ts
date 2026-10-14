@@ -4,7 +4,7 @@ function apiRequest<T>(path: string, workspace: string, options: RequestInit = {
   return request<T>(path, { ...options, headers: { 'Content-Type': 'application/json', 'X-Workspace-Key': workspace, ...options.headers } })
 }
 
-export type ApplicationInstallation = { id: string; workspaceKey: string; clientId: string; name: string; userId: string; installedBy: string; scopes: string[]; teamIds: string[]; allPublicTeams?: boolean; builtin: boolean; active: boolean; allTeams?: boolean; serverSuspended?: boolean; webhookUrl?: string; avatarUrl?: string; createdAt: string; updatedAt: string }
+export type ApplicationInstallation = { id: string; workspaceKey: string; clientId: string; name: string; userId: string; installedBy: string; scopes: string[]; teamIds: string[]; allPublicTeams?: boolean; builtin: boolean; active: boolean; allTeams?: boolean; serverSuspended?: boolean; withoutRealtime?: boolean; webhookUrl?: string; avatarUrl?: string; createdAt: string; updatedAt: string }
 /** A link an agent attaches to its session (a pull request, a run page). */
 export type ApplicationExternalUrl = { url: string; label?: string }
 /** One step of an agent session's plan (replaced as a whole by the agent). */

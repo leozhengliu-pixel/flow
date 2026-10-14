@@ -32,6 +32,10 @@ export interface CodingPromptIssue {
   description?: string;
   branchName: string;
   url: string;
+  /** The issue's team, written into the prompt's issue block. */
+  team?: string;
+  /** The parent issue, written into the prompt's issue block. */
+  parent?: { id: string; identifier: string; title: string; description?: string };
 }
 
 // Deep links carry the prompt in the URL, so keep it to a size apps accept.
@@ -59,11 +63,35 @@ export const CODING_TOOLS: CodingTool[] = [
   },
 ];
 
-export const DEFAULT_CODING_PROMPT_TEMPLATE = "# {{issue.identifier}}: {{issue.title}}\n\n{{context}}";
+/** The reference app's default prompt template ("Work on the reference app issue …"), with Flow's name. */
+export const DEFAULT_CODING_PROMPT_TEMPLATE = "Work on Flow issue {{issue.identifier}}:\n\nSuggested branch name: {{issue.branchName}}\n\n{{context}}";
+
+/** A description inside the issue block: inline when it is one line, else on lines of its own (as the reference app writes it). */
+function descriptionElement(description: string | undefined): string[] {
+  const text = description?.trim();
+  if (!text) return [];
+  return text.includes("\n") ? ["<description>", text, "</description>"] : [`<description>${text}</description>`];
+}
+
+/**
+ * `{{context}}`: the issue as the reference app's prompt describes it — an `<issue>` block with its title, description, team
+ * and parent issue (id, title, description).
+ */
+export function codingPromptContext(issue: CodingPromptIssue): string {
+  const parent = issue.parent;
+  return [
+    `<issue identifier="${issue.identifier}">`,
+    `<title>${issue.title}</title>`,
+    ...descriptionElement(issue.description),
+    ...(issue.team ? [`<team name="${issue.team}"/>`] : []),
+    ...(parent ? [`<parent-issue identifier="${parent.identifier}">`, `<id>${parent.id}</id>`, `<title>${parent.title}</title>`, ...descriptionElement(parent.description), "</parent-issue>"] : []),
+    "</issue>",
+  ].join("\n");
+}
 
 /** Renders the user's prompt template for an issue. */
 export function renderCodingPrompt(template: string | undefined, issue: CodingPromptIssue): string {
-  const context = `${issue.description?.trim() || "No description provided."}\n\nIssue URL: ${issue.url}`;
+  const context = codingPromptContext(issue);
   const values: Record<string, string> = {
     "issue.identifier": issue.identifier,
     "issue.title": issue.title,

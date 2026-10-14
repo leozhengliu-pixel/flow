@@ -5,8 +5,22 @@ import { CODING_TOOLS, enabledCodingTools, renderCodingPrompt } from "./coding-t
 const issue = { identifier: "FLO-7", title: "Fix login", description: "Steps", branchName: "me/flo-7-fix-login", url: "https://flow.test/i/FLO-7" };
 
 describe("coding tools", () => {
-  it("renders the default prompt", () => {
-    expect(renderCodingPrompt(undefined, issue)).toBe("# FLO-7: Fix login\n\nSteps\n\nIssue URL: https://flow.test/i/FLO-7");
+  it("renders the default prompt: the branch, then the issue block", () => {
+    expect(renderCodingPrompt(undefined, issue)).toBe(
+      "Work on Flow issue FLO-7:\n\nSuggested branch name: me/flo-7-fix-login\n\n<issue identifier=\"FLO-7\">\n<title>Fix login</title>\n<description>Steps</description>\n</issue>",
+    );
+  });
+
+  it("writes the team and the parent issue into the block, multi-line descriptions on their own lines", () => {
+    const prompt = renderCodingPrompt(undefined, {
+      ...issue,
+      description: "",
+      team: "Flow-app",
+      parent: { id: "parent-1", identifier: "FLO-6", title: "Auth", description: "One\n\nTwo" },
+    });
+    expect(prompt.split("\n\n").slice(2).join("\n\n")).toBe(
+      "<issue identifier=\"FLO-7\">\n<title>Fix login</title>\n<team name=\"Flow-app\"/>\n<parent-issue identifier=\"FLO-6\">\n<id>parent-1</id>\n<title>Auth</title>\n<description>\nOne\n\nTwo\n</description>\n</parent-issue>\n</issue>",
+    );
   });
 
   it("fills template variables and keeps unknown ones", () => {

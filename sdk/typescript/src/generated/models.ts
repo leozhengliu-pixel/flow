@@ -150,6 +150,46 @@ export interface AppUserNotificationWebhookEvent {
   webhookTimestamp: number
 }
 
+export interface ApplicationInstallation {
+  active: boolean
+  allPublicTeams?: boolean
+  /** AllTeams keeps the installation's teams in step with the workspace's teams (the built-in Flow agent works in every team). */
+  allTeams?: boolean
+  avatarUrl?: string
+  builtin: boolean
+  clientId: string
+  createdAt: string
+  id: string
+  installedBy: string
+  name: string
+  scopes: string[]
+  /** ServerSuspended marks an installation deactivated because the server's agent is disabled; it is reactivated when the agent is enabled again. */
+  serverSuspended?: boolean
+  teamIds: string[]
+  updatedAt: string
+  userId: string
+  webhookUrl?: string
+  /** WithoutRealtime marks an installation authorized while its application had no webhook:, it receives no webhook deliveries until an administrator authorizes it again ("Receive realtime updates about your workspace" is then a requested permission on the consent screen). */
+  withoutRealtime?: boolean
+  workspaceKey: string
+}
+
+/** ApplicationToken is an access token issued to an application (developer tokens and the client_credentials grant). */
+export interface ApplicationToken {
+  access_token: string
+  /** Actor is app (the application's app user) or user. */
+  actor: "app" | "user"
+  app_user_id?: string
+  /** Existing is true when the app user's active developer token was returned instead of a new one. */
+  existing?: boolean
+  /** ExpiresIn is the lifetime in seconds. */
+  expires_in: number
+  /** Scope is the space-separated scopes. */
+  scope: string
+  subject_user_id: string
+  token_type: string
+}
+
 /** ApplicationWebhookInput configures the webhook of an OAuth application. */
 export interface ApplicationWebhookInput {
   enabled?: boolean | null
@@ -157,6 +197,11 @@ export interface ApplicationWebhookInput {
   resourceTypes?: string[] | null
   /** URL is a public HTTPS endpoint. */
   url?: string | null
+}
+
+/** ApplicationWebhookSecret carries the signing secret of an application webhook. Sent with Cache-Control: no-store. */
+export interface ApplicationWebhookSecret {
+  secret: string
 }
 
 /** ApplicationWebhookSettings is the webhook configuration of an OAuth application. */
@@ -664,6 +709,14 @@ export interface CycleWebhookEvent {
   webhookId: string
   /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
   webhookTimestamp: number
+}
+
+/** DeveloperTokenInput creates a developer token for an application. */
+export interface DeveloperTokenInput {
+  /** Actor is app (default: a token of the application's app user, or its active one) or user (a token of the caller through the application). */
+  actor?: "app" | "user"
+  /** Scopes are the token's scopes (for user tokens, read and write as far as the application allows when omitted). */
+  scopes?: string[]
 }
 
 export interface Document {
@@ -1653,6 +1706,35 @@ export interface LinkAttachmentInput {
   url: string
 }
 
+/** ManifestApplication is an application saved from a manifest, with the webhook signing secret the first time its webhook is enabled. */
+export interface ManifestApplication {
+  clientId: string
+  clientSecret?: string
+  createdAt: string
+  creatorId: string
+  credentialsAuthorizedBy?: string
+  description?: string
+  /** DeveloperName and DeveloperURL are the public developer details from the app manifest (developer.name, oauth.client_uri). */
+  developerName?: string
+  developerUrl?: string
+  /** GitHubUsername associates GitHub activity with the application's app user (actor=app): pull requests opened and events sent by this GitHub account are attributed to the app user. "[bot]" names a GitHub App. */
+  githubUsername?: string
+  id: string
+  logoUrl?: string
+  name: string
+  publicEnabled: boolean
+  redirectUris: string[]
+  scopes: string[]
+  supportsClientCredentials: boolean
+  updatedAt: string
+  /** Application-level webhook, configured once by the developer: every workspace that installs or authorizes the application gets a managed webhook delivering these resource types to WebhookURL, signed with the application's webhook signing secret. */
+  webhookEnabled?: boolean
+  webhookResourceTypes?: string[]
+  webhookSecret?: string
+  webhookSecretPrefix?: string
+  webhookUrl?: string
+}
+
 /** NotificationComment is the comment of an inbox notification. */
 export interface NotificationComment {
   body?: string
@@ -1667,6 +1749,70 @@ export interface NotificationIssue {
   teamId?: string
   title?: string
   url?: string
+}
+
+/** OAuthAppManifest describes an OAuth application declaratively, in the shape of the reference app's OAuth app manifests (see /.well-known/oauth-app-manifest.schema.json). */
+export interface OAuthAppManifest {
+  $schema?: string
+  agent?: OAuthAppManifestAgent | null
+  developer?: OAuthAppManifestDev | null
+  display?: OAuthAppManifestDisplay | null
+  /** Distribution is private (default) or public. */
+  distribution?: "private" | "public"
+  github?: OAuthAppManifestGitHub | null
+  oauth?: OAuthAppManifestOAuth | null
+  schemaVersion: string
+  webhook?: OAuthAppManifestWebhook | null
+}
+
+/** OAuthAppManifestAgent is shorthand for the app:assignable and app:mentionable scopes of an agent application. */
+export interface OAuthAppManifestAgent {
+  assignable?: boolean
+  mentionable?: boolean
+}
+
+export interface OAuthAppManifestDev {
+  name: string
+}
+
+export interface OAuthAppManifestDisplay {
+  description?: string
+  iconUrl?: string
+}
+
+/** OAuthAppManifestGitHub is the "GitHub username": for actor=app, commits and comments by this GitHub account belong to the app user. */
+export interface OAuthAppManifestGitHub {
+  username: string
+}
+
+/** OAuthAppManifestIssue is one validation problem, at a JSON path. */
+export interface OAuthAppManifestIssue {
+  message: string
+  path: string
+}
+
+export interface OAuthAppManifestOAuth {
+  client_name: string
+  client_uri: string
+  grant_types?: string[]
+  redirect_uris: string[]
+  scopes?: string[]
+}
+
+/** OAuthAppManifestValidation is the result of validating a manifest. */
+export interface OAuthAppManifestValidation {
+  /** Application previews the application the manifest describes (when valid). */
+  application?: OAuthApplication | null
+  issues: OAuthAppManifestIssue[]
+  valid: boolean
+}
+
+export interface OAuthAppManifestWebhook {
+  enabled?: boolean | null
+  resourceTypes: string[]
+  /** Secret is the signing secret shown in the settings form before the webhook is first saved. Write-only: it is used only while the application has no signing secret yet and is never exported. */
+  secret?: string
+  url: string
 }
 
 /** OAuthAppWebhookEvent is sent to application webhooks when the application was uninstalled or its last authorization revoked. */
@@ -1690,6 +1836,77 @@ export interface OAuthAppWebhookEvent {
   webhookId: string
   /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
   webhookTimestamp: number
+}
+
+export interface OAuthApplication {
+  clientId: string
+  clientSecret?: string
+  createdAt: string
+  creatorId: string
+  credentialsAuthorizedBy?: string
+  description?: string
+  /** DeveloperName and DeveloperURL are the public developer details from the app manifest (developer.name, oauth.client_uri). */
+  developerName?: string
+  developerUrl?: string
+  /** GitHubUsername associates GitHub activity with the application's app user (actor=app): pull requests opened and events sent by this GitHub account are attributed to the app user. "[bot]" names a GitHub App. */
+  githubUsername?: string
+  id: string
+  logoUrl?: string
+  name: string
+  publicEnabled: boolean
+  redirectUris: string[]
+  scopes: string[]
+  supportsClientCredentials: boolean
+  updatedAt: string
+  /** Application-level webhook, configured once by the developer: every workspace that installs or authorizes the application gets a managed webhook delivering these resource types to WebhookURL, signed with the application's webhook signing secret. */
+  webhookEnabled?: boolean
+  webhookResourceTypes?: string[]
+  webhookSecretPrefix?: string
+  webhookUrl?: string
+}
+
+/** OAuthApplicationClientSecret carries the application's client secret (reading it, or the new one after a rotation). Sent with Cache-Control: no-store. */
+export interface OAuthApplicationClientSecret {
+  clientSecret: string
+}
+
+/** OAuthApplicationInput creates (name required) or updates an OAuth application. Omitted fields are left unchanged. */
+export interface OAuthApplicationInput {
+  description?: string | null
+  developerName?: string | null
+  developerUrl?: string | null
+  githubUsername?: string | null
+  /** LogoURL is an absolute HTTP(S) URL or an uploaded application icon. */
+  logoUrl?: string | null
+  /** Name is shown on the consent screen and in Settings › Applications. */
+  name?: string | null
+  /** PublicEnabled lets other workspaces install the application. */
+  publicEnabled?: boolean | null
+  /** RedirectURIs are the allowed OAuth callbacks (HTTPS, or loopback HTTP). */
+  redirectUris?: string[] | null
+  /** Scopes are the scopes the application may request. */
+  scopes?: string[] | null
+  /** SupportsClientCredentials enables the client_credentials grant. */
+  supportsClientCredentials?: boolean | null
+}
+
+/** OAuthApplicationInstalls lists the workspace's grants of an application: members' active user authorizations and the actor=app installation. */
+export interface OAuthApplicationInstalls {
+  authorizations: OAuthAuthorization[]
+  installations: ApplicationInstallation[]
+}
+
+export interface OAuthAuthorization {
+  actor?: string
+  clientId: string
+  clientName: string
+  createdAt: string
+  id: string
+  installerId?: string
+  lastUsedAt?: string | null
+  revokedAt?: string | null
+  scopes: string[]
+  userId: string
 }
 
 /** Organization is the workspace with headline counts. */

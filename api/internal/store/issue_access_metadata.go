@@ -43,8 +43,14 @@ func issueAccessMetadata(data domain.Bootstrap) domain.Bootstrap {
 	return result
 }
 
-// Match teamVisibleToUser without rescanning all teams and memberships for each
-// node. Parent ownership and the nearest private ancestor boundary are retained.
+// visibleIssueTeams lists the teams whose content (issues, projects,
+// documents, views) the user may read. It matches teamVisibleToUser without
+// rescanning all teams and memberships for each node; parent ownership and the
+// nearest private ancestor boundary are retained.
+//
+// Workspace admins are the one place the two differ: an admin
+// sees every team and may manage its settings and members, but a private
+// team's content stays with its members — admins included — until they join.
 func visibleIssueTeams(data domain.Bootstrap, userID, role string) []string {
 	roles := make(map[string]string, len(data.TeamMembers))
 	for _, member := range data.TeamMembers {
@@ -67,9 +73,11 @@ func visibleIssueTeams(data domain.Bootstrap, userID, role string) []string {
 			}
 			continue
 		}
-		allowed := isWorkspaceAdminRole(role) || roles[team.ID] != ""
+		allowed := roles[team.ID] != ""
 		settings := data.TeamSettings[team.ID]
-		if !allowed && role != "guest" {
+		if !allowed && isWorkspaceAdminRole(role) {
+			allowed = adminTeamContentVisible(teams, data.TeamSettings, roles, team)
+		} else if !allowed && role != "guest" {
 			access := strings.ToLower(strings.TrimSpace(settings.Access))
 			if access == "" && team.Private {
 				access = "private"
@@ -92,6 +100,38 @@ func visibleIssueTeams(data domain.Bootstrap, userID, role string) []string {
 		}
 	}
 	return visible
+}
+
+// adminTeamContentVisible reports whether a workspace admin who is not a
+// direct member of team may read its content. Public teams (including those
+// that require an invite to join) stay readable; a private team, or a team
+// inside a private ancestor the admin has not joined, does not.
+func adminTeamContentVisible(teams map[string]domain.Team, settings map[string]domain.TeamSettings, roles map[string]string, team domain.Team) bool {
+	if privateTeamAccess(team, settings[team.ID]) {
+		return false
+	}
+	seen := map[string]bool{team.ID: true}
+	for parent := settings[team.ID].ParentTeamID; parent != "" && !seen[parent]; parent = settings[parent].ParentTeamID {
+		seen[parent] = true
+		p := settings[parent]
+		if teams[parent].Private || strings.EqualFold(p.Access, "private") || strings.EqualFold(p.Access, "restricted") && p.ParentTeamID == "" {
+			return roles[parent] != ""
+		}
+	}
+	return true
+}
+
+func privateTeamAccess(team domain.Team, settings domain.TeamSettings) bool {
+	access := strings.ToLower(strings.TrimSpace(settings.Access))
+	return access == "private" || access == "" && team.Private
+}
+
+// TeamContentVisible reports whether the user may read a team's issues,
+// projects, documents and views. data needs the team graph and the user's
+// memberships. A workspace admin can see and manage a private team without
+// being a member, but its content needs membership (see visibleIssueTeams).
+func TeamContentVisible(data domain.Bootstrap, teamID, userID, role string) bool {
+	return slices.Contains(visibleIssueTeams(data, userID, role), teamID)
 }
 
 // Only identifiers referenced by this page are returned; never copy project

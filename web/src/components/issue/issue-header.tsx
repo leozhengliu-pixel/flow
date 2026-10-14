@@ -9,10 +9,10 @@ import type { ActivityEvent, BootstrapData, Issue, IssueRelationType, IssueUpdat
 import { IssueOptionsMenu, type IssueOptionsActions } from '@/components/issue/issue-options-menu'
 import { FlowBranchIcon, FlowChevronIcon, FlowCodingToolsIcon, FlowFavoriteFilledIcon, FlowFavoriteIcon, FlowIssueIdIcon, FlowNextIcon, FlowPreviousIcon, FlowUrlIcon, FlowWorkIcon } from '@/components/issue/flow-header-icons'
 import { issuePath, settingsPath } from '@/lib/app-routes'
-import { enabledCodingTools, renderCodingPrompt, type CodingTool } from '@/lib/coding-tools'
+import { enabledCodingTools, type CodingTool } from '@/lib/coding-tools'
 import { issueBreadcrumbs, type IssueBreadcrumb } from '@/lib/issue-navigation-context'
 import { issueViewers } from '@/lib/issue-presence'
-import { configuredIssueBranch, copyIssueForWork } from '@/lib/issue-work-actions'
+import { configuredIssueBranch, copyIssueForWork, issueWorkPrompt } from '@/lib/issue-work-actions'
 import { useOptionalTranslate } from '@/i18n/i18n'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
@@ -48,7 +48,7 @@ export function IssueHeader({ issue, presence = [], saveState, onRetrySave, data
   const viewers = issueViewers(presence, issue.id, data.viewer.id)
   const preferences=data.userSettings?.[data.viewer.id]
   const tools=enabledCodingTools(preferences)
-  const buildPrompt=useCallback(()=>renderCodingPrompt(preferences?.codingPromptTemplate,{identifier:issue.identifier,title:issue.title,description:issue.description,branchName:configuredIssueBranch(issue,data),url:location.href}),[preferences?.codingPromptTemplate,issue,data])
+  const buildPrompt=useCallback(()=>issueWorkPrompt(issue,data,location.href),[issue,data])
   const openInTool=useCallback(async(tool:CodingTool)=>{const url=tool.link(buildPrompt(),preferences??{});if(!url){toast.error('Add a custom link in coding tool settings first');return}window.open(url,/^https?:/i.test(url)?'_blank':'_self','noopener');try{await copyIssueForWork(buildPrompt(),'prompt',issue,data,onUpdate)}catch{/* opening the tool matters more than the clipboard */}},[buildPrompt,preferences,issue,data,onUpdate])
   const copyWork=useCallback(async(kind:'branch'|'prompt')=>{try{const text=kind==='branch'?configuredIssueBranch(issue,data):buildPrompt();await copyIssueForWork(text,kind,issue,data,onUpdate);toast.success(kind==='branch'?'Branch name copied to clipboard':'Prompt copied to clipboard')}catch(error){toast.error(error instanceof Error?error.message:'Could not write to clipboard')}},[issue,data,onUpdate,buildPrompt])
   useEffect(()=>{const onKey=(event:KeyboardEvent)=>{if(isEditable(event.target))return;if((event.metaKey||event.ctrlKey)&&event.altKey&&event.key.toLowerCase()==='p'){event.preventDefault();void copyWork('prompt')} };addEventListener('keydown',onKey);return()=>removeEventListener('keydown',onKey)},[copyWork])

@@ -1,0 +1,41 @@
+/* The floating chat's "Discard draft?" (agent-discard-draft-dialog.tsx), measured in the reference app; colours in tokens.css. */
+.agent-discard-overlay { position: fixed; z-index: 1600; inset: 0; background: var(--agent-discard-overlay); }
+.agent-discard-dialog {
+  box-sizing: border-box;
+  position: fixed;
+  z-index: 1601;
+  top: 26vh;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  padding: 24px;
+  border: .5px solid var(--agent-discard-border);
+  border-radius: 12px;
+  outline: 0;
+  background: var(--agent-discard-bg);
+  box-shadow: var(--agent-discard-shadow);
+  font-family: var(--font);
+}
+.agent-discard-title { margin: 0; color: var(--agent-discard-title); font-size: 15px; font-weight: 600; line-height: 23px; }
+.agent-discard-description { margin: 6px 0 0; color: var(--agent-discard-text); font-size: 15px; font-weight: 450; line-height: 23px; }
+.agent-discard-dialog > footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.agent-discard-cancel,
+.agent-discard-confirm {
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 12px;
+  border: .5px solid transparent;
+  border-radius: 9999px;
+  font: 500 13px/normal var(--font);
+  cursor: default;
+  transition: background-color .15s;
+}
+.agent-discard-cancel { background: var(--agent-discard-cancel-bg); color: var(--agent-discard-cancel-fg); box-shadow: var(--agent-discard-cancel-ring); }
+.agent-discard-cancel:hover { background: var(--agent-discard-cancel-hover-bg); }
+.agent-discard-confirm { background: var(--agent-discard-danger-bg); color: var(--agent-discard-danger-fg); }
+.agent-discard-confirm:focus-visible { outline: 2px solid var(--agent-discard-danger-bg); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .agent-discard-cancel,
+  .agent-discard-confirm { transition: none; }
+}

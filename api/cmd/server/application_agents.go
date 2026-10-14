@@ -49,6 +49,8 @@ func (s *server) configureApplicationInstallation(w http.ResponseWriter, r *http
 		old := items[index]
 		input.ClientID = old.ClientID
 		input.Builtin = old.Builtin
+		// Only authorizing again grants realtime updates (webhooks).
+		input.WithoutRealtime = old.WithoutRealtime
 	}
 	if input.Builtin {
 		if !s.agent.Enabled {

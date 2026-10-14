@@ -39,9 +39,11 @@
 .oauth-card-heading strong{font-weight:600}
 .oauth-card-section h2{margin:0 0 6px;color:var(--oauth-muted);font-size:13px;font-weight:500;line-height:15.5px}
 .oauth-list{margin:0;padding:0;overflow:hidden;list-style:none;border:.5px solid var(--oauth-list-border);border-radius:6px;background:var(--oauth-list-bg)}
-.oauth-list>li,.oauth-team-access>label{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-bottom:.5px solid var(--oauth-list-border);color:var(--oauth-row-text);font-size:13px;font-weight:450;line-height:16px}
-.oauth-list>li:last-child,.oauth-team-access>label:last-of-type{border-bottom:0}
-.oauth-list>li>span,.oauth-team-access>label>span{min-width:0;overflow-wrap:anywhere}
+.oauth-list>li,.oauth-team-option>label{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-bottom:.5px solid var(--oauth-list-border);color:var(--oauth-row-text);font-size:13px;font-weight:450;line-height:16px}
+.oauth-list>li:last-child,.oauth-team-option>label{border-bottom:0}
+.oauth-team-option{border-bottom:.5px solid var(--oauth-list-border)}
+.oauth-team-option:last-child{border-bottom:0}
+.oauth-list>li>span,.oauth-team-option>label>span{min-width:0;overflow-wrap:anywhere}
 .oauth-scope-icon{width:16px;height:16px;flex:none;color:var(--oauth-icon);stroke-width:1.75}
 .oauth-card-error{margin:-8px 0 0;color:var(--oauth-danger);font-size:12px;line-height:17px}
 .oauth-card-actions{display:flex;justify-content:flex-end;gap:8px;padding-top:16px}
@@ -61,7 +63,7 @@
 
 /* actor=app team access: radios and the multi-select team field. */
 .oauth-team-access{overflow:visible}
-.oauth-team-access>label{align-items:center;cursor:default}
+.oauth-team-option>label{align-items:center;cursor:default}
 .oauth-team-access input[type=radio]{appearance:none;box-sizing:border-box;width:16px;height:16px;flex:none;display:grid;place-items:center;margin:0;border:1px solid var(--oauth-radio-border);border-radius:50%;background:transparent}
 .oauth-team-access input[type=radio]:checked{border-color:var(--oauth-primary-bg);background:var(--oauth-primary-bg)}
 .oauth-team-access input[type=radio]:checked::after{content:"";width:4px;height:4px;border-radius:50%;background:var(--oauth-primary-text)}

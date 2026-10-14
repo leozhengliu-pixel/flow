@@ -182,7 +182,7 @@ import { LoadingContainer } from "@/components/ui/loading-caret";
 import { OrganizationNotFound } from "@/components/workspace/organization-not-found";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { toast } from "@/lib/toast";
-import { toastInitiativeCreated, toastIssueCreated, toastProjectCreated } from "@/lib/created-toasts";
+import { toastInitiativeCreated, toastIssueCreated, toastIssueCreatedInPlace, toastProjectCreated } from "@/lib/created-toasts";
 import type {
   ProjectCreateInput,
   ProjectMutationInput,
@@ -988,12 +988,13 @@ function App() {
   const chatHistoryButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => { if (!floatingAgentOpen) setFloatingAgentSession(undefined); }, [floatingAgentOpen]);
   // "Ask Flow" with a typed question (⌘K Tab): the floating chat opens on a fresh conversation that sends it at once.
-  const [floatingAgentRequest, setFloatingAgentRequest] = useState<{ id: number; prompt?: string; quote?: string }>();
-  // A page (e.g. a document's selection toolbar) asks for the floating chat, the reference app's "Ask agent" on a selection.
+  const [floatingAgentRequest, setFloatingAgentRequest] = useState<{ id: number } & FloatingAgentRequest>();
+  // A page (e.g. a document's selection toolbar) asks for the floating chat, the reference app's "Ask agent" on a selection;
+  // an "Issue created" toast's "Ask Flow" opens it with the issue mentioned.
   useEffect(() => {
     const listener = (event: Event) => {
       const detail = (event as CustomEvent<FloatingAgentRequest>).detail ?? {};
-      setFloatingAgentRequest({ id: Date.now(), prompt: detail.prompt, quote: detail.quote });
+      setFloatingAgentRequest({ id: Date.now(), prompt: detail.prompt, quote: detail.quote, mentions: detail.mentions, issueId: detail.issueId });
       setFloatingAgentOpen(true);
     };
     window.addEventListener(OPEN_FLOATING_AGENT_EVENT, listener);
@@ -1696,8 +1697,9 @@ function App() {
     if (!input.createMore) navigateTo(issuePath(data.workspace.urlKey, issue));
     return issue;
   };
-  // A comment composer's "Create issue from selection" creates the issue in place: no dialog and no
-  // navigation, just the "Issue created" toast (the composer swaps the selection for a mention of the issue).
+  // "Create issue from selection" (a description, document or comment composer) creates the issue in place, like
+  // The reference app: no dialog and no navigation, just the reference app's in-place "Issue created" toast with its actions (the editor
+  // swaps the selection for a mention of the issue).
   const createIssueInPlace = useRef<(input: InlineIssueInput) => Promise<Issue>>(undefined);
   createIssueInPlace.current = async (input) => {
     const issue = await createIssue(input);
@@ -1710,7 +1712,10 @@ function App() {
           })
         : current,
     );
-    if (data) toastIssueCreated(issue, issuePath(data.workspace.urlKey, issue), translateTitle);
+    if (data) toastIssueCreatedInPlace(issue, issuePath(data.workspace.urlKey, issue), data, {
+      onUpdate: (change) => updateIssueById(dataRef.current?.issues.find((item) => item.id === issue.id) ?? issue, change),
+      latestData: () => dataRef.current ?? undefined,
+    });
     return issue;
   };
   useEffect(() => {
@@ -7006,11 +7011,16 @@ function App() {
       <AgentChatPanel
         data={data}
         onCreateSkill={() => { setFloatingAgentOpen(false); navigateTo(newAgentSkillPath(data.workspace.urlKey)) }}
-        issues={selectedIssue ? [issueToExplorerRow(selectedIssue, data.workspace.urlKey, data.issues, data)] : []}
+        // The page's issue rides along; a request from an issue shown elsewhere (a peek, the inbox) brings its own.
+        issues={(() => {
+          const issue = (floatingAgentRequest?.issueId ? data.issues.find((item) => item.id === floatingAgentRequest.issueId) : undefined) ?? selectedIssue;
+          return issue ? [issueToExplorerRow(issue, data.workspace.urlKey, data.issues, data)] : [];
+        })()}
         key={floatingAgentSession ? `session-${floatingAgentSession.id}` : floatingAgentRequest?.id ?? "floating"}
         initialSession={floatingAgentSession}
         initialPrompt={floatingAgentRequest?.prompt}
         initialQuote={floatingAgentRequest?.quote}
+        initialMentions={floatingAgentRequest?.mentions}
         autoSubmit={Boolean(floatingAgentRequest?.prompt)}
         pageContext={
           // Issues ride along through `issues`; projects, initiatives and documents attach as the page entity.
@@ -7025,6 +7035,8 @@ function App() {
         open={floatingAgentOpen}
         onSessionChange={(next) => setClosedAgentSessionIds((current) => new Set(current).add(next.id))}
         onClose={() => { setFloatingAgentOpen(false); setFloatingAgentRequest(undefined); }}
+        // Escape hides the chat with its draft, like the Agent button; only the X discards (and asks first).
+        onHide={() => setFloatingAgentOpen(false)}
         onOpenFullPage={(session) => { setFloatingAgentOpen(false); navigateTo(agentPath(data.workspace.urlKey, session?.slugId)) }}
       />
       <div className="bottom-agent">

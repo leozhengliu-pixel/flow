@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap } from '@/test/fixtures'
 import type { AgentSession } from '@/types/flow'
@@ -19,6 +19,24 @@ vi.mock('@/lib/agent-stream', () => streams)
 import { AgentChatPanel } from './agent-chat-panel'
 import { AgentPanel } from './agent-panel'
 import { clampFloatSize, FLOAT_DEFAULT_SIZE } from './agent-float-size'
+import { AGENT_QUOTE_HIGHLIGHT, clearAgentQuoteHighlight, showAgentQuoteHighlight } from './agent-quote-highlight'
+
+/** jsdom has no CSS Custom Highlight API: a registry and Highlight stand-in record what the page would paint. */
+function stubHighlights() {
+  const registry = new Map<string, { ranges: Range[] }>()
+  vi.stubGlobal('Highlight', class { ranges: Range[]; constructor(...ranges: Range[]) { this.ranges = ranges } })
+  vi.stubGlobal('CSS', { ...globalThis.CSS, highlights: registry })
+  return registry
+}
+function quotedRange(text: string) {
+  const paragraph = document.createElement('p')
+  paragraph.textContent = text
+  document.body.append(paragraph)
+  const range = document.createRange()
+  range.selectNodeContents(paragraph)
+  return range
+}
+afterEach(() => { vi.unstubAllGlobals() })
 
 const session = (content: string): AgentSession => ({
   id: 'session-1', slugId: 'chat', userId: 'user-1', title: 'Explain the selection', favorite: false, location: 'toolbar', issueIds: [], skillIds: [],
@@ -45,6 +63,21 @@ describe('quoted selections in agent messages', () => {
     requestFloatingAgent({ quote: 'Selected' })
     window.removeEventListener(OPEN_FLOATING_AGENT_EVENT, listener)
     expect((listener.mock.calls[0][0] as CustomEvent).detail).toEqual({ quote: 'Selected' })
+  })
+
+  it('highlights only the newest quote, and an older chat cannot clear a newer quote\'s highlight', () => {
+    const page = stubHighlights()
+    const first = showAgentQuoteHighlight('First', quotedRange('First'))
+    const second = showAgentQuoteHighlight('Second', quotedRange('Second'))
+    expect(page.get(AGENT_QUOTE_HIGHLIGHT)?.ranges[0].toString()).toBe('Second')
+    clearAgentQuoteHighlight(first)
+    expect(page.has(AGENT_QUOTE_HIGHLIGHT)).toBe(true)
+    clearAgentQuoteHighlight(second)
+    expect(page.has(AGENT_QUOTE_HIGHLIGHT)).toBe(false)
+    // Without a range (or the API) nothing is painted, and an earlier highlight goes.
+    showAgentQuoteHighlight('Third', quotedRange('Third'))
+    requestFloatingAgent({ quote: 'No range' })
+    expect(page.has(AGENT_QUOTE_HIGHLIGHT)).toBe(false)
   })
 })
 
@@ -98,6 +131,90 @@ describe('floating agent chat (the reference app toolbar chat)', () => {
     const sent = await screen.findByLabelText('Your message')
     expect(sent).toHaveTextContent('123123123 What is this?')
     expect(sent.querySelector('blockquote')).toBeNull()
+  })
+
+  it('keeps the quoted text highlighted while its chip is in the chat, and drops it with the chip', async () => {
+    const page = stubHighlights()
+    const range = quotedRange('Highlight me')
+    requestFloatingAgent({ quote: 'Highlight me', range })
+    expect(page.get(AGENT_QUOTE_HIGHLIGHT)?.ranges).toEqual([range])
+    renderChat({ initialQuote: 'Highlight me' })
+    const composer = screen.getByRole('textbox', { name: 'Send a message to Flow Agent' })
+    await waitFor(() => expect(composer.querySelector('[data-agent-quote]')).not.toBeNull())
+    expect(page.has(AGENT_QUOTE_HIGHLIGHT)).toBe(true)
+    composer.querySelector('[data-agent-quote]')?.remove()
+    fireEvent.input(composer)
+    await waitFor(() => expect(page.has(AGENT_QUOTE_HIGHLIGHT)).toBe(false))
+  })
+
+  it('drops the highlight when the chat is minimized, and it stays gone when the chat comes back', async () => {
+    const user = userEvent.setup()
+    const page = stubHighlights()
+    requestFloatingAgent({ quote: 'Minimize me', range: quotedRange('Minimize me') })
+    renderChat({ initialQuote: 'Minimize me' })
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Send a message to Flow Agent' }).querySelector('[data-agent-quote]')).not.toBeNull())
+    expect(page.has(AGENT_QUOTE_HIGHLIGHT)).toBe(true)
+    await user.click(screen.getByRole('button', { name: 'Minimize chat' }))
+    expect(page.has(AGENT_QUOTE_HIGHLIGHT)).toBe(false)
+  })
+
+  it('drops the highlight when the message is sent', async () => {
+    const page = stubHighlights()
+    streams.streamNewAgentSession.mockImplementation(async (input: { message: string }) => session(input.message))
+    requestFloatingAgent({ quote: 'Send me', range: quotedRange('Send me') })
+    renderChat({ initialQuote: 'Send me' })
+    const send = screen.getByRole('button', { name: 'Send message' })
+    await waitFor(() => expect(send).toBeEnabled())
+    fireEvent.click(send)
+    await waitFor(() => expect(page.has(AGENT_QUOTE_HIGHLIGHT)).toBe(false))
+  })
+
+  it('starts with the mention chips it is handed (an "Issue created" toast\'s "Ask Flow")', async () => {
+    const data = makeBootstrap()
+    const issue = data.issues[0]
+    render(<I18nProvider><AgentChatPanel data={data} initialMentions={[{ type: 'issue', id: issue.id, label: issue.identifier }]} issues={[]} onClose={vi.fn()} open/></I18nProvider>)
+    const composer = screen.getByRole('textbox', { name: 'Send a message to Flow Agent' })
+    await waitFor(() => expect(composer.querySelector(`[data-mention-id="${issue.id}"]`)).not.toBeNull())
+    expect(composer.querySelector('[data-mention-id]')).toHaveTextContent(`${issue.identifier} ${issue.title}`)
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled()
+  })
+
+  it('asks "Discard draft?" before closing a chat with a draft; Cancel keeps it, Discard closes', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    renderChat({ initialQuote: 'Keep me', onClose })
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Send a message to Flow Agent' }).querySelector('[data-agent-quote]')).not.toBeNull())
+    await user.click(screen.getByRole('button', { name: 'Close chat' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard draft?' })
+    expect(dialog).toHaveTextContent('Your draft will be lost if you close this chat.')
+    expect(screen.getByRole('button', { name: 'Discard' })).toHaveFocus()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog', { name: 'Discard draft?' })).not.toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('textbox', { name: 'Send a message to Flow Agent' }).querySelector('[data-agent-quote]')).not.toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Close chat' }))
+    await user.click(await screen.findByRole('button', { name: 'Discard' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes at once without a draft (spaces do not count), and Escape hides the chat with its draft instead', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    const onHide = vi.fn()
+    renderChat({ onClose, onHide })
+    const composer = screen.getByRole('textbox', { name: 'Send a message to Flow Agent' })
+    await waitFor(() => expect(composer).toHaveAttribute('contenteditable', 'true'))
+    composer.append(document.createTextNode('   '))
+    fireEvent.input(composer)
+    await user.click(screen.getByRole('button', { name: 'Close chat' }))
+    expect(screen.queryByRole('dialog', { name: 'Discard draft?' })).not.toBeInTheDocument()
+    expect(onClose).toHaveBeenCalledTimes(1)
+    composer.append(document.createTextNode('A real draft'))
+    fireEvent.input(composer)
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(onHide).toHaveBeenCalledTimes(1)
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('dialog', { name: 'Discard draft?' })).not.toBeInTheDocument()
   })
 
   it('drops the quote when its chip is deleted from the composer', async () => {

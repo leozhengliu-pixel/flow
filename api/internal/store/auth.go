@@ -782,7 +782,7 @@ func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.B
 			allowed[team.ID] = true
 		}
 	}
-	filterBootstrapTeams(&data, allowed, role == "guest")
+	filterBootstrapTeams(&data, viewerTeamScope(data, allowed, userID, role), role == "guest")
 	hasSpecificStates := map[string]bool{}
 	for _, state := range data.States {
 		if state.TeamID != "" {
@@ -1408,7 +1408,7 @@ func OmitDirectoryExcludedTeams(data *domain.Bootstrap) {
 	if len(allowed) == len(data.Teams) {
 		return
 	}
-	filterBootstrapTeams(data, allowed, false)
+	filterBootstrapTeams(data, bootstrapTeamScope{Teams: allowed, Content: allowed}, false)
 	data.States = slices.DeleteFunc(data.States, func(state domain.WorkflowState) bool {
 		return state.TeamID != "" && !allowed[state.TeamID]
 	})
@@ -1495,12 +1495,52 @@ func teamVisibleToUser(data domain.Bootstrap, teamID, userID, workspaceRole stri
 	return access != "restricted"
 }
 
-func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest bool) {
+// bootstrapTeamScope splits what a viewer may see of each team.
+type bootstrapTeamScope struct {
+	// Teams are the team rows, labels and settings the viewer may see.
+	Teams map[string]bool
+	// Content are the teams whose issues, projects, documents, cycles and
+	// views the viewer may read. It equals Teams except for a workspace admin,
+	// who sees and manages every team but reads a private team's content only
+	// as a member (the reference app: "As an admin you have access to the team's settings").
+	Content map[string]bool
+	// AdminClosed, for a workspace admin, are the private teams whose content
+	// stays closed to them. Admins otherwise read every issue and document,
+	// including those of retired teams left out of Teams.
+	AdminClosed map[string]bool
+}
+
+// viewerTeamScope derives the content scope from the visible team rows.
+func viewerTeamScope(data domain.Bootstrap, teams map[string]bool, userID, role string) bootstrapTeamScope {
+	scope := bootstrapTeamScope{Teams: teams, Content: teams}
+	if !isWorkspaceAdminRole(role) {
+		return scope
+	}
+	readable := map[string]bool{}
+	for _, id := range visibleIssueTeams(data, userID, role) {
+		readable[id] = true
+	}
+	scope.Content, scope.AdminClosed = map[string]bool{}, map[string]bool{}
+	for _, team := range data.Teams {
+		switch {
+		case !readable[team.ID]:
+			if team.ArchivedAt == nil {
+				scope.AdminClosed[team.ID] = true
+			}
+		case teams[team.ID]:
+			scope.Content[team.ID] = true
+		}
+	}
+	return scope
+}
+
+func filterBootstrapTeams(data *domain.Bootstrap, scope bootstrapTeamScope, guest bool) {
+	allowed, teamRows := scope.Content, scope.Teams
 	archived := map[string]bool{}
 	for _, id := range ArchivedTeamIDs(*data) {
 		archived[id] = true
 	}
-	data.Teams = slices.DeleteFunc(data.Teams, func(team domain.Team) bool { return !allowed[team.ID] })
+	data.Teams = slices.DeleteFunc(data.Teams, func(team domain.Team) bool { return !teamRows[team.ID] })
 	data.Issues = slices.DeleteFunc(data.Issues, func(issue domain.Issue) bool {
 		if archived[issue.Team.ID] {
 			return true
@@ -1508,7 +1548,7 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 		if allowed[issue.Team.ID] {
 			return false
 		}
-		return !issuePermissionAllows(*data, issue, allowed)
+		return !issuePermissionAllows(*data, issue, allowed, scope.AdminClosed)
 	})
 	visibleIssueIDs := map[string]bool{}
 	for _, issue := range data.Issues {
@@ -1520,8 +1560,13 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 	// Documents can be scoped to private teams just like issues and projects.
 	// Keep unscoped documents workspace-visible, while preventing a member from
 	// discovering the title or content of a team document they cannot access.
-	if !isWorkspaceAdminRole(data.ViewerRole) {
+	// Admins read every document except those only in private teams closed to them.
+	admin := isWorkspaceAdminRole(data.ViewerRole)
+	if !admin || len(scope.AdminClosed) > 0 {
 		data.Documents = slices.DeleteFunc(data.Documents, func(document domain.Document) bool {
+			if admin && !slices.ContainsFunc(document.TeamIDs, func(teamID string) bool { return scope.AdminClosed[teamID] }) {
+				return false
+			}
 			if len(document.TeamIDs) == 0 {
 				// An unscoped document is workspace-visible until explicit
 				// document permissions are configured. Once configured, only a
@@ -1537,7 +1582,7 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 	data.Cycles = slices.DeleteFunc(data.Cycles, func(cycle domain.Cycle) bool { return !allowed[cycle.TeamID] })
 	data.Labels = slices.DeleteFunc(data.Labels, func(label domain.IssueLabel) bool {
 		scope := strings.ToLower(strings.TrimSpace(label.Scope))
-		return scope != "" && scope != "workspace" && !allowed[label.Scope]
+		return scope != "" && scope != "workspace" && !teamRows[label.Scope]
 	})
 	visibleLabels := map[string]bool{}
 	for _, label := range data.Labels {
@@ -1545,7 +1590,7 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 	}
 	data.LabelGroups = slices.DeleteFunc(data.LabelGroups, func(group domain.LabelGroup) bool {
 		scope := strings.ToLower(strings.TrimSpace(group.Scope))
-		return scope != "" && scope != "workspace" && !allowed[group.Scope]
+		return scope != "" && scope != "workspace" && !teamRows[group.Scope]
 	})
 	visibleLabelGroups := map[string]bool{}
 	for _, group := range data.LabelGroups {
@@ -1653,11 +1698,12 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 	}
 	data.IssueSLAs = slices.DeleteFunc(data.IssueSLAs, func(item domain.IssueSLA) bool { return !visibleIssues[item.IssueID] })
 	data.SLAEvents = slices.DeleteFunc(data.SLAEvents, func(item domain.SLAEvent) bool { return !visibleIssues[item.IssueID] })
+	// SLA rules are workspace settings: they follow the team rows, like labels.
 	data.SLARules = slices.DeleteFunc(data.SLARules, func(item domain.SLARule) bool {
-		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, func(id string) bool { return allowed[id] })
+		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, func(id string) bool { return teamRows[id] })
 	})
 	for index := range data.SLARules {
-		data.SLARules[index].TeamIDs = slices.DeleteFunc(data.SLARules[index].TeamIDs, func(id string) bool { return !allowed[id] })
+		data.SLARules[index].TeamIDs = slices.DeleteFunc(data.SLARules[index].TeamIDs, func(id string) bool { return !teamRows[id] })
 	}
 	// Recompute project issue counts from the visible issue projection so a
 	// public project shell cannot reveal the size of a private team's backlog.
@@ -1870,8 +1916,11 @@ func filterSettingsByVisibility(data *domain.Bootstrap, allowed map[string]bool)
 	}
 }
 
-func issuePermissionAllows(data domain.Bootstrap, issue domain.Issue, allowed map[string]bool) bool {
-	if isWorkspaceAdminRole(data.ViewerRole) {
+// issuePermissionAllows reports whether an issue outside the viewer's content
+// teams is shared with them. adminClosed lists private teams whose issues a
+// workspace admin reads only through such a grant.
+func issuePermissionAllows(data domain.Bootstrap, issue domain.Issue, allowed, adminClosed map[string]bool) bool {
+	if isWorkspaceAdminRole(data.ViewerRole) && !adminClosed[issue.Team.ID] {
 		return true
 	}
 	seenIssues := map[string]bool{}
@@ -2004,6 +2053,12 @@ func (s *SQLiteStore) ViewerVisibilityKeys(ctx context.Context, workspace string
 		}
 		slices.Sort(allowed)
 		keys[member.User.ID] = member.Role + "|" + strings.Join(allowed, ",")
+		if isWorkspaceAdminRole(member.Role) {
+			// Admins see every team row but only the private content they joined.
+			readable := visibleIssueTeams(data, member.User.ID, member.Role)
+			slices.Sort(readable)
+			keys[member.User.ID] += "|" + strings.Join(readable, ",")
+		}
 	}
 	return keys, nil
 }

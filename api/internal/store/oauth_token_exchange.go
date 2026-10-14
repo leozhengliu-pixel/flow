@@ -156,8 +156,30 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 		// Access tokens live an hour and each exchange issues a new one, so
 		// drop expired OAuth token rows instead of letting them pile up. Live
 		// tokens stay: one authorization can back several client sessions.
+		// An app installation holds one token chain at a time:,
+		// redeeming a new authorization code for an actor=app grant (after
+		// "Authorize", "Update access" or "Continue") revokes the access and
+		// refresh tokens issued to the app user before. Client-credentials
+		// tokens are separate and stay.
+		supersede := kind == "authorization_code" && grant.Actor == "app"
+		if supersede {
+			if _, err := tx.ExecContext(ctx, `UPDATE oauth_refresh_tokens SET revoked_at=? WHERE revoked_at IS NULL AND `+s.jsonText("data", "clientId")+`=? AND `+s.jsonText("data", "userId")+`=?`, time.Now().UTC().Format(time.RFC3339Nano), grant.ClientID, grant.UserID); err != nil {
+				return err
+			}
+		}
 		kept := current.APIKeys[:0:0]
 		for _, existing := range current.APIKeys {
+			if supersede && existing.RevokedAt == nil && existing.OAuthClientID == grant.ClientID && existing.Actor == "app" && existing.SubjectID() == grant.UserID && existing.GrantType != "client_credentials" {
+				revokedAt := time.Now().UTC()
+				existing.RevokedAt = &revokedAt
+				raw, err := json.Marshal(existing)
+				if err != nil {
+					return err
+				}
+				if _, err := tx.ExecContext(ctx, `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='apiKeys' AND record_key=?`, raw, workspace, existing.ID); err != nil {
+					return err
+				}
+			}
 			if existing.OAuthClientID != "" && existing.ExpiresAt != nil && !time.Now().UTC().Before(*existing.ExpiresAt) {
 				if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='apiKeys' AND record_key=?`, workspace, existing.ID); err != nil {
 					return err

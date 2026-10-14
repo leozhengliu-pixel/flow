@@ -39,6 +39,7 @@ export function AgentMentionInput({
   className,
   quote,
   onQuoteRemove,
+  initialMentions,
   onTab,
 }: {
   data: BootstrapData
@@ -57,6 +58,8 @@ export function AgentMentionInput({
   quote?: string
   /** The user deleted the quote chip (Backspace or a cut). */
   onQuoteRemove?: () => void
+  /** Mention chips the composer starts with, caret after them (the reference app's "Ask the reference app" on an "Issue created" toast). */
+  initialMentions?: AgentMention[]
   /** Tab with no mention menu open; return true when the host handled it (e.g. toggling page context). */
   onTab?: () => boolean
 }) {
@@ -154,6 +157,40 @@ export function AgentMentionInput({
     selection?.removeAllRanges()
     selection?.addRange(range)
   }, [disabled, editorRef, quote])
+
+  // Mentions handed over by the host (e.g. "Ask Flow" on an "Issue created" toast) become chips, caret after them.
+  const seededMentions = useRef<AgentMention[] | undefined>(undefined)
+  useLayoutEffect(() => {
+    const editor = editorRef.current
+    if (!editor || !initialMentions?.length || disabled || seededMentions.current === initialMentions) return
+    seededMentions.current = initialMentions
+    const added: Chip[] = []
+    let after: Text | undefined
+    for (const mention of initialMentions) {
+      const issue = mention.type === 'issue' ? data.issues.find(item => item.id === mention.id) : undefined
+      const option: MentionOption = { ...mention, key: `${mention.type}:${mention.id}`, group: '', detail: issue?.title, icon: issue ? <StatusIcon state={issue.state} size={14}/> : null }
+      const chip = document.createElement('span')
+      chip.contentEditable = 'false'
+      chip.className = styles.chip
+      chip.dataset.mentionType = mention.type
+      chip.dataset.mentionId = mention.id
+      chip.dataset.mentionLabel = mention.label
+      after = document.createTextNode(' ')
+      editor.append(chip, after)
+      added.push({ el: chip, option })
+    }
+    setChips(current => [...current, ...added])
+    editor.focus({ preventScroll: true })
+    if (after) {
+      const range = document.createRange()
+      range.setStart(after, 1)
+      range.collapse(true)
+      const selection = window.getSelection()
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+    }
+    sync()
+  }, [data.issues, disabled, editorRef, initialMentions, sync])
 
   // Clear the editor when the host resets the value (after sending); restore plain drafts on mount.
   useLayoutEffect(() => {

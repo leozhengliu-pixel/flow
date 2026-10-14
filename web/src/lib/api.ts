@@ -996,6 +996,8 @@ export interface AuthorizedApplication {
   developerName?: string;
   developerUrl?: string;
   authorizations: OAuthAuthorization[];
+  /** The application has a webhook: listed as "Receive realtime updates about your workspace". */
+  realtime?: boolean;
 }
 export function fetchAuthorizedApplications(signal?: AbortSignal): Promise<AuthorizedApplication[]> {
   return request('/api/oauth/authorized-applications', { signal })
@@ -1014,6 +1016,8 @@ export interface OAuthAuthorizationRequest {
   prompt?: string;
   /** Workspace the user already approved this client for; empty when consent is needed. */
   previouslyAuthorizedWorkspaceKey?: string;
+  /** The application has a webhook: the consent screen lists "Receive realtime updates about your workspace". */
+  realtime?: boolean;
   redirectUri: string;
   scopes: string[];
   scopeLabels: string[];

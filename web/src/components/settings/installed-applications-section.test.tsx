@@ -93,6 +93,36 @@ describe('InstalledApplicationPage', () => {
     expect(toasts.toast.success).toHaveBeenCalledWith('Access revoked', { description: 'Access has been revoked for Triage agent' })
   })
 
+  it('lists "Receive realtime updates" alphabetically when the application has a webhook', async () => {
+    api.fetchAuthorizedApplications.mockResolvedValue([{ clientId: 'client_a', name: 'Deploy bot', authorizations: [authorization], realtime: true }])
+    renderAt(<InstalledApplicationPage data={data} clientId="client_a" onReload={vi.fn()}/>)
+    await screen.findByText('Receive realtime updates about your workspace')
+    const rows = [...document.querySelectorAll('.oauth-app-permission')].map(row => row.textContent)
+    expect(rows).toEqual(['Read access to your workspace', 'Receive realtime updates about your workspace', 'Write access to your workspace'])
+  })
+
+  it('grants all public teams and select private teams after the reference app\'s confirmation', async () => {
+    const user = userEvent.setup()
+    const secret = { ...data.teams[0], id: 'team-secret', name: 'Secret', key: 'SEC', private: true }
+    const withPrivate = { ...data, teams: [...data.teams, secret] }
+    renderAt(<InstalledApplicationPage data={withPrivate} clientId="client_b" onReload={vi.fn().mockResolvedValue(undefined)}/>)
+    const access = await screen.findByRole('radiogroup', { name: 'Team access' })
+    await user.click(within(access).getByRole('radio', { name: 'All public teams and select other teams…' }))
+    expect(within(access).getByRole('button', { name: 'Update' })).toBeDisabled()
+    await user.click(within(access).getByRole('combobox', { name: 'Select other teams…' }))
+    // Only private teams are offered next to all public teams.
+    expect(within(access).getAllByRole('option').map(option => option.textContent)).toEqual(['Secret'])
+    await user.click(within(access).getByRole('option', { name: 'Secret' }))
+    await user.click(within(access).getByRole('button', { name: 'Update' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Update team access for Triage agent?' })
+    expect(dialog).toHaveTextContent('The application currently has access to all public teams.')
+    expect(dialog).toHaveTextContent('The application will now have access to all public teams and these other teams:Secret')
+    expect(apps.saveApplication).not.toHaveBeenCalled()
+    await user.click(within(dialog).getByRole('button', { name: 'Confirm' }))
+    await waitFor(() => expect(apps.saveApplication).toHaveBeenCalledWith('workspace', expect.objectContaining({ id: 'installation_a', allPublicTeams: true, teamIds: ['team-secret'] })))
+    expect(toasts.toast.success).toHaveBeenCalledWith('Team access updated', { description: 'The application’s team access has been updated.' })
+  })
+
   it('does nothing when the confirmation is cancelled', async () => {
     const user = userEvent.setup()
     dialogs.confirmAction.mockResolvedValue(false)

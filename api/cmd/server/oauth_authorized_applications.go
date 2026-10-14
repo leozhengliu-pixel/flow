@@ -21,6 +21,9 @@ type authorizedApplication struct {
 	DeveloperName  string                      `json:"developerName,omitempty"`
 	DeveloperURL   string                      `json:"developerUrl,omitempty"`
 	Authorizations []domain.OAuthAuthorization `json:"authorizations"`
+	// Realtime is set when the application has a webhook: the reference app then lists
+	// "Receive realtime updates about your workspace" among the permissions.
+	Realtime bool `json:"realtime,omitempty"`
 }
 
 // GET /api/oauth/authorized-applications lists, for workspace admins, every
@@ -72,6 +75,7 @@ func (s *server) listAuthorizedApplications(w http.ResponseWriter, r *http.Reque
 		item := byClient[clientID]
 		if app, ok := s.store.OAuthApplicationByClientID(clientID); ok {
 			item.Name, item.Description, item.LogoURL, item.DeveloperName, item.DeveloperURL = app.Name, app.Description, app.LogoURL, app.DeveloperName, app.DeveloperURL
+			item.Realtime = app.WebhookEnabled && app.WebhookURL != ""
 		} else if client, err := s.store.OAuthClient(r.Context(), clientID); err == nil {
 			item.Name, item.LogoURL, item.DeveloperURL = client.ClientName, client.LogoURI, client.ClientURI
 		}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/publicapi"
 	"flow/api/internal/store"
 )
 
@@ -135,13 +136,19 @@ func (s *server) issueApplicationToken(w http.ResponseWriter, r *http.Request, w
 			return
 		}
 	}
+	if grantType == "developer_token" {
+		if app, ok := s.store.OAuthApplicationByClientID(clientID); ok {
+			s.auditAPIKeyCredential(r, "developer_token_created", app)
+		}
+	}
+	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, 200, applicationTokenBody(secret, key, int(duration.Seconds())))
 }
 
-func applicationTokenBody(secret string, key domain.APIKey, expiresIn int) map[string]any {
-	response := map[string]any{"access_token": secret, "token_type": "Bearer", "expires_in": expiresIn, "scope": publicOAuthScopes(key.Scopes), "actor": key.Actor, "subject_user_id": key.SubjectID()}
+func applicationTokenBody(secret string, key domain.APIKey, expiresIn int) publicapi.ApplicationToken {
+	response := publicapi.ApplicationToken{AccessToken: secret, TokenType: "Bearer", ExpiresIn: expiresIn, Scope: publicOAuthScopes(key.Scopes), Actor: key.Actor, SubjectUserID: key.SubjectID()}
 	if key.Actor == "app" {
-		response["app_user_id"] = key.SubjectID()
+		response.AppUserID = key.SubjectID()
 	}
 	return response
 }
@@ -176,13 +183,13 @@ func (s *server) existingAppDeveloperToken(r *http.Request, data *domain.Bootstr
 	return token, key, true
 }
 
-func existingDeveloperTokenResponse(token string, key domain.APIKey) map[string]any {
+func existingDeveloperTokenResponse(token string, key domain.APIKey) publicapi.ApplicationToken {
 	expiresIn := 0
 	if key.ExpiresAt != nil {
 		expiresIn = int(time.Until(*key.ExpiresAt).Seconds())
 	}
 	response := applicationTokenBody(token, key, expiresIn)
-	response["existing"] = true
+	response.Existing = true
 	return response
 }
 
@@ -199,6 +206,7 @@ func (s *server) getApplicationDeveloperToken(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusNotFound, "No active app developer token")
 		return
 	}
+	s.auditAPIKeyCredential(r, "developer_token_read", app)
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, existingDeveloperTokenResponse(token, key))
 }
@@ -208,10 +216,7 @@ func (s *server) getApplicationDeveloperToken(w http.ResponseWriter, r *http.Req
 // actor=app creates a token for the application's app user with the chosen
 // scopes, or returns the app user's active token (existing: true).
 func (s *server) createApplicationDeveloperToken(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Actor  string   `json:"actor"`
-		Scopes []string `json:"scopes"`
-	}
+	var input publicapi.DeveloperTokenInput
 	if !decodeJSON(w, r, &input) {
 		return
 	}
@@ -224,6 +229,7 @@ func (s *server) createApplicationDeveloperToken(w http.ResponseWriter, r *http.
 	}
 	if input.Actor == "app" {
 		if token, key, found := s.existingAppDeveloperToken(r, data, app); found {
+			s.auditAPIKeyCredential(r, "developer_token_read", app)
 			w.Header().Set("Cache-Control", "no-store")
 			writeJSON(w, http.StatusOK, existingDeveloperTokenResponse(token, key))
 			return
@@ -246,6 +252,7 @@ func (s *server) rotateOAuthApplicationSecret(w http.ResponseWriter, r *http.Req
 		return
 	}
 	id := r.PathValue("id")
+	var rotated domain.OAuthApplication
 	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "oauth_application.secret_rotated", id, nil, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == id })
 		if index < 0 {
@@ -254,11 +261,14 @@ func (s *server) rotateOAuthApplicationSecret(w http.ResponseWriter, r *http.Req
 		data.OAuthApplications[index].ClientSecret = secret
 		data.OAuthApplications[index].CredentialsAuthorizedBy = requestActor(s, r).ID
 		data.OAuthApplications[index].UpdatedAt = time.Now().UTC()
+		rotated = data.OAuthApplications[index]
 		return nil
 	})
 	if err != nil {
 		respondMutation(w, err, 200, nil)
 		return
 	}
-	writeJSON(w, 200, map[string]string{"clientSecret": secret})
+	s.auditAPIKeyCredential(r, "client_secret_rotated", rotated)
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, 200, publicapi.OAuthApplicationClientSecret{ClientSecret: secret})
 }

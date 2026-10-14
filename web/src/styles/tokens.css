@@ -720,6 +720,31 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   --toast-success: var(--semantic-success);
   --toast-error: var(--semantic-danger);
   --toast-warning: var(--priority-high);
+  /* "Issue created" from a selection (components/ui/issue-created-toast.css), measured in the reference app. */
+  --toast-issue-title: lch(100% 0 272);
+  --toast-issue-identifier: lch(64.714% 1.425 272);
+  --toast-issue-text: lch(91.178% 1.425 272);
+  --toast-issue-rule: lch(25.68% 1.93 272);
+  --toast-issue-ask-bg: lch(17.349% 1.139 272);
+  --toast-issue-ask-hover-bg: lch(20.82% 1.3 272);
+  --toast-issue-ask-border: transparent;
+  --toast-issue-shadow: 0 0 0 .5px lch(100 0 0 / .148), 0 3px 8px lch(0 0 0 / .125), 0 2px 5px lch(0 0 0 / .125), 0 1px 1px lch(0 0 0 / .125);
+  --toast-issue-icon-hover-bg: lch(21.206% 1.043 272);
+  /* Text quoted into the floating agent chat (components/agent/agent-quote-highlight.css): tertiary text at 10%. */
+  --agent-quote-highlight: lch(61.803% 1.2 272 / .1);
+  /* The floating chat's "Discard draft?" (components/agent/agent-discard-draft-dialog.css), measured in the reference app. */
+  --agent-discard-overlay: lch(0 0 0 / .4);
+  --agent-discard-bg: lch(9.232% .85 272);
+  --agent-discard-border: lch(22.193% 1.93 272);
+  --agent-discard-shadow: 0 4px 40px lch(0 0 0 / .1), 0 3px 20px lch(0 0 0 / .125), 0 3px 12px lch(0 0 0 / .125), 0 2px 8px lch(0 0 0 / .125), 0 1px 1px lch(0 0 0 / .125);
+  --agent-discard-title: lch(100% 0 272);
+  --agent-discard-text: lch(63.304% 1.425 272);
+  --agent-discard-cancel-bg: lch(13.861% 1.139 272);
+  --agent-discard-cancel-hover-bg: lch(17.349% 1.139 272);
+  --agent-discard-cancel-fg: lch(90.826% 1.425 272);
+  --agent-discard-cancel-ring: none;
+  --agent-discard-danger-bg: lch(58% 73 29);
+  --agent-discard-danger-fg: lch(100% 5 286.91);
 }
 :root[data-theme="light"] {
   --toast-bg: lch(100% 0 282);
@@ -729,6 +754,29 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   --toast-hover-bg: lch(96.914% 0 282);
   --toast-hover-fg: lch(20% 1 282);
   --toast-link: lch(47.918% 59.303 288.421);
+  /* "Issue created" from a selection (components/ui/issue-created-toast.css), measured in the reference app. */
+  --toast-issue-title: lch(10% 0 282);
+  --toast-issue-identifier: lch(40% 1 282);
+  --toast-issue-text: lch(20% 1 282);
+  --toast-issue-rule: lch(91.9% 0 282);
+  --toast-issue-ask-bg: lch(100% 0 282);
+  --toast-issue-ask-hover-bg: lch(96.5% 0 282);
+  --toast-issue-ask-border: lch(89.84% 0 282);
+  --toast-issue-shadow: var(--toast-shadow);
+  --toast-issue-icon-hover-bg: lch(96.914% 0 282);
+  /* Text quoted into the floating agent chat (components/agent/agent-quote-highlight.css): tertiary text at 10%. */
+  --agent-quote-highlight: lch(39.176% 1.25 282 / .1);
+  /* The floating chat's "Discard draft?" (components/agent/agent-discard-draft-dialog.css), measured in the reference app. */
+  --agent-discard-overlay: lch(0 0 0 / .25);
+  --agent-discard-bg: lch(100% 0 282);
+  --agent-discard-border: lch(91.9% 0 282);
+  --agent-discard-shadow: 0 9px 48px lch(0 0 0 / .08), 0 6px 24px lch(0 0 0 / .1), 0 1px 1px lch(0 0 0 / .04);
+  --agent-discard-title: lch(10% 0 282);
+  --agent-discard-text: lch(40% 1 282);
+  --agent-discard-cancel-bg: lch(100% 0 282);
+  --agent-discard-cancel-hover-bg: lch(96.914% 0 282);
+  --agent-discard-cancel-fg: lch(20% 1 282);
+  --agent-discard-cancel-ring: 0 0 0 .5px lch(0 0 0 / .09), 0 3px 6px -2px lch(0 0 0 / .02), 0 1px 1px lch(0 0 0 / .04);
 }
 /* Settings › Projects › Statuses, measured from the reference page in each theme. */
 :root {

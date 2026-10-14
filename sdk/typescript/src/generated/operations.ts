@@ -3,7 +3,9 @@
 //   node sdk/typescript/scripts/generate.mjs
 
 import type {
+  ApplicationToken,
   ApplicationWebhookInput,
+  ApplicationWebhookSecret,
   ApplicationWebhookSettings,
   Attachment,
   AttachmentConnection,
@@ -43,6 +45,13 @@ import type {
   IssueRecordPage,
   IssueUpdateInput,
   LinkAttachmentInput,
+  ManifestApplication,
+  OAuthAppManifest,
+  OAuthAppManifestValidation,
+  OAuthApplication,
+  OAuthApplicationClientSecret,
+  OAuthApplicationInput,
+  OAuthApplicationInstalls,
   Organization,
   Project,
   ProjectConnection,
@@ -588,6 +597,72 @@ export interface PostIssuesIdLinkAttachmentsRequest {
   body: LinkAttachmentInput
 }
 
+/** Arguments of `postOauthApplications`. */
+export interface PostOauthApplicationsRequest {
+  body: OAuthApplicationInput
+}
+
+/** Arguments of `deleteOauthApplicationsId`. */
+export interface DeleteOauthApplicationsIdRequest {
+  path: { id: string }
+}
+
+/** Arguments of `getOauthApplicationsId`. */
+export interface GetOauthApplicationsIdRequest {
+  path: { id: string }
+}
+
+/** Arguments of `patchOauthApplicationsId`. */
+export interface PatchOauthApplicationsIdRequest {
+  path: { id: string }
+  body: OAuthApplicationInput
+}
+
+/** Arguments of `getOauthApplicationsIdClientSecret`. */
+export interface GetOauthApplicationsIdClientSecretRequest {
+  path: { id: string }
+}
+
+/** Arguments of `getOauthApplicationsIdDeveloperToken`. */
+export interface GetOauthApplicationsIdDeveloperTokenRequest {
+  path: { id: string }
+}
+
+/** Arguments of `postOauthApplicationsIdDeveloperToken`. */
+export interface PostOauthApplicationsIdDeveloperTokenRequest {
+  path: { id: string }
+  body: {
+  actor?: "app" | "user"
+  scopes?: string[]
+}
+}
+
+/** Arguments of `getOauthApplicationsIdFailures`. */
+export interface GetOauthApplicationsIdFailuresRequest {
+  path: { id: string }
+}
+
+/** Arguments of `getOauthApplicationsIdInstalls`. */
+export interface GetOauthApplicationsIdInstallsRequest {
+  path: { id: string }
+}
+
+/** Arguments of `getOauthApplicationsIdManifest`. */
+export interface GetOauthApplicationsIdManifestRequest {
+  path: { id: string }
+}
+
+/** Arguments of `putOauthApplicationsIdManifest`. */
+export interface PutOauthApplicationsIdManifestRequest {
+  path: { id: string }
+  body: OAuthAppManifest
+}
+
+/** Arguments of `postOauthApplicationsIdRotateSecret`. */
+export interface PostOauthApplicationsIdRotateSecretRequest {
+  path: { id: string }
+}
+
 /** Arguments of `getOauthApplicationsIdWebhook`. */
 export interface GetOauthApplicationsIdWebhookRequest {
   path: { id: string }
@@ -602,6 +677,21 @@ export interface PutOauthApplicationsIdWebhookRequest {
 /** Arguments of `postOauthApplicationsIdWebhookRotateSecret`. */
 export interface PostOauthApplicationsIdWebhookRotateSecretRequest {
   path: { id: string }
+}
+
+/** Arguments of `getOauthApplicationsIdWebhookSecret`. */
+export interface GetOauthApplicationsIdWebhookSecretRequest {
+  path: { id: string }
+}
+
+/** Arguments of `postOauthApplicationsManifest`. */
+export interface PostOauthApplicationsManifestRequest {
+  body: OAuthAppManifest
+}
+
+/** Arguments of `postOauthApplicationsManifestValidate`. */
+export interface PostOauthApplicationsManifestValidateRequest {
+  body: OAuthAppManifest
 }
 
 /** Query parameters of `GET /api/project-milestones`. */
@@ -1125,9 +1215,25 @@ export const operations = {
   deleteIssuesIdCommentsCommentId: { method: "DELETE", path: "/api/issues/{id}/comments/{commentId}", operationId: "delete_issues_id_comments_commentId", successStatuses: [204] },
   patchIssuesIdCommentsCommentId: { method: "PATCH", path: "/api/issues/{id}/comments/{commentId}", operationId: "patch_issues_id_comments_commentId", successStatuses: [200] },
   postIssuesIdLinkAttachments: { method: "POST", path: "/api/issues/{id}/link-attachments", operationId: "post_issues_id_link_attachments", successStatuses: [200, 201] },
+  getOauthApplications: { method: "GET", path: "/api/oauth-applications", operationId: "get_oauth_applications", successStatuses: [200] },
+  postOauthApplications: { method: "POST", path: "/api/oauth-applications", operationId: "post_oauth_applications", successStatuses: [201] },
+  deleteOauthApplicationsId: { method: "DELETE", path: "/api/oauth-applications/{id}", operationId: "delete_oauth_applications_id", successStatuses: [204] },
+  getOauthApplicationsId: { method: "GET", path: "/api/oauth-applications/{id}", operationId: "get_oauth_applications_id", successStatuses: [200] },
+  patchOauthApplicationsId: { method: "PATCH", path: "/api/oauth-applications/{id}", operationId: "patch_oauth_applications_id", successStatuses: [200] },
+  getOauthApplicationsIdClientSecret: { method: "GET", path: "/api/oauth-applications/{id}/client-secret", operationId: "get_oauth_applications_id_client_secret", successStatuses: [200] },
+  getOauthApplicationsIdDeveloperToken: { method: "GET", path: "/api/oauth-applications/{id}/developer-token", operationId: "get_oauth_applications_id_developer_token", successStatuses: [200] },
+  postOauthApplicationsIdDeveloperToken: { method: "POST", path: "/api/oauth-applications/{id}/developer-token", operationId: "post_oauth_applications_id_developer_token", successStatuses: [200] },
+  getOauthApplicationsIdFailures: { method: "GET", path: "/api/oauth-applications/{id}/failures", operationId: "get_oauth_applications_id_failures", successStatuses: [200] },
+  getOauthApplicationsIdInstalls: { method: "GET", path: "/api/oauth-applications/{id}/installs", operationId: "get_oauth_applications_id_installs", successStatuses: [200] },
+  getOauthApplicationsIdManifest: { method: "GET", path: "/api/oauth-applications/{id}/manifest", operationId: "get_oauth_applications_id_manifest", successStatuses: [200] },
+  putOauthApplicationsIdManifest: { method: "PUT", path: "/api/oauth-applications/{id}/manifest", operationId: "put_oauth_applications_id_manifest", successStatuses: [200] },
+  postOauthApplicationsIdRotateSecret: { method: "POST", path: "/api/oauth-applications/{id}/rotate-secret", operationId: "post_oauth_applications_id_rotate_secret", successStatuses: [200] },
   getOauthApplicationsIdWebhook: { method: "GET", path: "/api/oauth-applications/{id}/webhook", operationId: "get_oauth_applications_id_webhook", successStatuses: [200] },
   putOauthApplicationsIdWebhook: { method: "PUT", path: "/api/oauth-applications/{id}/webhook", operationId: "put_oauth_applications_id_webhook", successStatuses: [200] },
   postOauthApplicationsIdWebhookRotateSecret: { method: "POST", path: "/api/oauth-applications/{id}/webhook/rotate-secret", operationId: "post_oauth_applications_id_webhook_rotate_secret", successStatuses: [200] },
+  getOauthApplicationsIdWebhookSecret: { method: "GET", path: "/api/oauth-applications/{id}/webhook/secret", operationId: "get_oauth_applications_id_webhook_secret", successStatuses: [200] },
+  postOauthApplicationsManifest: { method: "POST", path: "/api/oauth-applications/manifest", operationId: "post_oauth_applications_manifest", successStatuses: [201] },
+  postOauthApplicationsManifestValidate: { method: "POST", path: "/api/oauth-applications/manifest/validate", operationId: "post_oauth_applications_manifest_validate", successStatuses: [200] },
   getOrganization: { method: "GET", path: "/api/organization", operationId: "get_organization", successStatuses: [200] },
   getProjectMilestones: { method: "GET", path: "/api/project-milestones", operationId: "get_project_milestones", successStatuses: [200] },
   getProjects: { method: "GET", path: "/api/projects", operationId: "get_projects", successStatuses: [200] },
@@ -1581,6 +1687,130 @@ export class FlowApi {
   }
 
   /**
+   * `GET /api/oauth-applications`
+   * List OAuth applications
+   * The workspace's own OAuth applications, newest first, without client secrets.
+   */
+  getOauthApplications(options?: RequestOptions): Promise<OAuthApplication[]> {
+    return this.transport.request({ method: "GET", path: "/api/oauth-applications", ...options })
+  }
+
+  /**
+   * `POST /api/oauth-applications`
+   * Create an OAuth application
+   * name is required; scopes default to read. The response carries the client secret (Cache-Control: no-store); creating an application with an API key is audited as client_secret_issued.
+   */
+  postOauthApplications(request: PostOauthApplicationsRequest, options?: RequestOptions): Promise<OAuthApplication> {
+    return this.transport.request({ method: "POST", path: "/api/oauth-applications", body: request.body, ...options })
+  }
+
+  /**
+   * `DELETE /api/oauth-applications/{id}`
+   * Delete an OAuth application
+   */
+  deleteOauthApplicationsId(request: DeleteOauthApplicationsIdRequest, options?: RequestOptions): Promise<void> {
+    return this.transport.request({ method: "DELETE", path: "/api/oauth-applications/{id}", pathParams: request.path, expect: 'none', ...options })
+  }
+
+  /**
+   * `GET /api/oauth-applications/{id}`
+   * Get an OAuth application
+   * Without its client secret.
+   */
+  getOauthApplicationsId(request: GetOauthApplicationsIdRequest, options?: RequestOptions): Promise<OAuthApplication> {
+    return this.transport.request({ method: "GET", path: "/api/oauth-applications/{id}", pathParams: request.path, ...options })
+  }
+
+  /**
+   * `PATCH /api/oauth-applications/{id}`
+   * Update an OAuth application
+   * Only the given fields change. Client ID and secret are kept.
+   */
+  patchOauthApplicationsId(request: PatchOauthApplicationsIdRequest, options?: RequestOptions): Promise<OAuthApplication> {
+    return this.transport.request({ method: "PATCH", path: "/api/oauth-applications/{id}", pathParams: request.path, body: request.body, ...options })
+  }
+
+  /**
+   * `GET /api/oauth-applications/{id}/client-secret`
+   * Read an application's client secret
+   * Workspace admins signed in, or a personal API key with the admin scope and access to all teams whose owner is a workspace admin (OAuth tokens, read-only, member and team-restricted keys get 403). The secret is only in the response body, sent with Cache-Control: no-store; every use with an API key is written to the audit log (actor, key, application and action, never the secret). Audited as client_secret_read.
+   */
+  getOauthApplicationsIdClientSecret(request: GetOauthApplicationsIdClientSecretRequest, options?: RequestOptions): Promise<OAuthApplicationClientSecret> {
+    return this.transport.request({ method: "GET", path: "/api/oauth-applications/{id}/client-secret", pathParams: request.path, ...options })
+  }
+
+  /**
+   * `GET /api/oauth-applications/{id}/developer-token`
+   * Read the app user's active developer token
+   * Workspace admins signed in, or a personal API key with the admin scope and access to all teams whose owner is a workspace admin (OAuth tokens, read-only, member and team-restricted keys get 403). The secret is only in the response body, sent with Cache-Control: no-store; every use with an API key is written to the audit log (actor, key, application and action, never the secret). 404 when the app user has no active developer token. Audited as developer_token_read.
+   */
+  getOauthApplicationsIdDeveloperToken(request: GetOauthApplicationsIdDeveloperTokenRequest, options?: RequestOptions): Promise<ApplicationToken> {
+    return this.transport.request({ method: "GET", path: "/api/oauth-applications/{id}/developer-token", pathParams: request.path, ...options })
+  }
+
+  /**
+   * `POST /api/oauth-applications/{id}/developer-token`
+   * Create a developer token
+   * Requires an interactive workspace owner/admin session. App tokens never inherit the issuing administrator role.
+   */
+  postOauthApplicationsIdDeveloperToken(request: PostOauthApplicationsIdDeveloperTokenRequest, options?: RequestOptions): Promise<{
+  access_token: string
+  token_type: "Bearer"
+  expires_in: number
+  scope: string
+  refresh_token?: string
+  actor?: "app" | "user"
+  subject_user_id?: string
+  app_user_id?: string
+}> {
+    return this.transport.request({ method: "POST", path: "/api/oauth-applications/{id}/developer-token", pathParams: request.path, body: request.body, ...options })
+  }
+
+  /**
+   * `GET /api/oauth-applications/{id}/failures`
+   * List an application's webhook delivery failures
+   */
+  getOauthApplicationsIdFailures(request: GetOauthApplicationsIdFailuresRequest, options?: RequestOptions): Promise<WebhookFailureEvent[]> {
+    return this.transport.request({ method: "GET", path: "/api/oauth-applications/{id}/failures", pathParams: request.path, ...options })
+  }
+
+  /**
+   * `GET /api/oauth-applications/{id}/installs`
+   * List an application's grants in the workspace
+   * Members' active user authorizations and the actor=app installation (its app user, scopes and team access).
+   */
+  getOauthApplicationsIdInstalls(request: GetOauthApplicationsIdInstallsRequest, options?: RequestOptions): Promise<OAuthApplicationInstalls> {
+    return this.transport.request({ method: "GET", path: "/api/oauth-applications/{id}/installs", pathParams: request.path, ...options })
+  }
+
+  /**
+   * `GET /api/oauth-applications/{id}/manifest`
+   * Export an application as a manifest
+   * The reference app's OAuth app manifest shape, with Flow's oauth.scopes, agent and github extensions (see /.well-known/oauth-app-manifest.schema.json). Never includes secrets.
+   */
+  getOauthApplicationsIdManifest(request: GetOauthApplicationsIdManifestRequest, options?: RequestOptions): Promise<OAuthAppManifest> {
+    return this.transport.request({ method: "GET", path: "/api/oauth-applications/{id}/manifest", pathParams: request.path, ...options })
+  }
+
+  /**
+   * `PUT /api/oauth-applications/{id}/manifest`
+   * Replace an application's configuration from a manifest
+   * Omitted optional blocks (display, webhook, agent, github) are cleared; client ID and secret are kept. webhookSecret is returned the first time the webhook is enabled. 400 with issues when the manifest is invalid.
+   */
+  putOauthApplicationsIdManifest(request: PutOauthApplicationsIdManifestRequest, options?: RequestOptions): Promise<ManifestApplication> {
+    return this.transport.request({ method: "PUT", path: "/api/oauth-applications/{id}/manifest", pathParams: request.path, body: request.body, ...options })
+  }
+
+  /**
+   * `POST /api/oauth-applications/{id}/rotate-secret`
+   * Rotate an application's client secret
+   * Rotate the client secret and immediately invalidate existing client-credentials tokens. The new secret is returned once.
+   */
+  postOauthApplicationsIdRotateSecret(request: PostOauthApplicationsIdRotateSecretRequest, options?: RequestOptions): Promise<OAuthApplicationClientSecret> {
+    return this.transport.request({ method: "POST", path: "/api/oauth-applications/{id}/rotate-secret", pathParams: request.path, ...options })
+  }
+
+  /**
    * `GET /api/oauth-applications/{id}/webhook`
    * Get the webhook of an OAuth application
    */
@@ -1600,9 +1830,37 @@ export class FlowApi {
   /**
    * `POST /api/oauth-applications/{id}/webhook/rotate-secret`
    * Rotate the signing secret of an application webhook
+   * The new secret is returned once (Cache-Control: no-store). With an API key: personal keys with the admin scope and access to all teams, owned by a workspace admin; audited as webhook_secret_rotated.
    */
   postOauthApplicationsIdWebhookRotateSecret(request: PostOauthApplicationsIdWebhookRotateSecretRequest, options?: RequestOptions): Promise<ApplicationWebhookSettings> {
     return this.transport.request({ method: "POST", path: "/api/oauth-applications/{id}/webhook/rotate-secret", pathParams: request.path, ...options })
+  }
+
+  /**
+   * `GET /api/oauth-applications/{id}/webhook/secret`
+   * Read the signing secret of an application webhook
+   * Workspace admins signed in, or a personal API key with the admin scope and access to all teams whose owner is a workspace admin (OAuth tokens, read-only, member and team-restricted keys get 403). The secret is only in the response body, sent with Cache-Control: no-store; every use with an API key is written to the audit log (actor, key, application and action, never the secret). Audited as webhook_secret_read. 404 when the application has no signing secret.
+   */
+  getOauthApplicationsIdWebhookSecret(request: GetOauthApplicationsIdWebhookSecretRequest, options?: RequestOptions): Promise<ApplicationWebhookSecret> {
+    return this.transport.request({ method: "GET", path: "/api/oauth-applications/{id}/webhook/secret", pathParams: request.path, ...options })
+  }
+
+  /**
+   * `POST /api/oauth-applications/manifest`
+   * Create an application from a manifest
+   * The response carries the client secret and, when the webhook is enabled, its signing secret (Cache-Control: no-store). 400 with issues when the manifest is invalid.
+   */
+  postOauthApplicationsManifest(request: PostOauthApplicationsManifestRequest, options?: RequestOptions): Promise<ManifestApplication> {
+    return this.transport.request({ method: "POST", path: "/api/oauth-applications/manifest", body: request.body, ...options })
+  }
+
+  /**
+   * `POST /api/oauth-applications/manifest/validate`
+   * Validate a manifest
+   * Always 200: valid with a preview of the application, or the issues found.
+   */
+  postOauthApplicationsManifestValidate(request: PostOauthApplicationsManifestValidateRequest, options?: RequestOptions): Promise<OAuthAppManifestValidation> {
+    return this.transport.request({ method: "POST", path: "/api/oauth-applications/manifest/validate", body: request.body, ...options })
   }
 
   /**

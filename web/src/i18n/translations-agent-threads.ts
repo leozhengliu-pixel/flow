@@ -1,5 +1,7 @@
 /** Agent sessions in comment threads (delegation, session state, links and plan) and agent replies in the Inbox. */
 export const agentThreadsZhCN: Record<string, string> = {
+  "Discard draft?": "放弃草稿？",
+  "Your draft will be lost if you close this chat.": "关闭此对话后，草稿将会丢失。",
   "Delegated to {name} by {user}": "由 {user} 委托给 {name}",
   "{name} didn’t respond": "{name} 没有响应",
   "No activity from {name} for 30 minutes": "{name} 已 30 分钟没有活动",

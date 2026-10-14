@@ -11,7 +11,7 @@ func TestInitiativeLeadTeamControlsPrivateVisibility(t *testing.T) {
 		{ID: "visible", LeadTeamID: "public", ParentInitiativeIDs: []string{"hidden"}},
 		{ID: "legacy", LeadTeamID: "public"},
 	}, InitiativeRelations: []domain.InitiativeRelation{{ID: "edge", InitiativeID: "visible", RelatedInitiativeID: "hidden", Type: "parent"}, {ID: "legacy-edge", InitiativeID: "legacy", RelatedInitiativeID: "visible", Type: "parent"}}, InitiativeUpdates: map[string][]domain.InitiativeUpdate{"hidden": {{ID: "private-update"}}}}
-	filterBootstrapTeams(&data, map[string]bool{"public": true}, false)
+	filterBootstrapTeams(&data, sameTeamScope(map[string]bool{"public": true}), false)
 	if len(data.Initiatives) != 2 || len(data.InitiativeRelations) != 1 {
 		t.Fatal("Private initiative leaked through a public project or relation")
 	}

@@ -83,6 +83,8 @@ export type EntityAgentThreadProps = {
   /** Selected text shown as a chip at the start of the composer (the reference app's "Ask agent" on a selection). */
   quote?: string
   onQuoteRemove?: () => void
+  /** Mention chips the composer starts with (the reference app's "Ask the reference app" on an "Issue created" toast). */
+  initialMentions?: AgentMention[]
   /** Extra composer buttons before Send (e.g. the page-context toggle and attach). */
   composerTools?: ReactNode
   /** Tab in the composer; return true when handled. */
@@ -132,6 +134,7 @@ export function EntityAgentThread({
   onSessionChange,
   quote,
   onQuoteRemove,
+  initialMentions,
   composerTools,
   onComposerTab,
   canSend,
@@ -402,6 +405,7 @@ export function EntityAgentThread({
             onSubmit={onSubmit}
             quote={quote}
             onQuoteRemove={onQuoteRemove}
+            initialMentions={initialMentions}
             onTab={onComposerTab}
           />
         ) : (

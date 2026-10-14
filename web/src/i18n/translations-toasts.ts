@@ -8,5 +8,7 @@ export const toastsZhCN: Record<string, string> = {
   "View document": "查看文档",
   "View initiative": "查看目标",
   "Document created": "文档已创建",
+  "Could not create issue": "无法创建事项",
+  "Copied, but the issue status could not be updated": "已复制，但无法更新事项状态",
   "Notifications": "通知",
 }

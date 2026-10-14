@@ -25,7 +25,12 @@ type ApplicationInstallation struct {
 	AllTeams bool `json:"allTeams,omitempty"`
 	// ServerSuspended marks an installation deactivated because the server's
 	// agent is disabled; it is reactivated when the agent is enabled again.
-	ServerSuspended bool      `json:"serverSuspended,omitempty"`
+	ServerSuspended bool `json:"serverSuspended,omitempty"`
+	// WithoutRealtime marks an installation authorized while its application
+	// had no webhook:, it receives no webhook deliveries until an
+	// administrator authorizes it again ("Receive realtime updates about
+	// your workspace" is then a requested permission on the consent screen).
+	WithoutRealtime bool      `json:"withoutRealtime,omitempty"`
 	WebhookURL      string    `json:"webhookUrl,omitempty"`
 	CreatedAt       time.Time `json:"createdAt"`
 	UpdatedAt       time.Time `json:"updatedAt"`

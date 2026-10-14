@@ -1,7 +1,8 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Menu } from 'lucide-react'
 import type { Editor } from '@tiptap/react'
-import { requestFloatingAgent } from '@/components/agent/agent-floating-request'
+import { askAgentAboutSelection } from '@/components/editor/selection-issue'
+import type { SelectedDescription } from '@/components/issue/editor/structured-blocks'
 import { IssueAgentTasksProvider } from '@/components/agent/issue-agent-tasks'
 import { SelectionIssueProvider } from '@/components/editor/selection-issue-provider'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -137,10 +138,8 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
     if (liveEditor && !liveEditor.isDestroyed) { liveEditor.commands.setTextSelection(selection.to); liveEditor.view.dom.blur(); window.getSelection()?.removeAllRanges() }
   }
   // Like the reference app: the selection goes to the floating chat as a chip and the editor lets go of it (the toolbar closes).
-  const askAgent = (quote: string) => {
-    if (liveEditor && !liveEditor.isDestroyed) liveEditor.commands.setTextSelection(liveEditor.state.selection.to)
-    requestFloatingAgent({ quote })
-  }
+  // The quoted text keeps a faint highlight while its chip is in the chat.
+  const askAgent = (selection: SelectedDescription, editor?: Editor) => askAgentAboutSelection(selection, editor ?? liveEditor ?? undefined)
   const defaultDocumentIcon = !document.icon
   const lastRevision = document.revisions.length ? latestRevision(document) : undefined
   const lastEditor = lastRevision?.author ?? document.creator

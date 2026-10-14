@@ -25,6 +25,11 @@ const consent = (patch = {}) => ({
   ...patch,
 })
 
+/** Serves the consent page's team list and installation state. */
+function serve({ teams = [{ id: 't1', name: 'Flow-app', key: 'FLO', color: '#f00', icon: 'Team' }], installation = null }: { teams?: object[]; installation?: object | null } = {}) {
+  client.request.mockImplementation(async (path: string) => path.startsWith('/api/oauth/installation?') ? { installation } : teams)
+}
+
 function renderAt(search: string) {
   return render(<I18nProvider><MemoryRouter initialEntries={[`/oauth/authorize${search}`]}><Routes><Route path="/oauth/authorize" element={<OAuthAuthorizePage account={account}/>}/></Routes></MemoryRouter></I18nProvider>)
 }
@@ -34,7 +39,7 @@ beforeEach(() => {
   localStorage.setItem('flow:locale', 'en-US')
   api.fetchUserSettings.mockResolvedValue({})
   api.decideOAuthAuthorization.mockResolvedValue({ redirect: 'http://localhost:8765/callback?code=x&state=s' })
-  client.request.mockResolvedValue([{ id: 't1', name: 'Flow-app', key: 'FLO', color: '#f00', icon: 'Team' }])
+  serve()
   Object.defineProperty(window, 'location', { configurable: true, value: { ...window.location, assign: vi.fn() } })
 })
 
@@ -67,6 +72,58 @@ describe('OAuth consent page', () => {
     expect(screen.getByRole('button', { name: 'Authorize' })).toBeEnabled()
     await user.click(screen.getByRole('button', { name: 'Authorize' }))
     await waitFor(() => expect(api.decideOAuthAuthorization).toHaveBeenCalledWith(expect.objectContaining({ actor: 'app', allPublicTeams: false, teamIds: ['t1'] })))
+  })
+
+  it('lists the realtime permission last when the application has a webhook', async () => {
+    api.fetchOAuthAuthorizationRequest.mockResolvedValue(consent({ realtime: true }))
+    renderAt('?client_id=c1&redirect_uri=x&response_type=code&scope=read,write')
+    const list = await screen.findByRole('list')
+    expect(within(list).getAllByRole('listitem').map(item => item.textContent)).toEqual(['Read access to your workspace', 'Write access to your workspace', 'Receive realtime updates about your workspace'])
+  })
+
+  it('offers "All public teams and select other teams…" with the private teams when the workspace has one', async () => {
+    const user = userEvent.setup()
+    serve({ teams: [{ id: 't1', name: 'Flow-app', key: 'FLO' }, { id: 't2', name: 'Secret', key: 'SEC', private: true }] })
+    api.fetchOAuthAuthorizationRequest.mockResolvedValue(consent({ actor: 'app', scopes: ['read'], scopeLabels: [] }))
+    renderAt('?client_id=c1&redirect_uri=x&response_type=code&scope=read&actor=app')
+    const access = await screen.findByRole('radiogroup', { name: 'Team access' })
+    expect(within(access).getAllByRole('radio').map(radio => radio.getAttribute('aria-label') ?? radio.parentElement?.textContent)).toEqual(['All public teams', 'All public teams and select other teams…', 'Only select teams…'])
+    await user.click(within(access).getByRole('radio', { name: 'All public teams and select other teams…' }))
+    expect(screen.getByRole('button', { name: 'Authorize' })).toBeDisabled()
+    await user.click(screen.getByRole('combobox', { name: 'Select other teams…' }))
+    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['Secret'])
+    await user.click(screen.getByRole('option', { name: 'Secret' }))
+    await user.click(screen.getByRole('button', { name: 'Authorize' }))
+    await waitFor(() => expect(api.decideOAuthAuthorization).toHaveBeenCalledWith(expect.objectContaining({ actor: 'app', allPublicTeams: true, teamIds: ['t2'] })))
+  })
+
+  it('shows the reference app\'s "Update access" card for an installed application asking for more', async () => {
+    const user = userEvent.setup()
+    serve({ installation: { installedBy: 'u1', installerName: 'Skyler', createdAt: '2026-10-13T12:00:00Z', scopes: ['read', 'app:assignable'], realtime: false } })
+    api.fetchOAuthAuthorizationRequest.mockResolvedValue(consent({ actor: 'app', scopes: ['read', 'write', 'app:mentionable'], scopeLabels: [], realtime: true }))
+    renderAt('?client_id=c1&redirect_uri=x&response_type=code&scope=read,write,app:mentionable&actor=app')
+    expect(await screen.findByRole('heading', { name: 'QA OAuth is requesting access' })).toBeVisible()
+    const [existing, requested] = screen.getAllByRole('list')
+    expect(within(existing).getAllByRole('listitem').map(item => item.textContent)).toEqual(['Assign issues and projects to the app in teams it can access', 'Read access to your workspace'])
+    expect(within(requested).getAllByRole('listitem').map(item => item.textContent)).toEqual(['Write access to your workspace', 'Mention app in issues, projects, and documents it can access', 'Receive realtime updates about your workspace'])
+    expect(screen.getByRole('heading', { name: 'Existing permissions' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Requested permissions' })).toBeVisible()
+    expect(screen.queryByRole('radiogroup')).toBeNull()
+    expect(screen.queryByText(/By approving, you authorize Flow/)).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Update access' }))
+    await waitFor(() => expect(api.decideOAuthAuthorization).toHaveBeenCalledWith(expect.objectContaining({ actor: 'app', approve: true, teamIds: undefined, allPublicTeams: undefined })))
+  })
+
+  it('shows "<App> already installed" with Continue when nothing new is asked', async () => {
+    serve({ installation: { installedBy: 'u1', installerName: 'Skyler', createdAt: '2026-10-13T12:00:00Z', scopes: ['read', 'write'], realtime: true } })
+    api.fetchOAuthAuthorizationRequest.mockResolvedValue(consent({ actor: 'app', scopes: ['read'], scopeLabels: [], realtime: true }))
+    renderAt('?client_id=c1&redirect_uri=x&response_type=code&scope=read&actor=app')
+    expect(await screen.findByRole('heading', { name: 'QA OAuth already installed' })).toBeVisible()
+    expect(screen.getByText((_, element) => element?.tagName === 'P' && element.textContent === 'Installed Oct 13 by Skyler')).toBeVisible()
+    // The realtime permission is not repeated among the existing ones.
+    expect(within(screen.getByRole('list')).getAllByRole('listitem').map(item => item.textContent)).toEqual(['Read access to your workspace', 'Write access to your workspace'])
+    expect(screen.queryByRole('heading', { name: 'Requested permissions' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
   })
 
   it('shows an invalid request: the mark and the server\'s message', async () => {
