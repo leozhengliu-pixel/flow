@@ -271,7 +271,7 @@ func (s *server) inviteMigrationUsers(w http.ResponseWriter, r *http.Request) {
 			mapping.TargetName = invitation.Email
 			mapping.Status = "invited"
 			if s.mailer != nil {
-				if mailErr := s.mailer.sendInvitation(invitation.Email, data.Workspace.Name, invitation.Token); mailErr != nil {
+				if mailErr := s.mailer.sendInvitation(invitation.Email, data.Workspace.Name, data.Viewer, invitation.Token); mailErr != nil {
 					mapping.Error = "invitation created but email failed: " + mailErr.Error()
 				}
 			}

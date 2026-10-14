@@ -941,8 +941,8 @@ func (s *server) withStaticFiles(next http.Handler) http.Handler {
 		if info, err := os.Stat(filepath.Join(s.staticPath, path)); err == nil && !info.IsDir() {
 			if strings.HasPrefix(r.URL.Path, "/assets/") || strings.HasPrefix(r.URL.Path, "/fonts/") {
 				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-			} else if strings.HasPrefix(r.URL.Path, "/tour/") {
-				// Tutorial clips keep their names across releases.
+			} else if strings.HasPrefix(r.URL.Path, "/tour/") || strings.HasPrefix(r.URL.Path, "/email/") {
+				// Tutorial clips and email images keep their names across releases.
 				w.Header().Set("Cache-Control", "public, max-age=86400")
 			}
 			files.ServeHTTP(w, r)
