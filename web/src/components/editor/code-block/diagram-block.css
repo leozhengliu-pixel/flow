@@ -1,0 +1,148 @@
+/* Mermaid diagram block, measured in the reference app: 6px block with a .5px border; the source on the code background (16px
+   padding, 13px monospace); the rendered diagram centred on the page background with 8px padding; a 31px frosted
+   toolbar pill 10px from the top-right corner on hover or selection. */
+.flow-diagram {
+  --flow-diagram-node: color-mix(in srgb, var(--theme-text-primary) 8%, var(--description-diagram-bg));
+  --flow-diagram-node-border: color-mix(in srgb, var(--theme-text-primary) 58%, var(--description-diagram-bg));
+  --flow-diagram-line: color-mix(in srgb, var(--theme-text-primary) 46%, var(--description-diagram-bg));
+  position: relative;
+  margin: 12px 0;
+  overflow: hidden;
+  border: .5px solid var(--description-diagram-border);
+  border-radius: 6px;
+  background: var(--description-diagram-bg);
+}
+.flow-diagram.ProseMirror-selectednode { outline: 2px solid var(--description-selected-outline); }
+
+/* Beats the editors' own `pre` / `code` rules (themed background, border, padding). */
+:root .flow-diagram[data-diagram] > pre.flow-diagram__source {
+  margin: 0;
+  padding: 16px;
+  border: 0;
+  border-radius: 0;
+  background: var(--description-diagram-source-bg);
+  color: var(--theme-text-primary);
+  font: 400 13px / 20px var(--font-monospace);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+:root .flow-diagram[data-diagram] > pre.flow-diagram__source > code { display: block; font: inherit; background: none; padding: 0; border: 0; border-radius: 0; color: inherit; white-space: inherit; }
+/* A fresh block keeps room for a few lines's 120px empty source. */
+:root .flow-diagram[data-empty] > pre.flow-diagram__source { min-height: 120px; box-sizing: border-box; }
+:root .flow-diagram:not([data-source-visible]) > pre.flow-diagram__source { display: none; }
+
+.flow-diagram__preview {
+  display: flex;
+  justify-content: center;
+  padding: 8px;
+  overflow-x: auto;
+  cursor: default;
+}
+.flow-diagram__svg { display: flex; justify-content: center; min-width: 0; max-width: 100%; }
+.flow-diagram__svg svg { display: block; height: auto; max-width: 100%; }
+/* The reference app centres node labels in their boxes (applied after Mermaid has measured them). */
+.flow-diagram__svg .node.default foreignObject div { display: flex !important; align-items: center !important; justify-content: center !important; height: 100% !important; }
+
+.flow-diagram__placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  box-sizing: border-box;
+  min-height: 166px;
+  padding: 16px;
+  cursor: text;
+}
+.flow-diagram__placeholder p { margin: 0; color: var(--description-diagram-placeholder); font: 450 15px / 24px var(--font); }
+
+.flow-diagram__toolbar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  height: 31px;
+  box-sizing: border-box;
+  padding: 2px;
+  border: .5px solid var(--description-media-toolbar-border);
+  border-radius: 9999px;
+  background: var(--description-media-toolbar-bg);
+  box-shadow: var(--description-toolbar-shadow);
+  backdrop-filter: saturate(1.8) blur(20px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--quick);
+  font-family: var(--font);
+}
+.flow-diagram:hover > .flow-diagram__toolbar,
+.flow-diagram:focus-within > .flow-diagram__toolbar,
+.flow-diagram.ProseMirror-selectednode > .flow-diagram__toolbar,
+.flow-diagram[data-source-visible] > .flow-diagram__toolbar { opacity: 1; pointer-events: auto; }
+@media (hover: none) { .flow-diagram__toolbar { opacity: 1; pointer-events: auto; } }
+.flow-diagram__button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--description-media-toolbar-fg);
+  cursor: pointer;
+}
+.flow-diagram__button:hover:not([data-disabled]),
+.flow-diagram__button[aria-pressed="true"] { background: var(--description-media-toolbar-hover); }
+.flow-diagram__button[data-disabled] { opacity: .6; cursor: default; }
+.flow-diagram__button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.flow-diagram__separator { flex: none; width: 1px; height: 18px; margin: 0 3px 0 4px; background: var(--description-toolbar-separator); }
+
+/* Invalid source: a round marker at the bottom-right of the source opens Mermaid's message underneath. */
+.flow-diagram__error-dot {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: .5px solid var(--description-media-toolbar-border);
+  border-radius: 9999px;
+  background: var(--description-media-toolbar-bg);
+  color: var(--description-media-toolbar-fg);
+  cursor: pointer;
+}
+.flow-diagram:has(.flow-diagram__console) .flow-diagram__error-dot { bottom: auto; top: 66px; }
+.flow-diagram__console {
+  padding: 8px 16px;
+  border-top: .5px solid var(--description-diagram-border);
+  background: var(--description-diagram-source-bg);
+  overflow: auto;
+}
+.flow-diagram__console span { color: var(--description-diagram-error); font: 400 13px / normal var(--font-monospace); white-space: pre-wrap; }
+.flow-diagram__console--inline { width: 100%; border-top: 0; background: transparent; }
+
+/* Fullscreen: a sheet 33px inside the window over a 25% scrim, the diagram at its natural size in the middle. */
+.flow-diagram-fullscreen__overlay { position: fixed; inset: 0; z-index: 1400; background: var(--description-diagram-overlay); }
+.flow-diagram-fullscreen {
+  position: fixed;
+  inset: 33px;
+  z-index: 1401;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--description-diagram-modal-border);
+  border-radius: 8px;
+  background: var(--description-diagram-bg);
+  box-shadow: var(--description-diagram-modal-shadow);
+  outline: none;
+}
+.flow-diagram__toolbar.flow-diagram__toolbar--fullscreen { top: 12px; right: 10px; opacity: 1; pointer-events: auto; }
+.flow-diagram-fullscreen__body { display: flex; flex: 1; align-items: center; justify-content: center; min-width: 0; padding: 56px 24px 24px; overflow: auto; }
+.flow-diagram-fullscreen__body .flow-diagram__svg svg { max-width: none; }
+.flow-diagram-fullscreen__source { align-self: flex-start; width: 100%; margin: 0; color: var(--theme-text-primary); font: 400 13px / 20px var(--font-monospace); white-space: pre-wrap; }
