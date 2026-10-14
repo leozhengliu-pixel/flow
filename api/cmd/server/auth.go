@@ -1939,7 +1939,7 @@ func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if s.mailer != nil {
-			if err := s.mailer.sendInvitation(item.Email, data.Workspace.Name, item.Token); err != nil {
+			if err := s.mailer.sendInvitation(item.Email, data.Workspace.Name, authUser(r), item.Token); err != nil {
 				writeError(w, http.StatusBadGateway, "Invitation created, but the email could not be sent")
 				return
 			}
@@ -2028,7 +2028,8 @@ func (s *server) resendInvitation(w http.ResponseWriter, r *http.Request) {
 	}
 	invitation, err := s.store.ResendInvitation(r.Context(), data.Workspace.ID, r.PathValue("invitationId"))
 	if err == nil && s.mailer != nil {
-		err = s.mailer.sendInvitation(invitation.Email, data.Workspace.Name, invitation.Token)
+		// The resent email comes from whoever resent it, so replies reach someone who is acting on it now.
+		err = s.mailer.sendInvitation(invitation.Email, data.Workspace.Name, authUser(r), invitation.Token)
 	}
 	if !devAuthTokens() {
 		invitation.Token = ""
