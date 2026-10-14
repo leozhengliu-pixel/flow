@@ -181,8 +181,8 @@ standard form-encoded `/oauth/token` endpoint.
 
 ## Developer Tokens
 
-In an application's detail page, **Create & copy token** works: a
-command menu offers **User** (a `read`/`write` token with your personal
+In an application's detail page, **Create & copy token** opens a
+command menu that offers **User** (a `read`/`write` token with your personal
 attribution, created and copied at once) and **App** (a token for the
 application's app user). The first **App** token asks for its scopes (`read`
 and `write` on by default); while it is active, **App** copies the same token

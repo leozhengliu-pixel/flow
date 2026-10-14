@@ -395,8 +395,8 @@ export function WebhookEditPage({
             <p>
               This webhook uses the legacy payload format (type "issues",
               action "created"). Switch to the current format to receive
-              payloads (type "Issue", action "create", actor,
-              url and updatedFrom).
+              payloads with type "Issue", action "create", actor, url and
+              updatedFrom.
             </p>
             <ActionButton disabled={busy} onClick={() => void upgradePayload()}>
               Use current format

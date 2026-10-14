@@ -1,7 +1,7 @@
-# Loops — parity (2026-09-29)
+# Loops — reference-app parity (2026-09-29)
 
-Observed in the reference workspace (dark). Test loops were created there with the user's permission. The reference app could
-not execute runs in this trial workspace ("Your workspace's AI credits aren't set up yet"), so the reference app run output is not
+Observed in the reference app's workspace `flow-app12` (dark). Test loops were created there with the user's permission. It could
+not execute runs in this trial workspace ("Your workspace's AI credits aren't set up yet"), so the reference run output is not
 available; run behaviour below comes from the UI around runs.
 
 ## Loops page
@@ -16,7 +16,7 @@ available; run behaviour below comes from the UI around runs.
 
 - Title "Create a new loop", subtitle "Automate manual work for your team and keep your process moving", button
   **Start from scratch**.
-- Composer "Ask the reference app to build the loop for you" (attach, send = "Create loop from prompt").
+- Composer "Ask Flow to build the loop for you" (attach, send = "Create loop from prompt").
 - "or pick a template" — 2-column cards: icon, name, description, footer `trigger icon → action icon  action text`:
 
 | Template | Trigger | Action line |
@@ -62,7 +62,7 @@ Breadcrumb `Loops › New loop`. Icon + large "Loop name" input, level picker (W
   assigned / Specify exceptions). Each answer → "Updated workflow definition draft" + loop card, editing instructions
   and trigger filters in place. After the last answer it **publishes and enables** the loop ("Created automation" card
   with `Ran 0 times (30d)` and team) and navigates to the loop page.
-- **Prompt** ("Ask the reference app to build…"): editor pre-filled from the request (name, schedule incl. weekday, detailed
+- **Prompt** ("Ask Flow to build…"): editor pre-filled from the request (name, schedule incl. weekday, detailed
   instructions with entity chips), panel titled from the request; reply ends "It remains a draft for your review; I
   didn't publish, enable, or run it".
 

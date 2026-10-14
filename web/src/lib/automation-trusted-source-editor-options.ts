@@ -67,7 +67,7 @@ const KIND_LABEL: Record<TrustedSourceKind, string> = {
 };
 
 function isSlackAsksAppUser(user: User): boolean {
-  return !user.oauthClientId && user.name === "the reference app Asks";
+  return !user.oauthClientId && user.name === "Flow Asks";
 }
 
 function isFlowAppUser(user: User): boolean {

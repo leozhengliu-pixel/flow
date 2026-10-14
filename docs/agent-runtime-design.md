@@ -12,7 +12,7 @@ Status: design + spike, 2026-10-13. Owner: agent platform. Spike code: [`agent-w
 - **部署**：先做**嵌入式**——worker 是同一个 pod 里的 sidecar，队列用 MySQL 行租约（不需要 Redis，也不需要网关）。之后扩展成集群：Redis Streams 或 NATS 作队列，worker 按队列深度扩缩。
 - **调度**：分优先级通道（chat > 评论线程/委派 > loops > 后台），加上每个 workspace 的并发配额、公平调度和 AI credit 计费。
 - **Spike 结论**（数字见 [§16](#16-spike-results)，主模型 `deepseek-flash`，同一模型同时提供三种协议）：
-  - **质量**：38 个用例（15 个核心 + 23 个改编自 参照应用研究的用例）× 3 次重复。worker 三个协议的通过率为 100% / 99.1% / 100%（Responses / Chat / Anthropic），基线（进程内 Go agent）为 93.0%。
+  - **质量**：38 个用例（15 个核心 + 23 个改编自参考应用研究的用例）× 3 次重复。worker 三个协议的通过率为 100% / 99.1% / 100%（Responses / Chat / Anthropic），基线（进程内 Go agent）为 93.0%。
   - **基线的问题**：审批后续跑时不回传 DeepSeek 的 `reasoning_content`，导致 400；还有一次批量删除删错了对象（删的是其他测试的 issue）。
   - **延迟**：worker p50 为 8.8–9.4 s，基线为 12.1 s；首个 activity p50 为 1.3–1.9 s，基线为 2.4 s。
   - **并发**：单个 worker 进程（无子进程）跑 400 个并发会话（读、写、stop、挂起/恢复混合），成功 396–398/400；800 并发时 DeepSeek 连接错误激增到 1,622 次，成功率降到 86%。每会话内存约 **2.5–6 MB**（Claude Agent SDK spike 是 200–260 MB），CPU 约 0.1–0.2 s/会话，事件循环 p99 延迟 ≤ 76 ms。瓶颈是上游连接和 Flow API 的 `/mcp` 延迟（400 并发时 p99 4.7 s），不是 worker。
@@ -520,7 +520,7 @@ mcp_rps ≈ runs_per_second × (tool calls per run 5.5 + 3 per connection)
 - **Flow:** a lab API on `:8090` (copy of the dev database, rate limiting off for load, worker secret set) so load and crash tests did not disturb the shared `:8080`; MCP authenticated with a personal API key (read/write) created for the dev user and revoked afterwards, or with run tokens in the queue tests.
 - **Eval:** 38 prompts × 3 repeats × 4 arms (456 cases), each arm-repeat on its own "QA spike – <arm><n>" fixtures, all 12 streams concurrently; results verified against Flow state through MCP.
   - **Core 15:** R1 capabilities, R2 inventory, R3 table, R4 history; W1 fields, W2 three sub-issues, W3 assign and state, W4 project + milestone + move, W5 design doc; Q1 `ask_user`; A1 bulk-delete approval; Z1 Chinese + write; M1 initiative + link + update; N1 refusal (no code access); S1 stop mid-run + follow-up.
-  - **23 adapted from the 39 the reference app prompts** (`raw-linear-prompts.md`; the rest overlap the core set or need non-chat surfaces): relations add/remove/verify, fields + verify, clarify-before-change, rewrite description, web research, owner + state + reminder, single delete without approval, customer + request, unsupported cycle creation, disabled loop, project description edit, update review, draft and post an At-risk update, risk + lead + target date, in-place document edit, save a skill, capability self-report, custom view, initiative update + target date, bulk cleanup via the agent.
+  - **23 adapted from the 39 reference-app prompts** (the rest overlap the core set or need non-chat surfaces): relations add/remove/verify, fields + verify, clarify-before-change, rewrite description, web research, owner + state + reminder, single delete without approval, customer + request, unsupported cycle creation, disabled loop, project description edit, update review, draft and post an At-risk update, risk + lead + target date, in-place document edit, save a skill, capability self-report, custom view, initiative update + target date, bulk cleanup via the agent.
 - **Logs:** session scratchpad `worker/` (`eval-full*/`, `load/`, `logs/`).
 - **Reproduce** (credentials from files, never printed):
 
@@ -566,7 +566,7 @@ Notes:
 - Tool errors are almost all argument validation (`fields` enum values such as `identifier` on list tools, extra properties), corrected by the model from Flow's detail.
 - The worker's Anthropic cache share is lower because the AI SDK adapter puts `cache_control` on the request, while OpenAI-protocol caching is automatic prefix caching keyed by `prompt_cache_key`.
 
-**Core 15, single run on `deepseek-flash`** (before the reference app prompts were added): baseline 14/15 (A1), all worker arms 15/15; p50 10.6 / 9.7 / 8.5 / 8.6 s; first activity p50 2.4 / 2.1 / 1.4 / 1.1 s; 14–17k prompt tokens per call, 81–90% cached.
+**Core 15, single run on `deepseek-flash`** (before the reference-app prompts were added): baseline 14/15 (A1), all worker arms 15/15; p50 10.6 / 9.7 / 8.5 / 8.6 s; first activity p50 2.4 / 2.1 / 1.4 / 1.1 s; 14–17k prompt tokens per call, 81–90% cached.
 
 **Core 15 on `gpt-6.1-sol`** (secondary; Responses upstream, effort medium; upstream stalls of 17–32 minutes hit all arms during the run, affected cases re-run):
 

@@ -74,8 +74,7 @@ type ApplicationToken struct {
 	Existing bool `json:"existing,omitempty"`
 }
 
-// OAuthAppManifest describes an OAuth application declaratively, in the
-// shape of the reference app's OAuth app manifests (see
+// OAuthAppManifest describes an OAuth application declaratively (see
 // /.well-known/oauth-app-manifest.schema.json).
 type OAuthAppManifest struct {
 	Schema        string `json:"$schema,omitempty"`

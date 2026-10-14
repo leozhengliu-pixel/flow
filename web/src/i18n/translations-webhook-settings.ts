@@ -43,7 +43,7 @@ export const webhookSettingsZhCN: Record<string, string> = {
   "Enable webhook": "启用 Webhook",
   "Recent deliveries are failing. The webhook is disabled if they keep failing for 24 hours.": "最近的投递失败。若持续失败 24 小时，Webhook 将被停用。",
   "Every delivery carries a Flow-Signature header: the HMAC-SHA256 of the raw body, keyed with this secret. The full secret is shown only once after create or rotate.": "每次投递都带有 Flow-Signature 请求头：使用此密钥对原始正文计算的 HMAC-SHA256。完整密钥仅在创建或轮换后显示一次。",
-  "This webhook uses the legacy payload format (type \"issues\", action \"created\"). Switch to the current format to receive 参照应用-compatible payloads (type \"Issue\", action \"create\", actor, url and updatedFrom).": "此 Webhook 使用旧版负载格式（type \"issues\"、action \"created\"）。切换到当前格式以接收兼容 参照应用的负载（type \"Issue\"、action \"create\"、actor、url 和 updatedFrom）。",
+  "This webhook uses the legacy payload format (type \"issues\", action \"created\"). Switch to the current format to receive payloads with type \"Issue\", action \"create\", actor, url and updatedFrom.": "此 Webhook 使用旧版负载格式（type \"issues\"、action \"created\"）。切换到当前格式以接收新格式的负载（type \"Issue\"、action \"create\"、actor、url 和 updatedFrom）。",
   "Use current format": "使用当前格式",
   "Send a WebhookTest event to check the endpoint.": "发送 WebhookTest 事件以检查端点。",
   "Send test event": "发送测试事件",

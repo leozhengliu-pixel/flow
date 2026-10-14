@@ -8,10 +8,8 @@ when to use each identity and how to build an Agent on top of it.
 
 The protocol follows RFC 6749, RFC 7636 (PKCE), RFC 7009 (revocation), RFC 7662
 (introspection) and RFC 8414 (metadata at
-`/.well-known/oauth-authorization-server`). Parameter names and behaviour
-match the reference app's OAuth API, so an integration written for the reference app's OAuth flow
-needs only its base URL changed. Flow has no GraphQL API; after OAuth, call the
-REST API described in [openapi.json](openapi.json).
+`/.well-known/oauth-authorization-server`). Flow has no GraphQL API; after
+OAuth, call the REST API described in [openapi.json](openapi.json).
 
 ## Endpoints
 
@@ -62,7 +60,7 @@ application for the same (or broader) scopes, with `actor=user`, is sent
 straight back to the callback with a new code. Public clients and `actor=app`
 installs always show the consent screen.
 
-The consent screen: a workspace switcher in the corner,
+The consent screen has a workspace switcher in the corner,
 "<App> is requesting access · Authenticating with your <workspace> workspace",
 the requested permissions (`write` hides the narrower `issues:create`,
 `comments:create` and `timeSchedule:write`), then "Receive realtime updates
@@ -75,7 +73,7 @@ member of) and "Only select teams…" (every team); a picker needs at least one
 team before Authorize is enabled.
 
 An `actor=app` request for an application that is already installed in the
-chosen workspace shows the reference app's re-consent card instead, without team access
+chosen workspace shows a re-consent card instead, without team access
 or the data-sharing notice:
 
 - When it asks for something the installation does not have yet:
@@ -98,7 +96,7 @@ reads the installation from `GET /api/oauth/installation?workspace=&client_id=`
 (administrators only).
 
 An invalid request shows Flow's mark and the error description instead, with
-The reference app's wording:
+these messages:
 
 | Problem | `error` | Description |
 | --- | --- | --- |
@@ -168,8 +166,8 @@ Response:
 }
 ```
 
-Access tokens last one hour (the reference app: 24 hours); refresh tokens last 30 days.
-As in the reference app, `scope` is space-separated, sorted and uses the reference app's scope names
+Access tokens last one hour; refresh tokens last 30 days.
+`scope` is space-separated, sorted and uses the short scope names
 (`issues:create`, `comments:create`) in every token response, refresh and
 introspection result and in `scopes_supported`. Requests may still use Flow's
 older names `create_issues` and `create_comments`.
@@ -208,7 +206,7 @@ curl --fail-with-body "$FLOW_BASE_URL/oauth/revoke" --user "$CLIENT_ID:$CLIENT_S
 - Client authentication is optional. When supplied it must be valid
   (`401 invalid_client`), and the token must have been issued to that client.
 - Unknown, expired or already revoked tokens return `200`, as RFC 7009
-  requires. (the reference app returns `400` for an already revoked token.)
+  requires.
 - For compatibility, the legacy `Authorization: Bearer <access token>` header
   and the `access_token` / `refresh_token` form fields are accepted; they must
   not be combined with `token`.
@@ -285,7 +283,7 @@ stay hidden from it.
 
 "Receive realtime updates about your workspace" is not an OAuth scope (tokens
 never carry it): the consent screen and the application's page in Settings ›
-Applications list it while the application has a webhook. As in the reference app, an
+Applications list it while the application has a webhook. An
 installation authorized before the application had a webhook receives no
 deliveries until an administrator authorizes it again (the consent screen then
 lists it under **Requested permissions**); installations made with the webhook
@@ -300,7 +298,7 @@ in place, and installations created directly through
 | `write` | yes | yes | Create and modify accessible resources. |
 | `issues:create` (`create_issues`) | yes | yes | Create and update issues and their attachments. |
 | `comments:create` (`create_comments`) | yes | yes | Create issue comments. |
-| `timeSchedule:write` | yes | no | Accepted for the reference app compatibility; Flow has no time schedule API, so it grants nothing. |
+| `timeSchedule:write` | yes | no | Accepted for compatibility; Flow has no time schedule API, so it grants nothing. |
 | `admin` | yes, if configured | **no** | Admin-level endpoints, only when the person is an admin. The application must list `admin` in its configured scopes (applications created on the settings page can request every scope); public clients cannot request it. |
 | `app:assignable`, `app:mentionable` | no | yes | Agent delegation and mentions. |
 | `customer:read`, `customer:write`, `initiative:read`, `initiative:write` | no | yes | Customer and initiative access for the app user ("Read data about customers in the workspace", "Read and write data about customers in the workspace", and the same for initiatives). |
@@ -361,8 +359,8 @@ Token, revocation and introspection endpoints return RFC 6749 errors:
 
 ## Application manifests
 
-A manifest describes an OAuth application as JSON, in the same format as
-The reference app's OAuth app manifests (plus two Flow extensions). Use it to create apps
+A manifest describes an OAuth application as JSON, (with a few Flow
+extensions, marked below). Use it to create apps
 reproducibly, review them in code, or link people to a pre-filled setup page.
 
 ```json
@@ -405,11 +403,11 @@ reproducibly, review them in code, or link people to a pre-filled setup page.
 | `oauth.grant_types` | `authorization_code` (required, default) and optionally `client_credentials`. |
 | `oauth.scopes` | *Flow extension.* Scopes the application may request (default `read`). |
 | `webhook.url` | Required with `webhook`. HTTPS, not a loopback, private-network or internal host (the same check as every Flow webhook). |
-| `webhook.resourceTypes` | Required with `webhook`, at least one, unique. Payload type names (`Issue`, `Comment`, `Attachment`, `IssueLabel`, `Reaction`, `Project`, `ProjectUpdate`, `ProjectMilestone`, `Document`, `Initiative`, `InitiativeUpdate`, `Cycle`, `Customer`, `CustomerNeed`, `User`, `IssueSLA`, `Release`, `ReleaseNote`, `IssueRelation`, and the application events `OAuthApp` (the reference app's `OAuthAuthorization` is accepted), `PermissionChange`, `AppUserNotification`, `AgentSessionEvent`) or Flow's webhook ids (`issues`, `comments`, …). Stored and exported under the payload type names. The reference app's `ProjectLabel` is not supported yet. |
+| `webhook.resourceTypes` | Required with `webhook`, at least one, unique. Payload type names (`Issue`, `Comment`, `Attachment`, `IssueLabel`, `Reaction`, `Project`, `ProjectUpdate`, `ProjectMilestone`, `Document`, `Initiative`, `InitiativeUpdate`, `Cycle`, `Customer`, `CustomerNeed`, `User`, `IssueSLA`, `Release`, `ReleaseNote`, `IssueRelation`, and the application events `OAuthApp` (`OAuthAuthorization` is accepted as an alias), `PermissionChange`, `AppUserNotification`, `AgentSessionEvent`) or Flow's webhook ids (`issues`, `comments`, …). Stored and exported under the payload type names. `ProjectLabel` is not supported yet. |
 | `webhook.enabled` | Default `true`. |
 | `webhook.secret` | *Flow extension, write-only.* The signing secret the settings form generated and showed (`flow_wh_…`). Used only when the application has no signing secret yet, otherwise ignored; never exported. Leave it out to have Flow generate one. |
 | `agent.assignable`, `agent.mentionable` | *Flow extension.* Add `app:assignable` / `app:mentionable`. |
-| `github.username` | *Flow extension* (the reference app's form field "GitHub username"). A GitHub user name, or a GitHub App's bot name with the `[bot]` suffix (`my-app[bot]`). Unique among the workspace's applications. Leaving `github` out clears it. See [GitHub username](#github-username). |
+| `github.username` | *Flow extension.* A GitHub user name, or a GitHub App's bot name with the `[bot]` suffix (`my-app[bot]`). Unique among the workspace's applications. Leaving `github` out clears it. See [GitHub username](#github-username). |
 
 Unknown fields are rejected. The JSON Schema at
 `/.well-known/oauth-app-manifest.schema.json` lets editors and CI validate a
@@ -435,7 +433,7 @@ Invalid manifests return `400` with `{"error": "...", "issues": [...]}`.
 ### Pre-filled setup links
 
 Link people to `/<workspace>/settings/api/applications/new` with either a
-`manifest` query parameter containing the URL-encoded JSON, or the reference app's
+`manifest` query parameter containing the URL-encoded JSON, or
 dot-notation parameters: `distribution`, `display.description`,
 `display.iconUrl`, `developer.name`, `oauth.client_name`, `oauth.client_uri`,
 `oauth.redirect_uris` (repeat), `oauth.grant_types` (repeat), `webhook.enabled`,
@@ -458,12 +456,12 @@ application: it is created, updated or removed to match the manifest.
 
 ## Settings pages
 
-Flow's settings follow the reference app's:
+Flow's settings pages:
 
 - **Settings › API › OAuth applications** lists the workspace's applications
   ("N OAuth applications", each with its icon and "Updated <date>") and
   creates them at `/<workspace>/settings/api/applications/new`. The create and
-  edit form has the reference app's fields, including **GitHub username** (checked on
+  edit form has the application's fields, including **GitHub username** (checked on
   submit against GitHub's public API: "Invalid GitHub username" when the
   account does not exist). With **Webhooks** on, the form shows the **Webhook
   signing secret**: a new application (or one whose webhook was never
@@ -501,8 +499,8 @@ Flow's settings follow the reference app's:
 
 ## Developer tokens
 
-**Create & copy token** on an application's page works: a
-command menu ("Create developer access token…") offers **User** and **App**.
+**Create & copy token** on an application's page opens a
+command menu ("Create developer access token…") with **User** and **App**.
 
 - **User** creates an `actor=user` token for you with `read` and `write` (as
   far as the application's configured scopes allow), copies it and says
@@ -525,7 +523,7 @@ command menu ("Create developer access token…") offers **User** and **App**.
 | `GET /api/oauth-applications/{id}/developer-token` | The app user's active developer token (`"existing": true`), or `404`. |
 
 The responses have the token endpoint's shape (`access_token`, `expires_in`,
-`scope` with the reference app's names, `actor`, `app_user_id`). Developer tokens last
+`scope` with the short names, `actor`, `app_user_id`). Developer tokens last
 one hour, like other Flow access tokens, and have no refresh token. These
 endpoints need a workspace administrator, signed in or with an admin API key.
 
@@ -550,9 +548,7 @@ manager with a short expiry, and revoke them when they are no longer needed.
 
 ## GitHub username
 
-An application's **GitHub username** (the reference app: "For `actor=app` only, add a
-GitHub username to associate commits and comments in GitHub with your
-application") ties a GitHub account to the application's app user, the way a
+An application's **GitHub username** (for `actor=app` only) ties a GitHub account to the application's app user, the way a
 member's connected GitHub account belongs to them. Use the account your
 application acts as on GitHub, or a GitHub App's bot name such as
 `my-app[bot]`. With the GitHub integration connected, pull requests opened by

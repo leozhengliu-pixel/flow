@@ -17,7 +17,7 @@ type User struct {
 	UserID            string     `json:"userId,omitempty"`
 	Name              string     `json:"name"`
 	DisplayName       string     `json:"displayName"`
-	// Username is the workspace-unique handle (the reference app's "username"), derived
+	// Username is the workspace-unique handle (shown as "username"), derived
 	// per request from account settings or the email local part.
 	Username      string `json:"username,omitempty"`
 	JobTitle      string `json:"jobTitle,omitempty"`
@@ -590,8 +590,8 @@ type Issue struct {
 	AddedToCycle           string           `json:"addedToCycle,omitempty"`
 	AgentSessionID         string           `json:"agentSessionId,omitempty"`
 	SuggestedLabelIDs      []string         `json:"suggestedLabelIds,omitempty"`
-	// Active Triage Intelligence suggestion targets (the reference app's "Suggested
-	// assignee/project/team", "Suggested duplicates/relations" filters). They
+	// Active Triage Intelligence suggestion targets (the "Suggested
+	// assignee/project/team" and "Suggested duplicates/relations" filters). They
 	// mirror the active IssueSuggestions so filters stay indexed lookups.
 	SuggestedAssigneeIDs  []string `json:"suggestedAssigneeIds,omitempty"`
 	SuggestedProjectIDs   []string `json:"suggestedProjectIds,omitempty"`
@@ -811,7 +811,7 @@ type Attachment struct {
 	ProviderURL string    `json:"providerUrl,omitempty"`
 	LinkbackURL string    `json:"linkbackUrl,omitempty"`
 	SyncStatus  string    `json:"syncStatus,omitempty"`
-	// Link attachments (the reference app's attachmentCreate): a subtitle, an icon and
+	// Link attachments: a subtitle, an icon and
 	// free-form key/value metadata shown with the link. Re-creating an
 	// attachment with the same URL on the same issue updates it.
 	Subtitle  string         `json:"subtitle,omitempty"`
@@ -1006,7 +1006,7 @@ type ReleaseResource struct {
 	Title      string `json:"title"`
 	URL        string `json:"url,omitempty"`
 	DocumentID string `json:"documentId,omitempty"`
-	// Content holds markdown for documents attached by CI (the reference app's --document).
+	// Content holds markdown for documents attached by CI (the --document option).
 	Content   string    `json:"content,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }

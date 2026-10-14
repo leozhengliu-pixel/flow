@@ -1,7 +1,7 @@
 # TypeScript SDK
 
-`@flow/sdk` is a typed client for the [Flow REST API](api.md). It follows the
-ergonomics of the reference app's TypeScript SDK where REST allows it: a `FlowClient` with
+`@flow/sdk` is a typed client for the [Flow REST API](api.md). It offers
+a `FlowClient` with
 `client.viewer`, `client.issues(…)` and `client.createIssue(…)`, Relay-style
 connections with `fetchNext()`, typed errors, a webhook receiver and OAuth
 helpers. Flow has no GraphQL API, so the SDK talks to the same REST endpoints
@@ -18,7 +18,7 @@ Contents: [Install](#install) · [Authentication](#authentication) ·
 [Pagination](#pagination) · [Mutations](#mutations) · [Files](#files) ·
 [Errors](#errors) · [Rate limits and retries](#rate-limits-and-retries) ·
 [Advanced usage](#advanced-usage) · [Webhooks](#webhooks) · [OAuth](#oauth) ·
-[Generated code](#generated-code) · [Differences from the reference app's SDK](#differences-from-linears-sdk)
+[Generated code](#generated-code) · [Design notes](#design-notes)
 
 ## Install
 
@@ -546,7 +546,7 @@ reachable through `client.request()` but may change.
 Develop the package with `npm install`, `npm run build`, `npm test` and
 `npx tsc --noEmit` inside `sdk/typescript`.
 
-## Differences from the reference app's SDK
+## Design notes
 
 - REST, not GraphQL: no query documents and no field selection. Methods return
   whole resources, and connections are fetched with the REST pagination
@@ -558,10 +558,10 @@ Develop the package with `npm install`, `npm run build`, `npm test` and
   failures throw.
 - Nested resources take their parent in the input: `createComment({ issueId, … })`,
   `updateComment(commentId, { issueId, … })`.
-- `fetchNext()` appends to the connection; `for await` over a
+- `fetchNext()` appends to the connection in place; `for await` over a
   connection walks every page.
 - `client.rateLimit`, `error.rateLimit` and opt-in `retry` replace hand-written
-  backoff around `RatelimitedFlowError`.
+  backoff around rate-limit errors.
 - Versioning: the SDK follows Flow's release version. The REST API is
   additive-only ([versioning policy](api.md#versioning-and-deprecations)), so
   ignore unknown fields.

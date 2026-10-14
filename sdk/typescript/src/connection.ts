@@ -31,8 +31,7 @@ export interface Page<T> {
 export type PageFetcher<T> = (request: PageRequest) => Promise<Page<T>>
 
 /**
- * A page of results with the means to fetch its neighbours, like the
- * connections of the reference app SDK.
+ * A page of results with the means to fetch its neighbours.
  *
  * ```ts
  * const issues = await client.issues({ first: 50 })

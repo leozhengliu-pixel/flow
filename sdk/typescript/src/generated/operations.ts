@@ -104,7 +104,7 @@ export interface GetAttachmentsQuery {
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
-  /** filter object (JSON). Filterable fields: id, title, subtitle, url, contentType, sourceType, issue, creator, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, title, subtitle, url, contentType, sourceType, issue, creator, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
   issueId?: string
   url?: string
@@ -134,7 +134,7 @@ export interface GetCommentsQuery {
   orderBy?: "createdAt"
   /** Include archived resources. */
   includeArchived?: boolean
-  /** filter object (JSON). Filterable fields: id, body, user, parent, resolved, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, body, user, parent, resolved, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
   /** Issue id or identifier (ENG-123). */
   issueId?: string
@@ -162,7 +162,7 @@ export interface GetCustomerRequestsQuery {
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
-  /** filter object (JSON). Filterable fields: id, body, customer, issue, project, priority, source, creator, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, body, customer, issue, project, priority, source, creator, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
   customerId?: string
   issueId?: string
@@ -199,7 +199,7 @@ export interface GetCustomersQuery {
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
-  /** filter object (JSON). Filterable fields: id, name, domains, externalIds, status, tier, owner, revenue, size, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, name, domains, externalIds, status, tier, owner, revenue, size, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
 }
 
@@ -248,7 +248,7 @@ export interface GetCyclesQuery {
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
-  /** filter object (JSON). Filterable fields: id, name, number, status, team, startsAt, endsAt, isActive, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, name, number, status, team, startsAt, endsAt, isActive, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
   /** Only resources of these teams (comma-separated ids). */
   teamId?: string
@@ -278,7 +278,7 @@ export interface GetDocumentsQuery {
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
-  /** filter object (JSON). Filterable fields: id, title, slugId, creator, teams, projects, issue, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, title, slugId, creator, teams, projects, issue, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
   /** Only resources of these teams (comma-separated ids). */
   teamId?: string
@@ -293,7 +293,7 @@ export interface GetDocumentsRequest {
 export interface GetDocumentsLegacyQuery {
   /** Include archived resources. */
   includeArchived?: boolean
-  /** filter object (JSON). Filterable fields: id, title, slugId, creator, teams, projects, issue, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, title, slugId, creator, teams, projects, issue, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
   /** Only resources of these teams (comma-separated ids). */
   teamId?: string
@@ -378,7 +378,7 @@ export interface GetInitiativesQuery {
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
-  /** filter object (JSON). Filterable fields: id, name, slugId, status, health, owner, creator, targetDate, projects, parentInitiatives, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, name, slugId, status, health, owner, creator, targetDate, projects, parentInitiatives, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
 }
 
@@ -444,7 +444,7 @@ export interface GetIssueLabelsQuery {
   orderBy?: "createdAt"
   /** Include archived resources. */
   includeArchived?: boolean
-  /** filter object (JSON). Filterable fields: id, name, color, team, parent, createdAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, name, color, team, parent, createdAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
   /** Only resources of these teams (comma-separated ids). */
   teamId?: string
@@ -708,7 +708,7 @@ export interface GetProjectMilestonesQuery {
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
-  /** filter object (JSON). Filterable fields: id, name, project, targetDate, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, name, project, targetDate, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
   /** Only milestones of these projects (comma-separated ids or slugs). */
   projectId?: string
@@ -857,7 +857,7 @@ export interface GetReleasesQuery {
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
-  /** filter object (JSON). Filterable fields: id, name, slugId, status, pipeline, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, name, slugId, status, pipeline, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
   /** Only releases of these pipelines. */
   pipelineId?: string
@@ -872,7 +872,7 @@ export interface GetReleasesRequest {
 export interface GetReleasesLegacyQuery {
   /** Include archived resources. */
   includeArchived?: boolean
-  /** filter object (JSON). Filterable fields: id, name, slugId, status, pipeline, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, name, slugId, status, pipeline, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
   /** Only releases of these pipelines. */
   pipelineId?: string
@@ -899,7 +899,7 @@ export interface GetTeamsQuery {
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
-  /** filter object (JSON). Filterable fields: id, name, key, private, parent, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, name, key, private, parent, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
 }
 
@@ -958,7 +958,7 @@ export interface GetUsersQuery {
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
-  /** filter object (JSON). Filterable fields: id, name, displayName, username, email, active, app, admin, isMe, createdAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, name, displayName, username, email, active, app, admin, isMe, createdAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
   /** Include deactivated users. */
   includeDisabled?: boolean
@@ -988,7 +988,7 @@ export interface GetWebhooksQuery {
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
-  /** filter object (JSON). Filterable fields: id, name, url, enabled, resourceTypes, teams, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, name, url, enabled, resourceTypes, teams, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
 }
 
@@ -1001,7 +1001,7 @@ export interface GetWebhooksRequest {
 export interface GetWebhooksLegacyQuery {
   /** Include archived resources. */
   includeArchived?: boolean
-  /** filter object (JSON). Filterable fields: id, name, url, enabled, resourceTypes, teams, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, name, url, enabled, resourceTypes, teams, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
 }
 
@@ -1091,7 +1091,7 @@ export interface GetWorkflowStatesQuery {
   orderBy?: "createdAt"
   /** Include archived resources. */
   includeArchived?: boolean
-  /** filter object (JSON). Filterable fields: id, name, type, position, team. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, name, type, position, team. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
   /** Only resources of these teams (comma-separated ids). */
   teamId?: string
@@ -1121,7 +1121,7 @@ export interface GetWorkspaceAuditLogQuery {
   orderBy?: "createdAt"
   /** Include archived resources. */
   includeArchived?: boolean
-  /** filter object (JSON). Filterable fields: id, type, action, resourceType, resourceId, actor, ip, createdAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, type, action, resourceType, resourceId, actor, ip, createdAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
   type?: string
   actorId?: string
@@ -1143,7 +1143,7 @@ export interface GetWorkspaceAuditLogRequest {
 export interface GetWorkspaceAuditLogLegacyQuery {
   /** Include archived resources. */
   includeArchived?: boolean
-  /** filter object (JSON). Filterable fields: id, type, action, resourceType, resourceId, actor, ip, createdAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, type, action, resourceType, resourceId, actor, ip, createdAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
   type?: string
   actorId?: string
@@ -1291,7 +1291,7 @@ export class FlowApi {
   /**
    * `GET /api/attachments`
    * List attachments by issue or URL
-   * Provide issueId and/or url (the reference app's attachmentsForURL).
+   * Provide issueId and/or url.
    */
   getAttachments(request?: GetAttachmentsRequest, options?: RequestOptions): Promise<AttachmentConnection> {
     return this.transport.request({ method: "GET", path: "/api/attachments", query: request?.query, ...options })
@@ -1786,7 +1786,7 @@ export class FlowApi {
   /**
    * `GET /api/oauth-applications/{id}/manifest`
    * Export an application as a manifest
-   * The reference app's OAuth app manifest shape, with Flow's oauth.scopes, agent and github extensions (see /.well-known/oauth-app-manifest.schema.json). Never includes secrets.
+   * The OAuth app manifest, with Flow's oauth.scopes, agent and github extensions (see /.well-known/oauth-app-manifest.schema.json). Never includes secrets.
    */
   getOauthApplicationsIdManifest(request: GetOauthApplicationsIdManifestRequest, options?: RequestOptions): Promise<OAuthAppManifest> {
     return this.transport.request({ method: "GET", path: "/api/oauth-applications/{id}/manifest", pathParams: request.path, ...options })

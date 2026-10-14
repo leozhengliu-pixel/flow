@@ -80,7 +80,7 @@ type Organization struct {
 	TeamCount int `json:"teamCount"`
 }
 
-// FileUploadInput prepares an upload (the reference app's fileUpload).
+// FileUploadInput prepares an upload.
 type FileUploadInput struct {
 	ContentType string `json:"contentType"`
 	Filename    string `json:"filename"`

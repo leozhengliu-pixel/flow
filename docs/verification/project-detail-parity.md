@@ -1,4 +1,4 @@
-# Project Detail vs. The reference app Comparison
+# Project Detail vs. Reference App Comparison
 
 Date: 2026-09-27. Scope: project detail page (Overview, Activity, Issues tabs,
 right sidebar, header, and property menus) in dark and light themes.
@@ -28,11 +28,11 @@ out of scope.
 `web/src/components/project-detail/project-detail-page.css` sets
 `--pd-copy: var(--theme-text-secondary)` in the base (dark) block but
 `--pd-copy: var(--text-body)` for `[data-theme="light"]`. The light theme
-therefore, while in dark the summary, description body, list
+therefore matches the reference, while in dark the summary, description body, list
 items, and overview property chips all render at secondary gray `#98999c`
-instead of the reference app's body `#e3e4e6`. `--pd-card-border` has the opposite
+instead of the reference body `#e3e4e6`. `--pd-card-border` has the opposite
 problem in light: `lch(97.3% 0 282)` renders as `#f7f7f7`, so the sidebar
-cards are nearly borderless (the reference app: 0.5px `#e8e8e8`).
+cards are nearly borderless (reference: 0.5px `#e8e8e8`).
 
 ## Findings
 
@@ -41,7 +41,7 @@ is a measurable style difference; **P3** is minor.
 
 ### Header (y 0-52)
 
-| # | Sev | Element | the reference app | Flow |
+| # | Sev | Element | Reference app | Flow |
 |---|---|---|---|---|
 | H1 | P1 | Breadcrumb | `Projects › [icon] Compare Test` | No `Projects ›` segment, so the favorite and actions buttons sit 77px further left (x 374 vs 451) |
 | H2 | P1 | Breadcrumb project icon | Project color (indigo default) | New projects default to red `#eb5757` |
@@ -51,7 +51,7 @@ is a measurable style difference; **P3** is minor.
 
 ### Tab bar (y 60)
 
-| # | Sev | Element | the reference app | Flow |
+| # | Sev | Element | Reference app | Flow |
 |---|---|---|---|---|
 | T1 | P1 | Inactive tab pill (dark) | bg `#1c1c1d` | Transparent |
 | T2 | P2 | Active tab pill (dark) | bg `#29292b`, text `#ffffff` | bg `#202022`, text `#e5e6e8` |
@@ -64,7 +64,7 @@ Light-theme tab colors match (`#ececed` active, `#ffffff` inactive).
 
 ### Overview: title block
 
-| # | Sev | Element | the reference app | Flow |
+| # | Sev | Element | Reference app | Flow |
 |---|---|---|---|---|
 | O1 | P1 | Icon tile | 36x36, bg project color at 18% alpha, 24px glyph | 28x32, bg `#202022` (dark) / `#f8f8f9` (light), 22px glyph |
 | O2 | P2 | Title | y 208, 24px/32px/600, letter spacing -0.16px, `#ffffff` | Input at y 204, no letter spacing, `#e5e6e8` |
@@ -72,7 +72,7 @@ Light-theme tab colors match (`#ececed` active, `#ffffff` inactive).
 
 ### Overview: property rows
 
-| # | Sev | Element | the reference app | Flow |
+| # | Sev | Element | Reference app | Flow |
 |---|---|---|---|---|
 | P1 | P1 | Rows shown | Properties, Resources | Properties, Initiatives, Labels, Resources, Customers (empty rows are always visible) |
 | P2 | P2 | Row label width | Fits content (65px) | Fixed 82px |
@@ -85,7 +85,7 @@ Light-theme tab colors match (`#ececed` active, `#ffffff` inactive).
 
 ### Overview: update card, description, milestones
 
-| # | Sev | Element | the reference app | Flow |
+| # | Sev | Element | Reference app | Flow |
 |---|---|---|---|---|
 | D1 | P1 | "Write first project update" | Inside a 688x65 card, 0.5px `#2c2d2f`, radius 10 | No card; the button floats |
 | D2 | P1 | Description body x | 293 (aligned with labels) | 307 (14px indent); list items 331 vs 317 |
@@ -99,7 +99,7 @@ Light-theme tab colors match (`#ececed` active, `#ffffff` inactive).
 
 ### Right sidebar
 
-| # | Sev | Element | the reference app | Flow |
+| # | Sev | Element | Reference app | Flow |
 |---|---|---|---|---|
 | S1 | P1 | Card frame | x 1001, width 388 (8px from the panel edge), 0.5px border `#29292c` (dark) / `#e8e8e8` (light) | Width 396, flush with the panel edge, 1px `#202022` (dark) / `#f7f7f7` (light, nearly invisible) |
 | S2 | P2 | Section header | 28px row; chevron 16px `#98999c`; `+` 28x28 with 14px icon `#e4e5e7` | 41px row; chevron 11px `#565759`; `+` 23x23 with 13px icon `#7d7d82` |
@@ -115,7 +115,7 @@ Light-theme tab colors match (`#ececed` active, `#ffffff` inactive).
 
 ### Activity tab
 
-| # | Sev | Element | the reference app | Flow |
+| # | Sev | Element | Reference app | Flow |
 |---|---|---|---|---|
 | A1 | P1 | Composer default mode | `Comment` | `Update` (with health pill and property diff) |
 | A2 | P1 | Feed | Shows `created the project` below the composer | No entries under the composer |
@@ -127,16 +127,16 @@ Light-theme tab colors match (`#ececed` active, `#ffffff` inactive).
 
 ### Issues tab (empty project)
 
-| # | Sev | Element | the reference app | Flow |
+| # | Sev | Element | Reference app | Flow |
 |---|---|---|---|---|
 | I1 | P1 | Empty state | Illustration 86x80, `Add issues to the project` 15px/600, two helper paragraphs 13px/18.2px, primary `Create new issue` button (`#5e6ad2` dark / `#6d78d5` light) with `C` key hint; left-aligned at x 451 | Centered `No matching issues` / `Change the filters or create a new issue.` (filter copy on an unfiltered project) plus secondary `Create issue` button |
 
 ### Menus
 
-All Flow menus's container style (bg, 0.5px border, radius 12,
+All Flow menus match the reference container style (bg, 0.5px border, radius 12,
 shadow). Differences:
 
-| # | Sev | Menu | the reference app | Flow |
+| # | Sev | Menu | Reference app | Flow |
 |---|---|---|---|---|
 | M1 | P2 | Project actions | 245px wide, items 31px, weight 400 | 264px wide, items 32px, weight 450; same items |
 | M2 | P2 | Status / priority | 247x205, items 31px, filter input 35px | 252x213, items 32px, input 36px; same items and number hints |
@@ -158,7 +158,7 @@ sidebar match within ±3 per channel. Menu containers match.
 1. Dark `--pd-copy` → body text token, and light `--pd-card-border` → a
    visible border token (fixes O3, P4, D3, and S1 color).
 2. Sidebar typography and placeholder dimming (S3, S4), card inset (S1).
-3. Hide empty optional rows and sections (P1, S5, S8), and use the reference app
+3. Hide empty optional rows and sections (P1, S5, S8), and use the reference
    empty state on the Issues tab (I1).
 4. Activity tab: default to Comment and render the feed (A1, A2).
 5. Header breadcrumb and tab pills (H1, T1, T2); description indent (D2);
@@ -269,8 +269,8 @@ Viewport 1470x706 for these measurements.
 ## Correction: Popover Sizes (2026-09-28)
 
 Earlier popover sizes in this document were taken with
-`getBoundingClientRect()` while the reference app tab was in the background. Hidden
-tabs pause animations, so the reference app menus were frozen at their opening frame,
+`getBoundingClientRect()` while the reference app's tab was in the background. Hidden
+tabs pause animations, so its menus were frozen at their opening frame,
 `scale(0.98)`, and the widths and heights came out about 2% small. Use
 `offsetWidth`/`offsetHeight`, which ignore transforms. Corrected values:
 

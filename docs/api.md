@@ -121,7 +121,7 @@ stop at the first node you have already seen.
 
 ## Filtering
 
-`filter` is a JSON object in the style of the reference app's filters. Conditions in one
+`filter` is a JSON object. Conditions in one
 object must all match; `and`/`or` take arrays of filters.
 
 ```bash
@@ -174,7 +174,7 @@ errors (`error`, `error_description`) and MCP keeps JSON-RPC errors.
 
 ## Rate limits
 
-Flow uses the reference app's leaky-bucket model: each budget refills continuously at
+Flow uses a leaky-bucket model: each budget refills continuously at
 limit ÷ hour.
 
 | Credential | Requests / hour | Complexity points / hour | Bucket |
@@ -210,7 +210,7 @@ can change the budgets (see [configuration](configuration.md#api-rate-limits)).
 
 ## Files
 
-Uploading follows the reference app's `fileUpload` flow: prepare, PUT the bytes, then use
+Uploading is a three-step flow: prepare, PUT the bytes, then use
 the asset URL.
 
 ```bash
@@ -257,8 +257,7 @@ database on first use.
 
 ## Attachments
 
-Link attachments connect an issue to an external resource
-`attachmentCreate`:
+Link attachments connect an issue to an external resource:
 
 ```bash
 curl "$FLOW_BASE_URL/api/issues/ENG-123/link-attachments" -H "Authorization: Bearer $FLOW_TOKEN" \
@@ -299,7 +298,7 @@ curl -X PUT "$FLOW_BASE_URL/api/customers" -H "Authorization: Bearer $FLOW_TOKEN
   --data '{"externalId":"crm-1042","name":"Acme","domains":["acme.com"],"tier":"Enterprise","size":250}'
 ```
 
-Customer requests (the reference app's customer needs) are created with
+Customer requests are created with
 `POST /api/customer-requests`. Select the customer with `customerId` or
 `customerExternalId`; `attachmentUrl` adds a link attachment to the request's
 issue (`issueId`) and becomes the request's `sourceUrl`. Update with
@@ -396,7 +395,7 @@ short expiry and revoke it when it is no longer needed.
 
 ## Prefilled issue links
 
-Open the issue composer with fields already set, like linear.new:
+Open the issue composer with fields already set:
 
 ```
 $FLOW_BASE_URL/<workspace>/new?title=Crash+on+launch&description=Steps…&priority=high&labels=bug,ios&assignee=me
