@@ -299,7 +299,7 @@ export function TeamCreatePage({
           <section className="workspace-settings-card">
             <label>
               <span>Team access</span>
-              <SelectControl label="Team access" value={privateTeam ? "private" : "public"} onChange={(value) => setPrivateTeam(value === "private")} options={[{ value: "public", label: restrictedByParent ? "Restricted to parent team" : "Public to workspace" }, { value: "private", label: "Private" }]}/>
+              <SelectControl label="Team access" value={privateTeam ? "private" : "public"} onChange={(value) => setPrivateTeam(value === "private")} options={[{ value: "public", label: restrictedByParent ? "Restricted to parent team" : "Public to workspace" }, { value: "private", label: "Private to team members" }]}/>
             </label>
           </section>
           <h2>Timezone</h2>

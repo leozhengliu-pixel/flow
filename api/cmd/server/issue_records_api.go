@@ -192,8 +192,10 @@ func (s *server) createIssueRecord(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	filterBootstrapForAPIKey(&metadata, r)
+	// A workspace admin sees private teams they have not joined, but adds
+	// issues to them only as a member.
 	teamAllowed := func(id string) bool {
-		return id == "" || slices.ContainsFunc(metadata.Teams, func(team domain.Team) bool { return team.ID == id })
+		return id == "" || slices.ContainsFunc(metadata.Teams, func(team domain.Team) bool { return team.ID == id }) && (s.authDisabled || teamContentVisible(metadata, id))
 	}
 	if !teamAllowed(input.TeamID) {
 		writeError(w, 403, "Team is outside your workspace access")

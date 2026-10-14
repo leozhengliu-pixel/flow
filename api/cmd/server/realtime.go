@@ -407,9 +407,7 @@ func realtimeEntityVisible(data domain.Bootstrap, event domain.RealtimeEvent) bo
 	if len(teamIDs) == 0 {
 		return false
 	}
-	return slices.ContainsFunc(teamIDs, func(id string) bool {
-		return slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == id })
-	})
+	return slices.ContainsFunc(teamIDs, func(id string) bool { return teamContentVisible(data, id) })
 }
 
 func writeSSE(w http.ResponseWriter, event domain.RealtimeEvent) bool {

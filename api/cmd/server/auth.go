@@ -540,7 +540,10 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 			return false
 		}
 	}
-	if joining, selfService := membershipSelfServiceAction(r, user.ID); selfService && joining {
+	// Workspace admins are team owners of every team (the reference app: "All workspace
+	// admins are automatically considered team owners"), so they may add
+	// themselves to a private team from its member settings.
+	if joining, selfService := membershipSelfServiceAction(r, user.ID); selfService && joining && !workspaceAdminRole(role) {
 		teamID := teamIDFromWorkspacePath(r.URL.Path)
 		settings := data.TeamSettings[teamID]
 		if role == "guest" || strings.EqualFold(settings.Access, "private") || strings.EqualFold(settings.Access, "restricted") || strings.EqualFold(settings.MembershipRestriction, "members") || strings.EqualFold(settings.MembershipRestriction, "owners") {
@@ -861,7 +864,8 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		if err != nil {
 			return false
 		}
-		return slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) && (access.Admin || slices.Contains(access.VisibleTeamIDs, teamID))
+		// A team setting: workspace admins manage it for private teams they have not joined.
+		return slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) && (access.Admin || access.WorkspaceAdmin || slices.Contains(access.VisibleTeamIDs, teamID))
 	}
 	if r.URL.Path == "/api/workspace/preferences" {
 		data, ok := s.store.WorkspaceSettingsMetadata(workspace)
@@ -911,7 +915,8 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) && !slices.Contains(key.TeamIDs, teamID) {
 			return false
 		}
-		return slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) && (access.Admin || slices.Contains(access.VisibleTeamIDs, teamID))
+		// Labels and statuses are team settings, which admins manage without joining.
+		return slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) && (access.Admin || access.WorkspaceAdmin || slices.Contains(access.VisibleTeamIDs, teamID))
 	}
 	var data domain.Bootstrap
 	var ok bool
@@ -943,11 +948,21 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		}
 		data.Comments[parts[2]] = []domain.Comment{comment}
 	}
-	teamAllowed := func(teamID string) bool {
+	// teamRowAllowed covers a team's settings and members; teamAllowed its
+	// content (issues, projects, documents, views...). They differ only for a
+	// workspace admin outside a private team:, the admin manages
+	// the team without joining but reads or adds content only as a member.
+	teamRowAllowed := func(teamID string) bool {
 		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) && !slices.Contains(key.TeamIDs, teamID) {
 			return false
 		}
 		return slices.ContainsFunc(data.Teams, func(item domain.Team) bool { return item.ID == teamID })
+	}
+	teamAllowed := func(teamID string) bool {
+		if !teamRowAllowed(teamID) {
+			return false
+		}
+		return s.authDisabled || teamContentVisible(data, teamID)
 	}
 	issueAllowed := func(issueID string) bool {
 		if isIssueRecordsRequest(r) {
@@ -1071,6 +1086,9 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		return input.TeamIDs == nil || !slices.ContainsFunc(*input.TeamIDs, func(id string) bool { return strings.TrimSpace(id) != "" && !teamAllowed(strings.TrimSpace(id)) })
 	}
 	mutationAllowed := func(input domain.IssueUpdateInput) bool {
+		if input.TeamID != nil && *input.TeamID != "" && !teamAllowed(*input.TeamID) {
+			return false
+		}
 		if input.ProjectID != nil && *input.ProjectID != "" && !projectAllowed(*input.ProjectID) {
 			return false
 		}
@@ -1595,7 +1613,9 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		if len(parts) < 3 {
 			return true
 		}
-		if !teamAllowed(parts[2]) {
+		// Team settings (states, labels, templates, members...) stay open to
+		// admins; the team page's pinned resources are content.
+		if !teamRowAllowed(parts[2]) || len(parts) >= 4 && (parts[3] == "resources" || parts[3] == "resource-sections") && !teamAllowed(parts[2]) {
 			return false
 		}
 		if r.Method == http.MethodGet && len(parts) == 4 && parts[3] == "resources" {
@@ -1615,7 +1635,7 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		return err == nil
 	case "workspaces":
 		if len(parts) >= 5 && parts[3] == "teams" {
-			return teamAllowed(parts[4])
+			return teamRowAllowed(parts[4])
 		}
 	}
 	return true

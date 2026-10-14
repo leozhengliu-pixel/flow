@@ -107,23 +107,24 @@ func visibleIssueTeams(data domain.Bootstrap, userID, role string) []string {
 // that require an invite to join) stay readable; a private team, or a team
 // inside a private ancestor the admin has not joined, does not.
 func adminTeamContentVisible(teams map[string]domain.Team, settings map[string]domain.TeamSettings, roles map[string]string, team domain.Team) bool {
-	if privateTeamAccess(team, settings[team.ID]) {
+	if privateTeamBoundary(team, settings[team.ID]) {
 		return false
 	}
 	seen := map[string]bool{team.ID: true}
 	for parent := settings[team.ID].ParentTeamID; parent != "" && !seen[parent]; parent = settings[parent].ParentTeamID {
 		seen[parent] = true
-		p := settings[parent]
-		if teams[parent].Private || strings.EqualFold(p.Access, "private") || strings.EqualFold(p.Access, "restricted") && p.ParentTeamID == "" {
+		if privateTeamBoundary(teams[parent], settings[parent]) {
 			return roles[parent] != ""
 		}
 	}
 	return true
 }
 
-func privateTeamAccess(team domain.Team, settings domain.TeamSettings) bool {
-	access := strings.ToLower(strings.TrimSpace(settings.Access))
-	return access == "private" || access == "" && team.Private
+// privateTeamBoundary reports whether a team closes its content (and its
+// sub-teams' content) to non-members: a private team, or a top-level team
+// restricted to its members.
+func privateTeamBoundary(team domain.Team, settings domain.TeamSettings) bool {
+	return team.Private || strings.EqualFold(settings.Access, "private") || strings.EqualFold(settings.Access, "restricted") && settings.ParentTeamID == ""
 }
 
 // TeamContentVisible reports whether the user may read a team's issues,

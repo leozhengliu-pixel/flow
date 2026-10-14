@@ -108,8 +108,13 @@ func TestVisibleTeamIDsForHidesPrivateTeamsFromNonMembers(t *testing.T) {
 	if !slices.Equal(member, []string{"public"}) {
 		t.Fatalf("member teams = %v", member)
 	}
+	// Like the reference app, a workspace admin reads a private team's content only as a member.
 	admin := VisibleTeamIDsFor(teams, map[string]domain.TeamSettings{}, nil, "a", "admin")
-	if len(admin) != 2 {
+	if !slices.Equal(admin, []string{"public"}) {
 		t.Fatalf("admin teams = %v", admin)
+	}
+	joined := VisibleTeamIDsFor(teams, map[string]domain.TeamSettings{}, []domain.TeamMember{{TeamID: "private", UserID: "a", Role: "member"}}, "a", "admin")
+	if len(joined) != 2 {
+		t.Fatalf("admin member teams = %v", joined)
 	}
 }

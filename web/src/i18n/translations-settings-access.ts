@@ -21,4 +21,11 @@ export const settingsAccessZhCN: Record<string, string> = {
   "Only admins and team owners can modify this team’s settings": "只有管理员和团队所有者可以修改此团队的设置",
   "You need permission to view this team’s settings.": "你需要权限才能查看此团队的设置。",
   "Only admins and team owners can modify this pipeline": "只有管理员和团队所有者可以修改此发布管线",
+  // Private teams (the reference app's copy): admins see and manage every team, but a
+  // private team's content needs membership.
+  "Private team": "私有团队",
+  "This is a private team and you are not a team member.": "这是一个私有团队，你不是团队成员。",
+  "As an admin you have access to the": "作为管理员，你可以访问",
+  "team’s settings": "团队设置",
+  "Private to team members": "仅限团队成员",
 };
