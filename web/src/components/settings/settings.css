@@ -271,3 +271,9 @@ body .domain-label-row-menu .menu-separator:after,body .domain-label-group-subme
 .settings-read-only-fields [contenteditable="true"],.settings-read-only-fields [role="button"],.settings-read-only-fields [role="switch"],.settings-read-only-fields [role="checkbox"],.settings-read-only-fields [draggable="true"]{pointer-events:none}
 .settings-read-only-fields :is(button,input,select,textarea):disabled{cursor:default}
 .settings-read-only-crumb:has(>div:empty){display:none}
+/* The reference app's hover card on controls a member cannot change: the reason, then "View admins →". */
+.settings-admin-hint{position:fixed;z-index:1100;transform:translateX(-50%);box-sizing:border-box;display:flex;flex-direction:column;align-items:flex-start;gap:2px;max-width:calc(100vw - 16px);padding:5px 8px;border:.5px solid var(--tooltip-border);border-radius:8px;background:var(--tooltip-bg);box-shadow:var(--tooltip-shadow);color:var(--tooltip-text);font:450 11px/16.5px var(--font);white-space:nowrap}
+.settings-admin-hint>a{color:var(--tooltip-muted);text-decoration:none}
+.settings-admin-hint>a:hover{color:var(--tooltip-text)}
+/* Hover target around a disabled action so its tooltip can say why. */
+.settings-action-hint{display:inline-flex}

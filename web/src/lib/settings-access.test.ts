@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
+import { zhCN } from '@/i18n/translations'
 import { makeBootstrap } from '@/test/fixtures'
 import type { BootstrapData, TeamSettings } from '@/types/flow'
 
 import type { SettingsPageId } from './app-routes'
 import {
+  adminHintsApply,
+  adminOnlyHint,
+  hiddenSettingsMessage,
   canAdministerReleasePipeline,
   canCreateReleasePipeline,
   roleAllowed,
@@ -49,6 +53,8 @@ const MATRIX: [SettingsPageId, SettingsAccess, SettingsAccess][] = [
   ['asks', 'edit', 'hidden'],
   ['emojis', 'edit', 'hidden'],
   ['integrations', 'edit', 'hidden'],
+  ['coding-sessions', 'edit', 'hidden'],
+  ['coding-environments', 'edit', 'hidden'],
   ['workspace', 'hidden', 'hidden'],
   ['teams', 'hidden', 'hidden'],
   ['members', 'hidden', 'hidden'],
@@ -122,9 +128,61 @@ describe('teamSettingsAccess', () => {
     expect(teamSettingsAccess(value, teamId, 'issue-labels')).toBe(expected)
   })
 
-  it('keeps Access and permissions owner-only for team members', () => {
+  it('keeps Access and permissions owner-only for team members (the reference app sends them to the overview)', () => {
     const { teamId, value } = teamData('member', 'member', 'allMembers')
-    expect(teamSettingsAccess(value, teamId, 'security')).toBe('read')
+    expect(teamSettingsAccess(value, teamId, 'security')).toBe('hidden')
+    const owner = teamData('member', 'owner', 'owners')
+    expect(teamSettingsAccess(owner.value, owner.teamId, 'security')).toBe('edit')
+  })
+})
+
+describe('member-facing copy (measured in the reference app as a member)', () => {
+  const member = data('member', { labelPermission: 'members', templatePermission: 'members' })
+
+  it('answers administration URLs with "Not found" and names the API page reason', () => {
+    expect(hiddenSettingsMessage('api')).toBe('Only workspace administrators can manage API settings')
+    for (const page of ['workspace', 'members', 'security', 'applications', 'import-export'] as const)
+      expect(hiddenSettingsMessage(page)).toBe('We could not find the page you were looking for')
+  })
+
+  it('explains disabled controls on hover only for members on admin-configured pages', () => {
+    expect(adminHintsApply(member, 'sla')).toBe(true)
+    expect(adminHintsApply(member, 'pulse')).toBe(true)
+    expect(adminHintsApply(member, 'releases')).toBe(false)
+    expect(adminHintsApply(member, 'issue-labels')).toBe(false)
+    expect(adminHintsApply(member, 'preferences')).toBe(false)
+    expect(adminHintsApply(data('admin'), 'sla')).toBe(false)
+    expect(adminHintsApply(data('guest'), 'sla')).toBe(false)
+  })
+
+  it.each([
+    ['sla', 'toggle', 'Enable SLAs', true, 'Only admins can modify'],
+    ['sla', 'button', 'Add rule', true, 'Only admins can add a rule'],
+    ['sla', 'button', 'Edit configuration', true, 'Only admins can edit SLAs'],
+    ['sla', 'button', 'Delete configuration', true, 'Only admins can delete SLAs'],
+    ['project-statuses', 'button', 'Create new project status', true, 'Only workspace admins can edit project statuses'],
+    ['project-updates', 'button', 'Connect', true, 'Only workspace admins can configure this'],
+    ['project-updates', 'button', 'Edit', true, 'Only admins can modify'],
+    ['initiatives', 'button', 'Connect', true, 'Only workspace admins can configure this'],
+    ['customer-requests', 'button', 'Create new customer status', true, 'Only workspace admins can edit customer statuses'],
+    ['asks', 'button', 'Connect workspace', false, 'Only admins can connect a workspace'],
+    ['asks', 'button', 'Add email', false, 'Only admins can add an email address'],
+    ['loops', 'button', 'Allowlist', false, 'Only workspace security admins can change sources'],
+    ['loops', 'toggle', 'Enable Loops', false, 'Only admins can modify'],
+    ['pulse', 'select', 'Default workspace schedule', false, 'Only admins can modify'],
+    ['pulse', 'select', 'Your personal schedule', false, null],
+    ['integrations', 'button', 'Disable', true, 'Only admins can disable this integration'],
+    ['ai', 'button', 'Save', false, null],
+  ] as const)('%s › %s "%s" → %s', (page, kind, label, readOnly, expected) => {
+    expect(adminOnlyHint(page, { kind, label }, readOnly)).toBe(expected)
+    if (expected) expect(zhCN[expected], expected).toBeTruthy()
+  })
+
+  it('has Chinese copy for the hint link, Not found reasons and team danger zone', () => {
+    for (const key of ['View admins →', 'Only workspace administrators can manage API settings', 'We could not find the page you were looking for', 'All integrations',
+      'Only workspace owners, admins, and team owners can delete teams', 'Only workspace owners, admins, and team owners can retire teams',
+      "Can't retire the last active team in the workspace", "Can't delete the last active team in the workspace", 'You should be a member of at least one active team'])
+      expect(zhCN[key], key).toBeTruthy()
   })
 })
 

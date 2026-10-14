@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
@@ -243,13 +243,30 @@ it('limits guests to their personal settings', () => {
   for (const hidden of ['Labels', 'Releases', 'Asks', 'Integrations', 'Members', 'API']) expect(labels).not.toContain(hidden);
 });
 
-it('blocks administration pages opened by URL for members', () => {
+it('answers administration pages opened by URL with the reference app\'s "Not found" for members', () => {
   localStorage.setItem('flow:locale', 'en');
   const input = props();
   input.page = 'security';
   input.data = { ...input.data, viewerRole: 'member' };
-  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
-  expect(screen.getByRole('heading', { name: 'Admin access required' })).toBeVisible();
+  const { unmount } = render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  expect(screen.getByRole('status')).toHaveTextContent('Not found');
+  expect(screen.getByRole('status')).toHaveTextContent('We could not find the page you were looking for');
+  unmount();
+  render(<I18nProvider><SettingsPage {...{ ...input, page: 'api' }}/></I18nProvider>);
+  expect(screen.getByRole('status')).toHaveTextContent('Only workspace administrators can manage API settings');
+});
+
+it('lists Integrations as its own section, "All integrations" for admins', () => {
+  localStorage.setItem('flow:locale', 'en');
+  const input = props();
+  input.page = 'preferences';
+  const { unmount } = render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  const section = (title: string) => Array.from(document.querySelectorAll('.settings-sidebar nav section')).find(item => item.querySelector('h2')?.textContent === title);
+  expect(section('Integrations')?.textContent).toContain('All integrations');
+  unmount();
+  render(<I18nProvider><SettingsPage {...{ ...input, data: { ...input.data, viewerRole: 'member' } }}/></I18nProvider>);
+  expect(section('Integrations')?.querySelector('button')?.textContent?.trim()).toBe('Integrations');
+  expect(section('Features')?.textContent).not.toContain('Integrations');
 });
 
 it('draws the Projects › Statuses nav item with the reference app\'s hexagon glyph', () => {
@@ -281,10 +298,17 @@ it('renders admin-only workspace configuration read-only for members with the re
   input.page = 'project-statuses';
   input.data = { ...input.data, viewerRole: 'member' };
   render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
-  expect(await screen.findByRole('note', {}, { timeout: 5000 })).toHaveTextContent('Only admins can edit project statuses');
+  await screen.findAllByRole('listitem', {}, { timeout: 5000 });
   const fields = document.querySelector('fieldset.settings-read-only-fields') as HTMLFieldSetElement;
   expect(fields).toBeDisabled();
-  expect(fields.querySelectorAll('button').length).toBeGreaterThan(0);
+  expect(fields).toHaveAccessibleName('Only admins can edit project statuses');
+  // The reference app shows no banner: the reason appears when hovering a disabled control.
+  expect(screen.queryByRole('note')).toBeNull();
+  const create = fields.querySelector('button') as HTMLButtonElement;
+  fireEvent.pointerMove(create, { clientX: 1, clientY: 1 });
+  const hint = await screen.findByRole('tooltip');
+  expect(hint).toHaveTextContent('Only workspace admins can edit project statuses');
+  expect(within(hint).getByRole('link', { name: 'View admins →' })).toHaveAttribute('href', '/workspace/members');
 });
 
 it('lets members open release pipeline settings and create a pipeline', async () => {
@@ -332,4 +356,39 @@ it('asks non-members for permission before showing team settings', () => {
   input.data = { ...input.data, viewerRole: 'member', teams: [{ id: 'team-eng', key: 'ENG', name: 'Engineering', color: '#777777' }], teamMembers: [], teamSettings: {} } as never;
   render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
   expect(screen.getByRole('heading', { name: 'You need permission to view this team’s settings.' })).toBeVisible();
+});
+
+function memberOfOnlyTeam(input: ReturnType<typeof props>) {
+  input.page = 'team';
+  input.teamKey = 'ENG';
+  input.data = {
+    ...input.data,
+    viewerRole: 'member',
+    teams: [{ id: 'team-eng', key: 'ENG', name: 'Engineering', color: '#777777' }, { id: 'team-ops', key: 'OPS', name: 'Ops', color: '#777777' }],
+    teamMembers: [{ teamId: 'team-eng', userId: input.data.viewer.id, role: 'member', joinedAt: '' }],
+    teamSettings: { 'team-eng': { teamId: 'team-eng', settingsPermission: 'allMembers', memberPermission: 'allMembers' } },
+  } as never;
+}
+
+it('sends team members from Access and permissions back to the team overview', async () => {
+  localStorage.setItem('flow:locale', 'en');
+  const input = props();
+  memberOfOnlyTeam(input);
+  input.teamSection = 'security';
+  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  await waitFor(() => expect(input.onNavigate).toHaveBeenCalledWith('team', 'ENG'));
+});
+
+it('disables the team danger zone for members with the reference app\'s reasons', async () => {
+  localStorage.setItem('flow:locale', 'en');
+  const input = props();
+  memberOfOnlyTeam(input);
+  input.teamSection = 'overview';
+  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  const leave = await screen.findByRole('button', { name: 'Leave team…' }, { timeout: 5000 });
+  expect(leave).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Retire…' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Delete…' })).toBeDisabled();
+  await userEvent.setup().hover(screen.getByRole('button', { name: 'Delete…' }).parentElement as HTMLElement);
+  expect(await screen.findByRole('tooltip')).toHaveTextContent('Only workspace owners, admins, and team owners can delete teams');
 });

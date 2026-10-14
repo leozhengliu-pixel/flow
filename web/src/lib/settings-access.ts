@@ -79,6 +79,78 @@ export function workspaceSettingsAccess(data: Pick<BootstrapData, 'viewerRole' |
   return 'hidden'
 }
 
+/**
+ * The reference app answers a workspace settings URL the viewer may not open with its
+ * "Not found" page; Settings › API names the reason.
+ */
+export function hiddenSettingsMessage(page: SettingsPageId): string {
+  return page === 'api' ? 'Only workspace administrators can manage API settings' : 'We could not find the page you were looking for'
+}
+
+export type AdminHintControl = { label: string; kind: 'toggle' | 'select' | 'button' | 'field' }
+
+/**
+ * Whether disabled controls on a workspace settings page explain themselves
+ * with the reference app's admin-only hover hint: read-only pages and the feature pages
+ * that disable their admin-only controls for members.
+ */
+export function adminHintsApply(data: Pick<BootstrapData, 'viewerRole' | 'workspaceSettings'>, page: SettingsPageId): boolean {
+  if (data.viewerRole !== 'member' || PERSONAL_PAGES.has(page) || page === 'team') return false
+  const access = workspaceSettingsAccess(data, page)
+  // Releases and emojis are member features; pipelines explain their own owner rules.
+  return access === 'read' || (access === 'edit' && MEMBER_SELF_GATED_PAGES.has(page) && page !== 'releases' && page !== 'emojis')
+}
+
+/**
+ * The hover hint on a disabled control a member cannot use (the reference app shows it
+ * with a "View admins →" link instead of a page banner). Read-only pages
+ * explain every control; feature pages only their admin-only toggles and
+ * pickers plus the named actions. Null when the control is disabled for
+ * another reason.
+ */
+export function adminOnlyHint(page: SettingsPageId, control: AdminHintControl, readOnlyPage: boolean): string | null {
+  const label = control.label.trim()
+  switch (page) {
+    case 'sla':
+      if (label === 'Add rule') return 'Only admins can add a rule'
+      if (label === 'Edit configuration') return 'Only admins can edit SLAs'
+      if (label === 'Delete configuration') return 'Only admins can delete SLAs'
+      break
+    case 'project-statuses':
+      if (control.kind === 'button') return 'Only workspace admins can edit project statuses'
+      break
+    case 'customer-requests':
+      if (label === 'Create new customer status') return 'Only workspace admins can edit customer statuses'
+      break
+    case 'project-updates':
+    case 'initiatives':
+      if (label === 'Connect') return 'Only workspace admins can configure this'
+      break
+    case 'asks':
+      if (label === 'Connect workspace') return 'Only admins can connect a workspace'
+      if (label === 'Add email') return 'Only admins can add an email address'
+      break
+    case 'loops':
+      if (/allowlist|trusted source|allowed source/i.test(label)) return 'Only workspace security admins can change sources'
+      break
+    case 'integrations':
+      if (label === 'Disable') return 'Only admins can disable this integration'
+      if (label === 'Enable') return 'Only admins can enable this integration'
+      break
+    case 'pulse':
+      // Members choose their own summary schedule; it is only off while Pulse is.
+      if (label === 'Your personal schedule') return null
+      break
+    case 'issue-labels':
+    case 'project-labels':
+    case 'initiative-labels':
+      if (readOnlyPage) return 'Only admins can manage labels for this workspace'
+      break
+  }
+  if (readOnlyPage || control.kind === 'toggle' || control.kind === 'select') return 'Only admins can modify'
+  return null
+}
+
 /** The reference app's read-only notice for a workspace settings page a member can view. */
 export function workspaceReadOnlyNotice(page: SettingsPageId): string {
   if (page === 'issue-labels' || page === 'project-labels' || page === 'initiative-labels') return 'Only admins can manage labels for this workspace'
@@ -97,7 +169,11 @@ export function teamSettingsAccess(data: BootstrapData, teamId: string, section:
   if (isWorkspaceAdmin(data)) return 'edit'
   if (data.viewerRole !== 'member') return 'hidden'
   if (!viewerBelongsToTeam(data, teamId)) return 'hidden'
-  return canManageTeamSettings(data, teamId, section) ? 'edit' : 'read'
+  const editable = canManageTeamSettings(data, teamId, section)
+  // The reference app sends members who do not own the team from "Access and
+  // permissions" back to the team overview.
+  if (section === 'security' && !editable) return 'hidden'
+  return editable ? 'edit' : 'read'
 }
 
 function viewerBelongsToTeam(data: BootstrapData, teamId: string): boolean {

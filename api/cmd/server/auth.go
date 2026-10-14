@@ -435,6 +435,21 @@ func publicAuthPath(path string) bool {
 	return path == "/api/health" || path == "/api/oauth/token" || path == "/api/auth/register" || path == "/api/auth/verify-email" || path == "/api/auth/resend-verification" || path == "/api/auth/login" || path == "/api/auth/logout" || path == "/api/auth/session" || path == "/api/auth/forgot-password" || path == "/api/auth/reset-password" || path == "/api/auth/providers" || path == "/api/auth/discovery" || strings.HasPrefix(path, "/api/auth/enterprise/") || strings.HasPrefix(path, "/api/auth/google/") || strings.HasPrefix(path, "/api/auth/oidc/") || strings.HasPrefix(path, "/api/auth/saml/") || strings.HasPrefix(path, "/api/invitations/preview/") || strings.HasPrefix(path, "/api/invite-links/preview/") || strings.HasPrefix(path, "/api/calendar/cycles/") || strings.HasPrefix(path, "/api/email-intake/") || strings.HasPrefix(path, "/api/integrations/") && (strings.HasSuffix(path, "/webhook") || strings.HasSuffix(path, "/oauth/callback")) || strings.HasPrefix(path, "/api/shared/views/") || strings.HasPrefix(path, "/api/shared/dashboards/") || strings.HasPrefix(path, "/api/shared/issues/") || path == "/api/auth/token-login" || path == "/api/auth/magic-link" || path == "/api/email/unsubscribe"
 }
 
+// accountScopedPath reports routes that act on the signed-in account rather
+// than on a workspace, so they work before the account belongs to one.
+func accountScopedPath(r *http.Request) bool {
+	path := r.URL.Path
+	if r.Method == http.MethodPost && path == "/api/workspaces" {
+		return true
+	}
+	for _, prefix := range []string{"/api/account/", "/api/auth/", "/api/invitations/", "/api/invite-links/", "/api/oauth/", "/api/connector-oauth/", "/api/push-subscriptions", "/api/desktop-notifications"} {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return path == "/api/account"
+}
+
 func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Request, user domain.User) bool {
 	if oauthAuthorizationEndpoint(r) {
 		// Consent may select a different workspace than the browser header. Its
@@ -446,7 +461,7 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		return ok
 	}
 	key := workspaceKey(r)
-	if key == "" && r.URL.Path == "/api/workspace/preferences" {
+	if key == "" && s.authDisabled && r.URL.Path == "/api/workspace/preferences" {
 		if metadata, ok := s.store.WorkspaceSettingsMetadata(""); ok {
 			key = metadata.Workspace.URLKey
 			*r = *r.WithContext(context.WithValue(r.Context(), workspaceKeyContextKey{}, key))
@@ -456,6 +471,20 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 		if len(parts) >= 3 {
 			key = parts[2]
+		}
+	}
+	if key == "" && !s.authDisabled && strings.HasPrefix(r.URL.Path, "/api/") && !accountScopedPath(r) {
+		// Store reads treat an empty workspace key as the most recently written
+		// workspace, which can belong to another tenant. A session request that
+		// names no workspace acts in the viewer's own (last used) workspace and is
+		// authorized for it below; without one it cannot reach workspace data.
+		// (Files under /uploads/ resolve their workspace from the file itself.)
+		if account, err := s.store.OAuthAccountForUser(r.Context(), user.ID); err == nil && account.LastWorkspaceKey != "" {
+			key = account.LastWorkspaceKey
+			*r = *r.WithContext(context.WithValue(r.Context(), workspaceKeyContextKey{}, key))
+		} else {
+			writeError(w, http.StatusForbidden, "You don't have access to this workspace")
+			return false
 		}
 	}
 	if key == "" || r.URL.Path == "/api/account/bootstrap" || r.URL.Path == "/api/invitations/accept" || (r.Method == http.MethodPost && r.URL.Path == "/api/workspaces") {
