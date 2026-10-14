@@ -1,0 +1,2 @@
+/* Text quoted into the floating agent chat (agent-quote-highlight.ts); --agent-quote-highlight lives in tokens.css. */
+::highlight(flow-agent-quote) { background-color: var(--agent-quote-highlight); }

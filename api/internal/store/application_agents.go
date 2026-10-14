@@ -118,11 +118,19 @@ func (s *SQLiteStore) resolveApplicationAccess(a *domain.ApplicationInstallation
 // Installation creates a non-login principal and its memberships in the same
 // transaction. Public-team access is an explicit grant, not team membership.
 func (s *SQLiteStore) installApplicationTx(ctx context.Context, tx *sqlTx, lock string, current domain.Bootstrap, a domain.ApplicationInstallation, secret string) (domain.Bootstrap, domain.ApplicationInstallation, error) {
-	var role, status string
-	if err := tx.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`+lock, current.Workspace.ID, a.InstalledBy).Scan(&role, &status); err != nil || status != "active" || !isWorkspaceAdminRole(role) {
-		return current, a, ErrAuthForbidden
+	if err := activeWorkspaceAdminTx(ctx, tx, lock, current.Workspace.ID, a.InstalledBy); err != nil {
+		return current, a, err
 	}
 	return s.writeApplicationInstallationTx(ctx, tx, lock, current, a, secret)
+}
+
+// activeWorkspaceAdminTx requires userID to be an active workspace admin.
+func activeWorkspaceAdminTx(ctx context.Context, tx *sqlTx, lock, workspaceID, userID string) error {
+	var role, status string
+	if err := tx.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`+lock, workspaceID, userID).Scan(&role, &status); err != nil || status != "active" || !isWorkspaceAdminRole(role) {
+		return ErrAuthForbidden
+	}
+	return nil
 }
 
 // writeApplicationInstallationTx persists an installation and its principal,

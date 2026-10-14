@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"slices"
 	"testing"
+
+	"flow/api/internal/domain"
 )
 
 // TestOAuthAuthorizeRequestErrorsMatchReference checks the authorization
@@ -89,8 +91,8 @@ func TestOAuthApplicationClientSecretCopy(t *testing.T) {
 		t.Fatal("client secret was not rotated")
 	}
 	authRequest[map[string]any](t, admin, "GET", host.URL+"/api/oauth-applications/missing/client-secret", nil, data.Workspace.URLKey, 404)
-	if !apiKeyRestrictedPersonalPath("/api/oauth-applications/" + app.ID + "/client-secret") {
-		t.Fatal("API keys must not read client secrets")
+	if !oauthCredentialPath("/api/oauth-applications/"+app.ID+"/client-secret") || apiKeyOAuthCredentialDenial(domain.APIKey{Scopes: []string{"read", "write"}}) == "" {
+		t.Fatal("only admin API keys may read client secrets")
 	}
 }
 

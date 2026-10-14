@@ -10,7 +10,7 @@ import { MentionExtension } from '@/components/issue/editor/mention-extension'
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap } from '@/test/fixtures'
 import type { Issue } from '@/types/flow'
-import { CREATE_ISSUE_INLINE_EVENT, createIssueFromSelection, selectionIssueFields, teamDefaultStateId, useComposerSelectionActions, type InlineIssueRequest } from './selection-issue'
+import { askAgentAboutSelection, CREATE_ISSUE_INLINE_EVENT, createIssueFromSelection, selectionIssueStateId, selectionIssueFields, teamDefaultStateId, useComposerSelectionActions, type InlineIssueRequest } from './selection-issue'
 import { SelectionIssueProvider } from './selection-issue-provider'
 
 let editors: Editor[] = []
@@ -55,18 +55,33 @@ describe('selection issue fields', () => {
 
 describe('create issue from a comment selection', () => {
   it('creates the issue in the page context and swaps the selected text for a mention of it', async () => {
-    const data = makeBootstrap()
+    const base = makeBootstrap()
+    // A sub-issue starts in the team's first unstarted status ("Todo"), not its default ("Backlog").
+    const [first, ...rest] = base.states
+    const data = { ...base, states: [{ ...first, default: true }, ...rest, { ...first, id: 'state-todo', name: 'Todo', type: 'unstarted' as const, position: 1 }] }
     const editor = makeEditor('<p>Reply words Oscar papa quebec</p>')
     const created = { ...data.issues[0], id: 'issue-new', identifier: 'FLO-34', title: 'Oscar papa quebec' } as Issue
     const app = answerCreates(() => created)
     const selection = { ...rangeOf(editor, 'Oscar papa quebec'), text: 'Oscar papa quebec' }
     await createIssueFromSelection({ editor, selection, data, context: { teamId: 'team-9', projectId: 'project-2', parentId: 'issue-1' } })
     app.stop()
-    expect(app.requests).toEqual([{ title: 'Oscar papa quebec', description: '', teamId: 'team-9', stateId: teamDefaultStateId(data, 'team-9'), projectId: 'project-2', parentId: 'issue-1' }])
+    expect(app.requests).toEqual([{ title: 'Oscar papa quebec', description: '', teamId: 'team-9', stateId: 'state-todo', projectId: 'project-2', parentId: 'issue-1' }])
+    expect(teamDefaultStateId(data, 'team-9')).toBe('state-backlog')
     const mention = editor.getJSON().content?.[0].content?.find(node => node.type === 'mention') as { attrs?: Record<string, unknown> } | undefined
     expect(mention?.attrs).toMatchObject({ mentionType: 'issue', label: 'FLO-34' })
     expect(editor.state.doc.textContent).not.toContain('Oscar papa quebec')
     expect(editor.state.doc.textContent.startsWith('Reply words ')).toBe(true)
+  })
+
+  it('starts a sub-issue in its parent\'s status while the parent has not started', () => {
+    const base = makeBootstrap()
+    const todo = { ...base.states[0], id: 'state-todo', name: 'Todo', type: 'unstarted' as const, position: 1 }
+    const parent = { ...base.issues[0], id: 'parent-x', state: base.states[0] }
+    const data = { ...base, states: [...base.states, todo], issues: [parent] }
+    const team = parent.team.id
+    expect(selectionIssueStateId(data, team, 'parent-x')).toBe(base.states[0].id)
+    const startedParent = { ...parent, state: base.states.find(state => state.type === 'started')! }
+    expect(selectionIssueStateId({ ...data, issues: [startedParent] }, team, 'parent-x')).toBe('state-todo')
   })
 
   it('falls back to the workspace\'s first team without a page context', async () => {
@@ -102,6 +117,19 @@ describe('composer selection actions', () => {
     result.current.onCreateIssue?.({ ...rangeOf(editor, 'words'), text: 'words' }, editor)
     app.stop()
     expect(app.requests[0]).toMatchObject({ title: 'words', teamId: 'team-9', parentId: 'issue-1' })
+  })
+
+  it('keeps a faint highlight on the quoted text (a CSS highlight over the editor range)', () => {
+    const registry = new Map<string, { ranges: Range[] }>()
+    vi.stubGlobal('Highlight', class { ranges: Range[]; constructor(...ranges: Range[]) { this.ranges = ranges } })
+    vi.stubGlobal('CSS', { ...globalThis.CSS, highlights: registry })
+    try {
+      const editor = makeEditor('<p>Reply words here</p>')
+      askAgentAboutSelection({ ...rangeOf(editor, 'words'), text: 'words' }, editor)
+      expect(registry.get('flow-agent-quote')?.ranges[0].toString()).toBe('words')
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
 

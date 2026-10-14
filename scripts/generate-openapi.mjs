@@ -160,6 +160,7 @@ const document = {
     { name: 'customers', description: 'Customers and customer requests (needs).' },
     { name: 'audit', description: 'Workspace audit log.' },
     { name: 'oauth', description: 'OAuth 2.0 authorization server.' },
+    { name: 'oauth-applications', description: 'OAuth applications of the workspace: configuration, manifests, installs and credentials (workspace admins or the admin scope; see docs/oauth.md).' },
     { name: 'mcp', description: 'Model Context Protocol server.' },
   ],
   paths,

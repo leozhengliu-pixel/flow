@@ -1639,6 +1639,9 @@ type OAuthAuthorizationCode struct {
 	// PKCE: redeeming it (and refreshing the resulting tokens) needs the
 	// client secret. The refresh grant inherits it from the code's JSON.
 	ClientAuthRequired bool `json:"clientAuthRequired,omitempty"`
+	// Realtime records that the consent screen listed "Receive realtime
+	// updates about your workspace" (the application has a webhook).
+	Realtime bool `json:"realtime,omitempty"`
 }
 
 type OAuthRefreshGrant struct {

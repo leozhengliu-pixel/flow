@@ -52,6 +52,7 @@ export function AgentPanel({
   title,
   open,
   onRequestClose,
+  onRequestHide,
   onNewChat,
   onOpenFullPage,
   onToggleDock,
@@ -73,6 +74,8 @@ export function AgentPanel({
   title: string
   open: boolean
   onRequestClose: () => void
+  /** Escape: hides the chat and keeps what it holds (the reference app's floating chat); without it Escape closes. */
+  onRequestHide?: () => void
   onNewChat?: () => void
   onOpenFullPage?: () => void
   onToggleDock?: (dock: AgentPanelDock) => void
@@ -216,12 +219,13 @@ export function AgentPanel({
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !event.defaultPrevented) {
         event.preventDefault()
-        onRequestClose()
+        const dismiss = onRequestHide ?? onRequestClose
+        dismiss()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onRequestClose])
+  }, [open, onRequestClose, onRequestHide])
 
   if (!open) return null
 

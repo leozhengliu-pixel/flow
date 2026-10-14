@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Info, MoreHorizontal } from 'lucide-react'
+import { Info, Lock, MoreHorizontal } from 'lucide-react'
 import { toast } from '@/lib/toast'
 import { useI18n } from '@/i18n/i18n'
 import { confirmAction } from '@/components/ui/action-dialog-service'
@@ -11,7 +11,9 @@ import { TeamCombobox } from '@/components/auth/oauth-team-combobox'
 import { ScopeIcon } from '@/components/auth/oauth-scope-icon'
 import { listApplications, saveApplication, uninstallApplication, type ApplicationInstallation } from '@/lib/application-agents'
 import { fetchAuthorizedApplications, revokeOAuthAuthorization, type AuthorizedApplication } from '@/lib/api'
-import { OAUTH_SCOPE_LABELS, consentPermissions } from '@/lib/oauth-consent'
+import { OAUTH_SCOPE_LABELS, REALTIME_PERMISSION, consentPermissions, nextTeamSelection, type TeamMode } from '@/lib/oauth-consent'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { TeamIcon } from '@/components/issue/issue-icons'
 import { applicationSettingsPath, installedApplicationPath, settingsPath } from '@/lib/app-routes'
 import type { BootstrapData, Team } from '@/types/flow'
 import { SettingsCrumb, SettingsPageTitle as PageTitle, SettingsRow as Row, SettingsSection as Section } from './settings-primitives'
@@ -109,8 +111,13 @@ export function InstalledApplicationPage({ data, clientId, onReload }: { data: B
   const logoUrl = entry?.logoUrl || ownApp?.logoUrl || entry?.installation?.avatarUrl
   const authorizations = entry?.authorizations ?? []
   const installation = entry?.installation
-  // The reference app lists the granted scopes alphabetically, without the narrower write scopes that `write` covers.
-  const scopes = useMemo(() => consentPermissions([...new Set([...(entry?.authorizations ?? []).flatMap(item => item.scopes), ...(entry?.installation?.scopes ?? [])])].sort()).map(item => item.scope), [entry])
+  // The reference app lists the granted permissions alphabetically (by their wording), without the narrower write scopes that `write` covers, and
+  // "Receive realtime updates about your workspace" while the application has a webhook and is authorized.
+  const scopes = useMemo(() => {
+    const granted = [...(entry?.authorizations ?? []).flatMap(item => item.scopes), ...(entry?.installation?.scopes ?? [])]
+    if (entry?.realtime && granted.length) granted.push(REALTIME_PERMISSION)
+    return consentPermissions([...new Set(granted)]).sort((a, b) => a.label.localeCompare(b.label, 'en')).map(item => item.scope)
+  }, [entry])
   const back = () => navigate(settingsPath(workspace, 'applications'))
 
   const revokeTokens = async () => {
@@ -186,8 +193,6 @@ export function InstalledApplicationPage({ data, clientId, onReload }: { data: B
   </div>
 }
 
-type TeamMode = 'public' | 'mixed' | 'selected'
-
 /** The reference app's "App user" card: the app user, who installed it and its team access (with Update). */
 function AppUserSection({ data, name, installation, onRevoke, onSaved }: { data: BootstrapData; name: string; installation: ApplicationInstallation; onRevoke: () => void; onSaved: () => Promise<void> }) {
   const { t, formatDate } = useI18n()
@@ -200,16 +205,17 @@ function AppUserSection({ data, name, installation, onRevoke, onSaved }: { data:
   const [mode, setMode] = useState<TeamMode>(initialMode)
   const [teamIds, setTeamIds] = useState<string[]>(installedTeamIds)
   const [busy, setBusy] = useState(false)
-  const teams = data.teams.filter(team => !team.retiredAt)
-  const choices: Team[] = mode === 'mixed' ? teams.filter(team => team.private) : teams
+  const [confirming, setConfirming] = useState(false)
+  const teams = data.teams.filter(team => !team.retiredAt && !team.archivedAt)
   const changed = mode !== initialMode || [...teamIds].sort().join() !== [...installedTeamIds].sort().join()
   const invalid = mode !== 'public' && !teamIds.length
   const update = async () => {
+    setConfirming(false)
     setBusy(true)
     try {
       await saveApplication(data.workspace.urlKey, { ...installation, allPublicTeams: mode !== 'selected', teamIds: mode === 'public' ? [] : teamIds })
       await onSaved()
-      toast.success(t('Team access updated'))
+      toast.success(t('Team access updated'), { description: t('The application’s team access has been updated.') })
     } catch (error) {
       toast.error(error instanceof Error && error.message ? error.message : t('Could not update team access'))
     } finally {
@@ -238,15 +244,51 @@ function AppUserSection({ data, name, installation, onRevoke, onSaved }: { data:
     </div>
     <div className="oauth-app-team-access" role="radiogroup" aria-label={t('Team access')}>
       <strong>{t('Team access')}</strong>
-      {options.map(([value, label]) => <label key={value}>
-        <input type="radio" name={`team-access-${installation.id}`} checked={mode === value} onChange={() => {
-          setMode(value)
-          setTeamIds(current => value === 'public' ? [] : value === 'mixed' ? current.filter(id => teams.find(team => team.id === id)?.private) : current)
-        }}/>
-        <span>{t(label)}</span>
-      </label>)}
-      {mode !== 'public' && <TeamCombobox teams={choices} value={teamIds} onChange={setTeamIds} t={t}/>}
-      <footer><button type="button" className="oauth-app-button is-primary" disabled={!changed || invalid || busy} onClick={() => void update()}>{t('Update')}</button></footer>
+      {options.map(([value, label]) => <Fragment key={value}>
+        <label>
+          <input type="radio" name={`team-access-${installation.id}`} checked={mode === value} onChange={() => {
+            setMode(value)
+            setTeamIds(current => nextTeamSelection(value, current, teams))
+          }}/>
+          <span>{t(label)}</span>
+        </label>
+        {mode === value && value !== 'public' && <TeamCombobox teams={value === 'mixed' ? teams.filter(team => team.private) : teams} value={teamIds} onChange={setTeamIds} placeholder={value === 'mixed' ? 'Select other teams…' : 'Select teams…'} t={t}/>}
+      </Fragment>)}
+      <footer><button type="button" className="oauth-app-button is-primary" disabled={!changed || invalid || busy} onClick={() => setConfirming(true)}>{t('Update')}</button></footer>
     </div>
+    <TeamAccessConfirmDialog open={confirming} name={name} from={{ mode: initialMode, teams: installedTeamIds }} to={{ mode, teams: teamIds }} teams={data.teams} onCancel={() => setConfirming(false)} onConfirm={() => void update()}/>
   </Section>
+}
+
+type TeamAccess = { mode: TeamMode; teams: string[] }
+
+/**
+ * The reference app's "Update team access for <App>?" confirmation: what the application can access now and what it will
+ * access, with the teams listed under "…these other teams:" / "these teams:".
+ */
+function TeamAccessConfirmDialog({ open, name, from, to, teams, onCancel, onConfirm }: { open: boolean; name: string; from: TeamAccess; to: TeamAccess; teams: Team[]; onCancel: () => void; onConfirm: () => void }) {
+  const { t } = useI18n()
+  const describe = (template: string, access: TeamAccess) => {
+    const scope = access.mode === 'public' ? t('all public teams.') : access.mode === 'mixed' ? t('all public teams and these other teams:') : t('these teams:')
+    const listed = access.mode === 'public' ? [] : access.teams.map(id => teams.find(team => team.id === id)).filter((team): team is Team => Boolean(team))
+    return <>
+      <p>{fillNodes(t(template), { access: <strong key="access">{scope}</strong> })}</p>
+      {listed.length > 0 && <ul className="oauth-app-confirm-teams">
+        {listed.map(team => <li key={team.id}><TeamIcon team={team} size={14}/><span data-i18n-ignore>{team.name}</span>{team.private && <Lock aria-hidden="true"/>}</li>)}
+      </ul>}
+    </>
+  }
+  return <Dialog open={open} onOpenChange={next => { if (!next) onCancel() }}>
+    <DialogContent className="action-dialog oauth-app-confirm" overlayClassName="action-dialog-overlay">
+      <DialogTitle data-i18n-ignore>{t('Update team access for {name}?').replace('{name}', name)}</DialogTitle>
+      <div className="oauth-app-confirm-body" data-i18n-ignore>
+        {describe('The application currently has access to {access}', from)}
+        {describe('The application will now have access to {access}', to)}
+      </div>
+      <footer>
+        <button type="button" onClick={onCancel}>{t('Cancel')}</button>
+        <button type="button" className="primary" onClick={onConfirm}>{t('Confirm')}</button>
+      </footer>
+    </DialogContent>
+  </Dialog>
 }

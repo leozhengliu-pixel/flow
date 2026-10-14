@@ -529,7 +529,7 @@ func TestFilterBootstrapTeamsHidesPrivateTeamDocuments(t *testing.T) {
 			{ID: "workspace-doc"},
 		},
 	}
-	filterBootstrapTeams(&data, map[string]bool{"public-team": true}, false)
+	filterBootstrapTeams(&data, sameTeamScope(map[string]bool{"public-team": true}), false)
 	if slices.ContainsFunc(data.Documents, func(document domain.Document) bool { return document.ID == "private-doc" }) {
 		t.Fatal("private team document leaked")
 	}
@@ -566,7 +566,7 @@ func TestFilterBootstrapTeamsRedactsHiddenCollaborationData(t *testing.T) {
 			{ID: "project-rel", ProjectID: "hidden-project", RelatedProjectID: "public-project"},
 		},
 	}
-	filterBootstrapTeams(&data, map[string]bool{"public-team": true}, false)
+	filterBootstrapTeams(&data, sameTeamScope(map[string]bool{"public-team": true}), false)
 	if _, ok := data.Comments["private-issue"]; ok {
 		t.Fatal("private issue comments leaked")
 	}

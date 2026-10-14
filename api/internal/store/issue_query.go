@@ -67,7 +67,12 @@ type IssueRecordAccess struct {
 	UserID         string
 	WorkspaceID    string
 	VisibleTeamIDs []string
-	Admin          bool
+	// Admin skips the team filter: the viewer may read every team's content.
+	// A workspace admin gets it only while no private team is closed to them.
+	Admin bool
+	// WorkspaceAdmin is the viewer's workspace role. Admins manage every
+	// team's settings, but read only the content listed in VisibleTeamIDs.
+	WorkspaceAdmin bool
 	// ArchivedTeamIDs are deleted teams in their restoration window. Their
 	// issues stay hidden from everyone, including admins.
 	ArchivedTeamIDs []string
@@ -252,7 +257,15 @@ func (s *SQLiteStore) IssueQueryAccess(ctx context.Context, workspace, userID st
 	if err := rows.Err(); err != nil {
 		return data, IssueRecordAccess{}, err
 	}
-	access := IssueRecordAccess{UserID: userID, WorkspaceID: data.Workspace.ID, Admin: isWorkspaceAdminRole(role), VisibleTeamIDs: visibleIssueTeams(data, userID, role), ArchivedTeamIDs: ArchivedTeamIDs(data)}
+	visible := visibleIssueTeams(data, userID, role)
+	active := 0
+	for _, team := range data.Teams {
+		if team.ArchivedAt == nil {
+			active++
+		}
+	}
+	admin := isWorkspaceAdminRole(role)
+	access := IssueRecordAccess{UserID: userID, WorkspaceID: data.Workspace.ID, Admin: admin && len(visible) == active, WorkspaceAdmin: admin, VisibleTeamIDs: visible, ArchivedTeamIDs: ArchivedTeamIDs(data)}
 	return data, access, nil
 }
 

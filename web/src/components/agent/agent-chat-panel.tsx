@@ -15,6 +15,8 @@ import { PropertyMenu } from '@/components/property/property-menu'
 import { AgentAttachIcon, AgentChevronDownIcon, AgentPageContextIcon, AgentSkillsIcon } from './agent-icons'
 import { AGENT_ATTACHMENT_ACCEPT, addAgentAttachments, agentFileContext } from './agent-attachments'
 import { quoteAgentMessage } from './agent-floating-request'
+import { claimAgentQuoteHighlight, clearAgentQuoteHighlight } from './agent-quote-highlight'
+import { AgentDiscardDraftDialog } from './agent-discard-draft-dialog'
 import threadStyles from './entity-agent-thread.module.css'
 import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
@@ -38,9 +40,11 @@ export function AgentChatPanel({
   onCreateSkill,
   initialPrompt = '',
   initialQuote,
+  initialMentions,
   initialSession,
   issues,
   onClose,
+  onHide,
   onOpenFullPage,
   onSessionChange,
   onUseResponse,
@@ -58,9 +62,13 @@ export function AgentChatPanel({
   initialPrompt?: string
   /** Text selected on the page ("Ask agent" on a selection): a chip at the start of the composer, sent as a quote. */
   initialQuote?: string
+  /** Mention chips the composer starts with (the reference app's "Ask the reference app" on an "Issue created" toast). */
+  initialMentions?: AgentMention[]
   initialSession?: AgentSession
   issues: MyIssuesRowData[]
   onClose: () => void
+  /** Escape hides the chat, keeping its draft (the reference app's floating chat); without it Escape closes like the X. */
+  onHide?: () => void
   onOpenFullPage?: (session?: AgentSession) => void
   onSessionChange?: (session: AgentSession) => void
   /** When set, finished assistant replies offer a button that hands their text back to the caller. */
@@ -170,9 +178,27 @@ export function AgentChatPanel({
     if (initialPrompt) setInput(initialPrompt)
   }, [initialPrompt])
 
+  // The quoted text keeps a faint highlight on the page while its chip is here; this chat owns it.
+  const quoteHighlight = useRef(claimAgentQuoteHighlight(initialQuote))
   useEffect(() => {
-    if (initialQuote) setQuote(initialQuote)
+    if (!initialQuote) return
+    setQuote(initialQuote)
+    quoteHighlight.current = claimAgentQuoteHighlight(initialQuote) ?? quoteHighlight.current
   }, [initialQuote])
+  // It goes once the chip is removed or sent, or the chat is minimized or closed (and stays gone on reopening).
+  useEffect(() => {
+    if (!quote || minimized || !open) clearAgentQuoteHighlight(quoteHighlight.current)
+  }, [quote, minimized, open])
+  // Unmounting (another chat replaced this one) clears it too; after a tick, so StrictMode's remount keeps it.
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    const highlight = quoteHighlight
+    return () => {
+      mounted.current = false
+      setTimeout(() => { if (!mounted.current) clearAgentQuoteHighlight(highlight.current) })
+    }
+  }, [])
 
   const close = () => {
     autoSubmitted.current = false
@@ -195,6 +221,11 @@ export function AgentChatPanel({
     clearEntityThreadDraft(draftKey)
     onClose()
   }
+
+  // Like the reference app, closing a chat whose composer holds something asks "Discard draft?" first; spaces alone do not count.
+  const [discardOpen, setDiscardOpen] = useState(false)
+  const hasDraft = Boolean(input.trim() || quote || mentions.length || attachments.length)
+  const requestClose = () => { if (hasDraft) setDiscardOpen(true); else close() }
 
   const decideToolApproval = async (
     call: AgentMessagePart['toolCall'] | undefined,
@@ -351,6 +382,7 @@ export function AgentChatPanel({
   })
 
   return (
+    <>
     <AgentPanel
       fullscreen={fullscreen}
       minimized={minimized}
@@ -361,7 +393,8 @@ export function AgentChatPanel({
           ? () => onOpenFullPage(session)
           : undefined
       }
-      onRequestClose={close}
+      onRequestClose={requestClose}
+      onRequestHide={onHide}
       open={open}
       title={session?.title ?? t('New chat')}
       titleExtra={session ? (
@@ -416,6 +449,7 @@ export function AgentChatPanel({
         placeholder={status && !status.enabled ? t('Flow Agent is not configured') : t('Ask Flow…')}
         quote={quote}
         onQuoteRemove={() => setQuote(undefined)}
+        initialMentions={initialMentions}
         canSend={Boolean(input.trim() || quote)}
         onComposerTab={canTogglePageContext ? () => { togglePageContext(); return true } : undefined}
         composerHeader={attachments.length > 0 ? (
@@ -468,6 +502,9 @@ export function AgentChatPanel({
         streamParts={streamParts}
       />
     </AgentPanel>
+    {/* Outside the panel, so the minimized pill's close can ask too. */}
+    <AgentDiscardDraftDialog open={open && discardOpen} onCancel={() => setDiscardOpen(false)} onDiscard={() => { setDiscardOpen(false); close() }}/>
+    </>
   )
 }
 

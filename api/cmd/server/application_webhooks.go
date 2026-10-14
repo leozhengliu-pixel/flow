@@ -24,7 +24,9 @@ import (
 // webhook URL, its resource types and a signing secret. Every workspace that
 // installs the application (actor=app) or authorizes it (actor=user) gets a
 // managed webhook (ManagedBy "application") that delivers those events to the
-// URL, scoped to the teams the application can access. Uninstalling or
+// URL, scoped to the teams the application can access. As in the reference app, an
+// installation authorized before the application had a webhook gets none
+// until it is authorized again (ApplicationInstallation.WithoutRealtime). Uninstalling or
 // revoking the application removes the managed webhook and sends an OAuthApp
 // "revoked" event; a change of team access sends a PermissionChange event;
 // inbox notifications of the application's user are sent as
@@ -127,6 +129,8 @@ func (s *server) updateApplicationWebhook(w http.ResponseWriter, r *http.Request
 		}
 		settings = s.applicationWebhookSettings(r.Context(), updated)
 		settings.SecretPrefix, settings.Secret = secret[:min(len(secret), 17)], secret
+		s.auditAPIKeyCredential(r, "webhook_secret_issued", updated)
+		w.Header().Set("Cache-Control", "no-store")
 	}
 	go s.reconcileAllApplicationWebhooks(context.Background())
 	writeJSON(w, http.StatusOK, settings)
@@ -148,6 +152,8 @@ func (s *server) rotateApplicationWebhookSecret(w http.ResponseWriter, r *http.R
 	app.WebhookSecretPrefix = secret[:min(len(secret), 17)]
 	settings := s.applicationWebhookSettings(r.Context(), app)
 	settings.Secret = secret
+	s.auditAPIKeyCredential(r, "webhook_secret_rotated", app)
+	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, settings)
 }
 
@@ -216,6 +222,9 @@ type desiredApplicationWebhook struct {
 	teamIDs   []string
 	appUserID string
 	installer string
+	// withoutRealtime: the installation was authorized before the
+	// application had a webhook and must be authorized again to get one.
+	withoutRealtime bool
 }
 
 func managedWebhookID(workspace, clientID string) string {
@@ -244,7 +253,7 @@ func (s *server) reconcileApplicationWebhooksWith(ctx context.Context, workspace
 		}
 		teams := slices.Clone(installation.AccessTeamIDs())
 		sort.Strings(teams)
-		authorized[installation.ClientID] = desiredApplicationWebhook{teamIDs: teams, appUserID: installation.UserID, installer: installation.InstalledBy}
+		authorized[installation.ClientID] = desiredApplicationWebhook{teamIDs: teams, appUserID: installation.UserID, installer: installation.InstalledBy, withoutRealtime: installation.WithoutRealtime}
 	}
 	for _, grant := range data.OAuthAuthorizations {
 		if grant.RevokedAt != nil || grant.ClientID == "" {
@@ -265,7 +274,7 @@ func (s *server) reconcileApplicationWebhooksWith(ctx context.Context, workspace
 	desired := map[string]desiredApplicationWebhook{}
 	for clientID, item := range authorized {
 		app, ok := apps[clientID]
-		if !ok || !app.WebhookEnabled || app.WebhookURL == "" {
+		if !ok || !app.WebhookEnabled || app.WebhookURL == "" || item.withoutRealtime {
 			continue
 		}
 		app.WebhookResourceTypes = applicationWebhookResourceIDs(app.WebhookResourceTypes)

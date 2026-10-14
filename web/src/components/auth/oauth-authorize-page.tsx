@@ -7,7 +7,7 @@ import { applyAccountTheme } from '@/lib/theme'
 import { request as apiRequest } from '@/lib/api-client'
 import { settingsPath, workspaceOnboardingPath } from '@/lib/app-routes'
 import { useOptionalTranslate } from '@/i18n/i18n'
-import { consentPermissions, oauthErrorMessage } from '@/lib/oauth-consent'
+import { consentPermissions, nextTeamSelection, oauthErrorMessage, OAUTH_SCOPE_LABELS, reconsentPermissions, REALTIME_PERMISSION, type InstalledConsent, type TeamMode } from '@/lib/oauth-consent'
 import type { AccountBootstrap, Team, WorkspaceMembership } from '@/types/flow'
 import { FlowLogo } from '@/components/ui/flow-logo'
 import { GridLoader } from '@/components/ui/grid-loader'
@@ -26,6 +26,9 @@ type Translate = (source: string) => string
  * /oauth/authorize — the reference app's consent screen: a workspace switcher in the corner, one card with both marks,
  * "<App> is requesting access", the requested permissions (and, for actor=app installs, team access), Cancel /
  * Authorize, and the data-sharing notice under the card. Invalid requests show the mark and the error, centered.
+ * An actor=app request for an application already installed in the workspace shows the reference app's re-consent card
+ * instead: "Existing permissions" and "Requested permissions" with "Update access", or "<App> already installed"
+ * with Continue when nothing new is asked; neither asks for team access nor shows the notice.
  */
 export function OAuthAuthorizePage({ account }: Props) {
   const location = useLocation()
@@ -45,7 +48,9 @@ function OAuthConsentPage({ account }: Props) {
   const [autoApproving, setAutoApproving] = useState(false)
   const [teams, setTeams] = useState<Team[]>([])
   const [teamIds, setTeamIds] = useState<string[]>([])
-  const [allPublicTeams, setAllPublicTeams] = useState(true)
+  const [teamMode, setTeamMode] = useState<TeamMode>('public')
+  // actor=app: the workspace's installation of this application (null when not installed, undefined while loading).
+  const [installed, setInstalled] = useState<InstalledConsent | null>()
   const isApplication = query.get('actor') === 'app'
   const pendingRef = useRef(false)
   const submitRef = useRef<(approve: boolean, workspaceOverride?: string) => Promise<void>>(async () => {})
@@ -84,28 +89,36 @@ function OAuthConsentPage({ account }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search])
 
+  const clientId = query.get('client_id') ?? ''
   useEffect(() => {
-    setTeams([]); setTeamIds([]); setAllPublicTeams(true)
+    setTeams([]); setTeamIds([]); setTeamMode('public'); setInstalled(undefined)
     if (!isApplication || !workspaceKey) return
     const abort = new AbortController()
-    void apiRequest<Team[]>(`/api/oauth/installation-teams?workspace=${encodeURIComponent(workspaceKey)}`, { signal: abort.signal })
+    const workspace = encodeURIComponent(workspaceKey)
+    void apiRequest<Team[]>(`/api/oauth/installation-teams?workspace=${workspace}`, { signal: abort.signal })
       .then(value => { if (!abort.signal.aborted) setTeams(value) })
       .catch(value => { if (!abort.signal.aborted) setError(oauthErrorMessage(value, t)) })
+    void apiRequest<{ installation?: InstalledConsent | null }>(`/api/oauth/installation?workspace=${workspace}&client_id=${encodeURIComponent(clientId)}`, { signal: abort.signal })
+      .then(value => { if (!abort.signal.aborted) setInstalled(value?.installation ?? null) })
+      // Members cannot install: the install request itself reports the error.
+      .catch(() => { if (!abort.signal.aborted) setInstalled(null) })
     return () => abort.abort()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isApplication, workspaceKey])
+  }, [isApplication, workspaceKey, clientId])
 
+  const needsTeams = isApplication && !installed && teamMode !== 'public' && !teamIds.length
   const submit = async (approve: boolean, workspaceOverride?: string) => {
     const targetWorkspace = workspaceOverride ?? workspaceKey
-    if (pendingRef.current || (approve && (!targetWorkspace || !workspaceOverride && isApplication && !allPublicTeams && !teamIds.length))) return
+    if (pendingRef.current || (approve && (!targetWorkspace || !workspaceOverride && needsTeams))) return
     pendingRef.current = true
     setPending(true)
     setError('')
     try {
       const result = await decideOAuthAuthorization({
         actor: query.get('actor') ?? undefined,
-        teamIds: isApplication ? (allPublicTeams ? [] : teamIds) : undefined,
-        allPublicTeams: isApplication ? allPublicTeams : undefined,
+        // An installed application keeps its team access: only a first install sends it.
+        teamIds: isApplication && !installed ? (teamMode === 'public' ? [] : teamIds) : undefined,
+        allPublicTeams: isApplication && !installed ? teamMode !== 'selected' : undefined,
         clientId: query.get('client_id') ?? '',
         redirectUri: query.get('redirect_uri') ?? '',
         responseType: query.get('response_type') ?? '',
@@ -141,41 +154,63 @@ function OAuthConsentPage({ account }: Props) {
     </section>
   </OAuthShell>
 
-  if (!request || autoApproving) return <OAuthShell switcher={switcher}>
+  if (!request || autoApproving || isApplication && workspaceKey && installed === undefined) return <OAuthShell switcher={switcher}>
     <div aria-label={t('Loading authorization request')} className="oauth-loading"><GridLoader size={22}/></div>
   </OAuthShell>
 
   const appName = request.client.client_name
   const workspaceName = selected?.workspace.name ?? ''
   const permissions = consentPermissions(request.scopes, request.scopeLabels)
-  const blocked = isApplication && !allPublicTeams && !teamIds.length
+  if (request.realtime) permissions.push({ scope: REALTIME_PERMISSION, label: OAUTH_SCOPE_LABELS[REALTIME_PERMISSION] })
+  const reconsent = isApplication && installed ? reconsentPermissions(installed, request.scopes, Boolean(request.realtime)) : undefined
+  const alreadyInstalled = Boolean(reconsent && !reconsent.requested.length)
+  const permissionList = (items: { scope: string; label: string }[]) => <ul className="oauth-list">
+    {items.map(item => <li key={item.scope}><ScopeIcon scope={item.scope}/><span data-i18n-ignore>{t(item.label)}</span></li>)}
+  </ul>
   return <OAuthShell switcher={switcher}>
     <section className="oauth-card" aria-labelledby="oauth-card-title">
       <header className="oauth-card-header">
         <OAuthMarks clientName={appName} logoUri={request.client.logo_uri} t={t}/>
         <div className="oauth-card-heading">
-          <h1 id="oauth-card-title" data-i18n-ignore>{fill(t('{app} is requesting access'), { app: appName })}</h1>
-          <p data-i18n-ignore>{fill(t('Authenticating with your {workspace} workspace'), { workspace: <strong key="workspace">{workspaceName}</strong> })}</p>
+          {alreadyInstalled && installed ? <>
+            <h1 id="oauth-card-title" data-i18n-ignore>{fill(t('{app} already installed'), { app: appName })}</h1>
+            <p data-i18n-ignore>{fill(t('Installed {date} by {member}'), { date: installedDate(installed.createdAt), member: <strong key="member">{installed.installerName || t('a member')}</strong> })}</p>
+          </> : <>
+            <h1 id="oauth-card-title" data-i18n-ignore>{fill(t('{app} is requesting access'), { app: appName })}</h1>
+            <p data-i18n-ignore>{fill(t('Authenticating with your {workspace} workspace'), { workspace: <strong key="workspace">{workspaceName}</strong> })}</p>
+          </>}
         </div>
       </header>
-      <div className="oauth-card-section">
+      {reconsent ? <>
+        <div className="oauth-card-section">
+          <h2>{t('Existing permissions')}</h2>
+          {permissionList(reconsent.existing)}
+        </div>
+        {reconsent.requested.length > 0 && <div className="oauth-card-section">
+          <h2>{t('Requested permissions')}</h2>
+          {permissionList(reconsent.requested)}
+        </div>}
+      </> : <div className="oauth-card-section">
         <h2>{t('Permissions')}</h2>
-        <ul className="oauth-list">
-          {permissions.map(item => <li key={item.scope}><ScopeIcon scope={item.scope}/><span data-i18n-ignore>{t(item.label)}</span></li>)}
-        </ul>
-      </div>
-      {isApplication && <ConsentTeamAccess teams={teams} allPublicTeams={allPublicTeams} teamIds={teamIds} t={t} onChange={(nextAll, nextIds) => { setAllPublicTeams(nextAll); setTeamIds(nextIds) }}/>}
+        {permissionList(permissions)}
+      </div>}
+      {isApplication && !installed && <ConsentTeamAccess teams={teams.filter(team => !team.retiredAt && !team.archivedAt)} mode={teamMode} teamIds={teamIds} t={t} onChange={(nextMode, nextIds) => { setTeamMode(nextMode); setTeamIds(nextIds) }}/>}
       {error && <p className="oauth-card-error" role="alert">{error}</p>}
       <footer className="oauth-card-actions">
         <button type="button" className="oauth-button" disabled={pending} onClick={() => void submit(false)}>{t('Cancel')}</button>
-        <button type="button" className="oauth-button is-primary" disabled={pending || blocked || !workspaceKey} aria-busy={pending || undefined} onClick={() => void submit(true)}>{t('Authorize')}</button>
+        <button type="button" className="oauth-button is-primary" disabled={pending || needsTeams || !workspaceKey} aria-busy={pending || undefined} onClick={() => void submit(true)}>{t(alreadyInstalled ? 'Continue' : reconsent ? 'Update access' : 'Authorize')}</button>
       </footer>
     </section>
-    <div className="oauth-notice" data-i18n-ignore>
+    {!reconsent && <div className="oauth-notice" data-i18n-ignore>
       <span>{fill(t('This application is requesting access to your Flow workspace. By approving, you authorize Flow to share this data with {app} on behalf of your organization. Once shared, {app}’s use of the data is governed by its own terms and privacy policy, not by Flow’s terms or data commitments.'), { app: appName })}</span>
       <span>{fill(t('Owners and admins can revoke this connection at any time in Settings. Learn about {link}.'), { link: <a key="link" href={settingsPath(workspaceKey || selected?.workspace.urlKey || '', 'applications')} onClick={event => { event.preventDefault(); navigate(settingsPath(workspaceKey || selected?.workspace.urlKey || '', 'applications')) }}>{t('third-party applications')}</a> })}</span>
-    </div>
+    </div>}
   </OAuthShell>
+}
+
+/** The reference app's "Installed Oct 14" date: short month and day in the page's locale. */
+function installedDate(value: string) {
+  return new Intl.DateTimeFormat(document.documentElement.dataset.locale || 'en-US', { month: 'short', day: 'numeric' }).format(new Date(value))
 }
 
 function OAuthShell({ switcher, children }: { switcher: ReactNode; children: ReactNode }) {
@@ -219,13 +254,21 @@ function OAuthMarks({ clientName, logoUri, t }: { clientName: string; logoUri?: 
   </div>
 }
 
-function ConsentTeamAccess({ teams, allPublicTeams, teamIds, onChange, t }: { teams: Team[]; allPublicTeams: boolean; teamIds: string[]; onChange: (allPublicTeams: boolean, teamIds: string[]) => void; t: Translate }) {
+/**
+ * The reference app's app-user team access on the consent screen: "All public teams", "All public teams and select other
+ * teams…" (offered when the workspace has a private team; its picker lists the private teams) and "Only select
+ * teams…" (every team). A picker sits under its own option.
+ */
+function ConsentTeamAccess({ teams, mode, teamIds, onChange, t }: { teams: Team[]; mode: TeamMode; teamIds: string[]; onChange: (mode: TeamMode, teamIds: string[]) => void; t: Translate }) {
+  const privateTeams = teams.filter(team => team.private)
+  const options: [TeamMode, string][] = [['public', 'All public teams'], ...(privateTeams.length ? [['mixed', 'All public teams and select other teams…'] as [TeamMode, string]] : []), ['selected', 'Only select teams…']]
   return <div className="oauth-card-section">
     <h2>{t('Team access')}</h2>
     <div className="oauth-list oauth-team-access" role="radiogroup" aria-label={t('Team access')}>
-      <label><input type="radio" name="oauth-team-access" checked={allPublicTeams} onChange={() => onChange(true, [])}/><span>{t('All public teams')}</span></label>
-      <label><input type="radio" name="oauth-team-access" checked={!allPublicTeams} onChange={() => onChange(false, teamIds)}/><span>{t('Only select teams…')}</span></label>
-      {!allPublicTeams && <TeamCombobox teams={teams.filter(team => !team.retiredAt)} value={teamIds} onChange={next => onChange(false, next)} t={t}/>}
+      {options.map(([value, label]) => <div className="oauth-team-option" key={value}>
+        <label><input type="radio" name="oauth-team-access" checked={mode === value} onChange={() => onChange(value, nextTeamSelection(value, teamIds, teams))}/><span>{t(label)}</span></label>
+        {mode === value && value !== 'public' && <TeamCombobox teams={value === 'mixed' ? privateTeams : teams} value={teamIds} onChange={next => onChange(value, next)} placeholder={value === 'mixed' ? 'Select other teams…' : 'Select teams…'} t={t}/>}
+      </div>)}
     </div>
   </div>
 }

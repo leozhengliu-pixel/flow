@@ -3,6 +3,9 @@
  * selection travels inside a message: the reference app shows it as an inline "selected text" chip, while the model reads it as a
  * markdown quote. A word joiner after the first "> " marks the quote as a chip, so a typed "> " stays plain text.
  */
+import type { AgentMention } from './agent-mention-input'
+import { showAgentQuoteHighlight } from './agent-quote-highlight'
+
 export const OPEN_FLOATING_AGENT_EVENT = 'flow:open-floating-agent'
 
 export type FloatingAgentRequest = {
@@ -10,9 +13,18 @@ export type FloatingAgentRequest = {
   quote?: string
   /** Text to send right away (the reference app's "Write with Agent"). */
   prompt?: string
+  /** Entities placed in the composer as mention chips (the reference app's "Ask the reference app" on an "Issue created" toast). */
+  mentions?: AgentMention[]
+  /** The issue the request comes from when it is not the page's issue (e.g. a description in a peek or the inbox). */
+  issueId?: string
 }
 
-export function requestFloatingAgent(detail: FloatingAgentRequest) {
+/**
+ * Opens the floating chat. With `range` (where `quote` sits in the editor) the quoted text keeps a faint highlight
+ * while its chip is in the composer, like the reference app (see agent-quote-highlight).
+ */
+export function requestFloatingAgent({ range, ...detail }: FloatingAgentRequest & { range?: Range }) {
+  if (detail.quote) showAgentQuoteHighlight(detail.quote, range)
   window.dispatchEvent(new CustomEvent<FloatingAgentRequest>(OPEN_FLOATING_AGENT_EVENT, { detail }))
 }
 

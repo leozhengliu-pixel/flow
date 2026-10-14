@@ -136,7 +136,15 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 				return
 			}
 		}
-		if apiKey != nil && apiKeyRestrictedPersonalPath(r.URL.Path) {
+		if apiKey != nil && oauthCredentialPath(r.URL.Path) {
+			// Application credentials are available to admin API keys only
+			// (the admin-route check below also requires an admin owner);
+			// every use is audited by the handlers.
+			if denial := apiKeyOAuthCredentialDenial(*apiKey); denial != "" {
+				writeError(w, http.StatusForbidden, denial)
+				return
+			}
+		} else if apiKey != nil && apiKeyRestrictedPersonalPath(r.URL.Path) {
 			// Personal credentials, sessions, and account preferences must be
 			// managed from an interactive account session. Allowing a bearer key
 			// to mint or revoke credentials would turn a leaked scoped key into
@@ -169,9 +177,6 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 }
 
 func apiKeyRestrictedPersonalPath(path string) bool {
-	if strings.HasPrefix(path, "/api/oauth-applications/") && (strings.HasSuffix(path, "/developer-token") || strings.HasSuffix(path, "/rotate-secret") || strings.HasSuffix(path, "/client-secret") || strings.HasSuffix(path, "/webhook/secret")) {
-		return true
-	}
 	if path == "/api/oauth/authorization-request" || strings.HasPrefix(path, "/api/oauth/authorizations/") {
 		return true
 	}
@@ -235,6 +240,11 @@ func apiKeyAllowsRequest(r *http.Request, key domain.APIKey) bool {
 		}
 	}
 	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/agent-tasks/") && strings.HasSuffix(r.URL.Path, "/activities") && (apiKeyHasScope(key, "app:assignable") || apiKeyHasScope(key, "app:mentionable")) {
+		return true
+	}
+	if oauthCredentialPath(r.URL.Path) && key.Actor != "app" {
+		// Decided after authentication, with a 403 that names the missing
+		// requirement (apiKeyOAuthCredentialDenial).
 		return true
 	}
 	if adminOnlyRequest(r) && !apiKeyHasScope(key, "admin") {

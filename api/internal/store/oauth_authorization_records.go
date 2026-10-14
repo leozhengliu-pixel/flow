@@ -154,7 +154,7 @@ func (s *SQLiteStore) CreateOAuthAuthorizationGrant(ctx context.Context, code st
 				return current, ErrAuthForbidden
 			}
 			var installed domain.ApplicationInstallation
-			installation := domain.ApplicationInstallation{ClientID: grant.ClientID, Name: client.ClientName, AvatarURL: client.LogoURI, InstalledBy: grant.InstallerID, Scopes: grant.Scopes, TeamIDs: grant.TeamIDs, AllPublicTeams: grant.AllPublicTeams, Active: true}
+			installation := domain.ApplicationInstallation{ClientID: grant.ClientID, Name: client.ClientName, AvatarURL: client.LogoURI, InstalledBy: grant.InstallerID, Scopes: grant.Scopes, TeamIDs: grant.TeamIDs, AllPublicTeams: grant.AllPublicTeams, WithoutRealtime: !grant.Realtime, Active: true}
 			var previous []byte
 			if findErr := tx.QueryRowContext(ctx, `SELECT data FROM application_installations WHERE workspace_key=? AND client_id=?`, grant.WorkspaceKey, grant.ClientID).Scan(&previous); findErr == nil {
 				var old domain.ApplicationInstallation
@@ -162,10 +162,27 @@ func (s *SQLiteStore) CreateOAuthAuthorizationGrant(ctx context.Context, code st
 					return current, err
 				}
 				installation.WebhookURL = old.WebhookURL
+				if old.Active {
+					// Authorizing an installed application again ("Update
+					// access", or "Continue" when nothing new is asked) adds
+					// the requested scopes to the installed ones and keeps
+					// its installer and team access. The
+					// code (and so the token) carries every installed scope.
+					installation.InstalledBy, installation.TeamIDs, installation.AllPublicTeams = old.InstalledBy, old.TeamIDs, old.AllPublicTeams
+					installation.Scopes = slices.Compact(slices.Sorted(slices.Values(append(slices.Clone(old.Scopes), grant.Scopes...))))
+					installation.WithoutRealtime = old.WithoutRealtime && !grant.Realtime
+					grant.Scopes, grant.TeamIDs, grant.AllPublicTeams = slices.Clone(installation.Scopes), slices.Clone(old.TeamIDs), old.AllPublicTeams
+					authorization.Scopes = slices.Clone(installation.Scopes)
+				}
 			} else if !errors.Is(findErr, sql.ErrNoRows) {
 				return current, findErr
 			}
-			current, installed, err = s.installApplicationTx(ctx, tx, lock, current, installation, "")
+			// The administrator authorizing now must be an active admin; the
+			// installer named on an existing installation may not be anymore.
+			if err := activeWorkspaceAdminTx(ctx, tx, lock, current.Workspace.ID, grant.InstallerID); err != nil {
+				return current, err
+			}
+			current, installed, err = s.writeApplicationInstallationTx(ctx, tx, lock, current, installation, "")
 			if err != nil {
 				return current, err
 			}

@@ -51,6 +51,10 @@
       "description": "OAuth 2.0 authorization server."
     },
     {
+      "name": "oauth-applications",
+      "description": "OAuth applications of the workspace: configuration, manifests, installs and credentials (workspace admins or the admin scope; see docs/oauth.md)."
+    },
+    {
       "name": "mcp",
       "description": "Model Context Protocol server."
     }
@@ -17004,64 +17008,178 @@
     },
     "/api/oauth-applications": {
       "get": {
+        "description": "The workspace's own OAuth applications, newest first, without client secrets.",
         "operationId": "get_oauth_applications",
-        "tags": [
-          "oauth-applications"
-        ],
-        "summary": "GET /api/oauth-applications",
-        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
         "responses": {
-          "2XX": {
-            "description": "Success. The response is not described by this document.",
+          "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OAuthApplication"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
           },
           "default": {
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-flow-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "List OAuth applications",
+        "tags": [
+          "oauth-applications"
+        ],
+        "x-flow-typed": true,
         "x-flow-source": "main.go"
       },
       "post": {
+        "description": "name is required; scopes default to read. The response carries the client secret (Cache-Control: no-store); creating an application with an API key is audited as client_secret_issued.",
         "operationId": "post_oauth_applications",
-        "tags": [
-          "oauth-applications"
-        ],
-        "summary": "POST /api/oauth-applications",
-        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
-        "responses": {
-          "2XX": {
-            "description": "Success. The response is not described by this document.",
-            "content": {
-              "application/json": {
-                "schema": {}
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthApplicationInput"
               }
             }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthApplication"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
           },
           "default": {
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-flow-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Create an OAuth application",
+        "tags": [
+          "oauth-applications"
+        ],
+        "x-flow-typed": true,
         "x-flow-source": "main.go"
       }
     },
     "/api/oauth-applications/{id}": {
       "delete": {
         "operationId": "delete_oauth_applications_id",
-        "tags": [
-          "oauth-applications"
-        ],
-        "summary": "DELETE /api/oauth-applications/{id}",
-        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
               "type": "string"
@@ -17069,32 +17187,78 @@
           }
         ],
         "responses": {
-          "2XX": {
-            "description": "Success. The response is not described by this document.",
-            "content": {
-              "application/json": {
-                "schema": {}
+          "204": {
+            "description": "No content",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
           },
           "default": {
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-flow-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Delete an OAuth application",
+        "tags": [
+          "oauth-applications"
+        ],
+        "x-flow-typed": true,
         "x-flow-source": "main.go"
       },
-      "patch": {
-        "operationId": "patch_oauth_applications_id",
-        "tags": [
-          "oauth-applications"
-        ],
-        "summary": "PATCH /api/oauth-applications/{id}",
-        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+      "get": {
+        "description": "Without its client secret.",
+        "operationId": "get_oauth_applications_id",
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
               "type": "string"
@@ -17102,34 +17266,183 @@
           }
         ],
         "responses": {
-          "2XX": {
-            "description": "Success. The response is not described by this document.",
+          "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthApplication"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
           },
           "default": {
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-flow-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Get an OAuth application",
+        "tags": [
+          "oauth-applications"
+        ],
+        "x-flow-typed": true,
+        "x-flow-source": "oauth_platform.go"
+      },
+      "patch": {
+        "description": "Only the given fields change. Client ID and secret are kept.",
+        "operationId": "patch_oauth_applications_id",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthApplicationInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthApplication"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Update an OAuth application",
+        "tags": [
+          "oauth-applications"
+        ],
+        "x-flow-typed": true,
         "x-flow-source": "main.go"
       }
     },
     "/api/oauth-applications/{id}/client-secret": {
       "get": {
+        "description": "Workspace admins signed in, or a personal API key with the admin scope and access to all teams whose owner is a workspace admin (OAuth tokens, read-only, member and team-restricted keys get 403). The secret is only in the response body, sent with Cache-Control: no-store; every use with an API key is written to the audit log (actor, key, application and action, never the secret). Audited as client_secret_read.",
         "operationId": "get_oauth_applications_id_client_secret",
-        "tags": [
-          "oauth-applications"
-        ],
-        "summary": "GET /api/oauth-applications/{id}/client-secret",
-        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
               "type": "string"
@@ -17137,34 +17450,87 @@
           }
         ],
         "responses": {
-          "2XX": {
-            "description": "Success. The response is not described by this document.",
+          "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthApplicationClientSecret"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
           },
           "default": {
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-flow-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Read an application's client secret",
+        "tags": [
+          "oauth-applications"
+        ],
+        "x-flow-typed": true,
         "x-flow-source": "oauth_platform.go"
       }
     },
     "/api/oauth-applications/{id}/developer-token": {
       "get": {
+        "description": "Workspace admins signed in, or a personal API key with the admin scope and access to all teams whose owner is a workspace admin (OAuth tokens, read-only, member and team-restricted keys get 403). The secret is only in the response body, sent with Cache-Control: no-store; every use with an API key is written to the audit log (actor, key, application and action, never the secret). 404 when the app user has no active developer token. Audited as developer_token_read.",
         "operationId": "get_oauth_applications_id_developer_token",
-        "tags": [
-          "oauth-applications"
-        ],
-        "summary": "GET /api/oauth-applications/{id}/developer-token",
-        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
               "type": "string"
@@ -17172,38 +17538,117 @@
           }
         ],
         "responses": {
-          "2XX": {
-            "description": "Success. The response is not described by this document.",
+          "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationToken"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
           },
           "default": {
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-flow-internal": true,
-        "x-flow-source": "oauth_platform.go"
-      },
-      "post": {
-        "operationId": "post_oauth_applications_id_developer_token",
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Read the app user's active developer token",
         "tags": [
           "oauth-applications"
         ],
-        "summary": "POST /api/oauth-applications/{id}/developer-token",
+        "x-flow-typed": true,
+        "x-flow-source": "oauth_platform.go"
+      },
+      "post": {
         "description": "Requires an interactive workspace owner/admin session. App tokens never inherit the issuing administrator role.",
+        "operationId": "post_oauth_applications_id_developer_token",
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
               "type": "string"
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "actor": {
+                    "enum": [
+                      "app",
+                      "user"
+                    ],
+                    "default": "app"
+                  },
+                  "scopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "One-time developer access token, valid for one hour.",
@@ -17254,52 +17699,26 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-flow-source": "main.go",
         "security": [
           {
             "sessionCookie": []
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "actor": {
-                    "enum": [
-                      "app",
-                      "user"
-                    ],
-                    "default": "app"
-                  },
-                  "scopes": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "minItems": 1
-                  }
-                }
-              }
-            }
-          }
-        }
+        "summary": "Create a developer token",
+        "tags": [
+          "oauth-applications"
+        ],
+        "x-flow-typed": true,
+        "x-flow-source": "main.go"
       }
     },
     "/api/oauth-applications/{id}/failures": {
       "get": {
         "operationId": "get_oauth_applications_id_failures",
-        "tags": [
-          "oauth-applications"
-        ],
-        "summary": "GET /api/oauth-applications/{id}/failures",
-        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
               "type": "string"
@@ -17307,34 +17726,90 @@
           }
         ],
         "responses": {
-          "2XX": {
-            "description": "Success. The response is not described by this document.",
+          "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WebhookFailureEvent"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
           },
           "default": {
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-flow-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "List an application's webhook delivery failures",
+        "tags": [
+          "oauth-applications"
+        ],
+        "x-flow-typed": true,
         "x-flow-source": "main.go"
       }
     },
     "/api/oauth-applications/{id}/installs": {
       "get": {
+        "description": "Members' active user authorizations and the actor=app installation (its app user, scopes and team access).",
         "operationId": "get_oauth_applications_id_installs",
-        "tags": [
-          "oauth-applications"
-        ],
-        "summary": "GET /api/oauth-applications/{id}/installs",
-        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
               "type": "string"
@@ -17342,34 +17817,87 @@
           }
         ],
         "responses": {
-          "2XX": {
-            "description": "Success. The response is not described by this document.",
+          "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthApplicationInstalls"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
           },
           "default": {
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-flow-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "List an application's grants in the workspace",
+        "tags": [
+          "oauth-applications"
+        ],
+        "x-flow-typed": true,
         "x-flow-source": "oauth_platform.go"
       }
     },
     "/api/oauth-applications/{id}/manifest": {
       "get": {
+        "description": "the reference app's OAuth app manifest shape, with Flow's oauth.scopes, agent and github extensions (see /.well-known/oauth-app-manifest.schema.json). Never includes secrets.",
         "operationId": "get_oauth_applications_id_manifest",
-        "tags": [
-          "oauth-applications"
-        ],
-        "summary": "GET /api/oauth-applications/{id}/manifest",
-        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
               "type": "string"
@@ -17377,67 +17905,183 @@
           }
         ],
         "responses": {
-          "2XX": {
-            "description": "Success. The response is not described by this document.",
+          "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthAppManifest"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
           },
           "default": {
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-flow-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Export an application as a manifest",
+        "tags": [
+          "oauth-applications"
+        ],
+        "x-flow-typed": true,
         "x-flow-source": "oauth_platform.go"
       },
       "put": {
+        "description": "Omitted optional blocks (display, webhook, agent, github) are cleared; client ID and secret are kept. webhookSecret is returned the first time the webhook is enabled. 400 with issues when the manifest is invalid.",
         "operationId": "put_oauth_applications_id_manifest",
-        "tags": [
-          "oauth-applications"
-        ],
-        "summary": "PUT /api/oauth-applications/{id}/manifest",
-        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
               "type": "string"
             }
           }
         ],
-        "responses": {
-          "2XX": {
-            "description": "Success. The response is not described by this document.",
-            "content": {
-              "application/json": {
-                "schema": {}
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthAppManifest"
               }
             }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManifestApplication"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
           },
           "default": {
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-flow-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Replace an application's configuration from a manifest",
+        "tags": [
+          "oauth-applications"
+        ],
+        "x-flow-typed": true,
         "x-flow-source": "oauth_platform.go"
       }
     },
     "/api/oauth-applications/{id}/rotate-secret": {
       "post": {
-        "operationId": "post_oauth_applications_id_rotate_secret",
-        "tags": [
-          "oauth-applications"
-        ],
-        "summary": "POST /api/oauth-applications/{id}/rotate-secret",
         "description": "Rotate the client secret and immediately invalidate existing client-credentials tokens. The new secret is returned once.",
+        "operationId": "post_oauth_applications_id_rotate_secret",
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
               "type": "string"
@@ -17445,24 +18089,69 @@
           }
         ],
         "responses": {
-          "2XX": {
-            "description": "Success. The response is not described by this document.",
+          "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthApplicationClientSecret"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
           },
           "default": {
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-flow-source": "main.go",
         "security": [
           {
             "sessionCookie": []
           }
-        ]
+        ],
+        "summary": "Rotate an application's client secret",
+        "tags": [
+          "oauth-applications"
+        ],
+        "x-flow-typed": true,
+        "x-flow-source": "main.go"
       }
     },
     "/api/oauth-applications/{id}/sync-groups": {
@@ -17728,6 +18417,7 @@
     },
     "/api/oauth-applications/{id}/webhook/rotate-secret": {
       "post": {
+        "description": "The new secret is returned once (Cache-Control: no-store). With an API key: personal keys with the admin scope and access to all teams, owned by a workspace admin; audited as webhook_secret_rotated.",
         "operationId": "post_oauth_applications_id_webhook_rotate_secret",
         "parameters": [
           {
@@ -17815,16 +18505,12 @@
     },
     "/api/oauth-applications/{id}/webhook/secret": {
       "get": {
+        "description": "Workspace admins signed in, or a personal API key with the admin scope and access to all teams whose owner is a workspace admin (OAuth tokens, read-only, member and team-restricted keys get 403). The secret is only in the response body, sent with Cache-Control: no-store; every use with an API key is written to the audit log (actor, key, application and action, never the secret). Audited as webhook_secret_read. 404 when the application has no signing secret.",
         "operationId": "get_oauth_applications_id_webhook_secret",
-        "tags": [
-          "oauth-applications"
-        ],
-        "summary": "GET /api/oauth-applications/{id}/webhook/secret",
-        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
         "parameters": [
           {
-            "name": "id",
             "in": "path",
+            "name": "id",
             "required": true,
             "schema": {
               "type": "string"
@@ -17832,19 +18518,76 @@
           }
         ],
         "responses": {
-          "2XX": {
-            "description": "Success. The response is not described by this document.",
+          "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationWebhookSecret"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
           },
           "default": {
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-flow-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Read the signing secret of an application webhook",
+        "tags": [
+          "oauth-applications"
+        ],
+        "x-flow-typed": true,
         "x-flow-source": "oauth_platform.go"
       }
     },
@@ -17875,51 +18618,177 @@
     },
     "/api/oauth-applications/manifest": {
       "post": {
+        "description": "The response carries the client secret and, when the webhook is enabled, its signing secret (Cache-Control: no-store). 400 with issues when the manifest is invalid.",
         "operationId": "post_oauth_applications_manifest",
-        "tags": [
-          "oauth-applications"
-        ],
-        "summary": "POST /api/oauth-applications/manifest",
-        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
-        "responses": {
-          "2XX": {
-            "description": "Success. The response is not described by this document.",
-            "content": {
-              "application/json": {
-                "schema": {}
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthAppManifest"
               }
             }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManifestApplication"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
           },
           "default": {
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-flow-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Create an application from a manifest",
+        "tags": [
+          "oauth-applications"
+        ],
+        "x-flow-typed": true,
         "x-flow-source": "oauth_platform.go"
       }
     },
     "/api/oauth-applications/manifest/validate": {
       "post": {
+        "description": "Always 200: valid with a preview of the application, or the issues found.",
         "operationId": "post_oauth_applications_manifest_validate",
-        "tags": [
-          "oauth-applications"
-        ],
-        "summary": "POST /api/oauth-applications/manifest/validate",
-        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
-        "responses": {
-          "2XX": {
-            "description": "Success. The response is not described by this document.",
-            "content": {
-              "application/json": {
-                "schema": {}
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthAppManifest"
               }
             }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthAppManifestValidation"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
           },
           "default": {
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-flow-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Validate a manifest",
+        "tags": [
+          "oauth-applications"
+        ],
+        "x-flow-typed": true,
         "x-flow-source": "oauth_platform.go"
       }
     },
@@ -18013,6 +18882,31 @@
           "oauth"
         ],
         "summary": "GET /api/oauth/authorized-applications",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "oauth_platform.go"
+      }
+    },
+    "/api/oauth/installation": {
+      "get": {
+        "operationId": "get_oauth_installation",
+        "tags": [
+          "oauth"
+        ],
+        "summary": "GET /api/oauth/installation",
         "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
         "responses": {
           "2XX": {
@@ -32814,6 +33708,136 @@
         ],
         "type": "object"
       },
+      "ApplicationInstallation": {
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "allPublicTeams": {
+            "type": "boolean"
+          },
+          "allTeams": {
+            "description": "AllTeams keeps the installation's teams in step with the workspace's teams (the built-in Flow agent works in every team).",
+            "type": "boolean"
+          },
+          "avatarUrl": {
+            "type": "string"
+          },
+          "builtin": {
+            "type": "boolean"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "installedBy": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "serverSuspended": {
+            "description": "ServerSuspended marks an installation deactivated because the server's agent is disabled; it is reactivated when the agent is enabled again.",
+            "type": "boolean"
+          },
+          "teamIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "webhookUrl": {
+            "type": "string"
+          },
+          "withoutRealtime": {
+            "description": "WithoutRealtime marks an installation authorized while its application had no webhook:, it receives no webhook deliveries until an administrator authorizes it again (\"Receive realtime updates about your workspace\" is then a requested permission on the consent screen).",
+            "type": "boolean"
+          },
+          "workspaceKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "active",
+          "builtin",
+          "clientId",
+          "createdAt",
+          "id",
+          "installedBy",
+          "name",
+          "scopes",
+          "teamIds",
+          "updatedAt",
+          "userId",
+          "workspaceKey"
+        ],
+        "type": "object"
+      },
+      "ApplicationToken": {
+        "description": "ApplicationToken is an access token issued to an application (developer tokens and the client_credentials grant).",
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "actor": {
+            "description": "Actor is app (the application's app user) or user.",
+            "enum": [
+              "app",
+              "user"
+            ],
+            "type": "string"
+          },
+          "app_user_id": {
+            "type": "string"
+          },
+          "existing": {
+            "description": "Existing is true when the app user's active developer token was returned instead of a new one.",
+            "type": "boolean"
+          },
+          "expires_in": {
+            "description": "ExpiresIn is the lifetime in seconds.",
+            "type": "integer"
+          },
+          "scope": {
+            "description": "Scope is the space-separated scopes.",
+            "type": "string"
+          },
+          "subject_user_id": {
+            "type": "string"
+          },
+          "token_type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "actor",
+          "expires_in",
+          "scope",
+          "subject_user_id",
+          "token_type"
+        ],
+        "type": "object"
+      },
       "ApplicationWebhookInput": {
         "description": "ApplicationWebhookInput configures the webhook of an OAuth application.",
         "properties": {
@@ -32841,6 +33865,18 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "ApplicationWebhookSecret": {
+        "description": "ApplicationWebhookSecret carries the signing secret of an application webhook. Sent with Cache-Control: no-store.",
+        "properties": {
+          "secret": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "secret"
+        ],
         "type": "object"
       },
       "ApplicationWebhookSettings": {
@@ -34655,6 +35691,27 @@
           "webhookId",
           "webhookTimestamp"
         ],
+        "type": "object"
+      },
+      "DeveloperTokenInput": {
+        "description": "DeveloperTokenInput creates a developer token for an application.",
+        "properties": {
+          "actor": {
+            "description": "Actor is app (default: a token of the application's app user, or its active one) or user (a token of the caller through the application).",
+            "enum": [
+              "app",
+              "user"
+            ],
+            "type": "string"
+          },
+          "scopes": {
+            "description": "Scopes are the token's scopes (for user tokens, read and write as far as the application allows when omitted).",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
         "type": "object"
       },
       "Document": {
@@ -38498,6 +39555,104 @@
         ],
         "type": "object"
       },
+      "ManifestApplication": {
+        "description": "ManifestApplication is an application saved from a manifest, with the webhook signing secret the first time its webhook is enabled.",
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "clientSecret": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "creatorId": {
+            "type": "string"
+          },
+          "credentialsAuthorizedBy": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "developerName": {
+            "description": "DeveloperName and DeveloperURL are the public developer details from the app manifest (developer.name, oauth.client_uri).",
+            "type": "string"
+          },
+          "developerUrl": {
+            "type": "string"
+          },
+          "githubUsername": {
+            "description": "GitHubUsername associates GitHub activity with the application's app user (actor=app): pull requests opened and events sent by this GitHub account are attributed to the app user. \"[bot]\" names a GitHub App.",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "logoUrl": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "publicEnabled": {
+            "type": "boolean"
+          },
+          "redirectUris": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "supportsClientCredentials": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "webhookEnabled": {
+            "description": "Application-level webhook, configured once by the developer: every workspace that installs or authorizes the application gets a managed webhook delivering these resource types to WebhookURL, signed with the application's webhook signing secret.",
+            "type": "boolean"
+          },
+          "webhookResourceTypes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "webhookSecret": {
+            "type": "string"
+          },
+          "webhookSecretPrefix": {
+            "type": "string"
+          },
+          "webhookUrl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "clientId",
+          "createdAt",
+          "creatorId",
+          "id",
+          "name",
+          "publicEnabled",
+          "redirectUris",
+          "scopes",
+          "supportsClientCredentials",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
       "NotificationComment": {
         "description": "NotificationComment is the comment of an inbox notification.",
         "properties": {
@@ -38537,6 +39692,243 @@
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "OAuthAppManifest": {
+        "description": "OAuthAppManifest describes an OAuth application declaratively, in the shape of the reference app's OAuth app manifests (see /.well-known/oauth-app-manifest.schema.json).",
+        "properties": {
+          "$schema": {
+            "type": "string"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OAuthAppManifestAgent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "developer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OAuthAppManifestDev"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "display": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OAuthAppManifestDisplay"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "distribution": {
+            "description": "Distribution is private (default) or public.",
+            "enum": [
+              "private",
+              "public"
+            ],
+            "type": "string"
+          },
+          "github": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OAuthAppManifestGitHub"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "oauth": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OAuthAppManifestOAuth"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "schemaVersion": {
+            "type": "string"
+          },
+          "webhook": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OAuthAppManifestWebhook"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "schemaVersion"
+        ],
+        "type": "object"
+      },
+      "OAuthAppManifestAgent": {
+        "description": "OAuthAppManifestAgent is shorthand for the app:assignable and app:mentionable scopes of an agent application.",
+        "properties": {
+          "assignable": {
+            "type": "boolean"
+          },
+          "mentionable": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "OAuthAppManifestDev": {
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "OAuthAppManifestDisplay": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "iconUrl": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "OAuthAppManifestGitHub": {
+        "description": "OAuthAppManifestGitHub is the \"GitHub username\": for actor=app, commits and comments by this GitHub account belong to the app user.",
+        "properties": {
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "username"
+        ],
+        "type": "object"
+      },
+      "OAuthAppManifestIssue": {
+        "description": "OAuthAppManifestIssue is one validation problem, at a JSON path.",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "path"
+        ],
+        "type": "object"
+      },
+      "OAuthAppManifestOAuth": {
+        "properties": {
+          "client_name": {
+            "type": "string"
+          },
+          "client_uri": {
+            "type": "string"
+          },
+          "grant_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "redirect_uris": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "client_name",
+          "client_uri",
+          "redirect_uris"
+        ],
+        "type": "object"
+      },
+      "OAuthAppManifestValidation": {
+        "description": "OAuthAppManifestValidation is the result of validating a manifest.",
+        "properties": {
+          "application": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OAuthApplication"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Application previews the application the manifest describes (when valid)."
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/OAuthAppManifestIssue"
+            },
+            "type": "array"
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "issues",
+          "valid"
+        ],
+        "type": "object"
+      },
+      "OAuthAppManifestWebhook": {
+        "properties": {
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "resourceTypes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "secret": {
+            "description": "Secret is the signing secret shown in the settings form before the webhook is first saved. Write-only: it is used only while the application has no signing secret yet and is never exported.",
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "resourceTypes",
+          "url"
         ],
         "type": "object"
       },
@@ -38604,6 +39996,267 @@
           "type",
           "webhookId",
           "webhookTimestamp"
+        ],
+        "type": "object"
+      },
+      "OAuthApplication": {
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "clientSecret": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "creatorId": {
+            "type": "string"
+          },
+          "credentialsAuthorizedBy": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "developerName": {
+            "description": "DeveloperName and DeveloperURL are the public developer details from the app manifest (developer.name, oauth.client_uri).",
+            "type": "string"
+          },
+          "developerUrl": {
+            "type": "string"
+          },
+          "githubUsername": {
+            "description": "GitHubUsername associates GitHub activity with the application's app user (actor=app): pull requests opened and events sent by this GitHub account are attributed to the app user. \"[bot]\" names a GitHub App.",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "logoUrl": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "publicEnabled": {
+            "type": "boolean"
+          },
+          "redirectUris": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "supportsClientCredentials": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "webhookEnabled": {
+            "description": "Application-level webhook, configured once by the developer: every workspace that installs or authorizes the application gets a managed webhook delivering these resource types to WebhookURL, signed with the application's webhook signing secret.",
+            "type": "boolean"
+          },
+          "webhookResourceTypes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "webhookSecretPrefix": {
+            "type": "string"
+          },
+          "webhookUrl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "clientId",
+          "createdAt",
+          "creatorId",
+          "id",
+          "name",
+          "publicEnabled",
+          "redirectUris",
+          "scopes",
+          "supportsClientCredentials",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "OAuthApplicationClientSecret": {
+        "description": "OAuthApplicationClientSecret carries the application's client secret (reading it, or the new one after a rotation). Sent with Cache-Control: no-store.",
+        "properties": {
+          "clientSecret": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "clientSecret"
+        ],
+        "type": "object"
+      },
+      "OAuthApplicationInput": {
+        "description": "OAuthApplicationInput creates (name required) or updates an OAuth application. Omitted fields are left unchanged.",
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "developerName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "developerUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "githubUsername": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "logoUrl": {
+            "description": "LogoURL is an absolute HTTP(S) URL or an uploaded application icon.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "Name is shown on the consent screen and in Settings › Applications.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "publicEnabled": {
+            "description": "PublicEnabled lets other workspaces install the application.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "redirectUris": {
+            "description": "RedirectURIs are the allowed OAuth callbacks (HTTPS, or loopback HTTP).",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "scopes": {
+            "description": "Scopes are the scopes the application may request.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "supportsClientCredentials": {
+            "description": "SupportsClientCredentials enables the client_credentials grant.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "OAuthApplicationInstalls": {
+        "description": "OAuthApplicationInstalls lists the workspace's grants of an application: members' active user authorizations and the actor=app installation.",
+        "properties": {
+          "authorizations": {
+            "items": {
+              "$ref": "#/components/schemas/OAuthAuthorization"
+            },
+            "type": "array"
+          },
+          "installations": {
+            "items": {
+              "$ref": "#/components/schemas/ApplicationInstallation"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "authorizations",
+          "installations"
+        ],
+        "type": "object"
+      },
+      "OAuthAuthorization": {
+        "properties": {
+          "actor": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "clientName": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "installerId": {
+            "type": "string"
+          },
+          "lastUsedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revokedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "clientId",
+          "clientName",
+          "createdAt",
+          "id",
+          "scopes",
+          "userId"
         ],
         "type": "object"
       },

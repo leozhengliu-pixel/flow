@@ -355,6 +355,42 @@ and `createdAt`. With `first`/`after` it returns a connection.
 counts. The log keeps the latest 1,000 entries; stream it to your SIEM with the
 audit log stream (Settings › Security) for longer retention.
 
+## OAuth applications
+
+Workspace admins, or API keys with the `admin` scope, manage the workspace's
+OAuth applications (tag `oauth-applications` in `docs/openapi.json`; the
+manifest format and consent flow are in [oauth.md](oauth.md)):
+
+| Route | |
+| --- | --- |
+| `GET /api/oauth-applications`, `GET /api/oauth-applications/{id}` | The applications, without client secrets. |
+| `POST /api/oauth-applications`, `PATCH`/`DELETE /api/oauth-applications/{id}` | Create (returns the client secret once), update, delete. |
+| `POST /api/oauth-applications/manifest`, `PUT /api/oauth-applications/{id}/manifest`, `GET /api/oauth-applications/{id}/manifest`, `POST /api/oauth-applications/manifest/validate` | Manage an application as a manifest. |
+| `GET /api/oauth-applications/{id}/installs` | Members' authorizations and the app installation. |
+| `GET /api/oauth-applications/{id}/failures` | Webhook delivery failures. |
+| `GET`/`PUT /api/oauth-applications/{id}/webhook`, `POST …/webhook/rotate-secret`, `GET …/webhook/secret` | The application webhook and its signing secret. |
+| `GET …/client-secret`, `POST …/rotate-secret`, `GET`/`POST …/developer-token` | Credentials (below). |
+
+```bash
+curl --fail-with-body "$FLOW_BASE_URL/api/oauth-applications/$APP_ID/client-secret" \
+  -H "Authorization: Bearer $FLOW_ADMIN_KEY"
+```
+
+**Credentials with API keys.** Reading or rotating the client secret, reading
+or creating developer tokens and reading or rotating the webhook signing
+secret work with a personal API key only when the key has the `admin` scope
+(or full access), is not restricted to selected teams and belongs to a
+workspace admin. OAuth tokens, read-only keys, keys of members and
+team-restricted keys get `403`. Secrets are returned only in the response
+body with `Cache-Control: no-store`. Every such call made with an API key
+writes an audit entry (resource type `oauth_application`, actions
+`client_secret_read`, `client_secret_rotated`, `client_secret_issued`,
+`developer_token_read`, `developer_token_created`, `webhook_secret_read`,
+`webhook_secret_rotated`, `webhook_secret_issued`) naming the key's owner, the
+key (`apiKeyId`, `apiKeyName`) and the application, never the secret. Treat an
+admin key like the secrets it can read: keep it in a secret manager, give it a
+short expiry and revoke it when it is no longer needed.
+
 ## Prefilled issue links
 
 Open the issue composer with fields already set, like linear.new:

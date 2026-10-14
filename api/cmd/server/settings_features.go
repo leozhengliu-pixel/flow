@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/publicapi"
 	"flow/api/internal/store"
 )
 
@@ -1552,18 +1553,21 @@ func (s *server) listOAuthApplications(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-type oauthInput struct {
-	Name                      *string   `json:"name,omitempty"`
-	Description               *string   `json:"description,omitempty"`
-	LogoURL                   *string   `json:"logoUrl,omitempty"`
-	RedirectURIs              *[]string `json:"redirectUris,omitempty"`
-	Scopes                    *[]string `json:"scopes,omitempty"`
-	SupportsClientCredentials *bool     `json:"supportsClientCredentials,omitempty"`
-	PublicEnabled             *bool     `json:"publicEnabled,omitempty"`
-	DeveloperName             *string   `json:"developerName,omitempty"`
-	DeveloperURL              *string   `json:"developerUrl,omitempty"`
-	GitHubUsername            *string   `json:"githubUsername,omitempty"`
+// GET /api/oauth-applications/{id} returns one application (without its
+// client secret).
+func (s *server) getOAuthApplication(w http.ResponseWriter, r *http.Request) {
+	data := s.workspaceData(r)
+	index := slices.IndexFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == r.PathValue("id") })
+	if index < 0 {
+		writeError(w, http.StatusNotFound, "Application not found")
+		return
+	}
+	app := data.OAuthApplications[index]
+	app.ClientSecret = ""
+	writeJSON(w, http.StatusOK, app)
 }
+
+type oauthInput = publicapi.OAuthApplicationInput
 
 func (s *server) createOAuthApplication(w http.ResponseWriter, r *http.Request) {
 	var input oauthInput
@@ -1591,6 +1595,9 @@ func (s *server) createOAuthApplication(w http.ResponseWriter, r *http.Request) 
 	if err == nil {
 		// Keep each workspace's managed app webhook in step, as manifest saves do.
 		go s.reconcileAllApplicationWebhooks(context.Background())
+		// The response carries the client secret.
+		s.auditAPIKeyCredential(r, "client_secret_issued", created)
+		w.Header().Set("Cache-Control", "no-store")
 	}
 	respondMutation(w, err, http.StatusCreated, created)
 }

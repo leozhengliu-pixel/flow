@@ -1,0 +1,83 @@
+/*
+ * "Issue created" from a selection (issue-created-toast.tsx), measured in the reference app in both themes (the --toast-issue-*
+ * colours live in tokens.css). The card itself is the shared .flow-toast (384px, 12px radius, 12px padding); this
+ * adds the issue row and the action footer.
+ */
+
+.flow-issue-toast::after { box-shadow: var(--toast-issue-shadow); }
+.flow-issue-toast__body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.flow-issue-toast__title { padding-right: 20px; color: var(--toast-issue-title); font: 500 13px/16px var(--font); }
+
+/* The issue: identifier, status and title on a row that lights up under the pointer and opens it. */
+.flow-issue-toast__issue {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: -7px -6px -1px;
+  padding: 6px;
+  border-radius: 4px;
+  color: var(--toast-issue-text);
+  font: 450 13px/15px var(--font);
+  text-decoration: none;
+  cursor: default;
+  transition: background-color .15s;
+}
+.flow-issue-toast__issue:hover,
+.flow-issue-toast__issue:focus-visible { background: var(--toast-hover-bg); }
+.flow-issue-toast__issue:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 0; }
+.flow-issue-toast__issue > svg { flex: none; }
+.flow-issue-toast__identifier { flex: none; color: var(--toast-issue-identifier); }
+.flow-issue-toast__issue-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Footer: "Ask Flow" pill, then 28px round icon buttons 7px apart, under a hairline. */
+.flow-issue-toast__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: .5px solid var(--toast-issue-rule);
+}
+.flow-issue-toast__ask {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px 0 6px;
+  border: .5px solid var(--toast-issue-ask-border);
+  border-radius: 9999px;
+  background: var(--toast-issue-ask-bg);
+  color: var(--toast-issue-text);
+  font: 500 12px/normal var(--font);
+  white-space: nowrap;
+  cursor: default;
+  transition: background-color .15s;
+}
+.flow-issue-toast__ask > span { color: var(--toast-issue-title); font-weight: 450; }
+.flow-issue-toast__ask:hover { background: var(--toast-issue-ask-hover-bg); }
+.flow-issue-toast__icons { display: flex; align-items: center; gap: 7px; }
+.flow-issue-toast__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: .5px solid transparent;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--toast-issue-identifier);
+  cursor: default;
+  transition: background-color .15s, color .15s;
+}
+/* Glyphs (the favorited star too: filled, same grey, not yellow) brighten to the title colour under the pointer. */
+.flow-issue-toast__icon > svg { width: 14px; height: 14px; }
+.flow-issue-toast__icon:hover { background: var(--toast-issue-icon-hover-bg); color: var(--toast-issue-title); }
+.flow-issue-toast__ask:focus-visible,
+.flow-issue-toast__icon:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-issue-toast__issue,
+  .flow-issue-toast__ask,
+  .flow-issue-toast__icon { transition: none; }
+}

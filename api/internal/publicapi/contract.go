@@ -69,6 +69,10 @@ var (
 	adminScopes = []string{"admin"}
 )
 
+// oauthCredentialNote describes who may use the OAuth application credential
+// routes and how they answer.
+const oauthCredentialNote = "Workspace admins signed in, or a personal API key with the admin scope and access to all teams whose owner is a workspace admin (OAuth tokens, read-only, member and team-restricted keys get 403). The secret is only in the response body, sent with Cache-Control: no-store; every use with an API key is written to the audit log (actor, key, application and action, never the secret)."
+
 func connectionOf(tag, path, summary string, node any, filter []string, extra ...Param) Operation {
 	return Operation{Method: "GET", Path: path, Tag: tag, Summary: summary, Response: node, Connection: true, Filter: filter, Params: extra, Scopes: readScopes}
 }
@@ -190,7 +194,27 @@ var Operations = []Operation{
 	{Method: "GET", Path: "/api/webhooks/{id}/failures", Tag: "webhooks", Summary: "List failed attempts", Description: "Compatibility view of the delivery log: failed attempts, newest first.", Response: []domain.WebhookFailureEvent{}, Scopes: adminScopes},
 	{Method: "GET", Path: "/api/oauth-applications/{id}/webhook", Tag: "webhooks", Summary: "Get the webhook of an OAuth application", Response: ApplicationWebhookSettings{}, Scopes: adminScopes},
 	{Method: "PUT", Path: "/api/oauth-applications/{id}/webhook", Tag: "webhooks", Summary: "Configure the webhook of an OAuth application", Description: "Enabling the webhook for the first time creates the application's signing secret, returned once.", Request: ApplicationWebhookInput{}, Response: ApplicationWebhookSettings{}, Scopes: adminScopes},
-	{Method: "POST", Path: "/api/oauth-applications/{id}/webhook/rotate-secret", Tag: "webhooks", Summary: "Rotate the signing secret of an application webhook", Response: ApplicationWebhookSettings{}, Scopes: adminScopes},
+	{Method: "POST", Path: "/api/oauth-applications/{id}/webhook/rotate-secret", Tag: "webhooks", Summary: "Rotate the signing secret of an application webhook", Description: "The new secret is returned once (Cache-Control: no-store). With an API key: personal keys with the admin scope and access to all teams, owned by a workspace admin; audited as webhook_secret_rotated.", Response: ApplicationWebhookSettings{}, Scopes: adminScopes},
+	{Method: "GET", Path: "/api/oauth-applications/{id}/webhook/secret", Tag: "oauth-applications", Summary: "Read the signing secret of an application webhook", Description: oauthCredentialNote + " Audited as webhook_secret_read. 404 when the application has no signing secret.", Response: ApplicationWebhookSecret{}, Scopes: adminScopes},
+
+	// OAuth applications (workspace administrators, or the admin scope).
+	{Method: "GET", Path: "/api/oauth-applications", Tag: "oauth-applications", Summary: "List OAuth applications", Description: "The workspace's own OAuth applications, newest first, without client secrets.", Response: []domain.OAuthApplication{}, Scopes: adminScopes},
+	{Method: "POST", Path: "/api/oauth-applications", Tag: "oauth-applications", Summary: "Create an OAuth application", Description: "name is required; scopes default to read. The response carries the client secret (Cache-Control: no-store); creating an application with an API key is audited as client_secret_issued.", Request: OAuthApplicationInput{}, Response: domain.OAuthApplication{}, Status: 201, Scopes: adminScopes},
+	{Method: "GET", Path: "/api/oauth-applications/{id}", Tag: "oauth-applications", Summary: "Get an OAuth application", Description: "Without its client secret.", Response: domain.OAuthApplication{}, Scopes: adminScopes},
+	{Method: "PATCH", Path: "/api/oauth-applications/{id}", Tag: "oauth-applications", Summary: "Update an OAuth application", Description: "Only the given fields change. Client ID and secret are kept.", Request: OAuthApplicationInput{}, Response: domain.OAuthApplication{}, Scopes: adminScopes},
+	{Method: "DELETE", Path: "/api/oauth-applications/{id}", Tag: "oauth-applications", Summary: "Delete an OAuth application", Scopes: adminScopes},
+	{Method: "GET", Path: "/api/oauth-applications/{id}/installs", Tag: "oauth-applications", Summary: "List an application's grants in the workspace", Description: "Members' active user authorizations and the actor=app installation (its app user, scopes and team access).", Response: OAuthApplicationInstalls{}, Scopes: adminScopes},
+	{Method: "GET", Path: "/api/oauth-applications/{id}/failures", Tag: "oauth-applications", Summary: "List an application's webhook delivery failures", Response: []domain.WebhookFailureEvent{}, Scopes: adminScopes},
+	{Method: "GET", Path: "/api/oauth-applications/{id}/manifest", Tag: "oauth-applications", Summary: "Export an application as a manifest", Description: "the reference app's OAuth app manifest shape, with Flow's oauth.scopes, agent and github extensions (see /.well-known/oauth-app-manifest.schema.json). Never includes secrets.", Response: OAuthAppManifest{}, Scopes: adminScopes},
+	{Method: "PUT", Path: "/api/oauth-applications/{id}/manifest", Tag: "oauth-applications", Summary: "Replace an application's configuration from a manifest", Description: "Omitted optional blocks (display, webhook, agent, github) are cleared; client ID and secret are kept. webhookSecret is returned the first time the webhook is enabled. 400 with issues when the manifest is invalid.", Request: OAuthAppManifest{}, Response: ManifestApplication{}, Scopes: adminScopes},
+	{Method: "POST", Path: "/api/oauth-applications/manifest", Tag: "oauth-applications", Summary: "Create an application from a manifest", Description: "The response carries the client secret and, when the webhook is enabled, its signing secret (Cache-Control: no-store). 400 with issues when the manifest is invalid.", Request: OAuthAppManifest{}, Response: ManifestApplication{}, Status: 201, Scopes: adminScopes},
+	{Method: "POST", Path: "/api/oauth-applications/manifest/validate", Tag: "oauth-applications", Summary: "Validate a manifest", Description: "Always 200: valid with a preview of the application, or the issues found.", Request: OAuthAppManifest{}, Response: OAuthAppManifestValidation{}, Scopes: adminScopes},
+
+	// OAuth application credentials. See oauthCredentialNote.
+	{Method: "GET", Path: "/api/oauth-applications/{id}/client-secret", Tag: "oauth-applications", Summary: "Read an application's client secret", Description: oauthCredentialNote + " Audited as client_secret_read.", Response: OAuthApplicationClientSecret{}, Scopes: adminScopes},
+	{Method: "POST", Path: "/api/oauth-applications/{id}/rotate-secret", Tag: "oauth-applications", Summary: "Rotate an application's client secret", Description: oauthCredentialNote + " The previous secret stops working immediately. Audited as client_secret_rotated.", Response: OAuthApplicationClientSecret{}, Scopes: adminScopes},
+	{Method: "GET", Path: "/api/oauth-applications/{id}/developer-token", Tag: "oauth-applications", Summary: "Read the app user's active developer token", Description: oauthCredentialNote + " 404 when the app user has no active developer token. Audited as developer_token_read.", Response: ApplicationToken{}, Scopes: adminScopes},
+	{Method: "POST", Path: "/api/oauth-applications/{id}/developer-token", Tag: "oauth-applications", Summary: "Create a developer token", Description: oauthCredentialNote + " actor=app (default) returns the app user's active token (existing: true) or creates one with the given scopes, installing the application for all public teams if needed; actor=user creates a token of the caller through the application. Audited as developer_token_created (or developer_token_read for an existing token).", Request: DeveloperTokenInput{}, Response: ApplicationToken{}, Scopes: adminScopes},
 }
 
 func withOrderings(operation Operation, orderings ...string) Operation {

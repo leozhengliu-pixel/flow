@@ -65,8 +65,38 @@ installs always show the consent screen.
 The consent screen: a workspace switcher in the corner,
 "<App> is requesting access · Authenticating with your <workspace> workspace",
 the requested permissions (`write` hides the narrower `issues:create`,
-`comments:create` and `timeSchedule:write`), team access for `actor=app`
-installs ("All public teams" or "Only select teams…"), and Cancel / Authorize.
+`comments:create` and `timeSchedule:write`), then "Receive realtime updates
+about your workspace" when the application has a webhook (see
+[Realtime updates](#realtime-updates)), team access for `actor=app` installs,
+and Cancel / Authorize. Team access offers "All public teams", "All public
+teams and select other teams…" (only when the workspace has a private team; its
+picker lists the private teams, including ones the administrator is not a
+member of) and "Only select teams…" (every team); a picker needs at least one
+team before Authorize is enabled.
+
+An `actor=app` request for an application that is already installed in the
+chosen workspace shows the reference app's re-consent card instead, without team access
+or the data-sharing notice:
+
+- When it asks for something the installation does not have yet:
+  "<App> is requesting access", **Existing permissions** (the installed
+  scopes) and **Requested permissions** (the new scopes, and the realtime
+  permission when the installation was authorized before the application had a
+  webhook), with **Update access**.
+- Otherwise (the same or fewer scopes): "<App> already installed · Installed
+  <date> by <member>", **Existing permissions** and **Continue**.
+
+Either way the requested scopes are added to the installed ones (scopes are
+never removed by asking for fewer), the app user, its installer and its team
+access stay, and the code carries every installed scope. Redeeming it revokes
+the access and refresh tokens issued to the app user before, so an
+installation has one token chain at a time (client-credentials tokens are not
+affected). An `actor=user` request never shows this card: a person who already
+granted the scopes is sent straight back, and one asked for more sees the
+regular consent screen; their earlier tokens stay valid. The consent page
+reads the installation from `GET /api/oauth/installation?workspace=&client_id=`
+(administrators only).
+
 An invalid request shows Flow's mark and the error description instead, with
 The reference app's wording:
 
@@ -244,6 +274,24 @@ application that requests them without it gets `invalid_scope` (public MCP
 clients, which request every advertised scope, have them dropped). User tokens
 reach customers and initiatives through `read` and `write`.
 
+Team access is stored as `allPublicTeams` plus `teamIds`: "All public teams"
+is `allPublicTeams` alone, "All public teams and select other teams…" adds the
+chosen private teams to it, and "Only select teams…" is `teamIds` alone. The
+app user is a member of the chosen teams, so it reads and writes their issues
+(private ones included) and can be delegated work there; other private teams
+stay hidden from it.
+
+### Realtime updates
+
+"Receive realtime updates about your workspace" is not an OAuth scope (tokens
+never carry it): the consent screen and the application's page in Settings ›
+Applications list it while the application has a webhook. As in the reference app, an
+installation authorized before the application had a webhook receives no
+deliveries until an administrator authorizes it again (the consent screen then
+lists it under **Requested permissions**); installations made with the webhook
+in place, and installations created directly through
+`POST /api/application-installations`, receive them.
+
 ## Scopes
 
 | Scope | actor=user | actor=app | Grants |
@@ -369,14 +417,16 @@ manifest locally.
 
 ### Manifest API
 
-All endpoints require a workspace administrator.
+All endpoints require a workspace administrator (signed in, or an API key with
+the `admin` scope); they are part of the public contract (tag
+`oauth-applications`, see [api.md](api.md#oauth-applications)).
 
 | Request | Effect |
 | --- | --- |
 | `POST /api/oauth-applications/manifest/validate` | `{"valid": bool, "issues": [{"path", "message"}], "application": preview}`; never saves. |
 | `POST /api/oauth-applications/manifest` | Creates the application. `201` with the application, including `clientSecret` and, when the webhook is enabled, `webhookSecret` (the signing secret: `webhook.secret` when given, otherwise a new one). |
 | `PUT /api/oauth-applications/{id}/manifest` | Replaces the configuration; client ID and secret are kept. Omitted optional blocks (`display`, `webhook`, `agent`, `github`) are cleared. Returns `webhookSecret` the first time a webhook is enabled. |
-| `GET /api/oauth-applications/{id}/webhook/secret` | `{"secret": "flow_wh_…"}`, the current webhook signing secret (`404` when there is none). Signed-in administrators only, not API keys. |
+| `GET /api/oauth-applications/{id}/webhook/secret` | `{"secret": "flow_wh_…"}`, the current webhook signing secret (`404` when there is none). Administrators signed in, or an admin API key (see [Credentials and API keys](#credentials-and-api-keys)). |
 | `GET /api/oauth-applications/{id}/manifest` | Exports the application as a manifest. |
 | `GET /api/oauth-applications/{id}/installs` | This workspace's active user authorizations and app installations of the application. |
 
@@ -438,9 +488,13 @@ Flow's settings follow the reference app's:
   ("Authorized by N members") or installed as an app user. Admins load it from
   `GET /api/oauth/authorized-applications`, which includes every member's
   active authorizations. An application's page
-  (`/<workspace>/settings/applications/<client_id>`) shows its permissions,
-  the authorizing members and, for `actor=app` installs, the app user with its
-  team access. **Revoke access** revokes every member's tokens (owners and
+  (`/<workspace>/settings/applications/<client_id>`) shows its permissions
+  (alphabetically, with "Receive realtime updates about your workspace" while
+  the application has a webhook), the authorizing members and, for
+  `actor=app` installs, the app user with its team access: the three options of
+  the consent screen, each picker under its option, and **Update** asks "Update
+  team access for <App>?" with the current and the new access before saving.
+  **Revoke access** revokes every member's tokens (owners and
   admins may revoke other members' authorizations with
   `DELETE /api/oauth/authorizations/{id}`); the app user's own menu removes the
   installation.
@@ -473,8 +527,26 @@ command menu ("Create developer access token…") offers **User** and **App**.
 The responses have the token endpoint's shape (`access_token`, `expires_in`,
 `scope` with the reference app's names, `actor`, `app_user_id`). Developer tokens last
 one hour, like other Flow access tokens, and have no refresh token. These
-endpoints need a signed-in workspace administrator; API keys and OAuth tokens
-cannot call them.
+endpoints need a workspace administrator, signed in or with an admin API key.
+
+### Credentials and API keys
+
+The credential endpoints (`GET …/client-secret`, `POST …/rotate-secret`,
+`GET`/`POST …/developer-token`, `GET …/webhook/secret`,
+`POST …/webhook/rotate-secret`) accept a personal API key only when it has the
+`admin` scope (or full access), is not restricted to selected teams and its
+owner is a workspace admin. OAuth tokens, read-only keys, members' keys and
+team-restricted keys get `403`. Secrets and tokens come back only in the
+response body, with `Cache-Control: no-store`.
+
+**Security note.** Such a key can read every application secret of the
+workspace. Each read, rotation or token creation made with an API key is
+written to the audit log (resource type `oauth_application`; actions
+`client_secret_read`, `client_secret_rotated`, `client_secret_issued`,
+`developer_token_read`, `developer_token_created`, `webhook_secret_read`,
+`webhook_secret_rotated`, `webhook_secret_issued`) with the key's owner as
+actor and the key's id and name, never the secret. Keep admin keys in a secret
+manager with a short expiry, and revoke them when they are no longer needed.
 
 ## GitHub username
 

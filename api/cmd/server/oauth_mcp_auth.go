@@ -175,6 +175,9 @@ func (s *server) getOAuthAuthorizationRequest(w http.ResponseWriter, r *http.Req
 		"workspaces":  account.Workspaces,
 		"viewer":      account.Viewer,
 		"prompt":      request.Prompt,
+		// The application has a webhook: the reference app lists "Receive realtime
+		// updates about your workspace" after the requested scopes.
+		"realtime": s.applicationRealtime(client.ClientID),
 		// Set when this user already granted these scopes to this
 		// confidential application; the consent page completes the request
 		// without asking again unless prompt=consent was supplied.
@@ -215,9 +218,14 @@ func (s *server) decideOAuthAuthorization(w http.ResponseWriter, r *http.Request
 		writeOAuthError(w, 403, "access_denied", "This application is private to its workspace")
 		return
 	}
-	if input.Actor == "app" && (!workspaceAdminRole(workspace.ViewerRole) || !input.AllPublicTeams && len(input.TeamIDs) == 0) {
-		writeOAuthError(w, 403, "access_denied", "An administrator must select the teams this application can access")
-		return
+	if input.Actor == "app" {
+		// Authorizing an installed application again keeps its team access
+		// (the consent screen asks for teams only on the first install).
+		_, installed := s.activeApplicationInstallation(r.Context(), workspace.Workspace.URLKey, client.ClientID)
+		if !workspaceAdminRole(workspace.ViewerRole) || !installed && !input.AllPublicTeams && len(input.TeamIDs) == 0 {
+			writeOAuthError(w, 403, "access_denied", "An administrator must select the teams this application can access")
+			return
+		}
 	}
 	authorizationID := fmt.Sprintf("oauth_authorization_%d", time.Now().UnixNano())
 	ownWorkspace, ownApplication := s.store.OAuthApplicationHome(client.ClientID)
@@ -255,6 +263,7 @@ func (s *server) decideOAuthAuthorization(w http.ResponseWriter, r *http.Request
 	grant.InstallerID = actor.ID
 	grant.TeamIDs = input.TeamIDs
 	grant.AllPublicTeams = input.AllPublicTeams
+	grant.Realtime = s.applicationRealtime(client.ClientID)
 	// Without PKCE only the client secret proves the redeemer is the client.
 	grant.ClientAuthRequired = input.CodeChallenge == ""
 	_, err = s.store.CreateOAuthAuthorizationGrant(r.Context(), code, grant, domain.OAuthAuthorization{ID: authorizationID, ClientID: client.ClientID, ClientName: client.ClientName, UserID: actor.ID, Scopes: scopes, CreatedAt: time.Now().UTC()}, applicationApproved)

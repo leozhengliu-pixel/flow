@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/publicapi"
 	"flow/api/internal/store"
 	"flow/api/internal/websearch"
 )
@@ -27,23 +28,20 @@ import (
 // username") and the write-only webhook.secret the settings form generates.
 const oauthAppManifestSchemaVersion = "1.0.0"
 
-type oauthAppManifest struct {
-	Schema        string                    `json:"$schema,omitempty"`
-	SchemaVersion string                    `json:"schemaVersion"`
-	Distribution  string                    `json:"distribution,omitempty"`
-	Display       *oauthAppManifestDisplay  `json:"display,omitempty"`
-	Developer     *oauthAppManifestDev      `json:"developer,omitempty"`
-	OAuth         *oauthAppManifestOAuth    `json:"oauth,omitempty"`
-	Webhook       *oauthAppManifestWebhook  `json:"webhook,omitempty"`
-	Agent         *oauthAppManifestAgentCap `json:"agent,omitempty"`
-	GitHub        *oauthAppManifestGitHub   `json:"github,omitempty"`
-}
-
-// oauthAppManifestGitHub is the reference app's "GitHub username" field: for actor=app,
-// commits and comments by this GitHub account belong to the app user.
-type oauthAppManifestGitHub struct {
-	Username string `json:"username"`
-}
+// The manifest types are part of the public contract (publicapi).
+type (
+	oauthAppManifest         = publicapi.OAuthAppManifest
+	oauthAppManifestGitHub   = publicapi.OAuthAppManifestGitHub
+	oauthAppManifestDisplay  = publicapi.OAuthAppManifestDisplay
+	oauthAppManifestDev      = publicapi.OAuthAppManifestDev
+	oauthAppManifestOAuth    = publicapi.OAuthAppManifestOAuth
+	oauthAppManifestWebhook  = publicapi.OAuthAppManifestWebhook
+	oauthAppManifestAgentCap = publicapi.OAuthAppManifestAgent
+	oauthAppManifestIssue    = publicapi.OAuthAppManifestIssue
+	// manifestApplicationResponse is the saved application plus, the first
+	// time its webhook is enabled, the webhook signing secret.
+	manifestApplicationResponse = publicapi.ManifestApplication
+)
 
 // githubUsernamePattern accepts GitHub user names (alphanumerics and single
 // inner hyphens) and GitHub App bot names with the "[bot]" suffix.
@@ -79,43 +77,6 @@ func checkGitHubUsernameAvailable(data *domain.Bootstrap, applicationID, usernam
 // webhookSecretPattern is the format of webhook signing secrets
 // (randomWebhookSecret); the settings form generates one in the same shape.
 var webhookSecretPattern = regexp.MustCompile(`^flow_wh_[A-Za-z0-9_-]{32,64}$`)
-
-type oauthAppManifestDisplay struct {
-	Description string `json:"description,omitempty"`
-	IconURL     string `json:"iconUrl,omitempty"`
-}
-
-type oauthAppManifestDev struct {
-	Name string `json:"name"`
-}
-
-type oauthAppManifestOAuth struct {
-	ClientName   string   `json:"client_name"`
-	ClientURI    string   `json:"client_uri"`
-	RedirectURIs []string `json:"redirect_uris"`
-	GrantTypes   []string `json:"grant_types,omitempty"`
-	Scopes       []string `json:"scopes,omitempty"`
-}
-
-type oauthAppManifestWebhook struct {
-	Enabled       *bool    `json:"enabled,omitempty"`
-	URL           string   `json:"url"`
-	ResourceTypes []string `json:"resourceTypes"`
-	// Secret is the signing secret shown in the settings form before the
-	// webhook is first saved. Write-only: it is used only while the
-	// application has no signing secret yet and is never exported.
-	Secret string `json:"secret,omitempty"`
-}
-
-type oauthAppManifestAgentCap struct {
-	Assignable  bool `json:"assignable,omitempty"`
-	Mentionable bool `json:"mentionable,omitempty"`
-}
-
-type oauthAppManifestIssue struct {
-	Path    string `json:"path"`
-	Message string `json:"message"`
-}
 
 var oauthManifestReservedName = regexp.MustCompile(`(?i)\bflow\b`)
 
@@ -168,7 +129,7 @@ func manifestValuesUnique(values []string) bool {
 // the server's validWebhookURL); resource types are canonicalised by the
 // webhook delivery code and stored under their payload type names, exactly
 // as PUT /api/oauth-applications/{id}/webhook stores them.
-func (m *oauthAppManifest) validate(webhookURL func(string) (string, error)) ([]string, []string, []oauthAppManifestIssue) {
+func validateOAuthAppManifestContent(m *oauthAppManifest, webhookURL func(string) (string, error)) ([]string, []string, []oauthAppManifestIssue) {
 	issues := []oauthAppManifestIssue{}
 	add := func(path, format string, args ...any) {
 		issues = append(issues, oauthAppManifestIssue{Path: path, Message: fmt.Sprintf(format, args...)})
@@ -303,7 +264,7 @@ func (m *oauthAppManifest) validate(webhookURL func(string) (string, error)) ([]
 
 // applyTo writes the manifest into an application. Absent optional blocks
 // clear the corresponding settings: a manifest is the whole configuration.
-func (m oauthAppManifest) applyTo(app *domain.OAuthApplication, scopes, resourceTypes []string) {
+func applyOAuthAppManifest(m oauthAppManifest, app *domain.OAuthApplication, scopes, resourceTypes []string) {
 	app.Name = strings.TrimSpace(m.OAuth.ClientName)
 	app.DeveloperName = strings.TrimSpace(m.Developer.Name)
 	app.DeveloperURL = strings.TrimSpace(m.OAuth.ClientURI)
@@ -377,7 +338,7 @@ func (s *server) readOAuthAppManifest(w http.ResponseWriter, r *http.Request) (o
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "Invalid OAuth application manifest", "issues": issues})
 		return manifest, nil, nil, false
 	}
-	scopes, resourceTypes, issues := manifest.validate(s.validWebhookURL)
+	scopes, resourceTypes, issues := validateOAuthAppManifestContent(&manifest, s.validWebhookURL)
 	if len(issues) > 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "Invalid OAuth application manifest", "issues": issues})
 		return manifest, nil, nil, false
@@ -396,16 +357,16 @@ func (s *server) validateOAuthAppManifest(w http.ResponseWriter, r *http.Request
 	manifest, issues := decodeOAuthAppManifest(buffer.Bytes())
 	if issues == nil {
 		var scopes, resourceTypes []string
-		scopes, resourceTypes, issues = manifest.validate(s.validWebhookURL)
+		scopes, resourceTypes, issues = validateOAuthAppManifestContent(&manifest, s.validWebhookURL)
 		if len(issues) == 0 {
 			preview := domain.OAuthApplication{}
-			manifest.applyTo(&preview, scopes, resourceTypes)
+			applyOAuthAppManifest(manifest, &preview, scopes, resourceTypes)
 			preview.UpdatedAt = time.Time{}
-			writeJSON(w, http.StatusOK, map[string]any{"valid": true, "issues": []oauthAppManifestIssue{}, "application": preview})
+			writeJSON(w, http.StatusOK, publicapi.OAuthAppManifestValidation{Valid: true, Issues: []oauthAppManifestIssue{}, Application: &preview})
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"valid": false, "issues": issues})
+	writeJSON(w, http.StatusOK, publicapi.OAuthAppManifestValidation{Valid: false, Issues: issues})
 }
 
 // POST /api/oauth-applications/manifest creates an application from a manifest.
@@ -425,7 +386,7 @@ func (s *server) createOAuthApplicationFromManifest(w http.ResponseWriter, r *ht
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "oauth_application.created", map[string]string{"source": "manifest"}, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
 		created = domain.OAuthApplication{ID: fmt.Sprintf("oauth_app_%d", now.UnixNano()), ClientID: clientID, ClientSecret: secret, CreatorID: actor.ID, CredentialsAuthorizedBy: actor.ID, CreatedAt: now}
-		manifest.applyTo(&created, scopes, resourceTypes)
+		applyOAuthAppManifest(manifest, &created, scopes, resourceTypes)
 		if err := checkGitHubUsernameAvailable(data, created.ID, created.GitHubUsername); err != nil {
 			return "", err
 		}
@@ -436,22 +397,16 @@ func (s *server) createOAuthApplicationFromManifest(w http.ResponseWriter, r *ht
 		respondMutation(w, err, http.StatusCreated, nil)
 		return
 	}
-	s.respondManifestApplication(w, r, http.StatusCreated, created, manifest.webhookSecret())
+	s.auditAPIKeyCredential(r, "client_secret_issued", created)
+	s.respondManifestApplication(w, r, http.StatusCreated, created, manifestWebhookSecret(manifest))
 }
 
-// webhookSecret is the signing secret the settings form generated, if any.
-func (m oauthAppManifest) webhookSecret() string {
+// manifestWebhookSecret is the signing secret the settings form generated, if any.
+func manifestWebhookSecret(m oauthAppManifest) string {
 	if m.Webhook == nil {
 		return ""
 	}
 	return m.Webhook.Secret
-}
-
-// manifestApplicationResponse is the saved application plus, the first
-// time its webhook is enabled, the webhook signing secret.
-type manifestApplicationResponse struct {
-	domain.OAuthApplication
-	WebhookSecret string `json:"webhookSecret,omitempty"`
 }
 
 // respondManifestApplication finishes a manifest save the way the webhook
@@ -470,9 +425,13 @@ func (s *server) respondManifestApplication(w http.ResponseWriter, r *http.Reque
 			}
 			response.WebhookSecret = secret
 			response.WebhookSecretPrefix = secret[:min(len(secret), 17)]
+			s.auditAPIKeyCredential(r, "webhook_secret_issued", app)
 		}
 	}
 	go s.reconcileAllApplicationWebhooks(context.Background())
+	if response.ClientSecret != "" || response.WebhookSecret != "" {
+		w.Header().Set("Cache-Control", "no-store")
+	}
 	writeJSON(w, status, response)
 }
 
@@ -490,7 +449,7 @@ func (s *server) updateOAuthApplicationFromManifest(w http.ResponseWriter, r *ht
 		if index < 0 {
 			return errNotFound
 		}
-		manifest.applyTo(&data.OAuthApplications[index], scopes, resourceTypes)
+		applyOAuthAppManifest(manifest, &data.OAuthApplications[index], scopes, resourceTypes)
 		if err := checkGitHubUsernameAvailable(data, id, data.OAuthApplications[index].GitHubUsername); err != nil {
 			return err
 		}
@@ -503,7 +462,7 @@ func (s *server) updateOAuthApplicationFromManifest(w http.ResponseWriter, r *ht
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}
-	s.respondManifestApplication(w, r, http.StatusOK, updated, manifest.webhookSecret())
+	s.respondManifestApplication(w, r, http.StatusOK, updated, manifestWebhookSecret(manifest))
 }
 
 // GET /api/oauth-applications/{id}/manifest

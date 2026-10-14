@@ -6,7 +6,7 @@ import { createIssue, createIssueLink, createIssueReminder, createRelation, dele
 import { settingsPath } from '@/lib/app-routes'
 import { enabledCodingTools, renderCodingPrompt } from '@/lib/coding-tools'
 import { findFavorite, toggleFavoriteFor } from '@/lib/favorites'
-import { configuredIssueBranch } from '@/lib/issue-work-actions'
+import { configuredIssueBranch, issueWorkPrompt } from '@/lib/issue-work-actions'
 import { estimateLabel, estimateValues } from '@/lib/estimates'
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { StatusIcon } from '@/components/issue/issue-icons'
@@ -92,7 +92,7 @@ function ActionGroups({ row, onDelete }: { row: MyIssuesRowData; onDelete?: () =
   const settings = data.userSettings?.[viewerId]
   const tools = enabledCodingTools(settings)
   const branch = issue ? configuredIssueBranch(issue, data) : `${row.identifier.toLowerCase()}-${row.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50)}`
-  const prompt = () => renderCodingPrompt(settings?.codingPromptTemplate, { identifier: row.identifier, title: row.title, description: issue?.description ?? row.description, branchName: branch, url })
+  const prompt = () => issue ? issueWorkPrompt(issue, data, url) : renderCodingPrompt(settings?.codingPromptTemplate, { identifier: row.identifier, title: row.title, description: row.description, branchName: branch, url })
   const copy = (text: string, message: string) => void navigator.clipboard.writeText(text).then(() => toast.success(message)).catch(() => toast.error('Could not copy'))
   const copyLink = () => {
     const html = `<a href="${url}">${row.identifier} ${row.title.replace(/</g, '&lt;')}</a>`

@@ -104,8 +104,8 @@ html:root .settings-app .settings-main .oauth-app-section .settings-row .setting
 .oauth-app-team-access input[type=radio]:checked{border-color:var(--oauth-primary-bg);background:var(--oauth-primary-bg)}
 .oauth-app-team-access input[type=radio]:checked::after{content:"";width:4px;height:4px;border-radius:50%;background:var(--oauth-primary-text)}
 .oauth-app-team-access>footer{display:flex;justify-content:flex-end}
-.oauth-app-team-access .oauth-team-picker{padding:0 0 0 24px}
-.oauth-app-team-access .oauth-team-menu{left:24px}
+.oauth-app-team-access .oauth-team-picker{padding:0 10px 0 32px}
+.oauth-app-team-access .oauth-team-menu{left:32px}
 
 /* The reference app's menu on the page header (Edit application / Download manifest / Delete application / View in workspace). */
 .oauth-app-menu{min-width:176px;padding:4px}

@@ -1,8 +1,9 @@
 /**
- * The selection toolbar's actions in a comment composer (a new comment, a reply, an edit):
+ * The selection toolbar's actions in a comment composer (a new comment, a reply, an edit) — and the
+ * shared pieces descriptions and documents use, since the reference app behaves the same there:
  * - "Create issue from selection" (⌘⇧O) creates the issue right away — the selection's first line is its title and the
  *   rest its description, in the page's team and project, a sub-issue when the composer is on an issue — and the
- *   selected text becomes a mention of the new issue; an "Issue created" toast links to it.
+ *   selected text becomes a mention of the new issue; an "Issue created" toast (issue-created-toast) offers it.
  * - "Ask agent" (⌘J) opens the floating agent chat with the selection as a quote chip (the page rides along as context).
  * There is no "Comment" action in a composer.
  */
@@ -12,7 +13,8 @@ import { createIssue } from '@/lib/api'
 import { toast } from '@/lib/toast'
 import { useI18n } from '@/i18n/i18n'
 import { useAgentEntityData } from '@/components/agent/agent-entity-data'
-import { requestFloatingAgent } from '@/components/agent/agent-floating-request'
+import { requestFloatingAgent, type FloatingAgentRequest } from '@/components/agent/agent-floating-request'
+import { editorTextRange } from '@/components/agent/agent-quote-highlight'
 import { mentionAttrsForEntity } from '@/components/editor/mentions/mention-model'
 import type { DescriptionSelectionActions, SelectedDescription } from '@/components/issue/editor/structured-blocks'
 import type { BootstrapData, Issue } from '@/types/flow'
@@ -72,15 +74,53 @@ export function teamDefaultStateId(data: BootstrapData | undefined, teamId: stri
   return (states.find(state => state.id === configured) ?? states.find(state => state.default) ?? states.find(state => state.type === 'unstarted') ?? states[0])?.id
 }
 
-/** Creates an issue from a composer's selection and swaps the selected text for a mention of it. */
+/** The status a new sub-issue starts in, as in the reference app (and the sub-issue composer): the team's first unstarted one. */
+export function teamSubIssueStateId(data: BootstrapData | undefined, teamId: string) {
+  if (!data) return undefined
+  const specific = data.states.some(state => state.teamId === teamId)
+  const states = data.states.filter(state => specific ? state.teamId === teamId : !state.teamId).sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+  return states.find(state => state.type === 'unstarted')?.id ?? teamDefaultStateId(data, teamId)
+}
+
+/**
+ * The status an issue made from a selection starts in, measured in the reference app: a sub-issue of a parent that has not
+ * started (Backlog, Todo) takes the parent's status; under a started or finished parent it starts in the team's first
+ * unstarted one ("Todo"); any other issue in the team's default, like the New issue dialog ("Backlog").
+ */
+export function selectionIssueStateId(data: BootstrapData | undefined, teamId: string, parentId?: string) {
+  if (!parentId) return teamDefaultStateId(data, teamId)
+  const parent = data?.issues.find(issue => issue.id === parentId)
+  if (parent && parent.team.id === teamId && (parent.state.type === 'backlog' || parent.state.type === 'unstarted')) return parent.state.id
+  return teamSubIssueStateId(data, teamId)
+}
+
+/** Creates an issue from a selection and swaps the selected text for a mention of it. */
 export async function createIssueFromSelection({ editor, selection, data, context }: { editor?: Editor; selection: SelectedDescription; data?: BootstrapData; context: SelectionIssueContext }) {
   const fields = selectionIssueFields(selection.text)
   const teamId = context.teamId ?? data?.teams[0]?.id
   if (!fields || !teamId) return undefined
   // Made in the app by a member, so it skips Triage like an issue from the New issue dialog.
-  const issue = await createIssueInline({ ...fields, teamId, stateId: teamDefaultStateId(data, teamId), projectId: context.projectId, parentId: context.parentId })
+  const stateId = selectionIssueStateId(data, teamId, context.parentId)
+  const issue = await createIssueInline({ ...fields, teamId, stateId, projectId: context.projectId, parentId: context.parentId })
   replaceSelectionWithIssue(editor, selection, data, issue)
   return issue
+}
+
+/** "Create issue from selection" as a toolbar action: creates the issue in place and reports a failure. */
+export function createIssueFromSelectionAction(data: BootstrapData | undefined, context: SelectionIssueContext, t: (source: string) => string): NonNullable<DescriptionSelectionActions['onCreateIssue']> {
+  return (selection, editor) => {
+    void createIssueFromSelection({ editor, selection, data, context }).catch(error => toast.error(error instanceof Error ? error.message : t('Could not create issue')))
+  }
+}
+
+/**
+ * "Ask agent" on a selection: the selection goes to the floating chat as a chip, the editor lets go of
+ * it (the toolbar closes) and the quoted text keeps a faint highlight while the chip is in the chat.
+ */
+export function askAgentAboutSelection(selection: SelectedDescription, editor?: Editor, request: Pick<FloatingAgentRequest, 'issueId'> = {}) {
+  if (!selection.text.trim()) return
+  if (editor && !editor.isDestroyed) editor.commands.setTextSelection(selection.to)
+  requestFloatingAgent({ ...request, quote: selection.text, range: editorTextRange(editor, selection.from, selection.to) })
 }
 
 /** "Create issue from selection" and "Ask agent" for a comment composer's selection toolbar. */
@@ -90,14 +130,7 @@ export function useComposerSelectionActions(): DescriptionSelectionActions {
   const { t } = useI18n()
   const canCreate = Boolean(context.teamId ?? data?.teams[0]?.id)
   return useMemo(() => ({
-    onCreateIssue: canCreate ? (selection, editor) => {
-      void createIssueFromSelection({ editor, selection, data, context }).catch(error => toast.error(error instanceof Error ? error.message : t('Could not create issue')))
-    } : undefined,
-    // Like the reference app: the selection goes to the floating chat as a chip and the composer lets go of it (the toolbar closes).
-    onAskAgent: (selection, editor) => {
-      if (!selection.text.trim()) return
-      if (editor && !editor.isDestroyed) editor.commands.setTextSelection(selection.to)
-      requestFloatingAgent({ quote: selection.text })
-    },
+    onCreateIssue: canCreate ? createIssueFromSelectionAction(data, context, t) : undefined,
+    onAskAgent: (selection, editor) => askAgentAboutSelection(selection, editor),
   }), [canCreate, context, data, t])
 }
