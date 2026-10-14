@@ -9,6 +9,8 @@ RUN --mount=type=cache,target=/root/.npm \
     npm install --global npm@10.9.2 --fetch-retries=5 --fetch-timeout=60000 && \
     npm ci --no-audit --prefer-offline --fetch-retries=5 --fetch-timeout=60000
 COPY web/ ./
+# The Getting started issues embed the feature-tour GIFs; the build copies them to dist/tour/.
+COPY docs/media/*.gif /src/docs/media/
 RUN npm run build
 
 FROM --platform=$BUILDPLATFORM golang:1.27.1-alpine AS api-build

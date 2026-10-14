@@ -216,7 +216,8 @@ function applyImageAttrs(img: HTMLImageElement, attrs: Record<string, unknown>) 
     if (!img.getAttribute('width')) img.width = img.naturalWidth
     if (!img.getAttribute('height')) img.height = img.naturalHeight
     img.style.maxWidth = `min(100%, ${img.naturalWidth * 2}px)`
-    img.style.minWidth = `${img.naturalWidth}px`
+    // Never wider than the column: a large image in a narrow panel (description history, previews) scales down.
+    img.style.minWidth = `min(${img.naturalWidth}px, 100%)`
   }
   if (img.complete) applySize()
   else img.addEventListener('load', applySize, { once: true })

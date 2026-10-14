@@ -19,14 +19,17 @@ type Config struct {
 	AuthDisabled                   bool
 	WorkspaceRegionSelectorEnabled bool
 	WorkspaceDefaultRegion         string
-	Database                       store.DatabaseConfig
-	Redis                          coordination.Config
-	Storage                        objectstore.Config
-	Auth                           AuthConfig
-	Agent                          AgentConfig
-	TTS                            TTSConfig
-	WebSearch                      WebSearchConfig
-	Telemetry                      TelemetryConfig
+	// WorkspaceTutorial seeds the "Getting started" tutorial issues into
+	// workspaces created from the app; FLOW_WORKSPACE_TUTORIAL=off disables it.
+	WorkspaceTutorial bool
+	Database          store.DatabaseConfig
+	Redis             coordination.Config
+	Storage           objectstore.Config
+	Auth              AuthConfig
+	Agent             AgentConfig
+	TTS               TTSConfig
+	WebSearch         WebSearchConfig
+	Telemetry         TelemetryConfig
 	// Warnings lists settings Load adjusted (for example a feature turned
 	// off for a missing credential); the server logs them at startup.
 	Warnings []string
@@ -149,6 +152,7 @@ func Load() (Config, error) {
 		AuthDisabled:                   boolean("FLOW_AUTH_DISABLED", false),
 		WorkspaceRegionSelectorEnabled: boolean("FLOW_WORKSPACE_REGION_SELECTOR_ENABLED", true),
 		WorkspaceDefaultRegion:         strings.ToLower(value("FLOW_WORKSPACE_DEFAULT_REGION", "us")),
+		WorkspaceTutorial:              !switchedOff("FLOW_WORKSPACE_TUTORIAL"),
 		Database: store.DatabaseConfig{
 			Driver:              value("FLOW_DATABASE_DRIVER", "sqlite"),
 			URL:                 secret("FLOW_DATABASE_URL"),
@@ -404,6 +408,16 @@ func boolean(name string, fallback bool) bool {
 		return fallback
 	}
 	return strings.EqualFold(value, "true") || value == "1"
+}
+
+// switchedOff reports whether an on-by-default switch is turned off
+// (off, false, 0, no or disabled).
+func switchedOff(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(name))) {
+	case "off", "false", "0", "no", "disabled":
+		return true
+	}
+	return false
 }
 
 func integer(name string, fallback int) int {
