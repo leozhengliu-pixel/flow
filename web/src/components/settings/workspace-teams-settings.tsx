@@ -15,6 +15,7 @@ import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { useI18n } from "@/i18n/i18n";
 import { deleteTeam, listDeletedTeams, restoreDeletedTeam, updateTeam } from "@/lib/api";
 import { teamIssuesPath } from "@/lib/app-routes";
+import { teamContentAccessible } from "@/lib/team-access";
 import { DELETE_TEAM_DESCRIPTION } from "@/lib/team-deletion";
 import type { BootstrapData, DeletedTeam, Team } from "@/types/flow";
 import { SettingsPageTitle, SettingsSelect } from "./settings-primitives";
@@ -201,10 +202,13 @@ export function WorkspaceTeamsSettings({
                     <Settings size={16} />
                     {t("Team settings")}
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => navigate(teamIssuesPath(data.workspace.urlKey, team.key))}>
-                    <SquareStack size={16} />
-                    {t("Go to all issues")}
-                  </DropdownMenuItem>
+                  {/* Like the reference app, an admin outside a private team gets its settings, not its issues. */}
+                  {teamContentAccessible(data, team) && (
+                    <DropdownMenuItem onSelect={() => navigate(teamIssuesPath(data.workspace.urlKey, team.key))}>
+                      <SquareStack size={16} />
+                      {t("Go to all issues")}
+                    </DropdownMenuItem>
+                  )}
                   {admin && (
                     <>
                       <DropdownMenuSeparator />

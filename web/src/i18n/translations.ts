@@ -4149,7 +4149,6 @@ Object.assign(zhCN, {
   "Show initiatives in sidebar": "在侧边栏显示目标",
   "Back to team settings": "返回团队设置",
   "Team visibility": "团队可见性",
-  "Private teams are visible only to members.": "私有团队仅对团队成员可见。",
   "Who can join": "谁可以加入",
   "Anyone in the workspace": "工作区中的任何人",
   "By invitation": "通过邀请",

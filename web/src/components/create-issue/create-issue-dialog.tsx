@@ -27,6 +27,7 @@ import { useRecurrenceSummary } from '@/components/issue/use-recurrence-summary'
 import { useI18n } from '@/i18n/i18n'
 import { defaultRecurrenceFirstDue, recurrenceDate, recurrencePresetOptions, toDateInput } from '@/lib/recurrence'
 import { AiBurstGlyph } from '@/components/ui/agent-glyph'
+import { teamContentAccessible } from '@/lib/team-access'
 
 export interface CreateIssueInput {
   title: string
@@ -74,6 +75,12 @@ export interface CreateIssueDialogProps {
 const priorityNames = ['No priority', 'Urgent', 'High', 'Medium', 'Low']
 const draftStoragePrefix = 'flow:create-issue-draft:'
 
+/** Teams new issues can go to: a workspace admin outside a private team manages it but cannot add issues. */
+function issueTeams(data: BootstrapData) {
+  return data.teams.filter(item => !item.retiredAt && teamContentAccessible(data, item))
+}
+const defaultIssueTeamId = (data: BootstrapData) => issueTeams(data)[0]?.id || data.teams[0]?.id || ''
+
 interface StoredIssueDraft {
   title: string
   teamId: string
@@ -97,7 +104,8 @@ interface StoredIssueDraft {
 export function CreateIssueDialog({ data, draftId, initialContext, initialProjectId, initialProjectMilestoneId, initialTeamId, initialStateId, initialTemplateId, onCreate, onCreateLabel, onDraftDeleted, onDraftSaved, onOpenChange, onUpload, open }: CreateIssueDialogProps) {
   const requestedTeamId = initialContext?.teamId ?? initialTeamId
   const requestedStateId = initialContext?.stateId ?? initialStateId
-  const [teamId, setTeamId] = useState(requestedTeamId || data.teams[0]?.id || '')
+  const fallbackTeamId = defaultIssueTeamId(data)
+  const [teamId, setTeamId] = useState(requestedTeamId || fallbackTeamId)
   const availableStates = useMemo(() => {
     const specific = data.states.some(state => state.teamId === teamId)
     const states = data.states.filter(state => specific ? state.teamId === teamId : !state.teamId)
@@ -181,7 +189,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     const requestedMilestone = requestedProject?.milestones.find(milestone => milestone.id === initialProjectMilestoneId)
     if (draft || remote) {
       const restored = draft ?? remote as StoredIssueDraft
-      setTeamId(restored.teamId || (remoteDraft?.metadata?.teamId as string | undefined) || data.teams[0]?.id || '')
+      setTeamId(restored.teamId || (remoteDraft?.metadata?.teamId as string | undefined) || fallbackTeamId)
       setTitle(restored.title ?? remoteDraft?.title ?? '')
       setDescription(restored.description ?? null)
       setStateId(restored.stateId || requestedStateId || defaultState.id)
@@ -197,7 +205,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
       setRecurrence(restored.recurrence ?? '')
       setServerDraftId(remoteDraft?.id ?? '')
     } else {
-      setTitle(initialContext?.title ?? ''); setDescription(initialContext?.description ? {markdown:initialContext.description,document:{type:'doc',content:[{type:'paragraph',content:[{type:'text',text:initialContext.description}]}]},documentJSON:JSON.stringify({type:'doc',content:[{type:'paragraph',content:[{type:'text',text:initialContext.description}]}]}),contentState:''} : null); setFiles([]); setError(undefined); setServerDraftId(''); setTeamId(requestedTeamId || data.teams[0]?.id || '')
+      setTitle(initialContext?.title ?? ''); setDescription(initialContext?.description ? {markdown:initialContext.description,document:{type:'doc',content:[{type:'paragraph',content:[{type:'text',text:initialContext.description}]}]},documentJSON:JSON.stringify({type:'doc',content:[{type:'paragraph',content:[{type:'text',text:initialContext.description}]}]}),contentState:''} : null); setFiles([]); setError(undefined); setServerDraftId(''); setTeamId(requestedTeamId || fallbackTeamId)
       setStateId(requestedStateId || defaultState.id); setPriority(initialContext?.priority ?? 0); setEstimate(initialContext?.estimate ?? NO_ESTIMATE); setAssigneeId(initialContext?.assigneeId ?? data.viewer.id); setProjectId(initialContext?.projectId ?? ''); setProjectMilestoneId(initialContext?.projectMilestoneId ?? ''); setCycleId(initialContext?.cycleId ?? ''); setDueDate(initialContext?.dueDate ?? ''); setLabelIds(initialContext?.labelIds ?? []); setTemplateId(initialContext?.templateId ?? ''); setTemplateId(''); setRecurrence(''); setCreateMore(false); setExpanded(false)
       const textDocument = (text: string) => ({type:'doc',content:[{type:'paragraph',...(text ? {content:[{type:'text',text}]} : {})}]})
       titleEditorRef.current?.commands.setContent(textDocument(initialContext?.title ?? '')); descriptionEditorRef.current?.commands.setContent(textDocument(initialContext?.description ?? ''))
@@ -209,7 +217,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     }
     const frame = requestAnimationFrame(() => requestAnimationFrame(() => titleEditorRef.current?.commands.focus('end')))
     return () => cancelAnimationFrame(frame)
-  }, [availableStates, data.drafts, data.projects, data.teams, data.viewer.id, defaultState.id, draftId, draftKey, initialContext, initialProjectId, initialProjectMilestoneId, initializationKey, open, requestedStateId, requestedTeamId, teamId])
+  }, [availableStates, data.drafts, data.projects, data.teams, data.viewer.id, defaultState.id, draftId, draftKey, fallbackTeamId, initialContext, initialProjectId, initialProjectMilestoneId, initializationKey, open, requestedStateId, requestedTeamId, teamId])
 
   useEffect(() => { if (open && !availableStates.some(state => state.id === stateId)) setStateId(defaultState.id) }, [availableStates, defaultState.id, open, stateId])
 
@@ -464,7 +472,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
       <Dialog.Content data-flow-motion="create" ref={createMotionRef} className={styles.dialog} data-expanded={expanded} aria-label="Create issue" onPointerDownOutside={event => event.preventDefault()} onInteractOutside={event => event.preventDefault()} onEscapeKeyDown={event => { if (saving) event.preventDefault() }}>
         <form onSubmit={event => { event.preventDefault(); void submit() }}>
           <header className={styles.header}>
-            <PropertyMenu compact label="Team" value={team?.key ?? 'Team'} selectedId={teamId} options={data.teams.filter(item=>!item.retiredAt).map(item=>({id:item.id,label:item.name,keywords:item.key,icon:<TeamIcon team={item}/>,i18nIgnore:true}))} trigger={<><TeamIcon team={team}/><span data-i18n-ignore>{team?.key ?? 'Team'}</span></>} triggerClassName={styles.team} ariaLabel="Set team" onChange={id=>{setTeamId(id);setCycleId('');setLabelIds([]);setTemplateId('')}}/>
+            <PropertyMenu compact label="Team" value={team?.key ?? 'Team'} selectedId={teamId} options={issueTeams(data).map(item=>({id:item.id,label:item.name,keywords:item.key,icon:<TeamIcon team={item}/>,i18nIgnore:true}))} trigger={<><TeamIcon team={team}/><span data-i18n-ignore>{team?.key ?? 'Team'}</span></>} triggerClassName={styles.team} ariaLabel="Set team" onChange={id=>{setTeamId(id);setCycleId('');setLabelIds([]);setTemplateId('')}}/>
             {templateOptions.length > 0 && <PropertyMenu compact label="Template" ariaLabel="Choose a template" searchPlaceholder="Choose a template…" value={selectedTemplate?.name ?? 'Template'} valueIsEntityName={Boolean(selectedTemplate)} selectedId={templateId} triggerClassName={styles.team} trigger={<><TemplateGlyph name="page" size={13}/><span data-i18n-ignore={selectedTemplate ? true : undefined}>{selectedTemplate?.name ?? 'Template'}</span></>} options={[{ id: '', label: 'No template', icon: <TemplateGlyph name="page"/> }, ...templateOptions.map(item => ({ id: item.id, label: item.name, description: item.description, groupLabel: isWorkspaceIssueTemplate(item) ? 'Workspace' : data.teams.find(team => team.id === (item.visibilityTeamId || item.teamId))?.name, icon: <TemplateGlyph name="page"/>, i18nIgnore: true }))]} onChange={id => applyTemplate(id)}/>}
             <span className={styles.breadcrumb}>›</span><Dialog.Title>New issue</Dialog.Title>
             {serverDraftId ? <button type="button" className={styles.saveDraft} aria-label="Discard draft" disabled={saving} onClick={() => setDiscardConfirmOpen(true)}><Trash2/></button> : hasDraftContent && <button type="button" className={styles.saveDraft} aria-label="Save draft" disabled={saving} onClick={() => void saveDraft()}>{saving ? 'Saving...' : 'Save as draft'}</button>}

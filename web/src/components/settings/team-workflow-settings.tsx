@@ -580,24 +580,21 @@ function TeamOverview({
         </fieldset>
       </TeamSection>
       <TeamSection title="Danger zone">
-        <TeamRow
-          title="Leave team"
-          description="Remove yourself as a member of this team"
-        >
-          <button
-            type="button"
-            className="settings-action"
-            disabled={
-              !data.teamMembers.some(
-                (item) =>
-                  item.teamId === team.id && item.userId === data.viewer.id,
-              )
-            }
-            onClick={() => void leave()}
+        {/* An admin managing a team they are not in only sees Retire and Delete. */}
+        {data.teamMembers.some((item) => item.teamId === team.id && item.userId === data.viewer.id) && (
+          <TeamRow
+            title="Leave team"
+            description="Remove yourself as a member of this team"
           >
-            Leave team…
-          </button>
-        </TeamRow>
+            <button
+              type="button"
+              className="settings-action"
+              onClick={() => void leave()}
+            >
+              Leave team…
+            </button>
+          </TeamRow>
+        )}
         <TeamRow
           title={team.retiredAt ? "Restore team" : "Retire team"}
           description="Prevent creating and updating issues while preserving historical data"
@@ -1068,7 +1065,7 @@ function AccessSettings({
             public: restrictedParent
               ? "Restricted to parent team"
               : "Public to workspace",
-            private: "Private",
+            private: "Private to team members",
             restricted: "Restricted to parent team",
           }}
           onChange={(value) =>

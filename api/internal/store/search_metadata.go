@@ -384,7 +384,10 @@ func (s *SQLiteStore) appendSearchMetadata(ctx context.Context, result *domain.B
 				memberTeams[member.TeamID] = true
 			}
 		}
-		if !admin && item.Creator.ID != policy.Viewer.ID && !(len(item.Permissions) == 0 && (len(item.TeamIDs) == 0 || slices.ContainsFunc(item.TeamIDs, func(id string) bool { return memberTeams[id] })) || documentPermissionAllows(&policy, item, memberTeams)) {
+		// A workspace admin reads every document except those only in private
+		// teams they have not joined.
+		readable := admin || q.Access.WorkspaceAdmin && (len(item.TeamIDs) == 0 || slices.ContainsFunc(item.TeamIDs, func(id string) bool { return slices.Contains(q.Access.VisibleTeamIDs, id) }))
+		if !readable && item.Creator.ID != policy.Viewer.ID && !(len(item.Permissions) == 0 && (len(item.TeamIDs) == 0 || slices.ContainsFunc(item.TeamIDs, func(id string) bool { return memberTeams[id] })) || documentPermissionAllows(&policy, item, memberTeams)) {
 			return false, nil
 		}
 		if q.AllowedTeamIDs != nil && len(item.TeamIDs) > 0 && !teamAllowed(item.TeamIDs) {

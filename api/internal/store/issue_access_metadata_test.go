@@ -23,9 +23,24 @@ func TestVisibleIssueTeamsMatchesPrivateHierarchyPolicy(t *testing.T) {
 					if membership != "" {
 						data.TeamMembers = []domain.TeamMember{{TeamID: "root", UserID: "viewer", Role: membership}, {TeamID: "public", UserID: "other", Role: "owner"}}
 					}
+					// Admins see every team row, but read a private team's
+					// content only inside the private boundaries they joined.
+					adminReads := func(id string) bool {
+						for current, seen := id, map[string]bool{}; current != "" && !seen[current]; current = data.TeamSettings[current].ParentTeamID {
+							seen[current] = true
+							settings, private := data.TeamSettings[current], false
+							for _, team := range data.Teams {
+								private = private || team.ID == current && team.Private
+							}
+							if private || settings.Access == "private" || settings.Access == "restricted" && settings.ParentTeamID == "" {
+								return membership != "" && current == "root"
+							}
+						}
+						return true
+					}
 					want := []string{}
 					for _, team := range data.Teams {
-						if teamVisibleToUser(data, team.ID, "viewer", role) {
+						if teamVisibleToUser(data, team.ID, "viewer", role) && (!isWorkspaceAdminRole(role) || adminReads(team.ID) || membership != "" && team.ID == "root") {
 							want = append(want, team.ID)
 						}
 					}

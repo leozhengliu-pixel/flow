@@ -338,6 +338,10 @@ func webhookTeamsManageable(data *domain.Bootstrap, actorID string, teamIDs []st
 			return false
 		}
 		team := data.Teams[teamIndex]
+		// Webhooks are workspace settings. Admins manage every team's settings,
+		// private ones included, without joining (the reference app: "As an admin you have
+		// access to the team's settings"); reading the team's issues in Flow
+		// still needs membership. Other members need to belong to the team.
 		if !team.Private || admin {
 			continue
 		}
