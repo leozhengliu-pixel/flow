@@ -7,7 +7,7 @@ import {
 } from './security-setting'
 
 describe('security-setting', () => {
-  it('normalizes legacy and linear-like values', () => {
+  it('normalizes legacy and alternative values', () => {
     expect(normalizeSecurityPermission('everyone')).toBe('members')
     expect(normalizeSecurityPermission('admins')).toBe('admins')
     expect(normalizeSecurityPermission('owners')).toBe('owners')

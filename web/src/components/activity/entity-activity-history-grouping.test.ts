@@ -12,7 +12,7 @@ describe('LS-0249 EntityActivityHistoryGrouping', () => {
   it('builds user / multi-user / AI / workflow actor keys', () => {
     expect(resolveActivityActor({ userIds: ['u2'] })?.key).toBe('user:u2')
     expect(resolveActivityActor({ userIds: ['u2', 'u1'] })?.key).toBe('users:u1,u2')
-    expect(resolveActivityActor({ performedByFlowAi: true })?.key).toBe('linear')
+    expect(resolveActivityActor({ performedByFlowAi: true })?.key).toBe('flow')
     expect(resolveActivityActor({
       sourceMetadata: { type: 'workflow', id: 'auto-1' },
     })?.key).toBe('workflow:auto-1')
@@ -27,7 +27,7 @@ describe('LS-0249 EntityActivityHistoryGrouping', () => {
       userNames: ['Ada', 'Bea', 'Cy'],
     })!
     expect(summarizeActor(multi)).toBe('3 users')
-    expect(actorBadgeLabel('linear', 'the reference app')).toBe('AI')
+    expect(actorBadgeLabel('flow', 'Flow')).toBe('AI')
     expect(actorBadgeLabel('workflow:x', 'Workflow')).toBe('Workflow')
   })
 
@@ -48,7 +48,7 @@ describe('LS-0249 EntityActivityHistoryGrouping', () => {
     const propertyUser = groups.find(group => group.grouping.actorKey === 'user:u1' && group.grouping.category === 'property')
     expect(propertyUser?.items.map(item => item.id)).toEqual(['2', '1'])
     expect(propertyUser?.key).toContain('entity-activity-group:proj-1:property:user:u1:2026-09-20T08')
-    expect(groups.some(group => group.grouping.actorKey === 'linear')).toBe(true)
+    expect(groups.some(group => group.grouping.actorKey === 'flow')).toBe(true)
     expect(groups.find(group => group.grouping.category === 'comment')?.items).toHaveLength(1)
   })
 })
