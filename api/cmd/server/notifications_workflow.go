@@ -239,58 +239,12 @@ func (s *server) dispatchNotificationEmails(ctx context.Context, key string) {
 		} else {
 			notificationIndex := slices.IndexFunc(data.Notifications, func(item domain.Notification) bool { return item.ID == delivery.NotificationID })
 			recipient := userByID(&data, delivery.RecipientID)
-			issue, issueErr := issueByID(&data, func() string {
-				if notificationIndex >= 0 {
-					return data.Notifications[notificationIndex].IssueID
-				}
-				return ""
-			}())
-			if notificationIndex >= 0 && recipient != nil && data.Notifications[notificationIndex].ReviewID != "" {
-				review, err := reviewByID(data, data.Notifications[notificationIndex].ReviewID)
-				if err != nil {
-					status, message = "failed", "review is unavailable"
-				} else {
-					title, body := "Flow review activity", review.Title
-					if data.WorkspaceSettings.HIPAACompliance {
-						body = "Open Flow to view your notification."
-					}
-					if err := s.mailer.send(recipient.Email, title, body, s.mailer.appURL+"/"+key+"/review/"+review.SlugID); err != nil {
-						status, message = "failed", err.Error()
-					}
-				}
-			} else if notificationIndex >= 0 && recipient != nil && data.Notifications[notificationIndex].Title != "" && data.Notifications[notificationIndex].IssueID == "" {
-				// Pulse summaries and update activity carry their own title and text.
-				notification := data.Notifications[notificationIndex]
-				subject, body := readableNotificationLine(notification), "Open Flow to read it."
-				if data.WorkspaceSettings.HIPAACompliance {
-					subject, body = "Flow notification", "Open Flow to view your notification."
-				}
-				if err := s.mailer.send(recipient.Email, subject, body, s.mailer.appURL+"/"+key+"/inbox"); err != nil {
-					status, message = "failed", err.Error()
-				}
-			} else if notificationIndex < 0 || recipient == nil || issueErr != nil {
+			if notificationIndex < 0 || recipient == nil {
 				status, message = "failed", "notification source is unavailable"
-			} else {
-				notification := data.Notifications[notificationIndex]
-				body := notification.Actor.DisplayName + " updated " + issue.Identifier
-				if notification.Type == "assignment" {
-					body = notification.Actor.DisplayName + " assigned the issue to you"
-				}
-				if notification.Type == "mention" {
-					body = notification.Actor.DisplayName + " mentioned you"
-				}
-				if notification.Type == "comment" {
-					body = notification.Actor.DisplayName + " commented on the issue"
-				}
-				var sendErr error
-				if data.WorkspaceSettings.HIPAACompliance {
-					sendErr = s.mailer.send(recipient.Email, "Flow notification", "Open Flow to view your notification.", s.mailer.appURL+"/"+key+"/inbox")
-				} else {
-					sendErr = s.mailer.sendNotification(recipient.Email, key, issue.Identifier, issue.Title, body)
-				}
-				if err := sendErr; err != nil {
-					status, message = "failed", err.Error()
-				}
+			} else if item, err := s.notificationEmailItem(&data, key, data.Notifications[notificationIndex]); err != nil {
+				status, message = "failed", err.Error()
+			} else if err := s.mailer.sendNotificationEmail(recipient.Email, key, item.Title, []notificationEmailItem{item}, data.WorkspaceSettings.HIPAACompliance); err != nil {
+				status, message = "failed", err.Error()
 			}
 		}
 		persistCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

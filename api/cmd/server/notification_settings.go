@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"strings"
 	"time"
 
 	"flow/api/internal/domain"
@@ -87,28 +86,20 @@ func (s *server) dispatchNotificationDigests(ctx context.Context, workspace stri
 		if len(claimed) == 0 {
 			continue
 		}
-		var body strings.Builder
+		items := make([]notificationEmailItem, 0, len(claimed))
 		for _, delivery := range claimed {
 			for _, notification := range data.Notifications {
 				if notification.ID == delivery.NotificationID {
-					if notification.IssueID == "" && notification.Title != "" {
-						fmt.Fprintf(&body, "- %s\n", readableNotificationLine(notification))
-						break
+					item, itemErr := s.notificationEmailItem(&data, workspace, notification)
+					if itemErr != nil {
+						item = notificationEmailItem{Title: notification.Type, URL: s.mailer.appURL + "/" + url.PathEscape(workspace) + "/inbox", Icon: item.Icon, Line: inviterDisplayName(notification.Actor)}
 					}
-					title := notification.Type
-					if issue, err := issueByID(&data, notification.IssueID); err == nil {
-						title = issue.Identifier + " " + issue.Title
-					}
-					fmt.Fprintf(&body, "- %s: %s\n", notification.Actor.DisplayName, title)
+					items = append(items, item)
 					break
 				}
 			}
 		}
-		if data.WorkspaceSettings.HIPAACompliance {
-			body.Reset()
-			body.WriteString("Open Flow to view your notifications.")
-		}
-		err = s.mailer.send(recipient.Email, fmt.Sprintf("Flow: %d notifications", len(claimed)), body.String(), s.mailer.appURL+"/"+url.PathEscape(workspace)+"/inbox")
+		err = s.mailer.sendNotificationEmail(recipient.Email, workspace, fmt.Sprintf("Flow: %d notifications", len(claimed)), items, data.WorkspaceSettings.HIPAACompliance)
 		for _, delivery := range claimed {
 			_ = s.store.MutateNotificationDelivery(ctx, workspace, delivery.ID, func(current *domain.NotificationDelivery) error {
 				if current.Status != "delivering" {

@@ -430,6 +430,7 @@ func (s *server) finishEnterpriseOIDC(w http.ResponseWriter, r *http.Request) {
 	}
 	clearExternalState(w, r)
 	setSessionCookie(w, r, sessionToken, session.ExpiresAt)
+	s.afterSignIn(w, r, session)
 	http.Redirect(w, r, strings.TrimRight(s.allowedOrigin, "/")+"/"+workspaceKey, http.StatusFound)
 }
 

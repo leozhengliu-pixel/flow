@@ -288,6 +288,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/invitations/accept", s.acceptInvitation)
 	mux.HandleFunc("GET /api/invitations/preview/{token}", s.invitationPreview)
 	mux.HandleFunc("GET /api/invite-links/preview/{token}", s.inviteLinkPreview)
+	mux.HandleFunc("GET /api/email/unsubscribe", s.unsubscribeEmails)
+	mux.HandleFunc("POST /api/email/unsubscribe", s.unsubscribeEmails)
 	mux.HandleFunc("POST /api/invite-links/join", s.joinOrganization)
 	mux.HandleFunc("GET /api/account/bootstrap", s.accountBootstrap)
 	mux.HandleFunc("PUT /api/account/last-workspace", s.setLastWorkspace)

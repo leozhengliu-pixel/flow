@@ -218,10 +218,12 @@ func (s *server) decideOAuthAuthorization(w http.ResponseWriter, r *http.Request
 		writeOAuthError(w, 403, "access_denied", "This application is private to its workspace")
 		return
 	}
+	newInstallation := false
 	if input.Actor == "app" {
 		// Authorizing an installed application again keeps its team access
 		// (the consent screen asks for teams only on the first install).
 		_, installed := s.activeApplicationInstallation(r.Context(), workspace.Workspace.URLKey, client.ClientID)
+		newInstallation = !installed
 		if !workspaceAdminRole(workspace.ViewerRole) || !installed && !input.AllPublicTeams && len(input.TeamIDs) == 0 {
 			writeOAuthError(w, 403, "access_denied", "An administrator must select the teams this application can access")
 			return
@@ -270,6 +272,10 @@ func (s *server) decideOAuthAuthorization(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not authorize client")
 		return
+	}
+	if newInstallation {
+		// Like the reference app, the installing administrator gets "The … application has been installed in your workspace".
+		s.notifyApplicationInstalled(workspace, actor, client.ClientName, input.TeamIDs, input.AllPublicTeams)
 	}
 	query.Set("code", code)
 	if input.State != "" {
