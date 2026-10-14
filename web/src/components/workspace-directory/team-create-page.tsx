@@ -81,7 +81,7 @@ const SETTINGS_SECTIONS: {
   {
     title: "Features",
     items: [
-      { label: "AI & Agents", icon: AiBurstGlyph },
+      { label: "AI & agents", icon: AiBurstGlyph },
       { label: "Initiatives", icon: Goal },
       { label: "Documents", icon: FileText },
       { label: "Customer requests", icon: UsersRound },
@@ -110,7 +110,7 @@ const SETTINGS_DESTINATIONS: Record<string, SettingsPageId> = {
   "Personal/Preferences":"preferences","Personal/Profile":"profile","Personal/Notifications":"notifications","Personal/Code & reviews":"code-and-reviews","Personal/Security & access":"account-security","Personal/Connected accounts":"connections","Personal/Agent personalization":"agents",
   "Issues/Labels":"issue-labels","Issues/Templates":"issue-templates","Issues/SLAs":"sla",
   "Projects/Labels":"project-labels","Projects/Templates":"project-templates","Projects/Statuses":"project-statuses","Projects/Updates":"project-updates",
-  "Features/AI & Agents":"ai","Features/Initiatives":"initiatives","Features/Documents":"documents","Features/Customer requests":"customer-requests","Features/Releases":"releases","Features/Pulse":"pulse","Features/Asks":"asks","Features/Emojis":"emojis","Features/Integrations":"integrations",
+  "Features/AI & agents":"ai","Features/Initiatives":"initiatives","Features/Documents":"documents","Features/Customer requests":"customer-requests","Features/Releases":"releases","Features/Pulse":"pulse","Features/Asks":"asks","Features/Emojis":"emojis","Features/Integrations":"integrations",
   "Administration/Workspace":"workspace","Administration/Teams":"teams","Administration/Members":"members","Administration/Security":"security","Administration/API":"api","Administration/Applications":"applications","Administration/Import & export":"import-export",
 };
 

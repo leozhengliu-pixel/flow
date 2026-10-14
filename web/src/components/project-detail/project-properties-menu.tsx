@@ -9,6 +9,7 @@ import { ProjectLabelMenuContent } from '@/components/property/project-label-men
 import { projectLabelOptions } from '@/components/property/project-label-menu-model'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { toggleGroupedLabelIds } from '@/lib/labels'
+import { viewerCanInvite } from '@/lib/invite-navigation'
 import { useI18n } from '@/i18n/i18n'
 import type { Initiative } from '@/types/flow'
 import type { ProjectMutationInput } from '@/components/projects-page/projects-page'
@@ -47,7 +48,7 @@ export function ProjectPropertiesMenu({ featureFlags, initiatives, labels, label
   const memberIds = [...new Set([...(project.memberIds ?? []), ...(project.lead ? [project.lead.id] : [])])]
   const memberOptions: PropertyOption[] = [
     ...users.map(user => ({id:user.id,label:user.displayName,person:user,icon:<Avatar name={user.displayName}/>,end:project.lead?.id === user.id ? 'Project lead' : user.active ? undefined : 'Invited',i18nIgnore:true})),
-    {id:'__invite__',label:'Invite and add…',icon:<Send size={16}/>,groupLabel:'New user',action:true},
+    ...(viewerCanInvite() ? [{id:'__invite__',label:'Invite and add…',icon:<Send size={16}/>,groupLabel:'New user',action:true}] : []),
   ]
   const updateMember = (id: string) => {
     if (id === '__invite__') { setOpen(false); inviteProjectMember(); return }

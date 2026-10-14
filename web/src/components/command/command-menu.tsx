@@ -27,6 +27,7 @@ import { useSelectedModels } from '@/lib/selected-models-store'
 import { useAllowedActionGroups } from '@/hooks/use-action-groups-for-selection'
 import { useI18n } from '@/i18n/i18n'
 import { translatedKeywords } from '@/lib/search-match'
+import { roleAllowed } from '@/lib/settings-access'
 import type { AgentSession, BootstrapData, Customer, SearchResult } from '@/types/flow'
 import { agentSessionUnread, formatAgentHistoryTime, groupAgentHistory } from '@/components/agent/agent-read-state'
 import { CustomerLogo } from '@/components/customer/customer-logo'
@@ -38,6 +39,11 @@ import { GLOBAL_RELEASE_PAGES, releaseCommands, type ReleaseCommandHost } from '
 import { contextChip, useContextCommands, type CommandPage, type ContextCommandHandlers, type PageOption } from './context-commands'
 import './command-menu.css'
 import { AgentCursorGlyph, AgentHistoryGlyph } from '@/components/ui/agent-glyph'
+
+/** A Settings › Security "who can" permission for the viewer; without workspace data the command stays listed. */
+function viewerAllowed(data: BootstrapData | undefined, key: 'templatePermission' | 'teamCreatePermission') {
+  return !data || roleAllowed(data.viewerRole, data.workspaceSettings?.[key])
+}
 
 type CommandAction = {
   id: string
@@ -66,6 +72,7 @@ export function CommandMenu({
   onNavigateInitiatives,
   onNavigateViews,
   onNavigateMembers,
+  onCreateTeam,
   onNavigateCustomers,
   onGoToCustomers,
   onOpenCustomer,
@@ -100,6 +107,8 @@ export function CommandMenu({
   onNavigateInitiatives: () => void
   onNavigateViews: () => void
   onNavigateMembers: () => void
+  /** "Create a team…", listed when Settings › Security "Team creation" allows the viewer. */
+  onCreateTeam?: () => void
   onNavigateCustomers: () => void
   /** "Go to customers" (G then Q); omitted when customer requests are off or for guests, which also hides the other customer commands. */
   onGoToCustomers?: () => void
@@ -180,7 +189,10 @@ export function CommandMenu({
     ...documents.global.map(action => ({ id: action.id, group: 'Documents', label: action.label, icon: action.icon, shortcut: action.shortcut, keywords: action.keywords, run: () => { if (action.page) openPage(action.page); else void action.run?.() } })),
     ...releases.global.map(action => ({ id: action.id, group: action.group, label: action.label, icon: action.icon, shortcut: action.shortcut, keywords: action.keywords, run: () => { if (action.page) openPage(action.page); else void action.run?.() } })),
     { id: 'search-workspace', group: 'Filter', label: 'Search workspace...', icon: <Search/>, run: closeAnd(onSearchWorkspace) },
-    { id: 'issue-template', group: 'Templates', label: 'Create new issue template...', icon: <FileText/>, run: closeAnd(onCreateIssueTemplate) },
+    // The reference app lists these only for people the workspace "who can" settings allow.
+    ...(viewerAllowed(data, 'templatePermission') ? [{ id: 'issue-template', group: 'Templates', label: 'Create new issue template…', icon: <FileText/>, run: closeAnd(onCreateIssueTemplate) }] : []),
+    ...(onCreateTeam && viewerAllowed(data, 'teamCreatePermission') ? [{ id: 'create-team', group: 'Teams', label: 'Create a team…', icon: <Plus/>, keywords: 'new team', run: closeAnd(onCreateTeam) }] : []),
+    ...(data && data.viewerRole !== 'guest' ? [{ id: 'view-admins', group: 'Navigation', label: 'View workspace admins', icon: <UserRound/>, keywords: 'admin owner members', run: closeAnd(onNavigateMembers) }] : []),
     { id: 'go-inbox', group: 'Navigation', label: 'Go to Inbox', icon: <Inbox/>, shortcut: ['G', 'then', 'I'], run: closeAnd(onNavigateInbox) },
     { id: 'go-my-issues', group: 'Navigation', label: 'Go to My issues', icon: <SquareDot/>, shortcut: ['G', 'then', 'M'], run: closeAnd(onNavigateMyIssues) },
     { id: 'go-projects', group: 'Navigation', label: 'Go to Projects', icon: <FolderKanban/>, run: closeAnd(onNavigateProjects) },

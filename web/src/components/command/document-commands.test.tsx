@@ -43,11 +43,15 @@ const template = (over: Partial<DocumentTemplate> = {}): DocumentTemplate => ({
 
 const launch = doc()
 const untitled = doc({ id: 'doc-2', slugId: 'untitled-def456', title: '', updatedAt: '2026-01-03T00:00:00Z', teamIds: [] })
-const data = (over: Partial<BootstrapData> = {}) => makeBootstrap({
-  documents: [launch, untitled], teams: [team, second], teamMembers: [{ teamId: team.id, userId: viewer.id }, { teamId: second.id, userId: viewer.id }],
-  favorites: [], documentTemplates: [template(), template({ id: 'tpl-2', teamId: second.id, name: 'Retro' })], initiatives: [{ id: 'init-1', slugId: 'init', name: 'Big goal', color: '#5e6ad2', icon: 'Initiative', resources: [] }],
-  teamPinnedResources: [], ...over,
-} as unknown as Partial<BootstrapData>)
+const data = (over: Partial<BootstrapData> = {}) => {
+  const base = makeBootstrap({
+    documents: [launch, untitled], teams: [team, second], teamMembers: [{ teamId: team.id, userId: viewer.id }, { teamId: second.id, userId: viewer.id }],
+    favorites: [], documentTemplates: [template(), template({ id: 'tpl-2', teamId: second.id, name: 'Retro' })], initiatives: [{ id: 'init-1', slugId: 'init', name: 'Big goal', color: '#5e6ad2', icon: 'Initiative', resources: [] }],
+    teamPinnedResources: [], ...over,
+  } as unknown as Partial<BootstrapData>)
+  // Members manage workspace templates (Settings › Security)'s default.
+  return { ...base, workspaceSettings: { ...base.workspaceSettings, templatePermission: 'members' } } as BootstrapData
+}
 
 function Register({ context }: { context?: CommandContext }) { useRegisterCommandContext(context); return null }
 
@@ -169,6 +173,12 @@ describe('document commands in ⌘K', () => {
       const second = setup()
       await second.user.click(option(/Create new document template…/))
       expect(second.host.navigate).toHaveBeenCalledWith(expect.stringContaining('/workspace/settings/documents?newTemplate=1'))
+    })
+
+    it('hides "Create new document template…" from members when only admins manage templates', () => {
+      const workspace = data()
+      setup(undefined, { ...workspace, workspaceSettings: { ...workspace.workspaceSettings, templatePermission: 'admins' } } as BootstrapData)
+      expect(screen.queryByRole('option', { name: /Create new document template…/ })).toBeNull()
     })
   })
 

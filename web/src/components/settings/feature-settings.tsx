@@ -205,7 +205,7 @@ function AIPage({data,onReload,settings,busy,setEnabled,setFeature,onOpenIntegra
       toast.error(message(error));
     }
   };
-  return <FeatureShell title="AI & Agents" description="Automate your product development processes and operations with AI">
+  return <FeatureShell title="AI & agents" description="Automate your product development processes and operations with AI">
     <FeatureSection title="Flow Agent" description="Create issues and answer questions about your workspace.">
       <FeatureCard>{cards.slice(0,1).map(([id,title,description,Icon])=><FeatureRow key={id} icon={Icon} title={title} businessTitle={id==="ai-agent"} description={description}><Toggle checked={settings.featureFlags[id]??true} disabled={busy} label={title} onChange={value=>setEnabled(id,value)}/></FeatureRow>)}
         <FeatureLinkRow icon={AgentCodingGlyph} title="Coding sessions" description="Assign or ask Flow to make code changes" detail={(settings.featureFlags["coding-sessions"]??true)?"Enabled":"Disabled"} onClick={()=>onNavigateSettings?.("coding-sessions")}/>

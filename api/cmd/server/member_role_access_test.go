@@ -128,4 +128,18 @@ func TestMemberRoleMatchesReference(t *testing.T) {
 			t.Fatalf("account bootstrap without a workspace = %d, want 200", got)
 		}
 	})
+
+	t.Run("members cannot leave their last active team; admins may still remove them", func(t *testing.T) {
+		url := server.URL + "/api/workspaces/test-workspace/teams/" + teamID + "/members/" + member.user.ID
+		if code, message := teamMembershipRequest(t, member.client, url, false, "member"); code != http.StatusConflict || message != "You should be a member of at least one active team" {
+			t.Fatalf("leaving the last team = %d %q", code, message)
+		}
+		if got := status(member.client, http.MethodDelete, "/api/teams/"+teamID+"/members/"+member.user.ID, nil, "test-workspace"); got != http.StatusConflict {
+			t.Fatalf("removing yourself through the team member API = %d, want 409", got)
+		}
+		// The reference app's team member list lets an admin remove someone from their only team.
+		if code, message := teamMembershipRequest(t, admin, url, false, "member"); code != http.StatusNoContent {
+			t.Fatalf("admin removal = %d %q", code, message)
+		}
+	})
 }

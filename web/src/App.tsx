@@ -325,6 +325,7 @@ import { triageState } from '@/components/triage/triage-model'
 import type { WorkspaceSecondaryKind } from '@/components/workspace/workspace-secondary-page'
 import { applyLabelUpdate, archiveProjectUpdateReminders, mergeRefreshedIssues, mergeScopedIssues, mergeWorkspaceMetadata, metadataOnlyRealtimeEvent, newlyReleasedIssueIds, syncIssueProjectSummaries, teamIssueScope, type IssueRefreshScope } from '@/lib/workspace-metadata-refresh'
 import { ISSUE_QUERY_INVALIDATED } from '@/components/issue-explorer/paged-issue-invalidation'
+import { canInviteMembers, setViewerCanInvite } from '@/lib/invite-navigation'
 
 const ReleaseEditorDialog = lazy(() => import('@/components/releases/release-editor-dialog').then(module => ({default:module.ReleaseEditorDialog})))
 const IssueLoadingPreview = lazy(() => import('@/components/issue/issue-loading-preview').then(module => ({default:module.IssueLoadingPreview})))
@@ -344,6 +345,8 @@ function App() {
   sessionViewerRef.current=session?.user.id;
   const dataRef=useRef(data);
   dataRef.current=data;
+  // Pickers deep in the tree hide "Invite and assign…" when the viewer cannot invite.
+  if (data) setViewerCanInvite(canInviteMembers(data));
   const acceptBootstrap = useCallback((next:BootstrapData)=>{
     if(next.viewer.id!==sessionViewerRef.current) return;
     setData(current=>{
@@ -6858,6 +6861,7 @@ function App() {
             onNavigateMembers={() =>
               navigateTo(membersPath(data.workspace.urlKey))
             }
+            onCreateTeam={() => navigateTo(newTeamPath(data.workspace.urlKey))}
             onNavigateCustomers={() =>
               navigateTo(`${customersPath(data.workspace.urlKey)}?create=1`)
             }

@@ -213,7 +213,7 @@ it('shows members the workspace feature pages and hides administration', () => {
   input.data = { ...input.data, viewerRole: 'member', workspaceSettings: { ...input.data.workspaceSettings, labelPermission: 'members', templatePermission: 'members', teamCreatePermission: 'members' } };
   render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
   const labels = navLabels();
-  for (const visible of ['Preferences', 'Labels', 'Templates', 'SLAs', 'Statuses', 'Updates', 'AI & Agents', 'Loops', 'Initiatives', 'Documents', 'Customer requests', 'Releases', 'Pulse', 'Asks', 'Emojis', 'Integrations', 'Create a team'])
+  for (const visible of ['Preferences', 'Labels', 'Templates', 'SLAs', 'Statuses', 'Updates', 'AI & agents', 'Loops', 'Initiatives', 'Documents', 'Customer requests', 'Releases', 'Pulse', 'Asks', 'Emojis', 'Integrations', 'Create a team'])
     expect(labels).toContain(visible);
   for (const hidden of ['Workspace', 'Members', 'Security', 'API', 'Applications', 'Import & export'])
     expect(labels).not.toContain(hidden);
@@ -256,7 +256,7 @@ it('answers administration pages opened by URL with the reference app\'s "Not fo
   expect(screen.getByRole('status')).toHaveTextContent('Only workspace administrators can manage API settings');
 });
 
-it('lists Integrations as its own section, "All integrations" for admins', () => {
+it('lists Integrations as its own section, "All integrations" and enabled integrations for admins', async () => {
   localStorage.setItem('flow:locale', 'en');
   const input = props();
   input.page = 'preferences';
@@ -264,6 +264,18 @@ it('lists Integrations as its own section, "All integrations" for admins', () =>
   const section = (title: string) => Array.from(document.querySelectorAll('.settings-sidebar nav section')).find(item => item.querySelector('h2')?.textContent === title);
   expect(section('Integrations')?.textContent).toContain('All integrations');
   unmount();
+  // Admins also get each enabled integration under "All integrations" (the reference app: All integrations, GitHub).
+  const connected = { ...input, page: 'integrations' as const, integrationProvider: 'github' as const, data: { ...input.data, integrationConnections: [
+    { id: 'conn-github', provider: 'github', name: 'GitHub', status: 'connected' },
+    { id: 'conn-slack', provider: 'slack', name: 'Slack', status: 'error' },
+  ] } } as unknown as ReturnType<typeof props>;
+  const admin = render(<I18nProvider><SettingsPage {...connected}/></I18nProvider>);
+  const items = Array.from(section('Integrations')?.querySelectorAll('button') ?? []);
+  expect(items.map(item => item.textContent?.trim())).toEqual(['All integrations', 'GitHub']);
+  expect(items[1]).toHaveAttribute('aria-current', 'page');
+  await userEvent.setup().click(items[0]);
+  expect(input.onNavigate).toHaveBeenCalledWith('integrations');
+  admin.unmount();
   render(<I18nProvider><SettingsPage {...{ ...input, data: { ...input.data, viewerRole: 'member' } }}/></I18nProvider>);
   expect(section('Integrations')?.querySelector('button')?.textContent?.trim()).toBe('Integrations');
   expect(section('Features')?.textContent).not.toContain('Integrations');

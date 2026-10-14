@@ -14,7 +14,7 @@ import { AgentHoverCard } from '@/components/agent/agent-hover-card'
 import { AGENT_HOVER_CLASS } from '@/components/agent/agent-hover-class'
 import { agentHoverProps } from '@/components/agent/agent-hover-props'
 import { ASSIGNEE_INVITE_ID, assigneeCandidates, assigneeShortcut } from '@/lib/agent-members'
-import { openMemberInvite } from '@/lib/invite-navigation'
+import { openMemberInvite, viewerCanInvite } from '@/lib/invite-navigation'
 import { avatarColor } from '@/components/issue/avatar-color'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { NestingLine } from '@/components/ui/nesting-line'
@@ -261,7 +261,7 @@ export function AssigneePicker({ value, delegate, users, onChange, onDelegate, o
     emptyOptionLabel="No assignee"
     emptyOptionShortcut="0"
     emptyTriggerLabel="Assign"
-    extraOptions={[{ id: ASSIGNEE_INVITE_ID, label: 'Invite and assign…', icon: <FlowGlyph className="property-command-invite-icon" name="invitePlane" size={16}/>, groupLabel: 'New user', action: true }]}
+    extraOptions={viewerCanInvite() ? [{ id: ASSIGNEE_INVITE_ID, label: 'Invite and assign…', icon: <FlowGlyph className="property-command-invite-icon" name="invitePlane" size={16}/>, groupLabel: 'New user', action: true }] : []}
     hoverContent={personHover && value && hoverContext ? <AssigneeHoverPreview user={value} {...hoverContext}/> : stacked && delegate ? <AgentHoverCard agent={delegate}/> : undefined}
     hoverClassName={!personHover && stacked ? AGENT_HOVER_CLASS : 'property-rich-hover assignee-hover-surface'}
     label="Assignee"

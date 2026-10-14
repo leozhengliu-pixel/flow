@@ -2051,7 +2051,7 @@ export class FlowApi {
   /**
    * `DELETE /api/teams/{id}/members/{userId}`
    * Remove a team member
-   * Without origin, removes the member like team settings do (not the last owner, not SCIM-managed members). With origin, removes only a membership with that origin (409 TEAM_MEMBER_ORIGIN_MISMATCH with the actual `origin` otherwise) and never an owner (409 TEAM_OWNER_PROTECTED). dryRun=true writes nothing and returns what would be removed, or in kept why the member would stay.
+   * Without origin, removes the member like team settings do (not the last owner, not SCIM-managed members). With origin, removes only a membership with that origin (409 TEAM_MEMBER_ORIGIN_MISMATCH with the actual `origin` otherwise) and never an owner (409 TEAM_OWNER_PROTECTED). Nobody removes themselves from their last active team (409 LAST_ACTIVE_TEAM). dryRun=true writes nothing and returns what would be removed, or in kept why the member would stay.
    */
   deleteTeamsIdMembersUserId(request: DeleteTeamsIdMembersUserIdRequest, options?: RequestOptions): Promise<TeamMemberRemoval> {
     return this.transport.request({ method: "DELETE", path: "/api/teams/{id}/members/{userId}", pathParams: request.path, query: request?.query, ...options })

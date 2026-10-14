@@ -26,6 +26,7 @@ import { NoAssigneeIcon, ProjectIcon, TeamIcon } from '@/components/issue/issue-
 import { reminderPresetOptions } from '@/components/ui/reminder-presets'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { documentPath, initiativePath, projectPath, settingsPath, teamArchivePath, teamDocumentsPath, workspaceRootPath } from '@/lib/app-routes'
+import { roleAllowed } from '@/lib/settings-access'
 import type { BootstrapData, DocumentTemplate, FlowDocument, Team } from '@/types/flow'
 import type { CommandContext } from './command-context'
 import type { CommandPage, ContextAction, PageOption } from './context-commands'
@@ -116,7 +117,8 @@ export function documentCommands({ context, data: source, page: current, query, 
       if (team) host.navigate(teamArchivePath(workspace, team.key, 'recently-deleted-documents'))
     } },
     { id: 'create-document', label: 'Create new document in…', icon: <FilePlus2/>, keywords: 'new', page: page('documentCreateIn', 'Create new document in…') },
-    { id: 'create-document-template', label: 'Create new document template…', icon: <LayoutTemplate/>, run: () => { close(); host.navigate(`${settingsPath(workspace, 'documents')}?newTemplate=1`) } },
+    // Settings › Security "Manage workspace templates" decides who sees it.
+    ...(roleAllowed(data.viewerRole, data.workspaceSettings?.templatePermission) ? [{ id: 'create-document-template', label: 'Create new document template…', icon: <LayoutTemplate/>, run: () => { close(); host.navigate(`${settingsPath(workspace, 'documents')}?newTemplate=1`) } }] : []),
     ...(templates.length ? [{ id: 'create-document-from-template', label: 'Create new document from template…', icon: <LayoutTemplate/>, keywords: 'new', page: page('documentFromTemplate', 'Create new document from template…') }] : []),
     ...(teams.length ? [{ id: 'add-document-to-overview', label: 'Add document to team overview…', icon: <Pin/>, keywords: 'pin resources', page: page('documentTeamOverview', 'Add document to team overview…') }] : []),
   ]

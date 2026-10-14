@@ -117,9 +117,10 @@ func TestTeamMembershipPermissionMatrix(t *testing.T) {
 		if status != http.StatusNoContent {
 			t.Fatalf("self-join status=%d error=%q", status, message)
 		}
+		// The reference app: "You should be a member of at least one active team".
 		status, message = teamMembershipRequest(t, outsider.client, membershipURL(outsider.user.ID), false, "member")
-		if status != http.StatusNoContent {
-			t.Fatalf("self-leave status=%d error=%q", status, message)
+		if status != http.StatusConflict || message != errLastActiveTeam.Error() {
+			t.Fatalf("leaving the only team status=%d error=%q", status, message)
 		}
 
 		privateTeam := authRequest[domain.Team](t, admin, http.MethodPost, server.URL+"/api/workspaces/test-workspace/teams", map[string]any{"name": "Private", "key": "PRIV", "private": true}, "", http.StatusCreated)
@@ -128,6 +129,11 @@ func TestTeamMembershipPermissionMatrix(t *testing.T) {
 		status, message = teamMembershipRequest(t, outsider.client, privateURL, false, "member")
 		if status != http.StatusNoContent {
 			t.Fatalf("private self-leave status=%d error=%q", status, message)
+		}
+		// Back to one team: leaving it is refused again; an admin may still remove them.
+		status, message = teamMembershipRequest(t, outsider.client, membershipURL(outsider.user.ID), false, "member")
+		if status != http.StatusConflict || message != errLastActiveTeam.Error() {
+			t.Fatalf("leaving the last team again status=%d error=%q", status, message)
 		}
 		status, message = teamMembershipRequest(t, outsider.client, privateURL, true, "member")
 		if status != http.StatusForbidden || message != "This team requires an invitation" {

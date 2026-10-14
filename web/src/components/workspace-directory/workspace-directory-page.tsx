@@ -55,6 +55,8 @@ import {
   type DirectoryFilterGroup,
 } from "./directory-menus";
 import { InviteMembersDialog } from "./invite-members-dialog";
+import { canInviteMembers } from "@/lib/invite-navigation";
+import { roleAllowed } from "@/lib/settings-access";
 import { memberColumnIds, useMemberDirectoryPreferences, type MemberColumn, type MemberOrdering } from "./use-member-directory-preferences";
 import { isActiveSubscription } from "@/lib/subscription-records";
 
@@ -110,7 +112,10 @@ export function WorkspaceDirectoryPage({
   onReload: (teamId?: string) => Promise<void>;
 }) {
   const {t}=useI18n();
-  const [inviteOpen, setInviteOpen] = useState(inviteOnOpen);
+  // Settings › Security "New user invitations" and "Team creation" decide who may invite or create teams.
+  const canInvite = canInviteMembers(data);
+  const canCreateTeam = roleAllowed(data.viewerRole, data.workspaceSettings?.teamCreatePermission);
+  const [inviteOpen, setInviteOpen] = useState(inviteOnOpen && canInvite);
   const [customerOpen, setCustomerOpen] = useState(customerOnOpen);
   // "Create new customer…" from the command menu reopens the dialog while already on the page.
   useEffect(() => { if (customerOnOpen) setCustomerOpen(true); }, [customerOnOpen]);
@@ -125,7 +130,7 @@ export function WorkspaceDirectoryPage({
       <DirectoryHeader
         title={title}
         onOpenSidebar={onOpenSidebar}
-        onCreate={kind === "members" && data.viewerRole !== "admin" && data.viewerRole !== "owner" ? undefined : () =>
+        onCreate={(kind === "members" && !canInvite) || (kind === "teams" && !canCreateTeam) ? undefined : () =>
           kind === "members"
             ? setInviteOpen(true)
             : kind === "customers"
