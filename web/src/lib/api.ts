@@ -515,7 +515,8 @@ export function listIssues(filters: IssueQueryInput = {}): Promise<IssueQueryPag
   return request<IssueQueryPage>(`/api/issues${query.size ? `?${query}` : ""}`);
 }
 export function createWorkspace(
-  input: WorkspaceMutationInput & { name: string; urlKey: string },
+  // locale: the creator's interface language, used for the workspace's Getting started issues.
+  input: WorkspaceMutationInput & { name: string; urlKey: string; locale?: string },
 ): Promise<BootstrapData> {
   return request<BootstrapData>("/api/workspaces", {
     method: "POST",

@@ -4,6 +4,11 @@ Short product demos of Flow (English UI, dark theme, invented "Acme" demo
 workspace). Every clip exists as a GIF (for READMEs and docs) and as an
 H.264 MP4 (sharper, smaller, with the same content).
 
+The GIFs are also the clips of the "Getting started" issues every new
+workspace starts with (`api/cmd/server/workspace_tutorial_content.go`): the web
+build copies `docs/media/*.gif` to `/tour/` (`web/tour-media-plugin.ts`), so
+keep the file names when re-recording.
+
 The clips are generated, not hand-recorded: see
 [`scripts/feature-tour`](../../scripts/feature-tour/README.md) to re-record them
 after a UI change.

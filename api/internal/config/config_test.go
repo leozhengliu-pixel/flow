@@ -49,6 +49,16 @@ func TestWorkspaceRegionSelectorConfig(t *testing.T) {
 	}
 }
 
+func TestWorkspaceTutorialConfig(t *testing.T) {
+	for value, want := range map[string]bool{"": true, "on": true, "true": true, "off": false, "OFF": false, "false": false, "0": false} {
+		t.Setenv("FLOW_WORKSPACE_TUTORIAL", value)
+		loaded, err := Load()
+		if err != nil || loaded.WorkspaceTutorial != want {
+			t.Fatalf("FLOW_WORKSPACE_TUTORIAL=%q: tutorial=%v err=%v, want %v", value, loaded.WorkspaceTutorial, err, want)
+		}
+	}
+}
+
 func TestLoadRedisClusterValidation(t *testing.T) {
 	t.Setenv("FLOW_REDIS_MODE", "cluster")
 	t.Setenv("FLOW_REDIS_ADDRS", "redis-1:6379, redis-2:6379,redis-3:6379")

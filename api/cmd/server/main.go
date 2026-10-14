@@ -79,6 +79,7 @@ type server struct {
 	allowedOrigin                  string
 	workspaceRegionSelectorEnabled bool
 	workspaceDefaultRegion         string
+	workspaceTutorial              bool // seed the "Getting started" issues into workspaces created from the app
 	agentApprovalsMu               sync.Mutex
 	agentApprovals                 map[string]*agentApproval
 	agentElicitations              map[string]*agentElicitation
@@ -158,6 +159,7 @@ func main() {
 		allowedOrigin:                  applicationConfig.AppURL,
 		workspaceRegionSelectorEnabled: applicationConfig.WorkspaceRegionSelectorEnabled,
 		workspaceDefaultRegion:         applicationConfig.WorkspaceDefaultRegion,
+		workspaceTutorial:              applicationConfig.WorkspaceTutorial,
 	}
 
 	httpServer := &http.Server{Addr: applicationConfig.HTTPAddr, Handler: telemetryHandler(newHandler(s), applicationConfig.Telemetry.Enabled), ReadHeaderTimeout: 5 * time.Second}
@@ -934,9 +936,14 @@ func (s *server) withStaticFiles(next http.Handler) http.Handler {
 			http.ServeFile(w, r, filepath.Join(s.staticPath, "index.html"))
 			return
 		}
-		if _, err := os.Stat(filepath.Join(s.staticPath, path)); err == nil {
+		// Directories (assets/, fonts/, tour/) are not pages: a workspace whose
+		// URL key matches one still gets the app.
+		if info, err := os.Stat(filepath.Join(s.staticPath, path)); err == nil && !info.IsDir() {
 			if strings.HasPrefix(r.URL.Path, "/assets/") || strings.HasPrefix(r.URL.Path, "/fonts/") {
 				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			} else if strings.HasPrefix(r.URL.Path, "/tour/") {
+				// Tutorial clips keep their names across releases.
+				w.Header().Set("Cache-Control", "public, max-age=86400")
 			}
 			files.ServeHTTP(w, r)
 			return
@@ -1372,6 +1379,12 @@ func (s *server) createWorkspace(w http.ResponseWriter, r *http.Request) {
 		Name   string `json:"name"`
 		URLKey string `json:"urlKey"`
 		Region string `json:"region"`
+		// Locale is the creator's interface language (en-US or zh-CN); the
+		// tutorial issues are written in it.
+		Locale string `json:"locale"`
+		// Tutorial false skips the "Getting started" issues, for clients that
+		// create a workspace to import into.
+		Tutorial *bool `json:"tutorial"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
@@ -1392,7 +1405,12 @@ func (s *server) createWorkspace(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "unsupported workspace region")
 		return
 	}
-	data, err := s.store.CreateWorkspace(r.Context(), input.Name, input.URLKey, input.Region)
+	var seed store.WorkspaceSeed
+	if s.workspaceTutorial && (input.Tutorial == nil || *input.Tutorial) {
+		locale := tutorialLocale(input.Locale, r.Header.Get("Accept-Language"))
+		seed = func(data *domain.Bootstrap) error { return seedWorkspaceTutorial(data, locale) }
+	}
+	data, err := s.store.CreateWorkspaceWith(r.Context(), input.Name, input.URLKey, input.Region, seed)
 	if err == nil {
 		s.ensureBuiltinApplication(r.Context(), data.Workspace.URLKey)
 	}

@@ -552,7 +552,7 @@ function App() {
   const loadedWorkspaceKey = data?.workspace.urlKey;
   const projectListProjection = isProjectListRoute(route);
   const bootstrapProjection = projectListProjection ? 'project-list' : route.kind === 'issue' ? 'issue-detail' : undefined;
-  const { t: translateTitle } = useI18n();
+  const { t: translateTitle, locale } = useI18n();
   useEffect(() => {
     // Search sets its own title (it includes the query); the OAuth consent page is titled "Flow" (the reference app: "the reference app").
     if (route.kind === "search") return;
@@ -3953,7 +3953,8 @@ function App() {
     region: string;
   }) => {
     const created = await run(
-      () => createWorkspace(input),
+      // The workspace's Getting started issues are written in the creator's language.
+      () => createWorkspace({ ...input, locale }),
       "Could not create workspace",
     );
     const nextAccount = await fetchAccountBootstrap();

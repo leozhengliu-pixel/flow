@@ -123,6 +123,19 @@ FLOW_DATABASE_URL=mysql://flow:secret@mysql:3306/flow?tls=true
 `FLOW_DB_PATH` remains accepted as a fallback for existing SQLite deployments;
 new deployments should use `FLOW_DATABASE_PATH`.
 
+## New workspaces
+
+A workspace created from the app starts with a "Getting started" tour: a
+"Welcome to Flow" issue with one sub-issue per module (issues, planning,
+documents, agent), each embedding its feature-tour clip, in the creator's
+language (English or Simplified Chinese). The clips ship with the web build
+(`docs/media/*.gif` is copied to `/tour/`), so the tour works offline and on
+self-hosted deployments. Existing and imported workspaces never get it.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FLOW_WORKSPACE_TUTORIAL` | `on` | `off` (or `false`, `0`) creates new workspaces without the tutorial issues. API clients can also pass `"tutorial": false` to `POST /api/workspaces`. |
+
 ## Redis coordination and cluster mode
 
 Redis is optional for a single Flow process and disabled by default. Enable it

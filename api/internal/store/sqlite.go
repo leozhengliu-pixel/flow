@@ -1778,8 +1778,20 @@ func firstWorkspaceKey(workspaces map[string]domain.Bootstrap) string {
 }
 
 func (s *SQLiteStore) CreateWorkspace(ctx context.Context, name, urlKey, region string) (domain.Bootstrap, error) {
+	return s.CreateWorkspaceWith(ctx, name, urlKey, region, nil)
+}
+
+// WorkspaceSeed adds starter content (the "Getting started" issues) to a new
+// workspace's defaults before they are first persisted. data.Viewer is the
+// workspace creator.
+type WorkspaceSeed func(data *domain.Bootstrap) error
+
+// CreateWorkspaceWith creates a workspace like CreateWorkspace and lets seed
+// add starter content in the same write, so a workspace never exists without
+// it (or with half of it).
+func (s *SQLiteStore) CreateWorkspaceWith(ctx context.Context, name, urlKey, region string, seed WorkspaceSeed) (domain.Bootstrap, error) {
 	if s.coordinator == nil {
-		return s.createWorkspace(ctx, name, urlKey, region)
+		return s.createWorkspace(ctx, name, urlKey, region, seed)
 	}
 	var created domain.Bootstrap
 	err := s.coordinator.WithWorkspaceLock(ctx, "__workspace_catalog__", func() error {
@@ -1787,7 +1799,7 @@ func (s *SQLiteStore) CreateWorkspace(ctx context.Context, name, urlKey, region 
 			return err
 		}
 		var err error
-		created, err = s.createWorkspace(ctx, name, urlKey, region)
+		created, err = s.createWorkspace(ctx, name, urlKey, region, seed)
 		return err
 	})
 	if err == nil {
@@ -1796,7 +1808,7 @@ func (s *SQLiteStore) CreateWorkspace(ctx context.Context, name, urlKey, region 
 	return created, err
 }
 
-func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region string) (domain.Bootstrap, error) {
+func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region string, seed WorkspaceSeed) (domain.Bootstrap, error) {
 	s.lockWorkspaceWrites()
 	defer s.unlockWorkspaceWrites()
 	if _, exists := s.workspaces[urlKey]; exists {
@@ -1811,6 +1823,12 @@ func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region 
 		s.viewer = viewer
 	}
 	data := EmptyWorkspace(name, urlKey, region, viewer)
+	if seed != nil {
+		if err := seed(&data); err != nil {
+			return domain.Bootstrap{}, fmt.Errorf("seed workspace: %w", err)
+		}
+		normalize(&data)
+	}
 	event := &domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: "workspace.created", AggregateID: data.Workspace.ID, Payload: json.RawMessage(fmt.Sprintf(`{"urlKey":%q}`, urlKey)), CreatedAt: time.Now().UTC()}
 	if err := s.persistWorkspace(ctx, urlKey, data, event); err != nil {
 		return domain.Bootstrap{}, err
