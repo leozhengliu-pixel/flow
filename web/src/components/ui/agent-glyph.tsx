@@ -12,7 +12,7 @@ type GlyphProps = Omit<SVGProps<SVGSVGElement>, 'name'> & { size?: number | stri
  *
  *  - `AgentCursorGlyph`: the agent cursor: sidebar item, "Agent" corner button, composer chips, "Ask agent" buttons.
  *  - `AgentWriteGlyph`: "Write with Agent" / "Configure with Agent" / "Copy as prompt".
- *  - `AiBurstGlyph`: the AI burst: Triage Intelligence, "AI & Agents" settings.
+ *  - `AiBurstGlyph`: the AI burst: Triage Intelligence, "AI & agents" settings.
  *  - `LoopsGlyph`: Loops (nav, settings). `AgentMinimizeGlyph`, `AgentFullPageGlyph`, `AgentCloseGlyph`: the floating chat's header controls.
  *  - `AgentCodingGlyph`: "Coding sessions". `CodeIntelligenceGlyph`: "Code Intelligence". `AgentHistoryGlyph`: "Chat history".
  */

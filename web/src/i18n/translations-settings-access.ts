@@ -35,6 +35,10 @@ export const settingsAccessZhCN: Record<string, string> = {
   "Only admins can disable this integration": "只有管理员可以停用此集成",
   "Only admins can enable this integration": "只有管理员可以启用此集成",
   "All integrations": "所有集成",
+  // Command menu entries gated by the workspace "who can" settings.
+  "Create a team…": "创建团队…",
+  "Create new issue template…": "新建事项模板…",
+  "View workspace admins": "查看工作区管理员",
   "Only workspace owners, admins, and team owners can delete teams": "只有工作区所有者、管理员和团队所有者可以删除团队",
   "Only workspace owners, admins, and team owners can retire teams": "只有工作区所有者、管理员和团队所有者可以停用团队",
   "Can't retire the last active team in the workspace": "无法停用工作区中最后一个活跃团队",

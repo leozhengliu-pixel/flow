@@ -20,7 +20,7 @@ import { avatarColor } from '@/components/issue/avatar-color'
 import { AgentHover } from '@/components/agent/agent-hover-card'
 import { agentHoverProps } from '@/components/agent/agent-hover-props'
 import { ASSIGNEE_INVITE_ID, assigneeShortcut } from '@/lib/agent-members'
-import { openMemberInvite } from '@/lib/invite-navigation'
+import { openMemberInvite, viewerCanInvite } from '@/lib/invite-navigation'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { useI18n } from '@/i18n/i18n'
 import { IssueSLAIndicator } from '@/components/issue/issue-sla-indicator'
@@ -441,7 +441,7 @@ const ASSIGNEE_INVITE_OPTION: MyIssuesContextOption = { id: ASSIGNEE_INVITE_ID, 
 export function RowCommandPicker({ propertyLabel, label, multi = false, onSelect, options, searchLabel, searchShortcut, selectedIds, trigger, triggerClassName, kind = 'standard', hoverContent, hoverClassName, hoverPlacement }: { propertyLabel: string; label: string; multi?: boolean; onSelect: (id: string) => void | Promise<void>; options: MyIssuesContextOption[]; searchLabel: string; searchShortcut?: string; selectedIds: string[]; trigger: ReactNode; triggerClassName?: string; kind?: PropertyMenuKind; hoverContent?: ReactNode; hoverClassName?: string; hoverPlacement?: 'left' | 'below' }) {
   const assignee = propertyLabel === 'Assignee'
   // Assignee pickers: number keys on "No assignee" (0) and the rows after it, agents without a pill but with a hover card, and an invite action under "New user".
-  const rows = assignee ? [...options, ASSIGNEE_INVITE_OPTION] : options
+  const rows = assignee && viewerCanInvite() ? [...options, ASSIGNEE_INVITE_OPTION] : options
   const commandOptions = rows.map((option, index) => ({ ...option, icon: <MyIssuesOptionIcon option={option}/>, ...(option.id === ASSIGNEE_INVITE_ID ? { action: true } : option.agent ? agentHoverProps({ id: option.id, name: option.handle ?? option.label, displayName: option.label, avatarUrl: option.avatarUrl }) : {}), shortcut: option.kind === 'priority' ? option.id : option.kind === 'status' ? String(index + 1) : assignee && option.id !== ASSIGNEE_INVITE_ID ? assigneeShortcut(index) : option.shortcut }))
   return <PropertyMenu label={propertyLabel} value={options.find(option => selectedIds.includes(option.id))?.label} multiple={multi} selectedId={selectedIds[0]} selectedIds={selectedIds} options={commandOptions} kind={kind} searchPlaceholder={searchLabel} searchShortcut={searchShortcut ?? (assignee ? 'A' : undefined)} ariaLabel={label} triggerClassName={triggerClassName ?? styles.propertyTrigger} trigger={trigger} hoverContent={hoverContent} hoverClassName={hoverClassName} hoverPlacement={hoverPlacement} onChange={id => id === ASSIGNEE_INVITE_ID ? openMemberInvite() : onSelect(id)}/>
 }
@@ -477,7 +477,7 @@ function ContextPropertySub({ label, multi = false, onSelect, options, selectedI
   const choose = (id: string) => id === ASSIGNEE_INVITE_ID ? openMemberInvite() : onSelect(id)
   const command = usePropertyCommand({ open: open && people, options: items, personOptions: people, selectedIds, onSelect: option => choose(option.id), onOpenChange: setOpen })
   const selected = new Set(selectedIds)
-  const sections = multi && label === 'Labels' ? groupContextOptions(items) : [{ id: 'all', label: undefined as string | undefined, options: people ? command.filteredOptions : items }, ...(assignee && !command.query ? [{ id: 'invite', label: 'New user', options: [ASSIGNEE_INVITE_OPTION] }] : [])]
+  const sections = multi && label === 'Labels' ? groupContextOptions(items) : [{ id: 'all', label: undefined as string | undefined, options: people ? command.filteredOptions : items }, ...(assignee && !command.query && viewerCanInvite() ? [{ id: 'invite', label: 'New user', options: [ASSIGNEE_INVITE_OPTION] }] : [])]
   const row = (option: MyIssuesContextOption) => {
     const content = multi
       ? <ContextMenu.CheckboxItem className={styles.submenuItem} checked={selected.has(option.id)} onSelect={event => event.preventDefault()} onCheckedChange={() => void choose(option.id)}><span className={styles.optionCheckbox}>{selected.has(option.id) && <CheckboxMark/>}</span><MyIssuesOptionIcon option={option}/><span>{option.label}</span></ContextMenu.CheckboxItem>

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, makeIssue, project, teammate, viewer } from '@/test/fixtures'
 import type { AgentSession, Issue, IssueUpdateInput, User } from '@/types/flow'
+import { setViewerCanInvite } from '@/lib/invite-navigation'
 import { CommandMenu } from './command-menu'
 import { resetCommandContext, useRegisterCommandContext, type CommandContext } from './command-context'
 
@@ -124,6 +125,26 @@ describe('context-aware command menu', () => {
     await user.click(input())
     await user.keyboard('3')
     await waitFor(() => expect(onUpdateIssue).toHaveBeenCalledWith(first.id, { delegateId: 'app_flow' }))
+  })
+
+  it('assign page: no "Invite and assign…" for people who cannot invite (the reference app member view)', async () => {
+    setViewerCanInvite(false)
+    onTestFinished(() => setViewerCanInvite(true))
+    const { user } = setup({ kind: 'issues', source: 'detail', issues: [first] })
+    await user.click(screen.getByRole('option', { name: /Assign to…/ }))
+    expect(screen.queryByRole('option', { name: /Invite and assign…/ })).toBeNull()
+    expect(screen.queryByText('New user')).toBeNull()
+  })
+
+  it('follows the workspace "who can" settings for template commands and lists "View workspace admins"', async () => {
+    const restricted = makeBootstrap({ viewerRole: 'member', issues: [first, second] })
+    restricted.workspaceSettings = { ...restricted.workspaceSettings, templatePermission: 'admins' }
+    const { user } = setup(undefined, {}, restricted)
+    await user.type(input(), 'template')
+    expect(screen.queryByRole('option', { name: /Create new issue template/ })).toBeNull()
+    await user.clear(input())
+    await user.type(input(), 'admins')
+    expect(screen.getByRole('option', { name: /View workspace admins/ })).toBeInTheDocument()
   })
 
   it('goes back to the root page with Backspace on an empty query', async () => {

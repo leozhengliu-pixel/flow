@@ -142,11 +142,21 @@ func TestTeamMemberChangesAreAuditedOnEveryPath(t *testing.T) {
 		t.Fatalf("removal actor/team = %+v", entries[0])
 	}
 
-	// Joining and leaving a team yourself is marked self-service.
+	// Joining and leaving a team yourself is marked self-service. Leaving your
+	// last active team is refused (the reference app: "You should be a member of at least
+	// one active team") and writes no audit entry.
 	authRequest[any](t, person.client, http.MethodPut, membershipURL(f.teamID, person.user.ID), map[string]any{"member": true, "role": "member"}, "", http.StatusNoContent)
+	if code, message := teamMembershipRequest(t, person.client, membershipURL(f.teamID, person.user.ID), false, "member"); code != http.StatusConflict || message != errLastActiveTeam.Error() {
+		t.Fatalf("leaving the last active team = %d %q", code, message)
+	}
+	if entries = f.auditFor(t, person.user.ID); entries[0].Action != "added" {
+		t.Fatalf("refused leave was audited: %+v", entries[0])
+	}
+	second := authRequest[domain.Team](t, f.admin, http.MethodPost, f.server.URL+"/api/workspaces/test-workspace/teams", map[string]any{"name": "Second", "key": "SEC"}, "", http.StatusCreated)
+	authRequest[any](t, f.admin, http.MethodPut, membershipURL(second.ID, person.user.ID), map[string]any{"member": true, "role": "member"}, "", http.StatusNoContent)
 	authRequest[any](t, person.client, http.MethodPut, membershipURL(f.teamID, person.user.ID), map[string]any{"member": false, "role": "member"}, "", http.StatusNoContent)
 	entries = f.auditFor(t, person.user.ID)
-	requireAudit(t, entries[1], "added", map[string]any{"selfService": true, "source": "manual"})
+	requireAudit(t, entries[2], "added", map[string]any{"selfService": true, "source": "manual"})
 	requireAudit(t, entries[0], "removed", map[string]any{"selfService": true})
 
 	// Creating a team makes the creator its owner: audited.

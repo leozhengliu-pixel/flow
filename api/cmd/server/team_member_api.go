@@ -297,6 +297,8 @@ func writeTeamMemberError(w http.ResponseWriter, err error, kept *domain.TeamMem
 		writeJSON(w, http.StatusConflict, body)
 	case errors.Is(err, store.ErrInvalidTeamMemberOrigin):
 		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, errLastActiveTeam):
+		writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error(), "code": "LAST_ACTIVE_TEAM"})
 	default:
 		respondMutation(w, err, http.StatusNoContent, nil)
 	}
@@ -320,6 +322,27 @@ func (s *server) changeTeamMember(r *http.Request, workspace, workspaceID string
 	if ownerRoleChange && !workspaceAdminRole(workspaceRole) && actorTeamRole != "owner" && !request.KeepOwners {
 		return store.TeamMembershipChangeResult{}, errTeamOwnerRequired
 	}
+	// The reference app: "You should be a member of at least one active team". Nobody takes
+	// themselves out of their last active team; admins may still remove someone
+	// else, as the reference app's team member list allows. The dry run keeps the store's
+	// own refusals (origin mismatch, protected owners) first.
+	if !request.Member && isMember && request.UserID == actorID {
+		preview := request
+		preview.DryRun = true
+		planned, err := s.store.ChangeTeamMembership(r.Context(), preview)
+		if err != nil {
+			return planned, err
+		}
+		if len(planned.Changes) > 0 {
+			last, err := s.store.LeavingLastActiveTeam(r.Context(), workspaceID, request.TeamID, actorID)
+			if err != nil {
+				return store.TeamMembershipChangeResult{}, fmt.Errorf("could not verify team membership: %w", err)
+			}
+			if last {
+				return store.TeamMembershipChangeResult{}, errLastActiveTeam
+			}
+		}
+	}
 	result, err := s.store.ChangeTeamMembership(r.Context(), request)
 	if err == nil && !request.DryRun {
 		declared := request.Origin
@@ -332,6 +355,8 @@ func (s *server) changeTeamMember(r *http.Request, workspace, workspaceID string
 }
 
 var errTeamOwnerRequired = errors.New("Team owner access required to change owner roles")
+
+var errLastActiveTeam = errors.New("You should be a member of at least one active team")
 
 // teamForMemberRequest resolves {id} (team id or key) among the teams the
 // caller can see, applying API key team restrictions.

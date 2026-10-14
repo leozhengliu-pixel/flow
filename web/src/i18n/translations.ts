@@ -2986,7 +2986,7 @@ export const zhCN: Record<string, string> = {
   Assigned: "分配给我",
   Agent: "Agent",
   "Agent personalization": "Agent 个性化",
-  "AI & Agents": "AI 与 Agent",
+  "AI & agents": "AI 与 Agent",
   All: "全部",
   "All issues": "所有事项",
   "All projects": "所有项目",
@@ -5039,7 +5039,7 @@ Object.assign(zhCN, {
 
 // Settings audit: strings that were still English in Chinese mode (2026-09-29).
 Object.assign(zhCN, {
-  // AI & Agents, Coding sessions, Code Intelligence, Triage Intelligence
+  // AI & agents, Coding sessions, Code Intelligence, Triage Intelligence
   "Enable coding sessions": "启用编码会话",
   "Let Flow Agent write code and open pull requests when assigned or asked to implement an issue.":
     "指派或请求 Flow Agent 实现事项时，允许它编写代码并创建合并请求。",

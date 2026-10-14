@@ -319,7 +319,10 @@ adds a member or changes their role; send `"origin":"sync"` from a sync.
 `origin=sync` it removes only a membership with that origin (`409
 TEAM_MEMBER_ORIGIN_MISMATCH` with the actual `origin` otherwise) and never an
 owner (`409 TEAM_OWNER_PROTECTED`). `dryRun=true` writes nothing and returns
-`{dryRun, removed, kept}`, where `kept` says why a member would stay.
+`{dryRun, removed, kept}`, where `kept` says why a member would stay. Nobody
+can remove themselves from their last active team (`409 LAST_ACTIVE_TEAM`,
+"You should be a member of at least one active team"), by this endpoint or by
+leaving the team in Flow; an admin may still remove someone else.
 
 `POST /api/teams/{id}/members/sync` makes a team match a directory list
 (`members`: user ids or emails). It adds missing users with `origin` (default

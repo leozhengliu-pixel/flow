@@ -3,7 +3,7 @@ import { NoAssigneeIcon } from '@/components/issue/issue-icons'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { ASSIGNEE_INVITE_ID, assigneeShortcut } from '@/lib/agent-members'
 import { AgentHover } from '@/components/agent/agent-hover-card'
-import { openMemberInvite } from '@/lib/invite-navigation'
+import { openMemberInvite, viewerCanInvite } from '@/lib/invite-navigation'
 import { useMemo } from 'react'
 import type { User } from '@/types/flow'
 import { UserAvatar } from '@/components/ui/user-avatar'
@@ -24,7 +24,7 @@ export function PeopleMenuItems({ users, selectedId, selectedIds, onSelect, empt
   const options = useMemo(() => [
     ...(emptyLabel ? [{ id: '', label: emptyLabel, person: undefined as User | undefined, entity: false, shortcut: assignee ? '0' : undefined, groupLabel: undefined as string | undefined }] : []),
     ...users.map((user, index) => ({ id: user.id, label: user.displayName || user.name, keywords: personSearchText(user), person: user as User | undefined, entity: true, shortcut: assignee ? assigneeShortcut(index + 1) : undefined, groupLabel: undefined as string | undefined })),
-    ...(assignee ? [{ id: ASSIGNEE_INVITE_ID, label: 'Invite and assign…', person: undefined as User | undefined, entity: false, shortcut: undefined as string | undefined, groupLabel: 'New user' as string | undefined }] : []),
+    ...(assignee && viewerCanInvite() ? [{ id: ASSIGNEE_INVITE_ID, label: 'Invite and assign…', person: undefined as User | undefined, entity: false, shortcut: undefined as string | undefined, groupLabel: 'New user' as string | undefined }] : []),
   ], [assignee, emptyLabel, users])
   const checked = selectedIds ?? (selectedId === undefined ? [] : [selectedId])
   return <SearchableMenuItems options={options} className="people-menu-body" searchClassName="property-command-search" itemClassName={itemClassName} searchLabel={assignee ? 'Assign to…' : 'Search people'} selectedId={selectedId} contextMenu={contextMenu}

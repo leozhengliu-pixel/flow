@@ -570,7 +570,7 @@ function TeamOverview({
         "recurring-issues",
       ])}
       {group(t("Workflow"), ["statuses", "workflow", "triage", "cycles"])}
-      <TeamSection title={t("AI & Agents")}>
+      <TeamSection title={t("AI & agents")}>
         <div className="team-overview-list">
           {["agents", "agent-connectors", "agent-skills"].map((id) => {
             const item = SECTIONS.find((value) => value.id === id)!;

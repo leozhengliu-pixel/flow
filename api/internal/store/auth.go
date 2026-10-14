@@ -941,6 +941,39 @@ func (s *SQLiteStore) ListTeamMembers(ctx context.Context, workspaceID string) (
 	return result, rows.Err()
 }
 
+// LeavingLastActiveTeam reports whether leaving teamID would leave the user in
+// no active (neither retired nor deleted) team of the workspace.
+func (s *SQLiteStore) LeavingLastActiveTeam(ctx context.Context, workspaceID, teamID, userID string) (bool, error) {
+	data, _, ok := s.workspaceByID(workspaceID)
+	if !ok {
+		return false, ErrAuthForbidden
+	}
+	active := map[string]bool{}
+	for _, team := range data.Teams {
+		if team.RetiredAt == nil && team.ArchivedAt == nil {
+			active[team.ID] = true
+		}
+	}
+	if !active[teamID] {
+		return false, nil
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT team_id FROM team_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return false, err
+		}
+		if id != teamID && active[id] {
+			return false, nil
+		}
+	}
+	return true, rows.Err()
+}
+
 // TeamMembership performs an indexed point read for permission checks on a
 // single member. The boolean is false when the user is not in the team.
 func (s *SQLiteStore) TeamMembership(ctx context.Context, workspaceID, teamID, userID string) (domain.TeamMember, bool, error) {

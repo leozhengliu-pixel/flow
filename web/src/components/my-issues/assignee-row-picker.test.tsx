@@ -12,8 +12,8 @@ import { teammate, viewer } from '@/test/fixtures'
 import { MyIssuesBulkActionBar } from './my-issues-bulk-action-bar'
 import { IssueContextMenu, RowCommandPicker, type MyIssuesRowData } from './my-issues-list'
 
-const invite = vi.hoisted(() => ({ openMemberInvite: vi.fn() }))
-vi.mock('@/lib/invite-navigation', () => invite)
+const invite = vi.hoisted(() => ({ openMemberInvite: vi.fn(), viewerCanInvite: () => true }))
+vi.mock('@/lib/invite-navigation', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/invite-navigation')>(), ...invite }))
 
 class TestResizeObserver { observe() {} unobserve() {} disconnect() {} }
 Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, value: TestResizeObserver })

@@ -14,7 +14,7 @@ import { toast } from '@/lib/toast'
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { agentsAvailable, ASSIGNEE_INVITE_ID, assigneeCandidates, assigneeShortcut } from '@/lib/agent-members'
-import { openMemberInvite } from '@/lib/invite-navigation'
+import { openMemberInvite, viewerCanInvite } from '@/lib/invite-navigation'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { useIssueSearch } from '@/components/issue/use-issue-search'
@@ -290,7 +290,8 @@ function issueCommands({ context, data, page, query, handlers, close, t, refs, i
           const delegated = Boolean(user.app) && issues.every(issue => issue.delegate?.id === user.id)
           return { id: user.id, label: user.displayName || user.name, entity: true, keywords: `${user.name} ${user.email ?? ''}${user.app ? ' agent' : ''}`, icon: <UserAvatar className="command-avatar" avatarUrl={user.avatarUrl} name={user.displayName || user.name}/>, shortcut: assigneeShortcut(index + 1), current: user.app ? delegated : current === user.id, select: choose(() => apply(user.app ? { delegateId: delegated ? '' : user.id } : { assigneeId: user.id })) }
         }),
-        { id: ASSIGNEE_INVITE_ID, label: 'Invite and assign…', icon: <FlowGlyph className="command-invite-icon" name="invitePlane" size={16}/>, keywords: 'invite member user new', group: 'New user', select: choose(async () => openMemberInvite()) },
+        // The reference app hides the invite row from people who cannot invite.
+        ...(viewerCanInvite() ? [{ id: ASSIGNEE_INVITE_ID, label: 'Invite and assign…', icon: <FlowGlyph className="command-invite-icon" name="invitePlane" size={16}/>, keywords: 'invite member user new', group: 'New user', select: choose(async () => openMemberInvite()) }] : []),
       ]
     }
     if (page.id === 'labels') {

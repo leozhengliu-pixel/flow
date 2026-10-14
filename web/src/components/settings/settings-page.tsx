@@ -16,6 +16,7 @@ import { ApplicationPolicySettings, DataPrivacyDialog } from './application-poli
 import type { IntegrationProvider } from '@/lib/app-routes';
 import { adminHintsApply, hiddenSettingsMessage, isPersonalSettingsPage, isWorkspaceAdmin, roleAllowed, teamReadOnlyNotice, teamSettingsAccess, workspaceReadOnlyNotice, workspaceSettingsAccess } from '@/lib/settings-access';
 import { AdminOnlyHint } from './admin-only-hint';
+import { EnabledIntegrationNav } from './enabled-integration-nav';
 import { useSecuritySetting } from '@/hooks/use-security-setting';
 import { securityPermissionLabel, type SecuritySettingKey } from '@/lib/security-setting';
 import {
@@ -34,6 +35,7 @@ import {
   Upload,
   KeyRound,
   KeyboardOff,
+  LayoutGrid,
   MonitorX,
   LayoutTemplate,
   Link2,
@@ -41,7 +43,6 @@ import {
   MessageCircleQuestion,
   MoreHorizontal,
   PanelTop,
-  Plug,
   Plus,
   Radio,
   Rocket,
@@ -395,7 +396,7 @@ const NAV: { title: string; items: NavItem[] }[] = [
   {
     title: "Features",
     items: [
-      { id: "ai", label: "AI & Agents", icon: AiBurstGlyph },
+      { id: "ai", label: "AI & agents", icon: AiBurstGlyph },
       { id: "loops", label: "Loops", icon: LoopsGlyph },
       { id: "initiatives", label: "Initiatives", icon: Zap },
       { id: "documents", label: "Documents", icon: FileText },
@@ -407,9 +408,10 @@ const NAV: { title: string; items: NavItem[] }[] = [
     ],
   },
   {
-    // The reference app: its own section; admins see "All integrations", members "Integrations".
+    // The reference app: its own section. Members see "Integrations"; admins "All
+    // integrations" followed by each enabled integration (EnabledIntegrationNav).
     title: "Integrations",
-    items: [{ id: "integrations", label: "Integrations", icon: Plug }],
+    items: [{ id: "integrations", label: "Integrations", icon: LayoutGrid }],
   },
   {
     title: "Administration",
@@ -685,7 +687,16 @@ export function SettingsPage(props: SettingsPageProps) {
             ) : visible.map((section) => (
               <section key={section.title}>
                 <h2>{t(section.title)}</h2>
-                {section.items.map((item) => (
+                {section.title === "Integrations" && isWorkspaceAdmin(props.data) ? (
+                  <EnabledIntegrationNav
+                    data={props.data}
+                    onIntegrationsPage={props.page === "integrations"}
+                    provider={props.integrationProvider}
+                    slug={props.integrationSlug}
+                    onOpenAll={() => { props.onNavigate("integrations"); setMobileNav(false); }}
+                    onOpen={(target) => { props.onOpenIntegration(target); setMobileNav(false); }}
+                  />
+                ) : section.items.map((item) => (
                   <SettingsNavButton
                     key={item.id}
                     item={item}
@@ -2287,7 +2298,7 @@ function SecurityPage({
         {toggle("Prevent guests from interacting with agents in the workspace", "preventGuestAgents", "Restrict agent invocation to full workspace members only")}
       </Section>
       <ApplicationPolicySettings admin={data.viewerRole === "admin" || data.viewerRole === "owner"} />
-      <Section grouped title="AI & Agents">
+      <Section grouped title="AI & agents">
         <Group title="Web search" description="Let Flow Agent use current public information">
           {/* Web access is on unless an admin turns it off (like the reference app's "Enable web access"). */}
           <Row title="Enable Flow Agent web search" description="Allow Flow Agent to search the public web for current information and cite sources">
@@ -2623,7 +2634,7 @@ const FEATURE_COPY: Partial<
     ],
   },
   ai: {
-    title: "AI & Agents",
+    title: "AI & agents",
     description: "Configure AI features and agents for your workspace.",
     rows: [
       ["Enable AI features", "Allow members to use Flow AI"],

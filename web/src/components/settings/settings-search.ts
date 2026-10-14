@@ -470,7 +470,7 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
   },
   {
     id: 'ai',
-    title: 'AI & Agents',
+    title: 'AI & agents',
     section: 'Features',
     keywords: ['flow agent', 'ai', 'coding sessions', 'loops'],
     groups: [
