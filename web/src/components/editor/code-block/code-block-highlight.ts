@@ -180,7 +180,7 @@ export function highlightCode(code: string, language: string | null | undefined)
   const raw = String(language ?? '').trim().toLowerCase()
   try {
     const id = !raw || raw === 'auto' ? detectLanguage(code) ?? undefined : resolveLanguage(raw)
-    if (!id || id === 'plaintext') return []
+    if (!id || id === 'plaintext' || id === 'mermaid') return []
     const tokens = refine(code, id, tokenRanges(hljs.highlight(code, { language: id, ignoreIllegals: true }).value))
     return addIdentifiers(code, id, tokens)
   } catch {

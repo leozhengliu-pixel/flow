@@ -66,19 +66,9 @@ export const DescriptionDiagram = Node.create({
       }
     }
   },
-  markdownTokenName: 'descriptionDiagram',
-  parseMarkdown: (token, helpers) => helpers.createNode('diagram', { source: String(token.text ?? defaultSource) }),
+  // Older content only: new diagrams are Mermaid code blocks (```mermaid parses as one), so this node exports to the
+  // same fence and comes back as a code block.
   renderMarkdown: node => `\`\`\`mermaid\n${String(node.attrs?.source || defaultSource).trim()}\n\`\`\`\n`,
-  markdownTokenizer: {
-    name: 'descriptionDiagram',
-    level: 'block' as const,
-    start: (src: string) => src.startsWith('```mermaid') ? 0 : -1,
-    tokenize(src: string) {
-      const match = src.match(/^```mermaid[ \t]*\n([\s\S]*?)\n```[ \t]*(?:\n|$)/)
-      if (!match) return undefined
-      return { type: 'descriptionDiagram', raw: match[0], text: match[1] }
-    },
-  },
 })
 
 async function renderMermaid(target: HTMLElement, source: string) {

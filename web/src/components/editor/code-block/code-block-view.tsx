@@ -8,6 +8,7 @@ import { TextSelection } from '@tiptap/pm/state'
 import { Toggle } from '@/components/ui/toggle'
 import { useI18n } from '@/i18n/i18n'
 import { updateCodeBlockSettings, useCodeBlockSettings } from './code-block-settings'
+import { DiagramBlockView } from './diagram-block-view'
 import { CODE_LANGUAGES, detectLanguage, languageLabel, resolveLanguage } from './languages'
 import './code-block.css'
 
@@ -60,7 +61,7 @@ function LanguagePicker({ detected, editable, language, onSelect }: { detected: 
               <Fragment key={option.id}>
               <button aria-checked={option.id === current} className="flow-code-block__option" data-active={index === active} onClick={() => choose(option.id)} onPointerMove={() => setActive(index)} role="menuitemradio" type="button">
                 <span>{option.label}</span>
-                {option.id === current && <Check size={14}/>}
+                {option.id === current ? <Check size={14}/> : option.id === 'mermaid' && <FlowGlyph name="diagram" size={14}/>}
               </button>
               {option.id === AUTO && options.length > 1 && <div className="flow-code-block__divider" role="separator"/>}
               </Fragment>
@@ -112,7 +113,13 @@ function CopyButton({ text }: { text: string }) {
 }
 
 /** A fenced code block with the reference app's chrome: language picker, settings, copy, line numbers and a collapsed long-block view. */
-export function CodeBlockView({ editor, getPos, node }: ReactNodeViewProps) {
+export function CodeBlockView(props: ReactNodeViewProps) {
+  // A Mermaid block is a diagram (the reference app switches the block in place when its language is set to Mermaid).
+  if (resolveLanguage(props.node.attrs.language as string | null) === 'mermaid') return <DiagramBlockView {...props}/>
+  return <PlainCodeBlockView {...props}/>
+}
+
+function PlainCodeBlockView({ editor, getPos, node }: ReactNodeViewProps) {
   const { t } = useI18n()
   const { lineNumbers, wrap } = useCodeBlockSettings()
   const [showAll, setShowAll] = useState(false)

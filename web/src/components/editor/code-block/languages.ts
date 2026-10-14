@@ -52,6 +52,8 @@ const LANGUAGES: CodeLanguage[] = [
   { id: 'lua', label: 'Lua' },
   { id: 'makefile', label: 'Makefile', keywords: 'make mk' },
   { id: 'markdown', label: 'Markdown', keywords: 'md' },
+  // Not a highlight.js language: a Mermaid block renders as a diagram (diagram-block-view).
+  { id: 'mermaid', label: 'Mermaid', keywords: 'diagram flowchart sequence' },
   { id: 'nginx', label: 'Nginx', keywords: 'conf' },
   { id: 'objectivec', label: 'Objective-C', keywords: 'objc' },
   { id: 'php', label: 'PHP' },
@@ -102,7 +104,7 @@ export const AUTO_DETECT_LIMIT = 10_000
 export const HIGHLIGHT_LIMIT = 50_000
 
 // Languages whose definitions match too loosely to be guessed from a snippet (css claims JSON, TypeScript, Python ...).
-const NOT_GUESSED = new Set(['plaintext', 'css', 'scss', 'less', 'shell', 'excel', 'ini', 'markdown', 'makefile', 'wasm', 'nginx', 'vbnet', 'dockerfile', 'haskell', 'clojure', 'elixir'])
+const NOT_GUESSED = new Set(['plaintext', 'css', 'scss', 'less', 'shell', 'excel', 'ini', 'markdown', 'makefile', 'wasm', 'nginx', 'vbnet', 'dockerfile', 'haskell', 'clojure', 'elixir', 'mermaid'])
 export const DETECT_SUBSET = CODE_LANGUAGES.map(language => language.id).filter(id => !NOT_GUESSED.has(id))
 /** Snippets shorter than this are never guessed. */
 export const DETECT_MIN_LENGTH = 12

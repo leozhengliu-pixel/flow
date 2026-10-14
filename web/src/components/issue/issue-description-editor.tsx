@@ -378,7 +378,12 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       { id: 'media', group: 'media', label: 'Insert media…', keywords: 'image picture photo video screenshot', icon: ImageIcon, run: execute(() => pickDescriptionFiles(files => insertPickedFiles(editor.view, files, uploadImageRef.current), 'image/*,video/*')) },
       { id: 'file', group: 'media', label: 'Attach files…', keywords: 'attachment upload pdf', shortcut: '⌘⇧U', icon: Paperclip, run: execute(() => pickDescriptionFiles(files => insertPickedFiles(editor.view, files, uploadImageRef.current))) },
       { id: 'code-block', group: 'blocks', label: 'Code block', keywords: 'source snippet', shortcut: '⌘⇧\\', icon: Code2, run: execute(() => editor.chain().focus().toggleCodeBlock().run()) },
-      { id: 'diagram', group: 'blocks', label: 'Diagram', keywords: 'mermaid flowchart sequence', icon: Workflow, run: execute(() => editor.chain().focus().insertContent({ type: 'diagram' }).run()) },
+      { id: 'diagram', group: 'blocks', label: 'Diagram', keywords: 'mermaid flowchart sequence', icon: Workflow, run: execute(() => {
+        // The reference app's diagram is a Mermaid code block, opened on its (empty) source.
+        const { $from } = editor.state.selection
+        if ($from.parent.isTextblock && !$from.parent.textContent) editor.chain().focus().setCodeBlock({ language: 'mermaid' }).run()
+        else editor.chain().focus().insertContent({ type: 'codeBlock', attrs: { language: 'mermaid' } }).run()
+      }) },
       { id: 'collapse', group: 'blocks', label: 'Collapsible section', keywords: 'details toggle fold', shortcut: '⌘⇧6', icon: ChevronsDownUp, run: execute(() => editor.chain().focus().setDetails().run()) },
       { id: 'quote', group: 'blocks', label: 'Blockquote', keywords: 'blockquote citation', shortcut: '⌥⇧.', icon: Quote, run: execute(() => editor.chain().focus().toggleBlockquote().run()) },
       { id: 'callout', group: 'blocks', label: 'Callout', keywords: 'aside note warning info', icon: Lightbulb, run: execute(() => {
@@ -462,6 +467,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     editor.view.dom.setAttribute('aria-label', descriptionLabel)
     editor.storage.image.upload = uploadImageRef.current
     editor.storage.image.onComment = selection => selectionActions?.onComment?.(selection)
+    if (editor.storage.codeBlock) editor.storage.codeBlock.onComment = selectionActions?.onComment ? selection => selectionActions.onComment?.(selection) : undefined
   }, [descriptionLabel, editor, onInsertImage, selectionActions])
   useEffect(() => {
     selectedRef.current = 0
