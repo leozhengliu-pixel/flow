@@ -509,7 +509,7 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	} else {
 		data, ok = s.store.WorkspaceSettingsMetadata(key)
 		if ok && teamManagementRequest(r) {
-			teamID := teamIDFromWorkspacePath(r.URL.Path)
+			teamID := s.store.ResolveTeamID(key, teamIDFromWorkspacePath(r.URL.Path))
 			if settings, found := s.store.TeamSettingsFor(key, teamID); found {
 				data.TeamSettings = map[string]domain.TeamSettings{teamID: settings}
 			}
@@ -561,7 +561,7 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		return false
 	}
 	if teamManagementRequest(r) && !workspaceAdminRole(role) && !membershipSelfServiceRequest(r, user.ID) {
-		teamID := teamIDFromWorkspacePath(r.URL.Path)
+		teamID := s.store.ResolveTeamID(key, teamIDFromWorkspacePath(r.URL.Path))
 		teamRole, _ := s.store.TeamRole(r.Context(), data.Workspace.ID, teamID, user.ID)
 		allowed := teamOperationPermission(data.TeamSettings[teamID], r)
 		if !teamOperationAllowed(data.TeamSettings[teamID], allowed, teamRole, role) {
@@ -573,7 +573,7 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	// admins are automatically considered team owners"), so they may add
 	// themselves to a private team from its member settings.
 	if joining, selfService := membershipSelfServiceAction(r, user.ID); selfService && joining && !workspaceAdminRole(role) {
-		teamID := teamIDFromWorkspacePath(r.URL.Path)
+		teamID := s.store.ResolveTeamID(key, teamIDFromWorkspacePath(r.URL.Path))
 		settings := data.TeamSettings[teamID]
 		if role == "guest" || strings.EqualFold(settings.Access, "private") || strings.EqualFold(settings.Access, "restricted") || strings.EqualFold(settings.MembershipRestriction, "members") || strings.EqualFold(settings.MembershipRestriction, "owners") {
 			writeError(w, http.StatusForbidden, "This team requires an invitation")
@@ -888,7 +888,7 @@ func guestRestrictedPath(path string) bool {
 
 func (s *server) resourceAllowed(r *http.Request, workspace string, userID string) bool {
 	if strings.HasSuffix(r.URL.Path, "/default-favorites") {
-		teamID := teamIDFromWorkspacePath(r.URL.Path)
+		teamID := s.store.ResolveTeamID(workspace, teamIDFromWorkspacePath(r.URL.Path))
 		data, access, err := s.requestIssueQueryAccess(r)
 		if err != nil {
 			return false
@@ -937,7 +937,7 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		if err != nil {
 			return false
 		}
-		teamID := teamIDFromWorkspacePath(r.URL.Path)
+		teamID := s.store.ResolveTeamID(workspace, teamIDFromWorkspacePath(r.URL.Path))
 		if teamID == "" {
 			return true
 		}
@@ -1644,13 +1644,14 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		}
 		// Team settings (states, labels, templates, members...) stay open to
 		// admins; the team page's pinned resources are content.
-		if !teamRowAllowed(parts[2]) || len(parts) >= 4 && (parts[3] == "resources" || parts[3] == "resource-sections") && !teamAllowed(parts[2]) {
+		teamID := s.store.ResolveTeamID(workspace, parts[2])
+		if !teamRowAllowed(teamID) || len(parts) >= 4 && (parts[3] == "resources" || parts[3] == "resource-sections") && !teamAllowed(teamID) {
 			return false
 		}
 		if r.Method == http.MethodGet && len(parts) == 4 && parts[3] == "resources" {
 			// Carry only this team's authorized resource rows into the handler,
 			// rather than projecting workspace metadata a second time.
-			*r = *r.WithContext(context.WithValue(r.Context(), teamResourcesReadKey{}, projectTeamResources(data, parts[2])))
+			*r = *r.WithContext(context.WithValue(r.Context(), teamResourcesReadKey{}, projectTeamResources(data, teamID)))
 		}
 		return true
 	case "notifications":
@@ -1664,7 +1665,7 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		return err == nil
 	case "workspaces":
 		if len(parts) >= 5 && parts[3] == "teams" {
-			return teamRowAllowed(parts[4])
+			return teamRowAllowed(s.store.ResolveTeamID(workspace, parts[4]))
 		}
 	}
 	return true

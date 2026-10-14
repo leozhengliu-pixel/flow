@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"flow/api/internal/domain"
@@ -30,7 +31,7 @@ func TestMemberRoleMatchesReference(t *testing.T) {
 	admin := authClient(t)
 	authRequest[domain.AuthSession](t, admin, http.MethodPost, server.URL+"/api/auth/login", map[string]string{"email": "admin@example.test", "password": "test-password"}, "", http.StatusOK)
 	bootstrap := authRequest[domain.Bootstrap](t, admin, http.MethodGet, server.URL+"/api/bootstrap", nil, "test-workspace", http.StatusOK)
-	teamID := bootstrap.Teams[0].ID
+	teamID, teamKey := bootstrap.Teams[0].ID, bootstrap.Teams[0].Key
 	authRequest[any](t, admin, http.MethodPatch, server.URL+"/api/workspace/preferences", map[string]any{"labelPermission": "members", "apiKeyPermission": "members"}, "test-workspace", http.StatusOK)
 	member := inviteTeamPermissionActor(t, server.URL, admin, "Workspace member", "workspace-member@example.test", "member", []string{teamID})
 
@@ -136,6 +137,10 @@ func TestMemberRoleMatchesReference(t *testing.T) {
 		}
 		if got := status(member.client, http.MethodDelete, "/api/teams/"+teamID+"/members/"+member.user.ID, nil, "test-workspace"); got != http.StatusConflict {
 			t.Fatalf("removing yourself through the team member API = %d, want 409", got)
+		}
+		// The route takes the team key too; the permission gate must resolve it like the handler does.
+		if got := status(member.client, http.MethodDelete, "/api/teams/"+strings.ToLower(teamKey)+"/members/"+member.user.ID, nil, "test-workspace"); got != http.StatusConflict {
+			t.Fatalf("removing yourself by team key = %d, want 409", got)
 		}
 		// The reference app's team member list lets an admin remove someone from their only team.
 		if code, message := teamMembershipRequest(t, admin, url, false, "member"); code != http.StatusNoContent {

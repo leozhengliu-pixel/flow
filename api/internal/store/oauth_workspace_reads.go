@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"flow/api/internal/domain"
@@ -105,6 +106,31 @@ func (s *SQLiteStore) TeamSettingsFor(workspace, teamID string) (domain.TeamSett
 	}
 	settings, found := data.TeamSettings[teamID]
 	return settings, found
+}
+
+// ResolveTeamID maps a team route's {id} segment, which may be the team key
+// ("ENG", any case), to the team's id. Unknown values come back unchanged.
+func (s *SQLiteStore) ResolveTeamID(workspace, idOrKey string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if workspace == "" {
+		workspace = s.lastWorkspaceKey
+	}
+	data, ok := s.workspaces[workspace]
+	if !ok || idOrKey == "" {
+		return idOrKey
+	}
+	for _, team := range data.Teams {
+		if team.ID == idOrKey {
+			return idOrKey
+		}
+	}
+	for _, team := range data.Teams {
+		if strings.EqualFold(team.Key, idOrKey) {
+			return team.ID
+		}
+	}
+	return idOrKey
 }
 
 func (s *SQLiteStore) TrashSnapshot(workspace string) []domain.TrashEntry {
