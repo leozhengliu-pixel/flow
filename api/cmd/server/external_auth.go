@@ -264,6 +264,7 @@ func (s *server) finishOIDC(w http.ResponseWriter, r *http.Request) {
 	}
 	clearExternalState(w, r)
 	setSessionCookie(w, r, sessionToken, session.ExpiresAt)
+	s.afterSignIn(w, r, session)
 	http.Redirect(w, r, oidcSuccessRedirect(s.externalAuth.appURL, state, r), http.StatusFound)
 }
 
@@ -351,6 +352,7 @@ func (s *server) finishSAML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	setSessionCookie(w, r, token, flowSession.ExpiresAt)
+	s.afterSignIn(w, r, flowSession)
 	http.Redirect(w, r, s.externalAuth.appURL, http.StatusFound)
 }
 

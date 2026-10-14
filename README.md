@@ -165,6 +165,9 @@ Flow reads configuration from environment variables passed to the API process.
 | `FLOW_SMTP_USERNAME` | unset | SMTP authentication username. |
 | `FLOW_SMTP_PASSWORD` | unset | SMTP authentication password. |
 | `FLOW_SMTP_FROM` | unset | Sender address for account emails. |
+| `FLOW_ONBOARDING_EMAILS` | `true` | Send new accounts "Welcome to Flow" and its follow-up; `false` turns both off. Login alerts, invitations and notifications are not affected. |
+| `FLOW_ONBOARDING_MCP_DELAY` | `168h` | Time after the welcome email when "Connect Flow to your AI tools with MCP" is sent; `0` turns the follow-up off. Recipients can unsubscribe in one click. |
+| `FLOW_SUPPORT_EMAIL` | unset | Reply-To and help address named in onboarding emails. |
 | `FLOW_COOKIE_SECURE` | `false` | Force secure authentication cookies. Set to `true` in production. |
 | `FLOW_DEV_AUTH_TOKENS` | `false` | Include account action tokens in development responses. Enable only for isolated local development. |
 | `FLOW_TRUST_PROXY_HEADERS` | `false` | Trust forwarded client information from a controlled reverse proxy. |

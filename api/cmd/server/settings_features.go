@@ -1672,18 +1672,23 @@ func (s *server) updateOAuthApplication(w http.ResponseWriter, r *http.Request) 
 
 func (s *server) deleteOAuthApplication(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	var deleted domain.OAuthApplication
+	deletedFrom := ""
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "oauth_application.deleted", id, nil, func(data *domain.Bootstrap) error {
-		before := len(data.OAuthApplications)
-		data.OAuthApplications = slices.DeleteFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == id })
-		if before == len(data.OAuthApplications) {
+		index := slices.IndexFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == id })
+		if index < 0 {
 			return errNotFound
 		}
+		deleted, deletedFrom = data.OAuthApplications[index], data.Workspace.Name
+		data.OAuthApplications = slices.Delete(data.OAuthApplications, index, index+1)
 		return nil
 	})
 	if err != nil {
 		respondMutation(w, err, http.StatusNoContent, nil)
 		return
 	}
+	// The application's tokens are gone with it; its creator hears so by email.
+	s.notifyApplicationRevoked(context.WithoutCancel(r.Context()), deleted, deletedFrom)
 	w.WriteHeader(http.StatusNoContent)
 }
 

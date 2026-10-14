@@ -74,6 +74,7 @@ func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error 
 	s.processDueWebhookDeliveries(ctx, now)
 	if sweepSettings {
 		s.reconcileAllApplicationWebhooks(ctx)
+		s.sendDueOnboardingEmails(ctx, now)
 	}
 	for _, key := range s.store.WorkspaceKeys() {
 		s.sweepAppUserNotifications(ctx, key, now)

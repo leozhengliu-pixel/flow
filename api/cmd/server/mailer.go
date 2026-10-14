@@ -26,11 +26,16 @@ import (
 
 type smtpMailer struct {
 	host, port, username, password, from, appURL string
+	// transport replaces the SMTP connection (tests capture mail with it).
+	transport func(envelope string, to []string, message []byte) error
 }
 
 // mailMessage is one outgoing email. HTML is optional: without it the message is a single text/plain part.
 type mailMessage struct {
 	To, ReplyTo, Subject, Text, HTML string
+	// ListUnsubscribe is the List-Unsubscribe URL; OneClick adds RFC 8058's List-Unsubscribe-Post.
+	ListUnsubscribe string
+	OneClick        bool
 }
 
 // mailSenderName is the From display name when FLOW_SMTP_FROM is a bare address.
@@ -74,26 +79,17 @@ func (m *smtpMailer) sendInvitation(email, workspace string, inviter domain.User
 	return m.deliver(message)
 }
 
-func (m *smtpMailer) sendNotification(email, workspaceKey, identifier, title, body string) error {
-	subject := identifier + " " + title
-	link := m.appURL + "/" + url.PathEscape(workspaceKey) + "/issue/" + url.PathEscape(identifier)
-	return m.send(email, subject, body, link)
-}
-
 // send delivers a plain-text email whose body ends with link.
 func (m *smtpMailer) send(to, subject, body, link string) error {
 	return m.deliver(mailMessage{To: to, Subject: subject, Text: body + "\r\n\r\n" + link + "\r\n"})
 }
 
-// invitationProduct describes Flow to someone who has not used it; the invitation's body and preheader start with it.
-const invitationProduct = "Flow brings your team's issues, projects, code reviews, and agents together in one place."
-
 // emailFontStack is the body font of Flow's HTML emails: Inter (served by the Flow instance) with system fallbacks.
 const emailFontStack = `Inter,"SF Pro",-apple-system,BlinkMacSystemFont,ui-sans-serif,"Segoe UI",Roboto,Oxygen,Ubuntu,Cantarell,"Open Sans","Helvetica Neue",sans-serif`
 
-// invitationEmailOutlook is the head block that keeps PNG images crisp in Outlook. html/template drops comments, so
+// emailOutlookHead is the head block that keeps PNG images crisp in Outlook. html/template drops comments, so
 // the conditional comment is inserted as trusted markup.
-const invitationEmailOutlook = template.HTML(`<!--[if gte mso 9]>
+const emailOutlookHead = template.HTML(`<!--[if gte mso 9]>
       <xml>
         <o:OfficeDocumentSettings>
           <o:AllowPNG/>
@@ -102,17 +98,47 @@ const invitationEmailOutlook = template.HTML(`<!--[if gte mso 9]>
       </xml>
     <![endif]-->`)
 
-// invitationEmail is the HTML invitation: a centred 602px column holding a white card (logotype, headline, product
-// paragraph, hero image, Accept invite button) and a footer line. Styles are inline for clients that drop <style>.
-// "Inter Display" is the variable Inter declared at weight 600 only, so the bold headline (and the <strong> names in
-// it) render semibold where web fonts load, and plain bold Inter or the system font elsewhere.
-var invitationEmail = template.Must(template.New("invitation").Parse(`<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+// emailLayout is one HTML email in Flow's layout: a centred 602px column holding a white card (logotype, headline,
+// then Blocks in order) and a footer line with Flow's name and, for emails people can opt out of, Unsubscribe.
+type emailLayout struct {
+	Title, Preheader string
+	Heading          template.HTML
+	// RegularHeading sets the headline in medium-weight Inter (onboarding emails) instead of the bold display face.
+	RegularHeading bool
+	Blocks         []emailBlock
+	Unsubscribe    string
+}
+
+// emailBlock is one piece of an email body. Kind selects the markup:
+//
+//	p        paragraph of HTML
+//	hero     540x312 image
+//	button   Label linking to URL
+//	rule     24px-spaced divider; hr: the notification email's tighter divider
+//	fields   bold "Label:" value lines
+//	link     a bold "Label →" link to URL with HTML as its description
+//	list     bullet list of Items
+//	code     URL-like value in a monospace box
+//	notice   notification entry: Label linking to URL, then Icon and HTML
+type emailBlock struct {
+	Kind, Label, URL, Image, Icon string
+	HTML                          template.HTML
+	Fields                        []emailField
+	Items                         []template.HTML
+}
+
+type emailField struct{ Label, Value string }
+
+// emailTemplate renders emailLayout. Styles are inline for clients that drop <style>. "Inter Display" is the
+// variable Inter declared at weight 600 only, so the bold headline (and <strong> names in it) render semibold
+// where web fonts load, and plain bold Inter or the system font elsewhere.
+var emailTemplate = template.Must(template.New("email").Parse(`<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html dir="ltr" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width" />
-    <title>{{.Subject}}</title>
+    <title>{{.Layout.Title}}</title>
     <style type="text/css">
       @font-face{font-family:Inter;font-weight:100 900;font-display:swap;font-style:normal;src:url("{{.FontURL}}") format("woff2")}
       @font-face{font-family:"Inter Display";font-weight:600;font-display:swap;font-style:normal;src:url("{{.FontURL}}") format("woff2")}
@@ -120,9 +146,12 @@ var invitationEmail = template.Must(template.New("invitation").Parse(`<!DOCTYPE 
       body{font-family:Inter,"SF Pro",-apple-system,BlinkMacSystemFont,ui-sans-serif,"Segoe UI",Roboto,Oxygen,Ubuntu,Cantarell,"Open Sans","Helvetica Neue",sans-serif;font-size:15px;line-height:1.4;-moz-osx-font-smoothing:grayscale;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;-ms-text-size-adjust:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%;color:#3c4149;background:#f9f8f9}
       table{border-spacing:0}
       a{color:#66f;text-decoration:none}
+      code{font-family:"SFMono Regular",Consolas,"Liberation Mono",Menlo,Courier,monospace}
       h1,h2,h3,h4,h5,h6{font-family:"Inter Display",Inter,"SF Pro",-apple-system,BlinkMacSystemFont,ui-sans-serif,"Segoe UI",Roboto,Oxygen,Ubuntu,Cantarell,"Open Sans","Helvetica Neue",sans-serif}
       p{margin-top:0;margin-bottom:16px}
       p>strong{color:#282a30}
+      ol,ul{margin-top:16px;margin-bottom:16px;padding-left:16px}
+      ol li,ul li{margin-top:6px;margin-left:0}
       #__bodyTable__{margin:0;padding:0;width:100% !important}
     </style>
     {{.Outlook}}
@@ -131,19 +160,53 @@ var invitationEmail = template.Must(template.New("invitation").Parse(`<!DOCTYPE 
     <table bgcolor="#F9F8F9" id="__bodyTable__" width="100%" style="-webkit-font-smoothing:antialiased;width:100% !important;background:#F9F8F9;-webkit-text-size-adjust:none;margin:0;padding:0;min-width:100%">
       <tr>
         <td align="center">
-          <span style="display:none !important;color:#F9F8F9;margin:0;padding:0;font-size:1px;line-height:1px">{{.Preheader}}</span>
+          <span style="display:none !important;color:#F9F8F9;margin:0;padding:0;font-size:1px;line-height:1px">{{.Layout.Preheader}}</span>
           <table id="main" width="602" style="width:602px;margin:24px;max-width:90vw" border="0" cellspacing="0" cellpadding="0"><tbody><tr><td align="left">
             <table width="100%" style="border:1px solid #EFF1F4;border-radius:5px;padding:32px 28px 24px 28px;background:#FFF;color:#3C4149" border="0" cellspacing="0" cellpadding="0"><tbody><tr><td>
               <table width="100%" style="margin-bottom:48px" border="0" cellspacing="0" cellpadding="0"><tbody><tr><td>
                 <a href="{{.AppURL}}"><img alt="Flow" src="{{.LogoURL}}" height="20" width="80" style="display:block" /></a>
               </td></tr></tbody></table>
-              <h1 style="font-size:24px;line-height:1.2;font-weight:700;font-family:{{.HeadingFont}};font-variation-settings:'opsz' 32;margin-top:0;margin-bottom:24px;color:#282a30"><strong>{{.Inviter}}</strong> invited you to join <strong>{{.Workspace}}</strong> on Flow</h1>
-              <p>{{.Product}} Join the workspace to see what your team is working on.</p>
-              <p><img alt="" src="{{.HeroURL}}" width="540" height="312" style="display:block;max-width:100%;height:auto;border-radius:10px" /></p>
-              <a href="{{.AcceptURL}}" style="margin-top:8px;margin-bottom:24px;display:inline-block;padding:12px 16px;color:#fff;background:#5E6AD2;border-radius:5px;font-size:13px;line-height:1.2;font-weight:500;text-decoration:none;cursor:pointer">Accept invite</a>
+              {{- if .Layout.RegularHeading}}
+              <h1 style="font-size:24px;line-height:1.2;font-weight:500;font-family:{{.BodyFont}};margin-top:0;margin-bottom:24px;color:#282a30">{{.Layout.Heading}}</h1>
+              {{- else}}
+              <h1 style="font-size:24px;line-height:1.2;font-weight:700;font-family:{{.HeadingFont}};font-variation-settings:'opsz' 32;margin-top:0;margin-bottom:24px;color:#282a30">{{.Layout.Heading}}</h1>
+              {{- end}}
+              {{- range .Layout.Blocks}}
+              {{- if eq .Kind "p"}}
+              <p>{{.HTML}}</p>
+              {{- else if eq .Kind "hero"}}
+              <p><img alt="" src="{{.Image}}" width="540" height="312" style="display:block;max-width:100%;height:auto;border-radius:10px" /></p>
+              {{- else if eq .Kind "button"}}
+              <a href="{{.URL}}" style="margin-top:8px;margin-bottom:24px;display:inline-block;padding:12px 16px;color:#fff;background:#5E6AD2;border-radius:5px;font-size:13px;line-height:1.2;font-weight:500;text-decoration:none;cursor:pointer">{{.Label}}</a>
+              {{- else if eq .Kind "rule"}}
+              <hr style="margin:8px 0 24px 0;border-top:0;border-left:0;border-right:0;border-bottom:1px solid #E3DFE6" />
+              {{- else if eq .Kind "hr"}}
+              <hr style="margin:12px 0px;border-top:0;border-left:0;border-right:0;border-bottom:1px solid #EFF1F4" />
+              {{- else if eq .Kind "fields"}}
+              {{- range .Fields}}
+              <p style="margin-bottom:8px"><strong style="font-weight:600;color:#3C4149">{{.Label}}:</strong> {{.Value}}</p>
+              {{- end}}
+              <div style="height:16px;line-height:16px;font-size:1px">&nbsp;</div>
+              {{- else if eq .Kind "link"}}
+              <p style="margin-bottom:8px"><a href="{{.URL}}" style="font-weight:600;color:#66f">{{.Label}} &rarr;</a></p>
+              <p style="margin-bottom:24px">{{.HTML}}</p>
+              {{- else if eq .Kind "list"}}
+              <ul>{{range .Items}}<li>{{.}}</li>{{end}}</ul>
+              {{- else if eq .Kind "code"}}
+              <p><code style="display:inline-block;padding:6px 10px;border:1px solid #EFF1F4;border-radius:5px;background:#F9F8F9;color:#282a30;font-size:13px;word-break:break-all">{{.Label}}</code></p>
+              {{- else if eq .Kind "notice"}}
+              <table width="100%" border="0" cellspacing="0" cellpadding="0"><tbody>
+                <tr style="padding-top:10px;padding-bottom:10px"><td width="100%" style="padding:0px 16px 16px 0px"><a style="color:#3C4149;font-size:14px;font-weight:500;line-height:20px;vertical-align:baseline" href="{{.URL}}">{{.Label}}</a></td></tr>
+                <tr><td valign="middle" colspan="2" style="padding:0px 0px 12px 0px;font-size:14px;color:#3C4149"><div style="display:flex">{{if .Icon}}<span style="margin-right:18px"><img width="16" height="16" style="vertical-align:text-top;border-radius:4px" alt="" src="{{.Icon}}" /></span>{{end}}<span>{{.HTML}}</span></div></td></tr>
+              </tbody></table>
+              {{- end}}
+              {{- end}}
             </td></tr></tbody></table>
             <table width="100%" style="width:100%;margin-top:32px;padding-left:28px;padding-right:28px;font-size:14px;line-height:1.5" border="0" cellspacing="0" cellpadding="0"><tbody><tr>
               <td style="width:50%"><a href="{{.AppURL}}" style="color:#3C4149;white-space:nowrap">Flow</a></td>
+              {{- if .Layout.Unsubscribe}}
+              <td style="width:50%;text-align:right"><a href="{{.Layout.Unsubscribe}}">Unsubscribe</a></td>
+              {{- end}}
             </tr></tbody></table>
           </td></tr></tbody></table>
         </td>
@@ -152,6 +215,57 @@ var invitationEmail = template.Must(template.New("invitation").Parse(`<!DOCTYPE 
   </body>
 </html>
 `))
+
+// renderEmail renders layout as an HTML document with Flow's logotype, font and links on this instance's URL.
+func (m *smtpMailer) renderEmail(layout emailLayout) (string, error) {
+	var html bytes.Buffer
+	err := emailTemplate.Execute(&html, map[string]any{
+		"Layout":      layout,
+		"AppURL":      m.appURL,
+		"LogoURL":     m.emailAsset("flow-logotype@4x.png"),
+		"FontURL":     m.appURL + "/fonts/InterVariable.woff2",
+		"HeadingFont": template.CSS(`"Inter Display",` + emailFontStack),
+		"BodyFont":    template.CSS(emailFontStack),
+		"Outlook":     emailOutlookHead,
+	})
+	return html.String(), err
+}
+
+// emailAsset is the absolute URL of an image in web/public/email.
+func (m *smtpMailer) emailAsset(name string) string {
+	return m.appURL + "/email/" + name
+}
+
+// emailHTML formats an HTML fragment: string arguments are escaped, template.HTML arguments (strong, link) pass
+// through.
+func emailHTML(format string, args ...any) template.HTML {
+	escaped := make([]any, len(args))
+	for index, arg := range args {
+		switch value := arg.(type) {
+		case template.HTML:
+			escaped[index] = string(value)
+		default:
+			escaped[index] = template.HTMLEscapeString(fmt.Sprint(value))
+		}
+	}
+	return template.HTML(fmt.Sprintf(format, escaped...))
+}
+
+// emailStrong is text in <strong>, escaped.
+func emailStrong(text string) template.HTML {
+	return template.HTML("<strong>" + template.HTMLEscapeString(text) + "</strong>")
+}
+
+// emailLink is an escaped link; only http(s) URLs are linked.
+func emailLink(href, text string) template.HTML {
+	if !strings.HasPrefix(href, "https://") && !strings.HasPrefix(href, "http://") {
+		return template.HTML(template.HTMLEscapeString(text))
+	}
+	return template.HTML(`<a href="` + template.HTMLEscapeString(href) + `" style="color:#66f;text-decoration:none">` + template.HTMLEscapeString(text) + `</a>`)
+}
+
+// invitationProduct describes Flow to someone who has not used it; the invitation's body and preheader start with it.
+const invitationProduct = "Flow brings your team's issues, projects, code reviews, and agents together in one place."
 
 // invitationMessage builds the invitation email: "<inviter> invited you to join <workspace> on Flow", in text and HTML.
 func (m *smtpMailer) invitationMessage(email, workspace string, inviter domain.User, token string) (mailMessage, error) {
@@ -162,29 +276,24 @@ func (m *smtpMailer) invitationMessage(email, workspace string, inviter domain.U
 	}
 	subject := inviterName + " invited you to join " + workspace + " on Flow"
 	acceptURL := m.appURL + "/invite/" + url.PathEscape(token)
-	var html bytes.Buffer
-	err := invitationEmail.Execute(&html, map[string]any{
-		"Subject":     subject,
-		"Inviter":     inviterName,
-		"Workspace":   workspace,
-		"Product":     invitationProduct,
-		"Preheader":   invitationProduct + " Create your account to see what your team is working on.",
-		"AppURL":      m.appURL,
-		"AcceptURL":   acceptURL,
-		"LogoURL":     m.appURL + "/email/flow-logotype@4x.png",
-		"HeroURL":     m.appURL + "/email/invite.jpg",
-		"FontURL":     m.appURL + "/fonts/InterVariable.woff2",
-		"HeadingFont": template.CSS(`"Inter Display",` + emailFontStack),
-		"Outlook":     invitationEmailOutlook,
+	html, err := m.renderEmail(emailLayout{
+		Title:     subject,
+		Preheader: invitationProduct + " Create your account to see what your team is working on.",
+		Heading:   emailHTML("%s invited you to join %s on Flow", emailStrong(inviterName), emailStrong(workspace)),
+		Blocks: []emailBlock{
+			{Kind: "p", HTML: emailHTML("%s Join the workspace to see what your team is working on.", invitationProduct)},
+			{Kind: "hero", Image: m.emailAsset("invite.jpg")},
+			{Kind: "button", Label: "Accept invite", URL: acceptURL},
+		},
 	})
 	if err != nil {
 		return mailMessage{}, err
 	}
 	text := subject + ".\n\n" + invitationProduct + " Join the workspace to see what your team is working on.\n\nAccept invite: " + acceptURL + "\n"
-	return mailMessage{To: email, ReplyTo: replyAddress(inviter), Subject: subject, Text: text, HTML: html.String()}, nil
+	return mailMessage{To: email, ReplyTo: replyAddress(inviter), Subject: subject, Text: text, HTML: html}, nil
 }
 
-// inviterDisplayName is how the invitation names its sender: display name, then full name, then the email's local
+// inviterDisplayName is how an email names a person: display name, then full name, then the email's local
 // part, so a teammate without a profile still reads as a person.
 func inviterDisplayName(inviter domain.User) string {
 	for _, name := range []string{inviter.DisplayName, inviter.Name, strings.SplitN(inviter.Email, "@", 2)[0]} {
@@ -232,7 +341,7 @@ func (m *smtpMailer) sender() (header, envelope string) {
 
 // compose renders message as RFC 5322 bytes: quoted-printable UTF-8 text, with an HTML alternative when present.
 func (m *smtpMailer) compose(message mailMessage) ([]byte, error) {
-	if strings.ContainsAny(message.To+message.Subject+message.ReplyTo, "\r\n") {
+	if strings.ContainsAny(message.To+message.Subject+message.ReplyTo+message.ListUnsubscribe, "\r\n") || strings.ContainsAny(message.ListUnsubscribe, "<>") {
 		return nil, fmt.Errorf("invalid email header")
 	}
 	from, envelope := m.sender()
@@ -246,12 +355,21 @@ func (m *smtpMailer) compose(message mailMessage) ([]byte, error) {
 	header("Subject", mime.QEncoding.Encode("utf-8", message.Subject))
 	header("Date", time.Now().Format(time.RFC1123Z))
 	header("Message-ID", "<"+randomMessageID()+"@"+messageIDDomain(envelope)+">")
+	if message.ListUnsubscribe != "" {
+		header("List-Unsubscribe", "<"+message.ListUnsubscribe+">")
+		if message.OneClick {
+			header("List-Unsubscribe-Post", "List-Unsubscribe=One-Click")
+		}
+	}
 	header("MIME-Version", "1.0")
 	if message.HTML == "" {
 		header("Content-Type", "text/plain; charset=UTF-8")
 		header("Content-Transfer-Encoding", "quoted-printable")
 		out.WriteString("\r\n")
-		return out.Bytes(), writeQuotedPrintable(&out, message.Text)
+		if err := writeQuotedPrintable(&out, message.Text); err != nil {
+			return nil, err
+		}
+		return out.Bytes(), nil
 	}
 	var body bytes.Buffer
 	parts := multipart.NewWriter(&body)
@@ -302,6 +420,9 @@ func (m *smtpMailer) deliver(message mailMessage) error {
 	}
 	_, envelope := m.sender()
 	to := message.To
+	if m.transport != nil {
+		return m.transport(envelope, []string{to}, data)
+	}
 	address := net.JoinHostPort(m.host, m.port)
 	var auth smtp.Auth
 	if m.username != "" {
