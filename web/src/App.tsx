@@ -204,7 +204,7 @@ import { useLocation } from "react-router-dom";
 import { useRouteNavigation } from "@/hooks/use-route-navigation";
 import { usePrefilledIssueRoute } from "@/hooks/use-prefilled-issue-route";
 import { applyDocumentTitle, routeInfo } from "@/lib/route-info";
-import { useI18n } from "@/i18n/i18n";
+import { useAccountLanguage, useI18n } from "@/i18n/i18n";
 import {
   agentPath,
   newAgentSkillPath,
@@ -3706,6 +3706,7 @@ function App() {
     return () => { window.removeEventListener('flow:user-settings-updated',sync); window.removeEventListener('flow:workspace-preferences-updated',syncWorkspace); };
   }, []);
   useSaveBrowserTimeZone(data?.workspace.urlKey, data?.viewer.id, data ? data.userSettings[data.viewer.id]?.timezone : undefined);
+  useAccountLanguage(data ? data.userSettings[data.viewer.id]?.language : undefined);
   const changeCurrentUserSettings = async (input: UserSettings) => {
     const settings = await run(
       () => updateUserSettings(input),

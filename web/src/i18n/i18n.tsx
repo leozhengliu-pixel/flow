@@ -21,6 +21,19 @@ type I18nValue = {
 
 const I18nContext = createContext<I18nValue | null>(null)
 
+/**
+ * Applies the language saved on the account (Settings › Preferences › Language) once the workspace data has it,
+ * so a new browser, a cleared storage or a fresh login shows the saved language instead of the browser's. It only
+ * reacts when the saved value changes: a local switch is never undone by the older value still in flight.
+ */
+export function useAccountLanguage(language: string | undefined) {
+  const { locale, setLocale } = useI18n()
+  useEffect(() => {
+    if ((language === 'zh-CN' || language === 'en-US') && language !== locale) setLocale(language)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- follow the saved value only, not local switches
+  }, [language])
+}
+
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<AppLocale>(initialLocale)
   const [dictionaryReady, setDictionaryReady] = useState(isChineseDictionaryLoaded)

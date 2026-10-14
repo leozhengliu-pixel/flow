@@ -62,6 +62,14 @@ describe('ClientStorage (LS-0109)', () => {
     expect(sessionStorage.getItem('scratch')).toBeNull()
   })
 
+  it('clearAllNonAuthData keeps the language and theme used on this device', () => {
+    localStorage.setItem('flow:locale', 'zh-CN')
+    localStorage.setItem('flow.theme', 'Light')
+    ClientStorage.clearAllNonAuthData()
+    expect(localStorage.getItem('flow:locale')).toBe('zh-CN')
+    expect(localStorage.getItem('flow.theme')).toBe('Light')
+  })
+
   it('clear retains user-scoped persistent keys', () => {
     localStorage.setItem('flow.theme', '{}')
     localStorage.setItem('p_user-a_keep', '1')
