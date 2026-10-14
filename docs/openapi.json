@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Flow API",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "summary": "REST API of the Flow issue tracker",
     "description": "Flow's HTTP API. Typed operations (with request and response schemas reflected from the server's Go types) form the public contract; every other route is listed as an inventory entry that may change.\n\nAuthenticate with a personal API key or an OAuth access token in `Authorization: Bearer <token>`; tokens select their workspace. Browser sessions send the `X-Workspace-Key` header.\nLists return connections (`nodes`, `pageInfo`) paged with `first`/`after` or `last`/`before`, ordered newest first by `orderBy` (createdAt or updatedAt), filtered with a `filter` object.\nRoutes marked `x-flow-internal` serve the web app and are not part of the contract. Payloads Flow sends to webhook endpoints are described in the `webhooks` section.\nErrors use one envelope (`error`, `code`, `type`, `requestId`). Requests are rate limited per user or application (X-RateLimit-* headers, HTTP 429 with type RATELIMITED).\nThe API is unversioned: changes are additive, deprecated operations are flagged and kept for at least six months. See docs/api.md.",
     "license": {
@@ -2568,7 +2568,7 @@
     },
     "/api/attachments": {
       "get": {
-        "description": "Provide issueId and/or url (the reference app's attachmentsForURL).",
+        "description": "Provide issueId and/or url.",
         "operationId": "get_attachments",
         "parameters": [
           {
@@ -2608,7 +2608,7 @@
                 }
               }
             },
-            "description": "filter object (JSON). Filterable fields: id, title, subtitle, url, contentType, sourceType, issue, creator, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
+            "description": "Filter object (JSON). Filterable fields: id, title, subtitle, url, contentType, sourceType, issue, creator, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
             "in": "query",
             "name": "filter"
           },
@@ -3454,7 +3454,7 @@
                 }
               }
             },
-            "description": "filter object (JSON). Filterable fields: id, body, user, parent, resolved, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
+            "description": "Filter object (JSON). Filterable fields: id, body, user, parent, resolved, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
             "in": "query",
             "name": "filter"
           },
@@ -3713,7 +3713,7 @@
                 }
               }
             },
-            "description": "filter object (JSON). Filterable fields: id, body, customer, issue, project, priority, source, creator, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
+            "description": "Filter object (JSON). Filterable fields: id, body, customer, issue, project, priority, source, creator, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
             "in": "query",
             "name": "filter"
           },
@@ -4430,7 +4430,7 @@
                 }
               }
             },
-            "description": "filter object (JSON). Filterable fields: id, name, domains, externalIds, status, tier, owner, revenue, size, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
+            "description": "Filter object (JSON). Filterable fields: id, name, domains, externalIds, status, tier, owner, revenue, size, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
             "in": "query",
             "name": "filter"
           }
@@ -5055,7 +5055,7 @@
                 }
               }
             },
-            "description": "filter object (JSON). Filterable fields: id, name, number, status, team, startsAt, endsAt, isActive, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
+            "description": "Filter object (JSON). Filterable fields: id, name, number, status, team, startsAt, endsAt, isActive, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
             "in": "query",
             "name": "filter"
           },
@@ -6068,7 +6068,7 @@
                 }
               }
             },
-            "description": "filter object (JSON). Filterable fields: id, title, slugId, creator, teams, projects, issue, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
+            "description": "Filter object (JSON). Filterable fields: id, title, slugId, creator, teams, projects, issue, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
             "in": "query",
             "name": "filter"
           },
@@ -8960,7 +8960,7 @@
                 }
               }
             },
-            "description": "filter object (JSON). Filterable fields: id, name, slugId, status, health, owner, creator, targetDate, projects, parentInitiatives, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
+            "description": "Filter object (JSON). Filterable fields: id, name, slugId, status, health, owner, creator, targetDate, projects, parentInitiatives, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
             "in": "query",
             "name": "filter"
           }
@@ -11431,7 +11431,7 @@
                 }
               }
             },
-            "description": "filter object (JSON). Filterable fields: id, name, color, team, parent, createdAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
+            "description": "Filter object (JSON). Filterable fields: id, name, color, team, parent, createdAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
             "in": "query",
             "name": "filter"
           },
@@ -17940,7 +17940,7 @@
     },
     "/api/oauth-applications/{id}/manifest": {
       "get": {
-        "description": "the reference app's OAuth app manifest shape, with Flow's oauth.scopes, agent and github extensions (see /.well-known/oauth-app-manifest.schema.json). Never includes secrets.",
+        "description": "The OAuth app manifest, with Flow's oauth.scopes, agent and github extensions (see /.well-known/oauth-app-manifest.schema.json). Never includes secrets.",
         "operationId": "get_oauth_applications_id_manifest",
         "parameters": [
           {
@@ -19384,7 +19384,7 @@
                 }
               }
             },
-            "description": "filter object (JSON). Filterable fields: id, name, project, targetDate, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
+            "description": "Filter object (JSON). Filterable fields: id, name, project, targetDate, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
             "in": "query",
             "name": "filter"
           },
@@ -23018,7 +23018,7 @@
                 }
               }
             },
-            "description": "filter object (JSON). Filterable fields: id, name, slugId, status, pipeline, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
+            "description": "Filter object (JSON). Filterable fields: id, name, slugId, status, pipeline, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
             "in": "query",
             "name": "filter"
           },
@@ -24356,7 +24356,7 @@
                 }
               }
             },
-            "description": "filter object (JSON). Filterable fields: id, name, key, private, parent, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
+            "description": "Filter object (JSON). Filterable fields: id, name, key, private, parent, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
             "in": "query",
             "name": "filter"
           }
@@ -26670,7 +26670,7 @@
                 }
               }
             },
-            "description": "filter object (JSON). Filterable fields: id, name, displayName, username, email, active, app, admin, isMe, createdAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
+            "description": "Filter object (JSON). Filterable fields: id, name, displayName, username, email, active, app, admin, isMe, createdAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
             "in": "query",
             "name": "filter"
           },
@@ -27129,7 +27129,7 @@
                 }
               }
             },
-            "description": "filter object (JSON). Filterable fields: id, name, url, enabled, resourceTypes, teams, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
+            "description": "Filter object (JSON). Filterable fields: id, name, url, enabled, resourceTypes, teams, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
             "in": "query",
             "name": "filter"
           }
@@ -28339,7 +28339,7 @@
                 }
               }
             },
-            "description": "filter object (JSON). Filterable fields: id, name, type, position, team. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
+            "description": "Filter object (JSON). Filterable fields: id, name, type, position, team. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
             "in": "query",
             "name": "filter"
           },
@@ -28733,7 +28733,7 @@
                 }
               }
             },
-            "description": "filter object (JSON). Filterable fields: id, type, action, resourceType, resourceId, actor, ip, createdAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
+            "description": "Filter object (JSON). Filterable fields: id, type, action, resourceType, resourceId, actor, ip, createdAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
             "in": "query",
             "name": "filter"
           },
@@ -33765,7 +33765,7 @@
             "type": "boolean"
           },
           "allTeams": {
-            "description": "AllTeams keeps the installation's teams in step with the workspace's teams (the built-in Flow agent works in every team).",
+            "description": "AllTeams keeps the installation's teams in step with the workspace's teams (as the built-in Flow agent works in every team).",
             "type": "boolean"
           },
           "avatarUrl": {
@@ -33817,7 +33817,7 @@
             "type": "string"
           },
           "withoutRealtime": {
-            "description": "WithoutRealtime marks an installation authorized while its application had no webhook:, it receives no webhook deliveries until an administrator authorizes it again (\"Receive realtime updates about your workspace\" is then a requested permission on the consent screen).",
+            "description": "WithoutRealtime marks an installation authorized while its application had no webhook: it receives no webhook deliveries until an administrator authorizes it again (\"Receive realtime updates about your workspace\" is then a requested permission on the consent screen).",
             "type": "boolean"
           },
           "workspaceKey": {
@@ -34026,7 +34026,7 @@
             "type": "integer"
           },
           "subtitle": {
-            "description": "Link attachments (the reference app's attachmentCreate): a subtitle, an icon and free-form key/value metadata shown with the link. Re-creating an attachment with the same URL on the same issue updates it.",
+            "description": "Link attachments: a subtitle, an icon and free-form key/value metadata shown with the link. Re-creating an attachment with the same URL on the same issue updates it.",
             "type": "string"
           },
           "syncStatus": {
@@ -34134,7 +34134,7 @@
             "type": "integer"
           },
           "subtitle": {
-            "description": "Link attachments (the reference app's attachmentCreate): a subtitle, an icon and free-form key/value metadata shown with the link. Re-creating an attachment with the same URL on the same issue updates it.",
+            "description": "Link attachments: a subtitle, an icon and free-form key/value metadata shown with the link. Re-creating an attachment with the same URL on the same issue updates it.",
             "type": "string"
           },
           "syncStatus": {
@@ -36697,7 +36697,7 @@
         "type": "object"
       },
       "FileUploadInput": {
-        "description": "FileUploadInput prepares an upload (the reference app's fileUpload).",
+        "description": "FileUploadInput prepares an upload.",
         "properties": {
           "contentType": {
             "type": "string"
@@ -38003,7 +38003,7 @@
             "type": "array"
           },
           "suggestedAssigneeIds": {
-            "description": "Active Triage Intelligence suggestion targets (the reference app's \"Suggested assignee/project/team\", \"Suggested duplicates/relations\" filters). They mirror the active IssueSuggestions so filters stay indexed lookups.",
+            "description": "Active Triage Intelligence suggestion targets (the \"Suggested assignee/project/team\" and \"Suggested duplicates/relations\" filters). They mirror the active IssueSuggestions so filters stay indexed lookups.",
             "items": {
               "type": "string"
             },
@@ -38800,7 +38800,7 @@
             "type": "array"
           },
           "suggestedAssigneeIds": {
-            "description": "Active Triage Intelligence suggestion targets (the reference app's \"Suggested assignee/project/team\", \"Suggested duplicates/relations\" filters). They mirror the active IssueSuggestions so filters stay indexed lookups.",
+            "description": "Active Triage Intelligence suggestion targets (the \"Suggested assignee/project/team\" and \"Suggested duplicates/relations\" filters). They mirror the active IssueSuggestions so filters stay indexed lookups.",
             "items": {
               "type": "string"
             },
@@ -39744,7 +39744,7 @@
         "type": "object"
       },
       "OAuthAppManifest": {
-        "description": "OAuthAppManifest describes an OAuth application declaratively, in the shape of the reference app's OAuth app manifests (see /.well-known/oauth-app-manifest.schema.json).",
+        "description": "OAuthAppManifest describes an OAuth application declaratively (see /.well-known/oauth-app-manifest.schema.json).",
         "properties": {
           "$schema": {
             "type": "string"
@@ -43377,7 +43377,7 @@
       "ReleaseResource": {
         "properties": {
           "content": {
-            "description": "Content holds markdown for documents attached by CI (the reference app's --document).",
+            "description": "Content holds markdown for documents attached by CI (the --document option).",
             "type": "string"
           },
           "createdAt": {
@@ -43411,7 +43411,7 @@
       "ReleaseResourcePartial": {
         "properties": {
           "content": {
-            "description": "Content holds markdown for documents attached by CI (the reference app's --document).",
+            "description": "Content holds markdown for documents attached by CI (the --document option).",
             "type": "string"
           },
           "createdAt": {
@@ -44016,7 +44016,7 @@
             "type": "string"
           },
           "username": {
-            "description": "Username is the workspace-unique handle (the reference app's \"username\"), derived per request from account settings or the email local part.",
+            "description": "Username is the workspace-unique handle (shown as \"username\"), derived per request from account settings or the email local part.",
             "type": "string"
           }
         },
@@ -44115,7 +44115,7 @@
             "type": "string"
           },
           "username": {
-            "description": "Username is the workspace-unique handle (the reference app's \"username\"), derived per request from account settings or the email local part.",
+            "description": "Username is the workspace-unique handle (shown as \"username\"), derived per request from account settings or the email local part.",
             "type": "string"
           }
         },
