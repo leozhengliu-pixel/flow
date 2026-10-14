@@ -24,6 +24,12 @@ export const CLIENT_STORAGE_AUTH_LOCAL_KEYS = [
 
 export const CLIENT_STORAGE_AUTH_SESSION_KEYS = ['ApplicationStore'] as const
 
+/**
+ * Device display preferences kept across logout, so the sign-in page and the next session start in the language
+ * and theme last used here (the account's saved values are applied again once signed in).
+ */
+export const CLIENT_STORAGE_DEVICE_PREFERENCE_KEYS = ['flow:locale', 'flow.theme'] as const
+
 const EPHEMERAL_PREFIX = 'ephemeral_'
 
 function encodeValue(_key: string, value: unknown): unknown {
@@ -243,7 +249,7 @@ export class ClientStorage {
    * User-scoped `p_{userId}_*` keys are also cleared (they are non-auth prefs).
    */
   static clearAllNonAuthData(): void {
-    const keepLocal = new Set<string>(CLIENT_STORAGE_AUTH_LOCAL_KEYS)
+    const keepLocal = new Set<string>([...CLIENT_STORAGE_AUTH_LOCAL_KEYS, ...CLIENT_STORAGE_DEVICE_PREFERENCE_KEYS])
     const keepSession = new Set<string>(CLIENT_STORAGE_AUTH_SESSION_KEYS)
     this.removeAllWithCondition((key) => !keepLocal.has(key), 'local')
     this.removeAllWithCondition((key) => !keepSession.has(key), 'session')
