@@ -861,7 +861,7 @@ var loopToolLabels = map[string]string{
 	"list_issue_statuses": "Listed statuses", "list_cycles": "Listed cycles", "list_customers": "Listed customers",
 	"save_status_update": "Posted status update", "get_status_updates": "Read status updates",
 	"list_issue_history": "Read issue history", "list_project_activity": "Read project activity",
-	"list_documents": "Listed documents", "get_document": "Read document", "search_documentation": "Searched documentation",
+	"list_documents": "Listed documents", "search_documents": "Searched documents", "get_document": "Read document", "search_documentation": "Searched documentation",
 	"save_reaction": "Reacted", "create_reminder": "Set reminder", "list_diffs": "Listed code changes",
 	"get_diff": "Read code change", "get_diff_threads": "Read review threads", "list_initiatives": "Listed initiatives",
 	"get_initiative": "Read initiative", "list_releases": "Listed releases", "list_milestones": "Listed milestones",

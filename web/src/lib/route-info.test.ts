@@ -90,6 +90,18 @@ describe("routeInfo titles", () => {
     expect(routeInfo({ kind: "settings", workspaceSlug: "acme", page: "coding-sessions" }, data).title).toBe("Coding sessions");
     expect(routeInfo({ kind: "team-cycles", workspaceSlug: "acme", teamKey: "ACM" }, data).title).toBe("Acme Team › Cycles");
   });
+
+  it("titles team members settings and the new-loop editor", () => {
+    expect(routeInfo({ kind: "team-members", workspaceSlug: "acme", teamKey: "ACM" }, data).title).toBe("Acme Team › Members");
+    expect(routeInfo({ kind: "settings", workspaceSlug: "acme", page: "team", teamKey: "ACM", teamSection: "members" }, data).title).toBe("Acme Team › Team members");
+    expect(routeInfo({ kind: "loop-editor", workspaceSlug: "acme", draftId: "d1" }, data).title).toBe("New loop");
+    expect(routeInfo({ kind: "loop-editor", workspaceSlug: "acme", teamKey: "ACM", draftId: "d1" }, data).title).toBe("Acme Team › New loop");
+    const loops = [{ id: "loop-1", slugId: "triage-agent-96b66416bc6a", name: "Triage agent" }] as BootstrapData["loops"];
+    expect(routeInfo({ kind: "loop", workspaceSlug: "acme", loopId: "loop-1" }, { ...data, loops }).title).toBe("Triage agent");
+    expect(routeInfo({ kind: "loop-run", workspaceSlug: "acme", loopId: "triage-agent-96b66416bc6a" }, { ...data, loops }).title).toBe("Triage agent");
+    expect(routeInfo({ kind: "loops", workspaceSlug: "acme", view: "mine" }, data).title).toBe("Loops › My loops");
+    expect(routeInfo({ kind: "loops", workspaceSlug: "acme", view: "all" }, data).title).toBe("Loops › All");
+  });
 });
 
 describe("custom view titles", () => {

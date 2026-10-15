@@ -13,7 +13,8 @@ type Translate = (source: string) => string
 export const CHAT_TOOL_LABELS: Record<string, [string, string]> = {
   list_issues: ["Looking at issues…", "Looked at issues"], list_projects: ["Looking at projects…", "Looked at projects"],
   list_initiatives: ["Looking at initiatives…", "Looked at initiatives"], list_documents: ["Looking at documents…", "Looked at documents"],
-  search_documentation: ["Searching documentation…", "Searched documentation"], save_issue: ["Creating issue…", "Created issue"],
+  search_documentation: ["Searching documentation…", "Searched documentation"], search_documents: ["Searching documents…", "Searched documents"],
+  save_issue: ["Creating issue…", "Created issue"],
   save_project: ["Creating project…", "Created project"], save_initiative: ["Creating initiative…", "Created initiative"],
   save_comment: ["Adding comment…", "Added comment"],
   get_issue: ["Looking at issue…", "Looked at issue"], list_issue_history: ["Looking at issue activity…", "Looked at issue activity"],

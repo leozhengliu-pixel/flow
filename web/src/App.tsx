@@ -2,6 +2,7 @@ import { overlayUserSettings, USER_SETTINGS_OVERRIDES_EVENT } from "@/lib/user-s
 import {
   Suspense,
   lazy,
+  startTransition,
   useCallback,
   useEffect,
   useMemo,
@@ -217,7 +218,12 @@ import {
   customerPath,
   cyclePath,
   documentPath,
+  editLoopPath,
+  loopPath,
+  loopRunPath,
   loopsPath,
+  loopsViewPath,
+  workspaceRootPath,
   inboxPath,
   initiativePath,
   initiativesPath,
@@ -230,6 +236,7 @@ import {
   asksSlackSettingsPath,
   newAsksEmailIntakePath,
   membersPath,
+  memberProfileHandle,
   memberProfilePath,
   myIssuesPath,
   newReleasePipelinePath,
@@ -286,7 +293,8 @@ import {
   type AppRoute,
 } from "@/lib/app-routes";
 import { findDocumentBySlugSuffix } from "@/lib/document-slug";
-import { findBySlugRef } from "@/lib/resource-slug";
+import { findBySlugRef, findLoopByRef } from "@/lib/resource-slug";
+import { rememberTeamHomeTab, teamHomeTab, teamHomeTabOf, teamHomeTabPath } from "@/lib/team-home-tab";
 import { findTrashedDocument } from "@/components/documents/document-trash";
 import { ISSUE_DELETE_DESCRIPTION } from "@/lib/issue-delete-confirmation";
 import { OPEN_COMMAND_MENU_EVENT } from "@/components/command/command-context";
@@ -301,6 +309,7 @@ import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { isPulseRealtimeEvent, pulseSidebarPath, pulseUnread } from "@/components/pulse/pulse-unread";
 import { useEntityUpdatesLoader, useRequestEntityUpdates } from "@/lib/entity-updates";
 import { applyFavoriteDelta, FAVORITES_CHANGED, overlayPendingFavoriteIntents, toggleFavoriteFor } from '@/lib/favorites';
+import { applyTeamResourcesChange, onTeamResourcesChange, refreshTeamResourcesForEvent } from '@/lib/team-resource-sync';
 import { fetchResourcePreferences, mergeResourcePreferences, RESOURCE_PREFERENCES_UPDATED, type ResourcePreferences } from '@/lib/resource-preferences';
 import { useDesktopNotifications } from "@/hooks/use-desktop-notifications";
 import { useSaveBrowserTimeZone } from "@/hooks/use-browser-timezone";
@@ -1244,6 +1253,15 @@ function App() {
     window.addEventListener(FAVORITES_CHANGED, update);
     return () => window.removeEventListener(FAVORITES_CHANGED, update);
   }, []);
+  // Team overview pins and sections change locally first (see team-resource-sync).
+  // The open overview renders the change itself; the workspace copy follows
+  // as a transition so it never delays that.
+  useEffect(() => onTeamResourcesChange(change => startTransition(() => setData(current => {
+    if (!current) return current;
+    const state = { resources: current.teamPinnedResources ?? [], sections: current.teamResourceSections ?? [] };
+    const next = applyTeamResourcesChange(state, change);
+    return next === state ? current : { ...current, teamPinnedResources: next.resources, teamResourceSections: next.sections };
+  }))), []);
   const realtime = useWorkspaceRealtime({
     workspaceKey: data?.workspace.urlKey,
     viewerId: data?.viewer.id,
@@ -1291,6 +1309,8 @@ function App() {
         setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? overlayPendingFavoriteIntents(mergeResourcePreferences(current, preferences)) : current);
         return;
       }
+      // Team overview pins and sections: refetch only that team's list.
+      if (await refreshTeamResourcesForEvent(data, event)) return;
       // LS-0718: entity Map / SSE patch path — merge when payload is self-contained.
       if (canApplyRealtimePatch(event)) {
         setData((current) => {
@@ -4159,9 +4179,31 @@ function App() {
         (item) => item.name === route.username || item.username === route.username || item.id === route.username,
       );
       if (user) {
-        const canonical = memberProfilePath(workspace, user.name, route.view);
+        // Profiles live at the member's username; links by name or id land there.
+        const canonical = memberProfilePath(workspace, memberProfileHandle(user), route.view);
         if (location.pathname !== canonical)
           canonicalize(canonical, { replace: true });
+      }
+    }
+    // Each team remembers the home tab last opened; the bare team URL (`/team/<key>`) reopens it.
+    const homeTab = teamHomeTabOf(route);
+    if (homeTab && "teamKey" in route && route.teamKey) {
+      const teamKey = route.teamKey;
+      const team = data.teams.find((item) => item.key.toLowerCase() === teamKey.toLowerCase());
+      const bare = location.pathname.replace(/\/+$/, "").toLowerCase() === `${workspaceRootPath(workspace)}/team/${teamKey}`.toLowerCase();
+      if (team && bare)
+        canonicalize(teamHomeTabPath(workspace, team.key, teamHomeTab(data.viewer.id, team.id), workspaceFeatureEnabled(data.workspaceSettings?.featureFlags, "loops")), { replace: true });
+      else if (team) rememberTeamHomeTab(data.viewer.id, team.id, homeTab);
+    }
+    // The Loops page opens on "My loops".
+    if (route.kind === "loops" && !route.view)
+      canonicalize(loopsViewPath(workspace, "mine"), { replace: true });
+    // Loop pages live at the loop's slug; older id links (`/loop/<id>`, `/loops/<id>`) land there.
+    if ((route.kind === "loop" || route.kind === "loop-run" || (route.kind === "loop-editor" && route.loopId)) && route.loopId) {
+      const loop = findLoopByRef(data.loops, route.loopId);
+      if (loop?.slugId) {
+        const canonical = route.kind === "loop" ? loopPath(workspace, loop) : route.kind === "loop-run" ? loopRunPath(workspace, loop, route.runId) : editLoopPath(workspace, loop);
+        if (location.pathname !== canonical) canonicalize(canonical, { replace: true });
       }
     }
     if (
@@ -5272,7 +5314,9 @@ function App() {
             <LoopsPage
               data={data}
               draftId={route.kind === "loop-editor" ? route.draftId : undefined}
-              loopId={route.kind === "loop-editor" || route.kind === "loop" || route.kind === "loop-run" ? route.loopId : undefined}
+              teamKey={route.kind === "loop-editor" ? route.teamKey : undefined}
+              loopId={route.kind === "loop-editor" || route.kind === "loop" || route.kind === "loop-run" ? (findLoopByRef(data.loops, route.loopId)?.id ?? route.loopId) : undefined}
+              loopsView={route.kind === "loops" ? route.view : undefined}
               runId={route.kind === "loop-run" ? route.runId : undefined}
               mode={route.kind === "loop-editor" ? "edit" : route.kind === "loop" ? "detail" : route.kind === "loop-run" ? "runs" : "list"}
               editing={route.kind === "loop-editor"}
@@ -5499,7 +5543,7 @@ function App() {
               )
             }
             onNavigateMember={(user) =>
-              navigateTo(memberProfilePath(data.workspace.urlKey, user.name))
+              navigateTo(memberProfilePath(data.workspace.urlKey, memberProfileHandle(user)))
             }
             onNavigateTeam={(team) =>
               navigateTo(teamHomePath(data.workspace.urlKey, team.key))
@@ -5536,11 +5580,11 @@ function App() {
                 view={route.view}
                 onNavigate={(view) =>
                   navigateTo(
-                    memberProfilePath(data.workspace.urlKey, user.name, view),
+                    memberProfilePath(data.workspace.urlKey, memberProfileHandle(user), view),
                   )
                 }
                 onOpenMember={(member) =>
-                  navigateTo(memberProfilePath(data.workspace.urlKey, member.name))
+                  navigateTo(memberProfilePath(data.workspace.urlKey, memberProfileHandle(member)))
                 }
                 onOpenIssue={openIssue}
                 onUpdateIssue={updateIssueFromPage}

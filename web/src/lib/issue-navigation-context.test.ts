@@ -22,13 +22,12 @@ describe('issue navigation context', () => {
     ])
   })
 
-  it('shows "Projects › Project" for an issue opened from a project opened from a projects list, linking back to the tab it came from', () => {
+  it('shows only the project for an issue opened from a project opened from a projects list, linking back to the tab it came from', () => {
     const linked = { ...issue, project }
     const tab = '/workspace/project/project-one/issues?projectMilestoneId=milestone-1'
     const trail = ['/workspace/projects/all', tab]
     expect(issueReturnPath({ navigationTrail: trail, returnTo: tab }, 'workspace', linked)).toBe(tab)
     expect(issueBreadcrumbs(data, linked, trail)).toEqual([
-      { label: 'Projects', href: '/workspace/projects/all', tooltip: 'All projects' },
       { label: 'Project one', href: tab, entity: true, project },
     ])
   })
@@ -48,7 +47,7 @@ describe('issue navigation context', () => {
     const parentPath = '/workspace/issue/TST-2/parent-issue'
     const parentCrumb = { label: 'TST-2', href: parentPath, entity: true, tooltip: 'Parent issue', issue: parent }
     expect(issueBreadcrumbs(withParent, issue, ['/workspace/projects/all', '/workspace/project/project-one/issues', parentPath])).toEqual([
-      { label: 'Projects', href: '/workspace/projects/all', tooltip: 'All projects' }, parentCrumb,
+      { label: 'Project one', href: '/workspace/project/project-one/issues', entity: true, project }, parentCrumb,
     ])
     expect(issueBreadcrumbs(withParent, issue, ['/workspace/project/project-one/issues', parentPath])).toEqual([
       { label: 'Project one', href: '/workspace/project/project-one/issues', entity: true, project }, parentCrumb,
@@ -74,12 +73,20 @@ describe('issue navigation context', () => {
     expect(issueBreadcrumbs(data, issue)).not.toContainEqual(expect.objectContaining({ label: 'My issues' }))
   })
 
-  it('has no breadcrumb context when the issue was opened directly by URL, even when it belongs to a project', () => {
+  it('opened directly by URL, shows only the issue’s project (its overview), and nothing for an issue without one or in Triage', () => {
     expect(issueListContextPath(undefined, 'workspace')).toBeUndefined()
     expect(issueListContextPath({ returnTo: '/workspace/issue/TST-2/other' }, 'workspace')).toBeUndefined()
     expect(issueListContextPath({ returnTo: '/workspace/team/TST/all' }, 'workspace')).toBe('/workspace/team/TST/all')
     expect(issueBreadcrumbs(data, issue)).toEqual([])
-    expect(issueBreadcrumbs(data, { ...issue, project }, undefined)).toEqual([])
+    expect(issueBreadcrumbs(data, { ...issue, project }, undefined)).toEqual([
+      { label: 'Project one', href: '/workspace/project/project-one/overview', entity: true, project },
+    ])
+    expect(issueBreadcrumbs(data, { ...issue, project }, ['/workspace/issue/TST-1/old-title'])).toEqual([
+      expect.objectContaining({ label: 'Project one', href: '/workspace/project/project-one/overview' }),
+    ])
+    const triage = { ...data, teamSettings: { ...data.teamSettings, [issue.team.id]: { ...data.teamSettings?.[issue.team.id], triageEnabled: true } } }
+    const inTriage = { ...issue, project, state: { ...issue.state, type: 'backlog' as const }, triagedAt: undefined }
+    expect(issueBreadcrumbs(triage as typeof data, inTriage)).toEqual([])
   })
 
   it('rejects external, other-workspace and unknown return targets', () => {

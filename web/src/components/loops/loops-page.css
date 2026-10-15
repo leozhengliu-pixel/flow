@@ -236,18 +236,22 @@
   padding: 0 8px;
 }
 .loops-tabs { display: flex; align-items: center; gap: 5px; }
-.loops-tabs button {
+.loops-tabs a {
+  box-sizing: border-box;
   height: 28px;
+  display: inline-flex;
+  align-items: center;
   padding: 0 10px;
   border: 0.5px solid transparent;
   border-radius: 9999px;
   background: var(--theme-control-active);
   color: var(--theme-text-secondary);
   font: 500 12px var(--font);
+  text-decoration: none;
   cursor: pointer;
 }
-.loops-tabs button:hover { color: var(--theme-text-primary); }
-.loops-tabs button.is-active { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
+.loops-tabs a:hover { color: var(--theme-text-primary); text-decoration: none; }
+.loops-tabs a.is-active { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
 .loops-toolbar-left { min-width: 0; flex: 1; display: flex; align-items: center; gap: 6px; }
 .loops-toolbar-right { display: flex; align-items: center; gap: 6px; }
 .loops-search.is-inline { box-sizing: border-box; width: 300px; min-width: 0; gap: 8px; padding: 0 8px 0 10px; border-color: transparent; border-radius: 9999px; background: var(--bg-panel); }
@@ -329,7 +333,7 @@
 .loops-table-row:hover::before,
 .loops-table-row.is-menu-open::before,
 .loops-table-row:has(.loops-row-link:focus-visible)::before { background: var(--bg-hover); }
-.loops-row-link { position: absolute; z-index: 0; inset: 0 8px; width: calc(100% - 16px); padding: 0; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
+.loops-row-link { position: absolute; z-index: 0; inset: 0 8px; display: block; width: calc(100% - 16px); padding: 0; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
 .loops-row-link:focus-visible { outline: 0; }
 .loops-cell-name,
 .loops-cell-muted,

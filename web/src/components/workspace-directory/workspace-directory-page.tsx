@@ -2,6 +2,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
 import { teamHierarchy } from '@/lib/team-hierarchy';
 import { personMatchesQuery, personSearchText, personUsername } from '@/lib/people';
+import { memberProfileHandle, memberProfilePath } from '@/lib/app-routes';
 import { compareDirectoryTeams, indexTeamPeople, matchesTeamDate, matchesTeamFilters, teamDateChoices, teamTimestamp, type TeamFilterField, type TeamOrdering } from './team-directory-model';
 import { TeamDateFilterDialog, TeamFilterBar } from './team-directory-controls';
 import { useTeamDirectoryControls, type TeamColumn } from './use-team-directory-controls';
@@ -434,7 +435,7 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
     const online = member.status === "active" && !user.app && (user.id === data.viewer.id || (lastSeen !== undefined && Date.now() - lastSeen.getTime() < MEMBER_ONLINE_WINDOW_MS));
     return <a
       className="workspace-directory-member-row"
-      href={`/${encodeURIComponent(data.workspace.urlKey)}/profiles/${encodeURIComponent(user.name)}`}
+      href={memberProfilePath(data.workspace.urlKey, memberProfileHandle(user))}
       onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onOpen(user) }}
     >
       <div className="workspace-member-identity"><DirectoryUserAvatar user={user} /><span><strong data-i18n-ignore>{user.displayName || user.name}</strong><small data-i18n-ignore>{personUsername(user)}</small></span></div>

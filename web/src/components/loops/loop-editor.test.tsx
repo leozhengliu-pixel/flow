@@ -51,6 +51,19 @@ describe('LoopEditor', () => {
     api.updateLoop.mockImplementation(async (id: string, input: Partial<Loop>) => ({ ...draft, ...input, id }))
   })
 
+  it('leads a new loop started from a team\'s Loops tab back to that tab', async () => {
+    api.getLoop.mockResolvedValue(draft)
+    const onNavigate = vi.fn()
+    const data = makeBootstrap({ loops: [draft], drafts: [], favorites: [], integrationConnections: [] })
+    render(<I18nProvider><LoopEditor data={data} draftId={draft.id} teamKey="TST" onNavigate={onNavigate} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' })
+    expect(nav).toHaveTextContent('Test team›New loop')
+    const team = within(nav).getByRole('link', { name: 'Test team' })
+    expect(team).toHaveAttribute('href', '/workspace/team/TST/loops')
+    await userEvent.click(team)
+    expect(onNavigate).toHaveBeenCalledWith('/workspace/team/TST/loops')
+  })
+
   it('lays out the name row, trigger, instructions, connectors, permissions and footer', async () => {
     const { view } = renderEditor({ ...draft, templateId: undefined })
     const heading = view.container.querySelector('.loops-editor-heading')!

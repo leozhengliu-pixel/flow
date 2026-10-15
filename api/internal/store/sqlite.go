@@ -1570,6 +1570,22 @@ func aggregateJSONValue(data domain.Bootstrap, aggregateID string) any {
 // unknown IDs still fall back to the generic lookup below.
 func aggregateEntityByID(data domain.Bootstrap, id string) (any, bool) {
 	switch {
+	// Team overview resources and sections share the "team_" prefix. A
+	// deleted one has no entity; skip the reflection walk either way.
+	case strings.HasPrefix(id, "team_resource_section_"):
+		for index := range data.TeamResourceSections {
+			if data.TeamResourceSections[index].ID == id {
+				return data.TeamResourceSections[index], true
+			}
+		}
+		return nil, true
+	case strings.HasPrefix(id, "team_resource_"):
+		for index := range data.TeamPinnedResources {
+			if data.TeamPinnedResources[index].ID == id {
+				return data.TeamPinnedResources[index], true
+			}
+		}
+		return nil, true
 	case strings.HasPrefix(id, "team_"):
 		for index := range data.Teams {
 			if data.Teams[index].ID == id {

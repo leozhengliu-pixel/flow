@@ -145,7 +145,7 @@ export function LoopActionsMenu({
         )}
         <DropdownMenuSeparator />
         {!draft && (
-          <DropdownMenuItem onSelect={() => onNavigate(editLoopPath(workspace, loop.id))}>
+          <DropdownMenuItem onSelect={() => onNavigate(editLoopPath(workspace, loop))}>
             <Pencil size={14} />
             {t("Edit")}
           </DropdownMenuItem>
@@ -223,13 +223,13 @@ export function LoopActionsMenu({
         </DropdownMenuSub>
         {!draft && <DropdownMenuSeparator />}
         {!draft && (
-          <DropdownMenuItem onSelect={() => onNavigate(loopRunPath(workspace, loop.id))}>
+          <DropdownMenuItem onSelect={() => onNavigate(loopRunPath(workspace, loop))}>
             <History size={14} />
             {t("Show run history")}
           </DropdownMenuItem>
         )}
         {!draft && (
-          <DropdownMenuItem onSelect={() => (onShowVersions ? onShowVersions() : onNavigate(`${loopPath(workspace, loop.id)}?versions=1`))}>
+          <DropdownMenuItem onSelect={() => (onShowVersions ? onShowVersions() : onNavigate(`${loopPath(workspace, loop)}?versions=1`))}>
             <GitCommitVertical size={14} />
             {t("Show published versions")}
           </DropdownMenuItem>

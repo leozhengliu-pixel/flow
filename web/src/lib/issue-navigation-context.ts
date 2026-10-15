@@ -1,7 +1,8 @@
-import { myIssuesPath, parseAppRoute, teamHomePath, teamIssuesPath } from './app-routes'
+import { myIssuesPath, parseAppRoute, projectPath, teamHomePath, teamIssuesPath } from './app-routes'
 import type { BootstrapData, Issue, Project } from '@/types/flow'
+import { isIssueInTriage } from '@/components/triage/triage-model'
 import { findBySlugRef } from './resource-slug'
-import { navigationReturnPath, navigationTrail, projectsListOriginPath, workspacePath } from './navigation-context'
+import { navigationReturnPath, navigationTrail, workspacePath } from './navigation-context'
 
 /** `team` / `project`: the crumb is drawn with that entity's icon like the reference header.
  * `issue`: an issue page this one was opened from (shown as its identifier, its title in a tooltip).
@@ -32,14 +33,15 @@ function previousIssuePath(state: unknown, workspace: string, issue?: Issue) {
 }
 
 /**
- * The reference header shows the breadcrumb of the page the issue was opened from, then the issue:
- * - from a project (any tab): `Projects › ◆ Project › ID title` when the project itself was opened from a
- *   projects list, else `◆ Project › ID title`; the project crumb links back to the tab the issue came from;
+ * The issue header shows the breadcrumb of the page the issue was opened from, then the issue:
+ * - from a project (any tab): `◆ Project › ID title`, the project crumb linking back to the tab the issue came
+ *   from (a "Projects" crumb the project page itself showed is not carried over);
  * - from another issue (a sub-issue opened from its parent): that issue's root crumb, then its identifier;
  * - from a list: the list's crumbs (`Team › Issues`, `My issues`, …).
- * More than two crumbs collapse to the first and the last (`Projects › FLO-29 › FLO-31`).
+ * More than two crumbs collapse to the first and the last (`◆ Project › FLO-29 › FLO-31`).
  * `context` is the navigation trail (oldest first) or, for older callers, just the list path.
- * Without one (opened directly by URL) there are no crumbs before the issue.
+ * Opened directly by URL, an issue in a project shows that project's crumb (its overview); any other issue,
+ * and an issue still in Triage, shows no crumbs before the issue.
  */
 export function issueBreadcrumbs(data: BootstrapData, issue: Issue, context?: string | string[]): IssueBreadcrumb[] {
   const workspace = data.workspace.urlKey
@@ -48,8 +50,14 @@ export function issueBreadcrumbs(data: BootstrapData, issue: Issue, context?: st
   const current = issue.identifier.toUpperCase()
   // A trail entry for this very issue (a reload, a canonical slug) is not an ancestor.
   while (trail.length && issueRouteIdentifier(trail.at(-1)!) === current) trail.pop()
-  const crumbs = trailCrumbs(data, issue, trail)
+  const crumbs = trail.length ? trailCrumbs(data, issue, trail) : directCrumbs(data, issue)
   return crumbs.length > 2 ? [crumbs[0], crumbs.at(-1)!] : crumbs
+}
+
+function directCrumbs(data: BootstrapData, issue: Issue): IssueBreadcrumb[] {
+  if (!issue.project || isIssueInTriage(issue, data.teamSettings)) return []
+  const project = data.projects.find(item => item.id === issue.project?.id)
+  return project ? [{ label: project.name, href: projectPath(data.workspace.urlKey, project), entity: true, project }] : []
 }
 
 function issueRouteIdentifier(path: string) {
@@ -60,7 +68,6 @@ function issueRouteIdentifier(path: string) {
 function trailCrumbs(data: BootstrapData, issue: Issue, trail: string[]): IssueBreadcrumb[] {
   const href = trail.at(-1)
   if (!href) return []
-  const workspace = data.workspace.urlKey
   const url = new URL(href, 'https://flow.invalid')
   const route = parseAppRoute(url.pathname, url.search)
   if (route.kind === 'issue') {
@@ -70,11 +77,7 @@ function trailCrumbs(data: BootstrapData, issue: Issue, trail: string[]): IssueB
   }
   if (route.kind === 'project') {
     const project = findBySlugRef(data.projects, route.projectSlugId)
-    if (project) {
-      const list = projectsListOriginPath({ navigationTrail: trail.slice(0, -1) }, workspace)
-      const crumb: IssueBreadcrumb = { label: project.name, href, entity: true, project }
-      return list ? [{ label: 'Projects', href: list, tooltip: 'All projects' }, crumb] : [crumb]
-    }
+    if (project) return [{ label: project.name, href, entity: true, project }]
   }
   return listCrumbs(data, issue, href, route)
 }

@@ -31,6 +31,13 @@ func metadataOnlyMutation(event string, payload any) bool {
 	if event == "team.updated" && metadataFieldsOnly(payload, "name", "color", "icon") {
 		return true
 	}
+	// Pinning a document, link, project or initiative to a team overview only
+	// validates the pinned record; issue pins load their issue through a
+	// mutation scope.
+	if event == "team.resource_pinned" {
+		input, ok := payload.(domain.TeamPinnedResource)
+		return ok && input.ResourceType != "issue"
+	}
 	if event == "project.created" {
 		input, ok := payload.(domain.ProjectMutationInput)
 		return ok && input.TemplateID == ""

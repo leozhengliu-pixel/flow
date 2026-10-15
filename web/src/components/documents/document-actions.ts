@@ -12,8 +12,9 @@ import { toast } from '@/lib/toast'
 import { confirmAction, promptAction, promptDateAction } from '@/components/ui/action-dialog-service'
 import {
   createDocument, createDocumentReminder, createDocumentTemplate, createInitiativeResource, deleteDocument,
-  deleteInitiativeResource, deleteTeamResource, pinTeamResource, replaceDocumentPermissions, restoreTrashEntry, updateDocument,
+  deleteInitiativeResource, replaceDocumentPermissions, restoreTrashEntry, updateDocument,
 } from '@/lib/api'
+import { pinResource, unpinResource } from '@/lib/team-resource-sync'
 import { toggleFavoriteFor } from '@/lib/favorites'
 import { documentPath } from '@/lib/app-routes'
 import type { BootstrapData, DocumentPermission, DocumentTemplate, FlowDocument, Initiative, Project, Team, User } from '@/types/flow'
@@ -288,13 +289,22 @@ export function documentPinnedResource(data: BootstrapData, teamId: string, docu
   return (data.teamPinnedResources ?? []).find(resource => resource.teamId === teamId && resource.resourceType === 'document' && resource.resourceId === documentId)
 }
 
-/** Pins the document to a team's overview "Team resources" (or unpins it when already pinned). */
+/**
+ * Pins the document to a team's overview "Team resources" (or unpins it when
+ * already pinned). The change shows at once on every surface; it does not
+ * reload workspace metadata.
+ */
 export async function toggleDocumentPinnedToTeam(ctx: DocumentActionContext, document: FlowDocument, team: Team) {
   const existing = documentPinnedResource(ctx.data, team.id, document.id)
-  return guarded(ctx, () => existing
-    ? deleteTeamResource(team.id, existing.id)
-    : pinTeamResource(team.id, { resourceType: 'document', resourceId: document.id, title: document.title }),
-  ctx.t(existing ? 'Removed from team overview' : 'Pinned to team overview'), 'Could not update team overview')
+  try {
+    if (existing) await unpinResource(team.id, existing)
+    else await pinResource(team.id, ctx.data.teamPinnedResources ?? [], { resourceType: 'document', resourceId: document.id, title: document.title })
+    toast.success(ctx.t(existing ? 'Unpinned from team overview' : 'Pinned to team overview'))
+    return true
+  } catch (error) {
+    toast.error(message(error, ctx.t('Could not update team overview')))
+    return false
+  }
 }
 
 export async function remindAboutDocument(ctx: DocumentActionContext, document: FlowDocument, remindAt: string) {

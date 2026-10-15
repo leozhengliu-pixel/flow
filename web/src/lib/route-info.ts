@@ -2,7 +2,7 @@ import type { AppRoute, SettingsPageId } from "@/lib/app-routes";
 import { findTrashedDocument } from "@/components/documents/document-trash";
 import { SETTINGS_SEARCH_PAGES } from "@/components/settings/settings-search";
 import type { BootstrapData, Issue, Project } from "@/types/flow";
-import { findBySlugRef } from "@/lib/resource-slug";
+import { findBySlugRef, findLoopByRef } from "@/lib/resource-slug";
 
 export type RouteInfo = {
   title: string;
@@ -25,7 +25,7 @@ const BILLING_SETTINGS = new Set<string>([
 export type RouteInfoData = Pick<
   BootstrapData,
   "workspace" | "issues" | "projects" | "teams" | "notifications"
-> & Partial<Pick<BootstrapData, "savedViews" | "customers" | "documents" | "trash" | "releasePipelines" | "releases" | "oauthApplications">> & {
+> & Partial<Pick<BootstrapData, "savedViews" | "customers" | "documents" | "trash" | "releasePipelines" | "releases" | "oauthApplications" | "loops">> & {
   issue?: Issue;
   project?: Project;
 };
@@ -206,6 +206,21 @@ export function routeInfo(
   if ((route.kind === "team-overview" || route.kind === "team-issues") && team) {
     return { title: team.name, pinnedTitle: team.name };
   }
+  // The new-loop editor: "New loop", or "<Team> › New loop" when started from a team's Loops tab.
+  if (route.kind === "loop-editor" && !route.loopId) {
+    const label = t("New loop");
+    return { title: team ? `${team.name} › ${label}` : label, pinnedTitle: label };
+  }
+  // The workspace Loops views: "Loops › My loops", "Loops › All".
+  if (route.kind === "loops" && route.view) {
+    const label = t("Loops");
+    return { title: `${label} › ${t(route.view === "all" ? "All" : "My loops")}`, pinnedTitle: label };
+  }
+  // A loop's own pages are titled with its name.
+  if (route.kind === "loop" || route.kind === "loop-run" || route.kind === "loop-editor") {
+    const loop = findLoopByRef(data?.loops, route.loopId);
+    if (loop?.name) return { title: loop.name, pinnedTitle: loop.name };
+  }
   const pageTitle = PAGE_TITLES[route.kind];
   if (pageTitle) {
     const title = team ? `${team.name} › ${t(pageTitle)}` : t(pageTitle);
@@ -229,6 +244,8 @@ function capitalize(value: string) {
 }
 
 function teamSectionLabel(section: string) {
+  // The team settings members page is titled "<Team> › Team members", unlike the team's Members tab.
+  if (section === "members") return "Team members";
   const label = section.replace(/^ai-/, "AI-").replace(/-/g, " ");
   return label[0]?.toUpperCase() + label.slice(1);
 }

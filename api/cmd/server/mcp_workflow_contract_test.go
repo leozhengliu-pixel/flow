@@ -111,7 +111,7 @@ func TestMCPAllToolsThroughRealSDK(t *testing.T) {
 		{"list_issue_labels", map[string]any{"team": team}}, {"list_project_labels", nil}, {"list_initiative_labels", nil},
 		{"list_issues", map[string]any{"team": team, "limit": 2}}, {"count_issues", map[string]any{"team": team}}, {"list_cycles", map[string]any{"teamId": team}},
 		{"list_projects", nil}, {"get_project", map[string]any{"query": project}}, {"list_milestones", map[string]any{"project": project}},
-		{"list_initiatives", nil}, {"list_documents", nil}, {"get_document", map[string]any{"id": "contract-doc"}},
+		{"list_initiatives", nil}, {"list_documents", nil}, {"search_documents", map[string]any{"queries": []any{"contract"}}}, {"get_document", map[string]any{"id": "contract-doc"}},
 		{"list_comments", map[string]any{"issueId": issue}}, {"get_status_updates", map[string]any{"type": "project"}},
 		{"list_release_pipelines", nil}, {"list_releases", nil}, {"list_release_notes", nil},
 		{"list_diffs", nil}, {"get_diff", map[string]any{"urlOrId": review}}, {"get_diff_threads", map[string]any{"urlOrId": review}},

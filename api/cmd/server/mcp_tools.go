@@ -232,11 +232,25 @@ func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, a
 		return mcpFindInitiative(data, stringArg(args, "query"))
 	case "list_documents":
 		items := slices.Clone(data.Documents)
-		query := lowerArg(args, "query")
 		items = slices.DeleteFunc(items, func(item domain.Document) bool {
-			return !boolArg(args, "includeArchived") && item.ArchivedAt != nil || query != "" && !containsFold(item.Title+" "+item.Content, query) || stringArg(args, "creatorId") != "" && item.Creator.ID != stringArg(args, "creatorId") || stringArg(args, "projectId") != "" && !slices.Contains(item.ProjectIDs, stringArg(args, "projectId")) || stringArg(args, "teamId") != "" && !slices.Contains(item.TeamIDs, stringArg(args, "teamId"))
+			return !boolArg(args, "includeArchived") && item.ArchivedAt != nil || stringArg(args, "creatorId") != "" && item.Creator.ID != stringArg(args, "creatorId") || stringArg(args, "projectId") != "" && !slices.Contains(item.ProjectIDs, stringArg(args, "projectId")) || stringArg(args, "teamId") != "" && !slices.Contains(item.TeamIDs, stringArg(args, "teamId"))
 		})
+		if query := lowerArg(args, "query"); query != "" && len(documentSearchTerms(query)) > 0 {
+			// Every keyword, anywhere in the title or body, best match first.
+			matches, err := s.rankDocumentMatches(ctx, data.Workspace.URLKey, items, query, false)
+			if err != nil {
+				return nil, err
+			}
+			items = items[:0]
+			for _, match := range matches {
+				items = append(items, match.document)
+			}
+		} else if query != "" {
+			items = slices.DeleteFunc(items, func(item domain.Document) bool { return !containsFold(item.Title+" "+item.Content, query) })
+		}
 		return paginate(items, args), nil
+	case "search_documents":
+		return s.searchMCPDocuments(ctx, data, args)
 	case "get_document":
 		return mcpFindDocument(data, stringArg(args, "id"))
 	case "list_document_history":

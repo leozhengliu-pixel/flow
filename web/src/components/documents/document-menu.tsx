@@ -36,8 +36,11 @@ import {
 export interface DocumentMenuItemsProps {
   ctx: DocumentActionContext
   document: FlowDocument
-  /** `page` adds Download, Show author names and People with access; `row` pins to `team`'s overview. */
-  variant: 'page' | 'row' | 'resource'
+  /**
+   * `page` adds Download, Show author names and People with access; `row` pins to `team`'s overview;
+   * `overview` is a row pinned on `team`'s overview (Unpin first, no Move to).
+   */
+  variant: 'page' | 'row' | 'resource' | 'overview'
   /** The team whose overview "Pin to overview" targets (list rows). */
   team?: Team
   /** Page-only: state and handlers for the author names toggle and the access dialog. */
@@ -71,16 +74,17 @@ export function DocumentMenuItems({ ctx, document, variant, team, showAuthorName
   const pinnedTeam = team ?? teams[0]
   const rowPinned = pinnedTeam ? Boolean(documentPinnedResource(data, pinnedTeam.id, document.id)) : false
   const pinSelected = new Set(teams.filter(item => documentPinnedResource(data, item.id, document.id)).map(item => item.id))
+  const pinnedLabel = variant === 'overview' ? 'Unpin from overview' : 'Remove from overview'
   return <>
-    <FlowSubmenu icon={<IssueActionGlyph label="Move to" fallback={null}/>} label="Move to" shortcut="⇧ P" search>
+    {variant !== 'overview' && <FlowSubmenu icon={<IssueActionGlyph label="Move to" fallback={null}/>} label="Move to" shortcut="⇧ P" search>
       {({ close }) => <FlowMenuOptions options={moveOptions} selected={moveSelected} keepOpen={false} placeholder="Move to…" emptyLabel="No results" onChoose={id => {
         const [type, ...rest] = id.split(':')
         close()
         void moveDocument(ctx, document, { type: type as 'team' | 'project' | 'initiative', id: rest.join(':') })
       }}/>}
-    </FlowSubmenu>
-    {variant === 'row' && pinnedTeam
-      ? <FlowMenuItem icon={<IssueActionGlyph label="Pin to team" fallback={null}/>} label={rowPinned ? 'Remove from overview' : 'Pin to overview'} onSelect={() => void toggleDocumentPinnedToTeam(ctx, document, pinnedTeam)}/>
+    </FlowSubmenu>}
+    {(variant === 'row' || variant === 'overview') && pinnedTeam
+      ? <FlowMenuItem icon={<IssueActionGlyph label="Pin to team" fallback={null}/>} label={rowPinned ? pinnedLabel : 'Pin to overview'} onSelect={() => void toggleDocumentPinnedToTeam(ctx, document, pinnedTeam)}/>
       : <FlowSubmenu icon={<IssueActionGlyph label="Pin to team" fallback={null}/>} label="Pin to team">
         <FlowMenuOptions options={teams.map(item => ({ id: item.id, label: item.name, translate: false, icon: <TeamIcon team={item} size={14}/> }))} selected={pinSelected} multiple emptyLabel="No teams" onChoose={id => { const target = teams.find(item => item.id === id); if (target) void toggleDocumentPinnedToTeam(ctx, document, target) }}/>
       </FlowSubmenu>}
@@ -123,14 +127,14 @@ export function DocumentMenuItems({ ctx, document, variant, team, showAuthorName
 }
 
 /** Right-click menu for a document row; the row element is the trigger (its child). */
-export function DocumentRowMenu({ children, ctx, document, team, canDelete, extra }: { children: ReactElement; ctx: DocumentActionContext; document: FlowDocument; team?: Team; canDelete?: boolean; /** Surface-specific rows appended after the document rows. */ extra?: ReactNode }) {
+export function DocumentRowMenu({ children, ctx, document, team, canDelete, extra, variant = 'row' }: { children: ReactElement; ctx: DocumentActionContext; document: FlowDocument; team?: Team; canDelete?: boolean; /** Surface-specific rows appended after the document rows. */ extra?: ReactNode; variant?: 'row' | 'overview' }) {
   const { t } = useI18n()
   const point = useRef({ x: 0, y: 0 })
   return <FlowContextMenuRoot>
     <FlowContextMenuTrigger asChild onContextMenu={(event: MouseEvent) => { point.current = { x: event.clientX, y: event.clientY } }}>{children}</FlowContextMenuTrigger>
     <FlowContextMenuPortal>
       <FlowMenuContent label={t('Document actions')}>
-        <DocumentMenuItems ctx={ctx} document={document} variant="row" team={team} canDelete={canDelete}/>
+        <DocumentMenuItems ctx={ctx} document={document} variant={variant} team={team} canDelete={canDelete}/>
         {extra}
       </FlowMenuContent>
     </FlowContextMenuPortal>

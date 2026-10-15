@@ -86,6 +86,7 @@
   "save_template",
   "save_view",
   "search_documentation",
+  "search_documents",
   "search_issues",
   "submit_diff_review",
   "triage_issue",

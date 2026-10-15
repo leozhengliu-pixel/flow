@@ -1036,7 +1036,10 @@ type AskApproval struct {
 }
 
 type Loop struct {
-	ID                         string           `json:"id"`
+	ID string `json:"id"`
+	// SlugID is the loop's URL slug, `<name-slug>-<12 hex>` (see LoopSlugID);
+	// it is derived whenever a loop is served, so it always follows the name.
+	SlugID                     string           `json:"slugId,omitempty"`
 	Name                       string           `json:"name"`
 	Description                string           `json:"description"`
 	Status                     string           `json:"status"` // draft | published; loops stored before drafts are published

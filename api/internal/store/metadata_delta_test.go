@@ -324,11 +324,18 @@ func TestHighFrequencyEventsAvoidFullWorkspacePath(t *testing.T) {
 		{"loop.created", nil}, {"loop.updated", nil}, {"customer.created", nil}, {"customer.updated", nil}, {"customer_taxonomy.updated", nil},
 		{"release.deleted", nil}, {"release.reordered", nil}, {"release.note_created", nil}, {"release_pipeline.updated", nil},
 		{"favorite.added", nil}, {"favorite.removed", nil}, {"post.updated", nil}, {"ask.created", nil}, {"ask.updated", nil},
+		{"team.resource_pinned", domain.TeamPinnedResource{ResourceType: "document"}}, {"team.resource_pinned", domain.TeamPinnedResource{ResourceType: "link"}},
+		{"team.resource_updated", nil}, {"team.resource_deleted", nil},
+		{"team.resource_section_created", nil}, {"team.resource_section_updated", nil}, {"team.resource_section_deleted", nil},
 	}
 	for _, item := range events {
 		if !metadataOnlyMutation(item.event, item.payload) && !metadataTeamMutation(item.event, item.payload) {
 			t.Errorf("%s takes the full workspace path", item.event)
 		}
+	}
+	// Issue pins validate an issue record, which the metadata path does not load.
+	if metadataOnlyMutation("team.resource_pinned", domain.TeamPinnedResource{ResourceType: "issue"}) {
+		t.Error("issue pins must not take the metadata-only path")
 	}
 }
 

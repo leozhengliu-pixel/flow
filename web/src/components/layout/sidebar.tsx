@@ -43,6 +43,7 @@ import { useSidebarLayout } from './use-sidebar-layout';
 import { NavLink, useLocation } from "react-router-dom";
 import { parseAppRoute } from '@/lib/app-routes';
 import { sidebarRoutePath } from '@/lib/sidebar-route';
+import { teamHomeTabPath, useTeamHomeTab } from '@/lib/team-home-tab';
 import { toast } from "@/lib/toast";
 import { favoriteResourceKey, patchFavorite, toggleFavoriteFor, toggleTabFavoriteFor } from "@/lib/favorites";
 import { FavoriteTabIcon } from "./favorite-tab-badge";
@@ -1552,6 +1553,9 @@ function TeamNavigation({
   const overviewPath = teamHomePath(workspaceSlug, team.key);
   const onOverview =
     typeof location !== "undefined" && location.pathname === overviewPath;
+  // Home reopens the team home tab the viewer last used (Overview, Documents, Loops or Members).
+  const homeTab = useTeamHomeTab(data.viewer.id, team.id);
+  const homePath = teamHomeTabPath(workspaceSlug, team.key, homeTab, workspaceFeatureEnabled(data.workspaceSettings?.featureFlags, "loops"));
   return (
     <div className="sidebar-team" data-expanded={expanded}>
       <div className="team-heading">
@@ -1576,7 +1580,8 @@ function TeamNavigation({
             active={onOverview}
             icon={<HomeIcon />}
             label="Home"
-            to={overviewPath}
+            to={homePath}
+            matchPath={overviewPath}
             onClick={onNavigate}
           />
           {triageCount !== undefined && (

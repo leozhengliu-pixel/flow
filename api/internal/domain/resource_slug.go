@@ -204,6 +204,21 @@ func InitiativeIndexBySlugRef(initiatives []Initiative, ref string) int {
 	return IndexBySlugRef(initiatives, ref, InitiativeSlugKey)
 }
 
+// LoopSlugID is a loop's URL slug, `<name-slug>-<12 hex>`. The suffix is
+// derived from the loop id, so it is stable for the loop's life without being
+// stored; only the name prefix follows renames.
+func LoopSlugID(loop Loop) string {
+	return SlugWithSuffix(loop.Name, DerivedSlugSuffix(loop.ID))
+}
+
+// LoopIndexBySlugRef finds the loop an id or a (current or stale-prefix) slug
+// names, or -1.
+func LoopIndexBySlugRef(loops []Loop, ref string) int {
+	return IndexBySlugRef(loops, ref, func(loop Loop) (string, string, []string) {
+		return loop.ID, LoopSlugID(loop), nil
+	})
+}
+
 // StableSlug gives a slug without a stable suffix (a legacy name-only slug)
 // one derived from the record id, keeping the old slug in previous so links
 // made with it still resolve. changed is false when the slug already has one.

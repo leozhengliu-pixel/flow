@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -17,7 +17,7 @@ const base: Pick<Loop, 'connectorIds' | 'teamAccess' | 'allowChangesOutsideTrigg
   createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-29T00:00:00Z',
 }
 const loops: Loop[] = [
-  { ...base, id: 'loop-1', name: 'Triage agent', description: 'Routes incoming issues.', status: 'published', level: 'team', teamId: 'team-1', triggerType: 'issue', triggerConfig: { event: 'triage' }, enabled: true, ownerId: viewer.id, creator: viewer, runCount30d: 4, lastRunAt: new Date(Date.now() - 2 * 3600_000).toISOString() },
+  { ...base, id: 'loop-1', slugId: 'triage-agent-0123456789ab', name: 'Triage agent', description: 'Routes incoming issues.', status: 'published', level: 'team', teamId: 'team-1', triggerType: 'issue', triggerConfig: { event: 'triage' }, enabled: true, ownerId: viewer.id, creator: viewer, runCount30d: 4, lastRunAt: new Date(Date.now() - 2 * 3600_000).toISOString() },
   { ...base, id: 'loop-2', name: 'Weekly wrap', description: 'Shares the highlights.', status: 'published', level: 'workspace', triggerType: 'schedule', triggerConfig: { unit: 'week', interval: 1 }, enabled: true, ownerId: teammate.id, creator: teammate, runCount30d: 1 },
   { ...base, id: 'loop-3', name: '', status: 'draft', level: 'workspace', triggerType: 'schedule', triggerConfig: {}, enabled: false, creator: viewer },
   { ...base, id: 'loop-4', name: 'Someone else draft', status: 'draft', level: 'workspace', triggerType: 'schedule', triggerConfig: {}, enabled: false, creator: teammate },
@@ -81,10 +81,51 @@ describe('LoopList', () => {
     // The viewer's own draft is listed and marked; other people's drafts stay private.
     expect(screen.getByText('Draft')).toBeVisible()
     expect(screen.queryByText('Someone else draft')).toBeNull()
-    await user.click(screen.getByRole('button', { name: 'Triage agent' }))
-    expect(onNavigate).toHaveBeenCalledWith('/workspace/loop/loop-1')
-    await user.click(screen.getByRole('button', { name: 'Untitled loop' }))
+    // Rows are links to the loop's slug page (a draft links to its editor).
+    const link = screen.getByRole('link', { name: 'Triage agent' })
+    expect(link).toHaveAttribute('href', '/workspace/loop/triage-agent-0123456789ab')
+    await user.click(link)
+    expect(onNavigate).toHaveBeenCalledWith('/workspace/loop/triage-agent-0123456789ab')
+    const draft = screen.getByRole('link', { name: 'Untitled loop' })
+    expect(draft).toHaveAttribute('href', '/workspace/loops/new?draftId=loop-3')
+    await user.click(draft)
     expect(onNavigate).toHaveBeenCalledWith('/workspace/loops/new?draftId=loop-3')
+  })
+
+  it('leaves ⌘-, Ctrl- and middle-clicks on a row to the browser (a new tab) and Shift-click to the selection', async () => {
+    const user = userEvent.setup()
+    const { onNavigate } = renderList()
+    const link = screen.getByRole('link', { name: 'Triage agent' })
+    // Record whether the page left each click alone, then stop jsdom from trying to follow it.
+    let prevented: boolean | undefined
+    const record = (event: Event) => { prevented = event.defaultPrevented; event.preventDefault() }
+    window.addEventListener('click', record)
+    for (const init of [{ metaKey: true }, { ctrlKey: true }, { button: 1 }]) {
+      fireEvent.click(link, init)
+      expect({ init, prevented }).toEqual({ init, prevented: false })
+    }
+    window.removeEventListener('click', record)
+    expect(onNavigate).not.toHaveBeenCalled()
+    await user.keyboard('{Shift>}')
+    await user.click(link)
+    await user.keyboard('{/Shift}')
+    expect(onNavigate).not.toHaveBeenCalled()
+    expect(link.closest('[role="row"]')).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('links its tabs to /loops/my-loops and /loops/all and follows the routed view', async () => {
+    const user = userEvent.setup()
+    api.listLoops.mockResolvedValue(loops)
+    const onNavigate = vi.fn()
+    render(<I18nProvider><TooltipProvider><LoopList data={makeBootstrap({ loops, favorites: [] })} embedded={false} view="mine" onNavigate={onNavigate} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></TooltipProvider></I18nProvider>)
+    const mine = screen.getByRole('tab', { name: 'My loops' })
+    const all = screen.getByRole('tab', { name: 'All' })
+    expect(mine).toHaveAttribute('href', '/workspace/loops/my-loops')
+    expect(all).toHaveAttribute('href', '/workspace/loops/all')
+    expect(mine).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByText('Weekly wrap')).toBeNull()
+    await user.click(all)
+    expect(onNavigate).toHaveBeenCalledWith('/workspace/loops/all')
   })
 
   it('filters to my loops and by search', async () => {
@@ -288,7 +329,7 @@ describe('LoopList', () => {
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
     expect(screen.getByText('Weekly wrap')).toBeVisible()
     expect(screen.getByText('Triage agent')).toBeVisible()
-    expect(screen.queryByRole('button', { name: 'Untitled loop' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Untitled loop' })).toBeNull()
     await user.click(within(bar).getByRole('button', { name: 'Remove advanced filter' }))
     // Back to "all": nothing is owned by Teammate with ≥ 4 runs.
     expect(screen.getByRole('heading', { name: 'No loops matching the filters' })).toBeVisible()
@@ -320,7 +361,7 @@ describe('LoopList', () => {
     await user.click(ordering)
     expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['Name', 'Last executed', 'Runs', 'Trigger', 'Team', 'Owner'])
     await user.click(screen.getByRole('option', { name: 'Runs' }))
-    const names = () => screen.getAllByRole('row').slice(1).map(row => within(row).getAllByRole('button')[0].getAttribute('aria-label'))
+    const names = () => screen.getAllByRole('row').slice(1).map(row => within(row).getByRole('link').getAttribute('aria-label'))
     expect(names()).toEqual(['Paused digest', 'Triage agent', 'Weekly wrap', 'Untitled loop'])
     expect(screen.getByRole('columnheader', { name: 'Runs (30d)' })).toHaveClass('is-sorted')
     const direction = within(popover).getByRole('button', { name: 'Direction' })
@@ -331,9 +372,9 @@ describe('LoopList', () => {
 
     // Switches: disabled loops, then team loops.
     await user.click(within(popover).getByRole('checkbox', { name: 'Show disabled loops' }))
-    expect(screen.queryByRole('button', { name: 'Paused digest' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Paused digest' })).toBeNull()
     await user.click(within(popover).getByRole('checkbox', { name: 'Show team loops' }))
-    expect(screen.queryByRole('button', { name: 'Triage agent' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Triage agent' })).toBeNull()
     expect(JSON.parse(localStorage.getItem('flow:loops:display:workspace-1:user-1')!)).toEqual({ grouping: 'none', ordering: 'runs', descending: false, showTeamLoops: false, showDisabledLoops: false })
   })
 

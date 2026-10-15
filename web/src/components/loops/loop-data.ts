@@ -172,8 +172,8 @@ export function activeTeams(teams: Team[]) {
 }
 
 /** Absolute link to a loop page. */
-export function loopUrl(workspaceSlug: string, loop: Pick<Loop, "id" | "status">) {
-  const path = isLoopDraft(loop) ? `${newLoopPath(workspaceSlug)}?draftId=${encodeURIComponent(loop.id)}` : loopPath(workspaceSlug, loop.id);
+export function loopUrl(workspaceSlug: string, loop: Pick<Loop, "id" | "slugId" | "status">) {
+  const path = isLoopDraft(loop) ? `${newLoopPath(workspaceSlug)}?draftId=${encodeURIComponent(loop.id)}` : loopPath(workspaceSlug, loop);
   return `${window.location.origin}${path}`;
 }
 

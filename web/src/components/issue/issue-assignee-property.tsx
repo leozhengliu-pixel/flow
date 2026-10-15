@@ -4,7 +4,7 @@ import type { Issue, ProjectSummary, User, WorkspaceMember } from '@/types/flow'
 import { AssigneePicker, DelegatePicker } from '@/components/issue/core-property-pickers'
 import { NestingLine } from '@/components/ui/nesting-line'
 import { useI18n } from '@/i18n/i18n'
-import { memberProfilePath } from '@/lib/app-routes'
+import { memberProfileHandle, memberProfilePath } from '@/lib/app-routes'
 import './issue-assignee-property.css'
 
 const ACTIVE_SESSION_STATES = new Set<Issue['agentSessionState']>(['pending', 'active', 'awaitingInput'])
@@ -37,7 +37,7 @@ export function IssueAssigneeProperty({ issue, users, teamId, workspaceKey, allo
       <NestingLine className="issue-delegate-nesting-line" heightAbove={10}/>
       <div className="issue-assignee-property issue-delegate-property">
         <DelegatePicker delegate={delegate} allowAgents={allowAgents} users={users} teamId={teamId} onDelegate={delegateId => onUpdate({ delegateId })}/>
-        <a className="issue-assignee-profile" href={memberProfilePath(workspaceKey, delegate.name)} aria-label={t('Go to agent')}><ChevronRight size={15}/></a>
+        <a className="issue-assignee-profile" href={memberProfilePath(workspaceKey, memberProfileHandle(delegate))} aria-label={t('Go to agent')}><ChevronRight size={15}/></a>
       </div>
     </div>}
   </div>

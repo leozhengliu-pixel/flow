@@ -14,7 +14,14 @@ import {
   inboxPath,
   labelPath,
   meetingPath,
+  editLoopPath,
+  loopPath,
+  loopRunPath,
+  loopsViewPath,
+  memberProfileHandle,
+  memberProfilePath,
   newAPIKeyPath,
+  newLoopPath,
   newIssuePath,
   newSigningKeyPath,
   parseAppRoute,
@@ -60,6 +67,27 @@ describe("application routes", () => {
       workspaceSlug: "acme",
       draftId: "draft-loop-1",
     });
+    expect(parseAppRoute("/acme/team/ENG/loops/new")).toEqual({ kind: "loop-editor", workspaceSlug: "acme", teamKey: "ENG" });
+    expect(parseAppRoute("/acme/team/ENG/loops/new", "?draftId=draft-loop-1")).toEqual({
+      kind: "loop-editor",
+      workspaceSlug: "acme",
+      teamKey: "ENG",
+      draftId: "draft-loop-1",
+    });
+    expect(parseAppRoute("/acme/loops")).toEqual({ kind: "loops", workspaceSlug: "acme" });
+    expect(parseAppRoute("/acme/loops/my-loops")).toEqual({ kind: "loops", workspaceSlug: "acme", view: "mine" });
+    expect(parseAppRoute("/acme/loops/all")).toEqual({ kind: "loops", workspaceSlug: "acme", view: "all" });
+    expect(parseAppRoute("/acme/loops/constructor")).toEqual({ kind: "loop", workspaceSlug: "acme", loopId: "constructor" });
+    expect(loopsViewPath("acme", "mine")).toBe("/acme/loops/my-loops");
+    expect(loopsViewPath("acme", "all")).toBe("/acme/loops/all");
+    // Loop pages use the slug; a loop without one (or a bare reference) keeps its id.
+    const loop = { id: "loop_1", slugId: "triage-agent-96b66416bc6a" };
+    expect(loopPath("acme", loop)).toBe("/acme/loop/triage-agent-96b66416bc6a");
+    expect(editLoopPath("acme", loop)).toBe("/acme/loop/triage-agent-96b66416bc6a/edit");
+    expect(loopRunPath("acme", loop, "run-9")).toBe("/acme/loop/triage-agent-96b66416bc6a/run/run-9");
+    expect(loopRunPath("acme", loop)).toBe("/acme/loop/triage-agent-96b66416bc6a/runs");
+    expect(loopPath("acme", { id: "loop_1" })).toBe("/acme/loop/loop_1");
+    expect(parseAppRoute("/acme/loop/triage-agent-96b66416bc6a")).toEqual({ kind: "loop", workspaceSlug: "acme", loopId: "triage-agent-96b66416bc6a" });
     expect(parseAppRoute("/acme/loop/loop-1")).toEqual({ kind: "loop", workspaceSlug: "acme", loopId: "loop-1" });
     expect(parseAppRoute("/acme/loops/loop-1")).toEqual({ kind: "loop", workspaceSlug: "acme", loopId: "loop-1" });
     expect(parseAppRoute("/acme/loop/loop-1/edit")).toEqual({ kind: "loop-editor", workspaceSlug: "acme", loopId: "loop-1" });
@@ -181,7 +209,11 @@ describe("application routes", () => {
       "/acme/team/ENG/views/issues/new",
     );
     expect(teamLoopsPath("acme", "ENG")).toBe("/acme/team/ENG/loops");
+    expect(newLoopPath("acme")).toBe("/acme/loops/new");
+    expect(newLoopPath("acme", "ENG")).toBe("/acme/team/ENG/loops/new");
     expect(teamMembersPath("acme", "ENG")).toBe("/acme/team/ENG/members");
+    expect(memberProfilePath("acme", memberProfileHandle({ name: "Jane Doe", username: "jane.doe" }))).toBe("/acme/profiles/jane.doe");
+    expect(memberProfilePath("acme", memberProfileHandle({ name: "Jane Doe" }), "created")).toBe("/acme/profiles/Jane%20Doe/created");
     expect(projectSavedViewPath("acme", "platform", "view-1")).toBe(
       "/acme/project/platform/view/view-1",
     );
