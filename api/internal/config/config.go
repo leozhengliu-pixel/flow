@@ -25,14 +25,28 @@ type Config struct {
 	Database          store.DatabaseConfig
 	Redis             coordination.Config
 	Storage           objectstore.Config
-	Auth              AuthConfig
-	Agent             AgentConfig
-	TTS               TTSConfig
-	WebSearch         WebSearchConfig
-	Telemetry         TelemetryConfig
+	// ContentStoragePrefix is the object key prefix for offloaded database
+	// content when FLOW_STORAGE_DRIVER=s3 (FLOW_S3_CONTENT_PREFIX).
+	ContentStoragePrefix string
+	Auth                 AuthConfig
+	Agent                AgentConfig
+	TTS                  TTSConfig
+	WebSearch            WebSearchConfig
+	Telemetry            TelemetryConfig
+	Retention            RetentionConfig
 	// Warnings lists settings Load adjusted (for example a feature turned
 	// off for a missing credential); the server logs them at startup.
 	Warnings []string
+}
+
+// RetentionConfig bounds how long Flow keeps history it no longer serves.
+type RetentionConfig struct {
+	// DomainEvents is how long the domain_events log keeps an event
+	// (FLOW_DOMAIN_EVENT_RETENTION_DAYS, default 90); 0 keeps every event.
+	DomainEvents time.Duration
+	// Trash is how long deleted items stay restorable before they are purged
+	// (FLOW_TRASH_RETENTION_DAYS, default 30).
+	Trash time.Duration
 }
 
 type AgentConfig struct {
@@ -162,6 +176,13 @@ func Load() (Config, error) {
 			ConnMaxLifetime:     duration("FLOW_DATABASE_CONN_MAX_LIFETIME", 30*time.Minute),
 			MaxStateBytes:       integer("FLOW_WORKSPACE_STATE_MAX_BYTES", 64<<20),
 			MaxTransactionBytes: integer("FLOW_DATABASE_MAX_TRANSACTION_BYTES", 32<<20),
+			AgentOffloadBytes:   integer("FLOW_AGENT_TRANSCRIPT_OFFLOAD_BYTES", 8<<10),
+			ContentCacheBytes:   integer("FLOW_CONTENT_CACHE_BYTES", 128<<20),
+			SearchIndexMaxChars: integer("FLOW_SEARCH_INDEX_MAX_CHARS", 20000),
+		},
+		Retention: RetentionConfig{
+			DomainEvents: time.Duration(integer("FLOW_DOMAIN_EVENT_RETENTION_DAYS", 90)) * 24 * time.Hour,
+			Trash:        time.Duration(integer("FLOW_TRASH_RETENTION_DAYS", 30)) * 24 * time.Hour,
 		},
 		Redis: coordination.Config{
 			Mode: value("FLOW_REDIS_MODE", "disabled"), URL: secret("FLOW_REDIS_URL"), Addrs: csvRaw(value("FLOW_REDIS_ADDRS", "")),
@@ -170,6 +191,7 @@ func Load() (Config, error) {
 			DialTimeout: duration("FLOW_REDIS_DIAL_TIMEOUT", 5*time.Second), ReadTimeout: duration("FLOW_REDIS_READ_TIMEOUT", 3*time.Second), WriteTimeout: duration("FLOW_REDIS_WRITE_TIMEOUT", 3*time.Second),
 			ConnectTimeout: duration("FLOW_REDIS_CONNECT_TIMEOUT", 15*time.Second), LockTTL: duration("FLOW_REDIS_LOCK_TTL", 30*time.Second), LockWait: duration("FLOW_REDIS_LOCK_WAIT", 5*time.Second),
 		},
+		ContentStoragePrefix: value("FLOW_S3_CONTENT_PREFIX", "content"),
 		Storage: objectstore.Config{
 			Driver:          value("FLOW_STORAGE_DRIVER", "local"),
 			LocalPath:       value("FLOW_STORAGE_LOCAL_PATH", value("FLOW_UPLOAD_PATH", "data/uploads")),
@@ -245,6 +267,21 @@ func (c Config) Validate() error {
 	}
 	if c.Database.MaxTransactionBytes < 1<<20 {
 		return fmt.Errorf("FLOW_DATABASE_MAX_TRANSACTION_BYTES must be at least 1048576")
+	}
+	if c.Database.AgentOffloadBytes < 1024 {
+		return fmt.Errorf("FLOW_AGENT_TRANSCRIPT_OFFLOAD_BYTES must be at least 1024")
+	}
+	if c.Database.ContentCacheBytes < 0 {
+		return fmt.Errorf("FLOW_CONTENT_CACHE_BYTES must not be negative")
+	}
+	if c.Database.SearchIndexMaxChars != 0 && c.Database.SearchIndexMaxChars < 1000 {
+		return fmt.Errorf("FLOW_SEARCH_INDEX_MAX_CHARS must be 0 (no limit) or at least 1000")
+	}
+	if c.Retention.DomainEvents < 0 {
+		return fmt.Errorf("FLOW_DOMAIN_EVENT_RETENTION_DAYS must be 0 (keep all) or more")
+	}
+	if c.Retention.Trash < 24*time.Hour {
+		return fmt.Errorf("FLOW_TRASH_RETENTION_DAYS must be at least 1")
 	}
 	redisMode := strings.ToLower(strings.TrimSpace(c.Redis.Mode))
 	if redisMode != "disabled" && redisMode != "standalone" && redisMode != "cluster" {

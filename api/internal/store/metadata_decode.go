@@ -169,7 +169,7 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 func (s *SQLiteStore) loadMetadataRecordRows(ctx context.Context, workspace string, reader metadataReader, collections map[string]string) ([]metadataCacheRow, error) {
 	if cached, ok := s.metadataRecordsFromCache(ctx, workspace, collections); ok {
 		sortMetadataRecordRows(cached)
-		return cached, nil
+		return cached, s.inlineOffloadedRows(ctx, workspace, reader, cached)
 	}
 	// Read in primary-key order and sort in memory: ordering by
 	// collection_order on the server sorts every record with its data
@@ -191,8 +191,9 @@ func (s *SQLiteStore) loadMetadataRecordRows(ctx context.Context, workspace stri
 		return nil, err
 	}
 	sortMetadataRecordRows(result)
+	// The shared cache keeps rows as stored; bodies are inlined per process.
 	s.fillMetadataRecordsCache(ctx, workspace, result)
-	return result, nil
+	return result, s.inlineOffloadedRows(ctx, workspace, reader, result)
 }
 
 // sortMetadataRecordRows orders rows by field, collection order and key.

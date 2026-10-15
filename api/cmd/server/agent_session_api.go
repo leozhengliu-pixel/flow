@@ -314,8 +314,9 @@ func (s *server) agentSessionEventBody(ctx context.Context, app domain.Applicati
 		payload["issue"] = data.Issues[0]
 		session["issue"] = data.Issues[0]
 	} else if task.ResourceType == "document" && len(data.Documents) == 1 {
-		payload["document"] = data.Documents[0]
-		session["document"] = data.Documents[0]
+		document := s.documentWithVersions(ctx, data.Workspace.URLKey, data.Documents[0])
+		payload["document"] = document
+		session["document"] = document
 	} else if task.ResourceType == "project" && len(data.Projects) == 1 {
 		payload["project"] = data.Projects[0]
 		session["project"] = data.Projects[0]

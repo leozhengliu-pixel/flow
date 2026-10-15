@@ -560,6 +560,14 @@ func webhookEnvelopeBody(webhook domain.Webhook, organizationID string, event we
 
 // describeWebhookEvent builds the subject entity, URL, actor and teams.
 func (s *server) describeWebhookEvent(ctx context.Context, workspace string, event domain.DomainEvent, resource, action, legacy string) webhookEvent {
+	// Snapshots and previous values name offloaded bodies (older document
+	// versions, long agent replies); deliveries carry them whole.
+	if loaded, err := s.store.LoadOffloadedJSON(ctx, workspace, event.Snapshot); err == nil {
+		event.Snapshot = loaded
+	}
+	if loaded, err := s.store.LoadOffloadedJSON(ctx, workspace, event.PreviousValues); err == nil {
+		event.PreviousValues = loaded
+	}
 	result := webhookEvent{resource: resource, legacy: legacy, action: action, eventType: event.Type, eventID: event.ID, createdAt: event.CreatedAt, payload: event.Payload, previous: event.PreviousValues, updated: event.PreviousValues}
 	if result.createdAt.IsZero() {
 		result.createdAt = time.Now().UTC()

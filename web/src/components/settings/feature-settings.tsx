@@ -59,6 +59,7 @@ import { CustomerRequestsSettings } from "./customer-requests-settings";
 import { AgentCodingGlyph, AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { LoopsGlyph } from '@/components/ui/agent-glyph'
+import { withTrashRetention } from '@/lib/trash-retention'
 
 type FeaturePageId = Extract<SettingsPageId, "ai"|"loops"|"coding-sessions"|"coding-environments"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations">;
 type Props = { page: FeaturePageId; data: BootstrapData; onCreateReleasePipeline: () => void; onOpenReleasePipeline: (pipeline:ReleasePipeline) => void; onOpenIntegration:(provider:IntegrationProvider|string)=>void; onReload: () => Promise<void>; onNavigateSettings?: (page: SettingsPageId) => void; onOpenAsksSlack?: (integrationId: string) => void; onOpenAsksEmailIntake?: (addressId?: string) => void };
@@ -368,7 +369,7 @@ function ReleasesFeatureSettings({data,onCreate,onOpen,onReload}:{data:Bootstrap
   const pipelines=(data.releasePipelines??[]).filter(item=>item.name.toLocaleLowerCase().includes(needle));
   const deleted=data.trash.filter(item=>item.resourceType==='release_pipeline'&&item.title.toLocaleLowerCase().includes(needle));
   const docs=<a className="flow-pipelines-docs-link" href={RELEASES_DOCS_URL} target="_blank" rel="noreferrer">{t("Docs")}</a>;
-  const description=state==="deleted"?t("Deleted pipelines are retained here for 30 days before being permanently deleted along with all their releases."):<>{t("Track which issues ship in each release.")} {docs}</>;
+  const description=state==="deleted"?withTrashRetention(t("Deleted pipelines are retained here for {days} days before being permanently deleted along with all their releases."),data):<>{t("Track which issues ship in each release.")} {docs}</>;
   const empty=state==="active"&&!(data.releasePipelines??[]).length;
   return <div className="feature-wide"><FeatureShell className="flow-pipelines-settings" title="Releases" description={description}><div className="feature-toolbar flow-pipelines-toolbar"><label><FlowGlyph name="search" size={16}/><input type="search" aria-label={t("Filter by pipeline name")} placeholder={t("Filter by pipeline name…")} value={query} onChange={event=>setQuery(event.target.value)}/></label><FeatureSelect label="Pipeline status" value={state} options={[{value:"active",label:activeLabel,translate:false},{value:"deleted",label:"Recently deleted pipelines"}]} onChange={value=>setState(value as 'active'|'deleted')}/><span/>{state==="active"&&<FeatureButton primary disabled={!canCreateReleasePipeline(data)} onClick={onCreate}>New pipeline</FeatureButton>}</div>
     {empty?<PipelinesEmptyState/>:state==="active"?<PipelineSettingsRows data={data} pipelines={pipelines} filtering={Boolean(needle)} onClearFilter={()=>setQuery("")} onOpen={onOpen} onOpenReleases={pipeline=>navigate(releasePipelinePath(data.workspace.urlKey,pipeline.slugId))} onDuplicate={pipeline=>navigate(`${newReleasePipelinePath(data.workspace.urlKey)}?copyFrom=${encodeURIComponent(pipeline.slugId)}`)} onDeleted={onReload} onViewDeleted={()=>setState("deleted")}/>:<DeletedPipelineRows data={data} entries={deleted} filtering={Boolean(needle)} onRestored={onReload}/>}

@@ -393,7 +393,7 @@ func (s *server) publishDocumentDraft(w http.ResponseWriter, r *http.Request) {
 			log.Printf("clear replaced collaboration document=%s: %v", replacedCollaborationID, deleteErr)
 		}
 	}
-	respondMutation(w, err, http.StatusOK, result)
+	respondMutation(w, err, http.StatusOK, s.withDocumentVersions(r, result))
 }
 func (s *server) deleteDocumentDraft(w http.ResponseWriter, r *http.Request) {
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.draft_deleted", r.PathValue("draftId"), nil, func(data *domain.Bootstrap) error {
@@ -421,12 +421,25 @@ func (s *server) deleteDocumentDraft(w http.ResponseWriter, r *http.Request) {
 }
 func (s *server) documentContentHistory(w http.ResponseWriter, r *http.Request) {
 	data := s.workspaceData(r)
-	document, err := documentByID(&data, r.PathValue("id"))
-	if err != nil || documentRole(s, data, *document) == "none" {
+	var revisions []domain.DocumentRevision
+	if document, err := documentByID(&data, r.PathValue("id")); err == nil && documentRole(s, data, *document) != "none" {
+		revisions = document.Revisions
+	} else if deleted, _, ok := trashedDocument(&data, r.PathValue("id")); err != nil && ok && documentRole(s, data, deleted) != "none" {
+		// A deleted document's page shows its authors too.
+		revisions = deleted.Revisions
+	} else {
 		writeError(w, http.StatusNotFound, "document not found")
 		return
 	}
-	writePage(w, r, document.Revisions)
+	// Older versions' bodies are loaded on demand; the copy keeps the
+	// workspace snapshot's references.
+	revisions = slices.Clone(revisions)
+	start, end := pageBounds(r, len(revisions))
+	if err := s.store.LoadDocumentRevisionBodies(r.Context(), data.Workspace.URLKey, revisions[start:end]); err != nil {
+		writeError(w, http.StatusServiceUnavailable, "document history is temporarily unavailable")
+		return
+	}
+	writePage(w, r, revisions)
 }
 
 func (s *server) archiveCustomerNeed(w http.ResponseWriter, r *http.Request) {

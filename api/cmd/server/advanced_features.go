@@ -148,6 +148,9 @@ func (s *server) listDocuments(w http.ResponseWriter, r *http.Request) {
 		result = append(result, document)
 	}
 	slices.SortStableFunc(result, func(a, b domain.Document) int { return b.UpdatedAt.Compare(a.UpdatedAt) })
+	for index := range result {
+		result[index] = s.withDocumentVersions(r, result[index])
+	}
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -282,7 +285,7 @@ func appendTrash(data *domain.Bootstrap, resourceType, resourceID, title string,
 	for sequence := now.UnixNano() + 1; slices.ContainsFunc(data.Trash, func(item domain.TrashEntry) bool { return item.ID == id }); sequence++ {
 		id = fmt.Sprintf("trash_%d", sequence)
 	}
-	data.Trash = append([]domain.TrashEntry{{ID: id, ResourceType: resourceType, ResourceID: resourceID, Title: title, Payload: payload, TeamIDs: trashTeamIDs(data, value), DeletedBy: data.Viewer, DeletedAt: now, ExpiresAt: now.AddDate(0, 0, 30)}}, data.Trash...)
+	data.Trash = append([]domain.TrashEntry{{ID: id, ResourceType: resourceType, ResourceID: resourceID, Title: title, Payload: payload, TeamIDs: trashTeamIDs(data, value), DeletedBy: data.Viewer, DeletedAt: now, ExpiresAt: now.Add(trashRetention)}}, data.Trash...)
 	appendAudit(data, "deleted", resourceType, resourceID, map[string]any{"title": title})
 	return nil
 }
@@ -601,7 +604,7 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if errors.Is(err, errConflict) {
-		writeVersionConflict(w, current)
+		writeVersionConflict(w, s.withDocumentVersions(r, current))
 		return
 	}
 	if err == nil {
@@ -623,7 +626,7 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 		}
 		s.dispatchNotificationEmails(r.Context(), workspace)
 	}
-	respondMutation(w, err, http.StatusOK, updated)
+	respondMutation(w, err, http.StatusOK, s.withDocumentVersions(r, updated))
 }
 
 // jsonEqual compares two decoded JSON values.
@@ -643,6 +646,20 @@ func (s *server) restoreDocumentRevision(w http.ResponseWriter, r *http.Request)
 	var replacedCollaborationID string
 	workspace := workspaceKey(r)
 	directory := s.documentMemberDirectory(r)
+	// Older versions' bodies are offloaded: load the one to restore before
+	// taking the write lock.
+	var loaded *domain.DocumentRevision
+	snapshot := s.workspaceData(r)
+	if document, err := documentByID(&snapshot, id); err == nil {
+		if index := slices.IndexFunc(document.Revisions, func(item domain.DocumentRevision) bool { return item.ID == revisionID }); index >= 0 && len(document.Revisions[index].Offloaded) > 0 {
+			revision := []domain.DocumentRevision{document.Revisions[index]}
+			if err := s.store.LoadDocumentRevisionBodies(r.Context(), snapshot.Workspace.URLKey, revision); err != nil {
+				writeError(w, http.StatusServiceUnavailable, "this version is temporarily unavailable")
+				return
+			}
+			loaded = &revision[0]
+		}
+	}
 	err := s.store.MutateWorkspace(documentMutationScope(r.Context(), id), workspaceKey(r), "document.revision_restored", id, map[string]string{"revisionId": revisionID}, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
@@ -658,6 +675,12 @@ func (s *server) restoreDocumentRevision(w http.ResponseWriter, r *http.Request)
 		now := time.Now().UTC()
 		workspace = data.Workspace.URLKey
 		revision := document.Revisions[index]
+		if len(revision.Offloaded) > 0 {
+			if loaded == nil || loaded.ID != revision.ID || len(loaded.Offloaded) > 0 {
+				return errors.New("this version's content is unavailable")
+			}
+			revision = *loaded
+		}
 		document.Title, document.Content, document.ContentData = revision.Title, revision.Content, revision.ContentData
 		renameDocumentSlug(document)
 		replacedCollaborationID = startCollaborationGeneration(document)
@@ -676,7 +699,7 @@ func (s *server) restoreDocumentRevision(w http.ResponseWriter, r *http.Request)
 			log.Printf("clear replaced collaboration document=%s: %v", replacedCollaborationID, deleteErr)
 		}
 	}
-	respondMutation(w, err, http.StatusOK, updated)
+	respondMutation(w, err, http.StatusOK, s.withDocumentVersions(r, updated))
 }
 
 func (s *server) deleteDocument(w http.ResponseWriter, r *http.Request) {
@@ -3640,8 +3663,13 @@ func (s *server) downloadExport(w http.ResponseWriter, r *http.Request) {
 		writer.Flush()
 		return
 	}
+	// The export carries every version with its body.
+	exportedDocuments := make([]domain.Document, len(data.Documents))
+	for index, document := range data.Documents {
+		exportedDocuments[index] = s.withDocumentVersions(r, document)
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	packageData := map[string]any{"workspace": data.Workspace, "teams": data.Teams, "users": data.Users, "issues": nil, "projects": data.Projects, "documents": data.Documents, "customers": data.Customers, "customerRequests": data.CustomerRequests, "releases": data.Releases, "asks": data.Asks, "comments": nil, "activities": nil, "labels": data.Labels, "workflowStates": data.States, "cycles": data.Cycles, "templates": map[string]any{"issues": data.IssueTemplates, "projects": data.ProjectTemplates}, "exportedAt": time.Now().UTC()}
+	packageData := map[string]any{"workspace": data.Workspace, "teams": data.Teams, "users": data.Users, "issues": nil, "projects": data.Projects, "documents": exportedDocuments, "customers": data.Customers, "customerRequests": data.CustomerRequests, "releases": data.Releases, "asks": data.Asks, "comments": nil, "activities": nil, "labels": data.Labels, "workflowStates": data.States, "cycles": data.Cycles, "templates": map[string]any{"issues": data.IssueTemplates, "projects": data.ProjectTemplates}, "exportedAt": time.Now().UTC()}
 	raw, err := json.Marshal(packageData)
 	if err != nil {
 		writeError(w, 500, "could not encode export")
@@ -3677,7 +3705,7 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 	}
 	now := time.Now().UTC()
 	needsMutation := slaEnabled(&data) && slices.ContainsFunc(data.IssueSLAs, func(item domain.IssueSLA) bool { return item.Status == "active" && now.After(item.DueAt) })
-	needsMutation = needsMutation || slices.ContainsFunc(data.Trash, func(item domain.TrashEntry) bool { return now.After(item.ExpiresAt) })
+	needsMutation = needsMutation || slices.ContainsFunc(data.Trash, func(item domain.TrashEntry) bool { return trashExpired(item, now) })
 	settings, _ := data.Settings["projectUpdates"].(map[string]any)
 	defaultCadence := intFromAny(settings["cadenceDays"])
 	leadReminders := boolFromAny(settings["reminders"])
@@ -3718,7 +3746,7 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 			scope.Resources = append(scope.Resources, project.ID)
 		}
 		// Expiring documents take their comment threads with them.
-		expiredDocuments, _ := trashedDocumentOwners(current.Trash, func(entry domain.TrashEntry) bool { return now.After(entry.ExpiresAt) })
+		expiredDocuments, _ := trashedDocumentOwners(current.Trash, func(entry domain.TrashEntry) bool { return trashExpired(entry, now) })
 		scope.Resources = append(scope.Resources, expiredDocuments...)
 		return scope
 	}})
@@ -3773,12 +3801,12 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 				}
 			}
 		}
-		expiredDocuments, expiredCollaborationIDs := trashedDocumentOwners(next.Trash, func(entry domain.TrashEntry) bool { return now.After(entry.ExpiresAt) })
+		expiredDocuments, expiredCollaborationIDs := trashedDocumentOwners(next.Trash, func(entry domain.TrashEntry) bool { return trashExpired(entry, now) })
 		for _, documentID := range expiredDocuments {
 			delete(next.Comments, documentID)
 		}
-		expiredLoops := trashedLoopIDs(next.Trash, func(entry domain.TrashEntry) bool { return now.After(entry.ExpiresAt) })
-		next.Trash = slices.DeleteFunc(next.Trash, func(item domain.TrashEntry) bool { return now.After(item.ExpiresAt) })
+		expiredLoops := trashedLoopIDs(next.Trash, func(entry domain.TrashEntry) bool { return trashExpired(entry, now) })
+		next.Trash = slices.DeleteFunc(next.Trash, func(item domain.TrashEntry) bool { return trashExpired(item, now) })
 		if bytes.Equal(before, fingerprint()) && len(expiredDocuments) == 0 {
 			return store.ErrNoMutation
 		}

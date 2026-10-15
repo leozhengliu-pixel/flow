@@ -16,6 +16,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"flow/api/internal/objectstore"
+
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
@@ -32,6 +34,19 @@ type DatabaseConfig struct {
 	ConnMaxLifetime     time.Duration
 	MaxStateBytes       int
 	MaxTransactionBytes int
+	// ContentStore receives offloaded bodies (document revision content,
+	// large agent transcript parts) when FLOW_STORAGE_DRIVER=s3; without it
+	// they are kept gzip-compressed in the metadata_blobs table.
+	ContentStore objectstore.Store
+	// AgentOffloadBytes is the size above which an agent transcript part is
+	// offloaded (default 8 KiB).
+	AgentOffloadBytes int
+	// ContentCacheBytes bounds the in-process cache of offloaded bodies that
+	// workspace reloads read instead of the database or object store.
+	ContentCacheBytes int
+	// SearchIndexMaxChars caps the text indexed for full-text search per
+	// issue and per document (default 20,000; 0 indexes everything).
+	SearchIndexMaxChars int
 }
 
 type sqlDatabase struct {
@@ -42,6 +57,11 @@ type sqlDatabase struct {
 	// (or brought back as unread news), for the notification.created
 	// realtime signal.
 	notified atomic.Pointer[func([]notificationSignal)]
+	// content offloads large metadata bodies (content_offload.go).
+	content *contentOffload
+	// searchMaxChars caps the text indexed per issue and per document; 0
+	// indexes everything.
+	searchMaxChars int
 }
 
 type sqlTx struct {
@@ -190,7 +210,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 	if maxTransactionBytes <= 0 {
 		maxTransactionBytes = 32 << 20
 	}
-	s := &SQLiteStore{db: &sqlDatabase{DB: db, dialect: driver, maxTransactionBytes: maxTransactionBytes}, dialect: driver, fixtureProfile: strings.TrimSpace(config.FixtureProfile), fixturePassword: config.FixturePassword, maxStateBytes: maxStateBytes}
+	s := &SQLiteStore{db: &sqlDatabase{DB: db, dialect: driver, maxTransactionBytes: maxTransactionBytes, content: newContentOffload(config), searchMaxChars: max(config.SearchIndexMaxChars, 0)}, dialect: driver, fixtureProfile: strings.TrimSpace(config.FixtureProfile), fixturePassword: config.FixturePassword, maxStateBytes: maxStateBytes}
 	notify := s.publishNotificationSignals
 	s.db.notified.Store(&notify)
 	s.lifecycle, s.stopLifecycle = context.WithCancel(context.Background())
@@ -212,6 +232,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"ensureApplicationAgents", s.ensureApplicationAgents},
 		{"ensureAuditStreamSecrets", s.ensureAuditStreamSecrets},
 		{"ensureWebhookDeliveries", s.ensureWebhookDeliveries},
+		{"applySearchIndexCap", s.applySearchIndexCap},
 		{"ensureMetadataSearchIndex", s.ensureMetadataSearchIndex},
 		{"ensureAPIKeyLookup", s.ensureAPIKeyLookup},
 		{"ensureCustomerFilterIndex", s.ensureCustomerFilterIndex},
@@ -220,6 +241,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"ensureLoopRunRecords", s.ensureLoopRunRecords},
 		{"ensureAgentRuns", s.ensureAgentRuns},
 		{"ensureFileUploads", s.ensureFileUploads},
+		{"ensureOffloadedContent", s.ensureOffloadedContent},
 		{"loadOrSeed", s.loadOrSeed},
 		{"seedWorkspaceOwners", func(ctx context.Context) error {
 			if strings.EqualFold(strings.TrimSpace(config.FixtureProfile), "test") {

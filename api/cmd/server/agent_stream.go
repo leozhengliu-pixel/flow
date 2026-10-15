@@ -243,6 +243,7 @@ func (s *server) streamAgentSession(w http.ResponseWriter, r *http.Request, id s
 		_ = writer.send(agentStreamEvent{Type: "error", Error: err.Error()})
 		return
 	}
+	completed = s.withAgentBodies(r, completed)
 	_ = writer.send(agentStreamEvent{Type: "session.completed", Session: &completed})
 }
 
@@ -290,7 +291,8 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	contextMentions += agentInitiativePrompt(data, initiatives)
 	contextTeams := append(agentProjectTeamIDs(mergeAgentProjects(selectedAgentProjects(data.Projects, session.ProjectIDs), refs.Projects)), agentInitiativeTeamIDs(initiatives)...)
 	system := buildWorkspaceAgentPrompt(data, contextIssues, skills, agentChatToolRule, s.agentWriteAccessNote()+webNote, contextMentions+loopBuilderPrompt(data, *session), contextTeams...)
-	messages := agentProviderHistory(*session, system, agentIssueTitles(contextIssues))
+	// Replayed replies need their offloaded text and tool results.
+	messages := agentProviderHistory(s.withAgentBodies(r, *session), system, agentIssueTitles(contextIssues))
 	// What the user has seen so far; this run's own assistant text does not ground a write (see agentUngroundedIssueTarget).
 	historyEnd := len(messages)
 	s.addLoopAttachmentInputs(r.Context(), data, *session, messages)
@@ -328,7 +330,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	}
 	r = r.WithContext(context.WithValue(r.Context(), agentExtraToolsKey{}, extraTools))
 	if writer != nil {
-		snapshot := *session
+		snapshot := s.withAgentBodies(r, *session)
 		if err := writer.send(agentStreamEvent{Type: "session.started", Session: &snapshot, MessageID: messageID}); err != nil {
 			return domain.AgentSession{}, err
 		}

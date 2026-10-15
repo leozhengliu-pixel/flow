@@ -2183,6 +2183,7 @@ export const zhCN: Record<string, string> = {
   archived: "已归档",
   ended: "已结束",
   "deleted by": "删除者",
+  "deleted permanently after {days} days": "{days} 天后永久删除",
   "No release notes were added.": "未添加发布说明。",
   "No release notes yet": "暂无发布说明",
   "No workspaces connected": "尚未连接工作区",
@@ -2672,8 +2673,8 @@ export const zhCN: Record<string, string> = {
   "Document title": "文档标题",
   Edited: "已编辑",
   "Saved by": "保存者：",
-  'Deleted documents are available in the "Recently deleted" view for 30 days, before they are permanently deleted.':
-    "已删除的文档会在“最近删除”视图中保留 30 天，之后永久删除。",
+  'Deleted documents are available in the "Recently deleted" view for {days} days, before they are permanently deleted.':
+    "已删除的文档会在“最近删除”视图中保留 {days} 天，之后永久删除。",
   "Forgot password?": "忘记密码？",
   "Open development reset link": "打开开发环境重置链接",
   "Privacy&nbsp;&nbsp;·&nbsp;&nbsp;Terms": "隐私&nbsp;&nbsp;·&nbsp;&nbsp;条款",
@@ -3574,7 +3575,7 @@ export const zhCN: Record<string, string> = {
   "View recently deleted releases": "查看最近删除的发布版本",
   "Recently deleted releases": "最近删除的发布版本",
   "No recently deleted releases": "没有最近删除的发布版本",
-  "Deleted releases will appear here for 30 days before being permanently removed.": "已删除的发布版本将在此保留 30 天，之后会被永久移除。",
+  "Deleted releases will appear here for {days} days before being permanently removed.": "已删除的发布版本将在此保留 {days} 天，之后会被永久移除。",
   "Select release notes scope": "选择发布说明范围",
   "Single release": "单个发布版本",
   "Release range": "发布版本范围",

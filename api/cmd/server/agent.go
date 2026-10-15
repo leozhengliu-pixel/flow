@@ -2,11 +2,13 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 type agentChatMessage struct {
@@ -265,13 +267,37 @@ func validAgentIssueCount(w http.ResponseWriter, issueIDs []string) bool {
 	return false
 }
 
+// withAgentBodies loads the offloaded parts (long replies, tool results) of a
+// session sent whole: the conversation view and the model's history. Lists
+// send sessions without them (agentSessionSummary).
+func (s *server) withAgentBodies(r *http.Request, session domain.AgentSession) domain.AgentSession {
+	if !store.AgentSessionHasOffloaded(session) {
+		return session
+	}
+	loaded, err := s.store.LoadAgentSessionBodies(r.Context(), workspaceKey(r), session)
+	if err != nil {
+		log.Printf("load agent session %s: %v", session.ID, err)
+	}
+	return loaded
+}
+
+// agentSessionSummary is how lists send a session whose transcript is partly
+// offloaded: without messages, so the app loads the conversation
+// (GET /api/agent/sessions/{id}) when it is opened.
+func agentSessionSummary(session domain.AgentSession) domain.AgentSession {
+	if store.AgentSessionHasOffloaded(session) {
+		session.Messages = []domain.AgentMessage{}
+	}
+	return session
+}
+
 func (s *server) completeAgentSessionResponse(w http.ResponseWriter, r *http.Request, id string, status int) {
 	completed, err := s.completeAgentSession(r, id)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	writeJSON(w, status, completed)
+	writeJSON(w, status, s.withAgentBodies(r, completed))
 }
 
 func (s *server) agentStatus(w http.ResponseWriter, _ *http.Request) {
@@ -336,7 +362,7 @@ func (s *server) listAgentSessions(w http.ResponseWriter, r *http.Request) {
 	result := make([]domain.AgentSession, 0)
 	for _, session := range data.AgentSessions {
 		if session.UserID == data.Viewer.ID {
-			result = append(result, session)
+			result = append(result, agentSessionSummary(session))
 		}
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -349,7 +375,7 @@ func (s *server) getAgentSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "agent chat not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, session)
+	writeJSON(w, http.StatusOK, s.withAgentBodies(r, *session))
 }
 
 func (s *server) createAgentSession(w http.ResponseWriter, r *http.Request) {
@@ -537,7 +563,7 @@ func (s *server) updateAgentSession(w http.ResponseWriter, r *http.Request) {
 		updated = *session
 		return nil
 	})
-	respondMutation(w, err, http.StatusOK, updated)
+	respondMutation(w, err, http.StatusOK, s.withAgentBodies(r, updated))
 }
 
 // markAgentSessionRead records that the owner has seen the conversation up to
@@ -557,7 +583,7 @@ func (s *server) markAgentSessionRead(w http.ResponseWriter, r *http.Request) {
 		updated = *session
 		return nil
 	})
-	respondMutation(w, err, http.StatusOK, updated)
+	respondMutation(w, err, http.StatusOK, s.withAgentBodies(r, updated))
 }
 
 type agentFeedbackInput struct {
@@ -627,7 +653,7 @@ func (s *server) updateAgentMessageFeedback(w http.ResponseWriter, r *http.Reque
 		}
 		return errNotFound
 	})
-	respondMutation(w, err, http.StatusOK, updated)
+	respondMutation(w, err, http.StatusOK, s.withAgentBodies(r, updated))
 }
 
 // createAgentSessionFeedback records a note about the whole conversation (the chat menu's "Leave feedback…").
@@ -659,7 +685,7 @@ func (s *server) createAgentSessionFeedback(w http.ResponseWriter, r *http.Reque
 		updated = *session
 		return nil
 	})
-	respondMutation(w, err, http.StatusCreated, updated)
+	respondMutation(w, err, http.StatusCreated, s.withAgentBodies(r, updated))
 }
 
 // agentReadStamp copies the time so LastReadAt never aliases another field.

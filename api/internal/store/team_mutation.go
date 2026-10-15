@@ -870,7 +870,13 @@ func writeMetadataRecordUpserts(ctx context.Context, tx *sqlTx, workspace string
 			order = base
 		}
 		upserts[i].order = order
-		if _, err := tx.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,?,?,?,?) ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET data=excluded.data`, workspace, change.field, change.key, order, []byte(change.raw)); err != nil {
+		// The hot cache mirrors the row as stored.
+		stored, err := offloadRecord(ctx, tx, workspace, change.field, change.raw)
+		if err != nil {
+			return err
+		}
+		upserts[i].raw = stored
+		if _, err := tx.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,?,?,?,?) ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET data=excluded.data`, workspace, change.field, change.key, order, stored); err != nil {
 			return err
 		}
 		if err := syncMetadataSearchDocument(ctx, tx, workspace, change.field, change.key, []byte(change.raw)); err != nil {

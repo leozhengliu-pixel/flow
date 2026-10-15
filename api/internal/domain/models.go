@@ -162,6 +162,22 @@ type AgentMessage struct {
 	// Feedback is the owner's rating of an assistant reply (thumbs up / down with an optional note).
 	Feedback  *AgentFeedback `json:"feedback,omitempty"`
 	CreatedAt time.Time      `json:"createdAt"`
+	// Offloaded names fields stored outside the workspace record and not
+	// loaded yet (see OffloadedContent).
+	Offloaded OffloadedContent `json:"_offloaded,omitempty"`
+}
+
+// OffloadedContent names, by field ("content", "text", "result", or "body"
+// for a document version's content), bodies kept outside the workspace
+// record. They are loaded on demand; the field is empty until then.
+type OffloadedContent map[string]ContentRef
+
+// ContentRef locates an offloaded body.
+type ContentRef struct {
+	Key  string `json:"key"`
+	Size int    `json:"size"`
+	// Summary is the start of an offloaded transcript text.
+	Summary string `json:"summary,omitempty"`
 }
 
 // AgentFeedback is a rating ("positive" or "negative") and/or a written note about agent output.
@@ -188,6 +204,8 @@ type AgentMessagePart struct {
 	ToolCall    *AgentToolCall    `json:"toolCall,omitempty"`
 	// Question is a choice the agent asked the user for (the ask_user tool; the reference app's select elicitation).
 	Question *AgentQuestion `json:"question,omitempty"`
+	// Offloaded locates Text while it is not loaded.
+	Offloaded OffloadedContent `json:"_offloaded,omitempty"`
 }
 
 // AgentQuestion is a question with options the agent paused on. It is answered by the user's next message:
@@ -262,6 +280,8 @@ type AgentToolCall struct {
 	ApprovalID string `json:"approvalId,omitempty"`
 	// Change is what a successful Flow write did (the chat's "Created …" / "Updated …" result card and its Undo).
 	Change *AgentChange `json:"change,omitempty"`
+	// Offloaded locates Result while it is not loaded.
+	Offloaded OffloadedContent `json:"_offloaded,omitempty"`
 }
 
 // AgentChange records one agent write for the result card and Undo / Restore: the entity it touched and, for an
@@ -525,6 +545,9 @@ type DocumentRevision struct {
 	CreatedAt time.Time `json:"createdAt"`
 	// StartedAt is when the editing burst this version covers began.
 	StartedAt *time.Time `json:"startedAt,omitempty"`
+	// Offloaded["body"] locates Content, ContentState and ContentData while
+	// they are not loaded (document history loads them on demand).
+	Offloaded OffloadedContent `json:"_offloaded,omitempty"`
 }
 
 type DocumentTemplate struct {
@@ -2491,6 +2514,10 @@ type Bootstrap struct {
 	WorkspaceInviteLink    *WorkspaceInviteLink    `json:"workspaceInviteLink,omitempty"`
 	OAuthSyncGroupRequests []OAuthSyncGroupRequest `json:"oauthSyncGroupRequests,omitempty"`
 	ViewerRole             string                  `json:"viewerRole"`
+
+	// TrashRetentionDays is set on bootstrap responses only: how long deleted
+	// items stay restorable (FLOW_TRASH_RETENTION_DAYS).
+	TrashRetentionDays int `json:"trashRetentionDays,omitempty"`
 }
 
 type ProviderJob struct {

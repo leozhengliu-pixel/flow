@@ -16,6 +16,7 @@ import type { FlowDocument } from '@/types/flow'
 import { DocumentGlyph } from './document-icon'
 import { buildHistoryEntries, dayHeadingKind, entryPreview, groupEntriesByDay, type HistoryEntry } from './document-history-model'
 import { DocumentJsonView } from './document-json-view'
+import { useLoadedRevisions } from './use-loaded-revisions'
 import './document-history-dialog.css'
 
 export interface DocumentHistoryDialogProps {
@@ -30,7 +31,9 @@ const authorName = (entry: HistoryEntry) => entry.author?.displayName || entry.a
 
 export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore }: DocumentHistoryDialogProps) {
   const { t, formatDate } = useI18n()
-  const entries = useMemo(() => buildHistoryEntries(document), [document])
+  // Older versions' bodies are fetched when the dialog opens.
+  const loaded = useLoadedRevisions(document, open)
+  const entries = useMemo(() => buildHistoryEntries(loaded), [loaded])
   const days = useMemo(() => groupEntriesByDay(entries), [entries])
   const [selectedId, setSelectedId] = useState(entries[0]?.id ?? '')
   const [highlight, setHighlight] = useState(true)

@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import type { FlowDocument, User } from '@/types/flow'
+import { useLoadedRevisions } from './use-loaded-revisions'
 import { authorRuns, deriveBlockAuthors } from './document-authors'
 
 interface Label { key: string; name: string; top: number; lineHeight: string }
@@ -35,7 +36,7 @@ const idle = (callback: () => void) => {
 }
 
 export function DocumentAuthorLabels({ document, state, lastEditor, enabled, shell }: {
-  document: Pick<FlowDocument, 'creator' | 'revisions'>
+  document: Pick<FlowDocument, 'id' | 'creator' | 'revisions'>
   /** The editor's current ProseMirror JSON (string). */
   state: string | undefined
   lastEditor: User
@@ -43,6 +44,8 @@ export function DocumentAuthorLabels({ document, state, lastEditor, enabled, she
   /** The positioned element wrapping the editor (labels are placed relative to it). */
   shell: HTMLElement | null
 }) {
+  // Authors are derived from the versions' bodies, fetched while the labels are shown.
+  const loaded = useLoadedRevisions(document, enabled)
   const [authors, setAuthors] = useState<User[]>([])
   const [labels, setLabels] = useState<Label[]>([])
   const authorsRef = useRef<User[]>([])
@@ -55,13 +58,13 @@ export function DocumentAuthorLabels({ document, state, lastEditor, enabled, she
     const timer = window.setTimeout(() => {
       cancelIdle = idle(() => {
         const json = parseState(state)
-        if (json) { setAuthors(deriveBlockAuthors(document, json, lastEditor)); return }
+        if (json) { setAuthors(deriveBlockAuthors(loaded, json, lastEditor)); return }
         // No block data (a document that only has Markdown): one run owned by the creator.
-        setAuthors([document.creator])
+        setAuthors([loaded.creator])
       })
     }, DERIVE_DELAY_MS)
     return () => { window.clearTimeout(timer); cancelIdle?.() }
-  }, [enabled, state, document, lastEditor])
+  }, [enabled, state, loaded, lastEditor])
 
   // Place a label at the start of each author run, and keep it in place as the editor changes.
   useEffect(() => {

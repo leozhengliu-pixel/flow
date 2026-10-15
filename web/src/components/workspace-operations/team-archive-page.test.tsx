@@ -96,3 +96,15 @@ it("offers the reference app's Copy items and Restore project for a deleted proj
   await waitFor(() => expect(api.restoreTrashEntry).toHaveBeenCalledWith('trash-p'))
   await waitFor(() => expect(onReload).toHaveBeenCalled())
 })
+
+it('says when trash rows are deleted permanently, using the server retention', () => {
+  const project = makeBootstrap().projects[0]
+  const deleted: TrashEntry = { id: 'trash-p', resourceType: 'project', resourceId: project.id, title: project.name, payload: { project, updates: [] }, teamIds: ['team-1'], deletedBy: viewer, deletedAt: minutesAgo(5), expiresAt: '2026-10-16T12:00:00Z' }
+  renderArchive([deleted], { trashRetentionDays: 7 }, undefined, 'recently-deleted-projects')
+  expect(screen.getByText(/deleted permanently after 7 days/)).toBeTruthy()
+})
+
+it('falls back to 30 days when the server does not say', () => {
+  const { container } = renderArchive([entry('trash-1', documentPayload({ id: 'doc-1' }), minutesAgo(5))])
+  expect(container.querySelector('time.archive-doc-date')?.getAttribute('title')).toMatch(/deleted permanently after 30 days$/)
+})

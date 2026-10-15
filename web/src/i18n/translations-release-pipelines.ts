@@ -20,8 +20,8 @@ export const releasePipelinesZhCN: Record<string, string> = {
 
   // Settings list
   "Active pipelines": "活动",
-  "Deleted pipelines are retained here for 30 days before being permanently deleted along with all their releases.":
-    "已删除的管线会在此保留 30 天，之后将连同其所有发布版本被永久删除。",
+  "Deleted pipelines are retained here for {days} days before being permanently deleted along with all their releases.":
+    "已删除的管线会在此保留 {days} 天，之后将连同其所有发布版本被永久删除。",
   "Create release pipelines": "创建发布管线",
   "Create a new release pipeline to manage upcoming releases and track what's ready to ship.":
     "创建新的发布管线来管理即将推出的发布版本，并跟踪哪些内容已可交付。",
@@ -37,8 +37,8 @@ export const releasePipelinesZhCN: Record<string, string> = {
   "Pipeline deleted": "管线已删除",
   "View recently deleted pipelines": "查看最近删除的管线",
   "Delete the pipeline \"{name}\"?": "删除管线“{name}”？",
-  "Deleted pipelines are available in the \"Recently deleted pipelines\" view for 30 days, before being permanently deleted along with all their releases.":
-    "已删除的管线会在“最近删除的发布管线”视图中保留 30 天，之后将连同其所有发布版本被永久删除。",
+  "Deleted pipelines are available in the \"Recently deleted pipelines\" view for {days} days, before being permanently deleted along with all their releases.":
+    "已删除的管线会在“最近删除的发布管线”视图中保留 {days} 天，之后将连同其所有发布版本被永久删除。",
   "Type {name} to confirm": "输入 {name} 以确认",
 
   // New pipeline form and settings
