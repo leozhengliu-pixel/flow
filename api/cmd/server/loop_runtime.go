@@ -698,6 +698,10 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 	}
 	request = request.WithContext(context.WithValue(request.Context(), connectorContextKey{}, connectorRequestContext{Workspace: workspace, UserID: owner.ID}))
 	request = request.WithContext(context.WithValue(request.Context(), agentToolFilterKey{}, scope.offers))
+	// "Team access" covers what the run can read, not only what it may change:
+	// its tools run with a key restricted to the loop's teams, so lists,
+	// searches and reads outside them come back empty or not found.
+	request = request.WithContext(context.WithValue(request.Context(), apiKeyContextKey{}, scope.toolKey()))
 	request = request.WithContext(context.WithValue(request.Context(), agentExtraToolsKey{}, []agentProviderTool{loopFinishToolDefinition}))
 	if loop.WebSearch && s.webSearchAvailable() {
 		request = request.WithContext(withAgentWebTools(request.Context()))
@@ -1131,6 +1135,19 @@ func (scope *loopScope) check(ctx context.Context, call domain.AgentToolCall) er
 	return nil
 }
 
+// toolKey is the credential the run's tools act with: read and write, limited
+// to the teams the loop may use.
+func (scope *loopScope) toolKey() domain.APIKey {
+	ids := make([]string, 0, len(scope.teams))
+	for id, allowed := range scope.teams {
+		if allowed {
+			ids = append(ids, id)
+		}
+	}
+	slices.Sort(ids)
+	return domain.APIKey{Scopes: []string{"read", "write"}, TeamRestriction: "selected", TeamIDs: ids}
+}
+
 func (scope *loopScope) teamKeyAllowed(key string) bool {
 	data, ok := scope.s.store.WorkspaceMetadataFields(scope.workspace, "teams")
 	if !ok {
@@ -1309,6 +1326,14 @@ func loopSystemPrompt(data domain.Bootstrap, loop domain.Loop, trigger loopTrigg
 		}
 	}
 	fmt.Fprintf(&prompt, "\nTeams this loop may use: %s.\n", strings.Join(names, ", "))
+	// A loop made in a team works for that team: "the team", "our team" and team
+	// reports mean it, not every team the loop could reach.
+	for _, team := range data.Teams {
+		if team.ID == loop.TeamID {
+			fmt.Fprintf(&prompt, "\nThis loop belongs to the %s team (key %s). When the instructions say \"the team\", \"our team\" or ask for team-level work (summaries, reports, triage, planning), they mean %s: filter your reads by this team and keep your changes in it. Only work on other teams when the instructions name them.\n", team.Name, team.Key, team.Name)
+			break
+		}
+	}
 	fmt.Fprintf(&prompt, "\nToday: %s\n", time.Now().UTC().Format("Monday, 2006-01-02"))
 	return prompt.String()
 }
