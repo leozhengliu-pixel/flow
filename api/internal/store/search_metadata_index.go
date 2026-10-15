@@ -110,7 +110,10 @@ func (s *SQLiteStore) ensureMetadataSearchIndex(ctx context.Context) error {
 			`CREATE TRIGGER IF NOT EXISTS metadata_records_search_update AFTER UPDATE ON workspace_metadata_records WHEN NEW.data<>OLD.data BEGIN `+insert+` ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET content=excluded.content WHERE metadata_search_documents.content<>excluded.content; END`,
 			`CREATE TRIGGER IF NOT EXISTS metadata_records_search_delete AFTER DELETE ON workspace_metadata_records BEGIN `+remove+`; END`)
 	case "mysql":
-		statements = append(statements, `CREATE FULLTEXT INDEX metadata_search_fulltext ON metadata_search_documents(content) WITH PARSER ngram`)
+		// Full-text creation is optional on restricted MySQL users.
+		if err := s.ensureMySQLNgramIndex(ctx, "metadata_search_documents", "metadata_search_fulltext", metadataSearchStopwordsMigrationVersion, true); err != nil {
+			return err
+		}
 		for _, event := range []string{"INSERT", "UPDATE"} {
 			statements = append(statements, `CREATE TRIGGER metadata_records_search_`+strings.ToLower(event)+` AFTER `+event+` ON workspace_metadata_records FOR EACH ROW `+insert+` ON DUPLICATE KEY UPDATE content=IF(content<>VALUES(content),VALUES(content),content)`)
 		}

@@ -24,8 +24,6 @@ func (s *SQLiteStore) ensureIssueSearchIndex(ctx context.Context) error {
 			`CREATE TRIGGER IF NOT EXISTS issue_search_insert AFTER INSERT ON issue_search_documents BEGIN INSERT INTO issue_search_fts(rowid,content) VALUES(new.rowid,new.content); END`,
 			`CREATE TRIGGER IF NOT EXISTS issue_search_delete AFTER DELETE ON issue_search_documents BEGIN INSERT INTO issue_search_fts(issue_search_fts,rowid,content) VALUES('delete',old.rowid,old.content); END`,
 			`CREATE TRIGGER IF NOT EXISTS issue_search_update AFTER UPDATE ON issue_search_documents BEGIN INSERT INTO issue_search_fts(issue_search_fts,rowid,content) VALUES('delete',old.rowid,old.content); INSERT INTO issue_search_fts(rowid,content) VALUES(new.rowid,new.content); END`)
-	case "mysql":
-		statements = append(statements, `CREATE FULLTEXT INDEX issue_search_fulltext ON issue_search_documents(content) WITH PARSER ngram`)
 	case "postgres":
 		statements = append(statements, `CREATE EXTENSION IF NOT EXISTS pg_trgm`, `CREATE INDEX IF NOT EXISTS issue_search_trigram ON issue_search_documents USING gin(content gin_trgm_ops)`)
 	}
@@ -33,6 +31,9 @@ func (s *SQLiteStore) ensureIssueSearchIndex(ctx context.Context) error {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil && !(s.dialect == "mysql" && isDuplicateIndex(err)) {
 			return err
 		}
+	}
+	if s.dialect == "mysql" {
+		return s.ensureMySQLNgramIndex(ctx, "issue_search_documents", "issue_search_fulltext", issueSearchStopwordsMigrationVersion, false)
 	}
 	return nil
 }
