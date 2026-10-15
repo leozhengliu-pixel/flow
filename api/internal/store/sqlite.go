@@ -355,6 +355,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		{version: 6, name: "team membership role index", apply: s.createTeamMembershipRoleIndex},
 		{version: 7, name: "team membership origin", apply: s.addTeamMembershipOrigin},
 		{version: 8, name: "workspace departures", apply: s.createWorkspaceDeparturesSchema},
+		{version: 9, name: "domain event workspace", apply: s.addDomainEventWorkspace},
 		// Versions from 1000 up are data migrations (runDataMigrations),
 		// which run after the workspaces are loaded.
 	}
@@ -382,6 +383,21 @@ func (s *SQLiteStore) createTeamMembershipRoleIndex(ctx context.Context) error {
 
 func (s *SQLiteStore) addDomainEventPreviousValues(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx, `ALTER TABLE domain_events ADD COLUMN previous_values TEXT`)
+	if err != nil {
+		message := strings.ToLower(err.Error())
+		if strings.Contains(message, "duplicate column") || strings.Contains(message, "already exists") {
+			return nil
+		}
+	}
+	return err
+}
+
+// addDomainEventWorkspace records which workspace wrote each event, so event
+// reads can be scoped to one workspace. Aggregate IDs alone are not unique
+// across workspaces (each workspace numbers its issues from issue_1). Events
+// written before this column existed keep a NULL workspace and are not served.
+func (s *SQLiteStore) addDomainEventWorkspace(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, `ALTER TABLE domain_events ADD COLUMN workspace_id VARCHAR(191)`)
 	if err != nil {
 		message := strings.ToLower(err.Error())
 		if strings.Contains(message, "duplicate column") || strings.Contains(message, "already exists") {
@@ -1775,7 +1791,7 @@ func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspa
 		return err
 	}
 	if event != nil {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at) VALUES(?,?,?,?,?,?)`, event.ID, event.Type, event.AggregateID, []byte(event.Payload), []byte(event.PreviousValues), event.CreatedAt.Format(time.RFC3339Nano)); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at,workspace_id) VALUES(?,?,?,?,?,?,?)`, event.ID, event.Type, event.AggregateID, []byte(event.Payload), []byte(event.PreviousValues), event.CreatedAt.Format(time.RFC3339Nano), data.Workspace.ID); err != nil {
 			return err
 		}
 	}
@@ -1942,7 +1958,7 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 		return domain.Bootstrap{}, err
 	}
 	payload, _ := json.Marshal(workspace)
-	if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,created_at) VALUES(?,?,?,?,?)`, fmt.Sprintf("evt_%d", now.UnixNano()), "workspace.updated", workspace.ID, payload, now.Format(time.RFC3339Nano)); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,created_at,workspace_id) VALUES(?,?,?,?,?,?)`, fmt.Sprintf("evt_%d", now.UnixNano()), "workspace.updated", workspace.ID, payload, now.Format(time.RFC3339Nano), workspace.ID); err != nil {
 		return domain.Bootstrap{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -2069,7 +2085,7 @@ func (s *SQLiteStore) deleteWorkspace(ctx context.Context, workspaceKey string) 
 	if _, err := tx.ExecContext(ctx, `INSERT INTO account_state(id,last_workspace_key,viewer,updated_at) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,viewer=excluded.viewer,updated_at=excluded.updated_at`, nextWorkspaceKey, viewerRaw, now.Format(time.RFC3339Nano)); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,created_at) VALUES(?,?,?,?,?)`, fmt.Sprintf("evt_%d", now.UnixNano()), "workspace.deleted", data.Workspace.ID, []byte(`{}`), now.Format(time.RFC3339Nano)); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,created_at,workspace_id) VALUES(?,?,?,?,?,?)`, fmt.Sprintf("evt_%d", now.UnixNano()), "workspace.deleted", data.Workspace.ID, []byte(`{}`), now.Format(time.RFC3339Nano), data.Workspace.ID); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {

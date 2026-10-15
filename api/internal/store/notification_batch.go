@@ -127,7 +127,7 @@ func (s *SQLiteStore) BatchNotificationRecords(ctx context.Context, workspace, u
 		}
 		payload, _ := json.Marshal(input)
 		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: "notifications.batch_updated", AggregateID: user, Payload: payload, CreatedAt: now}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,created_at) VALUES(?,?,?,?,?)`, event.ID, event.Type, event.AggregateID, payload, now.Format(time.RFC3339Nano)); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,created_at,workspace_id) VALUES(?,?,?,?,?,(SELECT workspace_id FROM workspace_states WHERE workspace_key=?))`, event.ID, event.Type, event.AggregateID, payload, now.Format(time.RFC3339Nano), workspace); err != nil {
 			return err
 		}
 		return tx.Commit()

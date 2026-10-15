@@ -115,7 +115,7 @@ func (s *SQLiteStore) UninstallApplication(ctx context.Context, workspace, id st
 		if index := slices.IndexFunc(next.Users, func(item domain.User) bool { return item.ID == user.ID }); index >= 0 {
 			next.Users[index] = user
 		}
-		event, err = oauthRecordEvent(ctx, tx, "application.uninstalled", removed.ID)
+		event, err = oauthRecordEvent(ctx, tx, current.Workspace.ID, "application.uninstalled", removed.ID)
 		return next, err
 	})
 	if err == nil {

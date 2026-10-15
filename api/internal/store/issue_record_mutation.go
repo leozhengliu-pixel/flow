@@ -276,7 +276,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			before, _ = json.Marshal(previousFields)
 		}
 		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: "issue.updated", AggregateID: id, Payload: payload, PreviousValues: before, CreatedAt: time.Now().UTC()}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at) VALUES(?,?,?,?,?,?)`, event.ID, event.Type, id, payload, before, event.CreatedAt.Format(time.RFC3339Nano)); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at,workspace_id) VALUES(?,?,?,?,?,?,?)`, event.ID, event.Type, id, payload, before, event.CreatedAt.Format(time.RFC3339Nano), metadata.Workspace.ID); err != nil {
 			return err
 		}
 		realtime = enrichRealtimePayload(payload, result, event.Type)

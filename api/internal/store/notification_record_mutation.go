@@ -69,7 +69,7 @@ func (s *SQLiteStore) UpdateNotificationRecord(ctx context.Context, workspace, u
 			return err
 		}
 		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: eventType, AggregateID: id, Payload: payload, CreatedAt: time.Now().UTC()}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,created_at) VALUES(?,?,?,?,?)`, event.ID, event.Type, id, payload, event.CreatedAt.Format(time.RFC3339Nano)); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,created_at,workspace_id) VALUES(?,?,?,?,?,(SELECT workspace_id FROM workspace_states WHERE workspace_key=?))`, event.ID, event.Type, id, payload, event.CreatedAt.Format(time.RFC3339Nano), workspace); err != nil {
 			return err
 		}
 		realtime = enrichRealtimePayload(payload, result, eventType)

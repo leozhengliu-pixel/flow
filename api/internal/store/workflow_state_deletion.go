@@ -167,7 +167,7 @@ func (s *SQLiteStore) DeleteWorkflowStateRecords(ctx context.Context, workspace,
 		}
 		now := time.Now().UTC()
 		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", now.UnixNano()), Type: "workflow_state.deleted", AggregateID: state.ID, Payload: payload, CreatedAt: now}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at) VALUES(?,?,?,?,?,?)`, event.ID, event.Type, event.AggregateID, []byte(payload), []byte(nil), now.Format(time.RFC3339Nano)); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at,workspace_id) VALUES(?,?,?,?,?,?,?)`, event.ID, event.Type, event.AggregateID, []byte(payload), []byte(nil), now.Format(time.RFC3339Nano), current.Workspace.ID); err != nil {
 			return err
 		}
 		if err := tx.Commit(); err != nil {

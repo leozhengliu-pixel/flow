@@ -5283,17 +5283,6 @@ func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBo
 	return false
 }
 
-func (s *server) events(w http.ResponseWriter, r *http.Request) {
-	events, err := s.store.Events(r.Context(), r.URL.Query().Get("aggregateId"))
-	for index := range events {
-		// Previous values name offloaded bodies; the log returns them whole.
-		if loaded, loadErr := s.store.LoadOffloadedJSON(r.Context(), workspaceKey(r), events[index].PreviousValues); loadErr == nil {
-			events[index].PreviousValues = loaded
-		}
-	}
-	respondMutation(w, err, http.StatusOK, events)
-}
-
 func hasNotificationMutation(input domain.NotificationMutationInput) bool {
 	return input.Read != nil || input.Favorite != nil || input.Archived != nil || input.Deleted != nil || len(input.SnoozedUntil) > 0
 }

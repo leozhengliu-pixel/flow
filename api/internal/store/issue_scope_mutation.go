@@ -322,7 +322,7 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		if err := s.persistMetadataTx(ctx, tx, workspace, current, data); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,created_at) VALUES(?,?,?,?,?)`, event.ID, event.Type, aggregate, payloadRaw, event.CreatedAt.Format(time.RFC3339Nano)); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,created_at,workspace_id) VALUES(?,?,?,?,?,?)`, event.ID, event.Type, aggregate, payloadRaw, event.CreatedAt.Format(time.RFC3339Nano), current.Workspace.ID); err != nil {
 			return err
 		}
 		if err := tx.Commit(); err != nil {

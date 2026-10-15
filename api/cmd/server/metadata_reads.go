@@ -33,9 +33,10 @@ func metadataReadRequest(r *http.Request) bool {
 		if p[1] == "release-pipelines" && len(p) <= 3 {
 			return true
 		}
-		// Documents, their permissions, drafts and revisions are metadata;
-		// comments are read from the document's own content records.
-		if p[1] == "documents" && (len(p) == 2 || len(p) == 4 && (p[3] == "permissions" || p[3] == "comments" || p[3] == "drafts" || p[3] == "history")) {
+		// Documents (one or the list), their permissions, subscribers, drafts
+		// and revisions are metadata; comments are read from the document's
+		// own content records.
+		if p[1] == "documents" && (len(p) <= 3 || len(p) == 4 && (p[3] == "permissions" || p[3] == "subscribers" || p[3] == "comments" || p[3] == "drafts" || p[3] == "history")) {
 			return true
 		}
 	}
