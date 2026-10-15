@@ -14,6 +14,7 @@ import type { ReleaseMenuActions } from './release-menus'
 import { ReleaseDocumentDialog, ReleaseLinkDialog } from './release-resource-dialogs'
 import { releaseStatusForStage } from './release-view-model'
 import { absoluteUrl, copyToClipboard, isFavorite } from './release-actions-model'
+import { withTrashRetention } from '@/lib/trash-retention'
 
 /**
  * The release actions shared by the "…" menus, the row context menu and page shortcuts, plus the
@@ -37,7 +38,7 @@ export function useReleaseActions({ data, onReload, onNavigate, afterDelete }: {
     onCopyVersion: () => void copyToClipboard(release.version, t('"{version}" copied to clipboard').replace('{version}', release.version), t('Could not copy to clipboard')),
     onDelete: () => {
       void (async () => {
-        const confirmed = await confirmAction(t('Delete "{name}"?').replace('{name}', release.name), { description: t('Deleted releases are available in the "Recently deleted releases" view for 30 days, before they are permanently deleted.'), confirmLabel: t('Delete'), danger: true })
+        const confirmed = await confirmAction(t('Delete "{name}"?').replace('{name}', release.name), { description: withTrashRetention(t('Deleted releases are available in the "Recently deleted releases" view for {days} days, before they are permanently deleted.'), data), confirmLabel: t('Delete'), danger: true })
         if (!confirmed) return
         try {
           await deleteRelease(release.id)

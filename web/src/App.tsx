@@ -296,7 +296,7 @@ import { findDocumentBySlugSuffix } from "@/lib/document-slug";
 import { findBySlugRef, findLoopByRef } from "@/lib/resource-slug";
 import { rememberTeamHomeTab, teamHomeTab, teamHomeTabOf, teamHomeTabPath } from "@/lib/team-home-tab";
 import { findTrashedDocument } from "@/components/documents/document-trash";
-import { ISSUE_DELETE_DESCRIPTION } from "@/lib/issue-delete-confirmation";
+import { issueDeleteDescription } from "@/lib/issue-delete-confirmation";
 import { OPEN_COMMAND_MENU_EVENT } from "@/components/command/command-context";
 import type { CreateIssueInput } from "@/components/create-issue/create-issue-dialog";
 
@@ -3517,7 +3517,7 @@ function App() {
   const batchDelete = async () => {
     if (
       !(await confirmAction(`Delete ${selected.size} selected issues?`, {
-        description: ISSUE_DELETE_DESCRIPTION,
+        description: issueDeleteDescription(),
         confirmLabel: "Delete",
       }))
     )

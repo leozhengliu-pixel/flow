@@ -114,6 +114,15 @@ func main() {
 	for _, warning := range applicationConfig.Warnings {
 		log.Printf("WARNING: %s", warning)
 	}
+	if strings.EqualFold(applicationConfig.Storage.Driver, "s3") {
+		// Offloaded database content (document revisions, long agent
+		// transcript parts) lives beside uploads under its own prefix.
+		content := applicationConfig.Storage
+		content.Prefix = applicationConfig.ContentStoragePrefix
+		if applicationConfig.Database.ContentStore, err = objectstore.Open(context.Background(), content); err != nil {
+			log.Fatal(err)
+		}
+	}
 	repository, err := store.OpenDatabase(applicationConfig.Database)
 	if err != nil {
 		log.Fatal(err)
@@ -123,6 +132,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	trashRetention = applicationConfig.Retention.Trash
 	redisCoordinator, err := coordination.Open(context.Background(), applicationConfig.Redis)
 	if err != nil {
 		log.Fatal(err)
@@ -173,6 +183,7 @@ func main() {
 	s.ensureBuiltinApplications(shutdownSignal)
 	go s.runApplicationAgentWorker(shutdownSignal)
 	go s.runRecurringIssueScheduler(shutdownSignal)
+	go s.runStorageMaintenance(shutdownSignal, applicationConfig.Retention.DomainEvents)
 	go func() {
 		<-shutdownSignal.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -1037,6 +1048,7 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	stripPulseSnapshots(data)
 	data.ProviderJobs = nil
 	delete(data.Settings, "providerJobs")
+	data.TrashRetentionDays = trashRetentionDays()
 	availability, _ := data.Settings["calendarAvailability"].(map[string]any)
 	for i := range data.Users {
 		if raw, ok := availability[data.Users[i].ID].(string); ok {
@@ -1086,6 +1098,9 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	}
 	data.DocumentContentDrafts = slices.DeleteFunc(data.DocumentContentDrafts, func(item domain.DocumentContentDraft) bool { return item.UserID != data.Viewer.ID })
 	data.AgentSessions = slices.DeleteFunc(data.AgentSessions, func(item domain.AgentSession) bool { return item.UserID != data.Viewer.ID })
+	for index := range data.AgentSessions {
+		data.AgentSessions[index] = agentSessionSummary(data.AgentSessions[index])
+	}
 	data.AgentSkills = slices.DeleteFunc(data.AgentSkills, func(item domain.PersonalAgentSkill) bool { return item.UserID != data.Viewer.ID })
 	data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool { return item.UserID != data.Viewer.ID })
 	store.OmitDirectoryExcludedTeams(data)
@@ -5270,6 +5285,12 @@ func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBo
 
 func (s *server) events(w http.ResponseWriter, r *http.Request) {
 	events, err := s.store.Events(r.Context(), r.URL.Query().Get("aggregateId"))
+	for index := range events {
+		// Previous values name offloaded bodies; the log returns them whole.
+		if loaded, loadErr := s.store.LoadOffloadedJSON(r.Context(), workspaceKey(r), events[index].PreviousValues); loadErr == nil {
+			events[index].PreviousValues = loaded
+		}
+	}
 	respondMutation(w, err, http.StatusOK, events)
 }
 

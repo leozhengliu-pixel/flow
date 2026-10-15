@@ -9,7 +9,7 @@ import { trashCopyItems, trashRestoreLabel } from './trash-row-menu-model'
 
 /**
  * The menu of a row in a "Recently deleted" list: Copy ▸ and Restore. Deleted items have no
- * permanent-delete action in the app; they are purged automatically 30 days after deletion.
+ * permanent-delete action in the app; they are purged automatically once the trash retention (30 days by default) has passed.
  */
 export function TrashRowMenuItems({ entry, data, onRestore }: { entry: TrashEntry; data: BootstrapData; onRestore: () => void | Promise<void> }) {
   const { t } = useI18n()

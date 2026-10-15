@@ -357,7 +357,7 @@ func applyMetadataRecords(ctx context.Context, tx *sqlTx, workspace string, refs
 	}
 	for key, value := range wanted {
 		old, exists := previous[key]
-		if !exists || old.order != value.order || !refs.equalDisplayData(old.data, value.data) {
+		if !exists || old.order != value.order || !storedRecordEqual(tx, refs, key.field, old.data, value.data) {
 			if err := writeMetadataRecordRow(ctx, tx, workspace, key, value, old.data); err != nil {
 				return err
 			}
@@ -376,7 +376,11 @@ func applyMetadataRecords(ctx context.Context, tx *sqlTx, workspace string, refs
 // (API key lookup, application mentions, customer filters, search index).
 // previous is the stored payload, when the record existed.
 func writeMetadataRecordRow(ctx context.Context, tx *sqlTx, workspace string, key metadataRecordKey, value metadataRecord, previous []byte) error {
-	if _, err := tx.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,?,?,?,?) ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET collection_order=excluded.collection_order,data=excluded.data`, workspace, key.field, key.key, value.order, []byte(value.data)); err != nil {
+	stored, err := offloadRecord(ctx, tx, workspace, key.field, value.data)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,?,?,?,?) ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET collection_order=excluded.collection_order,data=excluded.data`, workspace, key.field, key.key, value.order, stored); err != nil {
 		return err
 	}
 	if key.field == "apiKeys" {

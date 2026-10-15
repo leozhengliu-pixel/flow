@@ -248,11 +248,24 @@ func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, a
 		} else if query != "" {
 			items = slices.DeleteFunc(items, func(item domain.Document) bool { return !containsFold(item.Title+" "+item.Content, query) })
 		}
-		return paginate(items, args), nil
+		page := paginate(items, args)
+		// Documents carry their versions whole: load the page's offloaded bodies.
+		if documents, ok := page["items"].([]domain.Document); ok {
+			loaded := make([]domain.Document, len(documents))
+			for index, document := range documents {
+				loaded[index] = s.documentWithVersions(ctx, data.Workspace.URLKey, document)
+			}
+			page["items"] = loaded
+		}
+		return page, nil
 	case "search_documents":
 		return s.searchMCPDocuments(ctx, data, args)
 	case "get_document":
-		return mcpFindDocument(data, stringArg(args, "id"))
+		document, err := mcpFindDocument(data, stringArg(args, "id"))
+		if err != nil {
+			return nil, err
+		}
+		return s.documentWithVersions(ctx, data.Workspace.URLKey, document), nil
 	case "list_document_history":
 		return s.listMCPDocumentHistory(ctx, actor, data, args)
 	case "get_document_permissions":

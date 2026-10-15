@@ -33,7 +33,7 @@ func syncMetadataSearchDocument(ctx context.Context, tx *sqlTx, workspace, field
 		_, err := tx.ExecContext(ctx, `DELETE FROM metadata_search_documents WHERE workspace_key=? AND field=? AND record_key=?`, workspace, field, key)
 		return err
 	}
-	content := metadataSearchText(raw)
+	content := capSearchText(metadataSearchText(raw), tx.database.searchMaxChars)
 	if tx.dialect == "mysql" {
 		_, err := tx.ExecContext(ctx, `INSERT INTO metadata_search_documents(workspace_key,field,record_key,content) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE content=IF(content<>VALUES(content),VALUES(content),content)`, workspace, field, key, content)
 		return err
@@ -73,9 +73,9 @@ func (s *SQLiteStore) metadataSearchContent(column string) string {
 		parts = append(parts, "COALESCE("+s.jsonText(column, field)+",'')")
 	}
 	if s.dialect == "mysql" {
-		return "CONCAT_WS(' '," + strings.Join(parts, ",") + ")"
+		return s.searchCapExpression("CONCAT_WS(' '," + strings.Join(parts, ",") + ")")
 	}
-	return strings.Join(parts, " || ' ' || ")
+	return s.searchCapExpression(strings.Join(parts, " || ' ' || "))
 }
 
 func (s *SQLiteStore) ensureMetadataSearchIndex(ctx context.Context) error {

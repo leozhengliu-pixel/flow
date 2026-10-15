@@ -33,6 +33,7 @@ import { dayValue, deletedReleasesForPipeline, releaseCompletion, releaseDateTon
 import { absoluteUrl, copyToClipboard, isFavorite } from './release-actions-model'
 import { useReleaseActions } from './use-release-actions'
 import { PipelineTabContextMenu } from './pipeline-tab-context-menu'
+import { trashRetentionDays } from '@/lib/trash-retention'
 
 type Props = {
   data: BootstrapData
@@ -105,7 +106,7 @@ export function ReleasePipelineView({ data, pipeline, tab, onCreate, onNavigate,
         <Popover.Portal><Popover.Content data-flow-motion="floating" aria-label={t('Display options')} className="flow-pipeline-display-popover" align="end" collisionPadding={8} sideOffset={4}>{display}</Popover.Content></Popover.Portal>
       </Popover.Root>}
     </div>}
-    {deleted ? <DeletedReleasesList items={deletedReleasesForPipeline(data, pipeline)} onReload={onReload}/>
+    {deleted ? <DeletedReleasesList items={deletedReleasesForPipeline(data, pipeline)} retentionDays={trashRetentionDays(data)} onReload={onReload}/>
       : tab === 'changelog' ? <ReleaseChangelog data={data} pipeline={pipeline} onCreate={onCreate} onNavigate={onNavigate} onReload={onReload}/>
         : <PipelineReleaseList data={data} pipeline={pipeline} archived={archive} grouping={scheduled && !archive ? grouping : 'none'} ordering={ordering} direction={direction} properties={properties} onSort={next => { if (ordering === next) setDirection(value => value === 'asc' ? 'desc' : 'asc'); else { setOrdering(next); setDirection(next === 'releaseDate' ? 'desc' : 'asc') } }} canManage={canManage} onCreate={onCreate} onNavigate={onNavigate} onReload={onReload}/>}
   </main>
@@ -278,9 +279,9 @@ function SelectionBar({ data, pipeline, ids, actions, onClear, onReload }: { dat
   </div>
 }
 
-function DeletedReleasesList({ items, onReload }: { items: TrashEntry[]; onReload: () => Promise<void> }) {
+function DeletedReleasesList({ items, retentionDays, onReload }: { items: TrashEntry[]; retentionDays: number; onReload: () => Promise<void> }) {
   const { t, formatDate } = useI18n()
-  if (!items.length) return <ReleaseEmptyState title={t('No recently deleted releases')} paragraphs={[t('Deleted releases will appear here for 30 days before being permanently removed.')]}/>
+  if (!items.length) return <ReleaseEmptyState title={t('No recently deleted releases')} paragraphs={[t('Deleted releases will appear here for {days} days before being permanently removed.').replace('{days}', String(retentionDays))]}/>
   return <div className="flow-releases-list is-deleted" aria-label={t('Recently deleted releases')}>
     {items.map(item => <DropdownMenu.Root key={item.id}>
       <div className="flow-releases-row flow-release-deleted-row">

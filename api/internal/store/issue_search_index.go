@@ -43,7 +43,7 @@ func writeIssueSearchIndex(ctx context.Context, tx *sqlTx, workspace string, iss
 	rows := [][]string{}
 	for _, issue := range issues {
 		ids = append(ids, issue.ID)
-		rows = append(rows, []string{issue.ID, issue.Identifier + "\n" + issue.Title + "\n" + issue.Description})
+		rows = append(rows, []string{issue.ID, capSearchText(issue.Identifier+"\n"+issue.Title+"\n"+issue.Description, tx.database.searchMaxChars)})
 	}
 	return syncIssueIndexRows(ctx, tx, workspace, "issue_search_documents", []string{"issue_id", "content"}, 1, ids, rows)
 }

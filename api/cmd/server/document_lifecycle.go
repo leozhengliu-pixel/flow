@@ -153,16 +153,34 @@ func (s *server) getDocument(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "document not found")
 			return
 		}
-		writeJSON(w, http.StatusOK, document)
+		writeJSON(w, http.StatusOK, s.withDocumentVersions(r, *document))
 		return
 	}
 	if document, entry, ok := trashedDocument(&data, id); ok && documentRole(s, data, document) != "none" {
 		deletedAt := entry.DeletedAt
 		document.DeletedAt = &deletedAt
-		writeJSON(w, http.StatusOK, document)
+		writeJSON(w, http.StatusOK, s.withDocumentVersions(r, document))
 		return
 	}
 	writeError(w, http.StatusNotFound, "document not found")
+}
+
+// withDocumentVersions loads the bodies of a document's offloaded versions for
+// a response that carries them (the document API and MCP send versions
+// whole; the workspace data and realtime events do not).
+func (s *server) withDocumentVersions(r *http.Request, document domain.Document) domain.Document {
+	return s.documentWithVersions(r.Context(), workspaceKey(r), document)
+}
+
+func (s *server) documentWithVersions(ctx context.Context, workspace string, document domain.Document) domain.Document {
+	if !slices.ContainsFunc(document.Revisions, func(item domain.DocumentRevision) bool { return len(item.Offloaded) > 0 }) {
+		return document
+	}
+	document.Revisions = slices.Clone(document.Revisions)
+	if err := s.store.LoadDocumentRevisionBodies(ctx, workspace, document.Revisions); err != nil {
+		log.Printf("load document versions document=%s: %v", document.ID, err)
+	}
+	return document
 }
 
 func trashedDocument(data *domain.Bootstrap, id string) (domain.Document, domain.TrashEntry, bool) {
@@ -214,7 +232,7 @@ func (s *server) restoreDeletedDocument(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusConflict, "document is not deleted")
 		return
 	}
-	respondMutation(w, err, http.StatusOK, restored)
+	respondMutation(w, err, http.StatusOK, s.withDocumentVersions(r, restored))
 }
 
 // purgeDocumentContent drops what a permanently deleted document left

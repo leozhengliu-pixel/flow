@@ -18,6 +18,7 @@ import { documentDisplayTitle, documentParent, type DocumentActionContext } from
 import { DeletedDocumentMenuItems } from '@/components/documents/document-deleted-menu'
 import { FlowContextMenuPortal, FlowContextMenuRoot, FlowContextMenuTrigger, FlowDropdownMenuContent, FlowMenuContent } from '@/components/ui/row-context-menu'
 import { TrashRowMenuItems } from './trash-row-menu'
+import { withTrashRetention } from '@/lib/trash-retention'
 
 type ArchiveTabDefinition = { id: TeamArchiveTab; label: string; title: string; empty: string; resource?: string }
 
@@ -101,7 +102,7 @@ export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,on
       {archivedIssues.map(item=><ArchiveRow icon={<CircleDashed/>} key={item.id} title={<span data-i18n-ignore>{item.identifier} {item.title}</span>} meta={<>{t('Issue')} · {t('archived')} {date(item.archivedAt!)}</>} onRestore={async()=>{await updateIssue(item.id,{archived:false});await onReload([item.id])}}/>)}
       {archivedProjects.map(item=><ArchiveRow icon={<Rocket/>} key={item.id} title={<span data-i18n-ignore>{item.name}</span>} meta={<>{t('Project')} · {t('archived')} {date(item.archivedAt!)}</>} onRestore={async()=>{await updateProject(item.id,{archived:false});await onReload()}}/>)}
       {archivedCycles.map(item=><ArchiveRow icon={<Archive/>} key={item.id} title={<span data-i18n-ignore>{item.name}</span>} meta={<>{t('Cycle')} · {t('ended')} {date(item.endsAt)}</>} onRestore={async()=>{await updateCycle(item.id,{status:'upcoming'});await onReload()}}/>)}
-      {trash.map(item=>item.resourceType==='document'?<DeletedDocumentRow data={data} entry={item} key={item.id} onNavigate={onNavigate} onReload={onReload}/>:<TrashRow data={data} entry={item} key={item.id} icon={archiveIcon(item.resourceType)} meta={<>{t(typeLabel(item.resourceType))} · {t('deleted by')} <span data-i18n-ignore>{item.deletedBy.displayName}</span> · {date(item.deletedAt)}</>} onRestore={()=>restoreTrash(item)}/>)}
+      {trash.map(item=>item.resourceType==='document'?<DeletedDocumentRow data={data} entry={item} key={item.id} onNavigate={onNavigate} onReload={onReload}/>:<TrashRow data={data} entry={item} key={item.id} icon={archiveIcon(item.resourceType)} meta={<>{t(typeLabel(item.resourceType))} · {t('deleted by')} <span data-i18n-ignore>{item.deletedBy.displayName}</span> · {date(item.deletedAt)} · {withTrashRetention(t('deleted permanently after {days} days'),data)}</>} onRestore={()=>restoreTrash(item)}/>)}
       {tab.id==='issues' && archivedLoader.loading && <div className="archive-row archive-loading-row"><GridLoader size={14}/><span/><div><strong>{t('Loading…')}</strong></div></div>}
       {tab.id==='issues' && archivedLoader.hasMore && !archivedLoader.loading && <div className="archive-row"><span/><span/><div><button type="button" className="ui-pill" onClick={()=>archivedLoader.loadMore(0)}>{t('Load more')}</button></div></div>}
     </div>}
@@ -124,12 +125,12 @@ function DeletedDocumentRow({data,entry,onNavigate,onReload}:{data:BootstrapData
   const parent=documentParent(data,document)
   const parentName=parent?.type==='team'?parent.team.name:parent?.type==='project'?parent.project.name:parent?.type==='initiative'?parent.initiative.name:undefined
   const ctx:DocumentActionContext={data,reload:()=>onReload(),navigate:onNavigate,t}
-  // The reference app's menu for a recently deleted document: Copy ▸ and Restore document (deleted items purge after 30 days).
+  // The reference app's menu for a recently deleted document: Copy ▸ and Restore document (deleted items purge after the trash retention).
   const menu=<DeletedDocumentMenuItems ctx={ctx} document={document} entry={entry}/>
   return <FlowContextMenuRoot><FlowContextMenuTrigger asChild><div className="archive-doc-row" data-trash-id={entry.id}>
     <DocumentGlyph className="archive-doc-glyph" document={document}/>
     <span className="archive-doc-title"><strong data-i18n-ignore>{title}</strong>{parentName&&<>{' '}<span className="archive-doc-parent" data-i18n-ignore>{parentName}</span></>}</span>
-    <time className="archive-doc-date" dateTime={entry.deletedAt} title={formatDate(entry.deletedAt,{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})}>{formatRelative(entry.deletedAt)}</time>
+    <time className="archive-doc-date" dateTime={entry.deletedAt} title={`${formatDate(entry.deletedAt,{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})} · ${withTrashRetention(t('deleted permanently after {days} days'),data)}`}>{formatRelative(entry.deletedAt)}</time>
     <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className="operations-row-menu" aria-label={t('Open actions')}><MoreHorizontal/></button></DropdownMenu.Trigger><DropdownMenu.Portal><FlowDropdownMenuContent align="end" label={t('Document options')}>{menu}</FlowDropdownMenuContent></DropdownMenu.Portal></DropdownMenu.Root>
   </div></FlowContextMenuTrigger><FlowContextMenuPortal><FlowMenuContent label={t('Document options')}>{menu}</FlowMenuContent></FlowContextMenuPortal></FlowContextMenuRoot>
 }

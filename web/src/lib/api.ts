@@ -9,6 +9,7 @@ import type {
   Attachment,
   AuthSession,
   BootstrapData,
+  DocumentRevision,
   CodeReview,
   CommitSigningKey,
   Comment,
@@ -105,6 +106,7 @@ import type {
   WorkspaceSettings,
 } from "@/types/flow";
 import type { ApplicationInstallation } from "@/lib/application-agents";
+import { rememberTrashRetention } from "@/lib/trash-retention";
 import { apiFetch, ApiError as PulseApiError, jsonRequest, request } from "@/lib/api-client";
 
 export { ApiError, realtimeClientId } from "@/lib/api-client";
@@ -402,14 +404,14 @@ export function fetchBootstrap(workspaceKey?: string, projection?: BootstrapProj
   return request<BootstrapData>(
     "/api/bootstrap",
     { headers, signal },
-  ).then(normalizeBootstrapData);
+  ).then(normalizeBootstrapData).then(rememberTrashRetention);
 }
 
 export function fetchPagedBootstrap(workspaceKey?: string, projection?: BootstrapProjection, signal?: AbortSignal): Promise<BootstrapData> {
   const headers: Record<string, string> = {}
   if (workspaceKey) headers['X-Workspace-Key'] = workspaceKey
   if (projection) headers['X-Flow-Projection'] = projection
-  return request<BootstrapData>('/api/issue-records/bootstrap', {headers, signal}).then(normalizeBootstrapData)
+  return request<BootstrapData>('/api/issue-records/bootstrap', {headers, signal}).then(normalizeBootstrapData).then(rememberTrashRetention)
 }
 export type IssueQueryInput = {
   q?: string;
@@ -1717,6 +1719,10 @@ export function setDocumentThreadSubscription(documentId: string, commentId: str
 }
 export function deleteDocument(id: string): Promise<void> {
   return request(`/api/documents/${id}`, { method: "DELETE" });
+}
+/** A document's versions with their bodies (newest first; documents keep at most 100). */
+export function fetchDocumentRevisions(id: string, signal?: AbortSignal): Promise<DocumentRevision[]> {
+  return request<{ nodes: DocumentRevision[] }>(`/api/documents/${encodeURIComponent(id)}/history?limit=200`, { signal }).then(page => page.nodes ?? []);
 }
 export function restoreDocumentRevision(
   id: string,

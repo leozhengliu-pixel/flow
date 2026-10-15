@@ -16,6 +16,7 @@ import {
 } from '@/lib/api'
 import { pinResource, unpinResource } from '@/lib/team-resource-sync'
 import { toggleFavoriteFor } from '@/lib/favorites'
+import { withTrashRetention } from '@/lib/trash-retention'
 import { documentPath } from '@/lib/app-routes'
 import type { BootstrapData, DocumentPermission, DocumentTemplate, FlowDocument, Initiative, Project, Team, User } from '@/types/flow'
 
@@ -168,7 +169,7 @@ export async function renameDocument(ctx: DocumentActionContext, document: FlowD
 export async function deleteDocumentWithConfirm(ctx: DocumentActionContext, document: FlowDocument, afterDelete?: () => void) {
   const title = documentDisplayTitle(document, ctx.t)
   const confirmed = await confirmAction(ctx.t('Delete "{name}"?').replace('{name}', title), {
-    description: ctx.t('Deleted documents are available in the "Recently deleted" view for 30 days, before they are permanently deleted.'),
+    description: withTrashRetention(ctx.t('Deleted documents are available in the "Recently deleted" view for {days} days, before they are permanently deleted.'), ctx.data),
     confirmLabel: ctx.t('Delete'),
   })
   if (!confirmed) return false
@@ -181,7 +182,7 @@ export async function deleteDocumentWithConfirm(ctx: DocumentActionContext, docu
 export async function deleteDocumentsWithConfirm(ctx: DocumentActionContext, documents: FlowDocument[], afterDelete?: () => void) {
   if (documents.length === 1) return deleteDocumentWithConfirm(ctx, documents[0], afterDelete)
   const confirmed = await confirmAction(ctx.t('Delete {count} documents?').replace('{count}', String(documents.length)), {
-    description: ctx.t('Deleted documents are available in the "Recently deleted" view for 30 days, before they are permanently deleted.'),
+    description: withTrashRetention(ctx.t('Deleted documents are available in the "Recently deleted" view for {days} days, before they are permanently deleted.'), ctx.data),
     confirmLabel: ctx.t('Delete'),
   })
   if (!confirmed) return false

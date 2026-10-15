@@ -17,6 +17,8 @@ async function readCss(name: string) {
 const toastSuccess = vi.fn()
 const toastError = vi.fn()
 vi.mock('@/lib/toast', () => ({ toast: { success: (...args: unknown[]) => toastSuccess(...args), error: (...args: unknown[]) => toastError(...args) } }))
+const api = vi.hoisted(() => ({ fetchDocumentRevisions: vi.fn() }))
+vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/api')>()), ...api }))
 
 const text = (value: string, marks?: PMNode['marks']): PMNode => ({ type: 'text', text: value, ...(marks ? { marks } : {}) })
 const p = (value: string): PMNode => ({ type: 'paragraph', content: [text(value)] })
@@ -258,5 +260,14 @@ describe('history dialog css', () => {
     expect(css).toMatch(/@media \(max-width: 720px\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/)
     expect(css).not.toMatch(/#[\da-f]{3,8}\b|rgba?\(|hsla?\(|lch\(/i)
     expect(viewCss).not.toMatch(/#[\da-f]{3,8}\b|rgba?\(|hsla?\(|lch\(/i)
+  })
+
+  it('loads the bodies of offloaded versions when it opens', async () => {
+    const offloaded: DocumentRevision = { ...revision('rev-2', 'Roadmap', undefined, ago(26)), _offloaded: { body: { key: 'document-revisions/doc-1/rev-2/abc', size: 120 } } }
+    api.fetchDocumentRevisions.mockResolvedValue([revision('rev-2', 'Roadmap', v1, ago(26), 'prev one')])
+    renderDialog(makeDocument({ revisions: [offloaded, makeDocument().revisions[1]] }))
+    await waitFor(() => expect(api.fetchDocumentRevisions).toHaveBeenCalledWith('doc-1', expect.anything()))
+    fireEvent.click(options()[1])
+    expect(await screen.findByText('The first version has a short paragraph.')).toBeInTheDocument()
   })
 })

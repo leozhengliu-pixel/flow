@@ -496,7 +496,7 @@ func (s *server) applyAgentMessageChanges(w http.ResponseWriter, r *http.Request
 		updated = *current
 		return nil
 	})
-	respondMutation(w, err, http.StatusOK, updated)
+	respondMutation(w, err, http.StatusOK, s.withAgentBodies(r, updated))
 }
 
 // applyAgentChange undoes (or, with undo false, re-applies) one recorded change and returns its new record.

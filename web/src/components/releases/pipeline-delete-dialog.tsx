@@ -6,6 +6,7 @@ import { useI18n } from '@/i18n/i18n'
 import { deleteReleasePipeline } from '@/lib/api'
 import type { ReleasePipeline } from '@/types/flow'
 
+import { withTrashRetention } from '@/lib/trash-retention'
 import './pipeline-settings-list.css'
 
 /**
@@ -44,7 +45,7 @@ export function PipelineDeleteDialog({ pipelines, onClose, onDeleted, onViewDele
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose() }}>
     <DialogContent className="flow-pipeline-confirm-dialog" closeLabel={t('Close')} aria-describedby="flow-pipeline-delete-description">
       <DialogTitle>{single ? withName(t('Delete the pipeline "{name}"?'), <span data-i18n-ignore>{single.name}</span>) : t('Delete {count} pipelines?').replace('{count}', String(pipelines.length))}</DialogTitle>
-      <p id="flow-pipeline-delete-description">{t('Deleted pipelines are available in the "Recently deleted pipelines" view for 30 days, before being permanently deleted along with all their releases.')}</p>
+      <p id="flow-pipeline-delete-description">{withTrashRetention(t('Deleted pipelines are available in the "Recently deleted pipelines" view for {days} days, before being permanently deleted along with all their releases.'))}</p>
       <label className="flow-pipeline-confirm-field">
         <span>{withName(t('Type {name} to confirm'), <strong data-i18n-ignore>{prompt}</strong>)}</span>
         <input autoFocus aria-label={t(single ? 'Pipeline name' : 'Confirmation')} autoComplete="off" spellCheck={false} value={value} onChange={event => setValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void remove() } }}/>

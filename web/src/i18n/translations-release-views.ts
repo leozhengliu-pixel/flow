@@ -54,7 +54,7 @@ export const releaseViewsZhCN: Record<string, string> = {
   "It may have been deleted, or the link is incorrect.": "它可能已被删除，或链接不正确。",
   "Deleted release {name}": "已删除发布版本 {name}",
   "Delete \"{name}\"?": "删除“{name}”？",
-  "Deleted releases are available in the \"Recently deleted releases\" view for 30 days, before they are permanently deleted.": "已删除的发布版本会在“最近删除的发布版本”视图中保留 30 天，之后将被永久删除。",
+  "Deleted releases are available in the \"Recently deleted releases\" view for {days} days, before they are permanently deleted.": "已删除的发布版本会在“最近删除的发布版本”视图中保留 {days} 天，之后将被永久删除。",
   "Optional": "可选",
   "You can restore it from the recently deleted releases view.": "你可以在最近删除的发布版本视图中恢复它。",
   "\"{version}\" copied to clipboard": "已复制“{version}”到剪贴板",

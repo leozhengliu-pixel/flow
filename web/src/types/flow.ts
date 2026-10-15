@@ -265,6 +265,8 @@ export interface DocumentRevision {
   createdAt: string;
   /** When the version's editing burst began. Absent on versions saved before bursts. */
   startedAt?: string;
+  /** Set while the version's body (content, contentState, contentData) is not loaded; the document history endpoint loads it. */
+  _offloaded?: Record<string, { key: string; size: number }>;
 }
 export interface DocumentPermission {
   id: UUID;
@@ -2329,6 +2331,8 @@ export interface InitiativeMutationInput {
 }
 export interface BootstrapData {
   resourceDetailsOmitted?: boolean;
+  /** Days deleted items stay restorable before they are deleted permanently. */
+  trashRetentionDays?: number;
   issueCollectionPaged?: boolean;
   issueCollectionRevision?: number;
   issueHistoryCursors?: Record<string, { commentsCursor?: string; activitiesCursor?: string }>;

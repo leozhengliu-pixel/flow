@@ -44,6 +44,63 @@ automatically at startup for all three drivers.
 | `FLOW_WORKSPACE_STATE_MAX_BYTES` | `67108864` | Maximum serialized workspace state size. Mutations fail before exceeding this limit. |
 | `FLOW_DATABASE_MAX_TRANSACTION_BYTES` | `33554432` | Cumulative SQL write text and parameter bytes per transaction. Exceeding the budget rolls back the transaction, even if a caller ignores the first error. Minimum 1 MiB. This is not a measurement of physical binlog bytes. |
 
+### Database growth
+
+Flow keeps history it no longer serves out of the database, or bounded:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FLOW_DOMAIN_EVENT_RETENTION_DAYS` | `90` | Days the `domain_events` log keeps an event; `0` keeps every event. |
+| `FLOW_TRASH_RETENTION_DAYS` | `30` | Days deleted items stay in "Recently deleted" before they are deleted permanently. Minimum 1. |
+| `FLOW_AGENT_TRANSCRIPT_OFFLOAD_BYTES` | `8192` | Agent replies and tool results larger than this are stored outside the database row, with a short summary left in the row. Minimum 1024. |
+| `FLOW_CONTENT_CACHE_BYTES` | `134217728` | In-process cache of recently loaded content stored outside rows (document versions, agent replies). |
+| `FLOW_SEARCH_INDEX_MAX_CHARS` | `20000` | Characters of each issue and document indexed for full-text search. Text past the limit is still stored and shown but is not found by search. `0` indexes everything. |
+
+- **Domain events.** Realtime catch-up does not read `domain_events`: each
+  instance keeps a short in-memory replay window per workspace, and a client
+  whose cursor is older than that window (after a restart, or a long time
+  offline) receives `workspace.resync_required` and reloads the workspace.
+  Webhooks are queued from the committed event, and the audit log is stored
+  separately, so pruning old events loses nothing a client needs. Pruning runs
+  hourly in batches of 1,000 rows.
+- **Trash.** Expired entries are purged hourly by a background job (in batches
+  of 200), not only when someone opens the app. Entries deleted before the
+  window was shortened are purged at the new, shorter window.
+- **Document versions and agent transcripts.** Each document version's body
+  (content, rich-text data and editor state) is stored outside the document's
+  row; the row keeps the version's author, time, size and a key. A version
+  equal to the current document refers to it instead of repeating it; the
+  newest version always stays in the row. Agent conversations store long
+  replies and tool results the same way (user messages and tool arguments
+  stay in the row). Deleted documents in the trash share their versions'
+  stored bodies. With
+  `FLOW_STORAGE_DRIVER=s3` the bodies are gzip-compressed objects under
+  `FLOW_S3_CONTENT_PREFIX/<workspace>/document-revisions/<document>/<version>/…`
+  (and `…/agent-transcripts/<conversation>/…`); otherwise they are kept
+  gzip-compressed in the `metadata_blobs` table. Rows written by earlier
+  versions are converted by a resumable background migration in small
+  batches. Bodies nothing refers to any more are deleted after 24 hours.
+- **Loading on demand.** Starting Flow or reloading a workspace reads none of
+  these bodies. They are read, through the in-process cache, only where they
+  are used: document history, comparing and restoring versions, responses
+  that carry whole documents (the document API, MCP document tools, exports,
+  webhook payloads and the event log's previous values), opening an agent
+  conversation, and the history an agent reply is generated from. Bodies that
+  retained domain events refer to are kept until those events are pruned.
+  The workspace data and conversation lists
+  carry older versions without their bodies (`_offloaded` names them) and
+  partly offloaded conversations without their messages; the app loads them
+  when a history or a conversation is opened.
+- **Search.** Changing `FLOW_SEARCH_INDEX_MAX_CHARS` takes effect at the next
+  start: lowering it truncates stored search text, raising it re-indexes.
+
+MySQL and PostgreSQL reuse the space freed by pruning, but do not return it to
+the operating system on their own. Run `OPTIMIZE TABLE domain_events,
+workspace_metadata_records;` (MySQL) or `VACUUM FULL` (PostgreSQL) in a
+maintenance window after the first cleanup to shrink the files. Use the
+reports in `scripts/db-size-report/` to see where space goes
+([Operations](operations.md#database-size)).
+
 ### Import writes and MySQL binary logs
 
 Issue imports compare existing records and update only changed entities and index
@@ -252,6 +309,7 @@ backend.
 | `FLOW_S3_SESSION_TOKEN` | empty | Optional temporary credential token. |
 | `FLOW_S3_PATH_STYLE` | `false` | Enable for MinIO and providers requiring path-style requests. |
 | `FLOW_S3_PREFIX` | `uploads` | Key prefix inside the bucket. |
+| `FLOW_S3_CONTENT_PREFIX` | `content` | Key prefix for database content kept in object storage (see [Database growth](#database-growth)). |
 | `FLOW_S3_VALIDATE_ON_START` | `true` | Fail startup when the bucket or credentials cannot be accessed. |
 
 The standard `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`,

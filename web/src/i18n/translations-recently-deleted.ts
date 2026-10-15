@@ -7,7 +7,7 @@ export const recentlyDeletedZhCN: Record<string, string> = {
   "No installed applications": "没有已安装的应用",
   "Applications installed in this workspace will appear here.": "此工作区中安装的应用将显示在这里。",
   "installed": "安装于",
-  "Deleted issues are available in the \"Recently deleted\" view for 30 days, before they are permanently deleted.": "已删除的议题会在“最近删除”视图中保留 30 天，之后将被永久删除。",
+  "Deleted issues are available in the \"Recently deleted\" view for {days} days, before they are permanently deleted.": "已删除的议题会在“最近删除”视图中保留 {days} 天，之后将被永久删除。",
   "Delete \"{name}\"?": "删除“{name}”？",
   "Delete \"{name}\" and 1 sub-issue?": "删除“{name}”及 1 个子议题？",
   "Delete \"{name}\" and {count} sub-issues?": "删除“{name}”及 {count} 个子议题？",
