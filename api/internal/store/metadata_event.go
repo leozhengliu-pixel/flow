@@ -23,17 +23,19 @@ func (s *SQLiteStore) recordMetadataEvent(ctx context.Context, workspace, eventT
 	if err != nil {
 		return err
 	}
-	now := time.Now().UTC()
-	event := domain.DomainEvent{ID: fmt.Sprintf("evt_%d", now.UnixNano()), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, CreatedAt: now}
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at) VALUES(?,?,?,?,?,?)`, event.ID, event.Type, event.AggregateID, []byte(event.Payload), []byte(nil), now.Format(time.RFC3339Nano)); err != nil {
-		return err
-	}
 	var entity any
+	workspaceID := ""
 	s.mu.RLock()
 	if data, ok := s.workspaces[workspace]; ok {
 		entity = teamMutationEntity(&data, aggregateID, len(data.Teams))
+		workspaceID = data.Workspace.ID
 	}
 	s.mu.RUnlock()
+	now := time.Now().UTC()
+	event := domain.DomainEvent{ID: fmt.Sprintf("evt_%d", now.UnixNano()), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, CreatedAt: now}
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at,workspace_id) VALUES(?,?,?,?,?,?,?)`, event.ID, event.Type, event.AggregateID, []byte(event.Payload), []byte(nil), now.Format(time.RFC3339Nano), workspaceID); err != nil {
+		return err
+	}
 	s.publishMutation(ctx, workspace, event, enrichRealtimePayload(payloadRaw, entity, eventType))
 	return nil
 }

@@ -34781,6 +34781,42 @@
         ],
         "type": "object"
       },
+      "ContentRef": {
+        "description": "ContentRef locates an offloaded body.",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "summary": {
+            "description": "Summary is the start of an offloaded transcript text.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "size"
+        ],
+        "type": "object"
+      },
+      "ContentRefPartial": {
+        "description": "ContentRef locates an offloaded body. In webhook payloads only id is guaranteed.",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "summary": {
+            "description": "Summary is the start of an offloaded transcript text.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Customer": {
         "properties": {
           "annualRevenue": {
@@ -36300,6 +36336,13 @@
       },
       "DocumentRevision": {
         "properties": {
+          "_offloaded": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ContentRef"
+            },
+            "description": "Offloaded[\"body\"] locates Content, ContentState and ContentData while they are not loaded (document history loads them on demand).",
+            "type": "object"
+          },
           "author": {
             "$ref": "#/components/schemas/User"
           },
@@ -36365,6 +36408,13 @@
       },
       "DocumentRevisionPartial": {
         "properties": {
+          "_offloaded": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ContentRefPartial"
+            },
+            "description": "Offloaded[\"body\"] locates Content, ContentState and ContentData while they are not loaded (document history loads them on demand).",
+            "type": "object"
+          },
           "author": {
             "$ref": "#/components/schemas/UserPartial"
           },

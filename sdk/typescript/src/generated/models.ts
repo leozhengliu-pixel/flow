@@ -442,6 +442,22 @@ export interface CommentWebhookEvent {
   webhookTimestamp: number
 }
 
+/** ContentRef locates an offloaded body. */
+export interface ContentRef {
+  key: string
+  size: number
+  /** Summary is the start of an offloaded transcript text. */
+  summary?: string
+}
+
+/** ContentRef locates an offloaded body. In webhook payloads only id is guaranteed. */
+export interface ContentRefPartial {
+  key?: string
+  size?: number
+  /** Summary is the start of an offloaded transcript text. */
+  summary?: string
+}
+
 export interface Customer {
   annualRevenue?: number
   createdAt: string
@@ -859,6 +875,8 @@ export interface DocumentPermissionPartial {
 }
 
 export interface DocumentRevision {
+  /** Offloaded["body"] locates Content, ContentState and ContentData while they are not loaded (document history loads them on demand). */
+  _offloaded?: Record<string, ContentRef>
   author: User
   /** AuthorIDs lists everyone who edited during the burst this version covers (Author is the latest). CreatedAt is when the burst ended. */
   authorIds?: string[]
@@ -876,6 +894,8 @@ export interface DocumentRevision {
 }
 
 export interface DocumentRevisionPartial {
+  /** Offloaded["body"] locates Content, ContentState and ContentData while they are not loaded (document history loads them on demand). */
+  _offloaded?: Record<string, ContentRefPartial>
   author?: UserPartial
   /** AuthorIDs lists everyone who edited during the burst this version covers (Author is the latest). CreatedAt is when the burst ended. */
   authorIds?: string[]

@@ -171,7 +171,7 @@ func (s *SQLiteStore) IssueApplicationCredential(ctx context.Context, workspace,
 		if err := ensureOAuthMetadataShape(ctx, tx, workspace, "apiKeys", "array", lock); err != nil {
 			return current, err
 		}
-		event, err = oauthRecordEvent(ctx, tx, "oauth_token.created", key.ID, map[string]string{"subjectUserId": key.SubjectID(), "issuedByUserId": key.IssuedByUserID, "actor": key.Actor, "grantType": key.GrantType, "clientId": clientID})
+		event, err = oauthRecordEvent(ctx, tx, current.Workspace.ID, "oauth_token.created", key.ID, map[string]string{"subjectUserId": key.SubjectID(), "issuedByUserId": key.IssuedByUserID, "actor": key.Actor, "grantType": key.GrantType, "clientId": clientID})
 		if err != nil {
 			return current, err
 		}

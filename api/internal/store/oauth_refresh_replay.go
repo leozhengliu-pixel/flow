@@ -198,7 +198,7 @@ func (s *SQLiteStore) revokeOAuthAccessFamily(ctx context.Context, workspace, fa
 			return current, nil
 		}
 		var err error
-		event, err = oauthRecordEvent(ctx, tx, "oauth_token.revoked", family)
+		event, err = oauthRecordEvent(ctx, tx, current.Workspace.ID, "oauth_token.revoked", family)
 		if err != nil {
 			return current, err
 		}

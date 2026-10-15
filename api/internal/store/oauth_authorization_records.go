@@ -116,7 +116,7 @@ func ensureOAuthMetadataShape(ctx context.Context, tx *sqlTx, workspace, field, 
 	return err
 }
 
-func oauthRecordEvent(ctx context.Context, tx *sqlTx, eventType, id string, values ...any) (domain.DomainEvent, error) {
+func oauthRecordEvent(ctx context.Context, tx *sqlTx, workspaceID, eventType, id string, values ...any) (domain.DomainEvent, error) {
 	now := time.Now().UTC()
 	event := domain.DomainEvent{ID: fmt.Sprintf("evt_%d", now.UnixNano()), Type: eventType, AggregateID: id, Payload: json.RawMessage(`null`), CreatedAt: now}
 	if len(values) > 0 {
@@ -126,7 +126,7 @@ func oauthRecordEvent(ctx context.Context, tx *sqlTx, eventType, id string, valu
 		}
 		event.Payload = payload
 	}
-	_, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at) VALUES(?,?,?,?,?,?)`, event.ID, event.Type, id, []byte(event.Payload), []byte(nil), now.Format(time.RFC3339Nano))
+	_, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at,workspace_id) VALUES(?,?,?,?,?,?,?)`, event.ID, event.Type, id, []byte(event.Payload), []byte(nil), now.Format(time.RFC3339Nano), workspaceID)
 	return event, err
 }
 
@@ -266,7 +266,7 @@ func (s *SQLiteStore) CreateOAuthAuthorizationGrant(ctx context.Context, code st
 		if existing != nil {
 			eventType = "oauth_authorization.reused"
 		}
-		event, err = oauthRecordEvent(ctx, tx, eventType, authorization.ID)
+		event, err = oauthRecordEvent(ctx, tx, current.Workspace.ID, eventType, authorization.ID)
 		if err != nil {
 			return current, err
 		}
@@ -310,7 +310,7 @@ func (s *SQLiteStore) RequestOAuthApplicationApproval(ctx context.Context, works
 		if err := ensureOAuthMetadataShape(ctx, tx, workspace, "settings", "map", lock); err != nil {
 			return current, err
 		}
-		event, err = oauthRecordEvent(ctx, tx, "application_policy.updated", clientID)
+		event, err = oauthRecordEvent(ctx, tx, current.Workspace.ID, "application_policy.updated", clientID)
 		if err != nil {
 			return current, err
 		}
@@ -399,7 +399,7 @@ func (s *SQLiteStore) RevokeOAuthAuthorizationRecords(ctx context.Context, works
 		}
 		// Refresh and code exchanges check the authorization row in their transaction;
 		// revocation therefore blocks both without scanning historical token tables.
-		event, err = oauthRecordEvent(ctx, tx, "oauth_authorization.revoked", id)
+		event, err = oauthRecordEvent(ctx, tx, current.Workspace.ID, "oauth_authorization.revoked", id)
 		if err != nil {
 			return current, err
 		}
@@ -465,7 +465,7 @@ func (s *SQLiteStore) RevokeOAuthAccessToken(ctx context.Context, secretHash str
 		if _, err := tx.ExecContext(ctx, `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='apiKeys' AND record_key=?`, raw, workspace, id); err != nil {
 			return current, err
 		}
-		event, err = oauthRecordEvent(ctx, tx, "oauth_token.revoked", id)
+		event, err = oauthRecordEvent(ctx, tx, current.Workspace.ID, "oauth_token.revoked", id)
 		if err != nil {
 			return current, err
 		}

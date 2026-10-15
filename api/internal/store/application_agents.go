@@ -242,7 +242,7 @@ func (s *SQLiteStore) InstallApplication(ctx context.Context, workspace string, 
 				return next, err
 			}
 		}
-		event, err = oauthRecordEvent(ctx, tx, "application.updated", a.ID)
+		event, err = oauthRecordEvent(ctx, tx, current.Workspace.ID, "application.updated", a.ID)
 		return next, err
 	})
 	if err == nil {
@@ -405,7 +405,7 @@ func (s *SQLiteStore) EnsureBuiltinApplication(ctx context.Context, workspace st
 		if err != nil {
 			return current, err
 		}
-		event, err = oauthRecordEvent(ctx, tx, "application.updated", installed.ID)
+		event, err = oauthRecordEvent(ctx, tx, current.Workspace.ID, "application.updated", installed.ID)
 		changed = err == nil
 		return updated, err
 	})
