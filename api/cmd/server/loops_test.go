@@ -33,6 +33,18 @@ func TestLoopLifecycle(t *testing.T) {
 	if len(listed) != 1 || listed[0].ID != created.ID {
 		t.Fatalf("loop list failed: %#v", listed)
 	}
+	// Loops carry a `<name>-<12 hex>` slug; the loop page resolves it, a stale name prefix, or the id.
+	slug := domain.SlugWithSuffix("Daily issue triage", domain.DerivedSlugSuffix(created.ID))
+	if created.SlugID != slug || listed[0].SlugID != slug {
+		t.Fatalf("loop slug = %q / %q, want %q", created.SlugID, listed[0].SlugID, slug)
+	}
+	for _, ref := range []string{slug, "renamed-" + domain.SlugSuffix(slug), created.ID} {
+		if got := requestJSON[domain.Loop](t, handler, http.MethodGet, "/api/loops/"+ref, nil, http.StatusOK); got.ID != created.ID {
+			t.Fatalf("GET /api/loops/%s = %q", ref, got.ID)
+		}
+	}
+	requestJSON[map[string]any](t, handler, http.MethodGet, "/api/loops/daily-issue-triage-000000000000", nil, http.StatusNotFound)
+	requestJSON[[]domain.LoopRun](t, handler, http.MethodGet, "/api/loops/"+slug+"/runs", nil, http.StatusOK)
 	requestJSON[map[string]any](t, handler, http.MethodDelete, "/api/loops/"+created.ID, nil, http.StatusNoContent)
 	listed = requestJSON[[]domain.Loop](t, handler, http.MethodGet, "/api/loops", nil, http.StatusOK)
 	if len(listed) != 0 {

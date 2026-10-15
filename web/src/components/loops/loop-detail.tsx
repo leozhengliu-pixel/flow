@@ -32,7 +32,7 @@ function useRunLoop(data: BootstrapData, loop: Loop | undefined, onNavigate: (pa
     try {
       const run = await runLoopNow(loop.id, target);
       setPicking(false);
-      onNavigate(loopRunPath(data.workspace.urlKey, loop.id, run.id));
+      onNavigate(loopRunPath(data.workspace.urlKey, loop, run.id));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("Could not start the loop"));
     } finally {
@@ -199,7 +199,7 @@ export function LoopDetail({
       <div className="loops-detail-scroll">
         <div className="loops-detail">
           <div className="loops-detail-actions">
-            <button className="loops-detail-button" onClick={() => onNavigate(editLoopPath(workspace, loop.id))}>
+            <button className="loops-detail-button" onClick={() => onNavigate(editLoopPath(workspace, loop))}>
               <Pencil size={14} />
               {t("Edit")}
             </button>
@@ -253,7 +253,7 @@ export function LoopDetail({
             )}
           </div>
 
-          <button className="loops-card loops-run-summary" onClick={() => onNavigate(loopRunPath(workspace, loop.id))}>
+          <button className="loops-card loops-run-summary" onClick={() => onNavigate(loopRunPath(workspace, loop))}>
             <span className="loops-run-summary-icon" aria-hidden="true">
               <History size={16} />
             </span>

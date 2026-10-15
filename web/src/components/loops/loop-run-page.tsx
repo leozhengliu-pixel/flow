@@ -240,7 +240,7 @@ export function LoopRunPage({
   const position = filtered.findIndex((run) => run.id === activeId);
   const nextRun = position >= 0 ? filtered[position + 1] : undefined;
   const previousRun = position > 0 ? filtered[position - 1] : undefined;
-  const goToRun = useCallback((run: LoopRun | undefined) => run && onNavigate(loopRunPath(workspace, loopId, run.id)), [loopId, onNavigate, workspace]);
+  const goToRun = useCallback((run: LoopRun | undefined) => run && onNavigate(loopRunPath(workspace, loop ?? loopId, run.id)), [loop, loopId, onNavigate, workspace]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -389,7 +389,7 @@ export function LoopRunPage({
                   <button
                     aria-current={run.id === activeId ? "true" : undefined}
                     className={`loops-run-row${run.id === activeId ? " is-active" : ""}`}
-                    onClick={() => onNavigate(loopRunPath(workspace, loopId, run.id))}
+                    onClick={() => onNavigate(loopRunPath(workspace, loop ?? loopId, run.id))}
                   >
                     <span className="loops-run-row-label" data-i18n-ignore>
                       {runTriggerText(run, t)}
@@ -423,7 +423,7 @@ export function LoopRunPage({
                       {t(cancelling ? "Cancelling…" : "Cancel run")}
                     </button>
                   )}
-                  <button className="loops-run-edit" onClick={() => onNavigate(editLoopPath(workspace, loopId))}>
+                  <button className="loops-run-edit" onClick={() => onNavigate(editLoopPath(workspace, loop ?? loopId))}>
                     <Pencil size={14} />
                     {t("Edit loop")}
                   </button>
@@ -436,11 +436,11 @@ export function LoopRunPage({
                 {selected.version !== undefined && (
                   <a
                     className="loops-run-version"
-                    href={`${loopPath(workspace, loopId)}?versions=1`}
+                    href={`${loopPath(workspace, loop ?? loopId)}?versions=1`}
                     title={t("Show published versions")}
                     onClick={(event) => {
                       event.preventDefault();
-                      onNavigate(`${loopPath(workspace, loopId)}?versions=1`);
+                      onNavigate(`${loopPath(workspace, loop ?? loopId)}?versions=1`);
                     }}
                   >
                     · {t("Ran version {version}").replace("{version}", String(selected.version))}

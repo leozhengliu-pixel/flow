@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"slices"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"flow/api/internal/domain"
@@ -74,19 +75,7 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 		} else {
 			matches := []string{}
 			for _, term := range q.Terms {
-				value := "%" + escapeIssueLike(strings.ToLower(term)) + "%"
-				selection := "SELECT s.record_key FROM metadata_search_documents s WHERE s.workspace_key=? AND s.field=? AND LOWER(s.content) LIKE ? ESCAPE '!'"
-				if s.dialect == "sqlite" && utf8.RuneCountInString(term) >= 3 {
-					value = "\"" + strings.ReplaceAll(term, "\"", "\"\"") + "\""
-					selection = "SELECT s.record_key FROM metadata_search_fts JOIN metadata_search_documents s ON metadata_search_fts.rowid=s.rowid WHERE s.workspace_key=? AND s.field=? AND metadata_search_fts MATCH ?"
-				}
-				if s.dialect == "mysql" && utf8.RuneCountInString(term) >= 2 {
-					selection = "SELECT s.record_key FROM metadata_search_documents s WHERE s.workspace_key=? AND s.field=? AND MATCH(s.content) AGAINST (? IN BOOLEAN MODE)"
-					value = "\"" + strings.ReplaceAll(term, "\"", " ") + "\""
-				}
-				if s.dialect == "postgres" {
-					selection = "SELECT s.record_key FROM metadata_search_documents s WHERE s.workspace_key=? AND s.field=? AND s.content ILIKE ? ESCAPE '!'"
-				}
+				selection, value := s.metadataTermSelection(term)
 				matches = append(matches, selection)
 				args = append(args, q.Scope.Workspace, kind.field, value)
 			}
@@ -227,6 +216,72 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 		}
 	}
 	return result, nil
+}
+
+// metadataTermSelection selects the record keys whose indexed text contains
+// term; its placeholders are workspace, field and the returned value.
+func (s *SQLiteStore) metadataTermSelection(term string) (string, string) {
+	value := "%" + escapeIssueLike(strings.ToLower(term)) + "%"
+	selection := "SELECT s.record_key FROM metadata_search_documents s WHERE s.workspace_key=? AND s.field=? AND LOWER(s.content) LIKE ? ESCAPE '!'"
+	if s.dialect == "sqlite" && utf8.RuneCountInString(term) >= 3 {
+		value = "\"" + strings.ReplaceAll(term, "\"", "\"\"") + "\""
+		selection = "SELECT s.record_key FROM metadata_search_fts JOIN metadata_search_documents s ON metadata_search_fts.rowid=s.rowid WHERE s.workspace_key=? AND s.field=? AND metadata_search_fts MATCH ?"
+	}
+	if s.dialect == "mysql" && utf8.RuneCountInString(term) >= 2 {
+		selection = "SELECT s.record_key FROM metadata_search_documents s WHERE s.workspace_key=? AND s.field=? AND MATCH(s.content) AGAINST (? IN BOOLEAN MODE)"
+		value = "\"" + strings.ReplaceAll(term, "\"", " ") + "\""
+	}
+	if s.dialect == "postgres" {
+		selection = "SELECT s.record_key FROM metadata_search_documents s WHERE s.workspace_key=? AND s.field=? AND s.content ILIKE ? ESCAPE '!'"
+	}
+	return selection, value
+}
+
+// SearchDocumentIDs returns the ids of documents whose indexed title and body
+// contain every term (matchAll) or any of them, at most limit. It reads only
+// record keys from the full-text index; callers check access and rank.
+func (s *SQLiteStore) SearchDocumentIDs(ctx context.Context, workspace string, terms []string, matchAll bool, limit int) ([]string, error) {
+	terms = normalizeSearchTerms(terms)
+	if len(terms) == 0 {
+		return []string{}, nil
+	}
+	matches, args := []string{}, []any{workspace, "documents"}
+	for _, term := range terms {
+		if s.dialect == "mysql" && strings.ContainsFunc(term, notCJK) {
+			// InnoDB's default stopwords ("at", "in", "on", "as"…) drop ngrams of most
+			// English words, so the ngram index misses them; match those terms on this
+			// workspace's document rows instead.
+			matches = append(matches, "LOWER(content) LIKE ? ESCAPE '!'")
+			args = append(args, "%"+escapeIssueLike(strings.ToLower(term))+"%")
+			continue
+		}
+		selection, value := s.metadataTermSelection(term)
+		matches = append(matches, "record_key IN ("+selection+")")
+		args = append(args, workspace, "documents", value)
+	}
+	join := " OR "
+	if matchAll {
+		join = " AND "
+	}
+	args = append(args, limit)
+	rows, err := s.db.QueryContext(ctx, "SELECT record_key FROM metadata_search_documents WHERE workspace_key=? AND field=? AND ("+strings.Join(matches, join)+") LIMIT ?", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func notCJK(r rune) bool {
+	return !unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul)
 }
 
 func searchMetadataJSONField(field, kind string) bool {

@@ -21,7 +21,7 @@ import (
 var agentChatCoreTools = []string{
 	"search_issues", "get_issue", "list_issues", "list_comments", "list_issue_history",
 	"get_project", "list_projects", "list_project_activity", "get_status_updates", "list_milestones",
-	"get_document", "list_documents",
+	"search_documents", "get_document", "list_documents",
 	"list_users", "get_user", "list_teams", "get_team", "list_cycles", "list_issue_statuses", "get_issue_status", "list_issue_labels",
 	"list_initiatives", "get_initiative", "get_workspace", "search_documentation",
 }

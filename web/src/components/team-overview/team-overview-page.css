@@ -242,7 +242,7 @@
   border: .5px solid transparent;
   border-radius: 9999px;
   background: var(--ui-pill-bg);
-  color: var(--theme-text-secondary);
+  color: var(--text);
   outline: 0;
   transition: background-color 150ms ease, border-color 150ms ease,
     color 150ms ease;
@@ -264,8 +264,8 @@
   color: var(--theme-text-primary);
 }
 .team-resource-command svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 .team-resource-empty {
   height: 24px;
@@ -420,88 +420,82 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/*
+ * Team resources, measured from the reference app (light theme, 712px column):
+ * the list spans the section's full width (12px past the text column on both
+ * sides). Rows are 40px links with a 2px gap, 12px side padding, a 16px icon
+ * 6px from a 13px/500 title, and a radius-8 hover fill; there is no inline
+ * menu (right-click). Groups end 16px below their last row; a named section
+ * starts with a 24px header (15px/600 name, collapse caret, 1px rule, and a
+ * "…" button that opens to 24px on hover) 6px into its group.
+ */
 .team-resource-section {
-  margin: 12px 12px 0;
+  margin: 16px 0 0;
+  padding: 0 0 14px;
 }
-.team-resource-section.is-named { margin-top: 24px; }
-.team-resource-section.is-named > header { height: 24px; min-height: 24px; gap: 4px; border: 0; }
-.team-resource-section-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 15px/23px var(--font); color: var(--theme-text-primary); }
-.team-resource-section > header > .team-resource-collapse { width: 16px; height: 16px; min-width: 16px; flex: 0 0 16px; padding: 0; display: grid; place-items: center; border: 0; background: transparent; color: var(--theme-text-tertiary); }
+.team-resource-section.is-named { margin: 0; padding: 6px 0 14px; }
+.team-resources > header + .team-resource-section.is-named { margin-top: 6px; }
+.team-resource-section.is-named > header { height: 24px; min-height: 24px; display: flex; align-items: center; gap: 4px; margin: 0 2px 0 12px; border: 0; }
+.team-resource-section-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 15px/23px var(--font); color: var(--text); }
+.team-resource-section > header > .team-resource-collapse { width: 16px; height: 16px; min-width: 16px; flex: 0 0 16px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 9999px; background: transparent; color: var(--theme-text-tertiary); }
 .team-resource-collapse svg { width: 16px; height: 16px; transition: transform 120ms ease; }
 .team-resource-collapse[aria-expanded=true] svg { transform: rotate(90deg); }
-.team-resource-section-rule { height: .5px; flex: 1; margin: 0 4px 0 8px; background: var(--theme-border); }
-.team-resource-section.is-named > header > button:last-child { width: 24px; height: 24px; flex: 0 0 24px; }
-.team-resource-section.is-named > header > input { flex: 0 1 240px; font: 600 15px/23px var(--font); }
-.team-resource-section > header:focus-within > button:last-child,.team-resource-section > header > button[data-state=open] { opacity: 1; }
-.team-resource-empty-add { height: 32px; display: flex; align-items: center; gap: 6px; margin: 12px 0 0; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: var(--theme-text-secondary); font: 13px var(--font); }
-.team-resource-empty-add:hover,.team-resource-empty-add[data-state=open] { background: var(--theme-surface-hover); }
-.team-resource-empty-add svg { width: 14px; height: 14px; }
-.team-resource-section:target { scroll-margin-top: 16px; }
-.team-resource-section > header,
-.team-resource-row,
-.team-new-section-row {
-  min-height: 32px;
-  display: flex;
-  align-items: center;
-  border-bottom: .5px solid var(--border-subtle);
-}
-.team-resource-section > header > button:first-child,
-.team-resource-section > header > input {
-  min-width: 0;
-  flex: 1;
-  padding: 0 4px;
-  border: 0;
-  background: transparent;
-  color: var(--theme-text-primary);
-  font: 500 13px/24px var(--font);
-  text-align: left;
-  outline: 0;
-}
-.team-resource-section > header > button:last-child,
-.team-resource-row > button:last-child {
-  width: 28px;
-  height: 28px;
+.team-resource-section-rule { height: 1px; flex: 1; margin: 0 4px; background: var(--theme-border); }
+.team-resource-section.is-named > header > button:last-child {
+  width: 0;
+  height: 24px;
+  flex: 0 0 auto;
   display: grid;
   place-items: center;
+  overflow: hidden;
   padding: 0;
   border: 0;
   border-radius: 9999px;
   background: transparent;
-  color: var(--theme-text-secondary);
+  color: var(--text);
   opacity: 0;
+  transition: width 150ms ease, opacity 150ms ease, background-color 150ms ease;
 }
-.team-resource-section:hover > header > button:last-child,
-.team-resource-row:hover > button:last-child,
-.team-resource-row > button:last-child[data-state="open"] {
-  opacity: 1;
-}
+.team-resource-section.is-named:hover > header > button:last-child,
+.team-resource-section.is-named > header:focus-within > button:last-child,
+.team-resource-section.is-named > header > button[data-state=open] { width: 24px; opacity: 1; }
+.team-resource-section.is-named > header > button:last-child:hover,
+.team-resource-section.is-named > header > button[data-state=open] { background: var(--bg-hover); }
+.team-resource-section.is-named > header > input { min-width: 0; flex: 0 1 240px; padding: 0 4px; border: 0; background: transparent; color: var(--text); font: 600 15px/23px var(--font); outline: 0; }
+.team-resource-empty-add { height: 24px; display: flex; align-items: center; gap: 6px; margin: 17px 0 9px 4px; padding: 0 8px 0 6px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--muted); font: 500 12px var(--font); }
+.team-resource-empty-add:hover,.team-resource-empty-add[data-state=open] { background: var(--bg-hover); }
+.team-resource-empty-add svg { width: 14px; height: 14px; color: var(--text); }
+.team-resource-section:target { scroll-margin-top: 16px; }
+.team-resource-section.is-named .team-resource-rows { padding-top: 8px; }
 .team-resource-row {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) 28px;
+  height: 40px;
+  display: flex;
+  align-items: center;
   gap: 6px;
-  color: var(--theme-text-secondary);
+  margin: 0 0 2px;
+  padding: 0 12px;
+  border-radius: 8px;
+  color: var(--text);
+  text-decoration: none;
+  outline: 0;
+  cursor: default;
 }
-.team-resource-row > svg {
-  width: 14px;
-  height: 14px;
-}
-.team-resource-row > button:nth-child(2) {
-  min-width: 0;
-  overflow: hidden;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--theme-text-primary);
-  font: 500 13px/normal var(--font);
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.team-resource-row:hover,
+.team-resource-row[data-state="open"] { background: var(--bg-hover); }
+.team-resource-row:focus-visible { box-shadow: inset 0 0 0 1.5px var(--focus-ring); }
+.team-resource-icon { width: 16px; height: 16px; flex: 0 0 16px; display: grid; place-items: center; color: var(--theme-text-primary); }
+.team-resource-icon[data-kind="link"] { color: var(--muted); }
+.team-resource-icon > svg { width: 16px; height: 16px; }
+.team-resource-icon > svg.lucide { width: 14px; height: 14px; }
+.team-resource-title { min-width: 0; overflow: hidden; color: var(--text); font: 500 13px/16px var(--font); text-overflow: ellipsis; white-space: nowrap; }
+.team-resource-external { width: 12px; height: 12px; flex: none; color: var(--theme-text-primary); }
 .team-new-section-row {
   height: 24px;
   min-height: 24px;
+  display: flex;
+  align-items: center;
   border: 0;
-  margin: 24px 12px 0;
+  margin: 6px 2px 14px 12px;
   gap: 4px;
 }
 .team-new-section-row > span svg { width: 16px; height: 16px; transform: rotate(90deg); color: var(--theme-text-tertiary); }
@@ -1071,7 +1065,6 @@
   font-weight: 500;
 }
 :root[data-theme="light"] .team-members-person strong,
-:root[data-theme="light"] .team-resource-row > button:nth-child(2),
 :root[data-theme="light"] .team-home-shortcuts a,
 :root[data-theme="light"] .team-home-member-row > a {
   color: var(--theme-text-primary);
@@ -1104,6 +1097,7 @@
   background: var(--theme-surface-1);
   color: var(--theme-text-secondary);
 }
+:root[data-theme="light"] .team-resource-command { color: var(--text); }
 :root[data-theme="light"] .team-members-add:hover,
 :root[data-theme="light"] .team-members-display:hover,
 :root[data-theme="light"] .team-resource-command:hover,
@@ -1114,9 +1108,6 @@
 :root[data-theme="light"] .team-home-member-row > a > svg,
 :root[data-theme="light"] .team-home-add-members,
 :root[data-theme="light"] .team-home-shortcuts a > svg,
-:root[data-theme="light"] .team-resource-empty-add,
-:root[data-theme="light"] .team-resource-section > header > button:last-child,
-:root[data-theme="light"] .team-resource-row,
 :root[data-theme="light"] .team-new-section-row > span,
 :root[data-theme="light"] .team-home-menu svg,
 :root[data-theme="light"] .team-resource-command-menu svg,
@@ -1153,7 +1144,6 @@
   color: var(--theme-text-primary);
 }
 :root[data-theme="light"] .team-home-add-members:hover,
-:root[data-theme="light"] .team-resource-empty-add:hover,
 :root[data-theme="light"] .team-home-tabs a:hover:not([aria-current="page"]) {
   color: var(--theme-text-primary);
 }
@@ -1198,7 +1188,6 @@
   background: var(--theme-control-hover);
   color: var(--theme-text-primary);
 }
-:root[data-theme="light"] .team-resource-section-rule,
 :root[data-theme="light"] .team-new-section-row > i,
 :root[data-theme="light"] .team-resource-command-menu [role="separator"]::after,
 :root[data-theme="light"] .team-section-menu [role="separator"]::after {
@@ -1207,8 +1196,6 @@
 :root[data-theme="light"] .team-documents-menu label,
 :root[data-theme="light"] .team-resource-existing-search,
 :root[data-theme="light"] .team-members-picker > label,
-:root[data-theme="light"] .team-resource-section > header,
-:root[data-theme="light"] .team-resource-row,
 :root[data-theme="light"] .team-new-section-row,
 :root[data-theme="light"] .team-home-tabs,
 :root[data-theme="light"] .team-documents-toolbar {

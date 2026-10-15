@@ -312,6 +312,7 @@ func presentLoop(counts map[string]int, loop domain.Loop) domain.Loop {
 		loop.Description = fallbackLoopDescription(loop.Instructions)
 	}
 	loop.RunCount30d = counts[loop.ID]
+	loop.SlugID = domain.LoopSlugID(loop)
 	return loop
 }
 
@@ -340,6 +341,22 @@ func (s *server) getLoop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeError(w, http.StatusNotFound, "loop not found")
+}
+
+// withLoopRef lets the /api/loops/{id} routes take a loop's URL slug (a loop
+// page link: `<name-slug>-<12 hex>`, with a current or stale name prefix) as
+// well as its id: the slug is resolved to the loop id before the handler runs.
+func (s *server) withLoopRef(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if ref := r.PathValue("id"); domain.SlugSuffix(ref) != "" {
+			if data, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "loops"); ok {
+				if index := domain.LoopIndexBySlugRef(data.Loops, ref); index >= 0 {
+					r.SetPathValue("id", data.Loops[index].ID)
+				}
+			}
+		}
+		next(w, r)
+	}
 }
 
 func (s *server) listLoopTemplates(w http.ResponseWriter, r *http.Request) {

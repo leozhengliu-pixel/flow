@@ -63,6 +63,13 @@ describe('LoopDetail', () => {
     expect(document.querySelector('.loops-detail-icon .status-glyph')).not.toBeNull()
   })
 
+  it('leads a team loop\'s crumbs to the team\'s home and its Loops tab', () => {
+    renderDetail()
+    const nav = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(nav).getByRole('link', { name: 'Test team' })).toHaveAttribute('href', '/workspace/team/TST/overview')
+    expect(within(nav).getByRole('link', { name: 'Loops' })).toHaveAttribute('href', '/workspace/team/TST/loops')
+  })
+
   it('opens without the agent panel otherwise', () => {
     renderDetail()
     expect(screen.queryByRole('complementary', { name: 'Loop agent' })).toBeNull()

@@ -42,3 +42,12 @@ export function findBySlugRef<T extends SlugRecord>(records: readonly T[] | unde
   }
   return best
 }
+
+/** The loop a URL reference names: its id (older links), its slug, or a slug with a stale name prefix. */
+export function findLoopByRef<T extends { id: string; slugId?: string }>(loops: readonly T[] | undefined, ref: string | undefined): T | undefined {
+  if (!loops || !ref) return undefined
+  const exact = loops.find(loop => loop.id === ref || loop.slugId === ref)
+  if (exact) return exact
+  const suffix = slugSuffix(ref)
+  return suffix ? loops.find(loop => slugSuffix(loop.slugId) === suffix) : undefined
+}

@@ -6,7 +6,7 @@ import { TeamIcon } from "@/components/issue/issue-icons";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { DirectoryFilterMenu } from "@/components/workspace-directory/directory-menus";
 import { TeamDateFilterDialog } from "@/components/workspace-directory/team-directory-controls";
-import { loopPath, newLoopPath } from "@/lib/app-routes";
+import { loopPath, loopsViewPath, newLoopPath, type LoopsRouteView } from "@/lib/app-routes";
 import { useI18n } from "@/i18n/i18n";
 import type { BootstrapData, Loop, LoopTriggerType, User } from "@/types/flow";
 import { LoopActionsMenu, LoopBulkActionsMenu } from "./loop-actions";
@@ -55,6 +55,7 @@ export function LoopList({
   onNavigate,
   onReload,
   createOpen: createOpenProp,
+  view,
 }: {
   data: BootstrapData;
   embedded: boolean;
@@ -64,12 +65,14 @@ export function LoopList({
   onReload: (changed?: Loop) => Promise<void>;
   /** `/loops/new` without a draft opens the hub dialog. */
   createOpen?: boolean;
+  /** The routed view (`/loops/my-loops`, `/loops/all`); the tabs then navigate between the two URLs. */
+  view?: LoopsRouteView;
 }) {
   const { t } = useI18n();
   const [allLoops, setLoops] = useLoops(data);
   const [storedTab, setTab] = useState<"mine" | "all">(() => readTab());
   // The team page has no tabs; it lists every loop of the team.
-  const tab = embedded ? "all" : storedTab;
+  const tab = embedded ? "all" : view ?? storedTab;
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<LoopListFilters>(emptyLoopFilters);
   const [dateOpen, setDateOpen] = useState(false);
@@ -80,6 +83,8 @@ export function LoopList({
   useEffect(() => writeLoopDisplay(displayKey, display), [display, displayKey]);
   // The team page lists only that team's loops, so it ignores "Show team loops".
   const showTeamLoops = display.showTeamLoops || Boolean(teamId);
+  // Loops started from a team's Loops tab open their editor under that team.
+  const originTeamKey = teamId ? data.teams.find((team) => team.id === teamId)?.key : undefined;
   const grouping = display.grouping;
   const grouped = grouping !== "none";
   const sort = { key: display.ordering, desc: display.descending };
@@ -260,8 +265,9 @@ export function LoopList({
     setLoops([copy, ...allLoops.filter((loop) => loop.id !== copy.id)]);
     void onReload(copy).catch(() => undefined);
   };
-  const open = (loop: Loop) =>
-    onNavigate(isLoopDraft(loop) ? `${newLoopPath(data.workspace.urlKey)}?draftId=${encodeURIComponent(loop.id)}` : loopPath(data.workspace.urlKey, loop.id));
+  // A row links to its loop page, or to the editor for a draft.
+  const href = (loop: Loop) =>
+    isLoopDraft(loop) ? `${newLoopPath(data.workspace.urlKey, originTeamKey)}?draftId=${encodeURIComponent(loop.id)}` : loopPath(data.workspace.urlKey, loop);
   // Column headers and the display menu's Ordering are the same setting.
   const sortBy = (key: SortKey) => setDisplay((current) => ({ ...current, ordering: key, descending: current.ordering === key ? !current.descending : defaultDescending(key) }));
   const toggle = <T,>(list: T[], value: T) => (list.includes(value) ? list.filter((item) => item !== value) : [...list, value]);
@@ -315,9 +321,21 @@ export function LoopList({
           <div className="loops-toolbar-left">
             <div className="loops-tabs" role="tablist" aria-label={t("Loops")}>
               {(["mine", "all"] as const).map((item) => (
-                <button key={item} role="tab" aria-selected={tab === item} className={tab === item ? "is-active" : undefined} onClick={() => setTab(item)}>
+                <a
+                  key={item}
+                  role="tab"
+                  href={loopsViewPath(data.workspace.urlKey, item)}
+                  aria-selected={tab === item}
+                  className={tab === item ? "is-active" : undefined}
+                  onClick={(event) => {
+                    if (opensElsewhere(event)) return;
+                    event.preventDefault();
+                    setTab(item);
+                    if (view) onNavigate(loopsViewPath(data.workspace.urlKey, item));
+                  }}
+                >
                   {t(item === "mine" ? "My loops" : "All")}
-                </button>
+                </a>
               ))}
             </div>
             {/* The team page's Loops tab has no search field in the reference app. */}
@@ -367,7 +385,7 @@ export function LoopList({
       />
       {empty ? (
         <div className="loops-hub-scroll">
-          <LoopCreateHub data={data} onNavigate={onNavigate} onReload={onReload} />
+          <LoopCreateHub data={data} originTeamKey={originTeamKey} onNavigate={onNavigate} onReload={onReload} />
         </div>
       ) : loops.length === 0 && filtering ? (
         <LoopsFilteredEmpty hiddenCount={base.length} onClear={clearFilters} />
@@ -426,7 +444,8 @@ export function LoopList({
                       if (inside) hovered.current = loop.id;
                       else if (hovered.current === loop.id) hovered.current = undefined;
                     }}
-                    onOpen={() => open(loop)}
+                    href={href(loop)}
+                    onOpen={() => onNavigate(href(loop))}
                     onNavigate={onNavigate}
                     onChanged={replace}
                     onChangedMany={replaceMany}
@@ -440,9 +459,14 @@ export function LoopList({
           )}
         </div>
       )}
-      <LoopCreateDialog data={data} open={createOpen} onOpenChange={setCreateOpen} onNavigate={onNavigate} onReload={onReload} />
+      <LoopCreateDialog data={data} open={createOpen} originTeamKey={originTeamKey} onOpenChange={setCreateOpen} onNavigate={onNavigate} onReload={onReload} />
     </Container>
   );
+}
+
+/** A click the browser should handle itself: a modified or non-primary click opens the link elsewhere. */
+function opensElsewhere(event: MouseEvent<HTMLElement>) {
+  return event.metaKey || event.ctrlKey || event.altKey || event.button !== 0;
 }
 
 function readTab(): "mine" | "all" {
@@ -461,6 +485,7 @@ function LoopRow({
   selection,
   onToggleSelect,
   onHover,
+  href,
   onOpen,
   onNavigate,
   onChanged,
@@ -477,6 +502,8 @@ function LoopRow({
   selection?: Loop[];
   onToggleSelect: (range: boolean) => void;
   onHover: (inside: boolean) => void;
+  /** Where the row links: the loop page, or the editor for a draft. */
+  href: string;
   onOpen: () => void;
   onNavigate: (path: string) => void;
   onChanged: (loop: Loop) => void;
@@ -507,15 +534,18 @@ function LoopRow({
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
     >
-      <button
+      {/* The row is a link: ⌘/Ctrl- and middle-click open the loop in a new tab, Shift-click extends the selection. */}
+      <a
         className="loops-row-link"
+        href={href}
         onClick={(event) => {
-          // Shift/⌘-click selects like the reference app instead of opening the loop.
-          if (event.shiftKey || event.metaKey || event.ctrlKey) {
+          if (event.shiftKey) {
             event.preventDefault();
-            onToggleSelect(event.shiftKey);
+            onToggleSelect(true);
             return;
           }
+          if (opensElsewhere(event)) return;
+          event.preventDefault();
           onOpen();
         }}
         aria-label={loop.name || t("Untitled loop")}

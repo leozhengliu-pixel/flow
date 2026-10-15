@@ -11,6 +11,61 @@ import (
 	"flow/api/internal/store"
 )
 
+// Pinning, moving, editing and removing team overview resources and sections
+// writes a few metadata records: none of them may read issue, comment or
+// activity records, whose count grows with the workspace.
+func TestTeamResourceWritesSkipIssueAndDiscussionRecords(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "team-resource-writes.db")
+	repo, err := store.OpenSQLiteTestFixture(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	initial := repo.Bootstrap()
+	key, team := initial.Workspace.URLKey, initial.Teams[0].ID
+	host := httptest.NewServer(newHandler(&server{store: repo, uploadPath: t.TempDir()}))
+	defer host.Close()
+	admin := authClient(t)
+	authRequest[domain.AuthSession](t, admin, "POST", host.URL+"/api/auth/login", map[string]string{"email": "admin@example.test", "password": "test-password"}, "", http.StatusOK)
+	other := authRequest[domain.Team](t, admin, "POST", host.URL+"/api/workspaces/"+key+"/teams", map[string]any{"name": "Other", "key": "OTH"}, "", http.StatusCreated).ID
+	document := authRequest[domain.Document](t, admin, "POST", host.URL+"/api/documents", map[string]any{"title": "Runbook", "teamIds": []string{team}}, key, http.StatusCreated)
+	// Another team's pins must not push this team's new pins down the list.
+	for range 3 {
+		authRequest[domain.TeamPinnedResource](t, admin, "POST", host.URL+"/api/teams/"+other+"/resources", map[string]any{"resourceType": "link", "url": "https://example.test/other", "title": "Other"}, key, http.StatusCreated)
+	}
+
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, statement := range []string{`UPDATE issue_records SET data=?`, `UPDATE workspace_content_records SET data=? WHERE kind IN ('comment','activity')`} {
+		if _, err := db.Exec(statement, []byte("invalid-unrelated-payload")); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	base := host.URL + "/api/teams/" + team
+	pinned := authRequest[domain.TeamPinnedResource](t, admin, "POST", base+"/resources", map[string]any{"resourceType": "document", "resourceId": document.ID, "title": "Runbook"}, key, http.StatusCreated)
+	link := authRequest[domain.TeamPinnedResource](t, admin, "POST", base+"/resources", map[string]any{"resourceType": "link", "url": "https://example.test/a", "title": "A"}, key, http.StatusCreated)
+	if pinned.Position != 0 || link.Position != 1 {
+		t.Fatalf("new pins go to the end of the team's list: got %v and %v", pinned.Position, link.Position)
+	}
+	section := authRequest[domain.TeamResourceSection](t, admin, "POST", base+"/resource-sections", map[string]any{"name": "Guides"}, key, http.StatusCreated)
+	moved := authRequest[domain.TeamPinnedResource](t, admin, "PATCH", base+"/resources/"+link.ID, map[string]any{"sectionId": section.ID, "url": "https://example.test/b", "title": "B"}, key, http.StatusOK)
+	if moved.SectionID != section.ID || moved.URL != "https://example.test/b" || moved.Title != "B" {
+		t.Fatalf("link edit not applied: %+v", moved)
+	}
+	authRequest[any](t, admin, "PATCH", base+"/resources/"+pinned.ID, map[string]any{"url": "https://example.test/c"}, key, http.StatusBadRequest)
+	authRequest[any](t, admin, "PATCH", base+"/resources/"+link.ID, map[string]any{"url": "javascript:alert(1)"}, key, http.StatusBadRequest)
+	authRequest[any](t, admin, "DELETE", base+"/resource-sections/"+section.ID, nil, key, http.StatusNoContent)
+	authRequest[any](t, admin, "DELETE", base+"/resources/"+pinned.ID, nil, key, http.StatusNoContent)
+	result := authRequest[teamResourcesRead](t, admin, "GET", base+"/resources", nil, key, http.StatusOK)
+	if len(result.Sections) != 0 || len(result.Resources) != 1 || result.Resources[0].ID != link.ID || result.Resources[0].SectionID != "" {
+		t.Fatalf("unexpected resources after writes: %+v", result)
+	}
+}
+
 func TestTeamResourcesAvoidIssueAndDiscussionHydration(t *testing.T) {
 	for _, populated := range []bool{false, true} {
 		name := "empty"

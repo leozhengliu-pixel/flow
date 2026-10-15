@@ -2,13 +2,13 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { toggleFavoriteFor } from '@/lib/favorites';
 import { teamHierarchy } from '@/lib/team-hierarchy';
 import { TeamIcon } from '@/components/issue/issue-icons';
-import { newTeamPath } from '@/lib/app-routes';
+import { memberProfileHandle, memberProfilePath, newTeamPath } from '@/lib/app-routes';
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   ArrowDown,
   ArrowUp,
+  ArrowUpRight,
   Check,
-  ChevronRight,
   FileText,
   Link2,
   Menu,
@@ -19,7 +19,6 @@ import {
   Trash2,
 } from "lucide-react";
 import {
-  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -36,17 +35,22 @@ import { isToday, isYesterday, isThisWeek, isSameWeek, subWeeks, isThisMonth, is
 
 import {
   createDocument,
-  createTeamResourceSection,
-  deleteTeamResource,
-  deleteTeamResourceSection,
   fetchTeamResources,
-  pinTeamResource,
   setTeamMembership,
-  updateTeamResource,
-  updateTeamResourceSection,
   updateStructuredTeamSettings,
   updateTeam,
 } from "@/lib/api";
+import {
+  applyTeamResourcesChange,
+  createSection,
+  deleteSection,
+  onTeamResourcesChange,
+  pinResource,
+  unpinResource,
+  updateResource,
+  updateSection,
+  type TeamResourceState,
+} from "@/lib/team-resource-sync";
 import {
   documentPath,
   settingsPath,
@@ -68,8 +72,10 @@ import { ProjectIcon, SlackIcon } from "@/components/issue/issue-icons";
 import { ViewGlyph, ViewIconPicker } from "@/components/views/view-icon-picker";
 import { DocumentGlyph } from "@/components/documents/document-icon";
 import { documentDisplayTitle, type DocumentActionContext } from "@/components/documents/document-actions";
-import { DocumentMenuItems, DocumentRowMenu } from "@/components/documents/document-menu";
-import { FlowDropdownMenuContent, FlowMenuOptions, FlowMenuSeparator, FlowSubmenu } from "@/components/ui/row-context-menu";
+import { DocumentRowMenu } from "@/components/documents/document-menu";
+import { IssueActionGlyph } from "@/components/issue/issue-action-glyphs";
+import { FlowGlyph } from "@/components/ui/menu-glyphs";
+import { FlowContextMenuPortal, FlowContextMenuRoot, FlowContextMenuTrigger, FlowMenuContent, FlowMenuItem } from "@/components/ui/row-context-menu";
 import { LoopsDirectory } from "@/components/loops/loops-page";
 import { workspaceFeatureEnabled } from "@/components/layout/sidebar-customization-state";
 import { canManageTeamSettings, viewerOwnsTeam } from "@/lib/settings-permissions";
@@ -119,13 +125,14 @@ export function TeamOverviewPage({
   const hierarchy = useMemo(() => teamHierarchy(data.teams, data.teamSettings), [data.teams, data.teamSettings]);
   const parentTeam = hierarchy.byId.get(data.teamSettings[team.id]?.parentTeamId ?? '');
   const childTeams = (hierarchy.children.get(team.id) ?? []).filter(item => !item.retiredAt);
-  const [sections, setSections] = useState<TeamResourceSection[]>([]);
-  const [resources, setResources] = useState<TeamPinnedResource[]>([]);
+  const [resourceState, setResourceState] = useState<TeamResourceState>({ resources: [], sections: [] });
+  const { resources, sections } = resourceState;
   const [loading, setLoading] = useState(true);
   const creatingDocument = useRef(false);
   const [documentCreating, setDocumentCreating] = useState(false);
   const [resourceOpen, setResourceOpen] = useState(false);
   const [resourceSectionId, setResourceSectionId] = useState('');
+  const [editingLink, setEditingLink] = useState<TeamPinnedResource>();
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem(`flow:team:${team.id}:collapsed-sections`) ?? '[]')); } catch { return new Set(); }
   });
@@ -158,17 +165,21 @@ export function TeamOverviewPage({
   const load = useCallback(async () => {
     try {
       const result = await fetchTeamResources(team.id);
-      setSections(result.sections);
-      setResources(result.resources);
+      setResourceState({ resources: result.resources, sections: result.sections });
     } finally {
       setLoading(false);
     }
   }, [team.id]);
   useEffect(() => {
     setLoading(true);
+    setResourceState({ resources: [], sections: [] });
     try { setCollapsedSections(new Set(JSON.parse(localStorage.getItem(`flow:team:${team.id}:collapsed-sections`) ?? '[]'))); } catch { setCollapsedSections(new Set()); }
     void load();
   }, [load, team.id]);
+  // Pins, moves and section edits apply here at once, before their request finishes.
+  useEffect(() => onTeamResourcesChange(change => {
+    if (change.teamId === team.id) setResourceState(current => applyTeamResourcesChange(current, change));
+  }), [team.id]);
   const teamMembers = data.teamMembers
     .filter((item) => item.teamId === team.id)
     .map((item) => data.users.find((user) => user.id === item.userId))
@@ -232,14 +243,16 @@ export function TeamOverviewPage({
         title: "",
         teamIds: [team.id],
       });
-      await pinTeamResource(team.id, {
+      // The pin shows at once and saves while the new document loads.
+      const pinned = pinResource(team.id, resources, {
         sectionId,
         resourceType: "document",
         resourceId: document.id,
         // The team resources endpoint requires a non-empty title; rows show the document's live title.
         title: document.title || t("Untitled"),
       });
-      await Promise.all([reloadResources(), onReload()]);
+      pinned.catch((error: unknown) => toast.error(error instanceof Error ? error.message : t("Could not update resource")));
+      await onReload();
       onNavigate(documentPath(data.workspace.urlKey, document));
     } catch (error) {
       toast.error(
@@ -436,7 +449,6 @@ export function TeamOverviewPage({
                   documents={documents}
                   onLink={() => { setResourceSectionId(''); setResourceOpen(true); }}
                   onNew={() => void newPinnedDocument()}
-                  onSaved={reloadResources}
                   resources={resources}
                   team={team}
                 />
@@ -469,6 +481,7 @@ export function TeamOverviewPage({
                         data={data}
                         items={items}
                         key={section.id || "unsectioned"}
+                        onEditLink={item => setEditingLink(item)}
                         onNavigate={onNavigate}
                         onReload={reloadResources}
                         onReloadWorkspace={onReload}
@@ -483,9 +496,8 @@ export function TeamOverviewPage({
                 <NewSectionRow
                   onCancel={() => setSectionOpen(false)}
                   onSave={async (name) => {
-                    await createTeamResourceSection(team.id, name);
+                    await createSection(team.id, name);
                     setSectionOpen(false);
-                    await reloadResources();
                   }}
                 />
               )}
@@ -636,15 +648,13 @@ export function TeamOverviewPage({
           team={team}
         />
       )}
-      {resourceOpen && (
+      {(resourceOpen || editingLink) && (
         <AddLinkDialog
           sectionId={resourceSectionId}
+          link={editingLink}
+          resources={resources}
           team={team}
-          onClose={() => setResourceOpen(false)}
-          onSaved={async () => {
-            setResourceOpen(false);
-            await reloadResources();
-          }}
+          onClose={() => { setResourceOpen(false); setEditingLink(undefined); }}
         />
       )}
       {membersOpen && (
@@ -844,7 +854,7 @@ function SelectChevronIcon() {
 }
 
 function ResourceSection({
-  documents, resources, collapsed, onToggle, onNew, onLink,
+  documents, resources, collapsed, onToggle, onNew, onLink, onEditLink,
   data,
   items,
   onNavigate,
@@ -860,9 +870,11 @@ function ResourceSection({
   onToggle: (all: boolean) => void;
   onNew: () => void;
   onLink: () => void;
+  onEditLink: (item: TeamPinnedResource) => void;
   data: BootstrapData;
   items: TeamPinnedResource[];
   onNavigate: (path: string) => void;
+  /** Refetches this team's resources (after a document action that can unpin, such as Delete). */
   onReload: () => Promise<void>;
   /** Refreshes workspace metadata (documents) after a document action. */
   onReloadWorkspace: () => Promise<void>;
@@ -891,25 +903,28 @@ function ResourceSection({
     if (!section || saving.current || cancelled.current) return;
     if (!name.trim() || name.trim() === section.name) { setEditing(false); return; }
     saving.current = true;
-    try { await updateTeamResourceSection(team.id, section.id, { name: name.trim() }); setEditing(false); await onReload(); }
+    setEditing(false);
+    try { await updateSection(team.id, section, { name: name.trim() }); }
     catch (error) { toast.error(error instanceof Error ? error.message : t('Could not rename section')); }
     finally { saving.current = false; }
   };
   const remove = async () => {
     if (!section) return;
     if (items.length && !await confirmAction(`Delete "${section.name}"?`, { description: t('Resources in this section will stay pinned to the page.'), confirmLabel: t('Delete section'), danger: true })) return;
-    try { await deleteTeamResourceSection(team.id, section.id); await onReload(); }
+    try { await deleteSection(team.id, section, resources); }
     catch (error) { toast.error(error instanceof Error ? error.message : t('Could not delete section')); }
   };
+  const fail = (fallback: string) => (error: unknown) => toast.error(error instanceof Error ? error.message : t(fallback));
   return (
     <div className={`team-resource-section${section ? ' is-named' : ''}`} id={section ? `section-${section.id}` : undefined}
       onDragOver={event => { if (event.dataTransfer.types.some(type => type === 'application/x-flow-team-resource' || type === 'application/x-flow-team-section')) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } }}
       onDrop={event => {
         const resourceId = event.dataTransfer.getData('application/x-flow-team-resource');
         const sectionId = event.dataTransfer.getData('application/x-flow-team-section');
-        if (resourceId && resources.some(resource => resource.id === resourceId)) {
+        const dragged = resourceId ? resources.find(resource => resource.id === resourceId) : undefined;
+        if (dragged) {
           event.preventDefault(); event.stopPropagation();
-          void updateTeamResource(team.id, resourceId, { sectionId: section?.id ?? '', position: Math.max(-1, ...items.map(item => item.position)) + 1 }).then(onReload).catch(() => toast.error(t('Could not move resource')));
+          void updateResource(team.id, dragged, { sectionId: section?.id ?? '', position: Math.max(-1, ...items.map(item => item.position)) + 1 }).catch(fail('Could not move resource'));
         } else if (section && sectionId !== section.id && sections.some(item => item.id === sectionId)) {
           event.preventDefault(); event.stopPropagation();
           const ordered = sections.filter(item => item.id !== sectionId).sort((a, b) => a.position - b.position);
@@ -917,7 +932,8 @@ function ResourceSection({
           const index = ordered.findIndex(item => item.id === section.id) + (after ? 1 : 0);
           const before = ordered[index - 1]?.position, next = ordered[index]?.position;
           const position = before === undefined ? (next ?? 0) - 1 : next === undefined ? before + 1 : (before + next) / 2;
-          void updateTeamResourceSection(team.id, sectionId, { position }).then(onReload).catch(() => toast.error(t('Could not move section')));
+          const moved = sections.find(item => item.id === sectionId)!;
+          void updateSection(team.id, moved, { position }).catch(fail('Could not move section'));
         }
       }}>
       {section && (
@@ -948,7 +964,7 @@ function ResourceSection({
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
               <DropdownMenu.Content data-flow-motion="floating" className="team-home-menu team-section-menu" align="end" sideOffset={4} onCloseAutoFocus={event => event.preventDefault()}>
-                <ResourceCommandMenu nested documents={documents} resources={resources} sectionId={section.id} team={team} onNew={onNew} onLink={onLink} onSaved={onReload}/>
+                <ResourceCommandMenu nested documents={documents} resources={resources} sectionId={section.id} team={team} onNew={onNew} onLink={onLink}/>
                 <DropdownMenu.Item onSelect={() => { void navigator.clipboard.writeText(`${location.origin}/${data.workspace.urlKey}/team/${team.key}/overview#section-${section.id}`).then(() => toast.success(t('Link copied'))).catch(() => toast.error(t('Could not copy link'))); }}><CopyLinkIcon/><span>{t('Copy link')}</span></DropdownMenu.Item>
                 <DropdownMenu.Item onSelect={() => { setMenuOpen(false); setTimeout(beginRename, 100); }}>
                   <Pencil/><span>{t('Rename…')}</span>
@@ -967,123 +983,81 @@ function ResourceSection({
         </header>
       )}
       <AnimatedCollapse open={!collapsed}>
-      {section && !items.length && <ResourceCommandMenu documents={documents} resources={resources} sectionId={section.id} team={team} onNew={onNew} onLink={onLink} onSaved={onReload} empty/>}
-      {items.map((item) => {
-        const resourceDocument = item.resourceType === "document"
-          ? data.documents.find((value) => value.id === item.resourceId)
-          : undefined;
-        // Documents show their live title (a renamed or untitled document never keeps a stale pinned title).
-        const rowTitle = item.resourceType === "document"
-          ? (resourceDocument ? documentDisplayTitle(resourceDocument, t) : resourceDisplayTitle({ type: item.resourceType, title: item.title, url: item.url ?? '' }) || t("Untitled"))
-          : resourceDisplayTitle({ type: item.resourceType, title: item.title, url: item.url ?? '' });
-        const sectionMoveMenu = sections.length > 0 && <>
-          <FlowMenuSeparator />
-          <FlowSubmenu label="Move to section">
-            <FlowMenuOptions
-              options={[{ id: '', label: 'Team resources' }, ...sections.map(value => ({ id: value.id, label: value.name, translate: false }))]}
-              selected={new Set([item.sectionId ?? ''])}
-              keepOpen={false}
-              onChoose={id => void updateTeamResource(team.id, item.id, { sectionId: id }).then(onReload)}
-            />
-          </FlowSubmenu>
-        </>;
-        const row = (
-        <div className="team-resource-row" draggable onDragStart={event => { event.stopPropagation(); event.dataTransfer.setData('application/x-flow-team-resource', item.id); event.dataTransfer.effectAllowed = 'move'; }}>
-          {resourceDocument ? <DocumentGlyph document={resourceDocument} /> : item.resourceType === "document" ? <FileText /> : <Link2 />}
-          <button
-            data-i18n-ignore
-            onClick={() => {
-              const document = data.documents.find(
-                (value) => value.id === item.resourceId,
-              );
-              if (document)
-                onNavigate(documentPath(data.workspace.urlKey, document));
-              else if (item.url) window.open(item.url, "_blank", "noopener");
-            }}
-          >
-            {rowTitle}
-          </button>
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger asChild>
-              <button aria-label={`Open menu ${rowTitle}`}>
-                <TeamMoreIcon />
-              </button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Portal>
-              {resourceDocument ? (
-                <FlowDropdownMenuContent label={t('Document actions')} align="end">
-                  <DocumentMenuItems ctx={documentCtx} document={resourceDocument} variant="row" team={team} />
-                  {sectionMoveMenu}
-                </FlowDropdownMenuContent>
-              ) : (
-              <DropdownMenu.Content data-flow-motion="floating" className="team-home-menu" align="end">
-                <DropdownMenu.Sub>
-                  <DropdownMenu.SubTrigger>
-                    Move to
-                    <ChevronRight />
-                  </DropdownMenu.SubTrigger>
-                  <DropdownMenu.Portal>
-                    <DropdownMenu.SubContent data-flow-motion="floating"
-                      className="team-home-menu"
-                      sideOffset={4}
-                    >
-                      <DropdownMenu.Item
-                        onSelect={() =>
-                          void updateTeamResource(team.id, item.id, {
-                            sectionId: "",
-                          }).then(onReload)
-                        }
-                      >
-                        Team resources{!item.sectionId && <Check />}
-                      </DropdownMenu.Item>
-                      {sections.map((value) => (
-                        <DropdownMenu.Item
-                          key={value.id}
-                          onSelect={() =>
-                            void updateTeamResource(team.id, item.id, {
-                              sectionId: value.id,
-                            }).then(onReload)
-                          }
-                        >
-                          {value.name}
-                          {item.sectionId === value.id && <Check />}
-                        </DropdownMenu.Item>
-                      ))}
-                    </DropdownMenu.SubContent>
-                  </DropdownMenu.Portal>
-                </DropdownMenu.Sub>
-                <DropdownMenu.Separator />
-                <DropdownMenu.Item
-                  className="danger"
-                  onSelect={() =>
-                    void deleteTeamResource(team.id, item.id).then(onReload)
-                  }
-                >
-                  <Trash2 />
-                  Remove
-                </DropdownMenu.Item>
-              </DropdownMenu.Content>
-              )}
-            </DropdownMenu.Portal>
-          </DropdownMenu.Root>
-        </div>
-        );
-        return resourceDocument
-          ? <DocumentRowMenu key={item.id} ctx={documentCtx} document={resourceDocument} team={team} extra={sectionMoveMenu}>{row}</DocumentRowMenu>
-          : <Fragment key={item.id}>{row}</Fragment>;
-      })}
+      {section && !items.length && <ResourceCommandMenu documents={documents} resources={resources} sectionId={section.id} team={team} onNew={onNew} onLink={onLink} empty/>}
+      {items.length > 0 && <div className="team-resource-rows">
+        {items.map(item => <ResourceRow key={item.id} ctx={documentCtx} data={data} item={item} onEditLink={onEditLink} onNavigate={onNavigate} team={team}/>)}
+      </div>}
       </AnimatedCollapse>
     </div>
   );
 }
 
+/**
+ * A pinned document or link: a 40px link row (hover fill, no inline menu).
+ * Right-click opens the document menu, or Copy link · Unpin · Edit · Delete
+ * for links.
+ */
+function ResourceRow({ ctx, data, item, onEditLink, onNavigate, team }: {
+  ctx: DocumentActionContext;
+  data: BootstrapData;
+  item: TeamPinnedResource;
+  onEditLink: (item: TeamPinnedResource) => void;
+  onNavigate: (path: string) => void;
+  team: Team;
+}) {
+  const { t } = useI18n();
+  const document = item.resourceType === "document" ? data.documents.find(value => value.id === item.resourceId) : undefined;
+  // Documents show their live title (a renamed or untitled document never keeps a stale pinned title).
+  const title = item.resourceType === "document"
+    ? (document ? documentDisplayTitle(document, t) : resourceDisplayTitle({ type: item.resourceType, title: item.title, url: item.url ?? '' }) || t("Untitled"))
+    : resourceDisplayTitle({ type: item.resourceType, title: item.title, url: item.url ?? '' });
+  const href = document ? documentPath(data.workspace.urlKey, document) : item.url || undefined;
+  const external = !document && Boolean(item.url);
+  const unpin = () => void unpinResource(team.id, item)
+    .then(() => toast.success(t('Unpinned from team overview')))
+    .catch((error: unknown) => toast.error(error instanceof Error ? error.message : t('Could not remove resource')));
+  const row = (
+    <a
+      className="team-resource-row"
+      data-flow-menu-row
+      draggable
+      href={href}
+      rel={external ? "noreferrer" : undefined}
+      target={external ? "_blank" : undefined}
+      onDragStart={event => { event.stopPropagation(); event.dataTransfer.setData('application/x-flow-team-resource', item.id); event.dataTransfer.effectAllowed = 'move'; }}
+      onClick={event => {
+        if (!document || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        onNavigate(href!);
+      }}
+    >
+      <span className="team-resource-icon" data-kind={document ? 'document' : item.resourceType}>{document ? <DocumentGlyph document={document} /> : item.resourceType === "document" ? <FileText /> : <Link2 />}</span>
+      <span className="team-resource-title" data-i18n-ignore>{title}</span>
+      {external && <ArrowUpRight aria-hidden="true" className="team-resource-external" />}
+    </a>
+  );
+  if (document) return <DocumentRowMenu ctx={ctx} document={document} team={team} variant="overview">{row}</DocumentRowMenu>;
+  return (
+    <FlowContextMenuRoot>
+      <FlowContextMenuTrigger asChild>{row}</FlowContextMenuTrigger>
+      <FlowContextMenuPortal>
+        <FlowMenuContent label={t('Link actions')}>
+          {item.url && <FlowMenuItem icon={<IssueActionGlyph label="Copy URL" fallback={null}/>} label="Copy link" onSelect={() => void navigator.clipboard.writeText(item.url!).then(() => toast.success(t('Link copied'))).catch(() => toast.error(t('Could not copy link')))}/>}
+          <FlowMenuItem icon={<IssueActionGlyph label="Pin to team" fallback={null}/>} label="Unpin" onSelect={unpin}/>
+          {item.resourceType === "link" && <FlowMenuItem icon={<IssueActionGlyph label="Rename…" fallback={null}/>} label="Edit" onSelect={() => { setTimeout(() => onEditLink(item), 0); }}/>}
+          <FlowMenuItem icon={<FlowGlyph name="delete"/>} label="Delete" onSelect={unpin}/>
+        </FlowMenuContent>
+      </FlowContextMenuPortal>
+    </FlowContextMenuRoot>
+  );
+}
+
 function ResourceCommandMenu({
-  documents, onLink, onNew, onSaved, resources, team, sectionId, nested = false, empty = false,
+  documents, onLink, onNew, resources, team, sectionId, nested = false, empty = false,
 }: {
   documents: FlowDocument[];
   onLink: () => void;
   onNew: () => void;
-  onSaved: () => Promise<void>;
   resources: TeamPinnedResource[];
   team: Team;
   sectionId?: string;
@@ -1092,8 +1066,6 @@ function ResourceCommandMenu({
 }) {
   const { t } = useI18n();
   const [query, setQuery] = useState('');
-  const [saving, setSaving] = useState(false);
-  const pending = useRef(false);
   const visible = [...new Map(documents.filter(document => !document.archivedAt && document.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).map(document => [document.id, document])).values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const groups = new Map<string, FlowDocument[]>();
   for (const document of visible) {
@@ -1103,17 +1075,13 @@ function ResourceCommandMenu({
   }
   const pinned = (document: FlowDocument) => resources.find(item => item.resourceType === 'document' && item.resourceId === document.id);
   const selected = (document: FlowDocument) => { const item = pinned(document); return Boolean(item && (!sectionId || item.sectionId === sectionId)); };
-  const toggle = async (document: FlowDocument) => {
-    if (pending.current) return;
-    pending.current = true; setSaving(true);
-    try {
-      const item = pinned(document);
-      if (item && selected(document)) await deleteTeamResource(team.id, item.id);
-      else if (item) await updateTeamResource(team.id, item.id, { sectionId: sectionId ?? '' });
-      else await pinTeamResource(team.id, { resourceType: 'document', resourceId: document.id, title: document.title || t('Untitled'), sectionId: sectionId ?? '' });
-      await onSaved();
-    } catch (error) { toast.error(error instanceof Error ? error.message : t('Could not update resource')); }
-    finally { pending.current = false; setSaving(false); }
+  // The checkbox and the row update at once; the request saves in the background.
+  const toggle = (document: FlowDocument) => {
+    const item = pinned(document);
+    const write = item && selected(document) ? unpinResource(team.id, item)
+      : item ? updateResource(team.id, item, { sectionId: sectionId ?? '' })
+        : pinResource(team.id, resources, { resourceType: 'document', resourceId: document.id, title: document.title || t('Untitled'), sectionId: sectionId ?? '' });
+    write.catch((error: unknown) => toast.error(error instanceof Error ? error.message : t('Could not update resource')));
   };
   const content = <>
     <DropdownMenu.Item onSelect={onNew}><NewDocumentIcon/><span>{t('New document')}</span></DropdownMenu.Item>
@@ -1125,7 +1093,7 @@ function ResourceCommandMenu({
           <div className="team-resource-existing-list">
             {[...groups].map(([label, items]) => <DropdownMenu.Group key={label}>
               <DropdownMenu.Label className="team-resource-date-group">{t(label)}</DropdownMenu.Label>
-              {items.map(document => <DropdownMenu.CheckboxItem checked={selected(document)} disabled={saving} key={document.id} onSelect={event => { event.preventDefault(); void toggle(document); }}>
+              {items.map(document => <DropdownMenu.CheckboxItem checked={selected(document)} key={document.id} onSelect={event => { event.preventDefault(); toggle(document); }}>
                 <span className="team-resource-checkbox">{selected(document) && <Check/>}</span><DocumentGlyph document={document}/><span data-i18n-ignore>{documentDisplayTitle(document, t)}</span>
               </DropdownMenu.CheckboxItem>)}
             </DropdownMenu.Group>)}
@@ -1147,42 +1115,35 @@ function ResourceCommandMenu({
   </DropdownMenu.Root>;
 }
 
+/** Adds a link to the team's resources, or edits `link`. Closes at once; the row saves in the background. */
 function AddLinkDialog({
   team,
+  link,
+  resources,
   sectionId = '',
   onClose,
-  onSaved,
 }: {
   team: Team;
+  link?: TeamPinnedResource;
+  resources: TeamPinnedResource[];
   sectionId?: string;
   onClose: () => void;
-  onSaved: () => Promise<void>;
 }) {
   const { t } = useI18n();
-  const [url, setUrl] = useState("");
-  const [title, setTitle] = useState("");
-  const [saving, setSaving] = useState(false);
-  const save = async () => {
+  const [url, setUrl] = useState(link?.url ?? "");
+  const [title, setTitle] = useState(link && link.title !== resourceLinkName(link.url ?? '') ? link.title : "");
+  const save = () => {
     const normalized = url.trim();
     if (!/^https?:\/\//i.test(normalized)) {
       toast.error(t("Enter a valid URL"));
       return;
     }
-    setSaving(true);
-    try {
-      await pinTeamResource(team.id, {
-        sectionId,
-        resourceType: "link",
-        title: title.trim() || resourceLinkName(normalized),
-        url: normalized,
-      });
-      await onSaved();
-    } catch (error) {
-      setSaving(false);
-      toast.error(
-        error instanceof Error ? error.message : "Could not add resource",
-      );
-    }
+    const name = title.trim() || resourceLinkName(normalized);
+    const write = link
+      ? updateResource(team.id, link, { url: normalized, title: name })
+      : pinResource(team.id, resources, { sectionId, resourceType: "link", title: name, url: normalized });
+    write.catch((error: unknown) => toast.error(error instanceof Error ? error.message : t("Could not add resource")));
+    onClose();
   };
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
@@ -1194,7 +1155,7 @@ function AddLinkDialog({
         >
           <Dialog.Title>
             <CopyLinkIcon />
-            {t("Add link to team")}
+            {t(link ? "Edit link" : "Add link to team")}
           </Dialog.Title>
           <label>
             <span>URL</span>
@@ -1221,10 +1182,9 @@ function AddLinkDialog({
             <button onClick={onClose}>{t("Cancel")}</button>
             <button
               className="primary"
-              disabled={saving}
-              onClick={() => void save()}
+              onClick={save}
             >
-              {t("Add link")}
+              {t(link ? "Save" : "Add link")}
             </button>
           </footer>
         </Dialog.Content>
@@ -1555,7 +1515,7 @@ function TeamMembersDirectory({
       <TeamMembersDisplayMenu columns={columns} descending={descending} hasSubteams={hasSubteams} onColumn={(column) => setColumns((current) => { const next = new Set(current); if (next.has(column)) next.delete(column); else next.add(column); return next; })} onDirection={() => setDescending((value) => !value)} onOrdering={setOrdering} onVisibility={(key) => setVisibility(current => ({ ...current, [key]: !current[key] }))} ordering={ordering} visibility={visibility}/>
     </div>
     {members.length ? <VirtualColumnList ariaLabel={t("Team members")} className="team-members-columns" computeItemKey={(_index, entry) => entry.user.id} data={members} header={header} increaseViewportBy={{ top: 96, bottom: 288 }} scrollerClassName="team-members-list team-members-scroll" virtualize={members.length > 60} itemContent={(index, value) => {
-        const profile = `/${data.workspace.urlKey}/profiles/${encodeURIComponent(value.user.name)}`;
+        const profile = memberProfilePath(data.workspace.urlKey, memberProfileHandle(value.user));
         const invited = Boolean(value.invitation);
         const managed = value.membership.managed === true;
         const lastOwner = value.membership.role === "owner" && ownerCount === 1;

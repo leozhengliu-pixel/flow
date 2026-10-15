@@ -14,7 +14,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { ViewGlyph, ViewIconPicker } from "@/components/views/view-icon-picker";
 import { TeamIcon } from "@/components/issue/issue-icons";
 import { createLoop, deleteDraft, deleteLoop, getLoop, updateLoop, type LoopMutation } from "@/lib/api";
-import { loopPath, loopsPath, newLoopPath } from "@/lib/app-routes";
+import { loopPath, loopsPath, newLoopPath, teamLoopsPath } from "@/lib/app-routes";
 import { useI18n } from "@/i18n/i18n";
 import type { BootstrapData, Loop, LoopCodeAccess, LoopTriggerType } from "@/types/flow";
 import { LoopAgentPanel } from "./loop-agent-panel";
@@ -116,6 +116,7 @@ export function LoopEditor({
   data,
   draftId,
   loopId,
+  teamKey,
   onOpenSidebar,
   onNavigate,
   onReload,
@@ -123,6 +124,8 @@ export function LoopEditor({
   data: BootstrapData;
   draftId?: string;
   loopId?: string;
+  /** The team whose Loops tab the new loop was started from (`/team/<key>/loops/new`). */
+  teamKey?: string;
   onOpenSidebar: () => void;
   onNavigate: (path: string) => void;
   onReload: (changed?: Loop) => Promise<void>;
@@ -147,12 +150,12 @@ export function LoopEditor({
     })
       .then(async (created) => {
         await deleteDraft(legacyDraft.id).catch(() => undefined);
-        window.history.replaceState({}, "", `${newLoopPath(data.workspace.urlKey)}?draftId=${encodeURIComponent(created.id)}`);
+        window.history.replaceState({}, "", `${newLoopPath(data.workspace.urlKey, teamKey)}?draftId=${encodeURIComponent(created.id)}`);
         setId(created.id);
         setLoop(created);
       })
       .catch((error) => toast.error(error instanceof Error ? error.message : t("Could not open draft")));
-  }, [data.workspace.urlKey, legacyDraft, setLoop, t]);
+  }, [data.workspace.urlKey, legacyDraft, setLoop, t, teamKey]);
 
   if (missing)
     return (
@@ -174,12 +177,13 @@ export function LoopEditor({
         </header>
       </main>
     );
-  return <LoopEditorForm key={loop.id} data={data} loop={loop} onLoopChange={setLoop} refetch={refetch} onOpenSidebar={onOpenSidebar} onNavigate={onNavigate} onReload={onReload} />;
+  return <LoopEditorForm key={loop.id} data={data} loop={loop} teamKey={teamKey} onLoopChange={setLoop} refetch={refetch} onOpenSidebar={onOpenSidebar} onNavigate={onNavigate} onReload={onReload} />;
 }
 
 function LoopEditorForm({
   data,
   loop,
+  teamKey,
   onLoopChange,
   refetch,
   onOpenSidebar,
@@ -188,6 +192,7 @@ function LoopEditorForm({
 }: {
   data: BootstrapData;
   loop: Loop;
+  teamKey?: string;
   onLoopChange: (loop: Loop) => void;
   refetch: () => Promise<Loop | undefined>;
   onOpenSidebar: () => void;
@@ -241,7 +246,7 @@ function LoopEditorForm({
     // The saved loop replaces its cached copy synchronously; the loops list
     // refreshes in the background so navigation never waits on it.
     void onReload(next).catch(() => undefined);
-    onNavigate(loopPath(workspace, next.id));
+    onNavigate(loopPath(workspace, next));
   };
 
   const submit = async () => {
@@ -261,7 +266,7 @@ function LoopEditorForm({
   const cancel = async () => {
     if (saving) return;
     if (!draft) {
-      onNavigate(loopPath(workspace, loop.id));
+      onNavigate(loopPath(workspace, loop));
       return;
     }
     // An untouched draft is discarded; anything else stays in Drafts.
@@ -274,6 +279,7 @@ function LoopEditorForm({
 
   const teams = activeTeams(data.teams);
   const levelTeam = form.level === "team" ? teams.find((team) => team.id === form.teamId) : undefined;
+  const originTeam = teamKey ? data.teams.find((team) => team.key.toLowerCase() === teamKey.toLowerCase()) : undefined;
   const accessTeamIds = configStrings(form.triggerConfig, "teamIds");
   const entity = ENTITY_NAMES[form.triggerType].toLowerCase();
   const canSubmit = Boolean(form.name.trim() && form.instructions.trim()) && !saving;
@@ -286,15 +292,29 @@ function LoopEditorForm({
         </button>
         {draft ? (
           <nav className="loops-breadcrumb" aria-label={t("Breadcrumb")}>
-            <a
-              href={loopsPath(workspace)}
-              onClick={(event) => {
-                event.preventDefault();
-                onNavigate(loopsPath(workspace));
-              }}
-            >
-              {t("Loops")}
-            </a>
+            {/* Started from a team's Loops tab: the team crumb leads back to that tab. */}
+            {originTeam ? (
+              <a
+                href={teamLoopsPath(workspace, originTeam.key)}
+                onClick={(event) => {
+                  event.preventDefault();
+                  onNavigate(teamLoopsPath(workspace, originTeam.key));
+                }}
+              >
+                <TeamIcon team={originTeam} size={16} />
+                <span data-i18n-ignore>{originTeam.name}</span>
+              </a>
+            ) : (
+              <a
+                href={loopsPath(workspace)}
+                onClick={(event) => {
+                  event.preventDefault();
+                  onNavigate(loopsPath(workspace));
+                }}
+              >
+                {t("Loops")}
+              </a>
+            )}
             <span aria-hidden="true">›</span>
             <h2>{t("New loop")}</h2>
           </nav>
@@ -570,7 +590,7 @@ function LoopEditorForm({
               markLoopAgentHandoff(result.id ?? loop.id);
               void refetch().then((next) => finish(next ?? { ...loop, status: "published", enabled: true, id: result.id ?? loop.id }));
             }}
-            onNavigateLoop={(result) => onNavigate(loopPath(workspace, result.id ?? loop.id))}
+            onNavigateLoop={(result) => onNavigate(loopPath(workspace, result.id && result.id !== loop.id ? result.id : loop))}
           />
         )}
       </div>

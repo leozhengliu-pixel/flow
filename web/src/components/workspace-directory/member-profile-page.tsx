@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 
 import { IssueExplorerPage } from '@/components/issue-explorer/issue-explorer-page'
 import type { MyIssuesCreateContext } from '@/components/my-issues/my-issues-list'
-import { memberProfilePath } from '@/lib/app-routes'
+import { memberProfileHandle, memberProfilePath } from '@/lib/app-routes'
 import type { BootstrapData, Issue, IssueUpdateInput, User } from '@/types/flow'
 
 import { MemberProfileAside } from './member-profile-aside'
@@ -40,7 +40,7 @@ export function MemberProfilePage({ data, user, view, onNavigate, onOpenMember, 
   const kind = memberAppKind(user)
   const openMember = (next: User) => {
     if (onOpenMember) onOpenMember(next)
-    else window.location.assign(memberProfilePath(data.workspace.urlKey, next.name))
+    else window.location.assign(memberProfilePath(data.workspace.urlKey, memberProfileHandle(next)))
   }
   return <IssueExplorerPage
     key={`${user.id}-${view}`}
@@ -61,9 +61,9 @@ export function MemberProfilePage({ data, user, view, onNavigate, onOpenMember, 
         <MemberUserSwitcher user={user} users={data.users} open={switcherOpen} onOpenChange={setSwitcherOpen} onSelect={openMember}/>
         {kind ? <small className="member-profile-title__kind">{kind}</small> : null}
       </span>,
-      tabs: (['assigned', 'created'] as const).map(id => ({ id, label: id === 'assigned' ? 'Assigned' : 'Created', href: memberProfilePath(data.workspace.urlKey, user.name, id), active: view === id, onSelect: () => onNavigate(id) })),
+      tabs: (['assigned', 'created'] as const).map(id => ({ id, label: id === 'assigned' ? 'Assigned' : 'Created', href: memberProfilePath(data.workspace.urlKey, memberProfileHandle(user), id), active: view === id, onSelect: () => onNavigate(id) })),
     }}
-    viewHref={() => memberProfilePath(data.workspace.urlKey, user.name, view)}
+    viewHref={() => memberProfilePath(data.workspace.urlKey, memberProfileHandle(user), view)}
     onNavigateView={() => onNavigate(view)}
     onOpenIssue={onOpenIssue}
     renderIssuePreview={renderIssuePreview}

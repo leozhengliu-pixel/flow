@@ -91,8 +91,9 @@ describe('team documents list', () => {
     fireEvent.contextMenu(container.querySelector('.team-docs-row')!)
     await user.click(within(screen.getByRole('menu')).getByText('Pin to overview'))
     await waitFor(() => expect(api.pinTeamResource).toHaveBeenCalledWith('team-1', expect.objectContaining({ resourceType: 'document', resourceId: 'doc-1' })))
-    await waitFor(() => expect(onReload).toHaveBeenCalled())
-    expect(onReloadResources).toHaveBeenCalled()
+    // The pin shows at once; neither workspace metadata nor the resource list is refetched.
+    expect(onReload).not.toHaveBeenCalled()
+    expect(onReloadResources).not.toHaveBeenCalled()
   })
 
   it('runs a row key hint (⇧R renames) on the focused row', async () => {

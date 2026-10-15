@@ -234,8 +234,8 @@ func (f *oauthPerfFixture) rpc(method, token string, want int) error {
 			return fmt.Errorf("tools/list returned wrong result type")
 		}
 		tools, ok := object["tools"].([]any)
-		if !ok || len(tools) != 91 {
-			return fmt.Errorf("tools/list inventory=%d, expected 91", len(tools))
+		if !ok || len(tools) != 92 {
+			return fmt.Errorf("tools/list inventory=%d, expected 92", len(tools))
 		}
 	}
 	return nil

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { TeamIcon } from "@/components/issue/issue-icons";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
-import { loopPath, loopsPath, teamLoopsPath } from "@/lib/app-routes";
+import { loopPath, loopsPath, teamHomePath, teamLoopsPath } from "@/lib/app-routes";
 import { useI18n } from "@/i18n/i18n";
 import type { BootstrapData, Loop } from "@/types/flow";
 import { LoopIcon } from "./loop-glyph";
@@ -9,7 +9,8 @@ import { loopIconColor } from "./loop-template-visuals";
 import { loopTeam } from "./loop-model";
 
 /**
- * The reference app's loop breadcrumb: `[team] Team › Loops › [icon] Loop › Edit ⋯`. Ancestors are primary 13/500,
+ * The loop breadcrumb: `[team] Team › Loops › [icon] Loop › Edit ⋯`. For a team loop the team crumb opens the team's
+ * home and "Loops" its Loops tab; a workspace loop's "Loops" is the workspace list. Ancestors are primary 13/500,
  * separators and the trailing page name secondary; the loop name links back unless it is the current page.
  */
 export function LoopBreadcrumb({
@@ -48,7 +49,7 @@ export function LoopBreadcrumb({
   return (
     <nav className="loops-breadcrumb" aria-label={t("Breadcrumb")}>
       {team ? (
-        <a {...link(teamLoopsPath(workspace, team.key))}>
+        <a {...link(teamHomePath(workspace, team.key))}>
           <TeamIcon team={team} size={16} />
           <span data-i18n-ignore>{team.name}</span>
         </a>
@@ -59,11 +60,12 @@ export function LoopBreadcrumb({
         </span>
       )}
       <span aria-hidden="true">›</span>
-      <a {...link(loopsPath(workspace))}>{t("Loops")}</a>
+      {/* A team loop's "Loops" crumb is its team's Loops tab. */}
+      <a {...link(team ? teamLoopsPath(workspace, team.key) : loopsPath(workspace))}>{t("Loops")}</a>
       <span aria-hidden="true">›</span>
       {current ? (
         <>
-          <a {...link(loopPath(workspace, loopId))} data-i18n-ignore={loop?.name ? true : undefined}>
+          <a {...link(loopPath(workspace, loop ?? loopId))} data-i18n-ignore={loop?.name ? true : undefined}>
             {icon}
             {name}
           </a>

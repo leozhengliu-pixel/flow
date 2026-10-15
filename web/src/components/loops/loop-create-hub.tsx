@@ -27,12 +27,15 @@ export function LoopCreateHub({
   onReload,
   variant = "inline",
   onCreated,
+  originTeamKey,
 }: {
   data: Pick<BootstrapData, "teams" | "workspace">;
   onNavigate: (path: string) => void;
   onReload?: (changed?: Loop) => Promise<void>;
   variant?: "inline" | "dialog";
   onCreated?: () => void;
+  /** Opened from a team's Loops tab: the new loop's editor opens under that team (`/team/<key>/loops/new`). */
+  originTeamKey?: string;
 }) {
   const { t } = useI18n();
   const { templates } = useLoopTemplates();
@@ -78,7 +81,7 @@ export function LoopCreateHub({
       onCreated?.();
       // The editor fetches the draft itself; refresh lists in the background.
       void onReload?.(loop).catch(() => undefined);
-      onNavigate(`${newLoopPath(data.workspace.urlKey)}?draftId=${encodeURIComponent(loop.id)}`);
+      onNavigate(`${newLoopPath(data.workspace.urlKey, originTeamKey)}?draftId=${encodeURIComponent(loop.id)}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("Could not create loop"));
     } finally {
@@ -210,19 +213,21 @@ export function LoopCreateDialog({
   onOpenChange,
   onNavigate,
   onReload,
+  originTeamKey,
 }: {
   data: Pick<BootstrapData, "teams" | "workspace">;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onNavigate: (path: string) => void;
   onReload?: (changed?: Loop) => Promise<void>;
+  originTeamKey?: string;
 }) {
   const { t } = useI18n();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="loops-hub-dialog" closeLabel={t("Close")}>
         <DialogTitle className="sr-only">{t("Create a new loop")}</DialogTitle>
-        <LoopCreateHub data={data} variant="dialog" onNavigate={onNavigate} onReload={onReload} onCreated={() => onOpenChange(false)} />
+        <LoopCreateHub data={data} variant="dialog" originTeamKey={originTeamKey} onNavigate={onNavigate} onReload={onReload} onCreated={() => onOpenChange(false)} />
       </DialogContent>
     </Dialog>
   );

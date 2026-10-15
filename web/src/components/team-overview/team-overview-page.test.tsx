@@ -193,53 +193,44 @@ describe('team overview', () => {
         expect(found).toHaveLength(2);
         return [...found];
       });
-      expect(rows[0].querySelector('button[data-i18n-ignore]')).toHaveTextContent('Roadmap');
+      expect(rows[0].querySelector('.team-resource-title')).toHaveTextContent('Roadmap');
       expect(rows[0]).not.toHaveTextContent('Stale stored title');
-      expect(rows[1].querySelector('button[data-i18n-ignore]')).toHaveTextContent('Untitled');
-      expect(rows[0].querySelector('svg')).not.toBeNull();
-      expect(screen.getByRole('button', { name: 'Open menu Untitled' })).toBeInTheDocument();
+      expect(rows[1].querySelector('.team-resource-title')).toHaveTextContent('Untitled');
+      expect(rows[0].querySelector('.team-resource-icon svg')).not.toBeNull();
+      // Rows are links with no inline "…" button; the menu is on right click.
+      expect(rows[0].tagName).toBe('A');
+      expect(rows[0]).toHaveAttribute('href', '/workspace/document/roadmap');
+      expect(screen.queryByRole('button', { name: /^Open menu Roadmap/ })).toBeNull();
     });
 
-    it('opens the shared document menu from the row "…" button, with the pin row reading Remove from overview', async () => {
-      const user = userEvent.setup();
-      api.fetchTeamResources.mockResolvedValue({ resources: [pin()], sections: [section] });
-      renderOverview({ documents: [document] });
-      await user.click(await screen.findByRole('button', { name: 'Open menu Roadmap' }));
-      const menu = await screen.findByRole('menu');
-      const labels = within(menu).getAllByRole('menuitem').map(item => item.textContent ?? '');
-      const at = (label: string) => labels.findIndex(text => text.startsWith(label));
-      for (const label of ['Move to', 'Remove from overview', 'Duplicate', 'New template from document', 'Rename…', 'Favorite', 'Copy', 'Remind me', 'Show document history', 'Delete', 'Move to section']) expect(at(label), label).toBeGreaterThanOrEqual(0);
-      expect(at('Move to')).toBeLessThan(at('Remove from overview'));
-      expect(at('Remove from overview')).toBeLessThan(at('Duplicate'));
-      expect(at('Delete')).toBeLessThan(at('Move to section'));
-      expect(within(menu).queryByRole('menuitem', { name: 'Pin to overview' })).toBeNull();
-      expect(within(menu).queryByRole('menuitem', { name: 'Remove' })).toBeNull();
-      await user.click(within(menu).getByRole('menuitem', { name: 'Remove from overview' }));
-      await waitFor(() => expect(api.deleteTeamResource).toHaveBeenCalledWith('team-1', 'pin-1'));
-    });
-
-    it('opens the same menu on right click and moves the pin to a section', async () => {
+    it('opens the document menu on right click with Unpin from overview first and unpins at once', async () => {
       const user = userEvent.setup();
       api.fetchTeamResources.mockResolvedValue({ resources: [pin()], sections: [section] });
       const { container } = renderOverview({ documents: [document] });
-      await screen.findByRole('button', { name: 'Open menu Roadmap' });
+      await waitFor(() => expect(container.querySelector('.team-resource-row')).not.toBeNull());
       fireEvent.contextMenu(container.querySelector('.team-resource-row')!);
       const menu = await screen.findByRole('menu');
-      expect(within(menu).getByRole('menuitem', { name: 'Remove from overview' })).toBeVisible();
-      await user.hover(within(menu).getByRole('menuitem', { name: /^Move to section/ }));
-      fireEvent.pointerMove(within(menu).getByRole('menuitem', { name: /^Move to section/ }), { pointerType: 'mouse' });
-      await user.click(await screen.findByRole('menuitem', { name: 'Plans' }));
-      await waitFor(() => expect(api.updateTeamResource).toHaveBeenCalledWith('team-1', 'pin-1', { sectionId: 'section-1' }));
+      const labels = within(menu).getAllByRole('menuitem').map(item => item.textContent ?? '');
+      const at = (label: string) => labels.findIndex(text => text.startsWith(label));
+      for (const label of ['Unpin from overview', 'Duplicate', 'New template from document', 'Rename…', 'Favorite', 'Copy', 'Remind me', 'Show document history', 'Delete']) expect(at(label), label).toBeGreaterThanOrEqual(0);
+      expect(at('Unpin from overview')).toBe(0);
+      expect(at('Move to')).toBe(-1);
+      await user.click(within(menu).getByRole('menuitem', { name: 'Unpin from overview' }));
+      expect(container.querySelector('.team-resource-row')).toBeNull();
+      await waitFor(() => expect(api.deleteTeamResource).toHaveBeenCalledWith('team-1', 'pin-1'));
+      expect(api.fetchTeamResources).toHaveBeenCalledTimes(1);
     });
 
-    it('keeps the Move to / Remove menu for links', async () => {
-      const user = userEvent.setup();
+    it('offers Copy link, Unpin, Edit and Delete for links', async () => {
       api.fetchTeamResources.mockResolvedValue({ resources: [{ id: 'pin-link', teamId: 'team-1', resourceType: 'link', resourceId: '', url: 'https://example.com/spec', title: 'Spec', sectionId: '', position: 0 }], sections: [] });
-      renderOverview({ documents: [document] });
-      await user.click(await screen.findByRole('button', { name: 'Open menu Spec' }));
-      expect(screen.getByRole('menuitem', { name: 'Move to' })).toBeVisible();
-      expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeVisible();
-      expect(screen.queryByRole('menuitem', { name: 'Duplicate' })).toBeNull();
+      const { container } = renderOverview({ documents: [document] });
+      await waitFor(() => expect(container.querySelector('.team-resource-row')).not.toBeNull());
+      const row = container.querySelector('.team-resource-row')!;
+      expect(row).toHaveAttribute('href', 'https://example.com/spec');
+      expect(row).toHaveAttribute('target', '_blank');
+      fireEvent.contextMenu(row);
+      const menu = await screen.findByRole('menu');
+      expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy link', 'Unpin', 'Edit', 'Delete']);
     });
 
     it('creates an untitled document when adding a new pinned document', async () => {
@@ -274,13 +265,15 @@ describe('team overview', () => {
     expect(screen.getByText('Plans')).toBeVisible();
   });
 
-  it('refetches only the team resources after a section edit, not the workspace', async () => {
+  it('adds a section without refetching the resources or the workspace', async () => {
     const user = userEvent.setup(), onReload = vi.fn().mockResolvedValue(undefined);
+    api.createTeamResourceSection.mockResolvedValue(section);
     renderPage("overview", {}, onReload);
     await waitFor(() => expect(api.fetchTeamResources).toHaveBeenCalledTimes(1));
     await user.click(screen.getByRole('button', { name: 'Add section' }));
     await user.type(screen.getByRole('textbox', { name: 'Section name' }), 'Plans{Enter}');
-    await waitFor(() => expect(api.fetchTeamResources).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('Plans')).toBeVisible();
+    expect(api.fetchTeamResources).toHaveBeenCalledTimes(1);
     expect(onReload).not.toHaveBeenCalled();
   });
 

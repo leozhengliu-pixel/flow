@@ -3,8 +3,10 @@ import type {
   Cycle,
   Initiative,
   Issue,
+  Loop,
   Project,
   SavedView,
+  User,
 } from "@/types/flow";
 
 export type MyIssuesRouteView =
@@ -19,6 +21,9 @@ export type ReleasePipelineTab = "releases" | "changelog" | "archive" | "deleted
 export type ReleaseRouteTab = "issues" | "release-notes";
 export type PulseRouteView = "following" | "popular" | "all";
 export type ReviewRouteTab = "overview" | "review" | "changes";
+/** The workspace Loops page's views: the viewer's loops, or every loop. */
+export type LoopsRouteView = "mine" | "all";
+const LOOPS_VIEW_SEGMENTS = new Map<string, LoopsRouteView>([["my-loops", "mine"], ["all", "all"]]);
 export type InboxRouteTab = "priority" | "other";
 export type WorkspaceSecondaryRouteKind =
   | "diary"
@@ -249,12 +254,15 @@ export type AppRoute =
       tab: ReleaseRouteTab;
     }
   | { kind: "asks"; workspaceSlug: string }
-  | { kind: "loops"; workspaceSlug: string }
+  /** `view` is unset on the bare `/loops`, which the app sends to "My loops". */
+  | { kind: "loops"; workspaceSlug: string; view?: LoopsRouteView }
   | {
       kind: "loop-editor";
       workspaceSlug: string;
       loopId?: string;
       draftId?: string;
+      /** Set for `/team/<key>/loops/new`: a new loop created from a team's Loops tab. */
+      teamKey?: string;
     }
   | { kind: "loop"; workspaceSlug: string; loopId: string }
   | { kind: "loop-run"; workspaceSlug: string; loopId: string; runId?: string }
@@ -683,8 +691,12 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     };
   if (section === "asks" && segments.length === 2)
     return { kind: "asks", workspaceSlug };
+  // `/loops` opens "My loops" (`/loops/my-loops`); `/loops/all` lists every loop.
   if (section === "loops" && !third && segments.length === 2)
     return { kind: "loops", workspaceSlug };
+  const loopsView = section === "loops" && third ? LOOPS_VIEW_SEGMENTS.get(third) : undefined;
+  if (loopsView && segments.length === 3)
+    return { kind: "loops", workspaceSlug, view: loopsView };
   if (section === "loops" && third === "new" && segments.length === 3) {
     const draftId = new URLSearchParams(search).get("draftId") || undefined;
     return draftId
@@ -1327,6 +1339,18 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
   if (
     section === "team" &&
     third &&
+    fourth === "loops" &&
+    fifth === "new" &&
+    segments.length === 5
+  ) {
+    const draftId = new URLSearchParams(search).get("draftId") || undefined;
+    return draftId
+      ? { kind: "loop-editor", workspaceSlug, teamKey: third, draftId }
+      : { kind: "loop-editor", workspaceSlug, teamKey: third };
+  }
+  if (
+    section === "team" &&
+    third &&
     fourth === "members" &&
     segments.length === 4
   )
@@ -1678,6 +1702,10 @@ export function workspaceIssuesPath(
 export function membersPath(workspaceSlug: string) {
   return `${workspaceRootPath(workspaceSlug)}/members`;
 }
+/** The handle a member's profile URL uses: their workspace username (`/profiles/jane.doe`), else their name. */
+export function memberProfileHandle(user: Pick<User, "username" | "name">) {
+  return user.username || user.name;
+}
 export function memberProfilePath(
   workspaceSlug: string,
   username: string,
@@ -1786,18 +1814,27 @@ export function asksPath(workspaceSlug: string) {
 export function loopsPath(workspaceSlug: string) {
   return `${workspaceRootPath(workspaceSlug)}/loops`;
 }
-export function newLoopPath(workspaceSlug: string) {
-  return `${loopsPath(workspaceSlug)}/new`;
+/** The new-loop editor; with a team key it is that team's (`/team/<key>/loops/new`). */
+export function newLoopPath(workspaceSlug: string, teamKey?: string) {
+  return teamKey ? `${teamLoopsPath(workspaceSlug, teamKey)}/new` : `${loopsPath(workspaceSlug)}/new`;
 }
-export function loopPath(workspaceSlug: string, loopId: string) {
-  return `${workspaceRootPath(workspaceSlug)}/loop/${encode(loopId)}`;
+/** The workspace Loops page's "My loops" (`/loops/my-loops`) or "All" (`/loops/all`) view. */
+export function loopsViewPath(workspaceSlug: string, view: LoopsRouteView) {
+  return `${loopsPath(workspaceSlug)}/${view === "all" ? "all" : "my-loops"}`;
 }
-export function editLoopPath(workspaceSlug: string, loopId: string) {
-  return `${loopPath(workspaceSlug, loopId)}/edit`;
+/** A loop, or a loop reference from a URL (its slug, or an id from an older link). */
+export type LoopRef = string | Pick<Loop, "id" | "slugId">;
+/** Loop pages read `/loop/<name-slug>-<12 hex>`; a loop without a slug yet falls back to its id. */
+export function loopPath(workspaceSlug: string, loop: LoopRef) {
+  const ref = typeof loop === "string" ? loop : loop.slugId || loop.id;
+  return `${workspaceRootPath(workspaceSlug)}/loop/${encode(ref)}`;
+}
+export function editLoopPath(workspaceSlug: string, loop: LoopRef) {
+  return `${loopPath(workspaceSlug, loop)}/edit`;
 }
 /** Run history page; without `runId` it opens the latest run. */
-export function loopRunPath(workspaceSlug: string, loopId: string, runId?: string) {
-  return runId ? `${loopPath(workspaceSlug, loopId)}/run/${encode(runId)}` : `${loopPath(workspaceSlug, loopId)}/runs`;
+export function loopRunPath(workspaceSlug: string, loop: LoopRef, runId?: string) {
+  return runId ? `${loopPath(workspaceSlug, loop)}/run/${encode(runId)}` : `${loopPath(workspaceSlug, loop)}/runs`;
 }
 export function teamArchivePath(
   workspaceSlug: string,

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
 	"fmt"
@@ -542,6 +543,27 @@ func (s *server) releaseHistory(w http.ResponseWriter, r *http.Request) {
 	writePage(w, r, items)
 }
 
+// teamResourceScope names the workspace metadata a team overview resource
+// write reads and changes (teams, sections, pins and the collection a pin is
+// validated against), so the store copies and compares only those
+// collections instead of the whole workspace snapshot. Pins validated against
+// other collections keep the full metadata snapshot.
+func teamResourceScope(ctx context.Context, resourceType string) context.Context {
+	fields := []string{"teams", "teamResourceSections", "teamPinnedResources"}
+	switch resourceType {
+	case "", "link":
+	case "document":
+		fields = append(fields, "documents")
+	case "project":
+		fields = append(fields, "projects")
+	case "initiative":
+		fields = append(fields, "initiatives")
+	default:
+		return ctx
+	}
+	return store.WithMetadataFields(ctx, fields...)
+}
+
 func (s *server) createTeamResourceSection(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Name string `json:"name"`
@@ -551,12 +573,18 @@ func (s *server) createTeamResourceSection(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var item domain.TeamResourceSection
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "team.resource_section_created", r.PathValue("id"), input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(teamResourceScope(r.Context(), ""), workspaceKey(r), "team.resource_section_created", r.PathValue("id"), input, func(data *domain.Bootstrap) error {
 		if !validateResourceIDs(data, "team", []string{r.PathValue("id")}) {
 			return errNotFound
 		}
 		now := time.Now().UTC()
-		item = domain.TeamResourceSection{ID: parityID("team_resource_section"), TeamID: r.PathValue("id"), Name: strings.TrimSpace(input.Name), Position: float64(len(data.TeamResourceSections)), CreatedAt: now, UpdatedAt: now}
+		position := 0.0
+		for _, section := range data.TeamResourceSections {
+			if section.TeamID == r.PathValue("id") {
+				position = max(position, section.Position+1)
+			}
+		}
+		item = domain.TeamResourceSection{ID: parityID("team_resource_section"), TeamID: r.PathValue("id"), Name: strings.TrimSpace(input.Name), Position: position, CreatedAt: now, UpdatedAt: now}
 		data.TeamResourceSections = append(data.TeamResourceSections, item)
 		return nil
 	})
@@ -571,7 +599,7 @@ func (s *server) updateTeamResourceSection(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var item domain.TeamResourceSection
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "team.resource_section_updated", r.PathValue("sectionId"), input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(teamResourceScope(r.Context(), ""), workspaceKey(r), "team.resource_section_updated", r.PathValue("sectionId"), input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.TeamResourceSections, func(value domain.TeamResourceSection) bool {
 			return value.ID == r.PathValue("sectionId") && value.TeamID == r.PathValue("id")
 		})
@@ -596,7 +624,7 @@ func (s *server) updateTeamResourceSection(w http.ResponseWriter, r *http.Reques
 	respondMutation(w, err, http.StatusOK, item)
 }
 func (s *server) deleteTeamResourceSection(w http.ResponseWriter, r *http.Request) {
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "team.resource_section_deleted", r.PathValue("sectionId"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(teamResourceScope(r.Context(), ""), workspaceKey(r), "team.resource_section_deleted", r.PathValue("sectionId"), nil, func(data *domain.Bootstrap) error {
 		before := len(data.TeamResourceSections)
 		data.TeamResourceSections = slices.DeleteFunc(data.TeamResourceSections, func(item domain.TeamResourceSection) bool {
 			return item.ID == r.PathValue("sectionId") && item.TeamID == r.PathValue("id")
@@ -624,14 +652,15 @@ func (s *server) createTeamPinnedResource(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var item domain.TeamPinnedResource
-	var pinnedIssue *string
-	if input.ResourceType == "issue" {
-		pinnedIssue = &input.ResourceID
-	}
 	if input.ResourceType == "link" && input.URL != "" && (strings.TrimSpace(input.Title) == "" || strings.TrimSpace(input.Title) == strings.TrimSpace(input.URL)) {
 		input.Title = resourceLinkName(input.URL)
 	}
-	err := s.store.MutateWorkspace(withIssueScope(r.Context(), pinnedIssue), workspaceKey(r), "team.resource_pinned", r.PathValue("id"), input, func(data *domain.Bootstrap) error {
+	ctx := teamResourceScope(r.Context(), input.ResourceType)
+	if input.ResourceType == "issue" {
+		// Validating an issue pin needs that issue record only.
+		ctx = withIssueScope(r.Context(), &input.ResourceID)
+	}
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "team.resource_pinned", r.PathValue("id"), input, func(data *domain.Bootstrap) error {
 		input.Title = strings.TrimSpace(input.Title)
 		if input.Title == "" && input.ResourceType == "document" && input.ResourceID != "" {
 			// Untitled documents pin under their live title or the placeholder.
@@ -653,7 +682,13 @@ func (s *server) createTeamPinnedResource(w http.ResponseWriter, r *http.Request
 		now := time.Now().UTC()
 		input.ID = parityID("team_resource")
 		input.TeamID = r.PathValue("id")
-		input.Position = float64(len(data.TeamPinnedResources))
+		// New pins go to the end of the team's list.
+		input.Position = 0
+		for _, resource := range data.TeamPinnedResources {
+			if resource.TeamID == input.TeamID {
+				input.Position = max(input.Position, resource.Position+1)
+			}
+		}
 		input.CreatedAt = now
 		input.UpdatedAt = now
 		data.TeamPinnedResources = append(data.TeamPinnedResources, input)
@@ -665,14 +700,23 @@ func (s *server) createTeamPinnedResource(w http.ResponseWriter, r *http.Request
 func (s *server) updateTeamResource(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Title     *string  `json:"title"`
+		URL       *string  `json:"url"`
 		SectionID *string  `json:"sectionId"`
 		Position  *float64 `json:"position"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	if input.URL != nil {
+		link := strings.TrimSpace(*input.URL)
+		if lower := strings.ToLower(link); !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
+			writeError(w, http.StatusBadRequest, "url must be an http(s) link")
+			return
+		}
+		input.URL = &link
+	}
 	var item domain.TeamPinnedResource
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "team.resource_updated", r.PathValue("resourceId"), input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(teamResourceScope(r.Context(), ""), workspaceKey(r), "team.resource_updated", r.PathValue("resourceId"), input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.TeamPinnedResources, func(value domain.TeamPinnedResource) bool {
 			return value.ID == r.PathValue("resourceId") && value.TeamID == r.PathValue("id")
 		})
@@ -682,6 +726,12 @@ func (s *server) updateTeamResource(w http.ResponseWriter, r *http.Request) {
 		current := &data.TeamPinnedResources[index]
 		if input.Title != nil {
 			current.Title = *input.Title
+		}
+		if input.URL != nil {
+			if current.ResourceType != "link" {
+				return errInvalid
+			}
+			current.URL = *input.URL
 		}
 		if input.SectionID != nil {
 			current.SectionID = *input.SectionID
@@ -696,7 +746,7 @@ func (s *server) updateTeamResource(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, item)
 }
 func (s *server) deleteTeamResource(w http.ResponseWriter, r *http.Request) {
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "team.resource_deleted", r.PathValue("resourceId"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(teamResourceScope(r.Context(), ""), workspaceKey(r), "team.resource_deleted", r.PathValue("resourceId"), nil, func(data *domain.Bootstrap) error {
 		before := len(data.TeamPinnedResources)
 		data.TeamPinnedResources = slices.DeleteFunc(data.TeamPinnedResources, func(item domain.TeamPinnedResource) bool {
 			return item.ID == r.PathValue("resourceId") && item.TeamID == r.PathValue("id")

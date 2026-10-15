@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findBySlugRef, slugSuffix } from './resource-slug'
+import { findBySlugRef, findLoopByRef, slugSuffix } from './resource-slug'
 import { createIssueShortcutContext } from './create-issue-shortcut'
 import { parseAppRoute } from './app-routes'
 import type { BootstrapData } from '@/types/flow'
@@ -34,5 +34,15 @@ describe('resource slugs', () => {
     const route = parseAppRoute('/acme/project/before-rename-cccccccccccc/overview')
     const data = { projects: [{ ...projects[2], teamIds: ['team-1'] }] } as unknown as BootstrapData
     expect(createIssueShortcutContext(route, data)).toMatchObject({ projectId: 'c' })
+  })
+
+  it('finds a loop by its id, its slug, or a slug with a stale name prefix', () => {
+    const loops = [{ id: 'loop_1', slugId: 'triage-agent-96b66416bc6a' }, { id: 'loop_2', slugId: 'weekly-wrap-0123456789ab' }, { id: 'loop_3' }]
+    expect(findLoopByRef(loops, 'loop_2')?.id).toBe('loop_2')
+    expect(findLoopByRef(loops, 'triage-agent-96b66416bc6a')?.id).toBe('loop_1')
+    expect(findLoopByRef(loops, 'renamed-96b66416bc6a')?.id).toBe('loop_1')
+    expect(findLoopByRef(loops, 'loop_3')?.id).toBe('loop_3')
+    expect(findLoopByRef(loops, 'missing-ffffffffffff')).toBeUndefined()
+    expect(findLoopByRef(loops, undefined)).toBeUndefined()
   })
 })

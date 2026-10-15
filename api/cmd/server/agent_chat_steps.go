@@ -22,6 +22,7 @@ const (
 	phaseLookAt        = "Looking at {subject}"
 	phaseSearchIssues  = "Searching issues for {subject}"
 	phaseSearchDocs    = "Searching documentation for {subject}"
+	phaseSearchFiles   = "Searching documents for {subject}"
 	phaseComments      = "Reading comments on {subject}"
 	phaseHistory       = "Reviewing history of {subject}"
 	phaseUpdate        = "Updating {subject}"
@@ -38,7 +39,7 @@ const (
 )
 
 // agentPhaseTemplates lists every phase title template; the web translates titles by matching them.
-var agentPhaseTemplates = []string{phaseLookUp, phaseLookAt, phaseSearchIssues, phaseSearchDocs, phaseComments, phaseHistory, phaseUpdate, phaseUpdatePrio, phaseUpdateStatus, phaseUpdateLabels, phaseAssign, phaseCreateIssue, phaseCreate, phaseComment, phaseDelete, phaseUse}
+var agentPhaseTemplates = []string{phaseLookUp, phaseLookAt, phaseSearchIssues, phaseSearchDocs, phaseSearchFiles, phaseComments, phaseHistory, phaseUpdate, phaseUpdatePrio, phaseUpdateStatus, phaseUpdateLabels, phaseAssign, phaseCreateIssue, phaseCreate, phaseComment, phaseDelete, phaseUse}
 
 // agentInternalID matches stored ids (issue_16, project_1790…) that should never be shown as a subject.
 var agentInternalID = regexp.MustCompile(`^[a-z]+(?:_[a-z]+)*_[0-9a-f]{1,}$`)
@@ -94,10 +95,13 @@ func agentCallPhrase(call domain.AgentToolCall) (string, string) {
 	noun = strings.ReplaceAll(noun, "_", " ")
 	target := agentCallTarget(args, result)
 	switch {
-	case name == "search_issues" || name == "search_documentation":
+	case name == "search_issues" || name == "search_documents" || name == "search_documentation":
 		if query := agentCallQueries(args); query != "" {
 			if name == "search_issues" {
 				return phaseSearchIssues, query
+			}
+			if name == "search_documents" {
+				return phaseSearchFiles, query
 			}
 			return phaseSearchDocs, query
 		}

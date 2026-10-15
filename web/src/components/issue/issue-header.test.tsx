@@ -62,16 +62,13 @@ describe('IssueHeader', () => {
     expect(within(nav).getByRole('link', { name: 'Issues' })).toHaveAttribute('href', '/workspace/team/TST/all')
   })
 
-  it('shows "Projects › ◆ Project" for an issue opened from a project\'s issues, the project linking back to that tab', async () => {
+  it('shows "◆ Project" for an issue opened from a project\'s issues (even one opened from Projects), the project linking back to that tab', () => {
     setup({ returnPath: '/workspace/project/project-one/issues', navigationTrail: ['/workspace/projects/all', '/workspace/project/project-one/issues'] })
     const nav = screen.getByRole('navigation', { name: 'Issue breadcrumb' })
-    expect(within(nav).getAllByRole('link').map(link => link.textContent)).toEqual(['Projects', 'Project one', expect.stringContaining('Test issue')])
-    expect(within(nav).getByRole('link', { name: 'Projects' })).toHaveAttribute('href', '/workspace/projects/all')
+    expect(within(nav).getAllByRole('link').map(link => link.textContent)).toEqual(['Project one', expect.stringContaining('Test issue')])
     const projectLink = within(nav).getByRole('link', { name: 'Project one' })
     expect(projectLink).toHaveAttribute('href', '/workspace/project/project-one/issues')
     expect(projectLink.querySelector('.issue-breadcrumb-project-icon svg, .issue-breadcrumb-project-icon span')).not.toBeNull()
-    await userEvent.hover(within(nav).getByRole('link', { name: 'Projects' }))
-    expect(await screen.findByRole('tooltip')).toHaveTextContent('All projects')
   })
 
   it('shows the parent issue crumb (identifier, title on hover) for a sub-issue opened from its parent', async () => {

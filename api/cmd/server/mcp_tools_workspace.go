@@ -1913,7 +1913,7 @@ func mcpLoopCard(workspace string, data domain.Bootstrap, args map[string]any, l
 			teamName = team.Name
 		}
 	}
-	link := mcpWorkspaceURL(workspace, args, "loop", loop.ID)
+	link := mcpWorkspaceURL(workspace, args, "loop", domain.LoopSlugID(loop))
 	if loop.Status == "draft" {
 		link = mcpWorkspaceURL(workspace, args, "loops", "new") + "?draftId=" + url.QueryEscape(loop.ID)
 	}
