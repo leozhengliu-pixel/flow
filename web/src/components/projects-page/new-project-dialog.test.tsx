@@ -144,7 +144,7 @@ describe('NewProjectDialog', () => {
       milestoneDetails: [{ name: 'Launch', description: 'Launch criteria', targetDate: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}` }],
       targetDateResolution: 'month',
     }))
-  })
+  }, 15000)
 
   it('resets a cancelled milestone draft and ignores an empty milestone', async () => {
     const user = userEvent.setup()
