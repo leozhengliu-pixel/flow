@@ -17,7 +17,7 @@ vi.hoisted(() => {
 import { MemoryRouter } from "react-router-dom";
 import { I18nProvider } from "@/i18n/i18n";
 import { makeBootstrap } from "@/test/fixtures";
-import { SettingsPage } from "./settings-page";
+import { preloadSettingsPage, SettingsPage } from "./settings-page";
 
 function props(): ComponentProps<typeof SettingsPage> {
   return {
@@ -161,6 +161,8 @@ it('shows Asks settings read-only to regular members with a searchable enable co
   const input = props();
   input.page = 'asks';
   input.data = { ...input.data, viewerRole: 'member', integrationConnections: [], emailIntakeAddresses: [] };
+  // Asks lives in the lazy feature settings chunk; a cold import takes longer than findBy's 1s.
+  await preloadSettingsPage('asks');
   render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
   expect(await screen.findByRole('checkbox', { name: 'Enable Asks' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Asks' })).toHaveAttribute('aria-current', 'page');

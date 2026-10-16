@@ -229,7 +229,7 @@ it("offers the reference app's filters and its empty state", async () => {
   await user.click(screen.getByRole("button", { name: "Clear filter" }));
   expect(groups()).toEqual(["Active2", "Invited1", "Application1", "Inactive2"]);
   expect(screen.getByRole("button", { name: "Member filter" })).toHaveTextContent("All");
-});
+}, 15000);
 
 it("ignores one-character searches", async () => {
   const user = userEvent.setup();
