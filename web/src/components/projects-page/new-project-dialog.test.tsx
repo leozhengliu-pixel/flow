@@ -127,8 +127,10 @@ describe('NewProjectDialog', () => {
     )
 
     await user.click(screen.getByRole('button', { name: 'Add' }))
-    await user.type(screen.getByRole('textbox', { name: 'Milestone name' }), 'Launch')
-    await user.type(screen.getByRole('textbox', { name: 'Milestone description' }), 'Launch criteria')
+    await user.click(screen.getByRole('textbox', { name: 'Milestone name' }))
+    await user.paste('Launch')
+    await user.click(screen.getByRole('textbox', { name: 'Milestone description' }))
+    await user.paste('Launch criteria')
     await user.click(screen.getByRole('button', { name: 'Choose date' }))
     const today = new Date()
     await user.click(screen.getByRole('gridcell', { name: new Intl.DateTimeFormat('en-US', { dateStyle: 'full' }).format(today) }))
@@ -136,7 +138,8 @@ describe('NewProjectDialog', () => {
     await user.click(screen.getByRole('button', { name: 'Change project target date' }))
     await user.click(screen.getByRole('tab', { name: 'Month' }))
     await user.click(screen.getAllByRole('button', { name: 'Jan' })[0])
-    await user.type(screen.getByRole('textbox', { name: 'Project name' }), 'Roadmap')
+    await user.click(screen.getByRole('textbox', { name: 'Project name' }))
+    await user.paste('Roadmap')
     await user.click(screen.getByRole('button', { name: 'Create project' }))
 
     expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({
