@@ -3,8 +3,6 @@
  * previews, hover-card summaries, toasts, aria-labels). A mention is written as `[label](path)`, so this keeps a link's text
  * and drops its target; agent shortcodes keep their label; images keep their alt text.
  */
-import { htmlText } from './html-text'
-
 export function markdownPlainText(markdown: string | null | undefined): string {
   if (!markdown) return ''
   let text = String(markdown).replace(/\r\n?/g, '\n')
@@ -32,7 +30,12 @@ export function markdownPlainText(markdown: string | null | undefined): string {
   text = text.replace(/(^|[^\w*])\*(?=\S)([^*\n]*?\S)\*(?!\w)/g, '$1$2')
   text = text.replace(/(^|[^\w_])_(?=\S)([^_\n]*?\S)_(?![\w])/g, '$1$2')
   text = text.replace(/~~(?=\S)([\s\S]*?\S)~~/g, '$1')
-  text = htmlText(text)
+  // Inline tags only, repeated until stable so removing one cannot join another. Not an HTML parser: in Markdown a
+  // `<` is usually text (`a<b`), and parsing would drop everything after it. The result is only ever shown as text.
+  for (let previous = ''; previous !== text;) {
+    previous = text
+    text = text.replace(/<\/?[a-zA-Z][^>\n]*>/g, '')
+  }
   return unescapeText(text).replace(/\s+/g, ' ').trim()
 }
 

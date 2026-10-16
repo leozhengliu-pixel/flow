@@ -25,6 +25,12 @@ describe('markdownPlainText', () => {
     expect(markdownPlainText('use snake_case_name and 2 * 3')).toBe('use snake_case_name and 2 * 3')
   })
 
+  it('keeps a bare < as text and drops inline tags', () => {
+    expect(markdownPlainText('if a<b then swap')).toBe('if a<b then swap')
+    expect(markdownPlainText('deploy <title>v2</title> and <b>bold</b>')).toBe('deploy v2 and bold')
+    expect(markdownPlainText('cost &lt;5')).toBe('cost &lt;5')
+  })
+
   it('collapses whitespace and handles empty input', () => {
     expect(markdownPlainText('  a\n\n\n b\t c ')).toBe('a b c')
     expect(markdownPlainText(undefined)).toBe('')
