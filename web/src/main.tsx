@@ -10,6 +10,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { I18nProvider } from './i18n/i18n'
 import { prepareInitialLocale } from './i18n/locale'
 import { initializeTheme } from './lib/theme'
+import { installStaleChunkReload } from './lib/stale-chunk-reload'
 import { renderMermaidPreview } from './components/issue/editor/mermaid-preview'
 import { ThemedToaster } from './components/ui/themed-toaster'
 import { ActionDialogHost } from './components/ui/action-dialogs'
@@ -22,6 +23,7 @@ import './styles/motion.css'
 import './styles/light-parity.css'
 import './styles/picker-parity.css'
 
+installStaleChunkReload()
 initializeTheme()
 window.__flowMermaidPreview = renderMermaidPreview
 
