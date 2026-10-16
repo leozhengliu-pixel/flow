@@ -1,8 +1,12 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, configure } from '@testing-library/react'
 import { afterEach } from 'vitest'
 
 import { loadChineseDictionary } from '@/i18n/translate'
+
+// findBy*/waitFor wait 1s by default, which a full parallel run in CI exceeds (lazy chunks, popovers).
+// Stay under the 5s test timeout so a real miss still reports the query instead of a bare timeout.
+configure({ asyncUtilTimeout: 4000 })
 
 // The Chinese dictionary is a lazily loaded chunk in the app; tests translate synchronously.
 await loadChineseDictionary()
