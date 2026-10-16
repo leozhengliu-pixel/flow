@@ -38,7 +38,7 @@ func setLoopLimits(srv *server, change func(*loopRunLimits)) {
 	srv.loopRunLimits.Store(&limits)
 }
 
-// waitForRun polls a run until it (and any reply on it) stopped running.
+// waitForRun waits for terminal state and runner cleanup so the loop can be started again.
 func waitForRun(t *testing.T, handler http.Handler, loopID, runID string) domain.LoopRun {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -48,6 +48,10 @@ func waitForRun(t *testing.T, handler http.Handler, loopID, runID string) domain
 		for _, reply := range run.Replies {
 			busy = busy || reply.Status == "running"
 		}
+		// The terminal row is saved before the runner's deferred guard release.
+		loopGuards.mu.Lock()
+		busy = busy || loopGuards.inFlight[loopID+"|"+run.EntityID] || loopGuards.inFlight["reply|"+runID]
+		loopGuards.mu.Unlock()
 		if !busy {
 			return run
 		}
