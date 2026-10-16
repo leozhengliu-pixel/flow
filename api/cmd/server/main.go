@@ -961,9 +961,24 @@ func (s *server) withStaticFiles(next http.Handler) http.Handler {
 			files.ServeHTTP(w, r)
 			return
 		}
+		// A missing asset is a 404, not the app: a stale client asking for an
+		// old chunk hash must see the failure instead of parsing HTML as JS.
+		// Decided by extension, not prefix, since "assets" can be a URL key.
+		if staticAssetExtensions[strings.ToLower(filepath.Ext(path))] {
+			w.Header().Set("Cache-Control", "no-cache")
+			http.NotFound(w, r)
+			return
+		}
 		w.Header().Set("Cache-Control", "no-cache")
 		http.ServeFile(w, r, filepath.Join(s.staticPath, "index.html"))
 	})
+}
+
+var staticAssetExtensions = map[string]bool{
+	".js": true, ".mjs": true, ".css": true, ".map": true, ".json": true, ".wasm": true,
+	".woff": true, ".woff2": true, ".ttf": true, ".otf": true,
+	".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true, ".avif": true, ".svg": true, ".ico": true,
+	".mp4": true, ".webm": true, ".txt": true, ".xml": true, ".webmanifest": true,
 }
 
 func (s *server) accountBootstrap(w http.ResponseWriter, r *http.Request) {
