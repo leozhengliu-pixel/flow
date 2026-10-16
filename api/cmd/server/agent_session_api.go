@@ -309,24 +309,36 @@ func (s *server) agentSessionEventBody(ctx context.Context, app domain.Applicati
 		payload["webhookId"] = app.ID
 	}
 	var issue *domain.Issue
+	var document *domain.Document
+	var project *domain.Project
 	if len(data.Issues) == 1 {
 		issue = &data.Issues[0]
 		payload["issue"] = data.Issues[0]
 		session["issue"] = data.Issues[0]
 	} else if task.ResourceType == "document" && len(data.Documents) == 1 {
-		document := s.documentWithVersions(ctx, data.Workspace.URLKey, data.Documents[0])
-		payload["document"] = document
-		session["document"] = document
+		loaded := s.documentWithVersions(ctx, data.Workspace.URLKey, data.Documents[0])
+		document = &loaded
+		payload["document"] = loaded
+		session["document"] = loaded
 	} else if task.ResourceType == "project" && len(data.Projects) == 1 {
+		project = &data.Projects[0]
 		payload["project"] = data.Projects[0]
 		session["project"] = data.Projects[0]
 	}
 	if creator := userByID(&data, task.CreatorID); creator != nil {
 		session["creator"] = map[string]any{"id": creator.ID, "name": firstNonEmpty(creator.DisplayName, creator.Name), "email": creator.Email}
 	}
+	// The discussion the session started in: issue and document comments are
+	// content records keyed by the resource; a project's own comments live on
+	// the project record.
 	var comments []domain.Comment
-	if issue != nil {
+	switch {
+	case issue != nil:
 		comments, _, _ = s.store.IssueContent(ctx, task.WorkspaceKey, issue.ID)
+	case document != nil:
+		comments, _, _ = s.store.IssueContent(ctx, task.WorkspaceKey, document.ID)
+	case project != nil:
+		comments = agentProjectComments(&data, project.Comments)
 	}
 	var trigger *domain.Comment
 	if task.CommentID != "" {
@@ -349,9 +361,42 @@ func (s *server) agentSessionEventBody(ctx context.Context, app domain.Applicati
 			payload["agentActivity"] = activity
 		}
 	}
-	payload["promptContext"] = agentPromptContextXML(issue, trigger, comments, guidance)
+	payload["promptContext"] = agentResourceContextXML(document, project) + agentPromptContextXML(issue, trigger, comments, guidance)
 	raw, _ := json.Marshal(payload)
 	return raw, eventID
+}
+
+// agentProjectComments copies a project's own comments with their authors
+// resolved, the way IssueContent resolves issue and document comments.
+func agentProjectComments(data *domain.Bootstrap, comments []domain.Comment) []domain.Comment {
+	result := slices.Clone(comments)
+	for i := range result {
+		if user := userByID(data, result[i].User.ID); user != nil {
+			result[i].User = *user
+		}
+	}
+	return result
+}
+
+// agentResourceContextXML describes the document or project a session was
+// started on, ahead of its threads, the way the issue block describes an issue.
+func agentResourceContextXML(document *domain.Document, project *domain.Project) string {
+	escape := html.EscapeString
+	switch {
+	case document != nil:
+		out := fmt.Sprintf("<document id=\"%s\">\n<title>%s</title>\n", escape(document.ID), escape(document.Title))
+		if content := strings.TrimSpace(document.Content); content != "" {
+			out += fmt.Sprintf("<content>%s</content>\n", escape(truncateSettingsText(content, 8000)))
+		}
+		return out + "</document>\n"
+	case project != nil:
+		out := fmt.Sprintf("<project id=\"%s\">\n<name>%s</name>\n", escape(project.ID), escape(project.Name))
+		if description := strings.TrimSpace(project.Description); description != "" {
+			out += fmt.Sprintf("<description>%s</description>\n", escape(truncateSettingsText(description, 8000)))
+		}
+		return out + "</project>\n"
+	}
+	return ""
 }
 
 func agentCommentPayload(comment domain.Comment) map[string]any {
