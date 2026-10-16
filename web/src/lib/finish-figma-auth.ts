@@ -3,6 +3,7 @@ import {
   clearFigmaOAuthState,
   parseFigmaCallbackState,
   readFigmaOAuthState,
+  figmaStateFingerprint,
 } from '@/lib/figma-auth'
 
 export type FinishFigmaAuthResult =
@@ -29,7 +30,7 @@ export async function finishFigmaAuth(search: string): Promise<FinishFigmaAuthRe
   const stored = readFigmaOAuthState()
   const callbackState = parseFigmaCallbackState(search)
   if (stored && callbackState) {
-    if (stored.key !== callbackState.key || stored.urlKey !== callbackState.urlKey) {
+    if (stored.key !== await figmaStateFingerprint(callbackState.key) || stored.urlKey !== callbackState.urlKey) {
       clearFigmaOAuthState()
       return { ok: false, error: 'Invalid OAuth state: states do not match' }
     }

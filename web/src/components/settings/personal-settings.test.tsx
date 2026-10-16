@@ -386,8 +386,7 @@ describe('personal settings workflows', () => {
       name: 'Full access', scopes: undefined, teamIds: [], teamRestriction: 'all',
     })))
     expect(onOpenAPIKey).toHaveBeenCalledWith(expect.objectContaining({ id: 'key-full' }))
-    expect(sessionStorage.getItem('flow.api-key-secret:key-full')).toBe('flow_full_secret')
-    sessionStorage.removeItem('flow.api-key-secret:key-full')
+    expect(sessionStorage.getItem('flow.api-key-secret:key-full')).toBeNull()
   })
 
   it('edits API-key permissions and team policy through the dedicated form', async () => {

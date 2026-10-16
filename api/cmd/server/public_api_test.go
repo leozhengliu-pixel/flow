@@ -521,17 +521,29 @@ func TestSignedFileURLHeaderRewritesResponses(t *testing.T) {
 	expires := time.Unix(1_900_000_000, 0)
 	body := []byte(`{"url":"/uploads/attachment_1_report v2.pdf","description":"see ![x](/uploads/asset_abc.png) and https://flow.test/uploads/asset_def.txt","upload":"https://flow.test/api/files/uploads/upload_x"}`)
 	rewritten := string(rewriteUploadURLs(body, key, "https://flow.test", expires))
+	var decoded map[string]string
+	if err := json.Unmarshal([]byte(rewritten), &decoded); err != nil {
+		t.Fatalf("rewritten JSON invalid: %v", err)
+	}
 	for _, name := range []string{"attachment_1_report v2.pdf", "asset_abc.png", "asset_def.txt"} {
-		if !strings.Contains(rewritten, signedFileURL(key, "https://flow.test", name, expires)) {
+		if !strings.Contains(decoded["url"]+decoded["description"], signedFileURL(key, "https://flow.test", name, expires)) {
 			t.Fatalf("%s not signed in %s", name, rewritten)
 		}
 	}
 	if !strings.Contains(rewritten, `"https://flow.test/api/files/uploads/upload_x"`) {
 		t.Fatalf("upload route rewritten: %s", rewritten)
 	}
+}
+
+func TestSignedFileURLsEscapeUntrustedOriginInJSON(t *testing.T) {
+	body := []byte(`{"url":"/uploads/a.png","description":"see /uploads/b.png"}`)
+	rewritten := rewriteUploadURLs(body, []byte("key"), `https://flow.test/"<script>alert(1)</script>`, time.Unix(1900000000, 0))
 	var decoded map[string]string
-	if err := json.Unmarshal([]byte(rewritten), &decoded); err != nil {
-		t.Fatalf("rewritten JSON invalid: %v", err)
+	if err := json.Unmarshal(rewritten, &decoded); err != nil {
+		t.Fatalf("origin broke JSON encoding: %v", err)
+	}
+	if bytes.ContainsAny(rewritten, "<>") || !strings.Contains(decoded["url"], "signature=") || !strings.Contains(decoded["description"], "signature=") {
+		t.Fatalf("unsafe signed URL response: %s", rewritten)
 	}
 }
 

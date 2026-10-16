@@ -1,4 +1,5 @@
 import { ALERT_CALLOUTS } from './markdown-to-doc'
+import DOMPurify from 'dompurify'
 
 /**
  * Rewrites the html GitHub puts on the clipboard (rendered Markdown in READMEs, issues, PRs and comments) into the
@@ -198,7 +199,12 @@ function cleanup(document: Document) {
   }
   for (const image of Array.from(document.querySelectorAll('img'))) {
     const canonical = image.getAttribute('data-canonical-src')
-    if (canonical) image.setAttribute('src', canonical)
+    if (canonical) {
+      try {
+        const url = new URL(canonical)
+        if (url.protocol === 'https:' || url.protocol === 'http:') image.setAttribute('src', url.href)
+      } catch { /* Keep the existing image source when the canonical URL is invalid. */ }
+    }
     image.removeAttribute('srcset')
   }
   // `<a><img></a>` badges: keep the image, drop the wrapping link so it is not lost when the image is a block.
@@ -210,7 +216,7 @@ function cleanup(document: Document) {
 export function normalizeGithubHtml(html: string): string {
   if (!isGithubHtml(html)) return html
   try {
-    const document = new DOMParser().parseFromString(html, 'text/html')
+    const document = new DOMParser().parseFromString(DOMPurify.sanitize(html, { ADD_TAGS: ['g-emoji'] }), 'text/html')
     cleanup(document)
     normalizeCode(document)
     normalizeAlerts(document)

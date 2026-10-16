@@ -1089,8 +1089,7 @@ func webhookBodyWithTimestamp(payload json.RawMessage, timestamp int64) []byte {
 		return payload
 	}
 	trimmed = bytes.TrimSpace(trimmed[:len(trimmed)-1])
-	body := make([]byte, 0, len(trimmed)+40)
-	body = append(body, trimmed...)
+	body := append([]byte(nil), trimmed...)
 	if len(trimmed) > 1 {
 		body = append(body, ',')
 	}

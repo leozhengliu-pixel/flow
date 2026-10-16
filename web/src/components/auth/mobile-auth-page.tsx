@@ -12,7 +12,12 @@ export function MobileAuthPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const params = useMemo(() => new URLSearchParams(location.search), [location.search])
-  const redirectUri = params.get('redirectUri') || params.get('redirect_uri') || ''
+  const redirectUri = useMemo(() => {
+    try {
+      const url = new URL(params.get('redirectUri') || params.get('redirect_uri') || '')
+      return url.protocol === 'flow:' && !url.username && !url.password ? url.href : ''
+    } catch { return '' }
+  }, [params])
 
   return (
     <main className="auth-page">
