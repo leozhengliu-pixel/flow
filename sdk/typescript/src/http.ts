@@ -141,7 +141,7 @@ function appendQuery(params: URLSearchParams, key: string, value: unknown): void
 
 /** Builds `path?query`, substituting `{param}` placeholders. Exported for tests. */
 export function buildPath(path: string, pathParams?: Record<string, string>, query?: QueryParams): string {
-  const filled = path.replace(/\{([^}]+)\}/g, (_, name: string) => {
+  const filled = path.replace(/\{([^{}]+)\}/g, (_, name: string) => {
     const value = pathParams?.[name]
     if (value === undefined || value === '') throw new TypeError(`Missing path parameter "${name}" for ${path}`)
     return encodeURIComponent(value)

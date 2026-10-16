@@ -90,7 +90,7 @@ describe('LoopInstructionsEditor', () => {
     const expected: Record<string, string> = { ...mentionLabels, issue: 'TST-1 Test issue', user: '@Teammate', milestone: 'Alpha · Project one' }
     for (const kind of kinds) {
       const found = await chip(kind)
-      expect(found.textContent?.replace(/ /g, ' ').trim(), kind).toBe(expected[kind])
+      expect(found.textContent?.replace(/\u00a0/g, ' ').trim(), kind).toBe(expected[kind])
     }
     expect(document.querySelector('a[data-agent-entity="issue"] svg')).not.toBeNull()
     expect(screen.getByRole('document', { name: 'Instructions' }).querySelector('ul li')).toHaveTextContent('Ping the owner')

@@ -1620,15 +1620,6 @@ function Security(props: PersonalProps) {
           props.onOpenAPIKey
             ? (created, secret) => {
                 pendingAPIKeySecrets.set(created.id, secret);
-                try {
-                  window.sessionStorage.setItem(
-                    `flow.api-key-secret:${created.id}`,
-                    secret,
-                  );
-                } catch {
-                  // The detail page still renders the created metadata when
-                  // session storage is unavailable.
-                }
                 props.onOpenAPIKey?.(created);
               }
             : undefined
@@ -3338,21 +3329,10 @@ function APIKeyDetailPage({
   const [revokeOpen, setRevokeOpen] = useState(false);
   const [newlyCreatedSecret, setNewlyCreatedSecret] = useState("");
   useEffect(() => {
-    try {
-      const key =
-        pendingAPIKeySecrets.get(apiKey.id) ??
-        window.sessionStorage.getItem(`flow.api-key-secret:${apiKey.id}`);
-      if (key) {
-        setNewlyCreatedSecret(key);
-        pendingAPIKeySecrets.delete(apiKey.id);
-        window.sessionStorage.removeItem(`flow.api-key-secret:${apiKey.id}`);
-      }
-    } catch {
-      const key = pendingAPIKeySecrets.get(apiKey.id);
-      if (key) {
-        setNewlyCreatedSecret(key);
-        pendingAPIKeySecrets.delete(apiKey.id);
-      }
+    const key = pendingAPIKeySecrets.get(apiKey.id);
+    if (key) {
+      setNewlyCreatedSecret(key);
+      pendingAPIKeySecrets.delete(apiKey.id);
     }
   }, [apiKey.id]);
   const scopeList = current.scopes ?? [];

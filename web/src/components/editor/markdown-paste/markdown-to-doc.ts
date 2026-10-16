@@ -1,6 +1,7 @@
 import type { Editor, JSONContent } from '@tiptap/core'
 import type { Schema } from '@tiptap/pm/model'
 import { normalizeNewlines } from './markdown-detect'
+import { htmlText } from '@/lib/html-text'
 
 /**
  * Markdown -> ProseMirror JSON for the shared editor. The editor's own Markdown manager (`@tiptap/markdown`) does the
@@ -95,7 +96,7 @@ export function splitCollapsibles(source: string): Segment[] {
 }
 
 function plainTitle(value: string) {
-  return value.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim()
+  return htmlText(value).replace(/\s+/g, ' ').trim()
 }
 
 type Context = { schema: Schema; headingLevels: number[] }

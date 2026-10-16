@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { finishFigmaAuth } from './finish-figma-auth'
-import { FIGMA_OAUTH_STATE_KEY } from './figma-auth'
+import { FIGMA_OAUTH_STATE_KEY, writeFigmaOAuthState } from './figma-auth'
 import { request } from '@/lib/api-client'
 
 vi.mock('@/lib/api-client', () => ({ request: vi.fn() }))
@@ -17,7 +17,7 @@ describe('finishFigmaAuth', () => {
   })
 
   it('posts code/state to REST finish and clears storage', async () => {
-    sessionStorage.setItem(FIGMA_OAUTH_STATE_KEY, JSON.stringify({ key: 'k', urlKey: 'acme' }))
+    await writeFigmaOAuthState({ key: 'k', urlKey: 'acme' })
     vi.mocked(request).mockResolvedValue({ provider: 'figma', connectionId: 'c1', status: 'connected' })
     const state = encodeURIComponent(JSON.stringify({ key: 'k', urlKey: 'acme' }))
     const result = await finishFigmaAuth(`?code=auth-code&state=${state}`)
@@ -30,7 +30,7 @@ describe('finishFigmaAuth', () => {
   })
 
   it('rejects mismatched stored state', async () => {
-    sessionStorage.setItem(FIGMA_OAUTH_STATE_KEY, JSON.stringify({ key: 'a', urlKey: 'acme' }))
+    await writeFigmaOAuthState({ key: 'a', urlKey: 'acme' })
     const state = encodeURIComponent(JSON.stringify({ key: 'b', urlKey: 'acme' }))
     const result = await finishFigmaAuth(`?code=auth-code&state=${state}`)
     expect(result.ok).toBe(false)

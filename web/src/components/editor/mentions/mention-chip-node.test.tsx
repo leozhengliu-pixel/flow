@@ -60,7 +60,7 @@ describe('mention chips in rich text', () => {
     const expected: Record<string, string> = { ...mentionLabels, issue: 'TST-1 Test issue', user: '@Viewer', milestone: 'Alpha · Project one' }
     for (const kind of kinds) {
       const found = await chip(kind)
-      expect(found.textContent?.replace(/ /g, ' ').trim(), kind).toBe(expected[kind])
+      expect(found.textContent?.replace(/\u00a0/g, ' ').trim(), kind).toBe(expected[kind])
       expect(found.getAttribute('href'), kind).toBe(kind === 'user' ? '/workspace/profiles/viewer' : mentionUrls[kind])
     }
     expect(document.querySelector('a[data-agent-entity="issue"] svg')).not.toBeNull()

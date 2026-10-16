@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -477,7 +478,8 @@ func rewriteUploadURLs(body, key []byte, baseURL string, expires time.Time) []by
 	}
 	body = uploadURLValue.ReplaceAllFunc(body, func(match []byte) []byte {
 		parts := uploadURLValue.FindSubmatch(match)
-		return []byte(`"` + sign(string(parts[2])) + `"`)
+		encoded, _ := json.Marshal(sign(string(parts[2])))
+		return encoded
 	})
 	// Markdown and text occurrences. Upload *routes* (/api/files/uploads/,
 	// /api/mcp/uploads/) are not downloads and stay unchanged.
@@ -490,7 +492,8 @@ func rewriteUploadURLs(body, key []byte, baseURL string, expires time.Time) []by
 			continue
 		}
 		output.Write(body[last:start])
-		output.WriteString(sign(string(body[match[2]:match[3]])))
+		encoded, _ := json.Marshal(sign(string(body[match[2]:match[3]])))
+		output.Write(encoded[1 : len(encoded)-1])
 		last = end
 	}
 	output.Write(body[last:])

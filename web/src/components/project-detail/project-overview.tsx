@@ -19,6 +19,7 @@ import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { ProjectDatePicker } from '@/components/projects-page/project-target-date-picker'
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { useI18n } from '@/i18n/i18n'
+import { htmlText } from '@/lib/html-text'
 import { viewerCanInvite } from '@/lib/invite-navigation'
 import type { ProjectMutationInput } from '@/components/projects-page/projects-page'
 import type { BootstrapData, FlowDocument, Issue, Project, ProjectResource, Team } from '@/types/flow'
@@ -253,7 +254,7 @@ function projectOutline(description: string, milestones: Array<{ id: string; nam
   // Descriptions stored as HTML list their H1–H4 elements too.
   if (!headings.length && /<h[1-4][\s>]/i.test(description ?? '')) {
     for (const match of (description ?? '').matchAll(/<h([1-4])[^>]*>([\s\S]*?)<\/h\1>/gi)) {
-      const text = match[2].replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim()
+      const text = htmlText(match[2]).trim()
       if (text) headings.push(text)
     }
   }
