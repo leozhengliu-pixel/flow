@@ -94,14 +94,16 @@ func TestLegacyLoopsReadInCurrentShape(t *testing.T) {
 }
 
 func TestLoopRunTurnLimitEndsWithSummaryAndRecordsProgress(t *testing.T) {
+	const maxToolTurns = 4
 	replies := []string{`tool:report_progress {"title":"Reviewing issues","message":"I'll check every team."}`}
-	for len(replies) < loopMaxToolTurns {
+	for len(replies) < maxToolTurns {
 		replies = append(replies, "tool:list_teams {}")
 	}
 	replies = append(replies, "Checked every team; nothing needed changes.")
 	provider := &fakeLoopProvider{replies: replies}
 	var seen domain.LoopRun
-	_, handler := newLoopTestServer(t, provider)
+	srv, handler := newLoopTestServer(t, provider)
+	setLoopLimits(srv, func(limits *loopRunLimits) { limits.MaxTurns = maxToolTurns })
 	loop := requestJSON[domain.Loop](t, handler, http.MethodPost, "/api/loops", map[string]any{"name": "Busy", "instructions": "Check every team.", "status": "published"}, http.StatusCreated)
 	provider.wait = func(n int) {
 		if n == 3 {
@@ -114,14 +116,14 @@ func TestLoopRunTurnLimitEndsWithSummaryAndRecordsProgress(t *testing.T) {
 	if run.TriggerLabel != "Manual run" {
 		t.Fatalf("trigger label = %q", run.TriggerLabel)
 	}
-	finished := waitForLoopRun(t, handler, loop.ID)
+	finished := waitForRun(t, handler, loop.ID, run.ID)
 	if finished.Status != "completed" || finished.Output != "Checked every team; nothing needed changes." {
 		t.Fatalf("finished = %#v", finished)
 	}
 	if len(finished.Steps) != 1 || finished.Steps[0].Title != "Reviewing issues" || finished.Steps[0].Message == "" || finished.Steps[0].Order != 1 {
 		t.Fatalf("steps = %#v", finished.Steps)
 	}
-	if len(finished.ToolCalls) != loopMaxToolTurns-1 || finished.ToolCalls[0].Name != "list_teams" || finished.ToolCalls[0].Label != "Listed teams" || finished.ToolCalls[0].Order != 2 || finished.ToolCalls[0].FinishedAt == nil {
+	if len(finished.ToolCalls) != maxToolTurns-1 || finished.ToolCalls[0].Name != "list_teams" || finished.ToolCalls[0].Label != "Listed teams" || finished.ToolCalls[0].Order != 2 || finished.ToolCalls[0].FinishedAt == nil {
 		t.Fatalf("tool calls = %d %#v", len(finished.ToolCalls), finished.ToolCalls[0])
 	}
 	if seen.Status != "running" || len(seen.Steps) != 1 || len(seen.ToolCalls) < 2 {
@@ -134,7 +136,7 @@ func TestLoopRunTurnLimitEndsWithSummaryAndRecordsProgress(t *testing.T) {
 	provider.mu.Lock()
 	defer provider.mu.Unlock()
 	last := len(provider.tools) - 1
-	if last != loopMaxToolTurns || len(provider.tools[last]) != 0 || !strings.Contains(provider.inputs[last], "Do not call any more tools") {
+	if last != maxToolTurns || len(provider.tools[last]) != 0 || !strings.Contains(provider.inputs[last], "Do not call any more tools") {
 		t.Fatalf("final turn: requests=%d tools=%v", last+1, provider.tools[last])
 	}
 }

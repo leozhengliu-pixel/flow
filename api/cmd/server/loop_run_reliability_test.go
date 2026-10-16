@@ -38,7 +38,7 @@ func setLoopLimits(srv *server, change func(*loopRunLimits)) {
 	srv.loopRunLimits.Store(&limits)
 }
 
-// waitForRun polls a run until it (and any reply on it) stopped running.
+// waitForRun waits for terminal state and runner cleanup so the loop can be started again.
 func waitForRun(t *testing.T, handler http.Handler, loopID, runID string) domain.LoopRun {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -48,6 +48,10 @@ func waitForRun(t *testing.T, handler http.Handler, loopID, runID string) domain
 		for _, reply := range run.Replies {
 			busy = busy || reply.Status == "running"
 		}
+		// The terminal row is saved before the runner's deferred guard release.
+		loopGuards.mu.Lock()
+		busy = busy || loopGuards.inFlight[loopID+"|"+run.EntityID] || loopGuards.inFlight["reply|"+runID]
+		loopGuards.mu.Unlock()
 		if !busy {
 			return run
 		}
@@ -55,6 +59,31 @@ func waitForRun(t *testing.T, handler http.Handler, loopID, runID string) domain
 	}
 	t.Fatal("loop run did not finish")
 	return domain.LoopRun{}
+}
+
+// startNextRun starts another run of the loop. The previous run's status turns
+// final a moment before its goroutine releases the loop's run guard, so a start
+// right after waitForRun can briefly get 409 "already running".
+func startNextRun(t *testing.T, handler http.Handler, loopID string) domain.LoopRun {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		req := httptest.NewRequest(http.MethodPost, "/api/loops/"+loopID+"/runs", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code == http.StatusConflict && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		if rec.Code != http.StatusAccepted {
+			t.Fatalf("POST /api/loops/%s/runs status %d, want 202: %s", loopID, rec.Code, rec.Body.String())
+		}
+		var run domain.LoopRun
+		if err := json.NewDecoder(rec.Body).Decode(&run); err != nil {
+			t.Fatal(err)
+		}
+		return run
+	}
 }
 
 func startTestRun(t *testing.T, handler http.Handler, name, instructions string, extra map[string]any) (domain.Loop, domain.LoopRun) {
@@ -161,7 +190,7 @@ func TestLoopRunAcceptance(t *testing.T) {
 	}
 
 	provider.replies = []string{`tool:save_status_update {"type":"project","project":"missing-project","body":"x"}`, `tool:finish_run {"status":"done","summary":"Posted."}`}
-	started = requestJSON[domain.LoopRun](t, handler, http.MethodPost, "/api/loops/"+loop.ID+"/runs", nil, http.StatusAccepted)
+	started = startNextRun(t, handler, loop.ID)
 	run = waitForRun(t, handler, loop.ID, started.ID)
 	if run.Status != "needs_review" || run.FailureReason != "tool_error" || !strings.Contains(run.Error, "Posted status update failed") {
 		t.Fatalf("run whose update failed = %+v", run)
@@ -385,7 +414,7 @@ func TestLoopRunFailureReasonsAndRetries(t *testing.T) {
 	}
 	// They stop after the retry budget, with an explicit reason.
 	provider.replies = []string{"status:503", "status:503", "status:503", "never reached"}
-	started = requestJSON[domain.LoopRun](t, handler, http.MethodPost, "/api/loops/"+loop.ID+"/runs", nil, http.StatusAccepted)
+	started = startNextRun(t, handler, loop.ID)
 	run = waitForRun(t, handler, loop.ID, started.ID)
 	if run.Status != "failed" || run.FailureReason != "provider_error" || run.Retries != 2 || !strings.Contains(run.Error, "503") {
 		t.Fatalf("exhausted retries = %+v", run)
@@ -394,7 +423,7 @@ func TestLoopRunFailureReasonsAndRetries(t *testing.T) {
 	provider.mu.Lock()
 	provider.replies, provider.inputs = []string{"status:400", "never reached"}, nil
 	provider.mu.Unlock()
-	started = requestJSON[domain.LoopRun](t, handler, http.MethodPost, "/api/loops/"+loop.ID+"/runs", nil, http.StatusAccepted)
+	started = startNextRun(t, handler, loop.ID)
 	run = waitForRun(t, handler, loop.ID, started.ID)
 	provider.mu.Lock()
 	requests := len(provider.inputs)
@@ -404,14 +433,14 @@ func TestLoopRunFailureReasonsAndRetries(t *testing.T) {
 	}
 	// An empty answer is its own failure.
 	provider.replies = []string{""}
-	started = requestJSON[domain.LoopRun](t, handler, http.MethodPost, "/api/loops/"+loop.ID+"/runs", nil, http.StatusAccepted)
+	started = startNextRun(t, handler, loop.ID)
 	if run = waitForRun(t, handler, loop.ID, started.ID); run.Status != "failed" || run.FailureReason != "empty_response" {
 		t.Fatalf("empty answer = %+v", run)
 	}
 	// The wall-clock budget ends a run that takes too long.
 	setLoopLimits(srv, func(l *loopRunLimits) { l.Timeout = 150 * time.Millisecond })
 	provider.replies = []string{"block"}
-	started = requestJSON[domain.LoopRun](t, handler, http.MethodPost, "/api/loops/"+loop.ID+"/runs", nil, http.StatusAccepted)
+	started = startNextRun(t, handler, loop.ID)
 	if run = waitForRun(t, handler, loop.ID, started.ID); run.Status != "failed" || run.FailureReason != "timeout" || !strings.Contains(run.Error, "time limit") {
 		t.Fatalf("timed out run = %+v", run)
 	}
@@ -505,7 +534,7 @@ func TestLoopRunBudgets(t *testing.T) {
 	provider.mu.Lock()
 	provider.replies, provider.inputs = []string{`tool:list_teams {}`, "Done."}, nil
 	provider.mu.Unlock()
-	started = requestJSON[domain.LoopRun](t, handler, http.MethodPost, "/api/loops/"+loop.ID+"/runs", nil, http.StatusAccepted)
+	started = startNextRun(t, handler, loop.ID)
 	waitForRun(t, handler, loop.ID, started.ID)
 	provider.mu.Lock()
 	second := provider.inputs[1]
@@ -517,7 +546,7 @@ func TestLoopRunBudgets(t *testing.T) {
 
 	// Context budget.
 	setLoopLimits(srv, func(l *loopRunLimits) { l.MaxContextBytes = 64 })
-	started = requestJSON[domain.LoopRun](t, handler, http.MethodPost, "/api/loops/"+loop.ID+"/runs", nil, http.StatusAccepted)
+	started = startNextRun(t, handler, loop.ID)
 	if run = waitForRun(t, handler, loop.ID, started.ID); run.Status != "failed" || run.FailureReason != "budget_exhausted" || !strings.Contains(run.Error, "context budget") {
 		t.Fatalf("context budget = %+v", run)
 	}
