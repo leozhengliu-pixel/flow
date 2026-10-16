@@ -12,6 +12,7 @@ Complete-source CodeQL validation on PR #124: JavaScript 15 -> 0, Go 20 -> 8. Al
 | 16, 17 | Server-issued Figma state stays server-side; legacy client state stores only a SHA-256 fingerprint for comparison. |
 | 18, 19, 20 | Restrict mobile handoff to the Flow scheme, validate the Figma authorization origin and path, and use router navigation for internal destinations. |
 | 22, 23, 47, 49, 50, 51 | Sanitize clipboard HTML with DOMPurify, extract text with a parser, decode entities once, and restrict canonical image sources to HTTP(S). |
+| — | Follow-up: Markdown snippets (`markdownPlainText`) strip inline tags with a regex repeated until stable, not the HTML parser. Parsing Markdown as HTML dropped everything after a bare `<` (`if a<b` → `if a`); the snippet is only rendered as text. |
 | 45, 46 | Normalize non-breaking spaces in assertions instead of replacing spaces with themselves. |
 | 53–59 | JSON-encode signed URLs before inserting them into JSON strings, including Markdown string values. This escapes quotes, backslashes and HTML delimiters while preserving decoded URL values. |
 | 60 | Build the webhook body with append operations rather than adding an unchecked length to an allocation capacity. |
