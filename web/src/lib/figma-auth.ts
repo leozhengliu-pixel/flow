@@ -36,8 +36,13 @@ export function readFigmaOAuthState(storage: Storage = sessionStorage): FigmaOAu
   }
 }
 
-export function writeFigmaOAuthState(state: FigmaOAuthState, storage: Storage = sessionStorage): void {
-  storage.setItem(FIGMA_OAUTH_STATE_KEY, JSON.stringify(state))
+export async function figmaStateFingerprint(key: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key))
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
+export async function writeFigmaOAuthState(state: FigmaOAuthState, storage: Storage = sessionStorage): Promise<void> {
+  storage.setItem(FIGMA_OAUTH_STATE_KEY, JSON.stringify({ key: await figmaStateFingerprint(state.key), urlKey: state.urlKey }))
 }
 
 export function clearFigmaOAuthState(storage: Storage = sessionStorage): void {

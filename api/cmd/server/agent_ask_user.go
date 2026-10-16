@@ -194,7 +194,7 @@ func partialJSONStringField(raw []byte, key string) string {
 			if index+6 > len(raw) {
 				return out.String()
 			}
-			code, err := strconv.ParseUint(string(raw[index+2:index+6]), 16, 32)
+			code, err := strconv.ParseUint(string(raw[index+2:index+6]), 16, 16)
 			if err != nil {
 				return out.String()
 			}
@@ -203,7 +203,7 @@ func partialJSONStringField(raw []byte, key string) string {
 				if index+6 > len(raw) {
 					return out.String()
 				}
-				low, err := strconv.ParseUint(string(raw[index+2:index+6]), 16, 32)
+				low, err := strconv.ParseUint(string(raw[index+2:index+6]), 16, 16)
 				if err != nil || raw[index] != '\\' || raw[index+1] != 'u' {
 					return out.String()
 				}

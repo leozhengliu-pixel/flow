@@ -199,3 +199,17 @@ func TestSMTPMailerRejectsHeaderInjectionBeforeConnecting(t *testing.T) {
 		t.Fatal("subject header injection was accepted")
 	}
 }
+
+func TestSMTPMailerKeepsUntrustedContentInsideMIMEBody(t *testing.T) {
+	mailer := &smtpMailer{from: "flow@example.test"}
+	for _, body := range []string{"hello\r\nBcc: attacker@example.test\r\n\r\ninjected", "hello\r\n.\r\nMAIL FROM:<attacker@example.test>"} {
+		raw, err := mailer.compose(mailMessage{To: "victim@example.test", Subject: "Notice", Text: body})
+		if err != nil {
+			t.Fatal(err)
+		}
+		email := parseComposedMail(t, raw)
+		if email.header.Get("Bcc") != "" || email.header.Get("To") != "victim@example.test" || email.text != body {
+			t.Fatalf("body escaped MIME boundaries: %#v", email)
+		}
+	}
+}

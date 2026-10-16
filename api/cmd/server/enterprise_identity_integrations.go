@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"slices"
@@ -20,6 +21,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
+	"flow/api/internal/websearch"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
@@ -927,8 +929,8 @@ func safeOutboundHTTPS(ctx context.Context, raw string) bool {
 		return false
 	}
 	for _, item := range ips {
-		ip := item.IP
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+		ip, ok := netip.AddrFromSlice(item.IP)
+		if !ok || !websearch.PublicAddr(ip) {
 			return false
 		}
 	}
@@ -950,6 +952,8 @@ func safeLocalDevelopmentURL(raw string) bool {
 func secureOutboundClient(timeout time.Duration) *http.Client {
 	dialer := &net.Dialer{Timeout: 3 * time.Second, KeepAlive: 30 * time.Second}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
+	// Environment proxies resolve destinations themselves and bypass our DNS/IP checks.
+	transport.Proxy = nil
 	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(address)
 		if err != nil {
@@ -960,8 +964,8 @@ func secureOutboundClient(timeout time.Duration) *http.Client {
 			return nil, err
 		}
 		for _, entry := range ips {
-			ip := entry.IP
-			if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+			ip, ok := netip.AddrFromSlice(entry.IP)
+			if !ok || !websearch.PublicAddr(ip) {
 				continue
 			}
 			return dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
