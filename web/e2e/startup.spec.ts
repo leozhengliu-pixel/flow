@@ -41,7 +41,8 @@ for (const theme of ['light', 'dark'] as const) {
           const content = element.querySelector('.flow-startup__content')!.getBoundingClientRect()
           return { mark: mark.width, width: content.width, height: content.height, x: content.x + content.width / 2, y: content.y + content.height / 2, viewportX: innerWidth / 2, viewportY: innerHeight / 2, overflow: document.documentElement.scrollWidth > innerWidth }
         })
-        expect(geometry.mark).toBe(32)
+        // The Flow mark (e5e313e3) is drawn at 26px inside the 64px startup tile.
+        expect(geometry.mark).toBe(26)
         expect(geometry.width).toBe(64)
         expect(geometry.height).toBe(64)
         expect(geometry.x).toBeCloseTo(geometry.viewportX, 0)

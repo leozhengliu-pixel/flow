@@ -71,12 +71,13 @@ test('streams Agent reasoning, tools, and text into the conversation', async ({ 
   await expect(editor).toHaveAttribute('contenteditable', 'true')
   await editor.fill('Review the workspace')
   await page.getByRole('button', { name: 'Submit comment' }).click()
-  const workGroup = page.locator('details').filter({ has: page.locator('div[class*="workItems"]') }).first()
-  await workGroup.locator(':scope > summary').click()
-  await workGroup.locator('details > summary').filter({ hasText: /^Looked at issues$/ }).click()
-  await expect(page.getByText('Looked at issues')).toBeVisible()
-  await expect(page.getByText('Reviewed workspace context.')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Result' })).toBeVisible()
+  // Tool calls are flat rows inside the "Worked for N seconds" group, which may
+  // already be open; provider reasoning stays hidden (agent-work-group.tsx).
+  const workGroup = page.locator('details').filter({ has: page.locator('div[class*="workItems"]') }).first()
+  if (await workGroup.getAttribute('open') === null) await workGroup.locator(':scope > summary').click()
+  await expect(workGroup.locator('div[class*="toolCallRow"]').filter({ hasText: /^Looked at issues/ })).toBeVisible()
+  await expect(page.getByText('Reviewed workspace context.')).toHaveCount(0)
   await expect(page.getByText('Streaming').last()).toHaveCSS('font-weight', /600|700/)
   await expect(page.getByText('Verified').last()).toHaveCSS('font-family', /mono/i)
   await expect(page).toHaveURL(new RegExp(`/${workspaceKey}/agent/.+`))
