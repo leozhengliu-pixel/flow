@@ -1,4 +1,5 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react'
+import { reloadForStaleChunk } from './stale-chunk-reload'
 
 /** Share the module request between navigation and speculative preloading. */
 export function lazyPage<Module, Name extends keyof Module>(
@@ -15,6 +16,7 @@ export function lazyPage<Module, Name extends keyof Module>(
     return { default: component as ComponentType<any> }
   })().catch(error => {
     pending = undefined
+    reloadForStaleChunk(error)
     throw error
   })
   return Object.assign(lazy(load), { preload: () => load().then(() => undefined) }) as never
