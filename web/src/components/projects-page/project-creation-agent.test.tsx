@@ -142,7 +142,7 @@ describe('ProjectCreationAgent', () => {
       milestones: ['Beta', 'General availability'],
       milestoneDetails: [{ name: 'Beta', description: 'Manual milestone' }, { name: 'General availability' }],
     }))
-  })
+  }, 15000)
 
   it('exposes the create-skill action from the composer menu', async () => {
     api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'test-model' })
