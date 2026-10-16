@@ -468,11 +468,15 @@ the work asynchronously.
 ```
 
 - `promptContext` is a ready-to-use prompt: the issue (title, description,
-  team, labels, parent, project), the thread that started the session
+  team, labels, parent, project), or for a session started in a document or
+  project discussion the `<document>` (title, content) or `<project>` (name,
+  description); then the thread that started the session
   (`primary-directive-thread`), other recent threads (`other-thread`) and the
   guidance rules. All text is XML-escaped.
-- `previousComments` are the earlier comments of the triggering thread (empty
-  for delegation).
+- `previousComments` are the earlier comments of the triggering thread, on
+  issues, documents and projects alike (empty for delegation).
+- `agentSession.comment` is the comment that started the session, with its
+  `parentId` (the thread root) when it is a reply.
 - `guidance` lists the agent guidance that applies to the session, least
   specific first: the workspace's (**Settings › Agents › Additional
   guidance**, `origin: "workspace"`), then the guidance of the session team's

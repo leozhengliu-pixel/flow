@@ -20,8 +20,11 @@ const teamForm = template({ id: 'form', name: 'Support request', scope: undefine
   { id: 'f-title', type: 'title', label: 'Title', required: true },
 ] })
 
-/** Lets the composer finish focusing its title editor (it would close a menu opened before that). */
-const settle = () => act(() => new Promise(resolve => setTimeout(resolve, 100)))
+/** Wait for editor initialization and drain the composer's queued focus frames before opening a menu. */
+const settle = async () => {
+  await waitFor(() => expect(screen.getByLabelText('Issue title')).toHaveFocus())
+  await act(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+}
 
 function mount(templates: IssueTemplate[]) {
   const data = makeBootstrap({ issueTemplates: templates, teamSettings: {}, cycleSettings: {}, teamMembers: [] } as unknown as Partial<BootstrapData>)

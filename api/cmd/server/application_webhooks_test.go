@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -317,4 +318,72 @@ func TestAgentSessionExternalURLsPlanEphemeralAndProactiveSessions(t *testing.T)
 		t.Fatalf("session on comment: %#v", onComment)
 	}
 	appRequest("POST", "/api/agent-tasks", map[string]any{"issueId": other.ID, "commentId": comment.ID}, http.StatusBadRequest)
+}
+
+// Sessions started from a document or project comment carry that discussion
+// like issue sessions do: the trigger comment, the earlier replies of its
+// thread and the resource itself are in the event, so the agent sees what the
+// person is replying to.
+func TestAgentSessionEventsCarryDocumentAndProjectThreads(t *testing.T) {
+	s, handler, seed, _ := webhookTestServer(t)
+	receiver := newWebhookReceiver(t, http.StatusOK)
+	app, _ := installableApplication(t, handler, receiver.server.URL, []string{"AgentSessionEvent"})
+	teamIDs := []string{}
+	for _, team := range seed.Teams {
+		teamIDs = append(teamIDs, team.ID)
+	}
+	installed := requestJSON[struct {
+		Application domain.ApplicationInstallation `json:"application"`
+	}](t, handler, http.MethodPost, "/api/application-installations?workspace=test-workspace", map[string]any{
+		"clientId": app.ClientID, "teamIds": teamIDs, "scopes": []string{"read", "write", "app:assignable", "app:mentionable"}, "active": true,
+	}, http.StatusOK).Application
+	s.reconcileApplicationWebhooks(context.Background(), "test-workspace")
+	mention := func(parentID string) map[string]any {
+		body := map[string]any{"body": "@Deploy bot please test the refund flow", "bodyData": map[string]any{"type": "doc", "content": []any{map[string]any{"type": "paragraph", "content": []any{map[string]any{"type": "mention", "attrs": map[string]any{"id": installed.UserID, "label": "Deploy bot"}}}}}}}
+		if parentID != "" {
+			body["parentId"] = parentID
+		}
+		return body
+	}
+	deliver := func(resource string) map[string]any {
+		t.Helper()
+		tasks, err := s.store.ListAgentTasks(context.Background(), "test-workspace", resource, installed.UserID)
+		if err != nil || len(tasks) != 1 {
+			t.Fatalf("mention session on %s: %v %v", resource, tasks, err)
+		}
+		s.deliverApplicationTask(context.Background(), tasks[0])
+		event, _ := receiver.waitFor(t, func(envelope map[string]any, _ http.Header) bool {
+			session, _ := envelope["agentSession"].(map[string]any)
+			return envelope["type"] == "AgentSessionEvent" && session["id"] == tasks[0].ID
+		})
+		return event
+	}
+	assertThread := func(event map[string]any, rootID string, fragments ...string) {
+		t.Helper()
+		session, _ := event["agentSession"].(map[string]any)
+		comment, _ := session["comment"].(map[string]any)
+		if comment == nil || comment["parentId"] != rootID {
+			t.Fatalf("trigger comment: %#v", session["comment"])
+		}
+		previous, _ := event["previousComments"].([]any)
+		if len(previous) != 1 || previous[0].(map[string]any)["id"] != rootID {
+			t.Fatalf("previousComments: %#v", event["previousComments"])
+		}
+		promptContext, _ := event["promptContext"].(string)
+		for _, fragment := range append(fragments, `<primary-directive-thread comment-id="`+rootID+`">`, "Refunds go back to the card", "please test the refund flow") {
+			if !strings.Contains(promptContext, fragment) {
+				t.Fatalf("promptContext missing %q:\n%s", fragment, promptContext)
+			}
+		}
+	}
+
+	doc := requestJSON[domain.Document](t, handler, http.MethodPost, "/api/documents?workspace=test-workspace", map[string]any{"title": "Refund <design>", "content": "Refunds & chargebacks", "teamIds": []string{seed.Teams[0].ID}}, http.StatusCreated)
+	root := requestJSON[domain.Comment](t, handler, http.MethodPost, "/api/documents/"+doc.ID+"/comments?workspace=test-workspace", map[string]any{"body": "Refunds go back to the card"}, http.StatusCreated)
+	requestJSON[domain.Comment](t, handler, http.MethodPost, "/api/documents/"+doc.ID+"/comments?workspace=test-workspace", mention(root.ID), http.StatusCreated)
+	assertThread(deliver(doc.ID), root.ID, `<document id="`+doc.ID+`">`, "<title>Refund &lt;design&gt;</title>", "<content>Refunds &amp; chargebacks</content>")
+
+	project := seed.Projects[0]
+	root = requestJSON[domain.Comment](t, handler, http.MethodPost, "/api/projects/"+project.ID+"/comments?workspace=test-workspace", map[string]any{"body": "Refunds go back to the card"}, http.StatusCreated)
+	requestJSON[domain.Comment](t, handler, http.MethodPost, "/api/projects/"+project.ID+"/comments?workspace=test-workspace", mention(root.ID), http.StatusCreated)
+	assertThread(deliver(project.ID), root.ID, `<project id="`+project.ID+`">`, "<name>"+html.EscapeString(project.Name)+"</name>")
 }

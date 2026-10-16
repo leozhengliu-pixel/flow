@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BootstrapData, Issue, User } from '@/types/flow'
@@ -13,7 +13,10 @@ import { makeBootstrap, makeIssue, teammate, viewer } from '@/test/fixtures'
 import { CreateIssueDialog } from './create-issue-dialog'
 
 const flow = { id: 'app_flow', name: 'Flow', displayName: 'Flow', avatarUrl: BUILTIN_AGENT_AVATAR_URL, email: '', active: true, app: true, builtinAgent: true, appScopes: ['read', 'app:assignable'], appTeamIds: ['team-1'] } as User
-const settle = () => act(() => new Promise(resolve => setTimeout(resolve, 100)))
+const settle = async () => {
+  await waitFor(() => expect(screen.getByLabelText('Issue title')).toHaveFocus())
+  await act(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+}
 
 beforeEach(() => {
   localStorage.clear()

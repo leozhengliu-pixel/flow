@@ -14,6 +14,8 @@ import { projectUpdateChanges } from './project-update-changes'
 const apiMocks = vi.hoisted(() => ({
   listProjectHistory: vi.fn(async () => ({ nodes: [] as unknown[], nextCursor: '', total: 0 })),
   deleteDraft: vi.fn(async () => undefined),
+  createDraft: vi.fn(async () => ({ id: 'draft-saved', updatedAt: '2026-09-27T12:00:00.000Z' })),
+  updateDraft: vi.fn(async (id: string) => ({ id, updatedAt: '2026-09-27T12:00:00.000Z' })),
   fetchIssueRecord: vi.fn(),
   listProjectRecords: vi.fn(),
   listIssueRecords: vi.fn(async () => ({ items: [], hasMore: false, total: 0 })),

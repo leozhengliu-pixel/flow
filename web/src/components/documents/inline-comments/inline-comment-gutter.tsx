@@ -297,7 +297,8 @@ export function InlineCommentGutter({ comments, viewer, users, editor, shell, dr
     const focus = () => {
       const target = element.querySelector<HTMLElement>('[contenteditable="true"]')
       if (target) target.focus()
-      else if (Date.now() - started < 3000) window.setTimeout(focus, 30)
+      // Stop once the composer has closed: nothing is left to focus.
+      else if (element.isConnected && Date.now() - started < 3000) window.setTimeout(focus, 30)
     }
     focus()
   }, [])
