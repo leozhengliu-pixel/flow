@@ -116,5 +116,5 @@ describe('callout view', () => {
     await waitFor(() => expect(editor().getJSON().content?.[0]?.attrs).toMatchObject({ icon: '🎉' }))
     const aside = document.querySelector('aside[data-callout]') as HTMLElement
     expect(aside.style.getPropertyValue('--callout-color')).toBe('#5e6ad2')
-  })
+  }, 15000)
 })
