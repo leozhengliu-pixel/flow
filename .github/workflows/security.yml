@@ -8,6 +8,7 @@ on:
   schedule:
     - cron: '17 3 * * 1'
   workflow_dispatch:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -59,6 +60,8 @@ jobs:
 
   codeql:
     name: CodeQL (${{ matrix.language }})
+    env:
+      CODEQL_ACTION_DIFF_INFORMED_QUERIES: 'false'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

@@ -3,6 +3,8 @@
  * accompanying text/html is merely a plain-text wrapper (VS Code, terminals, plain editors) rather than a rendered page.
  */
 
+import DOMPurify from 'dompurify'
+
 const FENCE = /^\s{0,3}(`{3,}|~{3,})/
 const HEADING = /^\s{0,3}#{1,6}[ \t]+\S/
 const TASK = /^\s*[-*+][ \t]+\[[ xX]\][ \t]+\S/
@@ -84,7 +86,7 @@ export function isPlainTextWrapperHtml(html: string) {
   if (!html.trim()) return true
   if (/data-pm-slice|data-flow-/i.test(html)) return false
   try {
-    const document = new DOMParser().parseFromString(html, 'text/html')
+    const document = new DOMParser().parseFromString(DOMPurify.sanitize(html), 'text/html')
     for (const element of document.body.querySelectorAll('*')) {
       if (STRUCTURAL_TAGS.has(element.tagName.toLowerCase())) return false
     }

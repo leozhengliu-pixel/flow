@@ -1,11 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { startIntegrationOAuth } from '@/lib/api'
-import {
-  FIGMA_OAUTH_STATE_KEY,
-  writeFigmaOAuthState,
-} from '@/lib/figma-auth'
 import { OAuthCompleteShell } from './complete-oauth-view'
 
 import './complete-oauth-views.css'
@@ -17,6 +13,7 @@ import { GridLoader } from '@/components/ui/grid-loader'
  */
 export function AuthDesktopRedirectFigma() {
   const location = useLocation()
+  const navigate = useNavigate()
   const params = useMemo(() => new URLSearchParams(location.search), [location.search])
   const workspace = params.get('workspace')?.trim() ?? params.get('urlKey')?.trim() ?? ''
   const [message, setMessage] = useState('Signing in…')
@@ -30,13 +27,12 @@ export function AuthDesktopRedirectFigma() {
         // Prefer server oauth/start so state is single-use and credentials stay server-side.
         const started = await startIntegrationOAuth('figma')
         if (!active) return
-        if (workspace) {
-          writeFigmaOAuthState({ key: started.state, urlKey: workspace })
-        } else {
-          sessionStorage.setItem(FIGMA_OAUTH_STATE_KEY, JSON.stringify({ key: started.state, urlKey: 'workspace' }))
+        const target = new URL(started.authorizationURL)
+        if (target.origin !== 'https://www.figma.com' || target.pathname !== '/oauth' || target.username || target.password) {
+          throw new Error('Invalid Figma authorization URL')
         }
-        setAuthorizationURL(started.authorizationURL)
-        window.location.assign(started.authorizationURL)
+        setAuthorizationURL(target.href)
+        window.location.assign(target.href)
       } catch (err) {
         if (!active) return
         const text = err instanceof Error ? err.message : 'Figma OAuth is unavailable'
@@ -55,7 +51,7 @@ export function AuthDesktopRedirectFigma() {
       return
     }
     const target = workspace ? `/${encodeURIComponent(workspace)}/settings/integrations` : '/'
-    window.location.assign(target)
+    navigate(target)
   }
 
   return (

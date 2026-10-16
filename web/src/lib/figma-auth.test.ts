@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { figmaAuthUrl, parseFigmaCallbackState } from './figma-auth'
+import { FIGMA_OAUTH_STATE_KEY, figmaAuthUrl, parseFigmaCallbackState, writeFigmaOAuthState } from './figma-auth'
 
 describe('figmaAuthUrl', () => {
   it('builds Figma authorize URL with required scopes', () => {
@@ -17,6 +17,13 @@ describe('figmaAuthUrl', () => {
 })
 
 describe('parseFigmaCallbackState', () => {
+  it('stores only a fingerprint of the OAuth state', async () => {
+    await writeFigmaOAuthState({ key: 'sensitive-oauth-state', urlKey: 'acme' })
+    const stored = sessionStorage.getItem(FIGMA_OAUTH_STATE_KEY)!
+    expect(stored).not.toContain('sensitive-oauth-state')
+    expect(JSON.parse(stored).key).toMatch(/^[a-f0-9]{64}$/)
+    sessionStorage.removeItem(FIGMA_OAUTH_STATE_KEY)
+  })
   it('parses JSON state and ignores opaque server state', () => {
     expect(parseFigmaCallbackState('?state=' + encodeURIComponent(JSON.stringify({ key: 'k', urlKey: 'w' })))).toEqual({
       key: 'k',
