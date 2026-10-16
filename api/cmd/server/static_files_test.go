@@ -65,3 +65,30 @@ func TestStaticFilesServeTutorialClipsAndKeepDirectoriesAsRoutes(t *testing.T) {
 		}
 	}
 }
+
+func TestStaticFilesMissingAssetsAre404NotTheApp(t *testing.T) {
+	staticPath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(staticPath, "index.html"), []byte("<html><body>Flow</body></html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	handler := (&server{staticPath: staticPath}).withStaticFiles(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("static handler unexpectedly delegated to API")
+	}))
+
+	// A stale client asking for an old chunk hash must see the failure.
+	for _, path := range []string{"/assets/definitely-not-here-12345.js", "/assets/index-old.CSS", "/fonts/gone.woff2", "/favicon-old.svg", "/haier/agent/chunk.mjs"} {
+		missing := httptest.NewRecorder()
+		handler.ServeHTTP(missing, httptest.NewRequest(http.MethodGet, path, nil))
+		if missing.Code != http.StatusNotFound {
+			t.Fatalf("%s status=%d body=%q", path, missing.Code, missing.Body.String())
+		}
+	}
+	// Extensionless routes still open the app, even under a workspace keyed "assets".
+	for _, path := range []string{"/haier/agent", "/assets/issue/AST-1", "/fonts", "/acme/project/v1.2-release"} {
+		page := httptest.NewRecorder()
+		handler.ServeHTTP(page, httptest.NewRequest(http.MethodGet, path, nil))
+		if page.Code != http.StatusOK || page.Body.String() != "<html><body>Flow</body></html>" {
+			t.Fatalf("%s status=%d body=%q", path, page.Code, page.Body.String())
+		}
+	}
+}
