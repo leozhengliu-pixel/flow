@@ -9450,6 +9450,41 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/initiatives/{id}/comment-attachments": {
+      "post": {
+        "operationId": "post_initiatives_id_comment_attachments",
+        "tags": [
+          "initiatives"
+        ],
+        "summary": "POST /api/initiatives/{id}/comment-attachments",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/initiatives/{id}/comments": {
       "post": {
         "operationId": "post_initiatives_id_comments",
@@ -36895,6 +36930,12 @@
           "color": {
             "type": "string"
           },
+          "commentAttachments": {
+            "items": {
+              "$ref": "#/components/schemas/Attachment"
+            },
+            "type": "array"
+          },
           "comments": {
             "items": {
               "$ref": "#/components/schemas/Comment"
@@ -37322,6 +37363,12 @@
           },
           "color": {
             "type": "string"
+          },
+          "commentAttachments": {
+            "items": {
+              "$ref": "#/components/schemas/AttachmentPartial"
+            },
+            "type": "array"
           },
           "comments": {
             "items": {
