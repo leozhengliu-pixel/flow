@@ -28,7 +28,8 @@ import { clearEntityThreadDraft } from './entity-thread-draft'
 import styles from './agent-chat-panel.module.css'
 import { conversationDraftKeyFor } from './agent-drafts'
 import { useMarkAgentSessionRead } from './agent-read-state'
-import { AgentChatMenu, AgentRenamePalette, deleteAgentChat, useAgentChatHotkeys } from './agent-chat-actions'
+import { AgentChatMenu, AgentRenamePalette } from './agent-chat-actions'
+import { deleteAgentChat, useAgentChatHotkeys } from './agent-chat-commands'
 import { AgentSessionFeedbackDialog } from './agent-message-actions'
 
 /** The entity the user is looking at; attached to the first message of a new conversation. */
