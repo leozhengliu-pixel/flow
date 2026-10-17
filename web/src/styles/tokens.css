@@ -960,3 +960,5 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   --agent-composer-scrollbar-light: lch(64.94 1.25 282);
 }
 :root{--pulse-health-text-on-track:lch(60% 64.37 141.95)}
+:root{--sidebar-badge-dot:var(--theme-text-tertiary)}
+:root[data-theme="light"]{--sidebar-badge-dot:lch(62.33% 1.25 282)}

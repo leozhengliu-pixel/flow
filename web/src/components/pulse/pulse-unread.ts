@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { fetchPulseUnread } from '@/lib/api'
-import { pulsePath, pulseViewPath } from '@/lib/app-routes'
+import { pulsePath, pulseRootPath, pulseViewPath } from '@/lib/app-routes'
 import type { PulseFeedView, PulseUnread } from '@/types/flow'
 
 /**
@@ -90,12 +90,17 @@ export function writePulseLastTab(workspaceKey: string, tab: PulseTab) {
   } catch { /* in-memory only */ }
 }
 
-/** The reference app: unread → For me; otherwise the last used tab (default Recent). */
+/**
+ * The reference app's sidebar target: any unread item sends you to For me;
+ * otherwise, while you are already on Pulse, the bare /pulse path (which
+ * redirects to the last used tab); otherwise the last used tab (default Recent).
+ */
 export function pulseSidebarTarget(workspaceKey: string, unread: number): PulseTab {
   return unread > 0 ? 'following' : readPulseLastTab(workspaceKey)
 }
 
-export function pulseSidebarPath(workspaceKey: string, unread: number) {
+export function pulseSidebarPath(workspaceKey: string, unread: number, onPulse = false) {
+  if (unread <= 0 && onPulse) return pulseRootPath(workspaceKey)
   const target = pulseSidebarTarget(workspaceKey, unread)
   return target.startsWith('view:') ? pulseViewPath(workspaceKey, target.slice(5)) : pulsePath(workspaceKey, target as Exclude<PulseFeedView, 'created'>)
 }

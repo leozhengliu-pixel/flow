@@ -2597,6 +2597,7 @@ export const zhCN: Record<string, string> = {
   "Always show": "始终显示",
   "Don't show": "不显示",
   "Show when badged": "有徽标时显示",
+  Badge: "徽标",
   Count: "数量",
   Dot: "圆点",
   "Default badge style": "默认徽标样式",
