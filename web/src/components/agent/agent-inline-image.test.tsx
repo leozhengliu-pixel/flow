@@ -6,7 +6,8 @@ import { I18nProvider } from '@/i18n/i18n'
 const lightbox = vi.hoisted(() => ({ openLightbox: vi.fn(() => true) }))
 vi.mock('@/components/editor/lightbox-bridge', () => lightbox)
 
-import { AgentContentWithBlocks, splitAgentBlocks } from './agent-content-blocks'
+import { AgentContentWithBlocks } from './agent-content-blocks'
+import { splitAgentBlocks } from './agent-content-model'
 
 describe('inline blocks in agent messages', () => {
   it('splits a message into its text and images, in order', () => {

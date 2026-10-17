@@ -291,7 +291,7 @@
   scrollbar-width: thin;
   scrollbar-color: var(--theme-text-tertiary) transparent;
 }
-:global(:root[data-theme="light"]) .editorScroll { scrollbar-color: lch(64.94 1.25 282) transparent; }
+:global(:root[data-theme="light"]) .editorScroll { scrollbar-color: var(--agent-composer-scrollbar-light) transparent; }
 .editor:empty:before {
   content: attr(data-placeholder);
   color: var(--agent-composer-placeholder);

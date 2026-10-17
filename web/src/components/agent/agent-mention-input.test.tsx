@@ -6,7 +6,8 @@ import type { BootstrapData } from '@/types/flow'
 
 vi.mock('@/lib/api', () => ({ listIssueRecords: vi.fn(() => new Promise(() => undefined)) }))
 
-import { AgentMentionInput, fillAgentComposer, type AgentMention, type AgentUpload } from './agent-mention-input'
+import { AgentMentionInput, type AgentMention, type AgentUpload } from './agent-mention-input'
+import { fillAgentComposer } from './agent-composer-dom'
 import { mentionIcon } from './agent-mention-icon'
 
 const data = {

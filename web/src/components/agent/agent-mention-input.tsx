@@ -7,8 +7,9 @@ import { avatarColor } from '@/components/issue/avatar-color'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { useI18n } from '@/i18n/i18n'
-import { AGENT_UPLOAD_MAX_ITEMS, agentFileKind, agentUploadLimit, pastedAgentFiles, shrinkAgentImage, type AgentFileKind } from './agent-attachments'
-import { agentBlockMarkdown, splitAgentBlocks } from './agent-content-blocks'
+import { AGENT_UPLOAD_MAX_ITEMS, agentFileKind, agentUploadLimit, pastedAgentFiles, shrinkAgentImage } from './agent-attachments'
+import { agentBlockMarkdown, splitAgentBlocks } from './agent-content-model'
+import { emptyLine, fillAgentComposer, inlineBlock, isBlock, isEmptyLine, type BlockKind, type InlineBlock } from './agent-composer-dom'
 import { AgentInlineFile } from './agent-inline-file'
 import { AgentInlineImage } from './agent-inline-image'
 import { AgentInlineVideo } from './agent-inline-video'
@@ -25,63 +26,6 @@ type Chip = { el: HTMLElement; option: MentionOption }
 
 /** What the upload endpoint returns for a file. */
 export type AgentUpload = { name: string; contentType: string; size: number; url: string }
-
-type BlockKind = Exclude<AgentFileKind, 'audio'>
-
-/** An image, video or file block in the composer: shown from `preview` while it uploads, then from its uploaded `src`. */
-type InlineBlock = { el: HTMLElement; id: string; kind: BlockKind; name: string; src: string; size: number; type: string; preview?: string }
-
-let inlineBlockId = 0
-
-function inlineBlock(kind: BlockKind, name: string, src: string, size = 0, type = '') {
-  const block = document.createElement('div')
-  block.setAttribute('contenteditable', 'false')
-  block.className = styles.block
-  block.dataset.agentBlock = `block-${++inlineBlockId}`
-  block.dataset.kind = kind
-  block.dataset.name = name
-  block.dataset.src = src
-  block.dataset.size = String(size)
-  block.dataset.type = type
-  return block
-}
-
-const isBlock = (node: Node | null | undefined) => node instanceof HTMLElement && node.dataset.agentBlock !== undefined
-
-/** A line with nothing on it: the one to type on after a block. */
-const isEmptyLine = (node: Node | null | undefined) => node instanceof HTMLElement && node.tagName === 'DIV' && !isBlock(node) && !node.textContent && !node.querySelector('[data-agent-block], [data-mention-id]')
-
-function emptyLine() {
-  const line = document.createElement('div')
-  line.append(document.createElement('br'))
-  return line
-}
-
-/**
- * Writes a message into the composer: text as typed, its Markdown images, videos and files as blocks (editing a sent
- * message, restoring a draft). The composer picks the blocks up on the input event this fires.
- */
-export function fillAgentComposer(editor: HTMLElement, value: string) {
-  editor.textContent = ''
-  const parts = splitAgentBlocks(value)
-  parts.forEach((part, index) => {
-    if (part.type === 'text') {
-      if (!part.text) return
-      // Text after a block sits on its own line, so the block's spacing applies to it.
-      if (isBlock(editor.lastChild)) {
-        const line = document.createElement('div')
-        line.append(document.createTextNode(part.text))
-        editor.append(line)
-      } else editor.append(document.createTextNode(part.text))
-      return
-    }
-    editor.append(part.type === 'image' ? inlineBlock('image', part.alt, part.src)
-      : part.type === 'video' ? inlineBlock('video', part.name, part.src)
-      : inlineBlock('file', part.name, part.src, part.size, part.contentType))
-    if (!parts[index + 1]) editor.append(emptyLine())
-  })
-  editor.dispatchEvent(new Event('input', { bubbles: true }))
-}
 
 type MentionIssue = { id: string; identifier: string; title: string; state: Pick<WorkflowState, 'id' | 'name' | 'color' | 'type'> }
 

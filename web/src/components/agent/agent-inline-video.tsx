@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Download, Maximize, Minimize, Pause, PictureInPicture2, Play, Volume2, VolumeX } from 'lucide-react'
-import { downloadImage } from '@/components/editor/lightbox-editor-provider'
+import { downloadImage } from '@/components/editor/lightbox-actions'
 import { deleteIcon } from '@/components/issue/editor/image-extension'
 import { useI18n } from '@/i18n/i18n'
 import { ToolbarIcon } from './agent-inline-image'
