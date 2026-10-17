@@ -3863,6 +3863,18 @@ export function uploadProjectCommentAttachment(
     body,
   });
 }
+/** Uploads media inserted inline into an initiative update comment. */
+export function uploadInitiativeCommentAttachment(
+  initiativeId: string,
+  file: File,
+): Promise<Attachment> {
+  const body = new FormData();
+  body.append("file", file);
+  return request(`/api/initiatives/${initiativeId}/comment-attachments`, {
+    method: "POST",
+    body,
+  });
+}
 export function deleteProjectUpdateAttachment(
   projectId: string,
   updateId: string,

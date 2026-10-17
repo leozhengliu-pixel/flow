@@ -2265,6 +2265,7 @@ type Initiative struct {
 	ProjectIDs           []string                        `json:"projectIds"`
 	Resources            []InitiativeResource            `json:"resources"`
 	Comments             []Comment                       `json:"comments"`
+	CommentAttachments   []Attachment                    `json:"commentAttachments,omitempty"`
 	TargetDate           *string                         `json:"targetDate,omitempty"`
 	TargetDateResolution string                          `json:"targetDateResolution,omitempty"`
 	Favorite             bool                            `json:"favorite"`

@@ -107,3 +107,39 @@ func TestProjectCommentAttachmentUploadIsInlineAndVisible(t *testing.T) {
 		t.Fatalf("unknown project status %d: %s", status, raw)
 	}
 }
+
+func TestInitiativeCommentAttachmentUploadIsInlineAndVisible(t *testing.T) {
+	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "initiative-comment-media.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	server := httptest.NewServer(newHandler(&server{store: repository, uploadPath: t.TempDir()}))
+	defer server.Close()
+	admin := authClient(t)
+	authRequest[domain.AuthSession](t, admin, http.MethodPost, server.URL+"/api/auth/login", map[string]string{"email": "admin@example.test", "password": "test-password"}, "", http.StatusOK)
+	initiative := authRequest[domain.Initiative](t, admin, http.MethodPost, server.URL+"/api/initiatives", map[string]any{"name": "Comment media initiative"}, "test-workspace", http.StatusCreated)
+	endpoint := server.URL + "/api/initiatives/" + initiative.ID + "/comment-attachments"
+
+	status, raw := postProjectCommentMedia(t, admin, endpoint, "notes.pdf", "application/pdf", "%PDF-1.4 notes")
+	if status != http.StatusCreated {
+		t.Fatalf("upload status %d: %s", status, raw)
+	}
+	var attachment domain.Attachment
+	if err := json.Unmarshal(raw, &attachment); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(attachment.URL, "/uploads/initiative_comment_attachment_") || attachment.Title != "notes.pdf" || attachment.Creator.ID == "" {
+		t.Fatalf("attachment = %#v", attachment)
+	}
+	authStatus(t, admin, http.MethodGet, server.URL+attachment.URL, http.StatusOK)
+	outsider, _ := verifiedAuthClient(t, server.URL, "Outsider", "outsider-initiative-media@example.com")
+	authStatus(t, outsider, http.MethodGet, server.URL+attachment.URL, http.StatusNotFound)
+	if status, raw := postProjectCommentMedia(t, admin, endpoint, "", "", ""); status != http.StatusBadRequest {
+		t.Fatalf("missing file status %d: %s", status, raw)
+	}
+	if status, raw := postProjectCommentMedia(t, admin, server.URL+"/api/initiatives/missing/comment-attachments", "a.txt", "text/plain", "x"); status != http.StatusNotFound && status != http.StatusForbidden {
+		t.Fatalf("unknown initiative status %d: %s", status, raw)
+	}
+}
