@@ -1,7 +1,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
 import type { Editor } from '@tiptap/react'
-import { ArrowUp, BellOff, BellRing, Copy, FolderKanban, FileText, HelpCircle, Link2, MessageCircle, MoreHorizontal, SmilePlus, SquareArrowOutUpRight } from 'lucide-react'
+import { ArrowUp, BellOff, BellRing, Copy, FileText, HelpCircle, Link2, MessageCircle, MoreHorizontal, SmilePlus, SquareArrowOutUpRight } from 'lucide-react'
 import { memo, useEffect, useRef, useState } from 'react'
 import { formatDistanceToNowStrict } from 'date-fns'
 import { toast } from '@/lib/toast'
@@ -134,24 +134,25 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
     <header className="pulse-post-header">
       <div className="pulse-post-heading">
         <PulseSourceTitle item={item} onNavigate={props.onNavigate}/>
-        <div className="pulse-post-byline">
+        {/* The whole status line is the link to the update (the reference app wraps it in one anchor). */}
+        <a className="pulse-post-byline" href={pulseUpdateLink(item)} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); props.onNavigate(`${item.source.url}#update-${update.id}`) }}>
           <span className={`pulse-post-health is-${update.health}`}><HealthGlyph className="pulse-health-glyph" health={update.health}/>{t(PULSE_HEALTH_LABELS[item.kind][update.health])}</span>
           <UserAvatar avatarUrl={update.user.avatarUrl} className="avatar pulse-byline-avatar" name={userName(update.user)}/>
           <span className="pulse-post-author" data-i18n-ignore>{userName(update.user)}</span>
           <FlowTooltip label={formatDate(created, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}>
             <time dateTime={update.createdAt}>{relativeTime(created, t('just now'))}{update.editedAt ? ` · ${t('edited')}` : ''}</time>
           </FlowTooltip>
-        </div>
+        </a>
       </div>
       <DropdownMenu.Root onOpenChange={setMenuOpen}>
         <DropdownMenu.Trigger asChild><button aria-label={t('Post actions')} className="pulse-post-menu-button" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger>
         <DropdownMenu.Portal><DropdownMenu.Content align="end" className="pulse-menu pulse-post-menu" data-flow-motion="floating" sideOffset={4}>
-          <DropdownMenu.Item onSelect={() => props.onNavigate(item.source.url)}><SquareArrowOutUpRight size={14}/>{item.kind === 'project' ? t('Go to update in project') : t('Go to update in initiative')}</DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={() => props.onNavigate(item.source.url)}>{item.kind === 'initiative' ? <ViewGlyph color="currentColor" icon="Initiative" style={{ width: 14, height: 14, flexShrink: 0 }}/> : <SquareArrowOutUpRight size={14}/>}{item.kind === 'project' ? t('Go to update in project') : t('Go to update in initiative')}</DropdownMenu.Item>
           <DropdownMenu.Item onSelect={() => void copy(pulseUpdateLink(item), item.kind === 'project' ? t('The project update URL for {name} is copied to clipboard') : t('The initiative update URL for {name} is copied to clipboard'))}><Link2 size={14}/>{t('Copy link')}</DropdownMenu.Item>
           <DropdownMenu.Item onSelect={() => void copy(pulseUpdateMarkdown(item), item.kind === 'project' ? t('The project update for {name} is copied to clipboard') : t('The initiative update for {name} is copied to clipboard'))}><Copy size={14}/>{t('Copy as markdown')}</DropdownMenu.Item>
           <DropdownMenu.Separator/>
           <DropdownMenu.Item onSelect={() => toggleSubscription().catch(() => undefined)}>{item.subscribed ? <BellOff size={14}/> : <BellRing size={14}/>}{(item.subscribed ? t('Unsubscribe from this {type}') : t('Subscribe to this {type}')).replace('{type}', type)}</DropdownMenu.Item>
-          {item.kind === 'initiative' && <DropdownMenu.Item onSelect={() => void toggleProjectUpdates()}>{projectUpdates.subscribed ? <BellOff size={14}/> : <FolderKanban size={14}/>}{projectUpdates.subscribed ? t("Unsubscribe from initiative's project updates") : t("Subscribe to initiative's project updates")}</DropdownMenu.Item>}
+          {item.kind === 'initiative' && <DropdownMenu.Item onSelect={() => void toggleProjectUpdates()}>{projectUpdates.subscribed ? <BellOff size={14}/> : <BellRing size={14}/>}{projectUpdates.subscribed ? t("Unsubscribe from initiative's project updates") : t("Subscribe to initiative's project updates")}</DropdownMenu.Item>}
           {props.view === 'following' && item.reasons.length > 0 && <DropdownMenu.Item onSelect={() => setWhyOpen(true)}><HelpCircle size={14}/>{t('Why am I seeing this?')}</DropdownMenu.Item>}
         </DropdownMenu.Content></DropdownMenu.Portal>
       </DropdownMenu.Root>
