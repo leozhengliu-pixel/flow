@@ -130,7 +130,8 @@ func TestPagedIssueDeletedOnlyReachesViewersWhoCouldSeeIt(t *testing.T) {
 	authRequest[any](t, admin, http.MethodDelete, host.URL+"/api/issues/"+hidden.ID, nil, "test-workspace", http.StatusNoContent)
 	authRequest[any](t, admin, http.MethodDelete, host.URL+"/api/issues/"+shown.ID, nil, "test-workspace", http.StatusNoContent)
 	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) && !(memberStream.has("issue.deleted", shown.ID) && adminStream.has("issue.deleted", hidden.ID)) {
+	// The two streams are consumed independently; wait for both admin events before inspecting its IDs.
+	for time.Now().Before(deadline) && !(memberStream.has("issue.deleted", shown.ID) && adminStream.has("issue.deleted", hidden.ID) && adminStream.has("issue.deleted", shown.ID)) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	deletedIDs := func(stream *sseCollector) []string {
