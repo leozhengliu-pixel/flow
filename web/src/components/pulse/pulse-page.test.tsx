@@ -97,7 +97,7 @@ describe('Pulse page', () => {
 
   it('keeps the card menu read-only like the reference app: no Edit or Delete, even for your own update', async () => {
     const own = pulseItem('own', new Date().toISOString())
-    vi.mocked(fetchPulseFeed).mockResolvedValue(page([{ ...own, update: { ...own.update, user: viewer } }]))
+    vi.mocked(fetchPulseFeed).mockResolvedValue(page([{ ...own, update: { ...own.update, user: viewer } } as PulseItem]))
     renderPage()
     await screen.findByText('Body of own')
     await userEvent.click(screen.getByRole('button', { name: 'Post actions' }))
