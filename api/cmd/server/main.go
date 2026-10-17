@@ -862,6 +862,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PUT /api/projects/{id}/comments/{commentId}/subscription", s.setProjectThreadSubscription)
 	mux.HandleFunc("DELETE /api/projects/{id}/comments/{commentId}/subscription", s.clearProjectThreadSubscription)
 	mux.HandleFunc("POST /api/projects/{id}/comment-attachments", s.createProjectCommentAttachment)
+	mux.HandleFunc("POST /api/initiatives/{id}/comment-attachments", s.createInitiativeCommentAttachment)
 	mux.HandleFunc("POST /api/documents/{id}/attachments", s.createDocumentAttachment)
 	mux.HandleFunc("GET /api/pulse/feed", s.getPulseFeed)
 	mux.HandleFunc("GET /api/pulse/unread", s.getPulseUnread)
@@ -5304,6 +5305,11 @@ func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBo
 		}
 		for _, project := range data.Projects {
 			if slices.ContainsFunc(project.CommentAttachments, func(attachment domain.Attachment) bool { return attachment.URL == url }) {
+				return true
+			}
+		}
+		for _, initiative := range data.Initiatives {
+			if slices.ContainsFunc(initiative.CommentAttachments, func(attachment domain.Attachment) bool { return attachment.URL == url }) {
 				return true
 			}
 		}

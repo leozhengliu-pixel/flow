@@ -1,12 +1,13 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
 import type { Editor } from '@tiptap/react'
-import { ArrowUp, BellOff, BellRing, Copy, FolderKanban, FileText, HelpCircle, Link2, MessageCircle, MoreHorizontal, SmilePlus, SquareArrowOutUpRight } from 'lucide-react'
-import { memo, useEffect, useRef, useState } from 'react'
+import { ArrowUp, BellOff, BellRing, Copy, FolderKanban, FileText, HelpCircle, Link2, MessageCircle, MoreHorizontal, Paperclip, SmilePlus, SquareArrowOutUpRight } from 'lucide-react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { formatDistanceToNowStrict } from 'date-fns'
 import { toast } from '@/lib/toast'
 import { RichComment } from '@/components/activity/rich-comment'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
+import { insertPickedFiles } from '@/components/issue/editor/insert-picked-files'
 import type { DescriptionSnapshot } from '@/components/issue/editor/editor-content'
 import { HealthGlyph } from '@/components/project-detail/health-glyph'
 import { EmojiPicker } from '@/components/reactions/emoji-picker'
@@ -22,6 +23,8 @@ import { PulseWhyDialog } from './pulse-why-dialog'
 
 export type PulseCardHandlers = {
   onComment: (item: PulseItem, body: string, bodyData?: Record<string, unknown>) => Promise<void>
+  /** Uploads a file for the comment box and returns the URL embedded in the comment body. */
+  onUploadCommentAttachment?: (item: PulseItem, file: File) => Promise<string>
   onReact: (item: PulseItem, emoji: string) => Promise<void>
   onToggleSubscription: (item: PulseItem, subscribe: boolean) => Promise<void>
   onToggleTeam: (teamId: string, subscribed: boolean) => Promise<void>
@@ -67,6 +70,15 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
   // Initiatives: "Subscribe to initiative's project updates" (every update of its projects).
   const projectUpdates = useInitiativeProjectUpdatesSubscription(item.kind === 'initiative' ? item.source.id : undefined, item.kind === 'initiative' ? item.projectUpdatesSubscribed ?? false : false, menuOpen && item.kind === 'initiative')
   const editorRef = useRef<Editor | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const uploadComment = props.onUploadCommentAttachment
+  const uploadMedia = useMemo(() => uploadComment ? (file: File) => uploadComment(item, file) : undefined, [item, uploadComment])
+  const attachFiles = (files: File[]) => {
+    const editor = editorRef.current
+    if (!editor || !files.length) return
+    editor.commands.focus('end')
+    insertPickedFiles(editor.view, files, uploadMedia)
+  }
   const comments = update.comments ?? []
   const reactions = update.reactions ?? {}
   const attachments = update.attachments ?? []
@@ -172,8 +184,14 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
       {comments.map(entry => <PulseComment comment={entry} key={entry.id}/>)}
       <div className="pulse-post-comment-box">
         <div className="pulse-post-comment-editor">
-          <IssueDescriptionEditor ariaLabel={t('Leave a comment…')} className="pulse-post-comment-rich-editor" editorRef={editor => { editorRef.current = editor }} key={composerKey} onChange={setComment} onSubmit={() => void submitComment()} placeholder={t('Leave a comment…')} state={comment?.documentJSON} users={props.users} value={comment?.markdown ?? ''}/>
-          <button aria-label={posting ? t('Sending…') : t('Comment')} className="pulse-post-comment-submit" disabled={!comment?.markdown.trim() || posting} onClick={() => void submitComment()} type="button"><ArrowUp size={14}/></button>
+          <IssueDescriptionEditor ariaLabel={t('Leave a comment…')} className="pulse-post-comment-rich-editor" editorRef={editor => { editorRef.current = editor }} key={composerKey} onChange={setComment} onInsertImage={uploadMedia} onSubmit={() => void submitComment()} placeholder={t('Leave a comment…')} state={comment?.documentJSON} users={props.users} value={comment?.markdown ?? ''}/>
+          <div className="pulse-post-comment-actions">
+            {uploadMedia && <>
+              <FlowTooltip label={t('Attach images, files, or videos')}><button aria-label={t('Attach images, files, or videos')} className="pulse-post-comment-attach" onClick={() => fileInputRef.current?.click()} type="button"><Paperclip size={16}/></button></FlowTooltip>
+              <input aria-hidden hidden multiple onChange={event => { attachFiles(Array.from(event.target.files ?? [])); event.target.value = '' }} ref={fileInputRef} tabIndex={-1} type="file"/>
+            </>}
+            <button aria-label={posting ? t('Sending…') : t('Comment')} className="pulse-post-comment-submit" disabled={!comment?.markdown.trim() || posting} onClick={() => void submitComment()} type="button"><ArrowUp size={14}/></button>
+          </div>
         </div>
       </div>
     </section>}
