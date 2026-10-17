@@ -340,7 +340,10 @@ func (s *server) updateWorkflowState(w http.ResponseWriter, r *http.Request) {
 	} else {
 		ctx = workflowIssueScope(ctx, teamID, stateID, teamID+"_"+stateID)
 	}
-	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "workflow_state.updated", stateID, input, func(data *domain.Bootstrap) error {
+	// The event carries the updated state (payload.state) so clients patch their
+	// embedded copies without refetching; it is filled in by the mutation.
+	payload := inputEventPayload(input)
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "workflow_state.updated", stateID, payload, func(data *domain.Bootstrap) error {
 		if teamSettings(data, teamID).InheritWorkflowStatuses {
 			return fmt.Errorf("%w: issue statuses are inherited from the parent team", errInvalid)
 		}
@@ -394,6 +397,7 @@ func (s *server) updateWorkflowState(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		remapInheritedWorkflowIssues(data, teamID)
+		payload["teamId"], payload["state"] = teamID, updated
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)

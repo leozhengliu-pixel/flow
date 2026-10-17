@@ -3026,6 +3026,12 @@ export interface RealtimeEvent {
     /** Post-mutation snapshot for incremental cache updates. */
     entity?: unknown;
     deleted?: boolean;
+    /** Issues the event affects (batch updates, permission changes, an issue deleted with its sub-issues). */
+    issueIds?: string[];
+    /** Issues the viewer must drop (hidden by a permission change or batch move). */
+    removedIssueIds?: string[];
+    /** Projected issues of a small batch update. */
+    issues?: Issue[];
   };
   createdAt: string;
 }
