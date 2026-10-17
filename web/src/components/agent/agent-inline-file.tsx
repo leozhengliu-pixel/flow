@@ -1,13 +1,13 @@
 import type { ReactNode } from 'react'
 import { Printer } from 'lucide-react'
-import { copyText, downloadImage } from '@/components/editor/lightbox-editor-provider'
+import { copyText, downloadImage } from '@/components/editor/lightbox-actions'
 import { deleteIcon, downloadIcon, linkIcon, viewIcon } from '@/components/issue/editor/image-extension'
 import { useI18n } from '@/i18n/i18n'
 import { ToolbarIcon } from './agent-inline-image'
 import styles from './agent-inline-file.module.css'
 
 /** "43 B", "1.2 KB", "12 KB", "1.2 MB". */
-export function formatAgentFileSize(bytes: number) {
+function formatAgentFileSize(bytes: number) {
   if (bytes < 1024) return `${Math.max(0, Math.round(bytes))} B`
   const units = ['KB', 'MB', 'GB']
   let value = bytes / 1024

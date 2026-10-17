@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { Clipboard, Download, Link2, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
-import { toast } from '@/lib/toast'
+import { copyImage, copyText, downloadImage } from './lightbox-actions'
 
 import { CommentPopover, type LightboxComment } from './comment-popover'
 import { registerLightboxOpener, type LightboxItem } from './lightbox-bridge'
@@ -36,30 +36,6 @@ type Session = { items: LightboxItem[]; index: number }
 /** The percentage of the image's own size it is shown at. */
 function zoomOf(image: HTMLImageElement) {
   return image.naturalWidth ? Math.round((image.clientWidth / image.naturalWidth) * 100) : 100
-}
-
-export function downloadImage(item: LightboxItem) {
-  const link = document.createElement('a')
-  link.href = item.src
-  link.download = item.alt || 'image'
-  link.rel = 'noopener'
-  link.click()
-}
-
-export async function copyText(text: string) {
-  try { await navigator.clipboard.writeText(text); toast.success('Copied to clipboard') }
-  catch { toast.error('Could not copy') }
-}
-
-/** Copies the picture itself where the browser allows it, and its link otherwise. */
-export async function copyImage(item: LightboxItem) {
-  try {
-    const blob = await (await fetch(item.src)).blob()
-    await navigator.clipboard.write([new ClipboardItem({ [blob.type || 'image/png']: blob })])
-    toast.success('Copied to clipboard')
-  } catch {
-    await copyText(item.src)
-  }
 }
 
 export function LightboxEditorProvider({

@@ -56,7 +56,7 @@
   margin: 4px;
   background: var(--description-toolbar-separator);
 }
-:global(:root[data-theme="light"]) .separator { background: lch(75.7 0 282); }
+:global(:root[data-theme="light"]) .separator { background: var(--agent-attachment-light-separator); }
 
 .handle {
   position: absolute;
@@ -65,7 +65,7 @@
   box-sizing: border-box;
   width: 5px;
   height: 40px;
-  border: 1px solid rgba(0, 0, 0, .4);
+  border: 1px solid var(--agent-attachment-resize-border);
   border-radius: 3px;
   background: color(srgb 1 1 1 / .8);
   transform: translateY(-50%);

@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { copyIcon, deleteIcon, downloadIcon, linkIcon, viewIcon } from '@/components/issue/editor/image-extension'
-import { copyImage, copyText, downloadImage } from '@/components/editor/lightbox-editor-provider'
+import { copyImage, copyText, downloadImage } from '@/components/editor/lightbox-actions'
 import { openLightbox } from '@/components/editor/lightbox-bridge'
 import { useI18n } from '@/i18n/i18n'
 import styles from './agent-inline-image.module.css'
