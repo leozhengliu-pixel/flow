@@ -49,6 +49,12 @@ describe('pasting rich text into the Agent composer', () => {
     expect(splitAgentBlocks(value())).toHaveLength(1)
   })
 
+  it('escapes existing backslashes before brackets in link labels', () => {
+    const { paste, value } = setup()
+    paste({ html: String.raw`<p><a href="https://example.com/docs">name\]</a></p>`, text: String.raw`name\]` })
+    expect(value()).toBe(String.raw`[name\\\]](https://example.com/docs)`)
+  })
+
   it('keeps lists, nested lists and ordered lists', () => {
     const { box, paste, value } = setup()
     paste({ html: '<ul><li>one<ul><li>inner</li></ul></li><li>two</li></ul><ol><li>first</li><li>second</li></ol>', text: 'x' })
