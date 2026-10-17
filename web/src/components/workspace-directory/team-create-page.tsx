@@ -111,7 +111,7 @@ const SETTINGS_DESTINATIONS: Record<string, SettingsPageId> = {
   "Issues/Labels":"issue-labels","Issues/Templates":"issue-templates","Issues/SLAs":"sla",
   "Projects/Labels":"project-labels","Projects/Templates":"project-templates","Projects/Statuses":"project-statuses","Projects/Updates":"project-updates",
   "Features/AI & agents":"ai","Features/Initiatives":"initiatives","Features/Documents":"documents","Features/Customer requests":"customer-requests","Features/Releases":"releases","Features/Pulse":"pulse","Features/Asks":"asks","Features/Emojis":"emojis","Features/Integrations":"integrations",
-  "Administration/Workspace":"workspace","Administration/Teams":"teams","Administration/Members":"members","Administration/Security":"security","Administration/API":"api","Administration/Applications":"applications","Administration/Import & export":"import-export",
+  "Administration/Workspace":"workspace","Administration/Teams":"teams","Administration/Members":"members","Administration/Security":"security","Administration/API":"api","Administration/Applications":"applications","Administration/Billing":"billing","Administration/Usage & limits":"usage","Administration/Import & export":"import-export",
 };
 
 export function TeamCreatePage({
