@@ -65,6 +65,7 @@ var InternalRoutes = []string{
 	"POST /api/agent/sessions/{id}/read",
 	"POST /api/agent/sessions/{id}/stop",
 	"POST /api/agent/skills",
+	"POST /api/agent/uploads",
 	"PUT /api/agent/sessions/{id}/messages/{messageId}/feedback",
 	// /api/agent-tasks
 	"GET /api/agent-tasks",

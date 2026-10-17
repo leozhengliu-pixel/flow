@@ -154,8 +154,10 @@ type AgentMessage struct {
 	Content string             `json:"content"`
 	Parts   []AgentMessagePart `json:"parts,omitempty"`
 	// Mentions are the resources @-mentioned in a user message, in order.
-	Mentions   []AgentMention `json:"mentions,omitempty"`
-	DurationMS int64          `json:"durationMs,omitempty"`
+	Mentions []AgentMention `json:"mentions,omitempty"`
+	// Attachments are the files sent with a user message; their content is in object storage at URL.
+	Attachments []AgentMessageAttachment `json:"attachments,omitempty"`
+	DurationMS  int64                    `json:"durationMs,omitempty"`
 	// AnswerTo is the question part a user message answered by picking one of its options (shown as the chosen
 	// option on the question, not as a separate message).
 	AnswerTo string `json:"answerTo,omitempty"`
@@ -165,6 +167,15 @@ type AgentMessage struct {
 	// Offloaded names fields stored outside the workspace record and not
 	// loaded yet (see OffloadedContent).
 	Offloaded OffloadedContent `json:"_offloaded,omitempty"`
+}
+
+// AgentMessageAttachment is a file sent with an agent chat message. URL is empty for a file sent by name only (a type
+// the agent cannot read).
+type AgentMessageAttachment struct {
+	Name        string `json:"name"`
+	ContentType string `json:"contentType"`
+	Size        int64  `json:"size"`
+	URL         string `json:"url,omitempty"`
 }
 
 // OffloadedContent names, by field ("content", "text", "result", or "body"

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -34,6 +35,8 @@ type agentSessionInput struct {
 	LoopIDs       []string              `json:"loopIds"`
 	Location      string                `json:"location"`
 	Mentions      []domain.AgentMention `json:"mentions"`
+	// Attachments are files sent with the first message (see agent_attachments.go).
+	Attachments []loopRunReplyAttachmentInput `json:"attachments"`
 }
 
 // agentMessageInput is a follow-up message plus anything @-mentioned in it.
@@ -48,6 +51,8 @@ type agentMessageInput struct {
 	Mentions      []domain.AgentMention `json:"mentions"`
 	// Answer picks an option of the reply's pending question (ask_user); the message carries its label.
 	Answer *agentQuestionAnswer `json:"answer,omitempty"`
+	// Attachments are files sent with the message (see agent_attachments.go).
+	Attachments []loopRunReplyAttachmentInput `json:"attachments"`
 }
 
 type agentSessionUpdate struct {
@@ -80,14 +85,20 @@ func validAgentMessage(w http.ResponseWriter, value string) (string, bool) {
 	return value, true
 }
 
-func decodeAgentMessage(w http.ResponseWriter, r *http.Request) (string, bool) {
-	var input struct {
-		Message string `json:"message"`
-	}
+// agentMessageEdit is an edited (or retried) user message; attachments, when sent, replace the message's files.
+type agentMessageEdit struct {
+	Message     string                        `json:"message"`
+	Attachments []loopRunReplyAttachmentInput `json:"attachments"`
+}
+
+func decodeAgentMessage(w http.ResponseWriter, r *http.Request) (agentMessageEdit, bool) {
+	var input agentMessageEdit
 	if !decodeJSON(w, r, &input) {
-		return "", false
+		return input, false
 	}
-	return validAgentMessage(w, input.Message)
+	var ok bool
+	input.Message, ok = validAgentMessage(w, input.Message)
+	return input, ok
 }
 
 // decodeAgentMessageInput reads a follow-up message with its mentions and checks their access.
@@ -415,11 +426,17 @@ func (s *server) beginAgentSession(r *http.Request, input agentSessionInput) (do
 	if err := s.checkAgentMentions(r, agentMentionIDs{Issues: input.IssueIDs, Projects: input.ProjectIDs, Documents: input.DocumentIDs, Initiatives: input.InitiativeIDs, Users: input.UserIDs}); err != nil {
 		return domain.AgentSession{}, err
 	}
+	attachments, err := s.saveAgentAttachments(r, input.Attachments)
+	if err != nil {
+		return domain.AgentSession{}, err
+	}
+	images := s.withStoredSizes(r.Context(), agentMessageUploads(r, input.Message))
+	attachments = append(attachments, images...)
 	now := time.Now().UTC()
 	sessionID := fmt.Sprintf("agent_session_%d", now.UnixNano())
-	title := agentSessionTitle(input.Message)
-	session := domain.AgentSession{ID: sessionID, SlugID: agentSessionSlug(title, now), Title: title, Location: input.Location, IssueIDs: uniqueAgentIDs(input.IssueIDs), ProjectIDs: uniqueAgentIDs(input.ProjectIDs), DocumentIDs: uniqueAgentIDs(input.DocumentIDs), InitiativeIDs: uniqueAgentIDs(input.InitiativeIDs), UserIDs: uniqueAgentIDs(input.UserIDs), LoopIDs: uniqueAgentIDs(input.LoopIDs), SkillIDs: uniqueAgentIDs(input.SkillIDs), Messages: []domain.AgentMessage{{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: input.Message, Mentions: input.Mentions, CreatedAt: now}}, CreatedAt: now, UpdatedAt: now, LastReadAt: agentReadStamp(now)}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.session_created", sessionID, input, func(data *domain.Bootstrap) error {
+	title := agentSessionTitle(firstNonEmpty(withoutAgentUploads(input.Message, images), agentUploadsTitle(images)))
+	session := domain.AgentSession{ID: sessionID, SlugID: agentSessionSlug(title, now), Title: title, Location: input.Location, IssueIDs: uniqueAgentIDs(input.IssueIDs), ProjectIDs: uniqueAgentIDs(input.ProjectIDs), DocumentIDs: uniqueAgentIDs(input.DocumentIDs), InitiativeIDs: uniqueAgentIDs(input.InitiativeIDs), UserIDs: uniqueAgentIDs(input.UserIDs), LoopIDs: uniqueAgentIDs(input.LoopIDs), SkillIDs: uniqueAgentIDs(input.SkillIDs), Messages: []domain.AgentMessage{{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: input.Message, Mentions: input.Mentions, Attachments: attachments, CreatedAt: now}}, CreatedAt: now, UpdatedAt: now, LastReadAt: agentReadStamp(now)}
+	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.session_created", sessionID, input, func(data *domain.Bootstrap) error {
 		session.UserID = data.Viewer.ID
 		if len(selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)) != len(session.SkillIDs) {
 			return fmt.Errorf("%w: one or more selected skills were not found", errInvalid)
@@ -430,6 +447,9 @@ func (s *server) beginAgentSession(r *http.Request, input agentSessionInput) (do
 		data.AgentSessions = append(data.AgentSessions, session)
 		return nil
 	})
+	if err != nil {
+		s.deleteAgentAttachments(r.Context(), agentUploads(attachments, false))
+	}
 	return session, err
 }
 
@@ -452,8 +472,13 @@ func (s *server) createAgentSessionMessage(w http.ResponseWriter, r *http.Reques
 
 func (s *server) appendAgentSessionMessage(r *http.Request, id string, input agentMessageInput) error {
 	message := input.Message
+	attachments, err := s.saveAgentAttachments(r, input.Attachments)
+	if err != nil {
+		return err
+	}
+	attachments = append(attachments, s.withStoredSizes(r.Context(), agentMessageUploads(r, message))...)
 	now := time.Now().UTC()
-	return s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.message_created", id, input, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.message_created", id, input, func(data *domain.Bootstrap) error {
 		session, err := ownedAgentSession(data, id)
 		if err != nil {
 			return err
@@ -475,12 +500,16 @@ func (s *server) appendAgentSessionMessage(r *http.Request, id string, input age
 		if err != nil {
 			return err
 		}
-		session.Messages = append(session.Messages, domain.AgentMessage{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: message, Mentions: input.Mentions, AnswerTo: answerTo, CreatedAt: now})
+		session.Messages = append(session.Messages, domain.AgentMessage{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: message, Mentions: input.Mentions, Attachments: attachments, AnswerTo: answerTo, CreatedAt: now})
 		data.AgentActivities = append(data.AgentActivities, domain.AgentActivity{ID: fmt.Sprintf("agent_activity_%d", now.UnixNano()), SessionID: id, Type: "message", Status: "completed", Body: message, CreatedAt: now, UpdatedAt: now})
 		session.UpdatedAt = now
 		session.LastReadAt = agentReadStamp(now) // the owner is in the conversation they just wrote to
 		return nil
 	})
+	if err != nil {
+		s.deleteAgentAttachments(r.Context(), agentUploads(attachments, false))
+	}
+	return err
 }
 
 func (s *server) updateAgentSessionMessage(w http.ResponseWriter, r *http.Request) {
@@ -500,9 +529,18 @@ func (s *server) updateAgentSessionMessage(w http.ResponseWriter, r *http.Reques
 	s.completeAgentSessionResponse(w, r, id, http.StatusOK)
 }
 
-func (s *server) replaceAgentSessionMessage(r *http.Request, id, messageID, message string) error {
-	input := map[string]string{"message": message}
-	return s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.message_updated", id, input, func(data *domain.Bootstrap) error {
+func (s *server) replaceAgentSessionMessage(r *http.Request, id, messageID string, edit agentMessageEdit) error {
+	attachments, err := s.saveAgentAttachments(r, edit.Attachments)
+	if err != nil {
+		return err
+	}
+	// Read outside the mutation: sizes come from storage.
+	images := s.withStoredSizes(r.Context(), agentMessageUploads(r, edit.Message))
+	input := map[string]any{"message": edit.Message, "attachments": edit.Attachments}
+	// Files of the replaced attachments and of the dropped later messages, removed once the edit is saved.
+	var removed []domain.AgentMessageAttachment
+	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.message_updated", id, input, func(data *domain.Bootstrap) error {
+		removed = nil
 		session, err := ownedAgentSession(data, id)
 		if err != nil {
 			return err
@@ -510,7 +548,24 @@ func (s *server) replaceAgentSessionMessage(r *http.Request, id, messageID, mess
 		for index := range session.Messages {
 			message := &session.Messages[index]
 			if message.ID == messageID && message.Role == "user" {
-				message.Content = input["message"]
+				message.Content = edit.Message
+				// Sent files stay unless the edit sends new ones (a retry resends the text alone); inline images follow the text.
+				files := agentUploads(message.Attachments, false)
+				if len(attachments) > 0 {
+					removed = append(removed, files...)
+					files = attachments
+				}
+				for _, old := range agentUploads(message.Attachments, true) {
+					if !slices.ContainsFunc(images, func(item domain.AgentMessageAttachment) bool { return item.URL == old.URL }) {
+						removed = append(removed, old)
+					}
+				}
+				message.Attachments = append(files, images...)
+				removed = append(removed, messageAttachments(session.Messages[index+1:])...)
+				// A later message's upload pasted again into the edit stays.
+				removed = slices.DeleteFunc(removed, func(item domain.AgentMessageAttachment) bool {
+					return slices.ContainsFunc(message.Attachments, func(kept domain.AgentMessageAttachment) bool { return kept.URL == item.URL })
+				})
 				session.Messages = session.Messages[:index+1]
 				session.UpdatedAt = time.Now().UTC()
 				session.LastReadAt = agentReadStamp(session.UpdatedAt)
@@ -519,6 +574,12 @@ func (s *server) replaceAgentSessionMessage(r *http.Request, id, messageID, mess
 		}
 		return errNotFound
 	})
+	if err != nil {
+		s.deleteAgentAttachments(r.Context(), attachments)
+		return err
+	}
+	s.deleteAgentAttachments(r.Context(), removed)
+	return nil
 }
 
 func (s *server) completeAgentSession(r *http.Request, id string) (domain.AgentSession, error) {
@@ -700,11 +761,13 @@ func agentSessionRead(session domain.AgentSession) bool {
 
 func (s *server) deleteAgentSession(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	var removed []domain.AgentMessageAttachment
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.session_deleted", id, nil, func(data *domain.Bootstrap) error {
 		session, err := ownedAgentSession(data, id)
 		if err != nil {
 			return err
 		}
+		removed = messageAttachments(session.Messages)
 		for index := range data.AgentSessions {
 			if data.AgentSessions[index].ID == session.ID {
 				data.AgentSessions = append(data.AgentSessions[:index], data.AgentSessions[index+1:]...)
@@ -717,6 +780,7 @@ func (s *server) deleteAgentSession(w http.ResponseWriter, r *http.Request) {
 		respondMutation(w, err, http.StatusNoContent, nil)
 		return
 	}
+	s.deleteAgentAttachments(r.Context(), removed)
 	w.WriteHeader(http.StatusNoContent)
 }
 

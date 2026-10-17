@@ -27,6 +27,8 @@ type agentProviderMessage struct {
 	ToolResult *agentProviderToolResult
 	// Images are sent as image inputs with a user message.
 	Images []agentProviderImage
+	// attachments are the stored files of a user message, read into Images and Content by addAgentAttachmentInputs.
+	attachments []domain.AgentMessageAttachment
 	// Reasoning is the provider's reasoning for an assistant turn (Chat Completions `reasoning_content`). Thinking
 	// models served over Chat Completions (DeepSeek, Kimi) refuse a tool-call turn of the current request sent back
 	// without it, so it is replayed there; Responses and Anthropic Messages never send it.
