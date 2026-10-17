@@ -133,7 +133,28 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 	for _, user := range data.Users {
 		users[user.ID] = user
 	}
+	lean := leanBootstrapRequested(r)
 	writeBootstrapWithFields(w, data, func(field string, buffer *bufio.Writer, encoder *json.Encoder) (bool, error) {
+		if lean {
+			switch field {
+			case "issues":
+				// The outline already is the list projection: no per-issue read.
+				buffer.WriteByte('[')
+				for i, issue := range data.Issues {
+					if i > 0 {
+						buffer.WriteByte(',')
+					}
+					if err := encoder.Encode(leanIssueRecord(issue)); err != nil {
+						return true, err
+					}
+				}
+				buffer.WriteByte(']')
+				return true, nil
+			case "comments", "activities":
+				buffer.WriteString("{}")
+				return true, nil
+			}
+		}
 		if field == "issues" {
 			buffer.WriteByte('[')
 			count := 0

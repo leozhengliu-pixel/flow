@@ -8,11 +8,23 @@ import (
 )
 
 func issueListProjection(issue domain.Issue) domain.Issue {
+	// Stored list rows are projected again on read: keep what they computed.
+	issue.HasContent = issue.HasContent || strings.TrimSpace(issue.Description) != "" || issue.DocumentContent != nil && strings.TrimSpace(issue.DocumentContent.Content) != ""
+	if len(issue.Reactions) > 0 {
+		issue.ReactionCounts = map[string]int{}
+		for emoji, users := range issue.Reactions {
+			if len(users) > 0 {
+				issue.ReactionCounts[emoji] = len(users)
+			}
+		}
+	}
 	issue.Description = ""
 	issue.DescriptionState = ""
 	issue.DocumentContent = nil
 	issue.Reactions = map[string][]string{}
-	issue.SubscriberIDs = []string{}
+	if issue.SubscriberIDs == nil {
+		issue.SubscriberIDs = []string{}
+	}
 	issue.IsSummary = true
 	return issue
 }
@@ -35,15 +47,32 @@ func (s *SQLiteStore) ensureIssueListProjection(ctx context.Context) error {
 // issueListMigrationBatch rows are projected per transaction.
 const issueListMigrationBatch = 500
 
+// issueListRebuildSuffix tags the second pass that re-projects rows stored
+// before list rows carried hasContent, subscribers and reaction counts.
+const issueListRebuildSuffix = "\x00list2"
+
 func (s *SQLiteStore) migrateIssueListProjection(ctx context.Context) error {
+	for _, rebuild := range []bool{false, true} {
+		if err := s.migrateIssueListProjectionPass(ctx, rebuild); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *SQLiteStore) migrateIssueListProjectionPass(ctx context.Context, rebuild bool) error {
 	for workspace := range s.workspaces {
-		if _, err := s.db.ExecContext(ctx, `INSERT INTO issue_list_migrations(workspace_key,last_id,complete) VALUES(?,'',0) ON CONFLICT DO NOTHING`, workspace); err != nil {
+		progress := workspace
+		if rebuild {
+			progress += issueListRebuildSuffix
+		}
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO issue_list_migrations(workspace_key,last_id,complete) VALUES(?,'',0) ON CONFLICT DO NOTHING`, progress); err != nil {
 			return err
 		}
 		for {
 			var last string
 			var done int
-			if err := s.db.QueryRowContext(ctx, `SELECT last_id,complete FROM issue_list_migrations WHERE workspace_key=?`, workspace).Scan(&last, &done); err != nil {
+			if err := s.db.QueryRowContext(ctx, `SELECT last_id,complete FROM issue_list_migrations WHERE workspace_key=?`, progress).Scan(&last, &done); err != nil {
 				return err
 			}
 			if done != 0 {
@@ -82,7 +111,7 @@ func (s *SQLiteStore) migrateIssueListProjection(ctx context.Context) error {
 				args := []any{}
 				for _, item := range batch {
 					last = item.id
-					if len(item.list) > 0 {
+					if len(item.list) > 0 && !rebuild {
 						continue
 					}
 					var issue domain.Issue
@@ -123,7 +152,7 @@ func (s *SQLiteStore) migrateIssueListProjection(ctx context.Context) error {
 				if len(batch) < issueListMigrationBatch {
 					done = 1
 				}
-				_, err = tx.ExecContext(ctx, `UPDATE issue_list_migrations SET last_id=?,complete=? WHERE workspace_key=?`, last, done, workspace)
+				_, err = tx.ExecContext(ctx, `UPDATE issue_list_migrations SET last_id=?,complete=? WHERE workspace_key=?`, last, done, progress)
 				return err
 			}()
 			if err != nil {

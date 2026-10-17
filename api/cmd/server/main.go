@@ -755,6 +755,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/issue-records/project-summary", s.issueRecordProjectSummary)
 	mux.HandleFunc("GET /api/issue-records/bootstrap", s.issueRecordsBootstrap)
 	mux.HandleFunc("GET /api/issue-records/groups", s.listIssueRecordGroups)
+	mux.HandleFunc("GET /api/issue-records/search-ids", s.searchIssueRecordIDs)
 	mux.HandleFunc("GET /api/issue-records/{id}", s.getIssueRecord)
 	mux.HandleFunc("GET /api/issue-records/{id}/context", s.getIssueRecordContext)
 	mux.HandleFunc("GET /api/issue-records/{id}/history", s.getIssueRecordHistory)
@@ -1010,6 +1011,7 @@ func (s *server) defaultWorkspaceRegion() string {
 }
 
 func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
+	started := time.Now()
 	if r.Header.Get("X-Flow-Projection") == "issue-detail" {
 		s.issueRecordsBootstrap(w, r)
 		return
@@ -1061,6 +1063,10 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 	}
 	sanitizeBootstrap(&data)
 	s.applyLoopRunCounts(r.Context(), data.Workspace.URLKey, data.Loops)
+	if leanBootstrapRequested(r) {
+		// Everything before the streamed body; the body is a pure encode of data.
+		w.Header().Set("Server-Timing", fmt.Sprintf("lean;dur=%.2f", float64(time.Since(started).Microseconds())/1000))
+	}
 	s.writeStoredBootstrap(w, r, data)
 }
 
