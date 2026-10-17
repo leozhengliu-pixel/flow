@@ -113,13 +113,13 @@ describe('agent reply and message actions', () => {
     expect(await screen.findByText('An answer')).toBeVisible()
   })
 
-  it('lists Copy as markdown, Leave feedback… and Delete ⌘⌫ in the chat menu and sends chat feedback', async () => {
+  it('lists Rename…, Copy as markdown, Leave feedback… and Delete in the chat menu and sends chat feedback', async () => {
     const user = userEvent.setup()
     api.createAgentSessionFeedback.mockResolvedValue(chat([]))
     renderPage(chat([{ id: 'answer', role: 'assistant', content: 'An answer', createdAt: '2026-10-12T00:00:01Z' }]))
     await user.click(await screen.findByRole('button', { name: 'Chat options' }))
     const menu = await screen.findByRole('menu')
-    expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy as markdown', 'Leave feedback…', 'Delete⌘⌫'])
+    expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Rename…ShiftR', 'Copy as markdown', 'Leave feedback…', 'DeleteCtrlDelete'])
     await user.click(within(menu).getByRole('menuitem', { name: 'Leave feedback…' }))
     const dialog = await screen.findByRole('dialog', { name: 'Leave feedback' })
     await user.type(within(dialog).getByRole('textbox', { name: 'Tell us more' }), 'Great chat')

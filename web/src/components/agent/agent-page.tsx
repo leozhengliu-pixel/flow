@@ -1,9 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Popover from "@radix-ui/react-popover";
 import { AlertCircle, Plus } from "lucide-react";
 import {
-  deleteAgentSession,
   fetchAgentStatus,
   getAgentSession,
   stopAgentSession,
@@ -64,6 +62,7 @@ import { isMacPlatform } from '@/components/project-detail/project-detail-shortc
 import { AgentToolbarGlyph } from '@/components/ui/agent-glyph'
 import { AgentReplyActions, AgentSessionFeedbackDialog, AgentUserMessageActions } from './agent-message-actions'
 import { toast } from '@/lib/toast'
+import { AgentChatMenu, AgentRenamePalette, deleteAgentChat, useAgentChatHotkeys } from './agent-chat-actions'
 import { AGENT_PAGE_ASK_EVENT, type AgentPageAskDetail } from './agent-ask-request'
 
 export function AgentPage({
@@ -89,7 +88,7 @@ export function AgentPage({
     [historyOpen, setHistoryOpen] = useState(false),
     [mentions, setMentions] = useState<AgentMention[]>([]),
     [selectedSkills, setSelectedSkills] = useState<string[]>([]),
-    [deleteTarget, setDeleteTarget] = useState<AgentSession>(),
+    [renameOpen, setRenameOpen] = useState(false),
     [editingId, setEditingId] = useState<string>(),
     [approvalBusy, setApprovalBusy] = useState<string>(),
     [activeStreamId, setActiveStreamId] = useState<string>(),
@@ -421,6 +420,21 @@ export function AgentPage({
     setSelectedSkills([]);
     onNavigate(agentPath(data.workspace.urlKey));
   };
+  // Deleting is immediate (no confirmation); the toast's Undo restores the chat and returns to it.
+  const deleteCurrent = () => {
+    if (!current) return;
+    const deleted = current;
+    void deleteAgentChat(deleted, {
+      t,
+      onDeleted: () => {
+        setSessions((list) => list.filter((item) => item.id !== deleted.id));
+        onSessionChange(deleted.id);
+        newChat();
+      },
+      onRestored: commitSession,
+    });
+  };
+  useAgentChatHotkeys(Boolean(current) && !current?.id.startsWith("pending-"), () => setRenameOpen(true), deleteCurrent);
   return (
     <main className={`${styles.page}${shown ? "" : ` ${styles.emptyPage}`}`}>
       <header>
@@ -523,46 +537,20 @@ export function AgentPage({
             >
               <FlowGlyph name="favorite" size={14} />
             </button>
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger asChild>
-                <button
-                  className={styles.headerIcon}
-                  aria-label={t("Chat options")}
-                  type="button"
-                >
-                  <FlowGlyph name="ellipsis" size={14} />
-                </button>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content data-flow-motion="floating"
-                  align="end"
-                  className={styles.optionsMenu}
-                  sideOffset={4}
-                >
-                  <DropdownMenu.Item
-                    onSelect={() =>
-                      void navigator.clipboard.writeText(markdown(current)).then(
-                        () => toast.info(t("Copied conversation"), { description: t("Conversation copied to clipboard as Markdown") }),
-                        () => toast.error(t("Could not copy to clipboard")),
-                      )
-                    }
-                  >
-                    <FlowGlyph name="copy" />
-                    <span>{t("Copy as markdown")}</span>
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item onSelect={() => setSessionFeedbackOpen(true)}>
-                    <FlowGlyph name="thumbsDown" />
-                    <span>{t("Leave feedback…")}</span>
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Separator />
-                  <DropdownMenu.Item onSelect={() => setDeleteTarget(current)}>
-                    <FlowGlyph name="delete" />
-                    <span>{t("Delete")}</span>
-                    <span className={styles.menuShortcut} aria-label={t("Command Backspace")}><kbd>⌘</kbd><kbd>⌫</kbd></span>
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
+            <AgentChatMenu
+              align="end"
+              className={styles.headerIcon}
+              unsaved={current.id.startsWith("pending-")}
+              onCopy={() =>
+                void navigator.clipboard.writeText(markdown(current)).then(
+                  () => toast.info(t("Copied conversation"), { description: t("Conversation copied to clipboard as Markdown") }),
+                  () => toast.error(t("Could not copy to clipboard")),
+                )
+              }
+              onDelete={deleteCurrent}
+              onFeedback={() => setSessionFeedbackOpen(true)}
+              onRename={() => setRenameOpen(true)}
+            />
           </>
         )}
         <span className={styles.headerSpacer} />
@@ -769,34 +757,23 @@ export function AgentPage({
           }}
         />
       )}
-      {deleteTarget && (
-        <div className={styles.confirmOverlay} role="presentation">
-          <section aria-label={t("Delete chat")} role="dialog">
-            <h3>{t("Delete chat")}</h3>
-            <p data-i18n-ignore>{deleteTarget.title}</p>
-            <footer>
-              <button onClick={() => setDeleteTarget(undefined)} type="button">
-                {t("Cancel")}
-              </button>
-              <button
-                className={styles.deleteButton}
-                onClick={() =>
-                  void deleteAgentSession(deleteTarget.id).then(() => {
-                    setSessions((list) =>
-                      list.filter((item) => item.id !== deleteTarget.id),
-                    );
-                    onSessionChange(deleteTarget.id);
-                    setDeleteTarget(undefined);
-                    newChat();
-                  })
-                }
-                type="button"
-              >
-                {t("Delete")}
-              </button>
-            </footer>
-          </section>
-        </div>
+      {current && (
+        <AgentRenamePalette
+          open={renameOpen}
+          title={current.title}
+          onOpenChange={setRenameOpen}
+          onRename={(title) =>
+            void updateAgentSession(current.id, { title }).then(
+              (next) => {
+                // The slug follows the title, so the address moves to the renamed chat's new one.
+                setSessions((list) => list.map((item) => (item.id === next.id ? { ...item, title: next.title, slugId: next.slugId, updatedAt: next.updatedAt } : item)));
+                onSessionChange(next.id, { ...current, title: next.title, slugId: next.slugId, updatedAt: next.updatedAt });
+                onNavigate(agentPath(data.workspace.urlKey, next.slugId));
+              },
+              (reason) => toast.error(reason instanceof Error ? reason.message : t("Could not rename chat")),
+            )
+          }
+        />
       )}
     </main>
   );
@@ -876,6 +853,8 @@ function Conversation({
     return () => { latestRef.current = undefined; };
   }, [latestRef]);
   const latestAssistantIndex = session.messages.findLastIndex((message) => message.role === "assistant");
+  // The files a reply's read_file / transcribe_media rows name, collected once per conversation update.
+  const sessionAttachments = useMemo(() => session.messages.flatMap((item) => item.attachments ?? []), [session.messages]);
   return (
     <div
       ref={scrollRef}
@@ -911,7 +890,7 @@ function Conversation({
                 {waiting
                   ? <div aria-live="polite" className={styles.thinkingPlaceholder}><span className={styles.workShimmer}>{t("Thinking…")}</span></div>
                   : message.parts?.length
-                    ? <AgentMessageParts {...answer} changes={{ sessionId: session.id.startsWith("pending-") ? undefined : session.id, onSessionChange }} onAnswer={index === latestAssistantIndex ? onAnswer : undefined} answerDisabled={busy} draftContext={draftContext} draftProject={draftProject} message={message} onRetry={retryTarget && !busy && index === session.messages.length - 1 ? () => onRetry(retryTarget) : undefined} onToolApproval={onToolApproval} approvalBusy={approvalBusy}/>
+                    ? <AgentMessageParts {...answer} attachments={sessionAttachments} changes={{ sessionId: session.id.startsWith("pending-") ? undefined : session.id, onSessionChange }} onAnswer={index === latestAssistantIndex ? onAnswer : undefined} answerDisabled={busy} draftContext={draftContext} draftProject={draftProject} message={message} onRetry={retryTarget && !busy && index === session.messages.length - 1 ? () => onRetry(retryTarget) : undefined} onToolApproval={onToolApproval} approvalBusy={approvalBusy}/>
                     : message.role === "user"
                       ? <AgentContentWithBlocks content={message.content} renderText={(text) => <AgentMessageText {...answer} content={text} draftContext={draftContext} draftProject={draftProject}/>}/>
                       : <AgentMessageText {...answer} content={message.content} draftContext={draftContext} draftProject={draftProject}/>}
@@ -939,7 +918,7 @@ function Conversation({
 /** Answer chrome for an assistant reply: entity chips need `data`; suggestion chips show only when `onSuggestion` is set. */
 type AnswerProps = { data?: BootstrapData; onSuggestion?: (message: string) => void; streaming?: boolean };
 
-function AgentMessageParts({ changes, draftContext, draftProject, message, onRetry, onToolApproval, approvalBusy, onAnswer, answerDisabled, ...answer }: AnswerProps & { changes?: { sessionId?: string; onSessionChange?: (session: AgentSession) => void }; draftContext: string; draftProject?: Project; message: AgentMessage; onRetry?: () => void; onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string; onAnswer?: (part: AgentMessagePart, choice: { label: string; value: string }) => void; answerDisabled?: boolean }) {
+function AgentMessageParts({ attachments, changes, draftContext, draftProject, message, onRetry, onToolApproval, approvalBusy, onAnswer, answerDisabled, ...answer }: AnswerProps & { attachments?: AgentMessageAttachment[]; changes?: { sessionId?: string; onSessionChange?: (session: AgentSession) => void }; draftContext: string; draftProject?: Project; message: AgentMessage; onRetry?: () => void; onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string; onAnswer?: (part: AgentMessagePart, choice: { label: string; value: string }) => void; answerDisabled?: boolean }) {
   const { t } = useI18n();
   const question = message.parts?.find(part => part.type === "question" && part.question);
   // A reply that stopped on a question keeps its text in the text part; its content also ends with the question.
@@ -953,7 +932,7 @@ function AgentMessageParts({ changes, draftContext, draftProject, message, onRet
   const changedKeys = useMemo(() => agentChangeEntityKeys(message), [message]);
   return <div className={styles.messageParts}>
     {/* Like the reference app, the work folds to "Worked for N seconds ▸" once the answer starts. */}
-    {work.length > 0 && <AgentWorkGroup message={message} parts={work} onToolApproval={onToolApproval} approvalBusy={approvalBusy} running={Boolean(answer.streaming) && !text} collapseWhenDone/>}
+    {work.length > 0 && <AgentWorkGroup attachments={attachments} message={message} parts={work} onToolApproval={onToolApproval} approvalBusy={approvalBusy} running={Boolean(answer.streaming) && !text} collapseWhenDone/>}
     <AgentElicitationResponseQueue answeredCount={queue.answeredCount} elicitationCount={queue.elicitationCount} isSubmitting={submitting} />
     {other.map(part => part.type === "elicitation" ? <AgentElicitation key={part.id} part={part}/> : part.type === "error"
       ? <div className={styles.partError} key={part.id} role="alert"><AlertCircle/><AgentErrorDetail error={part.text ?? ""}/>{onRetry && <button onClick={onRetry} type="button">{t("Retry")}</button>}</div>

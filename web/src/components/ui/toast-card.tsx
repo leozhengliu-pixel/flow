@@ -60,6 +60,7 @@ export function ToastCard({ id, content }: { id: string | number; content: Toast
       data-kind={kind}
       data-flow-toast=""
       data-rich={description || entities.length || links.length ? '' : undefined}
+      data-button={content.button ? '' : undefined}
       onKeyDown={onKeyDown}
       role={kind === 'error' ? 'alert' : 'status'}
     >
@@ -70,7 +71,12 @@ export function ToastCard({ id, content }: { id: string | number; content: Toast
         {entities.length ? <div className="flow-toast__entities">{entities.map((entity, index) => <ToastChip entity={entity} key={index} onOpen={dismiss}/>)}</div> : null}
         {links.length ? <div className="flow-toast__links">{links.map((link, index) => <ToastLinkButton hint={index === 0 && hasPrimary} id={id} key={index} link={link} onRun={dismiss}/>)}</div> : null}
       </div>
-      {content.closeButton ? <button aria-label={t('Dismiss')} className="flow-toast__close" onClick={dismiss} type="button"><ToastCloseIcon/></button> : null}
+      {content.button
+        ? <div className="flow-toast__actions">
+          <button className="flow-toast__button" onClick={() => { runToastLink(content.button!); dismiss() }} type="button">{content.button.label}</button>
+          {content.closeButton ? <button aria-label={t('Dismiss')} className="flow-toast__close" onClick={dismiss} type="button"><ToastCloseIcon/></button> : null}
+        </div>
+        : content.closeButton ? <button aria-label={t('Dismiss')} className="flow-toast__close" onClick={dismiss} type="button"><ToastCloseIcon/></button> : null}
     </div>
   )
 }

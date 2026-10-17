@@ -117,6 +117,26 @@ button.flow-toast__chip:focus-visible { outline: 2px solid var(--focus-ring); ou
 .flow-toast__link:hover { opacity: .8; }
 .flow-toast__link:focus-visible { border-radius: 4px; outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
+/* A toast with a button keeps one centred row: icon, title, then the button and dismiss together on the right. */
+.flow-toast[data-button] { align-items: center; }
+.flow-toast[data-button] .flow-toast__title { padding-right: 0; }
+.flow-toast__actions { flex: none; display: flex; align-items: center; gap: 10px; }
+.flow-toast__actions .flow-toast__close { position: static; margin: -6px; }
+.flow-toast__button {
+  flex: none;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: var(--toast-bg);
+  box-shadow: 0 0 0 .5px var(--theme-border-strong), 0 1px 1px lch(0 0 0 / .04);
+  color: var(--toast-title);
+  font: 500 12px/22px var(--font);
+  cursor: default;
+}
+.flow-toast__button:hover { background: var(--toast-hover-bg); }
+.flow-toast__button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+
 .flow-toast__spinner { animation: flow-toast-spin .9s linear infinite; }
 @keyframes flow-toast-spin { to { transform: rotate(360deg); } }
 

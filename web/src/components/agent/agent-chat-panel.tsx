@@ -3,11 +3,8 @@ import { FileText, Lightbulb, Plus } from 'lucide-react'
 import { AgentDraftCard } from './agent-draft-card'
 import { splitAgentDraft } from './agent-draft'
 import { splitAgentSuggestions } from './agent-answer-content'
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { deleteAgentSession, fetchAgentStatus, resolveAgentApproval, uploadAgentFile } from '@/lib/api'
+import { fetchAgentStatus, resolveAgentApproval, updateAgentSession, uploadAgentFile } from '@/lib/api'
 import { toast } from '@/lib/toast'
-import { FlowDropdownMenuContent, FlowMenuItem } from '@/components/ui/row-context-menu'
-import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from '@/lib/agent-stream'
 import { markStoppedAgentReply } from './agent-stopped-reply'
 import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus, BootstrapData } from '@/types/flow'
@@ -31,6 +28,8 @@ import { clearEntityThreadDraft } from './entity-thread-draft'
 import styles from './agent-chat-panel.module.css'
 import { conversationDraftKeyFor } from './agent-drafts'
 import { useMarkAgentSessionRead } from './agent-read-state'
+import { AgentChatMenu, AgentRenamePalette, deleteAgentChat, useAgentChatHotkeys } from './agent-chat-actions'
+import { AgentSessionFeedbackDialog } from './agent-message-actions'
 
 /** The entity the user is looking at; attached to the first message of a new conversation. */
 export type AgentPageContext = { type: 'project' | 'document' | 'issue' | 'initiative'; id: string; label: string }
@@ -47,6 +46,8 @@ export function AgentChatPanel({
   onHide,
   onOpenFullPage,
   onSessionChange,
+  onSessionDeleted,
+  onSessionRestored,
   onUseResponse,
   useResponseLabel = 'Use response',
   open,
@@ -71,6 +72,10 @@ export function AgentChatPanel({
   onHide?: () => void
   onOpenFullPage?: (session?: AgentSession) => void
   onSessionChange?: (session: AgentSession) => void
+  /** The chat was deleted (the host drops it from its lists). */
+  onSessionDeleted?: (id: string) => void
+  /** Undo on the "Chat deleted" toast brought the chat back; the host lists it again and reopens it. */
+  onSessionRestored?: (session: AgentSession) => void
   /** When set, finished assistant replies offer a button that hands their text back to the caller. */
   onUseResponse?: (content: string) => void
   useResponseLabel?: string
@@ -88,6 +93,8 @@ export function AgentChatPanel({
   const { t } = useI18n()
   const [messages, setMessages] = useState<AgentMessage[]>([])
   const [session, setSession] = useState<AgentSession>()
+  const [renameOpen, setRenameOpen] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [input, setInput] = useState(initialPrompt)
   const [quote, setQuote] = useState(initialQuote)
   const [attachments, setAttachments] = useState<File[]>([])
@@ -223,6 +230,18 @@ export function AgentChatPanel({
     clearEntityThreadDraft(draftKey)
     onClose()
   }
+
+  // Deleting is immediate (no confirmation): the panel closes and the toast's Undo restores the chat.
+  const deleteChat = () => {
+    if (!session) return
+    const deleted = session
+    void deleteAgentChat(deleted, {
+      t,
+      onDeleted: () => { onSessionDeleted?.(deleted.id); close() },
+      onRestored: restored => onSessionRestored?.(restored),
+    })
+  }
+  useAgentChatHotkeys(open && !minimized && Boolean(session) && !session?.id.startsWith('pending-'), () => setRenameOpen(true), deleteChat, '[data-agent-panel]')
 
   // Like the reference app, closing a chat whose composer holds something asks "Discard draft?" first; spaces alone do not count.
   const [discardOpen, setDiscardOpen] = useState(false)
@@ -402,23 +421,16 @@ export function AgentChatPanel({
       title={session?.title ?? t('New chat')}
       titleExtra={session ? (
         // The reference app's chat menu, right after the title once the chat exists.
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild>
-            <button aria-label={t('Chat options')} type="button"><FlowGlyph name="ellipsis" size={14}/></button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <FlowDropdownMenuContent label={t('Chat options')}>
-              <FlowMenuItem icon={<FlowGlyph name="copy"/>} label="Copy as markdown" onSelect={() => void navigator.clipboard.writeText(conversationMarkdown(messages)).then(
-                () => toast.info(t('Copied conversation'), { description: t('Conversation copied to clipboard as Markdown') }),
-                () => toast.error(t('Could not copy to clipboard')),
-              )}/>
-              <FlowMenuItem icon={<FlowGlyph name="delete"/>} label="Delete" shortcut="⌘ ⌫" onSelect={() => void deleteAgentSession(session.id).then(
-                () => { toast.success(t('Chat deleted')); close() },
-                reason => setError(reason instanceof Error ? reason.message : t('Flow Agent is unavailable')),
-              )}/>
-            </FlowDropdownMenuContent>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+        <AgentChatMenu
+          unsaved={session.id.startsWith('pending-')}
+          onCopy={() => void navigator.clipboard.writeText(conversationMarkdown(messages)).then(
+            () => toast.info(t('Copied conversation'), { description: t('Conversation copied to clipboard as Markdown') }),
+            () => toast.error(t('Could not copy to clipboard')),
+          )}
+          onDelete={deleteChat}
+          onFeedback={() => setFeedbackOpen(true)}
+          onRename={() => setRenameOpen(true)}
+        />
       ) : undefined}
       unread={unread}
       variant="floating"
@@ -516,6 +528,21 @@ export function AgentChatPanel({
     </AgentPanel>
     {/* Outside the panel, so the minimized pill's close can ask too. */}
     <AgentDiscardDraftDialog open={open && discardOpen} onCancel={() => setDiscardOpen(false)} onDiscard={() => { setDiscardOpen(false); close() }}/>
+    {session && <AgentRenamePalette
+      open={open && renameOpen}
+      title={session.title}
+      onOpenChange={setRenameOpen}
+      onRename={title => void updateAgentSession(session.id, { title }).then(
+        next => { const renamed = { ...session, title: next.title, slugId: next.slugId, updatedAt: next.updatedAt }; setSession(renamed); onSessionChange?.(renamed) },
+        reason => toast.error(reason instanceof Error ? reason.message : t('Could not rename chat')),
+      )}
+    />}
+    {session && <AgentSessionFeedbackDialog
+      open={open && feedbackOpen}
+      onOpenChange={setFeedbackOpen}
+      sessionId={session.id}
+      onSessionChange={next => { setSession(next); onSessionChange?.(next) }}
+    />}
     </>
   )
 }

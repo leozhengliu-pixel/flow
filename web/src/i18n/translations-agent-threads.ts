@@ -28,4 +28,9 @@ export const agentThreadsZhCN: Record<string, string> = {
   "Copied conversation": "已复制对话",
   "Conversation copied to clipboard as Markdown": "已将对话以 Markdown 格式复制到剪贴板",
   "Chat deleted": "对话已删除",
+  "Rename chat": "重命名对话",
+  "Rename chat to": "将对话重命名为",
+  "Could not rename chat": "无法重命名对话",
+  "Could not delete chat": "无法删除对话",
+  "Could not restore chat": "无法恢复对话",
 };

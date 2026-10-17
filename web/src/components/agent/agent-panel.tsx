@@ -261,6 +261,7 @@ export function AgentPanel({
         aria-label={ariaLabel ?? t('Flow Agent chat')}
         aria-modal={variant === 'floating' ? 'false' : undefined}
         className={styles.panel}
+        data-agent-panel=""
         data-dock={dock}
         data-fullscreen={fullscreen || undefined}
         data-minimized={minimized || undefined}

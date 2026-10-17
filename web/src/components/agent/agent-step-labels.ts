@@ -39,6 +39,7 @@ export const CHAT_TOOL_LABELS: Record<string, [string, string]> = {
   delete_agent_skill: ["Deleting skill…", "Deleted skill"], save_customer: ["Creating customer…", "Created customer"],
   save_customer_request: ["Logging customer request…", "Logged customer request"], save_cycle: ["Updating cycle…", "Updated cycle"],
   report_progress: ["Reporting progress…", "Reported progress"],
+  read_file: ["Reading file…", "Read file"], transcribe_media: ["Transcribing media…", "Transcribed media"],
   web_search: ["Searching the web…", "Searched the web"], fetch_url: ["Reading web page…", "Read web page"],
 }
 
@@ -177,4 +178,18 @@ export function workingLabel(parts: NonNullable<AgentMessage["parts"]>, t: Trans
  */
 export function isProviderReasoning(part: NonNullable<AgentMessage["parts"]>[number]) {
   return part.type === "reasoning" && !part.id.includes("_narration_");
+}
+
+/**
+ * The attachment a read_file call names. The server puts a file reference in the message (a name, or the saved file's
+ * url or id); resolve it against the session's attachments and fall back to the last path segment.
+ */
+export function readFileName(file: unknown, attachments: readonly { name: string; url?: string; id?: string }[] = []) {
+  if (typeof file !== "string" || !file.trim()) return ""
+  const ref = file.trim()
+  const hit = attachments.find(item => item.name === ref || item.url === ref || item.id === ref || (item.url && ref.endsWith(item.url)))
+  if (hit) return hit.name
+  if (!/[/?#]/.test(ref)) return ref
+  const last = ref.split(/[?#]/)[0].split("/").filter(Boolean).at(-1) ?? ref
+  try { return decodeURIComponent(last) } catch { return last }
 }

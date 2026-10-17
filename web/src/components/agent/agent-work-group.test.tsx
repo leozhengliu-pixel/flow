@@ -1,7 +1,7 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
-import type { AgentMessage } from '@/types/flow'
+import type { AgentMessage, AgentMessageAttachment } from '@/types/flow'
 import { AgentErrorDetail, classifyAgentError } from './agent-error-detail'
 import { AgentWorkGroup } from './agent-work-group'
 import { applyAgentStreamEvent } from './agent-stream-state'
@@ -10,14 +10,36 @@ import { translateToChinese } from '@/i18n/translate'
 
 type Parts = NonNullable<AgentMessage['parts']>
 
-function renderGroup(parts: Parts, locale: 'en-US' | 'zh-CN' = 'en-US') {
+function renderGroup(parts: Parts, locale: 'en-US' | 'zh-CN' = 'en-US', attachments?: AgentMessageAttachment[]) {
   localStorage.setItem('flow:locale', locale)
-  return render(<I18nProvider><AgentWorkGroup message={{ durationMs: 3000 }} parts={parts} onToolApproval={vi.fn()} running={false}/></I18nProvider>)
+  return render(<I18nProvider><AgentWorkGroup attachments={attachments} message={{ durationMs: 3000 }} parts={parts} onToolApproval={vi.fn()} running={false}/></I18nProvider>)
 }
 
 afterEach(() => localStorage.removeItem('flow:locale'))
 
 describe('AgentWorkGroup', () => {
+  it('shows "Read file <name>" and "Transcribed media" rows, resolving a file reference to the attachment name', () => {
+    const attachments = [{ name: 'Q3 report.pdf', contentType: 'application/pdf', size: 10, url: '/uploads/agent_upload_1_Q3_report.pdf' }]
+    const parts: Parts = [
+      { id: 't1', type: 'toolCall', status: 'completed', toolCall: { id: 't1', name: 'read_file', arguments: { file: '/uploads/agent_upload_1_Q3_report.pdf' }, status: 'completed' } },
+      { id: 't2', type: 'toolCall', status: 'completed', toolCall: { id: 't2', name: 'read_file', arguments: { file: 'sales.xlsx' }, status: 'completed' } },
+      { id: 't3', type: 'toolCall', status: 'completed', toolCall: { id: 't3', name: 'transcribe_media', arguments: { file: 'call.mp3' }, status: 'completed' } },
+    ]
+    const { container } = renderGroup(parts, 'en-US', attachments)
+    fireEvent.click(screen.getByText(/Worked for/))
+    const rows = [...container.querySelectorAll('[class*="toolCallRow"]')].map(row => row.textContent)
+    expect(rows).toEqual(['Read fileQ3 report.pdf', 'Read filesales.xlsx', 'Transcribed media'])
+  })
+
+  it('translates the attachment tool rows', () => {
+    const { container } = renderGroup([
+      { id: 't1', type: 'toolCall', status: 'completed', toolCall: { id: 't1', name: 'read_file', arguments: { file: 'a.pdf' }, status: 'completed' } },
+      { id: 't2', type: 'toolCall', status: 'completed', toolCall: { id: 't2', name: 'transcribe_media', arguments: { file: 'a.mp4' }, status: 'completed' } },
+    ], 'zh-CN')
+    expect(container.textContent).toContain('已读取文件')
+    expect(container.textContent).toContain('已转写媒体')
+  })
+
   it('hides raw provider reasoning, also in older chats, but keeps the agent\'s own narration and step labels', () => {
     const { container } = renderGroup([
       { id: 'agent_message_1_reasoning', type: 'reasoning', text: 'Figuring out query filters — I need to look into the priority filter', status: 'completed' },

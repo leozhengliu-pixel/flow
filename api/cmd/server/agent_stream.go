@@ -296,6 +296,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	// What the user has seen so far; this run's own assistant text does not ground a write (see agentUngroundedIssueTarget).
 	historyEnd := len(messages)
 	s.addLoopAttachmentInputs(r.Context(), data, *session, messages)
+	r = r.WithContext(withAgentSessionFiles(r.Context(), *session))
 	s.addAgentAttachmentInputs(r.Context(), messages)
 	s.rememberAgentOrigin(r)
 	titleDone := s.startAgentSessionTitle(r, *session, mentions)
@@ -777,6 +778,9 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 					call.Title = "Updated workflow definition draft"
 				}
 			}
+			if callErr == nil && isAgentFileTool(call.Name) {
+				call.Title = agentFileToolTitle(r.Context(), call)
+			}
 			key := "tool:" + call.ID
 			if index, ok := partIndex[key]; ok {
 				parts[index].Status = call.Status
@@ -1059,6 +1063,9 @@ func (s *server) executeAgentTool(r *http.Request, data domain.Bootstrap, call d
 	}
 	if isWebTool(call.Name) {
 		return s.executeWebTool(r.Context(), call.Name, call.Arguments)
+	}
+	if isAgentFileTool(call.Name) {
+		return s.executeAgentFileTool(r.Context(), call)
 	}
 	definitions, err := s.agentToolDefinitions()
 	if err != nil {
