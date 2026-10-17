@@ -125,3 +125,14 @@ body .feature-select-menu{z-index:500;box-sizing:border-box;min-width:93px;width
 .feature-dialog .feature-mention-field{box-sizing:border-box;width:100%;min-height:110px;padding:9px 10px;border:1px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-1);color:var(--theme-text-primary);--mention-field-min-height:92px}
 .feature-dialog .feature-mention-field:focus-within{box-shadow:0 0 0 2px var(--focus-ring)}
 :root[data-theme="light"] .feature-dialog .feature-mention-field{border-color:var(--border-strong);background:var(--theme-surface-1);color:var(--text)}
+
+/* Settings > Pulse: Linear's header/section rhythm and item-aligned schedule menus. */
+.feature-pulse-settings .feature-header{margin-bottom:32px}
+.feature-pulse-settings .feature-header p{margin-top:4px;line-height:22px}
+.feature-pulse-settings .feature-section{margin-top:48px}
+.feature-pulse-settings .feature-section>header{margin-bottom:16px}
+.feature-pulse-settings .feature-section>header p{margin-top:2px;line-height:22px}
+:root[data-theme] .feature-pulse-settings .feature-row .feature-select>span{font-size:13px;color:var(--theme-text-primary)}
+.feature-pulse-settings .feature-select:disabled{opacity:.5}
+html:root[data-theme] body .feature-select-menu.is-overlay{width:auto;min-width:calc(var(--radix-dropdown-menu-trigger-width) + 22px)}
+body .feature-select-menu.is-overlay .menu-item svg{position:absolute;right:15px;margin:0}
