@@ -17,6 +17,20 @@ export type SidebarEntry =
   | "loops";
 export type SidebarVisibility = "always" | "badged" | "never";
 export type SidebarBadgeStyle = "count" | "dot";
+/** Per item badge: "default" follows the global default badge style. */
+export type SidebarBadgeMode = "default" | SidebarBadgeStyle | "none";
+export type SidebarBadgeModes = Partial<Record<SidebarEntry, SidebarBadgeMode>>;
+/** Items that carry a notification count, so only they offer a Badge setting. */
+export const SIDEBAR_BADGE_ENTRIES: readonly SidebarEntry[] = ["inbox", "reviews", "pulse", "drafts"];
+export const sidebarEntryHasBadge = (entry: SidebarEntry) => SIDEBAR_BADGE_ENTRIES.includes(entry);
+export function resolveSidebarBadge(mode: SidebarBadgeMode | undefined, defaultStyle: SidebarBadgeStyle): SidebarBadgeStyle | "none" {
+  return !mode || mode === "default" ? defaultStyle : mode;
+}
+/** The visibility choices an item offers, like the reference app (badge-less items cannot be "Show when badged"). */
+export function sidebarVisibilityOptions(entry: SidebarEntry): SidebarVisibility[] {
+  if (entry === "inbox") return ["always", "badged"];
+  return sidebarEntryHasBadge(entry) ? ["always", "badged", "never"] : ["always", "never"];
+}
 export type SidebarPreferences = Record<SidebarEntry, SidebarVisibility>;
 export type SidebarGroup = "personal" | "workspace";
 export type SidebarOrder = Record<SidebarGroup, SidebarEntry[]>;
@@ -95,11 +109,11 @@ function readStored(base: string, userId?: string): string | null {
 }
 
 export function useSidebarCustomizationState(userId?: string) {
-  const [state, setState] = useState(() => ({ userId, preferences: readPreferences(userId), order: readOrder(userId), badgeStyle: readBadgeStyle(userId) }))
+  const [state, setState] = useState(() => ({ userId, preferences: readPreferences(userId), order: readOrder(userId), badgeStyle: readBadgeStyle(userId), badgeModes: readBadgeModes(userId) }))
   // Another user signed in: load their own choices.
-  const current = state.userId === userId ? state : { userId, preferences: readPreferences(userId), order: readOrder(userId), badgeStyle: readBadgeStyle(userId) }
+  const current = state.userId === userId ? state : { userId, preferences: readPreferences(userId), order: readOrder(userId), badgeStyle: readBadgeStyle(userId), badgeModes: readBadgeModes(userId) }
   if (current !== state) setState(current)
-  const { preferences, order, badgeStyle } = current
+  const { preferences, order, badgeStyle, badgeModes } = current
   useEffect(() => persist(sidebarStorageKey(PREFERENCE_OVERRIDES_KEY, userId), preferenceOverrides(preferences)), [preferences, userId]);
   useEffect(() => {
     // Saved only once rearranged, so later default changes reach everyone else.
@@ -108,22 +122,39 @@ export function useSidebarCustomizationState(userId?: string) {
     if (isDefault) { try { localStorage.removeItem(key) } catch { /* ignore */ } } else persist(key, order)
   }, [order, userId]);
   useEffect(() => persist(sidebarStorageKey("flow.sidebar.badge-style", userId), badgeStyle), [badgeStyle, userId]);
-  const update = <K extends "preferences" | "order" | "badgeStyle">(key: K, value: SetStateAction<(typeof current)[K]>) =>
+  useEffect(() => {
+    const key = sidebarStorageKey("flow.sidebar.badge-modes", userId)
+    if (Object.keys(badgeModes).length === 0) { try { localStorage.removeItem(key) } catch { /* ignore */ } } else persist(key, badgeModes)
+  }, [badgeModes, userId]);
+  const update = <K extends "preferences" | "order" | "badgeStyle" | "badgeModes">(key: K, value: SetStateAction<(typeof current)[K]>) =>
     setState(previous => ({ ...previous, [key]: typeof value === "function" ? (value as (old: (typeof current)[K]) => (typeof current)[K])(previous[key]) : value }))
   const setPreferences = (value: SetStateAction<SidebarPreferences>) => update("preferences", value)
   const setBadgeStyle = (value: SetStateAction<SidebarBadgeStyle>) => update("badgeStyle", value)
+  const setBadgeMode = (entry: SidebarEntry, mode: SidebarBadgeMode) =>
+    update("badgeModes", (value: SidebarBadgeModes) => {
+      const rest = Object.fromEntries(Object.entries(value).filter(([key]) => key !== entry)) as SidebarBadgeModes
+      return mode === "default" ? rest : { ...rest, [entry]: mode }
+    })
   const reorder = (group: SidebarGroup, active: SidebarEntry, target: SidebarEntry) =>
     update("order", (value: SidebarOrder) => ({
       ...value,
       [group]: reorderEntries(value[group], active, target),
     }));
-  return { badgeStyle, order, preferences, reorder, setBadgeStyle, setPreferences };
+  return { badgeModes, badgeStyle, order, preferences, reorder, setBadgeMode, setBadgeStyle, setPreferences };
 }
 
 function readBadgeStyle(userId?: string): SidebarBadgeStyle {
   // Stored JSON-encoded ('"dot"'); older builds wrote the bare value.
   try { const value = readStored("flow.sidebar.badge-style", userId); return value === "dot" || value === '"dot"' ? "dot" : "count"; }
   catch { return "count"; }
+}
+/** Only the items the user changed; "default" is never stored. */
+function readBadgeModes(userId?: string): SidebarBadgeModes {
+  try {
+    const stored = JSON.parse(readStored("flow.sidebar.badge-modes", userId) ?? "{}") as Record<string, unknown>
+    return Object.fromEntries(Object.entries(stored).filter(([key, value]) =>
+      SIDEBAR_BADGE_ENTRIES.includes(key as SidebarEntry) && (value === "count" || value === "dot" || value === "none"))) as SidebarBadgeModes
+  } catch { return {} }
 }
 function readPreferences(userId?: string): SidebarPreferences {
   return { ...defaultPreferences, ...readPreferenceOverrides(userId) }
