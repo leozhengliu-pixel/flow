@@ -257,6 +257,9 @@ func (s *server) updateWorkspacePreferences(w http.ResponseWriter, r *http.Reque
 		if input.SessionDurationDays < 1 || input.SessionDurationDays > 365 {
 			return errInvalid
 		}
+		if err := normalizeSpendLimits(&input.SpendLimits); err != nil {
+			return err
+		}
 		if !validTrustedSourcesMode(input.TrustedSourcesMode) {
 			return fmt.Errorf("%w: trustedSourcesMode must be none or allowlist", errInvalid)
 		}
@@ -2494,6 +2497,35 @@ func validateCodingToolSettings(input *domain.UserSettings) error {
 	}
 	if len(input.CodingPromptTemplate) > 8000 {
 		return fmt.Errorf("%w: prompt template is too long", errInvalid)
+	}
+	return nil
+}
+
+// normalizeSpendLimits validates the AI spend limits: non-negative USD amounts,
+// known reset frequencies (weekly by default) and in-range reset schedule values.
+func normalizeSpendLimits(limits *domain.SpendLimitSettings) error {
+	amounts := []float64{limits.WorkspaceLimit, limits.UserLimit, limits.LoopLimit}
+	for _, overrides := range []map[string]float64{limits.UserOverrides, limits.LoopOverrides} {
+		for _, amount := range overrides {
+			amounts = append(amounts, amount)
+		}
+	}
+	for _, amount := range amounts {
+		if amount < 0 || amount > 1e9 || amount != amount {
+			return fmt.Errorf("%w: spend limits must be between 0 and 1,000,000,000", errInvalid)
+		}
+	}
+	for _, reset := range []*string{&limits.WorkspaceReset, &limits.UserReset, &limits.LoopReset} {
+		if *reset == "" {
+			*reset = "weekly"
+		}
+		if !slices.Contains([]string{"daily", "weekly", "monthly"}, *reset) {
+			return fmt.Errorf("%w: spend limit reset must be daily, weekly or monthly", errInvalid)
+		}
+	}
+	outside := func(value *int, low, high int) bool { return value != nil && (*value < low || *value > high) }
+	if outside(limits.DailyResetHour, 0, 23) || outside(limits.WeeklyResetDay, 0, 6) || outside(limits.MonthlyResetDay, 1, 28) {
+		return fmt.Errorf("%w: spend limit reset schedule is out of range", errInvalid)
 	}
 	return nil
 }
