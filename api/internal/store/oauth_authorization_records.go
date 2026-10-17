@@ -126,7 +126,7 @@ func oauthRecordEvent(ctx context.Context, tx *sqlTx, workspaceID, eventType, id
 		}
 		event.Payload = payload
 	}
-	_, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at,workspace_id) VALUES(?,?,?,?,?,?,?)`, event.ID, event.Type, id, []byte(event.Payload), []byte(nil), now.Format(time.RFC3339Nano), workspaceID)
+	_, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: id, Payload: []byte(event.Payload), PreviousValues: []byte(nil), CreatedAt: now.Format(time.RFC3339Nano), WorkspaceID: workspaceID})
 	return event, err
 }
 

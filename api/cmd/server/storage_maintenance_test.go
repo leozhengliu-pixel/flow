@@ -99,6 +99,7 @@ func TestRealtimeCursorFromBeforeRetentionAsksForResync(t *testing.T) {
 	if lastEvent == "" {
 		t.Fatal("no realtime event was published")
 	}
+	repository.SetChangeLogMinRows(0)
 	// Retention removes the event from the log; a client that was offline
 	// since then reconnects with it as its cursor.
 	if _, err := s.pruneDomainEvents(ctx, time.Now().Add(time.Hour)); err != nil {

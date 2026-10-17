@@ -2963,7 +2963,10 @@ type DomainEvent struct {
 }
 
 type RealtimeEvent struct {
-	ID          string          `json:"id"`
+	ID string `json:"id"`
+	// Seq is the event's change-log cursor within its workspace. It is zero
+	// for events that are not persisted (presence, agent task streaming).
+	Seq         int64           `json:"seq,omitempty"`
 	Type        string          `json:"type"`
 	AggregateID string          `json:"aggregateId,omitempty"`
 	ActorID     string          `json:"actorId,omitempty"`

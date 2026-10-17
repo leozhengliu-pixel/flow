@@ -249,7 +249,7 @@ func (s *SQLiteStore) MutateLabelDeletion(ctx context.Context, workspace, eventT
 			return err
 		}
 		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", now.UnixNano()), Type: eventType, AggregateID: id, Payload: payload, CreatedAt: now}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at,workspace_id) VALUES(?,?,?,?,?,?,?)`, event.ID, event.Type, id, []byte(payload), []byte(nil), now.Format(time.RFC3339Nano), current.Workspace.ID); err != nil {
+		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: id, Payload: []byte(payload), PreviousValues: []byte(nil), CreatedAt: now.Format(time.RFC3339Nano), WorkspaceID: current.Workspace.ID}); err != nil {
 			return err
 		}
 		// Construct replacement slices before commit without copying unrelated bodies.

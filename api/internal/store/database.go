@@ -211,6 +211,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		maxTransactionBytes = 32 << 20
 	}
 	s := &SQLiteStore{db: &sqlDatabase{DB: db, dialect: driver, maxTransactionBytes: maxTransactionBytes, content: newContentOffload(config), searchMaxChars: max(config.SearchIndexMaxChars, 0)}, dialect: driver, fixtureProfile: strings.TrimSpace(config.FixtureProfile), fixturePassword: config.FixturePassword, maxStateBytes: maxStateBytes}
+	s.changeLogMinRows.Store(DefaultChangeLogMinRows)
 	notify := s.publishNotificationSignals
 	s.db.notified.Store(&notify)
 	s.lifecycle, s.stopLifecycle = context.WithCancel(context.Background())
