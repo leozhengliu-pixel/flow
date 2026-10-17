@@ -4137,7 +4137,9 @@ function App() {
         canonicalize(inboxPath(workspace), { replace: true });
         return;
       }
-      const canonical = route.viewMode === "new"
+      const canonical = route.bare
+        ? pulseSidebarPath(workspace, 0)
+        : route.viewMode === "new"
         ? pulseNewViewPath(workspace)
         : route.viewId
           ? pulseViewPath(workspace, route.viewId, route.viewMode === "edit" ? "edit" : undefined)
