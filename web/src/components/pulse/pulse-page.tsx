@@ -1,7 +1,6 @@
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import * as Popover from '@radix-ui/react-popover'
-import { Check, ChevronDown, CircleHelp, Menu, Search, SquarePen, Trash2, X } from 'lucide-react'
+import { Check, ChevronDown, Menu, Search, Trash2, X } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from '@/lib/toast'
 import { confirmAction } from '@/components/ui/action-dialog-service'
@@ -17,11 +16,10 @@ import type { BootstrapData, InitiativeUpdate, Project, ProjectUpdate, PulseItem
 import { FeedStableLastSeen } from './feed-stable-last-seen'
 import { PulseComposer } from './pulse-composer'
 import { PulseFilterChips, PulseFilterMenu } from './pulse-filters'
-import { PulseIcon } from './pulse-icon'
 import { PulseNewViewEditor, PulseSubscriptionMenu } from './pulse-menus'
 import { emptyCopy, orderPulseViews, PULSE_TABS, PULSE_VIEW_KEYS } from './pulse-page-model'
 import { effectivePulseSchedule, type PulseSchedule, type PulseViewDraft } from './pulse-schedule'
-import { feedPostUpdateEnabled, newestPulseItemTime, pulseConfigFromView, pulseGroupLabels, pulseGroupStarts, pulseViewMutation, type PulseGroupKey, weekStartsOnFromSetting, type PulseViewConfig } from './pulse-model'
+import { newestPulseItemTime, pulseConfigFromView, pulseGroupLabels, pulseGroupStarts, pulseViewMutation, type PulseGroupKey, weekStartsOnFromSetting, type PulseViewConfig } from './pulse-model'
 import { PulseUpdateCard, type PulseCardHandlers } from './pulse-update-card'
 import { pulseUnread, usePulseUnread, writePulseLastTab } from './pulse-unread'
 import { PulseWelcomeBanner } from './pulse-welcome-banner'
@@ -243,17 +241,14 @@ export function PulsePage(props: Props) {
   const initiativesEnabled = workspaceFeatureEnabled(data.workspaceSettings.featureFlags, 'initiatives')
   const filtering = Boolean(query.trim()) || quickFilters.filters.length > 0
   const empty = !feed.loading && !feed.error && feed.items.length === 0
-  const showNewButton = feedPostUpdateEnabled(data)
 
   return <main className="flow-framed-workspace main-panel pulse-page">
     <header className="pulse-header">
       <div className="pulse-header-top">
         <button aria-label={t('Open workspace sidebar')} className="pulse-mobile-menu" data-sidebar-trigger onClick={props.onOpenSidebar} type="button"><Menu size={16}/></button>
         <h2>{t('Pulse')}</h2>
-        <PulseHelpPopover/>
         <span className="pulse-header-spacer"/>
         <PulseSubscriptionMenu cadence={schedule} onChange={next => void changeSchedule(next)}/>
-        {showNewButton && <FlowTooltip label={t('New update')}><button aria-label={t('New update')} className="pulse-icon-button" onClick={() => setComposerOpen(true)} type="button"><SquarePen size={14}/></button></FlowTooltip>}
       </div>
       <div className="pulse-toolbar">
         <nav aria-label={t('Pulse views')} className="pulse-view-tabs">
@@ -280,7 +275,7 @@ export function PulsePage(props: Props) {
     {(creating || editing) && <PulseNewViewEditor data={data} draft={draft} onCancel={closeEditor} onChange={setDraft} onSave={() => void saveView()} saving={savingView}/>}
     <section className="pulse-content" onScroll={event => { if (newestLoadedAt && event.currentTarget.scrollTop < 80) markTopReached() }} ref={contentRef}>
       {feed.newItemsCount > 0 && <div className="pulse-new-items-anchor"><button className="pulse-new-items" onClick={() => { void feed.showNewItems().then(() => contentRef.current?.scrollTo?.({ top: 0 })) }} type="button"><span className="pulse-new-items-count">{feed.newItemsCount}</span><span>{feed.newItemsCount === 1 ? t('New update available') : t('New updates available')}</span></button></div>}
-      {showWelcome && !creating && !editing && <PulseWelcomeBanner cadence={schedule} containerRef={contentRef} onConfirm={dismissWelcome}/>}
+      {showWelcome && !empty && !creating && !editing && <PulseWelcomeBanner cadence={schedule} containerRef={contentRef} onConfirm={dismissWelcome}/>}
       {feed.loading && feed.items.length === 0 ? <PulseFeedSkeleton/> : feed.error && feed.items.length === 0 ? <div className="pulse-empty"><strong>{t('Could not load Pulse')}</strong><p>{feed.error}</p><div><button onClick={() => void feed.reload()} type="button">{t('Retry')}</button></div></div> : empty ? (
         filtering ? <PulseNoResults onClearFilters={quickFilters.filters.length ? () => setQuickFilters(EMPTY_CONFIG) : undefined} onClearSearch={query.trim() ? () => setSearch('') : undefined} term={query.trim()}/> : <PulseEmptyState copy={emptyCopy(tab, initiativesEnabled, t)} onCreate={() => setComposerOpen(true)}/>
       ) : <PulseFeedList activeReply={replyRequest} containerRef={contentRef} data={data} feed={feed} handlers={handlers} onActivate={setActiveItemId} onCaughtUp={markTopReached} onHoverChange={changeHover} tab={tab} unsubscribedSources={unsubscribedSources}/>}
@@ -467,19 +462,20 @@ function PulseViewTabs({ activeId, views, workspaceKey, onOpen, onEdit, onDuplic
   </>
 }
 
-function PulseHelpPopover() {
-  const { t } = useI18n()
-  return <Popover.Root><Popover.Trigger asChild><button aria-label={t('What is Pulse?')} className="pulse-help-button" type="button"><CircleHelp size={13}/></button></Popover.Trigger><Popover.Portal><Popover.Content align="start" className="pulse-help-popover" data-flow-motion="floating" sideOffset={6}>
-    <div className="pulse-help-icon"><PulseIcon size={16}/></div>
-    <strong>{t('What is Pulse?')}</strong>
-    <p>{t('Pulse brings together updates from projects, initiatives, and teams so you can follow progress across your workspace.')}</p>
-    <a href={DOCS_URL} rel="noreferrer" target="_blank">{t('Documentation')}</a>
-  </Popover.Content></Popover.Portal></Popover.Root>
+/** The reference app's empty-state art: a stack of hexagonal layers with an avatar on top. */
+function PulseEmptyIllustration() {
+  return <svg aria-hidden="true" className="pulse-empty-art" fill="none" height="80" viewBox="0 0 84 80" width="84">
+    <g className="pulse-empty-art-layers" strokeDasharray="2 2"><path d="M4 40v26M80 40v26M42 56v22"/></g>
+    <g className="pulse-empty-art-edges"><path d="M4 48l38 16 38-16M4 56l38 16 38-16M4 64l38 16 38-16"/></g>
+    <path className="pulse-empty-art-top" d="M42 3 80 19v21L42 56 4 40V19Z" strokeLinejoin="round"/>
+    <circle className="pulse-empty-art-glyph" cx="35" cy="23" r="4"/>
+    <path className="pulse-empty-art-glyph" d="M33 33c2-3 12-5 17-3l-1 4c-4-1-10 0-14 2Z"/>
+  </svg>
 }
 
 function PulseEmptyState({ copy, onCreate }: { copy: string; onCreate: () => void }) {
   const { t } = useI18n()
-  return <div className="pulse-empty"><div className="pulse-empty-icon"><i/><i/><span><PulseIcon size={17}/></span></div><strong>{t('Pulse')}</strong><p>{copy}</p><div><button onClick={onCreate} type="button">{t('New update')}</button><a href={DOCS_URL} rel="noreferrer" target="_blank">{t('Documentation')}</a></div></div>
+  return <div className="pulse-empty"><div className="pulse-empty-body"><PulseEmptyIllustration/><strong>{t('Pulse')}</strong><p>{copy}</p><div><button onClick={onCreate} type="button">{t('New update')}</button><a href={DOCS_URL} rel="noreferrer" target="_blank">{t('Documentation')}</a></div></div></div>
 }
 
 function PulseNoResults({ term, onClearSearch, onClearFilters }: { term: string; onClearSearch?: () => void; onClearFilters?: () => void }) {

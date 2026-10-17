@@ -2,7 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
 import type { Editor } from '@tiptap/react'
-import { BellOff, BellRing, Copy, FolderKanban, FileText, HelpCircle, Link2, MessageCircle, MoreHorizontal, Pencil, SmilePlus, SquareArrowOutUpRight, Trash2, X } from 'lucide-react'
+import { ArrowUp, BellOff, BellRing, Copy, FolderKanban, FileText, HelpCircle, Link2, MessageCircle, MoreHorizontal, Pencil, SmilePlus, SquareArrowOutUpRight, Trash2, X } from 'lucide-react'
 import { memo, useEffect, useRef, useState } from 'react'
 import { formatDistanceToNowStrict } from 'date-fns'
 import { toast } from '@/lib/toast'
@@ -17,7 +17,7 @@ import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { useI18n } from '@/i18n/i18n'
 import { useInitiativeProjectUpdatesSubscription } from '@/lib/pulse-subscriptions'
 import type { Comment, Project, PulseItem, User } from '@/types/flow'
-import { HEALTH_LABELS, pulseUpdateLink, pulseUpdateMarkdown, userName } from './pulse-card-model'
+import { HEALTH_LABELS, PULSE_HEALTH_LABELS, pulseUpdateLink, pulseUpdateMarkdown, userName } from './pulse-card-model'
 import { PulseDiffBlock } from './pulse-diff-block'
 import { PulseWhyDialog } from './pulse-why-dialog'
 
@@ -47,6 +47,11 @@ type Props = PulseCardHandlers & {
   onActivate?: (itemId: string) => void
   /** The pointer is over / left the card (R replies to the hovered card first). */
   onHoverChange?: (itemId: string, hovered: boolean) => void
+}
+
+/** "just now" for the first minute, then "2 minutes ago". */
+function relativeTime(date: Date, now: string) {
+  return Date.now() - date.getTime() < 60_000 ? now : formatDistanceToNowStrict(date, { addSuffix: true })
 }
 
 function commentsLabel(open: boolean, count: number) {
@@ -159,11 +164,11 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
       <div className="pulse-post-heading">
         <PulseSourceTitle item={item} onNavigate={props.onNavigate}/>
         <div className="pulse-post-byline">
-          <span className={`pulse-post-health is-${update.health}`}><HealthGlyph className="pulse-health-glyph" health={update.health}/>{t(HEALTH_LABELS[update.health])}</span>
+          <span className={`pulse-post-health is-${update.health}`}><HealthGlyph className="pulse-health-glyph" health={update.health}/>{t(PULSE_HEALTH_LABELS[item.kind][update.health])}</span>
           <UserAvatar avatarUrl={update.user.avatarUrl} className="avatar pulse-byline-avatar" name={userName(update.user)}/>
           <span className="pulse-post-author" data-i18n-ignore>{userName(update.user)}</span>
           <FlowTooltip label={formatDate(created, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}>
-            <time dateTime={update.createdAt}>{formatDistanceToNowStrict(created, { addSuffix: true })}{update.editedAt ? ` · ${t('edited')}` : ''}</time>
+            <time dateTime={update.createdAt}>{relativeTime(created, t('just now'))}{update.editedAt ? ` · ${t('edited')}` : ''}</time>
           </FlowTooltip>
         </div>
       </div>
@@ -191,21 +196,20 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
     <PulseDiffBlock diff={item.diff ?? update.diff} kind={item.kind}/>
     {attachments.length > 0 && <div className="pulse-post-attachments">{attachments.map(attachment => <span key={attachment.id}><a href={attachment.url} rel="noreferrer" target="_blank"><FileText size={13}/><b data-i18n-ignore>{attachment.title}</b></a>{canEdit && <button aria-label={t('Remove attachment')} onClick={() => props.onDeleteAttachment(item, attachment.id).catch(() => undefined)} type="button"><X size={11}/></button>}</span>)}</div>}
     <footer className="pulse-post-footer">
+      <FlowTooltip label={t(label)} shortcut="R">
+        <button aria-expanded={commentsOpen} aria-label={t(label)} className="pulse-footer-button" onClick={() => setCommentsOpen(value => !value)} type="button"><MessageCircle size={16}/>{comments.length > 0 && <span>{comments.length}</span>}</button>
+      </FlowTooltip>
       <div className="pulse-post-reactions">
         {Object.entries(reactions).filter(([, userIds]) => userIds.length).map(([emoji, userIds]) => <button aria-pressed={userIds.includes(viewer.id)} key={emoji} onClick={() => props.onReact(item, emoji).catch(() => undefined)} type="button"><span>{emoji}</span>{userIds.length}</button>)}
         <EmojiPicker align="start" onSelect={emoji => props.onReact(item, emoji).catch(() => undefined)}><button aria-label={t('Add reaction')} className="pulse-footer-button" type="button"><SmilePlus size={14}/></button></EmojiPicker>
       </div>
-      <FlowTooltip label={t(label)} shortcut="R">
-        <button aria-expanded={commentsOpen} aria-label={t(label)} className="pulse-footer-button" onClick={() => setCommentsOpen(value => !value)} type="button"><MessageCircle size={14}/>{comments.length > 0 && <span>{comments.length}</span>}</button>
-      </FlowTooltip>
     </footer>
     {commentsOpen && <section aria-label={t('Comments')} className="pulse-post-comments">
       {comments.map(entry => <PulseComment comment={entry} key={entry.id}/>)}
       <div className="pulse-post-comment-box">
-        <UserAvatar avatarUrl={viewer.avatarUrl} className="avatar pulse-byline-avatar" name={userName(viewer)}/>
         <div className="pulse-post-comment-editor">
           <IssueDescriptionEditor ariaLabel={t('Leave a comment…')} className="pulse-post-comment-rich-editor" editorRef={editor => { editorRef.current = editor }} key={composerKey} onChange={setComment} onSubmit={() => void submitComment()} placeholder={t('Leave a comment…')} state={comment?.documentJSON} users={props.users} value={comment?.markdown ?? ''}/>
-          <button className="pulse-post-comment-submit" disabled={!comment?.markdown.trim() || posting} onClick={() => void submitComment()} type="button">{posting ? t('Sending…') : t('Comment')}</button>
+          <button aria-label={posting ? t('Sending…') : t('Comment')} className="pulse-post-comment-submit" disabled={!comment?.markdown.trim() || posting} onClick={() => void submitComment()} type="button"><ArrowUp size={14}/></button>
         </div>
       </div>
     </section>}
@@ -219,12 +223,12 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
 })
 
 function PulseComment({ comment }: { comment: Comment }) {
-  const { formatDate } = useI18n()
+  const { formatDate, t } = useI18n()
   const created = new Date(comment.createdAt)
   return <article className="pulse-post-comment">
     <UserAvatar avatarUrl={comment.user.avatarUrl} className="avatar pulse-byline-avatar" name={userName(comment.user)}/>
     <div>
-      <header><strong data-i18n-ignore>{userName(comment.user)}</strong><time dateTime={comment.createdAt} title={formatDate(created, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}>{formatDistanceToNowStrict(created, { addSuffix: true })}</time></header>
+      <header><strong data-i18n-ignore>{userName(comment.user)}</strong><time dateTime={comment.createdAt} title={formatDate(created, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}>{relativeTime(created, t('just now'))}</time></header>
       <div className="pulse-post-comment-body"><RichComment body={comment.body} data={comment.bodyData} version={comment.version}/></div>
     </div>
   </article>
@@ -244,7 +248,7 @@ function PulseSourceTitle({ item, onNavigate }: { item: PulseItem; onNavigate: (
   return <Popover.Root onOpenChange={setOpen} open={open}>
     <Popover.Anchor asChild>
       <a className="pulse-post-title" href={item.source.url} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); onNavigate(item.source.url) }} onPointerEnter={() => schedule(true)} onPointerLeave={() => schedule(false)}>
-        <ViewGlyph color={item.source.color} icon={icon}/><span data-i18n-ignore>{item.source.name}</span>
+        <span data-i18n-ignore>{item.source.name}</span>
       </a>
     </Popover.Anchor>
     <Popover.Portal><Popover.Content align="start" className="pulse-hover-card" data-flow-motion="floating" onOpenAutoFocus={event => event.preventDefault()} onPointerEnter={() => schedule(true)} onPointerLeave={() => schedule(false)} sideOffset={6}>
