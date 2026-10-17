@@ -16,7 +16,7 @@ export function ToolbarIcon({ make }: { make: () => SVGSVGElement }) {
  * width (screenshots are taken at 1.5x or more) and 600px tall, with a hover toolbar. In the composer the toolbar can
  * also delete it and side handles resize it.
  */
-export function AgentInlineImage({ src, alt, editable = false, uploading = false, onRemove }: { src: string; alt: string; editable?: boolean; uploading?: boolean; onRemove?: () => void }) {
+export function AgentInlineImage({ src, alt, editable = false, uploading = false, failed = false, onRetry, onRemove }: { src: string; alt: string; editable?: boolean; uploading?: boolean; failed?: boolean; onRetry?: () => void; onRemove?: () => void }) {
   const { t } = useI18n()
   const [natural, setNatural] = useState<number>()
   const [width, setWidth] = useState<number>()
@@ -45,7 +45,7 @@ export function AgentInlineImage({ src, alt, editable = false, uploading = false
     </button>
   )
   return (
-    <span className={styles.frame} data-editable={editable || undefined} data-uploading={uploading || undefined}>
+    <span className={styles.frame} data-editable={editable || undefined} data-uploading={uploading || undefined} data-failed={failed || undefined}>
       <img
         alt={alt}
         className={styles.image}
@@ -56,14 +56,19 @@ export function AgentInlineImage({ src, alt, editable = false, uploading = false
         src={src}
         style={{ maxWidth: natural ? `min(100%, ${Math.round(natural / 1.5 * 100) / 100}px)` : '100%', width }}
       />
-      {!uploading && <span className={styles.toolbar}>
+      {failed && <span className={styles.failed} role="alert">
+        {t("Image upload didn't complete")}
+        <button onClick={event => { event.preventDefault(); onRetry?.() }} onMouseDown={event => event.preventDefault()} type="button">{t('Retry')}</button>
+        <button onClick={event => { event.preventDefault(); onRemove?.() }} onMouseDown={event => event.preventDefault()} type="button">{t('Delete')}</button>
+      </span>}
+      {!uploading && !failed && <span className={styles.toolbar}>
         {button('View image', viewIcon, view)}
         {button('Download', downloadIcon, () => downloadImage(item))}
         {button('Copy image', copyIcon, () => void copyImage(item))}
         {button('Copy link', linkIcon, () => void copyText(new URL(src, window.location.origin).href))}
         {editable && <><span aria-hidden className={styles.separator}/>{button('Delete', deleteIcon, () => onRemove?.())}</>}
       </span>}
-      {editable && !uploading && <>
+      {editable && !uploading && !failed && <>
         <span aria-hidden className={styles.handle} data-side="left" onPointerDown={resize('left')}/>
         <span aria-hidden className={styles.handle} data-side="right" onPointerDown={resize('right')}/>
       </>}

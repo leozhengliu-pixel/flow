@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MutableRefObject, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
-import { FileText } from 'lucide-react'
+import { FileText, Link2, PanelBottom } from 'lucide-react'
 import { ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { useIssueCandidates } from '@/components/issue/use-issue-candidates'
 import { avatarColor } from '@/components/issue/avatar-color'
@@ -10,10 +10,14 @@ import { useI18n } from '@/i18n/i18n'
 import { AGENT_UPLOAD_MAX_ITEMS, agentFileKind, agentUploadLimit, pastedAgentFiles, shrinkAgentImage } from './agent-attachments'
 import { agentBlockMarkdown, splitAgentBlocks } from './agent-content-model'
 import { emptyLine, fillAgentComposer, inlineBlock, isBlock, isEmptyLine, type BlockKind, type InlineBlock } from './agent-composer-dom'
+import { AgentInlineEmbed } from './agent-inline-embed'
 import { AgentInlineFile } from './agent-inline-file'
 import { AgentInlineImage } from './agent-inline-image'
 import { AgentInlineVideo } from './agent-inline-video'
 import { toast } from '@/lib/toast'
+import embedStyles from '@/components/editor/embeds/embed.module.css'
+import type { EmbedSource } from '@/components/editor/embeds/embed-providers'
+import { formattingMarkdown, planPaste } from './agent-paste'
 import type { BootstrapData, WorkflowState } from '@/types/flow'
 import styles from './agent-mention-input.module.css'
 import { AgentSelectedTextIcon } from './agent-icons'
@@ -97,6 +101,10 @@ export function AgentMentionInput({
   const [empty, setEmpty] = useState(!value && !quote)
   const [quoteEl, setQuoteEl] = useState<HTMLElement | null>(null)
   const [blocks, setBlocks] = useState<InlineBlock[]>([])
+  // A pasted link's popup ("Keep as link (Esc)", plus "Embed ... (Tab)" for a video or preview) while it is the latest edit.
+  const [hint, setHint] = useState<{ link: HTMLAnchorElement; embed?: EmbedSource; active: 0 | 1 } | null>(null)
+  const pasteAsText = useRef(false)
+  const retries = useRef(new Map<HTMLElement, () => void>())
   // The page only holds the issues it loaded, so fetch workspace issues while the menu is open.
   const candidates = useIssueCandidates(data, query !== null)
 
@@ -134,6 +142,8 @@ export function AgentMentionInput({
       }
       if (isBlock(node)) return node.dataset.src ? agentBlockMarkdown({ kind: node.dataset.kind as BlockKind, name: node.dataset.name ?? '', src: node.dataset.src, size: node.dataset.size, type: node.dataset.type }) : ''
       if (node.tagName === 'BR') return '\n'
+      const formatted = formattingMarkdown(node, walk)
+      if (formatted !== undefined) return formatted
       const inner = [...node.childNodes].map(walk).join('')
       return node.tagName === 'DIV' && node !== editor ? `\n${inner}` : inner
     }
@@ -286,13 +296,40 @@ export function AgentMentionInput({
     sync()
   }
 
-  // Files go in after the line holding the caret (at the end without one), followed by a line to type on.
-  const insertFiles = useCallback((picked: File[]) => {
+  type PendingUpload = { kind: BlockKind; name: string; size: number; type: string; preview?: string; produce: () => Promise<File>; remote?: boolean }
+
+  const startUpload = useCallback((block: HTMLElement, item: PendingUpload) => {
+    const run = () => {
+      setBlocks(current => current.map(entry => entry.el === block ? { ...entry, failed: false } : entry))
+      void item.produce().then(ready => {
+        if (ready.size > agentUploadLimit(ready)) throw new Error(t(agentUploadLimit(ready) > 2 * 1024 * 1024 ? "Files over 20 MB can't be attached" : "Files over 2 MB can't be attached"))
+        return onUploadFile!(ready)
+      }).then(upload => {
+        block.dataset.src = upload.url
+        block.dataset.name = upload.name || item.name
+        block.dataset.size = String(upload.size)
+        block.dataset.type = upload.contentType
+        if (item.preview) URL.revokeObjectURL(item.preview)
+        setBlocks(current => current.map(entry => entry.el === block ? { ...entry, preview: undefined, failed: false, src: upload.url, name: upload.name || item.name, size: upload.size, type: upload.contentType } : entry))
+        sync()
+      }).catch((error: unknown) => {
+        // A picture fetched from a web page stays, with Retry; a file the user picked is simply dropped.
+        if (item.remote && block.isConnected) { setBlocks(current => current.map(entry => entry.el === block ? { ...entry, failed: true } : entry)); return }
+        block.remove()
+        sync()
+        toast.error(error instanceof Error ? error.message : t('Could not upload file'))
+      })
+    }
+    retries.current.set(block, run)
+    run()
+  }, [onUploadFile, sync, t])
+
+  // Blocks go in after the line holding the caret (at the end without one), followed by a line to type on.
+  const insertUploads = useCallback((items: PendingUpload[]) => {
     const editor = editorRef.current
-    const files = picked.filter(file => agentFileKind(file) !== 'audio')
-    if (!editor || !onUploadFile || disabled || !files.length) return
+    if (!editor || !onUploadFile || disabled || !items.length) return
     const room = AGENT_UPLOAD_MAX_ITEMS - editor.querySelectorAll('[data-agent-block]').length
-    if (files.length > room) toast.error(t('A message can carry up to 8 files'), { id: 'agent-attachment-limit' })
+    if (items.length > room) toast.error(t('A message can carry up to 8 files'), { id: 'agent-attachment-limit' })
     const selection = window.getSelection()
     const caret = selection?.rangeCount && editor.contains(selection.getRangeAt(0).startContainer) ? selection.getRangeAt(0).startContainer : null
     let line: Node | null = caret ?? editor.lastChild
@@ -302,30 +339,12 @@ export function AgentMentionInput({
     const before = trailing ?? line?.nextSibling ?? null
     let focus: HTMLElement | null = trailing
     let inserted = false
-    for (const file of files.slice(0, Math.max(0, room))) {
-      const kind = agentFileKind(file) as BlockKind
-      const preview = kind === 'file' ? undefined : URL.createObjectURL(file)
-      const block = inlineBlock(kind, file.name, '', file.size, file.type)
+    for (const item of items.slice(0, Math.max(0, room))) {
+      const block = inlineBlock(item.kind, item.name, '', item.size, item.type)
       editor.insertBefore(block, before)
       inserted = true
-      setBlocks(current => [...current, { el: block, id: block.dataset.agentBlock!, kind, name: file.name, src: '', size: file.size, type: file.type, preview }])
-      const prepared = kind === 'image' ? shrinkAgentImage(file) : Promise.resolve(file)
-      void prepared.then(ready => {
-        if (ready.size > agentUploadLimit(ready)) throw new Error(t(agentUploadLimit(ready) > 2 * 1024 * 1024 ? "Files over 20 MB can't be attached" : "Files over 2 MB can't be attached"))
-        return onUploadFile(ready)
-      }).then(upload => {
-        block.dataset.src = upload.url
-        block.dataset.name = upload.name || file.name
-        block.dataset.size = String(upload.size)
-        block.dataset.type = upload.contentType
-        if (preview) URL.revokeObjectURL(preview)
-        setBlocks(current => current.map(item => item.el === block ? { ...item, preview: undefined, src: upload.url, name: upload.name || file.name, size: upload.size, type: upload.contentType } : item))
-        sync()
-      }).catch((error: unknown) => {
-        block.remove()
-        sync()
-        toast.error(error instanceof Error ? error.message : t('Could not upload file'))
-      })
+      setBlocks(current => [...current, { el: block, id: block.dataset.agentBlock!, kind: item.kind, name: item.name, src: '', size: item.size, type: item.type, preview: item.preview }])
+      startUpload(block, item)
     }
     if (inserted && !trailing && !isBlock(before)) {
       focus = emptyLine()
@@ -341,7 +360,28 @@ export function AgentMentionInput({
       focus.scrollIntoView?.({ block: 'nearest' })
     }
     sync()
-  }, [disabled, editorRef, onUploadFile, sync, t])
+  }, [disabled, editorRef, onUploadFile, startUpload, sync, t])
+
+  const insertFiles = useCallback((picked: File[]) => {
+    insertUploads(picked.filter(file => agentFileKind(file) !== 'audio').map((file): PendingUpload => {
+      const kind = agentFileKind(file) as BlockKind
+      return { kind, name: file.name, size: file.size, type: file.type, preview: kind === 'file' ? undefined : URL.createObjectURL(file), produce: () => kind === 'image' ? shrinkAgentImage(file) : Promise.resolve(file) }
+    }))
+  }, [insertUploads])
+
+  // A picture copied from a web page (html with only an <img>) is downloaded and uploaded like a pasted file.
+  const insertRemoteImage = useCallback((src: string) => {
+    insertUploads([{
+      kind: 'image', name: decodeURIComponent(new URL(src).pathname.split('/').pop() || 'image'), size: 0, type: '', preview: src, remote: true,
+      produce: async () => {
+        const response = await fetch(src)
+        const blob = response.ok ? await response.blob() : undefined
+        if (!blob?.type.startsWith('image/')) throw new Error('not an image')
+        const name = decodeURIComponent(new URL(src).pathname.split('/').pop() || '') || `image.${blob.type.split('/')[1]?.split('+')[0] || 'png'}`
+        return shrinkAgentImage(new File([blob], name, { type: blob.type }))
+      },
+    }])
+  }, [insertUploads])
 
   useEffect(() => {
     if (!insertFilesRef) return
@@ -349,8 +389,129 @@ export function AgentMentionInput({
     return () => { insertFilesRef.current = null }
   }, [insertFiles, insertFilesRef])
 
-  const uploading = blocks.some(block => !block.src)
+  const uploading = blocks.some(block => !block.src && !block.failed)
   useEffect(() => { onBusyChange?.(uploading) }, [onBusyChange, uploading])
+
+  const placeCaret = (node: Node, offset?: number) => {
+    const selection = window.getSelection()
+    const range = document.createRange()
+    if (offset === undefined) range.setStartAfter(node); else range.setStart(node, offset)
+    range.collapse(true)
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+  }
+
+  /** The caret's range when it is in the composer's own text, else the end of the composer. */
+  const pasteRange = () => {
+    const editor = editorRef.current!
+    const selection = window.getSelection()
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : undefined
+    const inside = range && editor.contains(range.commonAncestorContainer) && !(range.commonAncestorContainer.parentElement?.closest('[contenteditable=false]') && range.commonAncestorContainer.parentElement.closest('[contenteditable=false]') !== editor)
+    if (inside) return range
+    const end = document.createRange()
+    end.selectNodeContents(editor)
+    end.collapse(false)
+    return end
+  }
+
+  /** Rich text and Markdown go in as elements; a line of lists or code ends with a fresh line to carry on typing. */
+  const insertFragment = (fragment: DocumentFragment) => {
+    const editor = editorRef.current
+    if (!editor) return
+    editor.focus({ preventScroll: true })
+    const range = pasteRange()
+    range.deleteContents()
+    const last = fragment.lastChild!
+    range.insertNode(fragment)
+    if (last instanceof HTMLElement && ['UL', 'OL', 'PRE'].includes(last.tagName)) {
+      const line = emptyLine()
+      last.after(line)
+      placeCaret(line, 0)
+    } else placeCaret(last)
+    setQuery(null)
+    sync()
+  }
+
+  const insertChip = (option: MentionOption) => {
+    const editor = editorRef.current
+    if (!editor) return
+    editor.focus({ preventScroll: true })
+    const range = pasteRange()
+    range.deleteContents()
+    const chip = document.createElement('span')
+    chip.contentEditable = 'false'
+    chip.className = styles.chip
+    chip.dataset.mentionType = option.type
+    chip.dataset.mentionId = option.id
+    chip.dataset.mentionLabel = option.label
+    const after = document.createTextNode(' ')
+    range.insertNode(after)
+    range.insertNode(chip)
+    placeCaret(after, 1)
+    setChips(current => [...current, { el: chip, option }])
+    sync()
+  }
+
+  /** A line with only the link on it can become an embed (the reference app offers it for an otherwise empty paragraph). */
+  const aloneOnLine = (link: HTMLElement) => {
+    const edge = (node: Node | null, step: 'previousSibling' | 'nextSibling') => {
+      for (let current = node; current; current = current[step]) {
+        if (current instanceof HTMLElement && (current.tagName === 'BR' || current.tagName === 'DIV')) return true
+        if (current.textContent?.trim()) return false
+      }
+      return true
+    }
+    return link.parentNode === editorRef.current ? edge(link.previousSibling, 'previousSibling') && edge(link.nextSibling, 'nextSibling') : link.parentElement?.tagName === 'DIV' && link.parentElement.textContent === link.textContent
+  }
+
+  const insertLink = (href: string, embed?: EmbedSource) => {
+    const editor = editorRef.current
+    if (!editor) return
+    editor.focus({ preventScroll: true })
+    const range = pasteRange()
+    range.deleteContents()
+    const link = document.createElement('a')
+    link.setAttribute('href', href)
+    link.textContent = href
+    const space = document.createTextNode(' ')
+    range.insertNode(space)
+    range.insertNode(link)
+    placeCaret(space)
+    setQuery(null)
+    sync()
+    setHint({ link, embed: embed && aloneOnLine(link) ? embed : undefined, active: 0 })
+  }
+
+  /** Tab on the link popup: the link's line becomes an embedded player or preview, with a line after it to type on. */
+  const acceptEmbed = () => {
+    const editor = editorRef.current
+    if (!hint?.embed || !editor || !hint.link.isConnected) return
+    const { link, embed } = hint
+    const src = link.getAttribute('href') ?? ''
+    const block = inlineBlock('embed', src, src, 0, embed.provider)
+    const line = link.parentNode === editor ? link : link.parentNode!
+    if (link.nextSibling instanceof Text && link.nextSibling.data === ' ') link.nextSibling.remove()
+    if (line.nextSibling instanceof HTMLBRElement) line.nextSibling.remove()
+    line.parentNode!.replaceChild(block, line)
+    const next = block.nextSibling
+    const target = isEmptyLine(next) ? next as HTMLElement : emptyLine()
+    if (target !== next) block.after(target)
+    setBlocks(current => [...current, { el: block, id: block.dataset.agentBlock!, kind: 'embed', name: src, src, size: 0, type: embed.provider }])
+    setHint(null)
+    editor.focus({ preventScroll: true })
+    placeCaret(target, 0)
+    sync()
+  }
+
+  const pasteUrl = (url: Extract<ReturnType<typeof planPaste>, { kind: 'url' }>['url']) => {
+    if (url.kind === 'issue') {
+      const issue = data.issues.find(item => item.identifier.toUpperCase() === url.identifier)
+      if (issue) { insertChip({ type: 'issue', id: issue.id, label: issue.identifier, key: `issue:${issue.id}`, group: '', detail: issue.title, icon: <StatusIcon state={issue.state} size={14}/> }); return }
+      insertLink(url.href)
+      return
+    }
+    insertLink(url.href, url.embed)
+  }
 
   const removeBlock = (el: HTMLElement) => {
     // The line typed after a lone block goes with it when it is empty.
@@ -361,6 +522,13 @@ export function AgentMentionInput({
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    pasteAsText.current = (event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'v'
+    if (hint && !['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) {
+      if (event.key === 'Tab' && !event.shiftKey && hint.embed) { event.preventDefault(); acceptEmbed(); return }
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setHint(null); return }
+      if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && hint.embed) { event.preventDefault(); setHint({ ...hint, active: hint.active ? 0 : 1 }); return }
+      setHint(null)
+    }
     if (query !== null && options.length) {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault()
@@ -399,6 +567,7 @@ export function AgentMentionInput({
       </div>,
       document.body,
     )}
+    {hint && hint.link.isConnected && createPortal(<LinkHint hint={hint} onKeep={() => setHint(null)} onEmbed={acceptEmbed} onActive={active => setHint(current => current && { ...current, active })}/>, document.body)}
     <div
       ref={editorRef}
       aria-label={ariaLabel}
@@ -409,17 +578,28 @@ export function AgentMentionInput({
       data-placeholder={placeholder}
       role="textbox"
       suppressContentEditableWarning
-      onInput={() => { sync(); detectQuery() }}
+      onInput={() => { setHint(null); sync(); detectQuery() }}
       onKeyUp={event => { if (!['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].includes(event.key)) detectQuery() }}
-      onClick={detectQuery}
-      onBlur={() => setQuery(null)}
+      onClick={() => { setHint(null); detectQuery() }}
+      onBlur={() => { setQuery(null); setHint(null) }}
       onKeyDown={onKeyDown}
       onPaste={event => {
         event.preventDefault()
         const files = onPasteFiles || onUploadFile ? pastedAgentFiles(event.clipboardData) : []
         if (onUploadFile) insertFiles(files)
         else if (files.length) onPasteFiles?.(files)
-        if (!files.length) document.execCommand('insertText', false, event.clipboardData.getData('text/plain'))
+        if (files.length) return
+        const plain = event.clipboardData.getData('text/plain')
+        // Inside a code block (and for Shift-paste) the text goes in as typed.
+        const selection = window.getSelection()
+        const inCode = Boolean(selection?.anchorNode && (selection.anchorNode instanceof Element ? selection.anchorNode : selection.anchorNode.parentElement)?.closest('pre'))
+        const asText = pasteAsText.current
+        pasteAsText.current = false
+        const plan = inCode || asText ? { kind: 'text' as const } : planPaste(event.clipboardData, window.location.origin)
+        if (plan.kind === 'image' && onUploadFile) insertRemoteImage(plan.src)
+        else if (plan.kind === 'url') pasteUrl(plan.url)
+        else if (plan.kind === 'fragment') insertFragment(plan.fragment)
+        else document.execCommand('insertText', false, plain)
       }}
     />
     {quoteEl && quote && createPortal(<>
@@ -430,7 +610,8 @@ export function AgentMentionInput({
       const uploadingBlock = !block.src
       const src = block.src || block.preview || ''
       return createPortal(
-        block.kind === 'image' ? <AgentInlineImage alt={block.name} editable onRemove={() => removeBlock(block.el)} src={src} uploading={uploadingBlock}/>
+        block.kind === 'image' ? <AgentInlineImage alt={block.name} editable failed={block.failed} onRemove={() => removeBlock(block.el)} onRetry={() => retries.current.get(block.el)?.()} src={src} uploading={uploadingBlock && !block.failed}/>
+          : block.kind === 'embed' ? <AgentInlineEmbed editable onRemove={() => removeBlock(block.el)} src={block.src}/>
           : block.kind === 'video' ? <AgentInlineVideo editable name={block.name} onRemove={() => removeBlock(block.el)} src={src} uploading={uploadingBlock}/>
           : <AgentInlineFile contentType={block.type} editable name={block.name} onRemove={() => removeBlock(block.el)} size={block.size} src={src} uploading={uploadingBlock}/>,
         block.el,
@@ -450,4 +631,23 @@ function issueMentionRank(identifier: string, needle: string) {
   if (key === needle) return 0
   if (key.startsWith(needle)) return 1
   return 2
+}
+
+/** The popup beside a pasted link: "Embed ... (Tab)" when the link can be embedded, always "Keep as link (Esc)". */
+function LinkHint({ hint, onKeep, onEmbed, onActive }: { hint: { link: HTMLAnchorElement; embed?: EmbedSource; active: 0 | 1 }; onKeep: () => void; onEmbed: () => void; onActive: (active: 0 | 1) => void }) {
+  const { t } = useI18n()
+  const rect = hint.link.getBoundingClientRect()
+  const left = Math.max(12, Math.min(rect.left, window.innerWidth - 240))
+  const row = (index: 0 | 1, icon: ReactNode, label: string, key: string, run: () => void) => (
+    <button className={embedStyles.popoverItem} data-active={hint.active === index || undefined} onClick={run} onMouseDown={event => event.preventDefault()} onMouseOver={() => onActive(index)} type="button">
+      <span className={embedStyles.popoverIcon}>{icon}</span>
+      <span className={embedStyles.popoverLabel}>{label}</span>
+      <span className={embedStyles.popoverSpacer}/>
+      <kbd className={embedStyles.popoverKey}>{key}</kbd>
+    </button>
+  )
+  return <div className={embedStyles.popover} data-i18n-ignore data-open="true" role="menu" style={{ transform: `translate3d(${Math.round(left)}px, ${Math.round(rect.bottom + 8)}px, 0)` }}>
+    {hint.embed && row(0, <PanelBottom size={14}/>, t(hint.embed.label ?? 'Embed'), t('Tab'), onEmbed)}
+    {row(1, <Link2 size={14}/>, t('Keep as link'), t('Esc'), onKeep)}
+  </div>
 }
