@@ -74,3 +74,6 @@
 .handle[data-side="left"] { left: 4px; }
 .handle[data-side="right"] { right: 4px; }
 .frame:hover .handle { display: block; }
+.frame[data-failed] .image { opacity: .35; }
+.failed { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 8px; color: var(--pk-text); font: 450 13px/20px var(--font); text-align: center; }
+.failed button { padding: 0 6px; border: 0; background: transparent; color: var(--pk-muted); font: inherit; text-decoration: underline; cursor: pointer; }

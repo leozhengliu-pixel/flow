@@ -482,6 +482,19 @@ export function SettingsPage(props: SettingsPageProps) {
   const mainRef = useRef<HTMLElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const searchResultsRef = useRef<HTMLDivElement | null>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
+  // Opening a page deep in the nav (direct link, search result) reveals its
+  // item (centered), like the reference sidebar; visible items stay put.
+  useEffect(() => {
+    const nav = sidebarRef.current?.querySelector<HTMLElement>("nav");
+    const active = nav?.querySelector<HTMLElement>("button.active");
+    if (!nav || !active) return;
+    const navBox = nav.getBoundingClientRect();
+    const box = active.getBoundingClientRect();
+    if (box.top < navBox.top + 29 || box.bottom > navBox.bottom - 4) {
+      nav.scrollTop += box.top - navBox.top - (navBox.height - box.height) / 2;
+    }
+  }, [props.page, props.teamKey, props.teamSection]);
   const searchTargetRequestRef = useRef(0);
   const sidebarCustomization = useSidebarCustomizationState(props.data.viewer.id);
   const [settings, setSettings] = useUserStoredSettings(props.data);
@@ -620,7 +633,7 @@ export function SettingsPage(props: SettingsPageProps) {
   return (
     <>
       <div className="settings-app">
-        <aside className={`settings-sidebar${mobileNav ? " open" : ""}`}>
+        <aside ref={sidebarRef} className={`settings-sidebar${mobileNav ? " open" : ""}`}>
           <button className="settings-back" onClick={props.onBack}>
             <ArrowLeft size={16} />
             {t("Back to app")}

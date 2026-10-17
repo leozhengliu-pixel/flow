@@ -1003,6 +1003,7 @@ export interface Initiative {
   /** creation through an application or Flow's agent */
   botActor?: ActorBot | null
   color: string
+  commentAttachments?: Attachment[]
   comments: Comment[]
   contributingTeamIds: string[]
   createdAt: string
@@ -1100,6 +1101,7 @@ export interface InitiativePartial {
   /** creation through an application or Flow's agent */
   botActor?: ActorBotPartial | null
   color?: string
+  commentAttachments?: AttachmentPartial[]
   comments?: CommentPartial[]
   contributingTeamIds?: string[]
   createdAt?: string

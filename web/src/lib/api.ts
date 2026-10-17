@@ -397,22 +397,22 @@ export function setTeamMembership(
 }
 export type BootstrapProjection = 'project-list' | 'issue-detail'
 
-export function fetchBootstrap(workspaceKey?: string, projection?: BootstrapProjection, signal?: AbortSignal): Promise<BootstrapData> {
-  if (projection === 'issue-detail' || import.meta.env.VITE_PAGED_ISSUES === 'true') return fetchPagedBootstrap(workspaceKey, projection, signal)
+export function fetchBootstrap(workspaceKey?: string, projection?: BootstrapProjection, signal?: AbortSignal, quiet?: boolean): Promise<BootstrapData> {
+  if (projection === 'issue-detail' || import.meta.env.VITE_PAGED_ISSUES === 'true') return fetchPagedBootstrap(workspaceKey, projection, signal, quiet)
   const headers: Record<string, string> = {}
   if (workspaceKey) headers['X-Workspace-Key'] = workspaceKey
   if (projection) headers['X-Flow-Projection'] = projection
   return request<BootstrapData>(
     "/api/bootstrap",
-    { headers, signal },
+    { headers, signal, quiet },
   ).then(normalizeBootstrapData).then(rememberTrashRetention);
 }
 
-export function fetchPagedBootstrap(workspaceKey?: string, projection?: BootstrapProjection, signal?: AbortSignal): Promise<BootstrapData> {
+export function fetchPagedBootstrap(workspaceKey?: string, projection?: BootstrapProjection, signal?: AbortSignal, quiet?: boolean): Promise<BootstrapData> {
   const headers: Record<string, string> = {}
   if (workspaceKey) headers['X-Workspace-Key'] = workspaceKey
   if (projection) headers['X-Flow-Projection'] = projection
-  return request<BootstrapData>('/api/issue-records/bootstrap', {headers, signal}).then(normalizeBootstrapData).then(rememberTrashRetention)
+  return request<BootstrapData>('/api/issue-records/bootstrap', {headers, signal, quiet}).then(normalizeBootstrapData).then(rememberTrashRetention)
 }
 export type IssueQueryInput = {
   q?: string;

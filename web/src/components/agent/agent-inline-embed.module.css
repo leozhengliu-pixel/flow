@@ -1,0 +1,3 @@
+.embed { position: relative; width: 100%; max-width: 100%; }
+.remove { position: absolute; top: 10px; left: 10px; padding: 2px 8px; border: .5px solid var(--description-media-toolbar-border); border-radius: 9999px; background: var(--description-media-toolbar-bg); box-shadow: var(--description-toolbar-shadow); color: var(--pk-text); font: 450 12px/20px var(--font); cursor: pointer; opacity: 0; }
+.embed:hover .remove, .remove:focus-visible { opacity: 1; }
