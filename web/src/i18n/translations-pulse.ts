@@ -5,6 +5,15 @@
  */
 export const pulseZhCN: Record<string, string> = {
   // --- Pulse page (feed)
+  "just now": "刚刚",
+  "Project on track": "项目进展正常",
+  "Project at risk": "项目有风险",
+  "Project off track": "项目已偏离轨道",
+  "Project no update": "项目暂无更新",
+  "Initiative on track": "目标进展正常",
+  "Initiative at risk": "目标有风险",
+  "Initiative off track": "目标已偏离轨道",
+  "Initiative no update": "目标暂无更新",
   "New milestone": "新里程碑",
   "Set initiative health": "设置目标健康度",
   "Progress since {date}": "自 {date} 以来的进度",
