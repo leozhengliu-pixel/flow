@@ -1203,6 +1203,13 @@ export interface AgentFileAttachment {
   size: number;
   content?: string;
 }
+/** A file sent with an agent chat message; `url` is set when its content was saved (images and text files). */
+export interface AgentMessageAttachment {
+  name: string;
+  contentType: string;
+  size: number;
+  url?: string;
+}
 export interface LoopRunReply {
   id: string;
   userId: UUID;
@@ -2843,6 +2850,8 @@ export interface AgentMessage extends AgentChatMessage {
   parts?: AgentMessagePart[];
   /** Resources @-mentioned in a user message, in order. */
   mentions?: { type: 'issue' | 'project' | 'document' | 'initiative' | 'user'; id: UUID; label: string }[];
+  /** Files sent with a user message. */
+  attachments?: AgentMessageAttachment[];
   durationMs?: number;
   /** The owner's rating of an assistant reply (thumbs up / down, with an optional note). */
   feedback?: AgentFeedback;

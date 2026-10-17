@@ -11,7 +11,7 @@ const readStyles = (name: string) => fs.readFileSync(decodeURIComponent(new URL(
 const panelCss = readStyles('./agent-panel.module.css')
 const threadCss = readStyles('./entity-agent-thread.module.css')
 
-const api = vi.hoisted(() => ({ fetchAgentStatus: vi.fn(), markAgentSessionRead: vi.fn(), updateAgentMessageFeedback: vi.fn(), createAgentSessionFeedback: vi.fn(), deleteAgentSession: vi.fn() }))
+const api = vi.hoisted(() => ({ fetchAgentStatus: vi.fn(), markAgentSessionRead: vi.fn(), updateAgentMessageFeedback: vi.fn(), createAgentSessionFeedback: vi.fn(), deleteAgentSession: vi.fn(), uploadAgentFile: vi.fn() }))
 const streams = vi.hoisted(() => ({ streamNewAgentSession: vi.fn(), streamAgentSessionMessage: vi.fn() }))
 vi.mock('@/lib/api', () => api)
 vi.mock('@/lib/agent-stream', () => streams)
@@ -101,6 +101,21 @@ describe('floating agent chat (the reference app toolbar chat)', () => {
     expect(screen.queryByText('Ask anything or propose changes')).not.toBeInTheDocument()
     expect(screen.getByText('Spec')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Attach images, files, or videos' })).toBeVisible()
+  })
+
+  it('routes every file from the attach button into the message as a block and ignores audio', async () => {
+    api.uploadAgentFile.mockImplementation(async (file: File) => ({ name: file.name, contentType: file.type, size: file.size, url: `/uploads/agent_upload_0123456789abcdef_1_${file.name}` }))
+    renderChat()
+    const composer = screen.getByRole('textbox', { name: 'Send a message to Flow Agent' })
+    await waitFor(() => expect(composer).toHaveAttribute('contenteditable', 'true'))
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]')!
+    const pdf = new File(['pdf'], 'spec.pdf', { type: 'application/pdf' })
+    const song = new File(['mp3'], 'song.mp3', { type: 'audio/mpeg' })
+    fireEvent.change(input, { target: { files: [pdf, song] } })
+    await waitFor(() => expect(composer.querySelectorAll('[data-agent-block]')).toHaveLength(1))
+    expect(composer.querySelector('[data-kind="file"]')).not.toBeNull()
+    expect(api.uploadAgentFile).toHaveBeenCalledTimes(1)
+    expect(api.uploadAgentFile).toHaveBeenCalledWith(pdf)
   })
 
   it('shows the selection as a chip, enables Send with only the chip, and sends it as a quote with the document as context', async () => {

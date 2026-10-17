@@ -9,7 +9,7 @@ import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button
 import { useI18n } from '@/i18n/i18n'
 import type { AgentFeedback, AgentMessage, AgentSession } from '@/types/flow'
 import { AgentAttachIcon } from './agent-icons'
-import { AGENT_ATTACHMENT_ACCEPT, addAgentAttachments, agentFileContext } from './agent-attachments'
+import { AGENT_ATTACHMENT_ACCEPT, agentFileContext, attachAgentFiles } from './agent-attachments'
 import styles from './agent-message-actions.module.css'
 
 type Rating = NonNullable<AgentFeedback['rating']>
@@ -151,7 +151,7 @@ export function AgentFeedbackDialog({ open, onOpenChange, onSubmit }: { open: bo
                 <span aria-hidden="true"><AgentAttachIcon size={14}/></span>
               </button>
             </FlowTooltip>
-            <input accept={AGENT_ATTACHMENT_ACCEPT} hidden multiple onChange={event => { const picked = event.target.files; setFiles(items => addAgentAttachments(items, picked)); event.target.value = '' }} ref={fileInput} type="file"/>
+            <input accept={AGENT_ATTACHMENT_ACCEPT} hidden multiple onChange={event => { void attachAgentFiles(event.target.files, t, setFiles); event.target.value = '' }} ref={fileInput} type="file"/>
             <div className={styles.dialogButtons}>
               <button className={styles.dialogCancel} onClick={() => onOpenChange(false)} type="button">{t('Cancel')}</button>
               <button className={styles.dialogSend} disabled={!ready} type="submit">{t('Send')}</button>

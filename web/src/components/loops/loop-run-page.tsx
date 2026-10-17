@@ -11,7 +11,7 @@ import {
 import { DisplayIcon, FilterIcon } from "@/components/ui/view-action-icons";
 import { AgentWorkGroup } from "@/components/agent/agent-work-group";
 import { AgentAnswerText } from "@/components/agent/agent-answer";
-import { AGENT_ATTACHMENT_ACCEPT, addAgentAttachments, agentFileAttachment } from "@/components/agent/agent-attachments";
+import { AGENT_ATTACHMENT_ACCEPT, agentFileAttachment, attachAgentFiles, pastedAgentFiles } from "@/components/agent/agent-attachments";
 import { AgentAttachIcon } from "@/components/agent/agent-icons";
 import { AgentSkillsPicker } from "@/components/agent/agent-skills-picker";
 import { AttachmentRemoveButton } from "@/components/ui/attachment-remove-button";
@@ -616,6 +616,13 @@ function RunReplyComposer({
         value={body}
         rows={2}
         onChange={(event) => setBody(event.target.value)}
+        onPaste={(event) => {
+          const files = pastedAgentFiles(event.clipboardData);
+          if (files.length) {
+            event.preventDefault();
+            void attachAgentFiles(files, t, setAttachments);
+          }
+        }}
         onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
             event.preventDefault();
@@ -637,7 +644,7 @@ function RunReplyComposer({
           type="file"
           onChange={(event) => {
             const files = event.target.files;
-            setAttachments((items) => addAgentAttachments(items, files));
+            void attachAgentFiles(files, t, setAttachments);
             event.target.value = "";
           }}
         />

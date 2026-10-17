@@ -1,0 +1,9 @@
+/* A sent message (measured on the reference app): first block 6px (file) / 4px (image) under the bubble padding,
+   a block after a block 22px, text after an image 8px, text after a video or file 22px. */
+.sent { display: flex; flex-direction: column; min-width: 0; }
+.block { margin-top: 6px; }
+.block[data-kind="image"] { margin-top: 4px; }
+.block + .block { margin-top: 22px; }
+.text + .block { margin-top: 8px; }
+.block + .text { margin-top: 22px; }
+.block[data-kind="image"] + .text { margin-top: 8px; }

@@ -334,6 +334,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/agent/chat", s.agentChat)
 	mux.HandleFunc("GET /api/agent/sessions", s.listAgentSessions)
 	mux.HandleFunc("POST /api/agent/sessions", s.createAgentSession)
+	mux.HandleFunc("POST /api/agent/uploads", s.uploadAgentFile)
 	mux.HandleFunc("POST /api/agent/sessions/stream", s.createAgentSessionStream)
 	mux.HandleFunc("GET /api/agent/sessions/{id}", s.getAgentSession)
 	mux.HandleFunc("PATCH /api/agent/sessions/{id}", s.updateAgentSession)
@@ -5251,6 +5252,9 @@ func safeInlineUploadType(value, name string) bool {
 }
 
 func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBootstrap, userID, url string) bool {
+	if agentUploadVisible(userID, url) {
+		return true
+	}
 	for _, membership := range account.Workspaces {
 		data, access, err := s.store.IssueQueryAccess(ctx, membership.Workspace.URLKey, userID)
 		if err != nil {
@@ -5281,6 +5285,12 @@ func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBo
 		}
 		if documentAttachmentVisible(s, data, url) {
 			return true
+		}
+		// Files sent with an agent chat are visible to the chat's owner only.
+		for _, session := range data.AgentSessions {
+			if session.UserID == userID && slices.ContainsFunc(messageAttachments(session.Messages), func(attachment domain.AgentMessageAttachment) bool { return attachment.URL == url }) {
+				return true
+			}
 		}
 		for _, project := range data.Projects {
 			if slices.ContainsFunc(project.CommentAttachments, func(attachment domain.Attachment) bool { return attachment.URL == url }) {
