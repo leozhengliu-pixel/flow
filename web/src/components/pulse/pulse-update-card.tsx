@@ -1,8 +1,7 @@
-import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
 import type { Editor } from '@tiptap/react'
-import { ArrowUp, BellOff, BellRing, Copy, FolderKanban, FileText, HelpCircle, Link2, MessageCircle, MoreHorizontal, Pencil, SmilePlus, SquareArrowOutUpRight, Trash2, X } from 'lucide-react'
+import { ArrowUp, BellOff, BellRing, Copy, FolderKanban, FileText, HelpCircle, Link2, MessageCircle, MoreHorizontal, SmilePlus, SquareArrowOutUpRight } from 'lucide-react'
 import { memo, useEffect, useRef, useState } from 'react'
 import { formatDistanceToNowStrict } from 'date-fns'
 import { toast } from '@/lib/toast'
@@ -16,7 +15,7 @@ import { FlowTooltip } from '@/components/ui/tooltip'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { useI18n } from '@/i18n/i18n'
 import { useInitiativeProjectUpdatesSubscription } from '@/lib/pulse-subscriptions'
-import type { Comment, Project, PulseItem, User } from '@/types/flow'
+import type { Comment, PulseItem, User } from '@/types/flow'
 import { HEALTH_LABELS, PULSE_HEALTH_LABELS, pulseUpdateLink, pulseUpdateMarkdown, userName } from './pulse-card-model'
 import { PulseDiffBlock } from './pulse-diff-block'
 import { PulseWhyDialog } from './pulse-why-dialog'
@@ -24,9 +23,6 @@ import { PulseWhyDialog } from './pulse-why-dialog'
 export type PulseCardHandlers = {
   onComment: (item: PulseItem, body: string, bodyData?: Record<string, unknown>) => Promise<void>
   onReact: (item: PulseItem, emoji: string) => Promise<void>
-  onEdit: (item: PulseItem, input: { body: string; bodyData?: Record<string, unknown>; health: Project['health'] }) => Promise<void>
-  onDelete: (item: PulseItem) => Promise<void>
-  onDeleteAttachment: (item: PulseItem, attachmentId: string) => Promise<void>
   onToggleSubscription: (item: PulseItem, subscribe: boolean) => Promise<void>
   onToggleTeam: (teamId: string, subscribed: boolean) => Promise<void>
   onNavigate: (path: string) => void
@@ -36,7 +32,6 @@ type Props = PulseCardHandlers & {
   item: PulseItem
   view: 'following' | 'popular' | 'all'
   viewer: User
-  viewerRole: string
   users: User[]
   data: Parameters<typeof PulseWhyDialog>[0]['data']
   /** Shown after unsubscribing on the For me tab. */
@@ -67,19 +62,11 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
   const [comment, setComment] = useState<DescriptionSnapshot>()
   const [composerKey, setComposerKey] = useState(0)
   const [posting, setPosting] = useState(false)
-  const [editing, setEditing] = useState(false)
-  const [editBody, setEditBody] = useState<DescriptionSnapshot>()
-  const [editHealth, setEditHealth] = useState(update.health)
-  const [saving, setSaving] = useState(false)
-  const [deleteOpen, setDeleteOpen] = useState(false)
-  const [deleting, setDeleting] = useState(false)
   const [whyOpen, setWhyOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   // Initiatives: "Subscribe to initiative's project updates" (every update of its projects).
   const projectUpdates = useInitiativeProjectUpdatesSubscription(item.kind === 'initiative' ? item.source.id : undefined, item.kind === 'initiative' ? item.projectUpdatesSubscribed ?? false : false, menuOpen && item.kind === 'initiative')
   const editorRef = useRef<Editor | null>(null)
-  const canEdit = update.user.id === viewer.id
-  const canDelete = canEdit || props.viewerRole === 'admin' || props.viewerRole === 'owner'
   const comments = update.comments ?? []
   const reactions = update.reactions ?? {}
   const attachments = update.attachments ?? []
@@ -110,22 +97,6 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
       setComment(undefined)
       setComposerKey(key => key + 1)
     } catch { /* the app shows the error */ } finally { setPosting(false) }
-  }
-  const save = async () => {
-    const body = editBody?.markdown.trim() ?? update.body.trim()
-    if (!body || saving) return
-    setSaving(true)
-    try {
-      await props.onEdit(item, { body, bodyData: editBody?.document as Record<string, unknown> | undefined, health: editHealth })
-      setEditing(false)
-    } catch { /* the app shows the error */ } finally { setSaving(false) }
-  }
-  const remove = async () => {
-    setDeleting(true)
-    try {
-      await props.onDelete(item)
-      setDeleteOpen(false)
-    } catch { /* the app shows the error */ } finally { setDeleting(false) }
   }
   const copy = async (text: string, description: string) => {
     try {
@@ -182,19 +153,12 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
           <DropdownMenu.Item onSelect={() => toggleSubscription().catch(() => undefined)}>{item.subscribed ? <BellOff size={14}/> : <BellRing size={14}/>}{(item.subscribed ? t('Unsubscribe from this {type}') : t('Subscribe to this {type}')).replace('{type}', type)}</DropdownMenu.Item>
           {item.kind === 'initiative' && <DropdownMenu.Item onSelect={() => void toggleProjectUpdates()}>{projectUpdates.subscribed ? <BellOff size={14}/> : <FolderKanban size={14}/>}{projectUpdates.subscribed ? t("Unsubscribe from initiative's project updates") : t("Subscribe to initiative's project updates")}</DropdownMenu.Item>}
           {props.view === 'following' && item.reasons.length > 0 && <DropdownMenu.Item onSelect={() => setWhyOpen(true)}><HelpCircle size={14}/>{t('Why am I seeing this?')}</DropdownMenu.Item>}
-          {(canEdit || canDelete) && <DropdownMenu.Separator/>}
-          {canEdit && <DropdownMenu.Item onSelect={() => { setEditBody(undefined); setEditHealth(update.health); setEditing(true) }}><Pencil size={14}/>{t('Edit…')}</DropdownMenu.Item>}
-          {canDelete && <DropdownMenu.Item className="is-danger" onSelect={() => setDeleteOpen(true)}><Trash2 size={14}/>{t('Delete')}</DropdownMenu.Item>}
         </DropdownMenu.Content></DropdownMenu.Portal>
       </DropdownMenu.Root>
     </header>
-    {editing ? <div className="pulse-post-editor">
-      <div className="pulse-inline-health">{(['onTrack', 'atRisk', 'offTrack'] as Project['health'][]).map(value => <button aria-pressed={editHealth === value} className={editHealth === value ? 'is-active' : ''} key={value} onClick={() => setEditHealth(value)} type="button"><HealthGlyph className={`pulse-health-glyph is-${value}`} health={value}/>{t(HEALTH_LABELS[value])}</button>)}</div>
-      <IssueDescriptionEditor ariaLabel={t('Update body')} className="pulse-post-rich-editor" onChange={setEditBody} onSubmit={() => void save()} placeholder={t('Write an update…')} state={editBody?.documentJSON ?? (update.bodyData ? JSON.stringify(update.bodyData) : undefined)} users={props.users} value={editBody?.markdown ?? update.body}/>
-      <footer><button onClick={() => setEditing(false)} type="button">{t('Cancel')}</button><button className="is-primary" disabled={!(editBody?.markdown ?? update.body).trim() || saving} onClick={() => void save()} type="button">{saving ? t('Saving…') : t('Save update')}</button></footer>
-    </div> : <div className="pulse-post-body"><RichComment body={update.body} data={update.bodyData}/></div>}
+    <div className="pulse-post-body"><RichComment body={update.body} data={update.bodyData}/></div>
     <PulseDiffBlock diff={item.diff ?? update.diff} kind={item.kind}/>
-    {attachments.length > 0 && <div className="pulse-post-attachments">{attachments.map(attachment => <span key={attachment.id}><a href={attachment.url} rel="noreferrer" target="_blank"><FileText size={13}/><b data-i18n-ignore>{attachment.title}</b></a>{canEdit && <button aria-label={t('Remove attachment')} onClick={() => props.onDeleteAttachment(item, attachment.id).catch(() => undefined)} type="button"><X size={11}/></button>}</span>)}</div>}
+    {attachments.length > 0 && <div className="pulse-post-attachments">{attachments.map(attachment => <span key={attachment.id}><a href={attachment.url} rel="noreferrer" target="_blank"><FileText size={13}/><b data-i18n-ignore>{attachment.title}</b></a></span>)}</div>}
     <footer className="pulse-post-footer">
       <FlowTooltip label={t(label)} shortcut="R">
         <button aria-expanded={commentsOpen} aria-label={t(label)} className="pulse-footer-button" onClick={() => setCommentsOpen(value => !value)} type="button"><MessageCircle size={16}/>{comments.length > 0 && <span>{comments.length}</span>}</button>
@@ -213,11 +177,6 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
         </div>
       </div>
     </section>}
-    <Dialog.Root onOpenChange={setDeleteOpen} open={deleteOpen}><Dialog.Portal><Dialog.Overlay className="pulse-dialog-overlay is-delete" data-flow-motion="backdrop"/><Dialog.Content aria-describedby={undefined} className="pulse-delete-dialog" data-flow-motion="dialog">
-      <Dialog.Title>{item.kind === 'project' ? t('Delete this project update?') : t('Delete this initiative update?')}</Dialog.Title>
-      {comments.length > 0 && <p>{t('This will delete the update, along with all comments.')}</p>}
-      <footer><Dialog.Close asChild><button disabled={deleting} type="button">{t('Cancel')}</button></Dialog.Close><button className="is-danger" disabled={deleting} onClick={() => void remove()} type="button">{deleting ? t('Deleting…') : t('Delete')}</button></footer>
-    </Dialog.Content></Dialog.Portal></Dialog.Root>
     {whyOpen && <PulseWhyDialog data={props.data} item={item} onOpenChange={setWhyOpen} onToggleSubscription={() => toggleSubscription().catch(() => undefined)} onToggleTeam={(teamId, subscribed) => props.onToggleTeam(teamId, subscribed).catch(() => undefined)} open={whyOpen}/>}
   </article>
 })
