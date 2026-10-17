@@ -290,3 +290,49 @@ func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueReco
 	}
 	return nil
 }
+
+// SearchIssueIDs returns the ids of visible issues whose identifier, title or
+// description contain text, narrowed by the query's other predicates. More than
+// limit hits report truncated.
+func (s *SQLiteStore) SearchIssueIDs(ctx context.Context, q IssueRecordQuery, text string, limit int) ([]string, bool, error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return []string{}, false, nil
+	}
+	if limit < 1 || limit > 20000 {
+		limit = 5000
+	}
+	q.Text, q.SearchText = "", ""
+	if err := s.applyIssueRecordScope(ctx, &q); err != nil {
+		return nil, false, err
+	}
+	where, args, err := issueRecordWhere(q)
+	if err != nil {
+		return nil, false, err
+	}
+	selection, values := s.issueTextSelection(q.Workspace, text)
+	where += " AND i.id IN (" + selection + ")"
+	args = append(args, values...)
+	prefix, prefixArgs := issueAccessCTE(q)
+	rows, err := s.db.QueryContext(ctx, prefix+"SELECT i.id FROM issue_records i WHERE "+where+" ORDER BY i.collection_order,i.id LIMIT ?", append(append(prefixArgs, args...), limit+1)...)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, false, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	truncated := len(ids) > limit
+	if truncated {
+		ids = ids[:limit]
+	}
+	return ids, truncated, nil
+}
