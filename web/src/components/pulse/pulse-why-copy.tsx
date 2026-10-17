@@ -68,7 +68,7 @@ export function pulseReasonCopy(item: Pick<PulseItem, 'kind' | 'source'>, reason
   }
 }
 
-/** The reference app shows one reason; mentions and authorship win over subscription rules. */
+/** The reference app shows one reason: a mention first, then the subscription rule; authorship only when nothing else applies. */
 export function primaryPulseReason(reasons: PulseReason[]) {
-  return reasons.find(reason => reason.type === 'mentioned') ?? reasons.find(reason => reason.type === 'author') ?? reasons[0]
+  return reasons.find(reason => reason.type === 'mentioned') ?? reasons.find(reason => reason.type !== 'author') ?? reasons[0]
 }
