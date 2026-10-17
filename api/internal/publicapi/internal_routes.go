@@ -318,6 +318,7 @@ var InternalRoutes = []string{
 	"GET /api/issue-records/bootstrap",
 	"GET /api/issue-records/groups",
 	"GET /api/issue-records/project-summary",
+	"GET /api/issue-records/search-ids",
 	"GET /api/issue-records/{id}/context",
 	"GET /api/issue-records/{id}/history",
 	"GET /api/issue-records/{id}/permissions",
