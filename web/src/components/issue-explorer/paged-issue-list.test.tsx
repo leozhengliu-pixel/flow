@@ -21,7 +21,7 @@ vi.mock('react-virtuoso', async () => {
 })
 vi.mock('@/components/my-issues/my-issues-list', async importOriginal => {
   const actual = await importOriginal<typeof import('@/components/my-issues/my-issues-list')>()
-  return { ...actual, MyIssuesRow: ({ issue, onOpen }: { issue: { title: string }; onOpen: () => void }) => <button onClick={onOpen}>{issue.title}</button> }
+  return { ...actual, MyIssuesRow: ({ issue, onOpen }: { issue: { id: string; title: string }; onOpen: (issue: { id: string }) => void }) => <button onClick={() => onOpen(issue)}>{issue.title}</button> }
 })
 
 describe('server-backed issue groups', () => {
@@ -40,6 +40,30 @@ describe('server-backed issue groups', () => {
     expect(listIssueRecords).toHaveBeenLastCalledWith(expect.objectContaining({ groupValue: 'state-backlog', cursor: 'page-2', limit: 100 }), expect.any(AbortSignal))
     await userEvent.click(screen.getByRole('button', { name: 'Issue 100' }))
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'issue-100' }), expect.arrayContaining(['issue-100', 'issue-101']))
+  })
+
+  it('keeps the loaded extent and revalidates only the page on screen when a refresh lands', async () => {
+    const issues = (from: number, suffix = '') => Array.from({ length: 100 }, (_, index) => makeIssue({ id: `issue-${from + index}`, title: `Issue ${from + index}${suffix}` }))
+    vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: 'state-backlog', count: 300 }] })
+    vi.mocked(listIssueRecords).mockImplementation(async query => query?.cursor
+      ? { items: issues(100, query.limit === 100 && vi.mocked(listIssueRecords).mock.calls.length > 2 ? ' fresh' : ''), hasMore: true, nextCursor: 'page-3', total: -1 }
+      : { items: issues(0), hasMore: true, nextCursor: 'page-2', total: -1 })
+    const data = makeBootstrap({ issues: [], favorites: [], issueCollectionPaged: true })
+    const render_ = (revision: number) => <I18nProvider><PagedIssueList data={{ ...data, issueCollectionRevision: revision }} query={{ groupBy: 'status' }} onOpenIssueRecord={vi.fn()}/></I18nProvider>
+    const { rerender } = render(render_(0))
+    await screen.findByRole('button', { name: 'Issue 0' })
+    await userEvent.click(screen.getByRole('button', { name: 'Next page viewport' }))
+    await screen.findByRole('button', { name: 'Issue 100' })
+    expect(listIssueRecords).toHaveBeenCalledTimes(2)
+    // The group count refresh must not drop the second page (a drop scrolls the list back to the top).
+    rerender(render_(1))
+    await screen.findByRole('button', { name: 'Issue 100 fresh' })
+    expect(screen.queryByRole('button', { name: 'Issue 100' })).not.toBeInTheDocument()
+    expect(listIssueRecordGroups).toHaveBeenCalledTimes(2)
+    // Only the visible second page was fetched again (by its own cursor); the first page stays cached until it is reached.
+    expect(listIssueRecords).toHaveBeenCalledTimes(3)
+    expect(listIssueRecords).toHaveBeenLastCalledWith(expect.objectContaining({ groupValue: 'state-backlog', cursor: 'page-2' }), expect.any(AbortSignal))
+    expect(screen.getByText('Backlog').closest('header')).toHaveTextContent('300')
   })
 
   it('ignores an old group response after the query changes', async () => {

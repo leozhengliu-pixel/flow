@@ -28,6 +28,7 @@ export const editorEmbedsZhCN: Record<string, string> = {
   "Could not load the file preview": "无法加载文件预览",
   "Connect {provider}": "连接 {provider}",
   "Retry": "重试",
+  "Image upload didn't complete": "图片上传未完成",
   "Preview truncated. Open the file on {provider} to see all of it.": "预览已截断。在 {provider} 上打开文件以查看完整内容。",
   "This file is empty": "此文件为空",
 }

@@ -40,6 +40,8 @@ export class RealtimeEventQueue {
     this.bytes += bytes
   }
 
+  peek() { return this.items[0]?.event }
+
   shift() {
     const item = this.items.shift()
     if (item) this.bytes -= item.bytes

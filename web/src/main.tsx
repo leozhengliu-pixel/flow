@@ -11,6 +11,8 @@ import { I18nProvider } from './i18n/i18n'
 import { prepareInitialLocale } from './i18n/locale'
 import { initializeTheme } from './lib/theme'
 import { installStaleChunkReload } from './lib/stale-chunk-reload'
+import { preloadInitialRoute } from './lib/route-preload'
+import { registerServiceWorker } from './lib/service-worker'
 import { renderMermaidPreview } from './components/issue/editor/mermaid-preview'
 import { ThemedToaster } from './components/ui/themed-toaster'
 import { ActionDialogHost } from './components/ui/action-dialogs'
@@ -24,6 +26,9 @@ import './styles/light-parity.css'
 import './styles/picker-parity.css'
 
 installStaleChunkReload()
+// Fetch the current route's page chunks now, in parallel with the session/bootstrap requests, instead of after the data lands.
+preloadInitialRoute()
+registerServiceWorker()
 initializeTheme()
 window.__flowMermaidPreview = renderMermaidPreview
 

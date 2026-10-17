@@ -45,6 +45,11 @@ export async function preloadRoute(path: string) {
   }
 }
 
+/** Start the current URL's page chunks at startup; the router only mounts them once the bootstrap response arrives. */
+export function preloadInitialRoute(location: Pick<Location, 'pathname' | 'search'> = window.location) {
+  void preloadRoute(location.pathname + location.search).catch(() => undefined)
+}
+
 /** Exclude downloads, external/new-tab links, hashes, and routes owned by the server. */
 export function clientNavigationTarget(anchor: HTMLAnchorElement, current: URL): string | undefined {
   if (anchor.hasAttribute('download') || (anchor.target && anchor.target !== '_self') || anchor.hasAttribute('data-native-navigation')) return

@@ -51,6 +51,32 @@ export class PagedIssueCache {
       this.sizes.delete(oldest); this.pages.delete(oldest)
     }
   }
+  pageKeys() { return [...this.pages.keys()] }
+  /** Forgets the pages after `page` of a group: once a page changed length their offsets are unknown. The cursor to the next page stays. */
+  truncateAfter(group: string, page: number) {
+    for (const key of [...this.pages.keys()]) {
+      const [owner, index] = JSON.parse(key) as [string, number]
+      if (owner !== group || index <= page) continue
+      this.bytes -= this.sizes.get(key) ?? 0
+      this.sizes.delete(key); this.pages.delete(key)
+    }
+    for (const key of [...this.cursors.keys()]) {
+      const [owner, index] = JSON.parse(key) as [string, number]
+      if (owner === group && index > page + 1) this.cursors.delete(key)
+    }
+    const starts = this.starts.get(group)
+    if (starts) starts.length = Math.min(starts.length, page + 2)
+  }
+  /** Drops everything cached for groups that no longer exist. */
+  retainGroups(groups: ReadonlySet<string>) {
+    for (const key of [...this.pages.keys()]) {
+      if (groups.has((JSON.parse(key) as [string, number])[0])) continue
+      this.bytes -= this.sizes.get(key) ?? 0
+      this.sizes.delete(key); this.pages.delete(key)
+    }
+    for (const key of [...this.cursors.keys()]) if (!groups.has((JSON.parse(key) as [string, number])[0])) this.cursors.delete(key)
+    for (const group of [...this.starts.keys()]) if (!groups.has(group)) this.starts.delete(group)
+  }
   hasCursor(group: string, page: number) { return page === 0 || this.cursors.has(this.key(group, page)) }
   update(issue: Issue): Issue | undefined {
     issue = listIssue(issue)

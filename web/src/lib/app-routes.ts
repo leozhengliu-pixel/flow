@@ -151,6 +151,8 @@ export type AppRoute =
       viewId?: string;
       /** /pulse/view/new creates a custom feed; /pulse/view/:id/edit edits one. */
       viewMode?: "new" | "edit";
+      /** Bare /pulse: redirects to the last used tab (the reference app's feedLastTab). */
+      bare?: true;
     }
   | { kind: "my-issues"; workspaceSlug: string; view: MyIssuesRouteView }
   | { kind: "reviews"; workspaceSlug: string; view: "for-you" | "created" }
@@ -511,7 +513,7 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
   if (section === "automation" && third && segments.length === 3)
     return { kind: "automation-detail", workspaceSlug, automationId: third };
   if (section === "pulse" && !third)
-    return { kind: "pulse", workspaceSlug, view: "following" };
+    return { kind: "pulse", workspaceSlug, view: "following", bare: true };
   if (
     section === "pulse" &&
     (third === "following" || third === "popular" || third === "all") &&
@@ -1673,6 +1675,10 @@ export function teamResourcesPath(workspaceSlug: string, teamKey: string) {
 }
 export function teamLinksPath(workspaceSlug: string, teamKey: string) {
   return `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/links`;
+}
+/** Bare /pulse: the app sends it to the last used tab. */
+export function pulseRootPath(workspaceSlug: string) {
+  return `${workspaceRootPath(workspaceSlug)}/pulse`;
 }
 export function pulsePath(
   workspaceSlug: string,

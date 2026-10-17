@@ -12,7 +12,6 @@ export const PULSE_FEED_PAGE_SIZE = 30
 export type PulseFeedQueryState = {
   view: Exclude<PulseFeedView, 'created'>
   viewId?: string
-  q: string
   config: PulseViewConfig
 }
 
@@ -59,11 +58,10 @@ export function usePulseFeed(query: PulseFeedQueryState, options: { enabled?: bo
   const request = useCallback((cursor?: string, signal?: AbortSignal) => fetchPulseFeed({
     view: query.view,
     viewId: query.viewId,
-    q: query.q,
     filter,
     cursor,
     limit: PULSE_FEED_PAGE_SIZE,
-  }, signal), [filter, query.q, query.view, query.viewId])
+  }, signal), [filter, query.view, query.viewId])
 
   useEffect(() => FeedStableLastSeen.subscribe(() => bump(value => value + 1)), [])
 
@@ -161,7 +159,6 @@ export function usePulseFeed(query: PulseFeedQueryState, options: { enabled?: bo
   const patchUpdate = useCallback((itemId: string, update: ProjectUpdate | InitiativeUpdate) => {
     setItems(current => current.map(item => item.id === itemId ? { ...item, update } as PulseItem : item))
   }, [])
-  const removeItem = useCallback((itemId: string) => setItems(current => current.filter(item => item.id !== itemId)), [])
   const setSubscribed = useCallback((sourceId: string, subscribed: boolean) => {
     setItems(current => current.map(item => item.source.id === sourceId ? { ...item, subscribed } : item))
   }, [])
@@ -186,7 +183,6 @@ export function usePulseFeed(query: PulseFeedQueryState, options: { enabled?: bo
     loadMore,
     showNewItems,
     patchUpdate,
-    removeItem,
     setSubscribed,
   }
 }

@@ -428,7 +428,10 @@ func (s *server) updateWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.IssueLabel
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "label.updated", id, input, func(data *domain.Bootstrap) error {
+	// The event carries the updated label (payload.label) so clients patch their
+	// embedded copies without refetching; it is filled in by the mutation.
+	payload := inputEventPayload(input)
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "label.updated", id, payload, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id && labelScopeIsWorkspace(label.Scope) })
 		if index < 0 {
 			return errNotFound
@@ -451,6 +454,10 @@ func (s *server) updateWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 		applyLabelInput(&data.Labels[index], input)
 		updated = data.Labels[index]
 		cascadeLabel(data, updated)
+		// issueCount is derived per read and differs between mutation paths; clients keep their own.
+		eventLabel := updated
+		eventLabel.IssueCount = 0
+		payload["label"] = eventLabel
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
@@ -2528,4 +2535,14 @@ func normalizeSpendLimits(limits *domain.SpendLimitSettings) error {
 		return fmt.Errorf("%w: spend limit reset schedule is out of range", errInvalid)
 	}
 	return nil
+}
+
+// inputEventPayload turns a request input into a mutable event payload with the
+// same JSON fields, so the mutation can add the resulting entity to it.
+func inputEventPayload(input any) map[string]any {
+	payload := map[string]any{}
+	if raw, err := json.Marshal(input); err == nil {
+		_ = json.Unmarshal(raw, &payload)
+	}
+	return payload
 }

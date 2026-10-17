@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeBootstrap, makeIssue, project, viewer } from '@/test/fixtures'
+import type { Issue } from '@/types/flow'
 import { applyRealtimePatch, canApplyRealtimePatch } from './apply-realtime-patch'
 import { buildEntityDirectory, getEntityById } from './entity-directory'
 import { createWorkspaceStore } from './workspace-store'
@@ -97,6 +98,19 @@ describe('applyRealtimePatch (LS-0718 SSE/patch)', () => {
       expect(result.data.notifications).toHaveLength(1)
       expect(result.data.notifications[0]?.id).toBe('n-1')
     }
+  })
+
+  it('patches issue.updated from any payload.issue, even without an identifier', () => {
+    const data = makeBootstrap()
+    const { identifier: _identifier, ...slim } = makeIssue({ id: 'slim-1' }) as Issue & { identifier?: string }
+    const result = applyRealtimePatch(data, {
+      id: '1',
+      type: 'issue.updated',
+      createdAt: '2026-09-20',
+      payload: { issue: slim as unknown as Issue },
+    })
+    expect(result.handled).toBe(true)
+    if (result.handled) expect(result.data.issues.some(i => i.id === 'slim-1')).toBe(true)
   })
 
   it('patches projects when entity payload is present', () => {

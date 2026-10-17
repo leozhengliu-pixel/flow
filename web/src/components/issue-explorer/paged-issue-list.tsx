@@ -50,6 +50,23 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
   const stateOrderRef = useRef(data.states); stateOrderRef.current = data.states
   const dataRef = useRef(data); dataRef.current = data
   const groupsRef = useRef(groups); groupsRef.current = groups
+  // Cached pages that predate the latest refresh: shown as they are until their rows are on screen, then re-fetched in place.
+  const staleKeys = useRef(new Set<string>())
+  // Row models keep their identity between renders so the memoised rows can be skipped.
+  const rowModels = useRef(new WeakMap<Issue, { data: BootstrapData; items: Issue[]; row: ReturnType<typeof issueToExplorerRow> }>())
+  const openTargets = useRef(new Map<string, { issue: Issue; group: string }>())
+  const openRef = useRef(onOpenIssueRecord); openRef.current = onOpenIssueRecord
+  const openRow = useCallback((row: { id: string }) => {
+    const target = openTargets.current.get(row.id)
+    if (target) openRef.current(target.issue, cache.sequence(target.group, target.issue.id))
+  }, [cache])
+  const rowFor = (issue: Issue, items: Issue[]) => {
+    const cached = rowModels.current.get(issue)
+    if (cached && cached.data === data && cached.items === items) return cached.row
+    const row = issueToExplorerRow(issue, data.workspace.urlKey, items, data)
+    rowModels.current.set(issue, { data, items, row })
+    return row
+  }
   const renderedSignature = useRef(signature)
   useEffect(() => {
     const request = { signature, abort: new AbortController(), pending: new Set<string>(), ready: false }
@@ -59,7 +76,10 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
     if (changed || !cache.retainedEntities) { recordsRef.current?.([]); setGroups([]); setLoading(true) }
     setError(undefined)
     const initialQuery = queryRef.current
-    const firstGroup = !changed && groupsRef.current.length ? groupsRef.current[0].value
+    // A refresh of a list that is already showing rows keeps them (and the scroll position): see `revalidate`.
+    const refreshing = !changed && cache.retainedEntities > 0 && groupsRef.current.length > 0
+    const firstGroup = refreshing ? undefined
+      : !changed && groupsRef.current.length ? groupsRef.current[0].value
       : initialQuery.groupBy === 'none' ? 'all' : initialQuery.groupBy === 'status' || !initialQuery.groupBy ? stateOrderRef.current[0]?.id : undefined
     // The common status/all-issues first page does not have to wait for counts.
     const prefetched = firstGroup === undefined ? undefined : listIssueRecords({ ...initialQuery, groupValue: firstGroup, limit: PAGE_SIZE, includeTotal: false }, request.abort.signal)
@@ -68,7 +88,12 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
     const firstPage = prefetched?.then(page => ({ page }), error => ({ error }))
     void listIssueRecordGroups(initialQuery, request.abort.signal).then(async result => {
       if (request.abort.signal.aborted) return
-      const groups = result.groups.map(group => ({ ...group, loaded: 0, hasMore: group.count > 0 }))
+      const previous = refreshing ? new Map(groupsRef.current.map(group => [group.value, group])) : undefined
+      const groups = result.groups.map(group => {
+        const before = previous?.get(group.value)
+        const loaded = before ? Math.min(before.loaded, group.count) : 0
+        return { ...group, loaded, hasMore: before ? before.hasMore && loaded < group.count : group.count > 0 }
+      })
       if (queryRef.current.groupBy === 'customer') {
         // Customer groups: alphabetical, Unknown customer then No customer last.
         const rank = (value: string) => value === '' ? 2 : value === UNKNOWN_CUSTOMER_GROUP ? 1 : 0
@@ -79,6 +104,16 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
         const order = new Map(stateOrderRef.current.map((state, index) => [state.id, index]))
         groups.sort((a, b) => (order.get(a.value) ?? 999) - (order.get(b.value) ?? 999))
       }
+      if (refreshing) {
+        cache.retainGroups(new Set(groups.map(group => group.value)))
+        staleKeys.current = new Set(cache.pageKeys())
+        request.ready = true
+        recordsRef.current?.(cache.records())
+        setGroups(groups)
+        setRevision(value => value + 1)
+        totalRef.current?.(groups.reduce((total, group) => total + group.count, 0))
+        return
+      }
       const first = groups[0]
       let page
       if (first) {
@@ -87,7 +122,7 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
         page = prefetched?.page ?? await listIssueRecords({ ...initialQuery, groupValue: first.value, limit: PAGE_SIZE, includeTotal: false }, request.abort.signal)
       }
       if (request.abort.signal.aborted) return
-      cache.clear()
+      cache.clear(); staleKeys.current.clear()
       if (first && page) { cache.put(first.value, 0, page); first.loaded = page.items.length; first.hasMore = page.hasMore }
       request.ready = true
       recordsRef.current?.(cache.records())
@@ -156,6 +191,27 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
     }).catch(error => { if (!request.abort.signal.aborted) setError(String(error.message ?? error)) })
       .finally(() => request.pending.delete(key))
   }, [cache, signature])
+  /** Re-fetches a stale page in place (same cursor). Its rows stay on screen meanwhile, so nothing flashes or moves. */
+  const revalidate = useCallback((group: string, pageIndex: number) => {
+    const request = active.current, key = cache.key(group, pageIndex)
+    if (!request || !request.ready || request.signature !== signature || request.abort.signal.aborted || request.pending.has(key) || !staleKeys.current.has(key)) return
+    request.pending.add(key)
+    const cursor = cache.cursors.get(key)
+    void listIssueRecords({ ...queryRef.current, groupValue: group, cursor, limit: PAGE_SIZE, includeTotal: false }, request.abort.signal).then(page => {
+      if (request.abort.signal.aborted) return
+      staleKeys.current.delete(key)
+      const previousLength = cache.get(group, pageIndex)?.items.length
+      cache.put(group, pageIndex, page, cursor)
+      // A page that changed length moves every later page: those are fetched again, in order, as they are reached.
+      const resized = previousLength !== page.items.length
+      if (resized) cache.truncateAfter(group, pageIndex)
+      const end = cache.start(group, pageIndex) + page.items.length
+      recordsRef.current?.(cache.records())
+      setGroups(current => current.map(item => item.value === group ? { ...item, loaded: resized ? end : item.loaded, hasMore: resized || end >= item.loaded ? page.hasMore : item.hasMore } : item))
+      setRevision(value => value + 1)
+    }).catch(() => undefined)
+      .finally(() => request.pending.delete(key))
+  }, [cache, signature])
   const descriptor = useCallback((group: Group): MyIssuesGroupData => {
     const field = query.groupBy ?? 'status'
     const state = field === 'status' ? data.states.find(state => state.id === group.value) : undefined
@@ -186,8 +242,8 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
             <Virtuoso style={{ height: '100%' }} totalCount={group.loaded + (group.hasMore ? 1 : 0)} defaultItemHeight={120} context={revision} increaseViewportBy={240} itemContent={index => {
               const pageIndex = cache.pageAt(group.value, index), page = cache.get(group.value, pageIndex), issue = page?.items[index - cache.start(group.value, pageIndex)]
               if (!issue) return <IssuePagePlaceholder load={() => load(group.value, pageIndex)}/>
-              const row = issueToExplorerRow(issue, data.workspace.urlKey, page!.items, data)
-              return <div style={{ padding: '4px 8px' }}><IssueBoardCard issue={row} properties={rowProps.displayProperties ?? new Set(['id','status','priority','assignee'])} propertyOptions={rowProps.propertyOptions ?? { status: [], priority: [], assignee: [], dueDate: [], labels: [], project: [] }} selected={Boolean(rowProps.selectedIds?.has(issue.id))} dragging={dragging?.issue.id === issue.id} dropBefore={false} onDragStart={() => setDragging({ issue, group: group.value })} onDragEnd={() => setDragging(undefined)} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); event.stopPropagation(); drop(group, issue) }} onOpen={() => onOpenIssueRecord(issue, cache.sequence(group.value, issue.id))} onOpenSubIssue={child => { const issue = page!.items.find(issue => issue.id === child.id); if (issue) onOpenIssueRecord(issue, cache.sequence(group.value, issue.id)) }} onPropertyChange={(property, value) => rowProps.onPropertyChange?.(row, property, value)} onSelect={(selected, range) => rowProps.onSelectIssue?.(issue.id, selected, range)}/></div>
+              const row = rowFor(issue, page!.items)
+              return <div style={{ padding: '4px 8px' }}><StalePageProbe stale={staleKeys.current.has(cache.key(group.value, pageIndex))} revision={revision} run={() => revalidate(group.value, pageIndex)}/><IssueBoardCard issue={row} properties={rowProps.displayProperties ?? new Set(['id','status','priority','assignee'])} propertyOptions={rowProps.propertyOptions ?? { status: [], priority: [], assignee: [], dueDate: [], labels: [], project: [] }} selected={Boolean(rowProps.selectedIds?.has(issue.id))} dragging={dragging?.issue.id === issue.id} dropBefore={false} onDragStart={() => setDragging({ issue, group: group.value })} onDragEnd={() => setDragging(undefined)} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); event.stopPropagation(); drop(group, issue) }} onOpen={() => onOpenIssueRecord(issue, cache.sequence(group.value, issue.id))} onOpenSubIssue={child => { const issue = page!.items.find(issue => issue.id === child.id); if (issue) onOpenIssueRecord(issue, cache.sequence(group.value, issue.id)) }} onPropertyChange={(property, value) => rowProps.onPropertyChange?.(row, property, value)} onSelect={(selected, range) => rowProps.onSelectIssue?.(issue.id, selected, range)}/></div>
             }}/>
           </div>
         </VisibleIssueColumn>)}
@@ -200,8 +256,9 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
         const group = groups[groupIndex], localIndex = index - offsets[groupIndex], pageIndex = cache.pageAt(group.value, localIndex)
         const page = cache.get(group.value, pageIndex), issue = page?.items[localIndex - cache.start(group.value, pageIndex)]
         if (!issue) return <IssuePagePlaceholder load={() => load(group.value, pageIndex)}/>
-        const row = issueToExplorerRow(issue, data.workspace.urlKey, page!.items, data)
-        return <MyIssuesRow issue={row} selected={rowProps.selectedIds?.has(issue.id)} displayProperties={rowProps.displayProperties} propertyOptions={rowProps.propertyOptions} mutationError={rowProps.mutationErrors?.get(issue.id)} onOpen={() => onOpenIssueRecord(issue, cache.sequence(group.value, issue.id))} onPropertyChange={rowProps.onPropertyChange} onSelect={rowProps.onSelectIssue} onContextAction={rowProps.onContextAction} onRetryMutation={rowProps.onRetryMutation}/>
+        const row = rowFor(issue, page!.items)
+        openTargets.current.set(issue.id, { issue, group: group.value })
+        return <><StalePageProbe stale={staleKeys.current.has(cache.key(group.value, pageIndex))} revision={revision} run={() => revalidate(group.value, pageIndex)}/><MyIssuesRow issue={row} selected={rowProps.selectedIds?.has(issue.id)} displayProperties={rowProps.displayProperties} propertyOptions={rowProps.propertyOptions} mutationError={rowProps.mutationErrors?.get(issue.id)} onOpen={openRow} onPropertyChange={rowProps.onPropertyChange} onSelect={rowProps.onSelectIssue} onContextAction={rowProps.onContextAction} onRetryMutation={rowProps.onRetryMutation}/></>
       }}/>
   }
   // While a query loads, the previous result stays (inert) and fades out after 500ms;
@@ -243,6 +300,13 @@ function issueQueryChanged(before: Issue, after: Issue, query: IssueQueryInput) 
   if (query.projectId && before.project?.id !== after.project?.id || query.stateId && before.state.id !== after.state.id) return true
   const value = (issue: Issue, field: string | undefined) => field === 'status' ? issue.state.id : field === 'project' ? issue.project?.id : field === 'assignee' ? issue.assignee?.id : field === 'creator' ? issue.creator.id : field === 'cycle' ? issue.cycleId : field === 'label' || field === 'labels' ? (issue.labels ?? []).map(label => label.id).sort().join(',') : field === 'parent' ? issue.parentId : field ? issue[field as keyof Issue] : undefined
   return [...fields].some(field => value(before, field) !== value(after, field)) || Boolean(query.q && (before.title !== after.title || before.description !== after.description))
+}
+
+/** Starts a stale page's re-fetch once one of its rows is rendered, and again whenever a refresh lands (`revision`). */
+function StalePageProbe({ stale, revision, run }: { stale: boolean; revision: number; run: () => void }) {
+  const runRef = useRef(run); runRef.current = run
+  useEffect(() => { if (stale) runRef.current() }, [stale, revision])
+  return null
 }
 
 /** A not-yet-fetched page: fetches it and shows the list-footer caret meanwhile. */

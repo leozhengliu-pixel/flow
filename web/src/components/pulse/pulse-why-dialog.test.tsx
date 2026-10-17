@@ -35,7 +35,9 @@ describe('Why am I seeing this?', () => {
     expect(copy(projectItem, { type: 'subscribed' }).footer).toBe('Modify your Pulse subscriptions from an initiative or project page using the subscription menu in the top-right corner.')
     expect(copy(projectItem, { type: 'teamProjectUpdates', sourceIds: ['t1'] }).footer).toBe('Modify your Pulse subscriptions from a team’s menu in the sidebar.')
     expect(primaryPulseReason([{ type: 'projectMember' }, { type: 'author' }, { type: 'mentioned' }])?.type).toBe('mentioned')
-    expect(primaryPulseReason([{ type: 'projectMember' }, { type: 'author' }])?.type).toBe('author')
+    // Measured in the reference app: an author who is also subscribed sees the subscription reason.
+    expect(primaryPulseReason([{ type: 'author' }, { type: 'teamProjectUpdates' }])?.type).toBe('teamProjectUpdates')
+    expect(primaryPulseReason([{ type: 'author' }])?.type).toBe('author')
   })
 
   it('has Chinese copy for the reason templates', () => {
