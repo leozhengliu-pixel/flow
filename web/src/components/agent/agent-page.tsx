@@ -62,7 +62,8 @@ import { isMacPlatform } from '@/components/project-detail/project-detail-shortc
 import { AgentToolbarGlyph } from '@/components/ui/agent-glyph'
 import { AgentReplyActions, AgentSessionFeedbackDialog, AgentUserMessageActions } from './agent-message-actions'
 import { toast } from '@/lib/toast'
-import { AgentChatMenu, AgentRenamePalette, deleteAgentChat, useAgentChatHotkeys } from './agent-chat-actions'
+import { AgentChatMenu, AgentRenamePalette } from './agent-chat-actions'
+import { deleteAgentChat, useAgentChatHotkeys } from './agent-chat-commands'
 import { AGENT_PAGE_ASK_EVENT, type AgentPageAskDetail } from './agent-ask-request'
 
 export function AgentPage({

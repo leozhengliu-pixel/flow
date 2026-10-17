@@ -129,7 +129,7 @@ button.flow-toast__chip:focus-visible { outline: 2px solid var(--focus-ring); ou
   border: 1px solid transparent;
   border-radius: 9999px;
   background: var(--toast-bg);
-  box-shadow: 0 0 0 .5px var(--theme-border-strong), 0 1px 1px lch(0 0 0 / .04);
+  box-shadow: 0 0 0 .5px var(--theme-border-strong);
   color: var(--toast-title);
   font: 500 12px/22px var(--font);
   cursor: default;

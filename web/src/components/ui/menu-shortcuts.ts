@@ -150,5 +150,5 @@ export function useFlowHotkeys(handlers: Record<string, () => void>, enabled = t
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [enabled, key])
+  }, [enabled, key, scope])
 }
