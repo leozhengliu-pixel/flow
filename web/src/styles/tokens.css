@@ -959,3 +959,4 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   --agent-media-option-text: #111;
   --agent-composer-scrollbar-light: lch(64.94 1.25 282);
 }
+:root{--pulse-health-text-on-track:lch(60% 64.37 141.95)}

@@ -114,7 +114,6 @@ import {
   uploadProjectUpdateAttachment,
   deleteProjectUpdateAttachment,
   uploadInitiativeUpdateAttachment,
-  deleteInitiativeUpdateAttachment,
   uploadAttachment,
   ApiError,
   fetchPagedBootstrap,
@@ -2913,19 +2912,6 @@ function App() {
     replaceInitiativeUpdate(initiativeId, update);
     return update;
   };
-  const removeInitiativeUpdateAttachment = async (
-    initiativeId: string,
-    updateId: string,
-    attachmentId: string,
-  ) => {
-    const update = await run(
-      () =>
-        deleteInitiativeUpdateAttachment(initiativeId, updateId, attachmentId),
-      "Could not delete update attachment",
-    );
-    replaceInitiativeUpdate(initiativeId, update);
-    return update;
-  };
   const addProjectUpdate = async (
     id: string,
     input: {
@@ -5684,19 +5670,13 @@ function App() {
             onDeleteSavedView={removeSavedViewOnly}
             onUpdateUserSettings={changeCurrentUserSettings}
             onCreateProject={addProjectUpdate}
-            onUpdateProject={changeProjectUpdate}
-            onDeleteProject={removeProjectUpdate}
             onCommentProject={commentOnProjectUpdate}
             onReactProject={reactToProjectUpdate}
             onUploadProjectAttachment={addProjectUpdateAttachment}
-            onDeleteProjectAttachment={removeProjectUpdateAttachment}
             onCreateInitiative={addInitiativeUpdate}
-            onUpdateInitiative={changeInitiativeUpdate}
-            onDeleteInitiative={removeInitiativeUpdate}
             onCommentInitiative={commentOnInitiativeUpdate}
             onReactInitiative={reactToInitiativeUpdate}
             onUploadInitiativeAttachment={addInitiativeUpdateAttachment}
-            onDeleteInitiativeAttachment={removeInitiativeUpdateAttachment}
           />
         )}
         {page === "cycles" && route.kind === "team-cycles" && cycleTeam && (

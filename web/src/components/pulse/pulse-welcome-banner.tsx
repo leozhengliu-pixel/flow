@@ -1,3 +1,5 @@
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { Check, ChevronDown } from 'lucide-react'
 import { useEffect, useState, type RefObject } from 'react'
 import { toast } from '@/lib/toast'
 import { useI18n } from '@/i18n/i18n'
@@ -50,19 +52,31 @@ export function PulseWelcomeBanner({ containerRef, cadence, onConfirm }: PulseWe
 
   return (
     <div className="pulse-welcome-banner" data-pulse-welcome-banner="" style={{ opacity }}>
-      <div className="pulse-welcome-banner__glyph" aria-hidden><PulseIcon size={26}/></div>
+      <div className="pulse-welcome-banner__glyph" aria-hidden><PulseIcon size={44}/></div>
       <h2>{t(copy.title)}</h2>
       <p>{t(copy.body)}</p>
       <div className="pulse-welcome-banner__schedule">
-        <strong>{t(copy.scheduleLabel)}</strong>
-        <span>{t(copy.scheduleHelp)}</span>
-        <div className="pulse-welcome-banner__options" role="radiogroup" aria-label={t(copy.scheduleLabel)}>
-          {PULSE_SCHEDULES.map(option => (
-            <button key={option} type="button" role="radio" aria-checked={draft === option} data-active={draft === option || undefined} onClick={() => setDraft(option)}>
-              {t(pulseScheduleLabels[option])}
-            </button>
-          ))}
+        <div className="pulse-welcome-banner__label">
+          <strong>{t(copy.scheduleLabel)}</strong>
+          <span>{t(copy.scheduleHelp)}</span>
         </div>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button aria-label={t(copy.scheduleLabel)} className="pulse-welcome-banner__select" type="button"><span>{t(pulseScheduleLabels[draft])}</span><ChevronDown size={10}/></button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content align="end" className="pulse-menu" data-flow-motion="floating" sideOffset={4}>
+              <DropdownMenu.RadioGroup onValueChange={value => setDraft(value as PulseSchedule)} value={draft}>
+                {PULSE_SCHEDULES.map(option => (
+                  <DropdownMenu.RadioItem key={option} value={option}>
+                    <span>{t(pulseScheduleLabels[option])}</span>
+                    <DropdownMenu.ItemIndicator className="pulse-menu-end"><Check size={13}/></DropdownMenu.ItemIndicator>
+                  </DropdownMenu.RadioItem>
+                ))}
+              </DropdownMenu.RadioGroup>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
         <button type="button" className="pulse-welcome-banner__confirm" disabled={busy} onClick={() => void confirm()}>{t(copy.confirm)}</button>
       </div>
     </div>

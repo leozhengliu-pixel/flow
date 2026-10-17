@@ -54,8 +54,8 @@ function renderPage(props: Partial<Parameters<typeof PulsePage>[0]> = {}) {
   const handlers = {
     onNavigateView: vi.fn(), onNavigateSavedView: vi.fn(), onNavigate: vi.fn(),
     onCreateSavedView: vi.fn(), onUpdateSavedView: vi.fn(), onDeleteSavedView: vi.fn(),
-    onCreateProject: vi.fn(), onUpdateProject: vi.fn(), onDeleteProject: vi.fn(), onCommentProject: vi.fn(), onReactProject: vi.fn(), onUploadProjectAttachment: vi.fn(), onDeleteProjectAttachment: vi.fn(),
-    onCreateInitiative: vi.fn(), onUpdateInitiative: vi.fn(), onDeleteInitiative: vi.fn(), onCommentInitiative: vi.fn(), onReactInitiative: vi.fn(), onUploadInitiativeAttachment: vi.fn(), onDeleteInitiativeAttachment: vi.fn(),
+    onCreateProject: vi.fn(), onCommentProject: vi.fn(), onReactProject: vi.fn(), onUploadProjectAttachment: vi.fn(), 
+    onCreateInitiative: vi.fn(), onCommentInitiative: vi.fn(), onReactInitiative: vi.fn(), onUploadInitiativeAttachment: vi.fn(),
   }
   const result = render(<TooltipProvider><I18nProvider><PulsePage data={data()} view="following" {...handlers} {...props}/></I18nProvider></TooltipProvider>)
   return { ...result, handlers: { ...handlers, ...props } }
@@ -90,9 +90,20 @@ describe('Pulse page', () => {
     expect(handlers.onNavigateView).toHaveBeenLastCalledWith('all')
     fireEvent.keyDown(window, { key: '4' })
     expect(handlers.onNavigateSavedView).toHaveBeenLastCalledWith('view-1')
-    // Typing in the search box never switches tabs.
-    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Find in feed…' }), { key: '1' })
-    expect(handlers.onNavigateView).toHaveBeenCalledTimes(2)
+    // Pulse has no search box or filter button (the reference app has neither).
+    expect(screen.queryByRole('textbox', { name: 'Find in feed…' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add filter' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the card menu read-only like the reference app: no Edit or Delete, even for your own update', async () => {
+    const own = pulseItem('own', new Date().toISOString())
+    vi.mocked(fetchPulseFeed).mockResolvedValue(page([{ ...own, update: { ...own.update, user: viewer } } as PulseItem]))
+    renderPage()
+    await screen.findByText('Body of own')
+    await userEvent.click(screen.getByRole('button', { name: 'Post actions' }))
+    expect(await screen.findByRole('menuitem', { name: /Copy link/ })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /Edit/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /Delete/ })).not.toBeInTheDocument()
   })
 
   it('R opens the reply composer on the active update', async () => {
@@ -125,16 +136,11 @@ describe('Pulse page', () => {
     expect(screen.queryByText('Last seen')).not.toBeInTheDocument()
   })
 
-  it('shows the reference app empty copy per tab and a no-results state for searches', async () => {
+  it('shows the reference app empty copy', async () => {
     vi.mocked(fetchPulseFeed).mockResolvedValue(page([]))
     renderPage()
     expect(await screen.findByText('Updates from initiatives, projects that you’re a part of or subscribed to will show here.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'New update' })).toBeInTheDocument()
-    fireEvent.change(screen.getByRole('textbox', { name: 'Find in feed…' }), { target: { value: 'roadmap' } })
-    expect(await screen.findByText('No results found for "roadmap"')).toBeInTheDocument()
-    await waitFor(() => expect(vi.mocked(fetchPulseFeed).mock.calls.at(-1)?.[0]).toMatchObject({ q: 'roadmap' }))
-    fireEvent.click(within(document.querySelector('.pulse-no-results') as HTMLElement).getByRole('button', { name: 'Clear search' }))
-    expect(await screen.findByText('Updates from initiatives, projects that you’re a part of or subscribed to will show here.')).toBeInTheDocument()
   })
 
   it('counts realtime arrivals in a "New update available" pill instead of inserting them', async () => {
@@ -192,23 +198,11 @@ describe('Pulse page', () => {
       other.unmount()
       expect(markPulseSeen).not.toHaveBeenCalled()
     }
-
-    // A search on For me narrows the feed: reaching its top is not "seen".
-    vi.mocked(markPulseSeen).mockClear()
-    resetPulseSeenForTests()
-    FeedStableLastSeen.clear()
-    vi.mocked(fetchPulseFeed).mockImplementation(async query => page(query.q ? [pulseItem('a', newest)] : []))
-    const searching = renderPage()
-    await screen.findByText('Updates from initiatives, projects that you’re a part of or subscribed to will show here.')
-    fireEvent.change(screen.getByRole('textbox', { name: 'Find in feed…' }), { target: { value: 'roadmap' } })
-    await screen.findByText('Body of a')
-    searching.unmount()
-    expect(markPulseSeen).not.toHaveBeenCalled()
   })
 
   it('StrictMode mount/unmount before the feed loads records nothing', async () => {
     vi.mocked(fetchPulseFeed).mockImplementation(() => new Promise(() => undefined))
-    const handlers = { onNavigateView: vi.fn(), onNavigateSavedView: vi.fn(), onCreateSavedView: vi.fn(), onUpdateSavedView: vi.fn(), onDeleteSavedView: vi.fn(), onCreateProject: vi.fn(), onUpdateProject: vi.fn(), onDeleteProject: vi.fn(), onCommentProject: vi.fn(), onReactProject: vi.fn(), onUploadProjectAttachment: vi.fn(), onDeleteProjectAttachment: vi.fn(), onCreateInitiative: vi.fn(), onUpdateInitiative: vi.fn(), onDeleteInitiative: vi.fn(), onCommentInitiative: vi.fn(), onReactInitiative: vi.fn(), onUploadInitiativeAttachment: vi.fn(), onDeleteInitiativeAttachment: vi.fn() }
+    const handlers = { onNavigateView: vi.fn(), onNavigateSavedView: vi.fn(), onCreateSavedView: vi.fn(), onUpdateSavedView: vi.fn(), onDeleteSavedView: vi.fn(), onCreateProject: vi.fn(), onCommentProject: vi.fn(), onReactProject: vi.fn(), onUploadProjectAttachment: vi.fn(), onCreateInitiative: vi.fn(), onCommentInitiative: vi.fn(), onReactInitiative: vi.fn(), onUploadInitiativeAttachment: vi.fn(), onDeleteInitiativeAttachment: vi.fn() }
     const view = render(<StrictMode><TooltipProvider><I18nProvider><PulsePage data={data()} view="following" {...handlers}/></I18nProvider></TooltipProvider></StrictMode>)
     await act(async () => { await Promise.resolve() })
     view.unmount()
