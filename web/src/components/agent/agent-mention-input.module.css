@@ -20,3 +20,6 @@
 .quoteChip{display:inline;margin:0 1px 0 0;padding:1.5px 3.9px 1.5px 2.6px;border:.5px solid var(--agent-quote-chip-border);border-radius:4px;background:var(--agent-quote-chip-bg);color:var(--pk-text);font:450 13px/20.8px var(--font);white-space:pre-wrap;-webkit-box-decoration-break:clone;box-decoration-break:clone;cursor:default;user-select:none}
 .quoteIcon{display:inline-block;margin:0 3.5px 0 0;vertical-align:-2px;color:var(--chip-text)}
 .quoteText{color:var(--pk-text)}
+/* A pasted image, video or file (reference app's composer): 6px under the line before it, a line or block after it 22px below. */
+.block{display:block;margin-top:6px;white-space:normal;user-select:none}
+.block + div{margin-top:22px}

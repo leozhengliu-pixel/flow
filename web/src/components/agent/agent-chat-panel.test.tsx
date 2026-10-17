@@ -1,4 +1,4 @@
-import { render, screen, within, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
@@ -44,6 +44,41 @@ describe('Agent chat panel streaming', () => {
     await waitFor(() => expect(onSessionChange).toHaveBeenCalledWith(session))
     expect(streams.streamNewAgentSession).toHaveBeenCalledWith(expect.objectContaining({ message: 'Summarize', issueIds: [data.issues[0].id], location: 'toolbar' }), expect.any(Function), expect.any(AbortSignal))
     expect(screen.getByText('Summary')).toBeVisible()
+  })
+
+  it('sends a pasted screenshot as an attachment, not as text in the message', async () => {
+    streams.streamNewAgentSession.mockImplementation(async (_input, onEvent) => {
+      onEvent({ type: 'session.completed', session })
+      return session
+    })
+    const user = userEvent.setup()
+    render(<I18nProvider><AgentChatPanel issues={[]} onClose={vi.fn()} open/></I18nProvider>)
+    const input = screen.getByRole('textbox', { name: 'Send a message to Flow Agent' })
+    await waitFor(() => expect(input).toBeEnabled())
+    const screenshot = new File(['png-bytes'], 'image.png', { type: 'image/png' })
+    fireEvent.paste(input, { clipboardData: { files: [screenshot], getData: () => '' } })
+    expect(await screen.findByText('image.png')).toBeVisible()
+    await user.type(input, 'What is wrong here?')
+    await user.click(screen.getByRole('button', { name: 'Send message' }))
+    await waitFor(() => expect(streams.streamNewAgentSession).toHaveBeenCalled())
+    const [sent] = streams.streamNewAgentSession.mock.calls[0]
+    expect(sent.message).toBe('What is wrong here?')
+    expect(sent.attachments).toEqual([{ name: 'image.png', contentType: 'image/png', size: 9, content: expect.stringMatching(/^data:image\/png;base64,/) }])
+  })
+
+  it('shows a sent message\'s images as thumbnails and other files by name', async () => {
+    const withFiles: AgentSession = {
+      ...session,
+      messages: [
+        { ...session.messages[0], attachments: [{ name: 'screen.png', contentType: 'image/png', size: 10, url: '/uploads/agent_attachment_1_0_screen.png' }, { name: 'spec.pdf', contentType: 'application/pdf', size: 900 }] },
+        session.messages[1],
+      ],
+    }
+    render(<I18nProvider><AgentChatPanel initialSession={withFiles} issues={[]} onClose={vi.fn()} open/></I18nProvider>)
+    const thumbnail = await screen.findByRole('img', { name: 'screen.png' })
+    expect(thumbnail).toHaveAttribute('src', '/uploads/agent_attachment_1_0_screen.png')
+    expect(thumbnail.closest('a')).toHaveAttribute('href', '/uploads/agent_attachment_1_0_screen.png')
+    expect(screen.getByText('spec.pdf')).toBeVisible()
   })
 
   it('hands a finished assistant reply back through onUseResponse', async () => {

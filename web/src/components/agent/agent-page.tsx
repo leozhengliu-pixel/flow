@@ -12,7 +12,7 @@ import {
 } from "@/lib/api";
 import { streamAgentSessionMessage, streamAgentSessionMessageEdit, streamNewAgentSession, type AgentStreamEvent } from "@/lib/agent-stream";
 import { agentPath } from "@/lib/app-routes";
-import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus, AgentToolCall, BootstrapData, Project } from "@/types/flow";
+import type { AgentMessage, AgentMessageAttachment, AgentMessagePart, AgentSession, AgentStatus, AgentToolCall, BootstrapData, Project } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
 import { usePropertyCommand } from "@/components/property/use-property-command";
 import {
@@ -37,7 +37,11 @@ import { clearAgentDraft, readAgentDraft, writeAgentDraft } from "./agent-drafts
 import styles from "./agent-page.module.css";
 import { AgentMentionInput, type AgentMention } from "./agent-mention-input";
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
-import { AGENT_ATTACHMENT_ACCEPT, addAgentAttachments, agentFileContext } from './agent-attachments'
+import { agentFileAttachment } from './agent-attachments'
+import { AgentMessageAttachments } from './agent-message-attachments'
+import { AgentContentWithBlocks, splitAgentBlocks } from './agent-content-blocks'
+import { fillAgentComposer } from './agent-mention-input'
+import { uploadAgentFile } from '@/lib/api'
 import { AgentSkillsPicker } from './agent-skills-picker'
 import { applyAgentStreamEvent, markAgentSessionFailed, markAgentSessionStopped } from './agent-stream-state'
 import { isBlankStoppedReply, settleStoppedAgentReply } from './agent-stopped-reply'
@@ -95,6 +99,9 @@ export function AgentPage({
     [sessionFeedbackOpen, setSessionFeedbackOpen] = useState(false);
   const scrollToLatestRef = useRef<(() => void) | undefined>(undefined);
   const editorRef = useRef<HTMLDivElement>(null);
+  const insertFilesRef = useRef<((files: File[]) => void) | null>(null);
+  // Pasted images upload at once; the message waits until they are in.
+  const [filesUploading, setFilesUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamAbortRef = useRef<AbortController | undefined>(undefined);
   // Chats already re-read from the server since this page opened.
@@ -217,8 +224,7 @@ export function AgentPage({
   );
   const writeInput = (value: string) => {
     setInput(value);
-    if (editorRef.current && editorRef.current.textContent !== value)
-      editorRef.current.textContent = value;
+    writeInputToEditor(editorRef, value);
   };
   const saveSession = (next: AgentSession) => {
     setSessions((list) => [
@@ -249,22 +255,17 @@ export function AgentPage({
    */
   const send = async (message = input, retryOf?: AgentMessage, answer?: { partId: string; value: string }) => {
     message = message.trim();
-    if (!message || replyRunning || !status?.enabled) return;
+    if (!message || replyRunning || !status?.enabled || (!retryOf && !answer && filesUploading)) return;
     const retrying = Boolean(retryOf && current);
     setBusy(true);
     setError(undefined);
     // The reference app shows the sent message and its working state at once; the stream replaces this copy when it starts.
     // Picking a question's option shows it as the chosen pill straight away, not as a message bubble.
-    setPending(optimisticAgentTurn(current, message, retrying ? retryOf!.id : editingId, retrying ? retryOf!.mentions : mentions, answer));
+    setPending(optimisticAgentTurn(current, message, retrying ? retryOf!.id : editingId, retrying ? retryOf!.mentions : mentions, answer, retrying ? retryOf!.attachments : attachments.length ? attachments.map(({ name, type, size }) => ({ name, contentType: type, size })) : current?.messages.find((item) => item.id === editingId)?.attachments));
     let streamed = current, started = false, failedInChat = false;
     try {
-      // A retry resends the saved message as it is (attachment text included), leaving the composer alone.
-      const attachmentContext = retrying ? [] : await Promise.all(
-        attachments.map(agentFileContext),
-      );
-      const providerMessage = attachmentContext.length
-        ? `${message}\n\n${attachmentContext.join("\n\n")}`
-        : message;
+      // Files go with the message for the server to keep; a retry resends the text alone and the server keeps its files.
+      const sentAttachments = retrying ? [] : await Promise.all(attachments.map(agentFileAttachment));
       const controller = new AbortController();
       streamAbortRef.current = controller;
       const onEvent = (event: AgentStreamEvent) => {
@@ -299,6 +300,7 @@ export function AgentPage({
         userIds: mentions.filter((item) => item.type === "user").map((item) => item.id),
         mentions,
         ...(answer ? { answer } : {}),
+        ...(sentAttachments.length ? { attachments: sentAttachments } : {}),
       };
       // The reference app clears the composer as soon as the message is sent; restore it below if sending fails.
       if (!retrying && !answer) {
@@ -306,10 +308,10 @@ export function AgentPage({
         writeInput("");
         setAttachments([]);
       }
-      if (current && retryOf) await streamAgentSessionMessageEdit(current.id, retryOf.id, providerMessage, onEvent, controller.signal);
-      else if (current && editingId) await streamAgentSessionMessageEdit(current.id, editingId, providerMessage, onEvent, controller.signal);
-      else if (current) await streamAgentSessionMessage(current.id, providerMessage, onEvent, controller.signal, mentioned);
-      else await streamNewAgentSession({ message: providerMessage, ...mentioned, skillIds: selectedSkills, location: "page" }, onEvent, controller.signal);
+      if (current && retryOf) await streamAgentSessionMessageEdit(current.id, retryOf.id, message, onEvent, controller.signal);
+      else if (current && editingId) await streamAgentSessionMessageEdit(current.id, editingId, message, onEvent, controller.signal, sentAttachments);
+      else if (current) await streamAgentSessionMessage(current.id, message, onEvent, controller.signal, mentioned);
+      else await streamNewAgentSession({ message, ...mentioned, skillIds: selectedSkills, location: "page" }, onEvent, controller.signal);
       if (!retrying) {
         clearAgentDraft(agentDraftKey);
         setEditingId(undefined);
@@ -691,6 +693,9 @@ export function AgentPage({
               value={input}
               onChange={(value, next) => { setInput(value); setMentions(next); }}
               onSubmit={() => void send()}
+              onUploadFile={file => uploadAgentFile(file)}
+              insertFilesRef={insertFilesRef}
+              onBusyChange={setFilesUploading}
             />
           </div>
           <footer>
@@ -707,12 +712,11 @@ export function AgentPage({
             </FlowTooltip>
             <input
               ref={fileInputRef}
-              accept={AGENT_ATTACHMENT_ACCEPT}
               className={styles.fileInput}
               multiple
               onChange={(event) => {
-                const files = event.target.files;
-                setAttachments((items) => addAgentAttachments(items, files));
+                // Every file goes into the message like a pasted one.
+                insertFilesRef.current?.([...(event.target.files ?? [])]);
                 event.target.value = "";
               }}
               type="file"
@@ -731,8 +735,8 @@ export function AgentPage({
               aria-label={t("Submit comment")}
               className={styles.sendButton}
               // Like the reference app, an empty composer keeps the quiet send button (hover included); text turns it accent.
-              data-state={!status?.enabled ? "unavailable" : input.trim() ? "ready" : "empty"}
-              disabled={!input.trim() || !status?.enabled}
+              data-state={!status?.enabled ? "unavailable" : input.trim() && !filesUploading ? "ready" : "empty"}
+              disabled={!input.trim() || filesUploading || !status?.enabled}
               onClick={() => void send()}
               type="button"
             ><AgentSubmitIcon /></button></FlowTooltip>}
@@ -907,7 +911,10 @@ function Conversation({
                   ? <div aria-live="polite" className={styles.thinkingPlaceholder}><span className={styles.workShimmer}>{t("Thinking…")}</span></div>
                   : message.parts?.length
                     ? <AgentMessageParts {...answer} changes={{ sessionId: session.id.startsWith("pending-") ? undefined : session.id, onSessionChange }} onAnswer={index === latestAssistantIndex ? onAnswer : undefined} answerDisabled={busy} draftContext={draftContext} draftProject={draftProject} message={message} onRetry={retryTarget && !busy && index === session.messages.length - 1 ? () => onRetry(retryTarget) : undefined} onToolApproval={onToolApproval} approvalBusy={approvalBusy}/>
-                    : <AgentMessageText {...answer} content={message.content} draftContext={draftContext} draftProject={draftProject}/>}
+                    : message.role === "user"
+                      ? <AgentContentWithBlocks content={message.content} renderText={(text) => <AgentMessageText {...answer} content={text} draftContext={draftContext} draftProject={draftProject}/>}/>
+                      : <AgentMessageText {...answer} content={message.content} draftContext={draftContext} draftProject={draftProject}/>}
+                {message.role === "user" && <AgentMessageAttachments attachments={message.attachments?.filter((item) => !item.url || !message.content.includes(`](${item.url})`))}/>}
               </div>
               {message.role === "user"
                 ? <AgentUserMessageActions className={styles.messageActions} content={message.content} onEdit={message.id.startsWith("pending-") ? undefined : () => onEdit(message)} />
@@ -986,7 +993,7 @@ const titleRetryDelays = [1500, 5000, 12000, 25000];
  * The conversation as it looks the moment a message is sent: the user's message (replacing the edited one and
  * everything after it) followed by an empty assistant reply, which renders as the working indicator.
  */
-function optimisticAgentTurn(session: AgentSession | undefined, message: string, editingId?: string, mentions: AgentMention[] = [], answer?: { partId: string; value: string }): AgentSession {
+function optimisticAgentTurn(session: AgentSession | undefined, message: string, editingId?: string, mentions: AgentMention[] = [], answer?: { partId: string; value: string }, attachments?: AgentMessageAttachment[]): AgentSession {
   const now = new Date().toISOString();
   const earlier = (session?.messages ?? []).map((item) => answer && item.parts?.some((part) => part.id === answer.partId)
     ? { ...item, parts: item.parts.map((part) => part.id === answer.partId && part.question ? { ...part, status: "completed" as const, question: { ...part.question, selected: answer.value } } : part) }
@@ -995,11 +1002,11 @@ function optimisticAgentTurn(session: AgentSession | undefined, message: string,
   const stamp = Date.now();
   const messages: AgentMessage[] = [
     ...kept,
-    { id: `pending-user-${stamp}`, role: "user", content: message, mentions: mentions.length ? mentions.map(({ type, id, label }) => ({ type, id, label })) : undefined, answerTo: answer?.partId, createdAt: now },
+    { id: `pending-user-${stamp}`, role: "user", content: message, mentions: mentions.length ? mentions.map(({ type, id, label }) => ({ type, id, label })) : undefined, answerTo: answer?.partId, attachments: attachments?.length ? attachments : undefined, createdAt: now },
     { id: `pending-reply-${stamp}`, role: "assistant", content: "", parts: [], createdAt: now },
   ];
   if (session) return { ...session, messages, updatedAt: now };
-  return { id: `pending-${stamp}`, slugId: "", userId: "", title: message.split("\n")[0].slice(0, 80), favorite: false, location: "page", issueIds: [], skillIds: [], messages, createdAt: now, updatedAt: now };
+  return { id: `pending-${stamp}`, slugId: "", userId: "", title: (message.replace(/!\[[^\]\n]*\]\([^)\s]+\)/g, "").trim() || "Image").split("\n")[0].slice(0, 80), favorite: false, location: "page", issueIds: [], skillIds: [], messages, createdAt: now, updatedAt: now };
 }
 
 /**
@@ -1061,7 +1068,11 @@ function placeCaretAtEnd(editor: HTMLElement | null) {
 }
 
 function writeInputToEditor(editorRef: RefObject<HTMLDivElement | null>, value: string) {
-  if (editorRef.current && editorRef.current.textContent !== value) editorRef.current.textContent = value;
+  const editor = editorRef.current;
+  if (!editor) return;
+  // A message with pasted files comes back with its blocks (editing it, restoring a draft).
+  if (splitAgentBlocks(value).some((part) => part.type !== "text")) fillAgentComposer(editor, value);
+  else if (editor.textContent !== value) editor.textContent = value;
 }
 
 /** Shows the working indicator under a message whose reply is still on its way. */
