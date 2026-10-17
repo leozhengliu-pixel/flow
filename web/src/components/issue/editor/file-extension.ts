@@ -64,7 +64,9 @@ export const DescriptionFile = Node.create({
         const current = editor.state.doc.nodeAt(pos)
         editor.chain().focus().deleteRange({ from: pos, to: pos + (current?.nodeSize ?? 1) }).run()
       })
-      dom.append(link, remove)
+      // Read-only renders (posted comments) get no delete control.
+      dom.append(link)
+      if (editor.isEditable) dom.append(remove)
       return {
         dom,
         update(updated) {

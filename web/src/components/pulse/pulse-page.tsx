@@ -9,7 +9,7 @@ import { FlowTooltip } from '@/components/ui/tooltip'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { workspaceFeatureEnabled } from '@/components/layout/sidebar-customization-state'
 import { useI18n } from '@/i18n/i18n'
-import { updateUserSettings } from '@/lib/api'
+import { updateUserSettings, uploadInitiativeCommentAttachment, uploadProjectCommentAttachment } from '@/lib/api'
 import { changePulseSubscription, PULSE_SUBSCRIPTIONS_CHANGED_EVENT } from '@/lib/pulse-subscriptions'
 import { pulseNewViewPath, pulsePath, pulseViewPath, type PulseRouteView } from '@/lib/app-routes'
 import type { BootstrapData, InitiativeUpdate, Project, ProjectUpdate, PulseItem, SavedView, SavedViewMutationInput } from '@/types/flow'
@@ -268,6 +268,10 @@ function usePulseCardHandlers(props: Props, feed: PulseFeedState, tab: PulseRout
     onComment: async (item, body, bodyData) => {
       const update = await (item.kind === 'project' ? props.onCommentProject(projectId(item), item.update.id, body, bodyData) : props.onCommentInitiative(initiativeId(item), item.update.id, body, bodyData))
       feed.patchUpdate(item.id, update)
+    },
+    onUploadCommentAttachment: async (item, file) => {
+      const attachment = await run(() => item.kind === 'project' ? uploadProjectCommentAttachment(projectId(item), file) : uploadInitiativeCommentAttachment(initiativeId(item), file), 'Could not upload the attachment')
+      return attachment.url
     },
     onReact: async (item, emoji) => {
       const update = await (item.kind === 'project' ? props.onReactProject(projectId(item), item.update.id, emoji) : props.onReactInitiative(initiativeId(item), item.update.id, emoji))

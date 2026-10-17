@@ -270,6 +270,7 @@ var InternalRoutes = []string{
 	"PATCH /api/initiatives/{id}/comments/{commentId}",
 	"PATCH /api/initiatives/{id}/relations/{relationId}",
 	"PATCH /api/initiatives/{id}/resources/{resourceId}",
+	"POST /api/initiatives/{id}/comment-attachments",
 	"POST /api/initiatives/{id}/comments",
 	"POST /api/initiatives/{id}/comments/{commentId}/reactions",
 	"POST /api/initiatives/{id}/relations",
