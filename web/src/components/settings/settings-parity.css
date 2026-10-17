@@ -15,7 +15,7 @@ html:root .settings-app .settings-back {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin: 4px 0 13px 4px;
+  margin: 4px 0 12px 4px;
   padding: 0 12px 0 6px;
   border: .5px solid transparent;
   border-radius: 9999px;
@@ -23,7 +23,7 @@ html:root .settings-app .settings-back {
   font: 500 13px/28px var(--font);
 }
 html:root .settings-app .settings-back:hover { background: var(--bg-hover); color: var(--set-nav-active); }
-html:root .settings-app .settings-search { flex: 0 0 28px; margin-bottom: 29px; }
+html:root .settings-app .settings-search { flex: 0 0 28px; margin-bottom: 0; }
 html:root .settings-app .settings-search input {
   height: 28px;
   padding: 6px 25px 6px 32px;
@@ -32,10 +32,19 @@ html:root .settings-app .settings-search input {
   box-shadow: var(--set-search-shadow);
   font: 500 13px var(--font);
 }
-html:root .settings-app .settings-sidebar nav section { margin-bottom: 15px; }
+/* The nav scrolls edge to edge with a thin scrollbar that reserves its gutter,
+   so items stay 210px wide (12px inset + 10px gutter) like the reference. */
+html:root .settings-app .settings-sidebar nav {
+  margin: 0 -12px;
+  padding: 29px 12px 4px;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--set-scrollbar) transparent;
+}
+html:root .settings-app .settings-sidebar nav section { margin-bottom: 16px; }
 html:root .settings-app .settings-sidebar nav h2 {
   height: 16px;
-  margin: 0 0 5px;
+  margin: 0 0 6px;
   padding: 0 10px;
   color: var(--set-nav);
   font: 500 13px/16px var(--font);
@@ -50,7 +59,9 @@ html:root .settings-app .settings-sidebar nav button {
   color: var(--set-nav);
   font: 500 13px var(--font);
 }
-html:root .settings-app .settings-sidebar nav button:hover { color: var(--set-nav-active); }
+html:root .settings-app .settings-sidebar nav button svg { color: var(--set-text); }
+html:root .settings-app .settings-sidebar nav button:hover { background: var(--set-nav-hover-bg); color: var(--set-nav-active); }
+html:root .settings-app .settings-sidebar nav button.active svg { color: var(--set-nav-active); }
 html:root .settings-app .settings-sidebar nav button.active {
   background: var(--set-nav-active-bg);
   color: var(--set-nav-active);
@@ -60,6 +71,9 @@ html:root .settings-app .settings-sidebar nav button.active {
 html:root .settings-app .settings-main {
   border: .5px solid var(--set-panel-border);
   background: var(--set-panel-bg);
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--set-scrollbar) transparent;
 }
 
 /* Page header and sections */
