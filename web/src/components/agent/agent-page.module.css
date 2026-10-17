@@ -715,8 +715,7 @@
   color: inherit;
 }
 .historyMenu,
-.skillsMenu,
-.optionsMenu {
+.skillsMenu {
   z-index: 950;
   border: 0.5px solid var(--popover-border);
   border-radius: 12px;
@@ -868,96 +867,8 @@
   width: 14px;
   height: 14px;
 }
-/* The reference app's chat options menu: picker surface, 6px top/bottom room, 32px rows with an inset 8px highlight. */
-.historyMenu.optionsMenu,
-.optionsMenu {
-  width: 176px;
-  padding: 6px 0;
-  border-color: var(--pk-border);
-  background: var(--pk-surface);
-  box-shadow: var(--pk-shadow);
-  color: var(--pk-text);
-}
-.optionsMenu [role="menuitem"] {
-  position: relative;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 18px 0 14px;
-  outline: 0;
-  color: var(--pk-text);
-  font: 450 13px/normal var(--font);
-  isolation: isolate;
-}
-.optionsMenu [role="menuitem"][data-highlighted]::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  inset: 0 6px;
-  border-radius: 8px;
-  background: var(--pk-hover);
-}
-.optionsMenu [role="menuitem"] > svg {
-  width: 16px;
-  height: 16px;
-  flex: none;
-  color: var(--pk-muted);
-}
-.optionsMenu [role="separator"] {
-  height: 12px;
-  position: relative;
-}
-.optionsMenu [role="separator"]:after {
-  content: "";
-  position: absolute;
-  inset: 5.75px 0 auto;
-  height: 0.5px;
-  background: var(--pk-divider);
-}
 .danger {
   color: var(--semantic-danger);
-}
-.confirmOverlay {
-  position: fixed;
-  z-index: 1000;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background: var(--overlay-modal);
-}
-.confirmOverlay > section {
-  width: 400px;
-  padding: 24px;
-  border: 0.5px solid var(--popover-border);
-  border-radius: 12px;
-  background: var(--theme-surface-2);
-  box-shadow: var(--shadow-dialog);
-}
-.confirmOverlay h3 {
-  margin: 0 0 8px;
-  font-size: 15px;
-}
-.confirmOverlay p {
-  margin: 0 0 24px;
-  color: var(--theme-text-secondary);
-}
-.confirmOverlay footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-.confirmOverlay button {
-  height: 32px;
-  padding: 0 12px;
-  border: 0.5px solid var(--theme-border);
-  border-radius: 9999px;
-  background: transparent;
-}
-.deleteButton {
-  border-color: transparent !important;
-  background: var(--semantic-danger) !important;
-  color: var(--on-danger);
 }
 @media (max-width: 800px) {
   .page {
@@ -1102,11 +1013,6 @@
 :global(:root[data-theme="light"]) .historyMenu time { color: var(--theme-text-tertiary); }
 :global(:root[data-theme="light"]) .historyGroup { color: var(--theme-text-tertiary); }
 :global(:root[data-theme="light"]) .danger { color: var(--semantic-danger); }
-:global(:root[data-theme="light"]) .confirmOverlay { background: var(--overlay-modal); }
-:global(:root[data-theme="light"]) .confirmOverlay > section { border-color: var(--popover-border); background: var(--theme-surface-2); box-shadow: var(--shadow-dialog); color: var(--theme-text-primary); }
-:global(:root[data-theme="light"]) .confirmOverlay p { color: var(--theme-text-secondary); }
-:global(:root[data-theme="light"]) .confirmOverlay button { border-color: var(--theme-border); }
-:global(:root[data-theme="light"]) .deleteButton { background: var(--semantic-danger) !important; color: var(--on-danger); }
 :global(:root[data-theme="light"]) .attachments > span { border-color: var(--theme-border); background: var(--theme-surface-hover); }
 /* Preflight strips list markers; answers show bullets and numbers. */
 .messageDocument ul { list-style: disc; }
@@ -1192,21 +1098,6 @@
 .editingBanner > button svg {
   width: 14px;
   height: 14px;
-}
-/* Chat options menu: 13px items with 16px glyphs and a right-aligned key hint. */
-.optionsMenu [role="menuitem"] > span:not(.menuShortcut) {
-  min-width: 0;
-  flex: 1;
-}
-.menuShortcut {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  margin-left: 8px;
-}
-.menuShortcut kbd {
-  color: var(--pk-muted);
-  font: 500 11px/12.1px var(--font);
 }
 /* The reply's blocks sit 12px apart (the grid gap), option pills included; a question is its text, then its pills. */
 .messageParts > [data-agent-choices],

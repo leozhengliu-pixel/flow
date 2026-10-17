@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -372,7 +373,7 @@ func (s *server) listAgentSessions(w http.ResponseWriter, r *http.Request) {
 	data := s.workspaceData(r)
 	result := make([]domain.AgentSession, 0)
 	for _, session := range data.AgentSessions {
-		if session.UserID == data.Viewer.ID {
+		if session.UserID == data.Viewer.ID && session.DeletedAt == nil {
 			result = append(result, agentSessionSummary(session))
 		}
 	}
@@ -759,29 +760,83 @@ func agentSessionRead(session domain.AgentSession) bool {
 	return session.LastReadAt == nil || !session.UpdatedAt.After(*session.LastReadAt)
 }
 
+// deleteAgentSession hides the chat; its files go when the retention purge removes it.
 func (s *server) deleteAgentSession(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var removed []domain.AgentMessageAttachment
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.session_deleted", id, nil, func(data *domain.Bootstrap) error {
 		session, err := ownedAgentSession(data, id)
 		if err != nil {
 			return err
 		}
-		removed = messageAttachments(session.Messages)
-		for index := range data.AgentSessions {
-			if data.AgentSessions[index].ID == session.ID {
-				data.AgentSessions = append(data.AgentSessions[:index], data.AgentSessions[index+1:]...)
-				return nil
-			}
-		}
-		return errNotFound
+		now := time.Now().UTC()
+		session.DeletedAt = &now
+		return nil
 	})
 	if err != nil {
 		respondMutation(w, err, http.StatusNoContent, nil)
 		return
 	}
-	s.deleteAgentAttachments(r.Context(), removed)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// restoreAgentSession brings back a deleted chat that has not been purged.
+func (s *server) restoreAgentSession(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var restored domain.AgentSession
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.session_restored", id, nil, func(data *domain.Bootstrap) error {
+		// An exact ID wins over a slug shared with another deleted chat.
+		for _, byID := range []bool{true, false} {
+			for index := range data.AgentSessions {
+				session := &data.AgentSessions[index]
+				if (byID && session.ID == id || !byID && session.SlugID == id) && session.UserID == data.Viewer.ID && session.DeletedAt != nil {
+					session.DeletedAt = nil
+					restored = *session
+					return nil
+				}
+			}
+		}
+		return errNotFound
+	})
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.withAgentBodies(r, restored))
+}
+
+// purgeDeletedAgentSessions permanently removes chats deleted before cutoff,
+// with the files sent in them.
+func (s *server) purgeDeletedAgentSessions(ctx context.Context, key string, cutoff time.Time) (int, error) {
+	data, ok := s.store.WorkspaceMetadataFields(key, "agentSessions")
+	if !ok {
+		return 0, nil
+	}
+	expired := func(session domain.AgentSession) bool {
+		return session.DeletedAt != nil && session.DeletedAt.Before(cutoff)
+	}
+	if !slices.ContainsFunc(data.AgentSessions, expired) {
+		return 0, nil
+	}
+	var removed []domain.AgentMessageAttachment
+	purged := 0
+	err := s.store.MutateWorkspace(ctx, key, "agent.sessions_purged", "agent_sessions", nil, func(next *domain.Bootstrap) error {
+		for _, session := range next.AgentSessions {
+			if expired(session) {
+				removed = append(removed, messageAttachments(session.Messages)...)
+			}
+		}
+		before := len(next.AgentSessions)
+		next.AgentSessions = slices.DeleteFunc(next.AgentSessions, expired)
+		if purged = before - len(next.AgentSessions); purged == 0 {
+			return store.ErrNoMutation
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	s.deleteAgentAttachments(ctx, removed)
+	return purged, nil
 }
 
 func (s *server) listAgentSkillsHTTP(w http.ResponseWriter, r *http.Request) {
@@ -860,7 +915,7 @@ func validateAgentSkill(w http.ResponseWriter, input agentSkillInput) bool {
 func ownedAgentSession(data *domain.Bootstrap, id string) (*domain.AgentSession, error) {
 	for index := range data.AgentSessions {
 		session := &data.AgentSessions[index]
-		if (session.ID == id || session.SlugID == id) && session.UserID == data.Viewer.ID {
+		if (session.ID == id || session.SlugID == id) && session.UserID == data.Viewer.ID && session.DeletedAt == nil {
 			return session, nil
 		}
 	}

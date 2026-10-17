@@ -999,6 +999,15 @@ function App() {
   const [floatingAgentSession, setFloatingAgentSession] = useState<AgentSession>();
   const chatHistoryButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => { if (!floatingAgentOpen) setFloatingAgentSession(undefined); }, [floatingAgentOpen]);
+  // A chat deleted from a floating chat leaves the lists; Undo on the toast lists it again and reopens it there.
+  const removeAgentSession = (id: string) => setData(current => current ? withAgentSession(current, id) : current);
+  const restoreAgentSessionInUi = (session: AgentSession) => {
+    setData(current => current ? withAgentSession(current, session.id, session) : current);
+    setClosedAgentSessionIds(current => new Set(current).add(session.id));
+    setFloatingAgentRequest(undefined);
+    setFloatingAgentSession(session);
+    setFloatingAgentOpen(true);
+  };
   // "Ask Flow" with a typed question (⌘K Tab): the floating chat opens on a fresh conversation that sends it at once.
   const [floatingAgentRequest, setFloatingAgentRequest] = useState<{ id: number } & FloatingAgentRequest>();
   // A page (e.g. a document's selection toolbar) asks for the floating chat, the reference app's "Ask agent" on a selection;
@@ -7035,6 +7044,8 @@ function App() {
                 : current,
             )
           }
+          onSessionDeleted={removeAgentSession}
+          onSessionRestored={restoreAgentSessionInUi}
           onOpenFullPage={(session) => {
             if (!session) {
               navigateTo(agentPath(data.workspace.urlKey));
@@ -7084,6 +7095,8 @@ function App() {
         }
         open={floatingAgentOpen}
         onSessionChange={(next) => setClosedAgentSessionIds((current) => new Set(current).add(next.id))}
+        onSessionDeleted={removeAgentSession}
+        onSessionRestored={restoreAgentSessionInUi}
         onClose={() => { setFloatingAgentOpen(false); setFloatingAgentRequest(undefined); }}
         // Escape hides the chat with its draft, like the Agent button; only the X discards (and asks first).
         onHide={() => setFloatingAgentOpen(false)}

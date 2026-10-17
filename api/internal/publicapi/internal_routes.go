@@ -58,6 +58,7 @@ var InternalRoutes = []string{
 	"POST /api/agent/sessions/{id}/approvals/{approvalId}",
 	"POST /api/agent/sessions/{id}/elicitations/{elicitationId}",
 	"POST /api/agent/sessions/{id}/feedback",
+	"POST /api/agent/sessions/{id}/restore",
 	"POST /api/agent/sessions/{id}/messages",
 	"POST /api/agent/sessions/{id}/messages/stream",
 	"POST /api/agent/sessions/{id}/messages/{messageId}/restore",

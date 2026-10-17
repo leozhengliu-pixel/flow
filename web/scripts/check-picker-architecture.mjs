@@ -29,6 +29,8 @@ const dedicated = new Set([
   'auth/oauth-team-combobox.tsx',
   // Bottom-right chat history: a search field over time-grouped chats (aria-activedescendant listbox), opens a chat rather than picking a property value.
   'agent/agent-chat-history-popover.tsx',
+  // Chat rename: the reference app's command palette (a title field over "Rename chat to …" / "Cancel"), not a property value picker.
+  'agent/agent-chat-actions.tsx',
 ])
 
 const files = await collect(root)

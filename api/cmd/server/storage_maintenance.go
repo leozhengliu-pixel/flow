@@ -79,6 +79,11 @@ func (s *server) maintainStorage(ctx context.Context, now time.Time, eventRetent
 			log.Printf("Trash purge workspace=%s: %v", key, err)
 		}
 	}
+	for _, key := range s.store.WorkspaceKeys() {
+		if _, err := s.purgeDeletedAgentSessions(ctx, key, now.Add(-trashRetention)); err != nil && ctx.Err() == nil {
+			log.Printf("Agent chat purge workspace=%s: %v", key, err)
+		}
+	}
 	if err := s.migrateOffloadedContent(ctx); err != nil && ctx.Err() == nil {
 		log.Printf("Content offload migration: %v", err)
 	}

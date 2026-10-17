@@ -167,8 +167,9 @@ func messageAttachments(messages []domain.AgentMessage) []domain.AgentMessageAtt
 	return attachments
 }
 
-// addAgentAttachmentInputs gives the model the files sent with user messages: the newest images as image inputs,
-// text files as text within the loop attachment limits, anything else by name, type and size.
+// addAgentAttachmentInputs gives the model the files sent with user messages: the newest images as image inputs and,
+// for every other file, a reference in the message text (name, type, size, id). Contents are not inlined: the model
+// reads a document with read_file and audio or video with transcribe_media (see agent_file_tools.go).
 func (s *server) addAgentAttachmentInputs(ctx context.Context, messages []agentProviderMessage) {
 	storage, err := s.storage()
 	if err != nil {
@@ -201,7 +202,8 @@ func (s *server) addAgentAttachmentInputs(ctx context.Context, messages []agentP
 		}
 		return content, int64(len(content)) <= limit
 	}
-	images, textBytes := 0, 0
+	tools := s.agent.ToolsEnabled
+	images := 0
 	for index := len(messages) - 1; index >= 0; index-- {
 		message := &messages[index]
 		if len(message.attachments) == 0 {
@@ -209,10 +211,6 @@ func (s *server) addAgentAttachmentInputs(ctx context.Context, messages []agentP
 		}
 		var notes strings.Builder
 		for _, attachment := range message.attachments {
-			kind := "file"
-			if strings.HasPrefix(strings.ToLower(attachment.ContentType), "video/") {
-				kind = "video"
-			}
 			if imageType := loopAttachmentImageType(attachment.ContentType); imageType != "" && attachment.URL != "" {
 				if images >= agentAttachmentImages {
 					fmt.Fprintf(&notes, "\n\nAttached image %s (sent earlier; no longer shown).", attachment.Name)
@@ -226,25 +224,31 @@ func (s *server) addAgentAttachmentInputs(ctx context.Context, messages []agentP
 					continue
 				}
 			}
-			if attachment.URL != "" && loopAttachmentIsText(domain.LoopAttachment{Name: attachment.Name, ContentType: attachment.ContentType}) && textBytes < loopAttachmentTextTotal {
-				limit := min(int64(loopAttachmentTextBytes), int64(loopAttachmentTextTotal-textBytes))
-				if content, complete := read(attachment.URL, limit); len(content) > 0 {
-					if !complete {
-						content = content[:limit]
-					}
-					text, suffix := strings.ToValidUTF8(string(content), ""), ""
-					if !complete {
-						suffix = "\n[truncated]"
-					}
-					textBytes += len(text)
-					fmt.Fprintf(&notes, "\n\nAttached file %s:\n```\n%s%s\n```", attachment.Name, text, suffix)
-					continue
-				}
-			}
-			fmt.Fprintf(&notes, "\n\nAttached %s %s (%s, %d bytes).", kind, attachment.Name, attachment.ContentType, size(attachment))
+			fmt.Fprintf(&notes, "\n\n%s", agentAttachmentReference(attachment, size(attachment), tools))
 		}
 		message.Content += notes.String()
 	}
+}
+
+// agentAttachmentReference is the note a non-image attachment leaves in the user message.
+func agentAttachmentReference(attachment domain.AgentMessageAttachment, size int64, tools bool) string {
+	contentType := firstNonEmpty(attachment.ContentType, "application/octet-stream")
+	note := fmt.Sprintf("Attached file %s (%s, %d bytes)", attachment.Name, contentType, size)
+	media := agentMediaFile(attachment)
+	if media {
+		note = strings.Replace(note, "Attached file", "Attached "+map[bool]string{true: "video", false: "audio"}[agentVideoFile(attachment)], 1)
+	}
+	if attachment.URL == "" {
+		return note + "; its contents were not kept."
+	}
+	note += " \u2014 id: " + attachment.URL + "."
+	switch {
+	case !tools:
+		return note
+	case media:
+		return note + " Use transcribe_media to get its content."
+	}
+	return note + " Use read_file to read it."
 }
 
 // Files pasted or dropped into the composer are uploaded at once (as the reference app does) and the message carries
@@ -266,6 +270,7 @@ func agentUploadOwner(userID string) string {
 	return hex.EncodeToString(sum[:8])
 }
 
+// agentAudioFile reports whether a file is audio by its type or, without a usable type, its extension.
 func agentAudioFile(contentType, name string) bool {
 	mediaType, _, _ := mime.ParseMediaType(contentType)
 	if strings.HasPrefix(strings.ToLower(mediaType), "audio/") {
@@ -304,7 +309,8 @@ func (s *server) uploadAgentFile(w http.ResponseWriter, r *http.Request) {
 		name = "file"
 	}
 	declared, _, _ := mime.ParseMediaType(header.Header.Get("Content-Type"))
-	if agentAudioFile(declared, name) {
+	// Like the reference app, only the declared MIME type decides: a typeless .wav is an ordinary file.
+	if strings.HasPrefix(strings.ToLower(declared), "audio/") {
 		writeError(w, http.StatusBadRequest, "audio files cannot be attached")
 		return
 	}
@@ -322,10 +328,6 @@ func (s *server) uploadAgentFile(w http.ResponseWriter, r *http.Request) {
 				contentType = sniffed
 			}
 		}
-	}
-	if strings.HasPrefix(contentType, "audio/") {
-		writeError(w, http.StatusBadRequest, "audio files cannot be attached")
-		return
 	}
 	limit := int64(agentUploadMaxBytes)
 	if loopAttachmentImageType(contentType) != "" {

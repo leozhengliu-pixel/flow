@@ -94,3 +94,12 @@ describe('agent step and loop run vocabulary', () => {
     for (const source of ["The loop's instructions call for {outputs}, but the run made none.", 'The agent reported there was nothing to do.', 'Expected {outputs}, but {tool} failed.', 'Details', 'Agent reasoning']) expectTranslated(source)
   })
 })
+
+describe('attachment tool rows', () => {
+  it('labels read_file and transcribe_media in both languages', () => {
+    expect(toolStatusLabel('read_file', false, (s: string) => s)).toBe('Read file')
+    expect(toolStatusLabel('transcribe_media', false, (s: string) => s)).toBe('Transcribed media')
+    expect(toolStatusLabel('read_file', false, translateToChinese)).toBe('已读取文件')
+    expect(toolStatusLabel('transcribe_media', true, translateToChinese)).toBe('正在转写媒体…')
+  })
+})

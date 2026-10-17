@@ -43,7 +43,9 @@ func TestAgentReplySurvivesDisconnectAndStops(t *testing.T) {
 	defer api.Close()
 
 	// Starts a new chat, waits for session.started, then drops the connection.
-	startAndLeave := func(message string) string {
+	// With waitFor set it also waits until that text has streamed back, so the
+	// server has the partial reply before the page leaves.
+	startAndLeave := func(message, waitFor string) string {
 		t.Helper()
 		request, _ := http.NewRequest(http.MethodPost, api.URL+"/api/agent/sessions/stream", strings.NewReader(`{"message":"`+message+`","location":"page"}`))
 		request.Header.Set("Content-Type", "application/json")
@@ -55,8 +57,12 @@ func TestAgentReplySurvivesDisconnectAndStops(t *testing.T) {
 		scanner := bufio.NewScanner(response.Body)
 		scanner.Buffer(make([]byte, 0, 1<<20), 16<<20)
 		event, id := "", ""
-		for id == "" && scanner.Scan() {
+		seen := waitFor == ""
+		for (id == "" || !seen) && scanner.Scan() {
 			line := scanner.Text()
+			if !seen && strings.HasPrefix(line, "data: ") && strings.Contains(line, waitFor) {
+				seen = true
+			}
 			if name, ok := strings.CutPrefix(line, "event: "); ok {
 				event = name
 			}
@@ -89,7 +95,7 @@ func TestAgentReplySurvivesDisconnectAndStops(t *testing.T) {
 		return domain.AgentMessage{}, false
 	}
 
-	id := startAndLeave("hi")
+	id := startAndLeave("hi", "")
 	time.Sleep(50 * time.Millisecond)
 	close(release)
 	reply, ok := lastReply(id)
@@ -98,7 +104,7 @@ func TestAgentReplySurvivesDisconnectAndStops(t *testing.T) {
 	}
 
 	release = make(chan struct{}) // the next reply blocks until stopped
-	id = startAndLeave("again")
+	id = startAndLeave("again", "Hello")
 	apiCall[any](t, api.URL, http.MethodPost, "/api/agent/sessions/"+id+"/stop", http.StatusNoContent)
 	stopped, ok := lastReply(id)
 	if !ok || !strings.Contains(partsText(stopped.Parts), "Hello") || !strings.Contains(partsText(stopped.Parts), "Generation stopped") {
