@@ -49,7 +49,8 @@ const issueListMigrationBatch = 500
 
 // issueListRebuildSuffix tags the second pass that re-projects rows stored
 // before list rows carried hasContent, subscribers and reaction counts.
-const issueListRebuildSuffix = "\x00list2"
+// PostgreSQL text fields reject NUL; ':' also cannot occur in a workspace URL key.
+const issueListRebuildSuffix = ":list2"
 
 func (s *SQLiteStore) migrateIssueListProjection(ctx context.Context) error {
 	for _, rebuild := range []bool{false, true} {

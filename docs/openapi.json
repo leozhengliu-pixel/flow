@@ -13424,6 +13424,31 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/issue-records/search-ids": {
+      "get": {
+        "operationId": "get_issue_records_search_ids",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "GET /api/issue-records/search-ids",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/issue-records/visibility": {
       "post": {
         "operationId": "post_issue_records_visibility",
@@ -37991,6 +38016,10 @@
           "externalSource": {
             "type": "string"
           },
+          "hasContent": {
+            "description": "Computed by the list projection only; never persisted on a full record.",
+            "type": "boolean"
+          },
           "icon": {
             "description": "recurring issue icon (issue template icon format)",
             "type": "string"
@@ -38053,6 +38082,12 @@
               "string",
               "null"
             ]
+          },
+          "reactionCounts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object"
           },
           "reactions": {
             "additionalProperties": {
@@ -38788,6 +38823,10 @@
           "externalSource": {
             "type": "string"
           },
+          "hasContent": {
+            "description": "Computed by the list projection only; never persisted on a full record.",
+            "type": "boolean"
+          },
           "icon": {
             "description": "recurring issue icon (issue template icon format)",
             "type": "string"
@@ -38850,6 +38889,12 @@
               "string",
               "null"
             ]
+          },
+          "reactionCounts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object"
           },
           "reactions": {
             "additionalProperties": {
