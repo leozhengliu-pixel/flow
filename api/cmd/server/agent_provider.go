@@ -115,6 +115,9 @@ func (s *server) agentTurnTools(ctx context.Context) []agentProviderTool {
 	if extra, ok := ctx.Value(agentExtraToolsKey{}).([]agentProviderTool); ok && len(tools) > 0 {
 		tools = append(tools, extra...)
 	}
+	if len(tools) > 0 {
+		tools = append(tools, agentFileToolList(ctx)...)
+	}
 	if len(tools) > 0 && agentWebToolsEnabled(ctx) {
 		tools = append(tools, s.agentWebToolList()...)
 	}

@@ -25,15 +25,15 @@ export function addAgentAttachments(current: File[], picked: FileList | File[] |
 /** What a file becomes in the composer: an inline image, video or file card; audio is ignored. */
 export type AgentFileKind = "image" | "video" | "audio" | "file";
 export const AGENT_INLINE_IMAGE_TYPES = /^image\/(png|jpeg|gif|webp|svg\+xml)$/;
-const AGENT_AUDIO_NAME = /\.(mp3|wav|m4a|aac|ogg|flac)$/i;
 /** Images (after shrinking) stay under 2 MB; every other uploaded file may be up to 20 MB. */
 export const AGENT_UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
 export const AGENT_UPLOAD_MAX_ITEMS = 8;
 
-export function agentFileKind(file: Pick<File, "name" | "type">): AgentFileKind {
+/** Audio is ignored by MIME type alone, like the reference app: a file with an empty type becomes a file card. */
+export function agentFileKind(file: Pick<File, "type">): AgentFileKind {
   if (AGENT_INLINE_IMAGE_TYPES.test(file.type)) return "image";
   if (file.type.startsWith("video/")) return "video";
-  if (file.type.startsWith("audio/") || (!file.type && AGENT_AUDIO_NAME.test(file.name))) return "audio";
+  if (file.type.startsWith("audio/")) return "audio";
   return "file";
 }
 

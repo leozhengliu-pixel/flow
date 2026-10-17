@@ -75,6 +75,21 @@ type AgentConfig struct {
 	// WorkspaceRunConcurrency caps the agent runs one workspace holds at a time on the worker runtime;
 	// FLOW_AGENT_WORKSPACE_CONCURRENCY.
 	WorkspaceRunConcurrency int
+	// Media configures the transcribe_media chat tool for audio and video attachments.
+	Media AgentMediaConfig
+}
+
+// AgentMediaConfig points transcribe_media at an OpenAI-compatible API. BaseURL defaults to the Agent provider's;
+// the Agent key is reused only when BaseURL is the Agent base URL, so it is never sent to another host.
+type AgentMediaConfig struct {
+	BaseURL string
+	APIKey  string
+	// TranscribeModel serves POST {BaseURL}/audio/transcriptions (audio); empty turns audio transcription off.
+	TranscribeModel string
+	// VideoModel is a multimodal model reached through POST {BaseURL}/chat/completions with the video as a
+	// video_url content part; empty turns video transcription off.
+	VideoModel string
+	Timeout    time.Duration
 }
 
 // Agent runtimes (AgentConfig.Runtime).
@@ -220,6 +235,11 @@ func Load() (Config, error) {
 			ReasoningEffort: strings.ToLower(value("FLOW_AGENT_REASONING_EFFORT", "")), NativeWebSearch: boolean("FLOW_AGENT_NATIVE_WEB_SEARCH", true),
 			Runtime: strings.ToLower(value("FLOW_AGENT_RUNTIME", AgentRuntimeInProcess)), WorkerSecret: secret("FLOW_AGENT_WORKER_SECRET"),
 			WorkspaceRunConcurrency: integer("FLOW_AGENT_WORKSPACE_CONCURRENCY", 4),
+			Media: AgentMediaConfig{
+				BaseURL: value("FLOW_AGENT_MEDIA_BASE_URL", ""), APIKey: secret("FLOW_AGENT_MEDIA_API_KEY"),
+				TranscribeModel: value("FLOW_AGENT_MEDIA_TRANSCRIBE_MODEL", ""), VideoModel: value("FLOW_AGENT_MEDIA_VIDEO_MODEL", ""),
+				Timeout: duration("FLOW_AGENT_MEDIA_TIMEOUT", 5*time.Minute),
+			},
 		},
 		TTS: TTSConfig{
 			Enabled: boolean("FLOW_TTS_ENABLED", false), BaseURL: strings.TrimRight(value("FLOW_TTS_BASE_URL", value("FLOW_AGENT_BASE_URL", "https://api.openai.com/v1")), "/"),
@@ -230,6 +250,7 @@ func Load() (Config, error) {
 		Telemetry: TelemetryConfig{Enabled: boolean("FLOW_TELEMETRY_ENABLED", false) && !boolean("OTEL_SDK_DISABLED", false), ServiceName: value("OTEL_SERVICE_NAME", "flow-api"), Environment: value("FLOW_ENVIRONMENT", "production"), Endpoint: value("OTEL_EXPORTER_OTLP_ENDPOINT", ""), TraceEndpoint: value("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", ""), MetricEndpoint: value("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "")},
 	}
 	config.resolveTTSCredential()
+	config.resolveAgentMedia()
 	return config, config.Validate()
 }
 
@@ -248,6 +269,18 @@ func (c *Config) resolveTTSCredential() {
 	if c.TTS.Enabled {
 		c.TTS.Enabled = false
 		c.Warnings = append(c.Warnings, "FLOW_TTS_ENABLED=true but FLOW_TTS_API_KEY is not set and FLOW_TTS_BASE_URL is not FLOW_AGENT_BASE_URL; Pulse audio is disabled")
+	}
+}
+
+// resolveAgentMedia defaults the media endpoint to the Agent provider and lends it the Agent key only there.
+func (c *Config) resolveAgentMedia() {
+	media := &c.Agent.Media
+	media.BaseURL = strings.TrimRight(media.BaseURL, "/")
+	if media.BaseURL == "" {
+		media.BaseURL = strings.TrimRight(c.Agent.BaseURL, "/")
+	}
+	if media.APIKey == "" && media.BaseURL == strings.TrimRight(c.Agent.BaseURL, "/") {
+		media.APIKey = c.Agent.APIKey
 	}
 }
 

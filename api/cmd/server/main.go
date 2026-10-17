@@ -339,6 +339,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/agent/sessions/{id}", s.getAgentSession)
 	mux.HandleFunc("PATCH /api/agent/sessions/{id}", s.updateAgentSession)
 	mux.HandleFunc("DELETE /api/agent/sessions/{id}", s.deleteAgentSession)
+	mux.HandleFunc("POST /api/agent/sessions/{id}/restore", s.restoreAgentSession)
 	mux.HandleFunc("POST /api/agent/sessions/{id}/messages", s.createAgentSessionMessage)
 	mux.HandleFunc("POST /api/agent/sessions/{id}/messages/stream", s.createAgentSessionMessageStream)
 	mux.HandleFunc("PATCH /api/agent/sessions/{id}/messages/{messageId}", s.updateAgentSessionMessage)
@@ -1113,7 +1114,7 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 		data.Invitations[index].Token = ""
 	}
 	data.DocumentContentDrafts = slices.DeleteFunc(data.DocumentContentDrafts, func(item domain.DocumentContentDraft) bool { return item.UserID != data.Viewer.ID })
-	data.AgentSessions = slices.DeleteFunc(data.AgentSessions, func(item domain.AgentSession) bool { return item.UserID != data.Viewer.ID })
+	data.AgentSessions = slices.DeleteFunc(data.AgentSessions, func(item domain.AgentSession) bool { return item.UserID != data.Viewer.ID || item.DeletedAt != nil })
 	for index := range data.AgentSessions {
 		data.AgentSessions[index] = agentSessionSummary(data.AgentSessions[index])
 	}
@@ -5288,7 +5289,7 @@ func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBo
 		}
 		// Files sent with an agent chat are visible to the chat's owner only.
 		for _, session := range data.AgentSessions {
-			if session.UserID == userID && slices.ContainsFunc(messageAttachments(session.Messages), func(attachment domain.AgentMessageAttachment) bool { return attachment.URL == url }) {
+			if session.UserID == userID && session.DeletedAt == nil && slices.ContainsFunc(messageAttachments(session.Messages), func(attachment domain.AgentMessageAttachment) bool { return attachment.URL == url }) {
 				return true
 			}
 		}

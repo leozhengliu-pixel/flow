@@ -20,6 +20,8 @@ export type ToastOptions = {
   entities?: ToastEntity[]
   /** Link under the message, e.g. "View release" or "Undo". Runs, then dismisses the toast. */
   action?: ToastLink
+  /** A pill button on the title's row, before dismiss (the reference app's "Chat deleted · Undo"). */
+  button?: ToastLink
   link?: ToastLink
   links?: ToastLink[]
   closeButton?: boolean
@@ -48,7 +50,7 @@ function primitiveText(value: ReactNode): string | undefined {
 function dedupeId(kind: ToastKind, title: ReactNode, options: ToastOptions): string {
   const parts = [primitiveText(title), primitiveText(options.description)]
   for (const entity of [options.entity, ...(options.entities ?? [])]) if (entity) parts.push(primitiveText(entity.title), entity.identifier ?? '')
-  for (const link of [options.action, options.link, ...(options.links ?? [])]) if (link) parts.push(primitiveText(link.label))
+  for (const link of [options.action, options.button, options.link, ...(options.links ?? [])]) if (link) parts.push(primitiveText(link.label))
   if (parts.some(part => part === undefined)) return `flow-toast-${++counter}`
   return `flow-toast:${kind}:${parts.join('\u0001')}`
 }
@@ -62,6 +64,7 @@ function show(kind: ToastKind, title: ReactNode, options: ToastOptions = {}): st
     icon: options.icon,
     entities: [...(options.entity ? [options.entity] : []), ...(options.entities ?? [])],
     links: [...(options.action ? [options.action] : []), ...(options.link ? [options.link] : []), ...(options.links ?? [])],
+    button: options.button,
     closeButton: options.closeButton ?? true,
   }
   return sonnerToast.custom(toastId => <ToastCard content={content} id={toastId}/>, {

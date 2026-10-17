@@ -2581,6 +2581,10 @@ export function deleteAgentSession(id: string): Promise<void> {
     method: "DELETE",
   });
 }
+/** Undoes a delete: the chat comes back with its messages and files while the server still keeps it. */
+export function restoreAgentSession(id: string): Promise<import("@/types/flow").AgentSession> {
+  return request(`/api/agent/sessions/${encodeURIComponent(id)}/restore`, jsonRequest("POST", {}));
+}
 export function resolveAgentApproval(
   sessionId: string,
   approvalId: string,

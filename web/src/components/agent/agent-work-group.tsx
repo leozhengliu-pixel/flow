@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
-import type { AgentMessage, AgentToolCall } from "@/types/flow";
+import type { AgentMessage, AgentMessageAttachment, AgentToolCall } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
 import { AgentRichText } from "./agent-rich-text";
-import { isProviderReasoning, toolStatusLabel, translatePhaseTitle, translateToolTitle, workingLabel } from "./agent-step-labels";
+import { isProviderReasoning, readFileName, toolStatusLabel, translatePhaseTitle, translateToolTitle, workingLabel } from "./agent-step-labels";
 import styles from "./agent-page.module.css";
 import workStyles from "./agent-work-group.module.css";
 
 /** Shared "Worked for N seconds" group used by the Agent page and embedded agent threads. */
-export function AgentWorkGroup({ message, parts: allParts, onToolApproval, approvalBusy, running: forceRunning = false, className, collapseWhenDone = false }: { message: Pick<AgentMessage, "durationMs">; parts: NonNullable<AgentMessage["parts"]>; onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string; running?: boolean; className?: string; /** Fold back to "Worked for N seconds ▸" when the turn finishes (loop builder). */ collapseWhenDone?: boolean }) {
+export function AgentWorkGroup({ message, parts: allParts, onToolApproval, approvalBusy, running: forceRunning = false, className, collapseWhenDone = false, attachments }: { message: Pick<AgentMessage, "durationMs">; parts: NonNullable<AgentMessage["parts"]>; onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string; running?: boolean; className?: string; /** Fold back to "Worked for N seconds ▸" when the turn finishes (loop builder). */ collapseWhenDone?: boolean; /** The session's message attachments, to name the file a read_file step opened. */ attachments?: AgentMessageAttachment[] }) {
   const { t } = useI18n();
   // Older chats stored an unnamed placeholder for report_progress next to its step; it is not a real tool row.
   const settled = Boolean(message.durationMs) && !forceRunning;
@@ -41,7 +41,7 @@ export function AgentWorkGroup({ message, parts: allParts, onToolApproval, appro
         ? <div className={styles.stepRow} key={part.id}><span data-i18n-ignore>{translatePhaseTitle(part.title ?? "", t)}</span>{part.text && <div className={styles.reasoningRow}><AgentReasoningText text={part.text}/></div>}</div>
         : part.type === "reasoning"
         ? <div className={styles.reasoningRow} key={part.id}>{part.status === "running" && !part.text && <span className={styles.workShimmer}>{t("Thinking…")}</span>}{part.text && <AgentReasoningText text={part.text}/>}</div>
-        : part.toolCall ? <AgentToolCallItem key={part.id} part={settled ? settledToolPart(part) : part} onApproval={onToolApproval} approvalBusy={approvalBusy}/> : null)}
+        : part.toolCall ? <AgentToolCallItem key={part.id} attachments={attachments} part={settled ? settledToolPart(part) : part} onApproval={onToolApproval} approvalBusy={approvalBusy}/> : null)}
     </div>
   </details>;
 }
@@ -57,11 +57,11 @@ function splitAdjacentBold(text: string) {
   return text.replace(/(\S)\*\*\*\*(?=\S)/g, "$1**\n\n**");
 }
 
-function AgentToolCallItem({ part, onApproval, approvalBusy }: { part: NonNullable<AgentMessage["parts"]>[number]; onApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string }) {
+function AgentToolCallItem({ part, onApproval, approvalBusy, attachments }: { attachments?: AgentMessageAttachment[]; part: NonNullable<AgentMessage["parts"]>[number]; onApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string }) {
   const { t } = useI18n();
   const call = part.toolCall!;
   const running = call.status === "running" || call.status === "pending";
-  const detail = readableToolDetail(call.arguments, call.result);
+  const detail = readableToolDetail(call.arguments, call.result, call.name, attachments);
   const approvalPending = call.status === "pending" && Boolean(call.approvalId);
   return <div className={`${styles.toolCall} ${call.status === "error" ? styles.toolCallError : ""}`}>
     <div className={styles.toolCallRow} title={call.error || undefined}><span className={running ? styles.workShimmer : undefined} data-i18n-ignore>{call.title && !running ? translateToolTitle(call.title, t) : toolStatusLabel(call.name, running, t, call.arguments, call.status === "running")}</span>{detail && <span data-i18n-ignore>{detail}</span>}</div>
@@ -78,7 +78,10 @@ function settledToolPart(part: NonNullable<AgentMessage["parts"]>[number]) {
 }
 
 /** Step subtitle: the looked-up entity's name when the result has one, never a bare internal id (project_123…). */
-function readableToolDetail(value: Record<string, unknown> | undefined, result?: unknown) {
+function readableToolDetail(value: Record<string, unknown> | undefined, result?: unknown, tool?: string, attachments?: AgentMessageAttachment[]) {
+  // Read file <name>; "Transcribed media" carries no name, like the reference app.
+  if (tool === "transcribe_media") return "";
+  if (tool === "read_file") return readFileName(value?.file, attachments);
   const internalId = /^[a-z]+(?:_[a-z]+)*_\d{6,}$/;
   if (result && typeof result === "object" && !Array.isArray(result)) {
     const record = result as Record<string, unknown>;
