@@ -89,9 +89,13 @@ export type SettingsPageId =
   | "audit-log"
   | "api"
   | "applications"
+  | "billing"
+  | "usage"
   | "import-export"
   | "workflows"
   | "team";
+/** Sub-pages of Settings › Usage & limits, as the reference app routes them. */
+export type UsageSettingsView = "analytics" | "spend-limits" | "user-limits" | "loop-limits";
 export type TeamSettingsSection =
   | "overview"
   | "general"
@@ -318,6 +322,8 @@ export type AppRoute =
       accountView?: "coding-tools";
       /** `/settings/api/keys`: every API key issued in the workspace. */
       apiView?: "keys";
+      /** `/settings/usage/analytics|spend-limits[/users|/loops]`. */
+      usageView?: UsageSettingsView;
       /** `/settings/api/webhooks/:id` ("new" for a new webhook). */
       webhookId?: string;
     }
@@ -454,6 +460,12 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     return { kind: "settings", workspaceSlug, page: "code-and-reviews", accountView: "coding-tools" };
   if (section === "settings" && third === "workspace" && fourth === "welcome-message" && segments.length === 4)
     return { kind: "settings", workspaceSlug, page: "workspace", workspaceView: "welcome-message" };
+  if (section === "settings" && third === "usage" && fourth === "analytics" && segments.length === 4)
+    return { kind: "settings", workspaceSlug, page: "usage", usageView: "analytics" };
+  if (section === "settings" && third === "usage" && fourth === "spend-limits" && segments.length === 4)
+    return { kind: "settings", workspaceSlug, page: "usage", usageView: "spend-limits" };
+  if (section === "settings" && third === "usage" && fourth === "spend-limits" && (fifth === "users" || fifth === "loops") && segments.length === 5)
+    return { kind: "settings", workspaceSlug, page: "usage", usageView: fifth === "users" ? "user-limits" : "loop-limits" };
   if (section === "settings" && third === "api" && fourth === "keys" && segments.length === 4)
     return { kind: "settings", workspaceSlug, page: "api", apiView: "keys" };
   if (
@@ -1894,6 +1906,8 @@ const SETTINGS_PAGES = new Set<SettingsPageId>([
   "audit-log",
   "api",
   "applications",
+  "billing",
+  "usage",
   "import-export",
   "workflows",
 ]);
@@ -1948,6 +1962,15 @@ export function settingsPath(
   return ACCOUNT_SETTINGS.has(page)
     ? `${root}/account/${page}`
     : `${root}/${page}`;
+}
+/** A Usage & limits sub-page (usage explorer, spend limits and their per-user / per-loop overrides). */
+export function usageSettingsPath(workspaceSlug: string, view?: UsageSettingsView) {
+  const root = settingsPath(workspaceSlug, "usage");
+  if (view === "analytics") return `${root}/analytics`;
+  if (view === "spend-limits") return `${root}/spend-limits`;
+  if (view === "user-limits") return `${root}/spend-limits/users`;
+  if (view === "loop-limits") return `${root}/spend-limits/loops`;
+  return root;
 }
 /** Route for the dedicated personal API-key creation flow. */
 export function newAPIKeyPath(workspaceSlug: string) {

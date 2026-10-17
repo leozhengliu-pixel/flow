@@ -217,8 +217,20 @@ it('shows members the workspace feature pages and hides administration', () => {
   const labels = navLabels();
   for (const visible of ['Preferences', 'Labels', 'Templates', 'SLAs', 'Statuses', 'Updates', 'AI & agents', 'Loops', 'Initiatives', 'Documents', 'Customer requests', 'Releases', 'Pulse', 'Asks', 'Emojis', 'Integrations', 'Create a team'])
     expect(labels).toContain(visible);
-  for (const hidden of ['Workspace', 'Members', 'Security', 'API', 'Applications', 'Import & export'])
+  for (const hidden of ['Workspace', 'Members', 'Security', 'API', 'Applications', 'Billing', 'Usage & limits', 'Import & export'])
     expect(labels).not.toContain(hidden);
+});
+
+it('lists Billing and Usage & limits between Applications and Import & export for admins', async () => {
+  localStorage.setItem('flow:locale', 'en');
+  const input = props();
+  input.page = 'billing';
+  input.data = { ...input.data, viewerRole: 'owner' };
+  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  const labels = navLabels();
+  const admin = labels.slice(labels.indexOf('Workspace'));
+  expect(admin.slice(0, 9)).toEqual(['Workspace', 'Teams', 'Members', 'Security', 'API', 'Applications', 'Billing', 'Usage & limits', 'Import & export']);
+  expect(await screen.findByRole('heading', { level: 1, name: 'Billing' })).toBeInTheDocument();
 });
 
 it('hides workspace templates from members when only admins manage templates', () => {

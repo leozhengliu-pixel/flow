@@ -288,6 +288,7 @@ import {
   welcomePath,
   workspaceSavedViewPath,
   workspaceSavedViewEditPath,
+  usageSettingsPath,
   workspaceViewsNewPath,
   workspaceViewsPath,
   settingsPath,
@@ -4693,6 +4694,8 @@ function App() {
           teamSubPath={route.teamSubPath}
           releasePipelineMode={route.releasePipelineMode}
           apiView={route.apiView}
+          usageView={route.usageView}
+          onOpenUsageView={(view) => navigateTo(usageSettingsPath(data.workspace.urlKey, view))}
           workspaceView={route.workspaceView}
           accountView={route.accountView}
           webhookId={route.webhookId}
