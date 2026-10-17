@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -72,7 +73,15 @@ func (h *realtimeHub) subscribeSince(workspace, sinceID string) (<-chan domain.R
 	h.subscribers[workspace][id] = channel
 	if sinceID != "" {
 		history := h.history[workspace]
-		index := slices.IndexFunc(history, func(event domain.RealtimeEvent) bool { return event.ID == sinceID })
+		// A numeric cursor is a change-log seq (RealtimeEvent.Seq); anything
+		// else is the event id older clients remember.
+		seq, _ := strconv.ParseInt(sinceID, 10, 64)
+		index := slices.IndexFunc(history, func(event domain.RealtimeEvent) bool {
+			if seq > 0 {
+				return event.Seq == seq
+			}
+			return event.ID == sinceID
+		})
 		if index < 0 {
 			channel <- domain.RealtimeEvent{ID: fmt.Sprintf("resync_%d", time.Now().UnixNano()), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}
 		} else {
@@ -226,7 +235,8 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	workspace := workspaceKey(r)
-	if _, _, err := s.pagedRealtimeMetadata(r); err != nil {
+	metadata, _, err := s.pagedRealtimeMetadata(r)
+	if err != nil {
 		issueRecordsError(w, err)
 		return
 	}
@@ -248,18 +258,42 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(since, "connected_") {
 		since = ""
 	}
-	channel, unsubscribe := s.realtime.subscribeSince(workspace, since)
+	// Read the head before subscribing: events committed in between are then
+	// delivered live too, so a client never skips one.
+	head, _ := s.store.WorkspaceChangeHead(r.Context(), workspace)
+	// A numeric cursor is a change-log seq: replay from the durable log, which
+	// outlives the in-memory ring (restarts, eviction). Subscribe first so
+	// nothing committed during the replay is missed; live copies at or below
+	// the replayed cursor are dropped as duplicates.
+	replaySeq, numeric := strconv.ParseInt(since, 10, 64)
+	durable := numeric == nil && replaySeq >= 0
+	var channel <-chan domain.RealtimeEvent
+	var unsubscribe func()
+	if durable {
+		channel, unsubscribe = s.realtime.subscribe(workspace)
+	} else {
+		channel, unsubscribe = s.realtime.subscribeSince(workspace, since)
+	}
 	defer unsubscribe()
 	presence, err = s.pagedPresence(r, presence)
 	if err != nil {
 		issueRecordsError(w, err)
 		return
 	}
-	initial, _ := json.Marshal(map[string]any{"presence": presence})
+	// cursor is the workspace's change-log head when the stream opened. A
+	// client advances its own cursor only from event.seq of events it applied.
+	initial, _ := json.Marshal(map[string]any{"presence": presence, "cursor": head})
 	if !writeSSE(w, domain.RealtimeEvent{ID: fmt.Sprintf("connected_%d", time.Now().UnixNano()), Type: "connected", Payload: initial, CreatedAt: time.Now().UTC()}) {
 		return
 	}
 	flusher.Flush()
+	if durable {
+		cursor, ok := s.replayChanges(w, r, metadata.Workspace.ID, replaySeq, flusher)
+		if !ok {
+			return
+		}
+		replaySeq = cursor
+	}
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -267,6 +301,9 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case event := <-channel:
+			if durable && event.Seq > 0 && event.Seq <= replaySeq {
+				continue
+			}
 			projected, visible, err := s.pagedRealtimeEvent(r, event)
 			if err != nil {
 				return

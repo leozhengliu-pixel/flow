@@ -121,7 +121,7 @@ func (s *SQLiteStore) mutateFeatureFlags(ctx context.Context, workspace string, 
 		}
 		now := time.Now().UTC()
 		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", now.UnixNano()), Type: "workspace_preferences.updated", AggregateID: id, Payload: eventRaw, CreatedAt: now}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at,workspace_id) VALUES(?,?,?,?,?,?,?)`, event.ID, event.Type, event.AggregateID, []byte(event.Payload), []byte(event.PreviousValues), event.CreatedAt.Format(time.RFC3339Nano), current.Workspace.ID); err != nil {
+		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, Payload: []byte(event.Payload), PreviousValues: []byte(event.PreviousValues), CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: current.Workspace.ID}); err != nil {
 			return err
 		}
 		if err := tx.Commit(); err != nil {
