@@ -1091,6 +1091,26 @@ export interface LoopVersion {
     | "codeAccess"
   > & { description?: string };
 }
+export type SpendLimitReset = "daily" | "weekly" | "monthly";
+/** Limits in USD (0 or absent = no limit) with their reset frequency; the schedule says when each period rolls over. */
+export interface SpendLimitSettings {
+  workspaceLimit?: number;
+  workspaceReset?: SpendLimitReset;
+  userLimit?: number;
+  userReset?: SpendLimitReset;
+  loopLimit?: number;
+  loopReset?: SpendLimitReset;
+  /** Hour of day (0-23) the daily period resets. */
+  dailyResetHour?: number;
+  /** Weekday (0 Sunday – 6 Saturday) the weekly period resets. */
+  weeklyResetDay?: number;
+  /** Day of month (1-28) the monthly period resets. */
+  monthlyResetDay?: number;
+  /** Per-member overrides keyed by user id (USD, 0 = no limit). */
+  userOverrides?: Record<string, number>;
+  /** Per-loop overrides keyed by loop id. */
+  loopOverrides?: Record<string, number>;
+}
 /** Workspace Loops configuration (`GET /api/loop-config`, admins: `/api/workspace/loop-settings`). */
 export interface LoopConfig {
   webSearchAvailable: boolean;
@@ -1463,6 +1483,8 @@ export interface WorkspaceSettings {
   initiativePermission?: string;
   loopPermission?: string;
   importPermission?: string;
+  /** AI spend limits (Settings › Usage & limits › Spend limits). */
+  spendLimits?: SpendLimitSettings;
   pinnedViewPermission?: string;
   agentGuidancePermission?: string;
   agentInstructions?: string;

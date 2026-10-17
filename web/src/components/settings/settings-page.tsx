@@ -13,7 +13,7 @@ import { persistUserSettings } from '@/lib/settings-persistence';
 import { settingsSidebarTeams } from './settings-sidebar-teams';
 import { UploadPolicyDialog } from './upload-policy-dialog';
 import { ApplicationPolicySettings, DataPrivacyDialog } from './application-policy-settings';
-import type { IntegrationProvider } from '@/lib/app-routes';
+import type { IntegrationProvider, UsageSettingsView } from '@/lib/app-routes';
 import { adminHintsApply, hiddenSettingsMessage, isPersonalSettingsPage, isWorkspaceAdmin, roleAllowed, teamReadOnlyNotice, teamSettingsAccess, workspaceReadOnlyNotice, workspaceSettingsAccess } from '@/lib/settings-access';
 import { AdminOnlyHint } from './admin-only-hint';
 import { EnabledIntegrationNav } from './enabled-integration-nav';
@@ -23,6 +23,8 @@ import {
   Activity,
   AppWindow,
   ArrowLeft,
+  ChartColumn,
+  CreditCard,
   Bell,
   Braces,
   Building2,
@@ -156,6 +158,14 @@ const TeamWorkflowSettings = lazyPage(
   () => import("./team-workflow-settings"),
   "TeamWorkflowSettings",
 );
+const BillingSettings = lazyPage(
+  () => import("./billing-settings"),
+  "BillingSettings",
+);
+const UsageSettings = lazyPage(
+  () => import("./usage-settings"),
+  "UsageSettings",
+);
 const ImportExportSettings = lazyPage(
   () => import("./advanced-settings"),
   "ImportExportSettings",
@@ -261,6 +271,8 @@ export async function preloadSettingsPage(page: SettingsPageProps['page'], optio
   if (page === 'team') return TeamWorkflowSettings.preload()
   if (page === 'audit-log') return AuditLogSettings.preload()
   if (page === 'import-export') return ImportExportSettings.preload()
+  if (page === 'billing') return BillingSettings.preload()
+  if (page === 'usage') return UsageSettings.preload()
   if (page === 'workflows') return WorkflowAutomationSettings.preload()
   if (page === 'releases' && options.releasePipelineMode) return PipelineEditorPage.preload()
   if (page === 'integrations' && options.integrationSlug === 'enabled') return EnabledIntegrationsSettingsPage.preload()
@@ -300,6 +312,8 @@ type SettingsPageProps = {
   workspaceView?: "welcome-message";
   accountView?: "coding-tools";
   apiView?: "keys";
+  usageView?: UsageSettingsView;
+  onOpenUsageView?: (view?: UsageSettingsView) => void;
   webhookId?: string;
   releasePipelineSlug?: string;
   integrationProvider?: IntegrationProvider;
@@ -422,6 +436,8 @@ const NAV: { title: string; items: NavItem[] }[] = [
       { id: "security", label: "Security", icon: ShieldCheck },
       { id: "api", label: "API", icon: Braces },
       { id: "applications", label: "Applications", icon: AppWindow },
+      { id: "billing", label: "Billing", icon: CreditCard },
+      { id: "usage", label: "Usage & limits", icon: ChartColumn },
       { id: "import-export", label: "Import & export", icon: Import },
     ],
   },
@@ -1164,6 +1180,10 @@ function SettingsBodyContent(
     return <InstalledApplicationPage data={props.data} clientId={props.applicationId} onReload={props.onReload} />;
   if (page === "applications")
     return <InstalledApplicationsPage data={props.data} />;
+  if (page === "billing")
+    return <BillingSettings data={props.data} onOpenUsage={() => props.onOpenUsageView?.()} />;
+  if (page === "usage")
+    return <UsageSettings data={props.data} view={props.usageView} onReload={props.onReload} onOpenView={(view) => props.onOpenUsageView?.(view)} />;
   if (page === "import-export")
     return <ImportExportSettings data={props.data} onReload={props.onReload} />;
   if (page === "workflows")

@@ -1,0 +1,103 @@
+/* Settings › Billing, measured from the reference app at 1272x676 (640px column). */
+.billing-page .settings-page-header { align-items: flex-start; }
+.billing-page .settings-page-header p { max-width: none; line-height: 22px; }
+html:root .settings-app .settings-main .billing-page .settings-page-header { margin-bottom: 33px; }
+.billing-link { color: var(--set-text); font-weight: 450; text-decoration: none; }
+.billing-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+.billing-ghost-button {
+  box-sizing: border-box;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--set-button-text);
+  font: 500 12px/normal var(--font);
+  white-space: nowrap;
+}
+.billing-ghost-button:hover:not(:disabled) { background: var(--bg-hover); }
+.billing-ghost-button:disabled, .billing-primary-button:disabled { cursor: default; opacity: .5; }
+.billing-ghost-button.billing-large { height: 32px; padding: 0 12px; font-size: 13px; }
+.billing-primary-button {
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: var(--set-primary);
+  box-shadow: var(--set-primary-shadow);
+  color: var(--set-primary-text);
+  font: 500 13px/normal var(--font);
+  white-space: nowrap;
+}
+.billing-primary-button:hover:not(:disabled) { background: color-mix(in lch, var(--set-primary) 88%, white); }
+.billing-all-plans { align-self: flex-end; margin: 0 -6px -1px 0; padding: 0 6px 0 10px; }
+
+.billing-card {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--set-card);
+  box-shadow: var(--set-card-shadow);
+  color: var(--set-text);
+  text-align: left;
+}
+.billing-card h3 { margin: 0; color: var(--set-text); font-weight: 500; }
+.billing-card p { margin: 0; color: var(--set-desc); font-size: 12px; font-weight: 450; line-height: normal; }
+
+.billing-current-plan { height: 75px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px 0 16px; box-shadow: none; }
+.billing-current-plan h3 { margin-bottom: 5px; font-size: 15px; line-height: 23px; }
+
+.billing-upgrade { padding: 16px 16px 16px; }
+.billing-upgrade > header { padding-right: 4px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 15px; border-bottom: .5px solid var(--set-sep); }
+.billing-upgrade > header h3 { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; line-height: 16px; }
+.billing-upgrade-actions { display: flex; align-items: center; gap: 8px; }
+.billing-badge {
+  box-sizing: border-box;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  border: 1px solid color-mix(in lch, var(--set-primary) 45%, transparent);
+  border-radius: 4px;
+  color: var(--set-primary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 14px;
+}
+.billing-features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 10px; margin: 7px 0 17px; padding: 0; list-style: none; }
+.billing-features li { height: 23px; display: flex; align-items: center; gap: 4px; min-width: 0; color: var(--set-desc); font-size: 12px; font-weight: 450; }
+.billing-features li svg { flex: none; color: var(--set-primary); }
+.billing-features li span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.billing-notice {
+  box-sizing: border-box;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: .5px solid var(--set-sep);
+  border-radius: 8px;
+  background: var(--set-panel-bg);
+  color: var(--set-desc);
+  font-size: 12px;
+  font-weight: 450;
+}
+.billing-notice svg { flex: none; }
+.billing-notice span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.billing-usage-row { height: 66px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; cursor: pointer; }
+.billing-usage-row > span { display: flex; flex-direction: column; gap: 3px; }
+.billing-usage-row strong { font-size: 13px; font-weight: 500; line-height: 16px; }
+.billing-usage-row span span { color: var(--set-desc); font-size: 12px; font-weight: 450; line-height: 15px; }
+.billing-usage-row > svg { color: var(--set-desc); }
+.billing-usage-row:hover { background: var(--bg-hover); }
+.billing-invoices-title { margin: 48px 16px 16px; color: var(--set-text); font-size: 15px; font-weight: 500; line-height: 23px; }
+.billing-invoices { height: 60px; display: flex; align-items: center; padding: 0 16px; }
+.billing-invoices p { color: var(--set-label); font-size: 13px; font-weight: 450; }
