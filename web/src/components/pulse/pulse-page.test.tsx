@@ -3,7 +3,7 @@ import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { fetchInitiativeProjectUpdatesSubscription, fetchPulseFeed, markPulseSeen, setInitiativeProjectUpdatesSubscription } from '@/lib/api'
+import { fetchInitiativeProjectUpdatesSubscription, fetchPulseFeed, markPulseSeen, setInitiativeProjectUpdatesSubscription, uploadInitiativeCommentAttachment, uploadProjectCommentAttachment } from '@/lib/api'
 import { resetInitiativeProjectUpdatesChoices } from '@/lib/pulse-subscriptions'
 import userEvent from '@testing-library/user-event'
 import { makeBootstrap, project, teammate, viewer } from '@/test/fixtures'
@@ -21,6 +21,8 @@ vi.mock('@/lib/api', async original => ({
   listProjectHistory: vi.fn(async () => ({ nodes: [] })),
   setInitiativeProjectUpdatesSubscription: vi.fn(async (_id: string, subscribed: boolean) => ({ subscribed })),
   fetchInitiativeProjectUpdatesSubscription: vi.fn(async () => ({ subscribed: false })),
+  uploadProjectCommentAttachment: vi.fn(async (_id: string, file: File) => ({ id: 'att-p', title: file.name, url: `/uploads/p_${file.name}`, contentType: file.type, size: file.size })),
+  uploadInitiativeCommentAttachment: vi.fn(async (_id: string, file: File) => ({ id: 'att-i', title: file.name, url: `/uploads/i_${file.name}`, contentType: file.type, size: file.size })),
 }))
 
 function pulseItem(id: string, createdAt: string, overrides: Partial<PulseItem> = {}): PulseItem {
@@ -104,6 +106,29 @@ describe('Pulse page', () => {
     expect(await screen.findByRole('menuitem', { name: /Copy link/ })).toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: /Edit/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: /Delete/ })).not.toBeInTheDocument()
+  })
+
+  it('the comment box has an attach button that uploads picked files through the project or initiative comment endpoint', async () => {
+    const initiativeItem = pulseItem('init', new Date(Date.now() - 60_000).toISOString(), {
+      kind: 'initiative',
+      source: { id: 'initiative-1', name: 'Initiative one', url: '/workspace/initiative/initiative-one', icon: 'Initiative', color: '#5e6ad2' },
+      update: { id: 'update-init', initiativeId: 'initiative-1', body: 'Body of init', health: 'onTrack', createdAt: new Date().toISOString(), user: teammate, comments: [], reactions: {}, attachments: [] },
+    } as Partial<PulseItem>)
+    vi.mocked(fetchPulseFeed).mockResolvedValue(page([pulseItem('a', new Date().toISOString()), initiativeItem]))
+    renderPage()
+    await screen.findByText('Body of a')
+    const cards = document.querySelectorAll('[data-pulse-item]')
+    for (const [index, upload, id] of [[0, uploadProjectCommentAttachment, project.id], [1, uploadInitiativeCommentAttachment, 'initiative-1']] as const) {
+      const card = cards[index] as HTMLElement
+      await userEvent.click(within(card).getByRole('button', { name: 'Leave a comment' }))
+      const attach = await within(card).findByRole('button', { name: 'Attach images, files, or videos' })
+      expect(attach).toHaveAttribute('type', 'button')
+      const input = card.querySelector('input[type=file]') as HTMLInputElement
+      expect(input.multiple).toBe(true)
+      const file = new File(['hello'], `notes-${index}.txt`, { type: 'text/plain' })
+      fireEvent.change(input, { target: { files: [file] } })
+      await waitFor(() => expect(upload).toHaveBeenCalledWith(id, file))
+    }
   })
 
   it('R opens the reply composer on the active update', async () => {

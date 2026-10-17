@@ -111,6 +111,10 @@
 .pulse-post-comment-editor>.pulse-post-comment-rich-editor{box-sizing:border-box;width:100%;min-width:0;min-height:22px;margin:0;font-size:13px}
 .pulse-post-comment-editor>.pulse-post-comment-rich-editor .description-editor{box-sizing:border-box;width:100%;min-height:22px;margin:0;padding:0;font-size:13px;line-height:20px}
 .pulse-post-comment-editor>.pulse-post-comment-rich-editor .description-editor:focus,.pulse-post-comment-editor>.pulse-post-comment-rich-editor .description-editor:focus-visible{outline:none;background:transparent;box-shadow:none}
+.pulse-post-comment-actions{align-self:flex-end;display:flex;align-items:center;gap:12px;margin-top:auto}
+.pulse-post-comment-attach{width:24px;height:24px;display:grid;place-items:center;padding:0;border:0;border-radius:9999px;background:transparent;color:var(--ui-pill-fg);cursor:pointer}
+.pulse-post-comment-attach:hover{background:var(--theme-control-hover)}
+.pulse-post-comment-attach:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
 .pulse-post-comment-submit{align-self:flex-end;height:26px;padding:0 12px;border:0;border-radius:6px;background:var(--accent-primary);color:var(--on-accent);font-size:12px;font-weight:500}
 .pulse-post-comment-submit:disabled{background:var(--theme-control);color:var(--theme-text-tertiary)}
 
@@ -196,7 +200,7 @@
 .flow-framed-workspace.pulse-page .pulse-post-comment-editor{min-height:82px;gap:10px;padding:12px 16px;border:0;border-radius:12px;background:var(--ui-pill-bg);box-shadow:0 0 0 .5px var(--ui-pill-ring),var(--ui-pill-shadow)}
 .flow-framed-workspace.pulse-page .pulse-post-comment-editor:focus-within{border:0;box-shadow:0 0 0 .5px var(--ui-pill-hover-ring),var(--ui-pill-shadow)}
 .flow-framed-workspace.pulse-page .pulse-post-comment-editor>.pulse-post-comment-rich-editor,.flow-framed-workspace.pulse-page .pulse-post-comment-editor>.pulse-post-comment-rich-editor .description-editor{min-height:24px;font-size:15px;line-height:24px}
-.flow-framed-workspace.pulse-page .pulse-post-comment-submit{width:24px;height:24px;display:grid;place-items:center;margin-top:auto;padding:0;border-radius:12px;background:var(--ui-pill-bg);color:var(--ui-pill-active-fg);box-shadow:0 0 0 .5px var(--ui-pill-ring),var(--ui-pill-shadow)}
+.flow-framed-workspace.pulse-page .pulse-post-comment-submit{width:24px;height:24px;display:grid;place-items:center;padding:0;border-radius:12px;background:var(--ui-pill-bg);color:var(--ui-pill-active-fg);box-shadow:0 0 0 .5px var(--ui-pill-ring),var(--ui-pill-shadow)}
 .flow-framed-workspace.pulse-page .pulse-post-comment-submit:disabled{background:var(--ui-pill-bg);color:var(--text-placeholder)}
 .flow-framed-workspace.pulse-page .pulse-header-top .pulse-icon-button{color:var(--ui-pill-fg)}
 .flow-framed-workspace.pulse-page .pulse-header-top .pulse-icon-button svg{width:14px;height:14px}
