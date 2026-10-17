@@ -196,7 +196,6 @@ export function Sidebar({
   onReload?: (teamId?: string) => Promise<void>;
 }) {
   const layout = useSidebarLayout(open, onOpenChange);
-  const { t: translate } = useI18n();
   const currentLocation = useLocation();
   const navigationRoute = parseAppRoute(sourcePath?.split(/[?#]/)[0] ?? currentLocation.pathname);
   const selectedNavigationPath = sidebarRoutePath(navigationRoute);
@@ -503,8 +502,6 @@ export function Sidebar({
     pulse: pulseAvailable ? (
       <Nav
         accessory={<PulseAudioMiniPlayer />}
-        badge={pulseUnreadCount}
-        badgeLabel={translate(pulseUnreadCount === 1 ? "{count} new pulse item" : "{count} new pulse items").replace("{count}", String(pulseUnreadCount))}
         icon={<PulseIcon />}
         label="Pulse"
         matchPath={pulsePath(workspaceSlug)}
