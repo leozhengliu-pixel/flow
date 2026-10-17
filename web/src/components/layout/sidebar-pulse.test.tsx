@@ -49,11 +49,11 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); pulseAudio.stop() })
 
 describe('sidebar Pulse item', () => {
-  it('shows no unread badge (like the reference app) but links to For me while unread', async () => {
+  it('shows the unread badge ("N new pulse items") and links to For me while unread', async () => {
     vi.mocked(fetchPulseUnread).mockResolvedValue({ count: 3, latestAt: '2026-10-04T08:00:00Z' })
     renderSidebar()
-    await waitFor(() => expect(pulseLink()).toHaveAttribute('href', '/workspace/pulse/following'))
-    expect(pulseLink()).not.toHaveTextContent('3')
+    expect(await screen.findByLabelText('3 new pulse items')).toHaveTextContent('3')
+    expect(pulseLink()).toHaveAttribute('href', '/workspace/pulse/following')
   })
 
   it('links to the last used tab (default Recent) when nothing is unread', async () => {
@@ -73,7 +73,8 @@ describe('sidebar Pulse item', () => {
     view.unmount()
     vi.mocked(fetchPulseUnread).mockResolvedValue({ count: 1 })
     renderSidebar()
-    await waitFor(() => expect(pulseLink()).toBeInTheDocument())
+    expect(await screen.findByLabelText('1 new pulse item')).toBeInTheDocument()
+    expect(pulseLink()).toBeInTheDocument()
   })
 
   it('keeps Pulse visible while you are on the Pulse page, even "Show when badged" with nothing unread', async () => {

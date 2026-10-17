@@ -112,6 +112,8 @@ export const pulseZhCN: Record<string, string> = {
   "Updates from {sources} that you’re a part of or subscribed to will show here.": "你参与或订阅的{sources}的更新会显示在这里。",
   "Popular updates from {sources} will show here.": "{sources}的热门更新会显示在这里。",
   "Updates from {sources} in your workspace will show here.": "工作区中{sources}的更新会显示在这里。",
+  "{count} new pulse items": "{count} 条新动态",
+  "{count} new pulse item": "{count} 条新动态",
   "Go to pulse": "前往动态",
   "Disable Pulse": "停用动态",
   "Pulse enabled": "动态已启用",
