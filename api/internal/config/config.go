@@ -47,6 +47,9 @@ type RetentionConfig struct {
 	// Trash is how long deleted items stay restorable before they are purged
 	// (FLOW_TRASH_RETENTION_DAYS, default 30).
 	Trash time.Duration
+	// ChangeLogMinRows is how many of each workspace's newest changes pruning
+	// always keeps, whatever their age (FLOW_CHANGE_LOG_MIN_ROWS, default 10000).
+	ChangeLogMinRows int
 }
 
 type AgentConfig struct {
@@ -196,8 +199,9 @@ func Load() (Config, error) {
 			SearchIndexMaxChars: integer("FLOW_SEARCH_INDEX_MAX_CHARS", 20000),
 		},
 		Retention: RetentionConfig{
-			DomainEvents: time.Duration(integer("FLOW_DOMAIN_EVENT_RETENTION_DAYS", 90)) * 24 * time.Hour,
-			Trash:        time.Duration(integer("FLOW_TRASH_RETENTION_DAYS", 30)) * 24 * time.Hour,
+			DomainEvents:     time.Duration(integer("FLOW_DOMAIN_EVENT_RETENTION_DAYS", 90)) * 24 * time.Hour,
+			Trash:            time.Duration(integer("FLOW_TRASH_RETENTION_DAYS", 30)) * 24 * time.Hour,
+			ChangeLogMinRows: integer("FLOW_CHANGE_LOG_MIN_ROWS", store.DefaultChangeLogMinRows),
 		},
 		Redis: coordination.Config{
 			Mode: value("FLOW_REDIS_MODE", "disabled"), URL: secret("FLOW_REDIS_URL"), Addrs: csvRaw(value("FLOW_REDIS_ADDRS", "")),
@@ -251,6 +255,7 @@ func Load() (Config, error) {
 	}
 	config.resolveTTSCredential()
 	config.resolveAgentMedia()
+	config.clampRetention()
 	return config, config.Validate()
 }
 
@@ -273,6 +278,15 @@ func (c *Config) resolveTTSCredential() {
 }
 
 // resolveAgentMedia defaults the media endpoint to the Agent provider and lends it the Agent key only there.
+// clampRetention keeps the change log's minimum window: domain events are what
+// clients resume from, so they are never pruned sooner than seven days.
+func (c *Config) clampRetention() {
+	if c.Retention.DomainEvents > 0 && c.Retention.DomainEvents < store.MinChangeLogRetention {
+		c.Retention.DomainEvents = store.MinChangeLogRetention
+		c.Warnings = append(c.Warnings, "FLOW_DOMAIN_EVENT_RETENTION_DAYS raised to 7: the change log keeps at least seven days")
+	}
+}
+
 func (c *Config) resolveAgentMedia() {
 	media := &c.Agent.Media
 	media.BaseURL = strings.TrimRight(media.BaseURL, "/")
@@ -312,6 +326,9 @@ func (c Config) Validate() error {
 	}
 	if c.Retention.DomainEvents < 0 {
 		return fmt.Errorf("FLOW_DOMAIN_EVENT_RETENTION_DAYS must be 0 (keep all) or more")
+	}
+	if c.Retention.ChangeLogMinRows < 0 {
+		return fmt.Errorf("FLOW_CHANGE_LOG_MIN_ROWS must be 0 or more")
 	}
 	if c.Retention.Trash < 24*time.Hour {
 		return fmt.Errorf("FLOW_TRASH_RETENTION_DAYS must be at least 1")

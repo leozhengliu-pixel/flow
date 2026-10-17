@@ -127,6 +127,7 @@ func (s *server) listIssueRecords(w http.ResponseWriter, r *http.Request) {
 func (s *server) issueRecordsBootstrap(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
 	key := workspaceKey(r)
+	s.setChangeCursor(w, r, key)
 	var data domain.Bootstrap
 	if s.authDisabled {
 		var ok bool

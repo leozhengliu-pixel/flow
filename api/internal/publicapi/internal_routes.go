@@ -519,6 +519,7 @@ var InternalRoutes = []string{
 	"GET /api/push-subscriptions",
 	"POST /api/push-subscriptions",
 	// /api/realtime
+	"GET /api/realtime/changes",
 	"GET /api/realtime/events",
 	"GET /api/realtime/presence",
 	"GET /api/realtime/socket",

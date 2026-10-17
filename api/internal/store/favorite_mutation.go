@@ -159,7 +159,7 @@ func (s *SQLiteStore) mutateStandaloneFavorite(ctx context.Context, workspace, e
 		}
 		now := time.Now().UTC()
 		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", now.UnixNano()), Type: eventType, AggregateID: resourceID, Payload: payloadRaw, CreatedAt: now}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at,workspace_id) VALUES(?,?,?,?,?,?,?)`, event.ID, event.Type, event.AggregateID, []byte(event.Payload), []byte(nil), now.Format(time.RFC3339Nano), current.Workspace.ID); err != nil {
+		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, Payload: []byte(event.Payload), PreviousValues: []byte(nil), CreatedAt: now.Format(time.RFC3339Nano), WorkspaceID: current.Workspace.ID}); err != nil {
 			return err
 		}
 		realtimePayload = enrichRealtimePayload(payloadRaw, aggregateJSONValue(next, resourceID), eventType)

@@ -223,7 +223,7 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 			return err
 		}
 		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: "issue.created", AggregateID: id, Payload: raw, CreatedAt: time.Now().UTC()}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,created_at,workspace_id) VALUES(?,?,?,?,?,?)`, event.ID, event.Type, id, raw, event.CreatedAt.Format(time.RFC3339Nano), metadata.Workspace.ID); err != nil {
+		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: id, Payload: raw, CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: metadata.Workspace.ID}); err != nil {
 			return err
 		}
 		realtime = enrichRealtimePayload(raw, created, event.Type)

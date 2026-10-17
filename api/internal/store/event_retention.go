@@ -2,16 +2,19 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 	"time"
 )
 
-// domain_events is an append-only log. Nothing that keeps clients in sync
-// reads it: realtime catch-up replays an in-memory ring per workspace and
-// asks for a full resync (workspace.resync_required) when the client's cursor
-// is older than the ring, webhooks are queued from the committed event in
-// process, and the audit log is its own collection. Only GET /api/events and
-// one startup migration read it back, so old events can be pruned.
+// domain_events is an append-only log and, through its per-workspace seq
+// column, the change log behind GET /api/realtime/changes (change_log.go).
+// Clients that resume from a cursor older than the pruned range are told to
+// reload a snapshot (workspace_event_seq.pruned records the high-water mark).
+// Pruning therefore keeps events newer than the retention cutoff (never
+// shorter than MinChangeLogRetention, enforced by the caller) and, per
+// workspace, the newest SetChangeLogMinRows changes regardless of age. Besides
+// the change log, GET /api/events and one startup migration read it back.
 
 // retainedDomainEventTypes are never pruned: agentWebSearchFirstEnabled
 // reads them on startup. They are rare and small.
@@ -29,28 +32,49 @@ func (s *SQLiteStore) PruneDomainEvents(ctx context.Context, cutoff time.Time) (
 	for _, kind := range retainedDomainEventTypes {
 		args = append(args, kind)
 	}
-	args = append(args, DomainEventPruneBatch)
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM domain_events WHERE created_at<? AND event_type NOT IN (`+strings.TrimSuffix(strings.Repeat("?,", len(retainedDomainEventTypes)), ",")+`) ORDER BY created_at LIMIT ?`, args...)
+	args = append(args, s.changeLogMinRows.Load(), DomainEventPruneBatch)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	// Rows inside a workspace's newest-N window are kept; rows without a
+	// cursor (written by an older version) are plain old events.
+	rows, err := tx.QueryContext(ctx, `SELECT d.id,d.workspace_id,d.seq FROM domain_events d WHERE d.created_at<? AND d.event_type NOT IN (`+strings.TrimSuffix(strings.Repeat("?,", len(retainedDomainEventTypes)), ",")+`) AND (d.seq IS NULL OR d.seq<=(SELECT e.head-? FROM workspace_event_seq e WHERE e.workspace_id=d.workspace_id)) ORDER BY d.created_at LIMIT ?`, args...)
 	if err != nil {
 		return 0, err
 	}
 	ids := []string{}
+	prunedThrough := map[string]int64{}
 	for rows.Next() {
 		var id string
-		if err := rows.Scan(&id); err != nil {
+		var workspace sql.NullString
+		var seq sql.NullInt64
+		if err := rows.Scan(&id, &workspace, &seq); err != nil {
 			rows.Close()
 			return 0, err
 		}
 		ids = append(ids, id)
+		if workspace.Valid && seq.Valid {
+			prunedThrough[workspace.String] = max(prunedThrough[workspace.String], seq.Int64)
+		}
 	}
 	err = rows.Err()
 	rows.Close()
 	if err != nil || len(ids) == 0 {
 		return 0, err
 	}
+	for workspace, seq := range prunedThrough {
+		if _, err := tx.ExecContext(ctx, `UPDATE workspace_event_seq SET pruned=? WHERE workspace_id=? AND pruned<?`, seq, workspace, seq); err != nil {
+			return 0, err
+		}
+	}
 	clause, idArgs := bindList("id", ids)
-	result, err := s.db.ExecContext(ctx, `DELETE FROM domain_events WHERE `+clause, idArgs...)
+	result, err := tx.ExecContext(ctx, `DELETE FROM domain_events WHERE `+clause, idArgs...)
 	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
 	deleted, err := result.RowsAffected()
