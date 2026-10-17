@@ -2,10 +2,10 @@ import type { AgentFileKind } from './agent-attachments'
 import { splitAgentBlocks } from './agent-content-model'
 import styles from './agent-mention-input.module.css'
 
-export type BlockKind = Exclude<AgentFileKind, 'audio'>
+export type BlockKind = Exclude<AgentFileKind, 'audio'> | 'embed'
 
 /** An image, video or file block in the composer: shown from `preview` while it uploads, then from its uploaded `src`. */
-export type InlineBlock = { el: HTMLElement; id: string; kind: BlockKind; name: string; src: string; size: number; type: string; preview?: string }
+export type InlineBlock = { el: HTMLElement; id: string; kind: BlockKind; name: string; src: string; size: number; type: string; preview?: string; failed?: boolean }
 
 let inlineBlockId = 0
 
@@ -52,6 +52,7 @@ export function fillAgentComposer(editor: HTMLElement, value: string) {
       return
     }
     editor.append(part.type === 'image' ? inlineBlock('image', part.alt, part.src)
+      : part.type === 'embed' ? inlineBlock('embed', part.src, part.src)
       : part.type === 'video' ? inlineBlock('video', part.name, part.src)
       : inlineBlock('file', part.name, part.src, part.size, part.contentType))
     if (!parts[index + 1]) editor.append(emptyLine())
