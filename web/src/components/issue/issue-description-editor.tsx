@@ -11,7 +11,6 @@ import { OutlineMinimap } from '@/components/editor/outline/outline-minimap'
 import { Markdown } from '@tiptap/markdown'
 import { Editor as CoreEditor, getSchema } from '@tiptap/core'
 import type { EditorState } from '@tiptap/pm/state'
-import type { EditorView } from '@tiptap/pm/view'
 import { handleEmoticonInput } from '@/components/editor/emoticon-input'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
@@ -26,10 +25,11 @@ import { SelectionToolbar } from './editor/selection-toolbar'
 import { showsSelectionToolbar } from './editor/selection-toolbar-visibility'
 import { structuredBlocks, type DescriptionSelectionActions } from './editor/structured-blocks'
 import { handleSelectionShortcut } from './editor/selection-shortcuts'
-import { DescriptionImage, insertImageFiles, type DescriptionImageUpload } from './editor/image-extension'
+import { DescriptionImage, type DescriptionImageUpload } from './editor/image-extension'
 import { DescriptionCallout, DescriptionCalloutSchema } from './editor/callout-extension'
 import { DescriptionDiagram } from './editor/diagram-extension'
-import { DescriptionFile, DescriptionVideo, insertEmbedFiles } from './editor/file-extension'
+import { DescriptionFile, DescriptionVideo } from './editor/file-extension'
+import { insertPickedFiles } from './editor/insert-picked-files'
 import { MentionExtension } from './editor/mention-extension'
 import { MentionChipNode } from '@/components/editor/mentions/mention-chip-extension'
 import { MentionLinksExtension } from '@/components/editor/mentions/mention-links-extension'
@@ -570,15 +570,6 @@ function schemaExtensions() {
     InlineCommentMark,
     SlashCommandExtension,
   ]
-}
-
-/** Routes picked files to the right block: images become image nodes, everything else a video or file card (all uploaded). */
-function insertPickedFiles(view: EditorView, files: File[], upload?: DescriptionImageUpload) {
-  const images = files.filter(file => file.type.startsWith('image/'))
-  const rest = files.filter(file => !file.type.startsWith('image/'))
-  const insertedImages = images.length ? insertImageFiles(view, images, upload) : false
-  const insertedRest = rest.length ? insertEmbedFiles(view, rest, upload) : false
-  return insertedImages || insertedRest
 }
 
 function pickDescriptionFiles(onFiles: (files: File[]) => void, accept?: string) {
