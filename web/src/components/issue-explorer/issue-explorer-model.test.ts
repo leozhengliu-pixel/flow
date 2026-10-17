@@ -6,6 +6,7 @@ import { backlog, completed, label, makeBootstrap, makeIssue, project, started, 
 import {
   applyExplorerFilters,
   buildExplorerIssueGroups,
+  createExplorerRowCache,
   explorerBoardGroupUpdate,
   executeExplorerBulkAction,
   explorerFilterOptions,
@@ -173,5 +174,30 @@ describe('issue explorer workflow model', () => {
     expect(withMapKey(source, 'b', '2')).toEqual(new Map([['a', '1'], ['b', '2']]))
     expect(withoutMapKey(source, 'a').size).toBe(0)
     expect(source).toEqual(new Map([['a', '1']]))
+  })
+
+  it('rebuilds only the rows of changed issues across realtime updates, but everything when hierarchy or metadata moved', () => {
+    const first = makeIssue({ id: 'one', identifier: 'T-1', title: 'One' }), second = makeIssue({ id: 'two', identifier: 'T-2', title: 'Two' })
+    const data = makeBootstrap({ issues: [first, second] })
+    const rows = createExplorerRowCache()
+    const initial = rows(data.issues, data)
+    // A title edit replaces one issue object: the other row keeps its identity.
+    const edited = { ...second, title: 'Two, edited' }
+    const patched = { ...data, issues: [first, edited] }
+    const next = rows(patched.issues, patched)
+    expect(next[0]).toBe(initial[0])
+    expect(next[1]).not.toBe(initial[1])
+    expect(next[1].title).toBe('Two, edited')
+    // Metadata the rows read (here: projects) changed, so nothing may be reused.
+    const moved = { ...patched, projects: [...patched.projects] }
+    expect(rows(moved.issues, moved)[0]).not.toBe(next[0])
+    // A change to an issue in a hierarchy can alter other rows (parent trail, sub-issue progress).
+    const parent = makeIssue({ id: 'parent', identifier: 'T-3', title: 'Parent', subIssueIds: ['child'] }), child = makeIssue({ id: 'child', identifier: 'T-4', title: 'Child', parentId: 'parent' })
+    const family = { ...moved, issues: [first, parent, child] }
+    const familyRows = rows(family.issues, family)
+    const renamed = { ...family, issues: [first, { ...parent, title: 'Renamed parent' }, child] }
+    const renamedRows = rows(renamed.issues, renamed)
+    expect(renamedRows[0]).not.toBe(familyRows[0])
+    expect(renamedRows[2].parent?.title).toBe('Renamed parent')
   })
 })

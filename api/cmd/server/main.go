@@ -755,6 +755,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/issue-records/project-summary", s.issueRecordProjectSummary)
 	mux.HandleFunc("GET /api/issue-records/bootstrap", s.issueRecordsBootstrap)
 	mux.HandleFunc("GET /api/issue-records/groups", s.listIssueRecordGroups)
+	mux.HandleFunc("GET /api/issue-records/search-ids", s.searchIssueRecordIDs)
 	mux.HandleFunc("GET /api/issue-records/{id}", s.getIssueRecord)
 	mux.HandleFunc("GET /api/issue-records/{id}/context", s.getIssueRecordContext)
 	mux.HandleFunc("GET /api/issue-records/{id}/history", s.getIssueRecordHistory)
@@ -947,6 +948,8 @@ func (s *server) withStaticFiles(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		w, finish := compressStaticResponse(w, r)
+		defer finish()
 		path := strings.TrimPrefix(filepath.Clean("/"+strings.TrimPrefix(r.URL.Path, "/")), string(filepath.Separator))
 		if path == "" {
 			w.Header().Set("Cache-Control", "no-cache")
@@ -956,7 +959,10 @@ func (s *server) withStaticFiles(next http.Handler) http.Handler {
 		// Directories (assets/, fonts/, tour/) are not pages: a workspace whose
 		// URL key matches one still gets the app.
 		if info, err := os.Stat(filepath.Join(s.staticPath, path)); err == nil && !info.IsDir() {
-			if strings.HasPrefix(r.URL.Path, "/assets/") || strings.HasPrefix(r.URL.Path, "/fonts/") {
+			if r.URL.Path == "/sw.js" {
+				// The worker script must always revalidate so a fix or kill switch reaches clients.
+				w.Header().Set("Cache-Control", "no-cache")
+			} else if strings.HasPrefix(r.URL.Path, "/assets/") || strings.HasPrefix(r.URL.Path, "/fonts/") {
 				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 			} else if strings.HasPrefix(r.URL.Path, "/tour/") || strings.HasPrefix(r.URL.Path, "/email/") {
 				// Tutorial clips and email images keep their names across releases.
@@ -1010,6 +1016,7 @@ func (s *server) defaultWorkspaceRegion() string {
 }
 
 func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
+	started := time.Now()
 	if r.Header.Get("X-Flow-Projection") == "issue-detail" {
 		s.issueRecordsBootstrap(w, r)
 		return
@@ -1061,6 +1068,12 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 	}
 	sanitizeBootstrap(&data)
 	s.applyLoopRunCounts(r.Context(), data.Workspace.URLKey, data.Loops)
+	if leanBootstrapRequested(r) {
+		// Everything before the streamed body; the body is a pure encode of data.
+		w.Header().Set("Server-Timing", fmt.Sprintf("lean;dur=%.2f", float64(time.Since(started).Microseconds())/1000))
+	} else {
+		w.Header().Set("Server-Timing", fmt.Sprintf("bootstrap;dur=%.2f", float64(time.Since(started).Microseconds())/1000))
+	}
 	s.writeStoredBootstrap(w, r, data)
 }
 
@@ -4621,7 +4634,11 @@ func (s *server) deleteIssue(w http.ResponseWriter, r *http.Request) {
 	}
 	trashed := []string{}
 	documentIDs := []string{}
-	err := s.store.MutateWorkspace(r.Context(), workspace, "issue.deleted", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
+	// issueIds lists every issue trashed with this one (sub-issues) and issueAccess
+	// the team/grants needed to authorize them per viewer once the rows are gone.
+	// Both are set at the end of each mutation attempt so a retry overwrites them.
+	payload := map[string]any{"id": id}
+	err := s.store.MutateWorkspace(r.Context(), workspace, "issue.deleted", id, payload, func(data *domain.Bootstrap) error {
 		if issueIndexByID(data, id) < 0 {
 			return errNotFound
 		}
@@ -4641,6 +4658,9 @@ func (s *server) deleteIssue(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		trashed, documentIDs = nil, nil
+		delete(payload, "issueIds")
+		delete(payload, "issueAccess")
+		access := deletedIssueAccessEntries(data, append([]string{id}, descendants...))
 		for index := len(descendants) - 1; index >= 0; index-- {
 			documentID, err := trashIssue(data, descendants[index], id, nil)
 			if err != nil {
@@ -4653,6 +4673,8 @@ func (s *server) deleteIssue(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		trashed, documentIDs = append(trashed, id), append(documentIDs, documentID)
+		payload["issueIds"] = slices.Clone(trashed)
+		payload["issueAccess"] = access
 		return nil
 	})
 	if err == nil {

@@ -45,3 +45,18 @@ it('counts one million initiative labels without materializing derived arrays', 
   expect(count).toBe(1_000_000)
   expect(elapsed).toBeLessThan(250)
 })
+
+it('keeps array identity for collections a count update did not change', () => {
+  const label = { id: 'label-1', name: 'Product', color: '#123456', resourceType: 'issue', issueCount: 1 }
+  const issue = { id: 'issue-1', labels: [label], project: { id: 'project-1' } }
+  const project = { id: 'project-1', labelIds: [], issueCount: 1 }
+  const data = { labels: [label], issues: [issue], projects: [project], initiatives: [] } as unknown as BootstrapData
+  const result = deriveResourceCounts(data)
+  expect(result.labels).toBe(data.labels)
+  expect(result.issues).toBe(data.issues)
+  expect(result.projects).toBe(data.projects)
+  const changed = deriveResourceCounts({ ...data, issues: [...data.issues, { id: 'issue-2', labels: [label], project: { id: 'project-1' } }] } as unknown as BootstrapData)
+  expect(changed.labels).not.toBe(data.labels)
+  expect(changed.labels[0].issueCount).toBe(2)
+  expect(changed.projects[0].issueCount).toBe(2)
+})

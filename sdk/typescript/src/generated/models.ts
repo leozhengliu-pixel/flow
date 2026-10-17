@@ -1278,6 +1278,8 @@ export interface Issue {
   dueDate?: string | null
   estimate?: number | null
   externalSource?: string
+  /** Computed by the list projection only; never persisted on a full record. */
+  hasContent?: boolean
   /** recurring issue icon (issue template icon format) */
   icon?: string
   id: string
@@ -1292,6 +1294,7 @@ export interface Issue {
   priorityLabel: string
   project?: ProjectSummary | null
   projectMilestoneId?: string | null
+  reactionCounts?: Record<string, number>
   reactions: Record<string, string[]>
   recurrence?: string
   recurrenceOccurrence?: string
@@ -1468,6 +1471,8 @@ export interface IssuePartial {
   dueDate?: string | null
   estimate?: number | null
   externalSource?: string
+  /** Computed by the list projection only; never persisted on a full record. */
+  hasContent?: boolean
   /** recurring issue icon (issue template icon format) */
   icon?: string
   id: string
@@ -1482,6 +1487,7 @@ export interface IssuePartial {
   priorityLabel?: string
   project?: ProjectSummaryPartial | null
   projectMilestoneId?: string | null
+  reactionCounts?: Record<string, number>
   reactions?: Record<string, string[]>
   recurrence?: string
   recurrenceOccurrence?: string

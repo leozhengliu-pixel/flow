@@ -568,7 +568,7 @@ func (s *server) describeWebhookEvent(ctx context.Context, workspace string, eve
 	if loaded, err := s.store.LoadOffloadedJSON(ctx, workspace, event.PreviousValues); err == nil {
 		event.PreviousValues = loaded
 	}
-	result := webhookEvent{resource: resource, legacy: legacy, action: action, eventType: event.Type, eventID: event.ID, createdAt: event.CreatedAt, payload: event.Payload, previous: event.PreviousValues, updated: event.PreviousValues}
+	result := webhookEvent{resource: resource, legacy: legacy, action: action, eventType: event.Type, eventID: event.ID, createdAt: event.CreatedAt, payload: withoutRealtimeOnlyFields(event.Type, event.Payload), previous: event.PreviousValues, updated: event.PreviousValues}
 	if result.createdAt.IsZero() {
 		result.createdAt = time.Now().UTC()
 	}
@@ -1261,4 +1261,28 @@ func containsString(values []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// withoutRealtimeOnlyFields drops what issue.deleted records only to authorise realtime delivery (the trashed ids
+// and their teams and grants): webhooks keep receiving the payload they did before.
+func withoutRealtimeOnlyFields(eventType string, payload json.RawMessage) json.RawMessage {
+	if eventType != "issue.deleted" || len(payload) == 0 {
+		return payload
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(payload, &fields) != nil {
+		return payload
+	}
+	if _, ok := fields["issueAccess"]; !ok {
+		if _, ok := fields["issueIds"]; !ok {
+			return payload
+		}
+	}
+	delete(fields, "issueAccess")
+	delete(fields, "issueIds")
+	stripped, err := json.Marshal(fields)
+	if err != nil {
+		return payload
+	}
+	return stripped
 }

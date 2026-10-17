@@ -12,6 +12,7 @@ import {
 } from "react";
 import { AgentCursorGlyph, AgentHistoryGlyph } from "@/components/ui/agent-glyph";
 import { AppStartup } from '@/components/layout/app-startup';
+import { createBootstrapRequest, settleBootstrapRequest, startStartup, type BootstrapRequest } from '@/lib/startup';
 import { setRuntimePreferences, setWorkspaceRuntimePreferences } from '@/lib/runtime-preferences';
 import { AuthenticationPolicyPage } from '@/components/auth/authentication-policy-page';
 import {
@@ -113,7 +114,6 @@ import {
   uploadProjectUpdateAttachment,
   deleteProjectUpdateAttachment,
   uploadInitiativeUpdateAttachment,
-  deleteInitiativeUpdateAttachment,
   uploadAttachment,
   ApiError,
   fetchPagedBootstrap,
@@ -166,7 +166,8 @@ import {
   hydrateWorkspaceNavigation,
   readNavigationCache,
   workspaceBootstrapPhase,
-  writeNavigationCache,
+  writeNavigationCacheWhenIdle,
+  rememberWorkspace,
 } from "@/lib/navigation-cache";
 import { fetchWorkspacePreferences, listLoops } from '@/lib/api';
 import { getAgentSession, listAgentSessions, listAgentSkills } from '@/lib/api';
@@ -325,7 +326,8 @@ import { useExitPresence } from '@/components/ui/motion';
 
 import { PeopleProvider } from '@/components/property/people-provider'
 import { WorkspaceStoreProvider } from '@/store/application-store-context'
-import { applyRealtimePatch, canApplyRealtimePatch } from '@/store/apply-realtime-patch'
+import { applyLabelStateRename, applyRealtimePatch, canApplyRealtimePatch, isLabelStateRenameEvent } from '@/store/apply-realtime-patch'
+import { classifyRealtimeEvent } from '@/lib/realtime-dispatch'
 import { ActiveTeamProvider } from '@/lib/active-team'
 import { TeamPagesLayout } from '@/components/team/team-pages-layout'
 import { isTeamPagesRoute } from '@/components/team/team-pages-routes'
@@ -361,7 +363,7 @@ function App() {
     if(next.viewer.id!==sessionViewerRef.current) return;
     setData(current=>{
       const merged=mergeWorkspaceDirectory(current,next);
-      writeNavigationCache(next.viewer.id, next.workspace.urlKey, merged);
+      writeNavigationCacheWhenIdle(next.viewer.id, next.workspace.urlKey, merged);
       return merged;
     });
   },[]);
@@ -378,7 +380,7 @@ function App() {
       if (current?.workspace.urlKey !== workspaceKey || current.viewer.id !== next.viewer.id) return current;
       if (current.issueCollectionPaged) return mergeWorkspaceDirectory(current, next);
       const merged = mergeWorkspaceMetadata(current, next);
-      writeNavigationCache(next.viewer.id, workspaceKey, merged);
+      writeNavigationCacheWhenIdle(next.viewer.id, workspaceKey, merged);
       return merged;
     });
     for (let start = 0; start < releasedIssueIds.length; start += 500) {
@@ -482,7 +484,7 @@ function App() {
     }
     setData(current => applies(current) ? withAgentSession(current!, id, session) : current);
   }, []);
-  const bootstrapRequest = useRef<{ key: string; promise: Promise<BootstrapData>; controller: AbortController } | null>(null);
+  const bootstrapRequest = useRef<BootstrapRequest | null>(null);
   useEffect(() => () => bootstrapRequest.current?.controller.abort(), []);
   const loadedBootstrapRequestKey = useRef('');
   const initialIssueRef = useRef<{key:string;viewerId:string;issue:Issue} | null>(null);
@@ -617,10 +619,15 @@ function App() {
     }
   };
   useEffect(() => {
-    fetchAuthSession()
-      .then(async (authenticated) => {
+    const startup = startStartup(
+      { fetchSession: fetchAuthSession, fetchAccount: fetchAccountBootstrap, fetchBootstrap },
+      { requestedWorkspaceKey: requestedWorkspaceKey ?? "", isRoot: route.kind === "root", projection: bootstrapProjection },
+    );
+    if (startup.speculative) bootstrapRequest.current = startup.speculative;
+    startup.ready
+      .then(({ session: authenticated, account: nextAccount }) => {
         setSession(authenticated);
-        setAccount(await fetchAccountBootstrap());
+        setAccount(nextAccount);
       })
       .catch(() => {
         setSession(null);
@@ -628,6 +635,7 @@ function App() {
         clearNavigationCache();
       })
       .finally(() => setAuthReady(true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- startup runs once on mount; later navigation goes through the bootstrap effect
   }, []);
   const themeSyncRef = useRef<string>("");
   // Bumped when a pending settings write fails, so its old value re-applies.
@@ -815,23 +823,23 @@ function App() {
     // Cache hydration can make this workspace look loaded; share the in-flight request.
     if (bootstrapRequest.current?.key !== requestKey || bootstrapRequest.current.controller.signal.aborted) {
       bootstrapRequest.current?.controller.abort();
-      const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), 30000);
-      const request = { key: requestKey, controller, promise: fetchBootstrap(requestedWorkspaceKey, bootstrapProjection, controller.signal) };
-      bootstrapRequest.current = request;
-      const clear = () => { window.clearTimeout(timeout); if (bootstrapRequest.current === request) bootstrapRequest.current = null; };
-      void request.promise.then(clear, clear);
+      bootstrapRequest.current?.release();
+      bootstrapRequest.current = createBootstrapRequest(requestKey, signal => fetchBootstrap(requestedWorkspaceKey, bootstrapProjection, signal));
     }
-    bootstrapRequest.current.promise
+    const request = bootstrapRequest.current;
+    const clear = () => { request.release(); if (bootstrapRequest.current === request) bootstrapRequest.current = null; };
+    void request.promise.then(clear, clear);
+    settleBootstrapRequest(request, signal => fetchBootstrap(requestedWorkspaceKey, bootstrapProjection, signal))
       .then(next => {
         if (cancelled || next.viewer.id!==sessionViewerRef.current) return;
+        rememberWorkspace(account.viewer.id, requestedWorkspaceKey);
         loadedBootstrapRequestKey.current=requestKey;
         setData(current=>{
           const merged=mergeWorkspaceDirectory(current,next), preview=initialIssueRef.current;
           const withPreview=preview?.viewerId===account.viewer.id && preview?.key.startsWith(`${requestedWorkspaceKey}:`) && !preview.issue.isSummary
             ? {...merged,issues:mergeIssueRecords(merged.issues,[preview.issue])}
             : merged;
-          writeNavigationCache(account.viewer.id, requestedWorkspaceKey, withPreview);
+          writeNavigationCacheWhenIdle(account.viewer.id, requestedWorkspaceKey, withPreview);
           return withPreview;
         });
       })
@@ -1340,11 +1348,39 @@ function App() {
           return;
         }
       }
-      if (!data.issueCollectionPaged && metadataOnlyRealtimeEvent(event)) {
+      // Everything below is a patch, a metadata reload, a refetch of just the affected issues, or (only for
+      // overflow, an expired cursor and unknown event types) a full resync. See realtime-dispatch.
+      const action = classifyRealtimeEvent(event, Boolean(data.issueCollectionPaged));
+      if (isLabelStateRenameEvent(event)) {
+        setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? applyLabelStateRename(current, event) : current);
+        await reloadWorkspaceMetadata(workspace);
+        return;
+      }
+      if (action.kind === 'metadata' && metadataOnlyRealtimeEvent(event)) {
         await reloadWorkspaceMetadata(workspace);
         const projectId = event.aggregateId;
         if (event.type === 'project.update_created' && projectId) {
           setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? archiveProjectUpdateReminders(current, projectId) : current);
+        }
+        return;
+      }
+      if (action.kind === 'refetch') {
+        const gone = new Set(action.removedIssueIds);
+        // Only issues already held need a fresh copy; paged lists reload through the invalidation event.
+        const held = new Set((dataRef.current?.issues ?? []).map(issue => issue.id));
+        const wanted = action.issueIds.filter(id => !gone.has(id) && held.has(id));
+        if (gone.size) setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? deriveResourceCounts({ ...current, issues: current.issues.filter(issue => !gone.has(issue.id)) }) : current);
+        if (wanted.length) {
+          const returned = new Set<string>();
+          for (let start = 0; start < wanted.length; start += 500) {
+            const chunk = wanted.slice(start, start + 500);
+            const page = await listIssueRecords({ filter: { field: 'id', operator: 'in', values: chunk }, archived: 'all', limit: chunk.length }, undefined, workspace);
+            page.items.forEach(issue => returned.add(issue.id));
+            setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? deriveResourceCounts({ ...current, issues: current.issueCollectionPaged ? mergeIssueRecords(current.issues, page.items) : mergeScopedIssues(current, page.items).issues }) : current);
+          }
+          // Requested but not returned: the viewer can no longer see them.
+          const missing = wanted.filter(id => !returned.has(id));
+          if (missing.length) setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? deriveResourceCounts({ ...current, issues: current.issues.filter(issue => !missing.includes(issue.id)) }) : current);
         }
         return;
       }
@@ -1362,10 +1398,12 @@ function App() {
       const eventFields=event.payload as Record<string,unknown>|undefined;
       const cosmeticTeamChange=(event.type==='team.updated'||event.type==='team.settings_updated') && eventFields && ['name','icon','color','description','timezone','showInitiatives'].some(key=>Object.hasOwn(eventFields,key)) && !['access','private','retired','parentTeamId','membershipRestriction'].some(key=>Object.hasOwn(eventFields,key));
       const checkVisibility=data.issueCollectionPaged && requiresIssueVisibilityCheck(event.type) && !cosmeticTeamChange;
+      // Directory events of a paged workspace only change the slim metadata projection.
+      const slim = action.kind === 'metadata' && Boolean(data.issueCollectionPaged);
       if(checkVisibility && /resync|member|permission|shared|unshared/.test(event.type))setDetailAccessPending(workspace);
       let next:BootstrapData, visibility:{ids:string[]}|undefined;
       try {
-        [next,visibility]=await Promise.all([fetchBootstrap(workspace,bootstrapProjection),checkVisibility ? fetchVisibleIssueIds(workspace,checkedIds) : Promise.resolve(undefined)]);
+        [next,visibility]=await Promise.all([slim ? fetchPagedBootstrap(workspace) : fetchBootstrap(workspace,bootstrapProjection),checkVisibility ? fetchVisibleIssueIds(workspace,checkedIds) : Promise.resolve(undefined)]);
       } catch(error) {
         if(checkVisibility && sessionViewerRef.current===viewerId)setDetailAccessPending(workspace);
         throw error;
@@ -2875,19 +2913,6 @@ function App() {
     replaceInitiativeUpdate(initiativeId, update);
     return update;
   };
-  const removeInitiativeUpdateAttachment = async (
-    initiativeId: string,
-    updateId: string,
-    attachmentId: string,
-  ) => {
-    const update = await run(
-      () =>
-        deleteInitiativeUpdateAttachment(initiativeId, updateId, attachmentId),
-      "Could not delete update attachment",
-    );
-    replaceInitiativeUpdate(initiativeId, update);
-    return update;
-  };
   const addProjectUpdate = async (
     id: string,
     input: {
@@ -4152,7 +4177,9 @@ function App() {
         canonicalize(inboxPath(workspace), { replace: true });
         return;
       }
-      const canonical = route.viewMode === "new"
+      const canonical = route.bare
+        ? pulseSidebarPath(workspace, 0)
+        : route.viewMode === "new"
         ? pulseNewViewPath(workspace)
         : route.viewId
           ? pulseViewPath(workspace, route.viewId, route.viewMode === "edit" ? "edit" : undefined)
@@ -5648,19 +5675,13 @@ function App() {
             onDeleteSavedView={removeSavedViewOnly}
             onUpdateUserSettings={changeCurrentUserSettings}
             onCreateProject={addProjectUpdate}
-            onUpdateProject={changeProjectUpdate}
-            onDeleteProject={removeProjectUpdate}
             onCommentProject={commentOnProjectUpdate}
             onReactProject={reactToProjectUpdate}
             onUploadProjectAttachment={addProjectUpdateAttachment}
-            onDeleteProjectAttachment={removeProjectUpdateAttachment}
             onCreateInitiative={addInitiativeUpdate}
-            onUpdateInitiative={changeInitiativeUpdate}
-            onDeleteInitiative={removeInitiativeUpdate}
             onCommentInitiative={commentOnInitiativeUpdate}
             onReactInitiative={reactToInitiativeUpdate}
             onUploadInitiativeAttachment={addInitiativeUpdateAttachment}
-            onDeleteInitiativeAttachment={removeInitiativeUpdateAttachment}
           />
         )}
         {page === "cycles" && route.kind === "team-cycles" && cycleTeam && (

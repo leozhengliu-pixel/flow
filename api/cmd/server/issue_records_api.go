@@ -240,6 +240,23 @@ func (s *server) createIssueRecord(w http.ResponseWriter, r *http.Request) {
 	s.createIssue(w, r.WithContext(store.WithIssueRecordMutations(r.Context())))
 }
 
+// searchIssueRecordIDs answers the list filters that match descriptions, which
+// lean bootstrap records no longer carry: ids only, under the viewer's access.
+func (s *server) searchIssueRecordIDs(w http.ResponseWriter, r *http.Request) {
+	_, query, err := s.issueRecordsQuery(r)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	ids, truncated, err := s.store.SearchIssueIDs(r.Context(), query, r.URL.Query().Get("q"), limit)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ids": ids, "truncated": truncated})
+}
+
 func (s *server) listIssueRecordGroups(w http.ResponseWriter, r *http.Request) {
 	_, query, err := s.issueRecordsQuery(r)
 	if err != nil {

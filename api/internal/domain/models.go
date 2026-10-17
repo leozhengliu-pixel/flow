@@ -653,6 +653,9 @@ type Issue struct {
 	Relations            []IssueRelation     `json:"relations"`
 	Attachments          []Attachment        `json:"attachments"`
 	Permissions          []IssuePermission   `json:"permissions,omitempty"`
+	// Computed by the list projection only; never persisted on a full record.
+	HasContent     bool           `json:"hasContent,omitempty"`
+	ReactionCounts map[string]int `json:"reactionCounts,omitempty"`
 }
 
 type Cycle struct {

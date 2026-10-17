@@ -1,9 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import * as Popover from "@radix-ui/react-popover";
 import {
-  Check,
-  ChevronDown,
   Circle,
   ExternalLink,
   Plus,
@@ -32,7 +29,6 @@ import {
   deleteWorkspaceIssueTemplate,
   updateIssueTemplate,
   updateProjectTemplate,
-  updateProjectUpdateSettings,
   updateSLASettings,
   updateSLARule,
   updateWorkspaceIssueTemplate,
@@ -53,7 +49,6 @@ import type {
   TemplateMilestone,
 } from "@/types/flow";
 
-import { SlackUpdates } from "./slack-updates";
 import "./issues-projects-settings.css";
 import "./issue-template-settings.css";
 import { ProjectTemplateSettings } from "./project-template-settings";
@@ -969,158 +964,7 @@ export function SLASettings({
   );
 }
 
-export function ProjectUpdateSettings({
-  data,
-  onReload,
-}: {
-  data: BootstrapData;
-  onReload: () => Promise<void>;
-}) {
-  const { t } = useI18n();
-  const current = (data.settings?.projectUpdates ?? {}) as Record<
-    string,
-    unknown
-  >;
-  const initial = Number(current.cadenceDays ?? 0);
-  const [editing, setEditing] = useState(false);
-  const [cadence, setCadence] = useState(initial);
-  const [saving, setSaving] = useState(false);
-  const cadenceLabel =
-    cadenceOptions(t).find((item) => item[0] === cadence)?.[1] ??
-    t("No expectation");
-  const save = async () => {
-    setSaving(true);
-    try {
-      await updateProjectUpdateSettings({ cadenceDays: cadence });
-      await onReload();
-      setEditing(false);
-      toast.success(t("Update schedule saved"));
-    } catch (error) {
-      toast.error(errorMessage(error));
-    } finally {
-      setSaving(false);
-    }
-  };
-  return (
-    <div className="ip-settings-page" data-i18n-ignore>
-      <header className="settings-page-header ip-page-header">
-        <div>
-          <h1>{t("Project updates")}</h1>
-          <p>
-            {t(
-              "Short status reports about the progress and health of your projects. Project members regularly post updates, and subscribers automatically receive them in their inbox.",
-            )}{" "}
-            <a
-              href="https://flow.app/docs/project-updates"
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t("Docs")}
-              <ExternalLink size={11} />
-            </a>
-          </p>
-        </div>
-      </header>
-      <section className="ip-settings-section">
-        <header>
-          <h3>{t("Update schedule")}</h3>
-          <p>{t("Configure how often updates are expected on projects. Project leads will receive reminders to post updates.")}</p>
-        </header>
-        <div className="ip-setting-row">
-          <span>
-            <strong>{cadence ? cadenceLabel : t("No expectation for updates")}</strong>
-          </span>
-          {editing ? (
-            <div className="ip-update-editor">
-              <CadenceMenu value={cadence} onChange={setCadence} />
-              <button
-                onClick={() => {
-                  setCadence(initial);
-                  setEditing(false);
-                }}
-              >
-                {t("Cancel")}
-              </button>
-              <button
-                className="primary"
-                disabled={saving}
-                onClick={() => void save()}
-              >
-                {t("Save")}
-              </button>
-            </div>
-          ) : (
-            <button
-              className="settings-action"
-              onClick={() => setEditing(true)}
-            >
-              {t("Edit")}
-            </button>
-          )}
-        </div>
-      </section>
-      <section className="ip-settings-section">
-        <SlackUpdates
-          data={data}
-          kind="project"
-          variant="row"
-          disabled={saving}
-          onReload={onReload}
-        />
-      </section>
-    </div>
-  );
-}
-
-function CadenceMenu({
-  value,
-  onChange,
-}: {
-  value: number;
-  onChange: (value: number) => void;
-}) {
-  const { t } = useI18n();
-  const options = cadenceOptions(t);
-  const label = options.find((item) => item[0] === value)?.[1];
-  return (
-    <Dropdown.Root>
-      <Dropdown.Trigger asChild>
-        <button className="ip-combobox" role="combobox">
-          {label}
-          <ChevronDown size={13} />
-        </button>
-      </Dropdown.Trigger>
-      <Dropdown.Portal>
-        <Dropdown.Content data-flow-motion="floating"
-          className="ip-cadence-menu"
-          align="end"
-          sideOffset={5}
-          data-i18n-ignore
-        >
-          {options.map(([days, text]) => (
-            <Dropdown.Item
-              className="ip-cadence-item"
-              key={days}
-              onSelect={() => onChange(days)}
-            >
-              {text}
-              {days === value && <Check size={13} />}
-            </Dropdown.Item>
-          ))}
-        </Dropdown.Content>
-      </Dropdown.Portal>
-    </Dropdown.Root>
-  );
-}
-function cadenceOptions(t: (value: string) => string): Array<[number, string]> {
-  return [
-    [0, t("No expectation")],
-    [7, t("Every week")],
-    ...[2, 3, 4, 5, 6, 7, 8].map(
-      (value) => [value * 7, t(`Every ${value} weeks`)] as [number, string],
-    ),
-  ];
-}
+export { ProjectUpdateSettingsPage as ProjectUpdateSettings } from "./project-updates-settings";
 
 export function StatusDragHandle() {
   return (
