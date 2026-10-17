@@ -65,6 +65,33 @@ type compressedResponse struct {
 	http.ResponseWriter
 	gzip   *gzip.Writer
 	status int
+	// static selects text assets by content type instead of API JSON.
+	static bool
+}
+
+// Text formats worth compressing; images, fonts, video and wasm are already dense or rarely help.
+func compressibleStaticType(contentType string) bool {
+	mediaType, _, _ := strings.Cut(contentType, ";")
+	switch strings.ToLower(strings.TrimSpace(mediaType)) {
+	case "text/html", "text/css", "text/javascript", "application/javascript", "application/json", "application/manifest+json", "image/svg+xml", "text/plain", "text/xml", "application/xml":
+		return true
+	}
+	return false
+}
+
+// compressStaticResponse gzips text assets served by the SPA file handler. Range requests are served as-is.
+func compressStaticResponse(w http.ResponseWriter, r *http.Request) (http.ResponseWriter, func()) {
+	w.Header().Add("Vary", "Accept-Encoding")
+	if r.Header.Get("Range") != "" || !acceptsGzip(r.Header.Get("Accept-Encoding")) {
+		return w, func() {}
+	}
+	writer := &compressedResponse{ResponseWriter: w, static: true}
+	return writer, func() {
+		if writer.gzip != nil {
+			_ = writer.gzip.Close()
+			responseGzipPool.Put(writer.gzip)
+		}
+	}
 }
 
 func (w *compressedResponse) Unwrap() http.ResponseWriter { return w.ResponseWriter }
@@ -77,7 +104,11 @@ func (w *compressedResponse) WriteHeader(status int) {
 		return
 	}
 	w.status = status
-	if status != 204 && status != 304 && strings.HasPrefix(w.Header().Get("Content-Type"), "application/json") && w.Header().Get("Content-Encoding") == "" && !strings.Contains(w.Header().Get("Cache-Control"), "no-transform") {
+	compressible := strings.HasPrefix(w.Header().Get("Content-Type"), "application/json")
+	if w.static {
+		compressible = status == http.StatusOK && compressibleStaticType(w.Header().Get("Content-Type"))
+	}
+	if status != 204 && status != 304 && compressible && w.Header().Get("Content-Encoding") == "" && !strings.Contains(w.Header().Get("Cache-Control"), "no-transform") {
 		w.Header().Del("Content-Length")
 		w.Header().Set("Content-Encoding", "gzip")
 		w.gzip = responseGzipPool.Get().(*gzip.Writer)

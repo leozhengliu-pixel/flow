@@ -110,7 +110,59 @@ export function writeNavigationCache(viewerId: string, workspaceKey: string, dat
   }
 }
 
+const pendingWrites = new Map<string, { data: BootstrapData; cancel: () => void }>()
+
+/** Same as writeNavigationCache, but the snapshot is serialised when the browser is idle. */
+export function writeNavigationCacheWhenIdle(viewerId: string, workspaceKey: string, data: BootstrapData): void {
+  const key = storageKey(viewerId, workspaceKey)
+  pendingWrites.get(key)?.cancel()
+  const run = () => {
+    pendingWrites.delete(key)
+    writeNavigationCache(viewerId, workspaceKey, data)
+  }
+  let cancel: () => void
+  if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+    const handle = window.requestIdleCallback(run, { timeout: 2000 })
+    cancel = () => window.cancelIdleCallback(handle)
+  } else {
+    const handle = setTimeout(run, 0)
+    cancel = () => clearTimeout(handle)
+  }
+  pendingWrites.set(key, { data, cancel })
+}
+
+function cancelPendingWrites(prefix: string) {
+  for (const [key, pending] of [...pendingWrites]) {
+    if (!key.startsWith(prefix)) continue
+    pending.cancel()
+    pendingWrites.delete(key)
+  }
+}
+
+const lastWorkspaceKey = 'flow:last-workspace'
+
+export interface RememberedWorkspace { viewerId: string; workspaceKey: string }
+
+/** The workspace this viewer last opened on this device; the only key worth fetching before account confirms it. */
+export function readRememberedWorkspace(): RememberedWorkspace | undefined {
+  try {
+    const value = JSON.parse(localStorage.getItem(lastWorkspaceKey) ?? 'null')
+    if (typeof value?.viewerId === 'string' && typeof value?.workspaceKey === 'string' && value.viewerId && value.workspaceKey) return value
+  } catch { /* unavailable or corrupt */ }
+  return undefined
+}
+
+export function rememberWorkspace(viewerId: string, workspaceKey: string): void {
+  try {
+    const current = readRememberedWorkspace()
+    if (current?.viewerId === viewerId && current.workspaceKey === workspaceKey) return
+    localStorage.setItem(lastWorkspaceKey, JSON.stringify({ viewerId, workspaceKey }))
+  } catch { /* private mode */ }
+}
+
 export function clearNavigationCache(viewerId?: string, workspaceKey?: string): void {
+  cancelPendingWrites(viewerId && workspaceKey ? storageKey(viewerId, workspaceKey) : viewerId ? `${storagePrefix}${viewerId}:` : storagePrefix)
+  if (!viewerId) { try { localStorage.removeItem(lastWorkspaceKey) } catch { /* ignore */ } }
   if (viewerId && workspaceKey) {
     memory.delete(storageKey(viewerId, workspaceKey))
     if (typeof localStorage === 'undefined') return

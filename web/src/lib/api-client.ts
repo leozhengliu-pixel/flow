@@ -26,7 +26,7 @@ export function jsonRequest(method: string, input: unknown): RequestInit {
   }
 }
 
-export async function request<T>(url: string, init?: RequestInit): Promise<T> {
+export async function request<T>(url: string, init?: ApiRequestInit): Promise<T> {
 	const response = await apiFetch(url, init)
 	if (!response.ok) {
 		const payload = await response.json().catch(() => null)
@@ -36,14 +36,17 @@ export async function request<T>(url: string, init?: RequestInit): Promise<T> {
 	return response.json()
 }
 
-export function apiFetch(url: string, init?: RequestInit) {
+/** `quiet` keeps a failed speculative call from raising the authentication-policy event. */
+export type ApiRequestInit = RequestInit & { quiet?: boolean }
+
+export function apiFetch(url: string, { quiet, ...init }: ApiRequestInit = {}) {
   if (import.meta.env.VITE_PAGED_ISSUES === 'true') url = url.replace(/^\/api\/issues(?=\/|\?|$)/, '/api/issue-records')
   const workspaceKey = currentWorkspaceKey()
-  const headers = new Headers(init?.headers)
+  const headers = new Headers(init.headers)
   if (workspaceKey && !headers.has('X-Workspace-Key')) headers.set('X-Workspace-Key', workspaceKey)
   headers.set('X-Client-ID', realtimeClientId())
 	return fetch(url, { ...init, headers, credentials: 'same-origin' }).then(async response => {
-    if(response.status===403) {
+    if(response.status===403 && !quiet) {
       const payload=await response.clone().json().catch(()=>null)
       if(payload?.code==='mfa_required'||payload?.code==='authentication_method_required') window.dispatchEvent(new CustomEvent('flow:authentication-policy',{detail:{code:payload.code,workspaceKey:headers.get('X-Workspace-Key') ?? workspaceKey}}))
     }

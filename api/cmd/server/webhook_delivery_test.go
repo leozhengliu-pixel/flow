@@ -545,3 +545,14 @@ func TestLegacyHashedSecretRequiresRotationToSign(t *testing.T) {
 		t.Fatal("rotated secret not used")
 	}
 }
+
+func TestIssueDeletedWebhookPayloadOmitsRealtimeOnlyFields(t *testing.T) {
+	payload := json.RawMessage(`{"id":"issue_1","issueIds":["issue_1","issue_2"],"issueAccess":[{"id":"issue_2","teamId":"team_private","grants":[{"userId":"user_9"}]}]}`)
+	stripped := string(withoutRealtimeOnlyFields("issue.deleted", payload))
+	if strings.Contains(stripped, "issueAccess") || strings.Contains(stripped, "issue_2") || strings.Contains(stripped, "user_9") || !strings.Contains(stripped, `"id":"issue_1"`) {
+		t.Fatalf("webhook payload = %s", stripped)
+	}
+	if other := json.RawMessage(`{"issueIds":["a"]}`); string(withoutRealtimeOnlyFields("issue.batch_updated", other)) != string(other) {
+		t.Fatal("other events must keep their payload")
+	}
+}
