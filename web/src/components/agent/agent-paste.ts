@@ -285,9 +285,9 @@ export function formattingMarkdown(node: HTMLElement, walk: (node: Node) => stri
   switch (node.tagName) {
     case 'A': {
       const href = node.getAttribute('href')
-      // ')' and spaces would end the destination early; ']' the label.
-      const target = href?.trim().replace(/[()\s<>]/g, char => encodeURIComponent(char).replace(/[()]/g, c => c === '(' ? '%28' : '%29'))
-      return target ? `[${inner().replace(/[[\]]/g, '\\$&')}](${target})` : inner()
+      // Escape backslashes with brackets so existing escapes cannot terminate the label.
+      const target = href?.trim().replace(/[\\()\s<>]/g, char => encodeURIComponent(char).replace(/[()]/g, c => c === '(' ? '%28' : '%29'))
+      return target ? `[${inner().replace(/[\\[\]]/g, '\\$&')}](${target})` : inner()
     }
     case 'STRONG': case 'B': return mark('**', inner())
     case 'EM': case 'I': return mark('*', inner())
