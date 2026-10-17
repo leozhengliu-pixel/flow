@@ -14,7 +14,6 @@ import {
 } from "@/lib/api";
 import type { BootstrapData } from "@/types/flow";
 
-import "./slack-updates.css";
 
 import { findSlackUpdatesConnection, SCOPE_BY_KIND, type SlackUpdatesKind } from "./slack-updates-model";
 
@@ -94,22 +93,35 @@ export function SlackUpdates({
 
   if (variant === "row") {
     return (
-      <section className="slack-updates slack-updates-row" data-kind={kind}>
-        <header>
-          <h3>{t("Slack notifications")}</h3>
-          <p>{permissionHint}</p>
-        </header>
-        <div className="ip-setting-row">
-          <span className="ip-slack-label">
+      <section className="iu-section slack-updates-row" data-kind={kind}>
+        <h2>{t("Slack notifications")}</h2>
+        <p>{permissionHint}</p>
+        <div className="iu-card iu-slack-row">
+          <span className="iu-slack-icon">
             <IntegrationBrandIcon provider="slack" />
-            <span>
-              <strong>{title}</strong>
-              <small>{description}</small>
-            </span>
           </span>
+          <span className="iu-slack-copy">
+            <strong>{title}</strong>
+            <small>{description}</small>
+          </span>
+          <svg
+            className="iu-slack-info"
+            viewBox="0 0 16 16"
+            role="img"
+            aria-label={t("Slack channel updates")}
+          >
+            <title>{enabledBy ?? permissionHint}</title>
+            <circle cx="8" cy="8" r="7" fill="currentColor" />
+            <path
+              d="M8 7.2v3.6M8 4.8v1"
+              stroke="var(--theme-surface-2)"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+            />
+          </svg>
           <button
             type="button"
-            className="settings-action"
+            className="iu-slack-action"
             disabled={disabled || busy || !canManage}
             title={enabledBy}
             onClick={() => void toggle()}
@@ -119,7 +131,7 @@ export function SlackUpdates({
             ) : (
               <>
                 {actionLabel}
-                <ArrowUpRight size={11} />
+                <ArrowUpRight size={14} />
               </>
             )}
           </button>
