@@ -23,3 +23,10 @@
 /* A pasted image, video or file (reference app's composer): 6px under the line before it, a line or block after it 22px below. */
 .block{display:block;margin-top:6px;white-space:normal;user-select:none}
 .block + div{margin-top:22px}
+/* Formatting kept from a rich or Markdown paste; the composer serialises it back to Markdown. */
+.editor a{color:var(--chip-text);text-decoration:underline;text-underline-offset:2px;cursor:text}
+.editor code{padding:1px 4px;border-radius:4px;background:var(--pk-hover);font:450 12px/1 var(--font-mono)}
+.editor pre{margin:6px 0;padding:8px 10px;border:.5px solid var(--pk-border);border-radius:6px;background:var(--pk-hover);font:450 12px/18px var(--font-mono);white-space:pre-wrap}
+.editor pre code{padding:0;background:transparent;font:inherit}
+.editor ul,.editor ol{margin:0;padding-left:20px;white-space:normal}
+.editor li{padding-left:2px}

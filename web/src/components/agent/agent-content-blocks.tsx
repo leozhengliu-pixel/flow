@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { AgentInlineEmbed } from './agent-inline-embed'
 import { AgentInlineFile } from './agent-inline-file'
 import { AgentInlineImage } from './agent-inline-image'
 import { AgentInlineVideo } from './agent-inline-video'
@@ -15,6 +16,7 @@ export function AgentContentWithBlocks({ content, renderText }: { content: strin
       const key = `${part.src}-${index}`
       return <div className={styles.block} data-kind={part.type} key={key}>
         {part.type === 'image' ? <AgentInlineImage alt={part.alt} src={part.src}/>
+          : part.type === 'embed' ? <AgentInlineEmbed src={part.src}/>
           : part.type === 'video' ? <AgentInlineVideo name={part.name} src={part.src}/>
           : <AgentInlineFile contentType={part.contentType} name={part.name} size={part.size} src={part.src}/>}
       </div>
