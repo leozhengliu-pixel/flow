@@ -940,3 +940,22 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 /* Mermaid diagram blocks, measured from the reference app (light; dark follows the surface steps). */
 :root{--description-diagram-source-bg:var(--theme-surface-2);--description-diagram-error:lch(65% 65 29);--description-diagram-placeholder:var(--theme-text-secondary);--description-diagram-overlay:lch(0 0 0/.5);--description-diagram-modal-border:var(--theme-border-strong);--description-diagram-modal-shadow:lch(0 0 0/.3) 0 9px 48px 0,lch(0 0 0/.3) 0 6px 24px 0,lch(0 0 0/.2) 0 1px 1px 0}
 :root[data-theme="light"]{--description-diagram-source-bg:lch(94.44% .5 282);--description-diagram-error:lch(50% 80 29);--description-diagram-placeholder:lch(39.176% 1.25 282);--description-diagram-overlay:lch(0 0 0/.25);--description-diagram-modal-border:lch(88.49% 0 282);--description-diagram-modal-shadow:lch(0 0 0/.08) 0 9px 48px 0,lch(0 0 0/.1) 0 6px 24px 0,lch(0 0 0/.04) 0 1px 1px 0}
+/* Agent attachment cards and media controls, preserving the measured colors. */
+:root {
+  --agent-attachment-shadow: lch(0 0 0 / .02) 0 3px 6px -2px, lch(0 0 0 / .04) 0 1px 1px 0;
+  --agent-attachment-light-border: lch(97.3 0 282);
+  --agent-attachment-light-bg: lch(100 0 282);
+  --agent-attachment-light-text: lch(10 0 282);
+  --agent-attachment-light-muted: lch(40 1 282);
+  --agent-attachment-light-separator: lch(75.7 0 282);
+  --agent-attachment-resize-border: rgba(0, 0, 0, .4);
+  --agent-media-fullscreen-bg: #000;
+  --agent-media-controls-bg: rgba(24, 24, 27, .72);
+  --agent-media-controls-fg: rgba(255, 255, 255, .75);
+  --agent-media-controls-hover: rgba(255, 255, 255, .12);
+  --agent-media-controls-active-fg: #fff;
+  --agent-media-controls-muted: rgba(255, 255, 255, .55);
+  --agent-media-track: rgba(255, 255, 255, .25);
+  --agent-media-option-text: #111;
+  --agent-composer-scrollbar-light: lch(64.94 1.25 282);
+}

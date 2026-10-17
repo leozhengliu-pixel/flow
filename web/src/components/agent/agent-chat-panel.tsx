@@ -4,7 +4,7 @@ import { AgentDraftCard } from './agent-draft-card'
 import { splitAgentDraft } from './agent-draft'
 import { splitAgentSuggestions } from './agent-answer-content'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { deleteAgentSession, fetchAgentStatus, resolveAgentApproval } from '@/lib/api'
+import { deleteAgentSession, fetchAgentStatus, resolveAgentApproval, uploadAgentFile } from '@/lib/api'
 import { toast } from '@/lib/toast'
 import { FlowDropdownMenuContent, FlowMenuItem } from '@/components/ui/row-context-menu'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
@@ -13,7 +13,7 @@ import { markStoppedAgentReply } from './agent-stopped-reply'
 import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus, BootstrapData } from '@/types/flow'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { AgentAttachIcon, AgentChevronDownIcon, AgentPageContextIcon, AgentSkillsIcon } from './agent-icons'
-import { AGENT_ATTACHMENT_ACCEPT, addAgentAttachments, agentFileContext } from './agent-attachments'
+import { agentFileAttachment, attachAgentFiles } from './agent-attachments'
 import { quoteAgentMessage } from './agent-floating-request'
 import { claimAgentQuoteHighlight, clearAgentQuoteHighlight } from './agent-quote-highlight'
 import { AgentDiscardDraftDialog } from './agent-discard-draft-dialog'
@@ -91,6 +91,8 @@ export function AgentChatPanel({
   const [input, setInput] = useState(initialPrompt)
   const [quote, setQuote] = useState(initialQuote)
   const [attachments, setAttachments] = useState<File[]>([])
+  const insertFilesRef = useRef<((files: File[]) => void) | null>(null)
+  const [filesUploading, setFilesUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState<AgentStatus>()
   const [loading, setLoading] = useState(false)
@@ -249,17 +251,17 @@ export function AgentChatPanel({
   const submit = async (followUp?: string, answer?: { partId: string; value: string }) => {
     // Like the reference app, a quoted selection goes first (the model reads it as a quote, the chat shows it as a chip).
     const message = followUp !== undefined ? followUp.trim() : quoteAgentMessage(quote, input).trim()
-    if (!message || loading || !status?.enabled) return
+    if (!message || loading || !status?.enabled || (followUp === undefined && filesUploading)) return
     const sentFiles = followUp === undefined ? attachments : []
-    const fileContext = sentFiles.length ? (await Promise.all(sentFiles.map(agentFileContext))).join('\n\n') : ''
-    const providerMessage = fileContext ? `${message}\n\n${fileContext}` : message
+    // Files go with the message for the server to keep and give to the model (images as images, not text).
+    const sentAttachments = await Promise.all(sentFiles.map(agentFileAttachment))
     const sentMentions = followUp === undefined ? mentions : []
     const sentIdsOf = (type: AgentMention['type']) => followUp === undefined ? idsOf(type) : []
     setMessages(current => [
       ...current.map(item => answer && item.parts?.some(part => part.id === answer.partId)
         ? { ...item, parts: item.parts.map(part => part.id === answer.partId && part.question ? { ...part, status: 'completed' as const, question: { ...part.question, selected: answer.value } } : part) }
         : item),
-      { id: `pending-${Date.now()}`, role: 'user', content: message, mentions: sentMentions, answerTo: answer?.partId, createdAt: new Date().toISOString() },
+      { id: `pending-${Date.now()}`, role: 'user', content: message, mentions: sentMentions, answerTo: answer?.partId, attachments: sentFiles.length ? sentFiles.map(({ name, type, size }) => ({ name, contentType: type, size })) : undefined, createdAt: new Date().toISOString() },
     ])
     const mentioned = { issueIds: sentIdsOf('issue'), projectIds: sentIdsOf('project'), documentIds: sentIdsOf('document'), initiativeIds: sentIdsOf('initiative'), userIds: sentIdsOf('user'), mentions: sentMentions, ...(answer ? { answer } : {}) }
     const pageIdsOf = (type: AgentPageContext['type']) => activePageContexts.filter(context => context.type === type).map(context => context.id)
@@ -339,10 +341,11 @@ export function AgentChatPanel({
         }
       }
       next = session
-        ? await streamAgentSessionMessage(session.id, providerMessage, onEvent, controller.signal, mentioned)
+        ? await streamAgentSessionMessage(session.id, message, onEvent, controller.signal, { ...mentioned, ...(sentAttachments.length ? { attachments: sentAttachments } : {}) })
         : await streamNewAgentSession(
             {
-              message: providerMessage,
+              message,
+              ...(sentAttachments.length ? { attachments: sentAttachments } : {}),
               issueIds: [...new Set([...contextIssues.map(issue => issue.id), ...pageIdsOf('issue'), ...mentioned.issueIds])],
               projectIds: [...new Set([...pageIdsOf('project'), ...mentioned.projectIds])],
               documentIds: [...new Set([...pageIdsOf('document'), ...mentioned.documentIds])],
@@ -450,8 +453,12 @@ export function AgentChatPanel({
         quote={quote}
         onQuoteRemove={() => setQuote(undefined)}
         initialMentions={initialMentions}
-        canSend={Boolean(input.trim() || quote)}
+        canSend={Boolean(input.trim() || quote) && !filesUploading}
         onComposerTab={canTogglePageContext ? () => { togglePageContext(); return true } : undefined}
+        onPasteFiles={files => void attachAgentFiles(files, t, setAttachments)}
+        onUploadFile={file => uploadAgentFile(file)}
+        insertFilesRef={insertFilesRef}
+        onFilesBusyChange={setFilesUploading}
         composerHeader={attachments.length > 0 ? (
           <div className={threadStyles.attachments}>
             {attachments.map((file, index) => (
@@ -477,11 +484,16 @@ export function AgentChatPanel({
           </ScopedFlowTooltip>
           <input
             ref={fileInputRef}
-            accept={AGENT_ATTACHMENT_ACCEPT}
             aria-hidden="true"
             className={threadStyles.fileInput}
             multiple
-            onChange={event => { const files = event.target.files; setAttachments(items => addAgentAttachments(items, files)); event.target.value = '' }}
+            onChange={event => {
+              // Every file goes into the message like a pasted one; without the rich composer they are attached.
+              const files = [...(event.target.files ?? [])]
+              if (insertFilesRef.current) insertFilesRef.current(files)
+              else void attachAgentFiles(files, t, setAttachments)
+              event.target.value = ''
+            }}
             tabIndex={-1}
             type="file"
           />

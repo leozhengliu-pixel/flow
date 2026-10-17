@@ -296,6 +296,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	// What the user has seen so far; this run's own assistant text does not ground a write (see agentUngroundedIssueTarget).
 	historyEnd := len(messages)
 	s.addLoopAttachmentInputs(r.Context(), data, *session, messages)
+	s.addAgentAttachmentInputs(r.Context(), messages)
 	s.rememberAgentOrigin(r)
 	titleDone := s.startAgentSessionTitle(r, *session, mentions)
 	messageID := fmt.Sprintf("agent_message_%d", time.Now().UnixNano())
@@ -1152,9 +1153,12 @@ func agentProviderHistory(session domain.AgentSession, system string, issueTitle
 		content := message.Content
 		if message.Role == "user" {
 			// Chips reach the model as copyable references (DEV-42 ("Title")), never as glued chip text.
-			content = agentModelUserText(content, message.Mentions, issueTitle)
+			content = agentModelUserText(withoutAgentUploads(content, message.Attachments), message.Mentions, issueTitle)
 		}
 		providerMessage := agentProviderMessage{Role: message.Role, Content: content}
+		if message.Role == "user" {
+			providerMessage.attachments = message.Attachments
+		}
 		if start+offset < toolsFrom {
 			messages = append(messages, providerMessage)
 			continue

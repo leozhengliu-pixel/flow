@@ -1,0 +1,70 @@
+/* Measured on the reference app's agent composer and sent bubble (CSS px at 100%, light theme). */
+.card {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 54px;
+  padding: 6px;
+  border: 1px solid var(--description-file-border);
+  border-radius: 6px;
+  background: var(--description-file-bg);
+  box-shadow: var(--agent-attachment-shadow);
+  line-height: normal;
+}
+:global(:root[data-theme="light"]) .card { border-color: var(--agent-attachment-light-border); background: var(--agent-attachment-light-bg); }
+.card[data-uploading] { opacity: .5; }
+.row {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+}
+/* The icon and the name sit together; the 6px gap only parts them from the actions (as in the reference app). */
+.main { display: flex; min-width: 0; flex: 1; align-items: center; }
+.icon {
+  display: grid;
+  flex: none;
+  width: 32px;
+  height: 36px;
+  place-items: center;
+  color: var(--action-menu-muted);
+}
+.icon svg { width: 16px; height: 16px; margin: 0 9px 0 7px; }
+.text { display: flex; min-width: 0; flex-direction: column; margin-top: -4px; }
+.name {
+  overflow: hidden;
+  color: var(--theme-text-primary);
+  font: 450 15px / 23px var(--font);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:global(:root[data-theme="light"]) .name { color: var(--agent-attachment-light-text); }
+.size {
+  margin-top: 2px;
+  color: var(--theme-text-tertiary);
+  font: 450 12px / 15px var(--font);
+}
+:global(:root[data-theme="light"]) .size { color: var(--agent-attachment-light-muted); }
+
+.actions { display: flex; flex: none; align-items: center; padding: 2px; border-radius: 9999px; }
+.actions button {
+  display: grid;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  padding: 6px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--description-media-toolbar-fg);
+  cursor: pointer;
+}
+.actions button:hover { background: var(--description-media-toolbar-hover); }
+.actions button > span { display: grid; width: 14px; height: 14px; }
+.actions button svg { width: 14px; height: 14px; }
+.separator { flex: none; width: 1px; height: 18px; margin: 4px; background: var(--description-toolbar-separator); }
+:global(:root[data-theme="light"]) .separator { background: var(--agent-attachment-light-separator); }

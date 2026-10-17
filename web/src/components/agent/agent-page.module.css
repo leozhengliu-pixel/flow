@@ -283,10 +283,15 @@
   white-space: pre-wrap;
 }
 .editorScroll {
+  box-sizing: border-box;
   min-height: 48px;
+  max-height: 288px;
   overflow: hidden auto;
   padding: 2px 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--theme-text-tertiary) transparent;
 }
+:global(:root[data-theme="light"]) .editorScroll { scrollbar-color: var(--agent-composer-scrollbar-light) transparent; }
 .editor:empty:before {
   content: attr(data-placeholder);
   color: var(--agent-composer-placeholder);
@@ -295,6 +300,8 @@
 /* Beat the mention input's own 13px editor font: the reference app's agent composer types at 15px/24px. */
 .editorScroll > div > .editor {
   min-height: 24px;
+  max-height: none;
+  overflow: visible;
   font: 450 15px/24px var(--font);
 }
 .editorScroll > div > .editor[data-empty]::before {
@@ -1051,12 +1058,13 @@
 }
 :global(:root[data-theme="light"]) .headerIcon svg,
 :global(:root[data-theme="light"]) .mobileMenu svg { width: 16px; height: 16px; }
-:global(:root[data-theme="light"]) .composer { background: var(--theme-surface-2); }
+:global(:root[data-theme="light"]) .composer { background: var(--agent-composer-bg); }
 :global(:root[data-theme="light"]) .editor { color: var(--agent-composer-text); }
 :global(:root[data-theme="light"]) .conversation article,
 :global(:root[data-theme="light"]) .messageDocument h2,
 :global(:root[data-theme="light"]) .messageDocument h3 { color: var(--theme-text-primary); }
-:global(:root[data-theme="light"]) .user .messageContent { background: var(--theme-surface-2); }
+/* Measured in the reference app: a grey bubble a step darker than the panel, its text the composer's ink. */
+:global(:root[data-theme="light"]) .user .messageContent { background: var(--agent-user-bubble-bg); color: var(--agent-composer-text); }
 :global(:root[data-theme="light"]) .messageDocument code,
 :global(:root[data-theme="light"]) .messageDocument pre { border-color: var(--theme-border); background: var(--theme-surface-1); }
 :global(:root[data-theme="light"]) .thinkingPlaceholder { color: var(--theme-text-tertiary); }
