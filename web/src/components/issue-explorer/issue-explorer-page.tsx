@@ -34,7 +34,7 @@ import { InsightHiddenNotice, SavedViewDetailsPanel, SavedViewInsightsPanel, typ
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import type { ViewVisual } from '@/components/views/view-icon-picker'
 import {
-  ISSUE_FILTER_LABELS, applyExplorerFilters, buildExplorerIssueGroups, executeExplorerBulkAction, explorerBoardGroupUpdate, explorerBulkOptions, explorerFilterOptions,
+  ISSUE_FILTER_LABELS, applyExplorerFilters, buildExplorerIssueGroups, createExplorerRowCache, executeExplorerBulkAction, explorerBoardGroupUpdate, explorerBulkOptions, explorerFilterOptions,
   explorerPropertyOptions, explorerUpdateForAction, explorerUpdateForProperty, issueToExplorerRow, optimisticExplorerRow,
   stateIdForExplorerGroup, withMapKey, withoutMapKey,
 } from './issue-explorer-model'
@@ -162,7 +162,8 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const bandActive = Boolean(savedView && !viewEditor)
   const effectiveFilters = useMemo(() => bandActive && extraFilters.length ? [...filters, ...extraFilters] : filters, [bandActive, extraFilters, filters])
   const visibleIssues = useMemo(() => data.issueCollectionPaged ? pagedIssues : applyExplorerFilters(scopedIssues, effectiveFilters, data), [data, effectiveFilters, scopedIssues, pagedIssues])
-  const baseRows = useMemo(() => visibleIssues.map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)), [data, rowOverrides, visibleIssues])
+  const explorerRows = useRef(createExplorerRowCache()).current
+  const baseRows = useMemo(() => explorerRows(visibleIssues, data).map((row, index) => rowOverrides.get(visibleIssues[index].id) ?? row), [data, explorerRows, rowOverrides, visibleIssues])
   const rows = drillRows ?? baseRows
   const insightRows = useMemo(() => insightsOpen ? applyExplorerFilters(insightIssues, effectiveFilters, data).map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)) : [], [data, effectiveFilters, insightIssues, insightsOpen, rowOverrides])
   const activeInsightRows = useMemo(() => insightRows.filter(row => !row.archivedAt), [insightRows])

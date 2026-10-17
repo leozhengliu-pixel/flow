@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { memo, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { Virtuoso, type Components } from 'react-virtuoso'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -306,7 +306,7 @@ function useSelectHoveredRowWithX(entries: MyIssuesListEntry[], selectedIds: Rea
   }, [])
 }
 
-export function MyIssuesRow({ issue, active = false, selected = false, displayProperties = DEFAULT_PROPERTIES, nestedLines=EMPTY_LINES, showSubIssueProgress=true, propertyOptions = EMPTY_OPTIONS, mutationError, onContextAction, onOpen, onPropertyChange, onRetryMutation, onSelect }: {
+function MyIssuesRowView({ issue, active = false, selected = false, displayProperties = DEFAULT_PROPERTIES, nestedLines=EMPTY_LINES, showSubIssueProgress=true, propertyOptions = EMPTY_OPTIONS, mutationError, onContextAction, onOpen, onPropertyChange, onRetryMutation, onSelect }: {
   issue: MyIssuesRowData; active?: boolean; selected?: boolean; displayProperties?: ReadonlySet<MyIssuesProperty>; nestedLines?:readonly boolean[]; showSubIssueProgress?:boolean; propertyOptions?: MyIssuesRowPropertyOptions; mutationError?: string
   onContextAction?: (issue: MyIssuesRowData, action: MyIssuesContextAction) => void; onOpen?: (issue: MyIssuesRowData) => void
   onPropertyChange?: (issue: MyIssuesRowData, property: MyIssuesEditableProperty, value: string | string[]) => void | Promise<void>; onRetryMutation?: (issue: MyIssuesRowData) => void
@@ -396,6 +396,9 @@ export function MyIssuesRow({ issue, active = false, selected = false, displayPr
     <ContextMenu.Portal><IssueContextMenu editable={Boolean(onPropertyChange)} issue={issue} options={propertyOptions} onPropertyChange={change} onAction={onContextAction?action=>onContextAction(issue,action):undefined}/></ContextMenu.Portal>
   </ContextMenu.Root>
 }
+
+/** A row is a pure function of its props: skip re-rendering the mounted rows when the list around them re-renders. */
+export const MyIssuesRow = memo(MyIssuesRowView)
 
 const EMPTY_LINES:readonly boolean[]=[]
 const EMPTY_LINE_MAP=new Map<string,readonly boolean[]>()
@@ -533,9 +536,12 @@ const DEFAULT_PROPERTIES = new Set<MyIssuesProperty>(['id', 'status', 'assignee'
 const EMPTY_OPTIONS: MyIssuesRowPropertyOptions = { status: [], priority: [], assignee: [], dueDate: [], labels: [], project: [], cycle: [] }
 function priorityName(priority: number) { return ['No', 'Urgent', 'High', 'Medium', 'Low'][priority] }
 function rowAriaLabel(issue: MyIssuesRowData) { return `Select issue ${priorityName(issue.priority)} Priority ${issue.identifier} ${issue.title}` }
-function formatRowDate(value: string) { return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value)) }
-function formatFullDate(value: string) { return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(new Date(value)) }
-function formatDueDate(value: string) { return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(`${value}T00:00:00`)) }
+// Intl.DateTimeFormat construction is expensive (~0.1ms): build each formatter once, not per row render.
+const ROW_DATE_FORMAT = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
+const FULL_DATE_FORMAT = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' })
+function formatRowDate(value: string) { return ROW_DATE_FORMAT.format(new Date(value)) }
+function formatFullDate(value: string) { return FULL_DATE_FORMAT.format(new Date(value)) }
+function formatDueDate(value: string) { return ROW_DATE_FORMAT.format(new Date(`${value}T00:00:00`)) }
 function formatTimeInStatus(minutes: number) {
   if (minutes < 60) return `${Math.max(0, minutes)}m`
   const hours = minutes / 60
