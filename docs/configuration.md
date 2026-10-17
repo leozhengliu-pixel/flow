@@ -50,19 +50,37 @@ Flow keeps history it no longer serves out of the database, or bounded:
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `FLOW_DOMAIN_EVENT_RETENTION_DAYS` | `90` | Days the `domain_events` log keeps an event; `0` keeps every event. |
+| `FLOW_DOMAIN_EVENT_RETENTION_DAYS` | `90` | Days the `domain_events` log keeps an event; `0` keeps every event. Values below `7` are raised to `7`, because the log is also the change log behind `/api/realtime/changes`. |
+| `FLOW_CHANGE_LOG_MIN_ROWS` | `10000` | Newest changes per workspace that pruning always keeps, however old. `0` keeps only the age window. |
 | `FLOW_TRASH_RETENTION_DAYS` | `30` | Days deleted items stay in "Recently deleted" before they are deleted permanently. Minimum 1. |
 | `FLOW_AGENT_TRANSCRIPT_OFFLOAD_BYTES` | `8192` | Agent replies and tool results larger than this are stored outside the database row, with a short summary left in the row. Minimum 1024. |
 | `FLOW_CONTENT_CACHE_BYTES` | `134217728` | In-process cache of recently loaded content stored outside rows (document versions, agent replies). |
 | `FLOW_SEARCH_INDEX_MAX_CHARS` | `20000` | Characters of each issue and document indexed for full-text search. Text past the limit is still stored and shown but is not found by search. `0` indexes everything. |
 
-- **Domain events.** Realtime catch-up does not read `domain_events`: each
-  instance keeps a short in-memory replay window per workspace, and a client
-  whose cursor is older than that window (after a restart, or a long time
-  offline) receives `workspace.resync_required` and reloads the workspace.
-  Webhooks are queued from the committed event, and the audit log is stored
-  separately, so pruning old events loses nothing a client needs. Pruning runs
-  hourly in batches of 1,000 rows.
+- **Domain events and the change log.** Every persisted change gets a
+  per-workspace cursor (`seq`), allocated in the same transaction as the change
+  from a counter row, so cursors are gap-free, ordered by commit and survive
+  restarts; multi-node deployments share the counter through the database.
+  `GET /api/realtime/changes?since=<cursor>&limit=N` returns the changes after a
+  cursor (`events`, `next`, `head`, `hasMore`), filtered and projected for the
+  caller exactly like the SSE stream. `resyncRequired: true` means the cursor is
+  older than retention, ahead of the head, or unparseable: reload a snapshot and
+  resume from `head`. `/api/bootstrap` and `/api/issue-records/bootstrap` send
+  the cursor they were read at in the `X-Flow-Change-Cursor` header, SSE and
+  socket events carry `seq`, and the SSE `connected` event carries the head as
+  `cursor`; `Last-Event-ID`/`since` on the stream also accepts a cursor (a numeric `since` replays from the durable log, so it survives restarts and ring eviction). Replayed
+  events carry the persisted payload (the mutation input), not the transient
+  `entity` envelope; entities the viewer may read are re-projected, and events
+  that SSE turns into `workspace.resync_required` do so here too. Presence,
+  agent task and session state (`agent_task.updated` and streaming; refetch
+  agent sessions after a resume, `agent_task.replied` is logged), document collaboration
+  updates, `loop_run.*`, `notification.created` and recurring-issue signals are
+  not persisted and keep their own channels (no `seq`). Pruning runs hourly in
+  batches of 1,000 rows and keeps events newer than the retention window and
+  each workspace's newest `FLOW_CHANGE_LOG_MIN_ROWS` changes. Events written by
+  an older version during a rolling upgrade have no cursor and are not served.
+  Webhooks are queued from the committed event and the audit log is stored
+  separately.
 - **Trash.** Expired entries are purged hourly by a background job (in batches
   of 200), not only when someone opens the app. Entries deleted before the
   window was shortened are purged at the new, shorter window.

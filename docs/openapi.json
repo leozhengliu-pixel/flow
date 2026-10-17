@@ -1591,6 +1591,41 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/agent/sessions/{id}/restore": {
+      "post": {
+        "operationId": "post_agent_sessions_id_restore",
+        "tags": [
+          "agent"
+        ],
+        "summary": "POST /api/agent/sessions/{id}/restore",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/agent/sessions/{id}/stop": {
       "post": {
         "operationId": "post_agent_sessions_id_stop",
@@ -1774,6 +1809,31 @@
           "agent"
         ],
         "summary": "GET /api/agent/status",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/agent/uploads": {
+      "post": {
+        "operationId": "post_agent_uploads",
+        "tags": [
+          "agent"
+        ],
+        "summary": "POST /api/agent/uploads",
         "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
         "responses": {
           "2XX": {
@@ -22431,6 +22491,31 @@
             }
           }
         ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/realtime/changes": {
+      "get": {
+        "operationId": "get_realtime_changes",
+        "tags": [
+          "realtime"
+        ],
+        "summary": "GET /api/realtime/changes",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
         "responses": {
           "2XX": {
             "description": "Success. The response is not described by this document.",

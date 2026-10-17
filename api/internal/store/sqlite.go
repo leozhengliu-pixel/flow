@@ -52,6 +52,8 @@ type SQLiteStore struct {
 	apiKeyUseWorkers sync.WaitGroup
 	apiKeyUseClosed  bool
 	teamMembershipMu sync.Mutex
+	// changeLogMinRows: see SetChangeLogMinRows.
+	changeLogMinRows atomic.Int64
 	// startupCacheDrops lists workspaces whose metadata records a startup
 	// data migration rewrote. The store opens before its coordinator is
 	// attached, so their shared (Redis) metadata cache is dropped then.
@@ -356,6 +358,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		{version: 7, name: "team membership origin", apply: s.addTeamMembershipOrigin},
 		{version: 8, name: "workspace departures", apply: s.createWorkspaceDeparturesSchema},
 		{version: 9, name: "domain event workspace", apply: s.addDomainEventWorkspace},
+		{version: 10, name: "workspace change log", apply: s.addChangeLog},
 		// Versions from 1000 up are data migrations (runDataMigrations),
 		// which run after the workspaces are loaded.
 	}
@@ -1791,7 +1794,7 @@ func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspa
 		return err
 	}
 	if event != nil {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at,workspace_id) VALUES(?,?,?,?,?,?,?)`, event.ID, event.Type, event.AggregateID, []byte(event.Payload), []byte(event.PreviousValues), event.CreatedAt.Format(time.RFC3339Nano), data.Workspace.ID); err != nil {
+		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, Payload: []byte(event.Payload), PreviousValues: []byte(event.PreviousValues), CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: data.Workspace.ID}); err != nil {
 			return err
 		}
 	}
@@ -1958,7 +1961,7 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 		return domain.Bootstrap{}, err
 	}
 	payload, _ := json.Marshal(workspace)
-	if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,created_at,workspace_id) VALUES(?,?,?,?,?,?)`, fmt.Sprintf("evt_%d", now.UnixNano()), "workspace.updated", workspace.ID, payload, now.Format(time.RFC3339Nano), workspace.ID); err != nil {
+	if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: fmt.Sprintf("evt_%d", now.UnixNano()), Type: "workspace.updated", AggregateID: workspace.ID, Payload: payload, CreatedAt: now.Format(time.RFC3339Nano), WorkspaceID: workspace.ID}); err != nil {
 		return domain.Bootstrap{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -2085,7 +2088,7 @@ func (s *SQLiteStore) deleteWorkspace(ctx context.Context, workspaceKey string) 
 	if _, err := tx.ExecContext(ctx, `INSERT INTO account_state(id,last_workspace_key,viewer,updated_at) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,viewer=excluded.viewer,updated_at=excluded.updated_at`, nextWorkspaceKey, viewerRaw, now.Format(time.RFC3339Nano)); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,created_at,workspace_id) VALUES(?,?,?,?,?,?)`, fmt.Sprintf("evt_%d", now.UnixNano()), "workspace.deleted", data.Workspace.ID, []byte(`{}`), now.Format(time.RFC3339Nano), data.Workspace.ID); err != nil {
+	if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: fmt.Sprintf("evt_%d", now.UnixNano()), Type: "workspace.deleted", AggregateID: data.Workspace.ID, Payload: []byte(`{}`), CreatedAt: now.Format(time.RFC3339Nano), WorkspaceID: data.Workspace.ID}); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {

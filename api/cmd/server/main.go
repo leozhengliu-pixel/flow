@@ -133,6 +133,7 @@ func main() {
 		log.Fatal(err)
 	}
 	trashRetention = applicationConfig.Retention.Trash
+	repository.SetChangeLogMinRows(applicationConfig.Retention.ChangeLogMinRows)
 	redisCoordinator, err := coordination.Open(context.Background(), applicationConfig.Redis)
 	if err != nil {
 		log.Fatal(err)
@@ -324,6 +325,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/account/identities/{id}", s.unlinkAccountIdentity)
 	mux.HandleFunc("POST /api/account/change-password", s.changeAccountPassword)
 	mux.HandleFunc("GET /api/realtime/events", s.realtimeEvents)
+	mux.HandleFunc("GET /api/realtime/changes", s.realtimeChanges)
 	mux.HandleFunc("GET /api/realtime/socket", s.realtimeSocket)
 	mux.HandleFunc("GET /api/realtime/presence", s.listPresence)
 	mux.HandleFunc("POST /api/realtime/presence", s.updatePresence)
@@ -1021,6 +1023,7 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 	}
 	defer release()
 	r = r.WithContext(ctx)
+	s.setChangeCursor(w, r, workspaceKey(r))
 	userID := ""
 	if !s.authDisabled {
 		userID = authUser(r).ID

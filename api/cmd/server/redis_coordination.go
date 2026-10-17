@@ -16,6 +16,7 @@ func (s *server) publishRealtime(workspace string, event domain.RealtimeEvent) {
 	if domain.RoutineCredentialEvent(event.Type) {
 		return
 	}
+	s.stampChangeCursor(&event)
 	s.realtime.publish(workspace, event)
 	if s.coordinator == nil {
 		return
