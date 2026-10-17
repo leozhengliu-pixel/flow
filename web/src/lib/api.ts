@@ -4,6 +4,7 @@ import type {
   ThreadSubscription,
   ThreadSubscriptionState,
   AccountSessionInfo,
+  AgentMessageAttachment,
   APIKey,
   Ask,
   Attachment,
@@ -2970,6 +2971,12 @@ export function uploadLoopAttachment(file: File): Promise<LoopAttachment> {
   const body = new FormData();
   body.append("file", file);
   return request("/api/loops/attachments", { method: "POST", body });
+}
+/** Uploads a file pasted or attached in the Agent composer; the message then carries it as a Markdown image, video or file line. */
+export function uploadAgentFile(file: File): Promise<AgentMessageAttachment & { url: string }> {
+  const body = new FormData();
+  body.append("file", file);
+  return request("/api/agent/uploads", { method: "POST", body });
 }
 export function getLoopConfig(): Promise<LoopConfig> {
   return request("/api/loop-config");

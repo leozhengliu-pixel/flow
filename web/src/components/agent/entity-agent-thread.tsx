@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react'
 import { ArrowUp, X } from 'lucide-react'
 import { AgentElicitation } from './agent-elicitation'
 import { AgentElicitationResponseQueue } from './agent-elicitation-response-queue'
@@ -17,8 +17,11 @@ import { formatAgentTime, shouldShowAgentTime } from './agent-time'
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n/i18n'
+import { pastedAgentFiles } from './agent-attachments'
+import { AgentMessageAttachments } from './agent-message-attachments'
+import { AgentContentWithBlocks, hasAgentBlocks } from './agent-content-blocks'
 import type { AgentMessage, AgentMessagePart, AgentSession, BootstrapData } from '@/types/flow'
-import { AgentMentionInput, type AgentMention } from './agent-mention-input'
+import { AgentMentionInput, type AgentMention, type AgentUpload } from './agent-mention-input'
 import { mentionIcon } from './agent-mention-icon'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import {
@@ -95,6 +98,12 @@ export type EntityAgentThreadProps = {
   blankEmpty?: boolean
   /** Rows shown right above the composer (e.g. attached files). */
   composerHeader?: ReactNode
+  /** Files pasted into the composer; hosts that take attachments add them to their list. */
+  onPasteFiles?: (files: File[]) => void
+  /** Uploads a pasted or attached file so it goes into the message itself (see AgentMentionInput). */
+  onUploadFile?: (file: File) => Promise<AgentUpload>
+  insertFilesRef?: MutableRefObject<((files: File[]) => void) | null>
+  onFilesBusyChange?: (busy: boolean) => void
 }
 
 export type AgentContextEntity = { key: string; icon?: ReactNode; label: string; onRemove?: () => void }
@@ -140,6 +149,10 @@ export function EntityAgentThread({
   canSend,
   blankEmpty = false,
   composerHeader,
+  onPasteFiles,
+  onUploadFile,
+  insertFilesRef,
+  onFilesBusyChange,
 }: EntityAgentThreadProps) {
   const { t } = useI18n()
   // A reply the user stopped keeps only its work (no partial text, "stopped" row or rating).
@@ -292,7 +305,11 @@ export function EntityAgentThread({
                     })()}
                   </>
                 )}
-                {!isUser && renderAssistantBody ? null : isUser && splitAgentQuote(message.content).quote !== undefined ? (
+                {!isUser && renderAssistantBody ? null : isUser && hasAgentBlocks(message.content) ? (
+                  <div className={`${styles.messageDocument} agent-chat-document`} aria-label={t('Your message')}>
+                    <AgentContentWithBlocks content={message.content} renderText={text => mentionData && message.mentions?.length ? <MentionedText data={mentionData} mentions={message.mentions} text={text}/> : <AgentRichText ariaLabel={t('Your message')} content={text}/>}/>
+                  </div>
+                ) : isUser && splitAgentQuote(message.content).quote !== undefined ? (
                   <p className={`${styles.messageDocument} agent-chat-document`} aria-label={t('Your message')}><QuotedText data={mentionData} mentions={message.mentions} content={message.content}/></p>
                 ) : message.content && isUser && mentionData && (message.mentions?.length || /@[A-Z][A-Z0-9]*-\d+/.test(message.content)) ? (
                   <p className={`${styles.messageDocument} agent-chat-document`} aria-label={t('Your message')}><MentionedText data={mentionData} mentions={message.mentions} text={message.content}/></p>
@@ -310,6 +327,7 @@ export function EntityAgentThread({
                     content={message.content}
                   />
                 )}
+                {isUser && <AgentMessageAttachments attachments={message.attachments?.filter(item => !item.url || !message.content.includes(`](${item.url})`))}/>}
                 {answer && !streaming && !renderAssistantBody && <AgentReferencedResources data={entityData} exclude={agentChangeEntityKeys(message)} references={answer.references} />}
                 {!isUser && !renderAssistantBody && <AgentChangeCards data={entityData} message={message} onSessionChange={onSessionChange} sessionId={sessionId} />}
                 {!isUser && !streaming && !renderAssistantBody && renderMessageAttachment?.(message, index)}
@@ -407,12 +425,20 @@ export function EntityAgentThread({
             onQuoteRemove={onQuoteRemove}
             initialMentions={initialMentions}
             onTab={onComposerTab}
+            onPasteFiles={onPasteFiles}
+            onUploadFile={onUploadFile}
+            insertFilesRef={insertFilesRef}
+            onBusyChange={onFilesBusyChange}
           />
         ) : (
         <textarea
           aria-label={t('Send a message to Flow Agent')}
           disabled={!enabled || composerDisabled || loading}
           onChange={event => onInputChange(event.target.value)}
+          onPaste={event => {
+            const files = onPasteFiles ? pastedAgentFiles(event.clipboardData) : []
+            if (files.length) { event.preventDefault(); onPasteFiles?.(files) }
+          }}
           onKeyDown={event => {
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault()

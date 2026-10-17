@@ -1,0 +1,76 @@
+/* Measured on the reference app's agent composer and chat (CSS px at 100%). */
+.frame {
+  position: relative;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  line-height: 0;
+}
+.image {
+  display: block;
+  height: auto;
+  max-height: 600px;
+  border-radius: 6px;
+  object-fit: contain;
+  cursor: zoom-in;
+}
+.frame[data-editable] .image { cursor: default; }
+.frame[data-uploading] .image { opacity: .5; }
+
+.toolbar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: none;
+  align-items: center;
+  padding: 2px;
+  border: .5px solid var(--description-media-toolbar-border);
+  border-radius: 9999px;
+  background: var(--description-media-toolbar-bg);
+  box-shadow: var(--description-toolbar-shadow);
+  backdrop-filter: saturate(1.8) blur(20px);
+}
+:global(:root[data-theme="light"]) .toolbar { background: color(srgb 1 1 1 / .8); }
+.frame:hover .toolbar,
+.frame:focus-within .toolbar { display: flex; }
+.toolbar button {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  flex: none;
+  place-items: center;
+  padding: 6px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--description-media-toolbar-fg);
+  cursor: pointer;
+}
+.toolbar button:hover { background: var(--description-media-toolbar-hover); }
+.icon { display: grid; width: 14px; height: 14px; }
+.icon svg { width: 14px; height: 14px; }
+.separator {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  margin: 4px;
+  background: var(--description-toolbar-separator);
+}
+:global(:root[data-theme="light"]) .separator { background: lch(75.7 0 282); }
+
+.handle {
+  position: absolute;
+  top: 50%;
+  display: none;
+  box-sizing: border-box;
+  width: 5px;
+  height: 40px;
+  border: 1px solid rgba(0, 0, 0, .4);
+  border-radius: 3px;
+  background: color(srgb 1 1 1 / .8);
+  transform: translateY(-50%);
+  cursor: col-resize;
+}
+.handle[data-side="left"] { left: 4px; }
+.handle[data-side="right"] { right: 4px; }
+.frame:hover .handle { display: block; }

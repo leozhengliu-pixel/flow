@@ -1,4 +1,4 @@
-import type { AgentMessagePart, AgentSession } from '@/types/flow'
+import type { AgentFileAttachment, AgentMessagePart, AgentSession } from '@/types/flow'
 import { ApiError, apiFetch, jsonRequest } from '@/lib/api-client'
 
 export interface AgentStreamEvent {
@@ -26,6 +26,8 @@ export type AgentStreamInput = {
   mentions?: { type: 'issue' | 'project' | 'document' | 'initiative' | 'user'; id: string; label: string }[]
   skillIds?: string[]
   location?: 'page' | 'toolbar'
+  /** Files sent with the message: images as data URLs, text files as text (see agentFileAttachment). */
+  attachments?: AgentFileAttachment[]
 }
 
 /** Resources @-mentioned in a follow-up message; the server adds them to the conversation. */
@@ -39,6 +41,8 @@ export type AgentMessageMentions = {
   mentions?: { type: 'issue' | 'project' | 'document' | 'initiative' | 'user'; id: string; label: string }[]
   /** Picks an option of the reply's pending question (ask_user). */
   answer?: { partId: string; value: string }
+  /** Files sent with the message. */
+  attachments?: AgentFileAttachment[]
 }
 
 export function streamNewAgentSession(input: AgentStreamInput, onEvent: (event: AgentStreamEvent) => void, signal?: AbortSignal) {
@@ -49,8 +53,9 @@ export function streamAgentSessionMessage(id: string, message: string, onEvent: 
   return streamAgentRequest(`/api/agent/sessions/${encodeURIComponent(id)}/messages/stream`, 'POST', { message, ...mentions }, onEvent, signal)
 }
 
-export function streamAgentSessionMessageEdit(id: string, messageId: string, message: string, onEvent: (event: AgentStreamEvent) => void, signal?: AbortSignal) {
-  return streamAgentRequest(`/api/agent/sessions/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/stream`, 'PATCH', { message }, onEvent, signal)
+/** Edits (or retries) a user message; `attachments`, when given, replace the message's files, otherwise they are kept. */
+export function streamAgentSessionMessageEdit(id: string, messageId: string, message: string, onEvent: (event: AgentStreamEvent) => void, signal?: AbortSignal, attachments?: AgentFileAttachment[]) {
+  return streamAgentRequest(`/api/agent/sessions/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/stream`, 'PATCH', { message, ...(attachments?.length ? { attachments } : {}) }, onEvent, signal)
 }
 
 async function streamAgentRequest(url: string, method: 'POST' | 'PATCH', input: unknown, onEvent: (event: AgentStreamEvent) => void, signal?: AbortSignal) {
