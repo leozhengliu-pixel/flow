@@ -131,6 +131,49 @@ function resolveExplorerPullRequestLifecycle(
   return statuses[0]
 }
 
+/** Everything `issueToExplorerRow` reads from the bootstrap other than the issue collection itself. */
+function explorerRowDependencies(data: BootstrapData): unknown[] {
+  return [data.workspace?.urlKey, data.viewer?.id, data.projects, data.cycles, data.releases, data.releasePipelines, data.reviews, data.issueSlas, data.slaRules, data.customers, data.customerRequests, data.workspaceSettings?.featureSettings, data.teamSettings, data.activities, data.states]
+}
+
+/** An issue whose row can show, or be shown on, another issue's row (hierarchy, milestone progress). */
+function issueRowIsRelated(issue: Issue | undefined, parentIds: ReadonlySet<string>) {
+  return Boolean(issue && (issue.parentId || issue.subIssueIds?.length || issue.projectMilestoneId || parentIds.has(issue.id)))
+}
+
+/**
+ * Incremental `issueToExplorerRow` for the whole collection. A realtime update replaces one issue
+ * object in `data.issues`; rebuilding all rows (~40ms per update at 4,000 issues) for it was the
+ * main cost of every realtime event. Rows of untouched issues are reused as long as the metadata
+ * they read is unchanged and no changed issue is hierarchy/milestone related to them.
+ */
+export function createExplorerRowCache() {
+  let previous: { dependencies: unknown[]; byId: Map<string, Issue>; rows: Map<string, MyIssuesRowData> } | undefined
+  return (visible: Issue[], data: BootstrapData): MyIssuesRowData[] => {
+    const dependencies = explorerRowDependencies(data)
+    const byId = new Map(data.issues.map(issue => [issue.id, issue]))
+    let reusable = Boolean(previous) && dependencies.every((value, index) => value === previous!.dependencies[index])
+    if (reusable && previous!.byId.size === byId.size && data.issues.every(issue => previous!.byId.get(issue.id) === issue)) {
+      // Nothing changed in the collection itself.
+    } else if (reusable) {
+      const parentIds = new Set<string>()
+      for (const issue of data.issues) if (issue.parentId) parentIds.add(issue.parentId)
+      for (const [id, old] of previous!.byId) { const next = byId.get(id); if (next !== old && (issueRowIsRelated(old, parentIds) || issueRowIsRelated(next, parentIds))) { reusable = false; break } }
+      if (reusable) for (const [id, next] of byId) if (!previous!.byId.has(id) && issueRowIsRelated(next, parentIds)) { reusable = false; break }
+    }
+    const rows = new Map<string, MyIssuesRowData>()
+    const result = visible.map(issue => {
+      const cached = reusable ? previous!.rows.get(issue.id) : undefined
+      const row = cached && previous!.byId.get(issue.id) === issue ? cached : issueToExplorerRow(issue, data.workspace.urlKey, data.issues, data)
+      rows.set(issue.id, row)
+      return row
+    })
+    // Rows are cached for the visible subset only; a filter change just rebuilds the rows it newly shows.
+    previous = { dependencies, byId, rows }
+    return result
+  }
+}
+
 function issueIndex(issues: Issue[]) {
   const cached = ISSUE_INDEX_CACHE.get(issues)
   if (cached) return cached
