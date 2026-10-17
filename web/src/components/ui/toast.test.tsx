@@ -38,6 +38,22 @@ describe('toast system', () => {
     expect(screen.getByRole('button', { name: 'Dismiss' })).toBeInTheDocument()
   })
 
+  it('puts a button option on the title row, runs it and dismisses the toast', async () => {
+    const onClick = vi.fn()
+    act(() => { toast.info('Chat deleted', { button: { label: 'Undo', onClick } }) })
+    await settle(50)
+    const undo = screen.getByRole('button', { name: 'Undo' })
+    expect(undo).toHaveClass('flow-toast__button')
+    // Beside dismiss on the title's row, not in the links row under it.
+    expect(undo.parentElement).toHaveClass('flow-toast__actions')
+    expect(undo.parentElement).toContainElement(screen.getByRole('button', { name: 'Dismiss' }))
+    expect(document.querySelector('.flow-toast__links')).toBeNull()
+    fireEvent.click(undo)
+    expect(onClick).toHaveBeenCalledTimes(1)
+    await settle(500)
+    expect(screen.queryByText('Chat deleted')).not.toBeInTheDocument()
+  })
+
   it('stacks distinct toasts newest-first, always expanded, and caps the visible stack at four', async () => {
     act(() => { for (let index = 1; index <= 5; index += 1) toast.info(`Toast ${index}`) })
     await settle(50)

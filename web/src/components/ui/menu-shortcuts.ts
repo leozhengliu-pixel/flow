@@ -130,7 +130,7 @@ function safeMatches(element: Element, selector: string) {
  * Page-level key hints (e.g. a detail page's "…" menu): runs the handler for a completed hint unless
  * focus is in a text field or a menu or dialog is already open.
  */
-export function useFlowHotkeys(handlers: Record<string, () => void>, enabled = true) {
+export function useFlowHotkeys(handlers: Record<string, () => void>, enabled = true, scope?: string) {
   const latest = useRef(handlers)
   useEffect(() => { latest.current = handlers })
   const key = Object.keys(handlers).join('|')
@@ -141,6 +141,7 @@ export function useFlowHotkeys(handlers: Record<string, () => void>, enabled = t
       const target = event.target instanceof Element ? event.target : null
       if (event.defaultPrevented || target?.closest('input,textarea,select,[contenteditable="true"],[role="textbox"]')) return
       if (document.querySelector(BLOCKING_OVERLAYS)) return
+      if (scope && !target?.closest(scope) && !document.activeElement?.closest(scope)) return
       const result = matcher.match(event, key.split('|').filter(Boolean))
       if (!result || result === 'pending') return
       event.preventDefault()

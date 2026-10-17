@@ -88,7 +88,7 @@ describe('AgentMentionInput', () => {
     expect(onChange).toHaveBeenLastCalledWith('', [])
   })
 
-  it('turns a pasted PDF, video and SVG into blocks and ignores audio', async () => {
+  it('turns a pasted PDF, video and SVG into blocks, ignores audio by MIME type and keeps an untyped .wav as a file', async () => {
     const onChange = vi.fn<(value: string, mentions: AgentMention[]) => void>()
     const onUploadFile = vi.fn(async (file: File) => upload(file))
     URL.createObjectURL = vi.fn(() => 'blob:preview')
@@ -101,11 +101,11 @@ describe('AgentMentionInput', () => {
     const song = new File(['mp3'], 'song.mp3', { type: 'audio/mpeg' })
     const noType = new File(['wav'], 'clip.wav', { type: '' })
     fireEvent.paste(box, { clipboardData: { files: [pdf, video, svg, song, noType], getData: () => '' } })
-    expect([...box.querySelectorAll<HTMLElement>('[data-agent-block]')].map(block => block.dataset.kind)).toEqual(['file', 'video', 'image'])
-    await waitFor(() => expect(onUploadFile).toHaveBeenCalledTimes(3))
-    expect(onUploadFile.mock.calls.map(([file]) => file.name)).toEqual(['spec.pdf', 'demo.mp4', 'logo.svg'])
+    expect([...box.querySelectorAll<HTMLElement>('[data-agent-block]')].map(block => block.dataset.kind)).toEqual(['file', 'video', 'image', 'file'])
+    await waitFor(() => expect(onUploadFile).toHaveBeenCalledTimes(4))
+    expect(onUploadFile.mock.calls.map(([file]) => file.name)).toEqual(['spec.pdf', 'demo.mp4', 'logo.svg', 'clip.wav'])
     await waitFor(() => expect(onChange).toHaveBeenLastCalledWith(
-      '\n::file[spec.pdf](/uploads/agent_upload_0123456789abcdef_1_spec.pdf){size="3" type="application/pdf"}\n\n::video[demo.mp4](/uploads/agent_upload_0123456789abcdef_1_demo.mp4)\n\n![logo.svg](/uploads/agent_upload_0123456789abcdef_1_logo.svg)\n\n',
+      '\n::file[spec.pdf](/uploads/agent_upload_0123456789abcdef_1_spec.pdf){size="3" type="application/pdf"}\n\n::video[demo.mp4](/uploads/agent_upload_0123456789abcdef_1_demo.mp4)\n\n![logo.svg](/uploads/agent_upload_0123456789abcdef_1_logo.svg)\n\n::file[clip.wav](/uploads/agent_upload_0123456789abcdef_1_clip.wav){size="3" type=""}\n\n',
       [],
     ))
     // The card shows the name and size; the video has the custom player.
@@ -114,11 +114,11 @@ describe('AgentMentionInput', () => {
     expect(within(box).getByRole('group', { name: 'demo.mp4' }).querySelector('video')).toHaveAttribute('preload', 'metadata')
     expect(within(box).getByRole('button', { name: 'Play' })).toBeInTheDocument()
     // Blocks stack directly, with one line to type on after them.
-    expect(box.children).toHaveLength(4)
+    expect(box.children).toHaveLength(5)
     // Audio alone inserts nothing, not even text.
     document.execCommand = vi.fn(() => true)
     fireEvent.paste(box, { clipboardData: { files: [song], getData: () => '' } })
-    expect(box.querySelectorAll('[data-agent-block]')).toHaveLength(3)
+    expect(box.querySelectorAll('[data-agent-block]')).toHaveLength(4)
     expect(document.execCommand).not.toHaveBeenCalled()
   })
 

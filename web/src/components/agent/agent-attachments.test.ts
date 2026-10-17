@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const error = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/toast', () => ({ toast: { error } }))
 
-import { AGENT_ATTACHMENT_MAX_BYTES, addAgentAttachments, attachAgentFiles, pastedAgentFiles, shrinkAgentImage } from './agent-attachments'
+import { AGENT_ATTACHMENT_MAX_BYTES, addAgentAttachments, agentFileKind, attachAgentFiles, pastedAgentFiles, shrinkAgentImage } from './agent-attachments'
 
 const MB = 1024 * 1024
 const file = (name: string, type: string, size: number) => new File([new Uint8Array(size)], name, { type })
@@ -90,5 +90,15 @@ describe('attachment limits per message', () => {
     expect(kept.map(item => item.name)).toEqual(['f0.txt', 'f1.txt', 'f2.txt', 'f3.txt', 'f4.txt'])
     const small = Array.from({ length: 10 }, (_, index) => file(`s${index}.txt`, 'text/plain', 10))
     expect(addAgentAttachments([], small)).toHaveLength(8)
+  })
+})
+
+describe('agentFileKind', () => {
+  it('ignores audio by MIME type only', () => {
+    expect(agentFileKind({ type: 'audio/mpeg' })).toBe('audio')
+    expect(agentFileKind({ type: 'audio/wav' })).toBe('audio')
+    expect(agentFileKind({ type: '' })).toBe('file')
+    expect(agentFileKind({ type: 'application/pdf' })).toBe('file')
+    expect(agentFileKind({ type: 'video/mp4' })).toBe('video')
   })
 })

@@ -35,6 +35,8 @@ export type ToastContent = {
   icon?: ReactNode | false
   entities: ToastEntity[]
   links: ToastLink[]
+  /** A pill button on the title's row. */
+  button?: ToastLink
   /** Hides the dismiss button (kept for toasts that must stay until they resolve). */
   closeButton: boolean
 }

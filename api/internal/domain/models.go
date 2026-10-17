@@ -347,6 +347,8 @@ type AgentSession struct {
 	LastReadAt *time.Time `json:"lastReadAt,omitempty"`
 	// Feedback holds notes the owner left about the whole conversation ("Leave feedback…" in the chat menu).
 	Feedback []AgentFeedback `json:"feedback,omitempty"`
+	// DeletedAt marks a chat the owner deleted: hidden everywhere, restorable until the retention window passes.
+	DeletedAt *time.Time `json:"deletedAt,omitempty"`
 }
 
 type PersonalAgentSkill struct {

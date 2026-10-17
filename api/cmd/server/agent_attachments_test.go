@@ -52,7 +52,7 @@ func TestAgentChatAttachmentsReachTheModelOnEveryTurn(t *testing.T) {
 		return ""
 	}
 	first := modelInput("What is wrong here?")
-	if !strings.Contains(first, "input_image") || !strings.Contains(first, "data:image/png;base64,"+png) || !strings.Contains(first, "The header overlaps.") || !strings.Contains(first, "Attached file spec.pdf (application/pdf, 900 bytes).") {
+	if !strings.Contains(first, "input_image") || !strings.Contains(first, "data:image/png;base64,"+png) || strings.Contains(first, "The header overlaps.") || !strings.Contains(first, "Attached file notes.md (text/markdown, 28 bytes)") || !strings.Contains(first, "id: "+session.Messages[0].Attachments[1].URL+". Use read_file to read it.") || !strings.Contains(first, "Attached file spec.pdf (application/pdf, 900 bytes); its contents were not kept.") {
 		t.Fatalf("attachments missing from model input: %s", first)
 	}
 	// A follow-up still sees the screenshot from the first message.
@@ -60,18 +60,15 @@ func TestAgentChatAttachmentsReachTheModelOnEveryTurn(t *testing.T) {
 	if followUp := modelInput("And how do I fix it?"); !strings.Contains(followUp, "data:image/png;base64,"+png) {
 		t.Fatalf("follow-up lost the image: %s", followUp)
 	}
-	// The owner can open the file; deleting the chat removes it.
+	// The owner can open the file; deleting the chat hides it.
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, sent.Attachments[1].URL, nil))
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "The header overlaps.") {
 		t.Fatalf("serve attachment = %d", recorder.Code)
 	}
 	requestJSON[any](t, handler, http.MethodDelete, "/api/agent/sessions/"+sessionID[1], nil, http.StatusNoContent)
-	recorder = httptest.NewRecorder()
-	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, sent.Attachments[1].URL, nil))
-	if recorder.Code == http.StatusOK {
-		t.Fatal("attachment survived its chat")
-	}
+	// The chat is hidden at once; its files go when the retention purge removes it (agent_session_restore_test.go).
+	requestJSON[any](t, handler, http.MethodGet, "/api/agent/sessions/"+sessionID[1], nil, http.StatusNotFound)
 }
 
 func TestAgentChatAttachmentLimits(t *testing.T) {
@@ -284,7 +281,8 @@ func TestAgentChatUploadsAnyFileButAudio(t *testing.T) {
 	if code, _ := upload("song.mp3", "audio/mpeg", []byte("ID3")); code != http.StatusBadRequest {
 		t.Fatalf("audio upload = %d", code)
 	}
-	if code, _ := upload("song.flac", "application/octet-stream", []byte("fLaC")); code != http.StatusBadRequest {
+	// Only the declared MIME type counts, as in the reference app: a typeless audio file is an ordinary file.
+	if code, _ := upload("song.flac", "application/octet-stream", []byte("fLaC")); code != http.StatusCreated {
 		t.Fatalf("typeless audio upload = %d", code)
 	}
 	if code, _ := upload("big.zip", "application/zip", make([]byte, agentUploadMaxBytes+1)); code == http.StatusCreated {
@@ -316,12 +314,15 @@ func TestAgentChatUploadsAnyFileButAudio(t *testing.T) {
 		}
 	}
 	provider.mu.Unlock()
-	for _, want := range []string{"data:image/png;base64," + base64.StdEncoding.EncodeToString(png), "Attached video demo.webm (video/webm, 8 bytes).", "Remember the header.", "Attached file spec.pdf (application/pdf, 13 bytes)."} {
+	for _, want := range []string{"data:image/png;base64," + base64.StdEncoding.EncodeToString(png), "Attached video demo.webm (video/webm, 8 bytes)", "Use transcribe_media", "Attached file notes.txt (text/plain", "Attached file spec.pdf (application/pdf, 13 bytes)", "Use read_file to read it."} {
 		if !strings.Contains(input, want) {
 			t.Errorf("model input lacks %q: %s", want, input)
 		}
 	}
-	if strings.Contains(input, "/uploads/agent_upload_") || strings.Contains(input, "::file") || strings.Contains(input, "::video") {
+	if strings.Contains(input, "Remember the header.") {
+		t.Errorf("a text file was inlined: %s", input)
+	}
+	if strings.Contains(input, "::file") || strings.Contains(input, "::video") {
 		t.Errorf("raw tokens reached the model: %s", input)
 	}
 

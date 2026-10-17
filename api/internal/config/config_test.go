@@ -261,3 +261,29 @@ func TestLoadAgentRuntimeValidation(t *testing.T) {
 		t.Fatalf("worker runtime = %+v, %v", loaded.Agent.Runtime, err)
 	}
 }
+
+func TestResolveAgentMediaKeyReuse(t *testing.T) {
+	cases := []struct {
+		name    string
+		media   AgentMediaConfig
+		wantURL string
+		wantKey string
+	}{
+		{"defaults to agent", AgentMediaConfig{}, "https://agent.test/v1", "agent-key"},
+		{"same url with slash", AgentMediaConfig{BaseURL: "https://agent.test/v1/"}, "https://agent.test/v1", "agent-key"},
+		{"other url gets no key", AgentMediaConfig{BaseURL: "https://other.test/v1"}, "https://other.test/v1", ""},
+		{"own key kept", AgentMediaConfig{BaseURL: "https://other.test/v1", APIKey: "media-key"}, "https://other.test/v1", "media-key"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := Config{}
+			c.Agent.BaseURL = "https://agent.test/v1/"
+			c.Agent.APIKey = "agent-key"
+			c.Agent.Media = tc.media
+			c.resolveAgentMedia()
+			if c.Agent.Media.BaseURL != tc.wantURL || c.Agent.Media.APIKey != tc.wantKey {
+				t.Errorf("got %q %q", c.Agent.Media.BaseURL, c.Agent.Media.APIKey)
+			}
+		})
+	}
+}

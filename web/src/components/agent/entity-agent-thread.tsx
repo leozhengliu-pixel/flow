@@ -210,6 +210,7 @@ export function EntityAgentThread({
   // The reference app's "Worked for…" group above the answer — not after it, where text written after the tools ran read first.
   const liveWorkInReply = loading && streamWork.length > 0 && savedMessages.at(-1)?.role === 'assistant' && !renderAssistantBody
   const lastMessage = messages.at(-1)
+  const sessionAttachments = useMemo(() => messages.flatMap(message => message.attachments ?? []), [messages])
   // The reference app's composer reads "Something else…" while the newest reply offers choices (question options or suggestions).
   const offersChoices = !loading && lastMessage?.role === 'assistant' && (Boolean(lastMessage.parts?.some(part => part.type === 'question' && part.status === 'pending')) || parseAgentAnswer(lastMessage.content, entityData).suggestions.length > 0)
   const composerPlaceholder = messages.length && enabled
@@ -274,6 +275,7 @@ export function EntityAgentThread({
                   <>
                     {streaming && liveWorkInReply ? (
                       <AgentWorkGroup
+                        attachments={sessionAttachments}
                         approvalBusy={approvalBusy}
                         className={styles.work}
                         message={{}}
@@ -283,6 +285,7 @@ export function EntityAgentThread({
                       />
                     ) : work.length > 0 && (
                       <AgentWorkGroup
+                        attachments={sessionAttachments}
                         approvalBusy={approvalBusy}
                         className={styles.work}
                         message={message}
@@ -365,6 +368,7 @@ export function EntityAgentThread({
         })}
         {loading && streamWork.length > 0 && !liveWorkInReply && (
           <AgentWorkGroup
+            attachments={sessionAttachments}
             approvalBusy={approvalBusy}
             className={styles.work}
             message={{}}

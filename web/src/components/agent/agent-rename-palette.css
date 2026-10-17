@@ -1,0 +1,49 @@
+/* Rename palette: 720px panel, 81px from the top, 12px radius, no dimmed backdrop. */
+.agent-rename-palette {
+  position: fixed;
+  z-index: 1100;
+  top: 81px;
+  left: 50%;
+  box-sizing: border-box;
+  width: min(720px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  padding: 6px 6px 6px;
+  border: 1px solid var(--pk-border);
+  border-radius: 12px;
+  outline: 0;
+  background: var(--pk-surface);
+  box-shadow: var(--pk-shadow);
+  color: var(--pk-text);
+  font: 450 13px/normal var(--font);
+}
+.agent-rename-palette__title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.agent-rename-palette__input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 12px;
+  outline: 0;
+  background: transparent;
+  color: var(--pk-text-strong, var(--pk-text));
+  font: inherit;
+}
+.agent-rename-palette__input::placeholder { color: var(--pk-muted); }
+.agent-rename-palette__option {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 8px;
+  cursor: default;
+  user-select: none;
+}
+.agent-rename-palette__option[aria-selected="true"] { background: var(--pk-hover); }
+.agent-rename-palette__option[aria-disabled="true"] { opacity: .5; }
+.agent-rename-palette__value { margin-left: .3em; color: var(--pk-muted); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
