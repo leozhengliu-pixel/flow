@@ -1455,15 +1455,17 @@ type WorkspaceSettings struct {
 	GoogleAuthEnabled        bool                `json:"googleAuthEnabled"`
 	EmailAuthEnabled         bool                `json:"emailAuthEnabled"`
 	// AllowedAuthServices lists login methods for other domains (google, email, passkey, saml, appUser).
-	AllowedAuthServices     []string `json:"allowedAuthServices,omitempty"`
-	DisableAdminBypass      bool     `json:"disableAdminBypass"`
-	InitiativePermission    string   `json:"initiativePermission,omitempty"`
-	LoopPermission          string   `json:"loopPermission,omitempty"`
-	ImportPermission        string   `json:"importPermission,omitempty"`
-	PinnedViewPermission    string   `json:"pinnedViewPermission,omitempty"`
-	AgentGuidancePermission string   `json:"agentGuidancePermission,omitempty"`
-	AgentInstructions       string   `json:"agentInstructions,omitempty"`
-	PreventGuestAgents      bool     `json:"preventGuestAgents"`
+	AllowedAuthServices  []string `json:"allowedAuthServices,omitempty"`
+	DisableAdminBypass   bool     `json:"disableAdminBypass"`
+	InitiativePermission string   `json:"initiativePermission,omitempty"`
+	LoopPermission       string   `json:"loopPermission,omitempty"`
+	ImportPermission     string   `json:"importPermission,omitempty"`
+	// SpendLimits are the AI spend limits of Settings > Usage & limits.
+	SpendLimits             SpendLimitSettings `json:"spendLimits,omitempty"`
+	PinnedViewPermission    string             `json:"pinnedViewPermission,omitempty"`
+	AgentGuidancePermission string             `json:"agentGuidancePermission,omitempty"`
+	AgentInstructions       string             `json:"agentInstructions,omitempty"`
+	PreventGuestAgents      bool               `json:"preventGuestAgents"`
 	// AgentWebSearch is the older opt-in flag (off by default before web access became default-on). It is kept in
 	// step with the effective setting for older clients and no longer decides it.
 	AgentWebSearch bool `json:"agentWebSearch"`
@@ -1497,6 +1499,23 @@ type WorkspaceSettings struct {
 	TrustedSourcesMode      string    `json:"trustedSourcesMode,omitempty"`
 	TrustedSourcesAllowlist []string  `json:"trustedSourcesAllowlist,omitempty"`
 	UpdatedAt               time.Time `json:"updatedAt"`
+}
+
+// SpendLimitSettings holds the workspace AI spend limits in USD (0 = no limit),
+// how often each limit resets, when the periods roll over, and the per-member
+// and per-loop overrides keyed by id.
+type SpendLimitSettings struct {
+	WorkspaceLimit  float64            `json:"workspaceLimit,omitempty"`
+	WorkspaceReset  string             `json:"workspaceReset,omitempty"`
+	UserLimit       float64            `json:"userLimit,omitempty"`
+	UserReset       string             `json:"userReset,omitempty"`
+	LoopLimit       float64            `json:"loopLimit,omitempty"`
+	LoopReset       string             `json:"loopReset,omitempty"`
+	DailyResetHour  *int               `json:"dailyResetHour,omitempty"`
+	WeeklyResetDay  *int               `json:"weeklyResetDay,omitempty"`
+	MonthlyResetDay *int               `json:"monthlyResetDay,omitempty"`
+	UserOverrides   map[string]float64 `json:"userOverrides,omitempty"`
+	LoopOverrides   map[string]float64 `json:"loopOverrides,omitempty"`
 }
 
 type FeatureOption struct {
