@@ -635,6 +635,7 @@ function App() {
         clearNavigationCache();
       })
       .finally(() => setAuthReady(true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- startup runs once on mount; later navigation goes through the bootstrap effect
   }, []);
   const themeSyncRef = useRef<string>("");
   // Bumped when a pending settings write fails, so its old value re-applies.
