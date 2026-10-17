@@ -3,6 +3,7 @@ import { realtimeClientId, updatePresence } from '@/lib/api'
 import { AGENT_TASK_ACTIVITY_EVENT } from '@/lib/application-agents'
 import { INBOX_ACTIVITY_EVENT, inboxUnread } from '@/lib/inbox-unread'
 import { loadRealtimeCursor, saveRealtimeCursor } from '@/lib/realtime-cache'
+import { canApplyRealtimePatch } from '@/store/apply-realtime-patch'
 import { RealtimeEventQueue } from '@/lib/realtime-event-queue'
 import { connectSharedRealtime, type RealtimeMessage } from '@/lib/shared-realtime'
 import type { BootstrapData, Presence, RealtimeEvent } from '@/types/flow'
@@ -35,29 +36,39 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, o
     const queue = new RealtimeEventQueue()
     let cursorTimer: number | undefined
     let latestCursor = ''
+    // Consecutive self-contained entity patches (a bulk edit, an agent run) are applied in one task, so React
+    // renders the collection once for the burst instead of once per event. Anything that fetches, or reads
+    // the render-time snapshot, still yields between events.
+    const MAX_EVENTS_PER_TASK = 64
     const drain = async () => {
       timer = undefined
       if (disposed || syncing || !queue.length) return
       syncing = true
-      const event = queue.shift()!
       let failed = false
       try {
-        // Drop protected rows before awaiting permission reconciliation. A
-        // background refresh must never keep revoked data visible on failure.
-        const force = /^(resync$|workspace\.resync_required$|issue\.(permissions_updated|permission_updated|permission_deleted|shared|unshared)$|issue_permission\.|team_member\.|workspace_member\.|membership\.)/.test(event.type)
-        if (force || event.type === 'issue.deleted') {
-          const detail: IssueQueryInvalidation = { workspaceKey, issueId: event.aggregateId, issue: event.payload?.issue, force }
-          window.dispatchEvent(new CustomEvent(ISSUE_QUERY_INVALIDATED, { detail }))
+        for (let handled = 0; handled < MAX_EVENTS_PER_TASK && !disposed && queue.length && !failed; handled++) {
+          const event = queue.shift()!
+          try {
+            // Drop protected rows before awaiting permission reconciliation. A
+            // background refresh must never keep revoked data visible on failure.
+            const force = /^(resync$|workspace\.resync_required$|issue\.(permissions_updated|permission_updated|permission_deleted|shared|unshared)$|issue_permission\.|team_member\.|workspace_member\.|membership\.)/.test(event.type)
+            if (force || event.type === 'issue.deleted') {
+              const detail: IssueQueryInvalidation = { workspaceKey, issueId: event.aggregateId, issue: event.payload?.issue, force }
+              window.dispatchEvent(new CustomEvent(ISSUE_QUERY_INVALIDATED, { detail }))
+            }
+            if (['label.deleted', 'issue_label.deleted', 'label_group.deleted'].includes(event.type)) {
+              const labelIds = (event.payload as { labelIds?: unknown } | undefined)?.labelIds
+              if (Array.isArray(labelIds)) window.dispatchEvent(new CustomEvent(ISSUE_QUERY_INVALIDATED, { detail: { workspaceKey, labelIds: labelIds.filter((id): id is string => typeof id === 'string') } satisfies IssueQueryInvalidation }))
+            }
+            await syncRef.current(event)
+            const next = queue.peek()
+            if (!canApplyRealtimePatch(event) || !next || !canApplyRealtimePatch(next)) break
+          }
+          catch {
+            failed = true
+            queue.push({ id: event.id, type: 'resync', createdAt: event.createdAt }, 0)
+          }
         }
-        if (['label.deleted', 'issue_label.deleted', 'label_group.deleted'].includes(event.type)) {
-          const labelIds = (event.payload as { labelIds?: unknown } | undefined)?.labelIds
-          if (Array.isArray(labelIds)) window.dispatchEvent(new CustomEvent(ISSUE_QUERY_INVALIDATED, { detail: { workspaceKey, labelIds: labelIds.filter((id): id is string => typeof id === 'string') } satisfies IssueQueryInvalidation }))
-        }
-        await syncRef.current(event)
-      }
-      catch {
-        failed = true
-        queue.push({ id: event.id, type: 'resync', createdAt: event.createdAt }, 0)
       } finally {
         syncing = false
         if (!disposed && queue.length) timer = window.setTimeout(() => void drain(), failed ? 1000 : 0)

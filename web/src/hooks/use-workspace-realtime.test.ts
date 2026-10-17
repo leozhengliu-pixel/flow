@@ -73,4 +73,24 @@ describe('useWorkspaceRealtime', () => {
     unmount()
     expect(FakeEventSource.all[1].closed).toBe(true)
   })
+
+  it('applies a burst of self-contained issue patches in one task, but yields around events that fetch', async () => {
+    const order: string[] = []
+    const onRemoteSync = vi.fn(async (event: { id: string }) => { order.push(event.id) })
+    renderHook(() => useWorkspaceRealtime({ workspaceKey: 'acme', viewerId: 'u1', route: '/acme', onRemoteSync }))
+    const stream = FakeEventSource.all[0]
+    const patch = (id: string) => stream.emit(id, { type: 'issue.updated', aggregateId: id, payload: { issue: { id, identifier: 'A-1' } }, clientId: 'other' })
+    act(() => {
+      patch('p1'); patch('p2'); patch('p3')
+      stream.emit('comment_1', { type: 'label.created', aggregateId: 'x', clientId: 'other' })
+      patch('p4')
+      // A macrotask queued behind the drain: it only runs once the drain yields.
+      setTimeout(() => order.push('yield'), 80)
+    })
+    await act(async () => { await vi.advanceTimersByTimeAsync(80) })
+    // The three patches ran back to back (before the queued macrotask); the next, non-patch event waited for a new task.
+    expect(order).toEqual(['p1', 'p2', 'p3', 'yield'])
+    await act(async () => { await vi.advanceTimersByTimeAsync(10) })
+    expect(order).toEqual(['p1', 'p2', 'p3', 'yield', 'comment_1', 'p4'])
+  })
 })

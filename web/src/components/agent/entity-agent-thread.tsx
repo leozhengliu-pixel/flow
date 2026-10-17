@@ -4,6 +4,7 @@ import { AgentElicitation } from './agent-elicitation'
 import { AgentElicitationResponseQueue } from './agent-elicitation-response-queue'
 import { summarizeElicitationQueue } from './agent-elicitation-queue-model'
 import { AgentRichText } from './agent-rich-text'
+import { looksLikeMarkdown } from '@/components/editor/markdown-paste'
 import { AgentAnswerText, AgentReferencedResources, AgentSuggestionChips } from './agent-answer'
 import { AgentChangeCards } from './agent-change-cards'
 import { agentChangeEntityKeys } from './agent-change-model'
@@ -311,10 +312,12 @@ export function EntityAgentThread({
                 )}
                 {!isUser && renderAssistantBody ? null : isUser && hasAgentBlocks(message.content) ? (
                   <div className={`${styles.messageDocument} agent-chat-document`} aria-label={t('Your message')}>
-                    <AgentContentWithBlocks content={message.content} renderText={text => mentionData && message.mentions?.length ? <MentionedText data={mentionData} mentions={message.mentions} text={text}/> : <AgentRichText ariaLabel={t('Your message')} content={text}/>}/>
+                    <AgentContentWithBlocks content={message.content} renderText={text => mentionData && message.mentions?.length && !isFormattedText(text) ? <MentionedText data={mentionData} mentions={message.mentions} text={text}/> : <SentRichText data={mentionData} mentions={message.mentions} text={text} ariaLabel={t('Your message')}/>}/>
                   </div>
                 ) : isUser && splitAgentQuote(message.content).quote !== undefined ? (
                   <p className={`${styles.messageDocument} agent-chat-document`} aria-label={t('Your message')}><QuotedText data={mentionData} mentions={message.mentions} content={message.content}/></p>
+                ) : message.content && isUser && mentionData && isFormattedText(message.content) ? (
+                  <SentRichText ariaLabel={t('Your message')} className={`${styles.messageDocument} agent-chat-document`} data={mentionData} mentions={message.mentions} text={message.content}/>
                 ) : message.content && isUser && mentionData && (message.mentions?.length || /@[A-Z][A-Z0-9]*-\d+/.test(message.content)) ? (
                   <p className={`${styles.messageDocument} agent-chat-document`} aria-label={t('Your message')}><MentionedText data={mentionData} mentions={message.mentions} text={message.content}/></p>
                 ) : answer ? answer.markdown && (
@@ -494,6 +497,16 @@ function QuotedText({ data, mentions, content }: { data?: BootstrapData; mention
     {text ? ' ' : null}
     {text && (data ? <MentionedText data={data} mentions={mentions} text={text}/> : text)}
   </>
+}
+
+/** Pasted formatting (links, bold, lists, code) in a sent message. */
+const isFormattedText = (text: string) => looksLikeMarkdown(text) || /\[[^\]\n]+\]\([^)\s]+\)|`[^`\n]+`|\*\*[^*\n]+\*\*/.test(text)
+
+/** A sent message rendered as Markdown; its issue / person mentions become the entity chips of an answer. */
+function SentRichText({ ariaLabel, className, data, mentions, text }: { ariaLabel: string; className?: string; data?: BootstrapData; mentions?: AgentMessage['mentions']; text: string }) {
+  if (!data) return <AgentRichText ariaLabel={ariaLabel} className={className} content={text}/>
+  const plain = (mentions ?? []).reduce((result, item) => item.type === 'issue' ? result.split(`@${item.label}`).join(item.label) : result, text)
+  return <AgentAnswerText ariaLabel={ariaLabel} className={className ?? 'agent-rich-text'} data={data} markdown={plain}/>
 }
 
 /** A sent message with its @-mentions shown as chips (stored mentions, or issue identifiers). */

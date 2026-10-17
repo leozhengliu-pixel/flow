@@ -211,11 +211,18 @@ describe('hotkey guards', () => {
   })
 
   it('keeps the floating chat hotkeys inside the panel', async () => {
+    const user = userEvent.setup()
+    render(<button type="button">Outside chat</button>)
     renderPanel()
     await screen.findByRole('button', { name: 'Chat options' })
-    fireEvent.keyDown(document.body, deleteKey)
+    // Move focus outside explicitly: the composer may autofocus while the panel loads.
+    const outside = screen.getByRole('button', { name: 'Outside chat' })
+    await user.click(outside)
+    expect(outside).toHaveFocus()
+    await user.keyboard('{Control>}{Delete}{/Control}')
     expect(api.deleteAgentSession).not.toHaveBeenCalled()
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Chat options' }), deleteKey)
+    screen.getByRole('button', { name: 'Chat options' }).focus()
+    await user.keyboard('{Control>}{Delete}{/Control}')
     await waitFor(() => expect(api.deleteAgentSession).toHaveBeenCalledWith('session-1'))
   })
 })

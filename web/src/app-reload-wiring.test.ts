@@ -13,7 +13,7 @@ async function appSource() {
 describe('App reload wiring', () => {
   it('uses the workspace bootstrap only for boot, retry, realtime resync and the issue history fallback', async () => {
     const lines = (await appSource()).split('\n')
-    const allowed = [/const load = async/, /promise: fetchBootstrap\(requestedWorkspaceKey/, /fetchVisibleIssueIds\(workspace/, /const refreshActivity = async/]
+    const allowed = [/const load = async/, /createBootstrapRequest\(requestKey/, /settleBootstrapRequest\(request/, /fetchVisibleIssueIds\(workspace/, /const refreshActivity = async/]
     const offenders = lines.flatMap((line, index) => {
       if (!line.includes('fetchBootstrap(')) return []
       const context = lines.slice(Math.max(0, index - 20), index + 1).join('\n')

@@ -68,11 +68,15 @@ function AgentReferencedIssueRow({ data, reference }: { data: BootstrapData; ref
     <li>
       <AgentEntityHover data={data} entity={state.entity}>
         <AppLink className={styles.referenceRow} data-agent-entity="issue" data-i18n-ignore href={agentEntityHref(data, state.entity)}>
+          <span aria-hidden="true"/>
           <PriorityIcon priority={issue.priority} size={14}/>
           <span className={styles.entityIdentifier}>{issue.identifier}</span>
-          <StatusIcon size={14} state={issue.state}/>
-          <span className={styles.referenceTitle}>{issue.title}</span>
+          <span className={styles.referenceTitleCell}>
+            <StatusIcon size={14} state={issue.state}/>
+            <span className={styles.referenceTitle}>{issue.title}</span>
+          </span>
           {assignee ? <UserAvatar avatarUrl={issue.assignee?.avatarUrl} className={styles.referenceAvatar} name={assignee}/> : <NoAssigneeIcon className={styles.dim} size={16}/>}
+          <span aria-hidden="true"/>
         </AppLink>
       </AgentEntityHover>
     </li>

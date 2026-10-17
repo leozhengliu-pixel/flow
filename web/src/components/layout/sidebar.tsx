@@ -47,8 +47,11 @@ import { teamHomeTabPath, useTeamHomeTab } from '@/lib/team-home-tab';
 import { toast } from "@/lib/toast";
 import { favoriteResourceKey, patchFavorite, toggleFavoriteFor, toggleTabFavoriteFor } from "@/lib/favorites";
 import { FavoriteTabIcon } from "./favorite-tab-badge";
+import { SidebarItemMenu } from "./sidebar-item-menu";
+import { SidebarItemMenuContext, type SidebarItemMenuValue } from "./sidebar-item-menu-context";
 import {
   createFavoriteFolder,
+  batchNotifications,
   deleteFavoriteFolder,
   updateFavorite,
   updateFavoriteFolder,
@@ -120,6 +123,8 @@ import {
   useSidebarCustomizationState,
   workspaceFeatureEnabled,
   type SidebarBadgeStyle,
+  resolveSidebarBadge,
+  sidebarVisibilityOptions,
   type SidebarEntry,
   type SidebarGroup,
   type SidebarOrder,
@@ -129,7 +134,7 @@ import {
 
 import "./sidebar.css";
 import { pulseSidebarPath, usePulseUnread } from "@/components/pulse/pulse-unread";
-import { useInboxUnread } from "@/lib/inbox-unread";
+import { inboxUnread as inboxUnreadStore, useInboxUnread } from "@/lib/inbox-unread";
 import { pulseAudio, usePulseAudio } from "@/lib/pulse-audio";
 
 export type PageId =
@@ -222,10 +227,12 @@ export function Sidebar({
     ),
   );
   const {
+    badgeModes,
     badgeStyle,
     order: sidebarOrder,
     preferences,
     reorder: reorderSidebar,
+    setBadgeMode,
     setBadgeStyle,
     setPreferences,
   } = useSidebarCustomizationState(data.viewer.id);
@@ -308,6 +315,22 @@ export function Sidebar({
                 loop.status === "draft" && loop.creator?.id === data.viewer.id,
             ).length
           : 0;
+  const itemBadge = (entry: SidebarEntry) => resolveSidebarBadge(badgeModes[entry], badgeStyle);
+  const markInboxRead = () => {
+    void batchNotifications("markAllRead")
+      .then(() => inboxUnreadStore.schedule(workspaceSlug, 0))
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Could not mark notifications as read"));
+  };
+  const itemMenu: SidebarItemMenuValue = {
+    preferences,
+    badgeModes,
+    defaultBadgeStyle: badgeStyle,
+    setVisibility: (entry, visibility) => setPreferences((current) => ({ ...current, [entry]: visibility })),
+    setBadgeMode,
+    onCustomize: () => setCustomizeOpen(true),
+    onMarkAllRead: markInboxRead,
+    agentHref: agentPath(workspaceSlug),
+  };
   const activeWorkspaceEntry: SidebarEntry | undefined =
     selectedNavigationPath === membersPath(workspaceSlug)
       ? "members"
@@ -474,6 +497,8 @@ export function Sidebar({
   const personalNavigation: Record<SidebarEntry, ReactNode> = {
     inbox: (
       <Nav
+        entry="inbox"
+        badgeStyle={itemBadge("inbox")}
         badge={inboxUnread}
         icon={<FlowIcon name="Inbox" />}
         label="Inbox"
@@ -483,6 +508,8 @@ export function Sidebar({
     ),
     reviews: data.userSettings[data.viewer.id]?.codeReviewsEnabled !== false ? (
       <Nav
+        entry="reviews"
+        badgeStyle={itemBadge("reviews")}
         badge={reviewCount}
         active={page === "reviews"}
         icon={<ReviewsIcon />}
@@ -493,6 +520,7 @@ export function Sidebar({
     ) : null,
     myIssues: (
       <Nav
+        entry="myIssues"
         active={page === "issue-detail" && navigationRoute.kind === 'my-issues'}
         icon={<MyIssuesIcon />}
         label="My issues"
@@ -502,18 +530,22 @@ export function Sidebar({
     ),
     pulse: pulseAvailable ? (
       <Nav
+        entry="pulse"
+        badgeStyle={itemBadge("pulse")}
         accessory={<PulseAudioMiniPlayer />}
         badge={pulseUnreadCount}
         badgeLabel={translate(pulseUnreadCount === 1 ? "{count} new pulse item" : "{count} new pulse items").replace("{count}", String(pulseUnreadCount))}
         icon={<PulseIcon />}
         label="Pulse"
         matchPath={pulsePath(workspaceSlug)}
-        to={pulseSidebarPath(workspaceSlug, pulseUnreadCount)}
+        to={pulseSidebarPath(workspaceSlug, pulseUnreadCount, page === "pulse")}
         onClick={close}
       />
     ) : null,
     drafts: (
       <Nav
+        entry="drafts"
+        badgeStyle={itemBadge("drafts")}
         badge={badgeCount("drafts")}
         active={page === "drafts"}
         icon={<DraftIcon />}
@@ -524,6 +556,7 @@ export function Sidebar({
     ),
     agent: featureEnabled("ai") ? (
       <Nav
+        entry="agent"
         icon={<AgentIcon />}
         label="Agent"
         to={agentPath(workspaceSlug)}
@@ -543,6 +576,7 @@ export function Sidebar({
     initiatives:
       data.viewerRole === "guest" || !featureEnabled("initiatives") ? null : (
         <Nav
+          entry="initiatives"
           active={page === "initiative-detail"}
           icon={<InitiativeIcon />}
           label="Initiatives"
@@ -552,6 +586,7 @@ export function Sidebar({
       ),
     projects: (
       <Nav
+        entry="projects"
         active={page === "project-detail"}
         icon={<FlowIcon name="Project" />}
         label="Projects"
@@ -562,6 +597,7 @@ export function Sidebar({
     views:
       data.viewerRole === "guest" ? null : (
         <Nav
+          entry="views"
           icon={<FlowIcon name="CustomView" />}
           label="Views"
           to={workspaceViewsPath(workspaceSlug)}
@@ -570,6 +606,7 @@ export function Sidebar({
       ),
     members: (
       <Nav
+        entry="members"
         active={page === "members"}
         icon={<SidebarMembersIcon />}
         label="Members"
@@ -581,6 +618,7 @@ export function Sidebar({
       data.viewerRole === "guest" ||
       !featureEnabled("customer-requests") ? null : (
         <Nav
+          entry="customers"
           active={page === "customers"}
           icon={<CustomersIcon />}
           label="Customers"
@@ -590,6 +628,7 @@ export function Sidebar({
       ),
     teams: (
       <Nav
+        entry="teams"
         active={page === "teams"}
         icon={<FlowIcon name="Team" />}
         label="Teams"
@@ -599,6 +638,7 @@ export function Sidebar({
     ),
     releases: featureEnabled("releases") ? (
       <Nav
+        entry="releases"
         active={page === "releases"}
         icon={<ReleasesIcon />}
         label="Releases"
@@ -608,6 +648,7 @@ export function Sidebar({
     ) : null,
     loops: featureEnabled("loops") ? (
       <Nav
+        entry="loops"
         active={page === "loops"}
         icon={<LoopsIcon />}
         label="Loops"
@@ -631,7 +672,7 @@ export function Sidebar({
         aria-label="Close sidebar"
         onClick={layout.close}
       />
-      <SidebarRouteContext.Provider value={selectedNavigationPath}><div className="sidebar-layout" onPointerEnter={layout.onEdgeEnter} onPointerLeave={layout.clearHover}>
+      <SidebarRouteContext.Provider value={selectedNavigationPath}><SidebarItemMenuContext.Provider value={itemMenu}><div className="sidebar-layout" onPointerEnter={layout.onEdgeEnter} onPointerLeave={layout.clearHover}>
       <motion.aside
         ref={layout.surfaceRef}
         className={`sidebar${layout.floating ? " is-floating" : ""}${layout.resizing ? " is-resizing" : ""}`}
@@ -641,7 +682,6 @@ export function Sidebar({
         inert={!layout.visible || undefined}
         aria-hidden={!layout.visible || undefined}
         aria-label="Workspace navigation"
-        data-badge-style={badgeStyle}
         data-sidebar-width={layout.width}
         data-sidebar-surface
       >
@@ -825,7 +865,7 @@ export function Sidebar({
         /></FlowTooltip>}
       </motion.aside>
       {layout.collapsed && !layout.compact && !layout.floatingOpen && <button className="sidebar-reveal-edge" type="button" aria-label="Expand sidebar" onClick={layout.onResizeClick} onPointerDown={layout.onResizeStart} />}
-      </div></SidebarRouteContext.Provider>
+      </div></SidebarItemMenuContext.Provider></SidebarRouteContext.Provider>
 
       <SidebarCustomization
         open={customizeOpen}
@@ -1795,9 +1835,11 @@ function TryItem({
   return (
     <div className="try-item">
       {to ? (
-        <NavLink to={to} onClick={onClick}>
-          {content}
-        </NavLink>
+        <SidebarItemMenu href={to}>
+          <NavLink to={to} onClick={onClick}>
+            {content}
+          </NavLink>
+        </SidebarItemMenu>
       ) : (
         <button type="button" onClick={onClick}>
           {content}
@@ -1816,6 +1858,8 @@ function TryItem({
 }
 
 function Nav({
+  entry,
+  badgeStyle,
   icon,
   label,
   badge,
@@ -1827,6 +1871,10 @@ function Nav({
   onClick,
   to,
 }: {
+  /** The sidebar entry this item is, for its right-click menu. */
+  entry?: SidebarEntry;
+  /** How the unread badge draws: a count, a dot, or not at all. */
+  badgeStyle?: SidebarBadgeStyle | "none";
   icon: ReactElement;
   label: string;
   badge?: number;
@@ -1848,8 +1896,8 @@ function Nav({
       <span className="nav-icon">{icon}</span>
       <span className="nav-label">{label}</span>
       {accessory}
-      {badge ? (
-        <span className="nav-unread" aria-label={badgeLabel ?? `${badge} unread`}>
+      {badge && badgeStyle !== "none" ? (
+        <span className="nav-unread" data-badge-style={badgeStyle ?? "count"} aria-label={badgeLabel ?? `${badge} unread`}>
           {badge > 99 ? "99+" : badge}
         </span>
       ) : count ? (
@@ -1858,18 +1906,16 @@ function Nav({
     </>
   );
   const activePath = (matchPath ?? to ?? "").toLowerCase();
-  if (!to)
-    return (
-      <button
-        type="button"
-        className={`nav-item ${active ? "active" : ""}`}
-        title={label}
-        onClick={onClick}
-      >
-        {content}
-      </button>
-    );
-  return (
+  const item = !to ? (
+    <button
+      type="button"
+      className={`nav-item ${active ? "active" : ""}`}
+      title={label}
+      onClick={onClick}
+    >
+      {content}
+    </button>
+  ) : (
     <NavLink
       end={false}
       className={({ isActive }) =>
@@ -1881,6 +1927,11 @@ function Nav({
     >
       {content}
     </NavLink>
+  );
+  return (
+    <SidebarItemMenu entry={entry} href={to}>
+      {item}
+    </SidebarItemMenu>
   );
 }
 
@@ -1894,16 +1945,18 @@ function SubNav({
   onClick?: () => void;
 }) {
   return (
-    <NavLink
-      end={false}
-      className={({ isActive }) =>
-        `nav-item team-sub-link ${isActive ? "active" : ""}`
-      }
-      to={to}
-      onClick={onClick}
-    >
-      <span className="nav-label">{label}</span>
-    </NavLink>
+    <SidebarItemMenu href={to}>
+      <NavLink
+        end={false}
+        className={({ isActive }) =>
+          `nav-item team-sub-link ${isActive ? "active" : ""}`
+        }
+        to={to}
+        onClick={onClick}
+      >
+        <span className="nav-label">{label}</span>
+      </NavLink>
+    </SidebarItemMenu>
   );
 }
 
@@ -2099,22 +2152,18 @@ function CustomizationGroup({
             locale === "zh-CN"
               ? `${localizedName}的可见性`
               : `${name} visibility`;
-          const visibilityOptions =
-            id === "inbox"
-              ? [
-                  { value: "always", label: t("Always show") },
-                  { value: "badged", label: t("Show when badged") },
-                ]
-              : ["reviews", "pulse", "drafts"].includes(id)
-                ? [
-                    { value: "always", label: t("Always show") },
-                    { value: "badged", label: t("Show when badged") },
-                    { value: "never", label: t("Don't show") },
-                  ]
-                : [
-                    { value: "always", label: t("Always show") },
-                    { value: "never", label: t("Don't show") },
-                  ];
+          const visibilityOptions = sidebarVisibilityOptions(id).map(
+            (value) => ({
+              value,
+              label: t(
+                value === "always"
+                  ? "Always show"
+                  : value === "badged"
+                    ? "Show when badged"
+                    : "Don't show",
+              ),
+            }),
+          );
           return (
             <div
               className="sidebar-customize-row"

@@ -457,11 +457,11 @@
 }
 .sidebar-badge-value { display: flex; align-items: center; gap: 7px; }
 /* The reference app: "Count" is a plain muted number, "Dot" an 8px grey dot. */
-.badge-preview { min-width: 0; display: inline-block; color: var(--sidebar-count-fg); font-size: 11px; font-weight: 450; font-variant-numeric: tabular-nums; }
-.badge-preview.is-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--theme-text-tertiary); }
+.badge-preview { min-width: 0; display: inline-block; color: var(--sidebar-count-fg); font-size: 12px; font-weight: 450; font-variant-numeric: tabular-nums; }
+.badge-preview.is-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sidebar-badge-dot); }
 /* The reference app draws every sidebar count the same way: a plain muted number 10px from the edge. */
-.nav-unread,.nav-count{margin-left:auto;margin-right:2px;color:var(--sidebar-count-fg);font-size:11px;font-weight:450;font-variant-numeric:tabular-nums}
-.sidebar[data-badge-style="dot"] .nav-unread{width:8px;height:8px;overflow:hidden;color:transparent;font-size:0;border-radius:50%;background:var(--theme-text-tertiary)}
+.nav-unread,.nav-count{margin-left:auto;margin-right:2px;color:var(--sidebar-count-fg);font-size:12px;font-weight:450;font-variant-numeric:tabular-nums}
+.nav-unread[data-badge-style="dot"]{width:8px;height:8px;overflow:hidden;color:transparent;font-size:0;border-radius:50%;background:var(--sidebar-badge-dot)}
 .dialog-content.sidebar-shortcuts-dialog{box-sizing:border-box;left:auto;right:12px;top:8px;bottom:8px;transform:none;width:min(326px,calc(100vw - 24px));height:auto;display:flex;flex-direction:column;overflow:hidden;padding:0;border-radius:12px;background:var(--theme-surface-2);color:var(--theme-text-primary)}
 .sidebar-shortcuts-dialog h2{height:50px;flex:0 0 50px;display:flex;align-items:center;margin:0;padding:0 16px;font-size:14px;font-weight:600;line-height:20px}
 .sidebar-shortcuts-dialog>.dialog-close{top:11px;right:12px;width:28px;height:28px;border-radius:6px}
@@ -820,3 +820,35 @@
 .nav-audio-toggle:hover{background:var(--theme-control-hover)}
 .nav-audio-toggle[data-playing]{background:var(--accent-primary);color:var(--on-accent)}
 .nav-audio-toggle+.nav-unread{margin-left:6px}
+
+/* Sidebar item context menu: 175px wide, 32px rows inset 6px with 8px corners, 12px gap rows around separators. */
+.sidebar-item-menu { width: 175px; min-width: 175px; max-width: calc(100vw - 16px); }
+.sidebar-item-menu [role="menuitem"],
+.sidebar-item-menu [role="menuitemradio"] { gap: 8px; }
+.sidebar-item-menu [role="menuitemradio"] {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 0;
+  outline: 0;
+  font: 450 13px/19.5px var(--font);
+  color: var(--theme-text-primary);
+}
+.sidebar-item-menu [role="menuitemradio"]::before { content: ""; position: absolute; inset: 0 6px; z-index: -1; border-radius: 8px; }
+.sidebar-item-menu [role="menuitemradio"][data-highlighted]::before { background: var(--theme-surface-active); }
+.sidebar-item-menu-trigger { display: contents; }
+.sidebar-item-menu [role="menuitem"] > svg.sidebar-item-menu-icon { width: 16px; height: 16px; flex: 0 0 16px; color: var(--inbox-filter-muted); fill: none; stroke: currentColor; stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
+.sidebar-item-submenu { padding: 0; }
+.sidebar-item-submenu [role="group"] { padding: 6px 0; }
+.sidebar-item-menu-filter { height: 37px; display: flex; align-items: center; padding: 0 14px; border-bottom: 1px solid var(--theme-border); }
+.sidebar-item-menu-filter input { width: 100%; min-width: 0; padding: 0; border: 0; outline: 0; background: transparent; color: var(--theme-text-primary); font: 13px var(--font); }
+.sidebar-item-menu-filter input::placeholder { color: var(--theme-text-tertiary); }
+.sidebar-item-menu-end { width: 16px; height: 16px; margin-left: auto; display: grid; place-items: center; color: var(--theme-text-primary); }
+.sidebar-item-menu-end svg { width: 16px; height: 16px; stroke-width: 1.6; }
+.sidebar-item-menu-end .badge-preview { font-size: 12px; line-height: 15px; }
+.sidebar-item-menu [role="menuitemradio"] > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:root[data-theme="light"] .sidebar-item-menu [role="menuitemradio"] { color: var(--inbox-filter-text); }
