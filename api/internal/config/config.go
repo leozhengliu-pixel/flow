@@ -34,6 +34,8 @@ type Config struct {
 	WebSearch            WebSearchConfig
 	Telemetry            TelemetryConfig
 	Retention            RetentionConfig
+	// Coding configures coding sessions (coding.go).
+	Coding CodingConfig
 	// Warnings lists settings Load adjusted (for example a feature turned
 	// off for a missing credential); the server logs them at startup.
 	Warnings []string
@@ -253,6 +255,7 @@ func Load() (Config, error) {
 		WebSearch: WebSearchConfig{Provider: strings.ToLower(value("FLOW_WEB_SEARCH_PROVIDER", "")), APIKey: secret("FLOW_WEB_SEARCH_API_KEY"), URL: strings.TrimRight(value("FLOW_WEB_SEARCH_URL", ""), "/")},
 		Telemetry: TelemetryConfig{Enabled: boolean("FLOW_TELEMETRY_ENABLED", false) && !boolean("OTEL_SDK_DISABLED", false), ServiceName: value("OTEL_SERVICE_NAME", "flow-api"), Environment: value("FLOW_ENVIRONMENT", "production"), Endpoint: value("OTEL_EXPORTER_OTLP_ENDPOINT", ""), TraceEndpoint: value("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", ""), MetricEndpoint: value("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "")},
 	}
+	config.Coding = loadCoding(appURL)
 	config.resolveTTSCredential()
 	config.resolveAgentMedia()
 	config.clampRetention()
@@ -406,6 +409,9 @@ func (c Config) Validate() error {
 		return fmt.Errorf("FLOW_TTS_BASE_URL must be an http(s) URL")
 	}
 	if err := c.WebSearch.Validate(); err != nil {
+		return err
+	}
+	if err := c.Coding.Validate(); err != nil {
 		return err
 	}
 	if c.Telemetry.Enabled && c.Telemetry.Endpoint == "" && (c.Telemetry.TraceEndpoint == "" || c.Telemetry.MetricEndpoint == "") {

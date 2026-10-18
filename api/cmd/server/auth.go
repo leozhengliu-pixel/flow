@@ -429,6 +429,10 @@ func publicAuthPath(path string) bool {
 		// Agent workers authenticate with the worker secret or a run token (agent_runtime_api.go).
 		return true
 	}
+	if strings.HasPrefix(path, "/internal/coding-runtime/") || strings.HasPrefix(path, "/internal/llm-proxy/") {
+		// Sandboxes authenticate with their sandbox token (coding_runtime_api.go, coding_llm_proxy.go).
+		return true
+	}
 	if path == "/api/connector-oauth/callback" || path == "/api/connector-oauth/client-metadata" || path == "/mcp" || path == "/mcp/readonly" || path == "/oauth/register" || path == "/oauth/token" || path == "/oauth/revoke" || path == "/oauth/introspect" || strings.HasPrefix(path, "/.well-known/oauth-") || strings.HasPrefix(path, "/api/mcp/uploads/") || strings.HasPrefix(path, "/api/files/uploads/") || strings.HasPrefix(path, "/api/files/signed/") {
 		return true
 	}
