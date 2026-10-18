@@ -27,8 +27,8 @@ install it from the folder (or from a tarball made with `npm pack`):
 
 ```bash
 cd sdk/typescript && npm install && npm run build
-npm pack                      # produces flow-sdk-0.3.0.tgz
-npm install ./flow-sdk-0.3.0.tgz   # in your project
+npm pack                      # produces flow-sdk-0.1.0.tgz
+npm install ./flow-sdk-0.1.0.tgz   # in your project
 ```
 
 ```ts

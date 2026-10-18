@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Flow API",
-    "version": "0.3.0",
+    "version": "0.1.0",
     "summary": "REST API of the Flow issue tracker",
     "description": "Flow's HTTP API. Typed operations (with request and response schemas reflected from the server's Go types) form the public contract; every other route is listed as an inventory entry that may change.\n\nAuthenticate with a personal API key or an OAuth access token in `Authorization: Bearer <token>`; tokens select their workspace. Browser sessions send the `X-Workspace-Key` header.\nLists return connections (`nodes`, `pageInfo`) paged with `first`/`after` or `last`/`before`, ordered newest first by `orderBy` (createdAt or updatedAt), filtered with a `filter` object.\nRoutes marked `x-flow-internal` serve the web app and are not part of the contract. Payloads Flow sends to webhook endpoints are described in the `webhooks` section.\nErrors use one envelope (`error`, `code`, `type`, `requestId`). Requests are rate limited per user or application (X-RateLimit-* headers, HTTP 429 with type RATELIMITED).\nThe API is unversioned: changes are additive, deprecated operations are flagged and kept for at least six months. See docs/api.md.",
     "license": {

@@ -7,7 +7,35 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-## [0.3.0] - 2026-10-14
+## [0.1.0] - 2026-10-17
+
+The release series has been reset to v0.1.0 using the current main branch.
+Earlier release tags and GitHub Releases have been removed. The development
+history below is retained for reference.
+
+### Added
+
+- Agent image, video and file attachments, on-demand document reading and
+  media transcription, rich clipboard paste, chat renaming and delete with Undo.
+- Lean bootstrap responses, resumable realtime change cursors, parallel route
+  loading, smoother issue lists, and static asset caching.
+- Pulse initiative updates, unread indicators and comment attachments.
+- Updated sidebar menus and settings pages, including Billing and Usage & limits.
+
+### Fixed
+
+- Missing static assets return 404 and stale chunks trigger a guarded reload.
+- Plain-text Markdown snippets preserve bare angle brackets.
+- API inventory and SDK generated contracts match the server routes and types.
+- PostgreSQL issue-list migration compatibility and asynchronous test races.
+
+### Security
+
+- Restricted authentication redirects, sanitized pasted HTML, removed browser
+  persistence of API key secrets, and hardened public outbound requests.
+- Correct JSON escaping, Unicode conversion bounds and SDK placeholder parsing.
+
+## Archived 0.3.0 - 2026-10-14
 
 ### Added
 
@@ -78,7 +106,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   written workspace; it is now scoped to the viewer's own workspace.
 - Attach-from-URL can no longer reach internal addresses.
 
-## [0.2.0] - 2026-10-04
+## Archived 0.2.0 - 2026-10-04
 
 ### Added
 
@@ -118,7 +146,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - MCP OAuth tokens accumulating as API keys; `save_team` demoting owners;
   theme reverting during slow settings saves.
 
-## [0.1.0] - 2026-08-30
+## Archived 0.1.0 - 2026-08-30
 
 ### Fixed
 
