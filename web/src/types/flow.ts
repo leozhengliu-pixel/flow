@@ -3157,3 +3157,5 @@ export interface PulseCapabilities {
   aiSummaries: boolean;
   audio: boolean;
 }
+
+export type * from "./coding-sessions";

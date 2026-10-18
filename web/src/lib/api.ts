@@ -4413,3 +4413,5 @@ export function fetchUpdateDiffPreview(
 ): Promise<{ diff?: import("@/types/flow").PulseDiff; snapshot?: unknown }> {
   return request(`/api/${kind === "project" ? "projects" : "initiatives"}/${encodeURIComponent(id)}/updates/diff-preview`, { signal });
 }
+
+export * from "./coding-sessions-api";

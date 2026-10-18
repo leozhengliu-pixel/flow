@@ -42,6 +42,8 @@ var (
 
 type server struct {
 	store *store.SQLiteStore
+	// coding is the coding-session runtime (coding_runtime.go).
+	coding *codingServices
 	// agentAutoTitle names new Agent chats with a small extra model call (off in test fixtures).
 	agentAutoTitle                 bool
 	uploadPath                     string
@@ -181,7 +183,9 @@ func main() {
 	}()
 	shutdownSignal, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
+	s.initCoding(applicationConfig.Coding)
 	s.ensureBuiltinApplications(shutdownSignal)
+	go s.runCoding(shutdownSignal)
 	go s.runApplicationAgentWorker(shutdownSignal)
 	go s.runRecurringIssueScheduler(shutdownSignal)
 	go s.runStorageMaintenance(shutdownSignal, applicationConfig.Retention.DomainEvents)
@@ -930,6 +934,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/events", s.events)
 	mux.HandleFunc("GET /uploads/{name}", s.serveUploadOrAsset)
 	s.registerPublicAPIRoutes(mux)
+	s.registerCodingRoutes(mux)
 
 	handler := s.withStaticFiles(boundedLegacyIssueWrites(s.limitFailedAuthentication(s.authenticate(s.limitAuthenticatedAPI(mux)))))
 	return requestLog(s.cors(compressAPIResponses(s.signedFileURLs(apiErrorEnvelope(requestBodyBudget(handler))))))
