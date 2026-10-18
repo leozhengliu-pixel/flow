@@ -3,7 +3,7 @@
 //   node sdk/typescript/scripts/generate.mjs
 
 /** Version of the OpenAPI document these types were generated from. */
-export const SPEC_VERSION = "0.3.0"
+export const SPEC_VERSION = "0.1.0"
 
 /** ActorBot attributes a record to an OAuth application ("<User> via <App>"). It is stored on issues, comments, attachments, documents and activity when the request was authenticated with an OAuth token: - actor=user token: the record's user is the person who authorized the application; ActorBot names the application. - actor=app token with createAsUser: the record's user is the application user; UserDisplayName / UserAvatarURL name the external person the application acted for. - Flow's agent (Type "agent"): the record's user is the person the agent worked for (in-app chat) or the agent's own app user (comment threads and delegation); OnBehalfOfID / OnBehalfOfName name the person either way, so history reads "Flow <did X> on behalf of <User>". */
 export interface ActorBot {
