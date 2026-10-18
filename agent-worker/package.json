@@ -1,6 +1,6 @@
 {
   "name": "@flow/agent-worker",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Flow agent runtime worker on the OpenAI Agents SDK (spike)",
   "type": "module",
