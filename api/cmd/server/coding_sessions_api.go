@@ -39,6 +39,8 @@ func (s *server) registerCodingSessionRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/coding/sessions/{id}/dismiss", s.dismissCodingSession)
 	mux.HandleFunc("POST /api/coding/sessions/{id}/pull-request", s.createCodingSessionPullRequest)
 	mux.HandleFunc("GET /api/coding/sessions/{id}/sandboxes/{sandboxId}/logs", s.getCodingSandboxLogs)
+	mux.HandleFunc("GET /api/coding/sessions/{id}/diff", s.getCodingSessionDiff)                  // session page
+	mux.HandleFunc("POST /api/coding/sessions/{id}/subscription", s.setCodingSessionSubscription) // session page
 }
 
 // codingErrorStatus maps a coding error to an HTTP status and a stable code.
@@ -491,16 +493,27 @@ func (s *server) promptCodingSession(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Prompt      string   `json:"prompt"`
 		Attachments []string `json:"attachments"`
+		// Files are composer uploads (session page); they are signed for the runner.
+		Files []domain.AgentMessageAttachment `json:"files"`
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 80<<10)
+	r.Body = http.MaxBytesReader(w, r.Body, 96<<10)
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	files, signed, err := s.codingPromptFiles(r, viewer, input.Files)
+	if err != nil {
+		writeCodingError(w, err)
+		return
+	}
+	input.Attachments = append(input.Attachments, signed...)
 	if len(input.Attachments) > 20 {
 		writeCodingError(w, fmt.Errorf("%w: at most 20 attachments", coding.ErrInvalidInput))
 		return
 	}
-	updated, err := s.coding.service.Prompt(r.Context(), viewer.workspace, session.ID, coding.PromptInput{Prompt: input.Prompt, AuthorID: viewer.user.ID, Attachments: input.Attachments})
+	if strings.TrimSpace(input.Prompt) == "" && len(files) > 0 {
+		input.Prompt = "See the attached files."
+	}
+	updated, err := s.coding.service.Prompt(r.Context(), viewer.workspace, session.ID, coding.PromptInput{Prompt: input.Prompt, AuthorID: viewer.user.ID, Attachments: input.Attachments, Files: files})
 	s.respondCodingSession(w, r.Context(), viewer, updated, err)
 }
 

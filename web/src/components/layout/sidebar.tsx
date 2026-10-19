@@ -161,6 +161,7 @@ export type PageId =
   | "new-team"
   | "drafts"
   | "agent"
+  | "coding-session"
   | "loops"
   | "releases"
   | "asks"

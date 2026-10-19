@@ -281,7 +281,8 @@ function PolicyRows({ settings, update, models, status, disabled }: { settings: 
           label="Model"
           value={settings.model}
           disabled={disabled}
-          options={models_.map((option) => ({ ...option, translate: option.value === "auto" }))}
+          options={models_}
+          menuClassName="cs-model-menu"
           onChange={(model) => void update({ model })}
         />
       </CodingRow>

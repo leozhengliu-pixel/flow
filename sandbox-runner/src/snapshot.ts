@@ -1,5 +1,5 @@
 import { relative } from 'node:path'
-import { createTarZst, snapshotExcludes } from './archive.js'
+import { createTarZst, snapshotExcludes, toArchiveLayout } from './archive.js'
 import { backoffDelay, sleep } from './backoff.js'
 import type { RunnerConfig } from './config.js'
 import { baseEnv, writeRuntimeInfo } from './environment.js'
@@ -155,7 +155,7 @@ async function uploadWithRetry(deps: SnapshotDeps, snapshotId: string, uploadUrl
       if (deps.upload) return await deps.upload()
       const { paths } = deps.config
       const entries = [relative('/', paths.workspace), relative('/', paths.home)]
-      const tar = createTarZst('/', entries, snapshotExcludes(paths))
+      const tar = createTarZst('/', entries, snapshotExcludes(paths), toArchiveLayout(paths))
       const upload = deps.api.putSnapshotArchive(snapshotId, tar.stream, uploadUrl)
       await Promise.all([upload, tar.done])
       return tar.bytes()

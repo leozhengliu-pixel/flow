@@ -47,6 +47,50 @@ export function snapshotExcludes(paths: RunnerPaths): string[] {
   return out
 }
 
+/**
+ * Snapshot archives always hold the container layout: workspace/… and
+ * home/flow/… (members relative to "/"). A runner whose paths differ (the
+ * local development provider) renames its own paths to that layout when it
+ * creates an archive and back when it extracts one.
+ */
+export const ARCHIVE_WORKSPACE = 'workspace'
+export const ARCHIVE_HOME = 'home/flow'
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.[\]*^$\\,]/g, (char) => `\\${char}`)
+}
+
+function escapeReplacement(value: string): string {
+  return value.replace(/[\\&,]/g, (char) => `\\${char}`)
+}
+
+/** GNU tar --transform options renaming each `from` prefix to `to` (skipped when equal). */
+export function prefixTransforms(pairs: Array<[from: string, to: string]>): string[] {
+  const out: string[] = []
+  for (const [from, to] of pairs) {
+    if (from === to) continue
+    // The S flag leaves symlink targets alone; member names and hard link targets are renamed.
+    out.push(`--transform=s,^${escapeRegex(from)}$,${escapeReplacement(to)},S`, `--transform=s,^${escapeRegex(from)}/,${escapeReplacement(to)}/,S`)
+  }
+  return out
+}
+
+/** Renames this runner's workspace and home (relative to "/") to the archive layout. */
+export function toArchiveLayout(paths: RunnerPaths): string[] {
+  return prefixTransforms([
+    [rel(paths.workspace), ARCHIVE_WORKSPACE],
+    [rel(paths.home), ARCHIVE_HOME],
+  ])
+}
+
+/** Renames the archive layout to this runner's workspace and home (relative to "/"). */
+export function fromArchiveLayout(paths: RunnerPaths): string[] {
+  return prefixTransforms([
+    [ARCHIVE_WORKSPACE, rel(paths.workspace)],
+    [ARCHIVE_HOME, rel(paths.home)],
+  ])
+}
+
 export interface TarStream {
   stream: ReadableStream<Uint8Array>
   /** Resolves when tar exits; rejects on a fatal tar error. */
@@ -55,9 +99,9 @@ export interface TarStream {
 }
 
 /** Streams `tar --zstd -c` of `entries` (relative to `cwd`). Missing entries are skipped. */
-export function createTarZst(cwd: string, entries: string[], excludes: string[] = []): TarStream {
+export function createTarZst(cwd: string, entries: string[], excludes: string[] = [], transforms: string[] = []): TarStream {
   const present = entries.filter((entry) => existsSync(join(cwd, entry)))
-  const args = ['--zstd', '-cf', '-', '--warning=no-file-changed', '--ignore-failed-read', ...excludes.map((pattern) => `--exclude=${pattern}`), '-C', cwd]
+  const args = ['--zstd', '-cf', '-', '--warning=no-file-changed', '--ignore-failed-read', ...excludes.map((pattern) => `--exclude=${pattern}`), ...transforms, '-C', cwd]
   let stderr = ''
   let bytes = 0
   const child = spawn('tar', present.length ? [...args, '--', ...present] : [...args, '--files-from=/dev/null'], { stdio: ['ignore', 'pipe', 'pipe'] })
@@ -100,8 +144,8 @@ export async function tarZstBuffer(cwd: string, entries: string[], maxBytes: num
 }
 
 /** Unpacks a tar.zst stream into `dest`. */
-export async function extractTarZst(source: ReadableStream<Uint8Array> | Uint8Array, dest: string): Promise<void> {
-  const child = spawn('tar', ['--zstd', '-xf', '-', '-C', dest, '--no-same-owner', '--no-same-permissions', '--delay-directory-restore'], {
+export async function extractTarZst(source: ReadableStream<Uint8Array> | Uint8Array, dest: string, transforms: string[] = []): Promise<void> {
+  const child = spawn('tar', ['--zstd', '-xf', '-', '-C', dest, '--no-same-owner', '--no-same-permissions', '--delay-directory-restore', ...transforms], {
     stdio: ['pipe', 'ignore', 'pipe'],
   })
   let stderr = ''

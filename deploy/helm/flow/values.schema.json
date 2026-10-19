@@ -480,6 +480,14 @@
         "llm": {
           "type": "object",
           "properties": {
+            "openai": {
+              "type": "object",
+              "properties": {
+                "wireApi": {
+                  "enum": ["responses", "chat"]
+                }
+              }
+            },
             "timeout": {
               "type": "string",
               "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
@@ -509,6 +517,17 @@
             },
             "prices": {
               "type": "object"
+            },
+            "modelInfo": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "label": {"type": "string"},
+                  "group": {"enum": ["", "frontier", "other"]},
+                  "description": {"type": "string"}
+                }
+              }
             }
           }
         },

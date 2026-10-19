@@ -114,7 +114,7 @@ async function runMode(modeArg: string | undefined): Promise<number> {
           logger.info('no snapshot to restore')
           return 0
         }
-        await restoreSnapshot(client, snapshotId, logger, '/', archiveUrl)
+        await restoreSnapshot(client, snapshotId, logger, '/', archiveUrl, config.paths)
         return 0
       } catch (error) {
         logger.error('restore failed', { error: errorMessage(error) })
@@ -130,7 +130,7 @@ async function runMode(modeArg: string | undefined): Promise<number> {
     bootstrap = await waitForBinding(client, logger, shutdown.signal)
     if (!bootstrap) return 0
     if (bootstrap.snapshotId && !bootstrap.restored && bootstrap.mode !== 'snapshot') {
-      await restoreSnapshot(client, bootstrap.snapshotId, logger)
+      await restoreSnapshot(client, bootstrap.snapshotId, logger, '/', undefined, config.paths)
       bootstrap = { ...bootstrap, restored: true }
     }
   } else {

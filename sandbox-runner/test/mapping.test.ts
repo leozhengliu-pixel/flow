@@ -10,7 +10,10 @@ import { unwrapShell } from '../src/mapping/codex.js'
 // mapped to RunnerEvents and compared with <name>.expected.json.
 // *-recorded-* fixtures were captured from the pinned CLIs (claude-code
 // 2.1.289, codex 0.160.0, opencode 1.18.34) running against a scripted
-// fake of Flow's LLM proxy; the others follow the CLIs' documented formats.
+// fake of Flow's LLM proxy; codex-chatwire-* were captured from codex 0.160.0
+// against a real Chat Completions-only upstream (DeepSeek) through the
+// proxy's Responses→Chat translation (FLOW_CODING_LLM_OPENAI_WIRE_API=chat);
+// the others follow the CLIs' documented formats.
 // Refresh after a CLI upgrade with UPDATE_FIXTURES=1 npm test, then review the diff.
 
 const dir = join(import.meta.dirname, 'fixtures')
