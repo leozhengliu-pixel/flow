@@ -37,6 +37,13 @@ func (p *Provider) selector(filter sandbox.ListFilter) string {
 // ListManaged lists every Pod, Secret, PVC and VolumeSnapshot of this Flow
 // instance (labels flow.dev/managed-by=flow, flow.dev/instance=<id>). The
 // namespace NetworkPolicies are not listed: they are not per sandbox.
+//
+// Objects that are already being deleted are left out: a PVC held by the
+// kubernetes.io/pvc-protection finalizer until its Pod is gone, or a
+// VolumeSnapshot held by the snapshot controller's finalizers, would
+// otherwise be "deleted" again (and counted as an orphan) on every GC pass.
+// A Pod is listed again once its grace period has passed, so GC can force
+// the delete of a Pod stuck terminating on a lost node.
 func (p *Provider) ListManaged(ctx context.Context, filter sandbox.ListFilter) ([]sandbox.ManagedObject, error) {
 	options := metav1.ListOptions{LabelSelector: p.selector(filter)}
 	result := []sandbox.ManagedObject{}
@@ -45,6 +52,10 @@ func (p *Provider) ListManaged(ctx context.Context, filter sandbox.ListFilter) (
 		return nil, wrap("list pods", err)
 	}
 	for _, item := range pods.Items {
+		// A deleting Pod's deletionTimestamp is when its grace period ends.
+		if item.DeletionTimestamp != nil && p.now().Before(item.DeletionTimestamp.Time) {
+			continue
+		}
 		result = append(result, sandbox.ManagedObject{Type: TypePod, Name: item.Name, Labels: maps.Clone(item.Labels), CreatedAt: item.CreationTimestamp.Time})
 	}
 	secrets, err := p.client.CoreV1().Secrets(p.k8s.Namespace).List(ctx, options)
@@ -52,6 +63,9 @@ func (p *Provider) ListManaged(ctx context.Context, filter sandbox.ListFilter) (
 		return nil, wrap("list secrets", err)
 	}
 	for _, item := range secrets.Items {
+		if item.DeletionTimestamp != nil {
+			continue
+		}
 		result = append(result, sandbox.ManagedObject{Type: TypeSecret, Name: item.Name, Labels: maps.Clone(item.Labels), CreatedAt: item.CreationTimestamp.Time})
 	}
 	claims, err := p.client.CoreV1().PersistentVolumeClaims(p.k8s.Namespace).List(ctx, options)
@@ -59,6 +73,9 @@ func (p *Provider) ListManaged(ctx context.Context, filter sandbox.ListFilter) (
 		return nil, wrap("list pvcs", err)
 	}
 	for _, item := range claims.Items {
+		if item.DeletionTimestamp != nil {
+			continue
+		}
 		result = append(result, sandbox.ManagedObject{Type: TypePVC, Name: item.Name, Labels: maps.Clone(item.Labels), CreatedAt: item.CreationTimestamp.Time})
 	}
 	if p.Capabilities().VolumeSnapshots && p.dynamic != nil {
@@ -66,6 +83,9 @@ func (p *Provider) ListManaged(ctx context.Context, filter sandbox.ListFilter) (
 		switch {
 		case err == nil:
 			for _, item := range snapshots.Items {
+				if item.GetDeletionTimestamp() != nil {
+					continue
+				}
 				result = append(result, sandbox.ManagedObject{Type: TypeVolumeSnapshot, Name: item.GetName(), Labels: item.GetLabels(), CreatedAt: item.GetCreationTimestamp().Time})
 			}
 		case meta.IsNoMatchError(err) || apierrors.IsNotFound(err):
