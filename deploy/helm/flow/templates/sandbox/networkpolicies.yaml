@@ -1,0 +1,84 @@
+{{- if and (include "flow.coding.kubernetes" .) .Values.sandboxes.networkPolicy.enabled }}
+{{- $np := .Values.sandboxes.networkPolicy }}
+{{- $ns := include "flow.sandbox.namespace" . }}
+{{- if eq $np.manager "helm" }}
+# Sandbox Pods (flow.dev/managed-by=flow): deny all ingress and egress...
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flow-sandbox-default-deny
+  namespace: {{ $ns }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandboxes
+spec:
+  podSelector:
+    matchLabels:
+      flow.dev/managed-by: flow
+  policyTypes: [Ingress, Egress]
+---
+# ...except DNS, the Flow runtime port and the egress proxy. Pod exec goes
+# through the API server and kubelet, so no ingress rule is needed.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flow-sandbox-egress
+  namespace: {{ $ns }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandboxes
+spec:
+  podSelector:
+    matchLabels:
+      flow.dev/managed-by: flow
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.dns.namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $np.dns.podSelector | nindent 14 }}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              {{- include "flow.selectorLabels" . | nindent 14 }}
+      ports:
+        - port: {{ include "flow.runtimeContainerPort" . }}
+          protocol: TCP
+    {{- if include "flow.egress.enabled" . }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "flow.egress.selectorLabels" . | nindent 14 }}
+      ports:
+        - port: {{ .Values.egressProxy.port }}
+          protocol: TCP
+    {{- end }}
+---
+{{- end }}
+{{- if $np.namespaceDefaultDeny }}
+# Every other Pod in the namespace is isolated unless a policy allows it
+# (the egress proxy and the pre-pull DaemonSet have their own).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flow-sandbox-namespace-default-deny
+  namespace: {{ $ns }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandboxes
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+{{- end }}
+{{- end }}

@@ -1,0 +1,76 @@
+{
+  "events": [
+    {
+      "id": "e1",
+      "type": "thought",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "The user wants a hello file. I will create it with a shell command.",
+      "ephemeral": true
+    },
+    {
+      "id": "e2",
+      "type": "thought",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "I'll create the file."
+    },
+    {
+      "id": "e3",
+      "type": "action",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "action": {
+        "action": "Ran command",
+        "parameter": "echo hello > hello.txt && cat hello.txt",
+        "tool": "Bash"
+      },
+      "ephemeral": true
+    },
+    {
+      "id": "e4",
+      "type": "action",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "action": {
+        "action": "Ran command",
+        "parameter": "echo hello > hello.txt && cat hello.txt",
+        "result": "hello",
+        "tool": "Bash",
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "e5",
+      "type": "response",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "Created `hello.txt` containing a greeting.\n\nThe file prints `hello`."
+    },
+    {
+      "id": "e6",
+      "type": "usage",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "usage": {
+        "model": "claude-sonnet-4-5",
+        "inputTokens": 3000,
+        "outputTokens": 80,
+        "costUsd": 0.008579999999999999
+      }
+    }
+  ],
+  "outcome": {
+    "elicited": false,
+    "completed": true,
+    "model": "claude-sonnet-4-5",
+    "harnessSessionId": "d45c4385-3935-47ff-8907-0622d9ab302f",
+    "usage": {
+      "model": "claude-sonnet-4-5",
+      "inputTokens": 3000,
+      "outputTokens": 80,
+      "costUsd": 0.008579999999999999
+    },
+    "finalText": "Created `hello.txt` containing a greeting.\n\nThe file prints `hello`."
+  }
+}

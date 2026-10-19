@@ -52,6 +52,8 @@ import { DiffView } from './diff-view';
 import { EditableDiffView } from './editable-diff-view';
 import { PullRequestCommentActions } from './pull-request-comment-actions';
 import { PullRequestHeader } from './pull-request-header';
+// coding sessions (track G)
+import { ReviewCodingSessionActions } from '@/components/coding-sessions/review-coding-actions';
 import { resolvePreferredMergeMethod, type MergeMethod } from './pull-request-merge-method';
 import { PullRequestReviewShortcutsProvider } from './pull-request-review-shortcuts-context';
 import { useOptionalPullRequestReviewShortcuts } from './pull-request-review-shortcuts';
@@ -522,6 +524,9 @@ function ReviewDetail({
         onMerge={mergeWithMethod}
         returnPath={returnPath}
         actions={
+          <>
+          {/* coding sessions (track G): "Fix with agent" and quick actions */}
+          <ReviewCodingSessionActions review={review} data={data} />
           <ReviewActions
             review={review}
             busy={busy}
@@ -540,6 +545,7 @@ function ReviewDetail({
               }
             }}
           />
+          </>
         }
       />
       {tab === "overview" ? (

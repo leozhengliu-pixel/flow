@@ -579,6 +579,451 @@ the secret before persisting the pull/merge request and creating Inbox
 notifications. The delivery ID is used for idempotency, so provider retries do
 not duplicate notifications.
 
+## GitHub App
+
+Coding sessions (see [Code hosts](#code-hosts)) use a GitHub App: only an App can mint short-lived,
+repository-scoped tokens for sandboxes. The App's webhooks also feed the review
+sync above, so App-created PRs show up under Reviews without an OAuth or PAT
+connection. A workspace that already has a classic GitHub connection with a
+webhook secret keeps syncing through that connection, and the App does not add
+a second copy of the same events.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOW_GITHUB_APP_ID` | empty | App id (the JWT `iss`) |
+| `FLOW_GITHUB_APP_SLUG` | empty | App slug, used for the install link `https://<host>/apps/<slug>/installations/new` |
+| `FLOW_GITHUB_APP_PRIVATE_KEY` (`_FILE`) | empty | PEM private key (PKCS#1 or PKCS#8). Required when `FLOW_GITHUB_APP_ID` is set |
+| `FLOW_GITHUB_APP_WEBHOOK_SECRET` (`_FILE`) | empty | Webhook secret (`X-Hub-Signature-256`). Required when `FLOW_GITHUB_APP_ID` is set |
+| `FLOW_GITHUB_APP_CLIENT_ID` / `FLOW_GITHUB_APP_CLIENT_SECRET` (`_FILE`) | empty | User-to-server OAuth, which lets members link their GitHub account for personal access checks |
+| `FLOW_GITHUB_APP_HOST` | `github.com` | GitHub Enterprise Server host |
+| `FLOW_GITHUB_APP_API_URL` | `https://api.github.com`, or `https://<host>/api/v3` for GHE | REST API base |
+
+Register the App with these settings:
+
+- Webhook URL: `{FLOW_APP_URL}/api/integrations/github-app/webhook`.
+- Setup URL, and Callback URL for user authorization: `{FLOW_APP_URL}/api/integrations/github-app/setup`.
+- Permissions: Contents RW, Pull requests RW, Metadata R, Checks R, Actions R, Commit statuses R, Issues R.
+- Events: installation, installation repositories, pull request, pull request review, pull request review comment, issue comment, check suite, check run, push.
+
+Installation tokens are minted for one repository with minimal permissions.
+They are cached in memory until 5 minutes before they expire and are never
+persisted. Each sandbox gets its own token, which is revoked when the sandbox
+stops. Linked GitHub accounts are stored as an identity (login and id) in
+connector secrets, so `FLOW_CONNECTOR_SECRET_KEY` must be set. The OAuth token
+is discarded after linking.
+
+## Coding sessions
+
+Coding sessions run an agent (Claude Code, Codex or OpenCode) in a sandbox Pod
+or container and open a draft pull or merge request. The operator guide is
+[docs/coding-sessions.md](coding-sessions.md); the security model is in
+[docs/coding-sessions-security.md](coding-sessions-security.md) and the runbook
+in [docs/coding-sessions-operations.md](coding-sessions-operations.md). The
+design reference is `docs/coding-sessions-design.md` (all variables are listed
+in §8). The Helm chart (`deploy/helm/flow`) maps every variable below to a
+value.
+
+Everything is off until `FLOW_CODING_ENABLED=true`; validation is strict only
+then. Workspaces also need the `coding-sessions` feature flag. Secrets accept
+`_FILE` variants. Durations are Go durations (`90s`, `15m`, `4h`).
+
+### Runtime and listener
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOW_CODING_ENABLED` | `false` | Turn the coding-session runtime on. |
+| `FLOW_CODING_PROVIDER` | `disabled` | `disabled`, `fake`, `docker` (development and CI) or `kubernetes`. See [Sandbox providers](#sandbox-providers). |
+| `FLOW_CODING_RUNTIME_URL` | `FLOW_APP_URL` | URL sandboxes use to reach Flow's runtime API and LLM proxy, e.g. `http://flow.flow.svc.cluster.local:8080`. |
+| `FLOW_CODING_RUNTIME_ADDR` | empty | When set (for example `:8090`), Flow serves `/internal/coding-runtime/*` and `/internal/llm-proxy/*` only on this second listener, and the main listener answers 404 for them, so a NetworkPolicy can expose just this port to sandboxes. Empty keeps them on the main listener. |
+| `FLOW_CODING_INSTANCE_ID` | `flow` | `flow.dev/instance` label on every object Flow creates; orphan GC only touches this value. Give every Flow installation sharing a cluster its own id. |
+| `FLOW_CODING_MAX_SESSIONS` / `FLOW_CODING_WORKSPACE_SESSIONS` | `20` / `5` | Sessions holding a sandbox (provisioning through publishing, and stopping), per installation and per workspace. Further sessions wait in `queued` until `FLOW_CODING_QUEUE_TIMEOUT`, then fail with `capacityUnavailable`. |
+| `FLOW_CODING_RECONCILE_INTERVAL` | `5s` | How often the session and sandbox reconcilers lease due rows (minimum `1s`; writes wake them sooner). |
+| `FLOW_CODING_GC_INTERVAL` | `5m` | Orphan GC interval. |
+| `FLOW_CODING_ORPHAN_GRACE` | `10m` | Age before an object without a live row is deleted. |
+
+### Phase timeouts and retries
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOW_CODING_QUEUE_TIMEOUT` | `30m` | Waiting for capacity, then `capacityUnavailable`. |
+| `FLOW_CODING_APPROVAL_TIMEOUT` | `168h` | How long a session from an untrusted external source waits for a member's approval (and how long an agent question waits for an answer) before it ends with `approvalExpired`. |
+| `FLOW_CODING_PROVISION_TIMEOUT` | `5m` | Resolving environment, access and snapshot. |
+| `FLOW_CODING_START_TIMEOUT` | `10m` | Pod scheduling, image pull, restore and bootstrap. |
+| `FLOW_CODING_SETUP_TIMEOUT` | `20m` | Clone, `mise install` and the prepare script without a snapshot. |
+| `FLOW_CODING_TURN_TIMEOUT` | `1h` | One agent turn, then `turnTimeout`. |
+| `FLOW_CODING_HEARTBEAT_TIMEOUT` | `2m` | Missing runner heartbeats, then `runnerLost`. |
+| `FLOW_CODING_PUBLISH_TIMEOUT` | `5m` | Verifying the push and opening the draft PR/MR. |
+| `FLOW_CODING_IDLE_TTL` | `15m` | A finished session keeps its sandbox warm this long. |
+| `FLOW_CODING_STOP_GRACE` | `1m` | Time the harness gets after SIGINT on stop; the provider's SIGTERM → SIGKILL grace is this plus 30s so the runner can still commit and push work in progress. Stuck Pods are force-deleted after twice that. |
+| `FLOW_CODING_MAX_SESSION_DURATION` | `4h` | Pod `activeDeadlineSeconds` and the cumulative running cap (`sessionTimeout`). |
+| `FLOW_CODING_TOKEN_GRACE` | `5m` | Sandbox token lifetime beyond the sandbox deadline. |
+| `FLOW_CODING_PROVISION_RETRIES` | `3` | Retries of transient provisioning failures. |
+| `FLOW_CODING_START_RETRIES` | `2` | New sandboxes tried when a start fails; each retry uses a new sandbox id. |
+| `FLOW_CODING_PUBLISH_RETRIES` | `5` | Retries of transient PR/MR failures. |
+
+Each phase ends with the error code listed in the design (§4.1). Retries of
+transient failures back off 2s·2ⁿ, at most 1 minute. Heartbeat timeouts count
+from the later of the last heartbeat and the Flow process start, so a Flow
+restart never marks runners lost. Snapshot builds have their own timeout and
+retries (see [Environments and snapshots](#environments-and-snapshots)), and the
+debug terminal its own lifetime.
+
+### Metering and spend limits
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOW_CODING_RUNTIME_PRICES` | `small=0.10,medium=0.20,large=0.40` | USD per sandbox-hour by size, recorded in `coding_usage_records`. Runtime is billed in 5-minute increments while a sandbox runs and to the second when it ends; warm-pool sandboxes are not billed. |
+
+LLM tokens are priced by `FLOW_CODING_MODEL_PRICES` (see
+[LLM proxy and models](#llm-proxy-and-models)).
+
+Settings › Usage & limits spend limits (workspace, per-user and per-loop, daily/weekly/monthly resets with the
+configured reset hour, weekday and month day, computed in UTC, plus per-user and per-loop overrides) are enforced at
+session start, at every follow-up turn, by the LLM proxy per request (30-second cached decision) and after every metered
+usage record. A session over its limit ends with `quotaExceeded`; loop sessions count against the loop limit and the
+workspace limit, other sessions against the creator's limit and the workspace limit. An override of 0 inherits the
+default limit.
+
+### Sandbox providers
+
+Coding sessions run in sandboxes created by `FLOW_CODING_PROVIDER`:
+
+- `kubernetes`: one bare Pod per sandbox in `FLOW_CODING_K8S_NAMESPACE`, plus a
+  token Secret (`flow-cs-<id>-token`, mounted as a file, owned by the Pod), a
+  workspace PVC (`flow-ws-<id>`) when PVC workspaces are used, and two
+  namespace-wide NetworkPolicies (`flow-sandbox-default-deny`,
+  `flow-sandbox-egress`) when `FLOW_CODING_K8S_NETWORK_POLICY=true`. Flow uses the
+  kubeconfig at `FLOW_CODING_K8S_KUBECONFIG`, otherwise the in-cluster service
+  account; it never reads the default kubeconfig. Pods satisfy the restricted Pod
+  Security Standard (uid 1000, no privilege escalation, all capabilities dropped,
+  seccomp `RuntimeDefault`, read-only root filesystem, no service-account token,
+  no hostPath).
+- `docker`: one container per sandbox through the Engine API at
+  `FLOW_CODING_DOCKER_HOST` (`unix://`, `tcp://`, `http(s)://`), on the internal
+  network `FLOW_CODING_DOCKER_NETWORK`, with `FLOW_CODING_DOCKER_RUNTIME` as
+  `--runtime`. The token is written into a per-sandbox volume through the archive
+  API, so remote daemons work. `volumesnapshot` is not supported.
+- `fake` (tests) and `disabled`.
+
+#### Image, sizes, regions and warm pool
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOW_CODING_IMAGE` | `ghcr.io/leozhengliu-pixel/flow-sandbox:latest` | Sandbox image. Pin a digest in production. |
+| `FLOW_CODING_IMAGE_PULL_POLICY` | `IfNotPresent` | Kubernetes image pull policy. |
+| `FLOW_CODING_IMAGE_PULL_SECRETS` | empty | CSV of Secret names in the sandbox namespace. |
+| `FLOW_CODING_SIZE_SMALL` | `cpu=1,memory=8Gi,ephemeral=20Gi,pids=4096` | Limits of the small size. |
+| `FLOW_CODING_SIZE_MEDIUM` | `cpu=2,memory=16Gi,ephemeral=40Gi,pids=8192` | Limits of the medium size. |
+| `FLOW_CODING_SIZE_LARGE` | `cpu=4,memory=32Gi,ephemeral=80Gi,pids=16384` | Limits of the large size. |
+| `FLOW_CODING_WORKSPACE_SIZE` | `20Gi` | Workspace PVC size or emptyDir `sizeLimit`. |
+| `FLOW_CODING_CPU_REQUEST_RATIO` | `1` | Requests = limits × ratio, in (0, 1]. `1` gives Guaranteed QoS. |
+| `FLOW_CODING_REGIONS` | empty | CSV of region names; empty disables region pinning. Pinning uses required node affinity. |
+| `FLOW_CODING_REGION_LABEL` | `topology.kubernetes.io/region` | Node label matched by region pinning. |
+| `FLOW_CODING_DEFAULT_REGION` | empty | Region used when the workspace pins none. |
+| `FLOW_CODING_WARM_POOL` | empty | Unbound sandboxes kept per size (and per region), e.g. `small=2,medium=1`. |
+| `FLOW_CODING_WARM_POOL_MAX_AGE` | `1h` | Warm sandboxes are recycled after this age. |
+
+PID limits are not a Pod field: sandboxes receive `FLOW_PIDS_LIMIT` (from the
+size) for the runner's `ulimit -u`; configure kubelet `podPidsLimit` on the
+sandbox node pool as well. The docker provider sets `PidsLimit`.
+
+#### Kubernetes provider
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOW_CODING_K8S_KUBECONFIG` | empty | Kubeconfig path; empty uses the in-cluster ServiceAccount. |
+| `FLOW_CODING_K8S_NAMESPACE` | `flow-sandboxes` | Namespace for every sandbox object. |
+| `FLOW_CODING_K8S_RUNTIME_CLASS` | empty | `runtimeClassName` (e.g. `gvisor`, `kata`); empty uses runc. |
+| `FLOW_CODING_K8S_HOST_USERS` | `true` | `false` sets `hostUsers: false` (user namespaces). |
+| `FLOW_CODING_K8S_STORAGE_CLASS` | empty | StorageClass of workspace PVCs. |
+| `FLOW_CODING_K8S_WORKSPACE_VOLUME` | `auto` | `auto` (PVC for volumesnapshot, emptyDir for archive), `pvc` or `emptyDir`. |
+| `FLOW_CODING_K8S_NODE_SELECTOR` | empty | `k=v,k2=v2`, e.g. `flow.dev/pool=sandbox`. |
+| `FLOW_CODING_K8S_TOLERATIONS` | empty | CSV in taint syntax `key[=value]:Effect`. |
+| `FLOW_CODING_K8S_SERVICE_ACCOUNT` | `flow-sandbox` | ServiceAccount of sandbox Pods; it needs no RBAC and its token is not mounted. |
+| `FLOW_CODING_K8S_PRIORITY_CLASS` | empty | PriorityClass of sandbox Pods. |
+| `FLOW_CODING_K8S_EXTRA_LABELS` | empty | `k=v` CSV added to sandbox objects. |
+| `FLOW_CODING_K8S_EXTRA_ANNOTATIONS` | empty | `k=v` CSV added to sandbox objects. |
+| `FLOW_CODING_K8S_NETWORK_POLICY` | `true` | Flow ensures the sandbox NetworkPolicies itself. The Helm chart sets `false` when it renders them. |
+| `FLOW_CODING_K8S_FLOW_NAMESPACE` | `flow` | Namespace of the Flow Pods (NetworkPolicy peer). |
+| `FLOW_CODING_K8S_FLOW_POD_SELECTOR` | `app.kubernetes.io/name=flow` | Labels of the Flow Pods (NetworkPolicy peer). |
+| `FLOW_CODING_K8S_PROXY_NAMESPACE` | `flow-sandboxes` | Namespace of the egress proxy. |
+| `FLOW_CODING_K8S_PROXY_POD_SELECTOR` | `app.kubernetes.io/name=flow-egress` | Labels of the egress proxy Pods. |
+| `FLOW_CODING_K8S_QPS` / `FLOW_CODING_K8S_BURST` | `20` / `40` | client-go rate limits. |
+
+Example:
+
+```dotenv
+FLOW_CODING_PROVIDER=kubernetes
+FLOW_CODING_INSTANCE_ID=flow             # flow.dev/instance label; GC only touches this instance
+FLOW_CODING_IMAGE=ghcr.io/leozhengliu-pixel/flow-sandbox@sha256:...
+FLOW_CODING_IMAGE_PULL_SECRETS=registry   # CSV of Secret names
+FLOW_CODING_SIZE_MEDIUM=cpu=2,memory=16Gi,ephemeral=40Gi,pids=8192
+FLOW_CODING_K8S_NAMESPACE=flow-sandboxes
+FLOW_CODING_K8S_RUNTIME_CLASS=gvisor      # empty = runc
+FLOW_CODING_K8S_NODE_SELECTOR=flow.dev/pool=sandbox
+FLOW_CODING_K8S_TOLERATIONS=flow.dev/sandbox=true:NoSchedule
+FLOW_CODING_K8S_EXTRA_LABELS=team=platform
+FLOW_CODING_REGIONS=eu,us                 # region pinning via required node affinity
+```
+
+The egress NetworkPolicy allows only DNS (kube-dns), the Flow Pods and the egress
+proxy; there is no `ipBlock`, so `169.254.169.254` and every other address stay
+unreachable. When `FLOW_CODING_RUNTIME_ADDR` is set, only that port of the Flow
+Pods is allowed; otherwise any Flow Pod port is (NetworkPolicy ports are Pod
+ports, which the Service URL does not reveal). The proxy port is the port of
+`FLOW_CODING_EGRESS_PROXY_URL`, default 3128. Enforcement depends on the CNI.
+
+Flow's Role in the sandbox namespace needs: pods (create, get, list, delete),
+pods/log (get), pods/exec (create, get), secrets (create, get, list, delete, patch),
+persistentvolumeclaims (create, get, list, delete), namespaces (get, the sandbox
+namespace only), networkpolicies (get, create, patch) when Flow manages them, and volumesnapshots (create, get, list, delete)
+for the volumesnapshot strategy. Startup preflight checks these with
+`SelfSubjectAccessReview`, plus the RuntimeClass, StorageClass and VolumeSnapshot
+CRD.
+
+#### Docker provider
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOW_CODING_DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker Engine endpoint. |
+| `FLOW_CODING_DOCKER_NETWORK` | `flow-sandbox` | Internal network (no default route) shared by sandboxes, the egress proxy and Flow. |
+| `FLOW_CODING_DOCKER_RUNTIME` | empty | Container runtime, e.g. `runsc`. |
+
+#### Reconcile loops, warm pool and GC
+
+The sandbox reconciler runs every `FLOW_CODING_RECONCILE_INTERVAL` (leased rows,
+safe on any number of replicas), gives a sandbox `FLOW_CODING_START_TIMEOUT` and
+`FLOW_CODING_START_RETRIES` to start, archives runner logs as
+`coding-logs-<workspace hash>-<sandbox>.log` on stop, and meters runtime in
+5-minute increments priced by `FLOW_CODING_RUNTIME_PRICES`. The warm pool keeps
+`FLOW_CODING_WARM_POOL` unbound sandboxes and recycles them after
+`FLOW_CODING_WARM_POOL_MAX_AGE`. Orphan GC runs every `FLOW_CODING_GC_INTERVAL`
+and deletes this instance's objects that no live row owns once they are older
+than `FLOW_CODING_ORPHAN_GRACE`, and sweeps expired sandbox tokens. The warm
+pool and GC take the Redis leader lock when Redis is enabled.
+
+### Sandbox runner environment
+
+The sandbox image (`deploy/sandbox-image/`) runs `flow-runner` (`sandbox-runner/`). Flow's sandbox provider sets these
+variables on the sandbox container; operators don't set them on the Flow server.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOW_RUNTIME_URL` | required | Flow's runtime endpoint as the sandbox reaches it (`FLOW_CODING_RUNTIME_URL`) |
+| `FLOW_TOKEN_FILE` | `/var/run/flow/token` | File holding the per-sandbox token (`fcs_…`, mounted 0440 for gid 1000), re-read on every call |
+| `FLOW_SANDBOX_ID` | from bootstrap | Sandbox id, used in logs |
+| `FLOW_RUNNER_MODE` | `session` | `session`, `snapshot`, `debug`, `warm` or `restore` (the container command argument wins) |
+| `FLOW_SANDBOX`, `LINEAR_SANDBOX` | `1` | Always set for setup scripts and the agent, so repository scripts can detect the sandbox |
+| `FLOW_SNAPSHOT`, `LINEAR_SNAPSHOT` | unset | `1` while a snapshot is being built (setup and prepare script only) |
+| `FLOW_CODING_BRANCH_PREFIX` | `flow/` | Fallback push prefix when the bootstrap carries no `repo.branchPrefix` (the server setting is described under [Triggers](#triggers)) |
+| `FLOW_PIDS_LIMIT` | unset | `ulimit -u` applied to the agent process tree (the sandbox size's PID limit) |
+| `FLOW_SNAPSHOT_ID` | from bootstrap | Snapshot to unpack in `restore` mode |
+| `FLOW_ARCHIVE_URL` | unset | Archive URL for `restore` mode (fetched with the sandbox token); without it the runner uses the snapshot archive route. `flow-runner restore` exits `86` when the archive can't be restored |
+| `FLOW_SANDBOX_SIZE` | unset | Sandbox size (`small`, `medium`, `large`), logged at startup |
+| `FLOW_RUNNER_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` for the runner's JSON log (the Pod log) |
+| `FLOW_WORKSPACE_DIR`, `FLOW_REPO_DIR`, `FLOW_BIN_DIR` | `/workspace`, `/workspace/repo`, `/opt/flow/bin` | Path overrides, for tests |
+
+The runner never receives model provider keys. It points Claude Code (`ANTHROPIC_BASE_URL` plus `ANTHROPIC_AUTH_TOKEN`),
+Codex (`~/.codex/config.toml` provider `flow`, key in `FLOW_LLM_TOKEN`) and OpenCode (`OPENCODE_CONFIG` with an
+OpenAI-compatible provider) at Flow's LLM proxy, using the sandbox token. git, `gh` and `glab` get short-lived
+credentials from Flow at runtime (`flow-git-credential`; `~/.flow/cli-env`, which sets `GH_TOKEN`/`GH_HOST` or
+`GITLAB_TOKEN`/`GITLAB_HOST`/`GITLAB_API_PROTOCOL`/`GLAB_CONFIG_DIR`/`NO_PROMPT=1`), and signed commits go through
+`flow-sign`, which calls Flow's `/sign`. The image pins the CLI versions as Dockerfile build arguments.
+
+### Environments and snapshots
+
+Coding-session environments (Settings › Coding sessions) are stored in the
+`coding_environments` table; the legacy `codingAgentSettings.environments` list
+is moved there once at startup. Environment secrets are encrypted with
+`FLOW_CODING_SECRET_KEY` (see [Secrets and commit signing](#secrets-and-commit-signing)).
+These variables control snapshot builds and the debug terminal:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOW_CODING_SNAPSHOT_STRATEGY` | `archive` | `archive` (tar.zst in `FLOW_STORAGE_DRIVER`, works everywhere) or `volumesnapshot` (Kubernetes CSI VolumeSnapshots; kubernetes provider and PVC workspaces only). |
+| `FLOW_CODING_VOLUME_SNAPSHOT_CLASS` | empty | VolumeSnapshotClass; empty uses the cluster default. |
+| `FLOW_CODING_ARCHIVE_PREFIX` | `coding-snapshots` | Object key prefix of snapshot archives in `FLOW_STORAGE_DRIVER`. |
+| `FLOW_CODING_ARCHIVE_MAX_BYTES` | `10737418240` | Largest accepted snapshot archive upload. |
+| `FLOW_CODING_SNAPSHOT_TIMEOUT` | `30m` | A build that runs longer fails with `snapshotFailed`. |
+| `FLOW_CODING_SNAPSHOT_RETRIES` | `1` | Extra attempts of a snapshot build or restore after a lost sandbox (a failing prepare script is not retried). |
+| `FLOW_CODING_SNAPSHOT_TTL` | `168h` | Ready snapshots expire and their storage is deleted after this. |
+| `FLOW_CODING_SNAPSHOT_RETAIN` | `2` | Ready snapshots kept per environment; older ones are deleted. |
+| `FLOW_CODING_SNAPSHOT_REFRESH_INTERVAL` | `24h` | A snapshot older than this is rebuilt when the default branch has moved. |
+| `FLOW_CODING_DEBUG_TERMINAL` | on | `off` disables the environment debug terminal. |
+| `FLOW_CODING_DEBUG_TERMINAL_TTL` | `20m` | Lifetime of a debug-terminal sandbox (billed as sandbox runtime to the user). |
+
+Saving an environment queues a snapshot build whenever the image, mise config,
+prepare script, dependency mode, secret names or base branch change. Build logs
+are kept in the database (8 MiB per snapshot) together with the last 20
+snapshots of each environment.
+
+Snapshot strategies:
+
+- `archive` (default): tar.zst of `/workspace` and `/home/flow`, stored through
+  `FLOW_STORAGE_DRIVER` under
+  `<FLOW_CODING_ARCHIVE_PREFIX>-<workspace hash>-<snapshot>.tar.zst` (object keys are
+  flat: the local driver and signed file URLs reject `/`), capped by
+  `FLOW_CODING_ARCHIVE_MAX_BYTES`, and restored by the `restore` init container
+  (inline in the docker container).
+- `volumesnapshot`: CSI `VolumeSnapshot` (`snapshot.storage.k8s.io/v1`, through
+  the dynamic client) of a build PVC, with `FLOW_CODING_VOLUME_SNAPSHOT_CLASS`;
+  restores are PVCs with the snapshot as `dataSource`.
+
+### Egress proxy
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOW_CODING_EGRESS_PROXY_URL` | empty | Proxy sandboxes must use, e.g. `http://flow-egress.flow-sandboxes.svc.cluster.local:3128`. Set as `HTTP(S)_PROXY` with the sandbox's credentials. Empty means sandboxes have no Internet access. |
+| `FLOW_CODING_EGRESS_ALLOWLIST` | empty | Extra domains for every sandbox; `.example.com` also matches subdomains. |
+| `FLOW_CODING_EGRESS_DEFAULT_ALLOWLIST` | on | `off` drops the built-in code host, registry and toolchain list. |
+| `FLOW_CODING_EGRESS_NO_PROXY` | empty | Added to `NO_PROXY`; the Flow runtime host is always included. |
+| `FLOW_CODING_EGRESS_ACL_SECRET` | empty | Shared secret of the Squid ACL helper. When set, `POST /internal/coding-runtime/egress-check` answers the proxy and per-environment network modes apply; when empty the route returns 404 and the proxy uses its static allowlist. |
+
+The proxy container (`deploy/egress-proxy`) reads `FLOW_EGRESS_FLOW_URL` (Flow's
+runtime URL), `FLOW_CODING_EGRESS_ACL_SECRET` or `_FILE`,
+`FLOW_CODING_EGRESS_ALLOWLIST`, `FLOW_CODING_EGRESS_DEFAULT_ALLOWLIST`,
+`FLOW_EGRESS_ALLOWLIST_FILE`, `FLOW_EGRESS_BLOCK_CIDRS`, `FLOW_EGRESS_PORT`,
+`FLOW_EGRESS_HELPER_CHILDREN` and `FLOW_EGRESS_ACL_TIMEOUT` (default `5s`).
+
+### LLM proxy and models
+
+Sandboxes never receive model API keys. Claude Code, Codex and the open-source harness call Flow's LLM proxy (`/internal/llm-proxy/{anthropic,openai,opensource}/v1/...`) with their sandbox token, and Flow forwards each request with the real key (design §12 and §20).
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOW_CODING_LLM_ANTHROPIC_BASE_URL` / `FLOW_CODING_LLM_ANTHROPIC_API_KEY` | `https://api.anthropic.com` / empty | Anthropic Messages upstream for Claude Code. Without a key the route answers 503. |
+| `FLOW_CODING_LLM_OPENAI_BASE_URL` / `FLOW_CODING_LLM_OPENAI_API_KEY` | `https://api.openai.com/v1` / empty | OpenAI Responses and Chat Completions upstream for Codex. The base includes `/v1`. |
+| `FLOW_CODING_LLM_OPENSOURCE_BASE_URL` / `FLOW_CODING_LLM_OPENSOURCE_API_KEY` | empty | OpenAI-compatible upstream for OpenCode (vLLM, Ollama, OpenRouter). The key is optional. |
+| `FLOW_CODING_MODELS_CLAUDE_CODE` | `claude-sonnet-4-5,claude-opus-4-1` | Claude Code model catalog. |
+| `FLOW_CODING_MODELS_CODEX` | `gpt-5-codex,gpt-5` | Codex model catalog. |
+| `FLOW_CODING_MODELS_OPEN_SOURCE` | empty | Open-source model catalog. |
+| `FLOW_CODING_MODEL_PRICES` | empty | JSON, USD per million tokens: `{"claude-sonnet-4-5":{"input":3,"output":15,"cacheRead":0.3,"cacheWrite":3.75}}`. Unpriced models are recorded at zero cost, with a warning log and the `flow_coding_llm_unpriced_total` metric. |
+| `FLOW_CODING_LLM_TIMEOUT` | `10m` | Upper bound for each proxied request, including streaming. |
+
+In each catalog the first entry is what `auto` resolves to; "Restart with default model" switches a session back to `auto`. An Auto session falls back once to the next entry when the upstream reports the model missing (404 or model-not-found) or overloaded (503/529).
+
+How the proxy behaves:
+
+- **Models.** Requests that name another model are rewritten to the session's model. Claude Code's background Haiku calls are rewritten to the cheapest priced Claude model in the catalog.
+- **Metering.** Usage comes from the response, including streamed usage events: Anthropic `message_start`/`message_delta`, Responses `response.completed`, and the chat completions usage chunk (the proxy sets `stream_options.include_usage`). Each request writes one `coding_usage_records` row.
+- **Spend limits.** Over the spend limit, the proxy answers `402 {"error":{"type":"quota_exceeded"}}` with `X-Flow-Error-Code: quotaExceeded`. Spend decisions are cached for 30 seconds.
+- **Fixed limits.** These are not configurable:
+  - request bodies: 32 MiB;
+  - rate: 240 requests per minute per session, with a burst of 60;
+  - concurrency: 16 in-flight requests per session.
+- **Logs.** Logs carry ids, the model, the status, token counts and the cost. They never contain prompts, completions, tokens or keys.
+
+### Secrets and commit signing
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOW_CODING_SECRET_KEY` | `FLOW_CONNECTOR_SECRET_KEY` | Base64 32-byte AES-256-GCM key (`_FILE` works) for environment secrets, users' commit signing keys and token material. Required (directly or through the fallback) when coding sessions are enabled. |
+
+Environment secrets cannot be read back or changed, only deleted and added
+again. Rotating or losing the key makes stored environment secrets and signing
+keys unreadable; they must be added or uploaded again.
+
+**Commit signing.** A key uploaded under Settings › Account › Commit signing (SSH or unencrypted OpenPGP) is stored encrypted under `FLOW_CODING_SECRET_KEY`, and the private key never enters a sandbox. The runner's `flow-sign` shim calls `POST /internal/coding-runtime/sign`, and Flow answers with an SSHSIG (namespace `git`) or an armored OpenPGP detached signature. When the workspace requires signed commits and the user has no stored key, the session fails with `missingCommitSigningKey`. Keys uploaded before this release stored no private key: `GET /api/account/signing-key` returns `needsReupload: true` for them, and the user must upload the key again.
+
+### Code hosts
+
+**GitHub.** Coding sessions on GitHub use the GitHub App; its settings
+(`FLOW_GITHUB_APP_*`) and registration are documented under
+[GitHub App](#github-app).
+
+**GitLab.** Coding sessions use the workspace's existing GitLab connection (access token or
+OAuth). When coding sessions are enabled, the same GitLab webhook (see
+[GitHub/GitLab review webhooks](#githubgitlab-review-webhooks)) also turns
+Merge Request, Note and Pipeline events on session merge requests into session
+follow-ups; enable those three triggers on the GitLab webhook. Flow opens the
+draft merge request itself, so the sandbox token never needs to create one.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOW_CODING_GITLAB_CREDENTIAL_MODE` | `project-token` | How sandboxes authenticate to GitLab: `project-token`, `oauth` or `connection` |
+| `FLOW_CODING_GITLAB_TOKEN_SCOPES` | `read_repository,write_repository,read_api` | Scopes of the project access tokens Flow mints. Add `api` to let the agent reply with `glab mr note` |
+
+- `project-token` (recommended): for each session Flow creates a project access
+  token named `flow-cs-<sessionId>` (Developer role, the scopes above, expiring
+  after at least one full day) and revokes it when the session ends. The
+  orphan sweep (every `FLOW_CODING_GC_INTERVAL`) revokes any `flow-cs-*` token
+  whose session has ended and `flow-sb-*` tokens of snapshot builds after 2
+  hours. The connection token needs the `api` scope and the **Maintainer** role
+  (or higher) on each project. On GitLab.com, project access tokens need the
+  **Premium or Ultimate** tier; self-managed GitLab offers them on every tier.
+  Without these, sessions fail with `noCodeAccess` and explain what is missing.
+- `oauth`: sandboxes get the workspace's GitLab OAuth access token (about 2
+  hours; Flow refreshes it with `FLOW_INTEGRATION_GITLAB_TOKEN_URL`). It is not
+  limited to one project.
+- `connection`: sandboxes get the connection token itself. It is long-lived and
+  broad; Flow logs a warning at startup when this mode is on.
+
+Inside the sandbox, `glab` is authenticated at runtime only, through
+`GITLAB_TOKEN`, `GITLAB_HOST`, `GITLAB_API_PROTOCOL`, `GLAB_CONFIG_DIR` and
+`NO_PROMPT` from the short-lived credential. For a self-managed host the runner
+also writes `glab config set --global host <host>` (never the token). The agent
+is told to use `glab mr view`, `glab mr diff`, `glab ci status`, `glab ci get`
+and `glab ci trace` (and `glab mr note` when the scopes allow it), and never to
+create, merge or approve merge requests.
+
+### Triggers
+
+Coding sessions start from a delegated issue, Flow Agent chat, an issue
+comment, a Loop's "Start a coding session" action, a pull/merge request, or
+"Fix this PR/MR" on the review page. These variables shape the triggers:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOW_CODING_PR_MENTION` | `@flow` | Mention that turns a PR/MR comment into a follow-up. `@flow rebase`, `@flow fix lint`, `@flow add tests` and `@flow fix` pick the matching quick action; anything else is passed on as review feedback. A "changes requested" review on a Flow PR needs no mention |
+| `FLOW_CODING_BRANCH_PREFIX` | `flow/` | Branches Flow owns and the agent may push (besides the PR head for PR follow-ups). A rebase (a force push) from a comment is allowed only on these; the review page asks for confirmation on other branches |
+
+Issues from integrations (email intake, Slack, Intercom and other Asks, API
+applications) and PR/MR comments by people who are not workspace members are
+external. Unless their source is listed under Settings › Coding sessions ›
+Trusted external sources (`slack`, `email`, `integration:<name>`,
+`appUser:<id>`, or `github:<owner>` / `gitlab:<group>` for PR comments), the
+session waits in `awaitingApproval` for up to `FLOW_CODING_APPROVAL_TIMEOUT`
+(see [Phase timeouts and retries](#phase-timeouts-and-retries)) and the team's
+members get an Inbox notification. Loops may start sessions only on the
+repositories allowed by "Repository access for Loops", and their spend counts
+against the Loop limit (and per-loop overrides) in Usage & limits.
+
+### Browser testing and artifacts
+
+Coding-session agents can start the app inside their sandbox, test it in headless Chromium, and attach before/after
+screenshots and recordings to the session and to the draft PR/MR (`docs/coding-sessions-design.md` §17).
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOW_CODING_BROWSER` | on | `off` removes the browser tools from the sandbox, drops the browser guidance and refuses artifact uploads (403) |
+| `FLOW_CODING_ARTIFACT_MAX_BYTES` | `10485760` | Maximum size of one screenshot or recording. Larger uploads get 413; the runner retries a too-large PNG as JPEG |
+
+Fixed limits: PNG and JPEG screenshots and WebM or MP4 recordings only (the type is detected from the file contents,
+not the declared type); at most 20 artifacts per turn and 200 per session.
+
+Storage and links:
+
+- Artifacts are stored through `FLOW_STORAGE_DRIVER` (local or S3) as `coding-artifact_<session>_<artifact>.<ext>`.
+- The web app reads them through `GET /api/coding/sessions/{id}/artifacts/{artifactId}/content`, which follows the
+  visibility of the session's agent thread. The artifact listing also returns signed URLs valid for one hour.
+- PR/MR bodies get a "Screenshots" section between `<!-- flow:screenshots:start -->` and
+  `<!-- flow:screenshots:end -->` with signed `/api/files/signed/` URLs valid for 30 days. The section is rewritten,
+  with fresh URLs, after every upload while the PR/MR is open. Signed URLs use `FLOW_FILE_URL_SIGNING_KEY` (or the
+  generated key) and the public base URL `FLOW_APP_URL`. Anyone holding a link can view the image until it expires.
+
+Inside the sandbox (set as environment variables on the coding environment, never as secrets) the agent's
+`browser_start_app` tool uses:
+
+| Variable | Meaning |
+|---|---|
+| `FLOW_BROWSER_APP_COMMAND` | Command that starts the dev server (default: the `dev`, `start`, `preview` or `serve` script of `package.json`, run with the package manager found from the lockfile) |
+| `FLOW_BROWSER_APP_URL` | URL the app serves (default: the URL the server prints, or `http://127.0.0.1:$PORT`) |
+| `FLOW_BROWSER_APP_CWD` | Directory to run the command in, relative to the repository |
+
+A repository can instead commit `.flow/browser.json` (`{"command", "url", "cwd", "port", "readyPattern", "env"}`).
+The image installs a pinned Playwright and Chromium under `/opt/flow/playwright` and `/opt/ms-playwright`
+(`deploy/sandbox-image/install-browser.sh`).
+
 ## Compose profiles
 
 The default Compose configuration uses SQLite and local files. Optional service
@@ -621,6 +1066,17 @@ domains and use TLS plus ACL credentials.
 
 The app service uses `restart: unless-stopped`, so it retries while a selected
 database service completes its first-time initialization.
+
+The `coding` profile adds the egress proxy for coding sessions with the docker
+provider. The override file mounts the Docker socket into the app, which gives
+it root-equivalent access to the host, so use it only on a development machine:
+
+```bash
+FLOW_CODING_SECRET_KEY=$(openssl rand -base64 32) \
+FLOW_CODING_EGRESS_ACL_SECRET=$(openssl rand -hex 24) \
+DOCKER_GID=$(stat -c %g /var/run/docker.sock) \
+docker compose -f docker-compose.yml -f deploy/egress-proxy/compose.coding.yml --profile coding up --build
+```
 
 ## Settings Execution
 

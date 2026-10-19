@@ -1,0 +1,525 @@
+# Default values for the Flow chart. See docs/coding-sessions.md for the
+# coding-sessions walkthrough and docs/configuration.md for every variable.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: ghcr.io/leozhengliu-pixel/flow
+  # Defaults to the chart appVersion.
+  tag: ""
+  # Pin a digest in production (sha256:...). Takes precedence over tag.
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# More than one replica (or autoscaling) requires PostgreSQL or MySQL, Redis
+# coordination and shared object storage (S3); the chart refuses to render
+# otherwise. Flow without Redis is single-instance by design.
+replicaCount: 1
+
+# Rolling updates need multi-replica-safe storage. Empty = Recreate for a
+# single replica on a ReadWriteOnce volume, RollingUpdate otherwise.
+updateStrategy: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 2Gi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+priorityClassName: ""
+terminationGracePeriodSeconds: 30
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: flow.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: flow-tls
+  #    hosts: [flow.example.com]
+
+probes:
+  startup:
+    enabled: true
+    # Migrations run before the listener starts; allow up to 10 minutes.
+    failureThreshold: 60
+    periodSeconds: 10
+  readiness:
+    enabled: true
+    periodSeconds: 10
+    failureThreshold: 3
+  liveness:
+    enabled: true
+    periodSeconds: 20
+    failureThreshold: 3
+
+podDisruptionBudget:
+  # Rendered only with more than one replica (a PDB on one replica blocks drains).
+  enabled: true
+  minAvailable: 1
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: ""
+
+# Optional NetworkPolicy for the Flow pods themselves: allows the HTTP port
+# from anywhere (ingress controllers) and the runtime port from the sandbox
+# namespace. Egress stays open (databases, code hosts, model providers).
+networkPolicy:
+  enabled: false
+
+# Plain FLOW_* settings (see docs/configuration.md), e.g.
+#   FLOW_AUTH_EMAIL_ENABLED: "true"
+config:
+  appUrl: "http://flow.example.com"
+  logLevel: info
+  logFormat: json
+  env: {}
+
+# Extra container env entries (valueFrom allowed) and envFrom sources.
+extraEnv: []
+extraEnvFrom: []
+extraVolumes: []
+extraVolumeMounts: []
+
+secrets:
+  # An existing Secret whose keys are FLOW_* variable names, loaded with
+  # envFrom after the chart's own Secret (its values win). Use it for
+  # FLOW_CONNECTOR_SECRET_KEY, OIDC/SAML secrets, API keys and so on.
+  existingSecret: ""
+  # Secret FLOW_* values the chart stores in its own Secret.
+  env: {}
+  # base64 32-byte AES key for connector and coding secrets
+  # (openssl rand -base64 32). Required when coding sessions are enabled
+  # unless coding.secretKey or an existing secret provides it.
+  connectorSecretKey: ""
+
+database:
+  # sqlite | postgres | mysql. External PostgreSQL or MySQL is recommended
+  # for production.
+  driver: sqlite
+  sqlitePath: /app/data/flow.db
+  # postgres://user:pass@host:5432/flow?sslmode=require or
+  # user:pass@tcp(host:3306)/flow?parseTime=true
+  url: ""
+  existingSecret:
+    name: ""
+    key: FLOW_DATABASE_URL
+  maxOpenConns: ""
+  maxIdleConns: ""
+  connMaxLifetime: ""
+
+redis:
+  # disabled | standalone | cluster
+  mode: disabled
+  url: ""
+  addrs: ""
+  username: ""
+  password: ""
+  existingSecret:
+    name: ""
+    # Key holding FLOW_REDIS_URL or FLOW_REDIS_PASSWORD.
+    key: FLOW_REDIS_PASSWORD
+  tls: false
+  prefix: flow
+
+storage:
+  # local | s3. local keeps uploads (and coding snapshot archives) on the
+  # data volume; s3 is required for more than one replica.
+  driver: local
+  persistence:
+    enabled: true
+    existingClaim: ""
+    storageClass: ""
+    accessModes: [ReadWriteOnce]
+    size: 20Gi
+    annotations: {}
+  s3:
+    bucket: ""
+    region: ""
+    endpoint: ""
+    pathStyle: false
+    prefix: uploads
+    accessKeyId: ""
+    secretAccessKey: ""
+    existingSecret:
+      name: ""
+      accessKeyIdKey: FLOW_S3_ACCESS_KEY_ID
+      secretAccessKeyKey: FLOW_S3_SECRET_ACCESS_KEY
+
+# Bundled single-instance databases for evaluation only. Use managed or
+# operator-run databases in production.
+postgresql:
+  enabled: false
+  image: postgres:17-alpine
+  auth:
+    username: flow
+    password: ""
+    database: flow
+  persistence:
+    size: 20Gi
+    storageClass: ""
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {memory: 1Gi}
+
+mysql:
+  enabled: false
+  image: mysql:8.4
+  auth:
+    username: flow
+    password: ""
+    rootPassword: ""
+    database: flow
+  persistence:
+    size: 20Gi
+    storageClass: ""
+  resources:
+    requests: {cpu: 250m, memory: 1Gi}
+    limits: {memory: 2Gi}
+
+redisBundled:
+  enabled: false
+  image: redis:8.2-alpine
+  persistence:
+    size: 2Gi
+    storageClass: ""
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 512Mi}
+
+# ---------------------------------------------------------------------------
+# Coding sessions (docs/coding-sessions.md). Off by default.
+# ---------------------------------------------------------------------------
+coding:
+  enabled: false
+  # kubernetes | docker | fake | disabled
+  provider: kubernetes
+  # URL sandboxes use to reach Flow. Empty = the in-cluster Service URL
+  # (the runtime port when enabled).
+  runtimeUrl: ""
+  # Serve the runtime API and LLM proxy on a second listener so the sandbox
+  # NetworkPolicy can allow only that port (FLOW_CODING_RUNTIME_ADDR).
+  runtimePort:
+    enabled: false
+    port: 8090
+  # flow.dev/instance label used to scope orphan GC. Empty = release name.
+  instanceId: ""
+  # base64 32-byte AES key; empty = secrets.connectorSecretKey.
+  secretKey: ""
+
+  image:
+    repository: ghcr.io/leozhengliu-pixel/flow-sandbox
+    tag: latest
+    # Pin a digest in production.
+    digest: ""
+    pullPolicy: IfNotPresent
+    # Secret names in the sandbox namespace.
+    pullSecrets: []
+
+  branchPrefix: flow/
+  prMention: "@flow"
+  browser: true
+  debugTerminal: true
+  artifactMaxBytes: 10485760
+  maxSessions: 20
+  workspaceSessions: 5
+  reconcileInterval: 5s
+  gcInterval: 5m
+  orphanGrace: 10m
+  sizes:
+    small: {cpu: "1", memory: 8Gi, ephemeral: 20Gi, pids: 4096}
+    medium: {cpu: "2", memory: 16Gi, ephemeral: 40Gi, pids: 8192}
+    large: {cpu: "4", memory: 32Gi, ephemeral: 80Gi, pids: 16384}
+  workspaceSize: 20Gi
+  cpuRequestRatio: "1"
+  regions: []
+  regionLabel: topology.kubernetes.io/region
+  defaultRegion: ""
+  # e.g. {small: 2, medium: 1}
+  warmPool: {}
+  warmPoolMaxAge: 1h
+  timeouts:
+    queue: 30m
+    approval: 168h
+    provision: 5m
+    start: 10m
+    setup: 20m
+    turn: 1h
+    heartbeat: 2m
+    publish: 5m
+    idle: 15m
+    stopGrace: 1m
+    maxSessionDuration: 4h
+    debugTerminal: 20m
+    tokenGrace: 5m
+  retries:
+    provision: 3
+    start: 2
+    publish: 5
+    snapshot: 1
+  snapshot:
+    # archive (default, any CSI) | volumesnapshot (CSI snapshots + CRDs)
+    strategy: archive
+    volumeSnapshotClass: ""
+    archivePrefix: coding-snapshots
+    archiveMaxBytes: 10737418240
+    timeout: 30m
+    ttl: 168h
+    retain: 2
+    refreshInterval: 24h
+  kubernetes:
+    # Empty = in-cluster config (the chart's ServiceAccount).
+    kubeconfig: ""
+    storageClass: ""
+    # auto | pvc | emptyDir
+    workspaceVolume: auto
+    extraLabels: {}
+    extraAnnotations: {}
+    qps: 20
+    burst: 40
+  docker:
+    host: unix:///var/run/docker.sock
+    network: flow-sandbox
+    runtime: ""
+  egress:
+    # Empty = the chart's egress proxy Service when egressProxy.enabled.
+    proxyUrl: ""
+    noProxy: []
+  llm:
+    timeout: 10m
+    anthropic:
+      baseUrl: https://api.anthropic.com
+      apiKey: ""
+    openai:
+      baseUrl: https://api.openai.com/v1
+      apiKey: ""
+    opensource:
+      baseUrl: ""
+      apiKey: ""
+    models:
+      claudeCode: [claude-sonnet-4-5, claude-opus-4-1]
+      codex: [gpt-5-codex, gpt-5]
+      openSource: []
+    # USD per million tokens, e.g.
+    #   claude-sonnet-4-5: {input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75}
+    prices: {}
+  # USD per sandbox-hour by size.
+  runtimePrices:
+    small: "0.10"
+    medium: "0.20"
+    large: "0.40"
+  gitlab:
+    # project-token | oauth | connection
+    credentialMode: project-token
+    tokenScopes: [read_repository, write_repository, read_api]
+  githubApp:
+    appId: ""
+    slug: ""
+    clientId: ""
+    clientSecret: ""
+    # PEM. Prefer privateKeySecret so the key is mounted as a file.
+    privateKey: ""
+    webhookSecret: ""
+    host: github.com
+    apiUrl: ""
+    # An existing Secret holding the PEM; mounted read-only and passed as
+    # FLOW_GITHUB_APP_PRIVATE_KEY_FILE.
+    privateKeySecret:
+      name: ""
+      key: private-key.pem
+  # Extra FLOW_CODING_* overrides, rendered last into the ConfigMap.
+  extraEnv: {}
+
+# Everything Flow creates for sandboxes lives in this namespace.
+sandboxes:
+  namespace:
+    name: flow-sandboxes
+    create: true
+    labels: {}
+    annotations: {}
+    # Pod Security admission level enforced on the namespace.
+    podSecurity: restricted
+    # Keep the namespace (and running sandboxes) on helm uninstall.
+    keepOnUninstall: false
+
+  rbac:
+    # Role and RoleBinding for Flow in the sandbox namespace only.
+    create: true
+    # Read-only cluster access for preflight checks (RuntimeClass,
+    # StorageClass, VolumeSnapshotClass). Without it those checks become
+    # warnings.
+    preflightClusterRole: true
+    extraRules: []
+
+  # ServiceAccount sandbox Pods run as. It has no RBAC and its token is never
+  # mounted.
+  serviceAccount:
+    create: true
+    name: flow-sandbox
+
+  # Container runtime: "" or runc (default kernel), gvisor or kata. Any other
+  # name refers to an existing RuntimeClass.
+  runtimeClass:
+    name: ""
+    # Create the RuntimeClass object (cluster-scoped). Usually the node
+    # provisioner (GKE Sandbox, kata-deploy) already creates it.
+    create: false
+    # Defaults: gvisor -> runsc, kata -> kata.
+    handler: ""
+    overhead: {}
+    #  podFixed: {cpu: 250m, memory: 160Mi}
+
+  # false runs sandboxes in a user namespace (hostUsers: false, Kubernetes
+  # 1.33+ with a runtime that supports idmapped mounts).
+  hostUsers: true
+
+  # Dedicated, tainted node pool. Label and taint the nodes, for example:
+  #   kubectl label node <n> flow.dev/pool=sandbox
+  #   kubectl taint node <n> flow.dev/pool=sandbox:NoSchedule
+  # Clear both for a single-node development cluster.
+  nodeSelector:
+    flow.dev/pool: sandbox
+  tolerations:
+    - key: flow.dev/pool
+      operator: Equal
+      value: sandbox
+      effect: NoSchedule
+  priorityClassName: ""
+
+  networkPolicy:
+    enabled: true
+    # helm: the chart renders the sandbox policies and Flow is told not to
+    # manage them. flow: Flow ensures them at startup (needs RBAC).
+    manager: helm
+    # Also deny all traffic for any other Pod in the namespace that no
+    # policy allows.
+    namespaceDefaultDeny: true
+    dns:
+      namespace: kube-system
+      podSelector:
+        k8s-app: kube-dns
+
+  resourceQuota:
+    enabled: true
+    hard:
+      pods: "30"
+      requests.cpu: "64"
+      limits.cpu: "64"
+      requests.memory: 512Gi
+      limits.memory: 512Gi
+      requests.ephemeral-storage: 1Ti
+      limits.ephemeral-storage: 1Ti
+      persistentvolumeclaims: "40"
+      requests.storage: 1Ti
+      secrets: "200"
+
+  limitRange:
+    enabled: true
+    container:
+      default: {cpu: "1", memory: 2Gi, ephemeral-storage: 4Gi}
+      defaultRequest: {cpu: 100m, memory: 256Mi, ephemeral-storage: 1Gi}
+      max: {cpu: "8", memory: 64Gi, ephemeral-storage: 160Gi}
+    persistentVolumeClaim:
+      max: {storage: 200Gi}
+
+  # Pull the sandbox image on every sandbox node ahead of time.
+  prePull:
+    enabled: false
+    extraImages: []
+    pauseImage: registry.k8s.io/pause:3.10
+    resources:
+      requests: {cpu: 10m, memory: 16Mi}
+      limits: {cpu: 50m, memory: 64Mi}
+
+# Squid egress proxy for sandboxes (deploy/egress-proxy). Rendered when
+# coding sessions are enabled on the kubernetes provider.
+egressProxy:
+  enabled: true
+  image:
+    repository: ghcr.io/leozhengliu-pixel/flow-egress
+    # Defaults to the chart appVersion (the helper must match Flow).
+    tag: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  replicas: 2
+  port: 3128
+  # Per-environment network modes through the ACL helper. Without it every
+  # sandbox gets the static allowlist.
+  aclHelper:
+    enabled: true
+    # Shared secret between Flow and the proxy. Empty = generated once and
+    # kept across upgrades (looked up from the cluster).
+    secret: ""
+    existingSecret:
+      name: ""
+      key: acl-secret
+    children: 10
+    timeout: 5s
+  # Built-in registry and code host allowlist (files/allowlist-default.txt).
+  defaultAllowlist: true
+  # Extra domains for every sandbox (.example.com matches subdomains). The
+  # configured GitLab and GitHub Enterprise hosts and Flow's own host are
+  # added by Flow; list them here too when the ACL helper is off.
+  allowlist: []
+  # Extra destination CIDRs to deny (node, Pod and Service CIDRs of clusters
+  # that use public address space).
+  blockCIDRs: []
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: "1", memory: 512Mi}
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+
+# `helm test` Pod that verifies the sandbox NetworkPolicy is enforced
+# (docs/coding-sessions-security.md, "Verify NetworkPolicy enforcement").
+networkPolicyProbe:
+  image: curlimages/curl:8.11.1

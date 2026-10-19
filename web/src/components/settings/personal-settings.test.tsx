@@ -432,4 +432,28 @@ describe('personal settings workflows', () => {
     expect(input.onReload).toHaveBeenCalled()
     expect(input.onNavigate).toHaveBeenCalledWith('account-security')
   })
+
+  it('asks to upload a signing key again when coding sessions cannot use it', async () => {
+    const user = userEvent.setup()
+    const input = props('account-security')
+    const onCreateSigningKey = vi.fn()
+    input.onCreateSigningKey = onCreateSigningKey
+    api.fetchCommitSigningKey.mockResolvedValue({ name: 'Old key', type: 'ssh', fingerprint: 'SHA256:old', addedAt: '2026-01-01T00:00:00.000Z', needsReupload: true })
+    render(<MemoryRouter><I18nProvider><PersonalSettings {...input}/></I18nProvider></MemoryRouter>)
+
+    expect(await screen.findByText('Upload this key again so coding sessions can sign your commits')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Upload again' }))
+    expect(onCreateSigningKey).toHaveBeenCalledOnce()
+    expect(screen.getByRole('button', { name: 'Remove' })).toBeVisible()
+  })
+
+  it('shows no re-upload notice for a usable signing key', async () => {
+    const input = props('account-security')
+    api.fetchCommitSigningKey.mockResolvedValue({ name: 'Laptop key', type: 'ssh', fingerprint: 'SHA256:ok', addedAt: '2026-01-01T00:00:00.000Z' })
+    render(<MemoryRouter><I18nProvider><PersonalSettings {...input}/></I18nProvider></MemoryRouter>)
+
+    expect(await screen.findByText('Laptop key')).toBeVisible()
+    expect(screen.queryByText('Upload this key again so coding sessions can sign your commits')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Upload again' })).toBeNull()
+  })
 })

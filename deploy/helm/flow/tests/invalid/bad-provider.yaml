@@ -1,0 +1,4 @@
+coding:
+  enabled: true
+  secretKey: x
+  provider: nomad

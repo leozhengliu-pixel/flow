@@ -516,6 +516,9 @@ const PERSONAL_ZH: Record<string, string> = {
   "Unable to upload signing key": "无法上传签名密钥",
   "Unable to remove signing key": "无法移除签名密钥",
   "Unable to read signing key": "无法读取签名密钥",
+  "Upload this key again so coding sessions can sign your commits":
+    "请重新上传此密钥，以便编码会话为你的提交签名",
+  "Upload again": "重新上传",
   "Authorized applications": "已授权应用",
   "OAuth applications you’ve approved": "你已授权的 OAuth 应用",
   "No authorized applications": "没有已授权应用",
@@ -2203,11 +2206,30 @@ function SecurityOverview({
             )
           }
           description={
-            signingKey
-              ? `${signingKey.type.toUpperCase()} · ${signingKey.fingerprint}`
-              : undefined
+            signingKey ? (
+              <>
+                {`${signingKey.type.toUpperCase()} · ${signingKey.fingerprint}`}
+                {signingKey.needsReupload ? (
+                  <span className="personal-signing-key-reupload" role="status">
+                    {p("Upload this key again so coding sessions can sign your commits")}
+                  </span>
+                ) : null}
+              </>
+            ) : undefined
           }
         >
+          {signingKey?.needsReupload ? (
+            <Action
+              primary
+              onClick={() =>
+                onCreateSigningKey
+                  ? onCreateSigningKey()
+                  : setSigningKeyOpen(true)
+              }
+            >
+              {p("Upload again")}
+            </Action>
+          ) : null}
           {signingKey ? (
             <Action
               danger

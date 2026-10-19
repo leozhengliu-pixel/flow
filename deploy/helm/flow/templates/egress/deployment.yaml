@@ -1,0 +1,136 @@
+{{- if include "flow.egress.enabled" . }}
+{{- $e := .Values.egressProxy }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "flow.egress.fullname" . }}
+  namespace: {{ include "flow.sandbox.namespace" . }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+    {{- include "flow.egress.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: egress-proxy
+spec:
+  replicas: {{ $e.replicas }}
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      {{- include "flow.egress.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "flow.egress.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: egress-proxy
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/egress/configmap.yaml") . | sha256sum }}
+        {{- with $e.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "flow.egress.fullname" . }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 10
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: squid
+          image: {{ include "flow.egress.image" . | quote }}
+          imagePullPolicy: {{ $e.image.pullPolicy }}
+          securityContext:
+            {{- include "flow.restrictedContainer" . | nindent 12 }}
+          ports:
+            - name: proxy
+              containerPort: {{ $e.port }}
+              protocol: TCP
+          env:
+            - name: FLOW_EGRESS_PORT
+              value: {{ $e.port | quote }}
+            - name: FLOW_EGRESS_RUNTIME_DIR
+              value: /tmp/flow-egress
+            - name: FLOW_EGRESS_ALLOWLIST_FILE
+              value: /etc/flow-egress/lists/allowlist.txt
+            - name: FLOW_EGRESS_DEFAULT_ALLOWLIST_FILE
+              value: /etc/flow-egress/lists/allowlist-default.txt
+            - name: FLOW_CODING_EGRESS_DEFAULT_ALLOWLIST
+              value: {{ ternary "on" "off" $e.defaultAllowlist | quote }}
+            - name: FLOW_EGRESS_HELPER_CHILDREN
+              value: {{ $e.aclHelper.children | quote }}
+            - name: FLOW_EGRESS_BLOCK_CIDRS
+              value: {{ join " " $e.blockCIDRs | quote }}
+            {{- if include "flow.egress.aclEnabled" . }}
+            - name: FLOW_EGRESS_FLOW_URL
+              value: {{ include "flow.coding.runtimeUrl" . | quote }}
+            - name: FLOW_EGRESS_ACL_TIMEOUT
+              value: {{ $e.aclHelper.timeout | quote }}
+            - name: FLOW_CODING_EGRESS_ACL_SECRET_FILE
+              value: /var/run/flow-egress/acl-secret
+            {{- end }}
+          readinessProbe:
+            tcpSocket:
+              port: proxy
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: proxy
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            {{- toYaml $e.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: allowlists
+              mountPath: /etc/flow-egress/lists
+              readOnly: true
+            {{- if include "flow.egress.aclEnabled" . }}
+            - name: acl-secret
+              mountPath: /var/run/flow-egress
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: allowlists
+          configMap:
+            name: {{ include "flow.egress.fullname" . }}
+        {{- if include "flow.egress.aclEnabled" . }}
+        - name: acl-secret
+          secret:
+            secretName: {{ include "flow.egress.aclSecretName" . }}
+            defaultMode: 0400
+            items:
+              - key: {{ include "flow.egress.aclSecretKey" . }}
+                path: acl-secret
+        {{- end }}
+      {{- with $e.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $e.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      affinity:
+        {{- if $e.affinity }}
+        {{- toYaml $e.affinity | nindent 8 }}
+        {{- else }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "flow.egress.selectorLabels" . | nindent 20 }}
+        {{- end }}
+{{- end }}

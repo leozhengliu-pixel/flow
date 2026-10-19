@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -50,6 +51,7 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 	if eventID == "" {
 		eventID = fmt.Sprintf("%x", sha256.Sum256(body))
 	}
+	s.dispatchGitLabCodingWebhook(r, provider, connection, body) // coding sessions (track J): MR/Note/Pipeline hooks → follow-ups
 	if deployment, ok := parseDeploymentWebhook(provider, r.Header, body); ok {
 		s.applyDeploymentWebhook(w, r, provider, eventID, deployment)
 		return
@@ -59,10 +61,26 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid webhook payload")
 		return
 	}
+	if !normalizeCodeReviewEvent(provider, r.Header, &event) {
+		writeJSON(w, http.StatusAccepted, map[string]any{"ignored": true, "reason": "event is not a pull/merge request"})
+		return
+	}
+	updated, err := s.applyCodeReviewEvent(r.Context(), workspaceKey(r), provider, eventID, event)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not persist webhook")
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"reviewId": updated.ID, "eventId": eventID})
+}
+
+// normalizeCodeReviewEvent fills the action, number and title of a PR/MR
+// event from the provider's alternatives and reports whether the delivery is
+// a pull/merge request event at all.
+func normalizeCodeReviewEvent(provider string, header http.Header, event *externalCodeReviewEvent) bool {
 	if event.Action == "" {
-		event.Action = strings.TrimSpace(r.Header.Get("X-GitHub-Event"))
+		event.Action = strings.TrimSpace(header.Get("X-GitHub-Event"))
 		if provider == "gitlab" {
-			event.Action = strings.ToLower(strings.TrimSpace(r.Header.Get("X-Gitlab-Event")))
+			event.Action = strings.ToLower(strings.TrimSpace(header.Get("X-Gitlab-Event")))
 		}
 	}
 	if event.Number == 0 {
@@ -77,10 +95,13 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 	if event.Title == "" {
 		event.Title = event.ObjectAttributes.Title
 	}
-	if event.Title == "" || event.Number == 0 {
-		writeJSON(w, http.StatusAccepted, map[string]any{"ignored": true, "reason": "event is not a pull/merge request"})
-		return
-	}
+	return event.Title != "" && event.Number != 0
+}
+
+// applyCodeReviewEvent applies a verified pull/merge request event to the
+// workspace's CodeReview list. The connection webhook above and the GitHub
+// App webhook (github_app.go, coding sessions track D) share it.
+func (s *server) applyCodeReviewEvent(ctx context.Context, workspace, provider, eventID string, event externalCodeReviewEvent) (domain.CodeReview, error) {
 	var updated domain.CodeReview
 	var mergedNow bool
 	var mergedWorkspace string
@@ -88,9 +109,9 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 	// app user (the reference app's OAuth application "GitHub username").
 	var appUsers map[string]domain.User
 	if provider == "github" {
-		appUsers = s.githubAppUsers(r.Context(), workspaceKey(r))
+		appUsers = s.githubAppUsers(ctx, workspace)
 	}
-	err = s.store.MutateWorkspace(codeReviewScope(r.Context(), provider, eventID, event), workspaceKey(r), "code_review.webhook", eventID, map[string]any{"provider": provider, "action": event.Action}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(codeReviewScope(ctx, provider, eventID, event), workspace, "code_review.webhook", eventID, map[string]any{"provider": provider, "action": event.Action}, func(data *domain.Bootstrap) error {
 		mergedNow, mergedWorkspace = false, data.Workspace.URLKey
 		author := githubActor(appUsers, event.PullRequest.User.Login, data.Viewer)
 		sender := githubActor(appUsers, event.Sender.Login, data.Viewer)
@@ -165,16 +186,14 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "could not persist webhook")
-		return
+		return updated, err
 	}
 	if mergedNow {
-		if err := s.store.MarkAgentSessionsMerged(r.Context(), mergedWorkspace, updated.IssueIDs, time.Now()); err != nil {
-			writeError(w, http.StatusInternalServerError, "could not persist webhook")
-			return
+		if err := s.store.MarkAgentSessionsMerged(ctx, mergedWorkspace, updated.IssueIDs, time.Now()); err != nil {
+			return updated, err
 		}
 	}
-	writeJSON(w, http.StatusAccepted, map[string]any{"reviewId": updated.ID, "eventId": eventID})
+	return updated, nil
 }
 
 func (s *server) slackWebhook(w http.ResponseWriter, r *http.Request) {

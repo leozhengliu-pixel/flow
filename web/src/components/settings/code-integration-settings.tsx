@@ -27,6 +27,7 @@ import {
 } from "@/lib/api";
 import type { BootstrapData, IntegrationConnection } from "@/types/flow";
 import { integrationHasCodeAccess } from "@/lib/code-access";
+import { isWorkspaceAdmin } from "@/lib/settings-access";
 import {
   GITHUB_ENTERPRISE_CLOUD,
   gitHubSettingsPageMetadata,
@@ -34,6 +35,7 @@ import {
   isGithubEnterpriseCloudConnection,
   type GitHubSettingsMetadataItem,
 } from "@/lib/github-settings-metadata";
+import { GitHubAppCard } from "./github-app-card";
 import { GitLabIntegrationSettings } from "./gitlab-integration-settings";
 import { SettingsSelect } from "./settings-primitives";
 
@@ -410,6 +412,8 @@ function ProviderIntegrationSettings({
         )}
       </section>
 
+      {/* coding sessions (track D): GitHub App install card */}
+      {provider === "github" && <GitHubAppCard isAdmin={isWorkspaceAdmin(data)} />}
       {provider === "github" && connections[0] && (
         <section className="code-integration-section" aria-labelledby="github-code-access-heading">
           <div className="code-section-title">

@@ -703,6 +703,7 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 	// searches and reads outside them come back empty or not found.
 	request = request.WithContext(context.WithValue(request.Context(), apiKeyContextKey{}, scope.toolKey()))
 	request = request.WithContext(context.WithValue(request.Context(), agentExtraToolsKey{}, []agentProviderTool{loopFinishToolDefinition}))
+	request = request.WithContext(withCodingLoopRun(request.Context(), loop, rec.run.ID, trigger, scope.codeAccess)) // coding sessions (track L)
 	if loop.WebSearch && s.webSearchAvailable() {
 		request = request.WithContext(withAgentWebTools(request.Context()))
 	}

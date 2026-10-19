@@ -31,6 +31,8 @@ import { useMarkAgentSessionRead } from './agent-read-state'
 import { AgentChatMenu, AgentRenamePalette } from './agent-chat-actions'
 import { deleteAgentChat, useAgentChatHotkeys } from './agent-chat-commands'
 import { AgentSessionFeedbackDialog } from './agent-message-actions'
+// coding sessions (track G)
+import { ChatCodingSessionCards } from '@/components/coding-sessions/chat-coding-session-cards'
 
 /** The entity the user is looking at; attached to the first message of a new conversation. */
 export type AgentPageContext = { type: 'project' | 'document' | 'issue' | 'initiative'; id: string; label: string }
@@ -439,7 +441,8 @@ export function AgentChatPanel({
       <EntityAgentThread
         renderMessageAttachment={message => {
           const draft = drafts[message.id]
-          if (!draft) return null
+          // coding sessions (track G): a session the reply started shows as a live card.
+          if (!draft) return <ChatCodingSessionCards message={message} data={data}/>
           // The editor may reformat markdown, so compare loosely: outdated once the host no longer holds the draft's opening words.
           const opening = draft.replace(/[#*_>`-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24)
           const current = (card.current ?? '').replace(/<[^>]+>/g, ' ').replace(/[#*_>`-]/g, '').replace(/\s+/g, ' ')

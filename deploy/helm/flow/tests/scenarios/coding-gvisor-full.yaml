@@ -1,0 +1,94 @@
+# gVisor with a chart-created RuntimeClass, user namespaces, a separate
+# runtime port, pre-pull, and every coding value set to a non-default value
+# (the mapping test checks each FLOW_CODING_* variable is rendered).
+config:
+  appUrl: https://flow.example.com
+coding:
+  enabled: true
+  runtimePort:
+    enabled: true
+    port: 8090
+  instanceId: flow-prod
+  secretKey: dGVzdC1rZXktdGVzdC1rZXktdGVzdC1rZXktdGVzdC0=
+  image:
+    repository: registry.example.com/flow-sandbox
+    digest: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    pullPolicy: Always
+    pullSecrets: [regcred]
+  branchPrefix: agent/
+  prMention: "@bot"
+  browser: false
+  debugTerminal: false
+  artifactMaxBytes: 5242880
+  maxSessions: 40
+  workspaceSessions: 8
+  reconcileInterval: 3s
+  gcInterval: 2m
+  orphanGrace: 20m
+  sizes:
+    small: {cpu: "2", memory: 4Gi, ephemeral: 10Gi, pids: 2048}
+  workspaceSize: 30Gi
+  cpuRequestRatio: "0.5"
+  regions: [eu, us]
+  regionLabel: example.com/region
+  defaultRegion: eu
+  warmPool: {small: 2, medium: 1}
+  warmPoolMaxAge: 2h
+  timeouts:
+    queue: 20m
+    turn: 2h
+  retries:
+    start: 3
+  snapshot:
+    archivePrefix: snaps
+    retain: 3
+  kubernetes:
+    kubeconfig: ""
+    storageClass: fast
+    workspaceVolume: emptyDir
+    extraLabels: {team: platform}
+    extraAnnotations: {owner: flow}
+    qps: 30
+    burst: 60
+  docker:
+    runtime: runsc
+  egress:
+    noProxy: [internal.example.com]
+  llm:
+    timeout: 5m
+    anthropic: {apiKey: sk-ant-test}
+    openai: {apiKey: sk-openai-test}
+    opensource: {baseUrl: "http://vllm.ai.svc:8000/v1", apiKey: oss-test}
+    models:
+      openSource: [qwen3-coder]
+    prices:
+      claude-sonnet-4-5: {input: 3, output: 15}
+  runtimePrices: {small: "0.05", medium: "0.10", large: "0.20"}
+  gitlab:
+    credentialMode: oauth
+    tokenScopes: [read_repository, write_repository, read_api, api]
+  githubApp:
+    appId: "123456"
+    slug: flow-agent
+    clientId: Iv1.test
+    clientSecret: client-secret-test
+    privateKey: "-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----"
+    webhookSecret: webhook-secret-test
+    host: ghe.example.com
+    apiUrl: https://ghe.example.com/api/v3
+sandboxes:
+  runtimeClass:
+    name: gvisor
+    create: true
+    overhead:
+      podFixed: {cpu: 250m, memory: 160Mi}
+  hostUsers: false
+  priorityClassName: flow-sandbox
+  prePull:
+    enabled: true
+    extraImages: [mcr.microsoft.com/playwright:v1.56.0-noble]
+egressProxy:
+  allowlist: [.corp-mirror.example.net, pypi.internal.example.com]
+  blockCIDRs: [203.0.113.0/24, "2001:db8::/32"]
+  aclHelper:
+    secret: test-acl-secret

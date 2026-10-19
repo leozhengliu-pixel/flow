@@ -1,0 +1,50 @@
+{
+  "events": [
+    {
+      "id": "e1",
+      "type": "thought",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "Let me look at the failing build."
+    },
+    {
+      "id": "e2",
+      "type": "error",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "error": {
+        "code": "quotaExceeded",
+        "message": "API Error: 402 {\"error\":{\"type\":\"quota_exceeded\",\"message\":\"Spend limit reached\"}}"
+      },
+      "body": "API Error: 402 {\"error\":{\"type\":\"quota_exceeded\",\"message\":\"Spend limit reached\"}}"
+    },
+    {
+      "id": "e3",
+      "type": "usage",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "usage": {
+        "model": "claude-sonnet-4-5",
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "costUsd": 0
+      }
+    }
+  ],
+  "outcome": {
+    "elicited": false,
+    "completed": true,
+    "model": "claude-sonnet-4-5",
+    "harnessSessionId": "9a1c2b3d-0000-4000-8000-000000000001",
+    "usage": {
+      "model": "claude-sonnet-4-5",
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "costUsd": 0
+    },
+    "error": {
+      "code": "quotaExceeded",
+      "message": "API Error: 402 {\"error\":{\"type\":\"quota_exceeded\",\"message\":\"Spend limit reached\"}}"
+    }
+  }
+}

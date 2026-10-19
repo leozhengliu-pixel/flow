@@ -1,0 +1,43 @@
+{
+  "events": [
+    {
+      "id": "e1",
+      "type": "elicitation",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "Which greeting should the file contain?\n\n- hello\n- hi"
+    },
+    {
+      "id": "e2",
+      "type": "response",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "I asked which greeting you prefer."
+    },
+    {
+      "id": "e3",
+      "type": "usage",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "usage": {
+        "model": "claude-sonnet-4-5",
+        "inputTokens": 3000,
+        "outputTokens": 40,
+        "costUsd": 0.01656
+      }
+    }
+  ],
+  "outcome": {
+    "elicited": true,
+    "completed": true,
+    "model": "claude-sonnet-4-5",
+    "harnessSessionId": "d45c4385-3935-47ff-8907-0622d9ab302f",
+    "usage": {
+      "model": "claude-sonnet-4-5",
+      "inputTokens": 3000,
+      "outputTokens": 40,
+      "costUsd": 0.01656
+    },
+    "finalText": "I asked which greeting you prefer."
+  }
+}

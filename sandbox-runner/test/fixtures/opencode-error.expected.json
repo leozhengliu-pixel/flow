@@ -1,0 +1,25 @@
+{
+  "events": [
+    {
+      "id": "e1",
+      "type": "error",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "error": {
+        "code": "quotaExceeded",
+        "message": "Payment Required: {\"error\":{\"type\":\"quota_exceeded\"}}"
+      },
+      "body": "Payment Required: {\"error\":{\"type\":\"quota_exceeded\"}}"
+    }
+  ],
+  "outcome": {
+    "elicited": false,
+    "completed": false,
+    "model": "fixture-model",
+    "harnessSessionId": "ses_err01",
+    "error": {
+      "code": "quotaExceeded",
+      "message": "Payment Required: {\"error\":{\"type\":\"quota_exceeded\"}}"
+    }
+  }
+}

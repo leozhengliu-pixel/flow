@@ -88,6 +88,7 @@
   "search_documentation",
   "search_documents",
   "search_issues",
+  "start_coding_session",
   "submit_diff_review",
   "triage_issue",
   "update_notification"

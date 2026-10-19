@@ -34,6 +34,8 @@ type Config struct {
 	WebSearch            WebSearchConfig
 	Telemetry            TelemetryConfig
 	Retention            RetentionConfig
+	// Coding configures coding sessions (coding.go).
+	Coding CodingConfig
 	// Warnings lists settings Load adjusted (for example a feature turned
 	// off for a missing credential); the server logs them at startup.
 	Warnings []string
@@ -253,6 +255,7 @@ func Load() (Config, error) {
 		WebSearch: WebSearchConfig{Provider: strings.ToLower(value("FLOW_WEB_SEARCH_PROVIDER", "")), APIKey: secret("FLOW_WEB_SEARCH_API_KEY"), URL: strings.TrimRight(value("FLOW_WEB_SEARCH_URL", ""), "/")},
 		Telemetry: TelemetryConfig{Enabled: boolean("FLOW_TELEMETRY_ENABLED", false) && !boolean("OTEL_SDK_DISABLED", false), ServiceName: value("OTEL_SERVICE_NAME", "flow-api"), Environment: value("FLOW_ENVIRONMENT", "production"), Endpoint: value("OTEL_EXPORTER_OTLP_ENDPOINT", ""), TraceEndpoint: value("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", ""), MetricEndpoint: value("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "")},
 	}
+	config.Coding = loadCoding(appURL)
 	config.resolveTTSCredential()
 	config.resolveAgentMedia()
 	config.clampRetention()
@@ -408,6 +411,9 @@ func (c Config) Validate() error {
 	if err := c.WebSearch.Validate(); err != nil {
 		return err
 	}
+	if err := c.Coding.Validate(); err != nil {
+		return err
+	}
 	if c.Telemetry.Enabled && c.Telemetry.Endpoint == "" && (c.Telemetry.TraceEndpoint == "" || c.Telemetry.MetricEndpoint == "") {
 		return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT or both signal-specific trace and metric endpoints are required when telemetry is enabled")
 	}
@@ -509,6 +515,16 @@ func switchedOff(name string) bool {
 
 func integer(name string, fallback int) int {
 	value, err := strconv.Atoi(strings.TrimSpace(os.Getenv(name)))
+	if err != nil {
+		return fallback
+	}
+	return value
+}
+
+// integer64 is integer for values that may exceed 32 bits (byte sizes on
+// 32-bit platforms).
+func integer64(name string, fallback int64) int64 {
+	value, err := strconv.ParseInt(strings.TrimSpace(os.Getenv(name)), 10, 64)
 	if err != nil {
 		return fallback
 	}

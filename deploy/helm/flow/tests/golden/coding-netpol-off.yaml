@@ -1,0 +1,414 @@
+---
+# Source: flow/templates/sandbox/namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flow-sandboxes
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: sandboxes
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+  annotations:
+
+---
+# Source: flow/templates/sandbox/serviceaccount.yaml
+# Sandbox Pods run as this ServiceAccount. It is bound to no Role, and Flow
+# sets automountServiceAccountToken: false on every sandbox Pod as well.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flow-sandbox
+  namespace: flow-sandboxes
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: sandboxes
+automountServiceAccountToken: false
+
+---
+# Source: flow/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flow
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+automountServiceAccountToken: false
+
+---
+# Source: flow/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: flow
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/name: flow
+    app.kubernetes.io/instance: flow
+type: Opaque
+stringData:
+  FLOW_CODING_SECRET_KEY: "dGVzdC1rZXktdGVzdC1rZXktdGVzdC1rZXktdGVzdC0="
+
+---
+# Source: flow/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flow
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/name: flow
+    app.kubernetes.io/instance: flow
+data:
+  FLOW_HTTP_ADDR: ":8080"
+  FLOW_APP_URL: "http://flow.local"
+  FLOW_STATIC_PATH: /app/web
+  FLOW_LOG_LEVEL: "info"
+  FLOW_LOG_FORMAT: "json"
+  FLOW_DATABASE_DRIVER: "sqlite"
+  FLOW_DATABASE_PATH: "/app/data/flow.db"
+  FLOW_REDIS_MODE: "disabled"
+  FLOW_REDIS_TLS: "false"
+  FLOW_REDIS_PREFIX: "flow"
+  FLOW_STORAGE_DRIVER: "local"
+  FLOW_STORAGE_LOCAL_PATH: /app/data/uploads
+  # Coding sessions (docs/coding-sessions.md).
+  FLOW_CODING_ENABLED: "true"
+  FLOW_CODING_PROVIDER: "kubernetes"
+  FLOW_CODING_RUNTIME_URL: "http://flow.flow.svc.cluster.local:8080"
+  FLOW_CODING_INSTANCE_ID: "flow"
+  FLOW_CODING_IMAGE: "ghcr.io/leozhengliu-pixel/flow-sandbox:latest"
+  FLOW_CODING_IMAGE_PULL_POLICY: "IfNotPresent"
+  FLOW_CODING_IMAGE_PULL_SECRETS: ""
+  FLOW_CODING_BRANCH_PREFIX: "flow/"
+  FLOW_CODING_PR_MENTION: "@flow"
+  FLOW_CODING_BROWSER: "on"
+  FLOW_CODING_DEBUG_TERMINAL: "on"
+  FLOW_CODING_ARTIFACT_MAX_BYTES: "10485760"
+  FLOW_CODING_MAX_SESSIONS: "20"
+  FLOW_CODING_WORKSPACE_SESSIONS: "5"
+  FLOW_CODING_RECONCILE_INTERVAL: "5s"
+  FLOW_CODING_GC_INTERVAL: "5m"
+  FLOW_CODING_ORPHAN_GRACE: "10m"
+  FLOW_CODING_SIZE_SMALL: "cpu=1,memory=8Gi,ephemeral=20Gi,pids=4096"
+  FLOW_CODING_SIZE_MEDIUM: "cpu=2,memory=16Gi,ephemeral=40Gi,pids=8192"
+  FLOW_CODING_SIZE_LARGE: "cpu=4,memory=32Gi,ephemeral=80Gi,pids=16384"
+  FLOW_CODING_WORKSPACE_SIZE: "20Gi"
+  FLOW_CODING_CPU_REQUEST_RATIO: "1"
+  FLOW_CODING_REGIONS: ""
+  FLOW_CODING_REGION_LABEL: "topology.kubernetes.io/region"
+  FLOW_CODING_DEFAULT_REGION: ""
+  FLOW_CODING_WARM_POOL: ""
+  FLOW_CODING_WARM_POOL_MAX_AGE: "1h"
+  FLOW_CODING_QUEUE_TIMEOUT: "30m"
+  FLOW_CODING_APPROVAL_TIMEOUT: "168h"
+  FLOW_CODING_PROVISION_TIMEOUT: "5m"
+  FLOW_CODING_START_TIMEOUT: "10m"
+  FLOW_CODING_SETUP_TIMEOUT: "20m"
+  FLOW_CODING_TURN_TIMEOUT: "1h"
+  FLOW_CODING_HEARTBEAT_TIMEOUT: "2m"
+  FLOW_CODING_PUBLISH_TIMEOUT: "5m"
+  FLOW_CODING_IDLE_TTL: "15m"
+  FLOW_CODING_STOP_GRACE: "1m"
+  FLOW_CODING_MAX_SESSION_DURATION: "4h"
+  FLOW_CODING_DEBUG_TERMINAL_TTL: "20m"
+  FLOW_CODING_TOKEN_GRACE: "5m"
+  FLOW_CODING_PROVISION_RETRIES: "3"
+  FLOW_CODING_START_RETRIES: "2"
+  FLOW_CODING_PUBLISH_RETRIES: "5"
+  FLOW_CODING_SNAPSHOT_RETRIES: "1"
+  FLOW_CODING_SNAPSHOT_STRATEGY: "archive"
+  FLOW_CODING_VOLUME_SNAPSHOT_CLASS: ""
+  FLOW_CODING_ARCHIVE_PREFIX: "coding-snapshots"
+  FLOW_CODING_ARCHIVE_MAX_BYTES: "10737418240"
+  FLOW_CODING_SNAPSHOT_TIMEOUT: "30m"
+  FLOW_CODING_SNAPSHOT_TTL: "168h"
+  FLOW_CODING_SNAPSHOT_RETAIN: "2"
+  FLOW_CODING_SNAPSHOT_REFRESH_INTERVAL: "24h"
+  FLOW_CODING_K8S_KUBECONFIG: ""
+  FLOW_CODING_K8S_NAMESPACE: "flow-sandboxes"
+  FLOW_CODING_K8S_RUNTIME_CLASS: ""
+  FLOW_CODING_K8S_HOST_USERS: "true"
+  FLOW_CODING_K8S_STORAGE_CLASS: ""
+  FLOW_CODING_K8S_WORKSPACE_VOLUME: "auto"
+  FLOW_CODING_K8S_NODE_SELECTOR: "flow.dev/pool=sandbox"
+  FLOW_CODING_K8S_TOLERATIONS: ""
+  FLOW_CODING_K8S_SERVICE_ACCOUNT: "flow-sandbox"
+  FLOW_CODING_K8S_PRIORITY_CLASS: ""
+  FLOW_CODING_K8S_EXTRA_LABELS: ""
+  FLOW_CODING_K8S_EXTRA_ANNOTATIONS: ""
+  FLOW_CODING_K8S_NETWORK_POLICY: "false"
+  FLOW_CODING_K8S_FLOW_NAMESPACE: "flow"
+  FLOW_CODING_K8S_FLOW_POD_SELECTOR: "app.kubernetes.io/instance=flow,app.kubernetes.io/name=flow"
+  FLOW_CODING_K8S_PROXY_NAMESPACE: "flow-sandboxes"
+  FLOW_CODING_K8S_PROXY_POD_SELECTOR: "app.kubernetes.io/instance=flow,app.kubernetes.io/name=flow-egress"
+  FLOW_CODING_K8S_QPS: "20"
+  FLOW_CODING_K8S_BURST: "40"
+  FLOW_CODING_DOCKER_HOST: "unix:///var/run/docker.sock"
+  FLOW_CODING_DOCKER_NETWORK: "flow-sandbox"
+  FLOW_CODING_DOCKER_RUNTIME: ""
+  FLOW_CODING_EGRESS_PROXY_URL: ""
+  FLOW_CODING_EGRESS_ALLOWLIST: ""
+  FLOW_CODING_EGRESS_DEFAULT_ALLOWLIST: "on"
+  FLOW_CODING_EGRESS_NO_PROXY: ""
+  FLOW_CODING_LLM_ANTHROPIC_BASE_URL: "https://api.anthropic.com"
+  FLOW_CODING_LLM_OPENAI_BASE_URL: "https://api.openai.com/v1"
+  FLOW_CODING_LLM_OPENSOURCE_BASE_URL: ""
+  FLOW_CODING_MODELS_CLAUDE_CODE: "claude-sonnet-4-5,claude-opus-4-1"
+  FLOW_CODING_MODELS_CODEX: "gpt-5-codex,gpt-5"
+  FLOW_CODING_MODELS_OPEN_SOURCE: ""
+  FLOW_CODING_MODEL_PRICES: ""
+  FLOW_CODING_LLM_TIMEOUT: "10m"
+  FLOW_CODING_RUNTIME_PRICES: "large=0.40,medium=0.20,small=0.10"
+  FLOW_CODING_GITLAB_CREDENTIAL_MODE: "project-token"
+  FLOW_CODING_GITLAB_TOKEN_SCOPES: "read_repository,write_repository,read_api"
+
+---
+# Source: flow/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: flow-data
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+# Source: flow/templates/sandbox/rbac.yaml
+# Flow's permissions, limited to the sandbox namespace (design §9). Flow
+# needs no ClusterRole except the optional read-only preflight role below.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: flow-sandboxes
+  namespace: flow-sandboxes
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: sandboxes
+# The rules match the Kubernetes provider's API calls exactly
+# (api/internal/sandbox/kubernetes; preflight checks them with
+# SelfSubjectAccessReview): least privilege, no watch and no event access.
+rules:
+  # Sandbox Pods: create, observe, adopt after a restart, delete; orphan GC lists by label.
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [create, get, list, delete]
+  # Runner logs archived on stop.
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+  # Debug terminal (Provider.Exec): create for SPDY, get for the WebSocket
+  # exec protocol (Kubernetes >= 1.30).
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [create, get]
+  # Per-sandbox token Secrets (created, owner-referenced to the Pod by patch,
+  # deleted on stop); list for orphan GC by label.
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create, get, list, delete, patch]
+  # Workspace volumes (volumesnapshot strategy or FLOW_CODING_K8S_WORKSPACE_VOLUME=pvc).
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [create, get, list, delete]
+  # Preflight reads the sandbox namespace's Pod Security label (a namespace
+  # get is authorized in that namespace, so the Role can grant it).
+  - apiGroups: [""]
+    resources: [namespaces]
+    resourceNames: ["flow-sandboxes"]
+    verbs: [get]
+---
+# Source: flow/templates/sandbox/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: flow-sandboxes
+  namespace: flow-sandboxes
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: sandboxes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: flow-sandboxes
+subjects:
+  - kind: ServiceAccount
+    name: flow
+    namespace: flow
+
+---
+# Source: flow/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: flow
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/name: flow
+    app.kubernetes.io/instance: flow
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: flow
+    app.kubernetes.io/instance: flow
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+
+---
+# Source: flow/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flow
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/name: flow
+    app.kubernetes.io/instance: flow
+    app.kubernetes.io/component: api
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flow
+      app.kubernetes.io/instance: flow
+  strategy:
+    # One replica on a ReadWriteOnce volume (or SQLite): the old Pod must stop
+    # before the new one mounts the volume.
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flow
+        app.kubernetes.io/instance: flow
+        app.kubernetes.io/component: api
+      annotations:
+        checksum/config: 98d2cbf4c7b59ac2cf650d1e085049192cfd3ba8b15103d534120c55991f7415
+        checksum/secret: 32b320635f1cf58bf2db6ac6de15332abefefb3a4cb238796640b193b004203e
+    spec:
+      serviceAccountName: flow
+      # The kubernetes sandbox provider uses the in-cluster ServiceAccount token.
+      automountServiceAccountToken: true
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: flow
+          image: "ghcr.io/leozhengliu-pixel/flow:0.1.0"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: flow
+            - secretRef:
+                name: flow
+          env:
+            - name: GOMEMLIMIT
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.memory
+                  divisor: "1"
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 60
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 5
+          # TCP, not /api/health: a Redis outage makes health report 503 and
+          # must take the Pod out of rotation, not restart it.
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+            timeoutSeconds: 5
+          resources:
+            limits:
+              memory: 2Gi
+            requests:
+              cpu: 250m
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: flow-data
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi

@@ -1,0 +1,26 @@
+{{- if include "flow.egress.enabled" . }}
+{{- $extra := list }}
+{{- range .Values.egressProxy.allowlist }}
+{{- $extra = append $extra . }}
+{{- end }}
+{{- with .Values.coding.githubApp }}
+{{- if and .appId (ne .host "github.com") }}
+{{- $extra = append $extra .host }}
+{{- end }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "flow.egress.fullname" . }}
+  namespace: {{ include "flow.sandbox.namespace" . }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+    {{- include "flow.egress.selectorLabels" . | nindent 4 }}
+data:
+  # Built-in list (FLOW_CODING_EGRESS_DEFAULT_ALLOWLIST); the same list is in
+  # Flow (api/cmd/server/coding_egress.go).
+  allowlist-default.txt: |
+    {{- .Files.Get "files/allowlist-default.txt" | trim | nindent 4 }}
+  # Extra domains for every sandbox.
+  allowlist.txt: {{ join "\n" $extra | quote }}
+{{- end }}

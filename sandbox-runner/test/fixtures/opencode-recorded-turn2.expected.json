@@ -1,0 +1,41 @@
+{
+  "events": [
+    {
+      "id": "e1",
+      "type": "elicitation",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "Which greeting should the file contain?\n\n- hello\n- hi"
+    },
+    {
+      "id": "e2",
+      "type": "response",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "I asked which greeting you prefer."
+    },
+    {
+      "id": "e3",
+      "type": "usage",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "usage": {
+        "model": "fixture-model",
+        "inputTokens": 3600,
+        "outputTokens": 80
+      }
+    }
+  ],
+  "outcome": {
+    "elicited": true,
+    "completed": true,
+    "model": "fixture-model",
+    "harnessSessionId": "ses_eb05cf62fffeExyG4pKOW1pdcG",
+    "finalText": "I asked which greeting you prefer.",
+    "usage": {
+      "model": "fixture-model",
+      "inputTokens": 3600,
+      "outputTokens": 80
+    }
+  }
+}

@@ -1,0 +1,8 @@
+#!/bin/sh
+# glab wrapper: credentials come from Flow at runtime (~/.flow/cli-env), never from the image.
+/usr/local/bin/node /opt/flow/runner/flow-runner.mjs cli-env ensure >/dev/null 2>&1 || true
+if [ -r "$HOME/.flow/cli-env" ]; then
+  # shellcheck source=/dev/null
+  . "$HOME/.flow/cli-env"
+fi
+exec /usr/bin/glab "$@"

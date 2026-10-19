@@ -1,0 +1,15 @@
+{{- if and (include "flow.egress.enabled" .) .Values.egressProxy.podDisruptionBudget.enabled (gt (int .Values.egressProxy.replicas) 1) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "flow.egress.fullname" . }}
+  namespace: {{ include "flow.sandbox.namespace" . }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+    {{- include "flow.egress.selectorLabels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.egressProxy.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "flow.egress.selectorLabels" . | nindent 6 }}
+{{- end }}
