@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -530,13 +531,30 @@ func (s *server) deliverApplicationTask(ctx context.Context, task domain.AgentTa
 	_ = s.store.FinishApplicationDelivery(ctx, task.ID, task.Version, success)
 }
 
+// appendBuiltinActivity appends the built-in agent's activity at the version
+// it last wrote. When the task has meanwhile become a coding session's anchor
+// (start_coding_session reuses the delegation task), the session writes to it
+// as well, so the agent's later activities — its final reply — are appended at
+// the current version instead of being dropped as a conflict.
+func appendBuiltinActivity(ctx context.Context, repo *store.SQLiteStore, task domain.AgentTask, activity domain.AgentActivity) (domain.AgentTask, error) {
+	next, err := repo.AppendAgentActivity(ctx, task.WorkspaceKey, task.ID, task.Version, activity)
+	if !errors.Is(err, store.ErrIssueVersion) {
+		return next, err
+	}
+	current, readErr := repo.AgentTask(ctx, task.WorkspaceKey, task.ID)
+	if readErr != nil || current.CodingSessionID == "" || current.Version == task.Version {
+		return next, err
+	}
+	return repo.AppendAgentActivity(ctx, task.WorkspaceKey, task.ID, current.Version, activity)
+}
+
 func (s *server) executeBuiltinApplication(r *http.Request, app domain.ApplicationInstallation, task domain.AgentTask, data domain.Bootstrap) {
 	appendWithTool := func(kind, body string, call *domain.AgentToolCall) error {
 		current, err := s.store.ApplicationByUser(r.Context(), task.AppUserID)
 		if err != nil || !current.Active || !slices.Contains(current.AccessTeamIDs(), task.TeamID) {
 			return store.ErrAuthForbidden
 		}
-		next, err := s.store.AppendAgentActivity(r.Context(), task.WorkspaceKey, task.ID, task.Version, domain.AgentActivity{ActorID: task.AppUserID, Type: kind, Body: body, ToolCall: call})
+		next, err := appendBuiltinActivity(r.Context(), s.store, task, domain.AgentActivity{ActorID: task.AppUserID, Type: kind, Body: body, ToolCall: call})
 		if err == nil {
 			task = next
 		}
