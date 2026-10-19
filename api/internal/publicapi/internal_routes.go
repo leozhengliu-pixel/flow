@@ -739,6 +739,7 @@ var InternalRoutes = []string{
 	"GET /api/coding/sessions/{id}",
 	"GET /api/coding/sessions/{id}/artifacts",
 	"GET /api/coding/sessions/{id}/artifacts/{artifactId}/content", // coding sessions (track I)
+	"GET /api/coding/sessions/{id}/diff",                           // coding session page
 	"GET /api/coding/sessions/{id}/sandboxes/{sandboxId}/logs",
 	"GET /api/coding/settings",
 	"GET /api/coding/snapshots/{id}/logs",
@@ -771,6 +772,7 @@ var InternalRoutes = []string{
 	"POST /api/coding/sessions/{id}/pull-request",
 	"POST /api/coding/sessions/{id}/restart",
 	"POST /api/coding/sessions/{id}/stop",
+	"POST /api/coding/sessions/{id}/subscription", // coding session page
 	"POST /api/coding/snapshots/{id}/cancel",
 	"POST /api/integrations/github-app/authorize",
 	"POST /api/integrations/github-app/install",

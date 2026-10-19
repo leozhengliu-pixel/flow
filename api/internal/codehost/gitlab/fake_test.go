@@ -49,6 +49,8 @@ type fakeProject struct {
 	Notes         map[int][]string
 	Pipelines     []map[string]any
 	FailedJobs    map[int64][]map[string]any
+	// Compare answers repository/compare by "from...to".
+	Compare map[string]map[string]any
 }
 
 type fakeToken struct {
@@ -256,6 +258,13 @@ func (f *fakeGitLab) serveProject(w http.ResponseWriter, r *http.Request, projec
 			return
 		}
 		write(w, http.StatusOK, map[string]any{"id": id, "access_level": level})
+	case len(segments) == 2 && segments[0] == "repository" && segments[1] == "compare":
+		result, ok := project.Compare[query.Get("from")+"..."+query.Get("to")]
+		if !ok || query.Get("straight") != "false" {
+			write(w, http.StatusNotFound, map[string]any{"message": "404 Ref Not Found"})
+			return
+		}
+		write(w, http.StatusOK, result)
 	case segments[0] == "access_tokens":
 		f.serveTokens(w, r, project, segments, query)
 	case segments[0] == "merge_requests":

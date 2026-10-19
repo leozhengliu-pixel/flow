@@ -4226,6 +4226,41 @@
         "x-flow-source": "coding_artifacts_api.go"
       }
     },
+    "/api/coding/sessions/{id}/diff": {
+      "get": {
+        "operationId": "get_coding_sessions_id_diff",
+        "tags": [
+          "coding"
+        ],
+        "summary": "GET /api/coding/sessions/{id}/diff",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "coding_sessions_api.go"
+      }
+    },
     "/api/coding/sessions/{id}/dismiss": {
       "post": {
         "operationId": "post_coding_sessions_id_dismiss",
@@ -4416,6 +4451,41 @@
           "coding"
         ],
         "summary": "POST /api/coding/sessions/{id}/stop",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "coding_sessions_api.go"
+      }
+    },
+    "/api/coding/sessions/{id}/subscription": {
+      "post": {
+        "operationId": "post_coding_sessions_id_subscription",
+        "tags": [
+          "coding"
+        ],
+        "summary": "POST /api/coding/sessions/{id}/subscription",
         "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
         "parameters": [
           {
