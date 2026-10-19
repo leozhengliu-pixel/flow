@@ -269,7 +269,7 @@ func loadCoding(appURL string) CodingConfig {
 			Strategy:            strings.ToLower(value("FLOW_CODING_SNAPSHOT_STRATEGY", "archive")),
 			VolumeSnapshotClass: value("FLOW_CODING_VOLUME_SNAPSHOT_CLASS", ""),
 			ArchivePrefix:       value("FLOW_CODING_ARCHIVE_PREFIX", "coding-snapshots"),
-			ArchiveMaxBytes:     int64(integer("FLOW_CODING_ARCHIVE_MAX_BYTES", 10<<30)),
+			ArchiveMaxBytes:     integer64("FLOW_CODING_ARCHIVE_MAX_BYTES", 10<<30),
 			Timeout:             duration("FLOW_CODING_SNAPSHOT_TIMEOUT", 30*time.Minute),
 			TTL:                 duration("FLOW_CODING_SNAPSHOT_TTL", 7*24*time.Hour),
 			Retain:              integer("FLOW_CODING_SNAPSHOT_RETAIN", 2),
