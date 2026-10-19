@@ -87,38 +87,45 @@ export FLOW_PLAYWRIGHT_MODULE=${PLAYWRIGHT_PREFIX}/node_modules/playwright/index
 EOF
 chmod 0644 /etc/profile.d/flow-playwright.sh
 
-log "smoke test: headless Chromium as uid ${SANDBOX_UID}"
-smoke_dir="$(mktemp -d)"
-chmod 0777 "${smoke_dir}"
-cat >"${smoke_dir}/smoke.mjs" <<EOF
-import { chromium } from '${PLAYWRIGHT_PREFIX}/node_modules/playwright/index.mjs';
-// chromiumSandbox: false matches the runner: the Pod (non-root, no capabilities, seccomp, network
-// policy) is the sandbox boundary, and Chromium's own sandbox cannot start without user namespaces.
-const browser = await chromium.launch({ headless: true, chromiumSandbox: false, args: ['--disable-dev-shm-usage'] });
-try {
-  const context = await browser.newContext({ recordVideo: { dir: '${smoke_dir}/video', size: { width: 320, height: 240 } } });
-  const page = await context.newPage();
-  await page.setContent('<h1>ok 中文 ✓</h1>');
-  await page.screenshot({ path: '${smoke_dir}/shot.png' });
-  await context.close();
-} finally {
-  await browser.close();
-}
+# FLOW_BROWSER_SMOKE_TEST=skip skips the launch check: multi-arch builds set
+# it for emulated (QEMU) targets, where Chromium cannot start reliably. The
+# native build of the same Dockerfile still runs it.
+if [ "${FLOW_BROWSER_SMOKE_TEST:-run}" = "skip" ]; then
+  log "smoke test skipped (FLOW_BROWSER_SMOKE_TEST=skip, emulated build)"
+else
+  log "smoke test: headless Chromium as uid ${SANDBOX_UID}"
+  smoke_dir="$(mktemp -d)"
+  chmod 0777 "${smoke_dir}"
+  cat >"${smoke_dir}/smoke.mjs" <<EOF
+  import { chromium } from '${PLAYWRIGHT_PREFIX}/node_modules/playwright/index.mjs';
+  // chromiumSandbox: false matches the runner: the Pod (non-root, no capabilities, seccomp, network
+  // policy) is the sandbox boundary, and Chromium's own sandbox cannot start without user namespaces.
+  const browser = await chromium.launch({ headless: true, chromiumSandbox: false, args: ['--disable-dev-shm-usage'] });
+  try {
+    const context = await browser.newContext({ recordVideo: { dir: '${smoke_dir}/video', size: { width: 320, height: 240 } } });
+    const page = await context.newPage();
+    await page.setContent('<h1>ok 中文 ✓</h1>');
+    await page.screenshot({ path: '${smoke_dir}/shot.png' });
+    await context.close();
+  } finally {
+    await browser.close();
+  }
 EOF
-chmod 0644 "${smoke_dir}/smoke.mjs"
-run_as_sandbox_user() {
-  if id -u flow >/dev/null 2>&1 && [ "$(id -u flow)" = "${SANDBOX_UID}" ] && command -v runuser >/dev/null 2>&1; then
-    runuser -u flow -- env HOME="${smoke_dir}" PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH}" "$@"
-  elif command -v setpriv >/dev/null 2>&1; then
-    setpriv --reuid="${SANDBOX_UID}" --regid="${SANDBOX_GID}" --clear-groups \
-      env HOME="${smoke_dir}" PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH}" "$@"
-  else
-    fail "neither runuser (with user flow) nor setpriv is available for the non-root smoke test"
-  fi
-}
-run_as_sandbox_user node "${smoke_dir}/smoke.mjs"
-[ -s "${smoke_dir}/shot.png" ] || fail "smoke test did not produce a screenshot"
-ls "${smoke_dir}"/video/*.webm >/dev/null 2>&1 || fail "smoke test did not produce a video (ffmpeg missing?)"
-rm -rf "${smoke_dir}"
+  chmod 0644 "${smoke_dir}/smoke.mjs"
+  run_as_sandbox_user() {
+    if id -u flow >/dev/null 2>&1 && [ "$(id -u flow)" = "${SANDBOX_UID}" ] && command -v runuser >/dev/null 2>&1; then
+      runuser -u flow -- env HOME="${smoke_dir}" PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH}" "$@"
+    elif command -v setpriv >/dev/null 2>&1; then
+      setpriv --reuid="${SANDBOX_UID}" --regid="${SANDBOX_GID}" --clear-groups \
+        env HOME="${smoke_dir}" PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH}" "$@"
+    else
+      fail "neither runuser (with user flow) nor setpriv is available for the non-root smoke test"
+    fi
+  }
+  run_as_sandbox_user node "${smoke_dir}/smoke.mjs"
+  [ -s "${smoke_dir}/shot.png" ] || fail "smoke test did not produce a screenshot"
+  ls "${smoke_dir}"/video/*.webm >/dev/null 2>&1 || fail "smoke test did not produce a video (ffmpeg missing?)"
+  rm -rf "${smoke_dir}"
+fi
 
 log "done: playwright ${PLAYWRIGHT_VERSION}, browsers in ${PLAYWRIGHT_BROWSERS_PATH}"
