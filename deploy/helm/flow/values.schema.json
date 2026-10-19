@@ -191,7 +191,8 @@
             "disabled",
             "fake",
             "docker",
-            "kubernetes"
+            "kubernetes",
+            "opensandbox"
           ]
         },
         "runtimeUrl": {
@@ -442,6 +443,225 @@
             "retain": {
               "type": "integer",
               "minimum": 1
+            }
+          }
+        },
+        "opensandbox": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "pattern": "^https?://.+$"
+            },
+            "apiKey": {
+              "type": "string"
+            },
+            "existingSecret": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "key": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "execdTokenSecret": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "key": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "imageAuth": {
+              "type": "object",
+              "properties": {
+                "username": {
+                  "type": "string"
+                },
+                "passwordSecret": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "key": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            },
+            "requestTimeout": {
+              "type": "string",
+              "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+            },
+            "createTimeout": {
+              "type": "string",
+              "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+            },
+            "expiryWindow": {
+              "type": "string",
+              "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+            },
+            "retries": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10
+            },
+            "tls": {
+              "type": "object",
+              "properties": {
+                "insecureSkipVerify": {
+                  "type": "boolean"
+                },
+                "caSecret": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "key": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            },
+            "extraMetadata": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              }
+            },
+            "extensions": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              }
+            },
+            "pools": {
+              "type": "object",
+              "properties": {
+                "small": {
+                  "type": "string"
+                },
+                "medium": {
+                  "type": "string"
+                },
+                "large": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "sizes": {
+              "type": "object",
+              "properties": {
+                "small": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean"
+                    ]
+                  }
+                },
+                "medium": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean"
+                    ]
+                  }
+                },
+                "large": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean"
+                    ]
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "ephemeralStorage": {
+              "type": "boolean"
+            },
+            "execdAccess": {
+              "enum": [
+                "proxy",
+                "endpoint"
+              ]
+            },
+            "runAsUid": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tokenPath": {
+              "type": "string",
+              "pattern": "^/.+[^/]$"
+            },
+            "egressPolicy": {
+              "enum": [
+                "off",
+                "proxy"
+              ]
+            },
+            "egressAllow": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "serverNamespace": {
+              "type": "string"
+            },
+            "sandboxNamespace": {
+              "type": "string"
+            },
+            "networkPolicy": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "podSelector": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "extraIngressFrom": {
+                  "type": "array"
+                },
+                "extraEgress": {
+                  "type": "array"
+                }
+              }
             }
           }
         },

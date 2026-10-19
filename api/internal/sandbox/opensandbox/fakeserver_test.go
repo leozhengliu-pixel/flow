@@ -46,6 +46,47 @@ type fakeSandbox struct {
 	PingFailures int
 }
 
+// clone deep-copies what tests assert on (call with f.mu held).
+func (sb *fakeSandbox) clone() *fakeSandbox {
+	c := *sb
+	c.Metadata = map[string]string{}
+	for k, v := range sb.Metadata {
+		c.Metadata[k] = v
+	}
+	if sb.ExpiresAt != nil {
+		expires := *sb.ExpiresAt
+		c.ExpiresAt = &expires
+	}
+	c.Files, c.Modes, c.Commands, c.PTYs = map[string][]byte{}, map[string]int{}, map[string]*fakeCommand{}, map[string]string{}
+	for k, v := range sb.Files {
+		c.Files[k] = append([]byte(nil), v...)
+	}
+	for k, v := range sb.Modes {
+		c.Modes[k] = v
+	}
+	for k, v := range sb.Commands {
+		cmd := *v
+		c.Commands[k] = &cmd
+	}
+	for k, v := range sb.PTYs {
+		c.PTYs[k] = v
+	}
+	c.Order = append([]string(nil), sb.Order...)
+	return &c
+}
+
+func (f *fakeServer) setForeground(fn func(sb *fakeSandbox, req RunCommandRequest) ([]string, []string, int)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.foreground = fn
+}
+
+func (f *fakeServer) renewalsCopy() []time.Time {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]time.Time(nil), f.renewals...)
+}
+
 type fakeError struct {
 	Status     int
 	Code       string
@@ -112,7 +153,7 @@ func (f *fakeServer) list() []*fakeSandbox {
 	defer f.mu.Unlock()
 	out := []*fakeSandbox{}
 	for _, sb := range f.sandboxes {
-		out = append(out, sb)
+		out = append(out, sb.clone())
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
@@ -165,7 +206,8 @@ func (f *fakeServer) runner(id string) *fakeCommand {
 	}
 	for _, cid := range sb.Order {
 		if cmd := sb.Commands[cid]; cmd.Request.Background {
-			return cmd
+			copy := *cmd
+			return &copy
 		}
 	}
 	return nil

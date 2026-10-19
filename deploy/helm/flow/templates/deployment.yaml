@@ -127,6 +127,29 @@ spec:
                   name: {{ $v.egressProxy.aclHelper.existingSecret.name }}
                   key: {{ $v.egressProxy.aclHelper.existingSecret.key }}
             {{- end }}
+            {{- if include "flow.coding.opensandbox" . }}
+            {{- with $c.opensandbox.existingSecret.name }}
+            - name: FLOW_CODING_OPENSANDBOX_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: {{ $c.opensandbox.existingSecret.key }}
+            {{- end }}
+            {{- with $c.opensandbox.execdTokenSecret.name }}
+            - name: FLOW_CODING_OPENSANDBOX_EXECD_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: {{ $c.opensandbox.execdTokenSecret.key }}
+            {{- end }}
+            {{- with $c.opensandbox.imageAuth.passwordSecret.name }}
+            - name: FLOW_CODING_OPENSANDBOX_IMAGE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: {{ $c.opensandbox.imageAuth.passwordSecret.key }}
+            {{- end }}
+            {{- end }}
             {{- with $v.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -170,6 +193,11 @@ spec:
               mountPath: /var/run/flow/github-app
               readOnly: true
             {{- end }}
+            {{- if and (include "flow.coding.opensandbox" .) $c.opensandbox.tls.caSecret.name }}
+            - name: opensandbox-ca
+              mountPath: /var/run/flow/opensandbox-ca
+              readOnly: true
+            {{- end }}
             {{- with $v.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -195,6 +223,14 @@ spec:
             items:
               - key: {{ $c.githubApp.privateKeySecret.key }}
                 path: private-key.pem
+        {{- end }}
+        {{- if and (include "flow.coding.opensandbox" .) $c.opensandbox.tls.caSecret.name }}
+        - name: opensandbox-ca
+          secret:
+            secretName: {{ $c.opensandbox.tls.caSecret.name }}
+            items:
+              - key: {{ $c.opensandbox.tls.caSecret.key }}
+                path: ca.crt
         {{- end }}
         {{- with $v.extraVolumes }}
         {{- toYaml . | nindent 8 }}
