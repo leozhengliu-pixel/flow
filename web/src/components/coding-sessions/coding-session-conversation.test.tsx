@@ -164,7 +164,7 @@ describe('errors', () => {
   it('offers Retry on the last error of a failed session only', async () => {
     const user = userEvent.setup()
     vi.mocked(api.restartCodingSession).mockResolvedValue(makeSession({ state: 'pending', phase: 'queued', version: 2 }))
-    stream(activity('prompt', 'Go'), activity('error', 'Selected model is at capacity. (internal)', { metadata: { errorCode: 'internal' } }), activity('prompt', 'Again'), activity('error', 'Codex exited with code 1 (harnessFailed)', { metadata: { errorCode: 'harnessFailed' } }))
+    stream(activity('prompt', 'Go'), activity('error', 'Selected model is at capacity. (modelUnavailable)', { metadata: { errorCode: 'modelUnavailable' } }), activity('prompt', 'Again'), activity('error', 'Codex exited with code 1 (harnessFailed)', { metadata: { errorCode: 'harnessFailed' } }))
     const { onChange } = renderConversation(makeSession({ state: 'error', phase: 'done', errorCode: 'harnessFailed' }))
     await screen.findByText('Selected model is at capacity.')
     const cards = screen.getAllByRole('alert')

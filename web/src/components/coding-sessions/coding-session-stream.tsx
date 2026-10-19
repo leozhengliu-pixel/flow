@@ -192,12 +192,13 @@ export function CodingErrorCard({ activity, session, data, onRetry, busy, retry 
   </div>
   const info = code ? codingErrorInfo(code, { workspace, codeHost: session.codeHost }) : undefined
   const raw = activity ? activity.body.replace(/\s*\([a-zA-Z]+\)\s*$/, '') : session.error
-  const message = info && code !== 'internal' ? t(info.message) : raw || t('Something went wrong while running this session.')
+  // The agent's own error text, as the reference app shows it; sandbox start problems keep the raw reason for admins (§4.4).
+  const hideRaw = Boolean(info?.adminDetail && !admin)
+  const message = raw && !hideRaw ? raw : info && code !== 'internal' ? t(info.message) : t('Something went wrong while running this session.')
   return <div className="cs-error-card" role="alert" data-code={code}>
     <div className="cs-error-body">
       <div className="cs-error-title"><AlertTriangle size={14} aria-hidden="true"/><span>{t('Error')}</span></div>
       <p data-i18n-ignore={message === raw || undefined}>{message}</p>
-      {info?.adminDetail && admin && raw && raw !== message && <p className="cs-error-detail" data-i18n-ignore>{raw}</p>}
     </div>
     {retry && <button type="button" className="cs-button is-medium" disabled={busy} onClick={onRetry}>{t('Retry')}</button>}
   </div>

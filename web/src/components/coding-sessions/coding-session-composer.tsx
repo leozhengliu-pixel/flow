@@ -86,7 +86,7 @@ function OptionDropdown({ options, selected, onSelect }: { options: ComposerOpti
       </button>
     </DropdownMenuTrigger>
     <DropdownMenuContent align="start" className="coding-session-menu cs-option-menu">
-      <SearchableMenuItems options={options.map(option => ({ id: option.value, label: option.label, entity: true, keywords: option.value }))} selectedId={selected?.value} searchLabel="Filter options"
+      <SearchableMenuItems options={options.map(option => ({ id: option.value, label: option.label, entity: true, keywords: option.value }))} selectedId={selected?.value} searchLabel="Filter options" itemClassName="menu-item" searchClassName="property-command-search"
         renderOption={option => <span className="cs-option-menu-label" title={option.label} data-i18n-ignore>{option.label}</span>}
         onSelect={option => onSelect({ label: option.label, value: option.id })}/>
     </DropdownMenuContent>
