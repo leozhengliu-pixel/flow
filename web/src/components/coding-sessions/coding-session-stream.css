@@ -1,0 +1,211 @@
+/* Coding session stream states: turns, folded work groups, the accent shimmer, the plan pill, the PR card and commit
+   badges, error variants, the "Input needed" composer frame, the queue and the "Latest" button. Values follow the
+   reference app's session panel (see the session UI spec); colours come from the --cs-* tokens in styles/tokens.css. */
+
+/* Buttons: small 24px, medium 28px; primary, secondary (white with a hairline ring) and ghost. */
+.cs-button{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:24px;box-sizing:border-box;padding:0 8px;border:0;border-radius:9999px;background:var(--cs-control-tertiary);box-shadow:inset 0 0 0 1px var(--cs-border-solid);color:var(--cs-label-base);font:500 12px/1 var(--font);text-decoration:none;white-space:nowrap;cursor:pointer;transition:background-color .15s}
+.cs-button:hover:not(:disabled){background:var(--cs-control-tertiary-hover)}
+.cs-button.is-medium{height:28px;padding:0 10px}
+.cs-button.is-primary{background:var(--accent-primary);box-shadow:none;color:var(--on-accent)}
+.cs-button.is-primary:hover:not(:disabled){background:var(--accent-primary-hover)}
+.cs-button.is-ghost{background:transparent;box-shadow:none;color:var(--cs-label-muted)}
+.cs-button.is-ghost:hover:not(:disabled){background:var(--cs-control-tertiary-hover);color:var(--cs-label-base)}
+.cs-button:disabled{opacity:.6;cursor:default}
+
+/* Stream and turns */
+.coding-agent-stream.cs-stream{gap:0;padding:0 18px 12px 8px}
+.cs-turn{display:flex;flex-direction:column;gap:8px;padding-bottom:24px}
+.cs-turn[data-last]{padding-bottom:8px}
+.cs-turn>.cs-prompt-row+.cs-turn-items{margin-top:18px}
+.cs-time-marker{align-self:center;padding:8px 0;color:var(--cs-label-faint);font:500 12px/normal var(--font)}
+.cs-prompt-row{display:flex;justify-content:flex-end;animation:cs-enter-prompt .15s ease-out}
+.cs-prompt-row em{font-style:italic}
+.cs-turn-items{display:flex;flex-direction:column;align-items:stretch;gap:12px;min-width:0}
+.cs-turn-items>*{animation:cs-enter .15s ease-out}
+@keyframes cs-enter{from{opacity:0;transform:translateY(8px)}}
+@keyframes cs-enter-prompt{from{opacity:0;transform:translateY(10px)}}
+.cs-text{padding:0 10px;color:var(--cs-label-base);font:450 13px/20.8px var(--font);overflow-wrap:anywhere}
+.cs-approval-text{margin:0}
+.cs-start-line{display:flex;align-items:center;gap:8px;margin:12px 0 0;padding:0 10px;color:var(--cs-label-muted);font:450 12px/normal var(--font)}
+.cs-start-line strong{color:var(--cs-label-base);font-weight:500}
+.cs-start-line a{color:var(--cs-label-muted);text-decoration:none}
+.cs-start-line a:hover{text-decoration:underline}
+.cs-start-line+.cs-turn>.cs-time-marker,.cs-start-line+.cs-start-line{margin-top:4px}
+.cs-separator{display:flex;align-items:center;gap:12px;padding:8px 0 8px 8px;color:var(--cs-label-faint);font:500 12px/normal var(--font)}
+.cs-separator::before,.cs-separator::after{content:"";flex:1;height:1px;background:var(--cs-border-faint)}
+.cs-auth-line{display:flex;align-items:center;gap:6px;margin:0;padding:0 10px;color:var(--cs-label-faint);font:450 13px/normal var(--font)}
+.cs-stream-end{flex:none;height:1px}
+
+/* Action rows and work groups */
+.cs-action{display:flex;flex-direction:column;min-width:0;padding:0 10px}
+.cs-action-header{display:flex;align-items:center;gap:6px;min-width:0;min-height:16px;color:var(--cs-label-muted);font:500 12px/16px var(--font);transition:color .15s}
+.cs-action-header:hover{color:var(--cs-label-base)}
+.cs-action-header.is-disclosure{align-self:flex-start;max-width:calc(100% + 16px);margin:0 -8px;padding:0 8px;border-radius:4px;cursor:pointer}
+.cs-action-header.is-disclosure:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.cs-action-label{flex:none;white-space:nowrap}
+.cs-action-detail{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-action-label code,.cs-action-detail code,.cs-group-label code{padding:0;border:0;background:none;box-shadow:none;color:inherit;font:inherit;font-family:var(--font-monospace,monospace)}
+.cs-action-result{display:flex;flex-direction:column;gap:12px;padding-top:12px;animation:cs-fade .15s ease-out}
+.cs-action-result pre{max-height:240px;margin:0;padding:8px 10px;overflow:auto;border-radius:6px;background:var(--cs-bg-base);color:var(--cs-label-muted);font:12px/1.5 var(--font-monospace,monospace);white-space:pre-wrap;overflow-wrap:anywhere}
+@keyframes cs-fade{from{opacity:0}}
+.cs-triangle{flex:none;color:currentColor;transition:transform .15s ease-out}
+.cs-triangle[data-open]{transform:rotate(90deg)}
+.cs-group{display:flex;flex-direction:column;min-width:0}
+.cs-group-header{display:flex;align-items:center;gap:6px;align-self:flex-start;min-width:0;max-width:100%;min-height:16px;margin:0 2px;padding:0 8px;border:0;border-radius:4px;background:none;color:var(--cs-label-muted);font:500 12px/16px var(--font);text-align:left;cursor:pointer;transition:color .15s}
+.cs-group-header:hover{color:var(--cs-label-base)}
+.cs-group-header.is-sub{margin:0;padding:0 8px 0 2px}
+.cs-group-label{flex:none;white-space:nowrap}
+.cs-group-children{display:flex;flex-direction:column;gap:12px;padding-top:12px;animation:cs-fade .15s ease-out}
+.cs-tools{display:flex;flex-direction:column;padding:0 8px}
+.cs-reasoning{position:relative;padding-left:24px}
+.cs-reasoning::before{content:"";position:absolute;top:2px;bottom:2px;left:11px;width:2px;border-radius:1px;background:var(--cs-border-solid)}
+.cs-reasoning p{margin:0;color:var(--cs-label-muted);font:450 12px/1.6 var(--font);white-space:pre-wrap;overflow-wrap:anywhere}
+.cs-reasoning.is-promoted{margin-top:12px}
+
+/* The label swap: the new text slides up from below, the old one out above, both with a short blur. */
+.cs-slide-label{position:relative;display:inline-flex;align-items:center;gap:6px;min-width:0;height:16px;overflow:hidden}
+.cs-slide-label-item{display:inline-flex;align-items:center;gap:6px;min-width:0}
+.cs-slide-label-item.is-entering{animation:cs-slide-in .15s ease-out}
+.cs-slide-label-item.is-leaving{position:absolute;left:0;top:0;animation:cs-slide-out .15s ease-out forwards}
+@keyframes cs-slide-in{from{opacity:0;transform:translateY(16px);filter:blur(4px)}}
+@keyframes cs-slide-out{to{opacity:0;transform:translateY(-16px);filter:blur(4px)}}
+
+/* The accent shimmer: the purple sweep clipped to the muted text, 1.8s travel then a 0.6s pause. */
+.cs-shimmer{position:relative;display:inline-block;color:var(--cs-label-muted);white-space:nowrap}
+.cs-shimmer-sweep{position:absolute;inset:0;color:transparent;background:var(--agent-working-shine) no-repeat -180px center/180px 72px;-webkit-background-clip:text;background-clip:text;mix-blend-mode:screen;animation:cs-shimmer 2.4s linear infinite;pointer-events:none}
+:root[data-theme="light"] .cs-shimmer-sweep{mix-blend-mode:normal}
+@keyframes cs-shimmer{0%{background-position:-180px center}75%,100%{background-position:calc(100% + 180px) center}}
+.cs-legacy-shimmer{background:linear-gradient(110deg,var(--cs-label-muted) 25%,var(--cs-label-title) 45%,var(--cs-label-title) 55%,var(--cs-label-muted) 75%) 200% 0/200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:cs-legacy-shimmer 1.8s linear infinite}
+@keyframes cs-legacy-shimmer{to{background-position:-200% 0}}
+
+/* Turn footer: links on the left, copy on the right (revealed on hover when links are shown). */
+.cs-turn-footer{display:flex;align-items:center;gap:4px;margin-top:-12px;padding:0 4px 0 8px}
+.cs-turn-footer .cs-copy{color:var(--cs-label-faint);transition:opacity .15s}
+.cs-turn-footer[data-links] .cs-copy{opacity:0}
+.cs-turn-footer[data-links]:hover .cs-copy,.cs-turn-footer[data-links] .cs-copy:focus-visible{opacity:1}
+.cs-composer-spacer{flex:1}
+
+/* "Latest" */
+.cs-latest{position:relative;flex:none;height:0;z-index:2}
+.cs-latest::before{content:"";position:absolute;left:0;right:0;bottom:0;height:52px;background:linear-gradient(to bottom,transparent,var(--theme-surface-1));pointer-events:none}
+.cs-latest-button{position:absolute;left:50%;bottom:12px;display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 10px 0 8px;border:0;border-radius:15px;background:var(--cs-control-tertiary);box-shadow:inset 0 0 0 1px var(--cs-border-solid),var(--card-shadow);color:var(--cs-label-base);font:500 12px/1 var(--font);transform:translateX(-50%);cursor:pointer}
+.cs-latest-button:hover{background:var(--cs-control-tertiary-hover)}
+.cs-latest-button svg{color:var(--cs-label-muted)}
+
+/* Plan pill above the composer */
+.cs-composer-area{flex:none;display:flex;flex-direction:column;gap:6px;margin:0 8px 8px}
+.cs-composer-area>.coding-session-composer,.cs-composer-area>.cs-input-frame>.coding-session-composer{margin:0}
+.cs-plan{display:flex;flex-direction:column;overflow:hidden;padding:2px 0;border:1px solid var(--cs-border-thin);border-radius:15px;background:var(--cs-control-tertiary);user-select:none;animation:cs-plan-in .3s cubic-bezier(.25,.1,.25,1);transition:border-radius .22s,background-color .15s}
+.cs-plan:hover,.cs-plan:active{background:var(--cs-control-tertiary-hover)}
+.cs-plan[data-open]{padding:5px 0 2px;border-radius:8px}
+@keyframes cs-plan-in{from{opacity:0;transform:translateY(6px)}}
+.cs-plan-header{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:26px;box-sizing:border-box;padding:3px 12px;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.cs-plan-heading{display:flex;align-items:center;gap:8px;min-width:0;flex:1;animation:cs-plan-in .18s ease-out}
+.cs-plan-heading strong{color:var(--cs-label-base);font:500 12px/normal var(--font)}
+.cs-plan-updated{color:var(--cs-label-faint);font:450 12px/normal var(--font)}
+.cs-plan-position{flex:none;color:var(--cs-label-muted);font:500 11px/normal var(--font);font-variant-numeric:tabular-nums}
+.cs-marquee{--cs-marquee-duration:3s;flex:1;min-width:0;overflow:hidden;color:var(--cs-label-base);font:450 12px/normal var(--font);white-space:nowrap}
+.cs-marquee-track{display:inline-flex;gap:8px}
+.cs-marquee-text{flex:none}
+.cs-marquee:not([data-overflow]) .cs-marquee-text{overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.cs-marquee:not([data-overflow]) .cs-marquee-track{display:block;overflow:hidden;text-overflow:ellipsis}
+.cs-marquee[data-overflow]{-webkit-mask:linear-gradient(to right,transparent,black 12px,black calc(100% - 24px),transparent);mask:linear-gradient(to right,transparent,black 12px,black calc(100% - 24px),transparent)}
+.cs-plan-header:hover .cs-marquee[data-overflow] .cs-marquee-track{animation:cs-marquee var(--cs-marquee-duration) linear infinite}
+@keyframes cs-marquee{to{transform:translateX(calc(-50% - 4px))}}
+.cs-plan-list{display:flex;flex-direction:column;max-height:136px;margin:0;padding:0 0 4px;overflow-y:auto;list-style:none;scrollbar-width:none;animation:cs-fade .25s ease-out}
+.cs-plan-list::-webkit-scrollbar{display:none}
+.cs-plan-list li{display:flex;gap:8px;padding:6px 12px;animation:cs-fade .45s ease-out .12s backwards}
+.cs-plan-index{flex:none;width:14px;height:17px;display:grid;place-items:center;color:var(--cs-label-muted);font:450 12px/1 var(--font);font-variant-numeric:tabular-nums}
+.cs-plan-text{min-width:0;color:var(--cs-label-base);font:450 12px/1.4167 var(--font);overflow-wrap:anywhere}
+.cs-plan-list li[data-status=completed] .cs-plan-text,.cs-plan-list li[data-status=canceled] .cs-plan-text{color:var(--cs-label-muted)}
+.cs-plan-list li[data-status=canceled] .cs-plan-text{text-decoration:line-through}
+.cs-plan-shimmer{background:linear-gradient(90deg,var(--cs-label-muted) 38%,var(--cs-label-title) 50%,var(--cs-label-muted) 62%) 180% 0/200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:cs-plan-shimmer 2.4s linear infinite}
+@keyframes cs-plan-shimmer{to{background-position:-80% 0}}
+
+/* PR card, commit badge, uncommitted changes */
+.cs-pr-card{position:relative;display:flex;flex-direction:column;gap:4px;margin:0 2px;padding:8px;border:1px solid var(--cs-border-solid);border-radius:8px;background:var(--cs-control-tertiary);transition:background-color .15s}
+.cs-pr-card:hover{background:var(--cs-control-tertiary-hover)}
+.cs-pr-card-link{position:absolute;inset:0;border-radius:inherit}
+.cs-pr-card-link:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.cs-pr-card-stats{display:flex;align-items:center;justify-content:space-between;min-height:22px;color:var(--cs-label-base);font:450 12px/normal var(--font)}
+.cs-pr-card-stats strong{margin-right:4px;font-weight:500}
+.cs-tabular{font-variant-numeric:tabular-nums}
+.cs-additions{margin-left:6px;color:var(--cs-green-text);font-variant-numeric:tabular-nums}
+.cs-deletions{margin-left:6px;color:var(--cs-red-text);font-variant-numeric:tabular-nums}
+.cs-pr-card-title{display:flex;align-items:center;gap:6px;min-width:0;color:var(--cs-label-base);font:500 12px/normal var(--font)}
+.cs-pr-card-status{display:inline-flex;align-items:center;gap:4px;flex:none}
+.cs-pr-status-icon{color:var(--cs-green-base)}
+.cs-pr-card[data-status=draft] .cs-pr-status-icon{color:var(--cs-label-muted)}
+.cs-pr-card[data-status=merged] .cs-pr-status-icon{color:var(--cs-purple-base)}
+.cs-pr-card[data-status=closed] .cs-pr-status-icon{color:var(--cs-red-base)}
+.cs-pr-card-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-pr-card-name.is-loading{color:var(--cs-label-muted)}
+.cs-pr-card-branches{display:flex;align-items:center;gap:4px;min-width:0;font:450 12px/normal var(--font-monospace,monospace)}
+.cs-branch-chip{position:relative;z-index:1;min-width:0;padding:0 2px;border:0;border-radius:4px;background:none;color:var(--cs-label-muted);font:inherit;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.cs-branch-chip:hover{color:var(--cs-label-base)}
+.cs-branch-chip.is-base{flex:0 0 auto;max-width:40%}
+.cs-branch-chip.is-head{flex:0 1 auto}
+.cs-branch-arrow{flex:none;color:var(--cs-label-faint)}
+.cs-commit-badge{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;height:24px;margin-left:10px;padding:0 8px;border:1px solid var(--cs-border-solid);border-radius:6px;background:var(--cs-control-tertiary);color:var(--cs-label-base);font:450 12px/1 var(--font);cursor:pointer;transition:background-color .15s}
+.cs-commit-badge:hover{background:var(--cs-control-tertiary-hover)}
+.cs-commit-badge code,.cs-commit-sha{color:var(--cs-label-muted);font:450 12px/1 var(--font-monospace,monospace)}
+.cs-commit-message{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-uncommitted{display:inline-flex;align-items:center;gap:5px;align-self:flex-start;height:24px;margin-left:10px;padding:0 8px 0 6px;border:0;border-radius:6px;background:var(--cs-control-tertiary);box-shadow:inset 0 0 0 1px var(--cs-border-solid);color:var(--cs-label-base);font:450 12px/1 var(--font);cursor:pointer}
+.cs-uncommitted:hover{background:var(--cs-control-tertiary-hover)}
+.cs-uncommitted .cs-additions,.cs-uncommitted .cs-deletions{margin-left:0}
+
+/* Errors: the red-striped card (Retry on the last), the muted "failed to start" card and the access pills. */
+.cs-error-card{position:relative;isolation:isolate;display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;box-sizing:border-box;padding:8px 12px;border:1px solid var(--cs-border-thin);border-radius:8px;background:var(--cs-control-tertiary)}
+.cs-error-card::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:linear-gradient(90deg,color-mix(in srgb,var(--cs-red-base) 20%,transparent) 0%,transparent 15%),repeating-linear-gradient(45deg,color-mix(in srgb,var(--cs-red-text) 20%,transparent) 0 .5px,transparent .5px 6px);-webkit-mask:linear-gradient(to right,color-mix(in srgb,black 30%,transparent),transparent 15%);mask:linear-gradient(to right,color-mix(in srgb,black 30%,transparent),transparent 15%)}
+.cs-error-card::after{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1px;background:linear-gradient(90deg,color-mix(in srgb,var(--cs-red-bg) 30%,transparent) 0%,transparent 50%);-webkit-mask:linear-gradient(black 0 0) content-box,linear-gradient(black 0 0);-webkit-mask-composite:xor;mask:linear-gradient(black 0 0) content-box exclude,linear-gradient(black 0 0);pointer-events:none}
+.cs-error-card.is-muted::before,.cs-error-card.is-muted::after{display:none}
+.cs-error-body{display:flex;flex-direction:column;gap:4px;flex:1 1 240px;min-width:0}
+.cs-error-title{display:flex;align-items:center;gap:6px;color:var(--cs-red-text);font:500 12px/normal var(--font)}
+.cs-error-body p{margin:0;padding-left:0;color:color-mix(in oklch,var(--cs-red-text) 25%,var(--cs-label-base) 75%);font:450 12px/19.2px var(--font);overflow-wrap:anywhere}
+.cs-error-card.is-muted .cs-error-body p{color:var(--cs-label-muted)}
+.cs-error-detail{font-family:var(--font-monospace,monospace)}
+.cs-access{display:flex;flex-direction:column;gap:8px}
+.cs-access>p{margin:0;padding:0 12px;color:var(--cs-label-base);font:450 13px/20px var(--font)}
+.cs-inline-link{color:var(--cs-purple-text);font-weight:500;text-decoration:none}
+.cs-inline-link:hover{text-decoration:underline}
+.cs-access-pill{display:flex;align-items:center;gap:8px;min-height:32px;box-sizing:border-box;padding:4px 4px 4px 8px;border:1px solid color-mix(in srgb,var(--cs-purple-base) 75%,transparent);border-radius:9999px;background:linear-gradient(90deg,color-mix(in srgb,var(--cs-purple-base) 12%,transparent),var(--cs-bg-base));color:var(--cs-purple-text);font:500 13px/normal var(--font)}
+.cs-access-pill>span:not(.cs-access-pill-actions){flex:1;min-width:0}
+.cs-access-pill-icon{flex:none;color:var(--cs-purple-text)}
+.cs-access-pill-actions{display:inline-flex;gap:6px;flex:none}
+
+/* Composer: the "Input needed" frame, option chips, Continue / Queue, the queued messages */
+.cs-input-frame{display:flex;flex-direction:column;margin:0 -4px -4px;padding:0 4px 4px;border-radius:10.5px;background:linear-gradient(to bottom,var(--cs-purple-frame),var(--cs-bg-base))}
+.cs-input-frame-header{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px;box-sizing:border-box;padding:6px 8px 6px 12px;color:var(--cs-purple-text);font:500 12px/normal var(--font)}
+.cs-connect-pill{display:inline-flex;align-items:center;gap:4px;height:24px;box-sizing:border-box;padding:0 8px 0 6px;border:1px solid color-mix(in srgb,var(--cs-purple-text) 25%,transparent);border-radius:9999px;background:var(--cs-purple-tint);color:var(--cs-purple-text);font:450 12px/1 var(--font);text-decoration:none}
+.cs-composer-tools{align-items:center}
+.cs-options{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap;padding-left:6px}
+.cs-option-chip{display:inline-flex;align-items:center;max-width:30ch;height:24px;box-sizing:border-box;padding:0 8px;border:1px dashed color-mix(in srgb,var(--cs-purple-text) 25%,transparent);border-radius:9999px;background:transparent;color:var(--cs-purple-text);font:450 12px/1 var(--font);cursor:pointer}
+.cs-option-chip>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-option-chip:hover{background:var(--cs-purple-tint)}
+.cs-option-chip[aria-pressed=true]{border-style:solid;background:var(--cs-purple-tint)}
+.cs-option-select{display:inline-flex;align-items:center;gap:4px;max-width:30ch;height:24px;box-sizing:border-box;padding:0 6px 0 8px;border:0;border-radius:9999px;background:var(--cs-purple-tint);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--cs-purple-text) 25%,transparent);color:var(--cs-purple-text);font:450 12px/1 var(--font);cursor:pointer}
+.cs-option-select>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-option-select.is-selected{background:var(--cs-control-tertiary-hover);box-shadow:inset 0 0 0 1px var(--cs-option-border);color:var(--cs-label-base)}
+.cs-option-menu{max-width:320px}
+.cs-option-menu-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-send-label{display:inline-flex;align-items:center;gap:4px;height:24px;box-sizing:border-box;padding:0 8px;border:0;border-radius:9999px;background:var(--cs-control-tertiary);box-shadow:inset 0 0 0 1px var(--cs-border-solid);color:var(--cs-label-base);font:500 12px/1 var(--font);cursor:pointer}
+.cs-send-label.is-primary{background:var(--accent-primary);box-shadow:none;color:var(--on-accent)}
+.cs-send-label:disabled{opacity:.6;cursor:default}
+.cs-queue{display:flex;flex-direction:column;margin:-6px -8px 4px -2px;padding:4px;list-style:none;border-radius:8px 8px 0 0;background:linear-gradient(to bottom,var(--cs-bg-sub),var(--cs-bg-base))}
+.cs-queue li{display:flex;align-items:center;gap:8px;height:32px;box-sizing:border-box;padding:8px 10px;border-radius:6px}
+.cs-queue li:hover{background:var(--cs-row-hover)}
+.cs-queue-icon{flex:none;color:var(--cs-label-faint);transform:scaleX(-1)}
+.cs-queue-text{flex:1;min-width:0;overflow:hidden;color:var(--cs-label-base);font:450 13px/normal var(--font);text-overflow:ellipsis;white-space:nowrap}
+.cs-queue-actions{display:inline-flex;align-items:center;gap:2px;opacity:0;transition:opacity .15s}
+.cs-queue li:hover .cs-queue-actions,.cs-queue li:focus-within .cs-queue-actions{opacity:1}
+
+/* The avatar's red dot: failed sessions and sessions whose agent never answered. */
+.coding-agent-avatar[data-stalled] .coding-agent-avatar-dot{background:var(--cs-red-base);box-shadow:0 0 0 2px var(--theme-surface-1)}
+
+@media (prefers-reduced-motion:reduce){
+  .cs-shimmer-sweep{display:none}
+  .cs-legacy-shimmer,.cs-plan-shimmer{animation:none;background:none;color:var(--cs-label-muted)}
+  .cs-plan-header:hover .cs-marquee[data-overflow] .cs-marquee-track{animation:none}
+  .cs-turn-items>*,.cs-prompt-row,.cs-plan,.cs-plan-heading,.cs-plan-list,.cs-plan-list li,.cs-group-children,.cs-action-result,.cs-slide-label-item{animation:none}
+  .cs-slide-label-item.is-leaving{display:none}
+}

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ActionDialogHost } from "@/components/ui/action-dialogs";
 import { I18nProvider } from "@/i18n/i18n";
@@ -109,31 +109,40 @@ async function connect() {
   return FakeWebSocket.instances[0];
 }
 
+const card = () => screen.getByTestId("debug-terminal");
+const status = () => screen.getAllByRole("status")[0];
+
 describe("DebugTerminal", () => {
   it("shows the reference app's idle card", () => {
     renderTerminal();
     expect(screen.getByRole("status")).toHaveTextContent("No terminal is running.");
     expect(screen.getByRole("button", { name: "Start terminal" })).toBeEnabled();
-    expect(screen.getByTestId("debug-terminal").querySelector(".cs-terminal-screen")).toHaveClass("is-hidden");
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("connects, streams TTY bytes both ways and resizes", async () => {
+  it("opens the 960px terminal dialog, walks the start states and streams TTY bytes both ways", async () => {
     renderTerminal();
     const ws = await connect();
     expect(ws.url).toBe(`ws://${location.host}/api/coding/environments/env%201/terminal`);
     expect(ws.binaryType).toBe("arraybuffer");
-    expect(screen.getByRole("status")).toHaveTextContent("Starting a temporary sandbox…");
-    expect(screen.getByTestId("debug-terminal")).toHaveAttribute("data-state", "connecting");
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveClass("cs-terminal-dialog");
+    expect(within(dialog).getByRole("region", { name: "Coding environment terminal" })).toBeInTheDocument();
+    expect(status()).toHaveTextContent("Connecting to the sandbox…");
+    expect(card()).toHaveAttribute("data-state", "connecting");
 
     act(() => ws.serverOpen());
     expect(ws.sent[0]).toBe(JSON.stringify({ type: "resize", cols: 80, rows: 24 }));
-    act(() => ws.serverText({ type: "progress", message: "Restoring snapshot…" }));
-    expect(screen.getByRole("status")).toHaveTextContent("Restoring snapshot…");
+    expect(status()).toHaveTextContent("Preparing a sandbox. This can take a minute.");
+    act(() => ws.serverText({ type: "status", message: "Restoring snapshot…" }));
+    expect(status()).toHaveTextContent("Preparing the repository…");
 
     act(() => ws.serverBytes("$ "));
     const term = terminals[0];
+    expect(term.options).toMatchObject({ fontSize: 13, lineHeight: 1.2, cursorBlink: true });
     expect(String.fromCharCode(...(term.written[0] as Uint8Array))).toBe("$ ");
-    expect(screen.getByTestId("debug-terminal")).toHaveAttribute("data-state", "connected");
+    expect(card()).toHaveAttribute("data-state", "connected");
+    expect(status()).toHaveTextContent("Connected");
     expect(screen.getByTestId("terminal-countdown")).toHaveTextContent(/Expires in (20:00|19:5\d)/);
 
     act(() => term.dataListener?.("ls\r"));
@@ -152,7 +161,22 @@ describe("DebugTerminal", () => {
     expect(screen.getByTestId("terminal-countdown")).toHaveTextContent(/Expires in (5:00|4:5\d)/);
   });
 
-  it("disconnects on request and can reconnect", async () => {
+  it("minimises without stopping, then shows the terminal again", async () => {
+    renderTerminal();
+    const ws = await connect();
+    act(() => {
+      ws.serverOpen();
+      ws.serverBytes("$ ");
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Minimize terminal" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(ws.closeCalls).toHaveLength(0);
+    expect(status()).toHaveTextContent("Connected");
+    fireEvent.click(screen.getByRole("button", { name: "Show terminal" }));
+    expect(await screen.findByRole("dialog")).toBeVisible();
+  });
+
+  it("stops on request and can start again", async () => {
     renderTerminal();
     const ws = await connect();
     act(() => {
@@ -161,30 +185,53 @@ describe("DebugTerminal", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Stop terminal" }));
     expect(ws.closeCalls[0]).toEqual([1000, "closed by user"]);
-    expect(screen.getByTestId("debug-terminal")).toHaveAttribute("data-state", "closed");
-    expect(screen.getByRole("status")).toHaveTextContent("Disconnected. The temporary sandbox was stopped.");
-    fireEvent.click(screen.getByRole("button", { name: "Start terminal" }));
-    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
+    expect(card()).toHaveAttribute("data-state", "idle");
+    expect(status()).toHaveTextContent("No terminal is running.");
     expect(terminals[0].disposed).toBe(true);
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Start terminal" }));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
   });
 
-  it("reports a server close and an error frame", async () => {
+  it("reports an error frame and a closed connection, and restarts", async () => {
     renderTerminal();
     const ws = await connect();
     act(() => ws.serverOpen());
     act(() => ws.serverText({ type: "error", message: "Sandbox failed to start" }));
-    expect(screen.getByTestId("debug-terminal")).toHaveAttribute("data-state", "error");
-    expect(screen.getByText("Terminal failed")).toBeVisible();
-    expect(screen.getByRole("status")).toHaveTextContent("Sandbox failed to start");
+    expect(card()).toHaveAttribute("data-state", "error");
+    expect(status()).toHaveTextContent("Sandbox failed to start");
     act(() => ws.serverClose(1011, ""));
-    expect(screen.getByTestId("debug-terminal")).toHaveAttribute("data-state", "error");
-    expect(String(terminals[0].written.at(-1))).toContain("[disconnected]");
-    fireEvent.click(screen.getByRole("button", { name: "Retry terminal" }));
+    expect(card()).toHaveAttribute("data-state", "error");
+    expect(String(terminals[0].written.at(-1))).toContain("[Terminal connection closed]");
+    fireEvent.click(screen.getByRole("button", { name: "Restart terminal" }));
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
-    expect(screen.getByTestId("debug-terminal")).toHaveAttribute("data-state", "connecting");
+    expect(card()).toHaveAttribute("data-state", "connecting");
   });
 
-  it("shows the server's close reason when the sandbox deadline hits", async () => {
+  it("offers Retry terminal on the card after a failure", async () => {
+    renderTerminal();
+    const ws = await connect();
+    act(() => ws.serverClose(1006, ""));
+    expect(status()).toHaveTextContent("The terminal connection closed.");
+    fireEvent.click(screen.getByRole("button", { name: "Minimize terminal" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Retry terminal" }));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
+  });
+
+  it("shows the exited state with the shell's exit code", async () => {
+    renderTerminal();
+    const ws = await connect();
+    act(() => {
+      ws.serverOpen();
+      ws.serverBytes("$ ");
+      ws.serverText({ type: "exit", exitCode: 3 });
+      ws.serverClose(1000, "");
+    });
+    expect(card()).toHaveAttribute("data-state", "exited");
+    expect(status()).toHaveTextContent("The shell exited. Restart it to continue.");
+    expect(terminals[0].written.map(String).join("")).toContain("[Shell exited with code 3]");
+  });
+
+  it("shows the server's close reason", async () => {
     renderTerminal();
     const ws = await connect();
     act(() => {
@@ -192,8 +239,8 @@ describe("DebugTerminal", () => {
       ws.serverBytes("$ ");
       ws.serverClose(1000, "Sandbox expired");
     });
-    expect(screen.getByTestId("debug-terminal")).toHaveAttribute("data-state", "closed");
-    expect(screen.getByRole("status")).toHaveTextContent("Sandbox expired");
+    expect(card()).toHaveAttribute("data-state", "error");
+    expect(status()).toHaveTextContent("Sandbox expired");
   });
 
   it("closes the socket when unmounted", async () => {

@@ -1,0 +1,20 @@
+/* Debug terminal: the card's status line and the 960px terminal dialog (reference app: header 12px 20px, body 0 12px
+   12px, a 65dvh region capped at 640px with 12px padding on the terminal background, xterm 13px / 1.2). */
+.cs-terminal .cs-terminal-bar{gap:12px}
+.cs-terminal-status{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+.cs-terminal-status .cs-terminal-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.cs-terminal-dot{width:6px;height:6px;flex:0 0 6px;border-radius:50%;background:var(--cs-label-faint)}
+.cs-terminal-status[data-state=connecting] .cs-terminal-dot,.cs-terminal-status[data-state=starting] .cs-terminal-dot,.cs-terminal-status[data-state=preparing] .cs-terminal-dot{background:var(--cs-yellow-base)}
+.cs-terminal-status[data-state=connected] .cs-terminal-dot,.cs-terminal-status[data-state=exited] .cs-terminal-dot{background:var(--cs-green-base)}
+.cs-terminal-status[data-state=error] .cs-terminal-dot{background:var(--cs-red-base)}
+.cs-terminal-status[data-state=error] .cs-terminal-text{color:var(--cs-red-text)}
+.cs-terminal>.cs-terminal-actions{margin:-8px 16px 16px}
+html:root .dialog-content.cs-terminal-dialog{width:min(960px,calc(100vw - 32px));max-width:none;padding:0;border-radius:8px}
+.cs-terminal-dialog .dialog-close{display:none}
+.cs-terminal-dialog-header{display:flex;align-items:center;gap:12px;padding:12px 20px}
+.cs-terminal-dialog-header .cs-terminal-countdown{flex:none}
+.cs-terminal-dialog-actions{display:inline-flex;align-items:center;gap:8px;flex:none}
+.cs-terminal-dialog-body{padding:0 12px 12px}
+.cs-terminal-dialog .cs-terminal-screen{box-sizing:border-box;height:min(65dvh,640px);margin:0;padding:12px;border-radius:8px;background:var(--cs-terminal-bg);overflow:hidden}
+.cs-terminal-host{width:100%;height:100%}
+.cs-terminal-host .xterm-viewport{background:var(--cs-terminal-bg)!important}
