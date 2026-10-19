@@ -53,6 +53,7 @@ func (s *server) notifyAgentReply(ctx context.Context, task domain.AgentTask, ac
 		}
 		after = history[len(history)-1].ID
 	}
+	coding := s.codingSessionForAnchor(ctx, task)
 	// The write is the agent's own, scoped to the resource's records; it must
 	// not be cut short by the agent run's request ending.
 	write := context.WithoutCancel(ctx)
@@ -72,6 +73,7 @@ func (s *server) notifyAgentReply(ctx context.Context, task domain.AgentTask, ac
 		if err != nil {
 			return err
 		}
+		withCodingSessionAudience(&thread, coding)
 		appendAgentReplyNotifications(data, thread, task, activity, agent, prompters, now)
 		return nil
 	})
@@ -80,6 +82,38 @@ func (s *server) notifyAgentReply(ctx context.Context, task domain.AgentTask, ac
 		return
 	}
 	s.dispatchNotificationEmails(write, task.WorkspaceKey)
+}
+
+// codingSessionForAnchor is the coding session a task anchors, if any.
+func (s *server) codingSessionForAnchor(ctx context.Context, task domain.AgentTask) *domain.CodingSession {
+	if task.CodingSessionID == "" || s.coding == nil || s.coding.service == nil {
+		return nil
+	}
+	session, err := s.coding.service.Get(ctx, task.WorkspaceKey, task.CodingSessionID)
+	if err != nil {
+		return nil
+	}
+	return &session
+}
+
+// withCodingSessionAudience applies "Subscribe to session" to a coding
+// session's thread: subscribers hear its replies (completion, questions,
+// errors) and members who unsubscribed, the creator included, do not.
+func withCodingSessionAudience(thread *agentReplyThread, session *domain.CodingSession) {
+	if session == nil {
+		return
+	}
+	if thread.muted == nil {
+		thread.muted = map[string]bool{}
+	}
+	for _, id := range session.UnsubscribedIDs {
+		thread.muted[id] = true
+	}
+	for _, id := range session.SubscriberIDs {
+		if !thread.muted[id] {
+			thread.watchers = appendUnique(thread.watchers, id)
+		}
+	}
 }
 
 // agentReplyThread is where an agent session's thread lives, as its Inbox

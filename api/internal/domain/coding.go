@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"slices"
 	"time"
 )
 
@@ -424,8 +425,22 @@ type CodingSession struct {
 	// signed commits are required (track E's commit signing).
 	SigningFormat    string `json:"signingFormat,omitempty"`
 	SigningPublicKey string `json:"signingPublicKey,omitempty"`
+	// SubscriberIDs subscribed to the session ("Subscribe to session") and
+	// UnsubscribedIDs opted out; the creator is subscribed unless they opt
+	// out. Subscribers hear about completion, questions and errors.
+	SubscriberIDs   []string `json:"subscriberIds,omitempty"`
+	UnsubscribedIDs []string `json:"unsubscribedIds,omitempty"`
 	// NextReconcileAt is when the reconciler looks at the session again.
 	NextReconcileAt time.Time `json:"-"`
+}
+
+// CodingSessionSubscribed reports whether the user gets the session's
+// notifications: an explicit subscriber, or the creator who did not opt out.
+func CodingSessionSubscribed(session CodingSession, userID string) bool {
+	if userID == "" || slices.Contains(session.UnsubscribedIDs, userID) {
+		return false
+	}
+	return userID == session.CreatorID || slices.Contains(session.SubscriberIDs, userID)
 }
 
 // CodingUsageRecord is one metered charge: model tokens through the LLM
