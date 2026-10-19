@@ -30,11 +30,11 @@ export function CodingCard({ children, className = "" }: { children: ReactNode; 
   return <div className={`feature-card${className ? ` ${className}` : ""}`}>{children}</div>;
 }
 
-export function CodingRow({ title, description, icon, children, disabled, warning }: { title: string; description?: ReactNode; icon?: ReactNode; children?: ReactNode; disabled?: boolean; warning?: boolean }) {
+export function CodingRow({ title, description, icon, figure, children, disabled, warning }: { title: string; description?: ReactNode; icon?: ReactNode; figure?: boolean; children?: ReactNode; disabled?: boolean; warning?: boolean }) {
   const { t } = useI18n();
   return (
     <div className={`feature-row cs-row${disabled ? " is-disabled" : ""}`}>
-      {icon && <span className="feature-row-icon">{icon}</span>}
+      {icon && <span className={figure ? "cs-row-figure" : "feature-row-icon"}>{icon}</span>}
       <div>
         <strong>{t(title)}</strong>
         {description && (
@@ -49,18 +49,18 @@ export function CodingRow({ title, description, icon, children, disabled, warnin
   );
 }
 
-export function CodingLinkRow({ title, description, icon, detail, onClick }: { title: string; description?: string; icon?: ReactNode; detail?: ReactNode; onClick: () => void }) {
+export function CodingLinkRow({ title, description, icon, figure, detail, onClick }: { title: string; description?: string; icon?: ReactNode; /** Linear's 32px filled icon tile instead of the bordered 30px one. */ figure?: boolean; detail?: ReactNode; onClick: () => void }) {
   const { t } = useI18n();
   return (
-    <button type="button" className="feature-row feature-row-link cs-row" onClick={onClick}>
-      {icon && <span className="feature-row-icon">{icon}</span>}
+    <button type="button" className={`feature-row feature-row-link cs-row${figure ? " cs-link-row" : ""}`} onClick={onClick}>
+      {icon && <span className={figure ? "cs-row-figure" : "feature-row-icon"}>{icon}</span>}
       <div>
         <strong>{t(title)}</strong>
         {description && <span>{t(description)}</span>}
       </div>
       <aside>
         {detail && <span className="feature-state">{typeof detail === "string" ? t(detail) : detail}</span>}
-        <ChevronRight size={15} />
+        <ChevronRight size={figure ? 16 : 15} />
       </aside>
     </button>
   );
