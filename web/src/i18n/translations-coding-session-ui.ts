@@ -211,4 +211,6 @@ export const codingSessionUiZhCN: Record<string, string> = {
   "Sent to the coding agent": "已发送给编码 Agent",
   "Send comment to agent": "将评论发送给 Agent",
   "Sent comment to coding agent": "已将评论发送给编码 Agent",
+  // Environment picker elicitation: the preselected (leading) repository
+  "Recommended": "推荐",
 }

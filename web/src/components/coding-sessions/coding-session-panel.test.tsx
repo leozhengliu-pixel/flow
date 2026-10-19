@@ -251,6 +251,18 @@ describe('coding session panel', () => {
     await waitFor(() => expect(replyApplicationTask).toHaveBeenCalledWith('workspace', expect.objectContaining({ id: 'task-1' }), 'prompt', 'acme/api'))
   })
 
+  it('preselects the recommended repository so Enter confirms it', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getApplicationTask).mockResolvedValue({ session: { ...task, status: 'awaitingInput' }, activities: [activity('q', 'elicitation', 'Which repository should I work in?', { signal: 'select', signalMetadata: { selected: 'env-api', options: [{ value: 'env-web', label: 'Web (acme/web)' }, { value: 'env-api', label: 'API (acme/api)', recommended: true }] } })] })
+    vi.mocked(replyApplicationTask).mockResolvedValue({ ...task, version: 5 })
+    renderPanel(makeSession({ state: 'awaitingInput', phase: 'awaitingUser' }))
+    const recommended = await screen.findByRole('button', { name: /API \(acme\/api\)/ })
+    expect(recommended).toHaveTextContent('Recommended')
+    await waitFor(() => expect(recommended).toHaveFocus())
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(replyApplicationTask).toHaveBeenCalledWith('workspace', expect.objectContaining({ id: 'task-1' }), 'prompt', 'env-api'))
+  })
+
   it('ends a session waiting for an answer', async () => {
     const user = userEvent.setup()
     vi.mocked(api.dismissCodingSession).mockResolvedValue(makeSession({ state: 'stale', phase: 'done', version: 2 }))
