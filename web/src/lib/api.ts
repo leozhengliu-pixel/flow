@@ -1002,6 +1002,8 @@ export interface AuthorizedApplication {
   authorizations: OAuthAuthorization[];
   /** The application has a webhook: listed as "Receive realtime updates about your workspace". */
   realtime?: boolean;
+  /** The client's registered redirect URIs: recognise well-known clients (Claude, Cursor, …) for their logo. */
+  redirectUris?: string[];
 }
 export function fetchAuthorizedApplications(signal?: AbortSignal): Promise<AuthorizedApplication[]> {
   return request('/api/oauth/authorized-applications', { signal })
