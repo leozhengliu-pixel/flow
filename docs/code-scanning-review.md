@@ -43,3 +43,29 @@ The [Go advisory](https://pkg.go.dev/vuln/GO-2026-5932) identifies the affected 
 - Go vulnerability reachability scan, npm audit, secret scan and complete-source CodeQL analysis on the PR.
 
 GitHub's default-branch alert status changes after the fixes reach `main` and the corresponding analyses finish. Any false-positive dismissal should retain the specific evidence above rather than hide an entire rule family.
+
+## Follow-up Review: 2026-10-19
+
+Baseline: `01fd06ed`, no open PRs and ten open CodeQL alerts. The latest
+completed Go analysis at review time was `1978914325`, on `c0587df6`; newer
+`main` analyses were still queued. The SARIF paths, rather than just their
+sink locations, were reviewed against the current source.
+
+| Alerts | Evidence and Resolution |
+| --- | --- |
+| 76: weak password hashing | `connectorSecretID` hashes the workspace URL key, owner ID and connector ID into a stable credential-storage lookup key. The SARIF source is `AuthenticateAPIKeyRecord` followed by selection of `Workspace.URLKey`, not a password or credential value. Stored connector credentials are encrypted separately. Keep the deterministic lookup format and classify this instance as a false positive. |
+| 77: weak password hashing | `shortHash` creates turn IDs and review-trigger idempotency keys. Callers hash workspace/session identifiers, run IDs and prompt text for deduplication. SARIF propagates sensitivity through the MCP context containing an API key, including separate context values such as the run ID. This is not password storage or verification; existing trigger tests cover retry deduplication. Classify this instance as a false positive. |
+| 53-59: reflected XSS in response middleware | These SARIF paths now originate at `llmproxy.streamBody`'s `io.Reader.Read` and end in generic response-writer forwarding methods. The proxy is registered only under `/internal/llm-proxy/`; the error envelope, file-URL rewriting, API compression and failed-auth recording paths only wrap `/api/` (the error envelope also covers `/uploads/`). These paths therefore cannot run for the reported proxy request. Actual signed-URL JSON still uses `json.Marshal`, with an adversarial-origin regression test. Classify the current paths as false positives; do not remove or globally suppress the XSS query. |
+| 75: reflected XSS in the LLM proxy | Review found an additional response-boundary gap: provider responses could preserve an active document media type. The proxy now preserves only valid JSON and SSE media types, serves every other type as `text/plain; charset=utf-8`, and sets `nosniff` plus `sandbox; default-src 'none'` after copying upstream headers. This prevents upstream headers from overriding the protection. Raw JSON/SSE bytes and status codes remain unchanged. A remaining report on the byte-copy operation must be assessed with these enforced response headers, rather than escaping or corrupting the protocol stream. |
+
+`TestUpstreamResponsesCannotServeActiveDocuments` covers JSON, vendor JSON,
+SSE, HTML, XHTML, SVG, missing and malformed media types, for both successful
+and failing upstream responses. It checks that permissive upstream security
+headers cannot override the proxy's policy and that payload bytes remain
+unchanged. Existing proxy tests also verify incremental SSE delivery and usage
+metering. OAuth refresh, trigger deduplication, API error envelopes, compression
+and signed-file URL tests exercise the other reviewed boundaries.
+
+Keep full-source CodeQL analysis and all dependency/security checks enabled.
+Each false-positive dismissal must link this evidence and the fixing commit;
+it applies only to the reviewed alert, not to future findings from that rule.
