@@ -25,7 +25,7 @@
 @keyframes cs-enter{from{opacity:0;transform:translateY(8px)}}
 @keyframes cs-enter-prompt{from{opacity:0;transform:translateY(10px)}}
 .cs-text{padding:0 10px;color:var(--cs-label-base);font:450 13px/20.8px var(--font);overflow-wrap:anywhere}
-.cs-approval-text{margin:0}
+.cs-approval-text{margin:12px 0 0}
 .cs-start-line{display:flex;align-items:center;gap:8px;margin:12px 0 0;padding:0 10px;color:var(--cs-label-muted);font:450 12px/normal var(--font)}
 .cs-start-line strong{color:var(--cs-label-base);font-weight:500}
 .cs-start-line a{color:var(--cs-label-muted);text-decoration:none}
@@ -161,7 +161,6 @@
 .cs-error-title{display:flex;align-items:center;gap:6px;color:var(--cs-red-text);font:500 12px/normal var(--font)}
 .cs-error-body p{margin:0;padding-left:0;color:color-mix(in oklch,var(--cs-red-text) 25%,var(--cs-label-base) 75%);font:450 12px/19.2px var(--font);overflow-wrap:anywhere}
 .cs-error-card.is-muted .cs-error-body p{color:var(--cs-label-muted)}
-.cs-error-detail{font-family:var(--font-monospace,monospace)}
 .cs-access{display:flex;flex-direction:column;gap:8px}
 .cs-access>p{margin:0;padding:0 12px;color:var(--cs-label-base);font:450 13px/20px var(--font)}
 .cs-inline-link{color:var(--cs-purple-text);font-weight:500;text-decoration:none}
