@@ -108,6 +108,10 @@ func main() {
 	if len(os.Args) == 2 && os.Args[1] == "healthcheck" {
 		os.Exit(runHealthcheck())
 	}
+	// coding sessions (track H): Squid helper for the sandbox egress proxy.
+	if len(os.Args) >= 2 && os.Args[1] == "egress-acl" {
+		os.Exit(runEgressACLCommand(os.Args[2:]))
+	}
 	initLogging()
 	applicationConfig, err := appconfig.Load()
 	if err != nil {
@@ -184,6 +188,11 @@ func main() {
 	shutdownSignal, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
 	s.initCoding(applicationConfig.Coding)
+	// coding sessions (track B): optional dedicated runtime listener (FLOW_CODING_RUNTIME_ADDR).
+	if _, err := s.serveCodingRuntime(shutdownSignal, httpServer.Handler); err != nil {
+		log.Fatalf("coding runtime listener: %v", err)
+	}
+	httpServer.Handler = s.codingMainHandler(httpServer.Handler)
 	s.ensureBuiltinApplications(shutdownSignal)
 	go s.runCoding(shutdownSignal)
 	go s.runApplicationAgentWorker(shutdownSignal)

@@ -73,6 +73,10 @@ var agentToolGroups = []agentToolGroup{
 	{Name: "loops", Summary: "create, edit, or delete loops (automations)",
 		Tools:  []string{"save_loop", "delete_loop"},
 		Intent: regexp.MustCompile(`(?i)自动化|定时|\b(loop|loops|automation|automations|automate)\b`)},
+	// coding sessions (track L)
+	{Name: "coding", Summary: "start a coding session that changes code and opens a draft pull request",
+		Tools:  []string{startCodingSessionTool},
+		Intent: regexp.MustCompile(`(?i)修复|实现|重构|改代码|写代码|代码|测试|合并请求|\b(fix|fixes|bug|implement|refactor|code|coding|tests?|pr|pull request|merge request|mr|patch|repo|repository|rebase|lint)\b`)},
 }
 
 // agentChatHiddenTools are never offered in chat: progress narration costs a model round trip of its own, and

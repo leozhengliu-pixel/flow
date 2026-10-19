@@ -4183,6 +4183,84 @@
         "x-flow-source": "coding_artifacts_api.go"
       }
     },
+    "/api/coding/sessions/{id}/artifacts/{artifactId}/content": {
+      "get": {
+        "operationId": "get_coding_sessions_id_artifacts_artifactId_content",
+        "tags": [
+          "coding"
+        ],
+        "summary": "GET /api/coding/sessions/{id}/artifacts/{artifactId}/content",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifactId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "coding_artifacts_api.go"
+      }
+    },
+    "/api/coding/sessions/{id}/dismiss": {
+      "post": {
+        "operationId": "post_coding_sessions_id_dismiss",
+        "tags": [
+          "coding"
+        ],
+        "summary": "POST /api/coding/sessions/{id}/dismiss",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "coding_sessions_api.go"
+      }
+    },
     "/api/coding/sessions/{id}/prompt": {
       "post": {
         "operationId": "post_coding_sessions_id_prompt",
@@ -12322,6 +12400,56 @@
         "x-flow-source": "github_app.go"
       }
     },
+    "/api/integrations/github-app/authorization": {
+      "delete": {
+        "operationId": "delete_integrations_github_app_authorization",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "DELETE /api/integrations/github-app/authorization",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "github_app.go"
+      }
+    },
+    "/api/integrations/github-app/authorize": {
+      "post": {
+        "operationId": "post_integrations_github_app_authorize",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "POST /api/integrations/github-app/authorize",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "github_app.go"
+      }
+    },
     "/api/integrations/github-app/install": {
       "post": {
         "operationId": "post_integrations_github_app_install",
@@ -13503,6 +13631,41 @@
         },
         "x-flow-internal": true,
         "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/coding-session": {
+      "post": {
+        "operationId": "post_issue_records_id_coding_session",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "POST /api/issue-records/{id}/coding-session",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "coding_triggers_api.go"
       }
     },
     "/api/issue-records/{id}/comments": {

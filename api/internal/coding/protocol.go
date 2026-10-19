@@ -59,6 +59,10 @@ type BootstrapRepo struct {
 	BranchName string `json:"branchName"`
 	// ExistingBranch is true for follow-ups on a pushed branch / PR fixes.
 	ExistingBranch bool `json:"existingBranch"`
+	// coding sessions (track C): BranchPrefix is FLOW_CODING_BRANCH_PREFIX.
+	// The runner refuses to push branches outside it unless ExistingBranch
+	// (defense in depth, §19). Empty means the runner's default "flow/".
+	BranchPrefix string `json:"branchPrefix,omitempty"`
 }
 
 // BootstrapHarness selects the agent CLI.
@@ -264,6 +268,12 @@ type SignRequest struct {
 // SignResponse carries the armored signature.
 type SignResponse struct {
 	Signature string `json:"signature"`
+}
+
+// SnapshotLogsRequest is POST /internal/coding-runtime/snapshots/{id}/logs:
+// setup output lines in order, batched by the runner (coding sessions, track C).
+type SnapshotLogsRequest struct {
+	Lines []string `json:"lines"`
 }
 
 // SnapshotCompleteRequest is POST /internal/coding-runtime/snapshots/{id}/complete.

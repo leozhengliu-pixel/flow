@@ -203,6 +203,7 @@ func TestMCPAllToolsThroughRealSDK(t *testing.T) {
 	call("update_notification", map[string]any{"id": "contract-notification", "read": true})
 	call("save_agent_skill", map[string]any{"name": "SDK skill", "instructions": "Be brief."})
 	call("save_loop", map[string]any{"name": "SDK loop", "instructions": "Summarize the week."})
+	call("start_coding_session", map[string]any{"prompt": "Fix the typo in the README", "userRequest": "fix the typo", "issueId": issue}) // coding sessions (track L): answers "not enabled" without a sandbox
 	sdkCustomer := object("save_customer", map[string]any{"name": "SDK customer", "domains": []string{"sdk.example.com"}})
 	call("save_customer", map[string]any{"id": "sdk.example.com", "size": 50})
 	call("get_customer", map[string]any{"query": "SDK customer"})

@@ -1,0 +1,5 @@
+coding:
+  enabled: true
+  secretKey: x
+sandboxes:
+  namespace: {name: flow}

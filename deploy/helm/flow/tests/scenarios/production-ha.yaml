@@ -1,0 +1,73 @@
+# Several replicas: external PostgreSQL and Redis Cluster from existing
+# secrets, S3, autoscaling, Ingress, Flow NetworkPolicy, GitHub App key
+# mounted from a Secret, ACL secret from an existing Secret.
+replicaCount: 3
+image:
+  digest: sha256:abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd
+config:
+  appUrl: https://flow.example.com
+  env:
+    FLOW_AUTH_EMAIL_ENABLED: "false"
+    FLOW_AUTH_OIDC_ENABLED: "true"
+secrets:
+  existingSecret: flow-env
+database:
+  driver: postgres
+  existingSecret:
+    name: flow-db
+    key: url
+redis:
+  mode: cluster
+  addrs: redis-0.redis:6379,redis-1.redis:6379,redis-2.redis:6379
+  tls: true
+  existingSecret:
+    name: flow-redis
+    key: FLOW_REDIS_PASSWORD
+storage:
+  driver: s3
+  persistence:
+    enabled: false
+  s3:
+    bucket: flow-uploads
+    region: eu-west-1
+    existingSecret:
+      name: flow-s3
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+  hosts:
+    - host: flow.example.com
+      paths: [{path: /, pathType: Prefix}]
+  tls:
+    - secretName: flow-tls
+      hosts: [flow.example.com]
+networkPolicy:
+  enabled: true
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels: {app.kubernetes.io/name: flow}
+coding:
+  enabled: true
+  runtimePort:
+    enabled: true
+  githubApp:
+    appId: "123456"
+    slug: flow-agent
+    host: github.com
+    privateKeySecret:
+      name: flow-github-app
+      key: private-key.pem
+egressProxy:
+  aclHelper:
+    existingSecret:
+      name: flow-egress-acl
+      key: acl-secret

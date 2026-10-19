@@ -33,6 +33,12 @@ var (
 	ErrNotFound       = errors.New("codehost: not found")
 	ErrNotImplemented = errors.New("codehost: not implemented")
 	ErrBadSignature   = errors.New("codehost: invalid webhook signature")
+	// ErrUserNotLinked: the policy needs the requesting user's linked host
+	// account and there is none (→ requiresGithubConnection / requiresGitlabConnection).
+	ErrUserNotLinked = errors.New("codehost: user has not linked a host account")
+	// ErrRepoNotInPolicy: the repository is outside what the workspace or
+	// Loop policy allows on this host (→ repoNotInPolicy).
+	ErrRepoNotInPolicy = errors.New("codehost: repository not allowed by policy")
 )
 
 // RepoRef names a repository on a host.
@@ -118,6 +124,14 @@ type ChangeRequest struct {
 	BaseBranch  string  `json:"baseBranch"`
 	HeadSHA     string  `json:"headSha"`
 	AuthorLogin string  `json:"authorLogin,omitempty"`
+	// Body is the current description (markdown). Hosts fill it in
+	// GetChangeRequest so Flow can rewrite only its own sections
+	// (coding.MergeArtifactSection, track I).
+	Body string `json:"body,omitempty"`
+
+	// HeadRepository is the head's repository full name when it differs
+	// from Repo (a fork); "" means the same repository. (track L, additive)
+	HeadRepository string `json:"headRepository,omitempty"`
 }
 
 // CreateChangeRequestInput opens a draft PR/MR.
@@ -156,8 +170,12 @@ const (
 
 // WebhookEvent is a verified, normalized webhook delivery.
 type WebhookEvent struct {
-	DeliveryID     string
-	Type           WebhookEventType
+	DeliveryID string
+	Type       WebhookEventType
+	// Action is the host's raw action ("created", "deleted", "suspend",
+	// "added", "synchronize", "ready_for_review"…), for consumers that need
+	// more than Type (installation lifecycle, draft changes).
+	Action         string
 	CodeHost       Kind
 	HostName       string
 	InstallationID string
@@ -172,6 +190,13 @@ type WebhookEvent struct {
 	ReviewState    string // approved | changes_requested | commented
 	CI             *CIStatus
 	Installation   *domain.CodeHostInstallation
+
+	// Track L additions: the diff hunk an inline review comment is on, a
+	// link to the comment, and the commenter's public email when the host
+	// sends one (helps map the commenter to a Flow member).
+	CommentDiffHunk string
+	CommentURL      string
+	AuthorEmail     string
 }
 
 // Host is one code host implementation.
@@ -278,6 +303,12 @@ func ErrorCode(kind Kind, err error) domain.CodingErrorCode {
 		return domain.CodingErrNoCodeAccess
 	case errors.Is(err, ErrUserNoAccess):
 		return domain.CodingErrPersonalAccessDenied
+	case errors.Is(err, ErrUserNotLinked) && kind == domain.CodeHostGitLab:
+		return domain.CodingErrRequiresGitLabConnection
+	case errors.Is(err, ErrUserNotLinked):
+		return domain.CodingErrRequiresGitHubConnection
+	case errors.Is(err, ErrRepoNotInPolicy):
+		return domain.CodingErrRepoNotInPolicy
 	case errors.Is(err, ErrTransient) && kind == domain.CodeHostGitLab:
 		return domain.CodingErrGitLabTransientError
 	case errors.Is(err, ErrTransient):
@@ -285,4 +316,27 @@ func ErrorCode(kind Kind, err error) domain.CodingErrorCode {
 	default:
 		return domain.CodingErrInternal
 	}
+}
+
+// ErrorDescriber is implemented by hosts that refine ErrorCode for their own
+// errors and carry user-facing messages (track J's *gitlab.Host). The session
+// core uses it through DescribeError.
+type ErrorDescriber interface {
+	DescribeError(err error) (code domain.CodingErrorCode, message string)
+}
+
+// DescribeError maps a host error to a session error code and message,
+// preferring the host's own mapping. message falls back to err.Error().
+func DescribeError(host Host, kind Kind, err error) (domain.CodingErrorCode, string) {
+	if err == nil {
+		return "", ""
+	}
+	code, message := ErrorCode(kind, err), ""
+	if describer, ok := host.(ErrorDescriber); ok {
+		code, message = describer.DescribeError(err)
+	}
+	if message == "" {
+		message = err.Error()
+	}
+	return code, message
 }

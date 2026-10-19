@@ -1,0 +1,21 @@
+# Evaluation install with the bundled PostgreSQL and Redis (two replicas
+# need shared storage, so S3 through MinIO credentials).
+replicaCount: 2
+database:
+  driver: postgres
+postgresql:
+  enabled: true
+  auth:
+    password: test-pg-password
+redisBundled:
+  enabled: true
+storage:
+  driver: s3
+  persistence:
+    enabled: false
+  s3:
+    bucket: flow
+    endpoint: http://minio.minio.svc:9000
+    pathStyle: true
+    accessKeyId: flow
+    secretAccessKey: test-s3-secret

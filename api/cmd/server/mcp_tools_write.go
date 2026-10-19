@@ -98,6 +98,8 @@ func (s *server) callFlowWriteTool(ctx context.Context, actor mcpActor, data dom
 		return s.saveMCPAgentSkill(ctx, actor, data, args)
 	case "save_loop":
 		return s.saveMCPLoop(ctx, actor, data, args)
+	case startCodingSessionTool: // coding sessions (track L)
+		return s.startCodingSessionFromTool(ctx, actor, args)
 	case "delete_project", "delete_initiative", "delete_view", "delete_loop", "delete_agent_skill", "delete_customer", "delete_customer_request":
 		return s.deleteMCPResource(ctx, actor, data, name, args)
 	case "save_customer":

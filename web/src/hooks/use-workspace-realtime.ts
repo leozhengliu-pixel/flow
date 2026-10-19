@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { realtimeClientId, updatePresence } from '@/lib/api'
 import { AGENT_TASK_ACTIVITY_EVENT } from '@/lib/application-agents'
+// coding sessions (track G)
+import { dispatchCodingSessionRealtimeEvent } from '@/components/coding-sessions/coding-session-events'
 import { INBOX_ACTIVITY_EVENT, inboxUnread } from '@/lib/inbox-unread'
 import { loadRealtimeCursor, saveRealtimeCursor } from '@/lib/realtime-cache'
 import { canApplyRealtimePatch } from '@/store/apply-realtime-patch'
@@ -104,6 +106,8 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, o
         }
         return
       }
+      // coding sessions (track G): coding_session.* pushes refresh open session views without a workspace sync.
+      if (dispatchCodingSessionRealtimeEvent(event)) return
       if (event.payload?.presence) setPresence(event.payload.presence)
       if (event.type === 'connected') {
         return

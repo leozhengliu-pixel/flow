@@ -1,0 +1,433 @@
+---
+# Source: flow/templates/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: flow
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flow
+      app.kubernetes.io/instance: flow
+
+---
+# Source: flow/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flow
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+automountServiceAccountToken: false
+
+---
+# Source: flow/templates/bundled/postgresql.yaml
+# Evaluation only: a single PostgreSQL instance without backups or HA.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: flow-postgresql
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+  annotations:
+    helm.sh/resource-policy: keep
+type: Opaque
+stringData:
+  password: "test-pg-password"
+---
+# Source: flow/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: flow
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/name: flow
+    app.kubernetes.io/instance: flow
+type: Opaque
+stringData:
+  FLOW_DATABASE_URL: "postgres://flow:test-pg-password@flow-postgresql:5432/flow?sslmode=disable"
+  FLOW_S3_ACCESS_KEY_ID: "flow"
+  FLOW_S3_SECRET_ACCESS_KEY: "test-s3-secret"
+
+---
+# Source: flow/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flow
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/name: flow
+    app.kubernetes.io/instance: flow
+data:
+  FLOW_HTTP_ADDR: ":8080"
+  FLOW_APP_URL: "http://flow.example.com"
+  FLOW_STATIC_PATH: /app/web
+  FLOW_LOG_LEVEL: "info"
+  FLOW_LOG_FORMAT: "json"
+  FLOW_DATABASE_DRIVER: "postgres"
+  FLOW_REDIS_MODE: standalone
+  FLOW_REDIS_URL: "redis://flow-redis:6379/0"
+  FLOW_REDIS_TLS: "false"
+  FLOW_REDIS_PREFIX: "flow"
+  FLOW_STORAGE_DRIVER: "s3"
+  FLOW_S3_BUCKET: "flow"
+  FLOW_S3_REGION: ""
+  FLOW_S3_ENDPOINT: "http://minio.minio.svc:9000"
+  FLOW_S3_PATH_STYLE: "true"
+  FLOW_S3_PREFIX: "uploads"
+  # Coding sessions (docs/coding-sessions.md).
+  FLOW_CODING_ENABLED: "false"
+
+---
+# Source: flow/templates/bundled/postgresql.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: flow-postgresql
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: flow-postgresql
+    app.kubernetes.io/instance: flow
+  ports:
+    - name: postgres
+      port: 5432
+---
+# Source: flow/templates/bundled/redis.yaml
+# Evaluation only: one Redis instance for Flow's coordination locks.
+apiVersion: v1
+kind: Service
+metadata:
+  name: flow-redis
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  selector:
+    app.kubernetes.io/name: flow-redis
+    app.kubernetes.io/instance: flow
+  ports:
+    - name: redis
+      port: 6379
+---
+# Source: flow/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: flow
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/name: flow
+    app.kubernetes.io/instance: flow
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: flow
+    app.kubernetes.io/instance: flow
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+
+---
+# Source: flow/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flow
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/name: flow
+    app.kubernetes.io/instance: flow
+    app.kubernetes.io/component: api
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flow
+      app.kubernetes.io/instance: flow
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flow
+        app.kubernetes.io/instance: flow
+        app.kubernetes.io/component: api
+      annotations:
+        checksum/config: 1082590c4a003a8894cdd26c7004624211be2948dbc789601c254251caeb0424
+        checksum/secret: 55b57d949fb7e4ce1572edb5c2363a2db1f4784cb97506773ec43608ffdc324a
+    spec:
+      serviceAccountName: flow
+      # The kubernetes sandbox provider uses the in-cluster ServiceAccount token.
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: flow
+          image: "ghcr.io/leozhengliu-pixel/flow:0.1.0"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: flow
+            - secretRef:
+                name: flow
+          env:
+            - name: GOMEMLIMIT
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.memory
+                  divisor: "1"
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 60
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 5
+          # TCP, not /api/health: a Redis outage makes health report 503 and
+          # must take the Pod out of rotation, not restart it.
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+            timeoutSeconds: 5
+          resources:
+            limits:
+              memory: 2Gi
+            requests:
+              cpu: 250m
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi
+
+---
+# Source: flow/templates/bundled/postgresql.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: flow-postgresql
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  serviceName: flow-postgresql
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flow-postgresql
+      app.kubernetes.io/instance: flow
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flow-postgresql
+        app.kubernetes.io/instance: flow
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: "postgres:17-alpine"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          env:
+            - name: POSTGRES_USER
+              value: "flow"
+            - name: POSTGRES_DB
+              value: "flow"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: flow-postgresql
+                  key: password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "flow", "-d", "flow"]
+            periodSeconds: 10
+          resources:
+            limits:
+              memory: 1Gi
+            requests:
+              cpu: 250m
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: run
+              mountPath: /var/run/postgresql
+      volumes:
+        - name: run
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 20Gi
+
+---
+# Source: flow/templates/bundled/redis.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: flow-redis
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  serviceName: flow-redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flow-redis
+      app.kubernetes.io/instance: flow
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flow-redis
+        app.kubernetes.io/instance: flow
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          image: "redis:8.2-alpine"
+          args: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 10
+          resources:
+            limits:
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 2Gi

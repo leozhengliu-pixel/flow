@@ -146,7 +146,11 @@ export interface SessionPullRequest {
 
 export interface CodingCommit { sha: string; branch: string; turnActivityId?: string; message?: string; signed: boolean; createdAt: string }
 export interface CodingDiffSummary { path: string; additions: number; deletions: number; status: "added" | "modified" | "deleted" | "renamed" }
-export interface CodingArtifact { id: string; sessionId: string; kind: "screenshot" | "video" | "log"; label: string; url: string; contentType: string; sizeBytes: number; createdAt: string }
+export interface CodingArtifact {
+  id: string; sessionId: string; kind: "screenshot" | "video" | "log"; label: string; url: string; contentType: string; sizeBytes: number; createdAt: string;
+  /** Track I: turn and action activity of the capture, before/after pairing name, stable authenticated URL, signed URL expiry. */
+  turnId?: string; activityId?: string; group?: string; contentUrl?: string; expiresAt?: string;
+}
 
 export interface CodingSession {
   id: string;
@@ -189,6 +193,27 @@ export interface CodingSession {
   updatedAt: string;
   startedAt?: string;
   endedAt?: string;
+  /** Reconciler bookkeeping (track B). */
+  phaseStartedAt?: string;
+  phaseDeadline?: string;
+  attempts?: number;
+  sandboxAttempts?: number;
+  stopRequested?: boolean;
+  stoppedBy?: string;
+  loopId?: string;
+  sandboxSize?: CodingSandboxSize;
+  sandboxId?: string;
+  currentTurnId?: string;
+  lastTurnId?: string;
+  turnStartedAt?: string;
+  runningMillis?: number;
+  harnessResumeId?: string;
+  headSha?: string;
+  pushed?: boolean;
+  existingBranch?: boolean;
+  hostName?: string;
+  signingFormat?: string;
+  signingPublicKey?: string;
 }
 
 export interface CreateCodingSessionInput {
@@ -218,13 +243,22 @@ export interface CodingSettings {
 export interface CodingModelOption { id: string; label: string; harness: CodingHarness; auto?: boolean; reasoningEfforts?: CodingReasoningEffort[] }
 
 export interface CodingPreflightCheck { name: string; ok: boolean; warning?: boolean; message: string }
+export type GitLabCredentialMode = "project-token" | "oauth" | "connection";
+
 export interface CodingStatus {
   enabled: boolean;
   provider: "disabled" | "fake" | "docker" | "kubernetes";
   snapshotStrategy: "archive" | "volumesnapshot";
   regions: string[];
   sizes: Record<CodingSandboxSize, { cpu: string; memory: string }>;
-  codeHosts: { codeHost: CodeHostKind; hostName: string; connected: boolean; installUrl?: string }[];
+  codeHosts: {
+    codeHost: CodeHostKind;
+    hostName: string;
+    connected: boolean;
+    installUrl?: string;
+    /** GitLab only: FLOW_CODING_GITLAB_CREDENTIAL_MODE. */
+    credentialMode?: GitLabCredentialMode;
+  }[];
   debugTerminal: boolean;
   browserTesting: boolean;
   preflight: CodingPreflightCheck[];
@@ -256,6 +290,10 @@ export interface GitHubAppStatus {
   hostName: string;
   slug?: string;
   installations: { id: string; installationId: string; accountLogin: string; accountType?: string; repositorySelection?: string; suspendedAt?: string }[];
+  /** User-to-server OAuth is configured, so members can link their GitHub account. */
+  canLinkAccount?: boolean;
+  /** The viewer's linked GitHub account, when linked. */
+  linkedAccount?: { login: string; linkedAt: string };
 }
 
 export type ReviewCodingSessionKind = "fix" | "followUp" | "rebase" | "lint" | "test";

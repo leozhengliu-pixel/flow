@@ -1,0 +1,27 @@
+{
+  "name": "@flow/sandbox-runner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Flow coding sessions: the in-sandbox runner (harness adapters, event mapping, git, credential and sign shims, MCP server)",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "flow-runner": "dist/flow-runner.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vite": "8.3.0",
+    "vitest": "5.0.1"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts && vitest run --dir src",
+    "build": "node build.mjs",
+    "runner": "tsx src/main.ts"
+  }
+}

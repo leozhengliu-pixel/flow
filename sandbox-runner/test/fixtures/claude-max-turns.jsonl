@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","cwd":"/workspace/repo","session_id":"9a1c2b3d-0000-4000-8000-000000000002","tools":["Bash"],"mcp_servers":[],"model":"claude-sonnet-4-5"}
+{"type":"result","subtype":"error_max_turns","is_error":true,"duration_ms":120000,"num_turns":50,"session_id":"9a1c2b3d-0000-4000-8000-000000000002","total_cost_usd":1.2,"usage":{"input_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":5}}

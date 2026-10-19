@@ -1,0 +1,5 @@
+coding:
+  enabled: true
+  secretKey: x
+  snapshot: {strategy: volumesnapshot}
+  kubernetes: {workspaceVolume: emptyDir}

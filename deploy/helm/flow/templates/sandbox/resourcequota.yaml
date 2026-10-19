@@ -1,0 +1,15 @@
+{{- if and (include "flow.coding.kubernetes" .) .Values.sandboxes.resourceQuota.enabled }}
+# Caps everything in the sandbox namespace: sandboxes, warm pool, snapshot
+# builds, debug terminals, the egress proxy and the pre-pull DaemonSet.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: flow-sandboxes
+  namespace: {{ include "flow.sandbox.namespace" . }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandboxes
+spec:
+  hard:
+    {{- toYaml .Values.sandboxes.resourceQuota.hard | nindent 4 }}
+{{- end }}

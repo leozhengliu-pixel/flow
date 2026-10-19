@@ -577,9 +577,9 @@ egress:
 ingress: []   # pod exec goes through the API server and kubelet, so it needs no ingress rule
 ```
 
-Flow's RBAC (Helm `Role` in the sandbox namespace only): pods (create, get, list, watch, delete), pods/log (get),
-pods/exec (create), secrets (create, get, delete, patch), persistentvolumeclaims (create, get, list, delete),
-networkpolicies (get, create, patch), resourcequotas (get), events (list, watch), and volumesnapshots in
+Flow's RBAC (Helm `Role` in the sandbox namespace only): pods (create, get, list, delete), pods/log (get),
+pods/exec (create, get), secrets (create, get, list, delete, patch), persistentvolumeclaims (create, get, list, delete),
+namespaces (get, the sandbox namespace only), networkpolicies (get, create, patch) when Flow manages them, and volumesnapshots in
 `snapshot.storage.k8s.io` (create, get, list, delete) when that strategy is on. Flow needs no ClusterRole. Preflight
 uses `SelfSubjectAccessReview` and reads RuntimeClass, StorageClass and VolumeSnapshotClass when it is allowed to
 (those checks become warnings otherwise).
@@ -602,7 +602,7 @@ on success, trigger a background snapshot build.
    streams `tar --zstd` of `/workspace` and `/home/flow` (excluding caches listed in
    `.flow/snapshot-exclude` plus defaults such as `~/.cache/ms-playwright`, which is already in the image) to
    `PUT /internal/coding-runtime/snapshots/{id}/archive`. Flow streams it to `objectstore.Put` under
-   `FLOW_CODING_ARCHIVE_PREFIX/<workspace>/<snapshot>.tar.zst`, computing size and SHA-256 and enforcing
+   `<FLOW_CODING_ARCHIVE_PREFIX>-<workspace hash>-<snapshot>.tar.zst` (flat object keys), computing size and SHA-256 and enforcing
    `FLOW_CODING_ARCHIVE_MAX_BYTES`. Archives never pass through the sandbox's egress proxy because they go to Flow
    directly.
 2. Restore: the `restore` init container GETs the archive with the sandbox token and unpacks it into the fresh

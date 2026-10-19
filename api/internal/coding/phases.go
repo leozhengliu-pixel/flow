@@ -56,12 +56,14 @@ func PhasePolicies(c config.CodingConfig) map[domain.CodingSessionPhase]PhasePol
 var transitions = map[domain.CodingSessionPhase][]domain.CodingSessionPhase{
 	domain.CodingPhaseAwaitingApproval: {domain.CodingPhaseQueued},
 	domain.CodingPhaseQueued:           {domain.CodingPhaseProvisioning},
-	domain.CodingPhaseProvisioning:     {domain.CodingPhaseStarting},
-	domain.CodingPhaseStarting:         {domain.CodingPhaseSetup, domain.CodingPhaseRunning, domain.CodingPhaseProvisioning},
-	domain.CodingPhaseSetup:            {domain.CodingPhaseRunning},
-	domain.CodingPhaseRunning:          {domain.CodingPhaseAwaitingUser, domain.CodingPhasePublishing, domain.CodingPhaseIdle},
-	domain.CodingPhaseAwaitingUser:     {domain.CodingPhaseRunning, domain.CodingPhaseQueued},
-	domain.CodingPhasePublishing:       {domain.CodingPhaseIdle, domain.CodingPhaseRunning},
+	// provisioning → awaitingUser asks the user to pick a repository (select
+	// elicitation) when several environments match.
+	domain.CodingPhaseProvisioning: {domain.CodingPhaseStarting, domain.CodingPhaseAwaitingUser},
+	domain.CodingPhaseStarting:     {domain.CodingPhaseSetup, domain.CodingPhaseRunning, domain.CodingPhaseProvisioning},
+	domain.CodingPhaseSetup:        {domain.CodingPhaseRunning},
+	domain.CodingPhaseRunning:      {domain.CodingPhaseAwaitingUser, domain.CodingPhasePublishing, domain.CodingPhaseIdle},
+	domain.CodingPhaseAwaitingUser: {domain.CodingPhaseRunning, domain.CodingPhaseQueued},
+	domain.CodingPhasePublishing:   {domain.CodingPhaseIdle, domain.CodingPhaseRunning},
 	// A follow-up on an idle session runs a new turn in the warm sandbox, or
 	// re-queues when the sandbox was reclaimed (restore from the pushed branch).
 	domain.CodingPhaseIdle:     {domain.CodingPhaseRunning, domain.CodingPhaseQueued},

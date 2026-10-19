@@ -1,0 +1,37 @@
+Flow {{ .Chart.AppVersion }} is installed as {{ include "flow.fullname" . }} in {{ .Release.Namespace }}.
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "flow.fullname" . }} 8080:{{ .Values.service.port }}
+  open http://127.0.0.1:8080
+{{- if eq .Values.database.driver "sqlite" }}
+
+Database: SQLite on the data volume (single replica). Use PostgreSQL or MySQL
+for production.
+{{- end }}
+{{- if include "flow.coding.kubernetes" . }}
+
+Coding sessions: sandboxes run in namespace {{ include "flow.sandbox.namespace" . }}.
+  Runtime URL:  {{ include "flow.coding.runtimeUrl" . }}
+  Egress proxy: {{ default "none (sandboxes have no Internet access)" (include "flow.coding.proxyUrl" .) }}
+  Runtime:      {{ default "runc (default kernel)" (include "flow.runtimeClassName" .) }}
+  Snapshots:    {{ .Values.coding.snapshot.strategy }}
+{{- if not (include "flow.runtimeClassName" .) }}
+
+WARNING: sandboxes use the default runc runtime. A kernel exploit inside a
+sandbox reaches its node. Keep sandboxes on a dedicated, tainted node pool
+without cloud credentials (docs/coding-sessions-security.md).
+{{- end }}
+{{- if not .Values.sandboxes.nodeSelector }}
+
+WARNING: sandboxes.nodeSelector is empty, so sandboxes can share nodes with
+other workloads. Use a dedicated, tainted node pool in production.
+{{- end }}
+{{- if not .Values.sandboxes.networkPolicy.enabled }}
+
+WARNING: sandbox NetworkPolicies are disabled. Sandboxes can reach the cluster
+network and cloud metadata unless another layer blocks them.
+{{- else }}
+
+Verify that your CNI enforces the sandbox NetworkPolicies:
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+{{- end }}
+{{- end }}

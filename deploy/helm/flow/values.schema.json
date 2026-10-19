@@ -1,0 +1,740 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "Flow Helm chart values",
+  "type": "object",
+  "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "image": {
+      "type": "object",
+      "required": [
+        "repository"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^(|sha256:[a-f0-9]{64})$"
+        },
+        "pullPolicy": {
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "ClusterIP",
+            "NodePort",
+            "LoadBalancer"
+          ]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      }
+    },
+    "config": {
+      "type": "object",
+      "properties": {
+        "appUrl": {
+          "type": "string",
+          "pattern": "^https?://"
+        },
+        "logLevel": {
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ]
+        },
+        "logFormat": {
+          "enum": [
+            "text",
+            "json"
+          ]
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          }
+        }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "existingSecret": {
+          "type": "string"
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          }
+        },
+        "connectorSecretKey": {
+          "type": "string"
+        }
+      }
+    },
+    "database": {
+      "type": "object",
+      "properties": {
+        "driver": {
+          "enum": [
+            "sqlite",
+            "postgres",
+            "mysql"
+          ]
+        },
+        "url": {
+          "type": "string"
+        }
+      }
+    },
+    "redis": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": [
+            "disabled",
+            "standalone",
+            "cluster"
+          ]
+        },
+        "tls": {
+          "type": "boolean"
+        }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "driver": {
+          "enum": [
+            "local",
+            "s3"
+          ]
+        },
+        "persistence": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "accessModes": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "ReadWriteOnce",
+                  "ReadWriteMany",
+                  "ReadWriteOncePod",
+                  "ReadOnlyMany"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "autoscaling": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "minReplicas": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxReplicas": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "coding": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "provider": {
+          "enum": [
+            "disabled",
+            "fake",
+            "docker",
+            "kubernetes"
+          ]
+        },
+        "runtimeUrl": {
+          "type": "string",
+          "pattern": "^(|https?://.+)$"
+        },
+        "runtimePort": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            }
+          }
+        },
+        "instanceId": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9.]{0,61}[a-z0-9])?$|^$"
+        },
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": {
+              "type": "string",
+              "minLength": 1
+            },
+            "digest": {
+              "type": "string",
+              "pattern": "^(|sha256:[a-f0-9]{64})$"
+            },
+            "pullPolicy": {
+              "enum": [
+                "Always",
+                "IfNotPresent",
+                "Never"
+              ]
+            },
+            "pullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "browser": {
+          "type": "boolean"
+        },
+        "debugTerminal": {
+          "type": "boolean"
+        },
+        "maxSessions": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "workspaceSessions": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "reconcileInterval": {
+          "type": "string",
+          "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+        },
+        "gcInterval": {
+          "type": "string",
+          "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+        },
+        "orphanGrace": {
+          "type": "string",
+          "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+        },
+        "warmPoolMaxAge": {
+          "type": "string",
+          "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+        },
+        "sizes": {
+          "type": "object",
+          "properties": {
+            "small": {
+              "type": "object",
+              "required": [
+                "cpu",
+                "memory"
+              ],
+              "properties": {
+                "cpu": {
+                  "type": [
+                    "string",
+                    "integer",
+                    "number"
+                  ]
+                },
+                "memory": {
+                  "type": [
+                    "string",
+                    "integer",
+                    "number"
+                  ]
+                },
+                "ephemeral": {
+                  "type": [
+                    "string",
+                    "integer",
+                    "number"
+                  ]
+                },
+                "pids": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "medium": {
+              "type": "object",
+              "required": [
+                "cpu",
+                "memory"
+              ],
+              "properties": {
+                "cpu": {
+                  "type": [
+                    "string",
+                    "integer",
+                    "number"
+                  ]
+                },
+                "memory": {
+                  "type": [
+                    "string",
+                    "integer",
+                    "number"
+                  ]
+                },
+                "ephemeral": {
+                  "type": [
+                    "string",
+                    "integer",
+                    "number"
+                  ]
+                },
+                "pids": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "large": {
+              "type": "object",
+              "required": [
+                "cpu",
+                "memory"
+              ],
+              "properties": {
+                "cpu": {
+                  "type": [
+                    "string",
+                    "integer",
+                    "number"
+                  ]
+                },
+                "memory": {
+                  "type": [
+                    "string",
+                    "integer",
+                    "number"
+                  ]
+                },
+                "ephemeral": {
+                  "type": [
+                    "string",
+                    "integer",
+                    "number"
+                  ]
+                },
+                "pids": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          }
+        },
+        "cpuRequestRatio": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "regions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "warmPool": {
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "small",
+              "medium",
+              "large"
+            ]
+          },
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "timeouts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+          }
+        },
+        "retries": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "snapshot": {
+          "type": "object",
+          "properties": {
+            "strategy": {
+              "enum": [
+                "archive",
+                "volumesnapshot"
+              ]
+            },
+            "timeout": {
+              "type": "string",
+              "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+            },
+            "ttl": {
+              "type": "string",
+              "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+            },
+            "refreshInterval": {
+              "type": "string",
+              "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+            },
+            "retain": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "kubernetes": {
+          "type": "object",
+          "properties": {
+            "workspaceVolume": {
+              "enum": [
+                "auto",
+                "pvc",
+                "emptyDir"
+              ]
+            },
+            "extraLabels": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              }
+            },
+            "extraAnnotations": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              }
+            }
+          }
+        },
+        "llm": {
+          "type": "object",
+          "properties": {
+            "timeout": {
+              "type": "string",
+              "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+            },
+            "models": {
+              "type": "object",
+              "properties": {
+                "claudeCode": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "codex": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "openSource": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "prices": {
+              "type": "object"
+            }
+          }
+        },
+        "gitlab": {
+          "type": "object",
+          "properties": {
+            "credentialMode": {
+              "enum": [
+                "project-token",
+                "oauth",
+                "connection"
+              ]
+            },
+            "tokenScopes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "githubApp": {
+          "type": "object",
+          "properties": {
+            "appId": {
+              "type": [
+                "string",
+                "integer"
+              ]
+            },
+            "host": {
+              "type": "string"
+            }
+          }
+        },
+        "extraEnv": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^FLOW_(CODING|GITHUB_APP)_[A-Z0-9_]+$"
+          }
+        }
+      }
+    },
+    "sandboxes": {
+      "type": "object",
+      "properties": {
+        "namespace": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
+            },
+            "create": {
+              "type": "boolean"
+            },
+            "podSecurity": {
+              "enum": [
+                "restricted",
+                "baseline",
+                "privileged"
+              ]
+            }
+          }
+        },
+        "runtimeClass": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "create": {
+              "type": "boolean"
+            },
+            "handler": {
+              "type": "string"
+            }
+          }
+        },
+        "hostUsers": {
+          "type": "boolean"
+        },
+        "nodeSelector": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          }
+        },
+        "tolerations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "key"
+            ],
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "operator": {
+                "enum": [
+                  "Equal",
+                  "Exists"
+                ]
+              },
+              "value": {
+                "type": "string"
+              },
+              "effect": {
+                "enum": [
+                  "NoSchedule",
+                  "PreferNoSchedule",
+                  "NoExecute",
+                  ""
+                ]
+              }
+            }
+          }
+        },
+        "networkPolicy": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "manager": {
+              "enum": [
+                "helm",
+                "flow"
+              ]
+            },
+            "namespaceDefaultDeny": {
+              "type": "boolean"
+            }
+          }
+        },
+        "resourceQuota": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "hard": {
+              "type": "object"
+            }
+          }
+        },
+        "limitRange": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        },
+        "prePull": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "extraImages": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "egressProxy": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "replicas": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "aclHelper": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "secret": {
+              "type": "string"
+            },
+            "children": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "timeout": {
+              "type": "string",
+              "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+            }
+          }
+        },
+        "defaultAllowlist": {
+          "type": "boolean"
+        },
+        "allowlist": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(\\*\\.|\\.)?[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$"
+          }
+        },
+        "blockCIDRs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

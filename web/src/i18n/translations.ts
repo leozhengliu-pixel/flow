@@ -1,4 +1,6 @@
 import { pulseZhCN } from './translations-pulse';
+// coding sessions (track G)
+import { codingSessionUiZhCN } from './translations-coding-session-ui';
 import { viewFiltersZhCN } from './translations-view-filters';
 import { insightsZhCN } from './translations-insights';
 import { agentTriageZhCN } from './translations-agent-triage';
@@ -20,6 +22,8 @@ import { templatesZhCN } from './translations-templates';
 import { settingsAccessZhCN } from './translations-settings-access';
 import { agentHistoryZhCN } from './translations-agent-history';
 import { gitlabSettingsZhCN } from './translations-gitlab-settings';
+import { githubAppZhCN } from './translations-github-app';
+import { codingSessionsZhCN } from './translations-coding-sessions';
 import { webhookSettingsZhCN } from './translations-webhook-settings';
 import { billingUsageSettingsZhCN } from './translations-billing-usage-settings';
 import { teamMemberOriginsZhCN } from './translations-team-member-origins';
@@ -47,6 +51,7 @@ import { agentAttributionZhCN } from './translations-agent-attribution';
 import { issueHeaderZhCN } from './translations-issue-header';
 import { issueOptionsZhCN } from './translations-issue-options';
 import { teamAgentGuidanceZhCN } from './translations-team-agent-guidance';
+import { codingArtifactsZhCN } from './translations-coding-artifacts'; // coding sessions (track I)
 import { agentChangesZhCN } from './translations-agent-changes';
 import { agentRuntimeZhCN } from './translations-agent-runtime';
 import { workspaceMembersZhCN } from './translations-workspace-members';
@@ -5847,6 +5852,9 @@ Object.assign(zhCN, templatesZhCN);
 Object.assign(zhCN, settingsAccessZhCN);
 Object.assign(zhCN, agentHistoryZhCN);
 Object.assign(zhCN, gitlabSettingsZhCN);
+for (const [key, value] of Object.entries(githubAppZhCN)) if (!(key in zhCN)) zhCN[key] = value;
+// coding sessions (track F): only fills keys the shared dictionary does not already translate.
+for (const [key, value] of Object.entries(codingSessionsZhCN)) if (!(key in zhCN)) zhCN[key] = value;
 Object.assign(zhCN, webhookSettingsZhCN);
 for (const [key, value] of Object.entries(billingUsageSettingsZhCN)) if (!(key in zhCN)) zhCN[key] = value;
 Object.assign(zhCN, teamMemberOriginsZhCN);
@@ -5885,6 +5893,7 @@ for (const [source, translation] of Object.entries(issueDelegateZhCN)) zhCN[sour
 for (const [source, translation] of Object.entries(agentAttributionZhCN)) zhCN[source] ??= translation;
 // Team-level agent guidance (Team settings › Team agents) fills gaps only.
 for (const [source, translation] of Object.entries(teamAgentGuidanceZhCN)) zhCN[source] ??= translation;
+for (const [source, translation] of Object.entries(codingArtifactsZhCN)) zhCN[source] ??= translation; // coding sessions (track I)
 for (const [source, translation] of Object.entries(agentChangesZhCN)) zhCN[source] ??= translation;
 // Agent approvals (bulk deletes, agent-written updates), interrupted steps and web access fill gaps only.
 for (const [source, translation] of Object.entries(agentRuntimeZhCN)) zhCN[source] ??= translation;
@@ -5892,3 +5901,5 @@ for (const [source, translation] of Object.entries(agentRuntimeZhCN)) zhCN[sourc
 for (const [source, translation] of Object.entries(recentlyDeletedZhCN)) zhCN[source] ??= translation;
 // Settings › Members (groups, statuses, row and bulk actions, empty states) fills gaps only.
 for (const [source, translation] of Object.entries(workspaceMembersZhCN)) zhCN[source] ??= translation;
+// coding sessions (track G): session view, start entry points and review actions fill gaps only.
+for (const [source, translation] of Object.entries(codingSessionUiZhCN)) zhCN[source] ??= translation;

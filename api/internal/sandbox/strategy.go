@@ -16,6 +16,11 @@ type BuildPlan struct {
 	Workspace VolumeSource
 	// UploadURL is where the runner PUTs the archive (archive strategy).
 	UploadURL string
+	// StorageRef is where the build's result will be stored (the archive
+	// object key, or the VolumeSnapshot name). PlanBuild is deterministic,
+	// so a caller may recompute the plan instead of persisting it. Track A
+	// addition.
+	StorageRef string
 }
 
 // SnapshotStrategy stores and restores prepared workspaces (track A).

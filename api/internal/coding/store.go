@@ -2,21 +2,21 @@ package coding
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/sandbox"
 )
 
-// Store errors.
+// Store errors. They alias the domain errors so that internal/store, which
+// cannot import this package, returns errors callers match with errors.Is.
 var (
-	ErrNotFound        = errors.New("coding: not found")
-	ErrVersionConflict = errors.New("coding: version conflict")
-	ErrLeaseLost       = errors.New("coding: lease lost")
-	ErrSecretExists    = errors.New("coding: secret already exists") // secrets cannot be changed once saved
-	ErrRepoInUse       = errors.New("coding: repository already has an active environment")
-	ErrTokenInvalid    = errors.New("coding: sandbox token is invalid, expired or revoked")
+	ErrNotFound        = domain.ErrCodingNotFound
+	ErrVersionConflict = domain.ErrCodingVersionConflict
+	ErrLeaseLost       = domain.ErrCodingLeaseLost
+	ErrSecretExists    = domain.ErrCodingSecretExists // secrets cannot be changed once saved
+	ErrRepoInUse       = domain.ErrCodingRepoInUse
+	ErrTokenInvalid    = domain.ErrCodingTokenInvalid
 )
 
 // SessionFilter narrows ListCodingSessions.
@@ -36,6 +36,10 @@ type SandboxGrant struct {
 	SnapshotID   string
 	Kind         sandbox.Kind
 	ExpiresAt    time.Time
+	// EnvironmentID is the environment the sandbox works in (the session's,
+	// or the snapshot's for snapshot and debug sandboxes); egress checks use
+	// it to resolve the network mode.
+	EnvironmentID string
 }
 
 // SpendQuery sums metered cost in a window.

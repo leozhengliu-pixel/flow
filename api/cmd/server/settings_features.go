@@ -260,6 +260,12 @@ func (s *server) updateWorkspacePreferences(w http.ResponseWriter, r *http.Reque
 		if err := normalizeSpendLimits(&input.SpendLimits); err != nil {
 			return err
 		}
+		// coding sessions (track B): validate and normalize the coding policy when it is patched.
+		if _, ok := patch["codingAgentSettings"]; ok {
+			if err := s.normalizeCodingAgentSettings(&input.CodingAgentSettings); err != nil {
+				return err
+			}
+		}
 		if !validTrustedSourcesMode(input.TrustedSourcesMode) {
 			return fmt.Errorf("%w: trustedSourcesMode must be none or allowlist", errInvalid)
 		}

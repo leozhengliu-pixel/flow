@@ -29,9 +29,9 @@ func TestCodingRoutesAreRegistered(t *testing.T) {
 		method, path string
 		want         int
 	}{
-		{http.MethodGet, "/internal/coding-runtime/bootstrap", http.StatusNotImplemented},
+		{http.MethodGet, "/internal/coding-runtime/bootstrap", http.StatusNotFound}, // coding disabled
 		{http.MethodPost, "/internal/llm-proxy/anthropic/v1/messages", http.StatusNotImplemented},
-		{http.MethodPost, "/api/integrations/github-app/webhook", http.StatusNotImplemented},
+		{http.MethodPost, "/api/integrations/github-app/webhook", http.StatusNotFound}, // App not configured
 		{http.MethodGet, "/api/coding/sessions", http.StatusUnauthorized},
 	} {
 		request := httptest.NewRequest(test.method, test.path, nil)

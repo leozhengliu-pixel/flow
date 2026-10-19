@@ -1,0 +1,10 @@
+# The user's cluster: runc, host users, archive snapshots, Helm-managed
+# NetworkPolicies, dedicated tainted pool (chart defaults).
+config:
+  appUrl: https://flow.example.com
+coding:
+  enabled: true
+  secretKey: dGVzdC1rZXktdGVzdC1rZXktdGVzdC1rZXktdGVzdC0=
+egressProxy:
+  aclHelper:
+    secret: test-acl-secret
