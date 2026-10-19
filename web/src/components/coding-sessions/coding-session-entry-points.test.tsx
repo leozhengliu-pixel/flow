@@ -191,7 +191,7 @@ describe('agent chat session card', () => {
     expect(within(card).getByText('Fix login')).toBeVisible()
     expect(within(card).getByText('started by')).toBeVisible()
     const row = within(card).getByRole('link', { name: /Show session/ })
-    expect(row).toHaveTextContent('Finished')
+    expect(row).toHaveTextContent('Completed')
     expect(row).toHaveTextContent('Fixed the login redirect')
     expect(row).toHaveAttribute('href', '/workspace/diff/cs-1')
     expect(within(card).getByRole('link', { name: 'Open issue' })).toHaveAttribute('href', expect.stringContaining('#agent-session-task-1'))

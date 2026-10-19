@@ -134,11 +134,6 @@ export function CodingTimeMarker({ at }: { at: string }) {
   return label ? <time className="cs-time-marker" dateTime={at}>{label}</time> : null
 }
 
-/** "Session restarted" / "Session archived": a faint label between two hairlines. */
-export function CodingSeparator({ label }: { label: string }) {
-  return <div className="cs-separator" role="separator"><span>{label}</span></div>
-}
-
 /** The pill of an access error: icon, purple label and an optional action. */
 function AccessPill({ label, children }: { label: string; children?: ReactNode }) {
   return <div className="cs-access-pill"><GridLoader variant="read" size={14} className="cs-access-pill-icon"/><span>{label}</span>{children && <span className="cs-access-pill-actions">{children}</span>}</div>

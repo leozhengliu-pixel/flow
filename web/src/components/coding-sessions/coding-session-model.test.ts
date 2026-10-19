@@ -25,7 +25,7 @@ const env = (id: string, repository: string, extra: Partial<CodingEnvironment> =
 
 describe('coding session model', () => {
   it('uses Linear labels for every state', () => {
-    expect(CODING_STATE_LABELS).toEqual({ pending: 'Starting', active: 'Working', stopping: 'Stopping…', complete: 'Finished', awaitingInput: 'Needs input', error: 'Errored', stale: 'Stopped' })
+    expect(CODING_STATE_LABELS).toEqual({ pending: 'Working…', active: 'Working…', stopping: 'Stopping…', complete: 'Finished', awaitingInput: 'Needs input', error: 'Error', stale: 'Stopped responding' })
   })
 
   it('maps every error code to translated copy and a next action', () => {
@@ -134,12 +134,21 @@ describe('session status line', () => {
     const { codingStatusLine, formatCodingElapsed, codingRunStartedAt } = await import('./coding-session-model')
     const { codingSessionUiZhCN } = await import('@/i18n/translations-coding-session-ui')
     expect(codingStatusLine({ state: 'active', phase: 'running' })).toEqual({ tone: 'working', label: 'Thinking…', live: true })
-    expect(codingStatusLine({ state: 'pending', phase: 'provisioning' })).toEqual({ tone: 'working', label: 'Preparing sandbox', live: true, ellipsis: true })
+    expect(codingStatusLine({ state: 'active', phase: 'running' }, undefined, 'chat').label).toBe('Working for')
+    expect(codingStatusLine({ state: 'pending', phase: 'provisioning' })).toEqual({ tone: 'working', label: 'Starting coding session…', live: true })
+    expect(codingStatusLine({ state: 'stopping', phase: 'stopping' }).label).toBe('Stop requested')
     expect(codingStatusLine({ state: 'error', phase: 'done' }, 'Spend limit reached')).toMatchObject({ tone: 'error', label: 'Error', detail: 'Spend limit reached', live: false })
     expect(codingStatusLine({ state: 'complete', phase: 'idle', summary: 'Done' })).toMatchObject({ tone: 'done', label: 'Finished', detail: 'Done' })
+    expect(codingStatusLine({ state: 'complete', phase: 'idle', diffs: [{ path: 'a', additions: 1, deletions: 0, status: 'added' }, { path: 'b', additions: 1, deletions: 0, status: 'added' }] })).toMatchObject({ label: 'Changed {count} files', count: 2 })
+    expect(codingStatusLine({ state: 'complete', phase: 'idle' }, undefined, 'chat').label).toBe('Completed')
     expect(codingStatusLine({ state: 'awaitingInput', phase: 'awaitingApproval' }).label).toBe('Waiting for approval')
-    expect(codingStatusLine({ state: 'stale', phase: 'done' }).tone).toBe('stopped')
-    for (const label of ['Thinking…', 'Error', 'Finished', 'Stopped', 'Needs input', 'Waiting for approval', 'Stopping…']) expect(codingSessionUiZhCN[label], label).toBeTruthy()
+    expect(codingStatusLine({ state: 'awaitingInput', phase: 'awaitingUser' })).toMatchObject({ tone: 'input', label: 'Needs input' })
+    expect(codingStatusLine({ state: 'stale', phase: 'done', stoppedBy: 'u' })).toMatchObject({ tone: 'stopped', label: 'Stopped' })
+    expect(codingStatusLine({ state: 'stale', phase: 'done', startedAt: '2026-10-01T00:00:00Z' })).toMatchObject({ tone: 'error', label: 'Stopped responding' })
+    expect(codingStatusLine({ state: 'stale', phase: 'done' })).toMatchObject({ label: 'Agent didn’t start', detail: 'The request may not have reached the agent', translateDetail: true })
+    const { zhCN } = await import('@/i18n/translations')
+    void codingSessionUiZhCN
+    for (const label of ['Thinking…', 'Error', 'Finished', 'Stopped', 'Needs input', 'Waiting for approval', 'Stopping…', 'Working…', 'Working for', 'Completed', 'Changed {count} file', 'Changed {count} files', 'Stop requested', 'Starting coding session…', 'Stopped responding', 'Agent didn’t start', 'Didn’t start', 'The request may not have reached the agent']) expect(zhCN[label], label).toBeTruthy()
     expect(formatCodingElapsed(162_000)).toBe('02:42')
     expect(formatCodingElapsed(3_762_000)).toBe('1:02:42')
     expect(formatCodingElapsed(-5)).toBe('00:00')

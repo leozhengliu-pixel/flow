@@ -1,14 +1,15 @@
 import { useEffect, useState, type ComponentType } from 'react'
-import { CheckCircle2, Circle, CircleDashed, CircleDot, ExternalLink, FileText, GitBranch, GitCommit, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, Loader2, Server, XCircle } from 'lucide-react'
+import { CheckCircle2, CircleDashed, CircleDot, ExternalLink, FileText, GitBranch, GitCommit, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, Loader2, Server, XCircle } from 'lucide-react'
 import { fetchCodingSandboxLogs } from '@/lib/coding-sessions-api'
 import { useI18n } from '@/i18n/i18n'
 import type { CodeReview } from '@/types/flow'
-import type { CodingPlanStep, CodingSandbox, CodingSession, CodingSessionState, SessionPullRequest } from '@/types/coding-sessions'
+import type { CodingSandbox, CodingSession, CodingSessionState, SessionPullRequest } from '@/types/coding-sessions'
 import {
   CI_STATUS_LABELS,
   CODING_PHASE_LABELS,
   CODING_PROGRESS_STEPS,
   CODING_STATE_LABELS,
+  codingStateLabel,
   ciStatus,
   currentSandbox,
   PULL_REQUEST_STATE_LABELS,
@@ -18,10 +19,10 @@ import {
 } from './coding-session-model'
 
 /** The state pill with Linear's labels; `data-state` drives its colour. */
-export function CodingStateBadge({ state }: { state: CodingSessionState }) {
+export function CodingStateBadge({ state, session }: { state: CodingSessionState; /** Names a stale session's reason (stopped, never started, stopped responding). */ session?: Pick<CodingSession, 'state' | 'stoppedBy' | 'startedAt'> }) {
   const { t } = useI18n()
   const Icon = state === 'complete' ? CheckCircle2 : state === 'error' ? XCircle : state === 'awaitingInput' ? CircleDot : state === 'stale' ? CircleDashed : Loader2
-  return <span className="coding-state-badge" data-state={state}><Icon size={12} aria-hidden="true" className={state === 'pending' || state === 'active' || state === 'stopping' ? 'coding-spin' : undefined}/>{t(CODING_STATE_LABELS[state] ?? state)}</span>
+  return <span className="coding-state-badge" data-state={state}><Icon size={12} aria-hidden="true" className={state === 'pending' || state === 'active' || state === 'stopping' ? 'coding-spin' : undefined}/>{t(session ? codingStateLabel(session) : CODING_STATE_LABELS[state] ?? state)}</span>
 }
 
 /** Queued → … → Opening pull request, with the current phase highlighted (only while the session starts or works). */
@@ -138,18 +139,4 @@ export function CodingChanges({ session, commitsOnly }: { session: CodingSession
       {commits.map(commit => <li key={commit.sha}><GitCommit size={12} aria-hidden="true"/><code data-i18n-ignore>{commit.sha.slice(0, 7)}</code><span data-i18n-ignore>{commit.message?.split('\n')[0]}</span>{commit.signed && <span className="coding-commit-signed">{t('Signed')}</span>}</li>)}
     </ul>}
   </section>
-}
-
-const STEP_LABELS = { pending: 'Pending', inProgress: 'In progress', completed: 'Completed', canceled: 'Canceled' } as const
-
-/** The agent's plan (TodoWrite / todo_list), replaced as a whole on each update. */
-export function CodingPlan({ plan }: { plan?: CodingPlanStep[] }) {
-  const { t } = useI18n()
-  if (!plan?.length) return null
-  return <ol className="coding-plan" aria-label={t('Plan')}>
-    {plan.map((step, index) => {
-      const Icon = step.status === 'completed' ? CheckCircle2 : step.status === 'canceled' ? XCircle : step.status === 'inProgress' ? CircleDot : Circle
-      return <li key={index} data-status={step.status}><Icon size={14} aria-label={t(STEP_LABELS[step.status] ?? 'Pending')}/><span data-i18n-ignore>{step.content}</span></li>
-    })}
-  </ol>
 }

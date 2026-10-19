@@ -4,7 +4,7 @@
  * time markers, the plan's current step, duration copy and the per-session message queue. No React here.
  */
 import type { ApplicationActivity } from '@/lib/application-agents'
-import type { CodeReview } from '@/types/flow'
+import type { AgentMessageAttachment, CodeReview } from '@/types/flow'
 import type { CodingCommit, CodingPlanStep, CodingSession, SessionPullRequest } from '@/types/coding-sessions'
 
 const SHOWN_TYPES = new Set(['prompt', 'thought', 'action', 'response', 'elicitation', 'error'])
@@ -219,7 +219,7 @@ export function pendingElicitation(activities: readonly ApplicationActivity[]): 
 /** A stop request is pending: the latest prompt is a stop signal and the session has not stopped yet. */
 export const stopRequested = (session: Pick<CodingSession, 'state' | 'stopRequested'>) => session.state === 'stopping' || Boolean(session.stopRequested && (session.state === 'active' || session.state === 'pending'))
 
-export type QueuedMessage = { id: string; text: string; createdAt: string }
+export type QueuedMessage = { id: string; text: string; files?: AgentMessageAttachment[]; createdAt: string }
 
 const queueKey = (workspace: string, sessionId: string) => `flow:coding-sessions:queue:${workspace}:${sessionId}`
 

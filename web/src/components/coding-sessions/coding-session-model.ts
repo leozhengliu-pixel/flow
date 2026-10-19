@@ -17,15 +17,25 @@ import type {
   SessionPullRequest,
 } from '@/types/coding-sessions'
 
-/** Linear's AgentSession labels (§4.1). */
+/** The reference app's session status labels (session lists and menus). */
 export const CODING_STATE_LABELS: Record<CodingSessionState, string> = {
-  pending: 'Starting',
-  active: 'Working',
+  pending: 'Working…',
+  active: 'Working…',
   stopping: 'Stopping…',
   complete: 'Finished',
   awaitingInput: 'Needs input',
-  error: 'Errored',
-  stale: 'Stopped',
+  error: 'Error',
+  stale: 'Stopped responding',
+}
+
+/** Failed, or ended without anyone stopping it (the agent stopped responding or never started): the red avatar dot. */
+export const codingSessionStalled = (session: Pick<CodingSession, 'state' | 'stoppedBy'>) => session.state === 'error' || (session.state === 'stale' && !session.stoppedBy)
+
+/** The state label of one session: a stale session was stopped by someone, never started, or stopped responding. */
+export function codingStateLabel(session: Pick<CodingSession, 'state' | 'stoppedBy' | 'startedAt'>): string {
+  if (session.state !== 'stale') return CODING_STATE_LABELS[session.state] ?? session.state
+  if (session.stoppedBy) return 'Stopped'
+  return session.startedAt ? 'Stopped responding' : 'Didn’t start'
 }
 
 /** The finer progress line under the state badge. `done` and `idle` add nothing to the state label. */
@@ -278,24 +288,28 @@ export function codingSessionIdsFromMessage(message: Pick<AgentMessage, 'parts'>
 }
 
 export type CodingStatusTone = 'working' | 'input' | 'done' | 'error' | 'stopped'
-export type CodingStatusLine = { tone: CodingStatusTone; label: string; detail?: string; live: boolean; /** Append "…" after the translated label (a phase in progress). */ ellipsis?: boolean }
+export type CodingStatusLine = { tone: CodingStatusTone; label: string; detail?: string; live: boolean; /** Replaces "{count}" in the translated label. */ count?: number; /** The detail is app copy (translated), not the session's own text. */ translateDetail?: boolean }
 
 /**
- * The one-line status of a session, as the reference app's session card shows it ("Thinking…" with a running timer,
- * "Error" + the message): the label is translated by the caller, the detail is the session's own text.
+ * The one-line status of a session, as the reference app's session rows show it: the label is translated by the caller,
+ * the detail is the session's own text. `issue` is the issue activity row ("Changed 3 files" when complete), `chat` the
+ * agent chat card ("Completed").
  */
-export function codingStatusLine(session: Pick<CodingSession, 'state' | 'phase' | 'summary' | 'errorCode'>, errorTitle?: string): CodingStatusLine {
+export function codingStatusLine(session: Pick<CodingSession, 'state' | 'phase' | 'summary' | 'errorCode' | 'diffs' | 'stoppedBy' | 'startedAt'>, errorTitle?: string, surface: 'issue' | 'chat' = 'issue'): CodingStatusLine {
   switch (session.state) {
     case 'error': return { tone: 'error', label: 'Error', detail: errorTitle, live: false }
-    case 'complete': return { tone: 'done', label: 'Finished', detail: session.summary, live: false }
-    case 'stale': return { tone: 'stopped', label: 'Stopped', live: false }
-    case 'stopping': return { tone: 'working', label: 'Stopping…', live: true }
-    case 'awaitingInput': return { tone: 'input', label: session.phase === 'awaitingApproval' ? 'Waiting for approval' : 'Needs input', live: false }
-    default: {
-      if (session.phase === 'running') return { tone: 'working', label: 'Thinking…', live: true }
-      const phase = CODING_PHASE_LABELS[session.phase]
-      return phase ? { tone: 'working', label: phase, live: true, ellipsis: true } : { tone: 'working', label: 'Thinking…', live: true }
+    case 'complete': {
+      if (surface === 'chat') return { tone: 'done', label: 'Completed', detail: session.summary, live: false }
+      const files = session.diffs?.length ?? 0
+      return files ? { tone: 'done', label: files === 1 ? 'Changed {count} file' : 'Changed {count} files', count: files, detail: session.summary, live: false } : { tone: 'done', label: 'Finished', detail: session.summary, live: false }
     }
+    case 'stale':
+      if (session.stoppedBy) return { tone: 'stopped', label: 'Stopped', live: false }
+      return session.startedAt ? { tone: 'error', label: 'Stopped responding', live: false } : { tone: 'error', label: 'Agent didn’t start', detail: 'The request may not have reached the agent', translateDetail: true, live: false }
+    case 'stopping': return { tone: 'working', label: 'Stop requested', live: true }
+    case 'awaitingInput': return { tone: 'input', label: session.phase === 'awaitingApproval' ? 'Waiting for approval' : 'Needs input', live: false }
+    case 'pending': return { tone: 'working', label: 'Starting coding session…', live: true }
+    default: return { tone: 'working', label: surface === 'chat' ? 'Working for' : 'Thinking…', live: true }
   }
 }
 
