@@ -263,7 +263,7 @@ export function EnvironmentEditorPage({ data, environmentId, disabled, onBack, o
         </CodingRow>
       </CodingCard>
 
-      <CodingSection title="Agent" description="Overrides the workspace defaults for sessions in this environment.">
+      <CodingSection title="Agent and model" description="Overrides the workspace defaults for sessions in this environment.">
         <CodingCard>
           <CodingRow title="Agent">
             <CodingSelect label="Environment agent" value={draft.harness} disabled={locked} options={harnessOptions} onChange={(value) => update({ harness: value as EnvironmentDraft["harness"], model: "auto" })} />
@@ -279,7 +279,7 @@ export function EnvironmentEditorPage({ data, environmentId, disabled, onBack, o
 
       <CodingSection title="Setup" description="Runs when a sandbox starts without a snapshot, and when a snapshot is built.">
         <CodingCard className="cs-form-card">
-          <CodingField label="Tool versions" hint="Installed with mise, for example node 22 or python 3.12.">
+          <CodingField label="Runtimes and tools" hint="Installed with mise, for example node 22 or python 3.12.">
             <ToolsEditor tools={draft.tools} disabled={locked} onChange={(tools) => update({ tools })} />
           </CodingField>
           <CodingField label="Files" hint="Written to the sandbox home directory before setup.">
@@ -296,7 +296,7 @@ export function EnvironmentEditorPage({ data, environmentId, disabled, onBack, o
             <VariablesEditor variables={draft.variables} disabled={locked} onChange={(variables) => update({ variables })} />
             <p className="cs-field-hint">{t("Visible to the agent and in sandbox logs.")}</p>
           </div>
-          <CodingField label="Secrets" hint="Encrypted on save and only available while setup runs. Saved values are never shown and can't be edited. Anything the prepare script writes to disk is kept in snapshots.">
+          <CodingField label="Environment secrets" hint="Encrypted on save and only available while setup runs. Saved values are never shown and can't be edited. Anything the prepare script writes to disk is kept in snapshots.">
             <SecretsEditor
               saved={environment?.secrets ?? []}
               pending={pendingSecrets}
