@@ -113,8 +113,10 @@ type fakeServer struct {
 	// deleteToStopping keeps deleted sandboxes in Stopping until the next GET.
 	deleteToStopping bool
 	renewals         []time.Time
-	resizes          [][2]int
-	slow             time.Duration
+	// holdBackground keeps background command streams open (execd variants).
+	holdBackground bool
+	resizes        [][2]int
+	slow           time.Duration
 }
 
 func newFakeServer(apiKey string, now func() time.Time) *fakeServer {
@@ -660,6 +662,12 @@ func (f *fakeServer) command(w http.ResponseWriter, r *http.Request, sb *fakeSan
 	w.WriteHeader(200)
 	writeEvent(w, StreamEvent{Type: "init", Text: cmd.ID})
 	if req.Background {
+		f.mu.Lock()
+		hold := f.holdBackground
+		f.mu.Unlock()
+		if hold {
+			<-r.Context().Done()
+		}
 		return
 	}
 	stdout, stderr, exit := f.defaultForeground(sb, req)

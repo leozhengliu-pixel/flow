@@ -211,6 +211,11 @@ func (e *Execd) Run(ctx context.Context, run RunCommandRequest, onEvent func(Str
 		switch event.Type {
 		case "init":
 			result.ID = event.Text
+			if run.Background {
+				// Detached: the id is all Flow needs; do not wait for the
+				// stream to end (execd may keep it open).
+				return errStopStream
+			}
 		case "error":
 			failed = true
 			if event.Error != nil {
@@ -227,7 +232,7 @@ func (e *Execd) Run(ctx context.Context, run RunCommandRequest, onEvent func(Str
 		}
 		return nil
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, errStopStream) {
 		return result, &APIError{Op: "execd run command", Err: err}
 	}
 	switch {
@@ -244,6 +249,9 @@ func (e *Execd) Run(ctx context.Context, run RunCommandRequest, onEvent func(Str
 	}
 	return result, nil
 }
+
+// errStopStream ends ReadEvents early without an error.
+var errStopStream = errors.New("stop stream")
 
 // ReadEvents parses execd's event stream: either SSE "data:" lines or raw
 // JSON objects separated by blank lines (what execd writes).
