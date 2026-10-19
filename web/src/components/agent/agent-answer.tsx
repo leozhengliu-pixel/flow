@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { CalendarIcon, NoAssigneeIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { AppLink } from '@/components/ui/app-link'
@@ -135,32 +135,51 @@ function AgentReferencedCard({ data, reference }: { data: BootstrapData; referen
 /**
  * The reference app's option pills under an agent reply ("Choose an option"): follow-up suggestions and the options of a question
  * the agent stopped on (ask_user). Picking one sends it; once a question is answered the pills collapse into the chosen
- * one with a check.
+ * one with a check. A `recommended` option (e.g. the coding session's leading repository) is preselected while the
+ * question is open: it carries a "Recommended" tag and takes focus (unless the viewer is typing elsewhere), so Enter
+ * confirms it.
  */
-export function AgentChoicePills({ choices, selected, disabled = false, onSelect }: { choices: { label: string; value: string }[]; selected?: string; disabled?: boolean; onSelect?: (choice: { label: string; value: string }) => void }) {
+export function AgentChoicePills({ choices, selected, recommended, disabled = false, onSelect }: { choices: { label: string; value: string }[]; selected?: string; /** The value preselected while unanswered. */ recommended?: string; disabled?: boolean; onSelect?: (choice: { label: string; value: string }) => void }) {
   const { t } = useI18n()
   const shown = selected === undefined ? choices : choices.filter(choice => choice.value === selected)
+  const open = selected === undefined && !disabled && Boolean(onSelect)
+  const preselected = selected === undefined && recommended !== undefined && choices.some(choice => choice.value === recommended) ? recommended : undefined
+  const preselectedRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    const button = preselectedRef.current
+    if (!open || !button) return
+    // Never steal focus from a field (the reply composer) or another control the viewer is using.
+    const active = document.activeElement
+    if (active && active !== document.body && active !== button) return
+    button.focus({ preventScroll: true })
+  }, [open, preselected])
   if (!shown.length) return null
   return (
     <div className={styles.choices} data-agent-choices="">
       <div aria-label={t('Choose an option')} className={styles.choiceGroup} role="group">
-        {shown.map(choice => (
-          <button
-            aria-pressed={selected === undefined ? undefined : true}
-            className={styles.choice}
-            data-i18n-ignore
-            data-selected={selected === undefined ? undefined : ''}
-            disabled={disabled || selected !== undefined || !onSelect}
-            key={choice.value}
-            onClick={() => onSelect?.(choice)}
-            type="button"
-          >
-            <span className={styles.choiceLabel}>
-              <span>{choice.label}</span>
-              <span aria-hidden="true" className={styles.choiceCheck}><FlowGlyph name="resolveThread" size={14}/></span>
-            </span>
-          </button>
-        ))}
+        {shown.map(choice => {
+          const isPreselected = choice.value === preselected
+          return (
+            <button
+              aria-pressed={selected === undefined ? undefined : true}
+              className={styles.choice}
+              data-i18n-ignore
+              data-recommended={isPreselected ? '' : undefined}
+              data-selected={selected === undefined ? undefined : ''}
+              disabled={disabled || selected !== undefined || !onSelect}
+              key={choice.value}
+              onClick={() => onSelect?.(choice)}
+              ref={isPreselected ? preselectedRef : undefined}
+              type="button"
+            >
+              <span className={styles.choiceLabel}>
+                <span>{choice.label}</span>
+                {isPreselected && <span className={styles.choiceTag}>{t('Recommended')}</span>}
+                <span aria-hidden="true" className={styles.choiceCheck}><FlowGlyph name="resolveThread" size={14}/></span>
+              </span>
+            </button>
+          )
+        })}
       </div>
     </div>
   )

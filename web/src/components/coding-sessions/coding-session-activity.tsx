@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, ChevronRight, ExternalLink, Lightbulb, MessageSquare, Terminal } from 'lucide-react'
-import { AGENT_TASK_ACTIVITY_EVENT, getApplicationTask, replyApplicationTask, type ApplicationActivity, type ApplicationTask } from '@/lib/application-agents'
+import { AGENT_TASK_ACTIVITY_EVENT, getApplicationTask, recommendedChoiceValue, replyApplicationTask, type ApplicationActivity, type ApplicationTask } from '@/lib/application-agents'
 import { AgentAnswerText, AgentChoicePills } from '@/components/agent/agent-answer'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData } from '@/types/flow'
@@ -112,7 +112,7 @@ export function CodingSessionActivity({ data, agentSessionId, issueId, mode, awa
           {activity.type === 'error' && <p className="coding-session-activity-error" role="alert" data-i18n-ignore>{activity.body}</p>}
           {activity.type === 'elicitation' && <>
             <AgentAnswerText className="coding-session-markdown" data={data} markdown={activity.body}/>
-            {options.length > 0 && <AgentChoicePills choices={options} disabled={busy || pending?.id !== activity.id} onSelect={choice => void answer(choice.value)} selected={answered}/>}
+            {options.length > 0 && <AgentChoicePills choices={options} disabled={busy || pending?.id !== activity.id} onSelect={choice => void answer(choice.value)} recommended={activity.signal === 'select' ? recommendedChoiceValue(activity.signalMetadata) : undefined} selected={answered}/>}
             {activity.signal === 'auth' && !answered && activity.signalMetadata?.url && /^https?:\/\//i.test(activity.signalMetadata.url) && <a className="coding-session-link" href={activity.signalMetadata.url} target="_blank" rel="noreferrer"><ExternalLink size={13} aria-hidden="true"/>{t('Link account')}</a>}
           </>}
         </div>

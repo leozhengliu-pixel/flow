@@ -18,7 +18,14 @@ export type ApplicationTask = { id: string; issueId: string; teamId: string; com
 export const AGENT_TASK_ACTIVITY_EVENT = 'flow:agent-task-activity'
 /** Task states the agent may still change on its own; only these keep a fallback poll running. */
 export const isApplicationTaskRunning = (task: Pick<ApplicationTask, 'status'>) => task.status === 'pending' || task.status === 'active'
-export type ApplicationActivity = { id: string; sessionId: string; actorId: string; type: string; body: string; url?: string; createdAt: string; signal?: 'select' | 'auth' | 'stop'; signalMetadata?: { options?: { label?: string; value: string }[]; url?: string; userId?: string; providerName?: string; approval?: import('@/types/flow').AgentApproval }; metadata?: { action?: string; parameter?: string; result?: string; activityId?: string; enabled?: boolean } }
+export type ApplicationActivity = { id: string; sessionId: string; actorId: string; type: string; body: string; url?: string; createdAt: string; signal?: 'select' | 'auth' | 'stop'; signalMetadata?: { options?: { label?: string; value: string; /** The option the agent recommends (coding sessions: the clearly leading repository). */ recommended?: boolean }[]; /** The value preselected for the viewer (one of options). */ selected?: string; url?: string; userId?: string; providerName?: string; approval?: import('@/types/flow').AgentApproval }; metadata?: { action?: string; parameter?: string; result?: string; activityId?: string; enabled?: boolean } }
+
+/** The select option an elicitation preselects: `signalMetadata.selected` when it names an option, else the first option marked recommended. */
+export function recommendedChoiceValue(metadata: ApplicationActivity['signalMetadata']): string | undefined {
+  const options = metadata?.options ?? []
+  if (metadata?.selected && options.some(option => option.value === metadata.selected)) return metadata.selected
+  return options.find(option => option.recommended)?.value
+}
 export const isAgentMember = (user: User) => Boolean(user.app && user.active && (user.appScopes?.includes('app:assignable') || user.appScopes?.includes('app:mentionable')))
 export const canDelegateTo = (user: User, teamId: string) => Boolean(user.app && user.active && user.appScopes?.includes('app:assignable') && user.appTeamIds?.includes(teamId))
 export const listApplications = (workspace: string) => apiRequest<ApplicationInstallation[]>('/api/application-installations', workspace)

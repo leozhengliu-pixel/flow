@@ -5,7 +5,7 @@ import type { BootstrapData, Issue, User } from '@/types/flow'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { activityTimeLabel } from '@/components/activity/issue-activity-model'
 import { commentShortcutMatches } from '@/lib/runtime-preferences'
-import { AGENT_TASK_ACTIVITY_EVENT, deleteApplicationActivity, getApplicationTask, isApplicationTaskRunning, listApplicationTasks, reactApplicationTask, replyApplicationTask, type ApplicationTask, type ApplicationActivity } from '@/lib/application-agents'
+import { AGENT_TASK_ACTIVITY_EVENT, deleteApplicationActivity, getApplicationTask, isApplicationTaskRunning, listApplicationTasks, reactApplicationTask, recommendedChoiceValue, replyApplicationTask, type ApplicationTask, type ApplicationActivity } from '@/lib/application-agents'
 import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
 import { AgentAnswerText, AgentChoicePills } from './agent-answer'
 import { agentApprovalChoices, agentApprovalMarkdown } from './agent-approval-model'
@@ -235,7 +235,7 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
           />
         </div>}
         <div className="issue-agent-message-body"><AgentAnswerText className="issue-agent-markdown" data={data} markdown={body}/>
-          {choices.length > 0 && <AgentChoicePills choices={choices} disabled={busy || item.id !== pendingQuestion?.id} onSelect={choice => void submit('prompt', choice.value)} selected={item.resolved ? item.selected ?? '' : undefined}/>}
+          {choices.length > 0 && <AgentChoicePills choices={choices} disabled={busy || item.id !== pendingQuestion?.id} onSelect={choice => void submit('prompt', choice.value)} recommended={approval || activity.signal !== 'select' ? undefined : recommendedChoiceValue(activity.signalMetadata)} selected={item.resolved ? item.selected ?? '' : undefined}/>}
           {auth && (authUser && authUser !== data.viewer.id ? <p className="issue-agent-auth-wait">{t('Waiting for')} {data.users.find(user => user.id === authUser)?.displayName || t('another member')} {t('to link their account.')}</p> : <a className="issue-agent-auth-link" href={activity.signalMetadata?.url} target="_blank" rel="noreferrer"><ExternalLink size={14}/>{t('Link account')}</a>)}
           {activity.url && <a href={activity.url} target="_blank" rel="noreferrer">{t('Open result')}</a>}
           {!human && <ReactionPills reactions={reactions[activity.id]} viewerId={data.viewer.id} onToggle={emoji => react(activity.id, emoji)}/>}

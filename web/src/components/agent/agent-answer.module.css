@@ -55,6 +55,9 @@ a.referenceCard:focus-visible{outline:2px solid var(--focus-ring);outline-offset
 .choice:after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:var(--agent-choice-ring);pointer-events:none;transition:box-shadow .15s}
 .choice:hover:not(:disabled):after,.choice:focus-visible:after{box-shadow:var(--agent-choice-ring-hover)}
 .choice:disabled:not([data-selected]){opacity:.5}
+.choice[data-recommended]{background:var(--agent-send-hover-bg)}
+.choice[data-recommended]:after{box-shadow:var(--agent-choice-ring-hover)}
+.choiceTag{flex:none;margin-left:8px;padding:0 6px;border-radius:9999px;background:var(--agent-send-bg);color:var(--agent-thread-muted);font-size:11px;font-weight:500;line-height:18px}
 .references .entityIdentifier{color:var(--agent-thread-muted);letter-spacing:-.24px}
 .references a.referenceRow>svg:nth-child(2){width:14px;height:14px;color:var(--agent-thread-muted)}
 .references a.referenceRow>:nth-child(5){color:var(--agent-action-icon)}
