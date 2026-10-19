@@ -185,20 +185,24 @@ type StartInput struct {
 	// AnchorID reuses an existing AgentTask (a delegation) as the anchor.
 	AnchorID string
 	// ResourceType/ResourceID anchor a session without an issue (agent chat).
-	ResourceType    string
-	ResourceID      string
-	Prompt          string
-	Attachments     []string
-	TurnKind        string
-	EnvironmentID   string
-	Harness         string
-	Model           string
-	ReasoningEffort string
-	BaseRef         string
-	BranchName      string
-	ExistingBranch  bool
-	CreatorID       string
-	LoopID          string
+	ResourceType  string
+	ResourceID    string
+	Prompt        string
+	Attachments   []string
+	TurnKind      string
+	EnvironmentID string
+	// EnvironmentCandidates / PreferredEnvironmentID carry the trigger's
+	// ranking when the repository is ambiguous (EnvironmentID empty).
+	EnvironmentCandidates  []string
+	PreferredEnvironmentID string
+	Harness                string
+	Model                  string
+	ReasoningEffort        string
+	BaseRef                string
+	BranchName             string
+	ExistingBranch         bool
+	CreatorID              string
+	LoopID                 string
 	// RequireApproval starts in awaitingApproval (untrusted external source).
 	RequireApproval bool
 	IdempotencyKey  string
@@ -278,6 +282,12 @@ func (s *Service) Start(ctx context.Context, in StartInput) (domain.CodingSessio
 		Source: in.Source, SourceID: in.SourceID, Harness: harness, ModelSelection: selection, ReasoningEffort: NormalizeEffort(effort),
 		DisplayTitle: title, BranchName: branch, BaseRef: strings.TrimSpace(in.BaseRef), ExistingBranch: in.ExistingBranch, LoopID: in.LoopID,
 		CreatedAt: now, UpdatedAt: now, Version: 1, NextReconcileAt: now,
+	}
+	if session.EnvironmentID == "" && len(in.EnvironmentCandidates) > 0 {
+		session.EnvironmentCandidates = slices.Clone(in.EnvironmentCandidates)
+		if slices.Contains(in.EnvironmentCandidates, in.PreferredEnvironmentID) {
+			session.PreferredEnvironmentID = in.PreferredEnvironmentID
+		}
 	}
 	phase := domain.CodingPhaseQueued
 	if in.RequireApproval {
@@ -495,6 +505,7 @@ func (s *Service) commit(ctx context.Context, before, decided domain.CodingSessi
 func cloneSession(session domain.CodingSession) domain.CodingSession {
 	session.Plan = slices.Clone(session.Plan)
 	session.ExternalURLs = slices.Clone(session.ExternalURLs)
+	session.EnvironmentCandidates = slices.Clone(session.EnvironmentCandidates)
 	session.Diffs = slices.Clone(session.Diffs)
 	session.PullRequests = slices.Clone(session.PullRequests)
 	return session

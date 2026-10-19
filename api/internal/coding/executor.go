@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"flow/api/internal/codehost"
@@ -209,7 +210,28 @@ func (s *Service) resolveEnvironment(ctx context.Context, session domain.CodingS
 	case 1:
 		return envs[0], nil, nil
 	}
-	return domain.CodingEnvironment{}, envs, nil
+	return domain.CodingEnvironment{}, rankEnvironments(envs, session.EnvironmentCandidates), nil
+}
+
+// rankEnvironments orders the selection by the trigger's ranking (best
+// first); environments the ranking did not include follow in their listed
+// order, and ranked ids that are gone are skipped.
+func rankEnvironments(envs []domain.CodingEnvironment, candidates []string) []domain.CodingEnvironment {
+	if len(candidates) == 0 {
+		return envs
+	}
+	ranked := make([]domain.CodingEnvironment, 0, len(envs))
+	for _, id := range candidates {
+		if index := slices.IndexFunc(envs, func(env domain.CodingEnvironment) bool { return env.ID == id }); index >= 0 && !slices.ContainsFunc(ranked, func(env domain.CodingEnvironment) bool { return env.ID == id }) {
+			ranked = append(ranked, envs[index])
+		}
+	}
+	for _, env := range envs {
+		if !slices.Contains(candidates, env.ID) {
+			ranked = append(ranked, env)
+		}
+	}
+	return ranked
 }
 
 func hostFailure(host codehost.Host, codeHost string, err error) ProvisionOutcome {
