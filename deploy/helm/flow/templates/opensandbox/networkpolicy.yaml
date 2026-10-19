@@ -1,0 +1,68 @@
+{{- if and (include "flow.coding.opensandbox" .) .Values.coding.opensandbox.networkPolicy.enabled }}
+{{- $o := .Values.coding.opensandbox }}
+# Flow's sandbox Pods in OpenSandbox's sandbox namespace (selected by the
+# flow.dev/* metadata OpenSandbox applies as Pod labels): ingress only from
+# the OpenSandbox server (execd 44772 and the egress sidecar 18080 through its
+# proxy), egress only to DNS, Flow's runtime port and the egress proxy.
+# Rendered into a namespace this chart does not own; verify on the real
+# cluster that OpenSandbox copies metadata onto Pod labels.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "flow.fullname" . }}-opensandbox-sandboxes
+  namespace: {{ $o.sandboxNamespace }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- toYaml $o.networkPolicy.podSelector | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $o.serverNamespace }}
+    {{- with $o.networkPolicy.extraIngressFrom }}
+    - from:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.sandboxes.networkPolicy.dns.namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.sandboxes.networkPolicy.dns.podSelector | nindent 14 }}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              {{- include "flow.selectorLabels" . | nindent 14 }}
+      ports:
+        - port: {{ include "flow.runtimeContainerPort" . }}
+          protocol: TCP
+    {{- if include "flow.egress.enabled" . }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "flow.egress.namespace" . }}
+          podSelector:
+            matchLabels:
+              {{- include "flow.egress.selectorLabels" . | nindent 14 }}
+      ports:
+        - port: {{ .Values.egressProxy.port }}
+          protocol: TCP
+    {{- end }}
+    {{- with $o.networkPolicy.extraEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

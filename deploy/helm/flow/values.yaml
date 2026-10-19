@@ -236,7 +236,7 @@ redisBundled:
 # ---------------------------------------------------------------------------
 coding:
   enabled: false
-  # kubernetes | docker | fake | disabled
+  # kubernetes | opensandbox | docker | fake | disabled
   provider: kubernetes
   # URL sandboxes use to reach Flow. Empty = the in-cluster Service URL
   # (the runtime port when enabled).
@@ -321,6 +321,75 @@ coding:
     extraAnnotations: {}
     qps: 20
     burst: 40
+  # provider=opensandbox: sandboxes run through an OpenSandbox lifecycle
+  # server in the same cluster (docs/coding-sessions-operations.md,
+  # "OpenSandbox"). The chart then creates no sandbox namespace, RBAC,
+  # quota or sandbox NetworkPolicies of its own.
+  opensandbox:
+    # The opensandbox-server chart's Service ("/v1" is appended).
+    url: http://opensandbox-server.opensandbox-system.svc.cluster.local
+    # Prefer existingSecret: a Secret in the release namespace holding the
+    # server's API key (OpenSandbox keeps its own copy in opensandbox-system).
+    apiKey: ""
+    existingSecret:
+      name: ""
+      key: api-key
+    # Optional X-EXECD-ACCESS-TOKEN, when execd requires one.
+    execdTokenSecret:
+      name: ""
+      key: execd-token
+    # Private sandbox image registry credentials (image.auth).
+    imageAuth:
+      username: ""
+      passwordSecret:
+        name: ""
+        key: password
+    requestTimeout: 30s
+    # POST /sandboxes waits until the Pod runs (image pull included).
+    createTimeout: 10m
+    retries: 3
+    tls:
+      insecureSkipVerify: false
+      # Secret with a PEM CA bundle for an https url.
+      caSecret:
+        name: ""
+        key: ca.crt
+    # Added to every sandbox's metadata (OpenSandbox applies it as labels).
+    extraMetadata: {}
+    # Passed through as the create request's extensions.
+    extensions: {}
+    # OpenSandbox Pools per size (extensions.poolRef), e.g. {small: flow-small}.
+    pools: {}
+    # resourceLimits per size overriding coding.sizes, e.g. {large: {cpu: "8", memory: 64Gi, gpu: "1"}}.
+    sizes: {}
+    # Also send ephemeral-storage limits.
+    ephemeralStorage: false
+    # OpenSandbox expiry kept ahead while Flow observes a sandbox.
+    expiryWindow: 1h
+    # proxy (through the lifecycle server) | endpoint (direct to execd)
+    execdAccess: proxy
+    # uid the runner, exec and the debug terminal run as (0 = execd's user).
+    runAsUid: 1000
+    # Where Flow writes the sandbox token inside the sandbox.
+    tokenPath: /tmp/flow/token
+    # "off" | "proxy": deny-by-default OpenSandbox egress policy that only
+    # allows Flow and the egress proxy (needs OpenSandbox's egress sidecar).
+    egressPolicy: "off"
+    # Extra domains allowed by the egress policy.
+    egressAllow: []
+    # Namespaces of the OpenSandbox server and of the sandbox Pods it
+    # creates ([kubernetes].namespace in its config.toml).
+    serverNamespace: opensandbox-system
+    sandboxNamespace: opensandbox
+    # A NetworkPolicy in sandboxNamespace for Flow's sandbox Pods: ingress
+    # from the OpenSandbox server only, egress to DNS, Flow and the egress
+    # proxy. Off by default: the namespace belongs to OpenSandbox.
+    networkPolicy:
+      enabled: false
+      podSelector:
+        flow.dev/managed-by: flow
+      extraIngressFrom: []
+      extraEgress: []
   docker:
     host: unix:///var/run/docker.sock
     network: flow-sandbox
@@ -480,7 +549,8 @@ sandboxes:
       limits: {cpu: 50m, memory: 64Mi}
 
 # Squid egress proxy for sandboxes (deploy/egress-proxy). Rendered when
-# coding sessions are enabled on the kubernetes provider.
+# coding sessions are enabled on the kubernetes provider (in the sandbox
+# namespace) or the opensandbox provider (in the release namespace).
 egressProxy:
   enabled: true
   image:

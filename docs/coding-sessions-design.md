@@ -590,6 +590,67 @@ named volume per workspace, the token as a bind-mounted 0400 file from a Flow te
 `FLOW_CODING_DOCKER_NETWORK` (no default route) that also holds the egress proxy and Flow. `Exec` uses the Docker exec
 API with TTY.
 
+### 9.1 OpenSandbox provider
+
+`FLOW_CODING_PROVIDER=opensandbox` (`api/internal/sandbox/opensandbox`) runs
+sandboxes through an [OpenSandbox](https://github.com/alibaba/OpenSandbox)
+lifecycle server, typically in the same cluster as Flow.
+
+**Pinned spec.** Implemented from the public specs at tag `release-1.1.0`
+(published 2026-09-21, commit `b1a29cf9`; the newest release at least two
+weeks old when this was written; the repository now lives at
+`opensandbox-group/OpenSandbox`):
+
+- Lifecycle API `specs/sandbox-lifecycle.yml`, `info.version` 0.1.0, base path `/v1`, header `OPEN-SANDBOX-API-KEY`;
+- execd API `specs/execd-api.yaml`, `info.version` 1.0.0, header `X-EXECD-ACCESS-TOKEN`, port 44772;
+- execd PTY sessions `components/execd/PTY.md` (not in the OpenAPI spec);
+- server behaviour read from `server/opensandbox_server/` (error codes in `services/constants.py`, BatchSandbox status mapping, unauthenticated proxy routes in `middleware/auth.py`) and the Go SDK (`sdks/sandbox/go`: SSE parsing, exit codes from `error.evalue`);
+- deployment from `docs/deployment/index.md` (Service `opensandbox-server` in `opensandbox-system`, port 80; sandbox Pods in namespace `opensandbox`).
+
+Source: `https://github.com/alibaba/OpenSandbox/tree/release-1.1.0/specs`.
+Differences from the original assumptions: there is no per-request
+RuntimeClass or `hostUsers` (gVisor/Kata/Firecracker are server-side
+`[secure_runtime]`), creation is synchronous (the server waits for the Pod),
+sandbox ids are server-generated, and the PTY API is execd's, not the
+lifecycle server's.
+
+**Mapping.**
+
+| Provider method | OpenSandbox |
+|---|---|
+| `StartSandbox` | Look up by metadata (`GET /sandboxes?metadata=flow.dev/managed-by=flow&flow.dev/instance=…&flow.dev/sandbox-id=…`); if absent, `POST /sandboxes` in the background (image = Flow sandbox image, entrypoint `tail -f /dev/null`, `env` = runner env with `FLOW_TOKEN_FILE` = `FLOW_CODING_OPENSANDBOX_TOKEN_PATH`, `resourceLimits` cpu/memory[/ephemeral-storage], `resourceRequests` from `FLOW_CODING_CPU_REQUEST_RATIO`, `metadata` = the `flow.dev/*` labels + `flow.dev/deadline`, `timeout` ≤ expiry window, optional `networkPolicy`, `extensions.poolRef`, `image.auth`). Then wait for execd `/ping`, upload the token (`POST /files/upload`, 0600, chown to the runner uid) and run `flow-runner <mode>` as a background `POST /command` (uid/gid 1000, cwd `/workspace`); the command id is stored as metadata `flow.dev/runner` (`PATCH /sandboxes/{id}/metadata`). Returns `pending` until then. |
+| `Status` | Sandbox state + runner command status (`GET /command/status/{id}`): Pending/Allocated → starting (POOL_CAPACITY → pending/QuotaExceeded); Running/Paused + runner running → running; runner exit 0 → succeeded, 86 with restore → failed/InitFailed, other → failed/ExitNonZero, unknown command → failed/Evicted; Failed → failed with ImagePullFailed/Unschedulable/QuotaExceeded/ExitNonZero/StartFailed from reason and message; Stopping → failed/Evicted; Terminated → missing (DeadlineExceeded for TTL expiry); Running without a runner and no launch in flight → missing, so the reconciler restarts it (adoption with a fresh token). Also renews the expiry. |
+| Create errors | 403 `KUBERNETES::QUOTA_EXCEEDED` and 429 `POOL_CAPACITY_EXHAUSTED` → `ErrQuota` (capacityUnavailable, no attempts spent); image-pull messages → `ErrImagePull`; 5xx/409/timeouts → `ErrTransient`; 400/401/403 → permanent (startFailed). Reported by the next `StartSandbox`. |
+| `StopSandbox` | `kill -TERM` the runner (pid file) via execd, record `flow.dev/stop-requested`, `DELETE /sandboxes/{id}` once the runner exited or `TerminationGrace` passed; forced stops and runner-less sandboxes are deleted at once; 404 is success. |
+| `Exec` | TTY: `POST /pty` + WebSocket `/pty/{id}/ws` (stdin `0x00`, output `0x01`/`0x03`, resize JSON frames, `exit` frame), `setpriv` to the runner uid when execd is root, `DELETE /pty/{id}` afterwards. Otherwise a foreground `POST /command` streaming stdout/stderr; stdin is uploaded to a temp file and redirected. |
+| `Logs` | `GET /command/{runner}/logs` (cursor-based; `Follow` polls until the runner exits). |
+| `ListManaged` / `DeleteManaged` | List by metadata (`flow.dev/managed-by`, `flow.dev/instance`, kind/session/sandbox filters) → objects of type `sandbox`; delete by OpenSandbox id after checking the instance label. |
+| Volumes, VolumeSnapshots | `ErrUnsupported`: the archive strategy is used; restore runs inline before the runner (`flow-runner restore`, exit 86). OpenSandbox's own snapshots (`POST /sandboxes/{id}/snapshots`, image commit to a registry) and pause/resume are not used yet: Flow's snapshot contract is per-workspace archives, and pause would need a contract change. |
+| Warm pool | Flow's warm pool (warm-kind sandboxes) works unchanged; `FLOW_CODING_OPENSANDBOX_POOLS` can additionally route a size to an OpenSandbox Pool (`extensions.poolRef`). |
+| Egress | Flow's egress proxy via `HTTP(S)_PROXY` as on every provider, plus optionally (`FLOW_CODING_OPENSANDBOX_EGRESS_POLICY=proxy`) an OpenSandbox `networkPolicy` that denies everything except the Flow runtime host and the proxy host (domains only). |
+| `Preflight` | `GET /health`, an authenticated list (API key), runtime URL sanity, runtime/egress warnings. |
+
+**Idempotency and restarts.** Creates run in a goroutine bounded by
+`FLOW_CODING_OPENSANDBOX_CREATE_TIMEOUT`; while one is in flight the same
+process reports `pending` and never creates twice. After a crash or a lease
+hand-over the metadata lookup finds the sandbox; if two exist for one Flow id
+the one with a runner (then the oldest) wins and the others are deleted. A
+lost create response is recovered by a lookup. The runner wrapper creates
+`<token dir>/launched` atomically, so a relaunch after a crash between
+launching and recording the command id waits for the first runner instead of
+starting a second one.
+
+**Expiry.** `timeout = min(FLOW_CODING_OPENSANDBOX_EXPIRY_WINDOW, deadline +
+stop grace + 10m)`; `Status` renews (`POST /renew-expiration`) when less than
+half the window is left, never past `flow.dev/deadline`. Orphans of a Flow that
+is gone expire within the window; orphan GC deletes those of a running Flow.
+
+**Security notes.** The token is never an env var (OpenSandbox stores create
+`env` in its CRs); it is uploaded through execd. In single-tenant mode the
+lifecycle server does not authenticate `/sandboxes/{id}/proxy/{port}` routes,
+so anyone who can reach the server can reach execd: restrict ingress to the
+server with a NetworkPolicy and consider an execd access token.
+
 ## 10. Snapshot strategies
 
 A snapshot is the repo at `baseSha` after mise install and the prepare script (secrets are available while it is

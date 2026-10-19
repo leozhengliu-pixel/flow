@@ -1,0 +1,7 @@
+coding:
+  enabled: true
+  secretKey: x
+  provider: opensandbox
+  opensandbox:
+    pools: {small: flow-small}
+    egressPolicy: proxy

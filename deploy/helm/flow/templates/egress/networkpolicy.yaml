@@ -1,4 +1,4 @@
-{{- if and (include "flow.egress.enabled" .) .Values.sandboxes.networkPolicy.enabled }}
+{{- if and (include "flow.egress.enabled" .) (include "flow.egress.networkPolicy" .) }}
 # The proxy accepts connections only from sandboxes and reaches only DNS, the
 # Flow runtime port (ACL helper) and public addresses on 80/443. Squid denies
 # private and metadata destinations again after DNS resolution.
@@ -6,7 +6,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ include "flow.egress.fullname" . }}
-  namespace: {{ include "flow.sandbox.namespace" . }}
+  namespace: {{ include "flow.egress.namespace" . }}
   labels:
     {{- include "flow.labels" . | nindent 4 }}
     {{- include "flow.egress.selectorLabels" . | nindent 4 }}
@@ -17,9 +17,19 @@ spec:
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
+        {{- if include "flow.coding.opensandbox" . }}
+        # Flow's sandbox Pods in OpenSandbox's sandbox namespace.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.coding.opensandbox.sandboxNamespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.coding.opensandbox.networkPolicy.podSelector | nindent 14 }}
+        {{- else }}
         - podSelector:
             matchLabels:
               flow.dev/managed-by: flow
+        {{- end }}
       ports:
         - port: proxy
           protocol: TCP

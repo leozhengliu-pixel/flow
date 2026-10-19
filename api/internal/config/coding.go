@@ -16,7 +16,8 @@ type CodingConfig struct {
 	// Enabled turns the coding-session runtime on (FLOW_CODING_ENABLED).
 	// Workspaces still need the "coding-sessions" feature flag.
 	Enabled bool
-	// Provider is the sandbox provider: disabled | fake | docker | kubernetes.
+	// Provider is the sandbox provider: disabled | fake | docker | kubernetes |
+	// local | opensandbox.
 	Provider string
 	// RuntimeURL is the base URL sandboxes call Flow at (runtime API and LLM
 	// proxy); defaults to FLOW_APP_URL.
@@ -59,6 +60,7 @@ type CodingConfig struct {
 	Kubernetes        KubernetesSandboxConfig
 	Docker            DockerSandboxConfig
 	Local             LocalSandboxConfig
+	OpenSandbox       OpenSandboxConfig
 	Egress            CodingEgressConfig
 	LLM               CodingLLMConfig
 	RuntimePricesUSD  map[string]float64 // per sandbox-hour by size
@@ -343,6 +345,7 @@ func loadCoding(appURL string) CodingConfig {
 			Command: value("FLOW_CODING_LOCAL_COMMAND", ""),
 			Root:    value("FLOW_CODING_LOCAL_ROOT", ""),
 		},
+		OpenSandbox: loadOpenSandbox(),
 		Egress: CodingEgressConfig{
 			ProxyURL:         value("FLOW_CODING_EGRESS_PROXY_URL", ""),
 			Allowlist:        csv(value("FLOW_CODING_EGRESS_ALLOWLIST", "")),
@@ -384,9 +387,9 @@ func loadCoding(appURL string) CodingConfig {
 // sessions are enabled, so an unused block never blocks startup.
 func (c CodingConfig) Validate() error {
 	switch c.Provider {
-	case CodingProviderDisabled, CodingProviderFake, CodingProviderDocker, CodingProviderKubernetes, CodingProviderLocal:
+	case CodingProviderDisabled, CodingProviderFake, CodingProviderDocker, CodingProviderKubernetes, CodingProviderLocal, CodingProviderOpenSandbox:
 	default:
-		return fmt.Errorf("FLOW_CODING_PROVIDER must be disabled, fake, docker, kubernetes or local")
+		return fmt.Errorf("FLOW_CODING_PROVIDER must be disabled, fake, docker, kubernetes, local or opensandbox")
 	}
 	if !c.Enabled {
 		return nil
@@ -423,6 +426,11 @@ func (c CodingConfig) Validate() error {
 	}
 	if c.Provider == CodingProviderLocal && c.Local.Command == "" {
 		return fmt.Errorf("FLOW_CODING_LOCAL_COMMAND is required with FLOW_CODING_PROVIDER=local")
+	}
+	if c.Provider == CodingProviderOpenSandbox {
+		if err := c.OpenSandbox.Validate(c.Sizes); err != nil {
+			return err
+		}
 	}
 	if c.Snapshot.Strategy == "volumesnapshot" && c.Kubernetes.WorkspaceVolume == "emptyDir" {
 		return fmt.Errorf("FLOW_CODING_SNAPSHOT_STRATEGY=volumesnapshot needs PVC workspaces (FLOW_CODING_K8S_WORKSPACE_VOLUME=auto or pvc)")

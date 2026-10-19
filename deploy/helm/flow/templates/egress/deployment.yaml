@@ -4,7 +4,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "flow.egress.fullname" . }}
-  namespace: {{ include "flow.sandbox.namespace" . }}
+  namespace: {{ include "flow.egress.namespace" . }}
   labels:
     {{- include "flow.labels" . | nindent 4 }}
     {{- include "flow.egress.selectorLabels" . | nindent 4 }}

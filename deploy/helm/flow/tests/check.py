@@ -221,6 +221,51 @@ for key, want in expected_values.items():
     if env.get(key) != want:
         fail("coding-gvisor-full", f"{key}={env.get(key)!r}, want {want!r}")
 
+# OpenSandbox: no sandbox namespace or RBAC of Flow's own; the API key comes
+# from a Secret; the egress proxy runs in the release namespace; every
+# FLOW_CODING_OPENSANDBOX_* variable is mapped.
+name = "coding-opensandbox"
+docs = load(name)
+env = flow_env(docs)
+for kind in ("Role", "RoleBinding", "ClusterRole", "Namespace", "ResourceQuota", "LimitRange", "RuntimeClass"):
+    if find(docs, kind):
+        fail(name, f"unexpected {kind} with provider=opensandbox")
+for doc in docs:
+    if doc["metadata"].get("namespace", "flow") not in ("flow", "opensandbox"):
+        fail(name, f"unexpected namespace for {doc['kind']}/{doc['metadata']['name']}")
+if env.get("FLOW_CODING_PROVIDER") != "opensandbox" or env.get("FLOW_CODING_OPENSANDBOX_API_KEY") != "<from>":
+    fail(name, "provider and API key from the Secret")
+if "FLOW_CODING_OPENSANDBOX_API_KEY" in (find(docs, "Secret", "flow")[0].get("stringData") or {}):
+    fail(name, "the API key must not be rendered into the chart's Secret")
+if env.get("FLOW_CODING_RUNTIME_URL") != "http://flow.flow.svc.cluster.local:8090":
+    fail(name, f"runtime url {env.get('FLOW_CODING_RUNTIME_URL')}")
+if env.get("FLOW_CODING_EGRESS_PROXY_URL") != "http://flow-egress.flow.svc.cluster.local:3128":
+    fail(name, "egress proxy must run in the release namespace")
+if find(docs, "Deployment", "flow")[0]["spec"]["template"]["spec"]["automountServiceAccountToken"] is not False:
+    fail(name, "Flow needs no Kubernetes API access with opensandbox")
+source = (repo / "api/internal/config/coding_opensandbox.go").read_text()
+for variable in sorted(set(re.findall(r'"(FLOW_CODING_OPENSANDBOX_[A-Z0-9_]+)"', source))):
+    if variable not in env and variable != "FLOW_CODING_OPENSANDBOX_SIZE_":
+        fail(name, f"unmapped variable {variable}")
+fenced = find(docs, "NetworkPolicy", "flow-opensandbox-sandboxes")
+if not fenced or fenced[0]["metadata"]["namespace"] != "opensandbox":
+    fail(name, "sandbox NetworkPolicy in the OpenSandbox namespace")
+else:
+    spec = fenced[0]["spec"]
+    if spec["podSelector"]["matchLabels"] != {"flow.dev/managed-by": "flow"}:
+        fail(name, "sandbox policy selector")
+    if spec["ingress"][0]["from"][0]["namespaceSelector"]["matchLabels"] != {"kubernetes.io/metadata.name": "opensandbox-system"}:
+        fail(name, "sandbox ingress must come from the OpenSandbox server namespace")
+    ports = sorted(p["port"] for rule in spec["egress"] for p in rule["ports"])
+    if ports != [53, 53, 3128, 8090]:
+        fail(name, f"sandbox egress ports {ports}")
+proxy_policy = find(docs, "NetworkPolicy", "flow-egress")
+if not proxy_policy or proxy_policy[0]["spec"]["ingress"][0]["from"][0]["namespaceSelector"]["matchLabels"] != {"kubernetes.io/metadata.name": "opensandbox"}:
+    fail(name, "egress proxy must accept the OpenSandbox sandbox namespace")
+flow_policy = find(docs, "NetworkPolicy", "flow")[0]["spec"]["ingress"]
+if not any(peer.get("namespaceSelector", {}).get("matchLabels") == {"kubernetes.io/metadata.name": "opensandbox"} for rule in flow_policy for peer in rule.get("from", [])):
+    fail(name, "Flow must accept the runtime port from the OpenSandbox namespace")
+
 # Plain Flow renders no sandbox objects at all.
 docs = load("default")
 for doc in docs:

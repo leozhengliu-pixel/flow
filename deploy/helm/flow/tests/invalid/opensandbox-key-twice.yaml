@@ -1,0 +1,8 @@
+coding:
+  enabled: true
+  secretKey: x
+  provider: opensandbox
+  opensandbox:
+    apiKey: inline
+    existingSecret:
+      name: also-a-secret
