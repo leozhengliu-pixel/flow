@@ -35,6 +35,29 @@ function cssVar(name: string) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+let colorProbe: CanvasRenderingContext2D | null | undefined;
+/**
+ * xterm only parses hex and rgb() colours; tokens may be lch() or hsl(), which xterm would treat
+ * as black. A 1px canvas resolves any CSS colour to rgba(). Without canvas (jsdom) the value is
+ * returned unchanged.
+ */
+function xtermColor(value: string) {
+  if (/^(#|rgba?\()/i.test(value)) return value;
+  if (colorProbe === undefined) {
+    try {
+      colorProbe = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+    } catch {
+      colorProbe = null;
+    }
+  }
+  if (!colorProbe) return value;
+  colorProbe.clearRect(0, 0, 1, 1);
+  colorProbe.fillStyle = value;
+  colorProbe.fillRect(0, 0, 1, 1);
+  const [r, g, b, a] = colorProbe.getImageData(0, 0, 1, 1).data;
+  return a === 255 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(3)})`;
+}
+
 export function terminalFont() {
   return cssVar("--font-monospace") || "ui-monospace, Menlo, monospace";
 }
@@ -51,17 +74,17 @@ export function xtermTheme({ background = "--theme-surface-0", readOnly = false 
     cursorAccent: background,
     selectionBackground: "--rt-selection-bg",
     black: "--text-label",
-    red: "--semantic-danger-text",
-    green: "--semantic-success",
-    yellow: "--semantic-warning-text",
+    red: "--color-swatch-red",
+    green: "--color-swatch-green",
+    yellow: "--color-swatch-yellow",
     blue: "--accent-primary",
     magenta: "--color-swatch-purple",
     cyan: "--color-swatch-teal",
     white: "--theme-text-secondary",
     brightBlack: "--text-label",
-    brightRed: "--semantic-danger-text",
-    brightGreen: "--semantic-success",
-    brightYellow: "--semantic-warning-text",
+    brightRed: "--color-swatch-red",
+    brightGreen: "--color-swatch-green",
+    brightYellow: "--color-swatch-yellow",
     brightBlue: "--accent-primary",
     brightMagenta: "--color-swatch-purple",
     brightCyan: "--color-swatch-teal",
@@ -70,7 +93,7 @@ export function xtermTheme({ background = "--theme-surface-0", readOnly = false 
   const theme: XTermTheme = {};
   for (const [key, token] of Object.entries(tokens)) {
     const value = cssVar(token);
-    if (value) theme[key] = value;
+    if (value) theme[key] = xtermColor(value);
   }
   return theme;
 }
