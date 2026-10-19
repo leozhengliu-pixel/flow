@@ -128,3 +128,22 @@ describe('coding session model', () => {
     expect(codingSessionIdsFromMessage({ parts: [call('1', 'start_coding_session', { sessionId: 'a' }), call('2', 'search', { sessionId: 'x' }), call('3', 'start_coding_session', { sessionId: 'a' }), call('4', 'start_coding_session', { sessionId: 'b' }, 'error')] })).toEqual(['a'])
   })
 })
+
+describe('session status line', () => {
+  it('reads like the reference app session card', async () => {
+    const { codingStatusLine, formatCodingElapsed, codingRunStartedAt } = await import('./coding-session-model')
+    const { codingSessionUiZhCN } = await import('@/i18n/translations-coding-session-ui')
+    expect(codingStatusLine({ state: 'active', phase: 'running' })).toEqual({ tone: 'working', label: 'Thinking…', live: true })
+    expect(codingStatusLine({ state: 'pending', phase: 'provisioning' })).toEqual({ tone: 'working', label: 'Preparing sandbox', live: true, ellipsis: true })
+    expect(codingStatusLine({ state: 'error', phase: 'done' }, 'Spend limit reached')).toMatchObject({ tone: 'error', label: 'Error', detail: 'Spend limit reached', live: false })
+    expect(codingStatusLine({ state: 'complete', phase: 'idle', summary: 'Done' })).toMatchObject({ tone: 'done', label: 'Finished', detail: 'Done' })
+    expect(codingStatusLine({ state: 'awaitingInput', phase: 'awaitingApproval' }).label).toBe('Waiting for approval')
+    expect(codingStatusLine({ state: 'stale', phase: 'done' }).tone).toBe('stopped')
+    for (const label of ['Thinking…', 'Error', 'Finished', 'Stopped', 'Needs input', 'Waiting for approval', 'Stopping…']) expect(codingSessionUiZhCN[label], label).toBeTruthy()
+    expect(formatCodingElapsed(162_000)).toBe('02:42')
+    expect(formatCodingElapsed(3_762_000)).toBe('1:02:42')
+    expect(formatCodingElapsed(-5)).toBe('00:00')
+    expect(codingRunStartedAt({ createdAt: 'c', startedAt: 's', turnStartedAt: 't' })).toBe('t')
+    expect(codingRunStartedAt({ createdAt: 'c' })).toBe('c')
+  })
+})

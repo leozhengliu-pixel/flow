@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, ChevronRight, ExternalLink, Lightbulb, MessageSquare, Terminal } from 'lucide-react'
+import { AlertTriangle, ChevronRight, ExternalLink } from 'lucide-react'
+import { activityTimeLabel } from '@/components/activity/issue-activity-model'
+import { AgentCopyGlyph } from '@/components/ui/agent-glyph'
+import { UserAvatar } from '@/components/ui/user-avatar'
+import { toast } from '@/lib/toast'
 import { AGENT_TASK_ACTIVITY_EVENT, getApplicationTask, recommendedChoiceValue, replyApplicationTask, type ApplicationActivity, type ApplicationTask } from '@/lib/application-agents'
 import { AgentAnswerText, AgentChoicePills } from '@/components/agent/agent-answer'
 import { useI18n } from '@/i18n/i18n'
@@ -66,7 +70,8 @@ function useAnchorActivities(workspace: string, agentSessionId: string, issueId:
  * responses, questions (elicitations, with select options) and errors, read from the AgentTask anchor.
  */
 export function CodingSessionActivity({ data, agentSessionId, issueId, mode, awaitingInput, revision }: { data: BootstrapData; agentSessionId: string; issueId?: string; mode: CodingActivityMode; /** The session waits on the user (phase awaitingUser): the latest open question takes an answer. */ awaitingInput: boolean; /** Changes whenever the session changes (refetches newer activities). */ revision: string }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
+  const relativeTime = (value: string) => Number.isNaN(Date.parse(value)) ? '' : activityTimeLabel(value, Date.now(), locale).replace(/m(?= ago$)/, 'min')
   const { activities, task, setTask, error } = useAnchorActivities(data.workspace.urlKey, agentSessionId, issueId, revision)
   const [expanded, setExpanded] = useState(mode === 'all')
   const [busy, setBusy] = useState(false)
@@ -98,24 +103,34 @@ export function CodingSessionActivity({ data, agentSessionId, issueId, mode, awa
     const user = data.users.find(candidate => candidate.id === id)
     return id === data.viewer.id ? t('You') : user?.displayName || user?.name || t('User')
   }
+  const lastAgent = [...items].reverse().find(activity => activity.type === 'response' || activity.type === 'error' || activity.type === 'elicitation')
+  const copy = async (text: string) => {
+    try { await navigator.clipboard.writeText(text); toast.success(t('Copied message')) }
+    catch { toast.error(t('Could not copy')) }
+  }
   const list = <ol className="coding-session-activity" aria-label={t('Session activity')}>
     {items.map(activity => {
       const options = (activity.signal === 'select' ? activity.signalMetadata?.options ?? [] : []).map(option => ({ label: option.label || option.value, value: option.value }))
       const answered = answers.get(activity.id)
+      const user = activity.type === 'prompt' ? data.users.find(candidate => candidate.id === activity.actorId) : undefined
       return <li key={activity.id} className="coding-session-activity-item" data-type={activity.type}>
-        <span className="coding-session-activity-icon" aria-hidden="true"><ActivityIcon type={activity.type}/></span>
-        <div className="coding-session-activity-body">
-          {activity.type === 'prompt' && <><strong data-i18n-ignore>{userName(activity.actorId)}</strong><p data-i18n-ignore>{activity.body}</p></>}
-          {activity.type === 'thought' && <p className="coding-session-thought" data-i18n-ignore>{activity.body}</p>}
-          {activity.type === 'action' && <ActionRow activity={activity}/>}
-          {activity.type === 'response' && <AgentAnswerText className="coding-session-markdown" data={data} markdown={activity.body}/>}
-          {activity.type === 'error' && <p className="coding-session-activity-error" role="alert" data-i18n-ignore>{activity.body}</p>}
-          {activity.type === 'elicitation' && <>
-            <AgentAnswerText className="coding-session-markdown" data={data} markdown={activity.body}/>
-            {options.length > 0 && <AgentChoicePills choices={options} disabled={busy || pending?.id !== activity.id} onSelect={choice => void answer(choice.value)} recommended={activity.signal === 'select' ? recommendedChoiceValue(activity.signalMetadata) : undefined} selected={answered}/>}
-            {activity.signal === 'auth' && !answered && activity.signalMetadata?.url && /^https?:\/\//i.test(activity.signalMetadata.url) && <a className="coding-session-link" href={activity.signalMetadata.url} target="_blank" rel="noreferrer"><ExternalLink size={13} aria-hidden="true"/>{t('Link account')}</a>}
-          </>}
-        </div>
+        {activity.type === 'prompt' && <div className="coding-session-prompt">
+          <header><UserAvatar className="coding-session-prompt-avatar" name={user?.displayName || user?.name || userName(activity.actorId)} avatarUrl={user?.avatarUrl}/><strong data-i18n-ignore>{userName(activity.actorId)}</strong>{activity.createdAt && <time dateTime={activity.createdAt}>{relativeTime(activity.createdAt)}</time>}</header>
+          <p data-i18n-ignore>{activity.body}</p>
+        </div>}
+        {activity.type === 'thought' && <p className="coding-session-thought" data-i18n-ignore>{activity.body}</p>}
+        {activity.type === 'action' && <ActionRow activity={activity}/>}
+        {activity.type === 'response' && <AgentAnswerText className="coding-session-markdown" data={data} markdown={activity.body}/>}
+        {activity.type === 'error' && <div className="coding-session-callout" data-kind="error">
+          <div className="coding-session-callout-title"><AlertTriangle size={14} aria-hidden="true"/><strong>{t('Error')}</strong></div>
+          <p className="coding-session-activity-error" role="alert" data-i18n-ignore>{activity.body}</p>
+        </div>}
+        {activity.type === 'elicitation' && <>
+          <AgentAnswerText className="coding-session-markdown" data={data} markdown={activity.body}/>
+          {options.length > 0 && <AgentChoicePills choices={options} disabled={busy || pending?.id !== activity.id} onSelect={choice => void answer(choice.value)} recommended={activity.signal === 'select' ? recommendedChoiceValue(activity.signalMetadata) : undefined} selected={answered}/>}
+          {activity.signal === 'auth' && !answered && activity.signalMetadata?.url && /^https?:\/\//i.test(activity.signalMetadata.url) && <a className="coding-session-link" href={activity.signalMetadata.url} target="_blank" rel="noreferrer"><ExternalLink size={13} aria-hidden="true"/>{t('Link account')}</a>}
+        </>}
+        {mode === 'all' && activity === lastAgent && activity.body && <button type="button" className="coding-session-icon-button coding-session-copy" aria-label={t('Copy message')} onClick={() => void copy(activity.body)}><AgentCopyGlyph size={14}/></button>}
       </li>
     })}
   </ol>
@@ -123,7 +138,7 @@ export function CodingSessionActivity({ data, agentSessionId, issueId, mode, awa
   return <div className="coding-session-activity-block">
     {mode === 'steps'
       ? <button type="button" className="coding-session-disclosure" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
-        <ChevronRight size={13} aria-hidden="true" data-open={expanded || undefined}/>{t(expanded ? 'Hide steps' : 'Show {count} steps').replace('{count}', String(steps))}
+        {t(expanded ? 'Hide steps' : 'Show {count} steps').replace('{count}', String(steps))}<ChevronRight size={16} aria-hidden="true" data-open={expanded || undefined}/>
       </button>
       : null}
     {expanded && list}
@@ -137,14 +152,7 @@ function ActionRow({ activity }: { activity: ApplicationActivity }) {
   const parameter = activity.metadata?.parameter
   const result = activity.metadata?.result
   return <div className="coding-session-action">
-    <span className="coding-session-action-label"><strong data-i18n-ignore>{action}</strong>{parameter && <code data-i18n-ignore>{parameter}</code>}</span>
+    <span className="coding-session-action-label"><span data-i18n-ignore>{action}</span>{parameter && <code data-i18n-ignore>{parameter}</code>}</span>
     {result && <details className="coding-session-action-result"><summary>{t('Output')}</summary><pre data-i18n-ignore>{result}</pre></details>}
   </div>
-}
-
-function ActivityIcon({ type }: { type: string }) {
-  if (type === 'action') return <Terminal size={13}/>
-  if (type === 'thought') return <Lightbulb size={13}/>
-  if (type === 'error') return <AlertCircle size={13}/>
-  return <MessageSquare size={13}/>
 }

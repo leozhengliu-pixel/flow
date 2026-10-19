@@ -2,7 +2,9 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  createCodingEnvironment,
   fetchCodingEnvironments,
+  fetchCodingRepositories,
   fetchCodingModels,
   fetchCodingSettings,
   fetchCodingStatus,
@@ -22,6 +24,8 @@ vi.mock("@/lib/api", async (original) => ({
   updateCodingSettings: vi.fn(),
   fetchCodingModels: vi.fn(),
   fetchCodingEnvironments: vi.fn(),
+  fetchCodingRepositories: vi.fn(),
+  createCodingEnvironment: vi.fn(),
   unarchiveCodingEnvironment: vi.fn(),
   fetchCommitSigningKey: vi.fn(),
 }));
@@ -40,6 +44,10 @@ beforeEach(() => {
   ]);
   vi.mocked(fetchCodingEnvironments).mockResolvedValue([]);
   vi.mocked(fetchCommitSigningKey).mockResolvedValue({ id: "k" } as never);
+  vi.mocked(fetchCodingRepositories).mockResolvedValue({ repositories: [
+    { codeHost: "github", hostName: "github.com", fullName: "acme/web", id: "1", defaultBranch: "main", webUrl: "", private: false, archived: false },
+    { codeHost: "github", hostName: "github.com", fullName: "acme/api", id: "2", defaultBranch: "trunk", webUrl: "", private: false, archived: false },
+  ] });
 });
 
 async function choose(name: string, option: string) {
@@ -165,10 +173,46 @@ describe("Coding sessions settings page", () => {
     expect(screen.getByTestId("location")).toHaveTextContent(`${ROOT}/environments/env1`);
   });
 
-  it("creates a new environment from the empty state", async () => {
+  it("creates a new environment from the repository popover and opens it", async () => {
+    const user = userEvent.setup();
+    vi.mocked(createCodingEnvironment).mockResolvedValue(makeEnvironment({ id: "env-api", name: "api", repository: "acme/api" }));
     renderCodingSettings();
-    fireEvent.click(await screen.findByRole("button", { name: "New environment" }));
-    expect(screen.getByTestId("location")).toHaveTextContent(`${ROOT}/environments/new`);
+    await user.click(await screen.findByRole("button", { name: "New environment" }));
+    const picker = await screen.findByTestId("repository-picker");
+    expect(within(picker).getByPlaceholderText("Search repositories...")).toHaveFocus();
+    await user.click(await within(picker).findByRole("button", { name: "acme/api" }));
+    await waitFor(() => expect(createCodingEnvironment).toHaveBeenCalledWith({ name: "api", codeHost: "github", hostName: "github.com", repository: "acme/api", repositoryId: "2", defaultBranch: "trunk" }));
+    expect(fetchCodingRepositories).toHaveBeenCalledWith({ codeHost: "github", hostName: "github.com", q: undefined });
+    expect(toast.success).toHaveBeenCalledWith("Environment created");
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(`${ROOT}/environments/env-api`));
+  });
+
+  it("opens the existing environment when the repository already has one", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchCodingEnvironments).mockImplementation(async (archived) => (archived ? [] : [makeEnvironment()]));
+    renderCodingSettings();
+    await screen.findByRole("button", { name: "Web acme/web" });
+    await user.click(screen.getByRole("button", { name: "New environment" }));
+    await user.click(await screen.findByRole("button", { name: "acme/web" }));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(`${ROOT}/environments/env1`));
+    expect(createCodingEnvironment).not.toHaveBeenCalled();
+  });
+
+  it("searches repositories from the popover and picks with Enter", async () => {
+    const user = userEvent.setup();
+    vi.mocked(createCodingEnvironment).mockResolvedValue(makeEnvironment({ id: "env-web" }));
+    renderCodingSettings();
+    await user.click(await screen.findByRole("button", { name: "New environment" }));
+    await screen.findByRole("button", { name: "acme/web" });
+    await user.type(screen.getByLabelText("Search repositories"), "web");
+    await waitFor(() => expect(fetchCodingRepositories).toHaveBeenLastCalledWith({ codeHost: "github", hostName: "github.com", q: "web" }));
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(createCodingEnvironment).toHaveBeenCalledWith(expect.objectContaining({ repository: "acme/web" })));
+  });
+
+  it("keeps the direct /environments/new route working", async () => {
+    renderCodingSettings({ path: `${ROOT}/environments/new` });
+    expect(await screen.findByRole("heading", { level: 1, name: "New environment" })).toBeVisible();
   });
 
   it("shows archived environments and unarchives one", async () => {

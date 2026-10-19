@@ -276,3 +276,36 @@ export function codingSessionIdsFromMessage(message: Pick<AgentMessage, 'parts'>
   }
   return ids
 }
+
+export type CodingStatusTone = 'working' | 'input' | 'done' | 'error' | 'stopped'
+export type CodingStatusLine = { tone: CodingStatusTone; label: string; detail?: string; live: boolean; /** Append "…" after the translated label (a phase in progress). */ ellipsis?: boolean }
+
+/**
+ * The one-line status of a session, as the reference app's session card shows it ("Thinking…" with a running timer,
+ * "Error" + the message): the label is translated by the caller, the detail is the session's own text.
+ */
+export function codingStatusLine(session: Pick<CodingSession, 'state' | 'phase' | 'summary' | 'errorCode'>, errorTitle?: string): CodingStatusLine {
+  switch (session.state) {
+    case 'error': return { tone: 'error', label: 'Error', detail: errorTitle, live: false }
+    case 'complete': return { tone: 'done', label: 'Finished', detail: session.summary, live: false }
+    case 'stale': return { tone: 'stopped', label: 'Stopped', live: false }
+    case 'stopping': return { tone: 'working', label: 'Stopping…', live: true }
+    case 'awaitingInput': return { tone: 'input', label: session.phase === 'awaitingApproval' ? 'Waiting for approval' : 'Needs input', live: false }
+    default: {
+      if (session.phase === 'running') return { tone: 'working', label: 'Thinking…', live: true }
+      const phase = CODING_PHASE_LABELS[session.phase]
+      return phase ? { tone: 'working', label: phase, live: true, ellipsis: true } : { tone: 'working', label: 'Thinking…', live: true }
+    }
+  }
+}
+
+/** Elapsed time like the reference app's session timer: "02:42", "1:02:42". */
+export function formatCodingElapsed(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const hours = Math.floor(total / 3600), minutes = Math.floor((total % 3600) / 60), seconds = total % 60
+  const two = (value: number) => String(value).padStart(2, '0')
+  return hours ? `${hours}:${two(minutes)}:${two(seconds)}` : `${two(minutes)}:${two(seconds)}`
+}
+
+/** When the current run started (the turn, else the session). */
+export const codingRunStartedAt = (session: Pick<CodingSession, 'turnStartedAt' | 'startedAt' | 'createdAt'>) => session.turnStartedAt || session.startedAt || session.createdAt
