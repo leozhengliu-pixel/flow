@@ -1237,6 +1237,13 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	}
 }
 
+// workspaceScope reports whether a label or label-group scope means the
+// whole workspace rather than a single team.
+func workspaceScope(scope string) bool {
+	scope = strings.TrimSpace(scope)
+	return scope == "" || strings.EqualFold(scope, "workspace")
+}
+
 func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
 	if !ok {
@@ -1269,16 +1276,17 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	allowed := func(id string) bool { return slices.Contains(key.TeamIDs, id) }
 	data.Teams = slices.DeleteFunc(data.Teams, func(item domain.Team) bool { return !allowed(item.ID) })
 	data.States = slices.DeleteFunc(data.States, func(item domain.WorkflowState) bool { return item.TeamID != "" && !allowed(item.TeamID) })
-	data.Labels = slices.DeleteFunc(data.Labels, func(item domain.IssueLabel) bool {
-		scope := strings.ToLower(strings.TrimSpace(item.Scope))
-		return scope != "" && scope != "workspace" && !allowed(item.Scope)
-	})
+	// Labels and label groups share one scope convention: empty or
+	// "workspace" (any case, surrounding space ignored) is workspace-wide;
+	// anything else is a team ID that must be on the key's allow-list.
+	teamScopedOutside := func(scope string) bool {
+		return !workspaceScope(scope) && !allowed(scope)
+	}
+	data.Labels = slices.DeleteFunc(data.Labels, func(item domain.IssueLabel) bool { return teamScopedOutside(item.Scope) })
 	visibleLabel := func(id string) bool {
 		return slices.ContainsFunc(data.Labels, func(item domain.IssueLabel) bool { return item.ID == id })
 	}
-	data.LabelGroups = slices.DeleteFunc(data.LabelGroups, func(item domain.LabelGroup) bool {
-		return item.Scope != "" && item.Scope != "workspace" && !allowed(item.Scope)
-	})
+	data.LabelGroups = slices.DeleteFunc(data.LabelGroups, func(item domain.LabelGroup) bool { return teamScopedOutside(item.Scope) })
 	visibleLabelGroup := func(id string) bool {
 		return slices.ContainsFunc(data.LabelGroups, func(item domain.LabelGroup) bool { return item.ID == id })
 	}
@@ -1368,9 +1376,33 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	data.CustomerRequests = slices.DeleteFunc(data.CustomerRequests, func(item domain.CustomerRequest) bool {
 		return item.IssueID != "" && !visibleIssue(item.IssueID) || item.ProjectID != "" && !visibleProject(item.ProjectID)
 	})
+	// Releases follow their pipeline's team access, as in the store's
+	// per-user projection: a release in a workspace or allowed-team pipeline
+	// is visible even before any project or issue is attached. Releases
+	// without a pipeline stay visible when unlinked, or when linked to
+	// something the key can read. Links to hidden resources are scrubbed.
+	data.ReleasePipelines = slices.DeleteFunc(data.ReleasePipelines, func(item domain.ReleasePipeline) bool {
+		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, allowed)
+	})
+	visiblePipeline := func(id string) bool {
+		return slices.ContainsFunc(data.ReleasePipelines, func(item domain.ReleasePipeline) bool { return item.ID == id })
+	}
+	for index := range data.ReleasePipelines {
+		data.ReleasePipelines[index].TeamIDs = slices.DeleteFunc(data.ReleasePipelines[index].TeamIDs, func(id string) bool { return !allowed(id) })
+	}
 	data.Releases = slices.DeleteFunc(data.Releases, func(item domain.Release) bool {
+		if item.PipelineID != "" {
+			return !visiblePipeline(item.PipelineID)
+		}
+		if len(item.ProjectIDs) == 0 && len(item.IssueIDs) == 0 {
+			return false
+		}
 		return !slices.ContainsFunc(item.ProjectIDs, visibleProject) && !slices.ContainsFunc(item.IssueIDs, visibleIssue)
 	})
+	for index := range data.Releases {
+		data.Releases[index].ProjectIDs = slices.DeleteFunc(data.Releases[index].ProjectIDs, func(id string) bool { return !visibleProject(id) })
+		data.Releases[index].IssueIDs = slices.DeleteFunc(data.Releases[index].IssueIDs, func(id string) bool { return !visibleIssue(id) })
+	}
 	data.Asks = slices.DeleteFunc(data.Asks, func(item domain.Ask) bool { return item.TeamID != "" && !allowed(item.TeamID) })
 	data.Initiatives = slices.DeleteFunc(data.Initiatives, func(item domain.Initiative) bool { return !slices.ContainsFunc(item.ProjectIDs, visibleProject) })
 	visibleInitiative := func(id string) bool {
