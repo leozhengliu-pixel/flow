@@ -1,0 +1,4 @@
+coding:
+  llm:
+    openai:
+      wireApi: invalid
