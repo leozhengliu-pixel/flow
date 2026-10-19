@@ -397,6 +397,12 @@ type CodingSession struct {
 	SandboxAttempts int    `json:"sandboxAttempts,omitempty"`
 	StopRequested   bool   `json:"stopRequested,omitempty"`
 	StoppedBy       string `json:"stoppedBy,omitempty"`
+	// EnvironmentCandidates are the trigger's relevance-ranked environment
+	// ids for an ambiguous repository (track L's suggestions, best first);
+	// PreferredEnvironmentID is the clear leader among them, if any. The
+	// provisioning select elicitation lists and preselects them in that order.
+	EnvironmentCandidates  []string `json:"environmentCandidates,omitempty"`
+	PreferredEnvironmentID string   `json:"preferredEnvironmentId,omitempty"`
 	// LoopID attributes spend to a Loop (loopLimit / loopOverrides).
 	LoopID      string `json:"loopId,omitempty"`
 	SandboxSize string `json:"sandboxSize,omitempty"`

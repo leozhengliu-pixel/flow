@@ -200,6 +200,9 @@ export interface CodingSession {
   sandboxAttempts?: number;
   stopRequested?: boolean;
   stoppedBy?: string;
+  /** Trigger-ranked environment ids for an ambiguous repository (best first). */
+  environmentCandidates?: string[];
+  preferredEnvironmentId?: string;
   loopId?: string;
   sandboxSize?: CodingSandboxSize;
   sandboxId?: string;

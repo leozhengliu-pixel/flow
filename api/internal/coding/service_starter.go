@@ -2,6 +2,7 @@ package coding
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"flow/api/internal/domain"
@@ -22,7 +23,8 @@ var _ SessionStarter = ServiceStarter{}
 
 // StartCodingSession implements SessionStarter. An ambiguous repository
 // (AwaitEnvironment) leaves EnvironmentID empty: provisioning then asks with
-// its own select elicitation.
+// its select elicitation, ordered and preselected by the trigger's ranking
+// (EnvironmentSuggestions).
 func (s ServiceStarter) StartCodingSession(ctx context.Context, request TriggerStartRequest) (domain.CodingSession, bool, error) {
 	if s.Service == nil {
 		return domain.CodingSession{}, false, &TriggerError{Code: domain.CodingErrSandboxDisabled, Message: "Coding sessions are not available."}
@@ -31,10 +33,12 @@ func (s ServiceStarter) StartCodingSession(ctx context.Context, request TriggerS
 	if resourceType == "issue" {
 		resourceType, resourceID = "", ""
 	}
+	candidates, preferred := rankedCandidates(request)
 	session, created, err := s.Service.Start(ctx, StartInput{
 		WorkspaceKey: request.WorkspaceKey, Source: request.Source, SourceID: request.SourceID, IssueID: request.IssueID,
 		AnchorID: request.AnchorTaskID, ResourceType: resourceType, ResourceID: resourceID,
 		Prompt: request.Prompt, TurnKind: request.TurnKind, EnvironmentID: request.EnvironmentID,
+		EnvironmentCandidates: candidates, PreferredEnvironmentID: preferred,
 		Harness: request.Harness, Model: request.Model, BaseRef: request.BaseRef, BranchName: request.BranchName,
 		ExistingBranch: request.ExistingBranch, CreatorID: request.CreatorID, LoopID: request.LoopID,
 		RequireApproval: request.RequireApproval, IdempotencyKey: request.IdempotencyKey, Title: request.Title,
@@ -55,6 +59,26 @@ func (s ServiceStarter) StartCodingSession(ctx context.Context, request TriggerS
 		}
 	}
 	return session, created, nil
+}
+
+// rankedCandidates turns the trigger's suggestions for an ambiguous
+// repository into ranked environment ids and the preselected one: the top
+// suggestion when it has a signal and leads the runner-up.
+func rankedCandidates(request TriggerStartRequest) ([]string, string) {
+	if request.EnvironmentID != "" || len(request.EnvironmentSuggestions) == 0 {
+		return nil, ""
+	}
+	ids := make([]string, 0, len(request.EnvironmentSuggestions))
+	for _, suggestion := range request.EnvironmentSuggestions {
+		if suggestion.EnvironmentID != "" && !slices.Contains(ids, suggestion.EnvironmentID) {
+			ids = append(ids, suggestion.EnvironmentID)
+		}
+	}
+	top := request.EnvironmentSuggestions[0]
+	if top.Score > 0 && (len(request.EnvironmentSuggestions) == 1 || top.Score > request.EnvironmentSuggestions[1].Score) {
+		return ids, top.EnvironmentID
+	}
+	return ids, ""
 }
 
 // PromptCodingSession implements SessionStarter. The trigger's deterministic

@@ -167,8 +167,16 @@ func withoutAction(actions []Action, kind ActionKind) []Action {
 // askForEnvironment posts the repository selection elicitation (Linear's select signal).
 func (s *Service) askForEnvironment(ctx context.Context, session domain.CodingSession, envs []domain.CodingEnvironment) {
 	options := []map[string]any{}
+	metadata := map[string]any{}
 	for _, env := range envs {
-		options = append(options, map[string]any{"value": env.ID, "label": env.Name + " (" + env.Repository + ")"})
+		option := map[string]any{"value": env.ID, "label": env.Name + " (" + env.Repository + ")"}
+		if env.ID == session.PreferredEnvironmentID {
+			// The trigger's ranking had a clear leader (track L): preselect it.
+			option["recommended"] = true
+			metadata["selected"] = env.ID
+		}
+		options = append(options, option)
 	}
-	s.anchorActivity(ctx, session, domain.AgentActivity{Type: "elicitation", Body: "Which repository should I work in?", Signal: "select", SignalMetadata: map[string]any{"options": options}})
+	metadata["options"] = options
+	s.anchorActivity(ctx, session, domain.AgentActivity{Type: "elicitation", Body: "Which repository should I work in?", Signal: "select", SignalMetadata: metadata})
 }
