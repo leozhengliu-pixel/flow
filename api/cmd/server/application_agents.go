@@ -198,6 +198,14 @@ func (s *server) applicationTaskContext(r *http.Request, task domain.AgentTask, 
 		data.Issues = nil
 		return data, nil
 	}
+	if task.ResourceType == codingEnvironmentAnchorResource {
+		// "Configure/Fix with agent" sessions: environments are admin settings.
+		if !slices.Contains([]string{"admin", "owner"}, data.ViewerRole) && !data.Viewer.App {
+			return data, store.ErrAuthForbidden
+		}
+		data.Issues = nil
+		return data, nil
+	}
 	if task.ResourceType == "project" {
 		index := slices.IndexFunc(data.Projects, func(project domain.Project) bool { return project.ID == task.ResourceID })
 		if index < 0 || editing && data.ViewerRole == "guest" {
@@ -368,6 +376,11 @@ func (s *server) appendApplicationAgentActivity(w http.ResponseWriter, r *http.R
 		activity.ToolCall = &call
 	}
 	updated, err := s.store.AppendAgentActivity(r.Context(), task.WorkspaceKey, task.ID, input.Version, activity)
+	if err == nil {
+		// coding sessions (track B): stop and replies on a coding anchor drive the session.
+		activity.ID = paddedVersion(updated.Version)
+		s.codingAnchorActivity(r.Context(), updated, activity)
+	}
 	if err == store.ErrIssueQuery {
 		writeError(w, 400, "Invalid activity or feedback target")
 		return
@@ -420,6 +433,11 @@ func (s *server) runApplicationAgentWorker(ctx context.Context) {
 }
 
 func (s *server) deliverApplicationTask(ctx context.Context, task domain.AgentTask) {
+	// coding sessions (track B): a coding anchor is driven by its session, never by the application worker.
+	if s.codingAnchorTask(ctx, task) {
+		_ = s.store.FinishApplicationDelivery(ctx, task.ID, task.Version, true)
+		return
+	}
 	app, err := s.store.ApplicationByUser(ctx, task.AppUserID)
 	if err != nil || !app.Active || !slices.Contains(app.AccessTeamIDs(), task.TeamID) {
 		_, _ = s.store.AppendAgentActivity(ctx, task.WorkspaceKey, task.ID, task.Version, domain.AgentActivity{Type: "canceled", Body: "Application access was revoked."})

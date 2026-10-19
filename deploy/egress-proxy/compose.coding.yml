@@ -1,0 +1,18 @@
+# Docker provider for coding sessions in development:
+#
+#   FLOW_CODING_SECRET_KEY=$(openssl rand -base64 32) \
+#   FLOW_CODING_EGRESS_ACL_SECRET=$(openssl rand -hex 24) \
+#   DOCKER_GID=$(stat -c %g /var/run/docker.sock) \
+#   docker compose -f docker-compose.yml -f deploy/egress-proxy/compose.coding.yml --profile coding up --build
+#
+# Mounting the Docker socket gives Flow root-equivalent access to the host. Use
+# it only on a development machine; production uses the kubernetes provider.
+services:
+  app:
+    environment:
+      FLOW_CODING_ENABLED: "true"
+      FLOW_CODING_PROVIDER: docker
+    group_add:
+      - "${DOCKER_GID:-999}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

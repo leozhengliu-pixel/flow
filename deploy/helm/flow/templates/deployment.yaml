@@ -1,0 +1,217 @@
+{{- $v := .Values -}}
+{{- $c := .Values.coding -}}
+{{- $rwo := and (eq $v.storage.driver "local") $v.storage.persistence.enabled (not (has "ReadWriteMany" $v.storage.persistence.accessModes)) -}}
+{{- $sqlite := eq $v.database.driver "sqlite" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "flow.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+    {{- include "flow.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  {{- if not $v.autoscaling.enabled }}
+  replicas: {{ $v.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      {{- include "flow.selectorLabels" . | nindent 6 }}
+  strategy:
+    {{- if $v.updateStrategy }}
+    {{- toYaml $v.updateStrategy | nindent 4 }}
+    {{- else if and (not (include "flow.multiReplica" .)) (or $rwo $sqlite) }}
+    # One replica on a ReadWriteOnce volume (or SQLite): the old Pod must stop
+    # before the new one mounts the volume.
+    type: Recreate
+    {{- else }}
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "flow.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
+        {{- with $v.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with $v.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "flow.serviceAccountName" . }}
+      # The kubernetes sandbox provider uses the in-cluster ServiceAccount token.
+      automountServiceAccountToken: {{ if and (include "flow.coding.kubernetes" .) (not $c.kubernetes.kubeconfig) }}true{{ else }}false{{ end }}
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: {{ $v.terminationGracePeriodSeconds }}
+      {{- with $v.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with $v.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml $v.podSecurityContext | nindent 8 }}
+      containers:
+        - name: flow
+          image: {{ include "flow.image" . | quote }}
+          imagePullPolicy: {{ $v.image.pullPolicy }}
+          securityContext:
+            {{- toYaml $v.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ include "flow.httpPort" . }}
+              protocol: TCP
+            {{- if and $c.enabled $c.runtimePort.enabled }}
+            - name: runtime
+              containerPort: {{ $c.runtimePort.port }}
+              protocol: TCP
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "flow.fullname" . }}
+            - secretRef:
+                name: {{ include "flow.fullname" . }}
+            {{- with $v.secrets.existingSecret }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
+            {{- with $v.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          env:
+            - name: GOMEMLIMIT
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.memory
+                  divisor: "1"
+            {{- with $v.database.existingSecret.name }}
+            - name: FLOW_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: {{ $v.database.existingSecret.key }}
+            {{- end }}
+            {{- if and $v.redis.existingSecret.name (not $v.redisBundled.enabled) }}
+            - name: {{ $v.redis.existingSecret.key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $v.redis.existingSecret.name }}
+                  key: {{ $v.redis.existingSecret.key }}
+            {{- end }}
+            {{- if and (eq $v.storage.driver "s3") $v.storage.s3.existingSecret.name }}
+            - name: FLOW_S3_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $v.storage.s3.existingSecret.name }}
+                  key: {{ $v.storage.s3.existingSecret.accessKeyIdKey }}
+            - name: FLOW_S3_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $v.storage.s3.existingSecret.name }}
+                  key: {{ $v.storage.s3.existingSecret.secretAccessKeyKey }}
+            {{- end }}
+            {{- if and (include "flow.egress.aclEnabled" .) $v.egressProxy.aclHelper.existingSecret.name }}
+            - name: FLOW_CODING_EGRESS_ACL_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $v.egressProxy.aclHelper.existingSecret.name }}
+                  key: {{ $v.egressProxy.aclHelper.existingSecret.key }}
+            {{- end }}
+            {{- with $v.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if $v.probes.startup.enabled }}
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: {{ $v.probes.startup.periodSeconds }}
+            failureThreshold: {{ $v.probes.startup.failureThreshold }}
+            timeoutSeconds: 5
+          {{- end }}
+          {{- if $v.probes.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: {{ $v.probes.readiness.periodSeconds }}
+            failureThreshold: {{ $v.probes.readiness.failureThreshold }}
+            timeoutSeconds: 5
+          {{- end }}
+          {{- if $v.probes.liveness.enabled }}
+          # TCP, not /api/health: a Redis outage makes health report 503 and
+          # must take the Pod out of rotation, not restart it.
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: {{ $v.probes.liveness.periodSeconds }}
+            failureThreshold: {{ $v.probes.liveness.failureThreshold }}
+            timeoutSeconds: 5
+          {{- end }}
+          resources:
+            {{- toYaml $v.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: tmp
+              mountPath: /tmp
+            {{- if $c.githubApp.privateKeySecret.name }}
+            - name: github-app-key
+              mountPath: /var/run/flow/github-app
+              readOnly: true
+            {{- end }}
+            {{- with $v.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: data
+          {{- if and (eq $v.storage.driver "local") $v.storage.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-data" (include "flow.fullname" .)) $v.storage.persistence.existingClaim }}
+          {{- else if and $sqlite $v.storage.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-data" (include "flow.fullname" .)) $v.storage.persistence.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi
+        {{- with $c.githubApp.privateKeySecret.name }}
+        - name: github-app-key
+          secret:
+            secretName: {{ . }}
+            defaultMode: 0400
+            items:
+              - key: {{ $c.githubApp.privateKeySecret.key }}
+                path: private-key.pem
+        {{- end }}
+        {{- with $v.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with $v.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $v.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $v.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $v.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

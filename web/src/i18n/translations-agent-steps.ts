@@ -22,6 +22,8 @@ export const agentStepsZhCN: Record<string, string> = {
   "Searching documents…": "正在搜索文档内容…",
   "Searched documents": "已搜索文档内容",
   "Creating issue…": "正在创建事项…",
+  "Starting coding session…": "正在启动编码会话…",
+  "Started coding session": "已启动编码会话",
   "Created issue": "已创建事项",
   "Updating issue…": "正在更新事项…",
   "Updated issue": "已更新事项",
@@ -205,6 +207,7 @@ export const agentStepsZhCN: Record<string, string> = {
 
   // Subjects of tool labels built from tool names (flow_mcp_tools.json), under their own keys (subjectNoun).
   "subject:issue": "事项",
+  "subject:coding session": "编码会话",
   "subject:issues": "事项",
   "subject:project": "项目",
   "subject:projects": "项目",

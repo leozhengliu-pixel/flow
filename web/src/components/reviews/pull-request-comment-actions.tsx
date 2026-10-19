@@ -14,6 +14,10 @@ import type { ReviewEvent } from "@/types/flow";
 import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 
 import { buildAgentDispatchPrompt, formatReviewCommentMarkdown } from "./pull-request-comment-markdown";
+// coding sessions (track G)
+import { sendReviewCommentToCodingAgent } from "@/components/coding-sessions/review-coding-model";
+import { toastCodingStartError } from "@/components/coding-sessions/coding-session-start";
+import { useCodingAvailability } from "@/components/coding-sessions/use-coding-sessions";
 
 export type PullRequestCommentActionsProps = {
   event: ReviewEvent;
@@ -33,6 +37,9 @@ export function PullRequestCommentActions({
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const isCodeComment = Boolean(event.path);
+  // coding sessions (track G): with coding sessions on, the comment goes to the PR's coding session as a follow-up.
+  const coding = useCodingAvailability();
+  const workspace = decodeURIComponent(location.pathname.split("/").filter(Boolean)[0] ?? "");
 
   const copyLink = async () => {
     const hash = targetCommentHash(event.id);
@@ -48,6 +55,17 @@ export function PullRequestCommentActions({
 
   const sendToAgent = async () => {
     setBusy(true);
+    if (coding) {
+      try {
+        await sendReviewCommentToCodingAgent(reviewId, event);
+        toast.success(t("Sent comment to coding agent"));
+      } catch (error) {
+        toastCodingStartError(error, workspace, t);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     try {
       const session = await createAgentSession({
         message: buildAgentDispatchPrompt(event, reviewId),
@@ -92,7 +110,7 @@ export function PullRequestCommentActions({
           {isCodeComment || event.type === "commented" || event.type === "review_commented" ? (
             <button type="button" disabled={busy} onClick={() => void sendToAgent()}>
               <AgentCursorGlyph size={14} />
-              {t("Send to agent")}
+              {t(coding ? "Send comment to agent" : "Send to agent")}
             </button>
           ) : null}
         </Popover.Content>

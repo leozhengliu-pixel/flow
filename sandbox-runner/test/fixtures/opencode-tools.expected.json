@@ -1,0 +1,117 @@
+{
+  "events": [
+    {
+      "id": "e1",
+      "type": "plan",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "plan": [
+        {
+          "content": "Fix the timezone bug",
+          "status": "inProgress"
+        },
+        {
+          "content": "Run the tests",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "e2",
+      "type": "action",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "action": {
+        "action": "Read",
+        "parameter": "src/date.ts",
+        "tool": "read"
+      },
+      "ephemeral": true
+    },
+    {
+      "id": "e3",
+      "type": "thought",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "The helper formats in UTC.",
+      "ephemeral": true
+    },
+    {
+      "id": "e4",
+      "type": "thought",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "Switching to local time."
+    },
+    {
+      "id": "e5",
+      "type": "action",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "action": {
+        "action": "Edited",
+        "parameter": "src/date.ts",
+        "tool": "edit"
+      }
+    },
+    {
+      "id": "e6",
+      "type": "diff",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "diff": [
+        {
+          "path": "src/date.ts",
+          "additions": 1,
+          "deletions": 1,
+          "status": "modified"
+        }
+      ]
+    },
+    {
+      "id": "e7",
+      "type": "action",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "action": {
+        "action": "Ran command",
+        "parameter": "npm test",
+        "result": "Command failed: 1 failing",
+        "tool": "bash",
+        "exitCode": 1
+      }
+    },
+    {
+      "id": "e8",
+      "type": "response",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "Use local dates in formatDate"
+    },
+    {
+      "id": "e9",
+      "type": "usage",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "usage": {
+        "model": "fixture-model",
+        "inputTokens": 16800,
+        "outputTokens": 360,
+        "costUsd": 0.003
+      }
+    }
+  ],
+  "outcome": {
+    "elicited": false,
+    "completed": true,
+    "model": "fixture-model",
+    "harnessSessionId": "ses_tools01",
+    "finalText": "Use local dates in formatDate",
+    "usage": {
+      "model": "fixture-model",
+      "inputTokens": 16800,
+      "outputTokens": 360,
+      "costUsd": 0.003
+    }
+  }
+}

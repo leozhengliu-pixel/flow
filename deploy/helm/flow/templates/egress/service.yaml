@@ -1,0 +1,19 @@
+{{- if include "flow.egress.enabled" . }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "flow.egress.fullname" . }}
+  namespace: {{ include "flow.sandbox.namespace" . }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+    {{- include "flow.egress.selectorLabels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "flow.egress.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: proxy
+      port: {{ .Values.egressProxy.port }}
+      targetPort: proxy
+      protocol: TCP
+{{- end }}

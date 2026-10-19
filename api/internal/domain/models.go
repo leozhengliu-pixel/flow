@@ -1428,10 +1428,27 @@ type TeamAgentConnector struct {
 }
 
 type CodingAgentSettings struct {
-	CommitSigningEnabled bool                     `json:"commitSigningEnabled"`
-	Harness              string                   `json:"harness,omitempty"`
-	Model                string                   `json:"model,omitempty"`
-	Environments         []CodingAgentEnvironment `json:"environments,omitempty"`
+	// CommitSigningEnabled is "Require signed commits".
+	CommitSigningEnabled bool `json:"commitSigningEnabled"`
+	// Harness is codex (default) | claudeCode | openSource; the legacy values
+	// auto and claude are read as codex and claudeCode.
+	Harness string `json:"harness,omitempty"`
+	// Model is auto (default) or a model id from the coding model catalog.
+	Model string `json:"model,omitempty"`
+	// Environments is the legacy config-only list; it is migrated into the
+	// coding_environments table at startup and no longer written.
+	Environments []CodingAgentEnvironment `json:"environments,omitempty"`
+	// ReasoningEffort is "" (model default) | low | medium | high.
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+	// PinnedRegion pins sandboxes to one FLOW_CODING_REGIONS entry; "" = any.
+	PinnedRegion string `json:"pinnedRegion,omitempty"`
+	// TrustedExternalSources lists external sources (e.g. "slack", "intercom",
+	// "github:<org>") whose issues may start sessions without member approval.
+	TrustedExternalSources []string `json:"trustedExternalSources,omitempty"`
+	// LoopRepositoryAccess is "none" (default) | "all" | "selected";
+	// LoopRepositories lists environment ids Loops may start sessions on.
+	LoopRepositoryAccess string   `json:"loopRepositoryAccess,omitempty"`
+	LoopRepositories     []string `json:"loopRepositories,omitempty"`
 }
 
 type WorkspaceSettings struct {

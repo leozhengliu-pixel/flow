@@ -118,6 +118,9 @@ type AgentTask struct {
 	// EphemeralActivityID is the agent's latest ephemeral activity, replaced
 	// by the next agent activity.
 	EphemeralActivityID string `json:"ephemeralActivityId,omitempty"`
+	// CodingSessionID is set when the task anchors a coding session
+	// (docs/coding-sessions-design.md §6); the session UI mounts from it.
+	CodingSessionID string `json:"codingSessionId,omitempty"`
 }
 
 // Agent session timing, as in the agent interaction guidelines: an agent

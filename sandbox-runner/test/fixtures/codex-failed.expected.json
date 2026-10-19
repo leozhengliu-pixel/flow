@@ -1,0 +1,40 @@
+{
+  "events": [
+    {
+      "id": "e1",
+      "type": "thought",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "stream error: error sending request; retrying 1/5 in 213ms…",
+      "ephemeral": true
+    },
+    {
+      "id": "e2",
+      "type": "thought",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "Looking at the repository."
+    },
+    {
+      "id": "e3",
+      "type": "error",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "error": {
+        "code": "modelUnavailable",
+        "message": "unexpected status 404 Not Found: {\"error\":{\"message\":\"The model `gpt-9` does not exist\",\"type\":\"invalid_request_error\",\"code\":\"model_not_found\"}}"
+      },
+      "body": "unexpected status 404 Not Found: {\"error\":{\"message\":\"The model `gpt-9` does not exist\",\"type\":\"invalid_request_error\",\"code\":\"model_not_found\"}}"
+    }
+  ],
+  "outcome": {
+    "elicited": false,
+    "completed": false,
+    "model": "gpt-5-codex",
+    "harnessSessionId": "0199a213-81c0-7800-8aa1-bbab2a035a99",
+    "error": {
+      "code": "modelUnavailable",
+      "message": "unexpected status 404 Not Found: {\"error\":{\"message\":\"The model `gpt-9` does not exist\",\"type\":\"invalid_request_error\",\"code\":\"model_not_found\"}}"
+    }
+  }
+}

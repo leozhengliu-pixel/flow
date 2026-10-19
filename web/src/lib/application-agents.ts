@@ -13,12 +13,19 @@ export type ApplicationPlanStep = { content: string; status: 'pending' | 'inProg
  * An agent session. "stale" is derived by the server: a pending or active session whose agent has been silent for
  * 30 minutes. `unresponsive` is set when the agent did not acknowledge a delivered event within 10 seconds.
  */
-export type ApplicationTask = { id: string; issueId: string; teamId: string; commentId?: string; appUserId: string; creatorId: string; status: 'pending' | 'active' | 'awaitingInput' | 'complete' | 'error' | 'canceled' | 'stale'; prompt: string; initialPrompt?: string; trigger: string; version: number; createdAt?: string; updatedAt: string; pendingTool?: {name:string;arguments:unknown;status:string}; externalUrls?: ApplicationExternalUrl[]; plan?: ApplicationPlanStep[]; unresponsive?: boolean; deliveredAt?: string; lastActivityAt?: string }
+export type ApplicationTask = { id: string; issueId: string; teamId: string; commentId?: string; appUserId: string; creatorId: string; status: 'pending' | 'active' | 'awaitingInput' | 'complete' | 'error' | 'canceled' | 'stale'; prompt: string; initialPrompt?: string; trigger: string; version: number; createdAt?: string; updatedAt: string; pendingTool?: {name:string;arguments:unknown;status:string}; externalUrls?: ApplicationExternalUrl[]; plan?: ApplicationPlanStep[]; unresponsive?: boolean; deliveredAt?: string; lastActivityAt?: string; /** Set when the task anchors a coding session (docs/coding-sessions-design.md §6). */ codingSessionId?: string }
 /** Window event fired when the realtime stream reports an agent task change; detail is the task's resource id. */
 export const AGENT_TASK_ACTIVITY_EVENT = 'flow:agent-task-activity'
 /** Task states the agent may still change on its own; only these keep a fallback poll running. */
 export const isApplicationTaskRunning = (task: Pick<ApplicationTask, 'status'>) => task.status === 'pending' || task.status === 'active'
-export type ApplicationActivity = { id: string; sessionId: string; actorId: string; type: string; body: string; url?: string; createdAt: string; signal?: 'select' | 'auth' | 'stop'; signalMetadata?: { options?: { label?: string; value: string }[]; url?: string; userId?: string; providerName?: string; approval?: import('@/types/flow').AgentApproval }; metadata?: { action?: string; parameter?: string; result?: string; activityId?: string; enabled?: boolean } }
+export type ApplicationActivity = { id: string; sessionId: string; actorId: string; type: string; body: string; url?: string; createdAt: string; signal?: 'select' | 'auth' | 'stop'; signalMetadata?: { options?: { label?: string; value: string; /** The option the agent recommends (coding sessions: the clearly leading repository). */ recommended?: boolean }[]; /** The value preselected for the viewer (one of options). */ selected?: string; url?: string; userId?: string; providerName?: string; approval?: import('@/types/flow').AgentApproval }; metadata?: { action?: string; parameter?: string; result?: string; activityId?: string; enabled?: boolean } }
+
+/** The select option an elicitation preselects: `signalMetadata.selected` when it names an option, else the first option marked recommended. */
+export function recommendedChoiceValue(metadata: ApplicationActivity['signalMetadata']): string | undefined {
+  const options = metadata?.options ?? []
+  if (metadata?.selected && options.some(option => option.value === metadata.selected)) return metadata.selected
+  return options.find(option => option.recommended)?.value
+}
 export const isAgentMember = (user: User) => Boolean(user.app && user.active && (user.appScopes?.includes('app:assignable') || user.appScopes?.includes('app:mentionable')))
 export const canDelegateTo = (user: User, teamId: string) => Boolean(user.app && user.active && user.appScopes?.includes('app:assignable') && user.appTeamIds?.includes(teamId))
 export const listApplications = (workspace: string) => apiRequest<ApplicationInstallation[]>('/api/application-installations', workspace)

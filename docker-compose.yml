@@ -92,6 +92,28 @@ services:
       OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: ${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
+      # Coding sessions (docs/coding-sessions.md). Off unless FLOW_CODING_ENABLED=true;
+      # the docker provider also needs deploy/egress-proxy/compose.coding.yml.
+      FLOW_CODING_ENABLED: ${FLOW_CODING_ENABLED:-false}
+      FLOW_CODING_PROVIDER: ${FLOW_CODING_PROVIDER:-disabled}
+      FLOW_CODING_RUNTIME_URL: ${FLOW_CODING_RUNTIME_URL:-http://app:8080}
+      FLOW_CODING_SECRET_KEY: ${FLOW_CODING_SECRET_KEY:-}
+      FLOW_CODING_IMAGE: ${FLOW_CODING_IMAGE:-ghcr.io/leozhengliu-pixel/flow-sandbox:latest}
+      FLOW_CODING_DOCKER_HOST: ${FLOW_CODING_DOCKER_HOST:-unix:///var/run/docker.sock}
+      FLOW_CODING_DOCKER_NETWORK: flow-sandbox
+      FLOW_CODING_DOCKER_RUNTIME: ${FLOW_CODING_DOCKER_RUNTIME:-}
+      FLOW_CODING_EGRESS_PROXY_URL: ${FLOW_CODING_EGRESS_PROXY_URL:-http://egress-proxy:3128}
+      FLOW_CODING_EGRESS_ALLOWLIST: ${FLOW_CODING_EGRESS_ALLOWLIST:-}
+      FLOW_CODING_EGRESS_ACL_SECRET: ${FLOW_CODING_EGRESS_ACL_SECRET:-}
+      FLOW_CODING_LLM_ANTHROPIC_API_KEY: ${FLOW_CODING_LLM_ANTHROPIC_API_KEY:-}
+      FLOW_CODING_LLM_OPENAI_API_KEY: ${FLOW_CODING_LLM_OPENAI_API_KEY:-}
+      FLOW_GITHUB_APP_ID: ${FLOW_GITHUB_APP_ID:-}
+      FLOW_GITHUB_APP_SLUG: ${FLOW_GITHUB_APP_SLUG:-}
+      FLOW_GITHUB_APP_PRIVATE_KEY: ${FLOW_GITHUB_APP_PRIVATE_KEY:-}
+      FLOW_GITHUB_APP_WEBHOOK_SECRET: ${FLOW_GITHUB_APP_WEBHOOK_SECRET:-}
+    networks:
+      - default
+      - flow-sandbox
     ports:
       - "5173:8080"
       - "8080:8080"
@@ -212,6 +234,36 @@ services:
     environment:
       MINIO_ROOT_USER: ${FLOW_S3_ACCESS_KEY_ID:-flow}
       MINIO_ROOT_PASSWORD: ${FLOW_S3_SECRET_ACCESS_KEY:-flow-development-secret}
+
+  # Coding sessions: Squid egress proxy for docker-provider sandboxes. It sits on
+  # the internal flow-sandbox network (no default route) and the default network.
+  egress-proxy:
+    build:
+      context: .
+      dockerfile: deploy/egress-proxy/Dockerfile
+    profiles: ["coding"]
+    environment:
+      FLOW_EGRESS_FLOW_URL: http://app:8080
+      FLOW_CODING_EGRESS_ACL_SECRET: ${FLOW_CODING_EGRESS_ACL_SECRET:-}
+      FLOW_CODING_EGRESS_ALLOWLIST: ${FLOW_CODING_EGRESS_ALLOWLIST:-}
+      FLOW_CODING_EGRESS_DEFAULT_ALLOWLIST: ${FLOW_CODING_EGRESS_DEFAULT_ALLOWLIST:-on}
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - default
+      - flow-sandbox
+    restart: unless-stopped
+
+networks:
+  default: {}
+  flow-sandbox:
+    name: flow-sandbox
+    internal: true
 
 volumes:
   flow-api-data:

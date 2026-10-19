@@ -19,6 +19,9 @@ import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { ProjectGlyph } from '@/components/views/project-glyph'
 import { AgentEntityHover } from '@/components/agent/agent-entity-hover'
 import './issue-header.css'
+// coding sessions (track G)
+import { useIssueCodingSessionStarter } from '@/components/coding-sessions/coding-session-start'
+import { AgentCodingGlyph } from '@/components/ui/agent-glyph'
 
 export type IssueSaveState = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -56,6 +59,8 @@ export function IssueHeader({ issue, presence = [], saveState, onRetrySave, data
   const copyWork=useCallback(async(kind:'branch'|'prompt')=>{try{const text=kind==='branch'?configuredIssueBranch(issue,data):buildPrompt();await copyIssueForWork(text,kind,issue,data,onUpdate);toast.success(kind==='branch'?'Branch name copied to clipboard':'Prompt copied to clipboard')}catch(error){toast.error(error instanceof Error?error.message:'Could not write to clipboard')}},[issue,data,onUpdate,buildPrompt])
   useEffect(()=>{const onKey=(event:KeyboardEvent)=>{if(isEditable(event.target))return;if((event.metaKey||event.ctrlKey)&&event.altKey&&event.key.toLowerCase()==='p'){event.preventDefault();void copyWork('prompt')} };addEventListener('keydown',onKey);return()=>removeEventListener('keydown',onKey)},[copyWork])
   const triage=variant==='triage'
+  // coding sessions (track G): "Start coding session" in the Work on issue menu.
+  const coding=useIssueCodingSessionStarter(issue,data)
   // Previews sit beside a list that owns J / K and Esc; only the full page handles them here.
   usePageKeys({enabled:!triage&&!closable,closable,canGoNext,canGoPrevious,onClose,onNavigate})
   const presenceGroup=viewers.length>0?<IssuePresence viewers={viewers} label={t('People viewing this issue')}/>:null
@@ -70,22 +75,23 @@ export function IssueHeader({ issue, presence = [], saveState, onRetrySave, data
       {total>0&&<div className="issue-sequence" role="group" aria-label="Issue navigation"><span className="issue-sequence-count">{position}<span> / {total}</span></span><div className="issue-sequence-buttons"><HeaderTooltip label={t('Navigate down')} shortcut="J"><button className="issue-sequence-down" type="button" aria-label="Navigate down" disabled={!canGoNext} onClick={()=>onNavigate('next')}><FlowNextIcon/></button></HeaderTooltip><HeaderTooltip label={t('Navigate up')} shortcut="K"><button className="issue-sequence-up" type="button" aria-label="Navigate up" disabled={!canGoPrevious} onClick={()=>onNavigate('previous')}><FlowPreviousIcon/></button></HeaderTooltip></div></div>}
       {closable&&<HeaderTooltip label="Close" shortcut="Esc"><button className="issue-header-icon issue-header-close" type="button" aria-label="Close issue" aria-keyshortcuts="Escape" onClick={onClose}><X size={14}/></button></HeaderTooltip>}
     </div>}
-    <IssueCommandStrip issue={issue} tools={tools} configurePath={`${settingsPath(data.workspace.urlKey,'code-and-reviews')}/coding-tools`} onCopyWork={kind=>void copyWork(kind)} onOpenTool={tool=>void openInTool(tool)}/>
+    <IssueCommandStrip issue={issue} tools={tools} configurePath={`${settingsPath(data.workspace.urlKey,'code-and-reviews')}/coding-tools`} onCopyWork={kind=>void copyWork(kind)} onOpenTool={tool=>void openInTool(tool)} onStartCodingSession={coding.available?()=>void coding.start():undefined}/>
+    {coding.element}
   </header>
 }
 
 /** The reference app's floating copy / work strip under the header's right edge: it overlays the content and stays put while it scrolls. */
-function IssueCommandStrip({issue,tools,configurePath,onCopyWork,onOpenTool}:{issue:Issue;tools:CodingTool[];configurePath:string;onCopyWork:(kind:'branch'|'prompt')=>void;onOpenTool:(tool:CodingTool)=>void}){
+function IssueCommandStrip({issue,tools,configurePath,onCopyWork,onOpenTool,onStartCodingSession}:{issue:Issue;tools:CodingTool[];configurePath:string;onCopyWork:(kind:'branch'|'prompt')=>void;onOpenTool:(tool:CodingTool)=>void;onStartCodingSession?:()=>void}){
   const t = useOptionalTranslate()
   return <div className="issue-command-strip"><div className="issue-command-buttons">
     <CommandButton label={t('Copy issue URL')} shortcut="⌘ ⇧ ," onClick={()=>copyText(location.href,'Issue URL copied to clipboard')}><FlowUrlIcon/></CommandButton>
     <CommandButton label={t('Copy issue ID')} shortcut="⌘ ." onClick={()=>copyText(issue.identifier,'Issue ID copied to clipboard')}><FlowIssueIdIcon/></CommandButton>
     <CommandButton label={t('Copy branch name')} shortcut="⌘ ⇧ ." onClick={()=>onCopyWork('branch')}><FlowBranchIcon/></CommandButton>
-    <div className="issue-work-control" role="group" aria-label={t('Work on issue')}><CommandButton className="issue-work-prompt" label={t('Copy as prompt')} shortcut="⌘ ⌥ P" onClick={()=>onCopyWork('prompt')}><FlowWorkIcon/></CommandButton><WorkMenu tools={tools} onOpenTool={onOpenTool} onCopyPrompt={()=>onCopyWork('prompt')} configurePath={configurePath}/></div>
+    <div className="issue-work-control" role="group" aria-label={t('Work on issue')}><CommandButton className="issue-work-prompt" label={t('Copy as prompt')} shortcut="⌘ ⌥ P" onClick={()=>onCopyWork('prompt')}><FlowWorkIcon/></CommandButton><WorkMenu tools={tools} onOpenTool={onOpenTool} onCopyPrompt={()=>onCopyWork('prompt')} configurePath={configurePath} onStartCodingSession={onStartCodingSession}/></div>
   </div></div>
 }
 
-function WorkMenu({tools,onOpenTool,onCopyPrompt,configurePath}:{tools:CodingTool[];onOpenTool:(tool:CodingTool)=>void;onCopyPrompt:()=>void;configurePath:string}){
+function WorkMenu({tools,onOpenTool,onCopyPrompt,configurePath,onStartCodingSession}:{tools:CodingTool[];onOpenTool:(tool:CodingTool)=>void;onCopyPrompt:()=>void;configurePath:string;onStartCodingSession?:()=>void}){
   const t = useOptionalTranslate()
   const[open,setOpen]=useState(false)
   // The reference app highlights a row on hover, or after the arrow keys move through the list; never the first row on open.
@@ -98,6 +104,7 @@ function WorkMenu({tools,onOpenTool,onCopyPrompt,configurePath}:{tools:CodingToo
       <Command loop onKeyDown={event=>{if(event.key==='ArrowDown'||event.key==='ArrowUp')setKeyboard(true)}}>
         <div className="work-menu-search"><Command.Input aria-label="Work on issue…" placeholder="Work on issue…" autoFocus/><kbd>W</kbd><span>then</span><kbd>O</kbd></div>
         <Command.List>
+          {onStartCodingSession&&<Command.Item value="Start coding session" onSelect={()=>{onStartCodingSession();setOpen(false)}}><AgentCodingGlyph/><span className="work-menu-label">{t('Start coding session')}</span></Command.Item>}
           {tools.map(tool=><Command.Item key={tool.id} value={`Open in ${tool.name}`} onSelect={()=>{onOpenTool(tool);setOpen(false)}}><ExternalLink/><span className="work-menu-label">Open in {tool.name}</span></Command.Item>)}
           <Command.Item value="Copy as prompt" onSelect={()=>{onCopyPrompt();setOpen(false)}}><FlowWorkIcon/><span className="work-menu-label">{t('Copy as prompt')}</span><span className="work-menu-shortcut" aria-label="Command Option P"><kbd>⌘</kbd><kbd>⌥</kbd><kbd>P</kbd></span></Command.Item>
           <div className="work-menu-separator" role="separator"/>

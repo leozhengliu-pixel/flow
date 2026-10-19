@@ -241,6 +241,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"ensureTeamDefaultFavorites", s.ensureTeamDefaultFavorites},
 		{"ensureLoopRunRecords", s.ensureLoopRunRecords},
 		{"ensureAgentRuns", s.ensureAgentRuns},
+		{"ensureCodingSessions", s.ensureCodingSessions},
 		{"ensureFileUploads", s.ensureFileUploads},
 		{"ensureOffloadedContent", s.ensureOffloadedContent},
 		{"loadOrSeed", s.loadOrSeed},

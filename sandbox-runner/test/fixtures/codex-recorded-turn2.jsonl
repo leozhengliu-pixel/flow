@@ -1,0 +1,7 @@
+{"type":"thread.started","thread_id":"01a14fa2-b73d-7ef1-aa9f-a7880ee2b118"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Model metadata for `gpt-5-codex` not found. Defaulting to fallback metadata; this can degrade performance and cause issues."}}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_1","type":"mcp_tool_call","server":"flow","tool":"ask_user","arguments":{"question":"Which greeting should the file contain?","options":["hello","hi"]},"result":null,"error":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"mcp_tool_call","server":"flow","tool":"ask_user","arguments":{"question":"Which greeting should the file contain?","options":["hello","hi"]},"result":{"content":[{"type":"text","text":"Your question was sent to the user. Stop now and end your turn without further tool calls; their answer will arrive as the next message."}],"structured_content":null},"error":null,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"I asked which greeting you prefer."}}
+{"type":"turn.completed","usage":{"input_tokens":9600,"cached_input_tokens":4800,"cache_write_input_tokens":0,"output_tokens":320,"reasoning_output_tokens":80}}

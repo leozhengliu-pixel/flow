@@ -1,0 +1,8 @@
+# Single replica on the bundled MySQL, local uploads on a PVC.
+database:
+  driver: mysql
+mysql:
+  enabled: true
+  auth:
+    password: test-mysql-password
+    rootPassword: test-mysql-root

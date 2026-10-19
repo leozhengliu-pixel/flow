@@ -1,0 +1,43 @@
+{
+  "events": [
+    {
+      "id": "e1",
+      "type": "error",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "error": {
+        "code": "harnessFailed",
+        "message": "The agent reached its maximum number of turns."
+      },
+      "body": "The agent reached its maximum number of turns."
+    },
+    {
+      "id": "e2",
+      "type": "usage",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "usage": {
+        "model": "claude-sonnet-4-5",
+        "inputTokens": 10,
+        "outputTokens": 5,
+        "costUsd": 1.2
+      }
+    }
+  ],
+  "outcome": {
+    "elicited": false,
+    "completed": true,
+    "model": "claude-sonnet-4-5",
+    "harnessSessionId": "9a1c2b3d-0000-4000-8000-000000000002",
+    "usage": {
+      "model": "claude-sonnet-4-5",
+      "inputTokens": 10,
+      "outputTokens": 5,
+      "costUsd": 1.2
+    },
+    "error": {
+      "code": "harnessFailed",
+      "message": "The agent reached its maximum number of turns."
+    }
+  }
+}

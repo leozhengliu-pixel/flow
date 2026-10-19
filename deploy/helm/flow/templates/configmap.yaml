@@ -1,0 +1,173 @@
+{{- include "flow.validate" . -}}
+{{- $v := .Values -}}
+{{- $c := .Values.coding -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "flow.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+    {{- include "flow.selectorLabels" . | nindent 4 }}
+data:
+  FLOW_HTTP_ADDR: ":{{ include "flow.httpPort" . }}"
+  FLOW_APP_URL: {{ $v.config.appUrl | quote }}
+  FLOW_STATIC_PATH: /app/web
+  FLOW_LOG_LEVEL: {{ $v.config.logLevel | quote }}
+  FLOW_LOG_FORMAT: {{ $v.config.logFormat | quote }}
+  FLOW_DATABASE_DRIVER: {{ $v.database.driver | quote }}
+  {{- if eq $v.database.driver "sqlite" }}
+  FLOW_DATABASE_PATH: {{ $v.database.sqlitePath | quote }}
+  {{- end }}
+  {{- with $v.database.maxOpenConns }}
+  FLOW_DATABASE_MAX_OPEN_CONNS: {{ . | quote }}
+  {{- end }}
+  {{- with $v.database.maxIdleConns }}
+  FLOW_DATABASE_MAX_IDLE_CONNS: {{ . | quote }}
+  {{- end }}
+  {{- with $v.database.connMaxLifetime }}
+  FLOW_DATABASE_CONN_MAX_LIFETIME: {{ . | quote }}
+  {{- end }}
+  {{- if $v.redisBundled.enabled }}
+  FLOW_REDIS_MODE: standalone
+  FLOW_REDIS_URL: {{ printf "redis://%s-redis:6379/0" (include "flow.fullname" .) | quote }}
+  {{- else }}
+  FLOW_REDIS_MODE: {{ $v.redis.mode | quote }}
+  {{- with $v.redis.url }}
+  FLOW_REDIS_URL: {{ . | quote }}
+  {{- end }}
+  {{- with $v.redis.addrs }}
+  FLOW_REDIS_ADDRS: {{ . | quote }}
+  {{- end }}
+  {{- with $v.redis.username }}
+  FLOW_REDIS_USERNAME: {{ . | quote }}
+  {{- end }}
+  {{- end }}
+  FLOW_REDIS_TLS: {{ $v.redis.tls | quote }}
+  FLOW_REDIS_PREFIX: {{ $v.redis.prefix | quote }}
+  FLOW_STORAGE_DRIVER: {{ $v.storage.driver | quote }}
+  {{- if eq $v.storage.driver "local" }}
+  FLOW_STORAGE_LOCAL_PATH: /app/data/uploads
+  {{- else }}
+  FLOW_S3_BUCKET: {{ $v.storage.s3.bucket | quote }}
+  FLOW_S3_REGION: {{ $v.storage.s3.region | quote }}
+  FLOW_S3_ENDPOINT: {{ $v.storage.s3.endpoint | quote }}
+  FLOW_S3_PATH_STYLE: {{ $v.storage.s3.pathStyle | quote }}
+  FLOW_S3_PREFIX: {{ $v.storage.s3.prefix | quote }}
+  {{- end }}
+  {{- range $key, $value := $v.config.env }}
+  {{ $key }}: {{ $value | toString | quote }}
+  {{- end }}
+  # Coding sessions (docs/coding-sessions.md).
+  FLOW_CODING_ENABLED: {{ $c.enabled | quote }}
+  {{- if $c.enabled }}
+  FLOW_CODING_PROVIDER: {{ $c.provider | quote }}
+  FLOW_CODING_RUNTIME_URL: {{ include "flow.coding.runtimeUrl" . | quote }}
+  {{- if $c.runtimePort.enabled }}
+  FLOW_CODING_RUNTIME_ADDR: ":{{ $c.runtimePort.port }}"
+  {{- end }}
+  FLOW_CODING_INSTANCE_ID: {{ default .Release.Name $c.instanceId | quote }}
+  FLOW_CODING_IMAGE: {{ include "flow.coding.image" . | quote }}
+  FLOW_CODING_IMAGE_PULL_POLICY: {{ $c.image.pullPolicy | quote }}
+  FLOW_CODING_IMAGE_PULL_SECRETS: {{ join "," $c.image.pullSecrets | quote }}
+  FLOW_CODING_BRANCH_PREFIX: {{ $c.branchPrefix | quote }}
+  FLOW_CODING_PR_MENTION: {{ $c.prMention | quote }}
+  FLOW_CODING_BROWSER: {{ ternary "on" "off" $c.browser | quote }}
+  FLOW_CODING_DEBUG_TERMINAL: {{ ternary "on" "off" $c.debugTerminal | quote }}
+  FLOW_CODING_ARTIFACT_MAX_BYTES: {{ $c.artifactMaxBytes | int64 | quote }}
+  FLOW_CODING_MAX_SESSIONS: {{ $c.maxSessions | quote }}
+  FLOW_CODING_WORKSPACE_SESSIONS: {{ $c.workspaceSessions | quote }}
+  FLOW_CODING_RECONCILE_INTERVAL: {{ $c.reconcileInterval | quote }}
+  FLOW_CODING_GC_INTERVAL: {{ $c.gcInterval | quote }}
+  FLOW_CODING_ORPHAN_GRACE: {{ $c.orphanGrace | quote }}
+  FLOW_CODING_SIZE_SMALL: {{ include "flow.size" $c.sizes.small | quote }}
+  FLOW_CODING_SIZE_MEDIUM: {{ include "flow.size" $c.sizes.medium | quote }}
+  FLOW_CODING_SIZE_LARGE: {{ include "flow.size" $c.sizes.large | quote }}
+  FLOW_CODING_WORKSPACE_SIZE: {{ $c.workspaceSize | quote }}
+  FLOW_CODING_CPU_REQUEST_RATIO: {{ $c.cpuRequestRatio | toString | quote }}
+  FLOW_CODING_REGIONS: {{ join "," $c.regions | quote }}
+  FLOW_CODING_REGION_LABEL: {{ $c.regionLabel | quote }}
+  FLOW_CODING_DEFAULT_REGION: {{ $c.defaultRegion | quote }}
+  FLOW_CODING_WARM_POOL: {{ include "flow.kvcsv" $c.warmPool | quote }}
+  FLOW_CODING_WARM_POOL_MAX_AGE: {{ $c.warmPoolMaxAge | quote }}
+  FLOW_CODING_QUEUE_TIMEOUT: {{ $c.timeouts.queue | quote }}
+  FLOW_CODING_APPROVAL_TIMEOUT: {{ $c.timeouts.approval | quote }}
+  FLOW_CODING_PROVISION_TIMEOUT: {{ $c.timeouts.provision | quote }}
+  FLOW_CODING_START_TIMEOUT: {{ $c.timeouts.start | quote }}
+  FLOW_CODING_SETUP_TIMEOUT: {{ $c.timeouts.setup | quote }}
+  FLOW_CODING_TURN_TIMEOUT: {{ $c.timeouts.turn | quote }}
+  FLOW_CODING_HEARTBEAT_TIMEOUT: {{ $c.timeouts.heartbeat | quote }}
+  FLOW_CODING_PUBLISH_TIMEOUT: {{ $c.timeouts.publish | quote }}
+  FLOW_CODING_IDLE_TTL: {{ $c.timeouts.idle | quote }}
+  FLOW_CODING_STOP_GRACE: {{ $c.timeouts.stopGrace | quote }}
+  FLOW_CODING_MAX_SESSION_DURATION: {{ $c.timeouts.maxSessionDuration | quote }}
+  FLOW_CODING_DEBUG_TERMINAL_TTL: {{ $c.timeouts.debugTerminal | quote }}
+  FLOW_CODING_TOKEN_GRACE: {{ $c.timeouts.tokenGrace | quote }}
+  FLOW_CODING_PROVISION_RETRIES: {{ $c.retries.provision | quote }}
+  FLOW_CODING_START_RETRIES: {{ $c.retries.start | quote }}
+  FLOW_CODING_PUBLISH_RETRIES: {{ $c.retries.publish | quote }}
+  FLOW_CODING_SNAPSHOT_RETRIES: {{ $c.retries.snapshot | quote }}
+  FLOW_CODING_SNAPSHOT_STRATEGY: {{ $c.snapshot.strategy | quote }}
+  FLOW_CODING_VOLUME_SNAPSHOT_CLASS: {{ $c.snapshot.volumeSnapshotClass | quote }}
+  FLOW_CODING_ARCHIVE_PREFIX: {{ $c.snapshot.archivePrefix | quote }}
+  FLOW_CODING_ARCHIVE_MAX_BYTES: {{ $c.snapshot.archiveMaxBytes | int64 | quote }}
+  FLOW_CODING_SNAPSHOT_TIMEOUT: {{ $c.snapshot.timeout | quote }}
+  FLOW_CODING_SNAPSHOT_TTL: {{ $c.snapshot.ttl | quote }}
+  FLOW_CODING_SNAPSHOT_RETAIN: {{ $c.snapshot.retain | quote }}
+  FLOW_CODING_SNAPSHOT_REFRESH_INTERVAL: {{ $c.snapshot.refreshInterval | quote }}
+  FLOW_CODING_K8S_KUBECONFIG: {{ $c.kubernetes.kubeconfig | quote }}
+  FLOW_CODING_K8S_NAMESPACE: {{ include "flow.sandbox.namespace" . | quote }}
+  FLOW_CODING_K8S_RUNTIME_CLASS: {{ include "flow.runtimeClassName" . | quote }}
+  FLOW_CODING_K8S_HOST_USERS: {{ $v.sandboxes.hostUsers | quote }}
+  FLOW_CODING_K8S_STORAGE_CLASS: {{ $c.kubernetes.storageClass | quote }}
+  FLOW_CODING_K8S_WORKSPACE_VOLUME: {{ $c.kubernetes.workspaceVolume | quote }}
+  FLOW_CODING_K8S_NODE_SELECTOR: {{ include "flow.kvcsv" $v.sandboxes.nodeSelector | quote }}
+  FLOW_CODING_K8S_TOLERATIONS: {{ include "flow.tolerationsCsv" $v.sandboxes.tolerations | quote }}
+  FLOW_CODING_K8S_SERVICE_ACCOUNT: {{ $v.sandboxes.serviceAccount.name | quote }}
+  FLOW_CODING_K8S_PRIORITY_CLASS: {{ $v.sandboxes.priorityClassName | quote }}
+  FLOW_CODING_K8S_EXTRA_LABELS: {{ include "flow.kvcsv" $c.kubernetes.extraLabels | quote }}
+  FLOW_CODING_K8S_EXTRA_ANNOTATIONS: {{ include "flow.kvcsv" $c.kubernetes.extraAnnotations | quote }}
+  FLOW_CODING_K8S_NETWORK_POLICY: {{ and $v.sandboxes.networkPolicy.enabled (eq $v.sandboxes.networkPolicy.manager "flow") | quote }}
+  FLOW_CODING_K8S_FLOW_NAMESPACE: {{ .Release.Namespace | quote }}
+  FLOW_CODING_K8S_FLOW_POD_SELECTOR: {{ printf "app.kubernetes.io/instance=%s,app.kubernetes.io/name=%s" .Release.Name (include "flow.name" .) | quote }}
+  FLOW_CODING_K8S_PROXY_NAMESPACE: {{ include "flow.sandbox.namespace" . | quote }}
+  FLOW_CODING_K8S_PROXY_POD_SELECTOR: {{ printf "app.kubernetes.io/instance=%s,app.kubernetes.io/name=flow-egress" .Release.Name | quote }}
+  FLOW_CODING_K8S_QPS: {{ $c.kubernetes.qps | toString | quote }}
+  FLOW_CODING_K8S_BURST: {{ $c.kubernetes.burst | quote }}
+  FLOW_CODING_DOCKER_HOST: {{ $c.docker.host | quote }}
+  FLOW_CODING_DOCKER_NETWORK: {{ $c.docker.network | quote }}
+  FLOW_CODING_DOCKER_RUNTIME: {{ $c.docker.runtime | quote }}
+  FLOW_CODING_EGRESS_PROXY_URL: {{ include "flow.coding.proxyUrl" . | quote }}
+  FLOW_CODING_EGRESS_ALLOWLIST: {{ join "," $v.egressProxy.allowlist | quote }}
+  FLOW_CODING_EGRESS_DEFAULT_ALLOWLIST: {{ ternary "on" "off" $v.egressProxy.defaultAllowlist | quote }}
+  FLOW_CODING_EGRESS_NO_PROXY: {{ join "," $c.egress.noProxy | quote }}
+  FLOW_CODING_LLM_ANTHROPIC_BASE_URL: {{ $c.llm.anthropic.baseUrl | quote }}
+  FLOW_CODING_LLM_OPENAI_BASE_URL: {{ $c.llm.openai.baseUrl | quote }}
+  FLOW_CODING_LLM_OPENSOURCE_BASE_URL: {{ $c.llm.opensource.baseUrl | quote }}
+  FLOW_CODING_MODELS_CLAUDE_CODE: {{ join "," $c.llm.models.claudeCode | quote }}
+  FLOW_CODING_MODELS_CODEX: {{ join "," $c.llm.models.codex | quote }}
+  FLOW_CODING_MODELS_OPEN_SOURCE: {{ join "," $c.llm.models.openSource | quote }}
+  FLOW_CODING_MODEL_PRICES: {{ if $c.llm.prices }}{{ $c.llm.prices | toJson | quote }}{{ else }}""{{ end }}
+  FLOW_CODING_LLM_TIMEOUT: {{ $c.llm.timeout | quote }}
+  FLOW_CODING_RUNTIME_PRICES: {{ include "flow.kvcsv" $c.runtimePrices | quote }}
+  FLOW_CODING_GITLAB_CREDENTIAL_MODE: {{ $c.gitlab.credentialMode | quote }}
+  FLOW_CODING_GITLAB_TOKEN_SCOPES: {{ join "," $c.gitlab.tokenScopes | quote }}
+  {{- range $key, $value := $c.extraEnv }}
+  {{ $key }}: {{ $value | toString | quote }}
+  {{- end }}
+  {{- end }}
+  {{- with $c.githubApp }}
+  {{- if .appId }}
+  # GitHub App (also used for workspace PR sync).
+  FLOW_GITHUB_APP_ID: {{ .appId | toString | quote }}
+  FLOW_GITHUB_APP_SLUG: {{ .slug | quote }}
+  FLOW_GITHUB_APP_CLIENT_ID: {{ .clientId | quote }}
+  FLOW_GITHUB_APP_HOST: {{ .host | quote }}
+  {{- with .apiUrl }}
+  FLOW_GITHUB_APP_API_URL: {{ . | quote }}
+  {{- end }}
+  {{- if .privateKeySecret.name }}
+  FLOW_GITHUB_APP_PRIVATE_KEY_FILE: /var/run/flow/github-app/private-key.pem
+  {{- end }}
+  {{- end }}
+  {{- end }}

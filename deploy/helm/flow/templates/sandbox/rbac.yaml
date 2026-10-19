@@ -1,0 +1,117 @@
+{{- if and (include "flow.coding.kubernetes" .) .Values.sandboxes.rbac.create }}
+{{- $volumesnapshot := eq .Values.coding.snapshot.strategy "volumesnapshot" }}
+{{- $flowManagesPolicies := and .Values.sandboxes.networkPolicy.enabled (eq .Values.sandboxes.networkPolicy.manager "flow") }}
+# Flow's permissions, limited to the sandbox namespace (design §9). Flow
+# needs no ClusterRole except the optional read-only preflight role below.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "flow.fullname" . }}-sandboxes
+  namespace: {{ include "flow.sandbox.namespace" . }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandboxes
+# The rules match the Kubernetes provider's API calls exactly
+# (api/internal/sandbox/kubernetes; preflight checks them with
+# SelfSubjectAccessReview): least privilege, no watch and no event access.
+rules:
+  # Sandbox Pods: create, observe, adopt after a restart, delete; orphan GC lists by label.
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [create, get, list, delete]
+  # Runner logs archived on stop.
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+  # Debug terminal (Provider.Exec): create for SPDY, get for the WebSocket
+  # exec protocol (Kubernetes >= 1.30).
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [create, get]
+  # Per-sandbox token Secrets (created, owner-referenced to the Pod by patch,
+  # deleted on stop); list for orphan GC by label.
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create, get, list, delete, patch]
+  # Workspace volumes (volumesnapshot strategy or FLOW_CODING_K8S_WORKSPACE_VOLUME=pvc).
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [create, get, list, delete]
+  # Preflight reads the sandbox namespace's Pod Security label (a namespace
+  # get is authorized in that namespace, so the Role can grant it).
+  - apiGroups: [""]
+    resources: [namespaces]
+    resourceNames: [{{ include "flow.sandbox.namespace" . | quote }}]
+    verbs: [get]
+  {{- if $flowManagesPolicies }}
+  # Flow ensures flow-sandbox-default-deny and flow-sandbox-egress itself.
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies]
+    verbs: [get, create, patch]
+  {{- end }}
+  {{- if $volumesnapshot }}
+  - apiGroups: [snapshot.storage.k8s.io]
+    resources: [volumesnapshots]
+    verbs: [create, get, list, delete]
+  {{- end }}
+  {{- with .Values.sandboxes.rbac.extraRules }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "flow.fullname" . }}-sandboxes
+  namespace: {{ include "flow.sandbox.namespace" . }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandboxes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "flow.fullname" . }}-sandboxes
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "flow.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- if .Values.sandboxes.rbac.preflightClusterRole }}
+---
+# Read-only, cluster-scoped objects preflight inspects. No write access and
+# nothing namespaced.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "flow.fullname" . }}-{{ .Release.Namespace }}-preflight
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandboxes
+rules:
+  - apiGroups: [node.k8s.io]
+    resources: [runtimeclasses]
+    verbs: [get]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
+    verbs: [get, list]
+  {{- if $volumesnapshot }}
+  - apiGroups: [snapshot.storage.k8s.io]
+    resources: [volumesnapshotclasses]
+    verbs: [get]
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "flow.fullname" . }}-{{ .Release.Namespace }}-preflight
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandboxes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "flow.fullname" . }}-{{ .Release.Namespace }}-preflight
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "flow.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- end }}

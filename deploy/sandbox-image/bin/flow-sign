@@ -1,0 +1,3 @@
+#!/bin/sh
+# gpg.program / gpg.ssh.program shim: Flow signs commits (POST /sign); the key never enters the sandbox.
+exec /usr/local/bin/node /opt/flow/runner/flow-runner.mjs sign "$@"

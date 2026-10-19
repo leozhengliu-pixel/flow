@@ -1,4 +1,5 @@
 import { ArrowUpRight, ChevronRight, Presentation } from "lucide-react";
+import { CodingUsageBlock } from "./coding-sessions/coding-usage-block";
 import { useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useI18n } from "@/i18n/i18n";
@@ -128,6 +129,8 @@ function UsageOverview({ data, onOpenView }: UsageProps) {
           <Chevron />
         </button>
       </section>
+      {/* coding sessions (track F): coding spend by user and loop */}
+      <CodingUsageBlock users={data.users ?? []} />
       {creditsOpen && <AddCreditsDialog onClose={() => setCreditsOpen(false)} />}
     </div>
   );

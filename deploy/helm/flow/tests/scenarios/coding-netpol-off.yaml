@@ -1,0 +1,22 @@
+# NetworkPolicies off (CNI without enforcement), no egress proxy, no
+# preflight ClusterRole, shared nodes (development cluster).
+config:
+  appUrl: http://flow.local
+coding:
+  enabled: true
+  secretKey: dGVzdC1rZXktdGVzdC1rZXktdGVzdC1rZXktdGVzdC0=
+sandboxes:
+  runtimeClass:
+    name: runc
+  nodeSelector: {}
+  tolerations: []
+  networkPolicy:
+    enabled: false
+  rbac:
+    preflightClusterRole: false
+  resourceQuota:
+    enabled: false
+  limitRange:
+    enabled: false
+egressProxy:
+  enabled: false

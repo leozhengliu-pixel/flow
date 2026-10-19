@@ -1,0 +1,11 @@
+.DS_Store
+.git/
+*.swp
+*.bak
+*.tmp
+*.orig
+tests/golden/
+tests/scenarios/
+tests/invalid/
+tests/*.py
+tests/*.sh

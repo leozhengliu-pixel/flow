@@ -218,7 +218,7 @@ func TestMCPRealSDKConnectsAndCallsTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(listed.Tools) != 92 {
+	if len(listed.Tools) != 93 {
 		t.Fatalf("inventory changed: %d", len(listed.Tools))
 	}
 	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "get_workspace", Arguments: map[string]any{}})

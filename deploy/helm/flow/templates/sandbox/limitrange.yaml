@@ -1,0 +1,33 @@
+{{- if and (include "flow.coding.kubernetes" .) .Values.sandboxes.limitRange.enabled }}
+{{- $lr := .Values.sandboxes.limitRange }}
+# Defaults for any container without limits (required by the ResourceQuota)
+# and per-container and per-volume maximums.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: flow-sandboxes
+  namespace: {{ include "flow.sandbox.namespace" . }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandboxes
+spec:
+  limits:
+    - type: Container
+      {{- with $lr.container.default }}
+      default:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $lr.container.defaultRequest }}
+      defaultRequest:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $lr.container.max }}
+      max:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with $lr.persistentVolumeClaim.max }}
+    - type: PersistentVolumeClaim
+      max:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+{{- end }}
