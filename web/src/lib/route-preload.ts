@@ -22,7 +22,7 @@ const routePages = {
   'member-profile': ['MemberProfilePage'], customer: ['CustomerDetailPage'], documents: ['TeamOverviewPage'], document: ['DocumentPage'],
   analytics: ['AnalyticsDashboardPage'], dashboards: ['DashboardsPage'],
   'release-note': ['WorkspaceSecondaryPage'], label: ['WorkspaceSecondaryPage'], drafts: ['WorkspaceOperationsPage'],
-  agent: ['AgentPage'], releases: ['WorkspaceOperationsPage'], 'release-pipeline': ['WorkspaceOperationsPage'], release: ['WorkspaceOperationsPage'], asks: ['WorkspaceOperationsPage'],
+  agent: ['AgentPage'], 'coding-session': ['CodingSessionPage'], releases: ['WorkspaceOperationsPage'], 'release-pipeline': ['WorkspaceOperationsPage'], release: ['WorkspaceOperationsPage'], asks: ['WorkspaceOperationsPage'],
   loops: ['LoopsPage'], 'loop-editor': ['LoopsPage'], loop: ['LoopsPage'], 'loop-run': ['LoopsPage'], 'team-archive': ['TeamArchivePage'], 'new-team': ['TeamCreatePage'], settings: ['SettingsPage'],
   projects: ['ProjectsPage'], 'team-projects': ['ProjectsPage'], 'projects-new-view': ['ProjectsPage'], 'team-projects-new-view': ['ProjectsPage'],
   'projects-saved-view': ['ProjectsPage'], 'team-projects-saved-view': ['ProjectsPage'],

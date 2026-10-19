@@ -6,6 +6,7 @@ import { UserAvatar } from '@/components/ui/user-avatar'
 import { toast } from '@/lib/toast'
 import { AGENT_TASK_ACTIVITY_EVENT, getApplicationTask, recommendedChoiceValue, replyApplicationTask, type ApplicationActivity, type ApplicationTask } from '@/lib/application-agents'
 import { AgentAnswerText, AgentChoicePills } from '@/components/agent/agent-answer'
+import { AgentMessageAttachments } from '@/components/agent/agent-message-attachments'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData } from '@/types/flow'
 import { CODING_SESSION_EVENT, type CodingSessionEventDetail } from './coding-session-events'
@@ -117,6 +118,7 @@ export function CodingSessionActivity({ data, agentSessionId, issueId, mode, awa
         {activity.type === 'prompt' && <div className="coding-session-prompt">
           <header><UserAvatar className="coding-session-prompt-avatar" name={user?.displayName || user?.name || userName(activity.actorId)} avatarUrl={user?.avatarUrl}/><strong data-i18n-ignore>{userName(activity.actorId)}</strong>{activity.createdAt && <time dateTime={activity.createdAt}>{relativeTime(activity.createdAt)}</time>}</header>
           <p data-i18n-ignore>{activity.body}</p>
+          <AgentMessageAttachments attachments={activity.metadata?.attachments}/>
         </div>}
         {activity.type === 'thought' && <p className="coding-session-thought" data-i18n-ignore>{activity.body}</p>}
         {activity.type === 'action' && <ActionRow activity={activity}/>}

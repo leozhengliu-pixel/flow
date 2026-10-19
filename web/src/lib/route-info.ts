@@ -261,6 +261,7 @@ const SETTINGS_EXTRA_TITLES: Record<string, string> = {
 const PAGE_TITLES: Partial<Record<AppRoute["kind"], string>> = {
   agent: "Agent",
   asks: "Asks",
+  "coding-session": "Coding session",
   automations: "Automations",
   "automation-new": "Automations",
   "automation-detail": "Automations",

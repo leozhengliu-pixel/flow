@@ -191,7 +191,7 @@ import type {
 } from "@/components/projects-page/projects-page";
 import type { NewProjectDraft } from "@/components/projects-page/new-project-dialog";
 import { LabelActions } from "@/components/workspace/label-page-toolbar";
-import { WorkspaceOnboarding, WelcomeOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, AuthTokenPage, AuthErrorPage, AuthGoogleCallbackPage, MobileAuthPage, InviteLinkAccept, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
+import { WorkspaceOnboarding, WelcomeOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, AuthTokenPage, AuthErrorPage, AuthGoogleCallbackPage, MobileAuthPage, InviteLinkAccept, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, CodingSessionPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
 import { AGENT_SESSION_DOCKED_EVENT } from "@/components/agent/agent-docked-sessions";
 import { AgentChatHistoryPopover } from "@/components/agent/agent-chat-history-popover";
 import { FlowTooltip } from "@/components/ui/tooltip";
@@ -5347,6 +5347,14 @@ function App() {
             }
           />
         )}
+        {page === "coding-session" && route.kind === "coding-session" && (
+          <CodingSessionPage
+            data={data}
+            sessionId={route.sessionId}
+            onNavigate={navigateTo}
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
+          />
+        )}
         {page === "loops" &&
           loopsEnabled &&
           (route.kind === "loops" || route.kind === "loop-editor" || route.kind === "loop" || route.kind === "loop-run") && (
@@ -7242,6 +7250,7 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
   if (route.kind === "document") return "document-detail";
   if (route.kind === "drafts") return "drafts";
   if (route.kind === "agent") return "agent";
+  if (route.kind === "coding-session") return "coding-session";
   if (route.kind === "loops" || route.kind === "loop-editor" || route.kind === "loop" || route.kind === "loop-run") return "loops";
   if (
     route.kind === "releases" ||

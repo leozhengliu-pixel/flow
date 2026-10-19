@@ -1,11 +1,13 @@
 import { useState } from 'react'
+import { useInRouterContext } from 'react-router-dom'
 import { AlertTriangle, CheckCircle2, ChevronRight, CircleDot, CircleSlash, GitBranch, X } from 'lucide-react'
 import { activityTimeLabel } from '@/components/activity/issue-activity-model'
 import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { AppLink } from '@/components/ui/app-link'
 import { useI18n } from '@/i18n/i18n'
-import { issuePath } from '@/lib/app-routes'
+import { codingSessionPath, issuePath } from '@/lib/app-routes'
+import { useCodingSessionOpener } from './use-coding-session-opener'
 import type { BootstrapData } from '@/types/flow'
 import type { CodingSession } from '@/types/coding-sessions'
 import { CODING_PHASE_LABELS, codingErrorInfo, codingRunStartedAt, codingStatusLine, formatCodingElapsed, isCodingSessionTerminal, PULL_REQUEST_STATE_LABELS, pullRequestDisplayState, pullRequestNumberLabel } from './coding-session-model'
@@ -35,7 +37,7 @@ function CodingSessionSummary({ session, data }: { session: CodingSession; data:
  * agent works), the label ("Thinking…", "Error"), the detail (error title, summary) on one line, the running timer and a
  * chevron. The whole row opens the session view.
  */
-export function CodingSessionStatusRow({ session, data, onOpen }: { session: CodingSession; data: BootstrapData; onOpen: () => void }) {
+export function CodingSessionStatusRow({ session, data, href, onOpen }: { session: CodingSession; data: BootstrapData; /** The session page; without it the row is a button calling onOpen (the dialog fallback). */ href?: string; onOpen?: () => void }) {
   const { t } = useI18n()
   const errorTitle = session.state === 'error' ? t(codingErrorInfo(session.errorCode, { workspace: data.workspace.urlKey, codeHost: session.codeHost }).title) : undefined
   const status = codingStatusLine(session, errorTitle)
@@ -43,7 +45,7 @@ export function CodingSessionStatusRow({ session, data, onOpen }: { session: Cod
   const now = useNow(live)
   const started = codingRunStartedAt(session)
   const elapsed = live && started && !Number.isNaN(Date.parse(started)) ? formatCodingElapsed(now - Date.parse(started)) : ''
-  return <button type="button" className="coding-session-status-row" data-tone={status.tone} onClick={onOpen}>
+  const content = <>
     <CodingStatusIcon tone={status.tone}/>
     <span className="coding-session-status-label">{t(status.label)}{status.ellipsis ? '…' : ''}</span>
     {status.detail && <span className="coding-session-status-detail" data-i18n-ignore>{status.detail}</span>}
@@ -52,7 +54,10 @@ export function CodingSessionStatusRow({ session, data, onOpen }: { session: Cod
       <ChevronRight size={16} aria-hidden="true"/>
     </span>
     <span className="sr-only">{t('Show session')}</span>
-  </button>
+  </>
+  return href
+    ? <AppLink className="coding-session-status-row" data-tone={status.tone} href={href}>{content}</AppLink>
+    : <button type="button" className="coding-session-status-row" data-tone={status.tone} onClick={onOpen}>{content}</button>
 }
 
 function CodingStatusIcon({ tone }: { tone: ReturnType<typeof codingStatusLine>['tone'] }) {
@@ -70,7 +75,7 @@ function CodingStatusIcon({ tone }: { tone: ReturnType<typeof codingStatusLine>[
 export function CodingSessionCard({ sessionId, initial, data, onDismiss }: { sessionId: string; initial?: CodingSession; data: BootstrapData; onDismiss?: () => void }) {
   const { t, locale } = useI18n()
   const { session, error } = useCodingSession(sessionId, initial)
-  const [open, setOpen] = useState(false)
+  const opener = useCodingSessionOpener(session, data, onDismiss)
   if (!session) return error ? <p className="coding-session-error-text" role="alert">{error}</p> : <div className="coding-session-card is-loading" role="status">{t('Loading coding session…')}</div>
   const issue = session.issueId ? data.issues.find(item => item.id === session.issueId) : undefined
   const creator = data.users.find(user => user.id === session.creatorId)
@@ -87,13 +92,14 @@ export function CodingSessionCard({ sessionId, initial, data, onDismiss }: { ses
       {issue && <AppLink className="coding-session-link" href={`${issuePath(data.workspace.urlKey, issue)}#agent-session-${session.agentSessionId}`}>{t('Open issue')}</AppLink>}
       {onDismiss && isCodingSessionTerminal(session) && <button type="button" className="coding-session-icon-button" aria-label={t('Dismiss')} onClick={onDismiss}><X size={14}/></button>}
     </header>
-    <CodingSessionStatusRow session={session} data={data} onOpen={() => setOpen(true)}/>
-    {open && <CodingSessionDialog sessionId={session.id} initial={session} data={data} open onOpenChange={setOpen} onDismiss={onDismiss}/>}
+    <CodingSessionStatusRow session={session} data={data} {...opener.rowProps}/>
+    {opener.dialog}
   </article>
 }
 
 /**
- * The full session view in a dialog, laid out like the reference app's session page: a 44px bar with the issue and
+ * The full session view in a dialog (the fallback where no app router is mounted; entry points open the session page),
+ * laid out like the reference app's session page: a 44px bar with the issue and
  * session title and the "Hide agent" toggle over the changes and the agent panel. Actions that start another session
  * switch the dialog to it.
  */
@@ -126,6 +132,7 @@ export function CodingSessionsList({ data, issueId, creatorId, title = 'Coding s
   const { sessions, error } = useCodingSessions({ issueId, creatorId })
   const { dismissed, dismiss } = useDismissedCodingSessions(data.workspace.urlKey, data.viewer.id)
   const [open, setOpen] = useState<CodingSession>()
+  const routed = useInRouterContext()
   const shown = sessions
     .filter(session => !dismissed.has(session.id))
     .sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0))
@@ -139,10 +146,15 @@ export function CodingSessionsList({ data, issueId, creatorId, title = 'Coding s
     <h3>{t(title)}</h3>
     <ul>
       {shown.map(session => <li key={session.id} data-state={session.state}>
-        <button type="button" className="coding-sessions-list-row" onClick={() => setOpen(session)}>
-          <CodingSessionSummary session={session} data={data}/>
-          <time dateTime={session.updatedAt}>{time(session.updatedAt)}</time>
-        </button>
+        {routed
+          ? <AppLink className="coding-sessions-list-row" href={codingSessionPath(data.workspace.urlKey, session.id)}>
+            <CodingSessionSummary session={session} data={data}/>
+            <time dateTime={session.updatedAt}>{time(session.updatedAt)}</time>
+          </AppLink>
+          : <button type="button" className="coding-sessions-list-row" onClick={() => setOpen(session)}>
+            <CodingSessionSummary session={session} data={data}/>
+            <time dateTime={session.updatedAt}>{time(session.updatedAt)}</time>
+          </button>}
         {isCodingSessionTerminal(session) && <button type="button" className="coding-session-icon-button" aria-label={`${t('Dismiss')} ${sessionTitle(session, data)}`} onClick={() => dismiss(session.id)}><X size={13}/></button>}
       </li>)}
     </ul>

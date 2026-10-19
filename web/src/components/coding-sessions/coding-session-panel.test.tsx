@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, viewer } from '@/test/fixtures'
 import * as api from '@/lib/coding-sessions-api'
+import { uploadAgentFile } from '@/lib/api'
 import { AGENT_TASK_ACTIVITY_EVENT, getApplicationTask, replyApplicationTask, type ApplicationActivity, type ApplicationTask } from '@/lib/application-agents'
 import type { CodeReview } from '@/types/flow'
 import type { CodingSession, CodingSessionState } from '@/types/coding-sessions'
@@ -17,8 +18,10 @@ vi.mock('@/lib/coding-sessions-api', () => ({
   approveCodingSession: vi.fn(), dismissCodingSession: vi.fn(), createCodingSessionPullRequest: vi.fn(), promptCodingSession: vi.fn(), fetchCodingSandboxLogs: vi.fn(),
   fixCodingEnvironmentWithAgent: vi.fn(), startReviewCodingSession: vi.fn(), startIssueCodingSession: vi.fn(), fetchCodingEnvironments: vi.fn(),
   fetchCodingSessionArtifacts: vi.fn(async () => []),
+  fetchCodingSessionDiff: vi.fn(async () => ({ source: 'none', additions: 0, deletions: 0, files: [] })), setCodingSessionSubscription: vi.fn(),
 }))
 vi.mock('@/lib/application-agents', async original => ({ ...await original<typeof import('@/lib/application-agents')>(), getApplicationTask: vi.fn(), replyApplicationTask: vi.fn() }))
+vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), uploadAgentFile: vi.fn() }))
 vi.mock('@/components/agent/agent-rich-text', () => ({ AgentRichText: ({ content }: { content: string }) => <div>{content}</div> }))
 
 const task = { id: 'task-1', issueId: 'issue-1', teamId: 'team-1', appUserId: 'app', creatorId: viewer.id, status: 'active', prompt: '', trigger: 'delegation', version: 4, updatedAt: '' } as ApplicationTask
@@ -33,6 +36,7 @@ function renderPanel(session: CodingSession, props: Partial<Parameters<typeof Co
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(api.fetchCodingSessionDiff).mockResolvedValue({ source: 'none', additions: 0, deletions: 0, files: [] })
   vi.mocked(getApplicationTask).mockResolvedValue({ session: task, activities: [] })
 })
 
@@ -88,7 +92,7 @@ describe('coding session panel', () => {
     renderPanel(makeSession({ state: 'complete', phase: 'idle' }))
     await user.type(screen.getByRole('textbox', { name: 'Follow-up prompt' }), 'Also add tests')
     await user.click(screen.getByRole('button', { name: 'Send follow-up' }))
-    expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'Also add tests')
+    expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'Also add tests', undefined, [])
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Follow-up prompt' })).toHaveValue(''))
   })
 
@@ -122,7 +126,7 @@ describe('coding session panel', () => {
     expect(await screen.findByText('Claude Code · claude-sonnet-4-5 (Auto)', { selector: '[role=menuitem] span' })).toBeVisible()
     await user.click(screen.getByRole('menuitem', { name: 'Copy' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Session URL' }))
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringMatching(/\/agent$|#agent-session-task-1$/)))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringMatching(/\/diff\/cs-1$/)))
   })
 
   it('shows the agent working with a running timer and stops it from the composer', async () => {
@@ -136,12 +140,81 @@ describe('coding session panel', () => {
     expect(api.stopCodingSession).toHaveBeenCalledWith('cs-1')
   })
 
-  it('shows "No changes yet" until the agent changes something', () => {
+  it('shows "No changes yet" until the agent changes something', async () => {
     const { unmount } = renderPanel(makeSession())
-    expect(screen.getByText('No changes yet')).toBeVisible()
+    expect(await screen.findByText('No changes yet')).toBeVisible()
     unmount()
+    vi.mocked(api.fetchCodingSessionDiff).mockResolvedValue({ source: 'summary', additions: 1, deletions: 0, files: [{ path: 'src/a.ts', additions: 1, deletions: 0, status: 'modified', hunks: [] }] })
     renderPanel(makeSession({ diffs: [{ path: 'src/a.ts', additions: 1, deletions: 0, status: 'modified' }] }))
+    expect(await screen.findByRole('region', { name: 'Code changes' })).toBeVisible()
     expect(screen.queryByText('No changes yet')).toBeNull()
+    expect(screen.getByText('Line changes appear here once the agent pushes its branch.')).toBeVisible()
+  })
+
+  it('shows the full diff: file tree with counts, line numbers, tinted rows and collapse per file', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.fetchCodingSessionDiff).mockResolvedValue({ source: 'codeHost', base: 'main', head: 'flow/fix', additions: 2, deletions: 1, files: [
+      { path: 'src/app/a.ts', additions: 2, deletions: 1, status: 'modified', hunks: [{ header: '@@ -1,2 +1,3 @@', oldStart: 1, oldLines: 2, newStart: 1, newLines: 3, lines: [
+        { kind: 'context', oldLine: 1, newLine: 1, text: 'const a = 1' }, { kind: 'delete', oldLine: 2, text: 'const b = 2' }, { kind: 'add', newLine: 2, text: 'const b = 3' }, { kind: 'add', newLine: 3, text: 'const c = 4' },
+      ] }] },
+      { path: 'logo.png', additions: 0, deletions: 0, status: 'added', binary: true, hunks: [] },
+    ] })
+    renderPanel(makeSession({ headSha: 'abc' }))
+    const region = await screen.findByRole('region', { name: 'Code changes' })
+    expect(within(region).getByText('2 files changed')).toBeVisible()
+    const tree = within(region).getByRole('navigation', { name: 'Changed files' })
+    expect(within(tree).getByRole('treeitem', { name: /src\/app/ })).toHaveAttribute('aria-expanded', 'true')
+    expect(within(tree).getByRole('treeitem', { name: /a\.ts/ })).toHaveTextContent('+2−1')
+    const table = within(region).getByRole('table', { name: 'Diff of src/app/a.ts' })
+    const rows = within(table).getAllByRole('row')
+    expect(rows[0]).toHaveTextContent('@@ -1,2 +1,3 @@')
+    expect(rows[2]).toHaveAttribute('data-kind', 'delete')
+    expect(within(rows[3]).getByLabelText('New line 2')).toHaveTextContent('2')
+    expect(within(region).getByText('Binary file not shown.')).toBeVisible()
+    const file = within(region).getByRole('article', { name: 'src/app/a.ts' })
+    await user.click(within(file).getByRole('button', { name: 'src/app/a.ts' }))
+    expect(within(region).queryByRole('table', { name: 'Diff of src/app/a.ts' })).toBeNull()
+    await user.click(within(region).getByRole('button', { name: 'Collapse all' }))
+    expect(within(region).queryByText('Binary file not shown.')).toBeNull()
+    await user.click(within(region).getByRole('button', { name: 'Expand all' }))
+    expect(within(region).getByRole('table', { name: 'Diff of src/app/a.ts' })).toBeVisible()
+  })
+
+  it('subscribes to and unsubscribes from the session in the Session details menu', async () => {
+    const user = userEvent.setup()
+    const session = makeSession({ creatorId: viewer.id })
+    vi.mocked(api.setCodingSessionSubscription).mockResolvedValue({ ...session, unsubscribedIds: [viewer.id] })
+    const { onChange } = renderPanel(session)
+    await user.click(screen.getByRole('button', { name: 'Session details' }))
+    const item = await screen.findByRole('menuitemcheckbox', { name: /Subscribe to session/ })
+    expect(item).toHaveAttribute('aria-checked', 'true')
+    await user.click(item)
+    await waitFor(() => expect(api.setCodingSessionSubscription).toHaveBeenCalledWith('cs-1', false))
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ unsubscribedIds: [viewer.id] })))
+  })
+
+  it('attaches files to a follow-up with the paperclip and sends them with the prompt', async () => {
+    const user = userEvent.setup()
+    vi.mocked(uploadAgentFile).mockResolvedValue({ name: 'notes.md', contentType: 'text/markdown', size: 5, url: '/uploads/agent_upload_0123456789abcdef_1_notes.md' })
+    vi.mocked(api.promptCodingSession).mockResolvedValue(makeSession())
+    renderPanel(makeSession({ state: 'complete', phase: 'idle' }))
+    await user.upload(screen.getByTestId('coding-session-file-input'), new File(['hello'], 'notes.md', { type: 'text/markdown' }))
+    const files = await screen.findByRole('list', { name: 'Attachments' })
+    await waitFor(() => expect(within(files).getByRole('listitem')).toHaveAttribute('data-state', 'ready'))
+    await user.type(screen.getByRole('textbox', { name: 'Follow-up prompt' }), 'Use these notes')
+    await user.click(screen.getByRole('button', { name: 'Send follow-up' }))
+    expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'Use these notes', undefined, [{ name: 'notes.md', contentType: 'text/markdown', size: 5, url: '/uploads/agent_upload_0123456789abcdef_1_notes.md' }])
+    await waitFor(() => expect(screen.queryByRole('list', { name: 'Attachments' })).toBeNull())
+  })
+
+  it('removes an attached file before sending', async () => {
+    const user = userEvent.setup()
+    vi.mocked(uploadAgentFile).mockResolvedValue({ name: 'a.md', contentType: 'text/markdown', size: 1, url: '/uploads/agent_upload_0123456789abcdef_1_a.md' })
+    renderPanel(makeSession({ state: 'complete', phase: 'idle' }))
+    await user.upload(screen.getByTestId('coding-session-file-input'), new File(['a'], 'a.md', { type: 'text/markdown' }))
+    await user.click(await screen.findByRole('button', { name: 'Remove a.md' }))
+    expect(screen.queryByRole('list', { name: 'Attachments' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Send follow-up' })).toBeDisabled()
   })
 
   it('retries an errored session from its error card', async () => {
@@ -247,12 +320,12 @@ describe('coding session panel', () => {
   })
 
   it('shows the plan, diff summary and summary', async () => {
-    const user = userEvent.setup()
+    vi.mocked(api.fetchCodingSessionDiff).mockResolvedValue({ source: 'summary', additions: 6, deletions: 2, files: [{ path: 'src/a.ts', additions: 5, deletions: 2, status: 'modified', hunks: [] }, { path: 'src/b.ts', additions: 1, deletions: 0, status: 'added', hunks: [] }] })
     renderPanel(makeSession({ state: 'complete', phase: 'idle', summary: 'Fixed the login bug', plan: [{ content: 'Reproduce', status: 'completed' }, { content: 'Fix', status: 'inProgress' }], diffs: [{ path: 'src/a.ts', additions: 5, deletions: 2, status: 'modified' }, { path: 'src/b.ts', additions: 1, deletions: 0, status: 'added' }] }))
     expect(within(screen.getByRole('list', { name: 'Plan' })).getAllByRole('listitem')).toHaveLength(2)
     expect(screen.getByText('Fixed the login bug')).toBeVisible()
-    await user.click(screen.getByText('2 files changed'))
-    expect(screen.getByText('src/a.ts')).toBeVisible()
+    expect(await screen.findByText('2 files changed')).toBeVisible()
+    expect(screen.getByRole('article', { name: 'src/a.ts' })).toBeVisible()
   })
 
   it('renders the activity stream with every activity type', async () => {
