@@ -16,6 +16,11 @@ import {
   reasoningOptions,
   repositoryConflict,
   sandboxSizeOptions,
+  environmentOwners,
+  formatDuration,
+  snapshotDuration,
+  toolLabel,
+  toolVersions,
   splitDomains,
   validateDraft,
 } from "./coding-sessions-model";
@@ -173,8 +178,27 @@ describe("settings helpers", () => {
     expect(reasoningOptions(models, "claudeCode", "auto")).toEqual([]);
   });
   it("labels sandbox sizes from the server or the defaults", () => {
-    expect(sandboxSizeOptions().map((size) => size.detail)).toEqual(["1 vCPU, 8 GB", "2 vCPU, 16 GB", "4 vCPU, 32 GB"]);
-    expect(sandboxSizeOptions({ sizes: { small: { cpu: "2", memory: "4Gi" }, medium: { cpu: "4", memory: "8Gi" }, large: { cpu: "8", memory: "512Mi" } } } as never)[2].detail).toBe("8 vCPU, 512 MB");
+    expect(sandboxSizeOptions().map((size) => size.detail)).toEqual(["1 vCPU · 8 GB memory", "2 vCPU · 16 GB memory", "4 vCPU · 32 GB memory"]);
+    expect(sandboxSizeOptions({ sizes: { small: { cpu: "2", memory: "4Gi" }, medium: { cpu: "4", memory: "8Gi" }, large: { cpu: "8", memory: "512Mi" } } } as never)[2].detail).toBe("8 vCPU · 512 MB memory");
+  });
+  it("offers tool presets and keeps custom versions", () => {
+    expect(toolLabel("dotnet")).toBe(".NET");
+    expect(toolLabel("zig")).toBe("zig");
+    expect(toolVersions("node", "22")).toEqual(["latest", "26", "24", "22"]);
+    expect(toolVersions("node", "20.11")).toEqual(["latest", "26", "24", "22", "20.11"]);
+    expect(toolVersions("zig", "")).toEqual(["latest"]);
+  });
+  it("formats snapshot durations", () => {
+    expect(formatDuration(9000)).toBe("9s");
+    expect(formatDuration(72_000)).toBe("1m 12s");
+    expect(formatDuration(3_780_000)).toBe("1h 3m");
+    expect(snapshotDuration({ createdAt: "2026-10-01T00:00:00Z", startedAt: "2026-10-01T00:00:01Z", finishedAt: "2026-10-01T00:00:10Z" })).toBe(9000);
+    expect(snapshotDuration({ createdAt: "2026-10-01T00:00:00Z" })).toBeUndefined();
+  });
+  it("treats the creator as the owner of an environment without owners", () => {
+    expect(environmentOwners({ createdBy: "u1" })).toEqual(["u1"]);
+    expect(environmentOwners({ ownerIds: ["u2"], createdBy: "u1" })).toEqual(["u2"]);
+    expect(environmentOwners({})).toEqual([]);
   });
   it("formats bytes", () => {
     expect(formatBytes(undefined)).toBe("");

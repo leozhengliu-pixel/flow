@@ -69,49 +69,61 @@ beforeEach(() => {
 const NEW = `${ROOT}/environments/new`;
 const EDIT = `${ROOT}/environments/env1`;
 
+async function choose(user: ReturnType<typeof userEvent.setup>, combobox: string, option: RegExp | string) {
+  await user.click(screen.getByRole("combobox", { name: combobox }));
+  await user.click(await screen.findByRole("menuitem", { name: option }));
+}
+
+async function addFile(user: ReturnType<typeof userEvent.setup>, path: string) {
+  await user.click(within(screen.getByTestId("files-editor")).getByRole("button", { name: "Add file" }));
+  const dialog = await screen.findByRole("dialog", { name: "Add file" });
+  await user.type(within(dialog).getByLabelText("File path"), path);
+  await user.click(within(dialog).getByRole("button", { name: "Add file" }));
+}
+
 describe("environment editor: create", () => {
   it("creates an environment with tools, files, variables and secrets", async () => {
     const user = userEvent.setup();
     vi.mocked(createCodingEnvironment).mockResolvedValue(makeEnvironment({ id: "env-new" }));
     renderCodingSettings({ path: NEW });
     expect(await screen.findByRole("heading", { level: 1, name: "New environment" })).toBeVisible();
+    expect(screen.getByText("Configure this coding environment.")).toBeVisible();
+    // Like the reference app there is no Name field and no Configure with agent before the environment exists.
+    expect(screen.queryByLabelText("Name")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Configure with agent" })).toBeNull();
     const save = screen.getByRole("button", { name: "Create environment" });
     expect(save).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "Repository" }));
     const option = await screen.findByRole("button", { name: /acme\/web/ });
     expect(screen.queryByRole("button", { name: /acme\/old/ })).toBeNull();
+    expect(screen.getByPlaceholderText("Search repositories...")).toBeVisible();
     await user.click(option);
     expect(fetchCodingRepositories).toHaveBeenCalledWith({ codeHost: "github", hostName: "github.com", q: undefined });
     expect(screen.getByRole("button", { name: "Repository" })).toHaveTextContent("acme/web");
-    expect(screen.getByLabelText("Name")).toHaveValue("web");
 
-    await user.click(screen.getByRole("button", { name: "Add tool" }));
-    await user.type(screen.getByLabelText("Tool"), "node");
-    await user.type(screen.getByLabelText("Version"), "22");
-    await user.click(screen.getByRole("button", { name: "Add file" }));
-    await user.type(screen.getByLabelText("File path"), ".npmrc");
+    await choose(user, "Add tool", "Node.js");
+    await choose(user, "Node.js version", "22");
+    await addFile(user, ".npmrc");
     fireEvent.change(screen.getByLabelText("File content"), { target: { value: "registry=x" } });
     await user.click(screen.getByRole("button", { name: "Add variable" }));
     await user.type(screen.getByLabelText("Variable name"), "PORT");
     await user.type(screen.getByLabelText("Variable value"), "3000");
-    await user.click(screen.getByRole("button", { name: "Add secret" }));
-    await user.type(screen.getByLabelText("Secret name"), "NPM_TOKEN");
+    await user.click(screen.getByRole("button", { name: "Add variable" }));
+    await user.type(screen.getAllByLabelText("Variable name")[1], "NPM_TOKEN");
+    await user.click(screen.getAllByRole("checkbox", { name: "Secret" })[1]);
     const secretValue = screen.getByLabelText("Secret value");
     expect(secretValue).toHaveAttribute("type", "password");
+    expect(screen.getByLabelText("Secret name")).toHaveValue("NPM_TOKEN");
     await user.type(secretValue, "s3cret");
     fireEvent.change(screen.getByLabelText("Prepare script"), { target: { value: "npm ci" } });
     fireEvent.change(screen.getByLabelText("Custom guidance"), { target: { value: "Run npm test" } });
 
-    await user.click(screen.getByRole("combobox", { name: "Sandbox size" }));
-    await user.click(await screen.findByRole("menuitem", { name: /^Large/ }));
-    await user.click(screen.getByRole("combobox", { name: "Network access" }));
-    await user.click(await screen.findByRole("menuitem", { name: /^Extended/ }));
+    await choose(user, "Sandbox size", /^Large/);
+    await choose(user, "Network access", /^Extended/);
     fireEvent.change(screen.getByLabelText("Allowed domains"), { target: { value: "example.com" } });
-    await user.click(screen.getByRole("combobox", { name: "Dependency management" }));
-    await user.click(await screen.findByRole("menuitem", { name: /^Custom only/ }));
-    await user.click(screen.getByRole("combobox", { name: "Environment agent" }));
-    await user.click(await screen.findByRole("menuitem", { name: /^Claude Code/ }));
+    await choose(user, "Dependency management", /^Custom only/);
+    await choose(user, "Environment agent", /^Claude Code/);
 
     await user.click(save);
     await waitFor(() => expect(createCodingEnvironment).toHaveBeenCalledTimes(1));
@@ -136,6 +148,13 @@ describe("environment editor: create", () => {
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(`${ROOT}/environments/env-new`));
   });
 
+  it("shows two-line sandbox sizes from the server", async () => {
+    const user = userEvent.setup();
+    renderCodingSettings({ path: NEW });
+    await user.click(await screen.findByRole("combobox", { name: "Sandbox size" }));
+    expect(await screen.findByRole("menuitem", { name: /Medium\s*2 vCPU · 16 GB memory/ })).toBeVisible();
+  });
+
   it("accepts a typed repository when the listing has no match", async () => {
     const user = userEvent.setup();
     vi.mocked(fetchCodingRepositories).mockResolvedValue({ repositories: [] });
@@ -158,7 +177,7 @@ describe("environment editor: create", () => {
     expect(fetchCodingRepositories).toHaveBeenLastCalledWith({ codeHost: "github", hostName: "github.com", q: undefined, cursor: "c2" });
   });
 
-  it("switches the code host to GitLab", async () => {
+  it("switches the code host to GitLab when both are connected", async () => {
     const user = userEvent.setup();
     vi.mocked(fetchCodingStatus).mockResolvedValue(makeStatus({ codeHosts: [{ codeHost: "github", hostName: "github.com", connected: true }, { codeHost: "gitlab", hostName: "gitlab.acme.dev", connected: true }] }));
     renderCodingSettings({ path: NEW });
@@ -168,6 +187,12 @@ describe("environment editor: create", () => {
     expect(screen.getByTestId("gitlab-credential-note")).toHaveTextContent(/api scope and the Maintainer role.*Premium or Ultimate/);
     await user.click(screen.getByRole("button", { name: "Repository" }));
     await waitFor(() => expect(fetchCodingRepositories).toHaveBeenLastCalledWith({ codeHost: "gitlab", hostName: "gitlab.acme.dev", q: undefined }));
+  });
+
+  it("hides the code host select with a single connected host", async () => {
+    renderCodingSettings({ path: NEW });
+    await screen.findByRole("button", { name: "Repository" });
+    expect(screen.queryByRole("combobox", { name: "Code host" })).toBeNull();
   });
 
   it("explains the configured GitLab credential mode", async () => {
@@ -192,33 +217,99 @@ describe("environment editor: create", () => {
   it("shows the first validation problem", async () => {
     const user = userEvent.setup();
     renderCodingSettings({ path: NEW });
-    await user.type(await screen.findByLabelText("Name"), "x");
+    await user.click(await screen.findByRole("button", { name: "Add variable" }));
+    await user.type(screen.getByLabelText("Variable name"), "X");
     expect(await screen.findByRole("alert")).toHaveTextContent("Choose a repository");
   });
 });
 
+describe("environment editor: tools and files", () => {
+  it("adds, versions and removes preset tools and keeps custom versions", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchCodingEnvironment).mockResolvedValue(makeEnvironment({ mise: { tools: { node: "20.11", ruby: "3.4" }, files: [], environmentVariables: [] } }));
+    vi.mocked(updateCodingEnvironment).mockResolvedValue(makeEnvironment());
+    renderCodingSettings({ path: EDIT });
+    const node = await screen.findByTestId("tool-node");
+    expect(within(node).getByText("Node.js")).toBeVisible();
+    expect(within(node).getByRole("combobox", { name: "Node.js version" })).toHaveTextContent("20.11");
+    await user.click(within(node).getByRole("combobox", { name: "Node.js version" }));
+    expect((await screen.findAllByRole("menuitem")).map((item) => item.textContent)).toEqual(["latest", "26", "24", "22", "20.11"]);
+    await user.keyboard("{Escape}");
+
+    await user.click(screen.getByRole("combobox", { name: "Add tool" }));
+    const options = (await screen.findAllByRole("menuitem")).map((item) => item.textContent);
+    expect(options).toEqual(["Bun", "Deno", "Python", "Go", "Rust", "Java", ".NET", "PostgreSQL", "Redis", "MongoDB", "ClickHouse"]);
+    await user.click(screen.getByRole("menuitem", { name: "PostgreSQL" }));
+    expect(screen.getByRole("combobox", { name: "PostgreSQL version" })).toHaveTextContent("latest");
+    await user.click(screen.getByRole("button", { name: "Remove Ruby" }));
+    expect(screen.queryByTestId("tool-ruby")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(updateCodingEnvironment).toHaveBeenCalledWith("env1", expect.objectContaining({ mise: expect.objectContaining({ tools: { node: "20.11", postgres: "latest" } }) })));
+  });
+
+  it("adds, renames and removes files through the modal", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchCodingEnvironment).mockResolvedValue(makeEnvironment());
+    renderCodingSettings({ path: EDIT });
+    const files = await screen.findByTestId("files-editor");
+    expect(within(files).getByText("No files added. Add a file to set its path and contents.")).toBeVisible();
+
+    await user.click(within(files).getByRole("button", { name: "Add file" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add file" });
+    expect(within(dialog).getByText("Add files to the sandbox’s home directory")).toBeVisible();
+    const input = within(dialog).getByPlaceholderText(".npmrc");
+    expect(within(dialog).getByRole("button", { name: "Add file" })).toBeDisabled();
+    await user.type(input, ".npmrc{Enter}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(within(files).getByRole("tab", { name: ".npmrc" })).toHaveAttribute("aria-selected", "true");
+    expect(within(files).getByLabelText("File content")).toHaveAttribute("placeholder", "File contents");
+
+    await user.click(within(files).getByRole("button", { name: "Rename file" }));
+    const rename = await screen.findByRole("dialog", { name: "Rename file" });
+    const field = within(rename).getByLabelText("File path");
+    expect(field).toHaveValue(".npmrc");
+    await user.clear(field);
+    await user.type(field, ".config/app.json");
+    await user.click(within(rename).getByRole("button", { name: "Rename" }));
+    expect(await within(files).findByRole("tab", { name: ".config/app.json" })).toBeVisible();
+
+    await user.click(within(files).getByRole("button", { name: "Remove file" }));
+    expect(within(files).queryByRole("tab")).toBeNull();
+    expect(within(files).getByText("No files added. Add a file to set its path and contents.")).toBeVisible();
+  });
+});
+
 describe("environment editor: edit", () => {
-  it("saves with the version and adds pending secrets", async () => {
+  it("saves with the version and adds rows marked Secret as secrets", async () => {
     const user = userEvent.setup();
     vi.mocked(fetchCodingEnvironment).mockResolvedValue(makeEnvironment());
     vi.mocked(updateCodingEnvironment).mockResolvedValue(makeEnvironment({ version: 4, prepareScript: "pnpm i" }));
     vi.mocked(addCodingEnvironmentSecrets).mockResolvedValue(makeEnvironment({ version: 5, prepareScript: "pnpm i", secrets: [{ name: "NPM_TOKEN", createdAt: "" }, { name: "API_KEY", createdAt: "" }] }));
     renderCodingSettings({ path: EDIT });
-    expect(await screen.findByRole("heading", { level: 1, name: "Web" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Repository" })).toBeDisabled();
+    expect(await screen.findByRole("heading", { level: 1, name: "Edit environment" })).toBeVisible();
+    expect(screen.getByTestId("environment-repository")).toHaveTextContent("acme/web");
+    expect(screen.getByText("Create a new environment to use a different repository")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Repository" })).toBeNull();
     const save = screen.getByRole("button", { name: "Save changes" });
     expect(save).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Prepare script"), { target: { value: "pnpm i" } });
-    await user.click(screen.getByRole("button", { name: "Add secret" }));
-    const names = screen.getAllByLabelText("Secret name");
+    // Configure with agent works on saved settings only.
+    expect(screen.getByRole("button", { name: "Configure with agent" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Add variable" }));
+    const names = screen.getAllByLabelText("Variable name");
     await user.type(names[names.length - 1], "API_KEY");
+    const checks = screen.getAllByRole("checkbox", { name: "Secret" });
+    await user.click(checks[checks.length - 1]);
     await user.type(screen.getByLabelText("Secret value"), "k");
     await user.click(save);
     await waitFor(() => expect(addCodingEnvironmentSecrets).toHaveBeenCalledWith("env1", [{ name: "API_KEY", value: "k" }]));
-    expect(updateCodingEnvironment).toHaveBeenCalledWith("env1", expect.objectContaining({ version: 3, prepareScript: "pnpm i" }));
+    expect(updateCodingEnvironment).toHaveBeenCalledWith("env1", expect.objectContaining({ version: 3, prepareScript: "pnpm i", mise: expect.objectContaining({ environmentVariables: [{ name: "NODE_ENV", value: "test" }] }) }));
+    expect(updateCodingEnvironment).toHaveBeenCalledWith("env1", expect.not.objectContaining({ ownerIds: expect.anything() }));
     expect(await screen.findByTestId("secret-API_KEY")).toBeVisible();
     expect(screen.queryByLabelText("Secret value")).toBeNull();
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Configure with agent" })).toBeEnabled();
   });
 
   it("reports a concurrent edit and reloads", async () => {
@@ -261,12 +352,70 @@ describe("environment editor: edit", () => {
     expect(within(row).getByLabelText("Hidden value")).toHaveTextContent("••••");
     const name = within(row).getByLabelText("Secret name");
     expect(name).toHaveAttribute("readonly");
+    const secret = within(row).getByRole("checkbox", { name: "Secret" });
+    expect(secret).toBeChecked();
+    expect(secret).toBeDisabled();
     expect(within(row).queryByLabelText("Secret value")).toBeNull();
     expect(document.body.textContent).not.toContain("s3cret");
     fireEvent.click(within(row).getByRole("button", { name: "Delete secret NPM_TOKEN" }));
     fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
     await waitFor(() => expect(deleteCodingEnvironmentSecret).toHaveBeenCalledWith("env1", "NPM_TOKEN"));
     await waitFor(() => expect(screen.queryByTestId("secret-NPM_TOKEN")).toBeNull());
+  });
+
+  it("shows only the footer when there are no variables", async () => {
+    vi.mocked(fetchCodingEnvironment).mockResolvedValue(makeEnvironment({ secrets: [], mise: { tools: {}, files: [], environmentVariables: [] } }));
+    renderCodingSettings({ path: EDIT });
+    const card = await screen.findByTestId("variables-editor");
+    expect(within(card).queryByText("Name")).toBeNull();
+    expect(within(card).getByRole("button", { name: "Import from .env" })).toBeVisible();
+    expect(within(card).getByRole("button", { name: "Add variable" })).toBeVisible();
+  });
+
+  it("asks before discarding unsaved changes", async () => {
+    vi.mocked(fetchCodingEnvironment).mockResolvedValue(makeEnvironment());
+    renderCodingSettings({ path: EDIT });
+    fireEvent.change(await screen.findByLabelText("Prepare script"), { target: { value: "changed" } });
+    fireEvent.click(screen.getByRole("button", { name: "Coding sessions" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Discard changes?")).toBeVisible();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByTestId("location")).toHaveTextContent(EDIT);
+    fireEvent.click(screen.getByRole("button", { name: "Coding sessions" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Confirm" }));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(new RegExp(`^${ROOT}$`)));
+  });
+
+  it("leaves without asking when nothing changed", async () => {
+    vi.mocked(fetchCodingEnvironment).mockResolvedValue(makeEnvironment());
+    renderCodingSettings({ path: EDIT });
+    await screen.findByLabelText("Prepare script");
+    fireEvent.click(screen.getByRole("button", { name: "Coding sessions" }));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(new RegExp(`^${ROOT}$`)));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("lists the creator as owner and lets admins add owners", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchCodingEnvironment).mockResolvedValue(makeEnvironment({ createdBy: "user-1" }));
+    vi.mocked(updateCodingEnvironment).mockResolvedValue(makeEnvironment({ ownerIds: ["user-1", "user-2"] }));
+    renderCodingSettings({ path: EDIT });
+    const owners = await screen.findByTestId("owners-editor");
+    expect(within(owners).getByTestId("owner-user-1")).toHaveTextContent(/Viewer\s*viewer@example\.test/);
+    await user.click(within(owners).getByRole("button", { name: "Add owner" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Teammate/ }));
+    expect(within(owners).getByTestId("owner-user-2")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(updateCodingEnvironment).toHaveBeenCalledWith("env1", expect.objectContaining({ ownerIds: ["user-1", "user-2"] })));
+  });
+
+  it("does not let members change owners", async () => {
+    vi.mocked(fetchCodingEnvironment).mockResolvedValue(makeEnvironment({ ownerIds: ["user-2"] }));
+    renderCodingSettings({ path: EDIT, viewerRole: "member" });
+    const owners = await screen.findByTestId("owners-editor");
+    expect(within(owners).getByRole("button", { name: "Add owner" })).toBeDisabled();
+    expect(within(owners).queryByRole("button", { name: /^Remove/ })).toBeNull();
   });
 
   it("archives after confirming", async () => {
@@ -286,6 +435,13 @@ describe("environment editor: edit", () => {
     expect(await screen.findByText(/This environment is archived/)).toBeVisible();
     expect(screen.getByLabelText("Prepare script")).toBeDisabled();
     expect(screen.queryByTestId("debug-terminal")).toBeNull();
+  });
+
+  it("shows the debug section", async () => {
+    vi.mocked(fetchCodingEnvironment).mockResolvedValue(makeEnvironment());
+    renderCodingSettings({ path: EDIT });
+    expect(await screen.findByText(/destroyed after 20 minutes\. Billed at the same rate as sandbox runtime\./)).toBeVisible();
+    expect(within(screen.getByTestId("debug-terminal")).getByText("No terminal is running.")).toBeVisible();
   });
 
   it("shows a load error", async () => {
@@ -346,21 +502,36 @@ describe("Import from .env", () => {
 });
 
 describe("snapshots", () => {
-  it("shows status and refreshes", async () => {
+  it("lists snapshots newest first and refreshes the environment", async () => {
     vi.mocked(fetchCodingEnvironment).mockResolvedValue(makeEnvironment({ latestSnapshot: snapshot() }));
-    vi.mocked(fetchCodingSnapshots).mockResolvedValue([snapshot()]);
-    vi.mocked(refreshCodingSnapshot).mockResolvedValue(snapshot({ id: "snap2", status: "queued", createdAt: "2026-10-02T00:00:00Z" }));
+    vi.mocked(fetchCodingSnapshots).mockResolvedValue([
+      snapshot({ id: "old", createdAt: "2026-09-01T00:00:00Z", startedAt: "2026-09-01T00:00:00Z", finishedAt: "2026-09-01T00:01:12Z" }),
+      snapshot(),
+    ]);
+    let resolve: (value: CodingEnvironmentSnapshot) => void = () => undefined;
+    vi.mocked(refreshCodingSnapshot).mockReturnValue(new Promise((done) => (resolve = done)));
     renderCodingSettings({ path: EDIT });
     const panel = await screen.findByTestId("snapshot-panel");
-    expect(within(panel).getByTestId("snapshot-status")).toHaveTextContent("Ready");
-    expect(within(panel).getByText(/main @ abcdef1 · 3.0 MB/)).toBeVisible();
-    fireEvent.click(within(panel).getByRole("button", { name: "Refresh" }));
-    await waitFor(() => expect(within(panel).getByTestId("snapshot-status")).toHaveTextContent("Queued"));
+    await waitFor(() => expect(within(panel).getAllByTestId("snapshot-row")).toHaveLength(2));
+    const statuses = within(panel).getAllByTestId("snapshot-status");
+    expect(statuses[0]).toHaveTextContent("Ready");
+    expect(statuses[1]).toHaveTextContent("1m 12s");
+    const refresh = screen.getByRole("button", { name: "Refresh environment" });
+    expect(refresh).toHaveAttribute("title", "Prepare a new snapshot from saved settings");
+    fireEvent.click(refresh);
+    expect(await screen.findByRole("button", { name: "Refreshing environment…" })).toBeDisabled();
+    await act(async () => resolve(snapshot({ id: "snap2", status: "queued", createdAt: "2026-10-02T00:00:00Z" })));
+    await waitFor(() => expect(within(panel).getAllByTestId("snapshot-status")[0]).toHaveTextContent("Queued"));
     expect(refreshCodingSnapshot).toHaveBeenCalledWith("env1");
-    expect(within(panel).getByRole("button", { name: "Cancel" })).toBeVisible();
   });
 
-  it("cancels a building snapshot and streams its logs", async () => {
+  it("shows an empty state", async () => {
+    vi.mocked(fetchCodingEnvironment).mockResolvedValue(makeEnvironment());
+    renderCodingSettings({ path: EDIT });
+    expect(await within(await screen.findByTestId("snapshot-panel")).findByText("No snapshots yet.")).toBeVisible();
+  });
+
+  it("opens a building snapshot's logs, streams them and cancels", async () => {
     const building = snapshot({ status: "building" });
     vi.mocked(fetchCodingEnvironment).mockResolvedValue(makeEnvironment({ latestSnapshot: building }));
     vi.mocked(fetchCodingSnapshots).mockResolvedValue([building]);
@@ -368,12 +539,34 @@ describe("snapshots", () => {
     vi.mocked(cancelCodingSnapshot).mockResolvedValue(snapshot({ status: "canceled" }));
     renderCodingSettings({ path: EDIT });
     const panel = await screen.findByTestId("snapshot-panel");
-    fireEvent.click(within(panel).getByRole("button", { name: "View logs" }));
-    expect(await within(panel).findByTestId("snapshot-logs")).toHaveTextContent(/cloning…\s*mise install/);
+    fireEvent.click(within(panel).getByTestId("snapshot-row"));
+    const dialog = await screen.findByRole("dialog", { name: "Snapshot logs" });
+    expect(await within(dialog).findByTestId("snapshot-logs")).toHaveTextContent(/cloning…\s*mise install/);
     expect(fetchCodingSnapshotLogs).toHaveBeenCalledWith("snap1");
-    fireEvent.click(within(panel).getByRole("button", { name: "Cancel" }));
+    expect(within(dialog).getByTestId("snapshot-summary")).toHaveTextContent(/^Building · started/);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(within(panel).getByTestId("snapshot-status")).toHaveTextContent("Canceled"));
     expect(cancelCodingSnapshot).toHaveBeenCalledWith("snap1");
+  });
+
+  it("summarizes a finished build and copies its logs", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const done = snapshot({ startedAt: "2026-10-01T00:00:00Z", finishedAt: "2026-10-01T00:00:09Z" });
+    vi.mocked(fetchCodingEnvironment).mockResolvedValue(makeEnvironment({ latestSnapshot: done }));
+    vi.mocked(fetchCodingSnapshots).mockResolvedValue([done]);
+    vi.mocked(fetchCodingSnapshotLogs).mockResolvedValue({ logs: "ok", complete: true } as never);
+    renderCodingSettings({ path: EDIT });
+    const panel = await screen.findByTestId("snapshot-panel");
+    await waitFor(() => expect(within(panel).getByTestId("snapshot-status")).toHaveTextContent("9s"));
+    await user.click(within(panel).getByTestId("snapshot-row"));
+    const dialog = await screen.findByRole("dialog", { name: "Snapshot logs" });
+    expect(within(dialog).getByTestId("snapshot-summary")).toHaveTextContent(/^Succeeded · started .+ · took 9s$/);
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: "Copy logs" })).toBeEnabled());
+    await user.click(within(dialog).getByRole("button", { name: "Copy logs" }));
+    expect(writeText).toHaveBeenCalledWith("ok");
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Logs copied"));
   });
 
   it("polls an in-progress snapshot until it finishes", async () => {
@@ -397,18 +590,22 @@ describe("snapshots", () => {
     const failed = snapshot({ status: "failed", error: "npm ci exited 1" });
     vi.mocked(fetchCodingEnvironment).mockResolvedValue(makeEnvironment({ latestSnapshot: failed }));
     vi.mocked(fetchCodingSnapshots).mockResolvedValue([failed, snapshot({ id: "old", createdAt: "2026-09-01T00:00:00Z" })]);
+    vi.mocked(fetchCodingSnapshotLogs).mockResolvedValue({ logs: "npm ERR!", complete: true } as never);
     vi.mocked(fixCodingEnvironmentWithAgent).mockResolvedValue({} as never);
     renderCodingSettings({ path: EDIT });
     const panel = await screen.findByTestId("snapshot-panel");
-    expect(await within(panel).findByText("npm ci exited 1")).toBeVisible();
-    expect(within(panel).getByText("Previous snapshots")).toBeInTheDocument();
-    fireEvent.click(within(panel).getByRole("button", { name: "Fix with agent" }));
+    await waitFor(() => expect(within(panel).getAllByTestId("snapshot-row")).toHaveLength(2));
+    expect(within(panel).getAllByTestId("snapshot-status")[0]).toHaveTextContent("Failed");
+    fireEvent.click(within(panel).getAllByTestId("snapshot-row")[0]);
+    const dialog = await screen.findByRole("dialog", { name: "Snapshot logs" });
+    expect(within(dialog).getByText("npm ci exited 1")).toBeVisible();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Fix with agent" }));
     await waitFor(() => expect(fixCodingEnvironmentWithAgent).toHaveBeenCalledWith("env1", "snap1"));
   });
 });
 
 describe("agent-assisted setup", () => {
-  it("starts Configure with agent and shows the proposal when it arrives", async () => {
+  it("starts Configure with agent from the header and shows the proposal when it arrives", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       vi.mocked(fetchCodingEnvironment).mockResolvedValueOnce(makeEnvironment()).mockResolvedValue(makeEnvironment({ pendingProposal: { sessionId: "s1", explanation: "Use pnpm", verified: true, createdAt: "", prepareScript: "pnpm i" } }));

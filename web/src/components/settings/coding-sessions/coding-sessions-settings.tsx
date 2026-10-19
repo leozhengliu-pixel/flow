@@ -4,7 +4,7 @@ import { ArrowUpRight, ChevronRight, Plus, TriangleAlert, X } from "lucide-react
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AgentCodingGlyph, LoopsGlyph } from "@/components/ui/agent-glyph";
 import { useI18n } from "@/i18n/i18n";
-import { fetchCommitSigningKey, unarchiveCodingEnvironment } from "@/lib/api";
+import { createCodingEnvironment, fetchCommitSigningKey, unarchiveCodingEnvironment } from "@/lib/api";
 import { codingEnvironmentIdFromPath, codingEnvironmentPath, settingsPath, type IntegrationProvider, type SettingsPageId } from "@/lib/app-routes";
 import { toast } from "@/lib/toast";
 import type { BootstrapData, CodingEnvironment, CodingHarness, CodingSettings, CodingStatus, WorkspaceSettings } from "@/types/flow";
@@ -18,10 +18,12 @@ import {
   hasConnectedCodeHost,
   modelOptions,
   reasoningOptions,
+  repositoryConflict,
   trustedSourceLabel,
 } from "./coding-sessions-model";
 import { CodingButton, CodingCard, CodingLinkRow, CodingRow, CodingSection, CodingSelect, CodingToggle } from "./coding-settings-primitives";
 import { EnvironmentEditorPage } from "./environment-editor";
+import { RepositoryPickerPopover, type PickedRepository, type RepositoryHost } from "./repository-picker";
 import { errorMessage, useCodingEnvironments, useCodingModels, useCodingPolicy, useCodingStatus } from "./use-coding-settings";
 import "../feature-settings.css";
 import "./coding-sessions.css";
@@ -123,10 +125,7 @@ function CodingSessionsOverview({ data, settings: workspaceSettings, disabled, o
         title="Environments"
         description="Create reusable environments for coding sessions."
         action={environments.length > 0 ? (
-          <CodingButton ghost disabled={controlsDisabled} onClick={() => onOpenEnvironment("new")}>
-            <Plus size={14} />
-            New environment
-          </CodingButton>
+          <NewEnvironmentButton status={status} environments={environments} disabled={controlsDisabled} onOpenEnvironment={onOpenEnvironment} />
         ) : undefined}
       >
         <CodingCard className="cs-environments">
@@ -140,10 +139,7 @@ function CodingSessionsOverview({ data, settings: workspaceSettings, disabled, o
                 <span className="cs-empty-text">{t("No environments configured")}</span>
               </div>
               <aside>
-                <CodingButton ghost disabled={controlsDisabled} onClick={() => onOpenEnvironment("new")}>
-                  <Plus size={14} />
-                  New environment
-                </CodingButton>
+                <NewEnvironmentButton status={status} environments={environments} disabled={controlsDisabled} onOpenEnvironment={onOpenEnvironment} />
               </aside>
             </div>
           )}
@@ -199,6 +195,51 @@ function CodingSessionsOverview({ data, settings: workspaceSettings, disabled, o
       </section>
       {data.viewerRole !== "admin" && data.viewerRole !== "owner" && <p className="cs-admin-hint">{t("Only workspace admins can change coding session settings.")}</p>}
     </div>
+  );
+}
+
+/**
+ * "New environment" opens the repository picker in place, like the reference app: choosing a
+ * repository creates the environment (named after the repository) and opens its editor. A
+ * repository that already has an active environment opens that one instead.
+ */
+function NewEnvironmentButton({ status, environments, disabled, onOpenEnvironment }: { status?: CodingStatus; environments: CodingEnvironment[]; disabled?: boolean; onOpenEnvironment: (id: string) => void }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const connected = (status?.codeHosts ?? []).filter((host) => host.connected);
+  const hosts: RepositoryHost[] = (connected.length ? connected : status?.codeHosts?.slice(0, 1) ?? [{ codeHost: "github" as const, hostName: "github.com" }]).map((host) => ({ codeHost: host.codeHost, hostName: host.hostName }));
+  const create = async (repository: PickedRepository) => {
+    const existing = repositoryConflict(environments, { codeHost: repository.codeHost, hostName: repository.hostName, repository: repository.fullName });
+    if (existing) {
+      onOpenEnvironment(existing.id);
+      return;
+    }
+    setCreating(true);
+    try {
+      const created = await createCodingEnvironment({
+        name: repository.fullName.split("/").pop() || repository.fullName,
+        codeHost: repository.codeHost,
+        hostName: repository.hostName,
+        repository: repository.fullName,
+        ...(repository.id ? { repositoryId: repository.id } : {}),
+        ...(repository.defaultBranch ? { defaultBranch: repository.defaultBranch } : {}),
+      });
+      toast.success(t("Environment created"));
+      onOpenEnvironment(created.id);
+    } catch (reason) {
+      toast.error(errorMessage(reason, "Could not create the environment"));
+    } finally {
+      setCreating(false);
+    }
+  };
+  return (
+    <RepositoryPickerPopover hosts={hosts} open={open} onOpenChange={setOpen} onPick={(repository) => void create(repository)}>
+      <CodingButton ghost disabled={disabled || creating} aria-haspopup="dialog">
+        <Plus size={14} />
+        New environment
+      </CodingButton>
+    </RepositoryPickerPopover>
   );
 }
 
