@@ -20,6 +20,9 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath -ldflags="-s -w" -o /out/flow-api ./cmd/server
 
 FROM alpine:3.24
+# The alpine base tag pins the package set; per-package pins would break on
+# every alpine point release.
+# hadolint ignore=DL3018
 RUN apk add --no-cache squid ca-certificates tini && \
     mkdir -p /etc/flow-egress /var/cache/squid /var/log/squid /var/run/squid && \
     chown -R 1000:1000 /var/cache/squid /var/log/squid /var/run/squid

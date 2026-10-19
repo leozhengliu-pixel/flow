@@ -32,7 +32,7 @@ children="${FLOW_EGRESS_HELPER_CHILDREN:-10}"
 # are covered by a wildcard are dropped.
 allowlist="$runtime/allowlist.txt"
 {
-  case "$(printf '%s' "${FLOW_CODING_EGRESS_DEFAULT_ALLOWLIST:-on}" | tr 'A-Z' 'a-z')" in
+  case "$(printf '%s' "${FLOW_CODING_EGRESS_DEFAULT_ALLOWLIST:-on}" | tr '[:upper:]' '[:lower:]')" in
     off|false|0|no|disabled) ;;
     *) cat "${FLOW_EGRESS_DEFAULT_ALLOWLIST_FILE:-/etc/flow-egress/allowlist.default.txt}" ;;
   esac
@@ -40,7 +40,7 @@ allowlist="$runtime/allowlist.txt"
     cat "$FLOW_EGRESS_ALLOWLIST_FILE"
   fi
   printf '%s\n' "${FLOW_CODING_EGRESS_ALLOWLIST:-}" | tr ',' '\n'
-} | sed -e 's/#.*//' -e 's/[[:space:]]//g' -e 's/^\*\././' | tr 'A-Z' 'a-z' | grep -E '^\.?[a-z0-9_.-]+$' | sort -u > "$allowlist.raw" || true
+} | sed -e 's/#.*//' -e 's/[[:space:]]//g' -e 's/^\*\././' | tr '[:upper:]' '[:lower:]' | grep -E '^\.?[a-z0-9_.-]+$' | sort -u > "$allowlist.raw" || true
 grep '^\.' "$allowlist.raw" > "$allowlist.wild" || true
 : > "$allowlist"
 while IFS= read -r entry; do
