@@ -69,4 +69,3 @@ export function codingSessionURL(workspace: string, sessionId: string) {
 
 export const codingSessionTitle = (session: CodingSession, data: Pick<BootstrapData, 'issues'>) =>
   session.displayTitle || data.issues.find(issue => issue.id === session.issueId)?.title || session.repository || 'Coding session'
-

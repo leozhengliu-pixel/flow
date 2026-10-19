@@ -40,6 +40,7 @@ type connectorOAuthState struct {
 var connectorRefreshLocks [64]sync.Mutex
 
 func connectorSecretID(workspace, userID, id string) string {
+	// Hash public identifiers into a stable storage key, not a password verifier.
 	return fmt.Sprintf("credential_%x", sha256.Sum256([]byte(workspace+"\x00"+userID+"\x00"+id)))
 }
 func connectorOwner(item applicationPolicy, userID string) string {

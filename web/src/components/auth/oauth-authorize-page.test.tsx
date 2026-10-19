@@ -74,6 +74,35 @@ describe('OAuth consent page', () => {
     await waitFor(() => expect(api.decideOAuthAuthorization).toHaveBeenCalledWith(expect.objectContaining({ actor: 'app', allPublicTeams: false, teamIds: ['t1'] })))
   })
 
+  it('shows a well-known client\'s brand mark (Claude via claude.ai) and keeps the generic icon for a name on a foreign callback', async () => {
+    api.fetchOAuthAuthorizationRequest.mockResolvedValue(consent({ client: { client_id: 'c2', client_name: 'Claude', token_endpoint_auth_method: 'none' }, redirectUri: 'https://claude.ai/api/mcp/auth_callback' }))
+    const { unmount, container } = renderAt('?client_id=c2&redirect_uri=x&response_type=code&scope=read')
+    const mark = await screen.findByRole('img', { name: 'Claude icon' })
+    expect(mark).toHaveClass('oauth-mark', 'is-known')
+    expect(mark.querySelector('svg[data-known-app="claude"]')).not.toBeNull()
+    expect(container.querySelector('.oauth-icon-placeholder')).toBeNull()
+    unmount()
+
+    api.fetchOAuthAuthorizationRequest.mockResolvedValue(consent({ client: { client_id: 'c3', client_name: 'Claude', token_endpoint_auth_method: 'none' }, redirectUri: 'https://evil.example.test/callback' }))
+    renderAt('?client_id=c3&redirect_uri=x&response_type=code&scope=read')
+    const generic = await screen.findByRole('img', { name: 'Claude icon' })
+    expect(generic).toHaveClass('is-placeholder')
+    expect(generic.querySelector('[data-known-app]')).toBeNull()
+  })
+
+  it('recognises a CLI client by name on a loopback callback, and prefers the client\'s own logo_uri', async () => {
+    api.fetchOAuthAuthorizationRequest.mockResolvedValue(consent({ client: { client_id: 'c4', client_name: 'Claude Code (flow)', token_endpoint_auth_method: 'none' }, redirectUri: 'http://localhost:54321/callback' }))
+    const { unmount } = renderAt('?client_id=c4&redirect_uri=x&response_type=code&scope=read')
+    expect((await screen.findByRole('img', { name: 'Claude Code (flow) icon' })).querySelector('svg[data-known-app="claude-code"]')).not.toBeNull()
+    unmount()
+
+    api.fetchOAuthAuthorizationRequest.mockResolvedValue(consent({ client: { client_id: 'c5', client_name: 'Cursor', logo_uri: 'https://cdn.example.test/logo.png', token_endpoint_auth_method: 'none' }, redirectUri: 'cursor://anysphere.cursor-mcp/oauth/callback' }))
+    renderAt('?client_id=c5&redirect_uri=x&response_type=code&scope=read')
+    const own = await screen.findByRole('img', { name: 'Cursor icon' })
+    expect(own.querySelector('img')).toHaveAttribute('src', 'https://cdn.example.test/logo.png')
+    expect(own.querySelector('[data-known-app]')).toBeNull()
+  })
+
   it('lists the realtime permission last when the application has a webhook', async () => {
     api.fetchOAuthAuthorizationRequest.mockResolvedValue(consent({ realtime: true }))
     renderAt('?client_id=c1&redirect_uri=x&response_type=code&scope=read,write')

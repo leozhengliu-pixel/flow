@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -62,6 +63,13 @@ func (s *SQLiteStore) CodingArtifacts(ctx context.Context, workspaceKey, session
 		}
 		result = append(result, artifact)
 	}
+	// The indexed column is milliseconds; documents retain the full timestamp.
+	slices.SortFunc(result, func(a, b domain.CodingArtifact) int {
+		if order := a.CreatedAt.Compare(b.CreatedAt); order != 0 {
+			return order
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
 	return result, rows.Err()
 }
 
