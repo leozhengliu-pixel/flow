@@ -259,6 +259,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		document, translation, ep, rest = chat, translated, endpointChat, "v1/chat/completions"
+		entry.endpoint = string(endpointResponses) + "->" + string(endpointChat)
 	}
 	var stream bool
 	if value, present := document["stream"]; present {
