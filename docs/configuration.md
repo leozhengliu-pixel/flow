@@ -912,6 +912,7 @@ Sandboxes never receive model API keys. Claude Code, Codex and the open-source h
 |---|---|---|
 | `FLOW_CODING_LLM_ANTHROPIC_BASE_URL` / `FLOW_CODING_LLM_ANTHROPIC_API_KEY` | `https://api.anthropic.com` / empty | Anthropic Messages upstream for Claude Code. Without a key the route answers 503. |
 | `FLOW_CODING_LLM_OPENAI_BASE_URL` / `FLOW_CODING_LLM_OPENAI_API_KEY` | `https://api.openai.com/v1` / empty | OpenAI Responses and Chat Completions upstream for Codex. The base includes `/v1`. |
+| `FLOW_CODING_LLM_OPENAI_WIRE_API` | `responses` | What the OpenAI upstream speaks: `responses`, or `chat` for providers that only offer Chat Completions (DeepSeek, vLLM, …). With `chat`, the LLM proxy translates Codex's Responses requests to Chat Completions and the answers (streamed or not, tool calls, reasoning, usage) back. Hosted tools such as web search are not available then, and `previous_response_id` is refused. |
 | `FLOW_CODING_LLM_OPENSOURCE_BASE_URL` / `FLOW_CODING_LLM_OPENSOURCE_API_KEY` | empty | OpenAI-compatible upstream for OpenCode (vLLM, Ollama, OpenRouter). The key is optional. |
 | `FLOW_CODING_MODELS_CLAUDE_CODE` | `claude-sonnet-4-5,claude-opus-4-1` | Claude Code model catalog. |
 | `FLOW_CODING_MODELS_CODEX` | `gpt-5-codex,gpt-5` | Codex model catalog. |

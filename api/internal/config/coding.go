@@ -159,10 +159,14 @@ type CodingEgressConfig struct {
 
 // CodingLLMConfig configures the LLM proxy upstreams and model catalog.
 type CodingLLMConfig struct {
-	AnthropicBaseURL  string
-	AnthropicAPIKey   string
-	OpenAIBaseURL     string
-	OpenAIAPIKey      string
+	AnthropicBaseURL string
+	AnthropicAPIKey  string
+	OpenAIBaseURL    string
+	OpenAIAPIKey     string
+	// OpenAIWireAPI is the protocol the OpenAI upstream speaks: "responses"
+	// (default) or "chat" for Chat Completions-only providers, in which case
+	// the proxy translates Codex's Responses requests (llmproxy/chatwire.go).
+	OpenAIWireAPI     string
 	OpenSourceBaseURL string
 	OpenSourceAPIKey  string
 	// Models per harness; the first entry is what Auto resolves to.
@@ -177,6 +181,12 @@ type CodingLLMConfig struct {
 	modelInfoErr error
 	Timeout      time.Duration
 }
+
+// OpenAI upstream wire APIs (FLOW_CODING_LLM_OPENAI_WIRE_API).
+const (
+	OpenAIWireAPIResponses = "responses"
+	OpenAIWireAPIChat      = "chat"
+)
 
 // Model picker groups (ModelInfo.Group).
 const (
@@ -345,6 +355,7 @@ func loadCoding(appURL string) CodingConfig {
 			AnthropicAPIKey:   secret("FLOW_CODING_LLM_ANTHROPIC_API_KEY"),
 			OpenAIBaseURL:     strings.TrimRight(value("FLOW_CODING_LLM_OPENAI_BASE_URL", "https://api.openai.com/v1"), "/"),
 			OpenAIAPIKey:      secret("FLOW_CODING_LLM_OPENAI_API_KEY"),
+			OpenAIWireAPI:     strings.ToLower(strings.TrimSpace(value("FLOW_CODING_LLM_OPENAI_WIRE_API", OpenAIWireAPIResponses))),
 			OpenSourceBaseURL: strings.TrimRight(value("FLOW_CODING_LLM_OPENSOURCE_BASE_URL", ""), "/"),
 			OpenSourceAPIKey:  secret("FLOW_CODING_LLM_OPENSOURCE_API_KEY"),
 			ClaudeCodeModels:  csvRaw(value("FLOW_CODING_MODELS_CLAUDE_CODE", "claude-sonnet-4-5,claude-opus-4-1")),
@@ -388,6 +399,11 @@ func (c CodingConfig) Validate() error {
 	}
 	if err := c.LLM.validateModelInfo(); err != nil {
 		return err
+	}
+	switch c.LLM.OpenAIWireAPI {
+	case "", OpenAIWireAPIResponses, OpenAIWireAPIChat:
+	default:
+		return fmt.Errorf("FLOW_CODING_LLM_OPENAI_WIRE_API must be responses or chat")
 	}
 	if c.SecretKey == "" {
 		return fmt.Errorf("FLOW_CODING_SECRET_KEY (or FLOW_CONNECTOR_SECRET_KEY) is required when coding sessions are enabled")
