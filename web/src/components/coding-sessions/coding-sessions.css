@@ -161,8 +161,8 @@
 @media (prefers-reduced-motion:reduce){.coding-agent-spinner{animation:none}.coding-agent-working-shine{display:none}}
 
 /* Callouts: approval, needs input, and the error card (neutral 1px border with a danger gradient fading left to right) */
-.coding-session-callout{position:relative;isolation:isolate;display:flex;flex-direction:column;gap:6px;box-sizing:border-box;padding:8px 12px;border:1px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-1)}
-.coding-session-callout-title{display:flex;align-items:center;gap:6px;min-width:0;color:var(--text-body);font:500 12px/15px var(--font)}
+.coding-session-callout{position:relative;isolation:isolate;display:flex;flex-direction:column;gap:4px;box-sizing:border-box;padding:8px 12px;border:1px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-1)}
+.coding-session-callout-title{display:flex;align-items:center;gap:6px;min-width:0;min-height:24px;color:var(--text-body);font:500 12px/15px var(--font)}
 .coding-session-callout-title strong{font-weight:500}
 .coding-session-callout>p{margin:0;padding-left:0;color:var(--theme-text-secondary);font:450 12px/19.2px var(--font)}
 .coding-session-callout[data-kind=error]{border-color:color-mix(in srgb,var(--semantic-danger) 22%,var(--theme-border-strong));background:color-mix(in srgb,var(--semantic-danger) 3%,var(--theme-surface-1))}
