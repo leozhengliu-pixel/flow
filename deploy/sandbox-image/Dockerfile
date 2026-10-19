@@ -104,8 +104,12 @@ COPY deploy/sandbox-image/bin/ /opt/flow/bin/
 # matches verify-image.sh, so the build works before that script lands.
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 COPY deploy/sandbox-image/*.sh /opt/flow/image/
+# Chromium's launch smoke test only runs on the native architecture; under
+# QEMU emulation (cross-arch buildx) it crashes regardless of the image.
+ARG BUILDARCH
 RUN chmod 0755 /opt/flow/bin/* /opt/flow/image/*.sh && \
-    if [ -f /opt/flow/image/install-browser.sh ]; then /opt/flow/image/install-browser.sh; fi
+    smoke=run; if [ "${TARGETARCH}" != "${BUILDARCH:-${TARGETARCH}}" ]; then smoke=skip; fi && \
+    if [ -f /opt/flow/image/install-browser.sh ]; then FLOW_BROWSER_SMOKE_TEST="$smoke" /opt/flow/image/install-browser.sh; fi
 
 ENV HOME=/home/flow \
     PATH=/opt/flow/bin:/home/flow/.local/share/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
