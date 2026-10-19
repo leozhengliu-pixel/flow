@@ -243,7 +243,10 @@ export interface CodingSettings {
   loopRepositories: string[];
 }
 
-export interface CodingModelOption { id: string; label: string; harness: CodingHarness; auto?: boolean; reasoningEfforts?: CodingReasoningEffort[] }
+/** Model picker group: Auto first, then Frontier (with one-line descriptions), then Other models. */
+export type CodingModelGroup = "auto" | "frontier" | "other";
+/** `group` and `description` are optional: older servers omit them and the picker renders a flat list. */
+export interface CodingModelOption { id: string; label: string; harness: CodingHarness; auto?: boolean; group?: CodingModelGroup; description?: string; reasoningEfforts?: CodingReasoningEffort[] }
 
 export interface CodingPreflightCheck { name: string; ok: boolean; warning?: boolean; message: string }
 export type GitLabCredentialMode = "project-token" | "oauth" | "connection";

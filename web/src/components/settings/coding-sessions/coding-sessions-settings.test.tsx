@@ -132,6 +132,23 @@ describe("Coding sessions settings page", () => {
     expect(updateCodingSettings).toHaveBeenCalledWith({ reasoningEffort: "high" });
   });
 
+  it("groups the model menu under Frontier and Other models with descriptions", async () => {
+    vi.mocked(fetchCodingModels).mockResolvedValue([
+      { id: "auto", label: "Auto (gpt-5-codex)", harness: "codex", auto: true, group: "auto", description: "Uses adaptive routing to pick the best model" },
+      { id: "gpt-5-codex", label: "GPT-5 Codex", harness: "codex", group: "frontier", description: "Strong reasoning for multi-file changes" },
+      { id: "gpt-4.1", label: "GPT-4.1", harness: "codex", group: "other" },
+    ]);
+    const user = userEvent.setup();
+    renderCodingSettings();
+    await user.click(await screen.findByRole("combobox", { name: "Model" }));
+    const menu = await screen.findByRole("menu");
+    expect(menu).toHaveClass("cs-model-menu");
+    const labels = Array.from(menu.querySelectorAll(".cs-select-group, [role=menuitem]")).map((node) => node.textContent);
+    expect(labels).toEqual(["AutoUses adaptive routing to pick the best model", "Frontier", "GPT-5 CodexStrong reasoning for multi-file changes", "Other models", "GPT-4.1"]);
+    await user.click(screen.getByRole("menuitem", { name: /^GPT-4\.1/ }));
+    expect(updateCodingSettings).toHaveBeenCalledWith({ model: "gpt-4.1" });
+  });
+
   it("saves Require signed commits and reverts on failure", async () => {
     renderCodingSettings();
     const toggle = await screen.findByRole("checkbox", { name: "Require signed commits" });

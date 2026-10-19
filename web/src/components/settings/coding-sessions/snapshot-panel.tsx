@@ -8,6 +8,8 @@ import { toast } from "@/lib/toast";
 import type { CodingEnvironmentSnapshot, CodingSnapshotStatus } from "@/types/flow";
 import { SNAPSHOT_STATUS_LABEL, formatDuration, snapshotDuration, snapshotInProgress } from "./coding-sessions-model";
 import { CodingButton, CodingSection } from "./coding-settings-primitives";
+import { stripAnsi } from "./coding-xterm";
+import { SnapshotLogTerminal } from "./snapshot-log-terminal";
 import { errorMessage } from "./use-coding-settings";
 
 export const SNAPSHOT_POLL_MS = 3000;
@@ -123,12 +125,11 @@ export function SnapshotPanel({ environmentId, initial, disabled, onFixWithAgent
   );
 }
 
-/** "Snapshot logs": a 960px modal with the build log (polled until complete), outcome, Copy logs. */
+/** "Snapshot logs": a 960px modal with the build log in a read-only xterm (polled until complete), outcome, Copy logs. */
 function SnapshotLogsDialog({ snapshot, disabled, onClose, onChange, onFixWithAgent }: { snapshot: CodingEnvironmentSnapshot; disabled?: boolean; onClose: () => void; onChange: (snapshot: CodingEnvironmentSnapshot) => void; onFixWithAgent: (snapshotId: string) => void }) {
   const { t, formatRelative } = useI18n();
   const [logs, setLogs] = useState<{ logs: string; complete: boolean }>();
   const [canceling, setCanceling] = useState(false);
-  const region = useRef<HTMLPreElement>(null);
   const id = snapshot.id;
 
   useEffect(() => {
@@ -154,12 +155,6 @@ function SnapshotLogsDialog({ snapshot, disabled, onClose, onChange, onFixWithAg
     };
   }, [id, t]);
 
-  // Follow the output like a terminal.
-  useEffect(() => {
-    const element = region.current;
-    if (element) element.scrollTop = element.scrollHeight;
-  }, [logs?.logs]);
-
   const cancel = async () => {
     setCanceling(true);
     try {
@@ -172,7 +167,7 @@ function SnapshotLogsDialog({ snapshot, disabled, onClose, onChange, onFixWithAg
   };
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(logs?.logs ?? "");
+      await navigator.clipboard.writeText(stripAnsi(logs?.logs ?? ""));
       toast.success(t("Logs copied"));
     } catch {
       toast.error(t("Could not copy logs"));
@@ -195,9 +190,7 @@ function SnapshotLogsDialog({ snapshot, disabled, onClose, onChange, onFixWithAg
           <SnapshotStatusIcon status={snapshot.status} />
           <DialogTitle>{t("Snapshot logs")}</DialogTitle>
         </header>
-        <pre ref={region} className="cs-logs" data-testid="snapshot-logs" aria-live="polite" data-i18n-ignore={logs?.logs ? true : undefined}>
-          {logs ? logs.logs || t("No output yet") : t("Loading…")}
-        </pre>
+        <SnapshotLogTerminal text={logs?.logs ?? ""} placeholder={logs ? t("No output yet") : t("Loading…")} />
         {snapshot.status === "failed" && snapshot.error && <p className="cs-inline-error cs-logs-error" data-i18n-ignore>{snapshot.error}</p>}
         <footer className="cs-logs-footer">
           <span className="cs-logs-summary" data-testid="snapshot-summary" data-i18n-ignore>{summary}</span>

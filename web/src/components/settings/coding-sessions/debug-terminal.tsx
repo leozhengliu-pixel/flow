@@ -4,6 +4,7 @@ import { confirmAction } from "@/components/ui/action-dialog-service";
 import { useI18n } from "@/i18n/i18n";
 import { codingTerminalURL } from "@/lib/api";
 import { CodingButton } from "./coding-settings-primitives";
+import { createXTerm, observeResize, type XTerm } from "./coding-xterm";
 
 /** FLOW_CODING_DEBUG_TERMINAL_TTL default; the server may send the real deadline as `expiresAt`. */
 export const DEBUG_TERMINAL_TTL_MS = 20 * 60 * 1000;
@@ -12,23 +13,6 @@ type TerminalState = "idle" | "connecting" | "connected" | "closed" | "error";
 
 /** Text frames from the server: progress while the sandbox starts, then status or errors. */
 type ServerFrame = { type: "status" | "progress" | "ready"; message?: string; expiresAt?: string } | { type: "error"; message?: string } | { type: "exit"; code?: number; message?: string };
-
-type XTerm = {
-  open: (element: HTMLElement) => void;
-  write: (data: string | Uint8Array) => void;
-  onData: (listener: (data: string) => void) => { dispose: () => void };
-  onResize: (listener: (size: { cols: number; rows: number }) => void) => { dispose: () => void };
-  loadAddon: (addon: unknown) => void;
-  focus: () => void;
-  dispose: () => void;
-  cols: number;
-  rows: number;
-};
-
-function cssVar(name: string, fallback: string) {
-  const value = typeof window === "undefined" ? "" : getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return value || fallback;
-}
 
 function remaining(ms: number) {
   const total = Math.max(0, Math.round(ms / 1000));
@@ -81,19 +65,9 @@ export function DebugTerminal({ environmentId, disabled, available = true }: { e
     setMessage(t("Starting a temporary sandbox…"));
     setExpiresAt(undefined);
     let terminal: XTerm;
-    let fit: { fit: () => void } | undefined;
+    let fit: () => void;
     try {
-      const [{ Terminal }, { FitAddon }] = await Promise.all([import("@xterm/xterm"), import("@xterm/addon-fit"), import("@xterm/xterm/css/xterm.css")]);
-      terminal = new Terminal({
-        cursorBlink: true,
-        convertEol: false,
-        fontSize: 12,
-        fontFamily: cssVar("--font-monospace", "ui-monospace, Menlo, monospace"),
-        theme: { background: cssVar("--theme-surface-0", "black"), foreground: cssVar("--theme-text-primary", "white"), cursor: cssVar("--accent-primary", "white") },
-      }) as unknown as XTerm;
-      const addon = new FitAddon();
-      terminal.loadAddon(addon);
-      fit = addon;
+      ({ terminal, fit } = await createXTerm({ cursorBlink: true, convertEol: false, fontSize: 12 }));
     } catch {
       setState("error");
       setMessage(t("Could not load the terminal"));
@@ -103,22 +77,8 @@ export function DebugTerminal({ environmentId, disabled, available = true }: { e
     cleanup.current.push(() => terminal.dispose());
     if (container.current) {
       terminal.open(container.current);
-      try {
-        fit?.fit();
-      } catch {
-        // jsdom / hidden container
-      }
-      if (typeof ResizeObserver !== "undefined") {
-        const observer = new ResizeObserver(() => {
-          try {
-            fit?.fit();
-          } catch {
-            // ignore
-          }
-        });
-        observer.observe(container.current);
-        cleanup.current.push(() => observer.disconnect());
-      }
+      fit();
+      cleanup.current.push(observeResize(container.current, fit));
     }
 
     const ws = new WebSocket(codingTerminalURL(environmentId));

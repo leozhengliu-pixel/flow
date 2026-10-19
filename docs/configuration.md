@@ -897,6 +897,7 @@ Sandboxes never receive model API keys. Claude Code, Codex and the open-source h
 | `FLOW_CODING_MODELS_CLAUDE_CODE` | `claude-sonnet-4-5,claude-opus-4-1` | Claude Code model catalog. |
 | `FLOW_CODING_MODELS_CODEX` | `gpt-5-codex,gpt-5` | Codex model catalog. |
 | `FLOW_CODING_MODELS_OPEN_SOURCE` | empty | Open-source model catalog. |
+| `FLOW_CODING_MODEL_INFO` | empty | JSON display metadata for the model pickers: `{"gpt-5-codex":{"label":"GPT-5 Codex","group":"frontier","description":"Strong reasoning for multi-file changes"}}`. `group` is `frontier` or `other`; any field left out falls back to Flow's built-in labels and descriptions for well-known models, the model id, and a positional group (the first three catalog entries are Frontier, the rest Other models). Pickers list Auto, then Frontier, then Other models. |
 | `FLOW_CODING_MODEL_PRICES` | empty | JSON, USD per million tokens: `{"claude-sonnet-4-5":{"input":3,"output":15,"cacheRead":0.3,"cacheWrite":3.75}}`. Unpriced models are recorded at zero cost, with a warning log and the `flow_coding_llm_unpriced_total` metric. |
 | `FLOW_CODING_LLM_TIMEOUT` | `10m` | Upper bound for each proxied request, including streaming. |
 

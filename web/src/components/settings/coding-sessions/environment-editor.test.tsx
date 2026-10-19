@@ -26,6 +26,10 @@ import { toast } from "@/lib/toast";
 import type { CodingEnvironmentSnapshot } from "@/types/flow";
 import { ROOT, makeEnvironment, makeStatus, renderCodingSettings } from "./coding-sessions-test-kit";
 
+// The snapshot logs modal renders through xterm; jsdom has no canvas, so use a stand-in.
+vi.mock("@xterm/xterm", () => ({ Terminal: class { options = {}; open() {} write() {} reset() {} loadAddon() {} dispose() {} } }));
+vi.mock("@xterm/addon-fit", () => ({ FitAddon: class { fit() {} } }));
+vi.mock("@xterm/xterm/css/xterm.css", () => ({}));
 vi.mock("@/lib/api", async (original) => ({
   ...(await original<typeof import("@/lib/api")>()),
   fetchCodingStatus: vi.fn(),
