@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -195,51 +194,6 @@ func expireApproval(session *domain.CodingSession, now time.Time) {
 	session.Error = "Nobody approved this coding session in time."
 	session.UpdatedAt = now
 	session.EndedAt = &now
-}
-
-// ExpireApprovals ends the workspace's approval requests whose deadline has
-// passed. It is safe to run on every replica and alongside the session
-// reconciler (which applies the same rule through PhasePolicies): each end
-// is a version-checked update that only applies to a session still waiting.
-func (t *Triggers) ExpireApprovals(ctx context.Context, workspaceKey string) (int, error) {
-	if t.Sessions == nil {
-		return 0, nil
-	}
-	sessions, err := t.Sessions.ListCodingSessions(ctx, workspaceKey, SessionFilter{States: []domain.CodingSessionState{domain.CodingSessionAwaitingInput}, Limit: 500})
-	if err != nil {
-		return 0, fmt.Errorf("coding trigger: sessions: %w", err)
-	}
-	now := t.now()
-	expiredCount := 0
-	var errs []error
-	for _, session := range sessions {
-		if session.Phase != domain.CodingPhaseAwaitingApproval || now.Before(t.ApprovalDeadline(session)) {
-			continue
-		}
-		changed := false
-		updated, err := t.Sessions.UpdateCodingSession(ctx, workspaceKey, session.ID, func(current *domain.CodingSession) error {
-			changed = false
-			if current.Phase != domain.CodingPhaseAwaitingApproval || now.Before(t.ApprovalDeadline(*current)) {
-				return nil
-			}
-			expireApproval(current, now)
-			changed = true
-			return nil
-		})
-		if err != nil {
-			if !errors.Is(err, ErrNotFound) {
-				errs = append(errs, err)
-			}
-			continue
-		}
-		if changed {
-			expiredCount++
-			if err := t.notifier().ApprovalResolved(ctx, updated, "expired", ""); err != nil {
-				errs = append(errs, err)
-			}
-		}
-	}
-	return expiredCount, errors.Join(errs...)
 }
 
 func shortHash(value string) string {

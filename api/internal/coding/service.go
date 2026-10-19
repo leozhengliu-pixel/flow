@@ -107,6 +107,11 @@ type Service struct {
 	// inline instead of restoring a VolumeSnapshot. Archive snapshots need no
 	// hook (the runner downloads them).
 	RestoreSnapshot func(ctx context.Context, storageRef, sandboxID, workspaceKey string) (sandbox.VolumeSource, error)
+	// ApprovalExpired is called once when an awaitingApproval session ends
+	// with approvalExpired (track L's "approval expired" notification). The
+	// session reconciler is the only owner of that transition; the hook runs
+	// after the version-checked commit, so a lost race never notifies twice.
+	ApprovalExpired func(ctx context.Context, session domain.CodingSession)
 }
 
 // codedError extracts an explicit session error code from an error.
@@ -508,6 +513,9 @@ func (s *Service) afterTransition(ctx context.Context, before, after domain.Codi
 	}
 	if before.Phase == after.Phase && !created {
 		return
+	}
+	if before.Phase == domain.CodingPhaseAwaitingApproval && after.Phase == domain.CodingPhaseDone && after.ErrorCode == domain.CodingErrApprovalExpired && s.ApprovalExpired != nil {
+		s.ApprovalExpired(ctx, after)
 	}
 	switch {
 	case after.Phase == domain.CodingPhaseIdle && (before.Phase == domain.CodingPhaseRunning || before.Phase == domain.CodingPhasePublishing):

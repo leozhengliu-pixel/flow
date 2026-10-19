@@ -577,3 +577,35 @@ func TestCodingSessionGitLabFollowUpEndToEnd(t *testing.T) {
 		t.Fatalf("the MR note must queue a follow-up turn: %+v", items)
 	}
 }
+
+// Track L's "approval expired" notice is posted by the session core's
+// ApprovalExpired hook (the reconciler owns the expiry); it lands once on the
+// anchor however often the hook runs.
+func TestCodingApprovalExpiredNotice(t *testing.T) {
+	e := newCodingE2E(t)
+	ctx := context.Background()
+	session, created, err := e.s.coding.service.Start(ctx, coding.StartInput{WorkspaceKey: "test-workspace", Source: domain.CodingSourceExternal, Prompt: "From email", CreatorID: e.viewer.ID, RequireApproval: true, IdempotencyKey: "approval-notice"})
+	if err != nil || !created || session.Phase != domain.CodingPhaseAwaitingApproval {
+		t.Fatalf("start: %+v %v %v", session, created, err)
+	}
+	session.Phase, session.ErrorCode = domain.CodingPhaseDone, domain.CodingErrApprovalExpired
+	for range 2 {
+		e.s.coding.service.ApprovalExpired(ctx, session)
+	}
+	activities, err := e.repo.AgentActivities(ctx, "test-workspace", session.AgentSessionID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	notices := 0
+	for _, activity := range activities {
+		if activity.Metadata["codingKey"] == "approval:expired" {
+			notices++
+			if activity.Metadata["decision"] != "expired" || !strings.Contains(activity.Body, "in time") {
+				t.Fatalf("notice: %+v", activity)
+			}
+		}
+	}
+	if notices != 1 {
+		t.Fatalf("approval expired notices = %d, want 1", notices)
+	}
+}
