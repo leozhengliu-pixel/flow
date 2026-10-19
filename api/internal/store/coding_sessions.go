@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -260,6 +261,13 @@ func (s *SQLiteStore) ListCodingSessions(ctx context.Context, workspaceKey strin
 // version CAS), retrying lost races. The phase, its start and its deadline
 // are written by the same statement, so they can never disagree.
 // next_reconcile_at is written only when mutate changed NextReconcileAt.
+//
+// A mutation that changes nothing (an idempotent action repeated, a
+// reconcile pass that decided the same state) writes nothing and keeps the
+// version, and a coding_session.updated event is only published when a
+// field a session view shows changed (bookkeeping such as retry counters
+// or the phase deadline alone does not), so realtime volume follows real
+// progress rather than the reconcile interval.
 func (s *SQLiteStore) UpdateCodingSession(ctx context.Context, workspaceKey, id string, mutate func(*domain.CodingSession) error) (domain.CodingSession, error) {
 	for attempt := 0; attempt < 8; attempt++ {
 		current, err := s.CodingSession(ctx, workspaceKey, id)
@@ -267,10 +275,20 @@ func (s *SQLiteStore) UpdateCodingSession(ctx context.Context, workspaceKey, id 
 			return current, err
 		}
 		version, cost, next := current.Version, current.CostMicros, current.NextReconcileAt
+		before := current
+		beforeRaw, err := json.Marshal(before)
+		if err != nil {
+			return current, err
+		}
 		if err := mutate(&current); err != nil {
 			return current, err
 		}
 		current.ID, current.WorkspaceKey, current.CostMicros = id, workspaceKey, cost
+		if unchanged, err := sameCodingSessionDocument(beforeRaw, current, version, before.UpdatedAt); err != nil {
+			return current, err
+		} else if unchanged && (current.NextReconcileAt.Equal(next) || current.NextReconcileAt.IsZero()) {
+			return before, nil
+		}
 		current.Version = version + 1
 		current.UpdatedAt = time.Now().UTC()
 		raw, err := json.Marshal(current)
@@ -291,11 +309,41 @@ func (s *SQLiteStore) UpdateCodingSession(ctx context.Context, workspaceKey, id 
 		if count, err := result.RowsAffected(); err != nil {
 			return current, err
 		} else if count == 1 {
-			s.publishCodingSessionUpdate(workspaceKey, "coding_session.updated", current)
+			if codingSessionVisiblyChanged(before, current) {
+				s.publishCodingSessionUpdate(workspaceKey, "coding_session.updated", current)
+			}
 			return current, nil
 		}
 	}
 	return domain.CodingSession{}, ErrCodingVersionConflict
+}
+
+// sameCodingSessionDocument reports whether mutated serializes to the stored
+// document once the write-time fields (version, updated_at) are put back.
+func sameCodingSessionDocument(beforeRaw []byte, mutated domain.CodingSession, version int64, updatedAt time.Time) (bool, error) {
+	mutated.Version, mutated.UpdatedAt = version, updatedAt
+	afterRaw, err := json.Marshal(mutated)
+	if err != nil {
+		return false, err
+	}
+	return bytes.Equal(beforeRaw, afterRaw), nil
+}
+
+// codingSessionVisiblyChanged reports whether an update changed anything a
+// session view shows. Reconciler bookkeeping that only moves on its own
+// (retry counters, the phase deadline, the harness resume id, the version
+// and timestamp of the write) does not count.
+func codingSessionVisiblyChanged(before, after domain.CodingSession) bool {
+	strip := func(session domain.CodingSession) domain.CodingSession {
+		session.Version, session.UpdatedAt = 0, time.Time{}
+		session.Attempts, session.SandboxAttempts = 0, 0
+		session.PhaseDeadline, session.NextReconcileAt = nil, time.Time{}
+		session.HarnessResumeID = ""
+		return session
+	}
+	left, leftErr := json.Marshal(strip(before))
+	right, rightErr := json.Marshal(strip(after))
+	return leftErr != nil || rightErr != nil || !bytes.Equal(left, right)
 }
 
 // publishCodingSessionUpdate pushes a coding_session.* realtime event
