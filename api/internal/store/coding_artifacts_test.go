@@ -95,6 +95,34 @@ func TestCodingArtifactsStore(t *testing.T) {
 	}
 }
 
+func TestCodingArtifactsOrderWithinOneMillisecond(t *testing.T) {
+	repo, err := OpenSQLite(filepath.Join(t.TempDir(), "artifacts.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { repo.Close() })
+	at := time.Date(2026, 10, 19, 9, 0, 0, 0, time.UTC)
+	for _, artifact := range []domain.CodingArtifact{
+		{ID: "b-tied", SessionID: "s1", CreatedAt: at.Add(900 * time.Microsecond)},
+		{ID: "a-later", SessionID: "s1", CreatedAt: at.Add(900 * time.Microsecond)},
+		{ID: "z-earlier", SessionID: "s1", CreatedAt: at.Add(100 * time.Microsecond)},
+		{ID: "m-previous-millisecond", SessionID: "s1", CreatedAt: at.Add(-time.Millisecond)},
+	} {
+		if err := repo.AddCodingArtifact(t.Context(), "w", artifact, "object_"+artifact.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	artifacts, err := repo.CodingArtifacts(t.Context(), "w", "s1")
+	if err != nil || len(artifacts) != 4 {
+		t.Fatalf("artifacts: %+v %v", artifacts, err)
+	}
+	for index, want := range []string{"m-previous-millisecond", "z-earlier", "a-later", "b-tied"} {
+		if artifacts[index].ID != want {
+			t.Fatalf("artifact %d = %s, want %s (oldest first, ID breaks exact ties)", index, artifacts[index].ID, want)
+		}
+	}
+}
+
 func TestOrphanCodingArtifactSessions(t *testing.T) {
 	repo, err := OpenSQLite(filepath.Join(t.TempDir(), "artifacts.db"))
 	if err != nil {
