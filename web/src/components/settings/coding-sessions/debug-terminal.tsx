@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { SquareTerminal } from "lucide-react";
+import { Play, Square } from "lucide-react";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { useI18n } from "@/i18n/i18n";
 import { codingTerminalURL } from "@/lib/api";
@@ -199,27 +199,38 @@ export function DebugTerminal({ environmentId, disabled, available = true }: { e
   };
 
   const live = state === "connecting" || state === "connected";
+  const idleText = !available ? t("The debug terminal is turned off on this server.") : state === "closed" && message ? message : t("No terminal is running.");
   return (
     <div className="cs-terminal" data-testid="debug-terminal" data-state={state}>
-      <div className="feature-row cs-row">
-        <span className="feature-row-icon"><SquareTerminal size={16} /></span>
-        <div>
-          <strong>{t("Debug terminal")}</strong>
-          <span>{t("Opens a shell in a temporary sandbox that is destroyed after 20 minutes. Billed at the same rate as sandbox runtime.")}</span>
+      {state === "error" ? (
+        <div className="cs-terminal-error">
+          <div className="cs-terminal-error-title">
+            <span className="cs-status-dot" aria-hidden="true" />
+            {t("Terminal failed")}
+          </div>
+          <p role="status">{message}</p>
+          <div className="cs-terminal-actions">
+            <CodingButton small disabled={disabled || !available} onClick={() => void connect()}>Retry terminal</CodingButton>
+          </div>
         </div>
-        <aside>
-          {state === "connected" && expiresAt && <span className="feature-state" data-testid="terminal-countdown">{t("Expires in {time}").replace("{time}", remaining(expiresAt - now))}</span>}
-          {state === "connected" && <CodingButton onClick={() => void runPrepare()}>Run prepare script</CodingButton>}
-          {live ? (
-            <CodingButton onClick={disconnect}>Disconnect</CodingButton>
-          ) : (
-            <CodingButton disabled={disabled || !available} onClick={() => void connect()}>{state === "idle" ? "Open terminal" : "Reconnect"}</CodingButton>
-          )}
-        </aside>
-      </div>
-      {!available && <p className="cs-card-text">{t("The debug terminal is turned off on this server.")}</p>}
-      {message && <p className={`cs-terminal-status${state === "error" ? " is-error" : ""}`} role="status">{message}</p>}
-      <div ref={container} className={`cs-terminal-screen${state === "idle" ? " is-hidden" : ""}`} />
+      ) : live ? (
+        <div className="cs-terminal-bar">
+          <span className="cs-terminal-text" role="status">{message ?? t("Connected to a temporary sandbox.")}</span>
+          {state === "connected" && expiresAt && <span className="cs-terminal-countdown" data-testid="terminal-countdown">{t("Expires in {time}").replace("{time}", remaining(expiresAt - now))}</span>}
+          {state === "connected" && <CodingButton small onClick={() => void runPrepare()}>Run prepare script</CodingButton>}
+          <button type="button" className="cs-icon-button" aria-label={t("Stop terminal")} title={t("Stop terminal")} onClick={disconnect}>
+            <Square size={12} />
+          </button>
+        </div>
+      ) : (
+        <div className="cs-terminal-bar">
+          <span className="cs-terminal-text" role="status">{idleText}</span>
+          <button type="button" className="cs-icon-button" aria-label={t("Start terminal")} title={t("Start terminal")} disabled={disabled || !available} onClick={() => void connect()}>
+            <Play size={14} />
+          </button>
+        </div>
+      )}
+      <div ref={container} className={`cs-terminal-screen${live ? "" : " is-hidden"}`} />
     </div>
   );
 }
