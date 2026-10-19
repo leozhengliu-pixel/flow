@@ -1,0 +1,5 @@
+coding:
+  llm:
+    modelInfo:
+      gpt-5-codex:
+        group: invalid

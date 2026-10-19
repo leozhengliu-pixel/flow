@@ -475,15 +475,19 @@ data:
   FLOW_CODING_EGRESS_NO_PROXY: "internal.example.com"
   FLOW_CODING_LLM_ANTHROPIC_BASE_URL: "https://api.anthropic.com"
   FLOW_CODING_LLM_OPENAI_BASE_URL: "https://api.openai.com/v1"
+  FLOW_CODING_LLM_OPENAI_WIRE_API: "chat"
   FLOW_CODING_LLM_OPENSOURCE_BASE_URL: "http://vllm.ai.svc:8000/v1"
   FLOW_CODING_MODELS_CLAUDE_CODE: "claude-sonnet-4-5,claude-opus-4-1"
   FLOW_CODING_MODELS_CODEX: "gpt-5-codex,gpt-5"
   FLOW_CODING_MODELS_OPEN_SOURCE: "qwen3-coder"
   FLOW_CODING_MODEL_PRICES: "{\"claude-sonnet-4-5\":{\"input\":3,\"output\":15}}"
+  FLOW_CODING_MODEL_INFO: "{\"gpt-5-codex\":{\"description\":\"Multi-file changes\",\"group\":\"frontier\",\"label\":\"GPT-5 Codex\"}}"
   FLOW_CODING_LLM_TIMEOUT: "5m"
   FLOW_CODING_RUNTIME_PRICES: "large=0.20,medium=0.10,small=0.05"
   FLOW_CODING_GITLAB_CREDENTIAL_MODE: "oauth"
   FLOW_CODING_GITLAB_TOKEN_SCOPES: "read_repository,write_repository,read_api,api"
+  FLOW_CODING_LOCAL_COMMAND: "/opt/development/launcher"
+  FLOW_CODING_LOCAL_ROOT: "/tmp/development-sandboxes"
   # GitHub App (also used for workspace PR sync).
   FLOW_GITHUB_APP_ID: "123456"
   FLOW_GITHUB_APP_SLUG: "flow-agent"
@@ -871,7 +875,7 @@ spec:
         app.kubernetes.io/instance: flow
         app.kubernetes.io/component: api
       annotations:
-        checksum/config: 1bd8aeabfe433bb10e86dd62f3f08ed5a8ffcea8582146419093ba4a8e2f6a51
+        checksum/config: af22278b12a8419cfcafff3e6988c3a4284e24c74b037c5b5afeabd2e669e38a
         checksum/secret: e891932d726785fffb0b07bdd11b0e8ab743e922733061fa446dea1fc3c8cec9
     spec:
       serviceAccountName: flow

@@ -57,12 +57,19 @@ coding:
   llm:
     timeout: 5m
     anthropic: {apiKey: sk-ant-test}
-    openai: {apiKey: sk-openai-test}
+    openai: {apiKey: sk-openai-test, wireApi: chat}
     opensource: {baseUrl: "http://vllm.ai.svc:8000/v1", apiKey: oss-test}
     models:
       openSource: [qwen3-coder]
     prices:
       claude-sonnet-4-5: {input: 3, output: 15}
+    modelInfo:
+      gpt-5-codex: {label: GPT-5 Codex, group: frontier, description: Multi-file changes}
+  # The local provider is development-only and not a Helm provider. Exercise
+  # its optional settings through the generic environment passthrough.
+  extraEnv:
+    FLOW_CODING_LOCAL_COMMAND: /opt/development/launcher
+    FLOW_CODING_LOCAL_ROOT: /tmp/development-sandboxes
   runtimePrices: {small: "0.05", medium: "0.10", large: "0.20"}
   gitlab:
     credentialMode: oauth

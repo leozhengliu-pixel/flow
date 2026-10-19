@@ -143,11 +143,13 @@ data:
   FLOW_CODING_EGRESS_NO_PROXY: {{ join "," $c.egress.noProxy | quote }}
   FLOW_CODING_LLM_ANTHROPIC_BASE_URL: {{ $c.llm.anthropic.baseUrl | quote }}
   FLOW_CODING_LLM_OPENAI_BASE_URL: {{ $c.llm.openai.baseUrl | quote }}
+  FLOW_CODING_LLM_OPENAI_WIRE_API: {{ $c.llm.openai.wireApi | quote }}
   FLOW_CODING_LLM_OPENSOURCE_BASE_URL: {{ $c.llm.opensource.baseUrl | quote }}
   FLOW_CODING_MODELS_CLAUDE_CODE: {{ join "," $c.llm.models.claudeCode | quote }}
   FLOW_CODING_MODELS_CODEX: {{ join "," $c.llm.models.codex | quote }}
   FLOW_CODING_MODELS_OPEN_SOURCE: {{ join "," $c.llm.models.openSource | quote }}
   FLOW_CODING_MODEL_PRICES: {{ if $c.llm.prices }}{{ $c.llm.prices | toJson | quote }}{{ else }}""{{ end }}
+  FLOW_CODING_MODEL_INFO: {{ if $c.llm.modelInfo }}{{ $c.llm.modelInfo | toJson | quote }}{{ else }}""{{ end }}
   FLOW_CODING_LLM_TIMEOUT: {{ $c.llm.timeout | quote }}
   FLOW_CODING_RUNTIME_PRICES: {{ include "flow.kvcsv" $c.runtimePrices | quote }}
   FLOW_CODING_GITLAB_CREDENTIAL_MODE: {{ $c.gitlab.credentialMode | quote }}

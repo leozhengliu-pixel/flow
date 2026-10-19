@@ -395,11 +395,13 @@ data:
   FLOW_CODING_EGRESS_NO_PROXY: ""
   FLOW_CODING_LLM_ANTHROPIC_BASE_URL: "https://api.anthropic.com"
   FLOW_CODING_LLM_OPENAI_BASE_URL: "https://api.openai.com/v1"
+  FLOW_CODING_LLM_OPENAI_WIRE_API: "responses"
   FLOW_CODING_LLM_OPENSOURCE_BASE_URL: ""
   FLOW_CODING_MODELS_CLAUDE_CODE: "claude-sonnet-4-5,claude-opus-4-1"
   FLOW_CODING_MODELS_CODEX: "gpt-5-codex,gpt-5"
   FLOW_CODING_MODELS_OPEN_SOURCE: ""
   FLOW_CODING_MODEL_PRICES: ""
+  FLOW_CODING_MODEL_INFO: ""
   FLOW_CODING_LLM_TIMEOUT: "10m"
   FLOW_CODING_RUNTIME_PRICES: "large=0.40,medium=0.20,small=0.10"
   FLOW_CODING_GITLAB_CREDENTIAL_MODE: "project-token"
@@ -681,7 +683,7 @@ spec:
         app.kubernetes.io/instance: flow
         app.kubernetes.io/component: api
       annotations:
-        checksum/config: 57d453da65f7028a1e29d3cfa583ec9aced9212416f0063339d62175ded597de
+        checksum/config: 6a0a3f23309a6af8ea075b18242cbfe7b42b73c6dbd8b2f3d0aa7a74210bde36
         checksum/secret: 191b05a309042a4c5fef2dc1fda00c51382fde225ef3d456615981a2d8048b38
     spec:
       serviceAccountName: flow
