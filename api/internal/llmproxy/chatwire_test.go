@@ -345,6 +345,9 @@ func TestChatWireStreaming(t *testing.T) {
 		t.Fatalf("usage record: %+v", record)
 	}
 	assertLogsClean(t, h.logs.String())
+	if !strings.Contains(h.logs.String(), `"endpoint":"responses->chat_completions"`) {
+		t.Fatalf("the request log must show the translation: %s", h.logs.String())
+	}
 }
 
 // TestChatWireRoundTrip feeds the reasoning item of one response back as input
