@@ -72,7 +72,7 @@ function CodingSessionsOverview({ data, settings: workspaceSettings, disabled, o
   const models = useCodingModels();
   const { settings, update, error: policyError } = useCodingPolicy(workspaceSettings.codingAgentSettings, enabled);
   const [showArchived, setShowArchived] = useState(false);
-  const { environments, archived, loaded, error, reload } = useCodingEnvironments(showArchived);
+  const { environments, archived, loaded, error, reload } = useCodingEnvironments(true);
   // Without a reachable status API the code host is unknown; don't block the toggle on it.
   const needsCodeAccess = statusLoaded && status !== undefined && !hasConnectedCodeHost(status);
   const active = enabled && !needsCodeAccess;
@@ -148,12 +148,14 @@ function CodingSessionsOverview({ data, settings: workspaceSettings, disabled, o
             </div>
           )}
         </CodingCard>
-        <div className="cs-archived-toggle">
-          <button type="button" className="cs-text-button" aria-expanded={showArchived} onClick={() => setShowArchived((value) => !value)}>
-            {t(showArchived ? "Hide archived environments" : "Show archived environments")}
-          </button>
-        </div>
-        {showArchived && (
+        {archived.length > 0 && (
+          <div className="cs-archived-toggle">
+            <button type="button" className="cs-text-button" aria-expanded={showArchived} onClick={() => setShowArchived((value) => !value)}>
+              {t(showArchived ? "Hide archived environments" : "Show archived environments")}
+            </button>
+          </div>
+        )}
+        {showArchived && archived.length > 0 && (
           <CodingCard className="cs-environments is-archived">
             {archived.map((environment) => (
               <div key={environment.id} className="feature-row cs-row">
@@ -184,7 +186,17 @@ function CodingSessionsOverview({ data, settings: workspaceSettings, disabled, o
       </CodingSection>
 
       <TrustedSourcesSection settings={settings} update={update} disabled={controlsDisabled} onOpenCodeAccess={() => onOpenIntegration?.("github")} />
-      <LoopRepositoryAccess settings={settings} update={update} environments={environments} disabled={controlsDisabled} onOpenLoops={() => onNavigateSettings?.("loops")} />
+      <section className="feature-section cs-section cs-loop-access">
+        <CodingCard>
+          <CodingLinkRow
+            figure
+            icon={<LoopsGlyph size={16} />}
+            title="Repository access for Loops"
+            description="Choose which repos Loops can use for coding sessions"
+            onClick={() => onNavigateSettings?.("loops")}
+          />
+        </CodingCard>
+      </section>
       {data.viewerRole !== "admin" && data.viewerRole !== "owner" && <p className="cs-admin-hint">{t("Only workspace admins can change coding session settings.")}</p>}
     </div>
   );
@@ -195,7 +207,7 @@ function EnableIntegrationButton({ disabled, onOpenIntegration }: { disabled?: b
   const { t } = useI18n();
   return (
     <button type="button" className="feature-button primary cs-integration-button" disabled={disabled} onClick={() => onOpenIntegration?.("github")}>
-      <IntegrationBrandIcon provider="github" size={14} />
+      <IntegrationBrandIcon provider="github" size={16} />
       {t("Enable integration")}
       <ArrowUpRight size={12} />
     </button>
@@ -232,7 +244,7 @@ function PolicyRows({ settings, update, models, status, disabled }: { settings: 
           onChange={(model) => void update({ model })}
         />
       </CodingRow>
-      {efforts.length > 0 && (
+      {efforts.length > 0 && settings.model !== "auto" && (
         <CodingRow title="Reasoning effort" description="How long the agent thinks before acting" disabled={disabled}>
           <CodingSelect
             label="Reasoning effort"
@@ -250,7 +262,7 @@ function PolicyRows({ settings, update, models, status, disabled }: { settings: 
         title="Pin sandbox region"
         disabled={disabled}
         description={regions.length
-          ? <span data-i18n-ignore>{t("Pin new coding session sandboxes to {region}.").replace("{region}", settings.pinnedRegion || regions[0])}</span>
+          ? <span data-i18n-ignore>{t("Pin new coding session sandboxes to {region}.").replace("{region}", settings.pinnedRegion || regions[0])} {t("Region pinning raises the sandbox compute price.")}</span>
           : "No sandbox regions are configured on this server"}
       >
         {pinned && regions.length > 1 && (
@@ -326,55 +338,6 @@ function TrustedSourcesSection({ settings, update, disabled, onOpenCodeAccess }:
         )}
       </CodingCard>
     </CodingSection>
-  );
-}
-
-function LoopRepositoryAccess({ settings, update, environments, disabled, onOpenLoops }: { settings: CodingSettings; update: (patch: Partial<CodingSettings>) => Promise<void>; environments: CodingEnvironment[]; disabled: boolean; onOpenLoops: () => void }) {
-  const { t } = useI18n();
-  const selected = new Set(settings.loopRepositories);
-  return (
-    <section className="feature-section cs-section cs-loop-access">
-      <CodingCard>
-        <CodingRow title="Repository access for Loops" description="Choose which repos Loops can use for coding sessions" icon={<LoopsGlyph size={16} />}>
-          <CodingSelect
-            label="Repository access for Loops"
-            value={settings.loopRepositoryAccess}
-            disabled={disabled}
-            options={[
-              { value: "none", label: "No repositories" },
-              { value: "all", label: "All repositories" },
-              { value: "selected", label: "Selected repositories" },
-            ]}
-            onChange={(value) => void update({ loopRepositoryAccess: value as CodingSettings["loopRepositoryAccess"] })}
-          />
-        </CodingRow>
-        {settings.loopRepositoryAccess === "selected" && (
-          <div className="cs-loop-repos">
-            {environments.length === 0 && <p className="cs-card-text">{t("Create an environment to give Loops access to its repository.")}</p>}
-            {environments.map((environment) => (
-              <label key={environment.id} className="cs-check-row">
-                <input
-                  type="checkbox"
-                  checked={selected.has(environment.id)}
-                  disabled={disabled}
-                  onChange={(event) => {
-                    const next = new Set(selected);
-                    if (event.target.checked) next.add(environment.id);
-                    else next.delete(environment.id);
-                    void update({ loopRepositories: [...next] });
-                  }}
-                />
-                <span data-i18n-ignore>{environment.repository}</span>
-                <small data-i18n-ignore>{environment.name}</small>
-              </label>
-            ))}
-          </div>
-        )}
-      </CodingCard>
-      <div className="cs-archived-toggle">
-        <button type="button" className="cs-text-button" onClick={onOpenLoops}>{t("Loops settings")}</button>
-      </div>
-    </section>
   );
 }
 

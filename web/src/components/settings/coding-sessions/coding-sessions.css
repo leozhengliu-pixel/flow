@@ -2,24 +2,33 @@
    Layout comes from feature-settings.css; values below match the reference app's measured page:
    row titles 13px/500, descriptions 12px/450 secondary, 30px selects with 8px radius. */
 .cs-settings .feature-row strong { font-weight: 500; }
-.cs-settings .feature-row.is-disabled > div { opacity: .55; }
+.cs-settings .feature-row.is-disabled > div { opacity: .5; }
+.cs-settings .feature-row.is-disabled .feature-select:disabled, .cs-settings .feature-row.is-disabled [data-control=toggle]:disabled { opacity: .5; }
+.cs-settings .feature-row aside > [data-control=toggle] { margin-right: 6px; }
+.cs-settings .feature-header { margin-bottom: 32px; }
+.cs-settings .feature-header p { margin-top: 4px; line-height: 22px; }
+.cs-settings .feature-section > header p { margin-top: 2px; line-height: 22px; }
+.cs-settings .feature-docs-link { padding: 1px 4px; border-radius: 8px; }
 .cs-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .cs-header > div { min-width: 0; }
-.cs-header-link { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; height: 24px; margin-top: 36px; padding: 0 2px; border: 0; background: none; color: var(--theme-text-primary); font: 500 13px var(--font); cursor: pointer; }
-.cs-header-link:hover { color: var(--theme-text-secondary); }
+.cs-header-link { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; height: 24px; margin: 36px -6px 0 0; padding: 0 6px 0 8px; border: 1px solid transparent; border-radius: 9999px; background: none; color: var(--text-body); font: 500 12px var(--font); cursor: pointer; }
+.cs-header-link:hover { background: var(--theme-surface-hover); color: var(--text-strong); }
 .cs-header-link:focus-visible, .cs-text-button:focus-visible, .cs-icon-button:focus-visible, .cs-inline-link:focus-visible { outline: 0; box-shadow: 0 0 0 2px var(--focus-ring); border-radius: 6px; }
-.cs-row-warning { display: inline-flex !important; align-items: center; gap: 5px; }
+.cs-row-warning { display: inline-flex !important; align-items: center; gap: 4px; }
+.cs-row > div > .cs-row-warning { margin-top: -1px; }
 .cs-row-warning svg { flex: 0 0 auto; color: var(--priority-high); }
-.cs-integration-button { gap: 7px; }
-.cs-section-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.cs-integration-button { gap: 7px; margin-right: -6px; padding: 0 12px 0 10px !important; }
+.cs-section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.cs-section-header > .cs-icon-button { margin-right: -16px; }
 .cs-section-header > div { min-width: 0; }
-.cs-ghost { background: transparent !important; box-shadow: none !important; color: var(--theme-text-secondary) !important; font-weight: 450 !important; padding: 0 8px !important; }
+.cs-ghost { height: 24px !important; gap: 6px !important; background: transparent !important; box-shadow: none !important; color: var(--text-body) !important; font-size: 12px !important; font-weight: 500 !important; padding: 0 8px 0 6px !important; }
+.cs-ghost:disabled, .cs-settings .cs-icon-button:disabled { opacity: .6 !important; }
 .cs-ghost:hover:not(:disabled) { color: var(--theme-text-primary) !important; background: var(--theme-surface-hover) !important; }
 .cs-empty-row { min-height: 60px; }
-.cs-empty-text { color: var(--theme-text-primary) !important; font-size: 13px !important; line-height: 18px !important; }
-.cs-card-text { margin: 0; padding: 16px; color: var(--theme-text-secondary); font-size: 13px; line-height: 19px; }
+.cs-empty-text { color: var(--text-label) !important; font-size: 13px !important; line-height: 16px !important; }
+.cs-card-text { margin: 0; padding: 16px; color: var(--text-label); font-size: 13px; line-height: 16px; }
 .cs-compact-row { min-height: 48px; }
-.cs-icon-button { width: 24px; height: 24px; display: inline-grid; place-items: center; flex: 0 0 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--theme-text-secondary); cursor: pointer; }
+.cs-icon-button { width: 24px; height: 24px; display: inline-grid; place-items: center; flex: 0 0 24px; padding: 0; border: 0; border-radius: 9999px; background: transparent; color: var(--text-body); cursor: pointer; }
 .cs-icon-button:hover:not(:disabled) { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
 .cs-icon-button:disabled { opacity: .45; cursor: default; }
 .cs-inline-link { padding: 0; border: 0; background: none; color: var(--theme-text-primary); font: inherit; font-weight: 500; cursor: pointer; }
@@ -40,7 +49,9 @@
 .cs-select-option { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .cs-select-option small { color: var(--theme-text-secondary); font-size: 11px; }
 .cs-loop-access { margin-top: 48px; }
-.cs-loop-repos { display: grid; gap: 2px; padding: 4px 16px 12px 58px; border-top: 1px solid var(--theme-border); }
+.cs-row-figure { width: 32px; height: 32px; flex: 0 0 32px; display: grid; place-items: center; border-radius: 6px; background: var(--security-api-key-icon-bg); color: var(--text-strong); }
+.cs-link-row > aside > svg { color: var(--text-strong); }
+.cs-loop-repos { display: grid; gap: 2px; padding: 4px 16px 12px 60px; border-top: 1px solid var(--theme-border); }
 .cs-check-row { display: flex; align-items: center; gap: 8px; min-height: 30px; color: var(--theme-text-primary); font-size: 13px; }
 .cs-check-row small { color: var(--theme-text-secondary); font-size: 12px; }
 
