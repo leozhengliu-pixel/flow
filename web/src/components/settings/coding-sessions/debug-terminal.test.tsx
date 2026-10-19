@@ -104,15 +104,17 @@ function renderTerminal(props: Partial<Parameters<typeof DebugTerminal>[0]> = {}
 }
 
 async function connect() {
-  fireEvent.click(screen.getByRole("button", { name: "Open terminal" }));
+  fireEvent.click(screen.getByRole("button", { name: "Start terminal" }));
   await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
   return FakeWebSocket.instances[0];
 }
 
 describe("DebugTerminal", () => {
-  it("warns about the temporary, billed sandbox", () => {
+  it("shows the reference app's idle card", () => {
     renderTerminal();
-    expect(screen.getByText(/destroyed after 20 minutes\. Billed at the same rate as sandbox runtime\./)).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent("No terminal is running.");
+    expect(screen.getByRole("button", { name: "Start terminal" })).toBeEnabled();
+    expect(screen.getByTestId("debug-terminal").querySelector(".cs-terminal-screen")).toHaveClass("is-hidden");
   });
 
   it("connects, streams TTY bytes both ways and resizes", async () => {
@@ -157,11 +159,11 @@ describe("DebugTerminal", () => {
       ws.serverOpen();
       ws.serverBytes("$ ");
     });
-    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+    fireEvent.click(screen.getByRole("button", { name: "Stop terminal" }));
     expect(ws.closeCalls[0]).toEqual([1000, "closed by user"]);
     expect(screen.getByTestId("debug-terminal")).toHaveAttribute("data-state", "closed");
     expect(screen.getByRole("status")).toHaveTextContent("Disconnected. The temporary sandbox was stopped.");
-    fireEvent.click(screen.getByRole("button", { name: "Reconnect" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start terminal" }));
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
     expect(terminals[0].disposed).toBe(true);
   });
@@ -172,10 +174,14 @@ describe("DebugTerminal", () => {
     act(() => ws.serverOpen());
     act(() => ws.serverText({ type: "error", message: "Sandbox failed to start" }));
     expect(screen.getByTestId("debug-terminal")).toHaveAttribute("data-state", "error");
+    expect(screen.getByText("Terminal failed")).toBeVisible();
     expect(screen.getByRole("status")).toHaveTextContent("Sandbox failed to start");
     act(() => ws.serverClose(1011, ""));
     expect(screen.getByTestId("debug-terminal")).toHaveAttribute("data-state", "error");
     expect(String(terminals[0].written.at(-1))).toContain("[disconnected]");
+    fireEvent.click(screen.getByRole("button", { name: "Retry terminal" }));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
+    expect(screen.getByTestId("debug-terminal")).toHaveAttribute("data-state", "connecting");
   });
 
   it("shows the server's close reason when the sandbox deadline hits", async () => {
@@ -215,7 +221,7 @@ describe("DebugTerminal", () => {
 
   it("is unavailable when the server turns the terminal off", () => {
     renderTerminal({ available: false });
-    expect(screen.getByRole("button", { name: "Open terminal" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Start terminal" })).toBeDisabled();
     expect(screen.getByText("The debug terminal is turned off on this server.")).toBeVisible();
   });
 });

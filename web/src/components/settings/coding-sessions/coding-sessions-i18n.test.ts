@@ -11,7 +11,7 @@ const PATTERNS = [
   /\?\s*"([A-Z][A-Za-z ]+)"\s*:\s*"([A-Z][A-Za-z ]+)"/g,
 ];
 /** Product names, identifiers and examples stay as written. */
-const LITERAL = new Set(["Codex", "Claude Code", "Slack", "Intercom", "Zendesk", "Front", "Sentry", "NAME", "node", ".npmrc", "Auto", "GitHub", "GitLab"]);
+const LITERAL = new Set(["Codex", "Claude Code", "Slack", "Intercom", "Zendesk", "Front", "Sentry", "NAME", "node", ".npmrc", "Auto", "GitHub", "GitLab", "VARIABLE_NAME", "npm ci", ".example.com", ...["Node.js", "Bun", "Deno", "Python", "Ruby", "Go", "Rust", "Java", ".NET", "PostgreSQL", "Redis", "MongoDB", "ClickHouse"]]);
 
 describe("coding sessions translations", () => {
   it("has a Chinese translation for every literal string", () => {

@@ -178,3 +178,15 @@ export function useDismissedCodingSessions(workspace: string, viewerId: string) 
   }, [key])
   return { dismissed, dismiss }
 }
+
+/** Ticks once a second while `live`, for running timers. */
+export function useNow(live: boolean) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!live) return
+    setNow(Date.now())
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [live])
+  return now
+}
