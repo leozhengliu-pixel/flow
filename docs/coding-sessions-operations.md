@@ -172,6 +172,108 @@ Other secrets:
 - **Model provider keys**: update `flow-env` and restart Flow. Sandboxes never see them.
 - **`FLOW_CODING_SECRET_KEY`**: there is no in-place re-encryption. Changing it makes existing environment secrets and signing keys unreadable; owners must re-add them.
 
+## OpenSandbox
+
+With `coding.provider: opensandbox` Flow creates sandboxes through an
+OpenSandbox lifecycle server (design §9.1) instead of creating Pods itself.
+The chart then renders no sandbox namespace, Role, ResourceQuota, LimitRange,
+RuntimeClass or sandbox NetworkPolicies, and Flow mounts no ServiceAccount
+token: OpenSandbox owns the sandbox Pods. Tested against the API specs of
+OpenSandbox `release-1.1.0`.
+
+### In-cluster deployment
+
+Flow and OpenSandbox in the same cluster (the expected setup):
+
+```text
+flow namespace                         opensandbox-system           opensandbox
+┌────────────┐  /v1/sandboxes, proxy   ┌──────────────────┐  creates ┌──────────────────┐
+│ Flow Pods  │ ──────────────────────▶ │ opensandbox-     │ ───────▶ │ sandbox Pods     │
+│ :8080/8090 │                         │ server (:80)     │  execd   │ flow-runner,     │
+└────────────┘ ◀─── runtime API, LLM proxy (FLOW_CODING_RUNTIME_URL) ─│ execd :44772     │
+┌────────────┐ ◀──────────────── HTTP(S)_PROXY ────────────────────── └──────────────────┘
+│ flow-egress│
+└────────────┘
+```
+
+1. Install OpenSandbox (controller, CRDs, `opensandbox-server`) per its
+   Kubernetes deployment guide, with an API key in a Secret. Note the server
+   Service (default `opensandbox-server.opensandbox-system.svc.cluster.local:80`),
+   the sandbox namespace (`[kubernetes].namespace`, default `opensandbox`) and
+   whether the egress sidecar (`[egress]`) and a secure runtime
+   (`[secure_runtime]`: gVisor/Kata) are configured. Raise
+   `[server].max_sandbox_timeout_seconds` to at least `coding.opensandbox.expiryWindow`
+   and `sandbox_create_timeout_seconds` enough for the first pull of the Flow
+   sandbox image (several GB).
+2. Copy the API key into a Secret in Flow's namespace (Secrets are namespaced):
+   ```bash
+   kubectl -n flow create secret generic opensandbox-api-key \
+     --from-literal=api-key="$(kubectl -n opensandbox-system get secret opensandbox-api-key -o jsonpath='{.data.api-key}' | base64 -d)"
+   ```
+3. Values:
+   ```yaml
+   coding:
+     enabled: true
+     provider: opensandbox
+     runtimePort: {enabled: true}      # sandboxes only need the runtime port
+     # runtimeUrl: ""                  # default: Flow's in-cluster Service URL
+     opensandbox:
+       url: http://opensandbox-server.opensandbox-system.svc.cluster.local
+       existingSecret: {name: opensandbox-api-key, key: api-key}
+       sandboxNamespace: opensandbox
+       serverNamespace: opensandbox-system
+       egressPolicy: "proxy"           # only with OpenSandbox's egress sidecar
+       networkPolicy: {enabled: true}  # see below
+   networkPolicy:
+     enabled: true                     # Flow accepts the runtime port from the sandbox namespace
+   ```
+   The sandbox → Flow callbacks (runtime API, LLM proxy, snapshot archives) use
+   `FLOW_CODING_RUNTIME_URL`, which defaults to Flow's Service URL; the egress
+   proxy runs in Flow's namespace and sandboxes get it as `HTTP(S)_PROXY`.
+4. `helm upgrade`, then check **Settings → Coding → Diagnostics** (preflight:
+   server reachable, API key accepted) and start a session.
+
+### NetworkPolicies
+
+- `networkPolicy.enabled` (Flow's own policy) admits the runtime port from
+  `coding.opensandbox.sandboxNamespace` and, with the ACL helper, from the
+  egress proxy.
+- The egress proxy's policy admits only that namespace (and
+  `coding.opensandbox.networkPolicy.podSelector`).
+- `coding.opensandbox.networkPolicy.enabled` renders a policy **in OpenSandbox's
+  sandbox namespace** for Pods labelled `flow.dev/managed-by: flow`: ingress only
+  from the OpenSandbox server namespace (execd and the egress sidecar are
+  reached through the server proxy), egress only to DNS, Flow's runtime port and
+  the egress proxy. It relies on OpenSandbox copying sandbox metadata onto Pod
+  labels — verify with
+  `kubectl -n opensandbox get pods -l flow.dev/managed-by=flow` before enabling
+  it. With `execdAccess: endpoint` (Flow calls execd directly), add Flow's
+  namespace through `networkPolicy.extraIngressFrom`.
+- The chart does not add a policy for the OpenSandbox server: in single-tenant
+  mode its `/sandboxes/{id}/proxy/{port}` routes are not authenticated, so
+  restrict who can reach it in the OpenSandbox installation (allow Flow's
+  namespace and OpenSandbox's own components) and consider
+  `coding.opensandbox.execdTokenSecret`.
+
+### Operations
+
+- Every OpenSandbox sandbox of this installation carries the metadata
+  `flow.dev/managed-by=flow` and `flow.dev/instance=<instance id>`:
+  ```bash
+  curl -s -H "OPEN-SANDBOX-API-KEY: $KEY" \
+    "$URL/v1/sandboxes?metadata=$(printf 'flow.dev/managed-by=flow&flow.dev/instance=flow' | jq -sRr @uri)" | jq '.items[] | {id, state: .status.state, sandbox: .metadata["flow.dev/sandbox-id"], expiresAt}'
+  ```
+  Orphan GC deletes those without a live row after `FLOW_CODING_ORPHAN_GRACE`;
+  sandboxes of a Flow that is down expire within `expiryWindow`.
+- `capacityUnavailable` comes from namespace quota (`KUBERNETES::QUOTA_EXCEEDED`,
+  agent-sandbox provider) or exhausted Pools (HTTP 429). With the default
+  BatchSandbox provider quota exhaustion surfaces as a create timeout
+  (`sandboxStartFailed` after the retries).
+- Runner output is the execd command log (`GET /command/{id}/logs`, kept 24 h
+  after exit); Flow archives it on stop like on other providers.
+- `kubectl -n opensandbox get batchsandboxes,pods -l flow.dev/sandbox-id=<id>`
+  shows the workload of one Flow sandbox.
+
 ## Upgrades
 
 1. Read the release notes for changes to the runner protocol, the egress-check protocol or values.

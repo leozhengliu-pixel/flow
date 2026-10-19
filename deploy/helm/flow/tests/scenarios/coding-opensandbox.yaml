@@ -1,0 +1,38 @@
+# Flow in the same cluster as OpenSandbox: the API key comes from a Secret,
+# the runtime API has its own port, Flow's egress proxy runs in the release
+# namespace and a NetworkPolicy fences Flow's sandbox Pods in OpenSandbox's
+# namespace.
+config:
+  appUrl: https://flow.example.com
+networkPolicy:
+  enabled: true
+coding:
+  enabled: true
+  provider: opensandbox
+  secretKey: dGVzdC1rZXktdGVzdC1rZXktdGVzdC1rZXktdGVzdC0=
+  runtimePort:
+    enabled: true
+  opensandbox:
+    existingSecret:
+      name: opensandbox-api-key
+      key: api-key
+    execdTokenSecret:
+      name: opensandbox-execd
+    imageAuth:
+      username: robot
+      passwordSecret:
+        name: sandbox-registry
+    tls:
+      caSecret:
+        name: opensandbox-ca
+    extraMetadata:
+      team: platform
+    sizes:
+      large: {cpu: "8", memory: 64Gi}
+    egressPolicy: proxy
+    egressAllow: [pypi.org]
+    networkPolicy:
+      enabled: true
+egressProxy:
+  aclHelper:
+    secret: test-acl-secret

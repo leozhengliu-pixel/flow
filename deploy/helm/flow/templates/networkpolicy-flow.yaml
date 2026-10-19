@@ -24,4 +24,20 @@ spec:
         - port: runtime
           protocol: TCP
     {{- end }}
+    {{- if and (include "flow.coding.opensandbox" .) .Values.coding.runtimePort.enabled .Values.coding.opensandbox.sandboxNamespace }}
+    # Sandboxes in OpenSandbox's namespace call the runtime API and LLM proxy.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.coding.opensandbox.sandboxNamespace }}
+        {{- if include "flow.egress.aclEnabled" . }}
+        # The egress proxy's ACL helper (same namespace as Flow).
+        - podSelector:
+            matchLabels:
+              {{- include "flow.egress.selectorLabels" . | nindent 14 }}
+        {{- end }}
+      ports:
+        - port: runtime
+          protocol: TCP
+    {{- end }}
 {{- end }}

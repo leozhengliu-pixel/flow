@@ -632,7 +632,7 @@ then. Workspaces also need the `coding-sessions` feature flag. Secrets accept
 | Variable | Default | Meaning |
 |---|---|---|
 | `FLOW_CODING_ENABLED` | `false` | Turn the coding-session runtime on. |
-| `FLOW_CODING_PROVIDER` | `disabled` | `disabled`, `fake`, `docker` (development and CI), `kubernetes`, or `local` (development only). See [Sandbox providers](#sandbox-providers). |
+| `FLOW_CODING_PROVIDER` | `disabled` | `disabled`, `fake`, `docker` (development and CI), `kubernetes`, `opensandbox` (an [OpenSandbox](https://github.com/alibaba/OpenSandbox) deployment), or `local` (development only). See [Sandbox providers](#sandbox-providers). |
 | `FLOW_CODING_RUNTIME_URL` | `FLOW_APP_URL` | URL sandboxes use to reach Flow's runtime API and LLM proxy, e.g. `http://flow.flow.svc.cluster.local:8080`. |
 | `FLOW_CODING_RUNTIME_ADDR` | empty | When set (for example `:8090`), Flow serves `/internal/coding-runtime/*` and `/internal/llm-proxy/*` only on this second listener, and the main listener answers 404 for them, so a NetworkPolicy can expose just this port to sandboxes. Empty keeps them on the main listener. |
 | `FLOW_CODING_INSTANCE_ID` | `flow` | `flow.dev/instance` label on every object Flow creates; orphan GC only touches this value. Give every Flow installation sharing a cluster its own id. |
@@ -703,6 +703,17 @@ Coding sessions run in sandboxes created by `FLOW_CODING_PROVIDER`:
   network `FLOW_CODING_DOCKER_NETWORK`, with `FLOW_CODING_DOCKER_RUNTIME` as
   `--runtime`. The token is written into a per-sandbox volume through the archive
   API, so remote daemons work. `volumesnapshot` is not supported.
+- `opensandbox`: one [OpenSandbox](https://github.com/alibaba/OpenSandbox)
+  sandbox per Flow sandbox, created through the lifecycle server at
+  `FLOW_CODING_OPENSANDBOX_URL` (API specs of release `1.1.0`). Flow finds its
+  sandboxes by metadata (the `flow.dev/*` labels), uploads the sandbox token
+  through execd to `FLOW_CODING_OPENSANDBOX_TOKEN_PATH` and starts `flow-runner`
+  as an execd background command, whose exit code is the sandbox's result. The
+  container runtime (gVisor, Kata), node placement and quotas are OpenSandbox's
+  server configuration; Flow needs no Kubernetes RBAC. `volumesnapshot` is not
+  supported (archives are). See
+  [OpenSandbox](coding-sessions-operations.md#opensandbox) for the in-cluster
+  deployment.
 - `local` (development only, never production): each sandbox is a process on
   Flow's host, started as `<FLOW_CODING_LOCAL_COMMAND> <mode>` (preceded by
   `<FLOW_CODING_LOCAL_COMMAND> restore` when a snapshot archive is restored). The
@@ -800,6 +811,36 @@ CRD.
 | `FLOW_CODING_DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker Engine endpoint. |
 | `FLOW_CODING_DOCKER_NETWORK` | `flow-sandbox` | Internal network (no default route) shared by sandboxes, the egress proxy and Flow. |
 | `FLOW_CODING_DOCKER_RUNTIME` | empty | Container runtime, e.g. `runsc`. |
+
+#### OpenSandbox provider
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOW_CODING_OPENSANDBOX_URL` | `http://opensandbox-server.opensandbox-system.svc.cluster.local` | Lifecycle server base URL (`/v1` is appended unless present). The default is the `opensandbox-server` chart's Service in the same cluster. |
+| `FLOW_CODING_OPENSANDBOX_API_KEY` | empty | Sent as `OPEN-SANDBOX-API-KEY` (secret; `_FILE` supported). Must match the server's `server.api_key`. |
+| `FLOW_CODING_OPENSANDBOX_REQUEST_TIMEOUT` | `30s` | Timeout of every lifecycle and execd call except create. |
+| `FLOW_CODING_OPENSANDBOX_CREATE_TIMEOUT` | `10m` | Timeout of `POST /sandboxes`, which the server answers once the Pod runs (image pull included). Creates run in the background. Keep it above the server's `sandbox_create_timeout_seconds`. |
+| `FLOW_CODING_OPENSANDBOX_RETRIES` | `3` | Retries of idempotent calls on network errors, 409, 429 (honouring `Retry-After`) and 5xx (0-10). |
+| `FLOW_CODING_OPENSANDBOX_CA_FILE` | empty | PEM CA bundle for an `https` URL. |
+| `FLOW_CODING_OPENSANDBOX_INSECURE_SKIP_VERIFY` | `false` | Skip TLS verification (development only). |
+| `FLOW_CODING_OPENSANDBOX_EXTRA_METADATA` | empty | `k=v` CSV added to every sandbox's metadata (Kubernetes label rules; `flow.dev/` and `opensandbox.io/` keys are reserved). |
+| `FLOW_CODING_OPENSANDBOX_EXTENSIONS` | empty | `k=v` CSV passed through as the create request's `extensions`. |
+| `FLOW_CODING_OPENSANDBOX_POOLS` | empty | OpenSandbox Pool per size, e.g. `small=flow-small` (`extensions.poolRef`; the Pool template must use the Flow sandbox image and provides image and resources). Cannot be combined with the egress policy. |
+| `FLOW_CODING_OPENSANDBOX_SIZE_<SMALL\|MEDIUM\|LARGE>` | empty | `resourceLimits` of a size verbatim (e.g. `cpu=8,memory=64Gi,gpu=1`), instead of cpu and memory from `FLOW_CODING_SIZE_*`. |
+| `FLOW_CODING_OPENSANDBOX_EPHEMERAL_STORAGE` | `false` | Also send the size's ephemeral storage as the `ephemeral-storage` limit. |
+| `FLOW_CODING_OPENSANDBOX_EXPIRY_WINDOW` | `1h` | Sandboxes are created with this OpenSandbox timeout (at most Flow's deadline) and renewed at half of it while Flow observes them, so sandboxes of a Flow that is gone expire on their own (minimum `5m`). |
+| `FLOW_CODING_OPENSANDBOX_EXECD_ACCESS` | `proxy` | `proxy` reaches execd through the server's `/sandboxes/{id}/proxy/44772` route; `endpoint` resolves `GET /sandboxes/{id}/endpoints/44772` and calls the Pod directly. |
+| `FLOW_CODING_OPENSANDBOX_EXECD_TOKEN` | empty | `X-EXECD-ACCESS-TOKEN` for execd, when it requires one (secret). |
+| `FLOW_CODING_OPENSANDBOX_RUN_AS_UID` | `1000` | uid and gid of the runner, exec and the debug terminal (`0` keeps execd's user). |
+| `FLOW_CODING_OPENSANDBOX_TOKEN_PATH` | `/tmp/flow/token` | Where Flow writes the sandbox token (mode 0600) inside the sandbox; the runner's `FLOW_TOKEN_FILE`. Its directory also holds the runner's pid and exit code. |
+| `FLOW_CODING_OPENSANDBOX_EGRESS_POLICY` | `off` | `proxy` sends a deny-by-default OpenSandbox `networkPolicy` allowing only the Flow runtime host, the egress proxy host and `FLOW_CODING_OPENSANDBOX_EGRESS_ALLOW`, so everything else must go through Flow's egress proxy. Needs OpenSandbox's egress sidecar (`[egress]`; `dns+nft` mode also blocks direct IPs). |
+| `FLOW_CODING_OPENSANDBOX_EGRESS_ALLOW` | empty | Extra domains for the egress policy (domains only, no IPs). |
+| `FLOW_CODING_OPENSANDBOX_IMAGE_USERNAME` / `FLOW_CODING_OPENSANDBOX_IMAGE_PASSWORD` | empty | Registry credentials for a private sandbox image (`image.auth`); the password is a secret. |
+
+`FLOW_CODING_RUNTIME_URL` must be reachable from OpenSandbox's sandbox Pods; in
+the same cluster use Flow's Service URL (the Helm chart's default). The
+`FLOW_CODING_K8S_*` settings do not apply; RuntimeClass and user namespaces are
+OpenSandbox server settings (`[secure_runtime]`, its pod template).
 
 #### Local provider (development only)
 

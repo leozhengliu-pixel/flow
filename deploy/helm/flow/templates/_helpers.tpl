@@ -81,8 +81,33 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if and .Values.coding.enabled (eq .Values.coding.provider "kubernetes") -}}true{{- end -}}
 {{- end -}}
 
+{{- define "flow.coding.opensandbox" -}}
+{{- if and .Values.coding.enabled (eq .Values.coding.provider "opensandbox") -}}true{{- end -}}
+{{- end -}}
+
 {{- define "flow.egress.enabled" -}}
-{{- if and (include "flow.coding.kubernetes" .) .Values.egressProxy.enabled -}}true{{- end -}}
+{{- if and (or (include "flow.coding.kubernetes" .) (include "flow.coding.opensandbox" .)) .Values.egressProxy.enabled -}}true{{- end -}}
+{{- end -}}
+
+{{/*
+Namespace of the egress proxy: the sandbox namespace for the kubernetes
+provider; the release namespace for opensandbox (OpenSandbox owns the
+namespace its sandbox Pods run in).
+*/}}
+{{- define "flow.egress.namespace" -}}
+{{- if include "flow.coding.opensandbox" . -}}
+{{- .Release.Namespace -}}
+{{- else -}}
+{{- include "flow.sandbox.namespace" . -}}
+{{- end -}}
+{{- end -}}
+
+{{/* Whether the egress proxy gets a NetworkPolicy. */}}
+{{- define "flow.egress.networkPolicy" -}}
+{{- if include "flow.coding.opensandbox" . -}}
+{{- if .Values.coding.opensandbox.networkPolicy.enabled -}}true{{- end -}}
+{{- else if .Values.sandboxes.networkPolicy.enabled -}}true
+{{- end -}}
 {{- end -}}
 
 {{- define "flow.egress.aclEnabled" -}}
@@ -121,7 +146,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if .Values.coding.egress.proxyUrl -}}
 {{- .Values.coding.egress.proxyUrl -}}
 {{- else if include "flow.egress.enabled" . -}}
-{{- printf "http://%s.%s.svc.cluster.local:%d" (include "flow.egress.fullname" .) (include "flow.sandbox.namespace" .) (int .Values.egressProxy.port) -}}
+{{- printf "http://%s.%s.svc.cluster.local:%d" (include "flow.egress.fullname" .) (include "flow.egress.namespace" .) (int .Values.egressProxy.port) -}}
 {{- end -}}
 {{- end -}}
 
@@ -178,7 +203,7 @@ and the proxy's copy match within one render.
 {{- define "flow.egress.aclSecretValue" -}}
 {{- $acl := .Values.egressProxy.aclHelper -}}
 {{- if not $acl.secret -}}
-{{- $existing := lookup "v1" "Secret" (include "flow.sandbox.namespace" .) (printf "%s-egress-acl" (include "flow.fullname" .)) -}}
+{{- $existing := lookup "v1" "Secret" (include "flow.egress.namespace" .) (printf "%s-egress-acl" (include "flow.fullname" .)) -}}
 {{- if and $existing $existing.data (index $existing.data "acl-secret") -}}
 {{- $_ := set $acl "secret" (index $existing.data "acl-secret" | b64dec) -}}
 {{- else -}}
@@ -241,7 +266,22 @@ seccompProfile:
 {{- end -}}
 {{- if $v.coding.enabled -}}
 {{- if eq $v.coding.provider "disabled" -}}
-{{- fail "coding.enabled requires coding.provider (kubernetes, docker or fake)" -}}
+{{- fail "coding.enabled requires coding.provider (kubernetes, opensandbox, docker or fake)" -}}
+{{- end -}}
+{{- if eq $v.coding.provider "opensandbox" -}}
+{{- $o := $v.coding.opensandbox -}}
+{{- if not (regexMatch "^https?://[^/]+" $o.url) -}}
+{{- fail "coding.opensandbox.url must be an http(s) URL (default: the opensandbox-server Service)" -}}
+{{- end -}}
+{{- if and $o.apiKey $o.existingSecret.name -}}
+{{- fail "set coding.opensandbox.apiKey or coding.opensandbox.existingSecret.name, not both" -}}
+{{- end -}}
+{{- if and $o.networkPolicy.enabled (not $o.sandboxNamespace) -}}
+{{- fail "coding.opensandbox.networkPolicy.enabled needs coding.opensandbox.sandboxNamespace (OpenSandbox's [kubernetes].namespace)" -}}
+{{- end -}}
+{{- if and $o.pools (ne (toString $o.egressPolicy) "off") -}}
+{{- fail "coding.opensandbox.pools cannot be combined with coding.opensandbox.egressPolicy=proxy (OpenSandbox rejects networkPolicy with poolRef)" -}}
+{{- end -}}
 {{- end -}}
 {{- if and (not $v.coding.secretKey) (not $v.secrets.connectorSecretKey) (not $v.secrets.existingSecret) (not (hasKey $v.secrets.env "FLOW_CODING_SECRET_KEY")) (not (hasKey $v.secrets.env "FLOW_CONNECTOR_SECRET_KEY")) -}}
 {{- fail "coding sessions need an encryption key: coding.secretKey, secrets.connectorSecretKey or secrets.existingSecret" -}}
