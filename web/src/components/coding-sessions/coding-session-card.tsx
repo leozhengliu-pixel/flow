@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useInRouterContext } from 'react-router-dom'
-import { AlertTriangle, CheckCircle2, ChevronRight, CircleDot, CircleSlash, GitBranch, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronRight, CircleSlash, GitBranch, X } from 'lucide-react'
+import { GridLoader } from '@/components/ui/grid-loader'
 import { activityTimeLabel } from '@/components/activity/issue-activity-model'
 import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -10,11 +11,16 @@ import { codingSessionPath, issuePath } from '@/lib/app-routes'
 import { useCodingSessionOpener } from './use-coding-session-opener'
 import type { BootstrapData } from '@/types/flow'
 import type { CodingSession } from '@/types/coding-sessions'
-import { CODING_PHASE_LABELS, codingErrorInfo, codingRunStartedAt, codingStatusLine, formatCodingElapsed, isCodingSessionTerminal, PULL_REQUEST_STATE_LABELS, pullRequestDisplayState, pullRequestNumberLabel } from './coding-session-model'
+import { CODING_PHASE_LABELS, codingErrorInfo, codingSessionCapabilities, codingSessionStalled, codingRunStartedAt, codingStatusLine, formatCodingElapsed, isCodingSessionTerminal, PULL_REQUEST_STATE_LABELS, pullRequestDisplayState, pullRequestNumberLabel } from './coding-session-model'
 import { CodingStateBadge } from './coding-session-parts'
 import { CodingAgentAvatar, CodingSessionView } from './coding-session-panel'
 import { useCodingSession, useCodingSessions, useDismissedCodingSessions, useNow } from './use-coding-sessions'
+import { stopCodingSession } from '@/lib/coding-sessions-api'
+import { toast } from '@/lib/toast'
+import { AgentStopIcon } from '@/components/agent/agent-icons'
+import { notifyCodingSessionChanged } from './coding-session-events'
 import './coding-sessions.css'
+import './coding-session-stream.css'
 
 const sessionTitle = (session: CodingSession, data: BootstrapData) => session.displayTitle || data.issues.find(issue => issue.id === session.issueId)?.title || session.repository || 'Coding session'
 
@@ -24,7 +30,7 @@ function CodingSessionSummary({ session, data }: { session: CodingSession; data:
   const pr = session.latestPullRequest ?? session.pullRequests?.at(-1)
   const phase = CODING_PHASE_LABELS[session.phase]
   return <span className="coding-session-summary-line">
-    <CodingStateBadge state={session.state}/>
+    <CodingStateBadge state={session.state} session={session}/>
     <span className="coding-session-card-title" data-i18n-ignore>{sessionTitle(session, data)}</span>
     {(session.repository || session.branchName) && <span className="coding-session-card-repo" data-i18n-ignore><GitBranch size={12} aria-hidden="true"/>{[session.repository, session.branchName].filter(Boolean).join(' · ')}</span>}
     {pr && <span className="coding-pr-state" data-state={pullRequestDisplayState(pr)}><span data-i18n-ignore>{pullRequestNumberLabel(pr)}</span> {t(PULL_REQUEST_STATE_LABELS[pullRequestDisplayState(pr)])}</span>}
@@ -37,18 +43,18 @@ function CodingSessionSummary({ session, data }: { session: CodingSession; data:
  * agent works), the label ("Thinking…", "Error"), the detail (error title, summary) on one line, the running timer and a
  * chevron. The whole row opens the session view.
  */
-export function CodingSessionStatusRow({ session, data, href, onOpen }: { session: CodingSession; data: BootstrapData; /** The session page; without it the row is a button calling onOpen (the dialog fallback). */ href?: string; onOpen?: () => void }) {
+export function CodingSessionStatusRow({ session, data, href, onOpen, surface = 'issue' }: { session: CodingSession; data: BootstrapData; /** The session page; without it the row is a button calling onOpen (the dialog fallback). */ href?: string; onOpen?: () => void; /** `chat`: the agent chat card ("Working for 02:42", "Completed"). */ surface?: 'issue' | 'chat' }) {
   const { t } = useI18n()
   const errorTitle = session.state === 'error' ? t(codingErrorInfo(session.errorCode, { workspace: data.workspace.urlKey, codeHost: session.codeHost }).title) : undefined
-  const status = codingStatusLine(session, errorTitle)
+  const status = codingStatusLine(session, errorTitle, surface)
   const live = status.live && session.phase !== 'awaitingApproval'
   const now = useNow(live)
   const started = codingRunStartedAt(session)
   const elapsed = live && started && !Number.isNaN(Date.parse(started)) ? formatCodingElapsed(now - Date.parse(started)) : ''
   const content = <>
     <CodingStatusIcon tone={status.tone}/>
-    <span className="coding-session-status-label">{t(status.label)}{status.ellipsis ? '…' : ''}</span>
-    {status.detail && <span className="coding-session-status-detail" data-i18n-ignore>{status.detail}</span>}
+    <span className="coding-session-status-label">{t(status.label).replace('{count}', String(status.count ?? ''))}</span>
+    {status.detail && <span className="coding-session-status-detail" data-i18n-ignore={status.translateDetail ? undefined : true}>{status.translateDetail ? t(status.detail) : status.detail}</span>}
     <span className="coding-session-status-end">
       {elapsed && <time aria-label={t('Elapsed time')}>{elapsed}</time>}
       <ChevronRight size={16} aria-hidden="true"/>
@@ -61,10 +67,11 @@ export function CodingSessionStatusRow({ session, data, href, onOpen }: { sessio
 }
 
 function CodingStatusIcon({ tone }: { tone: ReturnType<typeof codingStatusLine>['tone'] }) {
-  if (tone === 'working') return <span className="coding-agent-spinner" aria-hidden="true"/>
+  // The reference app's dotted-grid sprite: animated while the agent works, the static "read" frame in purple when it needs input.
+  if (tone === 'working') return <GridLoader variant="agent" size={16} className="coding-session-status-icon is-working"/>
+  if (tone === 'input') return <GridLoader variant="read" size={16} className="coding-session-status-icon is-input"/>
   if (tone === 'error') return <AlertTriangle size={16} aria-hidden="true" className="coding-session-status-icon"/>
   if (tone === 'done') return <CheckCircle2 size={16} aria-hidden="true" className="coding-session-status-icon"/>
-  if (tone === 'input') return <CircleDot size={16} aria-hidden="true" className="coding-session-status-icon"/>
   return <CircleSlash size={16} aria-hidden="true" className="coding-session-status-icon"/>
 }
 
@@ -74,15 +81,25 @@ function CodingStatusIcon({ tone }: { tone: ReturnType<typeof codingStatusLine>[
  */
 export function CodingSessionCard({ sessionId, initial, data, onDismiss }: { sessionId: string; initial?: CodingSession; data: BootstrapData; onDismiss?: () => void }) {
   const { t, locale } = useI18n()
-  const { session, error } = useCodingSession(sessionId, initial)
+  const { session, error, apply } = useCodingSession(sessionId, initial)
   const opener = useCodingSessionOpener(session, data, onDismiss)
+  const [stopping, setStopping] = useState(false)
+  const stop = async () => {
+    if (!session || stopping) return
+    setStopping(true)
+    try {
+      apply(await stopCodingSession(session.id))
+      notifyCodingSessionChanged({ sessionId: session.id, agentSessionId: session.agentSessionId, issueId: session.issueId })
+    } catch (cause) { toast.error(cause instanceof Error ? cause.message : t('Could not stop the session')) }
+    finally { setStopping(false) }
+  }
   if (!session) return error ? <p className="coding-session-error-text" role="alert">{error}</p> : <div className="coding-session-card is-loading" role="status">{t('Loading coding session…')}</div>
   const issue = session.issueId ? data.issues.find(item => item.id === session.issueId) : undefined
   const creator = data.users.find(user => user.id === session.creatorId)
   const created = Number.isNaN(Date.parse(session.createdAt)) ? '' : activityTimeLabel(session.createdAt, Date.now(), locale).replace(/m(?= ago$)/, 'min')
   return <article className="coding-session-card" data-state={session.state} aria-label={t('Coding session')}>
     <header className="coding-session-card-header">
-      <CodingAgentAvatar state={session.state}/>
+      <CodingAgentAvatar state={session.state} stalled={codingSessionStalled(session)}/>
       <span className="coding-session-card-byline">
         <strong>{t('Flow')}</strong>
         {creator && <><span>{t('started by')}</span><strong data-i18n-ignore>{creator.displayName || creator.name}</strong></>}
@@ -92,7 +109,11 @@ export function CodingSessionCard({ sessionId, initial, data, onDismiss }: { ses
       {issue && <AppLink className="coding-session-link" href={`${issuePath(data.workspace.urlKey, issue)}#agent-session-${session.agentSessionId}`}>{t('Open issue')}</AppLink>}
       {onDismiss && isCodingSessionTerminal(session) && <button type="button" className="coding-session-icon-button" aria-label={t('Dismiss')} onClick={onDismiss}><X size={14}/></button>}
     </header>
-    <CodingSessionStatusRow session={session} data={data} {...opener.rowProps}/>
+    <div className="coding-session-card-status">
+      <CodingSessionStatusRow session={session} data={data} surface="chat" {...opener.rowProps}/>
+      {codingSessionCapabilities(session).stop && <button type="button" className="cs-button is-small coding-session-card-stop" aria-label={t('Send stop request')} title={session.stopRequested ? t('Stop request already sent, waiting for {agent}').replace('{agent}', t('Flow')) : t('Send stop request')} disabled={stopping || session.stopRequested}
+        onClick={() => void stop()}><AgentStopIcon size={14}/></button>}
+    </div>
     {opener.dialog}
   </article>
 }

@@ -248,7 +248,7 @@ describe('composer', () => {
     expect(within(screen.getByRole('list', { name: 'Queued messages' })).getByText('Also update the docs')).toBeVisible()
     expect(api.promptCodingSession).not.toHaveBeenCalled()
     view.rerender(<I18nProvider><CodingSessionConversation session={makeSession({ state: 'complete', phase: 'idle', version: 2 })} data={data} onChange={vi.fn()}/></I18nProvider>)
-    await waitFor(() => expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'Also update the docs'))
+    await waitFor(() => expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'Also update the docs', undefined, []))
     await waitFor(() => expect(screen.queryByRole('list', { name: 'Queued messages' })).toBeNull())
   })
 
@@ -263,7 +263,7 @@ describe('composer', () => {
     await user.click(within(list).getAllByRole('button', { name: 'Remove from queue' })[0])
     expect(within(list).queryByText('one')).toBeNull()
     await user.click(within(list).getByRole('button', { name: 'Send' }))
-    expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'two')
+    expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'two', undefined, [])
   })
 
   it('sends immediately with ⌘⇧Enter while the agent works', async () => {
@@ -272,7 +272,7 @@ describe('composer', () => {
     renderConversation(makeSession({ state: 'active', phase: 'running' }))
     await user.type(screen.getByRole('textbox', { name: 'Follow-up prompt' }), 'Steer now')
     await user.keyboard('{Meta>}{Shift>}{Enter}{/Shift}{/Meta}')
-    expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'Steer now')
+    expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'Steer now', undefined, [])
     expect(screen.queryByRole('list', { name: 'Queued messages' })).toBeNull()
   })
 
@@ -286,7 +286,7 @@ describe('composer', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'API' })).toHaveAttribute('aria-pressed', 'true'))
     expect(screen.getByRole('button', { name: 'Web' })).toHaveAttribute('aria-pressed', 'false')
     await user.click(screen.getByRole('button', { name: 'Continue with selected option' }))
-    expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'env-api')
+    expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'env-api', undefined, [])
   })
 
   it('uses a dropdown for many options and disables send until one is chosen', async () => {
@@ -300,7 +300,7 @@ describe('composer', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Beta' }))
     await user.type(screen.getByRole('textbox', { name: 'Follow-up prompt' }), 'and hurry')
     await user.click(screen.getByRole('button', { name: 'Continue with selected option' }))
-    expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'b\n\nand hurry')
+    expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'b\n\nand hurry', undefined, [])
   })
 
   it('asks the viewer to connect an account for an auth question', async () => {

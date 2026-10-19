@@ -4,6 +4,19 @@
  * translations.ts (fills gaps only).
  */
 export const codingSessionStatesZhCN: Record<string, string> = {
+  // Session status rows and labels
+  "Working for": "已工作",
+  "Completed": "已完成",
+  "Changed {count} file": "修改了 {count} 个文件",
+  "Changed {count} files": "修改了 {count} 个文件",
+  "Starting coding session…": "正在启动编码会话…",
+  "Stopped responding": "已停止响应",
+  "Agent didn’t start": "Agent 未启动",
+  "Didn’t start": "未启动",
+  "The request may not have reached the agent": "请求可能未送达 Agent",
+  "Send stop request": "发送停止请求",
+  "Start over with {model}": "使用 {model} 重新开始",
+  "Could not stop the session": "无法停止会话",
   // Work groups and durations
   "Working…": "工作中…",
   "Thinking…": "思考中…",

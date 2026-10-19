@@ -31,8 +31,6 @@
 .cs-start-line a{color:var(--cs-label-muted);text-decoration:none}
 .cs-start-line a:hover{text-decoration:underline}
 .cs-start-line+.cs-turn>.cs-time-marker,.cs-start-line+.cs-start-line{margin-top:4px}
-.cs-separator{display:flex;align-items:center;gap:12px;padding:8px 0 8px 8px;color:var(--cs-label-faint);font:500 12px/normal var(--font)}
-.cs-separator::before,.cs-separator::after{content:"";flex:1;height:1px;background:var(--cs-border-faint)}
 .cs-auth-line{display:flex;align-items:center;gap:6px;margin:0;padding:0 10px;color:var(--cs-label-faint);font:450 13px/normal var(--font)}
 .cs-stream-end{flex:none;height:1px}
 
@@ -198,6 +196,13 @@
 .cs-queue-text{flex:1;min-width:0;overflow:hidden;color:var(--cs-label-base);font:450 13px/normal var(--font);text-overflow:ellipsis;white-space:nowrap}
 .cs-queue-actions{display:inline-flex;align-items:center;gap:2px;opacity:0;transition:opacity .15s}
 .cs-queue li:hover .cs-queue-actions,.cs-queue li:focus-within .cs-queue-actions{opacity:1}
+
+/* Session status rows: the dotted-grid icon (muted while working, purple "read" frame when input is needed). */
+.coding-session-status-icon.is-working{color:var(--cs-label-muted)}
+.coding-session-status-icon.is-input,.coding-session-status-row[data-tone=input] .coding-session-status-label{color:var(--cs-purple-text)}
+.coding-session-card-status{display:flex;align-items:center;min-width:0}
+.coding-session-card-status>.coding-session-status-row{flex:1;min-width:0}
+.coding-session-card-stop{width:24px;padding:0;margin:0 12px 0 -8px;flex:none}
 
 /* The avatar's red dot: failed sessions and sessions whose agent never answered. */
 .coding-agent-avatar[data-stalled] .coding-agent-avatar-dot{background:var(--cs-red-base);box-shadow:0 0 0 2px var(--theme-surface-1)}

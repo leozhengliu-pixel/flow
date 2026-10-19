@@ -48,7 +48,7 @@ describe('coding session page', () => {
     vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession({ issueId: issue.id, displayTitle: 'Fix login' }))
     const { navigate } = renderPage()
     const page = await screen.findByRole('main', { name: 'Coding session' })
-    expect(within(page).getByRole('link', { name: /TST-1/ })).toHaveAttribute('href', expect.stringContaining('TST-1'))
+    expect(within(page).getAllByRole('link', { name: /TST-1/ })[0]).toHaveAttribute('href', expect.stringContaining('TST-1'))
     expect(within(page).getByRole('heading', { level: 2, name: 'Fix login' })).toBeVisible()
     expect(await within(page).findByText('No changes yet')).toBeVisible()
     expect(within(page).getByRole('complementary', { name: 'Agent' })).toBeVisible()

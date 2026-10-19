@@ -3,6 +3,7 @@ import { ArrowUpRight, ChevronDown } from 'lucide-react'
 import { approveCodingSession, promptCodingSession, restartCodingSession, stopCodingSession } from '@/lib/coding-sessions-api'
 import { AGENT_TASK_ACTIVITY_EVENT, getApplicationTask, type ApplicationActivity } from '@/lib/application-agents'
 import { AgentAnswerText } from '@/components/agent/agent-answer'
+import { AgentMessageAttachments } from '@/components/agent/agent-message-attachments'
 import { AgentCopyGlyph } from '@/components/ui/agent-glyph'
 import { AppLink } from '@/components/ui/app-link'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -12,7 +13,7 @@ import { issuePath } from '@/lib/app-routes'
 import { toast } from '@/lib/toast'
 import type { BootstrapData } from '@/types/flow'
 import type { CodingSession } from '@/types/coding-sessions'
-import { CodingComposer, type CodingComposerProps, type ComposerRequest } from './coding-session-composer'
+import { CodingComposer, type ComposerRequest } from './coding-session-composer'
 import { CODING_SESSION_EVENT, notifyCodingSessionChanged, type CodingSessionEventDetail } from './coding-session-events'
 import { CODING_PHASE_LABELS, codingModelLabel, codingSessionCapabilities } from './coding-session-model'
 import { CodingPlanPill } from './coding-session-plan'
@@ -102,15 +103,13 @@ type ConversationProps = {
   onChange: (session: CodingSession) => void
   /** Opens the session's changes (the "Uncommitted changes" pill). */
   onOpenChanges?: () => void
-  /** Composer extensions from the host (attachments). */
-  composer?: Pick<CodingComposerProps, 'attachments' | 'toolbarStart' | 'uploading' | 'textareaProps' | 'hasPayload'> & { send?: (text: string) => Promise<CodingSession> }
 }
 
 /**
  * The agent panel's conversation: the activity stream in turns (time markers, prompts, folded work groups, responses,
  * errors, the PR card and commit badges), the "Latest" button, the plan pill and the composer.
  */
-export function CodingSessionConversation({ session, data, onChange, onOpenChanges, composer }: ConversationProps) {
+export function CodingSessionConversation({ session, data, onChange, onOpenChanges }: ConversationProps) {
   const { t } = useI18n()
   const { activities, error, loaded } = useAnchorActivities(data.workspace.urlKey, session.agentSessionId, session.issueId, `${session.version}:${session.updatedAt}`)
   const [busy, setBusy] = useState(false)
@@ -139,8 +138,6 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
     } finally { busyRef.current = false; setBusy(false) }
   }
   const retry = () => void run(() => restartCodingSession(session.id), 'Restarted coding session')
-  const { send: hostSend, ...composerProps } = composer ?? {}
-  const send = hostSend ?? ((text: string) => promptCodingSession(session.id, text))
 
   const elicitation = session.phase === 'awaitingUser' ? pendingElicitation(activities) : undefined
   const request: ComposerRequest | undefined = session.phase === 'awaitingApproval' ? { kind: 'approval' } : elicitation ? { kind: 'elicitation', activity: elicitation } : undefined
@@ -198,7 +195,8 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
           {turn.prompt && <div className="cs-prompt-row">
             <div className="coding-session-prompt">
               <header><UserAvatar className="coding-session-prompt-avatar" name={userName(turn.prompt.activity.actorId)} avatarUrl={data.users.find(user => user.id === turn.prompt!.activity.actorId)?.avatarUrl}/><strong data-i18n-ignore>{userName(turn.prompt.activity.actorId)}</strong></header>
-              {turn.prompt.stop ? <p><em>{t('Stop requested')}</em></p> : <p data-i18n-ignore>{turn.prompt.activity.body}</p>}
+              {turn.prompt.stop ? <p><em>{t('Stop requested')}</em></p> : turn.prompt.activity.body && <p data-i18n-ignore>{turn.prompt.activity.body}</p>}
+              <AgentMessageAttachments attachments={turn.prompt.activity.metadata?.attachments}/>
             </div>
           </div>}
           {turn.items.length > 0 && <div className="cs-turn-items">
@@ -228,10 +226,9 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
     <div className="cs-composer-area">
       <CodingPlanPill plan={session.plan} updatedAt={session.updatedAt} complete={session.state === 'complete'}/>
       {(can.prompt || request) && <CodingComposer data={data} sessionId={session.id} generating={generating} stopPending={stopRequested(session)} canPrompt={can.prompt} busy={busy} request={request}
-        onSend={text => run(() => send(text))}
+        onSend={(text, files) => run(() => promptCodingSession(session.id, text, undefined, files))}
         onStop={() => void run(() => stopCodingSession(session.id))}
-        onApprove={async reject => { await run(() => approveCodingSession(session.id, reject), reject ? 'Rejected coding session' : 'Approved coding session') }}
-        {...composerProps}/>}
+        onApprove={async reject => { await run(() => approveCodingSession(session.id, reject), reject ? 'Rejected coding session' : 'Approved coding session') }}/>}
     </div>
   </>
 }
