@@ -38,6 +38,9 @@ type usageFields struct {
 	PromptTokensDetails *struct {
 		CachedTokens int64 `json:"cached_tokens"`
 	} `json:"prompt_tokens_details"`
+	// PromptCacheHitTokens is DeepSeek's cached-prompt count, used when
+	// prompt_tokens_details is absent.
+	PromptCacheHitTokens *int64 `json:"prompt_cache_hit_tokens"`
 }
 
 // usageEnvelope is any JSON document (a full response or one SSE event) that
@@ -98,6 +101,8 @@ func (u *Usage) applyOpenAI(f *usageFields) {
 		input, output = value(f.PromptTokens), value(f.CompletionTokens)
 		if f.PromptTokensDetails != nil {
 			cached = f.PromptTokensDetails.CachedTokens
+		} else if f.PromptCacheHitTokens != nil {
+			cached = value(f.PromptCacheHitTokens)
 		}
 	}
 	if cached < 0 || cached > input {

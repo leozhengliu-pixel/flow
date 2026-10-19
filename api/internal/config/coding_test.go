@@ -20,6 +20,9 @@ func TestCodingDefaults(t *testing.T) {
 	if c.Timeouts.DebugTerminal != 20*time.Minute || c.Timeouts.Turn != time.Hour {
 		t.Fatalf("timeouts: %+v", c.Timeouts)
 	}
+	if c.LLM.OpenAIWireAPI != OpenAIWireAPIResponses {
+		t.Fatalf("openai wire api: %q", c.LLM.OpenAIWireAPI)
+	}
 	if c.GitHubApp.APIURL != "https://api.github.com" || c.GitLab.CredentialMode != "project-token" {
 		t.Fatalf("code hosts: %+v %+v", c.GitHubApp, c.GitLab)
 	}
@@ -40,7 +43,11 @@ func TestCodingParsing(t *testing.T) {
 	t.Setenv("FLOW_CODING_MODEL_PRICES", `{"gpt-5-codex":{"input":1.25,"output":10}}`)
 	t.Setenv("FLOW_CODING_MODEL_INFO", `{"gpt-5-codex":{"label":"GPT-5 Codex","group":"frontier","description":"Fast"}}`)
 	t.Setenv("FLOW_GITHUB_APP_HOST", "github.acme.dev")
+	t.Setenv("FLOW_CODING_LLM_OPENAI_WIRE_API", " Chat ")
 	c := loadCoding("http://localhost:5173")
+	if c.LLM.OpenAIWireAPI != OpenAIWireAPIChat {
+		t.Fatalf("openai wire api: %q", c.LLM.OpenAIWireAPI)
+	}
 	if c.Kubernetes.NodeSelector["flow.dev/pool"] != "sandbox" || c.Kubernetes.NodeSelector["kubernetes.io/arch"] != "amd64" {
 		t.Fatalf("node selector: %v", c.Kubernetes.NodeSelector)
 	}
@@ -79,12 +86,13 @@ func TestCodingValidation(t *testing.T) {
 		"volumesnapshot+emptyDir": func(c *CodingConfig) {
 			c.Snapshot.Strategy, c.Kubernetes.WorkspaceVolume = "volumesnapshot", "emptyDir"
 		},
-		"warm pool size": func(c *CodingConfig) { c.WarmPool = map[string]int{"huge": 1} },
-		"default region": func(c *CodingConfig) { c.Regions, c.DefaultRegion = []string{"us"}, "eu" },
-		"gitlab mode":    func(c *CodingConfig) { c.GitLab.CredentialMode = "pat" },
-		"github app":     func(c *CodingConfig) { c.GitHubApp.AppID = "1" },
-		"runtime url":    func(c *CodingConfig) { c.RuntimeURL = "flow" },
-		"cpu ratio":      func(c *CodingConfig) { c.CPURequestRatio = 2 },
+		"warm pool size":  func(c *CodingConfig) { c.WarmPool = map[string]int{"huge": 1} },
+		"default region":  func(c *CodingConfig) { c.Regions, c.DefaultRegion = []string{"us"}, "eu" },
+		"gitlab mode":     func(c *CodingConfig) { c.GitLab.CredentialMode = "pat" },
+		"github app":      func(c *CodingConfig) { c.GitHubApp.AppID = "1" },
+		"runtime url":     func(c *CodingConfig) { c.RuntimeURL = "flow" },
+		"cpu ratio":       func(c *CodingConfig) { c.CPURequestRatio = 2 },
+		"openai wire api": func(c *CodingConfig) { c.LLM.OpenAIWireAPI = "completions" },
 	}
 	for name, mutate := range cases {
 		c := base()

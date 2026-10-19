@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"flow/api/internal/config"
 	"flow/api/internal/domain"
 )
 
@@ -249,6 +250,16 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fail(http.StatusForbidden, "permission_error", "No model is available for this session", string(domain.CodingErrModelUnavailable))
 		return
 	}
+	var translation *chatTranslation
+	if ep == endpointResponses && upstreamName == UpstreamOpenAI && p.Config.OpenAIWireAPI == config.OpenAIWireAPIChat {
+		// The upstream only speaks Chat Completions (chatwire.go).
+		chat, translated, err := responsesToChat(document)
+		if err != nil {
+			fail(http.StatusBadRequest, "invalid_request_error", err.Error(), "")
+			return
+		}
+		document, translation, ep, rest = chat, translated, endpointChat, "v1/chat/completions"
+	}
 	var stream bool
 	if value, present := document["stream"]; present {
 		_ = json.Unmarshal(value, &stream)
@@ -293,13 +304,19 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	entry.status = response.StatusCode
-	w.WriteHeader(response.StatusCode)
+	success := response.StatusCode >= 200 && response.StatusCode < 300
 
 	var meter *usageMeter
-	if ep.metered() && response.StatusCode >= 200 && response.StatusCode < 300 {
+	if ep.metered() && success {
 		meter = newUsageMeter(upstreamName, response.Header.Get("Content-Type"), p.limits.MaxMeteredBytes)
 	}
-	copyErr := streamBody(w, response.Body, meter)
+	var copyErr error
+	if translation != nil && success {
+		copyErr = relayChatAsResponses(w, response, translation, meter, p.now())
+	} else {
+		w.WriteHeader(response.StatusCode)
+		copyErr = streamBody(w, response.Body, meter)
+	}
 	if copyErr != nil {
 		entry.reason = "stream_interrupted"
 	}
