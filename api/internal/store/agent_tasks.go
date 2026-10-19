@@ -149,6 +149,12 @@ func (s *SQLiteStore) AppendAgentActivity(ctx context.Context, workspace, id str
 		return task, ErrIssueVersion
 	}
 	terminal := task.Status == "complete" || task.Status == "error" || task.Status == "canceled"
+	if terminal && task.Status == "complete" && (activity.Type == "thought" || activity.Type == "action") && s.codingAnchorMidTurn(ctx, workspace, task) {
+		// A delegation task reused as a coding anchor: the delegating agent's
+		// own reply completes it while the session's first turn is still
+		// starting, so that turn's progress reopens it instead of being dropped.
+		terminal = false
+	}
 	if terminal && activity.Type != "retry" && activity.Type != "prompt" && activity.Type != "feedback" && activity.Type != "deleted" || !terminal && activity.Type == "retry" {
 		return task, ErrIssueVersion
 	}

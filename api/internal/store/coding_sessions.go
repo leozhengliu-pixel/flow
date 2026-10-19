@@ -788,3 +788,21 @@ func (s *SQLiteStore) IsCodingAnchor(ctx context.Context, workspaceKey, agentSes
 	var count int
 	return s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM coding_sessions WHERE workspace_key=? AND agent_session_id=?`, workspaceKey, agentSessionID).Scan(&count) == nil && count > 0
 }
+
+// codingAnchorMidTurn reports whether task anchors a coding session whose turn
+// is underway (starting through publishing): its progress may reopen the
+// anchor even after another writer completed it.
+func (s *SQLiteStore) codingAnchorMidTurn(ctx context.Context, workspaceKey string, task domain.AgentTask) bool {
+	if task.CodingSessionID == "" {
+		return false
+	}
+	var phase string
+	if err := s.db.QueryRowContext(ctx, `SELECT phase FROM coding_sessions WHERE workspace_key=? AND id=? AND agent_session_id=?`, workspaceKey, task.CodingSessionID, task.ID).Scan(&phase); err != nil {
+		return false
+	}
+	switch domain.CodingSessionPhase(phase) {
+	case domain.CodingPhaseStarting, domain.CodingPhaseSetup, domain.CodingPhaseRunning, domain.CodingPhasePublishing:
+		return true
+	}
+	return false
+}
