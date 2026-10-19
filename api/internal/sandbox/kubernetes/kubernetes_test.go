@@ -595,6 +595,12 @@ func TestStartSandboxMapsQuotaAndTransientErrors(t *testing.T) {
 	if _, err := h.provider.StartSandbox(context.Background(), sessionSpec("s1")); !errors.Is(err, sandbox.ErrQuota) {
 		t.Fatalf("quota = %v", err)
 	}
+	// Before the quota controller computed usage (envtest: the API server's
+	// exact message) the rejection is capacity too, not a broken spec.
+	unknown := apierrors.NewForbidden(schema.GroupResource{Resource: "pods"}, "flow-cs-s1", errors.New("status unknown for quota: q, resources: pods"))
+	if err := wrap("create pod", unknown); !errors.Is(err, sandbox.ErrQuota) {
+		t.Fatalf("status unknown for quota = %v", err)
+	}
 	cases := []struct {
 		err       error
 		transient bool
@@ -969,5 +975,47 @@ func TestExecAndLogs(t *testing.T) {
 	defer stream.Close()
 	if data, _ := io.ReadAll(stream); len(data) == 0 {
 		t.Fatal("logs are empty")
+	}
+}
+
+// TestTerminatingObjects: objects held by finalizers (pvc-protection, the
+// snapshot controller) are not GC candidates again and are never reused.
+func TestTerminatingObjects(t *testing.T) {
+	ctx := context.Background()
+	deleting := func(at time.Time) metav1.ObjectMeta {
+		return metav1.ObjectMeta{Namespace: testNamespace, DeletionTimestamp: &metav1.Time{Time: at}, Finalizers: []string{"kubernetes.io/pvc-protection"},
+			Labels: map[string]string{sandbox.LabelManagedBy: "flow", sandbox.LabelInstance: "flow", sandbox.LabelSandboxID: "old"}}
+	}
+	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	pvc := &corev1.PersistentVolumeClaim{ObjectMeta: deleting(now.Add(-time.Minute))}
+	pvc.Name = PVCName("old")
+	secret := &corev1.Secret{ObjectMeta: deleting(now.Add(-time.Minute))}
+	secret.Name = TokenSecretName("old")
+	graceful := &corev1.Pod{ObjectMeta: deleting(now.Add(time.Minute))}
+	graceful.Name = PodName("old")
+	stuck := &corev1.Pod{ObjectMeta: deleting(now.Add(-time.Minute))}
+	stuck.Name, stuck.Labels = PodName("stuck"), map[string]string{sandbox.LabelManagedBy: "flow", sandbox.LabelInstance: "flow", sandbox.LabelSandboxID: "stuck"}
+	h := newHarness(t, nil, pvc, secret, graceful, stuck)
+
+	objects, err := h.provider.ListManaged(ctx, sandbox.ListFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(objects) != 1 || objects[0].Name != PodName("stuck") {
+		t.Fatalf("only the pod past its grace may be listed: %+v", objects)
+	}
+	if _, err := h.provider.EnsureVolume(ctx, sandbox.VolumeSpec{ID: "old"}); !errors.Is(err, sandbox.ErrTransient) {
+		t.Fatalf("ensuring a terminating volume = %v", err)
+	}
+	if status, err := h.provider.VolumeStatus(ctx, "old"); err != nil || status.Ready || status.Phase != "Terminating" {
+		t.Fatalf("terminating volume status = %+v %v", status, err)
+	}
+	spec := sessionSpec("s2")
+	spec.Workspace.VolumeID = "old"
+	if _, err := h.provider.StartSandbox(ctx, spec); !errors.Is(err, sandbox.ErrTransient) {
+		t.Fatalf("starting on a terminating volume = %v", err)
+	}
+	if countActions(h.clientset, "create", "pods") != 0 {
+		t.Fatal("no pod may mount a terminating volume")
 	}
 }

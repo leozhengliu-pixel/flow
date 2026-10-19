@@ -45,11 +45,24 @@ func (p *Provider) ensurePVC(ctx context.Context, volumeID, size, storageClass s
 	if err != nil {
 		return nil, wrap("create pvc", err)
 	}
+	if err := usablePVC(created); err != nil {
+		return nil, err
+	}
 	return created, nil
 }
 
+// usablePVC refuses a claim that is being deleted: the
+// kubernetes.io/pvc-protection finalizer keeps it until its last Pod is gone,
+// and a new Pod that mounts it never starts. Retry once it is gone.
+func usablePVC(pvc *corev1.PersistentVolumeClaim) error {
+	if pvc.DeletionTimestamp != nil {
+		return fmt.Errorf("kubernetes: pvc %s is being deleted: %w", pvc.Name, sandbox.ErrTransient)
+	}
+	return nil
+}
+
 func volumeStatus(id string, pvc *corev1.PersistentVolumeClaim) sandbox.VolumeStatus {
-	return sandbox.VolumeStatus{
+	status := sandbox.VolumeStatus{
 		ID:          id,
 		ProviderRef: pvc.Name,
 		// WaitForFirstConsumer classes keep a claim Pending until a Pod uses
@@ -58,6 +71,10 @@ func volumeStatus(id string, pvc *corev1.PersistentVolumeClaim) sandbox.VolumeSt
 		Phase:  string(pvc.Status.Phase),
 		Labels: maps.Clone(pvc.Labels),
 	}
+	if pvc.DeletionTimestamp != nil {
+		status.Ready, status.Phase = false, "Terminating"
+	}
+	return status
 }
 
 func (p *Provider) EnsureVolume(ctx context.Context, spec sandbox.VolumeSpec) (sandbox.VolumeStatus, error) {
@@ -81,6 +98,9 @@ func (p *Provider) RestoreWorkspace(ctx context.Context, spec sandbox.RestoreSpe
 		return sandbox.VolumeStatus{}, fmt.Errorf("kubernetes: %w: restore needs FLOW_CODING_SNAPSHOT_STRATEGY=volumesnapshot", sandbox.ErrUnsupported)
 	}
 	if existing, err := p.client.CoreV1().PersistentVolumeClaims(p.k8s.Namespace).Get(ctx, PVCName(spec.VolumeID), metav1.GetOptions{}); err == nil {
+		if err := usablePVC(existing); err != nil {
+			return sandbox.VolumeStatus{}, err
+		}
 		return volumeStatus(spec.VolumeID, existing), nil
 	}
 	snapshot, err := p.SnapshotStatus(ctx, spec.SnapshotID)

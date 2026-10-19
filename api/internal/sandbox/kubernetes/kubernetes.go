@@ -136,7 +136,10 @@ func wrap(op string, err error) error {
 	return fmt.Errorf("%s: %w", op, err)
 }
 
-// isQuota reports a ResourceQuota admission rejection (403 "exceeded quota").
+// isQuota reports a ResourceQuota admission rejection: 403 "exceeded quota",
+// or "status unknown for quota" while the quota controller has not yet
+// computed the usage of a new or changed quota (also capacity: waiting
+// helps, unlike a broken sandbox spec).
 func isQuota(err error) bool {
 	if !apierrors.IsForbidden(err) {
 		return false
@@ -144,7 +147,7 @@ func isQuota(err error) bool {
 	var status apierrors.APIStatus
 	if errors.As(err, &status) {
 		message := status.Status().Message
-		return strings.Contains(message, "exceeded quota")
+		return strings.Contains(message, "exceeded quota") || strings.Contains(message, "status unknown for quota")
 	}
 	return false
 }
@@ -216,8 +219,12 @@ func (p *Provider) StartSandbox(ctx context.Context, spec sandbox.SandboxSpec) (
 	}
 	if volumeID := p.workspaceVolumeID(spec); volumeID != "" {
 		if spec.Workspace.VolumeID != "" {
-			if _, err := p.client.CoreV1().PersistentVolumeClaims(p.k8s.Namespace).Get(ctx, PVCName(volumeID), metav1.GetOptions{}); err != nil {
+			pvc, err := p.client.CoreV1().PersistentVolumeClaims(p.k8s.Namespace).Get(ctx, PVCName(volumeID), metav1.GetOptions{})
+			if err != nil {
 				return sandbox.SandboxStatus{}, wrap("workspace volume "+volumeID, err)
+			}
+			if err := usablePVC(pvc); err != nil {
+				return sandbox.SandboxStatus{}, err
 			}
 		} else if _, err := p.ensurePVC(ctx, volumeID, "", "", p.labels(spec), ""); err != nil {
 			return sandbox.SandboxStatus{}, err
