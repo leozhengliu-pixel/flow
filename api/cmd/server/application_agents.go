@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"flow/api/internal/coding"
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
 )
@@ -717,7 +718,7 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 // thread so far. The worker runtime reads the same conversation from the run payload.
 func (s *server) builtinThreadMessages(r *http.Request, task domain.AgentTask, data domain.Bootstrap, contextIssues []domain.Issue) []agentProviderMessage {
 	issueTitle := agentIssueTitles(data.Issues)
-	messages := []agentProviderMessage{{Role: "system", Content: workspaceAgentSystemPrompt(data, contextIssues, nil, task.TeamID) + builtinTaskContext(task)}, {Role: "user", Content: agentModelUserText(builtinTaskPrompt(task, data), nil, issueTitle)}}
+	messages := []agentProviderMessage{{Role: "system", Content: workspaceAgentSystemPrompt(data, contextIssues, nil, task.TeamID) + builtinTaskContext(task)}, {Role: "user", Content: agentModelUserText(s.builtinTaskPrompt(task, data), nil, issueTitle)}}
 	if task.ResourceType == "document" && len(data.Documents) == 1 {
 		messages[1].Content += "\nDocument: " + documentDisplayTitle(data.Documents[0].Title) + "\n" + data.Documents[0].Content
 	}
@@ -856,10 +857,18 @@ func builtinTaskContext(task domain.AgentTask) string {
 	return "\nThis session is a comment thread on the " + firstNonEmpty(task.ResourceType, "issue") + ", not the chat panel: your final reply is posted in the thread as Markdown. Do not end it with a ```suggestions block.\n"
 }
 
-// builtinTaskPrompt is the first user message of a built-in agent session:
+// builtinTaskPrompt is builtinTaskPromptFor with whether this agent can
+// start coding sessions in the task's workspace.
+func (s *server) builtinTaskPrompt(task domain.AgentTask, data domain.Bootstrap) string {
+	canCode := s.agent.ToolsEnabled && s.agent.WriteTools && s.codingEnabled() && workspaceFeatureEnabled(data.WorkspaceSettings, coding.FeatureFlag)
+	return builtinTaskPromptFor(task, data, canCode)
+}
+
+// builtinTaskPromptFor is the first user message of a built-in agent session:
 // the mention's comment, or — for a delegated issue — what delegation means
-// and what work to do.
-func builtinTaskPrompt(task domain.AgentTask, data domain.Bootstrap) string {
+// and what work to do. With canCode (coding sessions on and the
+// start_coding_session tool offered) code changes go to a coding session.
+func builtinTaskPromptFor(task domain.AgentTask, data domain.Bootstrap, canCode bool) string {
 	prompt := task.InitialPrompt
 	if prompt == "" {
 		prompt = task.Prompt
@@ -885,8 +894,13 @@ func builtinTaskPrompt(task domain.AgentTask, data domain.Bootstrap) string {
 		"- triage it: set the priority, labels, estimate or project when they are unset and the issue makes them clear;\n" +
 		"- break larger work down into sub-issues;\n" +
 		"- write the plan or spec it needs (as your reply, or as a comment or description update);\n" +
-		"- when what is wanted is genuinely ambiguous, call ask_user with a short question and options instead of guessing.\n" +
-		"You have no access to code or repositories. If the issue needs code changes, say so in one sentence and do the parts you can do here.\n" +
-		"End with a short reply in the language of the issue: what you did and what is left. Refer to the issue by its identifier only; do not repeat its title.")
+		"- when what is wanted is genuinely ambiguous, call ask_user with a short question and options instead of guessing.\n")
+	if canCode {
+		text.WriteString("If the issue asks for code changes (a fix, an implementation, tests or a pull request), call start_coding_session now with its issueId and a prompt " +
+			"that describes the change: a coding agent changes the code in a sandbox and opens a draft pull request. Do not write the code or a plan for it yourself.\n")
+	} else {
+		text.WriteString("You have no access to code or repositories. If the issue needs code changes, say so in one sentence and do the parts you can do here.\n")
+	}
+	text.WriteString("End with a short reply in the language of the issue: what you did and what is left. Refer to the issue by its identifier only; do not repeat its title.")
 	return text.String()
 }
