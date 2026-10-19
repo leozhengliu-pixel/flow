@@ -1,0 +1,19 @@
+# Secret scanning config for gitleaks (picked up by gitleaks-action in
+# .github/workflows/security.yml). Keep the default rule set; only exclude
+# fixtures that are fake by construction.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Helm chart test fixtures"
+# Scenarios use a fake coding secret key (base64 of "test-key-test-key-...")
+# and the goldens are their rendered output, including checksum/secret
+# annotations. Nothing in these directories is a real credential.
+paths = [
+  '''^deploy/helm/flow/tests/(scenarios|golden)/[^/]+\.yaml$''',
+]
+# The same fake key, reused by the sandbox envtest RBAC test.
+regexes = [
+  '''dGVzdC1rZXktdGVzdC1rZXktdGVzdC1rZXktdGVzdC0=''',
+]
