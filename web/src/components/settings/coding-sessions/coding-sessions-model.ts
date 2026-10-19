@@ -118,12 +118,63 @@ function cpuLabel(cpu: string) {
 function memoryLabel(memory: string) {
   return memory.replace(/Gi$/i, " GB").replace(/Mi$/i, " MB");
 }
-/** "Small · 1 vCPU, 8 GB", from the server's sizes when known. */
+/** "Medium" / "2 vCPU · 16 GB memory" (the reference app's two-line options), from the server's sizes when known. */
 export function sandboxSizeOptions(status?: CodingStatus): { value: CodingSandboxSize; label: string; detail: string }[] {
   return SANDBOX_SIZES.map((size) => {
     const spec = status?.sizes?.[size] ?? DEFAULT_SIZES[size];
-    return { value: size, label: size[0].toUpperCase() + size.slice(1), detail: `${cpuLabel(spec.cpu)}, ${memoryLabel(spec.memory)}` };
+    return { value: size, label: size[0].toUpperCase() + size.slice(1), detail: `${cpuLabel(spec.cpu)} · ${memoryLabel(spec.memory)} memory` };
   });
+}
+
+/** "Add tool…" presets: the reference app's list, as mise tool ids with a few pinned majors. */
+export const TOOL_PRESETS: { tool: string; label: string; versions: string[] }[] = [
+  { tool: "node", label: "Node.js", versions: ["latest", "26", "24", "22"] },
+  { tool: "bun", label: "Bun", versions: ["latest", "1.3", "1.2"] },
+  { tool: "deno", label: "Deno", versions: ["latest", "2"] },
+  { tool: "python", label: "Python", versions: ["latest", "3.14", "3.13", "3.12", "3.11"] },
+  { tool: "ruby", label: "Ruby", versions: ["latest", "3.4", "3.3"] },
+  { tool: "go", label: "Go", versions: ["latest", "1.25", "1.24"] },
+  { tool: "rust", label: "Rust", versions: ["latest", "1.90", "1.89"] },
+  { tool: "java", label: "Java", versions: ["latest", "25", "21", "17"] },
+  { tool: "dotnet", label: ".NET", versions: ["latest", "10", "9", "8"] },
+  { tool: "postgres", label: "PostgreSQL", versions: ["latest", "18", "17", "16"] },
+  { tool: "redis", label: "Redis", versions: ["latest", "8", "7"] },
+  { tool: "mongodb", label: "MongoDB", versions: ["latest", "8", "7"] },
+  { tool: "clickhouse", label: "ClickHouse", versions: ["latest"] },
+];
+
+export function toolLabel(tool: string): string {
+  return TOOL_PRESETS.find((preset) => preset.tool === tool)?.label ?? tool;
+}
+
+/** Version choices for a tool: the preset's, plus the saved value when it is a custom one. */
+export function toolVersions(tool: string, current: string): string[] {
+  const versions = TOOL_PRESETS.find((preset) => preset.tool === tool)?.versions ?? ["latest"];
+  const value = current.trim() || "latest";
+  return versions.includes(value) ? versions : [...versions, value];
+}
+
+/** "9s", "1m 12s", "1h 3m". */
+export function formatDuration(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  if (total < 60) return `${total}s`;
+  const minutes = Math.floor(total / 60);
+  if (minutes < 60) return `${minutes}m ${total % 60}s`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+/** Wall time of a finished snapshot build, or undefined while it runs. */
+export function snapshotDuration(snapshot: { startedAt?: string; createdAt: string; finishedAt?: string }): number | undefined {
+  if (!snapshot.finishedAt) return undefined;
+  const start = Date.parse(snapshot.startedAt || snapshot.createdAt);
+  const end = Date.parse(snapshot.finishedAt);
+  return Number.isNaN(start) || Number.isNaN(end) ? undefined : Math.max(0, end - start);
+}
+
+/** Environment owners: the saved list, or the creator, who owns an environment without one. */
+export function environmentOwners(environment: { ownerIds?: string[]; createdBy?: string }): string[] {
+  if (environment.ownerIds?.length) return [...environment.ownerIds];
+  return environment.createdBy ? [environment.createdBy] : [];
 }
 
 export function codeHostLabel(host: CodeHostKind): string {
@@ -167,6 +218,8 @@ export interface EnvironmentDraft {
   prepareScript: string;
   customGuidance: string;
   dependencyManagement: CodingDependencyManagement;
+  /** Shown under Permissions; sent only when changed (admins only, §18). */
+  ownerIds: string[];
 }
 
 export function emptyDraft(status?: CodingStatus): EnvironmentDraft {
@@ -188,6 +241,7 @@ export function emptyDraft(status?: CodingStatus): EnvironmentDraft {
     prepareScript: "",
     customGuidance: "",
     dependencyManagement: "custom-and-generated",
+    ownerIds: [],
   };
 }
 
@@ -212,6 +266,7 @@ export function draftFromEnvironment(environment: CodingEnvironment): Environmen
     prepareScript: environment.prepareScript ?? "",
     customGuidance: environment.customGuidance ?? "",
     dependencyManagement: environment.dependencyManagement ?? "custom-and-generated",
+    ownerIds: environmentOwners(environment),
   };
 }
 
@@ -219,7 +274,7 @@ export function splitDomains(value: string): string[] {
   return [...new Set(value.split(/[\s,]+/).map((item) => item.trim().toLowerCase()).filter(Boolean))];
 }
 
-/** The PATCH/POST body: blank rows are dropped and names trimmed. */
+/** The PATCH/POST body: blank rows are dropped and names trimmed. Owners are sent separately (admins only). */
 export function draftToInput(draft: EnvironmentDraft): CodingEnvironmentInput {
   const tools: Record<string, string> = {};
   for (const row of draft.tools) if (row.tool.trim()) tools[row.tool.trim()] = row.version.trim() || "latest";

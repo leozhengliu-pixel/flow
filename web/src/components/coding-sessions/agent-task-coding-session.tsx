@@ -1,20 +1,22 @@
+import { useState } from 'react'
 import type { BootstrapData } from '@/types/flow'
 import type { CodingSession } from '@/types/coding-sessions'
-import { CodingSessionPanel, CodingSessionView } from './coding-session-panel'
+import { CodingSessionDialog, CodingSessionStatusRow } from './coding-session-card'
 import { useCodingAvailability, useCodingSession, useCodingSessions } from './use-coding-sessions'
+import './coding-sessions.css'
 
 /** The agent task fields this needs. `codingSessionId` is set by the server when the task anchors a coding session. */
 type AnchorTask = { id: string; issueId?: string; codingSessionId?: string }
 
 /**
- * Mounted in each agent session thread (issue-agent-tasks.tsx): when the task anchors a coding session, its session
- * view renders inside the thread (the thread keeps rendering replies, plan and reply box; this adds state, sandbox,
- * PRs, steps and actions).
+ * Mounted in each agent session thread (issue-agent-tasks.tsx): when the task anchors a coding session, the thread shows
+ * the session's status row ("Thinking… 02:42", "Error …"), like the reference app's session card in issue activity;
+ * the row opens the full session view.
  */
 export function AgentTaskCodingSession({ task, data }: { task: AnchorTask; data: BootstrapData }) {
   const available = useCodingAvailability(data)
   if (!available) return null
-  if (task.codingSessionId) return <CodingSessionView sessionId={task.codingSessionId} data={data} activity="steps"/>
+  if (task.codingSessionId) return <LiveEmbeddedSession sessionId={task.codingSessionId} data={data}/>
   return task.issueId ? <IssueAnchoredSession task={task} issueId={task.issueId} data={data}/> : null
 }
 
@@ -22,10 +24,15 @@ export function AgentTaskCodingSession({ task, data }: { task: AnchorTask; data:
 function IssueAnchoredSession({ task, issueId, data }: { task: AnchorTask; issueId: string; data: BootstrapData }) {
   const { sessions } = useCodingSessions({ issueId })
   const match = sessions.find(session => session.agentSessionId === task.id)
-  return match ? <LiveEmbeddedSession initial={match} data={data}/> : null
+  return match ? <LiveEmbeddedSession sessionId={match.id} initial={match} data={data}/> : null
 }
 
-function LiveEmbeddedSession({ initial, data }: { initial: CodingSession; data: BootstrapData }) {
-  const { session, apply } = useCodingSession(initial.id, initial)
-  return session ? <CodingSessionPanel session={session} data={data} onChange={apply} activity="steps"/> : null
+function LiveEmbeddedSession({ sessionId, initial, data }: { sessionId: string; initial?: CodingSession; data: BootstrapData }) {
+  const { session } = useCodingSession(sessionId, initial)
+  const [open, setOpen] = useState(false)
+  if (!session) return null
+  return <div className="coding-session-embedded" data-state={session.state}>
+    <CodingSessionStatusRow session={session} data={data} onOpen={() => setOpen(true)}/>
+    {open && <CodingSessionDialog sessionId={session.id} initial={session} data={data} open onOpenChange={setOpen}/>}
+  </div>
 }

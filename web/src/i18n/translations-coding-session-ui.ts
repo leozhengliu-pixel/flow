@@ -213,4 +213,22 @@ export const codingSessionUiZhCN: Record<string, string> = {
   "Sent comment to coding agent": "已将评论发送给编码 Agent",
   // Environment picker elicitation: the preselected (leading) repository
   "Recommended": "推荐",
+  // Session view, card and status row (reference app's session page)
+  "Session details": "会话详情",
+  "Thinking…": "思考中…",
+  "Error": "错误",
+  "Stop session": "停止会话",
+  "Session URL": "会话链接",
+  "Branch name": "分支名称",
+  "Copied session URL": "已复制会话链接",
+  "Copied branch name": "已复制分支名称",
+  "Copied message": "已复制消息",
+  "Show agent": "显示 Agent",
+  "Elapsed time": "已用时间",
+  "Session stream": "会话动态",
+  "No changes yet": "暂无更改",
+  "Changes will appear here as the agent works.": "Agent 工作时，更改会显示在这里。",
+  "Tell Flow what to do next…": "告诉 Flow 下一步做什么…",
+  "started by": "启动者",
+  "Flow": "Flow",
 }

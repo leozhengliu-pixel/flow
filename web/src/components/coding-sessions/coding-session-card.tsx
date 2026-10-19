@@ -1,15 +1,17 @@
 import { useState } from 'react'
-import { ChevronRight, Code2, GitBranch, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronRight, CircleDot, CircleSlash, GitBranch, X } from 'lucide-react'
+import { activityTimeLabel } from '@/components/activity/issue-activity-model'
+import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { AppLink } from '@/components/ui/app-link'
 import { useI18n } from '@/i18n/i18n'
 import { issuePath } from '@/lib/app-routes'
 import type { BootstrapData } from '@/types/flow'
 import type { CodingSession } from '@/types/coding-sessions'
-import { CODING_PHASE_LABELS, isCodingSessionTerminal, PULL_REQUEST_STATE_LABELS, pullRequestDisplayState, pullRequestNumberLabel } from './coding-session-model'
+import { CODING_PHASE_LABELS, codingErrorInfo, codingRunStartedAt, codingStatusLine, formatCodingElapsed, isCodingSessionTerminal, PULL_REQUEST_STATE_LABELS, pullRequestDisplayState, pullRequestNumberLabel } from './coding-session-model'
 import { CodingStateBadge } from './coding-session-parts'
-import { CodingSessionPanel, CodingSessionView } from './coding-session-panel'
-import { useCodingSession, useCodingSessions, useDismissedCodingSessions } from './use-coding-sessions'
+import { CodingAgentAvatar, CodingSessionView } from './coding-session-panel'
+import { useCodingSession, useCodingSessions, useDismissedCodingSessions, useNow } from './use-coding-sessions'
 import './coding-sessions.css'
 
 const sessionTitle = (session: CodingSession, data: BootstrapData) => session.displayTitle || data.issues.find(issue => issue.id === session.issueId)?.title || session.repository || 'Coding session'
@@ -29,41 +31,88 @@ function CodingSessionSummary({ session, data }: { session: CodingSession; data:
 }
 
 /**
- * The session card shown in agent chat (and anywhere a session is referenced): a live summary that expands into the
- * full session view in place. Issue sessions also link to their issue.
+ * The session's status row, like the reference app's session card in issue activity: a status icon (a spinner while the
+ * agent works), the label ("Thinking…", "Error"), the detail (error title, summary) on one line, the running timer and a
+ * chevron. The whole row opens the session view.
+ */
+export function CodingSessionStatusRow({ session, data, onOpen }: { session: CodingSession; data: BootstrapData; onOpen: () => void }) {
+  const { t } = useI18n()
+  const errorTitle = session.state === 'error' ? t(codingErrorInfo(session.errorCode, { workspace: data.workspace.urlKey, codeHost: session.codeHost }).title) : undefined
+  const status = codingStatusLine(session, errorTitle)
+  const live = status.live && session.phase !== 'awaitingApproval'
+  const now = useNow(live)
+  const started = codingRunStartedAt(session)
+  const elapsed = live && started && !Number.isNaN(Date.parse(started)) ? formatCodingElapsed(now - Date.parse(started)) : ''
+  return <button type="button" className="coding-session-status-row" data-tone={status.tone} onClick={onOpen}>
+    <CodingStatusIcon tone={status.tone}/>
+    <span className="coding-session-status-label">{t(status.label)}{status.ellipsis ? '…' : ''}</span>
+    {status.detail && <span className="coding-session-status-detail" data-i18n-ignore>{status.detail}</span>}
+    <span className="coding-session-status-end">
+      {elapsed && <time aria-label={t('Elapsed time')}>{elapsed}</time>}
+      <ChevronRight size={16} aria-hidden="true"/>
+    </span>
+    <span className="sr-only">{t('Show session')}</span>
+  </button>
+}
+
+function CodingStatusIcon({ tone }: { tone: ReturnType<typeof codingStatusLine>['tone'] }) {
+  if (tone === 'working') return <span className="coding-agent-spinner" aria-hidden="true"/>
+  if (tone === 'error') return <AlertTriangle size={16} aria-hidden="true" className="coding-session-status-icon"/>
+  if (tone === 'done') return <CheckCircle2 size={16} aria-hidden="true" className="coding-session-status-icon"/>
+  if (tone === 'input') return <CircleDot size={16} aria-hidden="true" className="coding-session-status-icon"/>
+  return <CircleSlash size={16} aria-hidden="true" className="coding-session-status-icon"/>
+}
+
+/**
+ * The session card shown in agent chat (and anywhere a session is referenced), like the reference app's session card in
+ * issue activity: "<Agent> started by <member> <time>" over the status row; the row opens the session view.
  */
 export function CodingSessionCard({ sessionId, initial, data, onDismiss }: { sessionId: string; initial?: CodingSession; data: BootstrapData; onDismiss?: () => void }) {
-  const { t } = useI18n()
-  const { session, error, apply } = useCodingSession(sessionId, initial)
+  const { t, locale } = useI18n()
+  const { session, error } = useCodingSession(sessionId, initial)
   const [open, setOpen] = useState(false)
-  const [other, setOther] = useState<CodingSession>()
   if (!session) return error ? <p className="coding-session-error-text" role="alert">{error}</p> : <div className="coding-session-card is-loading" role="status">{t('Loading coding session…')}</div>
   const issue = session.issueId ? data.issues.find(item => item.id === session.issueId) : undefined
+  const creator = data.users.find(user => user.id === session.creatorId)
+  const created = Number.isNaN(Date.parse(session.createdAt)) ? '' : activityTimeLabel(session.createdAt, Date.now(), locale).replace(/m(?= ago$)/, 'min')
   return <article className="coding-session-card" data-state={session.state} aria-label={t('Coding session')}>
-    <div className="coding-session-card-row">
-      <Code2 size={14} aria-hidden="true" className="coding-session-card-icon"/>
-      <button type="button" className="coding-session-card-toggle" aria-expanded={open} onClick={() => setOpen(value => !value)}>
-        <CodingSessionSummary session={session} data={data}/>
-        <ChevronRight size={14} aria-hidden="true" data-open={open || undefined}/>
-        <span className="sr-only">{t(open ? 'Hide session' : 'Show session')}</span>
-      </button>
+    <header className="coding-session-card-header">
+      <CodingAgentAvatar state={session.state}/>
+      <span className="coding-session-card-byline">
+        <strong>{t('Flow')}</strong>
+        {creator && <><span>{t('started by')}</span><strong data-i18n-ignore>{creator.displayName || creator.name}</strong></>}
+        {created && <time dateTime={session.createdAt}>{created}</time>}
+      </span>
+      <span className="coding-session-card-subject" data-i18n-ignore>{sessionTitle(session, data)}</span>
       {issue && <AppLink className="coding-session-link" href={`${issuePath(data.workspace.urlKey, issue)}#agent-session-${session.agentSessionId}`}>{t('Open issue')}</AppLink>}
-      {onDismiss && isCodingSessionTerminal(session) && <button type="button" className="coding-session-icon-button" aria-label={t('Dismiss')} onClick={onDismiss}><X size={13}/></button>}
-    </div>
-    {open && <CodingSessionPanel session={session} data={data} onChange={apply} onOpenSession={setOther}/>}
-    {other && <CodingSessionDialog sessionId={other.id} initial={other} data={data} open onOpenChange={value => { if (!value) setOther(undefined) }}/>}
+      {onDismiss && isCodingSessionTerminal(session) && <button type="button" className="coding-session-icon-button" aria-label={t('Dismiss')} onClick={onDismiss}><X size={14}/></button>}
+    </header>
+    <CodingSessionStatusRow session={session} data={data} onOpen={() => setOpen(true)}/>
+    {open && <CodingSessionDialog sessionId={session.id} initial={session} data={data} open onOpenChange={setOpen} onDismiss={onDismiss}/>}
   </article>
 }
 
-/** The full session view in a dialog (from lists and from actions that start another session). */
+/**
+ * The full session view in a dialog, laid out like the reference app's session page: a 44px bar with the issue and
+ * session title and the "Hide agent" toggle over the changes and the agent panel. Actions that start another session
+ * switch the dialog to it.
+ */
 export function CodingSessionDialog({ sessionId, initial, data, open, onOpenChange, onDismiss }: { sessionId: string; initial?: CodingSession; data: BootstrapData; open: boolean; onOpenChange: (open: boolean) => void; onDismiss?: () => void }) {
   const { t } = useI18n()
   // Mounted while open; "Fix with agent" and similar actions switch it to the session they started.
   const [shown, setShown] = useState<{ id: string; initial?: CodingSession }>({ id: sessionId, initial })
+  const [agentHidden, setAgentHidden] = useState(false)
+  const { session } = useCodingSession(shown.id, shown.initial)
+  const issue = session?.issueId ? data.issues.find(item => item.id === session.issueId) : undefined
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="coding-session-dialog" aria-describedby={undefined} closeLabel={t('Close')}>
-      <DialogTitle className="coding-session-dialog-title">{t('Coding session')}</DialogTitle>
-      <CodingSessionView key={shown.id} sessionId={shown.id} initial={shown.initial} data={data} onDismiss={onDismiss ? () => { onDismiss(); onOpenChange(false) } : undefined} onOpenSession={next => setShown({ id: next.id, initial: next })}/>
+      <header className="coding-session-dialog-bar">
+        {issue && <AppLink className="coding-session-dialog-crumb" href={issuePath(data.workspace.urlKey, issue)}><GitBranch size={14} aria-hidden="true"/><span data-i18n-ignore>{issue.identifier}</span></AppLink>}
+        {issue && <span className="coding-session-dialog-separator" aria-hidden="true">›</span>}
+        <DialogTitle className="coding-session-dialog-title"><span className="sr-only">{t('Coding session')}</span><span aria-hidden="true" data-i18n-ignore>{session ? sessionTitle(session, data) : ''}</span></DialogTitle>
+        <button type="button" className="coding-session-agent-toggle" aria-pressed={!agentHidden} aria-label={t(agentHidden ? 'Show agent' : 'Hide agent')} onClick={() => setAgentHidden(value => !value)}><AgentCursorGlyph size={14}/></button>
+      </header>
+      <CodingSessionView key={shown.id} sessionId={shown.id} initial={shown.initial} data={data} agentHidden={agentHidden} onDismiss={onDismiss ? () => { onDismiss(); onOpenChange(false) } : undefined} onOpenSession={next => setShown({ id: next.id, initial: next })}/>
     </DialogContent>
   </Dialog>
 }

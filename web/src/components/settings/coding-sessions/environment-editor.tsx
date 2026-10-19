@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FileUp, Sparkles } from "lucide-react";
+import { Info, Sparkles } from "lucide-react";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { useI18n } from "@/i18n/i18n";
 import {
@@ -14,8 +14,9 @@ import {
 } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
-import type { BootstrapData, CodeHostKind, CodingEnvironment, CodingEnvironmentSnapshot, CodingEnvVar } from "@/types/flow";
+import type { BootstrapData, CodeHostKind, CodingEnvironment, CodingEnvironmentSnapshot } from "@/types/flow";
 import type { GitLabCredentialMode } from "@/types/coding-sessions";
+import { IntegrationBrandIcon } from "../integration-brand-icon";
 import { SettingsCrumb } from "../settings-primitives";
 import {
   DEPENDENCY_OPTIONS,
@@ -31,10 +32,10 @@ import {
   validateDraft,
   type EnvironmentDraft,
 } from "./coding-sessions-model";
-import { CodingButton, CodingCard, CodingField, CodingRow, CodingSection, CodingSelect } from "./coding-settings-primitives";
+import { CodingButton, CodingCard, CodingCodeEditor, CodingRow, CodingSection, CodingSelect } from "./coding-settings-primitives";
 import { DebugTerminal } from "./debug-terminal";
 import { EnvImportDialog } from "./env-import-dialog";
-import { FilesEditor, SecretsEditor, ToolsEditor, VariablesEditor } from "./environment-fields";
+import { EnvVarsEditor, FilesEditor, OwnersEditor, ToolsEditor, type EnvRow } from "./environment-fields";
 import { ProposalPanel } from "./proposal-panel";
 import { RepositoryPicker } from "./repository-picker";
 import { SnapshotPanel } from "./snapshot-panel";
@@ -54,7 +55,17 @@ type Props = {
   onOpen: (id: string) => void;
 };
 
-/** The environment editor (`/settings/ai/coding-sessions/environments/:id`). */
+const repoName = (repository: string) => repository.trim().split("/").pop() || "";
+const rowsFromDraft = (draft: EnvironmentDraft): EnvRow[] => draft.variables.map((variable) => ({ ...variable, secret: false }));
+/** What "dirty" compares: the request body plus the owners, which are sent separately. */
+const fingerprint = (draft: EnvironmentDraft) => JSON.stringify({ ...draftToInput(draft), ownerIds: draft.ownerIds });
+
+/**
+ * The environment editor (`/settings/ai/coding-sessions/environments/:id` and `/new`), laid out
+ * like the reference app's: header actions (Configure with agent, Save changes), the
+ * repository/agent/model/size/tools card, then Files, Environment variables, Prepare script,
+ * Permissions, Custom guidance, Network, Debug and Snapshots sections.
+ */
 export function EnvironmentEditorPage({ data, environmentId, disabled, onBack, onOpen }: Props) {
   const { t } = useI18n();
   const isNew = environmentId === "new";
@@ -63,9 +74,10 @@ export function EnvironmentEditorPage({ data, environmentId, disabled, onBack, o
   const { environments } = useCodingEnvironments(false);
   const [environment, setEnvironment] = useState<CodingEnvironment>();
   const [loadError, setLoadError] = useState<string>();
-  const [draft, setDraft] = useState<EnvironmentDraft>(() => emptyDraft());
-  const [baseline, setBaseline] = useState<string>(() => JSON.stringify(draftToInput(emptyDraft())));
-  const [pendingSecrets, setPendingSecrets] = useState<CodingEnvVar[]>([]);
+  const [draftState, setDraft] = useState<EnvironmentDraft>(() => emptyDraft());
+  const [envRows, setEnvRows] = useState<EnvRow[]>([]);
+  const [baseline, setBaseline] = useState<string>(() => fingerprint(emptyDraft()));
+  const [baselineOwners, setBaselineOwners] = useState<string>("[]");
   const [saving, setSaving] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [saveError, setSaveError] = useState<string>();
@@ -77,7 +89,9 @@ export function EnvironmentEditorPage({ data, environmentId, disabled, onBack, o
     const nextDraft = draftFromEnvironment(next);
     setEnvironment(next);
     setDraft(nextDraft);
-    setBaseline(JSON.stringify(draftToInput(nextDraft)));
+    setEnvRows(rowsFromDraft(nextDraft));
+    setBaseline(fingerprint(nextDraft));
+    setBaselineOwners(JSON.stringify(nextDraft.ownerIds));
     setConflict(false);
   }, []);
 
@@ -118,38 +132,61 @@ export function EnvironmentEditorPage({ data, environmentId, disabled, onBack, o
     return () => clearInterval(timer);
   }, [agentRunning, environmentId, isNew]);
 
+  // The variables live in envRows (with their Secret checkbox); the draft is derived from them.
+  const draft = useMemo<EnvironmentDraft>(() => {
+    const variables = envRows.filter((row) => !row.secret).map(({ name, value }) => ({ name, value }));
+    // There is no visible Name field: the environment is named after its repository.
+    return { ...draftState, variables, name: draftState.name.trim() || repoName(draftState.repository) };
+  }, [draftState, envRows]);
+  const pendingSecrets = useMemo(() => envRows.filter((row) => row.secret).map(({ name, value }) => ({ name, value })), [envRows]);
+
   const update = (patch: Partial<EnvironmentDraft>) => setDraft((current) => ({ ...current, ...patch }));
   const savedSecretNames = (environment?.secrets ?? []).map((secret) => secret.name);
-  const errors = validateDraft(draft, pendingSecrets, savedSecretNames);
+  // The name follows the repository, so "Choose a repository" covers a missing name.
+  const errors = validateDraft(draft, pendingSecrets, savedSecretNames).filter((error) => draft.repository.trim() || error !== "Name is required");
   const repoInUse = repositoryConflict(environments, { id: environment?.id, codeHost: draft.codeHost, hostName: draft.hostName, repository: draft.repository });
-  const dirty = JSON.stringify(draftToInput(draft)) !== baseline || pendingSecrets.some((secret) => secret.name.trim());
+  const dirty = fingerprint(draft) !== baseline || pendingSecrets.some((secret) => secret.name.trim());
   const archived = Boolean(environment?.archivedAt);
   const locked = disabled || archived || saving;
+  const canManageOwners = data.viewerRole === "admin" || data.viewerRole === "owner";
+
+  // Leaving with unsaved changes asks first, in the app and when the tab closes.
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty && !saving;
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!dirtyRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
+  const leave = async () => {
+    if (dirtyRef.current && !(await confirmAction(t("Discard changes?"), { confirmLabel: t("Confirm"), danger: true }))) return;
+    onBack();
+  };
 
   const hostsOfKind = useMemo(() => (status?.codeHosts ?? []).filter((host) => host.codeHost === draft.codeHost), [status, draft.codeHost]);
-  const codeHostOptions = useMemo(() => {
-    const kinds = new Set<CodeHostKind>((status?.codeHosts ?? []).map((host) => host.codeHost));
-    if (!kinds.size) kinds.add("github").add("gitlab");
-    kinds.add(draft.codeHost);
-    return [...kinds].map((kind) => ({ value: kind, label: codeHostLabel(kind), translate: false }));
-  }, [status, draft.codeHost]);
+  const connectedKinds = useMemo(() => [...new Set((status?.codeHosts ?? []).filter((host) => host.connected).map((host) => host.codeHost))], [status]);
 
   const save = async () => {
     if (errors.length || repoInUse) return;
     setSaving(true);
     setSaveError(undefined);
     const secrets = pendingSecrets.filter((secret) => secret.name.trim()).map((secret) => ({ name: secret.name.trim(), value: secret.value }));
+    const owners = JSON.stringify(draft.ownerIds) !== baselineOwners ? { ownerIds: draft.ownerIds } : {};
     try {
       if (isNew) {
-        const created = await createCodingEnvironment({ ...draftToInput(draft), ...(secrets.length ? { secrets } : {}) });
-        setPendingSecrets([]);
+        const created = await createCodingEnvironment({ ...draftToInput(draft), ...owners, ...(secrets.length ? { secrets } : {}) });
+        setEnvRows([]);
+        dirtyRef.current = false;
         toast.success(t("Environment created"));
         onOpen(created.id);
         return;
       }
-      let saved = await updateCodingEnvironment(environmentId, { ...draftToInput(draft), version: draft.version });
+      let saved = await updateCodingEnvironment(environmentId, { ...draftToInput(draft), ...owners, version: draft.version });
       if (secrets.length) saved = await addCodingEnvironmentSecrets(environmentId, secrets);
-      setPendingSecrets([]);
       applyEnvironment(saved);
       toast.success(t("Environment saved"));
     } catch (reason) {
@@ -195,7 +232,7 @@ export function EnvironmentEditorPage({ data, environmentId, disabled, onBack, o
     return (
       <div className="feature-settings cs-settings">
         <SettingsCrumb pinned onClick={onBack}>{t("Coding sessions")}</SettingsCrumb>
-        <header className="feature-header"><h1>{t("Environment")}</h1></header>
+        <header className="feature-header"><h1>{t("Edit environment")}</h1></header>
         <p className="cs-inline-error" role="alert">{loadError}</p>
       </div>
     );
@@ -204,14 +241,29 @@ export function EnvironmentEditorPage({ data, environmentId, disabled, onBack, o
   const harnessOptions = [{ value: "", label: "Workspace default" }, ...HARNESS_OPTIONS.map((option) => ({ ...option, translate: option.value === "openSource" }))];
   const environmentHarness = draft.harness || "codex";
   const sizes = sandboxSizeOptions(status);
-  const latest = environment?.latestSnapshot;
+  const problem = saveError ?? (errors.length > 0 && dirty ? t(errors[0]) : undefined);
+  const owners = draft.ownerIds.length ? draft.ownerIds : [environment?.createdBy ?? data.viewer.id];
 
   return (
     <div className="feature-settings cs-settings cs-editor" data-testid="coding-environment-editor">
-      <SettingsCrumb pinned onClick={onBack}>{t("Coding sessions")}</SettingsCrumb>
-      <header className="feature-header">
-        <h1 data-i18n-ignore={isNew ? undefined : true}>{isNew ? t("New environment") : environment?.name}</h1>
-        <p>{t("Configure the sandbox that coding sessions use for one repository.")}</p>
+      <SettingsCrumb pinned onClick={() => void leave()}>{t("Coding sessions")}</SettingsCrumb>
+      <header className="feature-header cs-editor-header">
+        <div className="cs-editor-title">
+          <h1>{t(isNew ? "New environment" : "Edit environment")}</h1>
+          <div className="cs-editor-actions">
+            {!isNew && (
+              <CodingButton className="cs-agent-button" disabled={disabled || archived || dirty || agentRunning || Boolean(environment?.pendingProposal)} onClick={() => void startAgent("configure")}>
+                <Sparkles size={16} />
+                Configure with agent
+              </CodingButton>
+            )}
+            <CodingButton primary disabled={locked || !dirty || errors.length > 0 || Boolean(repoInUse)} onClick={() => void save()}>
+              {isNew ? "Create environment" : "Save changes"}
+            </CodingButton>
+          </div>
+        </div>
+        <p>{t("Configure this coding environment.")}</p>
+        {problem && <p className="cs-inline-error cs-editor-problem" role="alert">{problem}</p>}
       </header>
       {archived && <p className="cs-banner" role="status">{t("This environment is archived. Unarchive it from Coding sessions to edit it.")}</p>}
       {conflict && (
@@ -221,176 +273,161 @@ export function EnvironmentEditorPage({ data, environmentId, disabled, onBack, o
         </p>
       )}
 
-      <CodingCard>
-        <div className="cs-form-row">
-          <CodingField label="Name" htmlFor="cs-env-name">
-            <input id="cs-env-name" className="cs-input" value={draft.name} disabled={locked} placeholder={t("e.g. Web app")} onChange={(event) => update({ name: event.target.value })} />
-          </CodingField>
-        </div>
-        <CodingRow title="Code host" description="Where the repository lives">
-          {hostsOfKind.length > 1 && (
-            <CodingSelect label="Host" value={draft.hostName} disabled={locked || !isNew} options={hostsOfKind.map((host) => ({ value: host.hostName, label: host.hostName, translate: false }))} onChange={(hostName) => update({ hostName, repository: "", repositoryId: undefined })} />
+      <CodingCard className="cs-editor-card">
+        <CodingRow
+          title="Repository"
+          description={repoInUse
+            ? t("{name} already uses this repository. Only one active environment per repository is allowed.").replace("{name}", repoInUse.name)
+            : isNew ? "Choose the repository for this environment" : "Create a new environment to use a different repository"}
+          warning={Boolean(repoInUse)}
+        >
+          {isNew ? (
+            <>
+              {connectedKinds.length > 1 && (
+                <CodingSelect
+                  label="Code host"
+                  value={draft.codeHost}
+                  disabled={locked}
+                  options={connectedKinds.map((kind) => ({ value: kind, label: codeHostLabel(kind), translate: false }))}
+                  onChange={(value) => {
+                    const codeHost = value as CodeHostKind;
+                    const host = status?.codeHosts?.find((item) => item.codeHost === codeHost && item.connected) ?? status?.codeHosts?.find((item) => item.codeHost === codeHost);
+                    update({ codeHost, hostName: host?.hostName ?? (codeHost === "gitlab" ? "gitlab.com" : "github.com"), repository: "", repositoryId: undefined, defaultBranch: undefined });
+                  }}
+                />
+              )}
+              {hostsOfKind.length > 1 && (
+                <CodingSelect label="Host" value={draft.hostName} disabled={locked} options={hostsOfKind.map((host) => ({ value: host.hostName, label: host.hostName, translate: false }))} onChange={(hostName) => update({ hostName, repository: "", repositoryId: undefined })} />
+              )}
+              <RepositoryPicker
+                codeHost={draft.codeHost}
+                hostName={draft.hostName}
+                value={draft.repository}
+                disabled={locked}
+                onChange={(repository) => update({ repository: repository.fullName, repositoryId: repository.id, defaultBranch: repository.defaultBranch || undefined, name: repoName(repository.fullName) })}
+              />
+            </>
+          ) : (
+            <span className="cs-repo-value" data-testid="environment-repository">
+              <IntegrationBrandIcon provider={draft.codeHost} size={16} />
+              <span data-i18n-ignore>{draft.hostName && draft.hostName !== "github.com" && draft.hostName !== "gitlab.com" ? `${draft.hostName}/` : ""}{draft.repository}</span>
+            </span>
           )}
-          <CodingSelect
-            label="Code host"
-            value={draft.codeHost}
-            disabled={locked || !isNew}
-            options={codeHostOptions}
-            onChange={(value) => {
-              const codeHost = value as CodeHostKind;
-              const host = status?.codeHosts?.find((item) => item.codeHost === codeHost && item.connected) ?? status?.codeHosts?.find((item) => item.codeHost === codeHost);
-              update({ codeHost, hostName: host?.hostName ?? (codeHost === "gitlab" ? "gitlab.com" : "github.com"), repository: "", repositoryId: undefined, defaultBranch: undefined });
-            }}
-          />
         </CodingRow>
         {draft.codeHost === "gitlab" && (
           <p className="cs-card-text cs-gitlab-note" data-testid="gitlab-credential-note">
             {t(gitlabCredentialNote(status?.codeHosts?.find((item) => item.codeHost === "gitlab")?.credentialMode))}
           </p>
         )}
-        <CodingRow
-          title="Repository"
-          description={repoInUse ? t("{name} already uses this repository. Only one active environment per repository is allowed.").replace("{name}", repoInUse.name) : "Only one active environment per repository"}
-          warning={Boolean(repoInUse)}
-        >
-          <RepositoryPicker
-            codeHost={draft.codeHost}
-            hostName={draft.hostName}
-            value={draft.repository}
-            disabled={locked || !isNew}
-            onChange={(repository) => update({ repository: repository.fullName, repositoryId: repository.id, defaultBranch: repository.defaultBranch || undefined, name: draft.name || repository.fullName.split("/").pop() || "" })}
-          />
+        <CodingRow title="Agent">
+          <CodingSelect label="Environment agent" value={draft.harness} disabled={locked} options={harnessOptions} onChange={(value) => update({ harness: value as EnvironmentDraft["harness"], model: "auto" })} />
         </CodingRow>
+        <CodingRow title="Model">
+          <CodingSelect label="Environment model" value={draft.model} disabled={locked} options={modelOptions(models, environmentHarness).map((option) => ({ ...option, translate: option.value === "auto" }))} onChange={(model) => update({ model })} />
+        </CodingRow>
+        <CodingRow title="Sandbox size" description="Set CPU and memory for new coding sessions in this environment">
+          <CodingSelect label="Sandbox size" value={draft.sandboxSize} disabled={locked} options={sizes.map((size) => ({ value: size.value, label: size.label, detail: size.detail }))} onChange={(value) => update({ sandboxSize: value as EnvironmentDraft["sandboxSize"] })} />
+        </CodingRow>
+        <div className="feature-row cs-row cs-tools-row">
+          <div>
+            <strong>{t("Tool versions")}</strong>
+            <span>{t("Add the tools that Flow should install in this environment")}</span>
+          </div>
+          <aside>
+            <ToolsEditor tools={draft.tools} disabled={locked} onChange={(tools) => update({ tools })} />
+          </aside>
+        </div>
       </CodingCard>
 
-      <CodingSection title="Agent and model" description="Overrides the workspace defaults for sessions in this environment.">
-        <CodingCard>
-          <CodingRow title="Agent">
-            <CodingSelect label="Environment agent" value={draft.harness} disabled={locked} options={harnessOptions} onChange={(value) => update({ harness: value as EnvironmentDraft["harness"], model: "auto" })} />
-          </CodingRow>
-          <CodingRow title="Model" description="May affect quality and cost of code changes">
-            <CodingSelect label="Environment model" value={draft.model} disabled={locked} options={modelOptions(models, environmentHarness).map((option) => ({ ...option, translate: option.value === "auto" }))} onChange={(model) => update({ model })} />
-          </CodingRow>
-          <CodingRow title="Sandbox size" description="CPU and memory for each sandbox. Larger sizes cost more per hour.">
-            <CodingSelect label="Sandbox size" value={draft.sandboxSize} disabled={locked} options={sizes.map((size) => ({ value: size.value, label: size.label, detail: size.detail }))} onChange={(value) => update({ sandboxSize: value as EnvironmentDraft["sandboxSize"] })} />
-          </CodingRow>
+      {environment?.pendingProposal ? (
+        <CodingCard className="cs-proposal-card">
+          <ProposalPanel environment={environment} proposal={environment.pendingProposal} disabled={disabled} onApplied={(next) => applyEnvironment(next)} />
         </CodingCard>
+      ) : agentRunning ? (
+        <CodingCard className="cs-proposal-card">
+          <CodingRow title="Configure with agent" description="Flow Agent is working. Its proposal will appear here." icon={<Sparkles size={16} />} />
+        </CodingCard>
+      ) : null}
+
+      <CodingSection title="Files" description="Add files to the sandbox’s home directory" className="is-compact">
+        <FilesEditor files={draft.files} disabled={locked} onChange={(files) => update({ files })} />
       </CodingSection>
 
-      <CodingSection title="Setup" description="Runs when a sandbox starts without a snapshot, and when a snapshot is built.">
-        <CodingCard className="cs-form-card">
-          <CodingField label="Runtimes and tools" hint="Installed with mise, for example node 22 or python 3.12.">
-            <ToolsEditor tools={draft.tools} disabled={locked} onChange={(tools) => update({ tools })} />
-          </CodingField>
-          <CodingField label="Files" hint="Written to the sandbox home directory before setup.">
-            <FilesEditor files={draft.files} disabled={locked} onChange={(files) => update({ files })} />
-          </CodingField>
-          <div className="cs-field">
-            <div className="cs-field-heading">
-              <label>{t("Environment variables")}</label>
-              <button type="button" className="cs-text-button" disabled={locked} onClick={() => setImportOpen(true)}>
-                <FileUp size={13} />
-                {t("Import from .env")}
-              </button>
-            </div>
-            <VariablesEditor variables={draft.variables} disabled={locked} onChange={(variables) => update({ variables })} />
-            <p className="cs-field-hint">{t("Visible to the agent and in sandbox logs.")}</p>
-          </div>
-          <CodingField label="Environment secrets" hint="Encrypted on save and only available while setup runs. Saved values are never shown and can't be edited. Anything the prepare script writes to disk is kept in snapshots.">
-            <SecretsEditor
-              saved={environment?.secrets ?? []}
-              pending={pendingSecrets}
-              disabled={locked}
-              onPendingChange={setPendingSecrets}
-              onDelete={environment ? async (name) => {
-                try {
-                  const next = await deleteCodingEnvironmentSecret(environment.id, name);
-                  setEnvironment(next);
-                } catch (reason) {
-                  toast.error(errorMessage(reason, "Could not delete the secret"));
-                }
-              } : undefined}
-            />
-          </CodingField>
-          <CodingField label="Prepare script" htmlFor="cs-prepare" hint="Runs in the repository with bash after tools are installed, for example npm ci.">
-            <textarea id="cs-prepare" className="cs-code" spellCheck={false} rows={6} value={draft.prepareScript} disabled={locked} placeholder={"npm ci\nnpm run build"} onChange={(event) => update({ prepareScript: event.target.value })} />
-          </CodingField>
-          <div className="cs-field cs-field-inline">
-            <div>
-              <label>{t("Dependency management")}</label>
-              <p className="cs-field-hint">{t(DEPENDENCY_OPTIONS.find((option) => option.value === draft.dependencyManagement)?.description ?? "")}</p>
-            </div>
-            <CodingSelect label="Dependency management" value={draft.dependencyManagement} disabled={locked} options={DEPENDENCY_OPTIONS} onChange={(value) => update({ dependencyManagement: value as EnvironmentDraft["dependencyManagement"] })} />
-          </div>
-          <CodingField label="Custom guidance" htmlFor="cs-guidance" hint="Instructions for the agent, such as how to run tests or start the app.">
-            <textarea id="cs-guidance" className="cs-textarea" rows={4} value={draft.customGuidance} disabled={locked} onChange={(event) => update({ customGuidance: event.target.value })} />
-          </CodingField>
-        </CodingCard>
+      <CodingSection title="Environment variables" description="Secret values are encrypted before saving. Saved secret rows are masked and can’t be changed." className="is-compact">
+        <EnvVarsEditor
+          rows={envRows}
+          saved={environment?.secrets ?? []}
+          disabled={locked}
+          onChange={setEnvRows}
+          onImport={() => setImportOpen(true)}
+          onDeleteSecret={environment ? async (name) => {
+            try {
+              const next = await deleteCodingEnvironmentSecret(environment.id, name);
+              setEnvironment(next);
+            } catch (reason) {
+              toast.error(errorMessage(reason, "Could not delete the secret"));
+            }
+          } : undefined}
+        />
+      </CodingSection>
+
+      <CodingSection
+        title="Prepare script"
+        titleAccessory={
+          <span className="cs-info" tabIndex={0} role="img" aria-label={t("Runs in the repository with bash after tools are installed")} title={t("Runs in the repository with bash after tools are installed")}>
+            <Info size={14} aria-hidden="true" />
+          </span>
+        }
+        description="Runs while Flow prepares the environment"
+      >
+        <div className="feature-card">
+          <CodingCodeEditor aria-label={t("Prepare script")} placeholder="npm ci" value={draft.prepareScript} disabled={locked} onChange={(prepareScript) => update({ prepareScript })} />
+        </div>
+      </CodingSection>
+
+      <CodingSection title="Permissions" description="Environment owners can change settings, open terminals, and manage other owners. Workspace owners and admins can manage any environment.">
+        <OwnersEditor ownerIds={owners} users={data.users} canManage={canManageOwners && !locked} onChange={(ownerIds) => update({ ownerIds })} />
+      </CodingSection>
+
+      <CodingSection title="Custom guidance" description="Add instructions for the agent to follow in this environment">
+        <div className="feature-card cs-guidance">
+          <textarea aria-label={t("Custom guidance")} value={draft.customGuidance} disabled={locked} onChange={(event) => update({ customGuidance: event.target.value })} />
+        </div>
       </CodingSection>
 
       <CodingSection title="Network" description="Outbound access from the sandbox. Model providers are always reached through Flow.">
-        <CodingCard className="cs-form-card">
-          <div className="cs-field cs-field-inline">
-            <div>
-              <label>{t("Network access")}</label>
-              <p className="cs-field-hint">{t(NETWORK_OPTIONS.find((option) => option.value === draft.network)?.description ?? "")}</p>
-            </div>
+        <CodingCard>
+          <CodingRow title="Network access" description={NETWORK_OPTIONS.find((option) => option.value === draft.network)?.description}>
             <CodingSelect label="Network access" value={draft.network} disabled={locked} options={NETWORK_OPTIONS} onChange={(value) => update({ network: value as EnvironmentDraft["network"] })} />
-          </div>
+          </CodingRow>
           {draft.network === "extended" && (
-            <CodingField label="Allowed domains" htmlFor="cs-domains" hint="One per line. A leading dot matches subdomains, for example .example.com.">
-              <textarea id="cs-domains" className="cs-code" rows={3} value={draft.allowedDomains} disabled={locked} onChange={(event) => update({ allowedDomains: event.target.value })} />
-            </CodingField>
+            <div className="cs-domains">
+              <label htmlFor="cs-domains">{t("Allowed domains")}</label>
+              <textarea id="cs-domains" className="cs-code" rows={3} value={draft.allowedDomains} disabled={locked} placeholder=".example.com" onChange={(event) => update({ allowedDomains: event.target.value })} />
+              <p className="cs-field-hint">{t("One per line. A leading dot matches subdomains, for example .example.com.")}</p>
+            </div>
           )}
+          <CodingRow title="Dependency management" description={DEPENDENCY_OPTIONS.find((option) => option.value === draft.dependencyManagement)?.description}>
+            <CodingSelect label="Dependency management" value={draft.dependencyManagement} disabled={locked} options={DEPENDENCY_OPTIONS} onChange={(value) => update({ dependencyManagement: value as EnvironmentDraft["dependencyManagement"] })} />
+          </CodingRow>
         </CodingCard>
       </CodingSection>
 
-      <div className="cs-savebar">
-        {saveError ? <span className="cs-inline-error" role="alert">{saveError}</span> : errors.length > 0 && dirty ? <span className="cs-inline-error" role="alert">{t(errors[0])}</span> : <span />}
-        <span />
-        <CodingButton onClick={onBack}>Cancel</CodingButton>
-        <CodingButton primary disabled={locked || !dirty || errors.length > 0 || Boolean(repoInUse)} onClick={() => void save()}>
-          {isNew ? "Create environment" : "Save changes"}
-        </CodingButton>
-      </div>
-
       {environment && !archived && (
         <>
-          <CodingSection title="Snapshot" description="A prepared copy of the repository, tools and dependencies, so sessions start quickly.">
-            <CodingCard>
-              <SnapshotPanel
-                environmentId={environment.id}
-                initial={latest}
-                disabled={disabled}
-                onFixWithAgent={(snapshotId) => void startAgent("fix", snapshotId)}
-                onChange={(snapshot?: CodingEnvironmentSnapshot) => setEnvironment((current) => (current ? { ...current, latestSnapshot: snapshot } : current))}
-              />
-            </CodingCard>
-          </CodingSection>
-
-          <CodingSection title="Agent-assisted setup" description="Let Flow Agent inspect the repository and propose tools, a prepare script and guidance.">
-            <CodingCard>
-              {environment.pendingProposal ? (
-                <ProposalPanel
-                  environment={environment}
-                  proposal={environment.pendingProposal}
-                  disabled={disabled}
-                  onApplied={(next) => applyEnvironment(next)}
-                />
-              ) : (
-                <CodingRow title="Configure with agent" description={agentRunning ? "Flow Agent is working. Its proposal will appear here." : "The agent runs the setup in a sandbox until it succeeds. You review the result before it is applied."} icon={<Sparkles size={16} />}>
-                  {latest?.status === "failed" && <CodingButton disabled={disabled || agentRunning} onClick={() => void startAgent("fix", latest.id)}>Fix with agent</CodingButton>}
-                  <CodingButton disabled={disabled || agentRunning} onClick={() => void startAgent("configure")}>Configure with agent</CodingButton>
-                </CodingRow>
-              )}
-            </CodingCard>
-          </CodingSection>
-
-          <CodingSection title="Debug terminal">
+          <CodingSection title="Debug" description="Create a temporary sandbox for this environment that is destroyed after 20 minutes. Billed at the same rate as sandbox runtime.">
             <CodingCard>
               <DebugTerminal environmentId={environment.id} disabled={disabled} available={status?.debugTerminal ?? true} />
             </CodingCard>
           </CodingSection>
+
+          <SnapshotPanel
+            environmentId={environment.id}
+            initial={environment.latestSnapshot}
+            disabled={disabled}
+            onFixWithAgent={(snapshotId) => void startAgent("fix", snapshotId)}
+            onChange={(snapshot?: CodingEnvironmentSnapshot) => setEnvironment((current) => (current ? { ...current, latestSnapshot: snapshot } : current))}
+          />
 
           <CodingSection title="Danger zone">
             <CodingCard>
@@ -407,12 +444,15 @@ export function EnvironmentEditorPage({ data, environmentId, disabled, onBack, o
         open={importOpen}
         onClose={() => setImportOpen(false)}
         onImport={({ variables, secrets }) => {
-          const existing = new Set([...draft.variables.map((variable) => variable.name), ...pendingSecrets.map((secret) => secret.name), ...savedSecretNames]);
-          update({ variables: [...draft.variables.filter((variable) => variable.name.trim() || variable.value), ...variables.filter((variable) => !existing.has(variable.name))] });
-          setPendingSecrets([...pendingSecrets.filter((secret) => secret.name.trim()), ...secrets.filter((secret) => !existing.has(secret.name))]);
+          const existing = new Set([...envRows.map((row) => row.name), ...savedSecretNames]);
+          setEnvRows([
+            ...envRows.filter((row) => row.name.trim() || row.value),
+            ...variables.filter((variable) => !existing.has(variable.name)).map((variable) => ({ ...variable, secret: false })),
+            ...secrets.filter((secret) => !existing.has(secret.name)).map((secret) => ({ ...secret, secret: true })),
+          ]);
         }}
       />
-      {data.viewerRole !== "admin" && data.viewerRole !== "owner" && <p className="cs-admin-hint">{t("Only workspace admins can change environments.")}</p>}
+      {!canManageOwners && <p className="cs-admin-hint">{t("Only workspace admins can change environments.")}</p>}
     </div>
   );
 }
