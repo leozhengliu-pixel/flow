@@ -1590,6 +1590,9 @@ export interface CommitSigningKey {
   fingerprint: string;
   type: "ssh" | "pgp";
   addedAt: string;
+  /** The key was uploaded before Flow stored private keys for coding-session
+   * signing: sessions cannot sign with it until it is uploaded again. */
+  needsReupload?: boolean;
 }
 export interface OAuthApplication {
   id: UUID;

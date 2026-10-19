@@ -480,7 +480,6 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
           { title: 'Flow Agent', keywords: ['assistant'] },
           { title: 'Code Intelligence', keywords: ['code search'] },
           { title: 'Coding Sessions', keywords: ['agents', 'coding sessions', 'harness'] },
-          { title: 'Coding environments', keywords: ['environments', 'coding'] },
           { title: 'Trusted sources', keywords: ['allowlist', 'trusted sources', 'agent safety'] },
           { title: 'Loops', keywords: ['automations'] },
           { title: 'Triage Intelligence', keywords: ['triage', 'suggestions', 'duplicates'] },
@@ -494,6 +493,33 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
         title: 'AI',
         items: [{ title: 'Resolved thread summaries', keywords: ['summaries'] }],
       },
+    ],
+  },
+  // coding sessions (track F): Settings › AI & agents › Coding sessions.
+  {
+    id: 'coding-sessions',
+    title: 'Coding sessions',
+    section: 'Features',
+    keywords: ['coding agent', 'sandbox', 'pull requests', 'codex', 'claude code'],
+    groups: [
+      {
+        title: 'Coding sessions',
+        items: [
+          { title: 'Enable coding sessions', keywords: ['github app', 'code access'] },
+          { title: 'Agent', keywords: ['harness', 'codex', 'claude code', 'open source'] },
+          { title: 'Model', keywords: ['reasoning effort'] },
+          { title: 'Require signed commits', keywords: ['signing key', 'gpg', 'ssh'] },
+          { title: 'Pin sandbox region', keywords: ['region'] },
+        ],
+      },
+      {
+        title: 'Environments',
+        items: [
+          { title: 'New environment', keywords: ['repository', 'mise', 'prepare script', 'secrets', '.env', 'snapshot', 'debug terminal'] },
+        ],
+      },
+      { title: 'Trusted external sources', keywords: ['approval', 'external'] },
+      { title: 'Repository access for Loops', keywords: ['loops', 'repositories'] },
     ],
   },
   {

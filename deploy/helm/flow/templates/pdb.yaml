@@ -1,0 +1,14 @@
+{{- if and .Values.podDisruptionBudget.enabled (include "flow.multiReplica" .) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "flow.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "flow.selectorLabels" . | nindent 6 }}
+{{- end }}

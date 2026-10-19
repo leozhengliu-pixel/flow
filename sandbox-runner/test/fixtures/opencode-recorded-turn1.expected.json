@@ -1,0 +1,54 @@
+{
+  "events": [
+    {
+      "id": "e1",
+      "type": "thought",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "I'll create the file."
+    },
+    {
+      "id": "e2",
+      "type": "action",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "action": {
+        "action": "Ran command",
+        "parameter": "echo hello > hello.txt && cat hello.txt",
+        "result": "hello\n",
+        "tool": "bash",
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "e3",
+      "type": "response",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "Created `hello.txt` containing a greeting."
+    },
+    {
+      "id": "e4",
+      "type": "usage",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "usage": {
+        "model": "fixture-model",
+        "inputTokens": 3600,
+        "outputTokens": 80
+      }
+    }
+  ],
+  "outcome": {
+    "elicited": false,
+    "completed": true,
+    "model": "fixture-model",
+    "harnessSessionId": "ses_eb05cf62fffeExyG4pKOW1pdcG",
+    "finalText": "Created `hello.txt` containing a greeting.",
+    "usage": {
+      "model": "fixture-model",
+      "inputTokens": 3600,
+      "outputTokens": 80
+    }
+  }
+}

@@ -65,6 +65,9 @@ import { toast } from '@/lib/toast'
 import { AgentChatMenu, AgentRenamePalette } from './agent-chat-actions'
 import { deleteAgentChat, useAgentChatHotkeys } from './agent-chat-commands'
 import { AGENT_PAGE_ASK_EVENT, type AgentPageAskDetail } from './agent-ask-request'
+// coding sessions (track G)
+import { ChatCodingSessionCards } from '@/components/coding-sessions/chat-coding-session-cards'
+import { CodingSessionsList } from '@/components/coding-sessions/coding-session-card'
 
 export function AgentPage({
   chatSlug,
@@ -744,6 +747,8 @@ export function AgentPage({
           onOpen={(session) => onNavigate(agentPath(data.workspace.urlKey, session.slugId))}
           onOpenInToolbar={(session) => void updateAgentSession(session.id, { location: "toolbar" }).then(saveSession)}
         />}
+        {/* coding sessions (track G): the viewer's coding sessions next to the recent chats. */}
+        {!shown && <CodingSessionsList data={data} creatorId={data.viewer.id}/>}
         </div>
         </div>
       </section>
@@ -939,6 +944,8 @@ function AgentMessageParts({ attachments, changes, draftContext, draftProject, m
       ? <div className={styles.partError} key={part.id} role="alert"><AlertCircle/><AgentErrorDetail error={part.text ?? ""}/>{onRetry && <button onClick={onRetry} type="button">{t("Retry")}</button>}</div>
       : <div className={styles.eventPart} key={part.id}><span>{part.text}</span></div>)}
     {text ? <AgentMessageText {...answer} changeCards={changeCards} changedKeys={changedKeys} onSuggestion={question ? undefined : answer.onSuggestion} content={text} draftContext={draftContext} draftProject={draftProject}/> : changeCards}
+    {/* coding sessions (track G) */}
+    <ChatCodingSessionCards message={message} data={answer.data}/>
     {question?.question && <div className={styles.question}>
       <AgentQuestionPrompt className={`${styles.messageDocument} agent-chat-document`} data={answer.data} disabled={Boolean(answerDisabled) || question.status !== "pending"} onSelect={choice => onAnswer?.(question, choice)} part={question}/>
     </div>}

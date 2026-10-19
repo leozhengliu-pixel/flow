@@ -33,6 +33,7 @@ import (
 //   - coding_usage_records: metered LLM tokens and sandbox runtime.
 //   - code_host_installations: GitHub App installations per workspace.
 //   - coding_signing_keys: users' encrypted commit-signing private keys.
+//   - coding_runner_events: ingested runner event ids (idempotent /events).
 func (s *SQLiteStore) ensureCodingSessions(ctx context.Context) error {
 	blob, text := "BLOB", "TEXT"
 	switch s.dialect {
@@ -55,7 +56,13 @@ func (s *SQLiteStore) ensureCodingSessions(ctx context.Context) error {
 		`CREATE TABLE IF NOT EXISTS coding_session_artifacts(id ` + id + ` PRIMARY KEY,session_id ` + id + ` NOT NULL,workspace_key ` + id + ` NOT NULL,object_key VARCHAR(512) NOT NULL,data ` + blob + ` NOT NULL,created_at BIGINT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS coding_usage_records(id ` + id + ` PRIMARY KEY,workspace_key ` + id + ` NOT NULL,session_id ` + id + ` NOT NULL DEFAULT '',sandbox_id ` + id + ` NOT NULL DEFAULT '',user_id ` + id + ` NOT NULL DEFAULT '',loop_id ` + id + ` NOT NULL DEFAULT '',kind VARCHAR(16) NOT NULL,model ` + id + ` NOT NULL DEFAULT '',input_tokens BIGINT NOT NULL DEFAULT 0,output_tokens BIGINT NOT NULL DEFAULT 0,cache_read_tokens BIGINT NOT NULL DEFAULT 0,cache_write_tokens BIGINT NOT NULL DEFAULT 0,runtime_seconds BIGINT NOT NULL DEFAULT 0,size VARCHAR(16) NOT NULL DEFAULT '',cost_micros BIGINT NOT NULL DEFAULT 0,created_at BIGINT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS code_host_installations(id ` + id + ` PRIMARY KEY,workspace_key ` + id + ` NOT NULL,code_host VARCHAR(16) NOT NULL,host_name ` + id + ` NOT NULL,installation_id ` + id + ` NOT NULL,suspended_at BIGINT NOT NULL DEFAULT 0,data ` + blob + ` NOT NULL,created_at BIGINT NOT NULL,updated_at BIGINT NOT NULL)`,
+		// coding_runner_events (track B): runner event ids already ingested
+		// (RunnerEvent.ID), so a retried POST /events never duplicates an activity.
+		`CREATE TABLE IF NOT EXISTS coding_runner_events(session_id ` + id + ` NOT NULL,event_id ` + id + ` NOT NULL,workspace_key ` + id + ` NOT NULL,activity_id ` + id + ` NOT NULL DEFAULT '',claimed_at BIGINT NOT NULL,completed_at BIGINT NOT NULL DEFAULT 0,PRIMARY KEY(session_id,event_id))`,
 		`CREATE TABLE IF NOT EXISTS coding_signing_keys(user_id ` + id + ` PRIMARY KEY,format VARCHAR(16) NOT NULL,ciphertext ` + blob + ` NOT NULL,fingerprint VARCHAR(255) NOT NULL DEFAULT '',error_text ` + text + ` NULL,created_at BIGINT NOT NULL,updated_at BIGINT NOT NULL)`,
+		// coding sessions (track D): code host webhook deliveries already
+		// dispatched to a workspace (X-GitHub-Delivery / GitLab event UUID).
+		`CREATE TABLE IF NOT EXISTS code_host_webhook_deliveries(code_host VARCHAR(16) NOT NULL,delivery_id ` + id + ` NOT NULL,workspace_key ` + id + ` NOT NULL,created_at BIGINT NOT NULL,PRIMARY KEY(code_host,delivery_id,workspace_key))`,
 	} {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
 			return err
@@ -81,8 +88,13 @@ func (s *SQLiteStore) ensureCodingSessions(ctx context.Context) error {
 		`CREATE INDEX IF NOT EXISTS coding_usage_workspace ON coding_usage_records(workspace_key,created_at)`,
 		`CREATE INDEX IF NOT EXISTS coding_usage_user ON coding_usage_records(workspace_key,user_id,created_at)`,
 		`CREATE INDEX IF NOT EXISTS coding_usage_session ON coding_usage_records(session_id)`,
+		`CREATE INDEX IF NOT EXISTS coding_usage_loop ON coding_usage_records(workspace_key,loop_id,created_at)`,
+		`CREATE INDEX IF NOT EXISTS coding_session_lease ON coding_sessions(lease_until)`,
+		`CREATE INDEX IF NOT EXISTS coding_inbox_pending ON coding_session_inbox(session_id,delivered_at)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS code_host_installation_key ON code_host_installations(code_host,host_name,installation_id,workspace_key)`,
 		`CREATE INDEX IF NOT EXISTS code_host_installation_workspace ON code_host_installations(workspace_key,code_host)`,
+		// coding sessions (track D)
+		`CREATE INDEX IF NOT EXISTS code_host_webhook_delivery_created ON code_host_webhook_deliveries(created_at)`,
 	} {
 		if s.dialect == "mysql" {
 			statement = strings.Replace(statement, " IF NOT EXISTS", "", 1)
@@ -91,5 +103,6 @@ func (s *SQLiteStore) ensureCodingSessions(ctx context.Context) error {
 			return err
 		}
 	}
-	return nil
+	// coding sessions (track K): snapshot build logs.
+	return s.ensureCodingEnvironmentExtras(ctx)
 }

@@ -35,6 +35,9 @@ func TestErrorCodes(t *testing.T) {
 		{domain.CodeHostGitLab, codehost.ErrTransient, domain.CodingErrGitLabTransientError},
 		{domain.CodeHostGitHub, codehost.ErrUserNoAccess, domain.CodingErrPersonalAccessDenied},
 		{domain.CodeHostGitHub, codehost.ErrNoAccess, domain.CodingErrNoCodeAccess},
+		{domain.CodeHostGitHub, codehost.ErrUserNotLinked, domain.CodingErrRequiresGitHubConnection},
+		{domain.CodeHostGitLab, codehost.ErrUserNotLinked, domain.CodingErrRequiresGitLabConnection},
+		{domain.CodeHostGitHub, fmt.Errorf("x: %w", codehost.ErrRepoNotInPolicy), domain.CodingErrRepoNotInPolicy},
 		{domain.CodeHostGitHub, errors.New("boom"), domain.CodingErrInternal},
 	}
 	for _, c := range cases {

@@ -426,8 +426,9 @@ const TEAM_ARCHIVE_TABS = new Set<TeamArchiveTab>([
  */
 function settingsAlias(rest: string[]): string[] | undefined {
   const [first, second, third] = rest;
+  // coding sessions (track F): `environments` (legacy page, redirects) and `environments/:id|new` (editor).
   if (first === "ai" && second === "coding-sessions")
-    return third === "environments" ? ["coding-environments"] : rest.length === 2 ? ["coding-sessions"] : undefined;
+    return third === "environments" && rest.length <= 4 ? ["coding-environments"] : rest.length === 2 ? ["coding-sessions"] : undefined;
   if (first === "skill" && second && second !== "new" && third === "edit" && rest.length === 3)
     return ["skill", second];
   if (first === "labels" && rest.length === 1) return ["issue-labels"];
@@ -1931,6 +1932,15 @@ const TEAM_SETTINGS_SECTIONS = new Set<TeamSettingsSection>([
   "agent-skills",
   "default-favorites",
 ]);
+// coding sessions (track F): environment editor under Settings › AI & agents › Coding sessions.
+export function codingEnvironmentPath(workspaceSlug: string, environmentId: string | "new") {
+  return `${settingsPath(workspaceSlug, "coding-sessions")}/environments/${encode(environmentId)}`;
+}
+/** The environment id ("new" for the create form) of a coding environment editor URL. */
+export function codingEnvironmentIdFromPath(pathname: string): string | undefined {
+  const match = /\/settings\/ai\/coding-sessions\/environments\/([^/]+)\/?$/.exec(pathname);
+  return match ? safeDecode(match[1]) : undefined;
+}
 export function apiKeysSettingsPath(workspaceSlug: string) {
   return `${settingsPath(workspaceSlug, "api")}/keys`;
 }

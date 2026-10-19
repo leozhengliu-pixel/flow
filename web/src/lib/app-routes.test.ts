@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  codingEnvironmentIdFromPath,
+  codingEnvironmentPath,
   initiativePath,
   settingsPath,
   usageSettingsPath,
@@ -431,5 +433,20 @@ describe("new OAuth application route", () => {
     expect(applicationNewPath("acme", "oauth.client_name=A")).toBe("/acme/settings/api/applications/new?oauth.client_name=A");
     expect(parse("/acme/settings/api/applications/app-1/edit")).toMatchObject({ page: "api", applicationId: "app-1", applicationMode: "edit" });
     expect(parse("/acme/settings/applications/app-1/edit")).toMatchObject({ applicationId: "app-1", applicationMode: "edit" });
+  });
+});
+
+// coding sessions (track F)
+describe("coding environment routes", () => {
+  it("maps the editor URLs to the coding-environments page", () => {
+    expect(parseAppRoute("/acme/settings/ai/coding-sessions/environments/new")).toMatchObject({ kind: "settings", page: "coding-environments" });
+    expect(parseAppRoute("/acme/settings/ai/coding-sessions/environments/env_1")).toMatchObject({ kind: "settings", page: "coding-environments" });
+    expect(parseAppRoute("/acme/settings/ai/coding-sessions/environments/env_1/extra")).not.toMatchObject({ page: "coding-environments" });
+  });
+  it("builds and reads editor paths", () => {
+    expect(codingEnvironmentPath("acme", "new")).toBe("/acme/settings/ai/coding-sessions/environments/new");
+    expect(codingEnvironmentPath("acme", "a b")).toBe("/acme/settings/ai/coding-sessions/environments/a%20b");
+    expect(codingEnvironmentIdFromPath("/acme/settings/ai/coding-sessions/environments/a%20b/")).toBe("a b");
+    expect(codingEnvironmentIdFromPath("/acme/settings/ai/coding-sessions/environments")).toBeUndefined();
   });
 });

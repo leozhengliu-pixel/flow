@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"errors"
+	"time"
+)
 
 // Coding sessions (docs/coding-sessions-design.md). A coding session is the
 // Flow agent writing code in a sandbox for an issue, a chat, a comment, a
@@ -8,6 +11,22 @@ import "time"
 // anchored to one AgentTask (application_agent_tasks) of the built-in Flow
 // agent, so its activities, plan and external URLs use the existing agent
 // session protocol and UI; the coding-specific state lives in the types below.
+
+// Coding store errors. internal/coding re-exports them (coding.ErrNotFound,
+// …) because internal/store cannot import internal/coding (config imports
+// store), yet store methods must return errors coding callers can match with
+// errors.Is. Added by track K (additive). These are the ONE set of coding
+// store errors: internal/store and internal/coding both alias them, so no
+// layer translates errors.
+var (
+	ErrCodingNotFound        = errors.New("coding: not found")
+	ErrCodingVersionConflict = errors.New("coding: version conflict")
+	ErrCodingLeaseLost       = errors.New("coding: lease lost")
+	ErrCodingSecretExists    = errors.New("coding: secret already exists")
+	ErrCodingRepoInUse       = errors.New("coding: repository already has an active environment")
+	ErrCodingTokenInvalid    = errors.New("coding: sandbox token is invalid, expired or revoked")
+	ErrCodingInvalidInput    = errors.New("coding: invalid input")
+)
 
 // CodingSessionState is the user-facing state, matching Linear's
 // AgentSession states. UI labels: pending=Starting, active=Working,
@@ -312,6 +331,15 @@ type CodingArtifact struct {
 	ContentType string    `json:"contentType"`
 	SizeBytes   int64     `json:"sizeBytes"`
 	CreatedAt   time.Time `json:"createdAt"`
+	// Track I additions (browser testing): the turn and action activity the
+	// artifact belongs to, the flow name that pairs a "before" shot with its
+	// "after" shot, the stable authenticated URL used by the web app, and the
+	// expiry of URL when it is a signed link.
+	TurnID     string     `json:"turnId,omitempty"`
+	ActivityID string     `json:"activityId,omitempty"`
+	Group      string     `json:"group,omitempty"`
+	ContentURL string     `json:"contentUrl,omitempty"`
+	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
 }
 
 // CodingSession is the coding part of an agent session.
@@ -357,6 +385,41 @@ type CodingSession struct {
 	UpdatedAt     time.Time  `json:"updatedAt"`
 	StartedAt     *time.Time `json:"startedAt,omitempty"`
 	EndedAt       *time.Time `json:"endedAt,omitempty"`
+
+	// Reconciler bookkeeping (track B). The indexed copies live in
+	// coding_sessions columns; the document keeps them so a session read
+	// from data alone is complete.
+	PhaseStartedAt time.Time  `json:"phaseStartedAt"`
+	PhaseDeadline  *time.Time `json:"phaseDeadline,omitempty"`
+	// Attempts counts retries in the current phase; SandboxAttempts counts
+	// sandbox starts (a failed start retries with a new sandbox id).
+	Attempts        int    `json:"attempts,omitempty"`
+	SandboxAttempts int    `json:"sandboxAttempts,omitempty"`
+	StopRequested   bool   `json:"stopRequested,omitempty"`
+	StoppedBy       string `json:"stoppedBy,omitempty"`
+	// LoopID attributes spend to a Loop (loopLimit / loopOverrides).
+	LoopID      string `json:"loopId,omitempty"`
+	SandboxSize string `json:"sandboxSize,omitempty"`
+	// SandboxID is the session's current sandbox.
+	SandboxID string `json:"sandboxId,omitempty"`
+	// CurrentTurnID is the turn the runner works on; LastTurnID the last one that completed.
+	CurrentTurnID string     `json:"currentTurnId,omitempty"`
+	LastTurnID    string     `json:"lastTurnId,omitempty"`
+	TurnStartedAt *time.Time `json:"turnStartedAt,omitempty"`
+	// RunningMillis is the cumulative time spent running turns (sessionTimeout).
+	RunningMillis   int64  `json:"runningMillis,omitempty"`
+	HarnessResumeID string `json:"harnessResumeId,omitempty"`
+	HeadSHA         string `json:"headSha,omitempty"`
+	// Pushed is set by a turn that pushed commits; publishing clears it.
+	Pushed         bool   `json:"pushed,omitempty"`
+	ExistingBranch bool   `json:"existingBranch,omitempty"`
+	HostName       string `json:"hostName,omitempty"`
+	// SigningFormat / SigningPublicKey are resolved at provisioning when
+	// signed commits are required (track E's commit signing).
+	SigningFormat    string `json:"signingFormat,omitempty"`
+	SigningPublicKey string `json:"signingPublicKey,omitempty"`
+	// NextReconcileAt is when the reconciler looks at the session again.
+	NextReconcileAt time.Time `json:"-"`
 }
 
 // CodingUsageRecord is one metered charge: model tokens through the LLM

@@ -346,3 +346,4 @@
   gap: 8px;
   justify-content: flex-end;
 }
+.personal-signing-key-reupload{display:block;color:var(--semantic-warning);font-size:12px;line-height:17px}

@@ -17,6 +17,7 @@ export const CHAT_TOOL_LABELS: Record<string, [string, string]> = {
   save_issue: ["Creating issue…", "Created issue"],
   save_project: ["Creating project…", "Created project"], save_initiative: ["Creating initiative…", "Created initiative"],
   save_comment: ["Adding comment…", "Added comment"],
+  start_coding_session: ["Starting coding session…", "Started coding session"],
   get_issue: ["Looking at issue…", "Looked at issue"], list_issue_history: ["Looking at issue activity…", "Looked at issue activity"],
   list_project_activity: ["Looking at project activity…", "Looked at project activity"], get_status_updates: ["Looking at project updates…", "Looked at project updates"],
   search_issues: ["Searching issues…", "Searched issues"], list_notifications: ["Reviewing inbox…", "Reviewed inbox"],

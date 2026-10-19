@@ -1,0 +1,20 @@
+# Kata Containers (existing RuntimeClass), VolumeSnapshot strategy, and Flow
+# managing the sandbox NetworkPolicies itself.
+config:
+  appUrl: https://flow.example.com
+coding:
+  enabled: true
+  secretKey: dGVzdC1rZXktdGVzdC1rZXktdGVzdC1rZXktdGVzdC0=
+  snapshot:
+    strategy: volumesnapshot
+    volumeSnapshotClass: csi-snapclass
+  kubernetes:
+    storageClass: csi-rbd
+sandboxes:
+  runtimeClass:
+    name: kata
+  networkPolicy:
+    manager: flow
+egressProxy:
+  aclHelper:
+    secret: test-acl-secret

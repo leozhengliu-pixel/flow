@@ -1504,5 +1504,21 @@
         "id": { "type": "string", "description": "Loop ID or name" }
       }
     }
+    },
+  {
+    "name": "mcp__flow.start_coding_session",
+    "access": "write",
+    "description": "Start a coding session: Flow's coding agent changes code in a cloud sandbox for a repository and opens a draft pull/merge request. Call it right away when the user asks for code changes, a fix, an implementation, tests, or a pull request (\"fix this bug\", \"open a PR\"). Do NOT call it when the user asks to investigate, look into, plan, explain, or create tasks or issues: do that yourself and offer a coding session afterwards. If the issue already has an active session, the request is sent to it as a follow-up. The repository is chosen from `environmentId`, the issue's linked PRs, repository names in the text, labels and the team; when it is ambiguous the user is asked to pick. Requests from external sources (integrations, non-members) wait for a member's approval unless the source is trusted.",
+    "input_schema": {
+      "type": "object",
+      "required": ["prompt"],
+      "properties": {
+        "prompt": { "type": "string", "description": "The task for the coding agent: what to change and why, the expected behaviour, and how to verify it" },
+        "userRequest": { "type": "string", "description": "The user's request, verbatim (used to confirm they asked for code changes)" },
+        "issueId": { "type": "string", "description": "Issue ID or identifier (e.g. ENG-123) the session works on; omit for a chat-only request" },
+        "environmentId": { "type": "string", "description": "Coding environment (repository) to use, when known" },
+        "repository": { "type": "string", "description": "Repository name the user mentioned (e.g. acme/web), to help pick the environment" }
+      }
+    }
   }
 ]

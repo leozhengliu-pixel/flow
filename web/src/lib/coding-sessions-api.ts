@@ -84,6 +84,8 @@ export const restartCodingSession = (sessionId: string, options: { useDefaultMod
   request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/restart`, jsonRequest("POST", options));
 export const approveCodingSession = (sessionId: string, reject = false) =>
   request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/approve`, jsonRequest("POST", { reject }));
+/** Rejects a pending approval, or ends a session waiting for an answer. */
+export const dismissCodingSession = (sessionId: string) => request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/dismiss`, { method: "POST" });
 export const createCodingSessionPullRequest = (sessionId: string) =>
   request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/pull-request`, { method: "POST" });
 export const fetchCodingSandboxLogs = (sessionId: string, sandboxId: string) =>
@@ -101,3 +103,6 @@ export const fetchGitHubApp = () => request<GitHubAppStatus>("/api/integrations/
 export const startGitHubAppInstall = () => request<{ url: string }>("/api/integrations/github-app/install", { method: "POST" });
 export const removeGitHubAppInstallation = (installationId: string) =>
   request<void>(`/api/integrations/github-app/installations/${id(installationId)}`, { method: "DELETE" });
+/** Links the viewer's GitHub account (user-to-server OAuth) for personal access checks. */
+export const startGitHubAppAuthorization = () => request<{ url: string }>("/api/integrations/github-app/authorize", { method: "POST" });
+export const removeGitHubAppAuthorization = () => request<void>("/api/integrations/github-app/authorization", { method: "DELETE" });

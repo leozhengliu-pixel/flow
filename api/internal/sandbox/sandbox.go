@@ -35,17 +35,20 @@ const (
 
 // Environment variables the runner sees (besides the environment's own).
 const (
-	EnvRuntimeURL   = "FLOW_RUNTIME_URL" // Flow's runtime API base
-	EnvTokenFile    = "FLOW_TOKEN_FILE"  // path of the sandbox token
-	EnvSandboxID    = "FLOW_SANDBOX_ID"
-	EnvMode         = "FLOW_RUNNER_MODE"    // session | snapshot | debug | warm | restore
-	EnvLinearCompat = "LINEAR_SANDBOX"      // "1" in every sandbox (Linear parity)
-	EnvSnapshotting = "LINEAR_SNAPSHOT"     // "1" while building a snapshot
-	EnvFlowSandbox  = "FLOW_SANDBOX"        // "1" in every sandbox
-	EnvFlowSnapshot = "FLOW_SNAPSHOT"       // "1" while building a snapshot
-	TokenMountPath  = "/var/run/flow/token" // projected token file
-	WorkspacePath   = "/workspace"          // repository checkout and $HOME/work
-	HomePath        = "/home/flow"          // sandbox home (mise files land here)
+	EnvRuntimeURL = "FLOW_RUNTIME_URL" // Flow's runtime API base
+	EnvTokenFile  = "FLOW_TOKEN_FILE"  // path of the sandbox token
+	EnvSandboxID  = "FLOW_SANDBOX_ID"
+	// EnvEnvironmentID is the coding environment of a snapshot or debug
+	// sandbox (sessions carry it on the session row instead).
+	EnvEnvironmentID = "FLOW_ENVIRONMENT_ID"
+	EnvMode          = "FLOW_RUNNER_MODE"    // session | snapshot | debug | warm | restore
+	EnvLinearCompat  = "LINEAR_SANDBOX"      // "1" in every sandbox (Linear parity)
+	EnvSnapshotting  = "LINEAR_SNAPSHOT"     // "1" while building a snapshot
+	EnvFlowSandbox   = "FLOW_SANDBOX"        // "1" in every sandbox
+	EnvFlowSnapshot  = "FLOW_SNAPSHOT"       // "1" while building a snapshot
+	TokenMountPath   = "/var/run/flow/token" // projected token file
+	WorkspacePath    = "/workspace"          // repository checkout and $HOME/work
+	HomePath         = "/home/flow"          // sandbox home (mise files land here)
 )
 
 // Kind is what a sandbox is for.

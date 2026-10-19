@@ -19,6 +19,8 @@ import '@/components/project-detail/project-comment-menu.css'
 import { useI18n } from '@/i18n/i18n'
 import './application-agents.css'
 import './issue-agent-thread.css'
+// coding sessions (track G)
+import { AgentTaskCodingSession } from '@/components/coding-sessions/agent-task-coding-session'
 
 type Resource = Pick<Issue, 'id' | 'delegate' | 'agentSessionId'>
 type ResourceType = 'issue' | 'document' | 'project'
@@ -206,6 +208,8 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
     {/* AIG: a delegated issue names the responsible human ("Delegated to Flow by Skyler"). */}
     {delegator && <div className="issue-agent-delegation"><AgentMessageHeader user={agent} name={t('Delegated to {name} by {user}').replace('{name}', name).replace('{user}', delegator.displayName || delegator.name)} time={taskCreatedAt(task)}/></div>}
     <AgentSessionDetails session={current}/>
+    {/* coding sessions (track G): the session view when this task anchors a coding session */}
+    <AgentTaskCodingSession task={current} data={data}/>
     {shown.map(item => {
       const activity = item.activity
       const human = ['prompt', 'retry', 'canceled'].includes(activity.type)

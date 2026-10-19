@@ -39,10 +39,26 @@ type Record struct {
 	StartedAt    *time.Time
 	EndedAt      *time.Time
 	HeartbeatAt  *time.Time
+
+	// Track A additions (read by the sandbox reconciler).
+
+	// UserID is who runtime is billed to: the session creator, the snapshot
+	// requester, or the debug terminal user (stored in data for the latter).
+	// Track K's environment launcher sets it for snapshot and debug sandboxes.
+	UserID string
+	// LoopID is the loop a loop-started session is charged to.
+	LoopID string
+	// BilledSeconds is the runtime already metered (coding_sandboxes.billed_seconds).
+	BilledSeconds int64
+	// LogsKey is the object-store key of the archived runner log, once saved.
+	LogsKey string
+	// KeepVolume keeps the workspace volume when the sandbox stops (a
+	// volumesnapshot build whose PVC is snapshotted afterwards).
+	KeepVolume bool
 }
 
 // Store is the persistence the sandbox reconciler needs; *store.SQLiteStore
-// implements it (api/internal/store/coding_sandboxes.go, track B).
+// implements it (api/internal/store/coding_sandboxes.go, track A).
 type Store interface {
 	// LeaseSandboxes returns up to limit records that are not settled
 	// (Desired != observed) or due for an observation, leased to owner.

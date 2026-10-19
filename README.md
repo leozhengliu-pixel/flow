@@ -236,6 +236,8 @@ round-trip tests against PostgreSQL, MySQL, Redis, and S3-compatible storage.
 - [OpenAPI route inventory](docs/openapi.json)
 - [Testing](docs/testing.md)
 - [Operations and backup](docs/operations.md)
+- [Coding sessions: operator guide](docs/coding-sessions.md), [security model](docs/coding-sessions-security.md), [operations runbook](docs/coding-sessions-operations.md)
+- [Helm chart](deploy/helm/flow) (`helm install flow deploy/helm/flow`)
 - [Routing system](docs/routing-system.md)
 
 ## Community

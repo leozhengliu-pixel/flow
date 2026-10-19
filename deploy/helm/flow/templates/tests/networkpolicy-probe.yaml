@@ -1,0 +1,78 @@
+{{- if and (include "flow.coding.kubernetes" .) .Values.sandboxes.networkPolicy.enabled }}
+# `helm test <release>` runs this Pod in the sandbox namespace with the
+# sandbox label, so the sandbox NetworkPolicies apply to it. It succeeds only
+# if every forbidden path is blocked and the allowed paths work. The
+# flow.dev/instance value differs from Flow's, so orphan GC ignores it.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "flow.fullname" . }}-netpol-probe
+  namespace: {{ include "flow.sandbox.namespace" . }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+    flow.dev/managed-by: flow
+    flow.dev/instance: {{ printf "%s-netpol-probe" (default .Release.Name .Values.coding.instanceId) | trunc 63 | trimSuffix "-" }}
+    flow.dev/kind: probe
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  enableServiceLinks: false
+  serviceAccountName: {{ .Values.sandboxes.serviceAccount.name }}
+  activeDeadlineSeconds: 300
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  {{- with (include "flow.runtimeClassName" .) }}
+  runtimeClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.sandboxes.nodeSelector }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.sandboxes.tolerations }}
+  tolerations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  containers:
+    - name: probe
+      image: {{ .Values.networkPolicyProbe.image | quote }}
+      securityContext:
+        {{- include "flow.restrictedContainer" . | nindent 8 }}
+      resources:
+        requests: {cpu: 50m, memory: 32Mi}
+        limits: {cpu: 200m, memory: 64Mi}
+      env:
+        - name: FLOW_URL
+          value: {{ include "flow.coding.runtimeUrl" . | quote }}
+        - name: PROXY_URL
+          value: {{ include "flow.coding.proxyUrl" . | quote }}
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          fail=0
+          # blocked: no connection or an HTTP error; allowed: any HTTP answer.
+          blocked() { if curl -fsS -m 5 -o /dev/null "$@" 2>/dev/null; then echo "FAIL reachable: $*"; fail=1; else echo "ok blocked: $*"; fi; }
+          allowed() { if curl -sS -m 10 -o /dev/null "$@"; then echo "ok reachable: $*"; else echo "FAIL unreachable: $*"; fail=1; fi; }
+          # Cloud metadata, the API server, and the Internet must be unreachable directly.
+          blocked --noproxy '*' http://169.254.169.254/latest/meta-data/
+          blocked --noproxy '*' http://metadata.google.internal/computeMetadata/v1/
+          blocked --noproxy '*' -k https://kubernetes.default.svc/version
+          blocked --noproxy '*' https://example.com/
+          blocked --noproxy '*' https://1.1.1.1/
+          # Flow's runtime port must be reachable directly (any HTTP answer,
+          # 401 included, proves the connection).
+          allowed --noproxy '*' "$FLOW_URL/internal/coding-runtime/bootstrap"
+          if [ -n "$PROXY_URL" ]; then
+            # The proxy must refuse unauthenticated or non-allowlisted requests
+            # and must not reach metadata.
+            blocked --proxy "$PROXY_URL" --proxy-user probe:invalid https://github.com/
+            blocked --proxy "$PROXY_URL" http://169.254.169.254/latest/meta-data/
+          fi
+          exit $fail
+{{- end }}

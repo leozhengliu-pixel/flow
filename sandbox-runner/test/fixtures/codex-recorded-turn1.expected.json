@@ -1,0 +1,82 @@
+{
+  "events": [
+    {
+      "id": "e1",
+      "type": "thought",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "Model metadata for `gpt-5-codex` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.",
+      "ephemeral": true
+    },
+    {
+      "id": "e2",
+      "type": "thought",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "**Creating hello file**",
+      "ephemeral": true
+    },
+    {
+      "id": "e3",
+      "type": "thought",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "I'll create the file."
+    },
+    {
+      "id": "e4",
+      "type": "action",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "action": {
+        "action": "Ran command",
+        "parameter": "echo hello > hello.txt && cat hello.txt",
+        "tool": "shell"
+      },
+      "ephemeral": true
+    },
+    {
+      "id": "e5",
+      "type": "action",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "action": {
+        "action": "Ran command",
+        "parameter": "echo hello > hello.txt && cat hello.txt",
+        "result": "hello\n",
+        "tool": "shell",
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "e6",
+      "type": "response",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "Created `hello.txt` containing a greeting."
+    },
+    {
+      "id": "e7",
+      "type": "usage",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "usage": {
+        "model": "gpt-5-codex",
+        "inputTokens": 4800,
+        "outputTokens": 160
+      }
+    }
+  ],
+  "outcome": {
+    "elicited": false,
+    "completed": true,
+    "model": "gpt-5-codex",
+    "harnessSessionId": "01a14fa2-b73d-7ef1-aa9f-a7880ee2b118",
+    "finalText": "Created `hello.txt` containing a greeting.",
+    "usage": {
+      "model": "gpt-5-codex",
+      "inputTokens": 4800,
+      "outputTokens": 160
+    }
+  }
+}

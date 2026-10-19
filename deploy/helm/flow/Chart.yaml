@@ -1,0 +1,19 @@
+apiVersion: v2
+name: flow
+description: >-
+  Flow, a self-hosted issue tracker, with optional coding sessions: sandboxed
+  agent Pods in a dedicated namespace, RBAC limited to that namespace,
+  default-deny NetworkPolicies and a Squid egress proxy.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.28.0-0"
+home: https://github.com/leozhengliu-pixel/flow
+sources:
+  - https://github.com/leozhengliu-pixel/flow
+keywords:
+  - issue-tracker
+  - coding-agent
+  - sandbox
+annotations:
+  category: ProjectManagement

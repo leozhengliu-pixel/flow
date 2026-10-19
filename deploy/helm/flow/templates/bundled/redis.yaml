@@ -1,0 +1,80 @@
+{{- if .Values.redisBundled.enabled }}
+{{- $r := .Values.redisBundled }}
+{{- $name := printf "%s-redis" (include "flow.fullname" .) }}
+# Evaluation only: one Redis instance for Flow's coordination locks.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: flow-redis
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: redis
+      port: 6379
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flow-redis
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flow-redis
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          image: {{ $r.image | quote }}
+          args: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 10
+          resources:
+            {{- toYaml $r.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with $r.persistence.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $r.persistence.size }}
+{{- end }}

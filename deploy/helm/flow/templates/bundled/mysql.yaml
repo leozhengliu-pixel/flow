@@ -1,0 +1,108 @@
+{{- if .Values.mysql.enabled }}
+{{- $my := .Values.mysql }}
+{{- $name := printf "%s-mysql" (include "flow.fullname" .) }}
+# Evaluation only: a single MySQL instance without backups or HA.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+type: Opaque
+stringData:
+  password: {{ include "flow.mysql.password" . | quote }}
+  rootPassword: {{ include "flow.mysql.rootPassword" . | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: flow-mysql
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: mysql
+      port: 3306
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flow-mysql
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flow-mysql
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mysql
+          image: {{ $my.image | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          env:
+            - name: MYSQL_USER
+              value: {{ $my.auth.username | quote }}
+            - name: MYSQL_DATABASE
+              value: {{ $my.auth.database | quote }}
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $name }}
+                  key: password
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $name }}
+                  key: rootPassword
+          ports:
+            - name: mysql
+              containerPort: 3306
+          readinessProbe:
+            tcpSocket:
+              port: mysql
+            periodSeconds: 10
+          resources:
+            {{- toYaml $my.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with $my.persistence.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $my.persistence.size }}
+{{- end }}

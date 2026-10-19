@@ -1,0 +1,978 @@
+---
+# Source: flow/templates/sandbox/namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flow-sandboxes
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: sandboxes
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+  annotations:
+
+---
+# Source: flow/templates/egress/networkpolicy.yaml
+# The proxy accepts connections only from sandboxes and reaches only DNS, the
+# Flow runtime port (ACL helper) and public addresses on 80/443. Squid denies
+# private and metadata destinations again after DNS resolution.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flow-egress
+  namespace: flow-sandboxes
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/name: flow-egress
+    app.kubernetes.io/instance: flow
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: flow-egress
+      app.kubernetes.io/instance: flow
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              flow.dev/managed-by: flow
+      ports:
+        - port: proxy
+          protocol: TCP
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: flow
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: flow
+              app.kubernetes.io/instance: flow
+      ports:
+        - port: 8080
+          protocol: TCP
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 0.0.0.0/8
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.0.0.0/24
+              - 192.168.0.0/16
+              - 198.18.0.0/15
+              - 224.0.0.0/4
+              - 240.0.0.0/4
+        - ipBlock:
+            cidr: ::/0
+            except:
+              - ::1/128
+              - fc00::/7
+              - fe80::/10
+              - ff00::/8
+      ports:
+        - port: 80
+          protocol: TCP
+        - port: 443
+          protocol: TCP
+
+---
+# Source: flow/templates/sandbox/networkpolicies.yaml
+# Every other Pod in the namespace is isolated unless a policy allows it
+# (the egress proxy and the pre-pull DaemonSet have their own).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flow-sandbox-namespace-default-deny
+  namespace: flow-sandboxes
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: sandboxes
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+
+---
+# Source: flow/templates/sandbox/resourcequota.yaml
+# Caps everything in the sandbox namespace: sandboxes, warm pool, snapshot
+# builds, debug terminals, the egress proxy and the pre-pull DaemonSet.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: flow-sandboxes
+  namespace: flow-sandboxes
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: sandboxes
+spec:
+  hard:
+    limits.cpu: "64"
+    limits.ephemeral-storage: 1Ti
+    limits.memory: 512Gi
+    persistentvolumeclaims: "40"
+    pods: "30"
+    requests.cpu: "64"
+    requests.ephemeral-storage: 1Ti
+    requests.memory: 512Gi
+    requests.storage: 1Ti
+    secrets: "200"
+
+---
+# Source: flow/templates/sandbox/limitrange.yaml
+# Defaults for any container without limits (required by the ResourceQuota)
+# and per-container and per-volume maximums.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: flow-sandboxes
+  namespace: flow-sandboxes
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: sandboxes
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "1"
+        ephemeral-storage: 4Gi
+        memory: 2Gi
+      defaultRequest:
+        cpu: 100m
+        ephemeral-storage: 1Gi
+        memory: 256Mi
+      max:
+        cpu: "8"
+        ephemeral-storage: 160Gi
+        memory: 64Gi
+    - type: PersistentVolumeClaim
+      max:
+        storage: 200Gi
+
+---
+# Source: flow/templates/egress/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: flow-egress
+  namespace: flow-sandboxes
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/name: flow-egress
+    app.kubernetes.io/instance: flow
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flow-egress
+      app.kubernetes.io/instance: flow
+
+---
+# Source: flow/templates/egress/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flow-egress
+  namespace: flow-sandboxes
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/name: flow-egress
+    app.kubernetes.io/instance: flow
+automountServiceAccountToken: false
+
+---
+# Source: flow/templates/sandbox/serviceaccount.yaml
+# Sandbox Pods run as this ServiceAccount. It is bound to no Role, and Flow
+# sets automountServiceAccountToken: false on every sandbox Pod as well.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flow-sandbox
+  namespace: flow-sandboxes
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: sandboxes
+automountServiceAccountToken: false
+
+---
+# Source: flow/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flow
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+automountServiceAccountToken: false
+
+---
+# Source: flow/templates/egress/secret.yaml
+# The proxy's copy of the ACL secret (Flow's copy is in the release
+# namespace). Both are rendered from the same value.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: flow-egress-acl
+  namespace: flow-sandboxes
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/name: flow-egress
+    app.kubernetes.io/instance: flow
+type: Opaque
+stringData:
+  acl-secret: "test-acl-secret"
+
+---
+# Source: flow/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: flow
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/name: flow
+    app.kubernetes.io/instance: flow
+type: Opaque
+stringData:
+  FLOW_CODING_SECRET_KEY: "dGVzdC1rZXktdGVzdC1rZXktdGVzdC1rZXktdGVzdC0="
+  FLOW_CODING_EGRESS_ACL_SECRET: "test-acl-secret"
+
+---
+# Source: flow/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flow
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/name: flow
+    app.kubernetes.io/instance: flow
+data:
+  FLOW_HTTP_ADDR: ":8080"
+  FLOW_APP_URL: "https://flow.example.com"
+  FLOW_STATIC_PATH: /app/web
+  FLOW_LOG_LEVEL: "info"
+  FLOW_LOG_FORMAT: "json"
+  FLOW_DATABASE_DRIVER: "sqlite"
+  FLOW_DATABASE_PATH: "/app/data/flow.db"
+  FLOW_REDIS_MODE: "disabled"
+  FLOW_REDIS_TLS: "false"
+  FLOW_REDIS_PREFIX: "flow"
+  FLOW_STORAGE_DRIVER: "local"
+  FLOW_STORAGE_LOCAL_PATH: /app/data/uploads
+  # Coding sessions (docs/coding-sessions.md).
+  FLOW_CODING_ENABLED: "true"
+  FLOW_CODING_PROVIDER: "kubernetes"
+  FLOW_CODING_RUNTIME_URL: "http://flow.flow.svc.cluster.local:8080"
+  FLOW_CODING_INSTANCE_ID: "flow"
+  FLOW_CODING_IMAGE: "ghcr.io/leozhengliu-pixel/flow-sandbox:latest"
+  FLOW_CODING_IMAGE_PULL_POLICY: "IfNotPresent"
+  FLOW_CODING_IMAGE_PULL_SECRETS: ""
+  FLOW_CODING_BRANCH_PREFIX: "flow/"
+  FLOW_CODING_PR_MENTION: "@flow"
+  FLOW_CODING_BROWSER: "on"
+  FLOW_CODING_DEBUG_TERMINAL: "on"
+  FLOW_CODING_ARTIFACT_MAX_BYTES: "10485760"
+  FLOW_CODING_MAX_SESSIONS: "20"
+  FLOW_CODING_WORKSPACE_SESSIONS: "5"
+  FLOW_CODING_RECONCILE_INTERVAL: "5s"
+  FLOW_CODING_GC_INTERVAL: "5m"
+  FLOW_CODING_ORPHAN_GRACE: "10m"
+  FLOW_CODING_SIZE_SMALL: "cpu=1,memory=8Gi,ephemeral=20Gi,pids=4096"
+  FLOW_CODING_SIZE_MEDIUM: "cpu=2,memory=16Gi,ephemeral=40Gi,pids=8192"
+  FLOW_CODING_SIZE_LARGE: "cpu=4,memory=32Gi,ephemeral=80Gi,pids=16384"
+  FLOW_CODING_WORKSPACE_SIZE: "20Gi"
+  FLOW_CODING_CPU_REQUEST_RATIO: "1"
+  FLOW_CODING_REGIONS: ""
+  FLOW_CODING_REGION_LABEL: "topology.kubernetes.io/region"
+  FLOW_CODING_DEFAULT_REGION: ""
+  FLOW_CODING_WARM_POOL: ""
+  FLOW_CODING_WARM_POOL_MAX_AGE: "1h"
+  FLOW_CODING_QUEUE_TIMEOUT: "30m"
+  FLOW_CODING_APPROVAL_TIMEOUT: "168h"
+  FLOW_CODING_PROVISION_TIMEOUT: "5m"
+  FLOW_CODING_START_TIMEOUT: "10m"
+  FLOW_CODING_SETUP_TIMEOUT: "20m"
+  FLOW_CODING_TURN_TIMEOUT: "1h"
+  FLOW_CODING_HEARTBEAT_TIMEOUT: "2m"
+  FLOW_CODING_PUBLISH_TIMEOUT: "5m"
+  FLOW_CODING_IDLE_TTL: "15m"
+  FLOW_CODING_STOP_GRACE: "1m"
+  FLOW_CODING_MAX_SESSION_DURATION: "4h"
+  FLOW_CODING_DEBUG_TERMINAL_TTL: "20m"
+  FLOW_CODING_TOKEN_GRACE: "5m"
+  FLOW_CODING_PROVISION_RETRIES: "3"
+  FLOW_CODING_START_RETRIES: "2"
+  FLOW_CODING_PUBLISH_RETRIES: "5"
+  FLOW_CODING_SNAPSHOT_RETRIES: "1"
+  FLOW_CODING_SNAPSHOT_STRATEGY: "volumesnapshot"
+  FLOW_CODING_VOLUME_SNAPSHOT_CLASS: "csi-snapclass"
+  FLOW_CODING_ARCHIVE_PREFIX: "coding-snapshots"
+  FLOW_CODING_ARCHIVE_MAX_BYTES: "10737418240"
+  FLOW_CODING_SNAPSHOT_TIMEOUT: "30m"
+  FLOW_CODING_SNAPSHOT_TTL: "168h"
+  FLOW_CODING_SNAPSHOT_RETAIN: "2"
+  FLOW_CODING_SNAPSHOT_REFRESH_INTERVAL: "24h"
+  FLOW_CODING_K8S_KUBECONFIG: ""
+  FLOW_CODING_K8S_NAMESPACE: "flow-sandboxes"
+  FLOW_CODING_K8S_RUNTIME_CLASS: "kata"
+  FLOW_CODING_K8S_HOST_USERS: "true"
+  FLOW_CODING_K8S_STORAGE_CLASS: "csi-rbd"
+  FLOW_CODING_K8S_WORKSPACE_VOLUME: "auto"
+  FLOW_CODING_K8S_NODE_SELECTOR: "flow.dev/pool=sandbox"
+  FLOW_CODING_K8S_TOLERATIONS: "flow.dev/pool=sandbox:NoSchedule"
+  FLOW_CODING_K8S_SERVICE_ACCOUNT: "flow-sandbox"
+  FLOW_CODING_K8S_PRIORITY_CLASS: ""
+  FLOW_CODING_K8S_EXTRA_LABELS: ""
+  FLOW_CODING_K8S_EXTRA_ANNOTATIONS: ""
+  FLOW_CODING_K8S_NETWORK_POLICY: "true"
+  FLOW_CODING_K8S_FLOW_NAMESPACE: "flow"
+  FLOW_CODING_K8S_FLOW_POD_SELECTOR: "app.kubernetes.io/instance=flow,app.kubernetes.io/name=flow"
+  FLOW_CODING_K8S_PROXY_NAMESPACE: "flow-sandboxes"
+  FLOW_CODING_K8S_PROXY_POD_SELECTOR: "app.kubernetes.io/instance=flow,app.kubernetes.io/name=flow-egress"
+  FLOW_CODING_K8S_QPS: "20"
+  FLOW_CODING_K8S_BURST: "40"
+  FLOW_CODING_DOCKER_HOST: "unix:///var/run/docker.sock"
+  FLOW_CODING_DOCKER_NETWORK: "flow-sandbox"
+  FLOW_CODING_DOCKER_RUNTIME: ""
+  FLOW_CODING_EGRESS_PROXY_URL: "http://flow-egress.flow-sandboxes.svc.cluster.local:3128"
+  FLOW_CODING_EGRESS_ALLOWLIST: ""
+  FLOW_CODING_EGRESS_DEFAULT_ALLOWLIST: "on"
+  FLOW_CODING_EGRESS_NO_PROXY: ""
+  FLOW_CODING_LLM_ANTHROPIC_BASE_URL: "https://api.anthropic.com"
+  FLOW_CODING_LLM_OPENAI_BASE_URL: "https://api.openai.com/v1"
+  FLOW_CODING_LLM_OPENSOURCE_BASE_URL: ""
+  FLOW_CODING_MODELS_CLAUDE_CODE: "claude-sonnet-4-5,claude-opus-4-1"
+  FLOW_CODING_MODELS_CODEX: "gpt-5-codex,gpt-5"
+  FLOW_CODING_MODELS_OPEN_SOURCE: ""
+  FLOW_CODING_MODEL_PRICES: ""
+  FLOW_CODING_LLM_TIMEOUT: "10m"
+  FLOW_CODING_RUNTIME_PRICES: "large=0.40,medium=0.20,small=0.10"
+  FLOW_CODING_GITLAB_CREDENTIAL_MODE: "project-token"
+  FLOW_CODING_GITLAB_TOKEN_SCOPES: "read_repository,write_repository,read_api"
+
+---
+# Source: flow/templates/egress/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flow-egress
+  namespace: flow-sandboxes
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/name: flow-egress
+    app.kubernetes.io/instance: flow
+data:
+  # Built-in list (FLOW_CODING_EGRESS_DEFAULT_ALLOWLIST); the same list is in
+  # Flow (api/cmd/server/coding_egress.go).
+  allowlist-default.txt: |
+    # Built-in egress allowlist (docs/coding-sessions-security.md). Keep in sync with
+    # defaultEgressAllowlist() in api/cmd/server/coding_egress.go (a Go test checks it).
+    # One domain per line; a leading dot also matches subdomains.
+    github.com
+    api.github.com
+    codeload.github.com
+    objects.githubusercontent.com
+    raw.githubusercontent.com
+    ghcr.io
+    pkg-containers.githubusercontent.com
+    registry.npmjs.org
+    registry.yarnpkg.com
+    pypi.org
+    files.pythonhosted.org
+    proxy.golang.org
+    sum.golang.org
+    crates.io
+    static.crates.io
+    index.crates.io
+    rubygems.org
+    repo.maven.apache.org
+    repo1.maven.org
+    plugins.gradle.org
+    services.gradle.org
+    deb.debian.org
+    mise.jdx.dev
+    mise-versions.jdx.dev
+    nodejs.org
+    go.dev
+    dl.google.com
+    static.rust-lang.org
+  # Extra domains for every sandbox.
+  allowlist.txt: ""
+
+---
+# Source: flow/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: flow-data
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+# Source: flow/templates/sandbox/rbac.yaml
+# Read-only, cluster-scoped objects preflight inspects. No write access and
+# nothing namespaced.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flow-flow-preflight
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: sandboxes
+rules:
+  - apiGroups: [node.k8s.io]
+    resources: [runtimeclasses]
+    verbs: [get]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
+    verbs: [get, list]
+  - apiGroups: [snapshot.storage.k8s.io]
+    resources: [volumesnapshotclasses]
+    verbs: [get]
+---
+# Source: flow/templates/sandbox/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: flow-flow-preflight
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: sandboxes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: flow-flow-preflight
+subjects:
+  - kind: ServiceAccount
+    name: flow
+    namespace: flow
+
+---
+# Source: flow/templates/sandbox/rbac.yaml
+# Flow's permissions, limited to the sandbox namespace (design §9). Flow
+# needs no ClusterRole except the optional read-only preflight role below.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: flow-sandboxes
+  namespace: flow-sandboxes
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: sandboxes
+# The rules match the Kubernetes provider's API calls exactly
+# (api/internal/sandbox/kubernetes; preflight checks them with
+# SelfSubjectAccessReview): least privilege, no watch and no event access.
+rules:
+  # Sandbox Pods: create, observe, adopt after a restart, delete; orphan GC lists by label.
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [create, get, list, delete]
+  # Runner logs archived on stop.
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+  # Debug terminal (Provider.Exec): create for SPDY, get for the WebSocket
+  # exec protocol (Kubernetes >= 1.30).
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [create, get]
+  # Per-sandbox token Secrets (created, owner-referenced to the Pod by patch,
+  # deleted on stop); list for orphan GC by label.
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create, get, list, delete, patch]
+  # Workspace volumes (volumesnapshot strategy or FLOW_CODING_K8S_WORKSPACE_VOLUME=pvc).
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [create, get, list, delete]
+  # Preflight reads the sandbox namespace's Pod Security label (a namespace
+  # get is authorized in that namespace, so the Role can grant it).
+  - apiGroups: [""]
+    resources: [namespaces]
+    resourceNames: ["flow-sandboxes"]
+    verbs: [get]
+  # Flow ensures flow-sandbox-default-deny and flow-sandbox-egress itself.
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies]
+    verbs: [get, create, patch]
+  - apiGroups: [snapshot.storage.k8s.io]
+    resources: [volumesnapshots]
+    verbs: [create, get, list, delete]
+---
+# Source: flow/templates/sandbox/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: flow-sandboxes
+  namespace: flow-sandboxes
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: sandboxes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: flow-sandboxes
+subjects:
+  - kind: ServiceAccount
+    name: flow
+    namespace: flow
+---
+# Source: flow/templates/egress/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: flow-egress
+  namespace: flow-sandboxes
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/name: flow-egress
+    app.kubernetes.io/instance: flow
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: flow-egress
+    app.kubernetes.io/instance: flow
+  ports:
+    - name: proxy
+      port: 3128
+      targetPort: proxy
+      protocol: TCP
+
+---
+# Source: flow/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: flow
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/name: flow
+    app.kubernetes.io/instance: flow
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: flow
+    app.kubernetes.io/instance: flow
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+
+---
+# Source: flow/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flow
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/name: flow
+    app.kubernetes.io/instance: flow
+    app.kubernetes.io/component: api
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flow
+      app.kubernetes.io/instance: flow
+  strategy:
+    # One replica on a ReadWriteOnce volume (or SQLite): the old Pod must stop
+    # before the new one mounts the volume.
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flow
+        app.kubernetes.io/instance: flow
+        app.kubernetes.io/component: api
+      annotations:
+        checksum/config: 57d453da65f7028a1e29d3cfa583ec9aced9212416f0063339d62175ded597de
+        checksum/secret: 191b05a309042a4c5fef2dc1fda00c51382fde225ef3d456615981a2d8048b38
+    spec:
+      serviceAccountName: flow
+      # The kubernetes sandbox provider uses the in-cluster ServiceAccount token.
+      automountServiceAccountToken: true
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: flow
+          image: "ghcr.io/leozhengliu-pixel/flow:0.1.0"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: flow
+            - secretRef:
+                name: flow
+          env:
+            - name: GOMEMLIMIT
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.memory
+                  divisor: "1"
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 60
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 5
+          # TCP, not /api/health: a Redis outage makes health report 503 and
+          # must take the Pod out of rotation, not restart it.
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+            timeoutSeconds: 5
+          resources:
+            limits:
+              memory: 2Gi
+            requests:
+              cpu: 250m
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: flow-data
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi
+
+---
+# Source: flow/templates/egress/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flow-egress
+  namespace: flow-sandboxes
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/name: flow-egress
+    app.kubernetes.io/instance: flow
+    app.kubernetes.io/component: egress-proxy
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flow-egress
+      app.kubernetes.io/instance: flow
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flow-egress
+        app.kubernetes.io/instance: flow
+        app.kubernetes.io/component: egress-proxy
+      annotations:
+        checksum/config: 09ad95bd5ef429d36062c2a4080f82ac95ba1ac412b98b1b69bc3936a7396b9a
+    spec:
+      serviceAccountName: flow-egress
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 10
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: squid
+          image: "ghcr.io/leozhengliu-pixel/flow-egress:0.1.0"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - name: proxy
+              containerPort: 3128
+              protocol: TCP
+          env:
+            - name: FLOW_EGRESS_PORT
+              value: "3128"
+            - name: FLOW_EGRESS_RUNTIME_DIR
+              value: /tmp/flow-egress
+            - name: FLOW_EGRESS_ALLOWLIST_FILE
+              value: /etc/flow-egress/lists/allowlist.txt
+            - name: FLOW_EGRESS_DEFAULT_ALLOWLIST_FILE
+              value: /etc/flow-egress/lists/allowlist-default.txt
+            - name: FLOW_CODING_EGRESS_DEFAULT_ALLOWLIST
+              value: "on"
+            - name: FLOW_EGRESS_HELPER_CHILDREN
+              value: "10"
+            - name: FLOW_EGRESS_BLOCK_CIDRS
+              value: ""
+            - name: FLOW_EGRESS_FLOW_URL
+              value: "http://flow.flow.svc.cluster.local:8080"
+            - name: FLOW_EGRESS_ACL_TIMEOUT
+              value: "5s"
+            - name: FLOW_CODING_EGRESS_ACL_SECRET_FILE
+              value: /var/run/flow-egress/acl-secret
+          readinessProbe:
+            tcpSocket:
+              port: proxy
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: proxy
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: allowlists
+              mountPath: /etc/flow-egress/lists
+              readOnly: true
+            - name: acl-secret
+              mountPath: /var/run/flow-egress
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: allowlists
+          configMap:
+            name: flow-egress
+        - name: acl-secret
+          secret:
+            secretName: flow-egress-acl
+            defaultMode: 0400
+            items:
+              - key: acl-secret
+                path: acl-secret
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: flow-egress
+                    app.kubernetes.io/instance: flow
+---
+# Source: flow/templates/tests/networkpolicy-probe.yaml
+# `helm test <release>` runs this Pod in the sandbox namespace with the
+# sandbox label, so the sandbox NetworkPolicies apply to it. It succeeds only
+# if every forbidden path is blocked and the allowed paths work. The
+# flow.dev/instance value differs from Flow's, so orphan GC ignores it.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: flow-netpol-probe
+  namespace: flow-sandboxes
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+    flow.dev/managed-by: flow
+    flow.dev/instance: flow-netpol-probe
+    flow.dev/kind: probe
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  enableServiceLinks: false
+  serviceAccountName: flow-sandbox
+  activeDeadlineSeconds: 300
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  runtimeClassName: kata
+  nodeSelector:
+    flow.dev/pool: sandbox
+  tolerations:
+    - effect: NoSchedule
+      key: flow.dev/pool
+      operator: Equal
+      value: sandbox
+  containers:
+    - name: probe
+      image: "curlimages/curl:8.11.1"
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        capabilities:
+          drop: [ALL]
+        seccompProfile:
+          type: RuntimeDefault
+      resources:
+        requests: {cpu: 50m, memory: 32Mi}
+        limits: {cpu: 200m, memory: 64Mi}
+      env:
+        - name: FLOW_URL
+          value: "http://flow.flow.svc.cluster.local:8080"
+        - name: PROXY_URL
+          value: "http://flow-egress.flow-sandboxes.svc.cluster.local:3128"
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          fail=0
+          # blocked: no connection or an HTTP error; allowed: any HTTP answer.
+          blocked() { if curl -fsS -m 5 -o /dev/null "$@" 2>/dev/null; then echo "FAIL reachable: $*"; fail=1; else echo "ok blocked: $*"; fi; }
+          allowed() { if curl -sS -m 10 -o /dev/null "$@"; then echo "ok reachable: $*"; else echo "FAIL unreachable: $*"; fail=1; fi; }
+          # Cloud metadata, the API server, and the Internet must be unreachable directly.
+          blocked --noproxy '*' http://169.254.169.254/latest/meta-data/
+          blocked --noproxy '*' http://metadata.google.internal/computeMetadata/v1/
+          blocked --noproxy '*' -k https://kubernetes.default.svc/version
+          blocked --noproxy '*' https://example.com/
+          blocked --noproxy '*' https://1.1.1.1/
+          # Flow's runtime port must be reachable directly (any HTTP answer,
+          # 401 included, proves the connection).
+          allowed --noproxy '*' "$FLOW_URL/internal/coding-runtime/bootstrap"
+          if [ -n "$PROXY_URL" ]; then
+            # The proxy must refuse unauthenticated or non-allowlisted requests
+            # and must not reach metadata.
+            blocked --proxy "$PROXY_URL" --proxy-user probe:invalid https://github.com/
+            blocked --proxy "$PROXY_URL" http://169.254.169.254/latest/meta-data/
+          fi
+          exit $fail
+

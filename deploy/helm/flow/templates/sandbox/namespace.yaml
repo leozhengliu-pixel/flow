@@ -1,0 +1,24 @@
+{{- if and (include "flow.coding.kubernetes" .) .Values.sandboxes.namespace.create }}
+{{- $ns := .Values.sandboxes.namespace }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "flow.sandbox.namespace" . }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandboxes
+    pod-security.kubernetes.io/enforce: {{ $ns.podSecurity }}
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: {{ $ns.podSecurity }}
+    pod-security.kubernetes.io/warn: {{ $ns.podSecurity }}
+    {{- with $ns.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  annotations:
+    {{- if $ns.keepOnUninstall }}
+    helm.sh/resource-policy: keep
+    {{- end }}
+    {{- with $ns.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

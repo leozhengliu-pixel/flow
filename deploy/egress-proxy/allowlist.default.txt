@@ -1,0 +1,31 @@
+# Built-in egress allowlist (docs/coding-sessions-security.md). Keep in sync with
+# defaultEgressAllowlist() in api/cmd/server/coding_egress.go (a Go test checks it).
+# One domain per line; a leading dot also matches subdomains.
+github.com
+api.github.com
+codeload.github.com
+objects.githubusercontent.com
+raw.githubusercontent.com
+ghcr.io
+pkg-containers.githubusercontent.com
+registry.npmjs.org
+registry.yarnpkg.com
+pypi.org
+files.pythonhosted.org
+proxy.golang.org
+sum.golang.org
+crates.io
+static.crates.io
+index.crates.io
+rubygems.org
+repo.maven.apache.org
+repo1.maven.org
+plugins.gradle.org
+services.gradle.org
+deb.debian.org
+mise.jdx.dev
+mise-versions.jdx.dev
+nodejs.org
+go.dev
+dl.google.com
+static.rust-lang.org
