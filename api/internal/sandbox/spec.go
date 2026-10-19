@@ -167,8 +167,7 @@ func URLPort(raw string) int {
 		return 0
 	}
 	if port := parsed.Port(); port != "" {
-		n, _ := strconv.Atoi(port)
-		return n
+		return parsePort(port)
 	}
 	switch parsed.Scheme {
 	case "http":
@@ -188,8 +187,16 @@ func AddrPort(addr string) int {
 	if err != nil {
 		return 0
 	}
-	n, _ := strconv.Atoi(port)
-	return n
+	return parsePort(port)
+}
+
+// parsePort parses a TCP port, returning 0 for anything outside 0-65535.
+func parsePort(port string) int {
+	n, err := strconv.ParseUint(port, 10, 16)
+	if err != nil {
+		return 0
+	}
+	return int(n)
 }
 
 // DefaultDeadline is the lifetime of a sandbox kind when its record has no
