@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  codingSessionPath,
   codingEnvironmentIdFromPath,
   codingEnvironmentPath,
   initiativePath,
@@ -450,3 +451,12 @@ describe("coding environment routes", () => {
     expect(codingEnvironmentIdFromPath("/acme/settings/ai/coding-sessions/environments")).toBeUndefined();
   });
 });
+
+describe('coding session page route', () => {
+  it('parses /<workspace>/diff/<id> and builds its path', () => {
+    expect(parseAppRoute('/acme/diff/cs-1')).toEqual({ kind: 'coding-session', workspaceSlug: 'acme', sessionId: 'cs-1' })
+    expect(parseAppRoute('/acme/diff').kind).toBe('not-found')
+    expect(codingSessionPath('acme', 'cs 1')).toBe('/acme/diff/cs%201')
+    expect(codingSessionPath('acme', 'cs-1', { showAgent: false })).toBe('/acme/diff/cs-1?showAgent=false')
+  })
+})

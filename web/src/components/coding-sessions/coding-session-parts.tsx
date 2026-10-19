@@ -122,9 +122,9 @@ export function CodingSandboxLogs({ sessionId, sandbox, defaultOpen = false }: {
 }
 
 /** Changed files (+/−) and the commits pushed in each turn. */
-export function CodingChanges({ session }: { session: CodingSession }) {
+export function CodingChanges({ session, commitsOnly }: { session: CodingSession; /** The session page shows the files in its diff viewer; only the commits list stays. */ commitsOnly?: boolean }) {
   const { t } = useI18n()
-  const diffs = session.diffs ?? []
+  const diffs = commitsOnly ? [] : session.diffs ?? []
   const commits = Object.values(session.commitsByTurnActivityId ?? {}).flat().sort((a, b) => (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0))
   if (!diffs.length && !commits.length) return null
   const additions = diffs.reduce((sum, diff) => sum + diff.additions, 0)

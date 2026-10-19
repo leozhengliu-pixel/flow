@@ -1,7 +1,7 @@
-import { useState } from 'react'
 import type { BootstrapData } from '@/types/flow'
 import type { CodingSession } from '@/types/coding-sessions'
-import { CodingSessionDialog, CodingSessionStatusRow } from './coding-session-card'
+import { CodingSessionStatusRow } from './coding-session-card'
+import { useCodingSessionOpener } from './use-coding-session-opener'
 import { useCodingAvailability, useCodingSession, useCodingSessions } from './use-coding-sessions'
 import './coding-sessions.css'
 
@@ -11,7 +11,7 @@ type AnchorTask = { id: string; issueId?: string; codingSessionId?: string }
 /**
  * Mounted in each agent session thread (issue-agent-tasks.tsx): when the task anchors a coding session, the thread shows
  * the session's status row ("Thinking… 02:42", "Error …"), like the reference app's session card in issue activity;
- * the row opens the full session view.
+ * the row opens the session page.
  */
 export function AgentTaskCodingSession({ task, data }: { task: AnchorTask; data: BootstrapData }) {
   const available = useCodingAvailability(data)
@@ -29,10 +29,10 @@ function IssueAnchoredSession({ task, issueId, data }: { task: AnchorTask; issue
 
 function LiveEmbeddedSession({ sessionId, initial, data }: { sessionId: string; initial?: CodingSession; data: BootstrapData }) {
   const { session } = useCodingSession(sessionId, initial)
-  const [open, setOpen] = useState(false)
+  const opener = useCodingSessionOpener(session, data)
   if (!session) return null
   return <div className="coding-session-embedded" data-state={session.state}>
-    <CodingSessionStatusRow session={session} data={data} onOpen={() => setOpen(true)}/>
-    {open && <CodingSessionDialog sessionId={session.id} initial={session} data={data} open onOpenChange={setOpen}/>}
+    <CodingSessionStatusRow session={session} data={data} {...opener.rowProps}/>
+    {opener.dialog}
   </div>
 }

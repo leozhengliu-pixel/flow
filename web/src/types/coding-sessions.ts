@@ -217,6 +217,36 @@ export interface CodingSession {
   hostName?: string;
   signingFormat?: string;
   signingPublicKey?: string;
+  /** "Subscribe to session": explicit subscribers, and members who opted out (the creator is subscribed unless they did). */
+  subscriberIds?: string[];
+  unsubscribedIds?: string[];
+}
+
+/** One line of a diff hunk (GET /api/coding/sessions/{id}/diff). */
+export interface CodingDiffLine { kind: "context" | "add" | "delete" | "note"; oldLine?: number; newLine?: number; text: string }
+export interface CodingDiffHunk { header: string; oldStart: number; oldLines: number; newStart: number; newLines: number; lines: CodingDiffLine[] }
+export interface CodingDiffFile {
+  path: string;
+  previousPath?: string;
+  status: CodingDiffSummary["status"];
+  additions: number;
+  deletions: number;
+  binary?: boolean;
+  /** The host left the patch out, or it is past the response's line cap. */
+  tooLarge?: boolean;
+  hunks: CodingDiffHunk[];
+}
+/** The session's changes: the branch compared with its base on the code host, the runner's per-file summary, or none yet. */
+export interface CodingSessionDiff {
+  source: "codeHost" | "summary" | "none";
+  base?: string;
+  head?: string;
+  headSha?: string;
+  truncated?: boolean;
+  errorCode?: CodingErrorCode;
+  additions: number;
+  deletions: number;
+  files: CodingDiffFile[];
 }
 
 export interface CreateCodingSessionInput {

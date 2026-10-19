@@ -3,6 +3,7 @@
  * Re-exported from "@/lib/api". Owner of each group noted in the design.
  */
 import { jsonRequest, request } from "@/lib/api-client";
+import type { AgentMessageAttachment } from "@/types/flow";
 import type {
   CodeHostKind,
   CodeHostRepository,
@@ -13,6 +14,7 @@ import type {
   CodingEnvVar,
   CodingModelOption,
   CodingSession,
+  CodingSessionDiff,
   CodingSessionState,
   CodingSettings,
   CodingStatus,
@@ -77,8 +79,12 @@ export const fetchCodingSessions = (params: { issueId?: string; state?: CodingSe
 export const fetchCodingSession = (sessionId: string) => request<CodingSession>(`/api/coding/sessions/${id(sessionId)}`);
 export const createCodingSession = (input: CreateCodingSessionInput, idempotencyKey?: string) =>
   request<CodingSession>("/api/coding/sessions", { ...jsonRequest("POST", input), headers: { "Content-Type": "application/json", ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}) } });
-export const promptCodingSession = (sessionId: string, prompt: string, attachments?: string[]) =>
-  request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/prompt`, jsonRequest("POST", { prompt, attachments }));
+/** A follow-up; `files` are composer uploads (`/uploads/…`, from uploadAgentFile) the runner gets as signed URLs. */
+export const promptCodingSession = (sessionId: string, prompt: string, attachments?: string[], files?: AgentMessageAttachment[]) =>
+  request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/prompt`, jsonRequest("POST", { prompt, attachments, files: files?.length ? files : undefined }));
+export const fetchCodingSessionDiff = (sessionId: string, signal?: AbortSignal) => request<CodingSessionDiff>(`/api/coding/sessions/${id(sessionId)}/diff`, { signal });
+export const setCodingSessionSubscription = (sessionId: string, subscribed: boolean) =>
+  request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/subscription`, jsonRequest("POST", { subscribed }));
 export const stopCodingSession = (sessionId: string) => request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/stop`, { method: "POST" });
 export const restartCodingSession = (sessionId: string, options: { useDefaultModel?: boolean } = {}) =>
   request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/restart`, jsonRequest("POST", options));

@@ -245,6 +245,8 @@ export type AppRoute =
     }
   | { kind: "drafts"; workspaceSlug: string }
   | { kind: "agent"; workspaceSlug: string; chatSlug?: string }
+  /** A coding session's page (the reference app's `/diff/<id>`): its code changes and the agent panel. */
+  | { kind: "coding-session"; workspaceSlug: string; sessionId: string }
   | { kind: "releases"; workspaceSlug: string }
   | {
       kind: "release-pipeline";
@@ -649,6 +651,8 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     return { kind: "drafts", workspaceSlug };
   if (section === "agent" && segments.length <= 3)
     return { kind: "agent", workspaceSlug, chatSlug: third };
+  if (section === "diff" && third && segments.length === 3)
+    return { kind: "coding-session", workspaceSlug, sessionId: third };
   if (section === "release-pipelines" && segments.length === 2)
     return { kind: "releases", workspaceSlug };
   if (
@@ -1787,6 +1791,10 @@ export function draftsPath(workspaceSlug: string) {
 }
 export function agentPath(workspaceSlug: string, chatSlug?: string) {
   return `${workspaceRootPath(workspaceSlug)}/agent${chatSlug ? `/${encodeURIComponent(chatSlug)}` : ""}`;
+}
+/** A coding session's page; `showAgent=false` keeps the agent panel hidden. */
+export function codingSessionPath(workspaceSlug: string, sessionId: string, options: { showAgent?: boolean } = {}) {
+  return `${workspaceRootPath(workspaceSlug)}/diff/${encodeURIComponent(sessionId)}${options.showAgent === false ? "?showAgent=false" : ""}`;
 }
 export function newAgentSkillPath(workspaceSlug: string) {
   return `${workspaceRootPath(workspaceSlug)}/settings/skill/new`;

@@ -1,5 +1,5 @@
-import { useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { AlertTriangle, MoreHorizontal, RotateCcw, ShieldQuestion } from 'lucide-react'
+import { useEffect, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from 'react'
+import { AlertTriangle, MoreHorizontal, RotateCcw, ShieldQuestion, X } from 'lucide-react'
 import {
   approveCodingSession,
   dismissCodingSession,
@@ -7,18 +7,20 @@ import {
   fixCodingEnvironmentWithAgent,
   promptCodingSession,
   restartCodingSession,
+  setCodingSessionSubscription,
   startReviewCodingSession,
   stopCodingSession,
 } from '@/lib/coding-sessions-api'
-import { AgentStopIcon, AgentSubmitIcon } from '@/components/agent/agent-icons'
+import { AgentAttachIcon, AgentStopIcon, AgentSubmitIcon } from '@/components/agent/agent-icons'
+import { AGENT_ATTACHMENT_ACCEPT, AGENT_UPLOAD_MAX_ITEMS, agentFileKind, agentUploadLimit, pastedAgentFiles, shrinkAgentImage } from '@/components/agent/agent-attachments'
+import { uploadAgentFile } from '@/lib/api'
 import { AgentAvatarMark, AgentCodingGlyph } from '@/components/ui/agent-glyph'
 import { AppLink } from '@/components/ui/app-link'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useI18n } from '@/i18n/i18n'
-import { agentPath, issuePath } from '@/lib/app-routes'
 import { commentShortcutMatches } from '@/lib/runtime-preferences'
 import { toast } from '@/lib/toast'
-import type { BootstrapData } from '@/types/flow'
+import type { AgentMessageAttachment, BootstrapData } from '@/types/flow'
 import type { CodingSession } from '@/types/coding-sessions'
 import { CodingSessionActivity, type CodingActivityMode } from './coding-session-activity'
 import { notifyCodingSessionChanged } from './coding-session-events'
@@ -26,6 +28,8 @@ import { CODING_PHASE_LABELS, codingErrorInfo, codingModelLabel, codingRunStarte
 import { CodingChanges, CodingPhaseProgress, CodingPlan, CodingPullRequests, CodingSandboxInfo, CodingSandboxLogs, CodingStateBadge } from './coding-session-parts'
 import { useCodingSession, useNow } from './use-coding-sessions'
 import { CodingSessionArtifacts } from './artifacts/coding-session-artifacts'
+import { CodingDiffViewer } from './coding-session-diff'
+import { codingSessionSubscribed, codingSessionURL } from './coding-session-page-model'
 import './coding-sessions.css'
 
 export type CodingSessionPanelProps = {
@@ -78,15 +82,17 @@ export function CodingSessionPanel({ session, data, onChange, activity = 'all', 
   const model = codingModelLabel(session)
   const phase = CODING_PHASE_LABELS[session.phase]
   const admin = data.viewerRole === 'admin' || data.viewerRole === 'owner'
+  /** Runs a session action; false when it failed (the error shows under the panel). */
   const run = async (action: () => Promise<CodingSession | void>, done?: string) => {
-    if (busyRef.current) return
+    if (busyRef.current) return false
     busyRef.current = true; setBusy(true); setError('')
     try {
       const next = await action()
       if (next && next.id === session.id) onChange(next)
       notifyCodingSessionChanged({ sessionId: session.id, agentSessionId: session.agentSessionId, issueId: session.issueId })
       if (done) toast.success(t(done))
-    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) }
+      return true
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); return false }
     finally { busyRef.current = false; setBusy(false) }
   }
   const startOther = (start: () => Promise<CodingSession>, done: string) => run(async () => {
@@ -118,7 +124,6 @@ export function CodingSessionPanel({ session, data, onChange, activity = 'all', 
   const menuRestart = can.restart && !errorInfo?.actions.some(action => action.kind === 'restart')
   const menuRestartDefault = can.restartWithDefaultModel && !errorInfo?.actions.some(action => action.kind === 'restartWithDefaultModel')
   const menuCreatePullRequest = can.createPullRequest && !errorInfo?.actions.some(action => action.kind === 'createPullRequest')
-  const hasChanges = Boolean(session.pullRequests?.length || session.latestPullRequest || session.diffs?.length || Object.values(session.commitsByTurnActivityId ?? {}).some(list => list.length) || session.artifacts?.length || session.plan?.length || session.summary)
 
   const title = session.displayTitle || data.issues.find(issue => issue.id === session.issueId)?.title || session.repository || t('Coding session')
   return <section className={`coding-session-panel${agentHidden ? ' is-agent-hidden' : ''}${className ? ` ${className}` : ''}`} data-state={session.state} data-phase={session.phase} aria-label={t('Coding session')}>
@@ -137,19 +142,15 @@ export function CodingSessionPanel({ session, data, onChange, activity = 'all', 
       {session.summary && !steps && session.state === 'complete' && <p className="coding-session-summary" data-i18n-ignore>{session.summary}</p>}
       <CodingPullRequests session={session} reviews={data.reviews ?? []} busy={busy} onFixChecks={(_, review) => void startOther(() => startReviewCodingSession(review.id, { kind: 'fix' }), 'Started a session to fix failing checks')}/>
       <CodingSandboxInfo session={session}/>
-      <CodingChanges session={session}/>
+      <CodingChanges session={session} commitsOnly/>
       <CodingSessionArtifacts sessionId={session.id} artifacts={session.artifacts} refreshKey={session.updatedAt}/>
-      {!hasChanges && <div className="coding-session-empty">
-        <CodingChangesIllustration/>
-        <strong>{t('No changes yet')}</strong>
-        <span>{t('Changes will appear here as the agent works.')}</span>
-      </div>}
+      <CodingDiffViewer session={session}/>
     </div>
     <aside className="coding-agent-panel" aria-label={t('Agent')} hidden={agentHidden}>
       <header className="coding-agent-panel-header">
         <CodingAgentAvatar state={session.state}/>
         <h3 data-i18n-ignore>{title}</h3>
-        <CodingSessionMenu session={session} data={data} busy={busy} items={<>
+        <CodingSessionMenu session={session} data={data} busy={busy} onChange={onChange} items={<>
           {can.stop && <DropdownMenuItem disabled={busy} onSelect={() => void run(() => stopCodingSession(session.id), 'Stopping coding session')}>{t('Stop session')}</DropdownMenuItem>}
           {menuRestart && <DropdownMenuItem disabled={busy} onSelect={() => void restart()}><RotateCcw size={14} aria-hidden="true"/>{t('Restart')}</DropdownMenuItem>}
           {menuRestartDefault && <DropdownMenuItem disabled={busy} onSelect={() => void restartDefault()}>{t('Restart with default model')}</DropdownMenuItem>}
@@ -188,35 +189,33 @@ export function CodingSessionPanel({ session, data, onChange, activity = 'all', 
         </div>}
       </div>
       {!steps && can.prompt && <CodingFollowUp disabled={busy} awaitingInput={session.phase === 'awaitingUser'} stop={can.stop ? () => void run(() => stopCodingSession(session.id), 'Stopping coding session') : undefined}
-        onSubmit={prompt => run(() => promptCodingSession(session.id, prompt))}/>}
+        onSubmit={(prompt, files) => run(() => promptCodingSession(session.id, prompt, undefined, files))}/>}
       {steps && can.stop && <div className="coding-session-actions"><button type="button" className="coding-session-button" disabled={busy} onClick={() => void run(() => stopCodingSession(session.id), 'Stopping coding session')}>{t('Stop')}</button></div>}
       {error && <p className="coding-session-error-text" role="alert">{error}</p>}
     </aside>
   </section>
 }
 
-/** The empty diff illustration (a document with dashed lines), drawn in the current text colour. */
-function CodingChangesIllustration() {
-  return <svg className="coding-session-empty-art" width="97" height="97" viewBox="0 0 97 97" fill="none" aria-hidden="true">
-    <rect x="1.5" y="1.5" width="94" height="94" rx="6" stroke="currentColor" strokeWidth="1.5"/>
-    <path d="M9 13h22M9 18h45" stroke="currentColor" strokeWidth="1.2"/>
-    <path d="M12 30v62" stroke="currentColor" strokeWidth="2"/>
-    {[30, 37, 44, 51, 58, 65, 72, 79, 86].map((y, index) => <path key={y} d={`M17 ${y}h${[60, 40, 52, 34, 46, 28, 64, 38, 54][index]}`} stroke="currentColor" strokeWidth="1.2" strokeDasharray="3 2"/>)}
-  </svg>
-}
-
-/** "…" Session details: the model, copy actions, session actions and Archive. */
-export function CodingSessionMenu({ session, data, busy, items, onArchive }: { session: CodingSession; data: BootstrapData; busy?: boolean; items?: ReactNode; onArchive?: () => void }) {
+/** "…" Session details: the model, "Subscribe to session", copy actions, session actions and Archive. */
+export function CodingSessionMenu({ session, data, busy, items, onArchive, onChange }: { session: CodingSession; data: BootstrapData; busy?: boolean; items?: ReactNode; onArchive?: () => void; /** Receives the session after a subscription change. */ onChange?: (session: CodingSession) => void }) {
   const { t } = useI18n()
   const model = codingModelLabel(session)
-  const sessionUrl = () => {
-    const issue = session.issueId ? data.issues.find(item => item.id === session.issueId) : undefined
-    const base = typeof location === 'undefined' ? '' : location.origin
-    return issue ? `${base}${issuePath(data.workspace.urlKey, issue)}#agent-session-${session.agentSessionId}` : `${base}${agentPath(data.workspace.urlKey)}`
-  }
+  const subscribed = codingSessionSubscribed(session, data.viewer.id)
+  const [subscribing, setSubscribing] = useState(false)
   const copy = async (text: string, done: string) => {
     try { await navigator.clipboard.writeText(text); toast.success(t(done)) }
     catch { toast.error(t('Could not copy')) }
+  }
+  const toggleSubscription = async () => {
+    if (subscribing) return
+    setSubscribing(true)
+    try {
+      const next = await setCodingSessionSubscription(session.id, !subscribed)
+      onChange?.(next)
+      notifyCodingSessionChanged({ sessionId: session.id, agentSessionId: session.agentSessionId, issueId: session.issueId })
+      toast.success(t(subscribed ? 'Unsubscribed from session' : 'Subscribed to session'))
+    } catch (cause) { toast.error(cause instanceof Error ? cause.message : t('Could not update subscription')) }
+    finally { setSubscribing(false) }
   }
   return <DropdownMenu>
     <DropdownMenuTrigger asChild>
@@ -226,12 +225,17 @@ export function CodingSessionMenu({ session, data, busy, items, onArchive }: { s
       <DropdownMenuLabel>{t('Session details')}</DropdownMenuLabel>
       <DropdownMenuItem disabled className="coding-session-menu-detail"><AgentCodingGlyph size={16}/><span data-i18n-ignore>{model.harness} · {model.model}</span></DropdownMenuItem>
       <DropdownMenuItem disabled className="coding-session-menu-detail"><span className="coding-session-menu-cost">{t('Cost')}</span><span data-i18n-ignore>{formatCodingCost(session.costMicros)}</span></DropdownMenuItem>
+      <DropdownMenuSeparator/>
+      <DropdownMenuItem role="menuitemcheckbox" aria-checked={subscribed} disabled={subscribing} className="coding-session-menu-subscribe" onSelect={event => { event.preventDefault(); void toggleSubscription() }}>
+        <span className="coding-session-menu-cost">{t('Subscribe to session')}</span>
+        <span className="coding-session-menu-toggle" data-checked={subscribed || undefined} aria-hidden="true"/>
+      </DropdownMenuItem>
       {items && <><DropdownMenuSeparator/>{items}</>}
       <DropdownMenuSeparator/>
       <DropdownMenuSub>
         <DropdownMenuSubTrigger>{t('Copy')}</DropdownMenuSubTrigger>
         <DropdownMenuSubContent className="coding-session-menu">
-          <DropdownMenuItem onSelect={() => void copy(sessionUrl(), 'Copied session URL')}>{t('Session URL')}</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void copy(codingSessionURL(data.workspace.urlKey, session.id), 'Copied session URL')}>{t('Session URL')}</DropdownMenuItem>
           {session.branchName && <DropdownMenuItem onSelect={() => void copy(session.branchName!, 'Copied branch name')}>{t('Branch name')}</DropdownMenuItem>}
         </DropdownMenuSubContent>
       </DropdownMenuSub>
@@ -240,25 +244,89 @@ export function CodingSessionMenu({ session, data, busy, items, onArchive }: { s
   </DropdownMenu>
 }
 
-/** The follow-up composer ("Tell Flow what to do next…"): a new turn on the warm sandbox, or a restore after the idle TTL (§4.3). Stop replaces send while the agent works. */
-function CodingFollowUp({ disabled, awaitingInput, stop, onSubmit }: { disabled: boolean; awaitingInput: boolean; stop?: () => void; onSubmit: (prompt: string) => Promise<void> }) {
+type ComposerFile = { key: string; name: string; contentType: string; size: number; url?: string; preview?: string; failed?: boolean }
+
+/**
+ * The follow-up composer ("Tell Flow what to do next…"): a new turn on the warm sandbox, or a restore after the idle TTL
+ * (§4.3). Files attach with the paperclip, by pasting or by dropping them, upload at once like the agent chat's, and go
+ * with the prompt (the runner gets signed URLs). Stop replaces send while the agent works.
+ */
+function CodingFollowUp({ disabled, awaitingInput, stop, onSubmit }: { disabled: boolean; awaitingInput: boolean; stop?: () => void; onSubmit: (prompt: string, files: AgentMessageAttachment[]) => Promise<boolean> }) {
   const { t } = useI18n()
   const [value, setValue] = useState('')
+  const [files, setFiles] = useState<ComposerFile[]>([])
+  const [dragging, setDragging] = useState(false)
+  const input = useRef<HTMLInputElement>(null)
+  const filesRef = useRef(files)
+  filesRef.current = files
+  useEffect(() => () => { for (const file of filesRef.current) if (file.preview) URL.revokeObjectURL(file.preview) }, [])
   const body = value.trim()
+  const uploading = files.some(file => !file.url && !file.failed)
+  const ready = files.filter((file): file is ComposerFile & { url: string } => Boolean(file.url) && !file.failed)
+  const canSend = !disabled && !uploading && Boolean(body || ready.length)
+  const attach = async (picked: File[]) => {
+    const usable = picked.filter(file => agentFileKind(file) !== 'audio')
+    const room = AGENT_UPLOAD_MAX_ITEMS - filesRef.current.length
+    if (usable.length > room) toast.error(t('A message can carry up to 8 files'), { id: 'coding-attachment-limit' })
+    for (const original of usable.slice(0, Math.max(0, room))) {
+      const file = await shrinkAgentImage(original)
+      if (file.size > agentUploadLimit(file)) { toast.error(t('{name} is too large to attach').replace('{name}', file.name)); continue }
+      const key = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const preview = agentFileKind(file) === 'image' && typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : undefined
+      setFiles(items => [...items, { key, name: file.name, contentType: file.type || 'application/octet-stream', size: file.size, preview }])
+      uploadAgentFile(file)
+        .then(upload => setFiles(items => items.map(item => item.key === key ? { ...item, url: upload.url, name: upload.name || item.name, contentType: upload.contentType || item.contentType, size: upload.size } : item)))
+        .catch(error => {
+          setFiles(items => items.map(item => item.key === key ? { ...item, failed: true } : item))
+          toast.error(error instanceof Error ? error.message : t('Could not upload file'))
+        })
+    }
+  }
+  const remove = (key: string) => setFiles(items => items.filter(item => {
+    if (item.key === key && item.preview) URL.revokeObjectURL(item.preview)
+    return item.key !== key
+  }))
   const submit = async (event?: FormEvent) => {
     event?.preventDefault()
-    if (!body || disabled) return
-    await onSubmit(body)
+    if (!canSend) return
+    if (!await onSubmit(body, ready.map(({ name, contentType, size, url }) => ({ name, contentType, size, url })))) return
     setValue('')
+    for (const file of filesRef.current) if (file.preview) URL.revokeObjectURL(file.preview)
+    setFiles([])
   }
-  return <form className="coding-session-composer" onSubmit={event => void submit(event)}>
-    <textarea rows={1} aria-label={t('Follow-up prompt')} placeholder={t(awaitingInput ? 'Answer the agent…' : 'Tell Flow what to do next…')} value={value} disabled={disabled} onChange={event => setValue(event.target.value)} onKeyDown={event => {
-      if (commentShortcutMatches(event) && body) { event.preventDefault(); void submit() }
-    }}/>
+  const hasFiles = (event: DragEvent) => [...(event.dataTransfer?.types ?? [])].includes('Files')
+  return <form className="coding-session-composer" data-dragging={dragging || undefined} onSubmit={event => void submit(event)}
+    onDragOver={event => { if (!hasFiles(event)) return; event.preventDefault(); setDragging(true) }}
+    onDragLeave={() => setDragging(false)}
+    onDrop={event => { if (!hasFiles(event)) return; event.preventDefault(); setDragging(false); void attach([...event.dataTransfer.files]) }}>
+    {files.length > 0 && <ul className="coding-session-composer-files" aria-label={t('Attachments')}>
+      {files.map(file => <li key={file.key} data-state={file.failed ? 'failed' : file.url ? 'ready' : 'uploading'}>
+        {file.preview ? <img src={file.preview} alt=""/> : <AgentAttachIcon size={12} aria-hidden="true"/>}
+        <span data-i18n-ignore title={file.name}>{file.name}</span>
+        {!file.url && !file.failed && <span className="sr-only">{t('Uploading…')}</span>}
+        <button type="button" className="coding-session-icon-button" aria-label={t('Remove {name}').replace('{name}', file.name)} onClick={() => remove(file.key)}><X size={12}/></button>
+      </li>)}
+    </ul>}
+    <textarea rows={1} aria-label={t('Follow-up prompt')} placeholder={t(awaitingInput ? 'Answer the agent…' : 'Tell Flow what to do next…')} value={value} disabled={disabled} onChange={event => setValue(event.target.value)}
+      onPaste={event => {
+        const pasted = pastedAgentFiles(event.clipboardData)
+        if (!pasted.length) return
+        event.preventDefault()
+        void attach(pasted)
+      }}
+      onKeyDown={event => {
+        if (commentShortcutMatches(event) && canSend) { event.preventDefault(); void submit() }
+      }}/>
     <div className="coding-session-composer-tools">
-      {stop && !body
+      <input ref={input} type="file" multiple hidden accept={AGENT_ATTACHMENT_ACCEPT} data-testid="coding-session-file-input" onChange={event => {
+        const picked = [...(event.target.files ?? [])]
+        event.target.value = ''
+        void attach(picked)
+      }}/>
+      <button type="button" className="coding-session-composer-attach" aria-label={t('Attach files')} disabled={disabled || files.length >= AGENT_UPLOAD_MAX_ITEMS} onClick={() => input.current?.click()}><AgentAttachIcon size={14}/></button>
+      {stop && !body && !ready.length
         ? <button type="button" className="coding-session-composer-send is-stop" aria-label={t('Stop')} disabled={disabled} onClick={stop}><AgentStopIcon size={14}/></button>
-        : <button type="submit" className="coding-session-composer-send" aria-label={t('Send follow-up')} disabled={disabled || !body}><AgentSubmitIcon size={14}/></button>}
+        : <button type="submit" className="coding-session-composer-send" aria-label={t('Send follow-up')} disabled={!canSend}><AgentSubmitIcon size={14}/></button>}
     </div>
   </form>
 }

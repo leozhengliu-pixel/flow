@@ -155,6 +155,10 @@ export const AgentPage = lazyPage(
   () => import("@/components/agent/agent-page"),
   "AgentPage",
 );
+export const CodingSessionPage = lazyPage(
+  () => import("@/components/coding-sessions/coding-session-page"),
+  "CodingSessionPage",
+);
 export const AgentChatPanel = lazyPage(
   () => import("@/components/agent/agent-chat-panel"),
   "AgentChatPanel",
