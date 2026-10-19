@@ -28,6 +28,8 @@ export type XTermOptions = {
   scrollback?: number;
   fontSize?: number;
   lineHeight?: number;
+  /** A font stack; defaults to the monospace token. */
+  fontFamily?: string;
 };
 
 function cssVar(name: string) {
@@ -58,8 +60,31 @@ function xtermColor(value: string) {
   return a === 255 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(3)})`;
 }
 
-export function terminalFont() {
-  return cssVar("--font-monospace") || "ui-monospace, Menlo, monospace";
+export function terminalFont(token = "--font-monospace") {
+  return cssVar(token) || "ui-monospace, Menlo, monospace";
+}
+
+const ANSI_KEYS = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white", "brightBlack", "brightRed", "brightGreen", "brightYellow", "brightBlue", "brightMagenta", "brightCyan", "brightWhite"];
+
+/**
+ * The debug terminal's palette: a dark terminal in both themes, as in the reference app (background, foreground,
+ * cursor and selection from the --cs-terminal-* tokens, ANSI colours from --cs-terminal-ansi-*).
+ */
+export function terminalTheme(): XTermTheme {
+  const tokens: Record<string, string> = {
+    background: "--cs-terminal-bg",
+    foreground: "--cs-terminal-fg",
+    cursor: "--cs-terminal-cursor",
+    cursorAccent: "--cs-terminal-bg",
+    selectionBackground: "--cs-terminal-selection",
+  };
+  ANSI_KEYS.forEach((key, index) => (tokens[key] = `--cs-terminal-ansi-${index}`));
+  const theme: XTermTheme = {};
+  for (const [key, token] of Object.entries(tokens)) {
+    const value = cssVar(token);
+    if (value) theme[key] = xtermColor(value);
+  }
+  return theme;
 }
 
 /**
