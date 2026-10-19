@@ -478,6 +478,28 @@ func (s *Service) completeDecision(session domain.CodingSession, sandboxes []san
 	return d
 }
 
+// credentialSubject is what a sandbox may get repository credentials for:
+// its session, or for a snapshot build the environment's repository (the
+// build clones it before any session exists). The returned session only
+// carries the workspace, code host and repository fields.
+func (s *Service) credentialSubject(ctx context.Context, grant SandboxGrant) (domain.CodingSession, error) {
+	if grant.Kind != sandbox.KindSnapshot {
+		return s.sessionFor(ctx, grant)
+	}
+	if grant.EnvironmentID == "" || s.envs == nil {
+		return domain.CodingSession{}, ErrForbidden
+	}
+	environment, err := s.envs.CodingEnvironment(ctx, grant.WorkspaceKey, grant.EnvironmentID)
+	if err != nil {
+		return domain.CodingSession{}, err
+	}
+	codeHost := environment.CodeHost
+	if codeHost == "" {
+		codeHost = domain.CodeHostGitHub
+	}
+	return domain.CodingSession{WorkspaceKey: grant.WorkspaceKey, CodeHost: codeHost, HostName: environment.HostName, Repository: environment.Repository}, nil
+}
+
 // Credentials answers POST /credentials with a short-lived repository-scoped
 // credential minted by the session's code host (git credential helper, gh/glab).
 func (s *Service) Credentials(ctx context.Context, token string, request CredentialRequest) (CredentialResponse, error) {
@@ -485,7 +507,7 @@ func (s *Service) Credentials(ctx context.Context, token string, request Credent
 	if err != nil {
 		return CredentialResponse{}, err
 	}
-	session, err := s.sessionFor(ctx, grant)
+	session, err := s.credentialSubject(ctx, grant)
 	if err != nil {
 		return CredentialResponse{}, err
 	}
@@ -508,7 +530,11 @@ func (s *Service) Credentials(ctx context.Context, token string, request Credent
 	if !ok {
 		return CredentialResponse{}, codehost.ErrNotConnected
 	}
-	credential, err := host.MintCredential(ctx, codehost.CredentialRequest{WorkspaceKey: session.WorkspaceKey, SessionID: session.ID, SandboxID: grant.SandboxID, Repo: codehost.RepoRef{CodeHost: session.CodeHost, HostName: session.HostName, FullName: session.Repository}, Access: codehost.AccessWrite})
+	access := codehost.AccessWrite
+	if grant.Kind == sandbox.KindSnapshot {
+		access = codehost.AccessRead // a snapshot build only clones
+	}
+	credential, err := host.MintCredential(ctx, codehost.CredentialRequest{WorkspaceKey: session.WorkspaceKey, SessionID: session.ID, SandboxID: grant.SandboxID, Repo: codehost.RepoRef{CodeHost: session.CodeHost, HostName: session.HostName, FullName: session.Repository}, Access: access})
 	if err != nil {
 		return CredentialResponse{}, err
 	}
@@ -552,7 +578,9 @@ func (s *Service) HarnessStateKey(ctx context.Context, token string) (string, er
 	if _, err := s.sessionFor(ctx, grant); err != nil {
 		return "", err
 	}
-	return "coding-harness/" + grant.WorkspaceKey + "/" + grant.SessionID + ".tar.zst", nil
+	// A flat key, like coding artifacts': the local object store driver
+	// refuses keys with directories.
+	return "coding-harness_" + grant.WorkspaceKey + "_" + grant.SessionID + ".tar.zst", nil
 }
 
 // AuthenticateLLMCaller implements llmproxy.Authenticator: the token must
