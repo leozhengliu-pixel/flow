@@ -13,6 +13,8 @@ import { FlowLogo } from '@/components/ui/flow-logo'
 import { GridLoader } from '@/components/ui/grid-loader'
 import { WorkspaceAvatar } from '@/components/workspace/workspace-menu'
 import { ApplicationIconPlaceholder } from '@/components/ui/application-icon-placeholder'
+import { KnownAppMark } from '@/components/ui/app-logo'
+import { matchKnownApp } from '@/lib/known-apps'
 import { TeamCombobox } from './oauth-team-combobox'
 import { ScopeIcon } from './oauth-scope-icon'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -170,7 +172,7 @@ function OAuthConsentPage({ account }: Props) {
   return <OAuthShell switcher={switcher}>
     <section className="oauth-card" aria-labelledby="oauth-card-title">
       <header className="oauth-card-header">
-        <OAuthMarks clientName={appName} logoUri={request.client.logo_uri} t={t}/>
+        <OAuthMarks clientName={appName} logoUri={request.client.logo_uri} redirectUri={request.redirectUri} t={t}/>
         <div className="oauth-card-heading">
           {alreadyInstalled && installed ? <>
             <h1 id="oauth-card-title" data-i18n-ignore>{fill(t('{app} already installed'), { app: appName })}</h1>
@@ -243,11 +245,12 @@ function OAuthWorkspaceSwitcher({ email, memberships, selected, onSelect, onCrea
   </DropdownMenu>
 }
 
-function OAuthMarks({ clientName, logoUri, t }: { clientName: string; logoUri?: string; t: Translate }) {
+function OAuthMarks({ clientName, logoUri, redirectUri, t }: { clientName: string; logoUri?: string; redirectUri?: string; t: Translate }) {
   const logo = safeHttpUrl(logoUri)
+  const known = logo ? undefined : matchKnownApp({ name: clientName, redirectUris: redirectUri ? [redirectUri] : [] })
   return <div className="oauth-marks">
-    <span className={`oauth-mark${logo ? '' : ' is-placeholder'}`} role="img" aria-label={t('{app} icon').replace('{app}', clientName)}>
-      {logo ? <img src={logo} alt=""/> : <ApplicationIconPlaceholder/>}
+    <span className={`oauth-mark${logo ? '' : known ? ' is-known' : ' is-placeholder'}`} role="img" aria-label={t('{app} icon').replace('{app}', clientName)}>
+      {logo ? <img src={logo} alt=""/> : known ? <KnownAppMark app={known} size={32} decorative/> : <ApplicationIconPlaceholder/>}
     </span>
     <ArrowRightLeft aria-hidden="true" className="oauth-marks-arrows"/>
     <span className="oauth-mark is-flow" role="img" aria-label="Flow"><FlowLogo size={34}/></span>

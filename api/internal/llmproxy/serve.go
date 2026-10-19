@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"strconv"
 	"strings"
@@ -298,6 +299,13 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			header[key] = values
 		}
 	}
+	// Model APIs return data, never an upstream HTML document on Flow's origin.
+	mediaType, _, typeErr := mime.ParseMediaType(header.Get("Content-Type"))
+	if typeErr != nil || !(mediaType == "application/json" || strings.HasPrefix(mediaType, "application/") && strings.HasSuffix(mediaType, "+json") || mediaType == "text/event-stream") {
+		header.Set("Content-Type", "text/plain; charset=utf-8")
+	}
+	header.Set("X-Content-Type-Options", "nosniff")
+	header.Set("Content-Security-Policy", "sandbox; default-src 'none'")
 	header.Set("X-Flow-Model", decision.Model)
 	if !caller.AutoModel && !decision.Small && response.StatusCode != http.StatusOK && modelMissingStatus(response.StatusCode) && ep != endpointCountTokens {
 		if missing, _ := peekModelUnavailable(response); missing == ReasonModelNotFound {

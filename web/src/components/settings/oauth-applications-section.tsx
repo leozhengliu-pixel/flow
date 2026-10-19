@@ -4,18 +4,17 @@ import { useI18n } from "@/i18n/i18n";
 import { applicationSettingsPath } from "@/lib/app-routes";
 import type { BootstrapData } from "@/types/flow";
 import { FlowTooltip } from "@/components/ui/tooltip";
-import { ApplicationIconPlaceholder } from "@/components/ui/application-icon-placeholder";
+import { AppLogo } from "@/components/ui/app-logo";
 
 import { SettingsRow as Row, SettingsSection as Section } from "./settings-primitives";
 import "./oauth-application-settings.css";
 
-/** An application's icon: its uploaded/linked image, or the reference app's default icon. */
-export function OAuthAppAvatar({ logoUrl, size = 32 }: { logoUrl?: string; size?: number }) {
-  return (
-    <span className={`oauth-app-avatar${logoUrl ? "" : " is-placeholder"}`} style={{ width: size, height: size }} aria-hidden="true">
-      {logoUrl ? <img src={logoUrl} alt="" /> : <ApplicationIconPlaceholder />}
-    </span>
-  );
+/**
+ * An application's icon: its uploaded/linked image, else the brand mark of a well-known client (Claude, Cursor, …, matched
+ * by name and redirect URIs), else the reference app's default icon.
+ */
+export function OAuthAppAvatar({ logoUrl, name, redirectUris, size = 32 }: { logoUrl?: string; name?: string; redirectUris?: string[]; size?: number }) {
+  return <AppLogo className="oauth-app-avatar" logoUrl={logoUrl} name={name} redirectUris={redirectUris} size={size} />;
 }
 
 /** Settings › API › OAuth applications: the card on the API page (the reference app's list, or its empty row). */
@@ -48,7 +47,7 @@ export function OAuthApplicationsSection({ data }: { data: BootstrapData }) {
                     navigate(applicationSettingsPath(data.workspace.urlKey, app.id));
                   }}
                 >
-                  <OAuthAppAvatar logoUrl={app.logoUrl} />
+                  <OAuthAppAvatar logoUrl={app.logoUrl} name={app.name} redirectUris={app.redirectUris} />
                   <span className="oauth-app-list-copy">
                     <strong data-i18n-ignore>{app.name}</strong>
                     <span>{t("Updated {date}").replace("{date}", formatDate(app.updatedAt || app.createdAt, { month: "short", day: "numeric", year: "numeric" }))}</span>

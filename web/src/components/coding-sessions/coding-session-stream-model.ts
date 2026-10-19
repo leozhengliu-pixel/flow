@@ -279,4 +279,3 @@ export function pullRequestCardStatus(pr: Pick<SessionPullRequest, 'state' | 'dr
   if (review?.status === 'inReview') return 'inReview'
   return 'open'
 }
-

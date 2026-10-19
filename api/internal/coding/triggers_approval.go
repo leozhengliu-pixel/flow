@@ -197,6 +197,7 @@ func expireApproval(session *domain.CodingSession, now time.Time) {
 }
 
 func shortHash(value string) string {
+	// Stable trigger/turn identifiers for deduplication, not password storage.
 	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:12])
 }

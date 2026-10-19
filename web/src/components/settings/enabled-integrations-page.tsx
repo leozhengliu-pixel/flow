@@ -1,6 +1,7 @@
 /**
  * LS-0248 EnabledIntegrationsSettingsPage — merge connections + authorized apps.
  */
+import { KnownAppIcon } from "@/components/ui/app-logo";
 import { AppWindow, Plug } from "lucide-react";
 
 import { IntegrationBrandIcon } from "@/components/settings/integration-brand-icon";
@@ -111,7 +112,7 @@ export function EnabledIntegrationsSettingsPage({ data, onBack, onOpenSlug, onRe
               {authorizations.map((item) => (
                 <div key={item.id} className="feature-row">
                   <span className="feature-row-icon">
-                    <AppWindow size={16} />
+                    <KnownAppIcon name={item.clientName} size={16} fallback={<AppWindow size={16} />} />
                   </span>
                   <div>
                     <strong data-i18n-ignore>{item.clientName}</strong>

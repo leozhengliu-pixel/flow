@@ -122,6 +122,6 @@ describe('New initiative property pills', () => {
     const pill = container.querySelector('button.create-pill')
     expect(pill).toHaveTextContent('Launch')
     expect(pill).not.toHaveClass('is-placeholder')
-    expect(pill?.querySelector('.create-pill__label-dot')).toHaveStyle({ background: '#5e6ad2' })
+    expect(pill?.querySelector('.create-pill__label-dot')).toHaveStyle({ backgroundColor: '#5e6ad2' })
   })
 })

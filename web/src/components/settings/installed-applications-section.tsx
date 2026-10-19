@@ -80,7 +80,7 @@ export function InstalledApplicationsPage({ data }: { data: BootstrapData }) {
             event.preventDefault()
             navigate(installedApplicationPath(data.workspace.urlKey, entry.clientId))
           }}>
-            <OAuthAppAvatar logoUrl={entry.logoUrl || entry.installation?.avatarUrl}/>
+            <OAuthAppAvatar logoUrl={entry.logoUrl || entry.installation?.avatarUrl} name={entry.name} redirectUris={entry.redirectUris}/>
             <span className="oauth-app-list-copy">
               <strong data-i18n-ignore>{entry.name}</strong>
               <span data-i18n-ignore>{appSubtitle(entry, data, t, formatDate)}</span>
@@ -152,7 +152,7 @@ export function InstalledApplicationPage({ data, clientId, onReload }: { data: B
   return <div className="application-page">
     <SettingsCrumb pinned onClick={back}>{t('Applications')}</SettingsCrumb>
     <header className="oauth-app-page-header">
-      <OAuthAppAvatar logoUrl={logoUrl} size={48}/>
+      <OAuthAppAvatar logoUrl={logoUrl} name={name} redirectUris={entry?.redirectUris ?? ownApp?.redirectUris} size={48}/>
       <div className="oauth-app-page-header-copy">
         <h1 data-i18n-ignore>{name}</h1>
         {developerName && <p data-i18n-ignore>{t('by {developer}').replace('{developer}', developerName)}</p>}
