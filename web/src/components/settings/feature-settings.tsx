@@ -59,6 +59,7 @@ import { CustomerRequestsSettings } from "./customer-requests-settings";
 import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { LoopsGlyph } from '@/components/ui/agent-glyph'
+import { LoopCodeAccessSection } from './coding-sessions/loop-code-access'
 import { withTrashRetention } from '@/lib/trash-retention'
 
 type FeaturePageId = Extract<SettingsPageId, "ai"|"loops"|"coding-sessions"|"coding-environments"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations">;
@@ -148,6 +149,7 @@ function LoopsFeatureSettings({data,settings,busy,setEnabled,setFeature,onSaveWo
         <FeatureRow title="Allow external sources to trigger loops" description="Select which external sources can trigger loops"><Toggle checked={settings.externalLoopTriggers===true} disabled={busy} label="Allow external sources to trigger loops" onChange={value=>void onSaveWorkspace({externalLoopTriggers:value})}/></FeatureRow>
       </FeatureCard>
     </FeatureSection>}
+    {enabled&&<LoopCodeAccessSection disabled={busy}/>}
     {enabled&&<LoopsWebSearchSettings busy={busy}/>}
     {enabled&&<AgentTrustedSourcesSettings data={data} settings={settings} disabled={busy} onReload={onReload} />}
   </FeatureShell>;

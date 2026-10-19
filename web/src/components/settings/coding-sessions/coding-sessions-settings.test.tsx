@@ -114,8 +114,11 @@ describe("Coding sessions settings page", () => {
 
   it("picks a model and a reasoning effort", async () => {
     renderCodingSettings();
-    await screen.findByRole("combobox", { name: "Reasoning effort" });
+    await screen.findByRole("combobox", { name: "Model" });
+    // Like the reference app, Auto has no reasoning-effort row.
+    expect(screen.queryByRole("combobox", { name: "Reasoning effort" })).toBeNull();
     await choose("Model", "GPT-5 Codex");
+    await screen.findByRole("combobox", { name: "Reasoning effort" });
     expect(updateCodingSettings).toHaveBeenCalledWith({ model: "gpt-5-codex" });
     await choose("Reasoning effort", "High");
     expect(updateCodingSettings).toHaveBeenCalledWith({ reasoningEffort: "high" });
@@ -138,7 +141,7 @@ describe("Coding sessions settings page", () => {
     renderCodingSettings();
     const toggle = await screen.findByRole("checkbox", { name: "Pin sandbox region" });
     await waitFor(() => expect(toggle).toBeEnabled());
-    expect(screen.getByText("Pin new coding session sandboxes to us.")).toBeVisible();
+    expect(screen.getByText("Pin new coding session sandboxes to us. Region pinning raises the sandbox compute price.")).toBeVisible();
     fireEvent.click(toggle);
     expect(updateCodingSettings).toHaveBeenCalledWith({ pinnedRegion: "us" });
     await choose("Sandbox region", "eu");
@@ -195,17 +198,17 @@ describe("Coding sessions settings page", () => {
     expect(onOpenIntegration).toHaveBeenCalledWith("github");
   });
 
-  it("limits Loops to selected repositories", async () => {
-    vi.mocked(fetchCodingEnvironments).mockResolvedValue([makeEnvironment(), makeEnvironment({ id: "env2", name: "API", repository: "acme/api" })]);
-    vi.mocked(fetchCodingSettings).mockResolvedValue(makeSettings({ loopRepositoryAccess: "selected", loopRepositories: ["env1"] }));
-    vi.mocked(updateCodingSettings).mockImplementation(async (patch) => makeSettings({ loopRepositoryAccess: "selected", loopRepositories: ["env1"], ...patch }));
+  it("links Repository access for Loops to the Loops settings", async () => {
+    const { onNavigateSettings } = renderCodingSettings();
+    fireEvent.click(await screen.findByRole("button", { name: /Repository access for Loops/ }));
+    expect(onNavigateSettings).toHaveBeenCalledWith("loops");
+    expect(screen.queryByRole("combobox", { name: "Repository access for Loops" })).toBeNull();
+  });
+
+  it("hides the archived environments link when nothing is archived", async () => {
     renderCodingSettings();
-    const api = await screen.findByRole("checkbox", { name: /acme\/api/ });
-    expect(screen.getByRole("checkbox", { name: /acme\/web/ })).toBeChecked();
-    fireEvent.click(api);
-    expect(updateCodingSettings).toHaveBeenCalledWith({ loopRepositories: ["env1", "env2"] });
-    await choose("Repository access for Loops", "All repositories");
-    expect(updateCodingSettings).toHaveBeenCalledWith({ loopRepositoryAccess: "all" });
+    expect(await screen.findByText("No environments configured")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Show archived environments" })).toBeNull();
   });
 
   it("is read-only for members", async () => {
