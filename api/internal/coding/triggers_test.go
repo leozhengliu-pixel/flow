@@ -350,26 +350,6 @@ func TestExternalSourceApproval(t *testing.T) {
 			t.Fatalf("second decision: %v", err)
 		}
 	})
-	t.Run("timeout sweep", func(t *testing.T) {
-		store := newFakeTriggerStore(env("e-web", "Web", "acme/web"))
-		notifier := &recordingNotifier{}
-		triggers := newTestTriggers(store, notifier)
-		session := startExternal(t, triggers, nil)
-		if count, err := triggers.ExpireApprovals(ctx, "ws"); err != nil || count != 0 {
-			t.Fatalf("early sweep = %d %v", count, err)
-		}
-		triggers.Now = func() time.Time { return fixedNow.Add(7*24*time.Hour + time.Second) }
-		if count, err := triggers.ExpireApprovals(ctx, "ws"); err != nil || count != 1 {
-			t.Fatalf("sweep = %d %v", count, err)
-		}
-		if count, _ := triggers.ExpireApprovals(ctx, "ws"); count != 0 {
-			t.Fatal("the sweep must be idempotent")
-		}
-		got, _ := store.CodingSession(ctx, "ws", session.ID)
-		if got.ErrorCode != domain.CodingErrApprovalExpired || len(notifier.resolved) != 1 || notifier.resolved[0] != session.ID+":expired" {
-			t.Fatalf("session = %+v resolved = %+v", got, notifier.resolved)
-		}
-	})
 }
 
 func TestNewTriggerID(t *testing.T) {

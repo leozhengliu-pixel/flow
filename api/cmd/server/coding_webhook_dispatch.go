@@ -411,6 +411,15 @@ func (n *codingTriggerNotifier) ApprovalResolved(ctx context.Context, session do
 	return n.appendAnchorActivity(ctx, session, "approval:"+decision, domain.AgentActivity{Type: "action", Body: body, Metadata: map[string]any{"decision": decision}})
 }
 
+// notifyCodingApprovalExpired is the session core's ApprovalExpired hook:
+// track L's "approval expired" notice on the anchor. The notice is keyed
+// (approval:expired), so a repeated call posts nothing new.
+func (s *server) notifyCodingApprovalExpired(ctx context.Context, session domain.CodingSession) {
+	if err := (&codingTriggerNotifier{s: s}).ApprovalResolved(ctx, session, "expired", ""); err != nil {
+		log.Printf("coding sessions: approval expired notice for %s: %v", session.ID, err)
+	}
+}
+
 func (n *codingTriggerNotifier) ChecksFailed(ctx context.Context, session domain.CodingSession, pullRequest domain.SessionPullRequest, status codehost.CIStatus) error {
 	body := fmt.Sprintf("Checks failed on #%d", pullRequest.Number)
 	if status.Summary != "" {

@@ -142,6 +142,9 @@ func (s *server) initCodingCore(services *codingServices) {
 	}
 	// Track K: bootstrap of snapshot-build and debug-terminal sandboxes.
 	services.service.SnapshotBootstrap = s.codingEnvironmentBootstrap
+	// Track L: the "approval expired" notification. The session reconciler
+	// owns the expiry transition (PhasePolicies); this posts L's notice once.
+	services.service.ApprovalExpired = s.notifyCodingApprovalExpired
 	// Track E: commit signing. *coding.CommitSigningError carries
 	// missingCommitSigningKey, which fails provisioning without retry.
 	services.service.ResolveCommitSigning = func(ctx context.Context, workspaceKey, userID string) (string, string, error) {
@@ -179,7 +182,8 @@ func (s *server) runCoding(ctx context.Context) {
 	s.runCodingSandboxes(ctx)    // coding sessions (track A): sandbox reconciler, warm pool, orphan GC
 	go s.runCodingSnapshots(ctx) // coding sessions (track K): snapshot reconciler
 	go s.runGitLabCoding(ctx)    // coding sessions (track J): GitLab project token sweep
-	// Approval timeouts are the session reconciler's (PhasePolicies, approvalExpired).
+	// Approval timeouts are the session reconciler's (PhasePolicies,
+	// approvalExpired); Service.ApprovalExpired posts track L's notification.
 	<-ctx.Done()
 }
 

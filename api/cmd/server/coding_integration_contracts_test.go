@@ -103,6 +103,7 @@ func TestCodingRuntimeHooksAreWired(t *testing.T) {
 		"DecoratePullRequestBody (I)": service.DecoratePullRequestBody,
 		"ResolveCommitSigning (E)":    service.ResolveCommitSigning,
 		"RestoreSnapshot (A)":         service.RestoreSnapshot,
+		"ApprovalExpired (L)":         service.ApprovalExpired,
 	}
 	for name, hook := range hooks {
 		if reflect.ValueOf(hook).IsNil() {
