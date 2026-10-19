@@ -26,8 +26,11 @@ Request fields (all optional unless noted):
 - `links: [{ "url": "…", "label": "Pipeline" }]` (deduplicated by URL) and
   `documents: [{ "title": "Changelog", "content": "markdown" }]` (same title updates).
 - `releaseNotes`: markdown string (or `{ "content": "…" }`).
-- `stage` (update only): matched exactly, then case-insensitively with `-`/`_` as
-  spaces, then as a stage type (`planned`, `started`, `completed`, `canceled`).
+- `stage` (required for update, optional for sync): matched exactly, then
+  case-insensitively with `-`/`_` as spaces, then as a stage type (`planned`,
+  `started`, `completed`, `canceled`). Sync moves the release only when `stage`
+  is present; a stage type leaves a release that is already in a stage of that
+  type where it is.
 
 Targeting works like this:
 
@@ -93,6 +96,48 @@ when it ships.
 The original per-pipeline endpoint `POST /api/release-pipelines/{id}/events`
 (`version`, `name`, `description`, `commitSha`, `stage`) still works and accepts
 the sync fields above.
+
+## GitLab release webhooks
+
+Projects without a GitLab Runner (for example when deployments run in a
+separate PaaS CI/CD) can feed a release pipeline from their GitLab releases
+instead of calling the CI API. Connect GitLab under Settings › Integrations,
+then add a project (or group) webhook:
+
+- URL: the connection's webhook URL plus the target pipeline, for example
+  `https://flow.example.com/api/integrations/gitlab/webhook?workspace=acme&pipeline=mobile`.
+  `pipeline` is the pipeline id or its slug. Without it the workspace's only
+  release pipeline is used; with several pipelines the hook is answered with
+  `202 {"ignored": true, "reason": "no release pipeline is selected: …"}` and
+  nothing is written. An unknown `pipeline` answers 404.
+- Secret token: the connection's webhook secret (sent as `X-Gitlab-Token`, as
+  for merge request hooks).
+- Trigger: **Releases events**. Tag push events are not releases (a tag can
+  exist without a published release) and are ignored.
+
+Each Release Hook (`object_kind: "release"`) is applied as a sync with
+`stage: "completed"`, so issue linking, frozen stages, release history and the
+completion behaviour above are the same as for `POST /api/release-ci/sync`:
+
+| GitLab release | Flow release |
+| --- | --- |
+| `tag` | `version` |
+| `name` (falls back to the tag) | name |
+| `description` | description |
+| `url` | a link resource labeled "GitLab release" |
+| `KEY-123` identifiers in the name or description | linked issues (frozen stages skip them) |
+| `commit.id` | `commitSha` |
+
+- `create` and `update` upsert the release and move it to the pipeline's first
+  unfrozen completed stage, which runs the completion automations. Releases of
+  continuous pipelines are created completed; a release already in a completed
+  stage stays where it is.
+- Re-deliveries and updates of the same tag update the same release. A release
+  is matched by version, then by version with a leading `v` ignored on either
+  side (`v1.4.0` = `1.4.0`), then a release without a version by name
+  (case-insensitive); that release gets the tag as its version.
+- `delete` keeps the Flow release and answers
+  `{"ignored": true, "reason": "GitLab release deleted; Flow releases are kept"}`.
 
 ## Access keys
 
