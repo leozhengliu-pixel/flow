@@ -158,18 +158,22 @@ func TestOpenSandboxValidation(t *testing.T) {
 		return c
 	}
 	cases := map[string]func(*CodingConfig){
-		"url":             func(c *CodingConfig) { c.OpenSandbox.URL = "opensandbox:80" },
-		"timeout":         func(c *CodingConfig) { c.OpenSandbox.RequestTimeout = 0 },
-		"retries":         func(c *CodingConfig) { c.OpenSandbox.Retries = 50 },
-		"expiry window":   func(c *CodingConfig) { c.OpenSandbox.ExpiryWindow = time.Minute },
-		"execd access":    func(c *CodingConfig) { c.OpenSandbox.ExecdAccess = "direct" },
-		"egress policy":   func(c *CodingConfig) { c.OpenSandbox.EgressPolicy = "strict" },
-		"uid":             func(c *CodingConfig) { c.OpenSandbox.RunAsUID = -1 },
-		"token path":      func(c *CodingConfig) { c.OpenSandbox.TokenPath = "token" },
-		"ca file":         func(c *CodingConfig) { c.OpenSandbox.CAFile = "/nonexistent/ca.pem" },
-		"pool size":       func(c *CodingConfig) { c.OpenSandbox.Pools = map[string]string{"huge": "p"} },
-		"pool + egress":   func(c *CodingConfig) { c.OpenSandbox.Pools, c.OpenSandbox.EgressPolicy = map[string]string{"small": "p"}, OpenSandboxEgressProxy },
-		"size override":   func(c *CodingConfig) { c.OpenSandbox.SizeResources = map[string]map[string]string{"small": {"cpu": "1"}} },
+		"url":           func(c *CodingConfig) { c.OpenSandbox.URL = "opensandbox:80" },
+		"timeout":       func(c *CodingConfig) { c.OpenSandbox.RequestTimeout = 0 },
+		"retries":       func(c *CodingConfig) { c.OpenSandbox.Retries = 50 },
+		"expiry window": func(c *CodingConfig) { c.OpenSandbox.ExpiryWindow = time.Minute },
+		"execd access":  func(c *CodingConfig) { c.OpenSandbox.ExecdAccess = "direct" },
+		"egress policy": func(c *CodingConfig) { c.OpenSandbox.EgressPolicy = "strict" },
+		"uid":           func(c *CodingConfig) { c.OpenSandbox.RunAsUID = -1 },
+		"token path":    func(c *CodingConfig) { c.OpenSandbox.TokenPath = "token" },
+		"ca file":       func(c *CodingConfig) { c.OpenSandbox.CAFile = "/nonexistent/ca.pem" },
+		"pool size":     func(c *CodingConfig) { c.OpenSandbox.Pools = map[string]string{"huge": "p"} },
+		"pool + egress": func(c *CodingConfig) {
+			c.OpenSandbox.Pools, c.OpenSandbox.EgressPolicy = map[string]string{"small": "p"}, OpenSandboxEgressProxy
+		},
+		"size override": func(c *CodingConfig) {
+			c.OpenSandbox.SizeResources = map[string]map[string]string{"small": {"cpu": "1"}}
+		},
 		"reserved meta":   func(c *CodingConfig) { c.OpenSandbox.ExtraMetadata = map[string]string{"opensandbox.io/id": "x"} },
 		"image auth half": func(c *CodingConfig) { c.OpenSandbox.ImageUsername = "robot" },
 		"volumesnapshot":  func(c *CodingConfig) { c.Snapshot.Strategy = "volumesnapshot" },
