@@ -182,16 +182,21 @@ describe('delegating to the agent', () => {
 describe('agent chat session card', () => {
   const message = { parts: [{ id: 'p', type: 'toolCall', toolCall: { id: 't', name: 'start_coding_session', status: 'completed', result: { id: 'cs-1', agentSessionId: 'task-1' } } }] } as Pick<AgentMessage, 'parts'>
 
-  it('shows a live card that expands into the session view and can be dismissed', async () => {
+  it('shows a live card that opens the session view and can be dismissed', async () => {
     const user = userEvent.setup()
-    vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession({ state: 'complete', phase: 'idle', displayTitle: 'Fix login', repository: 'acme/app', branchName: 'flow/fix' }))
+    vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession({ state: 'complete', phase: 'idle', displayTitle: 'Fix login', repository: 'acme/app', branchName: 'flow/fix', summary: 'Fixed the login redirect' }))
     render(<MemoryRouter><I18nProvider><ChatCodingSessionCards message={message} data={baseData()}/></I18nProvider></MemoryRouter>)
     const card = await screen.findByRole('article', { name: 'Coding session' })
     expect(within(card).getByText('Fix login')).toBeVisible()
-    expect(within(card).getByText('Finished')).toBeVisible()
+    expect(within(card).getByText('started by')).toBeVisible()
+    const row = within(card).getByRole('button', { name: /Show session/ })
+    expect(row).toHaveTextContent('Finished')
+    expect(row).toHaveTextContent('Fixed the login redirect')
     expect(within(card).getByRole('link', { name: 'Open issue' })).toHaveAttribute('href', expect.stringContaining('#agent-session-task-1'))
-    await user.click(within(card).getByRole('button', { name: /Show session/ }))
-    expect(within(card).getByRole('region', { name: 'Coding session' })).toBeVisible()
+    await user.click(row)
+    const dialog = await screen.findByRole('dialog', { name: /Coding session/ })
+    expect(within(dialog).getByRole('region', { name: 'Coding session' })).toBeVisible()
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }))
     await user.click(within(card).getAllByRole('button', { name: 'Dismiss' })[0])
     expect(screen.queryByRole('article')).toBeNull()
     expect(localStorage.getItem('flow:coding-sessions:dismissed:workspace:user-1')).toContain('cs-1')
@@ -227,8 +232,10 @@ describe('issue activity', () => {
     vi.mocked(listApplicationTasks).mockResolvedValue([{ ...task, codingSessionId: 'cs-1' }])
     vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession({ repository: 'acme/app' }))
     render(<MemoryRouter><I18nProvider><IssueAgentTasks issue={makeIssue({ delegate: flowAgent })} data={baseData()}/></I18nProvider></MemoryRouter>)
+    const row = await screen.findByRole('button', { name: /Show session/ })
+    expect(row).toHaveTextContent('Thinking…')
+    await userEvent.setup().click(row)
     const panel = await screen.findByRole('region', { name: 'Coding session' })
-    expect(panel).toHaveClass('is-embedded')
     expect(within(panel).getByText('acme/app')).toBeVisible()
   })
 
@@ -236,6 +243,7 @@ describe('issue activity', () => {
     vi.mocked(api.fetchCodingSessions).mockResolvedValue([makeSession({ id: 'other', agentSessionId: 'task-9' }), makeSession({ agentSessionId: 'task-1', branchName: 'flow/anchored' })])
     vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession({ agentSessionId: 'task-1', branchName: 'flow/anchored' }))
     render(<MemoryRouter><I18nProvider><AgentTaskCodingSession task={task} data={baseData()}/></I18nProvider></MemoryRouter>)
+    await userEvent.setup().click(await screen.findByRole('button', { name: /Show session/ }))
     expect(await screen.findByText('flow/anchored')).toBeVisible()
     expect(api.fetchCodingSessions).toHaveBeenCalledWith({ issueId: 'issue-1', creatorId: undefined, state: undefined })
   })

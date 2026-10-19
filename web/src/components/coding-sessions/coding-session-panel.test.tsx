@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
@@ -92,21 +92,64 @@ describe('coding session panel', () => {
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Follow-up prompt' })).toHaveValue(''))
   })
 
-  it('restarts, restarts with the default model, creates a PR and dismisses a stopped session', async () => {
+  it('restarts, restarts with the default model, creates a PR and archives a stopped session from the session menu', async () => {
     const user = userEvent.setup(), onDismiss = vi.fn()
     vi.mocked(api.restartCodingSession).mockResolvedValue(makeSession({ state: 'pending', phase: 'queued' }))
     vi.mocked(api.createCodingSessionPullRequest).mockResolvedValue(makeSession({ state: 'active', phase: 'publishing' }))
     renderPanel(makeSession({ state: 'stale', phase: 'done', modelSelection: 'gpt-5', branchName: 'flow/x', commitsByTurnActivityId: { a: [{ sha: 'abcdef123', branch: 'flow/x', message: 'Fix bug\n\nbody', signed: true, createdAt: '' }] } }), { onDismiss })
     expect(screen.getByText('abcdef1')).toBeVisible()
     expect(screen.getByText('Signed')).toBeVisible()
-    await user.click(screen.getByRole('button', { name: 'Restart' }))
+    const choose = async (name: string) => {
+      await user.click(screen.getByRole('button', { name: 'Session details' }))
+      await user.click(await screen.findByRole('menuitem', { name }))
+    }
+    await choose('Restart')
     expect(api.restartCodingSession).toHaveBeenLastCalledWith('cs-1')
-    await user.click(screen.getByRole('button', { name: 'Restart with default model' }))
+    await choose('Restart with default model')
     expect(api.restartCodingSession).toHaveBeenLastCalledWith('cs-1', { useDefaultModel: true })
-    await user.click(screen.getByRole('button', { name: 'Create pull request' }))
+    await choose('Create pull request')
     expect(api.createCodingSessionPullRequest).toHaveBeenCalledWith('cs-1')
-    await user.click(screen.getByRole('button', { name: 'Dismiss' }))
+    await choose('Archive')
     expect(onDismiss).toHaveBeenCalled()
+  })
+
+  it('shows the session menu with the model and copies the session URL', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(window.navigator, 'clipboard', { value: { writeText, readText: vi.fn() }, configurable: true })
+    renderPanel(makeSession({ branchName: 'flow/x' }))
+    await user.click(screen.getByRole('button', { name: 'Session details' }))
+    expect(await screen.findByText('Claude Code · claude-sonnet-4-5 (Auto)', { selector: '[role=menuitem] span' })).toBeVisible()
+    await user.click(screen.getByRole('menuitem', { name: 'Copy' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Session URL' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringMatching(/\/agent$|#agent-session-task-1$/)))
+  })
+
+  it('shows the agent working with a running timer and stops it from the composer', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.stopCodingSession).mockResolvedValue(makeSession({ state: 'stopping', phase: 'stopping' }))
+    renderPanel(makeSession({ turnStartedAt: new Date(Date.now() - 162_000).toISOString() }))
+    const working = screen.getByRole('status')
+    expect(working).toHaveTextContent('Thinking…')
+    expect(within(working).getByLabelText('Elapsed time')).toHaveTextContent(/^02:4\d$/)
+    await user.click(within(screen.getByRole('complementary', { name: 'Agent' })).getByRole('button', { name: 'Stop' }))
+    expect(api.stopCodingSession).toHaveBeenCalledWith('cs-1')
+  })
+
+  it('shows "No changes yet" until the agent changes something', () => {
+    const { unmount } = renderPanel(makeSession())
+    expect(screen.getByText('No changes yet')).toBeVisible()
+    unmount()
+    renderPanel(makeSession({ diffs: [{ path: 'src/a.ts', additions: 1, deletions: 0, status: 'modified' }] }))
+    expect(screen.queryByText('No changes yet')).toBeNull()
+  })
+
+  it('retries an errored session from its error card', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.restartCodingSession).mockResolvedValue(makeSession())
+    renderPanel(makeSession({ state: 'error', phase: 'done', errorCode: 'sandboxLost' }))
+    await user.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Retry' }))
+    expect(api.restartCodingSession).toHaveBeenCalledWith('cs-1')
   })
 
   it('shows an action error', async () => {
