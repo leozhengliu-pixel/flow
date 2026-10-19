@@ -307,7 +307,7 @@ export function ApplicationDetailsPage({
     <div className="application-page">
       <SettingsCrumb pinned onClick={onBack}>{t("API")}</SettingsCrumb>
       <header className="oauth-app-page-header">
-        <OAuthAppAvatar logoUrl={app.logoUrl} size={48} />
+        <OAuthAppAvatar logoUrl={app.logoUrl} name={app.name} redirectUris={app.redirectUris} size={48} />
         <div className="oauth-app-page-header-copy">
           <h1 data-i18n-ignore>{app.name}</h1>
           <p data-i18n-ignore>

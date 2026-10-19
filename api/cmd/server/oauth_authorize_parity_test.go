@@ -117,7 +117,7 @@ func TestAuthorizedApplicationsListAndAdminRevoke(t *testing.T) {
 	authRequest[map[string]any](t, member, "GET", host.URL+"/api/oauth/authorized-applications", nil, workspace, 403)
 	listed := authRequest[[]authorizedApplication](t, admin, "GET", host.URL+"/api/oauth/authorized-applications", nil, workspace, 200)
 	index := slices.IndexFunc(listed, func(item authorizedApplication) bool { return item.ClientID == app.ClientID })
-	if index < 0 || listed[index].Name != app.Name || len(listed[index].Authorizations) != 1 || listed[index].Authorizations[0].UserID == data.Viewer.ID {
+	if index < 0 || listed[index].Name != app.Name || len(listed[index].Authorizations) != 1 || listed[index].Authorizations[0].UserID == data.Viewer.ID || !slices.Equal(listed[index].RedirectURIs, []string{oauthTestRedirect}) {
 		t.Fatalf("authorized applications = %+v", listed)
 	}
 

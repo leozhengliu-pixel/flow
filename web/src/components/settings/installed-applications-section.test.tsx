@@ -51,6 +51,23 @@ describe('InstalledApplicationsPage', () => {
     expect(screen.getByTestId('where')).toHaveTextContent('/workspace/settings/applications/client_a')
   })
 
+  it('shows well-known clients\' brand marks and keeps the generic icon for other applications', async () => {
+    api.fetchAuthorizedApplications.mockResolvedValue([
+      { clientId: 'client_a', name: 'Deploy bot', authorizations: [authorization] },
+      { clientId: 'client_c', name: 'Cursor', redirectUris: ['cursor://anysphere.cursor-mcp/oauth/callback'], authorizations: [{ ...authorization, id: 'auth-2', clientId: 'client_c', clientName: 'Cursor' }] },
+      { clientId: 'client_d', name: 'mcp-remote', redirectUris: ['https://claude.ai/api/mcp/auth_callback'], authorizations: [{ ...authorization, id: 'auth-3', clientId: 'client_d', clientName: 'mcp-remote' }] },
+      { clientId: 'client_e', name: 'Uploaded', logoUrl: 'https://cdn.example.test/u.png', authorizations: [{ ...authorization, id: 'auth-4', clientId: 'client_e', clientName: 'Uploaded' }] },
+    ])
+    apps.listApplications.mockResolvedValue([])
+    renderAt(<InstalledApplicationsPage data={data}/>)
+    const row = (name: string) => screen.getByText(name).closest('a') as HTMLElement
+    expect(await screen.findByRole('img', { name: 'Cursor' })).toHaveAttribute('data-known-app', 'cursor')
+    expect(within(row('mcp-remote')).getByRole('img', { name: 'Claude' })).toHaveAttribute('data-known-app', 'claude')
+    expect(row('Deploy bot').querySelector('.oauth-app-avatar.is-placeholder .oauth-icon-placeholder')).not.toBeNull()
+    expect(within(row('Uploaded')).getByRole('img', { name: 'Uploaded' })).toHaveAttribute('src', 'https://cdn.example.test/u.png')
+    expect(row('Cursor').querySelector('.oauth-app-avatar')).toHaveStyle({ width: '32px', height: '32px' })
+  })
+
   it('shows the reference app\'s empty state', async () => {
     api.fetchAuthorizedApplications.mockResolvedValue([])
     apps.listApplications.mockResolvedValue([])
