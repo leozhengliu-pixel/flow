@@ -254,4 +254,7 @@ export const codingSessionsZhCN: Record<string, string> = {
   "Capabilities": "能力",
   "Allow loops to access code": "允许 Loop 访问代码",
   "Select which repositories loops can access": "选择 Loop 可以访问的仓库",
+  "Agent and model": "Agent 与模型",
+  "Runtimes and tools": "运行时和工具",
+  "Environment secrets": "环境密钥",
 };
