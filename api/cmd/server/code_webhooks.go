@@ -56,6 +56,10 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 		s.applyDeploymentWebhook(w, r, provider, eventID, deployment)
 		return
 	}
+	if isGitLabReleaseHook(provider, r.Header, body) {
+		s.applyGitLabReleaseHook(w, r, body)
+		return
+	}
 	var event externalCodeReviewEvent
 	if err := json.Unmarshal(body, &event); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid webhook payload")

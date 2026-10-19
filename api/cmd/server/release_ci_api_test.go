@@ -277,3 +277,38 @@ func TestReleasePipelineNameLimit(t *testing.T) {
 	requestJSON[map[string]string](t, handler, http.MethodPost, "/api/release-pipelines", map[string]any{"name": strings.Repeat("x", 121)}, http.StatusBadRequest)
 	requestJSON[domain.ReleasePipeline](t, handler, http.MethodPost, "/api/release-pipelines", map[string]any{"name": strings.Repeat("界", 120)}, http.StatusCreated)
 }
+
+func TestReleaseCISyncMovesOnlyWithStage(t *testing.T) {
+	handler, _, _ := newReleaseCITestServer(t)
+	pipeline := requestJSON[domain.ReleasePipeline](t, handler, http.MethodPost, "/api/release-pipelines", map[string]any{
+		"name": "Desktop", "type": "scheduled",
+		"stages":        []string{"Planned", "In Progress", "Code Freeze", "Released", "Shipped Everywhere"},
+		"stageStatuses": map[string]string{"Planned": "planned", "In Progress": "inProgress", "Code Freeze": "inProgress", "Released": "released", "Shipped Everywhere": "released"},
+		"frozenStages":  []string{"Code Freeze"},
+	}, http.StatusCreated)
+	key := requestJSON[releasePipelineAccessKey](t, handler, http.MethodPost, "/api/release-pipelines/"+pipeline.ID+"/access-key", nil, http.StatusCreated)
+	for _, test := range []struct {
+		name       string
+		input      map[string]any
+		wantStatus int
+		wantStage  string
+	}{
+		{name: "create without stage starts", input: map[string]any{"version": "4.0.0"}, wantStatus: http.StatusCreated, wantStage: "In Progress"},
+		{name: "sync without stage stays", input: map[string]any{"version": "4.0.0", "commitSha": "ccccccc"}, wantStatus: http.StatusOK, wantStage: "In Progress"},
+		{name: "stage name moves", input: map[string]any{"version": "4.0.0", "stage": "code-freeze"}, wantStatus: http.StatusOK, wantStage: "Code Freeze"},
+		{name: "stage type completes", input: map[string]any{"version": "4.0.0", "stage": "completed"}, wantStatus: http.StatusOK, wantStage: "Released"},
+		{name: "later stage of the same type moves", input: map[string]any{"version": "4.0.0", "stage": "Shipped Everywhere"}, wantStatus: http.StatusOK, wantStage: "Shipped Everywhere"},
+		{name: "stage type already reached stays", input: map[string]any{"version": "4.0.0", "stage": "completed"}, wantStatus: http.StatusOK, wantStage: "Shipped Everywhere"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result := releaseCICall[releaseCIResult](t, handler, http.MethodPost, "/api/release-ci/sync", key.Secret, test.input, test.wantStatus)
+			if result.Release == nil || result.Release.Stage == nil || result.Release.Stage.Name != test.wantStage {
+				t.Fatalf("sync %v = %#v, want stage %q", test.input, result.Release, test.wantStage)
+			}
+		})
+	}
+	releaseCICall[map[string]string](t, handler, http.MethodPost, "/api/release-ci/sync", key.Secret, map[string]any{"version": "4.0.0", "stage": "Staging"}, http.StatusBadRequest)
+	if releases := requestJSON[[]domain.Release](t, handler, http.MethodGet, "/api/releases?pipelineId="+pipeline.ID, nil, http.StatusOK); len(releases) != 1 || releases[0].Status != "released" {
+		t.Fatalf("releases = %#v", releases)
+	}
+}

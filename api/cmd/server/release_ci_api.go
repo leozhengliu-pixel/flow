@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -476,21 +477,61 @@ func (s *server) releaseCIMutation(w http.ResponseWriter, r *http.Request, opera
 		writeError(w, http.StatusBadRequest, "name or version is required")
 		return
 	}
+	outcome, err := s.applyReleaseCIOperation(r.Context(), releaseAppBaseURL(s, r), workspace, pipelineID, operation, input, releaseCIOptions{notes: notes, hasNotes: hasNotes})
+	var ciErr releaseCIError
+	switch {
+	case errors.As(err, &ciErr):
+		writeError(w, ciErr.status, ciErr.message)
+	case err != nil:
+		respondMutation(w, err, http.StatusOK, nil)
+	case operation == "event":
+		// The original event endpoint answers with the release itself.
+		writeJSON(w, map[bool]int{true: http.StatusCreated, false: http.StatusOK}[outcome.created], outcome.release)
+	case outcome.created:
+		writeJSON(w, http.StatusCreated, outcome.result)
+	default:
+		writeJSON(w, http.StatusOK, outcome.result)
+	}
+}
+
+// releaseCIOptions carries what the access-key API and the GitLab release
+// webhook do differently around the shared mutation.
+type releaseCIOptions struct {
+	notes    string
+	hasNotes bool
+	// source names a webhook ("gitlab") that is not authenticated by the
+	// pipeline's access key; it is recorded in the release history.
+	source string
+	// looseVersionMatch also matches a release by version with a leading "v"
+	// ignored on either side, then a versionless release by name (backfilling
+	// the version).
+	looseVersionMatch bool
+}
+
+type releaseCIOutcome struct {
+	result  releaseCIResult
+	release domain.Release
+	created bool
+}
+
+// applyReleaseCIOperation is the single release mutation behind the CI API
+// (sync, update, complete, event) and the GitLab release webhook: it targets
+// or creates the release, links issues (never into frozen stages), adds
+// resources and notes, moves the stage, records history and runs the
+// pipeline's completion automations.
+func (s *server) applyReleaseCIOperation(ctx context.Context, base, workspace, pipelineID, operation string, input releaseCIInput, options releaseCIOptions) (releaseCIOutcome, error) {
 	identifiers := releaseCIIdentifiers(input)
 	// Completion automations and frozen checks need the pipeline's open releases' issues loaded.
-	ctx := store.WithMutationScope(r.Context(), store.MutationScope{IssueIdentifiers: identifiers, Resolve: func(data domain.Bootstrap) store.MutationScope {
+	ctx = store.WithMutationScope(ctx, store.MutationScope{IssueIdentifiers: identifiers, Resolve: func(data domain.Bootstrap) store.MutationScope {
 		extra := store.MutationScope{}
 		for _, release := range data.Releases {
-			if release.PipelineID == pipelineID && release.ArchivedAt == nil && (release.Status == "planned" || release.Status == "inProgress" || input.Version != "" && release.Version == input.Version) {
+			if release.PipelineID == pipelineID && release.ArchivedAt == nil && (release.Status == "planned" || release.Status == "inProgress" || input.Version != "" && release.Version == input.Version || options.looseVersionMatch && releaseLooselyMatches(release, input)) {
 				extra.IssueIDs = append(extra.IssueIDs, release.IssueIDs...)
 			}
 		}
 		return extra
 	}})
-	base := releaseAppBaseURL(s, r)
-	result := releaseCIResult{Success: true}
-	created := false
-	var final domain.Release
+	outcome := releaseCIOutcome{result: releaseCIResult{Success: true}}
 	logged := input
 	logged.ReleaseNotes = nil
 	err := s.store.MutateWorkspace(ctx, workspace, "release.ci_"+operation, pipelineID, logged, func(data *domain.Bootstrap) error {
@@ -499,12 +540,14 @@ func (s *server) releaseCIMutation(w http.ResponseWriter, r *http.Request, opera
 			return ciError(http.StatusNotFound, "release pipeline not found")
 		}
 		now := time.Now().UTC()
-		pipeline.AccessKeyLastUsedAt = &now
-		index, isNew, err := releaseCITarget(data, pipeline, input, operation, now)
+		if options.source == "" {
+			pipeline.AccessKeyLastUsedAt = &now
+		}
+		index, isNew, err := releaseCITarget(data, pipeline, input, operation, options.looseVersionMatch, now)
 		if err != nil {
 			return err
 		}
-		created = isNew
+		outcome.created = isNew
 		previousStatus := ""
 		if !isNew {
 			previousStatus = data.Releases[index].Status
@@ -519,39 +562,30 @@ func (s *server) releaseCIMutation(w http.ResponseWriter, r *http.Request, opera
 		if input.CommitSHA != "" && !(input.PreserveStoredCommitSHA && release.CommitSHA != "") {
 			release.CommitSHA = input.CommitSHA
 		}
-		result.SkippedIssueIdentifiers, result.UnknownIssueIdentifiers = applyReleaseCIIssues(data, release, input)
+		outcome.result.SkippedIssueIdentifiers, outcome.result.UnknownIssueIdentifiers = applyReleaseCIIssues(data, release, input)
 		applyReleaseCIResources(release, input, now)
-		if hasNotes {
-			setReleaseNotes(data, release, notes, now, "note_updated")
+		if options.hasNotes {
+			setReleaseNotes(data, release, options.notes, now, "note_updated")
 		}
 		if err := moveReleaseCIStage(data, pipeline, release, input, operation, now); err != nil {
 			return err
 		}
 		release.UpdatedAt = now
-		data.ReleaseHistory = append(data.ReleaseHistory, domain.ReleaseHistory{ID: fmt.Sprintf("release_history_%d", now.UnixNano()), ReleaseID: release.ID, Actor: data.Viewer, Action: "ci_" + operation, Metadata: map[string]any{"stage": release.Stage, "commitSha": release.CommitSHA, "issues": len(input.IssueReferences)}, CreatedAt: now})
+		metadata := map[string]any{"stage": release.Stage, "commitSha": release.CommitSHA, "issues": len(input.IssueReferences)}
+		if options.source != "" {
+			metadata["source"] = options.source
+		}
+		data.ReleaseHistory = append(data.ReleaseHistory, domain.ReleaseHistory{ID: fmt.Sprintf("release_history_%d", now.UnixNano()), ReleaseID: release.ID, Actor: data.Viewer, Action: "ci_" + operation, Metadata: metadata, CreatedAt: now})
 		releaseID := release.ID
 		if err := applyReleaseSettingAutomations(data, previousStatus, release, now); err != nil {
 			return err
 		}
 		// Re-read by id: completion may have appended a follow-up release.
-		final = data.Releases[slices.IndexFunc(data.Releases, func(item domain.Release) bool { return item.ID == releaseID })]
-		result.Release = releaseCIView(base, data.Workspace.URLKey, pipeline, final)
+		outcome.release = data.Releases[slices.IndexFunc(data.Releases, func(item domain.Release) bool { return item.ID == releaseID })]
+		outcome.result.Release = releaseCIView(base, data.Workspace.URLKey, pipeline, outcome.release)
 		return nil
 	})
-	var ciErr releaseCIError
-	switch {
-	case errors.As(err, &ciErr):
-		writeError(w, ciErr.status, ciErr.message)
-	case err != nil:
-		respondMutation(w, err, http.StatusOK, nil)
-	case operation == "event":
-		// The original event endpoint answers with the release itself.
-		writeJSON(w, map[bool]int{true: http.StatusCreated, false: http.StatusOK}[created], final)
-	case created:
-		writeJSON(w, http.StatusCreated, result)
-	default:
-		writeJSON(w, http.StatusOK, result)
-	}
+	return outcome, err
 }
 
 func shortCommitSHA(sha string) string {
@@ -586,15 +620,63 @@ func releaseByVersion(data *domain.Bootstrap, pipelineID, version string) int {
 	})
 }
 
+// releaseVersionKey compares versions with a leading "v" ignored ("v1.2.0" = "1.2.0").
+func releaseVersionKey(version string) string {
+	version = strings.TrimSpace(version)
+	if len(version) > 1 && (version[0] == 'v' || version[0] == 'V') {
+		return version[1:]
+	}
+	return version
+}
+
+// releaseLooselyMatches reports whether a release is the one a version/name
+// pair names once the leading "v" is ignored, or, for a release without a
+// version, by its name.
+func releaseLooselyMatches(release domain.Release, input releaseCIInput) bool {
+	if input.Version != "" && release.Version != "" {
+		return releaseVersionKey(release.Version) == releaseVersionKey(input.Version)
+	}
+	return release.Version == "" && input.Name != "" && strings.EqualFold(strings.TrimSpace(release.Name), input.Name)
+}
+
+// releaseByLooseVersionOrName finds a release by version ignoring a leading
+// "v", then a versionless release by name, or returns -1.
+func releaseByLooseVersionOrName(data *domain.Bootstrap, pipelineID string, input releaseCIInput) int {
+	candidates := func(match func(domain.Release) bool) int {
+		return slices.IndexFunc(data.Releases, func(item domain.Release) bool {
+			return item.PipelineID == pipelineID && item.ArchivedAt == nil && match(item)
+		})
+	}
+	if key := releaseVersionKey(input.Version); key != "" {
+		if index := candidates(func(item domain.Release) bool { return item.Version != "" && releaseVersionKey(item.Version) == key }); index >= 0 {
+			return index
+		}
+	}
+	if input.Name == "" {
+		return -1
+	}
+	return candidates(func(item domain.Release) bool {
+		return item.Version == "" && strings.EqualFold(strings.TrimSpace(item.Name), input.Name)
+	})
+}
+
 // releaseCITarget finds the release an operation acts on, creating one for
 // sync/event when needed. It returns the release index and whether it is new.
-func releaseCITarget(data *domain.Bootstrap, pipeline *domain.ReleasePipeline, input releaseCIInput, operation string, now time.Time) (int, bool, error) {
+func releaseCITarget(data *domain.Bootstrap, pipeline *domain.ReleasePipeline, input releaseCIInput, operation string, looseVersionMatch bool, now time.Time) (int, bool, error) {
 	if operation != "sync" && operation != "event" && pipeline.Type == "continuous" {
 		return 0, false, ciError(http.StatusBadRequest, "%s is only available for scheduled pipelines; continuous pipelines create completed releases on sync", operation)
 	}
 	version := input.Version
 	if index := releaseByVersion(data, pipeline.ID, version); index >= 0 {
 		return index, false, nil
+	}
+	if looseVersionMatch {
+		if index := releaseByLooseVersionOrName(data, pipeline.ID, input); index >= 0 {
+			if data.Releases[index].Version == "" {
+				data.Releases[index].Version = version
+			}
+			return index, false, nil
+		}
 	}
 	switch operation {
 	case "complete", "update":
@@ -684,6 +766,13 @@ func matchReleaseStage(pipeline *domain.ReleasePipeline, value string) string {
 	return firstReleaseStage(pipeline, status, false)
 }
 
+// releaseStageNamed reports whether value names a stage (rather than a stage type).
+func releaseStageNamed(pipeline *domain.ReleasePipeline, value string) bool {
+	return slices.ContainsFunc(pipeline.Stages, func(stage string) bool {
+		return stage == value || normalizeReleaseStageName(stage) == normalizeReleaseStageName(value)
+	})
+}
+
 func setReleaseCIStage(pipeline *domain.ReleasePipeline, release *domain.Release, stage string, now time.Time) error {
 	status := pipeline.StageStatuses[stage]
 	if !slices.Contains([]string{"planned", "inProgress", "released", "canceled"}, status) {
@@ -713,10 +802,10 @@ func moveReleaseCIStage(data *domain.Bootstrap, pipeline *domain.ReleasePipeline
 			return nil
 		}
 		return setReleaseCIStage(pipeline, release, stage, now)
-	case "update", "event":
+	case "update", "event", "sync":
 		value := input.Stage
 		if value == "" {
-			if operation == "event" {
+			if operation != "update" {
 				return nil
 			}
 			return ciError(http.StatusBadRequest, "stage is required")
@@ -726,6 +815,11 @@ func moveReleaseCIStage(data *domain.Bootstrap, pipeline *domain.ReleasePipeline
 			return ciError(http.StatusBadRequest, "release stage %q not found", value)
 		}
 		if stage == release.Stage {
+			return nil
+		}
+		// A sync naming a stage type ("completed") leaves a release that is
+		// already in a stage of that type where it is.
+		if operation == "sync" && !releaseStageNamed(pipeline, value) && pipeline.StageStatuses[stage] == release.Status {
 			return nil
 		}
 		release.StageFrozenAt = nil
