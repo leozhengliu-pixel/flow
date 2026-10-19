@@ -1,0 +1,53 @@
+name: Sandbox envtest
+
+# The Kubernetes sandbox provider and the Helm chart's RBAC against a real
+# kube-apiserver + etcd (envtest; no kubelet, no cluster credentials). Runs
+# only when the provider, the sandbox package or the chart change.
+on:
+  pull_request:
+    paths:
+      - api/internal/sandbox/**
+      - api/internal/config/coding.go
+      - deploy/helm/flow/**
+      - .github/workflows/sandbox-envtest.yml
+  push:
+    branches: [main]
+    paths:
+      - api/internal/sandbox/**
+      - api/internal/config/coding.go
+      - deploy/helm/flow/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  envtest:
+    name: Kubernetes provider (envtest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KUBECONFIG: /dev/null
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: v4.2.0
+
+      - name: Download envtest binaries
+        run: |
+          go install sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.0.0-20260125163108-a19ec76a3c5d
+          echo "KUBEBUILDER_ASSETS=$("$(go env GOPATH)/bin/setup-envtest" use 1.37.0 --bin-dir "$RUNNER_TEMP/envtest" -p path)" >> "$GITHUB_ENV"
+
+      - name: envtest suite
+        working-directory: api
+        run: go test -tags envtest -count=1 ./internal/sandbox/kubernetes/
