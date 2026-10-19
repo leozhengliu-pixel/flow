@@ -250,4 +250,8 @@ export const codingSessionsZhCN: Record<string, string> = {
   "By loop": "按 Loop",
   "Sessions use the workspace's GitLab OAuth access token, refreshed by Flow. It is not limited to one project: it reaches every project the authorizing user can access.": "会话使用工作区的 GitLab OAuth 访问令牌，由 Flow 自动刷新。该令牌不限于单个项目：授权用户可访问的所有项目它都能访问。",
   "Sessions use the GitLab connection token itself. It is long-lived and broad, and code the agent runs in the sandbox can read it. Prefer project access tokens.": "会话直接使用 GitLab 连接令牌。该令牌长期有效且权限宽泛，代理在沙盒中运行的代码可以读取它。建议改用项目访问令牌。",
+  "Region pinning raises the sandbox compute price.": "固定区域会提高沙盒计算价格。",
+  "Capabilities": "能力",
+  "Allow loops to access code": "允许 Loop 访问代码",
+  "Select which repositories loops can access": "选择 Loop 可以访问的仓库",
 };
