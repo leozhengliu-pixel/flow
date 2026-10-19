@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { sleep } from '../src/backoff.js'
 import type { RunnerConfig } from '../src/config.js'
 import { harnessFor } from '../src/harness/index.js'
 import type { ExitResult, RunningProcess, SpawnOptions } from '../src/process.js'
@@ -187,7 +188,7 @@ function bootstrap(overrides: Partial<BootstrapResponse> = {}): BootstrapRespons
   }
 }
 
-function setup(options: { bootstrap?: BootstrapResponse; script: Parameters<typeof fakeSpawner>[0] }) {
+function setup(options: { bootstrap?: BootstrapResponse; script: Parameters<typeof fakeSpawner>[0]; heartbeatMs?: number; sleep?: (ms: number, signal?: AbortSignal) => Promise<void> }) {
   const tmp = tempDir('session')
   const config: RunnerConfig = {
     runtimeUrl: 'http://flow',
@@ -215,15 +216,15 @@ function setup(options: { bootstrap?: BootstrapResponse; script: Parameters<type
     harnessState: { restore: async () => {}, save: async () => {} },
     logger: process.env.TEST_DEBUG ? createLogger((line) => process.stderr.write(line + '\n'), 'debug') : undefined,
     newId: () => `ev${++n}`,
-    heartbeatMs: 5,
+    heartbeatMs: options.heartbeatMs ?? 5,
     pushRetries: 1,
-    sleep: (ms, signal) => new Promise((resolve, reject) => {
+    sleep: options.sleep ?? ((ms, signal) => new Promise((resolve, reject) => {
       const timer = setTimeout(resolve, Math.min(ms, 5))
       signal?.addEventListener('abort', () => {
         clearTimeout(timer)
         reject(signal.reason)
       }, { once: true })
-    }),
+    })),
   })
   return { session, api, git, spawned, config, cleanup: tmp.cleanup }
 }
@@ -270,6 +271,7 @@ test('runs the first turn, commits, pushes, completes, then resumes for a follow
     assert.equal(c1.request.commits?.[0].turnActivityId, 'turn_1')
     assert.equal(c1.request.summary, 'Created `hello.txt` containing a greeting.\n\nThe file prints `hello`.')
     assert.equal(t.git.commitMessages[0], 'Created `hello.txt` containing a greeting.\n\nCo-authored-by: Flow <bot@example.com>\n')
+    assert.equal(c1.request.displayTitle, 'Created `hello.txt` containing a greeting.')
     assert.deepEqual(t.git.pushes, [{ branch: 'flow/fix-dates', forceWithLease: false }])
     assert.equal(c2.request.status, 'awaitingInput', 'ask_user ends the turn awaiting input')
     assert.equal(c2.request.pushed, false, 'nothing new to push')
@@ -304,6 +306,46 @@ test('a stop from the inbox interrupts the harness, pushes a WIP commit and comp
     assert.equal(t.api.completes[0].request.status, 'stopped')
     assert.equal(t.api.completes[0].request.pushed, true)
     assert.equal(t.git.commitMessages[0].split('\n')[0], 'WIP: stopped by Grace Hopper')
+  } finally {
+    t.cleanup()
+  }
+})
+
+test('phase changes are reported at once, not at the next heartbeat interval', { timeout: 10_000 }, async () => {
+  const t = setup({ heartbeatMs: 60_000, sleep, script: () => ({ fixture: 'claude-recorded-turn1.jsonl' }) })
+  t.api.onComplete = () => {
+    t.api.heartbeatStop = true
+  }
+  try {
+    assert.equal(await t.session.run(), 0)
+    const phases = t.api.heartbeats.map((heartbeat) => heartbeat.phase)
+    assert.ok(phases.includes('running'), `phases: ${phases.join(',')}`)
+    assert.ok(t.api.heartbeats.some((heartbeat) => heartbeat.phase === 'running' && heartbeat.turnId === 'turn_1'))
+    assert.ok(phases.includes('idle'), `phases: ${phases.join(',')}`)
+  } finally {
+    t.cleanup()
+  }
+})
+
+test('a follow-up whose harness conversation is gone starts a fresh harness session (recorded Claude Code error)', async () => {
+  const t = setup({
+    bootstrap: bootstrap({ harness: { name: 'claudeCode', model: 'claude-sonnet-4-5', resumeId: '0b6c4f1e-1111-4222-8333-444455556666' }, turn: { id: 'turn_1', prompt: 'Add a JSDoc line', kind: 'followUp' } }),
+    script: (index) =>
+      index === 0
+        ? { fixture: 'claude-recorded-resume-missing.jsonl', stderr: 'No conversation found with session ID: 0b6c4f1e-1111-4222-8333-444455556666', exitCode: 1 }
+        : { fixture: 'claude-recorded-turn1.jsonl' },
+  })
+  t.api.onComplete = () => {
+    t.api.heartbeatStop = true
+  }
+  try {
+    assert.equal(await t.session.run(), 0)
+    assert.equal(t.spawned.length, 2)
+    assert.ok(t.spawned[0].args.includes('--resume'))
+    assert.ok(!t.spawned[1].args.includes('--resume'), 'the retry starts a fresh conversation')
+    assert.match(String(t.spawned[1].options.stdin), /could not be resumed[\s\S]*Add a JSDoc line/)
+    assert.equal(t.api.completes.length, 1)
+    assert.equal(t.api.completes[0].request.status, 'success')
   } finally {
     t.cleanup()
   }

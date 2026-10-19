@@ -7,7 +7,7 @@ import { CliEnvRefresher } from './cli-env.js'
 import type { RunnerConfig } from './config.js'
 import { baseEnv, mcpCommand, runnerGuidance, writeRuntimeInfo } from './environment.js'
 import { EventBuffer } from './event-buffer.js'
-import { checkBranchAllowed, commitMessage, isSigningFailure, type Git } from './git/git.js'
+import { checkBranchAllowed, commitMessage, isSigningFailure, summaryTitle, type Git } from './git/git.js'
 import { resumeFailed, type HarnessAdapter, type HarnessContext } from './harness/types.js'
 import { errorMessage, silentLogger, type Logger } from './log.js'
 import { EventFactory, harnessError, type TurnOutcome } from './mapping/common.js'
@@ -130,6 +130,8 @@ export class Session {
   private readonly harnessState: HarnessStateStore
   private readonly newId: () => string
   private phase: HeartbeatPhase = 'setup'
+  /** Ends the heartbeat loop's wait early (set while it waits). */
+  private wakeHeartbeat?: () => void
   private turnId: string | undefined
   private inboxAfter = 0
   private stop: StopRequest | undefined
@@ -221,8 +223,12 @@ export class Session {
   }
 
   private setPhase(phase: HeartbeatPhase, turnId?: string): void {
+    const changed = phase !== this.phase || turnId !== this.turnId
     this.phase = phase
     this.turnId = turnId
+    // Report a phase change now, not at the next interval: a short turn
+    // would otherwise show as "setup" until it is already published.
+    if (changed) this.wakeHeartbeat?.()
   }
 
   // ── loops ──────────────────────────────────────────────────────────────
@@ -242,10 +248,17 @@ export class Session {
         }
         this.logger.warn('heartbeat failed', { error: errorMessage(error) })
       }
+      const pause = new AbortController()
+      const abortPause = () => pause.abort()
+      signal.addEventListener('abort', abortPause, { once: true })
+      this.wakeHeartbeat = abortPause
       try {
-        await this.sleep(interval, signal)
+        await this.sleep(interval, pause.signal)
       } catch {
-        return
+        if (signal.aborted) return
+      } finally {
+        this.wakeHeartbeat = undefined
+        signal.removeEventListener('abort', abortPause)
       }
     }
   }
@@ -366,7 +379,9 @@ export class Session {
       this.resumeId &&
       !this.stop &&
       !attempt.timedOut &&
-      !attempt.outcome.completed &&
+      // Claude Code reports a missing conversation as an error result, so a
+      // completed turn with an error still counts as a failed resume.
+      (!attempt.outcome.completed || attempt.outcome.error !== undefined) &&
       resumeFailed(`${attempt.stderr}\n${attempt.outcome.error?.message ?? ''}`)
     ) {
       this.logger.warn('harness resume failed, starting a fresh harness session', { resumeId: this.resumeId })
@@ -529,7 +544,7 @@ export class Session {
     const request: TurnCompleteRequest = {
       status,
       summary: summary || undefined,
-      displayTitle: summary ? message.split('\n')[0] : undefined,
+      displayTitle: status === 'success' || status === 'awaitingInput' ? summaryTitle(summary) : undefined,
       harnessSessionId: this.resumeId,
       commits: commits.length ? commits : undefined,
       pushed,
