@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -178,9 +179,10 @@ func TestReconcilerLifecycle(t *testing.T) {
 
 func TestReconcilerQuotaWaitsWithoutSpendingAttempts(t *testing.T) {
 	h := newHarness(t, nil)
-	quota := true
+	var quota atomic.Bool
+	quota.Store(true)
 	h.server.createHook = func(CreateRequest) *fakeError {
-		if quota {
+		if quota.Load() {
 			return &fakeError{Status: 403, Code: "KUBERNETES::QUOTA_EXCEEDED", Message: "exceeded quota"}
 		}
 		return nil
@@ -198,7 +200,7 @@ func TestReconcilerQuotaWaitsWithoutSpendingAttempts(t *testing.T) {
 	if record.Phase != sandbox.PhasePending || record.Reason != sandbox.ReasonQuota {
 		t.Fatalf("quota: %+v", record)
 	}
-	quota = false
+	quota.Store(false)
 	for i := 0; i < 3 && store.get("sb1").Phase != sandbox.PhaseRunning; i++ {
 		run()
 	}

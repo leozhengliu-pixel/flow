@@ -473,6 +473,7 @@ func TestStatusMapping(t *testing.T) {
 				meta[MetaRestore] = "1"
 			}
 			sb := h.server.seed(Sandbox{Status: tc.state, Metadata: meta, CreatedAt: h.clock.Now()})
+			h.server.mu.Lock()
 			if tc.runner != nil {
 				id := tc.runner.ID
 				if id == "" {
@@ -485,6 +486,7 @@ func TestStatusMapping(t *testing.T) {
 				}
 				sb.Metadata[MetaRunner] = id
 			}
+			h.server.mu.Unlock()
 			status := h.status("sb1")
 			if status.Phase != tc.phase || status.Reason != tc.reason {
 				t.Fatalf("got %s/%s (%s), want %s/%s", status.Phase, status.Reason, status.Message, tc.phase, tc.reason)
@@ -511,13 +513,13 @@ func TestExpiryRenewal(t *testing.T) {
 	sb := h.only()
 	initial := *sb.ExpiresAt
 	h.status("sb1")
-	if len(h.server.renewals) != 0 {
+	if len(h.server.renewalsCopy()) != 0 {
 		t.Fatal("no renewal while more than half the window is left")
 	}
 	h.clock.Advance(40 * time.Minute)
 	h.status("sb1")
-	if len(h.server.renewals) != 1 || !h.server.renewals[0].Equal(h.clock.Now().Add(time.Hour)) || !h.only().ExpiresAt.After(initial) {
-		t.Fatalf("renewals: %v", h.server.renewals)
+	if renewals := h.server.renewalsCopy(); len(renewals) != 1 || !renewals[0].Equal(h.clock.Now().Add(time.Hour)) || !h.only().ExpiresAt.After(initial) {
+		t.Fatalf("renewals: %v", renewals)
 	}
 	// Renewals stop at Flow's deadline (+ grace and margin).
 	for i := 0; i < 12; i++ {
@@ -525,7 +527,8 @@ func TestExpiryRenewal(t *testing.T) {
 		h.status("sb1")
 	}
 	deadline := h.only().Metadata[MetaDeadline]
-	last := h.server.renewals[len(h.server.renewals)-1]
+	renewals := h.server.renewalsCopy()
+	last := renewals[len(renewals)-1]
 	if !last.Equal(time.Unix(mustInt(t, deadline), 0)) {
 		t.Fatalf("the last renewal must reach the deadline exactly: %v vs %s", last, deadline)
 	}
@@ -567,7 +570,7 @@ func TestStopSandbox(t *testing.T) {
 	})
 	t.Run("grace expires", func(t *testing.T) {
 		h := newHarness(t, nil)
-		h.server.foreground = func(sb *fakeSandbox, req RunCommandRequest) ([]string, []string, int) { return nil, nil, 0 }
+		h.server.setForeground(func(sb *fakeSandbox, req RunCommandRequest) ([]string, []string, int) { return nil, nil, 0 })
 		h.start(h.spec("sb1"))
 		// A runner that ignores SIGTERM: emulate by restarting it.
 		if err := h.provider.StopSandbox(context.Background(), "sb1", sandbox.StopOptions{Grace: time.Minute}); err != nil {
@@ -623,14 +626,17 @@ func (h *harness) only_locked() *fakeSandbox {
 func TestExecStreamsOutput(t *testing.T) {
 	h := newHarness(t, nil)
 	h.start(h.spec("sb1"))
+	var seenMu sync.Mutex
 	var seen RunCommandRequest
-	h.server.foreground = func(sb *fakeSandbox, req RunCommandRequest) ([]string, []string, int) {
+	h.server.setForeground(func(sb *fakeSandbox, req RunCommandRequest) ([]string, []string, int) {
 		if len(req.Argv) > 0 && req.Argv[len(req.Argv)-1] == "-s" {
+			seenMu.Lock()
+			defer seenMu.Unlock()
 			seen = req
 			return []string{"line one", "line two"}, []string{"warning"}, 7
 		}
 		return nil, nil, 0
-	}
+	})
 	var stdout, stderr bytes.Buffer
 	result, err := h.provider.Exec(context.Background(), "sb1", sandbox.ExecRequest{Command: []string{"bash", "-s"}, Stdin: strings.NewReader("echo hi\n"), Stdout: &stdout, Stderr: &stderr})
 	if err != nil {
@@ -639,6 +645,8 @@ func TestExecStreamsOutput(t *testing.T) {
 	if result.ExitCode != 7 || stdout.String() != "line one\nline two\n" || stderr.String() != "warning\n" {
 		t.Fatalf("exec: %d %q %q", result.ExitCode, stdout.String(), stderr.String())
 	}
+	seenMu.Lock()
+	defer seenMu.Unlock()
 	if seen.UID == nil || *seen.UID != 1000 || seen.Cwd != sandbox.WorkspacePath || seen.Argv[0] != "/bin/sh" {
 		t.Fatalf("exec request: %+v", seen)
 	}

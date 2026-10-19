@@ -7,6 +7,19 @@ Flow {{ .Chart.AppVersion }} is installed as {{ include "flow.fullname" . }} in 
 Database: SQLite on the data volume (single replica). Use PostgreSQL or MySQL
 for production.
 {{- end }}
+{{- if include "flow.coding.opensandbox" . }}
+
+Coding sessions: sandboxes run through OpenSandbox at {{ .Values.coding.opensandbox.url }}
+(sandbox namespace {{ default "unknown" .Values.coding.opensandbox.sandboxNamespace }}).
+  Runtime URL:  {{ include "flow.coding.runtimeUrl" . }} (must be reachable from OpenSandbox sandbox Pods)
+  Egress proxy: {{ default "none" (include "flow.coding.proxyUrl" .) }}
+  Egress policy: {{ .Values.coding.opensandbox.egressPolicy }}
+  Runtime class: configured in OpenSandbox ([secure_runtime]), not by Flow.
+{{- if not (or .Values.coding.opensandbox.apiKey .Values.coding.opensandbox.existingSecret.name) }}
+
+WARNING: no OpenSandbox API key is configured (coding.opensandbox.existingSecret).
+{{- end }}
+{{- end }}
 {{- if include "flow.coding.kubernetes" . }}
 
 Coding sessions: sandboxes run in namespace {{ include "flow.sandbox.namespace" . }}.
