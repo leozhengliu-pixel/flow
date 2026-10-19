@@ -58,6 +58,7 @@ type CodingConfig struct {
 	Snapshot          CodingSnapshotConfig
 	Kubernetes        KubernetesSandboxConfig
 	Docker            DockerSandboxConfig
+	Local             LocalSandboxConfig
 	Egress            CodingEgressConfig
 	LLM               CodingLLMConfig
 	RuntimePricesUSD  map[string]float64 // per sandbox-hour by size
@@ -138,6 +139,13 @@ type DockerSandboxConfig struct {
 	Host    string
 	Network string
 	Runtime string
+}
+
+// LocalSandboxConfig configures the development-only local provider, which
+// runs each sandbox as a host process through an isolating launcher.
+type LocalSandboxConfig struct {
+	Command string // FLOW_CODING_LOCAL_COMMAND: absolute path of the launcher
+	Root    string // FLOW_CODING_LOCAL_ROOT: sandbox and workspace directories
 }
 
 // CodingEgressConfig configures the egress proxy that sandboxes must use.
@@ -222,6 +230,8 @@ const (
 	CodingProviderFake       = "fake"
 	CodingProviderDocker     = "docker"
 	CodingProviderKubernetes = "kubernetes"
+	// CodingProviderLocal runs sandboxes as local processes (development only).
+	CodingProviderLocal = "local"
 )
 
 func loadCoding(appURL string) CodingConfig {
@@ -319,6 +329,10 @@ func loadCoding(appURL string) CodingConfig {
 			Network: value("FLOW_CODING_DOCKER_NETWORK", "flow-sandbox"),
 			Runtime: value("FLOW_CODING_DOCKER_RUNTIME", ""),
 		},
+		Local: LocalSandboxConfig{
+			Command: value("FLOW_CODING_LOCAL_COMMAND", ""),
+			Root:    value("FLOW_CODING_LOCAL_ROOT", ""),
+		},
 		Egress: CodingEgressConfig{
 			ProxyURL:         value("FLOW_CODING_EGRESS_PROXY_URL", ""),
 			Allowlist:        csv(value("FLOW_CODING_EGRESS_ALLOWLIST", "")),
@@ -359,9 +373,9 @@ func loadCoding(appURL string) CodingConfig {
 // sessions are enabled, so an unused block never blocks startup.
 func (c CodingConfig) Validate() error {
 	switch c.Provider {
-	case CodingProviderDisabled, CodingProviderFake, CodingProviderDocker, CodingProviderKubernetes:
+	case CodingProviderDisabled, CodingProviderFake, CodingProviderDocker, CodingProviderKubernetes, CodingProviderLocal:
 	default:
-		return fmt.Errorf("FLOW_CODING_PROVIDER must be disabled, fake, docker or kubernetes")
+		return fmt.Errorf("FLOW_CODING_PROVIDER must be disabled, fake, docker, kubernetes or local")
 	}
 	if !c.Enabled {
 		return nil
@@ -390,6 +404,9 @@ func (c CodingConfig) Validate() error {
 	case "auto", "pvc", "emptyDir":
 	default:
 		return fmt.Errorf("FLOW_CODING_K8S_WORKSPACE_VOLUME must be auto, pvc or emptyDir")
+	}
+	if c.Provider == CodingProviderLocal && c.Local.Command == "" {
+		return fmt.Errorf("FLOW_CODING_LOCAL_COMMAND is required with FLOW_CODING_PROVIDER=local")
 	}
 	if c.Snapshot.Strategy == "volumesnapshot" && c.Kubernetes.WorkspaceVolume == "emptyDir" {
 		return fmt.Errorf("FLOW_CODING_SNAPSHOT_STRATEGY=volumesnapshot needs PVC workspaces (FLOW_CODING_K8S_WORKSPACE_VOLUME=auto or pvc)")

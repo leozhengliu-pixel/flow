@@ -632,7 +632,7 @@ then. Workspaces also need the `coding-sessions` feature flag. Secrets accept
 | Variable | Default | Meaning |
 |---|---|---|
 | `FLOW_CODING_ENABLED` | `false` | Turn the coding-session runtime on. |
-| `FLOW_CODING_PROVIDER` | `disabled` | `disabled`, `fake`, `docker` (development and CI) or `kubernetes`. See [Sandbox providers](#sandbox-providers). |
+| `FLOW_CODING_PROVIDER` | `disabled` | `disabled`, `fake`, `docker` (development and CI), `kubernetes`, or `local` (development only). See [Sandbox providers](#sandbox-providers). |
 | `FLOW_CODING_RUNTIME_URL` | `FLOW_APP_URL` | URL sandboxes use to reach Flow's runtime API and LLM proxy, e.g. `http://flow.flow.svc.cluster.local:8080`. |
 | `FLOW_CODING_RUNTIME_ADDR` | empty | When set (for example `:8090`), Flow serves `/internal/coding-runtime/*` and `/internal/llm-proxy/*` only on this second listener, and the main listener answers 404 for them, so a NetworkPolicy can expose just this port to sandboxes. Empty keeps them on the main listener. |
 | `FLOW_CODING_INSTANCE_ID` | `flow` | `flow.dev/instance` label on every object Flow creates; orphan GC only touches this value. Give every Flow installation sharing a cluster its own id. |
@@ -703,6 +703,18 @@ Coding sessions run in sandboxes created by `FLOW_CODING_PROVIDER`:
   network `FLOW_CODING_DOCKER_NETWORK`, with `FLOW_CODING_DOCKER_RUNTIME` as
   `--runtime`. The token is written into a per-sandbox volume through the archive
   API, so remote daemons work. `volumesnapshot` is not supported.
+- `local` (development only, never production): each sandbox is a process on
+  Flow's host, started as `<FLOW_CODING_LOCAL_COMMAND> <mode>` (preceded by
+  `<FLOW_CODING_LOCAL_COMMAND> restore` when a snapshot archive is restored). The
+  launcher must isolate the runner itself (bubblewrap, Landlock, a VM); Flow adds no
+  resource limits, network policy, exec or debug terminal. Its environment is the
+  container runner environment (`FLOW_TOKEN_FILE=/var/run/flow/token`,
+  `HOME=/home/flow`, …) plus the host paths it must map or pass on:
+  `FLOW_LOCAL_TOKEN_FILE` (mode 0600), `FLOW_LOCAL_HOME_DIR` and
+  `FLOW_LOCAL_WORKSPACE_DIR`; nothing of Flow's own environment is inherited. A
+  launcher without a mount namespace sets `FLOW_TOKEN_FILE`, `HOME` and
+  `FLOW_WORKSPACE_DIR` to those paths; the runner then renames snapshot archives to
+  and from the container layout. Sandboxes do not survive a Flow restart.
 - `fake` (tests) and `disabled`.
 
 #### Image, sizes, regions and warm pool
@@ -788,6 +800,13 @@ CRD.
 | `FLOW_CODING_DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker Engine endpoint. |
 | `FLOW_CODING_DOCKER_NETWORK` | `flow-sandbox` | Internal network (no default route) shared by sandboxes, the egress proxy and Flow. |
 | `FLOW_CODING_DOCKER_RUNTIME` | empty | Container runtime, e.g. `runsc`. |
+
+#### Local provider (development only)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOW_CODING_LOCAL_COMMAND` | empty | Absolute path of the launcher that isolates and runs the sandbox runner. Required with `FLOW_CODING_PROVIDER=local`. |
+| `FLOW_CODING_LOCAL_ROOT` | `$TMPDIR/flow-local-sandboxes` | Directory for per-sandbox directories (token, home, `runner.log`) and workspace volumes. |
 
 #### Reconcile loops, warm pool and GC
 
