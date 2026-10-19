@@ -120,3 +120,72 @@ func TestCodingModelInfoValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestOpenSandboxConfig(t *testing.T) {
+	t.Setenv("FLOW_CODING_ENABLED", "true")
+	t.Setenv("FLOW_CODING_PROVIDER", "opensandbox")
+	t.Setenv("FLOW_CODING_SECRET_KEY", "a2V5")
+	c := loadCoding("http://localhost:5173")
+	o := c.OpenSandbox
+	if o.URL != DefaultOpenSandboxURL || o.ExecdAccess != OpenSandboxExecdProxy || o.EgressPolicy != OpenSandboxEgressOff ||
+		o.RunAsUID != 1000 || o.TokenPath != "/tmp/flow/token" || o.ExpiryWindow != time.Hour || o.CreateTimeout != 10*time.Minute || o.Retries != 3 {
+		t.Fatalf("defaults: %+v", o)
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("defaults must validate: %v", err)
+	}
+	t.Setenv("FLOW_CODING_OPENSANDBOX_URL", "https://opensandbox.example/v1/")
+	t.Setenv("FLOW_CODING_OPENSANDBOX_API_KEY", " key ")
+	t.Setenv("FLOW_CODING_OPENSANDBOX_POOLS", "Small=flow-small")
+	t.Setenv("FLOW_CODING_OPENSANDBOX_SIZE_LARGE", "cpu=8,memory=64Gi,gpu=1")
+	t.Setenv("FLOW_CODING_OPENSANDBOX_EXTRA_METADATA", "team=platform")
+	t.Setenv("FLOW_CODING_OPENSANDBOX_EGRESS_ALLOW", "PyPI.org, files.pythonhosted.org")
+	c = loadCoding("http://localhost:5173")
+	o = c.OpenSandbox
+	if o.URL != "https://opensandbox.example/v1" || o.APIKey != "key" || o.Pools["small"] != "flow-small" || o.SizeResources["large"]["gpu"] != "1" ||
+		o.ExtraMetadata["team"] != "platform" || len(o.EgressAllow) != 2 || o.EgressAllow[0] != "pypi.org" {
+		t.Fatalf("parsed: %+v", o)
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("valid config rejected: %v", err)
+	}
+}
+
+func TestOpenSandboxValidation(t *testing.T) {
+	base := func() CodingConfig {
+		c := loadCoding("http://localhost:5173")
+		c.Enabled, c.Provider, c.SecretKey = true, CodingProviderOpenSandbox, "a2V5"
+		return c
+	}
+	cases := map[string]func(*CodingConfig){
+		"url":             func(c *CodingConfig) { c.OpenSandbox.URL = "opensandbox:80" },
+		"timeout":         func(c *CodingConfig) { c.OpenSandbox.RequestTimeout = 0 },
+		"retries":         func(c *CodingConfig) { c.OpenSandbox.Retries = 50 },
+		"expiry window":   func(c *CodingConfig) { c.OpenSandbox.ExpiryWindow = time.Minute },
+		"execd access":    func(c *CodingConfig) { c.OpenSandbox.ExecdAccess = "direct" },
+		"egress policy":   func(c *CodingConfig) { c.OpenSandbox.EgressPolicy = "strict" },
+		"uid":             func(c *CodingConfig) { c.OpenSandbox.RunAsUID = -1 },
+		"token path":      func(c *CodingConfig) { c.OpenSandbox.TokenPath = "token" },
+		"ca file":         func(c *CodingConfig) { c.OpenSandbox.CAFile = "/nonexistent/ca.pem" },
+		"pool size":       func(c *CodingConfig) { c.OpenSandbox.Pools = map[string]string{"huge": "p"} },
+		"pool + egress":   func(c *CodingConfig) { c.OpenSandbox.Pools, c.OpenSandbox.EgressPolicy = map[string]string{"small": "p"}, OpenSandboxEgressProxy },
+		"size override":   func(c *CodingConfig) { c.OpenSandbox.SizeResources = map[string]map[string]string{"small": {"cpu": "1"}} },
+		"reserved meta":   func(c *CodingConfig) { c.OpenSandbox.ExtraMetadata = map[string]string{"opensandbox.io/id": "x"} },
+		"image auth half": func(c *CodingConfig) { c.OpenSandbox.ImageUsername = "robot" },
+		"volumesnapshot":  func(c *CodingConfig) { c.Snapshot.Strategy = "volumesnapshot" },
+	}
+	for name, mutate := range cases {
+		c := base()
+		mutate(&c)
+		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "FLOW_CODING_") {
+			t.Errorf("%s: expected a FLOW_CODING_* validation error, got %v", name, err)
+		}
+	}
+	// Not validated unless selected.
+	c := base()
+	c.Provider = CodingProviderFake
+	c.OpenSandbox.URL = "bad"
+	if err := c.Validate(); err != nil {
+		t.Fatalf("other providers ignore the opensandbox block: %v", err)
+	}
+}
