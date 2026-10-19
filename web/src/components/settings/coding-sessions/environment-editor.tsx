@@ -323,7 +323,7 @@ export function EnvironmentEditorPage({ data, environmentId, disabled, onBack, o
           <CodingSelect label="Environment agent" value={draft.harness} disabled={locked} options={harnessOptions} onChange={(value) => update({ harness: value as EnvironmentDraft["harness"], model: "auto" })} />
         </CodingRow>
         <CodingRow title="Model">
-          <CodingSelect label="Environment model" value={draft.model} disabled={locked} options={modelOptions(models, environmentHarness).map((option) => ({ ...option, translate: option.value === "auto" }))} onChange={(model) => update({ model })} />
+          <CodingSelect label="Environment model" value={draft.model} disabled={locked} options={modelOptions(models, environmentHarness)} menuClassName="cs-model-menu" onChange={(model) => update({ model })} />
         </CodingRow>
         <CodingRow title="Sandbox size" description="Set CPU and memory for new coding sessions in this environment">
           <CodingSelect label="Sandbox size" value={draft.sandboxSize} disabled={locked} options={sizes.map((size) => ({ value: size.value, label: size.label, detail: size.detail }))} onChange={(value) => update({ sandboxSize: value as EnvironmentDraft["sandboxSize"] })} />

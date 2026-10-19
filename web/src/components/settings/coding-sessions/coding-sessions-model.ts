@@ -94,12 +94,26 @@ export function normalizeCodingSettings(settings: CodingSettings): CodingSetting
   };
 }
 
-/** Model options for one harness, Auto first. */
-export function modelOptions(models: CodingModelOption[], harness: CodingHarness): { value: string; label: string }[] {
-  const options = [{ value: "auto", label: "Auto" }];
-  for (const model of models) {
-    if (model.harness !== harness || model.auto || model.id === "auto") continue;
-    options.push({ value: model.id, label: model.label || model.id });
+export const AUTO_MODEL_DESCRIPTION = "Uses adaptive routing to pick the best model";
+const MODEL_GROUP_LABEL: Record<"frontier" | "other", string> = { frontier: "Frontier", other: "Other models" };
+
+export type ModelSelectOption = { value: string; label: string; detail?: string; group?: string; translate?: boolean };
+
+/**
+ * Model options for one harness, as the reference app's picker groups them: Auto (with its
+ * description), then "Frontier" models with their one-line descriptions, then "Other models".
+ * Servers that do not send groups get a flat list after Auto.
+ */
+export function modelOptions(models: CodingModelOption[], harness: CodingHarness): ModelSelectOption[] {
+  const options: ModelSelectOption[] = [{ value: "auto", label: "Auto", detail: AUTO_MODEL_DESCRIPTION }];
+  const grouped = models.some((model) => model.harness === harness && (model.group === "frontier" || model.group === "other"));
+  const entries = models.filter((model) => model.harness === harness && !model.auto && model.id !== "auto");
+  const rank = (model: CodingModelOption) => (model.group === "frontier" ? 0 : 1);
+  if (grouped) entries.sort((a, b) => rank(a) - rank(b));
+  for (const model of entries) {
+    const group = grouped ? MODEL_GROUP_LABEL[model.group === "frontier" ? "frontier" : "other"] : undefined;
+    const description = model.group === "frontier" ? model.description?.trim() : undefined;
+    options.push({ value: model.id, label: model.label || model.id, translate: false, ...(group ? { group } : {}), ...(description ? { detail: description } : {}) });
   }
   return options;
 }

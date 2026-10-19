@@ -38,6 +38,7 @@ func TestCodingParsing(t *testing.T) {
 	t.Setenv("FLOW_CODING_K8S_RUNTIME_CLASS", "gvisor")
 	t.Setenv("FLOW_CODING_WARM_POOL", "small=2,medium=1")
 	t.Setenv("FLOW_CODING_MODEL_PRICES", `{"gpt-5-codex":{"input":1.25,"output":10}}`)
+	t.Setenv("FLOW_CODING_MODEL_INFO", `{"gpt-5-codex":{"label":"GPT-5 Codex","group":"frontier","description":"Fast"}}`)
 	t.Setenv("FLOW_GITHUB_APP_HOST", "github.acme.dev")
 	c := loadCoding("http://localhost:5173")
 	if c.Kubernetes.NodeSelector["flow.dev/pool"] != "sandbox" || c.Kubernetes.NodeSelector["kubernetes.io/arch"] != "amd64" {
@@ -51,6 +52,9 @@ func TestCodingParsing(t *testing.T) {
 	}
 	if c.LLM.Prices["gpt-5-codex"].Output != 10 {
 		t.Fatalf("prices: %v", c.LLM.Prices)
+	}
+	if info := c.LLM.ModelInfo["gpt-5-codex"]; info.Group != ModelGroupFrontier || info.Description != "Fast" {
+		t.Fatalf("model info: %v", c.LLM.ModelInfo)
 	}
 	if c.GitHubApp.APIURL != "https://github.acme.dev/api/v3" {
 		t.Fatalf("GHE api url: %s", c.GitHubApp.APIURL)
@@ -87,6 +91,24 @@ func TestCodingValidation(t *testing.T) {
 		mutate(&c)
 		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "FLOW_") {
 			t.Errorf("%s: expected a FLOW_* validation error, got %v", name, err)
+		}
+	}
+}
+
+func TestCodingModelInfoValidation(t *testing.T) {
+	t.Setenv("FLOW_CODING_ENABLED", "true")
+	t.Setenv("FLOW_CODING_PROVIDER", "fake")
+	t.Setenv("FLOW_CODING_SECRET_KEY", "a2V5")
+	for raw, ok := range map[string]bool{
+		``:                         true,
+		`{"m":{"group":"other"}}`:  true,
+		`{"m":{"group":"legacy"}}`: false,
+		`not json`:                 false,
+	} {
+		t.Setenv("FLOW_CODING_MODEL_INFO", raw)
+		err := loadCoding("http://localhost:5173").Validate()
+		if (err == nil) != ok {
+			t.Errorf("FLOW_CODING_MODEL_INFO=%q: err %v", raw, err)
 		}
 	}
 }

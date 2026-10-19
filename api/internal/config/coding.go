@@ -162,8 +162,26 @@ type CodingLLMConfig struct {
 	CodexModels      []string
 	OpenSourceModels []string
 	// Prices maps a model to USD per million tokens.
-	Prices  map[string]ModelPrice
-	Timeout time.Duration
+	Prices map[string]ModelPrice
+	// ModelInfo is optional display metadata (label, picker group, one-line
+	// description) per model id, from FLOW_CODING_MODEL_INFO.
+	ModelInfo    map[string]ModelInfo
+	modelInfoErr error
+	Timeout      time.Duration
+}
+
+// Model picker groups (ModelInfo.Group).
+const (
+	ModelGroupFrontier = "frontier"
+	ModelGroupOther    = "other"
+)
+
+// ModelInfo is display metadata for a catalog model. Empty fields fall back
+// to Flow's built-in defaults.
+type ModelInfo struct {
+	Label       string `json:"label,omitempty"`
+	Group       string `json:"group,omitempty"` // frontier | other
+	Description string `json:"description,omitempty"`
 }
 
 // ModelPrice is USD per million tokens.
@@ -333,6 +351,7 @@ func loadCoding(appURL string) CodingConfig {
 			TokenScopes:    csv(value("FLOW_CODING_GITLAB_TOKEN_SCOPES", "read_repository,write_repository,read_api")),
 		},
 	}
+	c.LLM.ModelInfo, c.LLM.modelInfoErr = modelInfo(value("FLOW_CODING_MODEL_INFO", ""))
 	return c
 }
 
@@ -352,6 +371,9 @@ func (c CodingConfig) Validate() error {
 	}
 	if parsed, err := url.Parse(c.RuntimeURL); err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
 		return fmt.Errorf("FLOW_CODING_RUNTIME_URL must be an http(s) URL")
+	}
+	if err := c.LLM.validateModelInfo(); err != nil {
+		return err
 	}
 	if c.SecretKey == "" {
 		return fmt.Errorf("FLOW_CODING_SECRET_KEY (or FLOW_CONNECTOR_SECRET_KEY) is required when coding sessions are enabled")
@@ -476,6 +498,32 @@ func float(raw string, fallback float64) float64 {
 		return fallback
 	}
 	return n
+}
+
+// modelInfo reads a JSON object {"model":{"label":"…","group":"frontier","description":"…"}}.
+func modelInfo(raw string) (map[string]ModelInfo, error) {
+	result := map[string]ModelInfo{}
+	if strings.TrimSpace(raw) == "" {
+		return result, nil
+	}
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		return map[string]ModelInfo{}, err
+	}
+	return result, nil
+}
+
+func (c CodingLLMConfig) validateModelInfo() error {
+	if c.modelInfoErr != nil {
+		return fmt.Errorf("FLOW_CODING_MODEL_INFO must be a JSON object of model ids: %v", c.modelInfoErr)
+	}
+	for model, info := range c.ModelInfo {
+		switch info.Group {
+		case "", ModelGroupFrontier, ModelGroupOther:
+		default:
+			return fmt.Errorf("FLOW_CODING_MODEL_INFO group of %q must be frontier or other", model)
+		}
+	}
+	return nil
 }
 
 // modelPrices reads a JSON object {"model":{"input":3,"output":15,...}}.
