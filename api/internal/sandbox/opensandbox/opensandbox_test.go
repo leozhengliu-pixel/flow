@@ -290,6 +290,15 @@ func TestStartCreatesSandboxAndLaunchesRunner(t *testing.T) {
 	}
 }
 
+func TestBackgroundStreamHeldOpen(t *testing.T) {
+	h := newHarness(t, nil)
+	h.server.holdBackground = true
+	h.start(h.spec("sb1"))
+	if status := h.status("sb1"); status.Phase != sandbox.PhaseRunning {
+		t.Fatalf("the runner id must be taken from the init event: %+v", status)
+	}
+}
+
 func TestStartIsIdempotentAcrossRetriesAndRestarts(t *testing.T) {
 	h := newHarness(t, nil)
 	block := make(chan struct{})
