@@ -24,6 +24,10 @@ type authorizedApplication struct {
 	// Realtime is set when the application has a webhook: the reference app then lists
 	// "Receive realtime updates about your workspace" among the permissions.
 	Realtime bool `json:"realtime,omitempty"`
+	// RedirectURIs are the client's registered redirect URIs, so the web app
+	// can recognise well-known clients (Claude, Cursor, VS Code, …) by their
+	// app-owned redirect host or URL scheme and show their logo.
+	RedirectURIs []string `json:"redirectUris,omitempty"`
 }
 
 // GET /api/oauth/authorized-applications lists, for workspace admins, every
@@ -76,8 +80,10 @@ func (s *server) listAuthorizedApplications(w http.ResponseWriter, r *http.Reque
 		if app, ok := s.store.OAuthApplicationByClientID(clientID); ok {
 			item.Name, item.Description, item.LogoURL, item.DeveloperName, item.DeveloperURL = app.Name, app.Description, app.LogoURL, app.DeveloperName, app.DeveloperURL
 			item.Realtime = app.WebhookEnabled && app.WebhookURL != ""
+			item.RedirectURIs = slices.Clone(app.RedirectURIs)
 		} else if client, err := s.store.OAuthClient(r.Context(), clientID); err == nil {
 			item.Name, item.LogoURL, item.DeveloperURL = client.ClientName, client.LogoURI, client.ClientURI
+			item.RedirectURIs = slices.Clone(client.RedirectURIs)
 		}
 		result = append(result, *item)
 	}

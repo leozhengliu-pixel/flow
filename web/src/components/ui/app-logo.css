@@ -1,0 +1,7 @@
+/* App logo tiles (components/ui/app-logo.tsx). Zero-specificity defaults: the consent screen and settings lists size and round their own tiles. */
+:where(.app-logo){box-sizing:border-box;flex:none;display:grid;place-items:center;overflow:hidden;border-radius:6px}
+:where(.app-logo) img{width:100%;height:100%;object-fit:cover}
+:where(.app-logo.is-known,.app-logo.is-placeholder){border:.5px solid var(--oauth-icon-tile-border);background:var(--oauth-input-bg)}
+:where(.app-logo.is-known){color:var(--oauth-title)}
+:where(.app-logo) svg{display:block;flex:none}
+:where(.known-app-mark){color:var(--oauth-title)}

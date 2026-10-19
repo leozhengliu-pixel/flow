@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { KnownAppIcon } from "@/components/ui/app-logo";
 import { PriorityInboxSettings } from '@/components/inbox/hosts'
 import { readPriorityInboxRuleState } from '@/components/inbox/hosts/priority-inbox-settings-metadata'
 import {
@@ -2272,7 +2273,7 @@ function SecurityOverview({
           .map((item) => (
             <PersonalRow
               key={item.id}
-              icon={<ShieldCheck />}
+              icon={<KnownAppIcon name={item.clientName} fallback={<ShieldCheck />} />}
               title={<span data-i18n-ignore>{item.clientName}</span>}
               description={
                 <span
