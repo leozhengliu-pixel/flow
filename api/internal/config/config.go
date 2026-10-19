@@ -521,6 +521,16 @@ func integer(name string, fallback int) int {
 	return value
 }
 
+// integer64 is integer for values that may exceed 32 bits (byte sizes on
+// 32-bit platforms).
+func integer64(name string, fallback int64) int64 {
+	value, err := strconv.ParseInt(strings.TrimSpace(os.Getenv(name)), 10, 64)
+	if err != nil {
+		return fallback
+	}
+	return value
+}
+
 func duration(name string, fallback time.Duration) time.Duration {
 	value := strings.TrimSpace(os.Getenv(name))
 	if value == "" {
