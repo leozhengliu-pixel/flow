@@ -8,4 +8,5 @@ import (
 	_ "flow/api/internal/sandbox/docker"
 	_ "flow/api/internal/sandbox/kubernetes"
 	_ "flow/api/internal/sandbox/local"
+	_ "flow/api/internal/sandbox/opensandbox"
 )
