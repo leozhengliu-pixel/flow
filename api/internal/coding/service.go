@@ -508,7 +508,40 @@ func cloneSession(session domain.CodingSession) domain.CodingSession {
 	session.EnvironmentCandidates = slices.Clone(session.EnvironmentCandidates)
 	session.Diffs = slices.Clone(session.Diffs)
 	session.PullRequests = slices.Clone(session.PullRequests)
+	session.SubscriberIDs = slices.Clone(session.SubscriberIDs)
+	session.UnsubscribedIDs = slices.Clone(session.UnsubscribedIDs)
 	return session
+}
+
+// SetSubscription subscribes the user to the session's notifications or
+// unsubscribes them ("Subscribe to session"). It is idempotent and changes
+// no phase, so it runs no transition effects.
+func (s *Service) SetSubscription(ctx context.Context, workspaceKey, id, userID string, subscribed bool) (domain.CodingSession, error) {
+	if strings.TrimSpace(userID) == "" {
+		return domain.CodingSession{}, ErrInvalidInput
+	}
+	current, err := s.store.CodingSession(ctx, workspaceKey, id)
+	if err != nil {
+		return current, err
+	}
+	if domain.CodingSessionSubscribed(current, userID) == subscribed {
+		return s.enrich(ctx, current), nil
+	}
+	updated, err := s.store.UpdateCodingSession(ctx, workspaceKey, id, func(session *domain.CodingSession) error {
+		session.SubscriberIDs = slices.DeleteFunc(slices.Clone(session.SubscriberIDs), func(item string) bool { return item == userID })
+		session.UnsubscribedIDs = slices.DeleteFunc(slices.Clone(session.UnsubscribedIDs), func(item string) bool { return item == userID })
+		switch {
+		case subscribed && userID != session.CreatorID:
+			session.SubscriberIDs = append(session.SubscriberIDs, userID)
+		case !subscribed:
+			session.UnsubscribedIDs = append(session.UnsubscribedIDs, userID)
+		}
+		return nil
+	})
+	if err != nil {
+		return updated, err
+	}
+	return s.enrich(ctx, updated), nil
 }
 
 // afterTransition writes the anchor activities a phase change implies and
@@ -630,6 +663,19 @@ type PromptInput struct {
 	// TurnID is a caller-chosen, deterministic turn id (track L's triggers):
 	// a turn the inbox already holds is not queued or posted again.
 	TurnID string
+	// Files are the composer attachments as the web app shows them (Flow
+	// upload URLs); they go on the prompt activity's "attachments" metadata.
+	// Attachments carries the runner-reachable (signed) URLs of the same files.
+	Files []domain.AgentMessageAttachment
+}
+
+// promptActivity is the anchor's prompt activity for a follow-up.
+func promptActivity(in PromptInput) domain.AgentActivity {
+	activity := domain.AgentActivity{Type: "prompt", Body: in.Prompt, ActorID: in.AuthorID}
+	if len(in.Files) > 0 {
+		activity.Metadata = map[string]any{"attachments": in.Files}
+	}
+	return activity
 }
 
 // Prompt queues a follow-up turn (§4.3): delivered to the warm runner, after
@@ -665,7 +711,7 @@ func (s *Service) Prompt(ctx context.Context, workspaceKey, id string, in Prompt
 			return session, fmt.Errorf("%w: answer with one of the listed repositories", ErrInvalidInput)
 		}
 		if in.ActivityID == "" {
-			s.anchorActivity(ctx, session, domain.AgentActivity{Type: "prompt", Body: in.Prompt, ActorID: in.AuthorID})
+			s.anchorActivity(ctx, session, promptActivity(in))
 		}
 		return s.update(ctx, workspaceKey, id, func(current *domain.CodingSession) error {
 			if current.Phase != domain.CodingPhaseAwaitingUser {
@@ -690,7 +736,7 @@ func (s *Service) Prompt(ctx context.Context, workspaceKey, id string, in Prompt
 	}
 	turnID := in.ActivityID
 	if turnID == "" {
-		turnID = s.anchorActivity(ctx, session, domain.AgentActivity{Type: "prompt", Body: in.Prompt, ActorID: in.AuthorID})
+		turnID = s.anchorActivity(ctx, session, promptActivity(in))
 	}
 	if in.TurnID != "" {
 		turnID = in.TurnID

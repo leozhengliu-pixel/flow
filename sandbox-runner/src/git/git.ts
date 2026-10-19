@@ -30,14 +30,30 @@ export function gitEnv(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   }
 }
 
-export function commitMessage(summary: string, trailer?: string, fallback = 'Update from Flow coding session'): string {
-  const firstLine = summary
+/** Longest commit subject; longer summary lines are cut with an ellipsis. */
+export const MAX_SUBJECT = 72
+
+function summaryLine(summary: string): string | undefined {
+  return summary
     .split('\n')
     .map((line) => line.replace(/^[#>*\-\s]+/, '').trim())
     .find((line) => line.length > 0)
-  let subject = firstLine || fallback
-  if (subject.length > 72) subject = subject.slice(0, 71).trimEnd() + '…'
+}
+
+export function commitMessage(summary: string, trailer?: string, fallback = 'Update from Flow coding session'): string {
+  let subject = summaryLine(summary) || fallback
+  if (subject.length > MAX_SUBJECT) subject = subject.slice(0, MAX_SUBJECT - 1).trimEnd() + '…'
   return trailer ? `${subject}\n\n${trailer}\n` : `${subject}\n`
+}
+
+/**
+ * The session title a turn summary suggests: its first line when it is a
+ * title-sized line. A long first line is prose, and cutting it would make a
+ * worse pull request title than the one the session already has (the issue's).
+ */
+export function summaryTitle(summary: string): string | undefined {
+  const line = summaryLine(summary)
+  return line && line.length <= MAX_SUBJECT ? line : undefined
 }
 
 /** The branch the runner may push: the prefix, or any branch for existing branches (PR follow-ups). */

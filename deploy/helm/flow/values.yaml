@@ -337,6 +337,8 @@ coding:
     openai:
       baseUrl: https://api.openai.com/v1
       apiKey: ""
+      # responses | chat (translate Responses for chat-only upstreams)
+      wireApi: responses
     opensource:
       baseUrl: ""
       apiKey: ""
@@ -347,6 +349,8 @@ coding:
     # USD per million tokens, e.g.
     #   claude-sonnet-4-5: {input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75}
     prices: {}
+    # Model picker metadata by model id: {label, group, description}.
+    modelInfo: {}
   # USD per sandbox-hour by size.
   runtimePrices:
     small: "0.10"

@@ -7,7 +7,7 @@ import { glabConfigCommands, normalizeCliEnv, readCliEnvState, refreshCliEnv, re
 import type { RunnerConfig } from '../src/config.js'
 import { loadConfig } from '../src/config.js'
 import { baseEnv, mcpCommand, runnerGuidance } from '../src/environment.js'
-import { checkBranchAllowed, commitMessage, Git, parseNumstat } from '../src/git/git.js'
+import { checkBranchAllowed, commitMessage, Git, parseNumstat, summaryTitle } from '../src/git/git.js'
 import { claudeHarness } from '../src/harness/claude.js'
 import { codexConfig, codexHarness } from '../src/harness/codex.js'
 import { opencodeConfig, opencodeHarness } from '../src/harness/opencode.js'
@@ -183,6 +183,10 @@ test('git helpers: commit subject, numstat parsing, branch policy', () => {
   assert.equal(commitMessage('## Use local dates in formatDate\n\nDetails', 'Co-authored-by: Flow <b@x>'), 'Use local dates in formatDate\n\nCo-authored-by: Flow <b@x>\n')
   assert.equal(commitMessage('', undefined), 'Update from Flow coding session\n')
   assert.equal(commitMessage('x'.repeat(100)).split('\n')[0].length, 72)
+  // A title-sized first line becomes the session (and PR) title; a long prose line is never cut into one.
+  assert.equal(summaryTitle('## Use local dates in formatDate\n\nDetails'), 'Use local dates in formatDate')
+  assert.equal(summaryTitle('x'.repeat(100)), undefined)
+  assert.equal(summaryTitle(''), undefined)
   assert.deepEqual(parseNumstat('3\t1\tsrc/a.ts\n-\t-\tlogo.png\n0\t9\told.ts\n', 'M\tsrc/a.ts\nA\tlogo.png\nD\told.ts\n'), [
     { path: 'src/a.ts', additions: 3, deletions: 1, status: 'modified' },
     { path: 'logo.png', additions: 0, deletions: 0, status: 'added' },

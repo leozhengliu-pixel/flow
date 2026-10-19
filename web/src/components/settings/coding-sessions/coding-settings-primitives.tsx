@@ -1,6 +1,6 @@
-import { Children, useRef, type ButtonHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
+import { Children, Fragment, useRef, type ButtonHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
 import { Check, ChevronRight, TriangleAlert } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { FlowGlyph } from "@/components/ui/menu-glyphs";
 import { useI18n } from "@/i18n/i18n";
 import { SettingsToggle } from "../settings-primitives";
@@ -75,13 +75,14 @@ export function CodingButton({ children, primary, danger, ghost, small, ...props
   );
 }
 
-export type CodingSelectOption = { value: string; label: string; detail?: string; translate?: boolean; icon?: ReactNode };
+export type CodingSelectOption = { value: string; label: string; detail?: string; translate?: boolean; icon?: ReactNode; /** Section header shown above the first option of each run of the same group. */ group?: string };
 
 /**
  * Same trigger and menu as the other feature settings selects (`.feature-select`). `small` is the
- * reference app's 160x24 tool picker (12px text); options with `detail` render on two lines.
+ * reference app's 160x24 tool picker (12px text); options with `detail` render on two lines;
+ * options with a `group` are listed under a section header (the model picker's "Frontier").
  */
-export function CodingSelect({ label, value, options, onChange, disabled, placeholder, small }: { label: string; value: string; options: CodingSelectOption[]; onChange: (value: string) => void; disabled?: boolean; placeholder?: string; small?: boolean }) {
+export function CodingSelect({ label, value, options, onChange, disabled, placeholder, small, menuClassName }: { label: string; value: string; options: CodingSelectOption[]; onChange: (value: string) => void; disabled?: boolean; placeholder?: string; small?: boolean; menuClassName?: string }) {
   const { t } = useI18n();
   const openedAt = useRef(0);
   const selected = options.find((item) => item.value === value);
@@ -94,16 +95,19 @@ export function CodingSelect({ label, value, options, onChange, disabled, placeh
           <FlowGlyph name="selectChevron" width={10} height={5} />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className={`feature-select-menu cs-select-menu${small ? " is-small" : ""}`}>
-        {options.map((item) => (
-          <DropdownMenuItem key={item.value} className={item.detail ? "has-detail" : undefined} data-i18n-ignore={item.translate === false ? true : undefined} onSelect={() => onChange(item.value)}>
-            {item.icon}
-            <span className="cs-select-option">
-              <span>{text(item)}</span>
-              {item.detail && <small>{t(item.detail)}</small>}
-            </span>
-            {item.value === value && <Check size={13} />}
-          </DropdownMenuItem>
+      <DropdownMenuContent align="end" className={`feature-select-menu cs-select-menu${small ? " is-small" : ""}${menuClassName ? ` ${menuClassName}` : ""}`}>
+        {options.map((item, index) => (
+          <Fragment key={item.value}>
+            {item.group && item.group !== options[index - 1]?.group && <DropdownMenuLabel className="cs-select-group">{t(item.group)}</DropdownMenuLabel>}
+            <DropdownMenuItem className={item.detail ? "has-detail" : undefined} data-i18n-ignore={item.translate === false ? true : undefined} onSelect={() => onChange(item.value)}>
+              {item.icon}
+              <span className="cs-select-option">
+                <span>{text(item)}</span>
+                {item.detail && <small>{t(item.detail)}</small>}
+              </span>
+              {item.value === value && <Check size={13} />}
+            </DropdownMenuItem>
+          </Fragment>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>

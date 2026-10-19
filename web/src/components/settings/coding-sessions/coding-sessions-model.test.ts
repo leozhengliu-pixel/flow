@@ -170,7 +170,25 @@ describe("settings helpers", () => {
   });
   it("lists Auto first and filters by harness", () => {
     expect(modelOptions(models, "codex").map((option) => option.value)).toEqual(["auto", "gpt-5-codex", "gpt-5"]);
-    expect(modelOptions(models, "openSource")).toEqual([{ value: "auto", label: "Auto" }]);
+    expect(modelOptions(models, "openSource")).toEqual([{ value: "auto", label: "Auto", detail: "Uses adaptive routing to pick the best model" }]);
+    // A server without groups gets a flat list (no section headers).
+    expect(modelOptions(models, "codex").some((option) => option.group)).toBe(false);
+  });
+  it("groups models as Auto, Frontier with descriptions, then Other models", () => {
+    const grouped: CodingModelOption[] = [
+      { id: "auto", label: "Auto (gpt-5-codex)", harness: "codex", auto: true, group: "auto", description: "Uses adaptive routing to pick the best model" },
+      { id: "gpt-4.1", label: "GPT-4.1", harness: "codex", group: "other", description: "ignored outside Frontier" },
+      { id: "gpt-5-codex", label: "GPT-5 Codex", harness: "codex", group: "frontier", description: "Strong reasoning for multi-file changes" },
+      { id: "glm", label: "GLM", harness: "codex", group: "frontier" },
+      { id: "legacy", label: "", harness: "codex" },
+    ];
+    expect(modelOptions(grouped, "codex")).toEqual([
+      { value: "auto", label: "Auto", detail: "Uses adaptive routing to pick the best model" },
+      { value: "gpt-5-codex", label: "GPT-5 Codex", translate: false, group: "Frontier", detail: "Strong reasoning for multi-file changes" },
+      { value: "glm", label: "GLM", translate: false, group: "Frontier" },
+      { value: "gpt-4.1", label: "GPT-4.1", translate: false, group: "Other models" },
+      { value: "legacy", label: "legacy", translate: false, group: "Other models" },
+    ]);
   });
   it("offers reasoning efforts from the catalog", () => {
     expect(reasoningOptions(models, "codex", "auto")).toEqual(["low", "medium", "high"]);

@@ -1,4 +1,5 @@
-import { extractTarZst } from './archive.js'
+import { extractTarZst, fromArchiveLayout } from './archive.js'
+import type { RunnerPaths } from './config.js'
 import { errorMessage, type Logger } from './log.js'
 
 // Restore mode (the `restore` init container, and warm sandboxes after
@@ -14,12 +15,13 @@ export interface RestoreApi {
 }
 
 /** Downloads (FLOW_ARCHIVE_URL, or the snapshot archive route) and unpacks the archive. */
-export async function restoreSnapshot(api: RestoreApi, snapshotId: string, logger: Logger, root = '/', archiveUrl?: string): Promise<void> {
+export async function restoreSnapshot(api: RestoreApi, snapshotId: string, logger: Logger, root = '/', archiveUrl?: string, paths?: RunnerPaths): Promise<void> {
   const started = Date.now()
   logger.info('restoring snapshot', { snapshotId, fromArchiveUrl: Boolean(archiveUrl) })
   try {
     const stream = await api.getSnapshotArchive(snapshotId, undefined, archiveUrl)
-    await extractTarZst(stream, root)
+    // Archives hold workspace/… and home/flow/…; a runner with other paths renames them.
+    await extractTarZst(stream, root, paths && root === '/' ? fromArchiveLayout(paths) : [])
   } catch (error) {
     throw new Error(`restoring snapshot ${snapshotId} failed: ${errorMessage(error)}`)
   }

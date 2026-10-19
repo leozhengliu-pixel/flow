@@ -1,6 +1,7 @@
 import { pulseZhCN } from './translations-pulse';
 // coding sessions (track G)
 import { codingSessionUiZhCN } from './translations-coding-session-ui';
+import { codingSessionStatesZhCN } from './translations-coding-session-states';
 import { viewFiltersZhCN } from './translations-view-filters';
 import { insightsZhCN } from './translations-insights';
 import { agentTriageZhCN } from './translations-agent-triage';
@@ -5903,3 +5904,4 @@ for (const [source, translation] of Object.entries(recentlyDeletedZhCN)) zhCN[so
 for (const [source, translation] of Object.entries(workspaceMembersZhCN)) zhCN[source] ??= translation;
 // coding sessions (track G): session view, start entry points and review actions fill gaps only.
 for (const [source, translation] of Object.entries(codingSessionUiZhCN)) zhCN[source] ??= translation;
+for (const [source, translation] of Object.entries(codingSessionStatesZhCN)) zhCN[source] ??= translation;

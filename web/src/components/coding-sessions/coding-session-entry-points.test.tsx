@@ -31,6 +31,7 @@ vi.mock('@/lib/coding-sessions-api', () => ({
   approveCodingSession: vi.fn(), dismissCodingSession: vi.fn(), createCodingSessionPullRequest: vi.fn(), promptCodingSession: vi.fn(), fetchCodingSandboxLogs: vi.fn(),
   fixCodingEnvironmentWithAgent: vi.fn(), startReviewCodingSession: vi.fn(), startIssueCodingSession: vi.fn(), fetchCodingEnvironments: vi.fn(),
   fetchCodingSessionArtifacts: vi.fn(async () => []),
+  fetchCodingSessionDiff: vi.fn(async () => ({ source: 'none', additions: 0, deletions: 0, files: [] })), setCodingSessionSubscription: vi.fn(),
 }))
 vi.mock('@/lib/application-agents', async original => ({ ...await original<typeof import('@/lib/application-agents')>(), getApplicationTask: vi.fn(), listApplicationTasks: vi.fn() }))
 vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), createAgentSession: vi.fn() }))
@@ -189,17 +190,23 @@ describe('agent chat session card', () => {
     const card = await screen.findByRole('article', { name: 'Coding session' })
     expect(within(card).getByText('Fix login')).toBeVisible()
     expect(within(card).getByText('started by')).toBeVisible()
-    const row = within(card).getByRole('button', { name: /Show session/ })
-    expect(row).toHaveTextContent('Finished')
+    const row = within(card).getByRole('link', { name: /Show session/ })
+    expect(row).toHaveTextContent('Completed')
     expect(row).toHaveTextContent('Fixed the login redirect')
+    expect(row).toHaveAttribute('href', '/workspace/diff/cs-1')
     expect(within(card).getByRole('link', { name: 'Open issue' })).toHaveAttribute('href', expect.stringContaining('#agent-session-task-1'))
-    await user.click(row)
-    const dialog = await screen.findByRole('dialog', { name: /Coding session/ })
-    expect(within(dialog).getByRole('region', { name: 'Coding session' })).toBeVisible()
-    await user.click(within(dialog).getByRole('button', { name: 'Close' }))
     await user.click(within(card).getAllByRole('button', { name: 'Dismiss' })[0])
     expect(screen.queryByRole('article')).toBeNull()
     expect(localStorage.getItem('flow:coding-sessions:dismissed:workspace:user-1')).toContain('cs-1')
+  })
+
+  it('falls back to the session dialog where no app router is mounted', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession({ state: 'complete', phase: 'idle', displayTitle: 'Fix login' }))
+    render(<I18nProvider><ChatCodingSessionCards message={message} data={baseData()}/></I18nProvider>)
+    await user.click(await screen.findByRole('button', { name: /Show session/ }))
+    const dialog = await screen.findByRole('dialog', { name: /Coding session/ })
+    expect(within(dialog).getByRole('region', { name: 'Coding session' })).toBeVisible()
   })
 
   it('renders nothing for replies without a coding session', () => {
@@ -222,8 +229,7 @@ describe('sessions list', () => {
     expect(within(list).queryByRole('button', { name: 'Dismiss Working one' })).toBeNull()
     await user.click(within(list).getByRole('button', { name: 'Dismiss Done one' }))
     expect(within(list).queryByText('Done one')).toBeNull()
-    await user.click(within(list).getByRole('button', { name: /Working one/ }))
-    expect(await screen.findByRole('dialog', { name: 'Coding session' })).toBeVisible()
+    expect(within(list).getByRole('link', { name: /Working one/ })).toHaveAttribute('href', '/workspace/diff/cs-a')
   })
 })
 
@@ -232,19 +238,16 @@ describe('issue activity', () => {
     vi.mocked(listApplicationTasks).mockResolvedValue([{ ...task, codingSessionId: 'cs-1' }])
     vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession({ repository: 'acme/app' }))
     render(<MemoryRouter><I18nProvider><IssueAgentTasks issue={makeIssue({ delegate: flowAgent })} data={baseData()}/></I18nProvider></MemoryRouter>)
-    const row = await screen.findByRole('button', { name: /Show session/ })
+    const row = await screen.findByRole('link', { name: /Show session/ })
     expect(row).toHaveTextContent('Thinking…')
-    await userEvent.setup().click(row)
-    const panel = await screen.findByRole('region', { name: 'Coding session' })
-    expect(within(panel).getByText('acme/app')).toBeVisible()
+    expect(row).toHaveAttribute('href', '/workspace/diff/cs-1')
   })
 
   it('matches the session by anchor when the task has no session id', async () => {
     vi.mocked(api.fetchCodingSessions).mockResolvedValue([makeSession({ id: 'other', agentSessionId: 'task-9' }), makeSession({ agentSessionId: 'task-1', branchName: 'flow/anchored' })])
     vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession({ agentSessionId: 'task-1', branchName: 'flow/anchored' }))
     render(<MemoryRouter><I18nProvider><AgentTaskCodingSession task={task} data={baseData()}/></I18nProvider></MemoryRouter>)
-    await userEvent.setup().click(await screen.findByRole('button', { name: /Show session/ }))
-    expect(await screen.findByText('flow/anchored')).toBeVisible()
+    expect(await screen.findByRole('link', { name: /Show session/ })).toHaveAttribute('href', '/workspace/diff/cs-1')
     expect(api.fetchCodingSessions).toHaveBeenCalledWith({ issueId: 'issue-1', creatorId: undefined, state: undefined })
   })
 

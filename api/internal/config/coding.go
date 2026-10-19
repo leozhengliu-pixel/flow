@@ -58,6 +58,7 @@ type CodingConfig struct {
 	Snapshot          CodingSnapshotConfig
 	Kubernetes        KubernetesSandboxConfig
 	Docker            DockerSandboxConfig
+	Local             LocalSandboxConfig
 	Egress            CodingEgressConfig
 	LLM               CodingLLMConfig
 	RuntimePricesUSD  map[string]float64 // per sandbox-hour by size
@@ -140,6 +141,13 @@ type DockerSandboxConfig struct {
 	Runtime string
 }
 
+// LocalSandboxConfig configures the development-only local provider, which
+// runs each sandbox as a host process through an isolating launcher.
+type LocalSandboxConfig struct {
+	Command string // FLOW_CODING_LOCAL_COMMAND: absolute path of the launcher
+	Root    string // FLOW_CODING_LOCAL_ROOT: sandbox and workspace directories
+}
+
 // CodingEgressConfig configures the egress proxy that sandboxes must use.
 type CodingEgressConfig struct {
 	ProxyURL         string
@@ -151,10 +159,14 @@ type CodingEgressConfig struct {
 
 // CodingLLMConfig configures the LLM proxy upstreams and model catalog.
 type CodingLLMConfig struct {
-	AnthropicBaseURL  string
-	AnthropicAPIKey   string
-	OpenAIBaseURL     string
-	OpenAIAPIKey      string
+	AnthropicBaseURL string
+	AnthropicAPIKey  string
+	OpenAIBaseURL    string
+	OpenAIAPIKey     string
+	// OpenAIWireAPI is the protocol the OpenAI upstream speaks: "responses"
+	// (default) or "chat" for Chat Completions-only providers, in which case
+	// the proxy translates Codex's Responses requests (llmproxy/chatwire.go).
+	OpenAIWireAPI     string
 	OpenSourceBaseURL string
 	OpenSourceAPIKey  string
 	// Models per harness; the first entry is what Auto resolves to.
@@ -162,8 +174,32 @@ type CodingLLMConfig struct {
 	CodexModels      []string
 	OpenSourceModels []string
 	// Prices maps a model to USD per million tokens.
-	Prices  map[string]ModelPrice
-	Timeout time.Duration
+	Prices map[string]ModelPrice
+	// ModelInfo is optional display metadata (label, picker group, one-line
+	// description) per model id, from FLOW_CODING_MODEL_INFO.
+	ModelInfo    map[string]ModelInfo
+	modelInfoErr error
+	Timeout      time.Duration
+}
+
+// OpenAI upstream wire APIs (FLOW_CODING_LLM_OPENAI_WIRE_API).
+const (
+	OpenAIWireAPIResponses = "responses"
+	OpenAIWireAPIChat      = "chat"
+)
+
+// Model picker groups (ModelInfo.Group).
+const (
+	ModelGroupFrontier = "frontier"
+	ModelGroupOther    = "other"
+)
+
+// ModelInfo is display metadata for a catalog model. Empty fields fall back
+// to Flow's built-in defaults.
+type ModelInfo struct {
+	Label       string `json:"label,omitempty"`
+	Group       string `json:"group,omitempty"` // frontier | other
+	Description string `json:"description,omitempty"`
 }
 
 // ModelPrice is USD per million tokens.
@@ -204,6 +240,8 @@ const (
 	CodingProviderFake       = "fake"
 	CodingProviderDocker     = "docker"
 	CodingProviderKubernetes = "kubernetes"
+	// CodingProviderLocal runs sandboxes as local processes (development only).
+	CodingProviderLocal = "local"
 )
 
 func loadCoding(appURL string) CodingConfig {
@@ -301,6 +339,10 @@ func loadCoding(appURL string) CodingConfig {
 			Network: value("FLOW_CODING_DOCKER_NETWORK", "flow-sandbox"),
 			Runtime: value("FLOW_CODING_DOCKER_RUNTIME", ""),
 		},
+		Local: LocalSandboxConfig{
+			Command: value("FLOW_CODING_LOCAL_COMMAND", ""),
+			Root:    value("FLOW_CODING_LOCAL_ROOT", ""),
+		},
 		Egress: CodingEgressConfig{
 			ProxyURL:         value("FLOW_CODING_EGRESS_PROXY_URL", ""),
 			Allowlist:        csv(value("FLOW_CODING_EGRESS_ALLOWLIST", "")),
@@ -313,6 +355,7 @@ func loadCoding(appURL string) CodingConfig {
 			AnthropicAPIKey:   secret("FLOW_CODING_LLM_ANTHROPIC_API_KEY"),
 			OpenAIBaseURL:     strings.TrimRight(value("FLOW_CODING_LLM_OPENAI_BASE_URL", "https://api.openai.com/v1"), "/"),
 			OpenAIAPIKey:      secret("FLOW_CODING_LLM_OPENAI_API_KEY"),
+			OpenAIWireAPI:     strings.ToLower(strings.TrimSpace(value("FLOW_CODING_LLM_OPENAI_WIRE_API", OpenAIWireAPIResponses))),
 			OpenSourceBaseURL: strings.TrimRight(value("FLOW_CODING_LLM_OPENSOURCE_BASE_URL", ""), "/"),
 			OpenSourceAPIKey:  secret("FLOW_CODING_LLM_OPENSOURCE_API_KEY"),
 			ClaudeCodeModels:  csvRaw(value("FLOW_CODING_MODELS_CLAUDE_CODE", "claude-sonnet-4-5,claude-opus-4-1")),
@@ -333,6 +376,7 @@ func loadCoding(appURL string) CodingConfig {
 			TokenScopes:    csv(value("FLOW_CODING_GITLAB_TOKEN_SCOPES", "read_repository,write_repository,read_api")),
 		},
 	}
+	c.LLM.ModelInfo, c.LLM.modelInfoErr = modelInfo(value("FLOW_CODING_MODEL_INFO", ""))
 	return c
 }
 
@@ -340,9 +384,9 @@ func loadCoding(appURL string) CodingConfig {
 // sessions are enabled, so an unused block never blocks startup.
 func (c CodingConfig) Validate() error {
 	switch c.Provider {
-	case CodingProviderDisabled, CodingProviderFake, CodingProviderDocker, CodingProviderKubernetes:
+	case CodingProviderDisabled, CodingProviderFake, CodingProviderDocker, CodingProviderKubernetes, CodingProviderLocal:
 	default:
-		return fmt.Errorf("FLOW_CODING_PROVIDER must be disabled, fake, docker or kubernetes")
+		return fmt.Errorf("FLOW_CODING_PROVIDER must be disabled, fake, docker, kubernetes or local")
 	}
 	if !c.Enabled {
 		return nil
@@ -352,6 +396,14 @@ func (c CodingConfig) Validate() error {
 	}
 	if parsed, err := url.Parse(c.RuntimeURL); err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
 		return fmt.Errorf("FLOW_CODING_RUNTIME_URL must be an http(s) URL")
+	}
+	if err := c.LLM.validateModelInfo(); err != nil {
+		return err
+	}
+	switch c.LLM.OpenAIWireAPI {
+	case "", OpenAIWireAPIResponses, OpenAIWireAPIChat:
+	default:
+		return fmt.Errorf("FLOW_CODING_LLM_OPENAI_WIRE_API must be responses or chat")
 	}
 	if c.SecretKey == "" {
 		return fmt.Errorf("FLOW_CODING_SECRET_KEY (or FLOW_CONNECTOR_SECRET_KEY) is required when coding sessions are enabled")
@@ -368,6 +420,9 @@ func (c CodingConfig) Validate() error {
 	case "auto", "pvc", "emptyDir":
 	default:
 		return fmt.Errorf("FLOW_CODING_K8S_WORKSPACE_VOLUME must be auto, pvc or emptyDir")
+	}
+	if c.Provider == CodingProviderLocal && c.Local.Command == "" {
+		return fmt.Errorf("FLOW_CODING_LOCAL_COMMAND is required with FLOW_CODING_PROVIDER=local")
 	}
 	if c.Snapshot.Strategy == "volumesnapshot" && c.Kubernetes.WorkspaceVolume == "emptyDir" {
 		return fmt.Errorf("FLOW_CODING_SNAPSHOT_STRATEGY=volumesnapshot needs PVC workspaces (FLOW_CODING_K8S_WORKSPACE_VOLUME=auto or pvc)")
@@ -476,6 +531,32 @@ func float(raw string, fallback float64) float64 {
 		return fallback
 	}
 	return n
+}
+
+// modelInfo reads a JSON object {"model":{"label":"…","group":"frontier","description":"…"}}.
+func modelInfo(raw string) (map[string]ModelInfo, error) {
+	result := map[string]ModelInfo{}
+	if strings.TrimSpace(raw) == "" {
+		return result, nil
+	}
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		return map[string]ModelInfo{}, err
+	}
+	return result, nil
+}
+
+func (c CodingLLMConfig) validateModelInfo() error {
+	if c.modelInfoErr != nil {
+		return fmt.Errorf("FLOW_CODING_MODEL_INFO must be a JSON object of model ids: %v", c.modelInfoErr)
+	}
+	for model, info := range c.ModelInfo {
+		switch info.Group {
+		case "", ModelGroupFrontier, ModelGroupOther:
+		default:
+			return fmt.Errorf("FLOW_CODING_MODEL_INFO group of %q must be frontier or other", model)
+		}
+	}
+	return nil
 }
 
 // modelPrices reads a JSON object {"model":{"input":3,"output":15,...}}.

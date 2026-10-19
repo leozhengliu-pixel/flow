@@ -73,6 +73,17 @@ func TestUsageMeterProtocols(t *testing.T) {
 			want: Usage{Model: "q", InputTokens: 1, OutputTokens: 1},
 		},
 		{
+			name: "deepseek cache hit fields", upstream: UpstreamOpenAI, contentType: "application/json",
+			body: `{"usage":{"prompt_tokens":380,"completion_tokens":7,"prompt_cache_hit_tokens":128,"prompt_cache_miss_tokens":252}}`,
+			want: Usage{InputTokens: 252, OutputTokens: 7, CacheReadTokens: 128},
+		},
+		{
+			name: "deepseek stream with details and null usage chunks", upstream: UpstreamOpenAI, contentType: "text/event-stream",
+			body: "data: {\"model\":\"deepseek-flash\",\"choices\":[{\"delta\":{\"reasoning_content\":\"x\"}}],\"usage\":null}\n\n" +
+				"data: {\"model\":\"deepseek-flash\",\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":314,\"completion_tokens\":73,\"prompt_tokens_details\":{\"cached_tokens\":64},\"completion_tokens_details\":{\"reasoning_tokens\":20},\"prompt_cache_hit_tokens\":64,\"prompt_cache_miss_tokens\":250}}\n\ndata: [DONE]\n\n",
+			want: Usage{Model: "deepseek-flash", InputTokens: 250, OutputTokens: 73, CacheReadTokens: 64},
+		},
+		{
 			name: "invalid cached count ignored", upstream: UpstreamOpenAI, contentType: "application/json",
 			body: `{"usage":{"prompt_tokens":5,"completion_tokens":1,"prompt_tokens_details":{"cached_tokens":50}}}`,
 			want: Usage{InputTokens: 5, OutputTokens: 1},
