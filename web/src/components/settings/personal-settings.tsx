@@ -1,5 +1,4 @@
 import {
-  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -18,13 +17,11 @@ import {
   CircleAlert,
   Clipboard,
   Ellipsis,
-  GitFork,
+  Globe,
   KeyRound,
   Mail,
   Pencil,
   MessageCircle,
-  CalendarDays,
-  MessageSquare,
   Monitor,
   ShieldCheck,
   Plus,
@@ -67,7 +64,7 @@ import {
   updatePasskey,
 } from "@/lib/api";
 import type { NotificationSettingsView, SettingsPageId } from "@/lib/app-routes";
-import { agentSkillPath, newAgentSkillPath } from "@/lib/app-routes";
+import { agentSkillPath, newAgentSkillPath, settingsPath } from "@/lib/app-routes";
 import type {
   APIKey,
   AccountSessionInfo,
@@ -92,7 +89,8 @@ import {
   type SettingsSelectOption,
 } from "./settings-primitives";
 
-import { CodeHostConnectionRows } from "./code-host-accounts";
+import { CodeHostConnectionRows, ConnectAction } from "./code-host-accounts";
+import { IntegrationBrandIcon } from "./integration-brand-icon";
 
 import "./personal-settings.css";
 import {
@@ -3587,35 +3585,25 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
       description: p(
         "Sync your message attribution, and receive notifications in Slack",
       ),
-      icon: <MessageCircle />,
-      oauth: true,
+      icon: <IntegrationBrandIcon provider="slack" size={16} />,
+      available: true,
     },
     {
       provider: "google-calendar",
       name: "Google Calendar",
-      description: p(
-        "Sync your calendar out-of-office status with Flow",
-      ),
-      icon: <CalendarDays />,
-      oauth: false,
+      description: p("Sync your calendar out-of-office status with Flow"),
+      icon: <IntegrationBrandIcon provider="google-calendar" size={16} />,
+      available: false,
     },
     {
-      provider: "microsoft-teams",
-      name: "Microsoft Teams",
-      description: p("Connect Teams for personal notifications and attribution"),
-      icon: <MessageSquare />,
-      oauth: false,
-    },
-    {
-      provider: "github-enterprise",
-      name: "GitHub Enterprise",
-      description: p(
-        "Reconnect GitHub Enterprise for personal code access",
-      ),
-      icon: <GitFork />,
-      oauth: false,
+      provider: "notion",
+      name: "Notion",
+      description: p("Preview issues, projects, and views within Notion"),
+      icon: <IntegrationBrandIcon provider="notion" size={16} />,
+      available: false,
     },
   ];
+  const github = integrations.get("github");
   return (
     <>
       <PersonalPageTitle
@@ -3626,88 +3614,105 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
         {p("Connected accounts")}
       </PersonalPageTitle>
       <div className="personal-connection-list">
-        {entries.map((item, index) => {
+        {entries.map((item) => {
           const connection = integrations.get(item.provider);
-          const canConnect = item.oauth;
           return (
-            <Fragment key={item.provider}>
-            <div className="settings-card">
+            <div className="settings-card" key={item.provider}>
               <PersonalRow
                 icon={item.icon}
                 title={<span data-i18n-ignore>{item.name}</span>}
                 description={item.description}
               >
-                {canConnect ? (
-                  <Action onClick={() => onNavigate("integrations")}>
-                    {p(connection?.status === 'connected' ? "Connected" : "Connect")}
-                  </Action>
-                ) : (
+                {!item.available ? (
                   <span className="personal-connection-soon">{p("Coming soon")}</span>
+                ) : connection?.status === "connected" ? (
+                  <Action onClick={() => onNavigate("integrations")}>{p("Connected")}</Action>
+                ) : (
+                  <ConnectAction onClick={() => onNavigate("integrations")} />
                 )}
               </PersonalRow>
             </div>
-            {index === 0 && (
-              <CodeHostConnectionRows
-                githubDescription="Review code in Flow and sync attribution of your git-related actions"
-              />
-            )}
-            </Fragment>
           );
         })}
+        <CodeHostConnectionRows
+          githubDescription="Review code in Flow and sync attribution of your git-related actions"
+          githubOrganization={github?.config?.organization || github?.name}
+        />
       </div>
-      <PersonalSection
-        title={p("Sign-in identities")}
-        description={p(
-          "Identity provider accounts connected to your Flow profile",
-        )}
-      >
-        {identities.map((item) => (
+      <div className="personal-connection-list personal-connection-links">
+        <NavLink
+          className="settings-card personal-connection-link"
+          to={`${settingsPath(data.workspace.urlKey, "agents")}#mcp-connectors`}
+        >
           <PersonalRow
-            key={item.id}
-            icon={<ShieldCheck />}
-            title={
-              <span data-i18n-ignore>{item.username || item.subject}</span>
-            }
-            description={
-              <span>
-                <span data-i18n-ignore>
-                  {item.provider.toUpperCase()} · {item.issuer}
-                </span>
-                {` · ${p("last used")} ${formatDate(item.lastLoginAt, { dateStyle: "medium" })}`}
-              </span>
-            }
+            icon={<Globe />}
+            title={p("MCP connectors")}
+            description={p("Manage connectors for Flow Agent in Agent personalization")}
           >
-            <Action
-              danger
-              onClick={() =>
-                void unlinkAccountIdentity(item.id)
-                  .then(() => fetchAccountIdentities().then(setIdentities))
-                  .catch((error) =>
-                    toast.error(
-                      error instanceof Error
-                        ? error.message
-                        : p("Could not unlink identity"),
-                    ),
-                  )
+            <ChevronRight className="personal-connection-link-chevron" aria-hidden="true" />
+          </PersonalRow>
+        </NavLink>
+      </div>
+      {identities.length > 0 && (
+        <PersonalSection
+          title={p("Sign-in identities")}
+          description={p(
+            "Identity provider accounts connected to your Flow profile",
+          )}
+        >
+          {identities.map((item) => (
+            <PersonalRow
+              key={item.id}
+              icon={<ShieldCheck />}
+              title={
+                <span data-i18n-ignore>{item.username || item.subject}</span>
+              }
+              description={
+                <span>
+                  <span data-i18n-ignore>
+                    {item.provider.toUpperCase()} · {item.issuer}
+                  </span>
+                  {` · ${p("last used")} ${formatDate(item.lastLoginAt, { dateStyle: "medium" })}`}
+                </span>
               }
             >
-              {p("Unlink")}
-            </Action>
-          </PersonalRow>
-        ))}
-        {!identities.length && (
-          <div className="personal-empty">
-            <ShieldCheck />
-            <h3>{p("No sign-in identities connected")}</h3>
-          </div>
-        )}
-      </PersonalSection>
+              <Action
+                danger
+                onClick={() =>
+                  void unlinkAccountIdentity(item.id)
+                    .then(() => fetchAccountIdentities().then(setIdentities))
+                    .catch((error) =>
+                      toast.error(
+                        error instanceof Error
+                          ? error.message
+                          : p("Could not unlink identity"),
+                      ),
+                    )
+                }
+              >
+                {p("Unlink")}
+              </Action>
+            </PersonalRow>
+          ))}
+        </PersonalSection>
+      )}
     </>
   );
 }
 
 function Agents({ data, values, setValue, onNavigate, p }: PersonalProps) {
   const [draft, setDraft] = useState(String(values.agentInstructions || ""));
+  const mcpAnchor = useRef<HTMLDivElement>(null);
+  const [mcpTargeted, setMcpTargeted] = useState(false);
+  // Connected accounts links here with #mcp-connectors: bring the section into
+  // view and outline it briefly.
+  useEffect(() => {
+    if (window.location.hash !== "#mcp-connectors") return;
+    mcpAnchor.current?.scrollIntoView?.({ block: "center" });
+    setMcpTargeted(true);
+    const timer = window.setTimeout(() => setMcpTargeted(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, []);
   const dirty = draft !== String(values.agentInstructions || "");
   return (
     <>
@@ -3771,6 +3776,7 @@ function Agents({ data, values, setValue, onNavigate, p }: PersonalProps) {
             </NavLink>
           </PersonalRow>
         </SettingsGroup>
+        <div id="mcp-connectors" ref={mcpAnchor} className={`personal-mcp-anchor${mcpTargeted ? " is-targeted" : ""}`}>
         {data.workspaceSettings?.mcpConnectorsEnabled ? (
           <ApplicationPolicySettings admin={false} />
         ) : (
@@ -3787,6 +3793,7 @@ function Agents({ data, values, setValue, onNavigate, p }: PersonalProps) {
             </PersonalRow>
           </SettingsGroup>
         )}
+        </div>
       </PersonalSection>
     </>
   );

@@ -7,3 +7,16 @@
 .code-host-token a{color:var(--theme-text-secondary);text-decoration:underline}
 .code-host-token button{align-self:flex-end}
 .code-host-token .code-host-error{color:var(--semantic-danger)}
+.code-host-connect-arrow{width:14px;height:14px;margin-left:-2px}
+.code-host-status{gap:6px}
+.code-host-status-dot{width:6px;height:6px;border-radius:50%;background:var(--semantic-success)}
+.code-host-status.reconnect .code-host-status-dot{background:var(--project-health-at-risk)}
+.code-host-status-chevron{width:12px;height:12px;margin-left:-1px;opacity:.8}
+.code-host-account-card{display:flex;flex-direction:column}
+.code-host-account-header{display:flex;align-items:center;gap:12px;min-height:32px;margin:0 16px;padding:16px 0 15.5px;border-bottom:.5px solid var(--theme-border)}
+.code-host-account-header>strong{font-size:13px;font-weight:500;line-height:16px;color:var(--theme-text-primary)}
+.code-host-account-login{color:var(--theme-text-secondary)}
+.code-host-account-row{display:flex;align-items:center;gap:12px;padding:16px}
+.code-host-account-row>.settings-row-copy{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px}
+.code-host-account-row>.settings-row-copy>strong{font-size:13px;font-weight:500;line-height:16px;color:var(--theme-text-primary)}
+.code-host-account-row>.settings-row-copy>span{font-size:12px;line-height:15px;color:var(--theme-text-secondary)}

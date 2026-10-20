@@ -44,4 +44,8 @@ export const codeHostAccountsZhCN: Record<string, string> = {
   "Opened by the workspace integration ({login})": "由工作区集成创建（{login}）",
   "Link your GitHub account to push as yourself": "关联你的 GitHub 账号，以你本人的身份推送",
   "Link your GitLab account to push as yourself": "关联你的 GitLab 账号，以你本人的身份推送",
+  "{name} account options": "{name} 账户选项",
+  "Disconnect personal {name} account?": "断开个人 {name} 账户？",
+  "Review merge requests in Flow and sync attribution of your git-related actions": "在 Flow 中评审合并请求并同步 Git 相关操作的归属",
+  "Manage connectors for Flow Agent in Agent personalization": "在 Agent 个性化中管理 Flow Agent 的连接器",
 };
