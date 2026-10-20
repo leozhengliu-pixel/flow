@@ -17,7 +17,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"flow/api/internal/codehost"
@@ -58,9 +57,10 @@ const (
 	// they expire.
 	codeHostTokenRefreshMargin = 5 * time.Minute
 	// codeHostSandboxTokenMaxLifetime: only tokens that expire within this
-	// window may be served to a coding sandbox (GitHub App user tokens: 8h,
-	// GitLab OAuth: 2h). Personal access tokens and non-expiring OAuth tokens
-	// stay server side.
+	// window are used for a coding session's pushes (through Flow's git
+	// relay, never in the sandbox; GitHub App user tokens: 8h, GitLab OAuth:
+	// 2h). Personal access tokens and non-expiring OAuth tokens are only used
+	// for Flow's own API calls.
 	codeHostSandboxTokenMaxLifetime = 9 * time.Hour
 )
 
@@ -1051,9 +1051,24 @@ func (s *server) deleteGitLabMemberOAuthApplication(w http.ResponseWriter, r *ht
 
 // ---------------------------------------------------------------- using links
 
-// codeHostRefreshLocks serializes refreshes per account: GitHub and GitLab
-// rotate the refresh token on use.
-var codeHostRefreshLocks sync.Map
+// Refresh coordination across API replicas. GitHub and GitLab rotate the
+// refresh token on use: two replicas refreshing the same account at once
+// would each spend the same refresh token, and the loser's rejected refresh
+// would force the member to reconnect. A refresh therefore first takes the
+// account row's refresh lease (store.ClaimCodeHostAccountRefresh, a
+// compare-and-swap the database serializes). The replica that wins refreshes
+// and stores the new tokens before releasing; the others poll the stored
+// tokens and return the fresh ones instead of refreshing again. A lease left
+// by a crashed replica expires after codeHostRefreshLease.
+var (
+	codeHostRefreshLease     = 45 * time.Second
+	codeHostRefreshWait      = 30 * time.Second
+	codeHostRefreshPollEvery = 150 * time.Millisecond
+)
+
+func codeHostTokensFresh(tokens codeHostAccountTokens) bool {
+	return tokens.ExpiresAt.IsZero() || time.Until(tokens.ExpiresAt) > codeHostTokenRefreshMargin
+}
 
 // memberHostTokens returns the account's tokens, refreshed when they expire
 // soon. A revoked or expired grant marks the account "reconnect" and returns
@@ -1066,18 +1081,56 @@ func (s *server) memberHostTokens(ctx context.Context, account domain.CodeHostAc
 	if err != nil {
 		return tokens, err
 	}
-	if tokens.ExpiresAt.IsZero() || time.Until(tokens.ExpiresAt) > codeHostTokenRefreshMargin {
+	if codeHostTokensFresh(tokens) {
 		return tokens, nil
 	}
 	if tokens.RefreshToken == "" {
 		s.markCodeHostAccountReconnect(ctx, account, "The token expired. Reconnect the account.")
 		return codeHostAccountTokens{}, codehost.ErrUserNotLinked
 	}
-	lock, _ := codeHostRefreshLocks.LoadOrStore(account.ID, &sync.Mutex{})
-	lock.(*sync.Mutex).Lock()
-	defer lock.(*sync.Mutex).Unlock()
-	if current, err := s.readCodeHostTokens(ctx, account.ID); err == nil && time.Until(current.ExpiresAt) > codeHostTokenRefreshMargin {
-		return current, nil // refreshed while we waited
+	owner, err := codeHostRandomToken(18)
+	if err != nil {
+		return codeHostAccountTokens{}, err
+	}
+	deadline := time.Now().Add(codeHostRefreshWait)
+	for {
+		claimed, err := s.store.ClaimCodeHostAccountRefresh(ctx, account.ID, owner, codeHostRefreshLease)
+		if err != nil {
+			return codeHostAccountTokens{}, fmt.Errorf("%w: refresh lease: %v", codehost.ErrTransient, err)
+		}
+		if claimed {
+			break
+		}
+		// Another replica (or request) is refreshing: wait for its tokens.
+		if !time.Now().Before(deadline) {
+			return codeHostAccountTokens{}, fmt.Errorf("%w: the account's token refresh is still in progress", codehost.ErrTransient)
+		}
+		select {
+		case <-ctx.Done():
+			return codeHostAccountTokens{}, ctx.Err()
+		case <-time.After(codeHostRefreshPollEvery):
+		}
+		if current, err := s.readCodeHostTokens(ctx, account.ID); err != nil {
+			return codeHostAccountTokens{}, err
+		} else if codeHostTokensFresh(current) {
+			return current, nil
+		}
+	}
+	defer func() {
+		if err := s.store.ReleaseCodeHostAccountRefresh(context.WithoutCancel(ctx), account.ID, owner); err != nil {
+			log.Printf("code host account %s: release refresh lease: %v", account.ID, err)
+		}
+	}()
+	// Re-read under the lease: another replica may have refreshed (and so
+	// spent the refresh token read above) between that read and the claim.
+	if current, err := s.store.CodeHostAccount(ctx, account.UserID, account.ID); err != nil || current.Status != domain.CodeHostAccountActive {
+		return codeHostAccountTokens{}, codehost.ErrUserNotLinked // unlinked or marked reconnect meanwhile
+	}
+	if tokens, err = s.readCodeHostTokens(ctx, account.ID); err != nil {
+		return tokens, err
+	}
+	if codeHostTokensFresh(tokens) {
+		return tokens, nil
 	}
 	refreshed, err := s.refreshMemberHostTokens(ctx, account, tokens)
 	if err != nil {

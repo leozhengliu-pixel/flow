@@ -194,6 +194,7 @@ func (s *server) runCoding(ctx context.Context) {
 func (s *server) registerCodingRoutes(mux *http.ServeMux) {
 	s.registerCodingSessionRoutes(mux)
 	s.registerCodingRuntimeRoutes(mux)
+	s.registerCodingGitRelayRoutes(mux)
 	s.registerCodingEnvironmentRoutes(mux)
 	s.registerCodingLLMProxyRoutes(mux)
 	s.registerGitHubAppRoutes(mux)

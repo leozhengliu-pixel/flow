@@ -32602,6 +32602,74 @@
         "x-flow-source": "coding_runtime_api.go"
       }
     },
+    "/internal/coding-runtime/git/{path...}": {
+      "get": {
+        "operationId": "get_internal_coding_runtime_git_path___",
+        "tags": [
+          "internal"
+        ],
+        "summary": "GET /internal/coding-runtime/git/{path...}",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "path...",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "coding_git_relay.go"
+      },
+      "post": {
+        "operationId": "post_internal_coding_runtime_git_path___",
+        "tags": [
+          "internal"
+        ],
+        "summary": "POST /internal/coding-runtime/git/{path...}",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "path...",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "coding_git_relay.go"
+      }
+    },
     "/internal/coding-runtime/harness-state": {
       "get": {
         "operationId": "get_internal_coding_runtime_harness_state",

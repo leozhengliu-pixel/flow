@@ -110,13 +110,13 @@ export async function prepareRepository(deps: SetupDeps, options: { detach?: boo
   const { bootstrap, git, log } = deps
   if (bootstrap.restored && (await git.isRepo())) {
     log.line(`$ git fetch origin (restored workspace)`)
-    await git.configureCredentials()
+    await git.configureCredentials(bootstrap.repo.pushUrl)
     await git.fetch()
   } else {
     await mkdir(dirname(deps.paths.repo), { recursive: true })
     log.line(`$ git clone ${bootstrap.repo.fullName || bootstrap.repo.cloneUrl}`)
     await git.clone(bootstrap.repo.cloneUrl, (line) => log.line(line))
-    await git.configureCredentials()
+    await git.configureCredentials(bootstrap.repo.pushUrl)
     deps.emit(deps.events.action({ action: 'Cloned repo', parameter: bootstrap.repo.fullName || bootstrap.repo.cloneUrl }))
   }
   if (options.detach) await git.git(['checkout', '--detach', git.baseRevision(bootstrap.repo)])

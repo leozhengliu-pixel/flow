@@ -75,6 +75,12 @@ type SessionStore interface {
 	BindWarmSandbox(ctx context.Context, size, region, sessionID string) (sandbox.Record, error)
 	AuthenticateSandboxToken(ctx context.Context, token string) (SandboxGrant, error)
 	RevokeSandboxTokens(ctx context.Context, sandboxID string) error
+	// RegisterGitRelayPlaceholder stores a placeholder derived from a live
+	// sandbox token, bound to its sandbox and expiring and revoked with it;
+	// AuthenticateGitRelayPlaceholder resolves one (git_relay.go). Sandbox
+	// token checks never accept a placeholder.
+	RegisterGitRelayPlaceholder(ctx context.Context, token, placeholder string) error
+	AuthenticateGitRelayPlaceholder(ctx context.Context, placeholder string) (SandboxGrant, error)
 
 	AddCodingCommits(ctx context.Context, sessionID string, commits []domain.CodingCommit) error
 }

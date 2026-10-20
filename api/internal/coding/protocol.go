@@ -50,10 +50,14 @@ type BootstrapResponse struct {
 
 // BootstrapRepo is the repository to work on.
 type BootstrapRepo struct {
-	CodeHost   string `json:"codeHost"`
-	HostName   string `json:"hostName"`
-	FullName   string `json:"fullName"`
-	CloneURL   string `json:"cloneUrl"`
+	CodeHost string `json:"codeHost"`
+	HostName string `json:"hostName"`
+	FullName string `json:"fullName"`
+	CloneURL string `json:"cloneUrl"`
+	// PushURL, when set, is origin's push URL: Flow's git relay for a
+	// session that pushes as its creator (git_relay.go). The runner sets it
+	// with `git remote set-url --push origin`; fetches keep using CloneURL.
+	PushURL    string `json:"pushUrl,omitempty"`
 	BaseRef    string `json:"baseRef"`
 	BaseSHA    string `json:"baseSha,omitempty"`
 	BranchName string `json:"branchName"`

@@ -5,7 +5,10 @@ import type { CredentialRequest, CredentialResponse } from '../protocol.js'
 // (gitcredentials(7)). For `get` we ask Flow for a short-lived token
 // (POST /credentials {purpose:"git"}); `store` and `erase` are no-ops because
 // nothing is persisted in the sandbox. git asks again for every operation,
-// so an expired GitHub installation token is refreshed transparently.
+// so an expired GitHub installation token is refreshed transparently. For
+// Flow's git relay URL (origin's push URL when the session pushes as its
+// creator) Flow answers with an opaque placeholder; the relay adds the
+// member's token server side, so it never reaches the sandbox.
 
 export type CredentialAction = 'get' | 'store' | 'erase'
 

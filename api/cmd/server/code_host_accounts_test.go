@@ -41,8 +41,12 @@ type memberGitLab struct {
 	readOnly  map[string]bool     // tokens refused (403) on every write
 	expiresIn int64
 	issued    int
-	posts     []string // "path auth-token"
-	seen      []string
+	// refreshDelay holds refresh responses back, so concurrent refreshes
+	// overlap at the host.
+	refreshDelay time.Duration
+	refreshes    int      // refresh_token grants answered (accepted or not)
+	posts        []string // "path auth-token"
+	seen         []string
 }
 
 const testWorkspaceToken = "glpat-workspace"
@@ -65,6 +69,9 @@ func (f *memberGitLab) token(r *http.Request) (string, bool) {
 }
 
 func (f *memberGitLab) serve(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/oauth/token" && f.refreshDelay > 0 {
+		time.Sleep(f.refreshDelay)
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.seen = append(f.seen, r.Method+" "+r.URL.Path+" "+r.Header.Get("PRIVATE-TOKEN"))
@@ -84,6 +91,7 @@ func (f *memberGitLab) serve(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case "refresh_token":
+			f.refreshes++
 			if !f.refresh[r.Form.Get("refresh_token")] {
 				w.WriteHeader(http.StatusBadRequest)
 				_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
@@ -160,19 +168,21 @@ type memberAccountsFixture struct {
 	gitlab  *memberGitLab
 	viewer  domain.User
 	conn    string
+	dbPath  string
 }
 
 func newMemberAccountsFixture(t *testing.T) *memberAccountsFixture {
 	t.Helper()
 	enableConnectorSecrets(t)
 	t.Setenv("FLOW_APP_URL", "https://flow.example")
-	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	dbPath := filepath.Join(t.TempDir(), "flow.db")
+	repository, err := store.OpenSQLiteTestFixture(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { repository.Close() })
 	s := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true}
-	f := &memberAccountsFixture{t: t, repo: repository, server: s, handler: newHandler(s), gitlab: newMemberGitLab(t), viewer: repository.Account().Viewer}
+	f := &memberAccountsFixture{t: t, repo: repository, server: s, handler: newHandler(s), gitlab: newMemberGitLab(t), viewer: repository.Account().Viewer, dbPath: dbPath}
 	connection := requestJSON[domain.IntegrationConnection](t, f.handler, http.MethodPut, "/api/integrations/gitlab?workspace=test-workspace", map[string]any{"name": "GitLab", "config": map[string]string{"apiToken": testWorkspaceToken, "host": f.gitlab.URL}}, http.StatusOK)
 	f.conn = connection.ID
 	return f
@@ -500,8 +510,8 @@ func TestLinkedAccountsAttributeHostActivity(t *testing.T) {
 }
 
 // The GitHub App's user-to-server flow: PKCE through the App's setup URL,
-// an 8-hour token with refresh that coding sessions may serve to the git
-// helper of the member's own sessions only.
+// an 8-hour token with refresh that Flow's git relay may push with for the
+// member's own sessions only.
 func TestGitHubAppMemberLink(t *testing.T) {
 	enableConnectorSecrets(t)
 	t.Setenv("FLOW_APP_URL", "https://flow.example")

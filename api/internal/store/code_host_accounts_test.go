@@ -59,3 +59,41 @@ func TestCodeHostAccountsAreScopedToTheirUserAndSealTokens(t *testing.T) {
 		t.Fatal("unlink must delete the sealed tokens")
 	}
 }
+
+// The refresh lease is a compare-and-swap on the account row: one owner at a
+// time, re-entrant for its owner, released only by its owner, and taken over
+// once it expires.
+func TestCodeHostAccountRefreshLease(t *testing.T) {
+	repository, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	ctx := t.Context()
+	if _, err := repository.UpsertCodeHostAccount(ctx, domain.CodeHostAccount{ID: "cha_l", UserID: "alice", CodeHost: "github", HostName: "github.com", BaseURL: "https://github.com", ExternalUserID: "1", Login: "alice", AuthType: domain.CodeHostAuthGitHubApp}); err != nil {
+		t.Fatal(err)
+	}
+	claim := func(owner string, lease time.Duration) bool {
+		t.Helper()
+		ok, err := repository.ClaimCodeHostAccountRefresh(ctx, "cha_l", owner, lease)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ok
+	}
+	if !claim("a", time.Minute) || claim("b", time.Minute) || !claim("a", time.Minute) {
+		t.Fatal("the lease must be exclusive and re-entrant for its owner")
+	}
+	if err := repository.ReleaseCodeHostAccountRefresh(ctx, "cha_l", "b"); err != nil || claim("b", time.Minute) {
+		t.Fatalf("only the owner releases the lease: %v", err)
+	}
+	if err := repository.ReleaseCodeHostAccountRefresh(ctx, "cha_l", "a"); err != nil || !claim("b", -time.Second) {
+		t.Fatalf("a released lease can be claimed: %v", err)
+	}
+	if !claim("c", time.Minute) {
+		t.Fatal("an expired lease must be taken over")
+	}
+	if ok, err := repository.ClaimCodeHostAccountRefresh(ctx, "cha_missing", "c", time.Minute); ok || err != nil {
+		t.Fatalf("missing account: %v %v", ok, err)
+	}
+}

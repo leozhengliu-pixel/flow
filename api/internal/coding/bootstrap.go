@@ -51,6 +51,9 @@ func (s *Service) buildBootstrap(ctx context.Context, grant SandboxGrant, sessio
 		Turn:        turn,
 		Limits:      BootstrapLimits{TurnTimeoutSeconds: int(s.cfg.Timeouts.Turn.Seconds()), HeartbeatSeconds: int(HeartbeatInterval.Seconds()), SetupTimeoutSeconds: int(s.cfg.Timeouts.Setup.Seconds()), StopGraceSeconds: int(s.cfg.Timeouts.StopGrace.Seconds())},
 	}
+	if s.usesGitRelay(session) {
+		response.Repo.PushURL = GitRelayURL(runtime, session.HostName, session.Repository)
+	}
 	browser := ""
 	if s.cfg.BrowserEnabled && s.BrowserGuidance != nil {
 		browser = s.BrowserGuidance()

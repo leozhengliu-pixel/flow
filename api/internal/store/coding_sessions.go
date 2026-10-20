@@ -634,8 +634,56 @@ func (s *SQLiteStore) SetCodingSandboxDesired(ctx context.Context, id string, de
 
 // Warm sandboxes are bound by BindWarmCodingSandbox (coding_sandboxes.go).
 
+// GitRelayPlaceholderPrefix marks a sandbox's git relay placeholder: the
+// opaque password the sandbox's git credential helper gets for pushes
+// through Flow's git relay (coding.GitRelay). A placeholder row lives in
+// coding_sandbox_tokens next to its sandbox token (same sandbox, session,
+// expiry and revocation) but only AuthenticateGitRelayPlaceholder accepts
+// it: it is never a runtime, LLM proxy or egress proxy credential.
+const GitRelayPlaceholderPrefix = "fgr_"
+
+// RegisterGitRelayPlaceholder stores the placeholder derived from a live
+// sandbox token (idempotent), bound to that token's sandbox and session and
+// expiring with it.
+func (s *SQLiteStore) RegisterGitRelayPlaceholder(ctx context.Context, token, placeholder string) error {
+	if !strings.HasPrefix(token, sandboxTokenPrefix) || !strings.HasPrefix(placeholder, GitRelayPlaceholderPrefix) || len(placeholder) > 512 {
+		return ErrCodingTokenInvalid
+	}
+	var sandboxID, sessionID, workspace string
+	var expires int64
+	err := s.db.QueryRowContext(ctx, `SELECT sandbox_id,session_id,workspace_key,expires_at FROM coding_sandbox_tokens WHERE token_hash=? AND revoked_at=0 AND expires_at>?`, tokenHash(token), millis(time.Now())).
+		Scan(&sandboxID, &sessionID, &workspace, &expires)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrCodingTokenInvalid
+	}
+	if err != nil {
+		return err
+	}
+	// setup_secrets_used=1: a placeholder can never fetch setup secrets.
+	_, err = s.db.ExecContext(ctx, `INSERT INTO coding_sandbox_tokens(token_hash,sandbox_id,session_id,workspace_key,setup_secrets_used,expires_at,created_at) VALUES(?,?,?,?,1,?,?) ON CONFLICT(token_hash) DO NOTHING`,
+		tokenHash(placeholder), sandboxID, sessionID, workspace, expires, millis(time.Now()))
+	return err
+}
+
+// AuthenticateGitRelayPlaceholder resolves a live git relay placeholder
+// (not expired, not revoked) to its sandbox's grant.
+func (s *SQLiteStore) AuthenticateGitRelayPlaceholder(ctx context.Context, placeholder string) (CodingSandboxGrant, error) {
+	if !strings.HasPrefix(placeholder, GitRelayPlaceholderPrefix) || len(placeholder) > 512 {
+		return CodingSandboxGrant{}, ErrCodingTokenInvalid
+	}
+	return s.authenticateSandboxCredential(ctx, placeholder)
+}
+
 // AuthenticateSandboxToken resolves a live token (not expired, not revoked).
+// Git relay placeholders are refused.
 func (s *SQLiteStore) AuthenticateSandboxToken(ctx context.Context, token string) (CodingSandboxGrant, error) {
+	if strings.HasPrefix(token, GitRelayPlaceholderPrefix) {
+		return CodingSandboxGrant{}, ErrCodingTokenInvalid
+	}
+	return s.authenticateSandboxCredential(ctx, token)
+}
+
+func (s *SQLiteStore) authenticateSandboxCredential(ctx context.Context, token string) (CodingSandboxGrant, error) {
 	var grant CodingSandboxGrant
 	var tokenSession, tokenWorkspace string
 	var sandboxSession, sandboxWorkspace, snapshot, kind, sessionEnv, snapshotEnv sql.NullString

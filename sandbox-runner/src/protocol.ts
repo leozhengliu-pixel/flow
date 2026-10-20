@@ -43,6 +43,8 @@ export interface BootstrapRepo {
   hostName: string
   fullName: string
   cloneUrl: string
+  /** origin's push URL: Flow's git relay for a session that pushes as its creator. */
+  pushUrl?: string
   baseRef: string
   baseSha?: string
   branchName: string

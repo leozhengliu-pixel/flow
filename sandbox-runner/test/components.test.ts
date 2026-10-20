@@ -245,6 +245,45 @@ test('Git against a real repository: clone, branch, signed-off identity, commit,
   }
 })
 
+test('Git: a member session pushes through the relay push URL and fetches from origin', async () => {
+  const tmp = tempDir('git-relay')
+  try {
+    const origin = join(tmp.path, 'origin.git')
+    const relay = join(tmp.path, 'relay.git')
+    const seed = join(tmp.path, 'seed')
+    const env = { PATH: '/usr/bin:/bin', HOME: tmp.path, GIT_CONFIG_NOSYSTEM: '1' }
+    sh('git', ['init', '-q', '--bare', '-b', 'main', origin], { env })
+    sh('git', ['init', '-q', '--bare', '-b', 'main', relay], { env })
+    sh('git', ['init', '-q', '-b', 'main', seed], { env })
+    writeFileSync(join(seed, 'README.md'), '# app\n')
+    sh('git', ['-c', 'user.name=s', '-c', 'user.email=s@x', 'add', '.'], { cwd: seed, env })
+    sh('git', ['-c', 'user.name=s', '-c', 'user.email=s@x', 'commit', '-q', '-m', 'init'], { cwd: seed, env })
+    sh('git', ['push', '-q', origin, 'main'], { cwd: seed, env })
+    const repoDir = join(tmp.path, 'workspace', 'repo')
+    mkdirSync(join(tmp.path, 'workspace'))
+    const git = new Git({ repoDir, env, credentialHelper: 'h', signProgram: 's' })
+    await git.clone(origin)
+    await git.configureCredentials(relay)
+    assert.equal(sh('git', ['remote', 'get-url', 'origin'], { cwd: repoDir, env }).trim(), origin)
+    assert.equal(sh('git', ['remote', 'get-url', '--push', 'origin'], { cwd: repoDir, env }).trim(), relay)
+    await git.configureCredentials(relay) // idempotent
+    const repo = { ...bootstrap().repo, cloneUrl: origin, pushUrl: relay }
+    await git.checkoutSessionBranch(repo)
+    await git.configureIdentity(bootstrap().git)
+    writeFileSync(join(repoDir, 'hello.txt'), 'hello\n')
+    const sha = await git.commitAll('Add hello\n', bootstrap().git)
+    await git.push('flow/x')
+    assert.equal(sh('git', ['rev-parse', 'refs/heads/flow/x'], { cwd: relay, env }).trim(), sha)
+    assert.throws(() => sh('git', ['rev-parse', '--verify', '--quiet', 'refs/heads/flow/x'], { cwd: origin, env }))
+    await git.fetch()
+    // Without a push URL (e.g. a restored workspace of a bot session) origin is used again.
+    await git.configureCredentials()
+    assert.equal(sh('git', ['remote', 'get-url', '--push', 'origin'], { cwd: repoDir, env }).trim(), origin)
+  } finally {
+    tmp.cleanup()
+  }
+})
+
 test('setup: mise files stay in $HOME, tools toml, installers only for ignored outputs', async () => {
   const cfg = config('/r')
   assert.equal(resolveHomeFile('~/.npmrc', cfg.paths), '/r/home/.npmrc')
