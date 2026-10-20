@@ -51,7 +51,7 @@ Contents
 | Debug terminal (temporary sandbox, 20 min), import .env, archive, Configure/Fix with agent | §18 |
 | Snapshots with status, logs, refresh and cancel | §10 |
 | AgentSession states and fields, sandboxes[], PRs, commitsByTurnActivityId | `domain.CodingSession` anchored to an `AgentTask` (§4, §6) |
-| Activities thought/action/response/elicitation/error/prompt; signals stop/continue/auth/select | Reuses the AgentTask/AgentActivity protocol, so `issue-agent-tasks.tsx` renders it unchanged (§16) |
+| Activities thought/action/response/elicitation/error/prompt; signals stop/continue/auth/select | Reuses the AgentTask/AgentActivity protocol (§16). In issue activity a delegated session is a session card ("Flow started by …", the status row "Setting up owner/repo…" / "Finished" with the PR number, and Copy link, Unsubscribe from chat and Archive); its conversation shows in the session view |
 | Error reason codes | `domain.CodingErrorCode`. Linear's codes are kept verbatim; Flow adds sandbox codes (§4.4) |
 | Triggers: delegate, chat or comment, Loops "Start a coding session", PR follow-ups, "fix this PR" | §15 |
 | Billing: AI credits, sandbox runtime by time, spend limits | LLM proxy metering plus runtime metering, enforced against the existing `SpendLimitSettings` (§20) |

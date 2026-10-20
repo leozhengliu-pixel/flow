@@ -4,6 +4,7 @@ import { approveCodingSession, promptCodingSession, restartCodingSession, stopCo
 import { AGENT_TASK_ACTIVITY_EVENT, getApplicationTask, type ApplicationActivity } from '@/lib/application-agents'
 import { AgentAnswerText } from '@/components/agent/agent-answer'
 import { AgentMessageAttachments } from '@/components/agent/agent-message-attachments'
+import { activityTimeLabel } from '@/components/activity/issue-activity-model'
 import { AgentCopyGlyph } from '@/components/ui/agent-glyph'
 import { AppLink } from '@/components/ui/app-link'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -17,7 +18,7 @@ import { CodingComposer, type ComposerRequest } from './coding-session-composer'
 import { CODING_SESSION_EVENT, notifyCodingSessionChanged, type CodingSessionEventDetail } from './coding-session-events'
 import { CODING_PHASE_LABELS, codingModelLabel, codingSessionCapabilities } from './coding-session-model'
 import { CodingPlanPill } from './coding-session-plan'
-import { CodingCommitBadge, CodingPullRequestCard, CodingUncommittedChanges } from './coding-session-pr-card'
+import { CodingCommitBadge, CodingPullRequestCard, CodingUncommittedChanges, type CodingCommitStats } from './coding-session-pr-card'
 import { CodingActionRow, CodingActivityGroup, CodingAuthLine, CodingErrorCard, CodingLatestButton, CodingReasoning, CodingShimmer, CodingStaleCard, CodingTimeMarker } from './coding-session-stream'
 import { buildStreamItems, buildStreamTurns, commitsByTurn, isCodingSessionGenerating, pendingElicitation, stopRequested, type StreamItem } from './coding-session-stream-model'
 import './coding-session-stream.css'
@@ -95,6 +96,15 @@ function useStreamFollow(scroller: RefObject<HTMLElement | null>, sentinel: RefO
   return { away, jump: () => sentinel.current?.scrollIntoView?.({ behavior: 'smooth', block: 'end' }) }
 }
 
+/** A prompt's time: "just now", "3min ago", with the full date as the tooltip. */
+function PromptTime({ at }: { at: string }) {
+  const { locale } = useI18n()
+  const date = new Date(at)
+  if (!at || Number.isNaN(date.getTime())) return null
+  const full = date.toLocaleString(locale, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' })
+  return <time dateTime={at} title={full} aria-label={full}>{activityTimeLabel(at, Date.now(), locale).replace(/m(?= ago$)/, 'min')}</time>
+}
+
 const AGENT_TYPES = new Set(['thought', 'action', 'response', 'elicitation', 'error'])
 
 type ConversationProps = {
@@ -147,6 +157,12 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
   const lastResponse = lastResponseIndex >= 0 ? items[lastResponseIndex] : undefined
   const agentActive = activities.some(activity => AGENT_TYPES.has(activity.type))
   const allCommits = Object.values(session.commitsByTurnActivityId ?? {}).flat()
+  // The commit chip shows the session's file and line totals while one turn holds every commit (they are that turn's
+  // changes); with commits in several turns the per-turn totals are unknown and the chip shows the SHA only.
+  const diffs = session.diffs ?? []
+  const commitStats: CodingCommitStats | undefined = diffs.length && commits.size === 1
+    ? { files: diffs.length, additions: diffs.reduce((sum, diff) => sum + diff.additions, 0), deletions: diffs.reduce((sum, diff) => sum + diff.deletions, 0) }
+    : undefined
   const showUncommitted = Boolean(onOpenChanges && session.diffs?.length && !generating && !pr && !allCommits.length)
   const stale = session.state === 'stale' && !session.stoppedBy && loaded && !agentActive
   const missingError = session.state === 'error' && loaded && !lastErrorId
@@ -155,9 +171,10 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
   const issue = session.issueId ? data.issues.find(candidate => candidate.id === session.issueId) : undefined
   const model = codingModelLabel(session)
 
+  // Prompts carry the author's name (the viewer's own too) and a relative time with the full date on hover.
   const userName = (id: string) => {
-    const user = data.users.find(candidate => candidate.id === id)
-    return id === data.viewer.id ? t('You') : user?.displayName || user?.name || t('User')
+    const user = data.users.find(candidate => candidate.id === id) ?? (id === data.viewer.id ? data.viewer : undefined)
+    return user?.displayName || user?.name || t('User')
   }
   const renderItem = (item: StreamItem, key: string): ReactNode => {
     switch (item.kind) {
@@ -167,7 +184,7 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
       case 'thinking': return <div key={key} className="cs-action" data-loading role="status"><div className="cs-action-header"><span className="cs-action-label"><CodingShimmer>{session.state === 'pending' && CODING_PHASE_LABELS[session.phase] ? `${t(CODING_PHASE_LABELS[session.phase])}…` : t('Thinking…')}</CodingShimmer></span></div></div>
       case 'text': return <Fragment key={key}>
         <AgentAnswerText className="coding-session-markdown cs-text" data={data} markdown={item.activity.body}/>
-        {item === lastResponse && pr && <CodingPullRequestCard session={session} pr={pr} reviews={data.reviews ?? []} workspace={data.workspace.urlKey}/>}
+        {item === lastResponse && pr && !allCommits.length && <CodingPullRequestCard session={session} pr={pr} reviews={data.reviews ?? []} workspace={data.workspace.urlKey}/>}
       </Fragment>
       case 'auth': return <CodingAuthLine key={key} activity={item.activity} data={data}/>
       case 'error': return <CodingErrorCard key={key} activity={item.activity} session={session} data={data} busy={busy} onRetry={retry} retry={session.state === 'error' && can.restart && item.activity.id === lastErrorId}/>
@@ -180,13 +197,17 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
   }
   const links = (session.externalUrls ?? []).filter(link => /^https?:\/\//i.test(link.url))
   const startedByAgent = turns[0] && !turns[0].prompt
+  // "Flow routed this session to <model>" follows the first prompt (above the work it routed).
+  const routed = session.modelSelection === 'auto' && session.model
+    ? <p className="cs-start-line"><span><strong>{t('Flow')}</strong> {t('routed this session to')} <strong data-i18n-ignore>{model.model.replace(/ \(Auto\)$/, '')}</strong></span></p>
+    : null
   return <>
     <div ref={scroller} className="coding-agent-stream cs-stream" role="group" aria-label={t('Session stream')}>
       {startedByAgent && <p className="cs-start-line">
         <UserAvatar className="coding-session-prompt-avatar" name={creator?.displayName || creator?.name || t('Flow')} avatarUrl={creator?.avatarUrl}/>
         <span><strong data-i18n-ignore>{creator ? creator.displayName || creator.name : t('Flow')}</strong> {issue ? <>{t('started the session from')} <AppLink href={issuePath(data.workspace.urlKey, issue)} data-i18n-ignore>{issue.identifier}</AppLink></> : t('started the session')}</span>
       </p>}
-      {session.modelSelection === 'auto' && session.model && <p className="cs-start-line"><span><strong>{t('Flow')}</strong> {t('routed this session to')} <strong data-i18n-ignore>{model.model.replace(/ \(Auto\)$/, '')}</strong></span></p>}
+      {routed && !turns[0]?.prompt && routed}
       {turns.map((turn, index) => {
         const last = index === turns.length - 1
         const turnCommits = commits.get(turn.id)
@@ -194,19 +215,20 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
           {turn.showTime && turn.at && <CodingTimeMarker at={turn.at}/>}
           {turn.prompt && <div className="cs-prompt-row">
             <div className="coding-session-prompt">
-              <header><UserAvatar className="coding-session-prompt-avatar" name={userName(turn.prompt.activity.actorId)} avatarUrl={data.users.find(user => user.id === turn.prompt!.activity.actorId)?.avatarUrl}/><strong data-i18n-ignore>{userName(turn.prompt.activity.actorId)}</strong></header>
+              <header><UserAvatar className="coding-session-prompt-avatar" name={userName(turn.prompt.activity.actorId)} avatarUrl={data.users.find(user => user.id === turn.prompt!.activity.actorId)?.avatarUrl}/><strong data-i18n-ignore>{userName(turn.prompt.activity.actorId)}</strong><PromptTime at={turn.prompt.activity.createdAt}/></header>
               {turn.prompt.stop ? <p><em>{t('Stop requested')}</em></p> : turn.prompt.activity.body && <p data-i18n-ignore>{turn.prompt.activity.body}</p>}
               <AgentMessageAttachments attachments={turn.prompt.activity.metadata?.attachments}/>
             </div>
           </div>}
+          {index === 0 && turn.prompt && routed}
           {turn.items.length > 0 && <div className="cs-turn-items">
             {turn.items.map((item, position) => renderItem(item, item.kind === 'thinking' ? 'thinking' : item.kind === 'group' ? item.id : `${item.activity.id}-${position}`))}
-            {turnCommits?.length ? <CodingCommitBadge commits={turnCommits} pr={pr ?? (session.repository ? { codeHost: session.codeHost ?? 'github', hostName: session.hostName ?? '', repository: session.repository } : undefined)}/> : null}
+            {turnCommits?.length ? <CodingCommitBadge commits={turnCommits} stats={commitStats} onOpenChanges={onOpenChanges} pr={pr ?? (session.repository ? { codeHost: session.codeHost ?? 'github', hostName: session.hostName ?? '', repository: session.repository } : undefined)}/> : null}
           </div>}
         </section>
       })}
       {session.phase === 'awaitingApproval' && <p className="cs-text cs-approval-text">{t('This session comes from an external source. A member must approve it before the agent starts.')}</p>}
-      {pr && !lastResponse && !generating && <CodingPullRequestCard session={session} pr={pr} reviews={data.reviews ?? []} workspace={data.workspace.urlKey}/>}
+      {pr && !lastResponse && !generating && !allCommits.length && <CodingPullRequestCard session={session} pr={pr} reviews={data.reviews ?? []} workspace={data.workspace.urlKey}/>}
       {showUncommitted && onOpenChanges && <CodingUncommittedChanges session={session} onOpen={onOpenChanges}/>}
       {missingError && <CodingErrorCard session={session} data={data} busy={busy} onRetry={retry} retry={can.restart}/>}
       {stale && <CodingStaleCard busy={busy} onRetry={retry}/>}

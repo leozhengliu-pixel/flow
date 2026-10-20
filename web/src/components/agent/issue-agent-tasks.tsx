@@ -20,7 +20,7 @@ import { useI18n } from '@/i18n/i18n'
 import './application-agents.css'
 import './issue-agent-thread.css'
 // coding sessions (track G)
-import { AgentTaskCodingSession } from '@/components/coding-sessions/agent-task-coding-session'
+import { AgentTaskCodingSession, CodingSessionActivityCard } from '@/components/coding-sessions/agent-task-coding-session'
 
 type Resource = Pick<Issue, 'id' | 'delegate' | 'agentSessionId'>
 type ResourceType = 'issue' | 'document' | 'project'
@@ -103,7 +103,12 @@ export function IssueAgentTasks({ issue, data, resourceType = 'issue', commentId
   const tasks = byCreation(directory.tasks.filter(task => taskId ? task.id === taskId : threadIds ? Boolean(task.commentId && threadIds.includes(task.commentId)) : !standalone || !task.commentId))
   if (!tasks.length) return directory.error && !threadIds ? <p role="alert">{directory.error}</p> : null
   return <div className={`issue-agent-threads${threadIds ? ' is-comment-thread' : ' is-standalone'}${variant === 'document' ? ' is-document-card' : ''}`} aria-label={t('Agent sessions')}>
-    {tasks.map(task => <AgentTaskThread key={task.id} task={task} data={data} onChanged={directory.refresh} onUpload={onUpload ?? directory.onUpload} threadControls={threadControls} teamId={teamId} variant={variant}/>) }
+    {tasks.map(task => task.codingSessionId && !task.commentId
+      // A delegated coding session is a session card (status row into the session view), not a message thread.
+      ? <section key={task.id} className="issue-agent-thread is-coding-session" id={`agent-session-${task.id}`} data-agent-task-id={task.id}>
+        <CodingSessionActivityCard task={task} data={data} agentName={data.users.find(user => user.id === task.appUserId)?.displayName || t('Flow')}/>
+      </section>
+      : <AgentTaskThread key={task.id} task={task} data={data} onChanged={directory.refresh} onUpload={onUpload ?? directory.onUpload} threadControls={threadControls} teamId={teamId} variant={variant}/>) }
   </div>
 }
 

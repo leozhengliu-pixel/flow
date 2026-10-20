@@ -241,6 +241,29 @@ describe('issue activity', () => {
     const row = await screen.findByRole('link', { name: /Show session/ })
     expect(row).toHaveTextContent('Thinking…')
     expect(row).toHaveAttribute('href', '/workspace/diff/cs-1')
+    // The delegated session is a session card: "<Agent> started by <member>", no message thread or reply box.
+    const card = screen.getByRole('article', { name: 'Coding session' })
+    expect(card).toHaveTextContent(/Flow\s*started by\s*Viewer/)
+    expect(screen.queryByRole('textbox', { name: 'Reply to agent' })).toBeNull()
+    expect(getApplicationTask).not.toHaveBeenCalled()
+  })
+
+  it('shows the setup line, then "Finished" with the PR chip, and archives from the card options', async () => {
+    const user = userEvent.setup()
+    vi.mocked(listApplicationTasks).mockResolvedValue([{ ...task, codingSessionId: 'cs-1' }])
+    vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession({ state: 'pending', phase: 'provisioning', repository: 'acme/app' }))
+    const view = render(<MemoryRouter><I18nProvider><IssueAgentTasks issue={makeIssue({ delegate: flowAgent })} data={baseData()}/></I18nProvider></MemoryRouter>)
+    expect(await screen.findByRole('link', { name: /Show session/ })).toHaveTextContent('Setting up acme/app…')
+    view.unmount()
+    const pr = { sessionId: 'cs-1', codeHost: 'github' as const, hostName: 'github.com', repository: 'acme/app', number: 1, url: 'https://github.com/acme/app/pull/1', title: 'Add farewell', state: 'open' as const, draft: true, headBranch: 'flow/x', baseBranch: 'main', createdAt: '', updatedAt: '' }
+    vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession({ state: 'complete', phase: 'done', repository: 'acme/app', summary: 'Added farewell()', diffs: [{ path: 'a.js', additions: 4, deletions: 0, status: 'modified' }], latestPullRequest: pr }))
+    render(<MemoryRouter><I18nProvider><IssueAgentTasks issue={makeIssue({ delegate: flowAgent })} data={baseData()}/></I18nProvider></MemoryRouter>)
+    const row = await screen.findByRole('link', { name: /Show session/ })
+    await waitFor(() => expect(row).toHaveTextContent('FinishedAdded farewell()#1'))
+    await user.click(screen.getByRole('button', { name: 'Agent chat options' }))
+    expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy link', 'Unsubscribe from chat', 'Archive'])
+    await user.click(screen.getByRole('menuitem', { name: 'Archive' }))
+    await waitFor(() => expect(screen.queryByRole('article', { name: 'Coding session' })).toBeNull())
   })
 
   it('matches the session by anchor when the task has no session id', async () => {

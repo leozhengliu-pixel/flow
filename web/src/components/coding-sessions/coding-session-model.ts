@@ -288,27 +288,30 @@ export function codingSessionIdsFromMessage(message: Pick<AgentMessage, 'parts'>
 }
 
 export type CodingStatusTone = 'working' | 'input' | 'done' | 'error' | 'stopped'
-export type CodingStatusLine = { tone: CodingStatusTone; label: string; detail?: string; live: boolean; /** Replaces "{count}" in the translated label. */ count?: number; /** The detail is app copy (translated), not the session's own text. */ translateDetail?: boolean }
+export type CodingStatusLine = { tone: CodingStatusTone; label: string; detail?: string; live: boolean; /** Replaces "{count}" in the translated label. */ count?: number; /** Replaces "{repo}" in the translated label. */ repo?: string; /** The detail is app copy (translated), not the session's own text. */ translateDetail?: boolean }
 
 /**
  * The one-line status of a session, as the reference app's session rows show it: the label is translated by the caller,
- * the detail is the session's own text. `issue` is the issue activity row ("Changed 3 files" when complete), `chat` the
- * agent chat card ("Completed").
+ * the detail is the session's own text. `issue` is the issue activity row ("Setting up owner/repo…" while it starts,
+ * "Finished" once a PR is open, "Changed 3 files" for unpublished changes), `chat` the agent chat card ("Completed").
  */
-export function codingStatusLine(session: Pick<CodingSession, 'state' | 'phase' | 'summary' | 'errorCode' | 'diffs' | 'stoppedBy' | 'startedAt'>, errorTitle?: string, surface: 'issue' | 'chat' = 'issue'): CodingStatusLine {
+export function codingStatusLine(session: Pick<CodingSession, 'state' | 'phase' | 'summary' | 'errorCode' | 'diffs' | 'stoppedBy' | 'startedAt' | 'repository' | 'latestPullRequest' | 'pullRequests'>, errorTitle?: string, surface: 'issue' | 'chat' = 'issue'): CodingStatusLine {
   switch (session.state) {
     case 'error': return { tone: 'error', label: 'Error', detail: errorTitle, live: false }
     case 'complete': {
       if (surface === 'chat') return { tone: 'done', label: 'Completed', detail: session.summary, live: false }
       const files = session.diffs?.length ?? 0
-      return files ? { tone: 'done', label: files === 1 ? 'Changed {count} file' : 'Changed {count} files', count: files, detail: session.summary, live: false } : { tone: 'done', label: 'Finished', detail: session.summary, live: false }
+      const published = Boolean(session.latestPullRequest ?? session.pullRequests?.length)
+      return files && !published ? { tone: 'done', label: files === 1 ? 'Changed {count} file' : 'Changed {count} files', count: files, detail: session.summary, live: false } : { tone: 'done', label: 'Finished', detail: session.summary, live: false }
     }
     case 'stale':
       if (session.stoppedBy) return { tone: 'stopped', label: 'Stopped', live: false }
       return session.startedAt ? { tone: 'error', label: 'Stopped responding', live: false } : { tone: 'error', label: 'Agent didn’t start', detail: 'The request may not have reached the agent', translateDetail: true, live: false }
     case 'stopping': return { tone: 'working', label: 'Stop requested', live: true }
     case 'awaitingInput': return { tone: 'input', label: session.phase === 'awaitingApproval' ? 'Waiting for approval' : 'Needs input', live: false }
-    case 'pending': return { tone: 'working', label: 'Starting coding session…', live: true }
+    case 'pending': return session.repository && session.phase !== 'queued'
+      ? { tone: 'working', label: 'Setting up {repo}…', repo: session.repository, live: true }
+      : { tone: 'working', label: 'Starting coding session…', live: true }
     default: return { tone: 'working', label: surface === 'chat' ? 'Working for' : 'Thinking…', live: true }
   }
 }

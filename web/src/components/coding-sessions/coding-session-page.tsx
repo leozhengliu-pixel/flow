@@ -1,13 +1,15 @@
-import { Menu } from 'lucide-react'
+import { GitBranch, GitPullRequest, Link2, Menu } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { AppLink } from '@/components/ui/app-link'
 import { useI18n } from '@/i18n/i18n'
-import { agentPath, codingSessionPath, issuePath } from '@/lib/app-routes'
+import { agentPath, codingSessionPath, issuePath, reviewPath } from '@/lib/app-routes'
+import { toast } from '@/lib/toast'
 import type { BootstrapData } from '@/types/flow'
 import { CodingDiffGlyph } from './coding-diff-glyph'
-import { codingSessionTitle } from './coding-session-page-model'
+import { pullRequestNumberLabel, reviewForPullRequest } from './coding-session-model'
+import { codingSessionTitle, codingSessionURL } from './coding-session-page-model'
 import { CodingSessionPanel } from './coding-session-panel'
 import { useCodingSession, useDismissedCodingSessions } from './use-coding-sessions'
 import './coding-sessions.css'
@@ -28,6 +30,15 @@ export function CodingSessionPage({ data, sessionId, onNavigate, onOpenSidebar }
   const showAgent = new URLSearchParams(location.search).get('showAgent') !== 'false'
   const issue = session?.issueId ? data.issues.find(item => item.id === session.issueId) : undefined
   const leave = () => onNavigate(issue ? issuePath(workspace, issue) : agentPath(workspace))
+  // The header's change count, the PR reference (Flow's review when synced, else the code host) and "Copy URL".
+  const additions = (session?.diffs ?? []).reduce((sum, diff) => sum + diff.additions, 0)
+  const pr = session?.latestPullRequest ?? session?.pullRequests?.at(-1)
+  const review = pr ? reviewForPullRequest(pr, data.reviews ?? []) : undefined
+  const prHref = review ? reviewPath(workspace, review) : pr && /^https?:\/\//i.test(pr.url) ? pr.url : undefined
+  const copyURL = async () => {
+    try { await navigator.clipboard.writeText(codingSessionURL(workspace, sessionId)); toast.success(t('Copied session URL')) }
+    catch { toast.error(t('Could not copy')) }
+  }
   return <main className="main-panel coding-session-page" aria-label={t('Coding session')}>
     <header className="coding-session-page-bar">
       <button type="button" className="coding-session-page-menu" aria-label={t('Open sidebar')} data-sidebar-trigger onClick={onOpenSidebar}><Menu size={16}/></button>
@@ -36,9 +47,15 @@ export function CodingSessionPage({ data, sessionId, onNavigate, onOpenSidebar }
         <span className="coding-session-dialog-separator" aria-hidden="true">›</span>
       </>}
       <span className="coding-session-page-title">
-        <CodingDiffGlyph/>
+        {pr ? <GitPullRequest size={14} aria-hidden="true" className="coding-diff-glyph"/> : <CodingDiffGlyph/>}
         <h2 data-i18n-ignore={Boolean(session) || undefined}>{session ? codingSessionTitle(session, data) : t('Coding session')}</h2>
+        {additions > 0 && <span className="coding-session-page-additions" aria-label={t('{count} lines added').replace('{count}', String(additions))}>+{additions}</span>}
       </span>
+      {pr && <a className="coding-session-page-pr" href={prHref} target={review ? undefined : '_blank'} rel={review ? undefined : 'noreferrer'} title={pr.title || undefined} onClick={event => {
+        if (!review || !prHref || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return
+        event.preventDefault(); onNavigate(prHref)
+      }}><GitBranch size={14} aria-hidden="true"/><span data-i18n-ignore>{`${pr.repository.split('/').at(-1)}${pullRequestNumberLabel(pr)}`}</span></a>}
+      <button type="button" className="coding-session-page-icon" aria-label={t('Copy URL')} title={t('Copy URL')} onClick={() => void copyURL()}><Link2 size={14}/></button>
       <button type="button" className="coding-session-agent-toggle" aria-pressed={showAgent} aria-label={t(showAgent ? 'Hide agent' : 'Show agent')} title={t(showAgent ? 'Hide agent' : 'Show agent')}
         onClick={() => onNavigate(codingSessionPath(workspace, sessionId, { showAgent: !showAgent }), { replace: true })}><AgentCursorGlyph size={14}/></button>
     </header>

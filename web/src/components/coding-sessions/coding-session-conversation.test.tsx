@@ -79,6 +79,19 @@ describe('work groups', () => {
   })
 })
 
+describe('turn header', () => {
+  it('names the prompt’s author with its time and puts the routing note after the first prompt', async () => {
+    stream(activity('prompt', 'Work on ENG-1'), activity('response', 'Done.'))
+    renderConversation(makeSession({ state: 'complete', phase: 'done', modelSelection: 'auto', model: 'claude-sonnet-4-5' }))
+    await screen.findByText('Done.')
+    const prompt = screen.getByText('Work on ENG-1').closest('.coding-session-prompt')!
+    expect(within(prompt as HTMLElement).getByText('Viewer')).toBeVisible()
+    expect(prompt.querySelector('time')).toHaveAttribute('title')
+    const routed = screen.getByText(/routed this session to/).closest('p')!
+    expect(prompt.compareDocumentPosition(routed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
+
 describe('plan, PR card and commits', () => {
   it('shows the plan pill with the current step and expands into the list', async () => {
     const user = userEvent.setup()
@@ -103,14 +116,30 @@ describe('plan, PR card and commits', () => {
     expect(screen.queryByRole('button', { name: /Expand steps/ })).toBeNull()
   })
 
-  it('puts the PR card after the last response and the commit badge after its turn', async () => {
+  it('ends the turn that pushed with the diff chip (files, SHA, +/−) instead of a PR card', async () => {
     const prompt = activity('prompt', 'Ship it')
     stream(prompt, activity('response', 'Opened a PR.'))
-    renderConversation(makeSession({
+    const onOpenChanges = vi.fn()
+    render(<I18nProvider><CodingSessionConversation onOpenChanges={onOpenChanges} data={makeBootstrap({ reviews: [] })} onChange={vi.fn()} session={makeSession({
       state: 'complete', phase: 'done', repository: 'acme/app', codeHost: 'github',
       diffs: [{ path: 'a.ts', additions: 10, deletions: 2, status: 'modified' }, { path: 'b.ts', additions: 1, deletions: 0, status: 'added' }],
       latestPullRequest: { sessionId: 'cs-1', codeHost: 'github', hostName: 'github.com', repository: 'acme/app', number: 7, url: 'https://github.com/acme/app/pull/7', title: 'Fix login', state: 'open', draft: false, headBranch: 'flow/fix-login', baseBranch: 'main', createdAt: '', updatedAt: '' },
       commitsByTurnActivityId: { [prompt.id]: [{ sha: 'abcdef1234567', branch: 'flow/fix-login', signed: false, createdAt: '', message: 'Fix login' }] },
+    })}/></I18nProvider>)
+    await screen.findByText('Opened a PR.')
+    expect(screen.queryByRole('article', { name: 'Pull request' })).toBeNull()
+    const chip = screen.getByRole('button', { name: '2 files abcdef1 +11 -2' })
+    expect(chip).toHaveTextContent('2 filesabcdef1+11-2')
+    await userEvent.setup().click(chip)
+    expect(onOpenChanges).toHaveBeenCalled()
+  })
+
+  it('puts the PR card after the last response when no commit is recorded', async () => {
+    stream(activity('prompt', 'Ship it'), activity('response', 'Opened a PR.'))
+    renderConversation(makeSession({
+      state: 'complete', phase: 'done', repository: 'acme/app', codeHost: 'github',
+      diffs: [{ path: 'a.ts', additions: 10, deletions: 2, status: 'modified' }, { path: 'b.ts', additions: 1, deletions: 0, status: 'added' }],
+      latestPullRequest: { sessionId: 'cs-1', codeHost: 'github', hostName: 'github.com', repository: 'acme/app', number: 7, url: 'https://github.com/acme/app/pull/7', title: 'Fix login', state: 'open', draft: false, headBranch: 'flow/fix-login', baseBranch: 'main', createdAt: '', updatedAt: '' },
     }))
     await screen.findByText('Opened a PR.')
     const card = screen.getByRole('article', { name: 'Pull request' })
@@ -121,7 +150,6 @@ describe('plan, PR card and commits', () => {
     expect(within(card).getByRole('button', { name: 'main' })).toBeVisible()
     expect(within(card).getByRole('button', { name: 'flow/fix-login' })).toBeVisible()
     expect(within(card).queryByText(/Checks/)).toBeNull()
-    expect(screen.getByRole('button', { name: /abcdef1/ })).toHaveTextContent('abcdef1')
     expect(screen.queryByRole('button', { name: /Create pull request/ })).toBeNull()
   })
 
