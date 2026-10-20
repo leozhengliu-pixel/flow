@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"flow/api/internal/domain"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -21,6 +22,15 @@ type connectorTool struct {
 	RemoteName string
 }
 type connectorToolsKey struct{}
+
+const (
+	// maxConnectorTools bounds the connector tools one agent run is offered.
+	maxConnectorTools = 128
+	// connectorCallTimeout bounds one connector tool call.
+	connectorCallTimeout = 6 * time.Minute
+	// maxConnectorResultBytes bounds one connector response (a tools/list page or a tool result).
+	maxConnectorResultBytes = 1 << 20
+)
 
 func connectorAllowed(settings domain.WorkspaceSettings, item applicationPolicy, userID string) bool {
 	return settings.MCPConnectorsEnabled && !settings.HIPAACompliance && item.Kind == "mcp" && item.Status != "rejected" &&
@@ -154,13 +164,39 @@ func (c *remoteMCPClient) rpc(ctx context.Context, method string, params any, _ 
 		return nil, err
 	}
 	encoded, err := json.Marshal(result)
-	if len(encoded) > 1<<20 {
+	if len(encoded) > maxConnectorResultBytes {
 		return nil, fmt.Errorf("MCP response exceeds limit")
 	}
 	return encoded, err
 }
 
-func (s *server) discoverConnectorTools(ctx context.Context, data domain.Bootstrap) ([]connectorTool, error) {
+// withConnectorTools offers the MCP connector tools the acting user may use to the agent turns run with the
+// returned context. Chat, loops and delegated threads share it: connectors are discovered once per run as
+// request.UserID (the chat user, the loop owner, or the person who delegated or mentioned the agent), with that
+// user's credentials, so a connector removed or revoked since the last run is no longer offered, and
+// executeConnectorTool re-checks access on every call. On a discovery failure the context carries no tools.
+func (s *server) withConnectorTools(ctx context.Context, data domain.Bootstrap, request connectorRequestContext) (context.Context, []connectorTool, error) {
+	ctx = context.WithValue(ctx, connectorContextKey{}, request)
+	tools, err := s.discoverConnectorTools(ctx, data, request.UserID)
+	if err != nil {
+		return ctx, nil, err
+	}
+	return context.WithValue(ctx, connectorToolsKey{}, tools), tools, nil
+}
+
+// offeredConnectorTool is the connector tool behind an external_ tool name offered in ctx.
+func offeredConnectorTool(ctx context.Context, name string) (connectorTool, bool) {
+	items, _ := ctx.Value(connectorToolsKey{}).([]connectorTool)
+	for _, tool := range items {
+		if tool.Definition.Name == name {
+			return tool, true
+		}
+	}
+	return connectorTool{}, false
+}
+
+// discoverConnectorTools lists the tools of the MCP connectors userID may use (at most maxConnectorTools).
+func (s *server) discoverConnectorTools(ctx context.Context, data domain.Bootstrap, userID string) ([]connectorTool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	items := []connectorTool{}
@@ -168,7 +204,7 @@ func (s *server) discoverConnectorTools(ctx context.Context, data domain.Bootstr
 		return items, nil
 	}
 	for _, policy := range applicationPolicies(&data) {
-		if !connectorAllowed(data.WorkspaceSettings, policy, data.Viewer.ID) {
+		if !connectorAllowed(data.WorkspaceSettings, policy, userID) {
 			continue
 		}
 		client, err := s.openConnector(ctx, policy)
@@ -204,8 +240,8 @@ func (s *server) discoverConnectorTools(ctx context.Context, data domain.Bootstr
 				}
 				hash := sha256.Sum256([]byte(policy.ID + "\x00" + tool.Name))
 				items = append(items, connectorTool{Definition: agentProviderTool{Name: fmt.Sprintf("external_%x", hash[:16]), Description: truncateSettingsText(policy.Name+": "+tool.Description, 2000), Parameters: tool.InputSchema, Access: "write"}, Policy: policy, RemoteName: tool.Name})
-				if len(items) > 128 {
-					return nil, fmt.Errorf("too many MCP tools (maximum 128)")
+				if len(items) > maxConnectorTools {
+					return nil, fmt.Errorf("too many MCP tools (maximum %d)", maxConnectorTools)
 				}
 			}
 			if result.NextCursor == "" {
@@ -221,53 +257,80 @@ func (s *server) discoverConnectorTools(ctx context.Context, data domain.Bootstr
 }
 
 func (s *server) executeConnectorTool(r *http.Request, data domain.Bootstrap, call domain.AgentToolCall) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Minute)
+	ctx, cancel := context.WithTimeout(r.Context(), connectorCallTimeout)
 	defer cancel()
 	r = r.WithContext(ctx)
 	if !s.agent.WriteTools {
 		return nil, fmt.Errorf("External MCP tools require write-tool access and approval")
 	}
-	items, _ := r.Context().Value(connectorToolsKey{}).([]connectorTool)
-	for _, tool := range items {
-		if tool.Definition.Name == call.Name {
-			fresh, ok := s.store.WorkspaceMetadata(workspaceKey(r))
-			if !ok {
-				return nil, errNotFound
-			}
-			allowed := false
-			for _, policy := range applicationPolicies(&fresh) {
-				if policy.ID == tool.Policy.ID && policy.URL == tool.Policy.URL && connectorAllowed(fresh.WorkspaceSettings, policy, data.Viewer.ID) {
-					allowed = true
-					break
-				}
-			}
-			if !allowed {
-				return nil, fmt.Errorf("MCP connection access was revoked")
-			}
-			client, err := s.openConnector(r.Context(), tool.Policy)
-			if err != nil {
-				return nil, err
-			}
-			defer client.close()
-			var args map[string]any
-			if json.Unmarshal(call.Arguments, &args) != nil || args == nil {
-				return nil, fmt.Errorf("invalid MCP tool arguments")
-			}
-			result, err := client.rpc(r.Context(), "tools/call", map[string]any{"name": tool.RemoteName, "arguments": args}, false)
-			if err != nil {
-				return nil, err
-			}
-			var outcome struct {
-				IsError bool `json:"isError"`
-			}
-			if json.Unmarshal(result, &outcome) != nil {
-				return nil, fmt.Errorf("invalid MCP tool result")
-			}
-			if outcome.IsError {
-				return result, fmt.Errorf("MCP tool reported a failure")
-			}
-			return result, nil
+	tool, ok := offeredConnectorTool(r.Context(), call.Name)
+	if !ok {
+		// Tools are discovered per run: a held call resumed after its connector was removed or revoked is not offered.
+		return nil, fmt.Errorf("MCP tool is no longer available; its connection was removed or access was revoked")
+	}
+	fresh, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	if !ok {
+		return nil, errNotFound
+	}
+	allowed := false
+	for _, policy := range applicationPolicies(&fresh) {
+		if policy.ID == tool.Policy.ID && policy.URL == tool.Policy.URL && connectorAllowed(fresh.WorkspaceSettings, policy, data.Viewer.ID) {
+			allowed = true
+			break
 		}
 	}
-	return nil, fmt.Errorf("unknown MCP tool")
+	if !allowed {
+		return nil, fmt.Errorf("MCP connection access was revoked")
+	}
+	client, err := s.openConnector(r.Context(), tool.Policy)
+	if err != nil {
+		return nil, err
+	}
+	defer client.close()
+	var args map[string]any
+	if json.Unmarshal(call.Arguments, &args) != nil || args == nil {
+		return nil, fmt.Errorf("invalid MCP tool arguments")
+	}
+	result, err := client.rpc(r.Context(), "tools/call", map[string]any{"name": tool.RemoteName, "arguments": args}, false)
+	if err != nil {
+		return nil, err
+	}
+	var outcome struct {
+		IsError bool `json:"isError"`
+	}
+	if json.Unmarshal(result, &outcome) != nil {
+		return nil, fmt.Errorf("invalid MCP tool result")
+	}
+	if outcome.IsError {
+		return result, fmt.Errorf("MCP tool reported a failure")
+	}
+	return result, nil
+}
+
+// connectorResultText is a connector tool result's text content for the activity log, at most limit bytes.
+func connectorResultText(result []byte, limit int) string {
+	var parsed struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	text := string(result)
+	if json.Unmarshal(result, &parsed) == nil && len(parsed.Content) > 0 {
+		parts := []string{}
+		for _, item := range parsed.Content {
+			if item.Type == "text" && strings.TrimSpace(item.Text) != "" {
+				parts = append(parts, strings.TrimSpace(item.Text))
+			}
+		}
+		text = strings.Join(parts, "\n")
+	}
+	if len(text) > limit {
+		cut := limit
+		for cut > 0 && !utf8.RuneStart(text[cut]) {
+			cut--
+		}
+		text = text[:cut] + "…"
+	}
+	return text
 }

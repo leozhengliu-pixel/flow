@@ -20,7 +20,7 @@ func TestBuiltinDelegationPromptCodingSessions(t *testing.T) {
 		{false, "no access to code", "start_coding_session"},
 	}
 	for _, test := range tests {
-		prompt := builtinTaskPromptFor(task, data, test.canCode)
+		prompt := builtinTaskPromptFor(task, data, test.canCode, nil)
 		if !strings.Contains(prompt, test.want) || strings.Contains(prompt, test.avoid) {
 			t.Errorf("canCode=%v prompt:\n%s", test.canCode, prompt)
 		}

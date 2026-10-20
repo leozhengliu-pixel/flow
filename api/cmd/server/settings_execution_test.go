@@ -289,7 +289,7 @@ func TestMCPConnectorDiscoveryExecutionAndRevocation(t *testing.T) {
 				t.Fatal(err)
 			}
 			data, _ := repo.WorkspaceMetadata("test-workspace")
-			tools, err := s.discoverConnectorTools(t.Context(), data)
+			tools, err := s.discoverConnectorTools(t.Context(), data, data.Viewer.ID)
 			if err != nil || len(tools) != 1 {
 				t.Fatalf("discovery: %v, %v", tools, err)
 			}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -567,18 +568,21 @@ func appendBuiltinActivity(ctx context.Context, repo *store.SQLiteStore, task do
 }
 
 func (s *server) executeBuiltinApplication(r *http.Request, app domain.ApplicationInstallation, task domain.AgentTask, data domain.Bootstrap) {
-	appendWithTool := func(kind, body string, call *domain.AgentToolCall) error {
+	appendAgentActivity := func(activity domain.AgentActivity) error {
 		current, err := s.store.ApplicationByUser(r.Context(), task.AppUserID)
 		if err != nil || !current.Active || !slices.Contains(current.AccessTeamIDs(), task.TeamID) {
 			return store.ErrAuthForbidden
 		}
-		next, err := appendBuiltinActivity(r.Context(), s.store, task, domain.AgentActivity{ActorID: task.AppUserID, Type: kind, Body: body, ToolCall: call})
+		activity.ActorID = task.AppUserID
+		next, err := appendBuiltinActivity(r.Context(), s.store, task, activity)
 		if err == nil {
 			task = next
 		}
 		return err
 	}
-	appendActivity := func(kind, body string) error { return appendWithTool(kind, body, nil) }
+	appendActivity := func(kind, body string) error {
+		return appendAgentActivity(domain.AgentActivity{Type: kind, Body: body})
+	}
 	execute := func(call domain.AgentToolCall) ([]byte, error) {
 		current, err := s.store.ApplicationByUser(r.Context(), task.AppUserID)
 		if err != nil || !current.Active || !slices.Contains(current.AccessTeamIDs(), task.TeamID) {
@@ -591,6 +595,44 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 			return nil, err
 		}
 		return s.executeAgentTool(req, scoped, call)
+	}
+	// runTool records a tool step and runs it; the result is what the model reads. A connector (MCP) call is
+	// logged like an agent's action activity (action, parameter, result) so the thread's activity shows what the
+	// connector was asked and what it answered; false means the session can no longer be written.
+	runTool := func(call domain.AgentToolCall) (string, bool, bool) {
+		connector, external := offeredConnectorTool(r.Context(), call.Name)
+		if !external {
+			if err := appendActivity("action", call.Name); err != nil {
+				return "", false, false
+			}
+			result, err := execute(call)
+			if err != nil {
+				// The model reports what failed, so it needs the real reason.
+				return agentToolErrorContent(err), true, true
+			}
+			return string(result), false, true
+		}
+		parameter := connector.Policy.Name
+		if args := strings.TrimSpace(string(call.Arguments)); args != "" && args != "{}" {
+			parameter += " " + truncateSettingsText(args, 500)
+		}
+		metadata := map[string]any{"action": connector.RemoteName, "parameter": parameter, "connector": connector.Policy.Name}
+		if err := appendAgentActivity(domain.AgentActivity{Type: "action", Body: connector.RemoteName, Ephemeral: true, Metadata: maps.Clone(metadata)}); err != nil {
+			return "", false, false
+		}
+		result, err := execute(call)
+		content, logged := string(result), connectorResultText(result, 2000)
+		if err != nil {
+			content, logged = agentToolErrorContent(err), "Error: "+err.Error()
+			if detail := connectorResultText(result, 2000); detail != "" {
+				logged += "\n" + detail
+			}
+		}
+		metadata["result"] = logged
+		if appendAgentActivity(domain.AgentActivity{Type: "action", Body: connector.RemoteName, Metadata: metadata}) != nil {
+			return "", false, false
+		}
+		return content, err != nil, true
 	}
 	if !s.agent.Enabled {
 		_ = appendActivity("error", "Flow Agent is not configured.")
@@ -622,31 +664,42 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 	if agentWebAccess(data.WorkspaceSettings) {
 		r = r.WithContext(withAgentWebTools(r.Context()))
 	}
+	// Connector (MCP) tools as in chat, discovered for this run as the person who delegated or mentioned the agent
+	// (their personal connectors and credentials, and the workspace's shared ones). Calls wait for approval and
+	// re-check access when they run.
+	connectorFailure := ""
+	if metadata, ok := s.store.WorkspaceMetadata(task.WorkspaceKey); ok {
+		connectorCtx, _, err := s.withConnectorTools(r.Context(), metadata, connectorRequestContext{Workspace: task.WorkspaceKey, UserID: task.CreatorID})
+		r = r.WithContext(connectorCtx)
+		if err != nil {
+			connectorFailure = err.Error()
+		}
+	}
 	messages := s.builtinThreadMessages(r, task, data, data.Issues)
+	if connectorFailure != "" {
+		messages[0].Content += "\nThe workspace's connected MCP tools are unavailable in this session (" + truncateSettingsText(connectorFailure, 300) + "). If the request needs them, say so.\n"
+	}
 	latestPrompt := task.Prompt
 	if task.PendingTool != nil {
 		call := *task.PendingTool
 		held := agentApprovalBatchCalls(call)
 		results := make([]agentProviderMessage, 0, len(held))
 		if call.Status != "approved" {
-			_ = appendActivity("action", "Action rejected: "+agentHeldCallNames(held))
+			_ = appendActivity("action", "Action rejected: "+agentHeldCallNames(r.Context(), held))
 			for _, item := range held {
 				results = append(results, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: item.ID, Content: `{"error":"The user rejected this action; nothing was changed. Do not retry it unless they ask again."}`, IsError: true}})
 			}
 		} else {
-			if err := appendActivity("action", "Approved action: "+agentHeldCallNames(held)); err != nil {
+			if err := appendActivity("action", "Approved action: "+agentHeldCallNames(r.Context(), held)); err != nil {
 				return
 			}
 			for _, item := range held {
-				if err := appendActivity("action", item.Name); err != nil {
+				// Connectors were discovered for this run: one removed or revoked since the approval is refused.
+				content, failed, ok := runTool(item)
+				if !ok {
 					return
 				}
-				result, err := execute(item)
-				content := string(result)
-				if err != nil {
-					content = agentToolErrorContent(err)
-				}
-				results = append(results, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: item.ID, Content: content, IsError: err != nil}})
+				results = append(results, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: item.ID, Content: content, IsError: failed}})
 			}
 		}
 		messages = append(append(messages, agentProviderMessage{Role: "assistant", ToolCalls: held}), results...)
@@ -711,23 +764,18 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 			if slices.ContainsFunc(approval.Calls, func(item domain.AgentToolCall) bool { return item.ID == call.ID }) {
 				continue
 			}
-			if err := appendActivity("action", call.Name); err != nil {
+			content, failed, ok := runTool(call)
+			if !ok {
 				return
 			}
-			result, err := execute(call)
-			content := string(result)
-			if err != nil {
-				// The model reports what failed, so it needs the real reason.
-				content = agentToolErrorContent(err)
-			}
-			messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: content, IsError: err != nil}})
+			messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: content, IsError: failed}})
 		}
 		if len(approval.Calls) > 0 {
 			// One approval for everything held, as a readable preview with Approve / Reject options.
 			pendingCall := agentApprovalBatchCall(*approval)
 			body := strings.TrimSpace(strings.TrimSpace(turn.Text) + "\n\n" + agentApprovalPreview(*approval))
 			if approval.Kind == "connector" {
-				body = strings.TrimSpace(strings.TrimSpace(turn.Text) + "\n\nAllow " + agentHeldCallNames(approval.Calls) + "?")
+				body = strings.TrimSpace(strings.TrimSpace(turn.Text) + "\n\nAllow " + agentHeldCallNames(r.Context(), approval.Calls) + "?")
 			}
 			metadata := map[string]any{"options": []any{map[string]any{"label": "Approve", "value": agentApprovalApprove}, map[string]any{"label": "Reject", "value": agentApprovalReject}}}
 			if raw, err := json.Marshal(agentApprovalSummary(*approval)); err == nil {
@@ -754,7 +802,7 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 // thread so far. The worker runtime reads the same conversation from the run payload.
 func (s *server) builtinThreadMessages(r *http.Request, task domain.AgentTask, data domain.Bootstrap, contextIssues []domain.Issue) []agentProviderMessage {
 	issueTitle := agentIssueTitles(data.Issues)
-	messages := []agentProviderMessage{{Role: "system", Content: workspaceAgentSystemPrompt(data, contextIssues, nil, task.TeamID) + builtinTaskContext(task)}, {Role: "user", Content: agentModelUserText(s.builtinTaskPrompt(task, data), nil, issueTitle)}}
+	messages := []agentProviderMessage{{Role: "system", Content: workspaceAgentSystemPrompt(data, contextIssues, nil, task.TeamID) + builtinTaskContext(task)}, {Role: "user", Content: agentModelUserText(s.builtinTaskPrompt(r.Context(), task, data), nil, issueTitle)}}
 	if task.ResourceType == "document" && len(data.Documents) == 1 {
 		messages[1].Content += "\nDocument: " + documentDisplayTitle(data.Documents[0].Title) + "\n" + data.Documents[0].Content
 	}
@@ -790,6 +838,12 @@ func (s *server) builtinThreadHistory(r *http.Request, task domain.AgentTask, is
 				}
 			case activity.Type == "prompt" && body != "":
 				messages = append(messages, agentProviderMessage{Role: "user", Content: agentModelUserText(body, nil, issueTitle)})
+			case activity.Type == "action" && !activity.Ephemeral && activity.Metadata["connector"] != nil:
+				// Connector calls end a run on their approval: a later run keeps what earlier calls returned (as logged,
+				// at most 2 KB each) instead of calling the connector again.
+				parameter, _ := activity.Metadata["parameter"].(string)
+				result, _ := activity.Metadata["result"].(string)
+				messages = append(messages, agentProviderMessage{Role: "assistant", Content: "Earlier connector call " + activity.Body + " (" + parameter + ") returned:\n" + result})
 			}
 		}
 		if len(history) < 100 {
@@ -806,10 +860,15 @@ func agentToolErrorContent(err error) string {
 	return string(raw)
 }
 
-// agentHeldCallNames lists held calls' tool names for activity labels ("delete_issue, delete_issue").
-func agentHeldCallNames(calls []domain.AgentToolCall) string {
+// agentHeldCallNames lists held calls' tool names for activity labels ("delete_issue, delete_issue"); a connector
+// tool offered in ctx shows as its connector and tool ("Code search: search_code").
+func agentHeldCallNames(ctx context.Context, calls []domain.AgentToolCall) string {
 	names := make([]string, 0, len(calls))
 	for _, call := range calls {
+		if tool, ok := offeredConnectorTool(ctx, call.Name); ok {
+			names = append(names, tool.Policy.Name+": "+tool.RemoteName)
+			continue
+		}
 		names = append(names, call.Name)
 	}
 	return strings.Join(names, ", ")
@@ -895,16 +954,24 @@ func builtinTaskContext(task domain.AgentTask) string {
 
 // builtinTaskPrompt is builtinTaskPromptFor with whether this agent can
 // start coding sessions in the task's workspace.
-func (s *server) builtinTaskPrompt(task domain.AgentTask, data domain.Bootstrap) string {
+func (s *server) builtinTaskPrompt(ctx context.Context, task domain.AgentTask, data domain.Bootstrap) string {
 	canCode := s.agent.ToolsEnabled && s.agent.WriteTools && s.codingEnabled() && workspaceFeatureEnabled(data.WorkspaceSettings, coding.FeatureFlag)
-	return builtinTaskPromptFor(task, data, canCode)
+	connectors := []string{}
+	offered, _ := ctx.Value(connectorToolsKey{}).([]connectorTool)
+	for _, tool := range offered {
+		if !slices.Contains(connectors, tool.Policy.Name) {
+			connectors = append(connectors, tool.Policy.Name)
+		}
+	}
+	return builtinTaskPromptFor(task, data, canCode, connectors)
 }
 
 // builtinTaskPromptFor is the first user message of a built-in agent session:
 // the mention's comment, or — for a delegated issue — what delegation means
 // and what work to do. With canCode (coding sessions on and the
-// start_coding_session tool offered) code changes go to a coding session.
-func builtinTaskPromptFor(task domain.AgentTask, data domain.Bootstrap, canCode bool) string {
+// start_coding_session tool offered) code changes go to a coding session;
+// connectors names the MCP connectors whose tools the session is offered.
+func builtinTaskPromptFor(task domain.AgentTask, data domain.Bootstrap, canCode bool, connectors []string) string {
 	prompt := task.InitialPrompt
 	if prompt == "" {
 		prompt = task.Prompt
@@ -934,8 +1001,13 @@ func builtinTaskPromptFor(task domain.AgentTask, data domain.Bootstrap, canCode 
 	if canCode {
 		text.WriteString("If the issue asks for code changes (a fix, an implementation, tests or a pull request), call start_coding_session now with its issueId and a prompt " +
 			"that describes the change: a coding agent changes the code in a sandbox and opens a draft pull request. Do not write the code or a plan for it yourself.\n")
-	} else {
+	} else if len(connectors) == 0 {
 		text.WriteString("You have no access to code or repositories. If the issue needs code changes, say so in one sentence and do the parts you can do here.\n")
+	}
+	if len(connectors) > 0 {
+		fmt.Fprintf(&text, "You can use the tools of the connected MCP servers (%s). When the issue needs what they provide, such as searching or reading code, call them "+
+			"instead of guessing, and cite what you found: for code, the repository and branch, file paths and line numbers, and your reasoning. "+
+			"Each connector call waits for the person's approval, so make only the calls you need and answer as soon as the results are enough.\n", strings.Join(connectors, ", "))
 	}
 	text.WriteString("End with a short reply in the language of the issue: what you did and what is left. Refer to the issue by its identifier only; do not repeat its title.")
 	return text.String()
