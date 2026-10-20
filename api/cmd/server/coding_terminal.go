@@ -135,12 +135,19 @@ func (s *server) codingEnvironmentTerminal(w http.ResponseWriter, r *http.Reques
 	defer func() { _ = conn.Close(websocket.StatusNormalClosure, closeReason) }()
 
 	sandboxID := coding.NewResourceID(time.Now())
-	workspaceSource, restored := s.codingTerminalWorkspace(ctx, request.workspace, environment, sandboxID)
+	workspaceSource, snapshotID := s.codingTerminalWorkspace(ctx, request.workspace, environment, sandboxID)
+	restored := snapshotID != ""
+	// SnapshotID binds the sandbox record, and so its runtime token grant,
+	// to the snapshot the restore step downloads.
 	launch := coding.LaunchRequest{
-		ID: sandboxID, WorkspaceKey: request.workspace, Kind: sandbox.KindDebug, EnvironmentID: environment.ID, UserID: request.user.ID,
+		ID: sandboxID, WorkspaceKey: request.workspace, Kind: sandbox.KindDebug, SnapshotID: snapshotID, EnvironmentID: environment.ID, UserID: request.user.ID,
 		Size: environment.SandboxSize, Workspace: workspaceSource, Deadline: ttl, Env: map[string]string{sandbox.EnvMode: coding.ModeDebug},
 	}
-	socket.status(codingTerminalStatus{Type: "progress", Message: "Starting the terminal sandbox", SandboxID: sandboxID, Restored: &restored})
+	startMessage := "Starting the terminal sandbox"
+	if restored {
+		startMessage = "Starting the terminal sandbox from the latest snapshot"
+	}
+	socket.status(codingTerminalStatus{Type: "progress", Message: startMessage, SandboxID: sandboxID})
 	if err := launcher.Launch(ctx, launch); err != nil {
 		log.Printf("coding terminal %s: launch: %v", environment.ID, err)
 		socket.status(codingTerminalStatus{Type: "error", Message: "The terminal sandbox could not be started"})
@@ -201,13 +208,14 @@ func (s *server) codingEnvironmentTerminal(w http.ResponseWriter, r *http.Reques
 		}
 	}()
 
-	if err := s.waitForCodingTerminal(ctx, launcher, request.workspace, sandboxID, clientGone); err != nil {
+	if err := s.waitForCodingTerminal(ctx, launcher, request.workspace, sandboxID, restored, socket, clientGone); err != nil {
 		if ctx.Err() == nil {
 			socket.status(codingTerminalStatus{Type: "error", Message: err.Error()})
 		}
 		closeReason = "start failed"
 		return
 	}
+	socket.status(codingTerminalStatus{Type: "progress", Message: "The terminal sandbox is ready", SandboxID: sandboxID, Restored: &restored})
 	socket.status(codingTerminalStatus{Type: "ready", SandboxID: sandboxID, ExpiresAt: &expiresAt})
 
 	execDone := make(chan error, 1)
@@ -222,7 +230,15 @@ func (s *server) codingEnvironmentTerminal(w http.ResponseWriter, r *http.Reques
 		case <-prepare:
 			go s.runCodingTerminalPrepareScript(ctx, r, request, environment, sandboxID, socket)
 		case err := <-execDone:
-			if err != nil && ctx.Err() == nil {
+			// A shell killed because the sandbox itself stopped reports why
+			// the sandbox stopped, not the shell's exit code.
+			stopped := ""
+			if ctx.Err() == nil {
+				stopped = s.codingTerminalStopReason(ctx, launcher, request.workspace, sandboxID)
+			}
+			if stopped != "" {
+				socket.status(codingTerminalStatus{Type: "error", Message: stopped})
+			} else if err != nil && ctx.Err() == nil {
 				log.Printf("coding terminal %s: exec: %v", environment.ID, err)
 				socket.status(codingTerminalStatus{Type: "error", Message: "The shell stopped unexpectedly"})
 			} else if ctx.Err() == nil {
@@ -250,25 +266,33 @@ func (s *server) codingTerminalExpired(socket *codingTerminalSocket, reason *str
 	*reason = "terminal expired"
 }
 
-// codingTerminalWorkspace restores the newest ready snapshot when there is one.
-func (s *server) codingTerminalWorkspace(ctx context.Context, workspace string, environment domain.CodingEnvironment, sandboxID string) (sandbox.VolumeSource, bool) {
+// codingTerminalWorkspace restores the newest ready snapshot when there is
+// one. It returns the workspace source and the id of the snapshot it restores
+// ("" for a fresh clone); the launch binds the sandbox to that id, which is
+// what lets its token download the archive.
+func (s *server) codingTerminalWorkspace(ctx context.Context, workspace string, environment domain.CodingEnvironment, sandboxID string) (sandbox.VolumeSource, string) {
 	strategy := s.codingSnapshotStrategy()
 	if strategy == nil {
-		return sandbox.VolumeSource{}, false
+		return sandbox.VolumeSource{}, ""
 	}
 	snapshot, err := s.store.LatestUsableCodingSnapshot(ctx, workspace, environment.ID)
 	if err != nil {
-		return sandbox.VolumeSource{}, false
+		return sandbox.VolumeSource{}, ""
 	}
 	source, err := strategy.Restore(ctx, snapshot.StorageRef, sandboxID, workspace)
 	if err != nil {
 		log.Printf("coding terminal %s: restore snapshot %s: %v (using a fresh clone)", environment.ID, snapshot.ID, err)
-		return sandbox.VolumeSource{}, false
+		return sandbox.VolumeSource{}, ""
 	}
-	return source, true
+	return source, snapshot.ID
 }
 
-func (s *server) waitForCodingTerminal(ctx context.Context, launcher coding.SandboxLauncher, workspace, sandboxID string, clientGone <-chan struct{}) error {
+// waitForCodingTerminal waits until the sandbox runs and, when it restores a
+// snapshot, until the restore step has finished: providers without init
+// containers (docker, opensandbox) report the container as running while the
+// restore step still runs in it, and the runner writes
+// sandbox.RunnerReadyPath only once it starts after a successful restore.
+func (s *server) waitForCodingTerminal(ctx context.Context, launcher coding.SandboxLauncher, workspace, sandboxID string, restoring bool, socket *codingTerminalSocket, clientGone <-chan struct{}) error {
 	window := s.coding.config.Timeouts.Start
 	if window <= 0 {
 		window = codingTerminalStartWindow
@@ -276,17 +300,38 @@ func (s *server) waitForCodingTerminal(ctx context.Context, launcher coding.Sand
 	deadline := time.Now().Add(window)
 	ticker := time.NewTicker(codingTerminalPoll)
 	defer ticker.Stop()
+	running := false
 	for {
-		status, err := launcher.Observe(ctx, workspace, sandboxID)
-		if err == nil {
-			switch status.Phase {
-			case sandbox.PhaseRunning:
+		if !running {
+			status, err := launcher.Observe(ctx, workspace, sandboxID)
+			if err == nil {
+				switch status.Phase {
+				case sandbox.PhaseRunning:
+					running = true
+					if !restoring {
+						return nil
+					}
+					socket.status(codingTerminalStatus{Type: "progress", Message: "Restoring the snapshot", SandboxID: sandboxID})
+				case sandbox.PhaseFailed, sandbox.PhaseSucceeded:
+					return errors.New(s.codingTerminalFailure(ctx, sandboxID, status))
+				}
+			}
+		}
+		if running {
+			// The provider's own status: the record lags behind by an
+			// observe interval, and a failed restore stops the container.
+			status, err := s.coding.sandbox.Status(ctx, sandboxID)
+			if err == nil && status.Phase != sandbox.PhaseRunning && status.Phase != sandbox.PhaseStarting && status.Phase != sandbox.PhasePending {
+				return errors.New(s.codingTerminalFailure(ctx, sandboxID, status))
+			}
+			if err == nil && status.Phase == sandbox.PhaseRunning && s.codingTerminalRunnerReady(ctx, sandboxID) {
 				return nil
-			case sandbox.PhaseFailed, sandbox.PhaseSucceeded:
-				return fmt.Errorf("the terminal sandbox stopped (%s)", strings.TrimSpace(string(status.Reason)+" "+status.Message))
 			}
 		}
 		if time.Now().After(deadline) {
+			if running {
+				return errors.New("the terminal sandbox did not finish restoring the snapshot in time")
+			}
 			return errors.New("the terminal sandbox did not start in time")
 		}
 		select {
@@ -297,6 +342,95 @@ func (s *server) waitForCodingTerminal(ctx context.Context, launcher coding.Sand
 		case <-ticker.C:
 		}
 	}
+}
+
+// codingTerminalRunnerReady reports whether the runner wrote its ready marker.
+func (s *server) codingTerminalRunnerReady(ctx context.Context, sandboxID string) bool {
+	probeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	result, err := s.coding.sandbox.Exec(probeCtx, sandboxID, sandbox.ExecRequest{Command: []string{"test", "-e", sandbox.RunnerReadyPath}, Stdout: io.Discard, Stderr: io.Discard})
+	return err == nil && result.ExitCode == 0
+}
+
+// codingTerminalStopReason is why the sandbox stopped, or "" while it runs.
+func (s *server) codingTerminalStopReason(ctx context.Context, launcher coding.SandboxLauncher, workspace, sandboxID string) string {
+	status, err := s.coding.sandbox.Status(ctx, sandboxID)
+	if err != nil || status.Phase == sandbox.PhaseMissing {
+		if status, err = launcher.Observe(ctx, workspace, sandboxID); err != nil {
+			return ""
+		}
+	}
+	if status.Phase != sandbox.PhaseFailed {
+		return ""
+	}
+	return s.codingTerminalFailure(ctx, sandboxID, status)
+}
+
+// codingTerminalFailure describes a stopped sandbox for the client: the
+// runner's own restore error when the restore step failed (read from the
+// runner log, which never holds secrets), else the provider's reason.
+func (s *server) codingTerminalFailure(ctx context.Context, sandboxID string, status sandbox.SandboxStatus) string {
+	if reason := s.codingRunnerRestoreError(ctx, sandboxID); reason != "" {
+		return "Restoring the snapshot failed: " + reason
+	}
+	if status.Reason == sandbox.ReasonInitFailed {
+		return "Restoring the snapshot failed (" + strings.TrimSpace(status.Message) + ")"
+	}
+	detail := strings.TrimSpace(string(status.Reason) + " " + status.Message)
+	if detail == "" {
+		return "The terminal sandbox stopped"
+	}
+	return fmt.Sprintf("The terminal sandbox stopped (%s)", detail)
+}
+
+// codingRunnerRestoreError is the error of the runner's "restore failed" log
+// line, from the restore init container (Kubernetes) or the runner container
+// (docker and local run the restore step inline), or from the archived log.
+func (s *server) codingRunnerRestoreError(ctx context.Context, sandboxID string) string {
+	readCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	for _, container := range []string{"restore", ""} {
+		stream, err := s.coding.sandbox.Logs(readCtx, sandboxID, sandbox.LogOptions{Container: container, TailLines: 200})
+		if err != nil {
+			continue
+		}
+		reason := runnerRestoreError(io.LimitReader(stream, 1<<20))
+		_ = stream.Close()
+		if reason != "" {
+			return reason
+		}
+	}
+	if record, err := s.codingStore().CodingSandbox(readCtx, sandboxID); err == nil && record.LogsKey != "" && s.objectStore != nil {
+		if body, _, _, err := s.objectStore.Open(readCtx, record.LogsKey); err == nil {
+			defer body.Close()
+			return runnerRestoreError(io.LimitReader(body, 8<<20))
+		}
+	}
+	return ""
+}
+
+// runnerRestoreError finds the last {"msg":"restore failed","error":…} line
+// of a runner log (docker log frames may prefix each line with a header).
+func runnerRestoreError(log io.Reader) string {
+	data, _ := io.ReadAll(log)
+	reason := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		start := strings.Index(line, "{")
+		if start < 0 {
+			continue
+		}
+		var entry struct {
+			Msg   string `json:"msg"`
+			Error string `json:"error"`
+		}
+		if json.Unmarshal([]byte(line[start:]), &entry) == nil && entry.Msg == "restore failed" && entry.Error != "" {
+			reason = entry.Error
+		}
+	}
+	if len(reason) > 1<<10 {
+		reason = reason[:1<<10] + "…"
+	}
+	return reason
 }
 
 // runCodingTerminalPrepareScript runs the environment's prepare script with

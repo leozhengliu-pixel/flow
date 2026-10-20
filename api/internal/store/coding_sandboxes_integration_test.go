@@ -86,7 +86,7 @@ func TestExternalDatabaseCodingSandboxes(t *testing.T) {
 	if _, err := first.db.ExecContext(ctx, `INSERT INTO coding_sessions(id,workspace_key,agent_session_id,creator_id,source,state,phase,phase_started_at,data,created_at,updated_at) VALUES(?,?,?,?,?,'active','running',0,?,0,0)`, prefix+"s", workspace, prefix+"a", "u", "issue", []byte(`{}`)); err != nil {
 		t.Fatal(err)
 	}
-	if bound, err := second.BindWarmCodingSandbox(ctx, "small", "", prefix+"s"); err != nil || bound.SessionID != prefix+"s" {
+	if bound, err := second.BindWarmCodingSandbox(ctx, "small", "", prefix+"s", ""); err != nil || bound.SessionID != prefix+"s" {
 		t.Fatalf("bind = %+v %v", bound, err)
 	}
 }

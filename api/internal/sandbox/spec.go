@@ -27,6 +27,11 @@ const (
 	RestoreExitCode = 86
 	// RunnerUID is the uid and gid sandboxes run as.
 	RunnerUID = 1000
+	// RunnerReadyPath is the marker the runner writes once its main mode
+	// starts, i.e. after the restore step succeeded (it runs first, inline
+	// or as an init container). /tmp is per sandbox (tmpfs or emptyDir), so
+	// a marker never comes from a snapshot. The debug terminal waits for it.
+	RunnerReadyPath = "/tmp/flow-runner-ready"
 )
 
 // Mode is the runner mode of a sandbox kind (FLOW_RUNNER_MODE and the

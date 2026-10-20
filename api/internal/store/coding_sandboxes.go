@@ -458,9 +458,12 @@ func (s *SQLiteStore) WarmSandboxes(ctx context.Context) (map[string]int, error)
 // region, when given) for a session: a CAS on session_id=”. The row becomes
 // a session sandbox, its tokens move to the session (the same token gains the
 // session scope), and its idle time is marked as already billed, because the
-// warm pool is an operator cost. ErrCodingNotFound means no warm sandbox is
-// available and the caller creates a fresh one.
-func (s *SQLiteStore) BindWarmCodingSandbox(ctx context.Context, size, region, sessionID string) (CodingSandbox, error) {
+// warm pool is an operator cost. snapshotID is the snapshot the runner
+// restores after binding: it is stored on the row because the token grant
+// (and so the snapshot archive route) reads the sandbox's snapshot_id.
+// ErrCodingNotFound means no warm sandbox is available and the caller creates
+// a fresh one.
+func (s *SQLiteStore) BindWarmCodingSandbox(ctx context.Context, size, region, sessionID, snapshotID string) (CodingSandbox, error) {
 	var workspace string
 	err := s.db.QueryRowContext(ctx, `SELECT workspace_key FROM coding_sessions WHERE id=?`, sessionID).Scan(&workspace)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -506,7 +509,7 @@ func (s *SQLiteStore) BindWarmCodingSandbox(ctx context.Context, size, region, s
 		if err != nil {
 			return CodingSandbox{}, err
 		}
-		result, err := tx.ExecContext(ctx, `UPDATE coding_sandboxes SET session_id=?,workspace_key=?,kind='session',billed_seconds=? WHERE id=? AND kind='warm' AND session_id='' AND desired='running'`, sessionID, workspace, idle, c.id)
+		result, err := tx.ExecContext(ctx, `UPDATE coding_sandboxes SET session_id=?,workspace_key=?,snapshot_id=?,kind='session',billed_seconds=? WHERE id=? AND kind='warm' AND session_id='' AND desired='running'`, sessionID, workspace, snapshotID, idle, c.id)
 		if err != nil {
 			tx.Rollback()
 			return CodingSandbox{}, err

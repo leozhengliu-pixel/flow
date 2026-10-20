@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { createTarZst, extractTarZst, fromArchiveLayout, prefixTransforms, tarZstBuffer, toArchiveLayout } from '../src/archive.js'
 import { silentLogger } from '../src/log.js'
-import { RESTORE_FAILED_EXIT, restoreSnapshot } from '../src/restore.js'
+import { RESTORE_FAILED_EXIT, restoreSnapshot, restoreTarget, snapshotIdFromArchiveUrl } from '../src/restore.js'
 import { RuntimeClient } from '../src/runtime-client.js'
-import { MAIN_TS, startServer, tempDir, TSX_BIN } from './helpers.js'
+import { json, MAIN_TS, sh, startServer, tempDir, TSX_BIN } from './helpers.js'
 
 // Restore mode: FLOW_ARCHIVE_URL (track A) or the snapshot archive route,
 // and exit code 86 when the archive cannot be restored.
@@ -63,6 +63,112 @@ test('flow-runner restore exits 86 when the archive is corrupt', async () => {
       assert.equal(code, RESTORE_FAILED_EXIT)
     } finally {
       await server.close()
+    }
+  } finally {
+    tmp.cleanup()
+  }
+})
+
+test('restoreTarget takes the snapshot id from FLOW_ARCHIVE_URL, never a placeholder', () => {
+  const url = 'http://flow:8090/internal/coding-runtime/snapshots/01m5bn6js36ey9kk83hhwhvc5t/archive'
+  assert.equal(snapshotIdFromArchiveUrl(url), '01m5bn6js36ey9kk83hhwhvc5t')
+  assert.equal(snapshotIdFromArchiveUrl('http://flow/archives/a.tar.zst'), undefined)
+  assert.deepEqual(restoreTarget({ FLOW_ARCHIVE_URL: url }), { snapshotId: '01m5bn6js36ey9kk83hhwhvc5t', archiveUrl: url })
+  assert.deepEqual(restoreTarget({ FLOW_SNAPSHOT_ID: '01m5bn6js36ey9kk83hhwhvc5t', FLOW_ARCHIVE_URL: url }).snapshotId, '01m5bn6js36ey9kk83hhwhvc5t')
+  assert.throws(() => restoreTarget({ FLOW_SNAPSHOT_ID: 'other', FLOW_ARCHIVE_URL: url }), /does not match/)
+  assert.throws(() => restoreTarget({ FLOW_ARCHIVE_URL: 'http://flow/archives/a.tar.zst' }), /does not name a snapshot/)
+  assert.deepEqual(restoreTarget({}), { snapshotId: undefined, archiveUrl: undefined })
+})
+
+// The restore step against a server that behaves like Flow's archive route:
+// only the granted snapshot id is served, any other id is 403.
+test('flow-runner restore restores the granted snapshot (HEAD matches) and reports a refused one', async () => {
+  const tmp = tempDir('restore-grant')
+  try {
+    const repoSrc = join(tmp.path, 'src', 'workspace', 'repo')
+    mkdirSync(repoSrc, { recursive: true })
+    writeFileSync(join(repoSrc, 'README.md'), '# snapshot\n')
+    const git = (cwd: string, ...args: string[]) => sh('git', ['-C', cwd, '-c', 'user.name=Flow', '-c', 'user.email=flow@example.com', '-c', 'commit.gpgsign=false', ...args]).trim()
+    git(repoSrc, 'init', '-q')
+    git(repoSrc, 'add', 'README.md')
+    git(repoSrc, 'commit', '-q', '-m', 'snapshot')
+    const head = git(repoSrc, 'rev-parse', 'HEAD')
+    const archive = await tarZstBuffer(join(tmp.path, 'src'), ['workspace'], 8 << 20)
+    const granted = '01m5bn6js36ey9kk83hhwhvc5t'
+    const server = await startServer(6, (req, _body, res) => {
+      const match = /^\/internal\/coding-runtime\/snapshots\/([^/]+)\/archive$/.exec(req.url ?? '')
+      if (!match || req.headers.authorization !== 'Bearer fcs_tok') {
+        res.writeHead(401)
+        res.end()
+      } else if (match[1] !== granted) {
+        json(res, 403, { error: 'this sandbox does not restore that snapshot' })
+      } else {
+        res.writeHead(200, { 'content-type': 'application/zstd' })
+        res.end(Buffer.from(archive!))
+      }
+    })
+    try {
+      const tokenFile = join(tmp.path, 'token')
+      writeFileSync(tokenFile, 'fcs_tok\n', { mode: 0o440 })
+      const restore = (snapshotId: string, name: string) =>
+        new Promise<{ code: number | null; log: string; workspace: string }>((resolve) => {
+          // Local-provider paths: the archive's workspace/… lands in FLOW_WORKSPACE_DIR.
+          const workspace = join(tmp.path, name, 'ws')
+          const home = join(tmp.path, name, 'home')
+          mkdirSync(workspace, { recursive: true })
+          mkdirSync(home, { recursive: true })
+          const child = spawn(TSX_BIN, [MAIN_TS, 'restore'], {
+            env: {
+              PATH: process.env.PATH,
+              HOME: home,
+              FLOW_WORKSPACE_DIR: workspace,
+              FLOW_RUNTIME_URL: server.url,
+              FLOW_TOKEN_FILE: tokenFile,
+              FLOW_ARCHIVE_URL: `${server.url}/internal/coding-runtime/snapshots/${snapshotId}/archive`,
+            },
+            stdio: ['ignore', 'pipe', 'pipe'],
+          })
+          let log = ''
+          child.stdout.on('data', (chunk) => (log += chunk))
+          child.stderr.on('data', (chunk) => (log += chunk))
+          child.once('close', (code) => resolve({ code, log, workspace }))
+        })
+      const ok = await restore(granted, 'granted')
+      assert.equal(ok.code, 0, ok.log)
+      assert.match(ok.log, new RegExp(`"msg":"restoring snapshot","snapshotId":"${granted}"`))
+      assert.doesNotMatch(ok.log, /"snapshotId":"archive"/)
+      assert.equal(git(join(ok.workspace, 'repo'), 'rev-parse', 'HEAD'), head)
+      assert.equal(readFileSync(join(ok.workspace, 'repo', 'README.md'), 'utf8'), '# snapshot\n')
+
+      const refused = await restore('01m5bn6js36ey9kk83hhwhvc5u', 'refused')
+      assert.equal(refused.code, RESTORE_FAILED_EXIT)
+      assert.match(refused.log, /"msg":"restore failed","error":"restoring snapshot 01m5bn6js36ey9kk83hhwhvc5u failed: [^"]*403/)
+    } finally {
+      await server.close()
+    }
+  } finally {
+    tmp.cleanup()
+  }
+})
+
+test('flow-runner debug writes the ready marker once it starts', async () => {
+  const tmp = tempDir('ready')
+  try {
+    const tokenFile = join(tmp.path, 'token')
+    writeFileSync(tokenFile, 'fcs_tok\n', { mode: 0o440 })
+    const marker = join(tmp.path, 'ready')
+    const child = spawn(TSX_BIN, [MAIN_TS, 'debug'], {
+      env: { PATH: process.env.PATH, HOME: tmp.path, FLOW_RUNTIME_URL: 'http://127.0.0.1:9', FLOW_TOKEN_FILE: tokenFile, FLOW_RUNNER_READY_FILE: marker },
+      stdio: 'ignore',
+    })
+    const closed = new Promise((resolve) => child.once('close', resolve))
+    try {
+      const deadline = Date.now() + 20_000
+      while (!existsSync(marker) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50))
+      assert.ok(existsSync(marker), 'the debug runner writes the ready marker')
+    } finally {
+      child.kill('SIGTERM')
+      await closed
     }
   } finally {
     tmp.cleanup()

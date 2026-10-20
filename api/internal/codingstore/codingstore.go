@@ -203,8 +203,8 @@ func (s Store) SetCodingSandboxDesired(ctx context.Context, id string, desired s
 // is marked as already billed (warm sandboxes are an operator cost), so both
 // runtime billers (the sandbox reconciler and the session Meter, which CAS the
 // same billed_seconds) start counting at the bind.
-func (s Store) BindWarmSandbox(ctx context.Context, size, region, sessionID string) (sandbox.Record, error) {
-	return sandboxRecord(s.SQLiteStore.BindWarmCodingSandbox(ctx, size, region, sessionID))
+func (s Store) BindWarmSandbox(ctx context.Context, size, region, sessionID, snapshotID string) (sandbox.Record, error) {
+	return sandboxRecord(s.SQLiteStore.BindWarmCodingSandbox(ctx, size, region, sessionID, snapshotID))
 }
 
 // Sandbox reconciler, warm pool and GC (sandbox.ReconcilerStore,

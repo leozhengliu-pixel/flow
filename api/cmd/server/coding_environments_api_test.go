@@ -33,11 +33,63 @@ type echoProvider struct {
 	resizes  []sandbox.TerminalSize
 	commands [][]string
 	stdin    []string
+	// restored holds sandboxes whose runner wrote sandbox.RunnerReadyPath
+	// after its restore step.
+	restored map[string]bool
+	probes   int
+	tokens   map[string]string
+}
+
+// StartSandbox remembers the runtime token (what the runner reads from its
+// token file); sandbox.Fake itself never retains tokens.
+func (p *echoProvider) StartSandbox(ctx context.Context, spec sandbox.SandboxSpec) (sandbox.SandboxStatus, error) {
+	p.mu.Lock()
+	if p.tokens == nil {
+		p.tokens = map[string]string{}
+	}
+	p.tokens[spec.ID] = spec.Token
+	p.mu.Unlock()
+	return p.Fake.StartSandbox(ctx, spec)
+}
+
+func (p *echoProvider) token(id string) string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.tokens[id]
+}
+
+// finishRestore plays the runner finishing its restore step: it writes the
+// ready marker.
+func (p *echoProvider) finishRestore(id string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.restored == nil {
+		p.restored = map[string]bool{}
+	}
+	p.restored[id] = true
+}
+
+func (p *echoProvider) probeCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.probes
 }
 
 func (p *echoProvider) Exec(ctx context.Context, id string, request sandbox.ExecRequest) (sandbox.ExecResult, error) {
 	if status, _ := p.Fake.Status(ctx, id); status.Phase != sandbox.PhaseRunning {
 		return sandbox.ExecResult{}, sandbox.ErrNotFound
+	}
+	if len(request.Command) == 3 && request.Command[0] == "test" && request.Command[2] == sandbox.RunnerReadyPath {
+		// A sandbox restoring an archive is ready once its restore step
+		// finished; one without an archive has nothing to restore.
+		spec, _ := p.Fake.Spec(id)
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		p.probes++
+		if spec.Workspace.ArchiveURL != "" && !p.restored[id] {
+			return sandbox.ExecResult{ExitCode: 1}, nil
+		}
+		return sandbox.ExecResult{ExitCode: 0}, nil
 	}
 	p.mu.Lock()
 	p.commands = append(p.commands, request.Command)
@@ -90,6 +142,7 @@ type codingEnvTestServer struct {
 	handler  http.Handler
 	provider *echoProvider
 	store    *store.SQLiteStore
+	dbPath   string
 	usage    []domain.CodingUsageRecord
 	mu       sync.Mutex
 }
@@ -97,7 +150,8 @@ type codingEnvTestServer struct {
 func newCodingEnvTestServer(t *testing.T) *codingEnvTestServer {
 	t.Helper()
 	t.Setenv("FLOW_CODING_SECRET_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{5}, 32)))
-	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	dbPath := filepath.Join(t.TempDir(), "flow.db")
+	repository, err := store.OpenSQLiteTestFixture(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +170,7 @@ func newCodingEnvTestServer(t *testing.T) *codingEnvTestServer {
 	}
 	s := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true, objectStore: objects}
 	s.coding = &codingServices{config: config, sandbox: provider, hosts: map[codehost.Kind]codehost.Host{domain.CodeHostGitHub: codehost.Stub{HostKind: domain.CodeHostGitHub}, domain.CodeHostGitLab: gitlabCheckHost{Stub: codehost.Stub{HostKind: domain.CodeHostGitLab}}}}
-	harness := &codingEnvTestServer{t: t, server: s, handler: newHandler(s), provider: provider, store: repository}
+	harness := &codingEnvTestServer{t: t, server: s, handler: newHandler(s), provider: provider, store: repository, dbPath: dbPath}
 	codingEnvironmentLauncherOverride = func(s *server) coding.SandboxLauncher {
 		return coding.ProviderLauncher{Provider: provider, Config: s.coding.config, Usage: func(_ context.Context, record domain.CodingUsageRecord) error {
 			harness.mu.Lock()

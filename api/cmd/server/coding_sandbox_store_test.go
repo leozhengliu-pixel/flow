@@ -49,7 +49,7 @@ func TestCodingSandboxReconcilerEndToEnd(t *testing.T) {
 		t.Fatalf("provider objects = %d", len(objects))
 	}
 	// Binding needs a session row; an unknown session maps to coding.ErrNotFound.
-	if _, err := adapter.BindWarmSandbox(ctx, "small", "", "nope"); !errors.Is(err, coding.ErrNotFound) {
+	if _, err := adapter.BindWarmSandbox(ctx, "small", "", "nope", ""); !errors.Is(err, coding.ErrNotFound) {
 		t.Fatalf("bind unknown session = %v", err)
 	}
 	// An orphan (no row) is collected; rows' sandboxes survive.
