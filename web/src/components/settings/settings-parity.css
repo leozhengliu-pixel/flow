@@ -59,9 +59,15 @@ html:root .settings-app .settings-sidebar nav button {
   color: var(--set-nav);
   font: 500 13px var(--font);
 }
-html:root .settings-app .settings-sidebar nav button svg { color: var(--set-text); }
+/* Nav glyphs take the label's colour in every state (muted, hover, active). */
+html:root .settings-app .settings-sidebar nav button svg { color: inherit; }
 html:root .settings-app .settings-sidebar nav button:hover { background: var(--set-nav-hover-bg); color: var(--set-nav-active); }
-html:root .settings-app .settings-sidebar nav button.active svg { color: var(--set-nav-active); }
+/* Team rows: the team's 14px glyph, borderless, at the start of the 16px icon column. */
+html:root .settings-app .settings-sidebar nav button > .settings-team-icon { width: 16px; height: 16px; border: 0; justify-items: start; }
+html:root .settings-app .settings-sidebar nav button > .settings-team-icon > svg { width: 14px; height: 14px; }
+/* "Create a team": a 14px plus at 9px, label 7px after it. */
+html:root .settings-app .settings-sidebar nav button:has(> .settings-nav-create-glyph) { grid-template-columns: 14px minmax(0, 1fr); gap: 7px; padding-inline-start: 9px; }
+html:root .settings-app .settings-sidebar nav button > svg.settings-nav-create-glyph { width: 14px; height: 14px; }
 html:root .settings-app .settings-sidebar nav button.active {
   background: var(--set-nav-active-bg);
   color: var(--set-nav-active);

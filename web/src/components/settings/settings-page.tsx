@@ -1,6 +1,6 @@
 import { WelcomeMessageSettingsPage } from "./welcome-message-settings-page";
 import { CodingToolsSettingsPage } from "./coding-tools-settings-page";
-import { type ComponentType,
+import {
   Suspense,
   useCallback,
   useEffect,
@@ -20,44 +20,20 @@ import { EnabledIntegrationNav } from './enabled-integration-nav';
 import { useSecuritySetting } from '@/hooks/use-security-setting';
 import { securityPermissionLabel, type SecuritySettingKey } from '@/lib/security-setting';
 import {
-  Activity,
-  AppWindow,
   ArrowLeft,
-  ChartColumn,
-  CreditCard,
-  Bell,
-  Braces,
-  Building2,
   ChevronDown,
   ChevronRight,
-  Code2,
-  FileText,
-  Flame,
-  Import,
   Upload,
-  KeyRound,
   KeyboardOff,
-  LayoutGrid,
   MonitorX,
-  LayoutTemplate,
-  Link2,
   ListFilter,
-  MessageCircleQuestion,
   MoreHorizontal,
-  PanelTop,
   Plus,
-  Radio,
-  Rocket,
   Search,
   ShieldCheck,
-  SlidersHorizontal,
-  Smile,
-  Tag,
   Trash2,
   UserRound,
-  UsersRound,
   X,
-  Zap,
   Lock,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
@@ -99,8 +75,9 @@ import {
   rotateWorkspaceInviteLink,
 } from "@/lib/api";
 import type { NotificationSettingsView, SettingsPageId, TeamSettingsSection } from "@/lib/app-routes";
-import { AgentCursorGlyph, AgentHistoryGlyph, AiBurstGlyph, LoopsGlyph } from '@/components/ui/agent-glyph'
+import { AgentCursorGlyph, AgentHistoryGlyph } from '@/components/ui/agent-glyph'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
+import { SettingsNavGlyph, type SettingsNavGlyphName } from './settings-nav-glyphs'
 import {
   apiKeysSettingsPath,
   identityProviderSettingsPath,
@@ -371,74 +348,69 @@ type SettingsPageProps = {
   onReload: () => Promise<void>;
 };
 
-/** The reference app's sidebar glyph for Projects › Statuses. */
-function ProjectStatusesNavGlyph({ size = 16 }: { size?: number | string }) {
-  return <FlowGlyph name="projectStatuses" size={Number(size)} data-settings-nav-glyph="project-statuses" />;
-}
-
-type NavItem = { id: SettingsPageId; label: string; icon: ComponentType<{ size?: number | string }> };
+type NavItem = { id: SettingsPageId; label: string; glyph: SettingsNavGlyphName };
 const NAV: { title: string; items: NavItem[] }[] = [
   {
     title: "Personal",
     items: [
-      { id: "preferences", label: "Preferences", icon: SlidersHorizontal },
-      { id: "profile", label: "Profile", icon: UserRound },
-      { id: "notifications", label: "Notifications", icon: Bell },
-      { id: "code-and-reviews", label: "Code & reviews", icon: Code2 },
-      { id: "account-security", label: "Security & access", icon: KeyRound },
-      { id: "connections", label: "Connected accounts", icon: Link2 },
-      { id: "agents", label: "Agent personalization", icon: AgentCursorGlyph },
+      { id: "preferences", label: "Preferences", glyph: "preferences" },
+      { id: "profile", label: "Profile", glyph: "profile" },
+      { id: "notifications", label: "Notifications", glyph: "notifications" },
+      { id: "code-and-reviews", label: "Code & reviews", glyph: "code" },
+      { id: "account-security", label: "Security & access", glyph: "accountSecurity" },
+      { id: "connections", label: "Connected accounts", glyph: "connections" },
+      { id: "agents", label: "Agent personalization", glyph: "agents" },
     ],
   },
   {
     title: "Issues",
     items: [
-      { id: "issue-labels", label: "Labels", icon: Tag },
-      { id: "issue-templates", label: "Templates", icon: LayoutTemplate },
-      { id: "sla", label: "SLAs", icon: Flame },
+      { id: "issue-labels", label: "Labels", glyph: "labels" },
+      { id: "issue-templates", label: "Templates", glyph: "templates" },
+      { id: "sla", label: "SLAs", glyph: "sla" },
     ],
   },
   {
     title: "Projects",
     items: [
-      { id: "project-labels", label: "Labels", icon: Tag },
-      { id: "project-templates", label: "Templates", icon: PanelTop },
-      { id: "project-statuses", label: "Statuses", icon: ProjectStatusesNavGlyph },
-      { id: "project-updates", label: "Updates", icon: Activity },
+      { id: "project-labels", label: "Labels", glyph: "labels" },
+      { id: "project-templates", label: "Templates", glyph: "templates" },
+      { id: "project-statuses", label: "Statuses", glyph: "projectStatuses" },
+      { id: "project-updates", label: "Updates", glyph: "projectUpdates" },
     ],
   },
   {
     title: "Features",
     items: [
-      { id: "ai", label: "AI & agents", icon: AiBurstGlyph },
-      { id: "loops", label: "Loops", icon: LoopsGlyph },
-      { id: "initiatives", label: "Initiatives", icon: Zap },
-      { id: "documents", label: "Documents", icon: FileText },
-      { id: "customer-requests", label: "Customer requests", icon: UsersRound },
-      { id: "releases", label: "Releases", icon: Rocket },
-      { id: "pulse", label: "Pulse", icon: Radio },
-      { id: "asks", label: "Asks", icon: MessageCircleQuestion },
-      { id: "emojis", label: "Emojis", icon: Smile },
+      { id: "ai", label: "AI & agents", glyph: "ai" },
+      { id: "loops", label: "Loops", glyph: "loops" },
+      { id: "initiatives", label: "Initiatives", glyph: "initiatives" },
+      { id: "documents", label: "Documents", glyph: "documents" },
+      { id: "customer-requests", label: "Customer requests", glyph: "customerRequests" },
+      { id: "releases", label: "Releases", glyph: "releases" },
+      { id: "pulse", label: "Pulse", glyph: "pulse" },
+      { id: "asks", label: "Asks", glyph: "asks" },
+      { id: "emojis", label: "Emojis", glyph: "emojis" },
     ],
   },
   {
     // The reference app: its own section. Members see "Integrations"; admins "All
     // integrations" followed by each enabled integration (EnabledIntegrationNav).
     title: "Integrations",
-    items: [{ id: "integrations", label: "Integrations", icon: LayoutGrid }],
+    items: [{ id: "integrations", label: "Integrations", glyph: "integrations" }],
   },
   {
     title: "Administration",
     items: [
-      { id: "workspace", label: "Workspace", icon: Building2 },
-      { id: "teams", label: "Teams", icon: UsersRound },
-      { id: "members", label: "Members", icon: UserRound },
-      { id: "security", label: "Security", icon: ShieldCheck },
-      { id: "api", label: "API", icon: Braces },
-      { id: "applications", label: "Applications", icon: AppWindow },
-      { id: "billing", label: "Billing", icon: CreditCard },
-      { id: "usage", label: "Usage & limits", icon: ChartColumn },
-      { id: "import-export", label: "Import & export", icon: Import },
+      { id: "workspace", label: "Workspace", glyph: "workspace" },
+      { id: "teams", label: "Teams", glyph: "teams" },
+      { id: "members", label: "Members", glyph: "members" },
+      { id: "security", label: "Security", glyph: "security" },
+      { id: "api", label: "API", glyph: "code" },
+      { id: "applications", label: "Applications", glyph: "applications" },
+      { id: "billing", label: "Billing", glyph: "billing" },
+      { id: "usage", label: "Usage & limits", glyph: "usage" },
+      { id: "import-export", label: "Import & export", glyph: "importExport" },
     ],
   },
 ];
@@ -559,7 +531,7 @@ export function SettingsPage(props: SettingsPageProps) {
         id: item.id,
         title: item.label,
         section: section.title,
-        icon: <item.icon size={14}/>,
+        icon: <SettingsNavGlyph name={item.glyph} size={14}/>,
       },
     ]))),
     [visible],
@@ -770,7 +742,7 @@ export function SettingsPage(props: SettingsPageProps) {
                   ))}
                 {canCreateTeam && !query.trim() && (
                   <button onPointerEnter={() => { void TeamCreatePage.preload().catch(() => undefined); }} onFocus={() => { void TeamCreatePage.preload().catch(() => undefined); }} onClick={props.onCreateTeam}>
-                    <Plus size={16} />
+                    <FlowGlyph name="plus" size={14} className="settings-nav-create-glyph" />
                       <span>{t("Create a team")}</span>
                   </button>
                 )}
@@ -892,10 +864,9 @@ function SettingsNavButton({
   onClick: () => void;
 }) {
   const { t } = useI18n();
-  const Icon = item.icon;
   return (
     <button aria-current={active ? "page" : undefined} className={active ? "active" : ""} onPointerEnter={() => { void preloadSettingsPage(item.id).catch(() => undefined); }} onFocus={() => { void preloadSettingsPage(item.id).catch(() => undefined); }} onClick={onClick}>
-      <Icon size={16} />
+      <SettingsNavGlyph name={item.glyph} />
       <span>{t(item.label)}</span>
     </button>
   );

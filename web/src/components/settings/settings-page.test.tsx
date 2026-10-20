@@ -69,17 +69,24 @@ it("localizes settings navigation and keeps the active route announced", () => {
   expect(screen.getByPlaceholderText("搜索…")).toBeVisible();
 });
 
-it("draws the agent settings entries with the agent glyphs (cursor, AI burst), not lucide icons", () => {
+it("draws every settings nav entry with its reference glyph, not lucide icons", () => {
   const { container } = render(
     <I18nProvider>
       <SettingsPage {...props()} />
     </I18nProvider>,
   );
 
-  const glyph = (name: string) => [...container.querySelectorAll("button")].find((button) => button.textContent?.includes(name))?.querySelector("svg");
-  expect(glyph("Agent 个性化")).toHaveAttribute("data-agent-glyph", "agentPointer");
-  expect(glyph("AI 与 Agent")).toHaveAttribute("data-agent-glyph", "aiBurst");
-  expect(container.querySelector(".lucide-bot, .lucide-sparkles")).toBeNull();
+  const glyph = (name: string) => [...container.querySelectorAll(".settings-sidebar nav button")].find((button) => button.textContent?.includes(name))?.querySelector("svg");
+  expect(glyph("Agent 个性化")).toHaveAttribute("data-settings-nav-glyph", "agents");
+  expect(glyph("AI 与 Agent")).toHaveAttribute("data-settings-nav-glyph", "ai");
+  const navGlyphs = [...container.querySelectorAll(".settings-sidebar nav section:not(:last-child) button > svg")];
+  expect(navGlyphs.length).toBeGreaterThan(20);
+  for (const svg of navGlyphs) {
+    expect(svg).toHaveAttribute("data-settings-nav-glyph");
+    expect(svg).toHaveAttribute("fill", "currentColor");
+    expect(svg).toHaveAttribute("width", "16");
+  }
+  expect(container.querySelector(".settings-sidebar nav .lucide")).toBeNull();
 });
 
 it('does not advertise the retired shortcuts settings page', () => {
@@ -301,10 +308,11 @@ it('draws the Projects › Statuses nav item with the reference app\'s hexagon g
   input.page = 'project-statuses';
   render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
   const statuses = Array.from(document.querySelectorAll('aside nav button, .settings-sidebar nav button')).find(button => button.textContent?.trim() === 'Statuses');
-  const glyph = statuses?.querySelector('svg[data-settings-nav-glyph="project-statuses"]');
+  const glyph = statuses?.querySelector('svg[data-settings-nav-glyph="projectStatuses"]');
   expect(glyph).not.toBeNull();
   expect(glyph?.getAttribute('viewBox')).toBe('1 1 14 14');
   expect(glyph?.querySelectorAll('path')).toHaveLength(2);
+  expect(glyph?.querySelector('path')?.getAttribute('mask')).toMatch(/^url\(#settings-nav-status-/);
 });
 
 it('lets admins edit and delete every project status from its menu', async () => {
