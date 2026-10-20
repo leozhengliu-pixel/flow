@@ -6,6 +6,8 @@ import { useI18n } from "@/i18n/i18n";
 import { toast } from "@/lib/toast";
 import type { CodeReview } from "@/types/flow";
 
+import type { MergeMethod } from "./pull-request-merge-method";
+import { MERGE_LABELS } from "./pull-request-review-model";
 import { reviewProviderNoun } from "./review-provider-model";
 import { ReviewStateIcon } from "./review-state-icon";
 import "@/components/project-detail/project-action-menu.css";
@@ -27,7 +29,7 @@ export function PullRequestActionsMenu({
   onMutate: (input: ReviewMutation) => Promise<void>;
   onOpenPicker: (value: "reviewers" | "issues") => void;
   onQuickApprove: () => Promise<void>;
-  onMerge: () => Promise<void>;
+  onMerge: (method: MergeMethod) => Promise<void>;
   canQuickApprove: boolean;
 }) {
   const { t } = useI18n();
@@ -104,7 +106,26 @@ export function PullRequestActionsMenu({
                 label={t(review.draft ? "Mark ready for review" : "Convert to draft")}
                 onSelect={() => void onMutate({ draft: !review.draft })}
               />
-              {!review.draft && <MenuItem icon={<GitMerge />} label={t(`Merge ${noun}`)} onSelect={() => void onMerge()} />}
+              {!review.draft && (
+                <RadixMenu.Sub>
+                  <RadixMenu.SubTrigger>
+                    <span className="project-menu-icon">
+                      <GitMerge />
+                    </span>
+                    <span className="project-menu-label">{t(`Merge ${noun}`)}</span>
+                    <span className="project-menu-chevron" aria-hidden="true">
+                      ▶
+                    </span>
+                  </RadixMenu.SubTrigger>
+                  <RadixMenu.Portal>
+                    <RadixMenu.SubContent data-flow-motion="floating" className="project-action-menu project-action-submenu" sideOffset={4} collisionPadding={16}>
+                      {(Object.keys(MERGE_LABELS) as MergeMethod[]).map((method) => (
+                        <MenuItem key={method} icon={<GitMerge />} label={t(MERGE_LABELS[method])} onSelect={() => void onMerge(method)} />
+                      ))}
+                    </RadixMenu.SubContent>
+                  </RadixMenu.Portal>
+                </RadixMenu.Sub>
+              )}
               <RadixMenu.Separator />
               <MenuItem icon={<X />} label={t(`Close ${noun}`)} onSelect={() => void onMutate({ status: "closed" })} />
             </>

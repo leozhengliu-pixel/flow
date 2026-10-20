@@ -111,5 +111,12 @@ func TestReviewCommentRepliesAndThreadResolution(t *testing.T) {
 		}
 	}
 	requestJSON[any](t, handler, http.MethodPatch, base+"/"+root.ID, map[string]any{}, http.StatusBadRequest)
+	// Review summaries accept replies in the overview conversation.
+	approved := requestJSON[domain.CodeReview](t, handler, http.MethodPost, "/api/reviews/"+review.ID+"/submit", map[string]string{"decision": "approve", "body": "Ship it"}, http.StatusOK)
+	summary := approved.Events[len(approved.Events)-1]
+	updated = requestJSON[domain.CodeReview](t, handler, http.MethodPost, base, map[string]any{"body": "Thanks", "parentId": summary.ID}, http.StatusCreated)
+	if last := updated.Events[len(updated.Events)-1]; last.ParentID != summary.ID || last.Path != "" {
+		t.Fatalf("reply to a review summary must thread under it: %#v", last)
+	}
 	requestJSON[any](t, handler, http.MethodPatch, base+"/missing", map[string]any{"resolved": true}, http.StatusNotFound)
 }

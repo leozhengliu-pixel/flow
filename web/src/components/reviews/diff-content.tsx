@@ -2,7 +2,7 @@
  * DiffContent — line rows, unchanged-line separators, inline threads and the
  * inline code comment composer for one file of DiffView.
  */
-import { ArrowUp, ArrowUpToLine, MessageSquarePlus, X } from "lucide-react";
+import { ArrowUp, ArrowUpToLine, MessageSquarePlus, Minus, X } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 
 import { ReviewCode } from "@/components/reviews/review-code";
@@ -15,7 +15,7 @@ export function DiffHunkHeader({ hunk, hidden }: { hunk: DiffHunk; hidden: numbe
   const { t } = useI18n();
   const context = hunk.header.replace(/^@@[^@]*@@\s?/, "");
   return (
-    <div className="review-diff-hunk-header" role="presentation">
+    <div className={`review-diff-hunk-header${context ? "" : " is-bare"}`} role="presentation">
       <span className="review-diff-hunk-gutter">
         <ArrowUpToLine />
       </span>
@@ -58,7 +58,7 @@ export function DiffLineCell({
   return (
     <div className={`review-diff-cell is-${line?.kind ?? "empty"}${dirty ? " is-dirty" : ""}`} data-line-old={line?.oldNumber} data-line-new={line?.newNumber}>
       <span className="review-diff-number">
-        {lineNumber ?? ""}
+        {side === "unified" && line?.kind === "remove" ? <Minus className="review-diff-removed-mark" aria-label={`${t("Removed line")} ${line.oldNumber ?? ""}`} /> : (lineNumber ?? "")}
         {commentNumber && onComment ? (
           <button aria-label={`${t("Comment on line")} ${commentNumber}`} className="review-diff-comment-button" onClick={() => onComment({ path, line: commentNumber })} type="button">
             <MessageSquarePlus />
@@ -227,7 +227,7 @@ export function DiffContentRows({
       {hunks?.length
         ? hunks.map((hunk, index) => (
             <div key={`${hunk.header}-${index}`} className="review-diff-hunk">
-              <DiffHunkHeader hunk={hunk} hidden={hiddenBefore(hunks, index)} />
+              {(hiddenBefore(hunks, index) > 0 || hunk.header.replace(/^@@[^@]*@@\s?/, "")) && <DiffHunkHeader hunk={hunk} hidden={hiddenBefore(hunks, index)} />}
               {mode === "split" ? splitRowsFor(pair(hunk.lines)) : unifiedRows(hunk.lines)}
             </div>
           ))

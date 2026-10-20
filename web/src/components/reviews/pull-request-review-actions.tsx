@@ -1,6 +1,5 @@
 import * as Popover from "@radix-ui/react-popover";
-import * as RadixMenu from "@radix-ui/react-dropdown-menu";
-import { Check, ChevronDown, CircleCheck, CircleX, GitMerge, MessageSquare, X } from "lucide-react";
+import { CircleCheck, CircleX, GitMerge, MessageSquare, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useI18n } from "@/i18n/i18n";
@@ -8,7 +7,6 @@ import type { CodeReview } from "@/types/flow";
 
 import type { MergeMethod } from "./pull-request-merge-method";
 import { MERGE_LABELS, reviewPrimaryAction, type ReviewDecision } from "./pull-request-review-model";
-import "@/components/project-detail/project-action-menu.css";
 
 /** Right side of the tab row: ready/request review, merge, and the submit review popover. */
 export function PullRequestReviewActions({
@@ -18,7 +16,6 @@ export function PullRequestReviewActions({
   mergeMethod,
   submitOpen,
   onSubmitOpenChange,
-  onMergeMethodChange,
   onMerge,
   onMutate,
   onOpenPicker,
@@ -30,7 +27,6 @@ export function PullRequestReviewActions({
   mergeMethod: MergeMethod;
   submitOpen: boolean;
   onSubmitOpenChange: (open: boolean) => void;
-  onMergeMethodChange: (method: MergeMethod) => void;
   onMerge: (method: MergeMethod) => Promise<void>;
   onMutate: (input: { draft?: boolean }) => Promise<void>;
   onOpenPicker: (value: "reviewers" | "issues") => void;
@@ -41,29 +37,15 @@ export function PullRequestReviewActions({
   return (
     <>
       {action.mergeable && (
-        <div className="review-merge-split" role="group" aria-label={t("Merge")}>
-          <button type="button" className="review-pill-button" disabled={busy} onClick={() => void onMerge(mergeMethod)}>
-            <GitMerge />
-            {t(MERGE_LABELS[mergeMethod])}
-          </button>
-          <RadixMenu.Root>
-            <RadixMenu.Trigger asChild>
-              <button type="button" className="review-pill-button is-icon" aria-label={t("Merge options")} disabled={busy}>
-                <ChevronDown />
-              </button>
-            </RadixMenu.Trigger>
-            <RadixMenu.Portal>
-              <RadixMenu.Content data-flow-motion="floating" className="project-action-menu" align="end" sideOffset={4} collisionPadding={16}>
-                {(Object.keys(MERGE_LABELS) as MergeMethod[]).map((method) => (
-                  <RadixMenu.Item key={method} onSelect={() => onMergeMethodChange(method)}>
-                    <span className="project-menu-icon">{mergeMethod === method ? <Check /> : null}</span>
-                    <span className="project-menu-label">{t(MERGE_LABELS[method])}</span>
-                  </RadixMenu.Item>
-                ))}
-              </RadixMenu.Content>
-            </RadixMenu.Portal>
-          </RadixMenu.Root>
-        </div>
+        <button
+          type="button"
+          className={`review-pill-button${action.kind === "merge" ? " is-primary" : ""}`}
+          disabled={busy}
+          onClick={() => void onMerge(mergeMethod)}
+        >
+          <GitMerge />
+          {t(MERGE_LABELS[mergeMethod])}
+        </button>
       )}
       {action.kind === "readyForReview" || action.kind === "markReady" ? (
         <button type="button" className="review-pill-button is-primary" disabled={busy} onClick={() => void onMutate({ draft: false })}>

@@ -1,4 +1,4 @@
-import { GitMerge, GitPullRequest, PanelRightClose, Search, Sparkles } from "lucide-react";
+import { GitMerge, GitPullRequest, PanelRightClose, Search, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/toast";
 
@@ -288,7 +288,7 @@ function ReviewRow({ item, href, onOpen, display }: { item: CodeReview; href: st
           </small>
         )}
       </span>
-      {display.properties.includes("quick") && item.quickToReview && <Sparkles className="review-row-quick" aria-label={t("Quick to review")} />}
+      {display.properties.includes("quick") && item.quickToReview && <Zap className="review-row-quick" aria-label={t("Quick to review")} />}
       {display.properties.includes("author") && (
         <PersonHover person={item.author}>
           <span>
@@ -405,6 +405,9 @@ function ReviewDetail({
       openInProvider: () => window.open(review.url, "_blank", "noopener,noreferrer"),
       selectReviewers: () => onOpenPicker("reviewers"),
       toggleFavorite: () => void onMutate({ favorite: !review.favorite }),
+      openOverview: () => onNavigate(reviewPath(data.workspace.urlKey, review)),
+      openGuide: () => onNavigate(reviewPath(data.workspace.urlKey, review, "review")),
+      openDiff: () => onNavigate(reviewPath(data.workspace.urlKey, review, "changes")),
     });
   });
   useEffect(() => {
@@ -452,7 +455,7 @@ function ReviewDetail({
             onMutate={onMutate}
             onOpenPicker={onOpenPicker}
             onQuickApprove={quickApprove}
-            onMerge={() => merge(mergeMethod)}
+            onMerge={merge}
           />
         }
         actions={
@@ -466,7 +469,6 @@ function ReviewDetail({
               mergeMethod={mergeMethod}
               submitOpen={submitOpen}
               onSubmitOpenChange={setSubmitOpen}
-              onMergeMethodChange={setMergeMethod}
               onMerge={merge}
               onMutate={onMutate}
               onOpenPicker={onOpenPicker}
@@ -493,7 +495,7 @@ function ReviewDetail({
         ) : editableDiff ? (
           <EditableDiffView review={review} onReload={onReload} onExit={() => setEditableDiff(false)} />
         ) : (
-          <DiffView review={review} onReload={onReload} onEditableChange={setEditableDiff} />
+          <DiffView review={review} onReload={onReload} onEditableChange={setEditableDiff} viewer={data.viewer} />
         )}
       </div>
     </>

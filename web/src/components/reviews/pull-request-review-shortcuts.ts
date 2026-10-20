@@ -19,6 +19,9 @@ export type PullRequestReviewShortcutHandlers = {
   openInProvider?: () => void;
   selectReviewers?: () => void;
   toggleFavorite?: () => void;
+  openOverview?: () => void;
+  openGuide?: () => void;
+  openDiff?: () => void;
 };
 
 type ShortcutKey = keyof PullRequestReviewShortcutHandlers;
@@ -55,6 +58,9 @@ export function resolveReviewShortcut(
   }
   if (Object.keys(REVIEW_SHORTCUT_SEQUENCES).some((sequence) => sequence.startsWith(`${letter} `))) return { prefix: letter };
   const single: Record<string, ShortcutKey> = {
+    "1": "openOverview",
+    "2": "openGuide",
+    "3": "openDiff",
     ".": "toggleReviewLayout",
     t: "focusFileFilter",
     "/": "searchInFiles",
@@ -62,7 +68,7 @@ export function resolveReviewShortcut(
     j: "nextFile",
     k: "previousFile",
   };
-  return { handler: single[event.key === "." || event.key === "/" ? event.key : letter], prefix: null };
+  return { handler: single[/^[./1-3]$/.test(event.key) ? event.key : letter], prefix: null };
 }
 
 export type PullRequestReviewShortcutsContextValue = PullRequestReviewShortcutHandlers & {

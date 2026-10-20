@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { teammate, viewer } from '@/test/fixtures'
 import type { CodeReview } from '@/types/flow'
 import { resolveReviewShortcut } from './pull-request-review-shortcuts'
-import { reviewChecksSummary, reviewCodeThreads, reviewFileGroups, reviewPrimaryAction, splitReviewPath, splitSuggestionBody } from './pull-request-review-model'
+import { changedSegments, reviewChecksSummary, reviewCodeThreads, reviewDocsOnly, reviewFileGroups, reviewHeaderStat, reviewPrimaryAction, splitReviewPath, splitSuggestionBody } from './pull-request-review-model'
 
 const base = { id: 'r', slugId: 'r', provider: 'github', externalId: 'r', number: 1, title: 'r', description: '', status: 'open', repositoryOwner: 'o', repositoryName: 'n', url: '', author: teammate, reviewerIds: [viewer.id], teamReviewers: [], issueIds: [], baseBranch: 'main', headBranch: 'h', branchState: 'upToDate', additions: 0, deletions: 0, commitCount: 1, checks: [], files: [], events: [], favorite: false, draft: false, quickToReview: false, createdAt: '', updatedAt: '' } as CodeReview
 const key = (key: string, extra: Partial<KeyboardEvent> = {}) => ({ key, code: /^[a-z]$/i.test(key) ? `Key${key.toUpperCase()}` : '', shiftKey: false, altKey: false, metaKey: false, ctrlKey: false, ...extra })
@@ -11,7 +11,8 @@ describe('pull request review model', () => {
   it('chooses the primary action for authors and reviewers', () => {
     expect(reviewPrimaryAction({ ...base, author: viewer, reviewerIds: [], draft: true }, viewer.id).kind).toBe('readyForReview')
     expect(reviewPrimaryAction({ ...base, author: viewer, draft: true, reviewerIds: [teammate.id] }, viewer.id).kind).toBe('markReady')
-    expect(reviewPrimaryAction({ ...base, author: viewer, reviewerIds: [] }, viewer.id).kind).toBe('requestReview')
+    expect(reviewPrimaryAction({ ...base, author: viewer, reviewerIds: [] }, viewer.id).kind).toBe('merge')
+    expect(reviewPrimaryAction({ ...base, author: viewer, reviewerIds: [], checks: [{ id: 'c', name: 'ci', status: 'failed' }] }, viewer.id).kind).toBe('requestReview')
     expect(reviewPrimaryAction(base, viewer.id)).toMatchObject({ kind: 'submitReview', primary: true })
     expect(reviewPrimaryAction({ ...base, reviewerIds: [], events: [{ id: 'e', type: 'approved', actor: viewer, createdAt: '' }] }, viewer.id).kind).toBe('reviewAgain')
     expect(reviewPrimaryAction({ ...base, status: 'merged' }, viewer.id).kind).toBe('none')
@@ -55,5 +56,18 @@ describe('pull request review model', () => {
     expect(resolveReviewShortcut(key('t', { altKey: true, shiftKey: true }), null)).toEqual({ handler: 'toggleAllFiles', prefix: null })
     expect(resolveReviewShortcut(key('a', { altKey: true }), null)).toEqual({ handler: 'markAllFilesReviewed', prefix: null })
     expect(resolveReviewShortcut(key('s', { metaKey: true }), 'r')).toEqual({ prefix: null })
+  })
+  it('derives header stats, docs-only labels and rename highlights', () => {
+    const files = [
+      { path: 'lib/squares.js', status: 'added' as const, additions: 403, deletions: 0, patch: '' },
+      { path: 'package.json', status: 'modified' as const, additions: 1, deletions: 1, patch: '' },
+      { path: 'src/math.test.js', status: 'deleted' as const, additions: 0, deletions: 11, patch: '' },
+    ]
+    expect(reviewHeaderStat({ ...base, files, additions: 410, deletions: 12 })).toEqual({ additions: 404, deletions: 1 })
+    expect(reviewHeaderStat({ ...base, additions: 3, deletions: 2 })).toEqual({ additions: 3, deletions: 2 })
+    expect(reviewDocsOnly({ ...base, files: [{ path: 'README.md', status: 'modified', additions: 5, deletions: 0, patch: '' }] })).toBe(true)
+    expect(reviewDocsOnly({ ...base, files })).toBe(false)
+    expect(changedSegments('src/math.js', 'lib/arithmetic.js')).toEqual({ prefix: '', before: 'src/math', after: 'lib/arithmetic', suffix: '.js' })
+    expect(changedSegments('src/', 'lib/')).toEqual({ prefix: '', before: 'src', after: 'lib', suffix: '/' })
   })
 })

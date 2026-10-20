@@ -88,7 +88,7 @@ export function groupReviews(reviews: CodeReview[], display: ReviewDisplay, view
     const id = display.grouping === 'none' ? 'all' : display.grouping === 'status' ? reviewStatus(review)
       : display.grouping === 'repository' ? reviewRepository(review) : display.grouping === 'author' ? review.author.id
       : ['merged', 'closed'].includes(review.status) ? 'completed'
-      : review.author.id === viewerId ? reviewImportance(review) === 0 ? 'ready' : 'yours'
+      : review.author.id === viewerId ? reviewReadyToMerge(review) ? 'ready' : 'yours'
       : viewerHasReviewed(review, viewerId) ? 'reviewing'
       : review.reviewerIds.includes(viewerId) ? 'requested' : 'team'
     const label = display.grouping === 'focus' ? focusLabels[id] : display.grouping === 'status' ? reviewStatusLabels[id] : display.grouping === 'author' ? review.author.displayName : id
@@ -123,11 +123,13 @@ export function parseReviewDisplay(raw: string | null, view: ReviewView): Review
   } catch { return fallback }
 }
 
-/** Compact age used by review rows: 5m, 16h, 3d, 2w, 4mo, 1y. */
+/** Compact age used by review rows: 49s, 5m, 16h, 3d, 2w, 4mo, 1y. */
 export function reviewShortAge(value: string, now = Date.now()) {
-  const minutes = Math.max(0, Math.floor((now - Date.parse(value)) / 60_000))
-  if (!Number.isFinite(minutes)) return ''
-  if (minutes < 60) return `${Math.max(1, minutes)}m`
+  const seconds = Math.max(0, Math.floor((now - Date.parse(value)) / 1000))
+  if (!Number.isFinite(seconds)) return ''
+  if (seconds < 60) return `${Math.max(1, seconds)}s`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m`
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `${hours}h`
   const days = Math.floor(hours / 24)
@@ -147,4 +149,19 @@ export function reviewVisualState(review: CodeReview): 'draft' | 'open' | 'merge
   if (review.status === 'merged') return 'merged'
   if (review.status === 'closed') return 'closed'
   return review.draft ? 'draft' : 'open'
+}
+
+/** Activity and comment times: "just now", "1min ago", "16h ago", "3d ago". */
+export function reviewTimeAgo(value: string, now = Date.now()) {
+  const seconds = Math.floor((now - Date.parse(value)) / 1000)
+  if (!Number.isFinite(seconds)) return ''
+  if (seconds < 60) return 'just now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}min ago`
+  return `${reviewShortAge(value, now)} ago`
+}
+/** An open pull request the viewer authored that can merge now (not a draft, checks green, no conflicts or requested changes). */
+export function reviewReadyToMerge(review: CodeReview) {
+  return !review.draft && (review.status === 'open' || review.status === 'approved') && review.branchState !== 'conflicted'
+    && review.checks.every(check => check.status === 'passed' || check.status === 'skipped')
 }

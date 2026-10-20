@@ -1,5 +1,5 @@
 import * as RadixMenu from "@radix-ui/react-dropdown-menu";
-import { ArrowUp, ChevronDown, CircleCheck, CircleDashed, CircleX, FileCode2, GitBranch, Plus } from "lucide-react";
+import { ArrowUp, ChevronDown, CircleCheck, CircleDashed, CircleX, CornerDownRight, FileCode2, GitBranch, MessageSquare, Plus } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { MentionBody } from "@/components/editor/mentions/mention-body";
@@ -10,12 +10,12 @@ import { issuePath, reviewPath } from "@/lib/app-routes";
 import { commentOnReview } from "@/lib/api";
 import { targetCommentHash } from "@/lib/review-comment-navigation";
 import { toast } from "@/lib/toast";
-import type { BootstrapData, CodeReview, Issue, User } from "@/types/flow";
+import type { BootstrapData, CodeReview, Issue, ReviewEvent, User } from "@/types/flow";
 
 import { PullRequestCommentActions } from "./pull-request-comment-actions";
 import { ReviewCommentBody } from "./review-thread";
-import { reviewChecksSummary, reviewFileGroups, splitReviewPath } from "./pull-request-review-model";
-import { reviewShortAge, reviewStatus, reviewStatusLabels } from "./review-list-model";
+import { reviewChecksSummary, reviewCodeThreads, reviewFileGroups, splitReviewPath } from "./pull-request-review-model";
+import { reviewStatus, reviewStatusLabels, reviewTimeAgo } from "./review-list-model";
 import { reviewProviderNoun } from "./review-provider-model";
 import { ReviewStateIcon, ReviewTitle } from "./review-state-icon";
 import "@/components/project-detail/project-action-menu.css";
@@ -76,7 +76,7 @@ export function ReviewOverview({
           <h3>{t("Description")}</h3>
           {review.description.trim() ? <MentionBody body={review.description} /> : <p className="review-muted">{t("No description provided.")}</p>}
         </section>
-        <ReviewActivity data={data} review={review} />
+        <ReviewActivity data={data} review={review} onNavigate={onNavigate} onReload={onReload} />
         <ReviewCommentComposer data={data} review={review} onReload={onReload} />
       </div>
       <aside aria-label={t("Review details")} className="review-overview-sidebar">
@@ -230,7 +230,34 @@ function ReviewSidebarFiles({ data, review, onNavigate }: { data: BootstrapData;
       <h3>
         {review.files.length} {t(review.files.length === 1 ? "file changed" : "files changed")}
       </h3>
-      {groups.map((group) => {
+      {groups.length === 1 ? (
+        <ul className="review-file-flat">
+          {groups[0].files.map((file) => {
+            const { name, directory } = splitReviewPath(file.path);
+            return (
+              <li key={file.path}>
+                <a
+                  href={`${reviewPath(data.workspace.urlKey, review, "changes")}#file=${encodeURIComponent(file.path)}`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    open(file.path);
+                  }}
+                >
+                  <FileCode2 />
+                  <span className="review-file-name" data-i18n-ignore>
+                    {name}
+                  </span>
+                  <span className="review-file-directory" data-i18n-ignore>
+                    {directory}
+                  </span>
+                  <DiffCounts additions={file.additions} deletions={file.deletions} />
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+      {groups.length > 1 && groups.map((group) => {
         const isCollapsed = collapsed.has(group.id);
         return (
           <div key={group.id} className="review-file-group">
@@ -294,48 +321,153 @@ export function DiffCounts({ additions, deletions }: { additions: number; deleti
   );
 }
 
-function ReviewActivity({ data, review }: { data: BootstrapData; review: CodeReview }) {
+function ReviewActivity({ data, review, onNavigate, onReload }: { data: BootstrapData; review: CodeReview; onNavigate: (path: string) => void; onReload: () => Promise<void> }) {
   const { t } = useI18n();
-  // Replies render inside their thread on the Diff tab; activity lists thread roots and events.
-  const events = review.events.filter((event) => !event.parentId);
+  // Code comments live on the Diff tab; the activity shows events, conversation
+  // comments and reviews (with a resolved-threads summary on the latest review).
+  const events = review.events.filter((event) => !event.parentId && !event.path);
+  const threads = [...reviewCodeThreads(review).values()].flat();
+  const latestReview = [...events].reverse().find((event) => REVIEW_DECISIONS.has(event.type));
   return (
     <section className="review-activity">
       <h3>{t("Activity")}</h3>
       <ol>
-        {events.map((event) => (
-          <ReviewActivityItem key={event.id} data={data} review={review} event={event} />
-        ))}
+        {events.map((event) =>
+          isConversationCard(event) ? (
+            <ReviewActivityCard
+              key={event.id}
+              data={data}
+              review={review}
+              event={event}
+              replies={review.events.filter((item) => item.parentId === event.id)}
+              summary={event === latestReview && threads.length ? { resolved: threads.filter((thread) => thread.resolved).length, total: threads.length } : undefined}
+              onNavigate={onNavigate}
+              onReload={onReload}
+            />
+          ) : (
+            <ReviewActivityItem key={event.id} data={data} review={review} event={event} />
+          ),
+        )}
       </ol>
     </section>
   );
 }
 
+const REVIEW_DECISIONS = new Set(["review_commented", "approved", "changes_requested"]);
+
+function isConversationCard(event: ReviewEvent) {
+  return event.type === "commented" || event.type === "review_commented" || (REVIEW_DECISIONS.has(event.type) && Boolean(event.body));
+}
+
+function useTimeAgo() {
+  const { t } = useI18n();
+  return (value: string) => {
+    const label = reviewTimeAgo(value);
+    return label === "just now" ? t("just now") : label.replace(/ ago$/, ` ${t("ago")}`);
+  };
+}
+
+function ReviewActivityCard({
+  data,
+  review,
+  event,
+  replies,
+  summary,
+  onNavigate,
+  onReload,
+}: {
+  data: BootstrapData;
+  review: CodeReview;
+  event: ReviewEvent;
+  replies: ReviewEvent[];
+  summary?: { resolved: number; total: number };
+  onNavigate: (path: string) => void;
+  onReload: () => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const timeAgo = useTimeAgo();
+  const [reply, setReply] = useState("");
+  const [busy, setBusy] = useState(false);
+  const chip = event.type === "approved" ? "Approved" : event.type === "changes_requested" ? "Changes requested" : event.type === "review_commented" ? "Reviewed" : null;
+  const send = async () => {
+    if (!reply.trim() || busy) return;
+    setBusy(true);
+    try {
+      await commentOnReview(review.id, reply.trim(), { parentId: event.id });
+      setReply("");
+      await onReload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("Could not submit comment"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <li className="review-activity-comment">
+      {[event, ...replies].map((comment, index) => {
+        const actor = comment.actor.displayName || comment.actor.name;
+        return (
+          <div key={comment.id} className={`review-activity-comment-entry${index ? " is-reply" : ""}`} id={targetCommentHash(comment.id)} data-review-comment-id={comment.id}>
+            <header>
+              <UserAvatar className="avatar review-activity-avatar" name={actor} avatarUrl={comment.actor.avatarUrl} />
+              <strong data-i18n-ignore>{actor}</strong>
+              <time dateTime={comment.createdAt} title={new Date(comment.createdAt).toLocaleString()}>
+                {timeAgo(comment.createdAt)}
+              </time>
+              {index === 0 && chip && (
+                <span className={`review-activity-chip is-${event.type}`}>
+                  {event.type === "approved" ? <CircleCheck /> : event.type === "changes_requested" ? <CircleX /> : <MessageSquare />}
+                  {t(chip)}
+                </span>
+              )}
+              <PullRequestCommentActions event={comment} reviewId={review.id} issueIds={review.issueIds} reviewUrl={review.url} />
+            </header>
+            {comment.body ? <ReviewCommentBody className="review-activity-body" body={comment.body} /> : null}
+            {index === 0 && summary && (
+              <a
+                className="review-activity-summary"
+                href={reviewPath(data.workspace.urlKey, review, "changes")}
+                onClick={(clickEvent) => {
+                  clickEvent.preventDefault();
+                  onNavigate(reviewPath(data.workspace.urlKey, review, "changes"));
+                }}
+              >
+                <CornerDownRight />
+                {t("{resolved} of {total} code comments resolved").replace("{resolved}", String(summary.resolved)).replace("{total}", String(summary.total))}
+              </a>
+            )}
+          </div>
+        );
+      })}
+      <div className="review-activity-reply">
+        <UserAvatar className="avatar review-activity-avatar" name={data.viewer.displayName} avatarUrl={data.viewer.avatarUrl} />
+        <textarea
+          aria-label={t("Reply")}
+          placeholder={t("Leave a reply…")}
+          rows={1}
+          value={reply}
+          onChange={(changeEvent) => setReply(changeEvent.target.value)}
+          onKeyDown={(keyEvent) => {
+            if (keyEvent.key === "Enter" && !keyEvent.shiftKey) {
+              keyEvent.preventDefault();
+              void send();
+            }
+          }}
+        />
+        <button type="button" className="review-round-button" aria-label={t("Submit reply")} disabled={busy || !reply.trim()} onClick={() => void send()}>
+          <ArrowUp />
+        </button>
+      </div>
+    </li>
+  );
+}
+
 function ReviewActivityItem({ data, review, event }: { data: BootstrapData; review: CodeReview; event: CodeReview["events"][number] }) {
   const { t } = useI18n();
+  const timeAgo = useTimeAgo();
   const actor = event.actor.displayName || event.actor.name;
-  const age = `${reviewShortAge(event.createdAt)} ${t("ago")}`;
-  const isComment = event.type === "commented" || event.type === "review_commented" || Boolean(event.path);
+  const age = timeAgo(event.createdAt);
   const noun = reviewProviderNoun(review.provider);
-  if (isComment && event.body)
-    return (
-      <li className="review-activity-comment" id={targetCommentHash(event.id)} data-review-comment-id={event.id}>
-        <header>
-          <UserAvatar className="avatar review-activity-avatar" name={actor} avatarUrl={event.actor.avatarUrl} />
-          <strong data-i18n-ignore>{actor}</strong>
-          {event.path ? (
-            <code className="review-event-location" data-i18n-ignore>
-              {event.path}
-              {event.line ? `:${event.line}` : ""}
-            </code>
-          ) : null}
-          <time dateTime={event.createdAt} title={new Date(event.createdAt).toLocaleString()}>
-            {age}
-          </time>
-          <PullRequestCommentActions event={event} reviewId={review.id} issueIds={review.issueIds} reviewUrl={review.url} />
-        </header>
-        <ReviewCommentBody className="review-activity-body" body={event.body} />
-      </li>
-    );
   const reviewer = event.body ? data.users.find((user) => user.displayName === event.body || user.name === event.body) : undefined;
   let content: ReactNode;
   if (event.type === "opened")

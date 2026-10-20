@@ -1,30 +1,40 @@
 import type { CodeReview, ReviewFile } from "@/types/flow";
 
 import type { MergeMethod } from "./pull-request-merge-method";
+import { reviewReadyToMerge } from "./review-list-model";
 
 export type ReviewDecision = "approve" | "comment" | "requestChanges";
 
 export const MERGE_LABELS: Record<MergeMethod, string> = {
-  squash: "Squash and merge",
-  merge: "Create a merge commit",
-  rebase: "Rebase and merge",
+  squash: "Squash & merge",
+  merge: "Merge",
+  rebase: "Rebase & merge",
 };
 
 /** What the primary action of the pull request page is for the viewer. */
 export function reviewPrimaryAction(review: CodeReview, viewerId: string) {
   const closed = review.status === "merged" || review.status === "closed";
   const author = review.author.id === viewerId;
-  const passed = review.checks.every((check) => check.status === "passed" || check.status === "skipped");
-  const mergeable = !closed && !review.draft && review.status === "approved" && passed && review.branchState !== "conflicted";
+  const readyToMerge = !closed && reviewReadyToMerge(review);
+  // Authors merge as soon as the branch is mergeable; other people once it is approved.
+  const mergeable = readyToMerge && (author || review.status === "approved");
   if (closed) return { kind: "none" as const, mergeable: false };
   if (author) {
     if (review.draft) return { kind: review.reviewerIds.length ? ("markReady" as const) : ("readyForReview" as const), mergeable };
+    if (mergeable) return { kind: "merge" as const, mergeable };
     if (!review.reviewerIds.length && !review.teamReviewers.length) return { kind: "requestReview" as const, mergeable };
     return { kind: "none" as const, mergeable };
   }
   const asked = review.reviewerIds.includes(viewerId);
   const reviewed = review.events.some((event) => event.actor.id === viewerId && ["approved", "changes_requested", "review_commented"].includes(event.type));
   return { kind: reviewed && !asked ? ("reviewAgain" as const) : ("submitReview" as const), primary: asked, mergeable };
+}
+
+const DOC_FILE = /\.(md|mdx|markdown|txt|rst|adoc)$/i;
+
+/** True when every changed file is documentation (header shows "Docs only" instead of a diff stat). */
+export function reviewDocsOnly(review: CodeReview) {
+  return review.files.length > 0 && review.files.every((file) => DOC_FILE.test(file.path));
 }
 
 /** Sidebar/summary text for checks, mirroring the provider: failures by name, pending counts, or "All passed". */
@@ -96,4 +106,25 @@ export function reviewCodeThreads(review: CodeReview) {
     threads.set(key, [...(threads.get(key) ?? []), { root, replies, resolved: Boolean(root.resolved) }]);
   }
   return threads;
+}
+
+/** Splits two strings into a shared prefix, the differing middles and a shared suffix (rename highlights). */
+export function changedSegments(before: string, after: string) {
+  let start = 0;
+  while (start < before.length && start < after.length && before[start] === after[start]) start += 1;
+  let end = 0;
+  while (end < before.length - start && end < after.length - start && before[before.length - 1 - end] === after[after.length - 1 - end]) end += 1;
+  return {
+    prefix: before.slice(0, start),
+    before: before.slice(start, before.length - end),
+    after: after.slice(start, after.length - end),
+    suffix: before.slice(before.length - end),
+  };
+}
+
+/** Header diff stat: like the provider, test files are left out of the +/- totals. */
+export function reviewHeaderStat(review: CodeReview) {
+  if (!review.files.length) return { additions: review.additions, deletions: review.deletions };
+  const implementation = reviewFileGroups(review.files).find((group) => group.id === "implementation");
+  return { additions: implementation?.additions ?? 0, deletions: implementation?.deletions ?? 0 };
 }

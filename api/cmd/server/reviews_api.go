@@ -326,7 +326,12 @@ func reviewThreadRoot(review domain.CodeReview, commentID string) int {
 }
 
 func reviewCommentEvent(event domain.ReviewEvent) bool {
-	return event.Type == "commented" || event.Type == "review_commented" || event.Path != ""
+	switch event.Type {
+	case "commented", "review_commented", "approved", "changes_requested":
+		// Review summaries (approve / request changes) can be replied to like comments.
+		return true
+	}
+	return event.Path != ""
 }
 
 func reviewIndex(data domain.Bootstrap, id string) int {

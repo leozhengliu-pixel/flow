@@ -13,6 +13,7 @@ import { resolveCodeReviewAccess } from "@/lib/code-access";
 import { toast } from "@/lib/toast";
 import type { BootstrapData, CodeReview, Issue } from "@/types/flow";
 
+import { reviewDocsOnly, reviewHeaderStat } from "./pull-request-review-model";
 import { CodeHostIcon } from "./review-provider";
 import { reviewProviderIdentifier } from "./review-provider-model";
 import { ReviewStateIcon, ReviewTitle } from "./review-state-icon";
@@ -57,6 +58,7 @@ export function PullRequestHeader({
   const { t } = useI18n();
   const access = resolveCodeReviewAccess(data);
   const workspace = data.workspace.urlKey;
+  const stat = reviewHeaderStat(review);
   const go = (path: string) => (event: React.MouseEvent) => {
     event.preventDefault();
     onNavigate(path);
@@ -107,9 +109,15 @@ export function PullRequestHeader({
             aria-label={t("View diff")}
             onClick={() => onNavigate(reviewPath(workspace, review, "changes"))}
           >
-            <span className="review-diff-added">+{review.additions}</span>
-            <span className="review-diff-removed">-{review.deletions}</span>
-            <FileDiff />
+            {reviewDocsOnly(review) ? (
+              <span className="review-diff-docs">{t("Docs only")}</span>
+            ) : (
+              <>
+                <span className="review-diff-added">+{stat.additions}</span>
+                {(stat.deletions > 0 || review.deletions > 0) && <span className="review-diff-removed">-{stat.deletions}</span>}
+                <FileDiff />
+              </>
+            )}
           </button>
           <button
             className="review-ghost-button"
@@ -147,10 +155,11 @@ export function PullRequestHeader({
       </header>
       <div className="review-detail-tabs">
         <nav aria-label={t("Pull request sections")}>
-          {REVIEW_TABS.map((item) => (
+          {REVIEW_TABS.map((item, index) => (
             <a
               className={tab === item.id ? "active" : ""}
               aria-current={tab === item.id ? "page" : undefined}
+              title={`${t(item.id === "overview" ? "View overview" : item.id === "review" ? "View guide" : "View diff")}  ${index + 1}`}
               key={item.id}
               href={reviewPath(workspace, review, item.id)}
               onClick={go(reviewPath(workspace, review, item.id))}

@@ -373,7 +373,7 @@ it('groups For you by focus with provider labels, collapses completed work and s
     { ...review, id: 'mine', title: 'Add `mod(a, b)` helper', author: viewer, reviewerIds: [], createdAt: new Date(now - 16 * 3_600_000).toISOString() },
     { ...review, id: 'done', title: 'Old change', author: viewer, status: 'closed', closedAt: new Date(now - 3_600_000).toISOString() },
   ]);
-  expect(screen.getByRole('button', { name: /Created by you/ })).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByRole('button', { name: /Ready to merge/ })).toHaveAttribute('aria-expanded', 'true');
   expect(document.querySelector('.review-title-code')).toHaveTextContent('mod(a, b)');
   expect(screen.getByText('16h')).toBeVisible();
   const completed = screen.getByRole('button', { name: /Completed/ });
@@ -423,11 +423,46 @@ it('renders inline threads with suggestions, replies to the thread and resolves 
   };
   renderDetail(withThread, 'changes');
   expect(await screen.findByText('Suggested change')).toBeVisible();
-  expect(screen.getByText('const answer = 2;')).toBeVisible();
+  expect(screen.getByText((_text, element) => element?.classList.contains('review-code') === true && element.textContent === 'const answer = 2;')).toBeVisible();
   expect(screen.getByText('Will do')).toBeVisible();
   await user.type(screen.getByRole('textbox', { name: 'Reply' }), 'Done');
   await user.click(screen.getByRole('button', { name: 'Submit reply' }));
   await waitFor(() => expect(api.commentOnReview).toHaveBeenCalledWith(review.id, 'Done', { parentId: 'c1' }));
-  await user.click(screen.getByRole('button', { name: 'Resolve' }));
+  await user.click(screen.getByRole('button', { name: 'Resolve thread' }));
   await waitFor(() => expect(api.resolveReviewThread).toHaveBeenCalledWith(review.id, 'c1', true));
+});
+
+it('shows conversation comments and reviews as cards with replies and a resolved-thread summary', async () => {
+  const user = userEvent.setup();
+  api.commentOnReview.mockResolvedValue(review);
+  renderDetail({
+    ...review,
+    events: [
+      ...review.events,
+      { id: 'issue-comment', type: 'commented', body: 'Looks good overall', actor: teammate, createdAt: '2026-09-01T01:00:00.000Z' },
+      { id: 'summary', type: 'review_commented', body: 'Review notes', actor: teammate, createdAt: '2026-09-01T02:00:00.000Z' },
+      { id: 'code-1', type: 'commented', body: 'Inline only', path: 'src/a.ts', line: 3, actor: teammate, createdAt: '2026-09-01T02:00:00.000Z' },
+      { id: 'code-2', type: 'commented', body: 'Nit', path: 'src/a.ts', line: 9, resolved: true, actor: teammate, createdAt: '2026-09-01T02:00:00.000Z' },
+    ],
+  });
+  expect(screen.getByText('Looks good overall')).toBeVisible();
+  expect(screen.getByText('Reviewed')).toBeVisible();
+  expect(screen.getByRole('link', { name: /1 of 2 code comments resolved/ })).toBeVisible();
+  expect(screen.queryByText('Inline only')).not.toBeInTheDocument();
+  await user.type(screen.getAllByRole('textbox', { name: 'Reply' })[0], 'Thanks{Enter}');
+  await waitFor(() => expect(api.commentOnReview).toHaveBeenCalledWith(review.id, 'Thanks', { parentId: 'issue-comment' }));
+});
+
+it('describes renamed files without content changes and marks added and deleted files', async () => {
+  renderDetail({
+    ...review,
+    files: [
+      { path: 'lib/arithmetic.js', previousPath: 'src/math.js', status: 'renamed', additions: 0, deletions: 0, patch: '' },
+      { path: 'lib/new.js', status: 'added', additions: 1, deletions: 0, patch: '@@ -0,0 +1 @@\n+export const a = 1;' },
+      { path: 'src/old.test.js', status: 'deleted', additions: 0, deletions: 1, patch: '@@ -1 +0,0 @@\n-old();' },
+    ],
+  }, 'changes');
+  expect(await screen.findByText('File renamed and moved')).toBeVisible();
+  expect(document.querySelector('[data-diff-file="lib/new.js"] .review-file-name')).toHaveAttribute('data-file-status', 'added');
+  expect(document.querySelector('[data-diff-file="src/old.test.js"] .review-file-name')).toHaveAttribute('data-file-status', 'deleted');
 });

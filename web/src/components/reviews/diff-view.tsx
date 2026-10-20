@@ -5,7 +5,7 @@
  */
 import * as Popover from "@radix-ui/react-popover";
 import * as RadixMenu from "@radix-ui/react-dropdown-menu";
-import { ChevronDown, Columns2, Copy, ExternalLink, FileCode2, GitCommitHorizontal, ListTree, MoreHorizontal, Rows2, Search } from "lucide-react";
+import { ArrowRight, ChevronDown, Columns2, Copy, ExternalLink, FileCode2, GitCommitHorizontal, ListTree, MessageSquare, MoreHorizontal, Rows2, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DiffContentRows, DiffInlineComposer, type DiffCommentTarget } from "@/components/reviews/diff-content";
@@ -16,10 +16,10 @@ import { useI18n } from "@/i18n/i18n";
 import { commentOnReview } from "@/lib/api";
 import { pairDiffLines } from "@/lib/diff-computer";
 import { toast } from "@/lib/toast";
-import type { CodeReview } from "@/types/flow";
+import type { CodeReview, User } from "@/types/flow";
 
 import { useOptionalPullRequestReviewShortcuts } from "./pull-request-review-shortcuts";
-import { reviewCodeThreads, splitReviewPath } from "./pull-request-review-model";
+import { changedSegments, reviewCodeThreads, splitReviewPath } from "./pull-request-review-model";
 import { DiffCounts } from "./review-overview";
 import { ReviewThread } from "./review-thread";
 import "@/components/project-detail/project-action-menu.css";
@@ -56,8 +56,11 @@ export function DiffView({
   onEditLine,
   mode: controlledMode,
   onModeChange,
+  viewer,
 }: {
   review: CodeReview;
+  /** The signed-in person, shown next to thread reply boxes. */
+  viewer?: Pick<User, "displayName" | "avatarUrl">;
   onReload: () => Promise<void>;
   editable?: boolean;
   onEditableChange?: (editable: boolean) => void;
@@ -92,7 +95,11 @@ export function DiffView({
   const filterInput = useRef<HTMLInputElement>(null);
   const { files, ready } = useDiffFilesQuery(review, { variant: "basic", enableAgentContext: true });
   const threads = useMemo(() => reviewCodeThreads(review), [review]);
-  const visibleFiles = files.filter((file) => !(preferences.hideReviewed && reviewed.has(file.path)));
+  const [onlyCommented, setOnlyCommented] = useState(false);
+  const sourceFile = (path: string) => review.files.find((file) => file.path === path);
+  const commentCount = (path: string) => [...threads.entries()].filter(([key]) => key.startsWith(`${path}:`)).reduce((sum, [, list]) => sum + list.filter((thread) => !thread.resolved).length, 0);
+  const openThreads = files.reduce((sum, file) => sum + commentCount(file.path), 0);
+  const visibleFiles = files.filter((file) => !(preferences.hideReviewed && reviewed.has(file.path)) && (!onlyCommented || commentCount(file.path) > 0));
   const treeFiles = visibleFiles.filter((file) => file.path.toLowerCase().includes(filter.trim().toLowerCase()));
 
   const persistReviewed = (next: Set<string>) => {
@@ -184,6 +191,17 @@ export function DiffView({
           <small>{review.commitCount}</small>
         </span>
         {!ready ? <em className="review-diff-compute-status">{t("Computing diffs…")}</em> : null}
+        {openThreads > 0 && (
+          <div className="review-changes-filter" role="group" aria-label={t("Show files")}>
+            <button type="button" aria-pressed={!onlyCommented} onClick={() => setOnlyCommented(false)}>
+              {t("All")}
+            </button>
+            <button type="button" aria-pressed={onlyCommented} onClick={() => setOnlyCommented(true)}>
+              {t("Comments")}
+              <small>{openThreads}</small>
+            </button>
+          </div>
+        )}
         <Popover.Root open={displayOpen} onOpenChange={setDisplayOpen}>
           <Popover.Trigger asChild>
             <button type="button" className="review-ghost-button review-changes-display" aria-label={t("Display options")}>
@@ -234,7 +252,7 @@ export function DiffView({
                 const { name, directory } = splitReviewPath(file.path);
                 return (
                   <li key={file.path}>
-                    <button type="button" aria-current={hovered === file.path || undefined} onClick={() => scrollToFile(file.path)}>
+                    <button type="button" aria-current={hovered === file.path || undefined} data-file-status={file.status} onClick={() => scrollToFile(file.path)}>
                       <FileCode2 />
                       <span className="review-file-name" data-i18n-ignore>
                         {name}
@@ -242,6 +260,7 @@ export function DiffView({
                       <span className="review-file-directory" data-i18n-ignore>
                         {directory}
                       </span>
+                      {commentCount(file.path) > 0 && <small className="review-file-tree-count">{commentCount(file.path)}</small>}
                     </button>
                   </li>
                 );
@@ -257,7 +276,6 @@ export function DiffView({
               const computed = file.computed;
               const lines = computed?.lines ?? [];
               const splitRows = computed?.splitRows ?? pairDiffLines(lines);
-              const { name, directory } = splitReviewPath(file.path);
               const isCollapsed = collapsed.has(file.path);
               const isReviewed = reviewed.has(file.path);
               const lineContent = (line: number) => lines.find((item) => item.newNumber === line)?.content;
@@ -274,18 +292,14 @@ export function DiffView({
                       <FileCode2 className="review-file-icon" />
                       <ChevronDown className="review-file-chevron" />
                     </button>
-                    <strong className="review-file-name" data-i18n-ignore>
-                      {name}
-                    </strong>
-                    {directory && (
-                      <span className="review-file-directory" data-i18n-ignore>
-                        {directory}/
+                    <DiffFileName path={file.path} previousPath={sourceFile(file.path)?.previousPath} status={file.status} />
+                    {computed?.state === "computing" || computed?.state === "pending" ? <small className="review-diff-compute-status">{t("Computing…")}</small> : null}
+                    {commentCount(file.path) > 0 && (
+                      <span className="review-file-comments" aria-label={`${commentCount(file.path)} ${t(commentCount(file.path) === 1 ? "comment" : "comments")}`}>
+                        <MessageSquare />
+                        {commentCount(file.path)}
                       </span>
                     )}
-                    {file.status === "added" || file.status === "deleted" || file.status === "renamed" ? (
-                      <span className="review-file-status">{t(file.status === "added" ? "Added" : file.status === "deleted" ? "Deleted" : "Renamed")}</span>
-                    ) : null}
-                    {computed?.state === "computing" || computed?.state === "pending" ? <small className="review-diff-compute-status">{t("Computing…")}</small> : null}
                     <DiffCounts additions={file.additions} deletions={file.deletions} />
                     <label className="review-reviewed-toggle">
                       <input type="checkbox" checked={isReviewed} onChange={() => toggleReviewed(file.path)} />
@@ -297,6 +311,8 @@ export function DiffView({
                     <div className="review-diff-empty">{t("PDF preview is not available in Reviews yet")}</div>
                   ) : file.kind === "binary" ? (
                     <div className="review-diff-empty">{t("Binary file changed")}</div>
+                  ) : !lines.length && file.status === "renamed" && sourceFile(file.path)?.previousPath ? (
+                    <RenamedFileBody previousPath={sourceFile(file.path)?.previousPath ?? ""} path={file.path} />
                   ) : !lines.length ? (
                     <div className="review-diff-empty">
                       {computed?.state === "error"
@@ -332,7 +348,7 @@ export function DiffView({
                         return (
                           <>
                             {lineThreads.map((thread) => (
-                              <ReviewThread key={thread.root.id} review={review} thread={thread} originalLine={lineContent(line)} onReload={onReload} />
+                              <ReviewThread key={thread.root.id} review={review} thread={thread} originalLine={lineContent(line)} viewer={viewer} onReload={onReload} />
                             ))}
                             {composing && (
                               <DiffInlineComposer
@@ -396,5 +412,73 @@ function FileActions({ path, url }: { path: string; url: string }) {
         </RadixMenu.Content>
       </RadixMenu.Portal>
     </RadixMenu.Root>
+  );
+}
+
+function renameSegments({ before, after }: { before: string; after: string }) {
+  const parts = changedSegments(before, after);
+  return {
+    before: (
+      <span>
+        {parts.prefix}
+        {parts.before && <mark className="review-rename-removed">{parts.before}</mark>}
+        {parts.suffix}
+      </span>
+    ),
+    after: (
+      <span>
+        {parts.prefix}
+        {parts.after && <mark className="review-rename-added">{parts.after}</mark>}
+        {parts.suffix}
+      </span>
+    ),
+  };
+}
+
+/** File header name: added (green), deleted (struck through) or "old → new  dir/ → dir/" for renames. */
+function DiffFileName({ path, previousPath, status }: { path: string; previousPath?: string; status: string }) {
+  const { name, directory } = splitReviewPath(path);
+  if (status === "renamed" && previousPath && previousPath !== path) {
+    const previous = splitReviewPath(previousPath);
+    const names = renameSegments({ before: previous.name, after: name });
+    const directories = renameSegments({ before: previous.directory ? `${previous.directory}/` : "", after: directory ? `${directory}/` : "" });
+    return (
+      <span className="review-file-title" data-i18n-ignore>
+        <strong className="review-file-name">{names.before}</strong>
+        <ArrowRight className="review-rename-arrow" />
+        <strong className="review-file-name">{names.after}</strong>
+        {previous.directory !== directory && (
+          <span className="review-file-directory">
+            {directories.before}
+            <ArrowRight className="review-rename-arrow" />
+            {directories.after}
+          </span>
+        )}
+      </span>
+    );
+  }
+  return (
+    <span className="review-file-title" data-i18n-ignore>
+      <strong className="review-file-name" data-file-status={status}>
+        {name}
+      </strong>
+      {directory && <span className="review-file-directory">{directory}/</span>}
+    </span>
+  );
+}
+
+function RenamedFileBody({ previousPath, path }: { previousPath: string; path: string }) {
+  const { t } = useI18n();
+  const moved = splitReviewPath(previousPath).directory !== splitReviewPath(path).directory;
+  const parts = renameSegments({ before: previousPath, after: path });
+  return (
+    <div className="review-file-renamed">
+      <span>{t(moved ? "File renamed and moved" : "File renamed")}</span>
+      <span className="review-file-renamed-paths" data-i18n-ignore>
+        {parts.before}
+        <ArrowRight className="review-rename-arrow" />
+        {parts.after}
+      </span>
+    </div>
   );
 }

@@ -1777,6 +1777,8 @@ export interface ReviewFile {
   additions: number;
   deletions: number;
   patch: string;
+  /** Old path of a renamed or moved file. */
+  previousPath?: string;
 }
 export interface ReviewEvent {
   id: UUID;
