@@ -67,9 +67,27 @@ func readContentPage[T any](ctx context.Context, s *SQLiteStore, workspace, reso
 	return items, next, rows.Err()
 }
 
-// The caller authorizes the resource before requesting its discussion page.
+// ResourceCommentsPage reads one page of a resource's comments with authors resolved, so a renamed member or
+// re-logoed application shows as it is now. The caller authorizes the resource before requesting its discussion page.
 func (s *SQLiteStore) ResourceCommentsPage(ctx context.Context, workspace, resource, cursor string, limit int) ([]domain.Comment, string, error) {
-	return readContentPage[domain.Comment](ctx, s, workspace, resource, "comment", cursor, limit)
+	items, next, err := readContentPage[domain.Comment](ctx, s, workspace, resource, "comment", cursor, limit)
+	if err != nil || len(items) == 0 {
+		return items, next, err
+	}
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.User.ID)
+	}
+	refs, err := s.readIssueReferences(ctx, workspace, ids)
+	if err != nil {
+		return items, next, err
+	}
+	for i, item := range items {
+		if user, ok := refs.users[item.User.ID]; ok {
+			items[i].User = user
+		}
+	}
+	return items, next, nil
 }
 
 func (s *SQLiteStore) IssueHistoryPage(ctx context.Context, workspace, issue, commentsCursor, activitiesCursor string) (IssueHistory, error) {

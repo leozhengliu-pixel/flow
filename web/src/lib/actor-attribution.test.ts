@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { activityActor, attributedActionText, attributedActorAvatar, attributedActorLabel, attributedActorName, isAgentBot, liveBotActor, sameActivityActor, setLiveApplicationIdentities, viaAppName } from "./actor-attribution";
+import { activityActor, attributedActionText, attributedActorAvatar, attributedActorLabel, attributedActorName, isAgentBot, liveActorUser, liveBotActor, sameActivityActor, setLiveApplicationIdentities, viaAppName } from "./actor-attribution";
 
 const user = { displayName: "Mark", name: "mark", avatarUrl: "https://img.test/mark.png" };
 
@@ -77,6 +77,21 @@ describe("Flow agent attribution", () => {
       expect(liveBotActor({ ...bot, id: "other" }).name).toBe("Old app");
       setLiveApplicationIdentities([]);
       expect(viaAppName(user, bot)).toBe("Old app");
+    } finally {
+      setLiveApplicationIdentities([]);
+    }
+  });
+
+  it("shows an application user's current name and logo on records that kept the old ones", () => {
+    const written = { id: "app_user_1", app: true, displayName: "Old app", name: "Old app", avatarUrl: "/uploads/old.png" };
+    try {
+      setLiveApplicationIdentities([{ id: "app_user_1", app: true, oauthClientId: "client_1", name: "New app", displayName: "New app", avatarUrl: "/uploads/new.png" }]);
+      expect(attributedActorName(written)).toBe("New app");
+      expect(attributedActorAvatar(written)).toBe("/uploads/new.png");
+      expect(liveActorUser(written).avatarUrl).toBe("/uploads/new.png");
+      // Members are left as written.
+      const member = { ...user, id: "app_user_1" };
+      expect(liveActorUser(member)).toBe(member);
     } finally {
       setLiveApplicationIdentities([]);
     }
