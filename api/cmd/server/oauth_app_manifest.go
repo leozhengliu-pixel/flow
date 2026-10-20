@@ -462,6 +462,7 @@ func (s *server) updateOAuthApplicationFromManifest(w http.ResponseWriter, r *ht
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}
+	s.syncApplicationIdentity(r.Context(), updated.ClientID)
 	s.respondManifestApplication(w, r, http.StatusOK, updated, manifestWebhookSecret(manifest))
 }
 

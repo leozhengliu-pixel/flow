@@ -135,6 +135,14 @@ func (s *server) ensureBuiltinApplications(ctx context.Context) {
 	}
 }
 
+// syncApplicationIdentity shows an edited OAuth application's name and logo on
+// its installed app users (assignee, delegate, comment and history authors).
+func (s *server) syncApplicationIdentity(ctx context.Context, clientID string) {
+	if err := s.store.SyncApplicationIdentity(ctx, clientID); err != nil {
+		log.Printf("sync application identity client=%s: %v", clientID, err)
+	}
+}
+
 func (s *server) ensureBuiltinApplication(ctx context.Context, workspace string) {
 	if _, err := s.store.EnsureBuiltinApplication(ctx, workspace, s.agent.Enabled); err != nil {
 		log.Printf("ensure built-in Flow agent workspace=%s: %v", workspace, err)

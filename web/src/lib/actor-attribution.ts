@@ -2,6 +2,30 @@ import type { ActorBot } from "@/types/flow";
 
 type ActorUser = { displayName?: string; name?: string; avatarUrl?: string; app?: boolean } | null | undefined;
 
+type ApplicationUser = { app?: boolean; oauthClientId?: string; displayName?: string; name?: string; avatarUrl?: string };
+
+// The current name and logo of each installed OAuth application, by client
+// ID, from the workspace's app users. Records keep the application's name and
+// logo as they were when written; these show the application as it is now.
+let liveApplications = new Map<string, { name: string; avatarUrl?: string }>();
+
+export function setLiveApplicationIdentities(users: readonly ApplicationUser[] | null | undefined): void {
+  const next = new Map<string, { name: string; avatarUrl?: string }>();
+  for (const user of users ?? []) {
+    const name = user.displayName?.trim() || user.name?.trim();
+    if (user.app && user.oauthClientId && name) next.set(user.oauthClientId, { name, avatarUrl: user.avatarUrl || undefined });
+  }
+  liveApplications = next;
+}
+
+/** The record's application attribution with the application's current name and logo. */
+export function liveBotActor<T extends ActorBot | null | undefined>(botActor: T): T {
+  if (!botActor || botActor.type !== "oauthApplication" || !botActor.id) return botActor;
+  const current = liveApplications.get(botActor.id);
+  if (!current || (current.name === botActor.name && current.avatarUrl === botActor.avatarUrl)) return botActor;
+  return { ...botActor, name: current.name, avatarUrl: current.avatarUrl };
+}
+
 /**
  * "<User> via <App>" attribution (like the reference app's "Mark via Zendesk"):
  * - An application acting on behalf of an external person (`userDisplayName`) names that person.
@@ -13,7 +37,7 @@ export function attributedActorName(user: ActorUser, botActor?: ActorBot | null)
 
 /** The application name to show after "via", if any. */
 export function viaAppName(user: ActorUser, botActor?: ActorBot | null): string | undefined {
-  const app = botActor?.name?.trim();
+  const app = liveBotActor(botActor)?.name?.trim();
   if (!app) return undefined;
   // The application's own bot user never needs a "via" suffix on its own activity.
   if (user?.app && !botActor?.userDisplayName?.trim()) return undefined;
@@ -21,7 +45,7 @@ export function viaAppName(user: ActorUser, botActor?: ActorBot | null): string 
 }
 
 export function attributedActorAvatar(user: ActorUser, botActor?: ActorBot | null): string | undefined {
-  if (botActor?.userDisplayName?.trim()) return botActor.userAvatarUrl || botActor.avatarUrl || user?.avatarUrl;
+  if (botActor?.userDisplayName?.trim()) return botActor.userAvatarUrl || liveBotActor(botActor).avatarUrl || user?.avatarUrl;
   return user?.avatarUrl;
 }
 
