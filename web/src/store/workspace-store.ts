@@ -1,3 +1,4 @@
+import { setLiveApplicationIdentities } from '@/lib/actor-attribution'
 import type { BootstrapData, RealtimeEvent } from '@/types/flow'
 import { applyRealtimePatch, type RealtimePatchResult } from './apply-realtime-patch'
 import {
@@ -29,6 +30,8 @@ export type WorkspaceStore = {
 
 export function createWorkspaceStore(data: BootstrapData | null = null): WorkspaceStore {
   const entities = buildEntityDirectory(data)
+  // Application attributions on records show the application's current name and logo.
+  if (data) setLiveApplicationIdentities(data.users)
 
   const store: WorkspaceStore = {
     data,

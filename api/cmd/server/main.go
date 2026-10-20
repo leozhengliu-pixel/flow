@@ -204,6 +204,9 @@ func main() {
 	}
 	httpServer.Handler = s.codingMainHandler(httpServer.Handler)
 	s.ensureBuiltinApplications(shutdownSignal)
+	if err := s.store.SyncAllApplicationIdentities(shutdownSignal); err != nil {
+		log.Printf("sync application identities: %v", err)
+	}
 	go s.runCoding(shutdownSignal)
 	go s.runApplicationAgentWorker(shutdownSignal)
 	go s.runRecurringIssueScheduler(shutdownSignal)

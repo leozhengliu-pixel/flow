@@ -1681,6 +1681,7 @@ func (s *server) updateOAuthApplication(w http.ResponseWriter, r *http.Request) 
 		return nil
 	})
 	if err == nil {
+		s.syncApplicationIdentity(r.Context(), updated.ClientID)
 		// Keep each workspace's managed app webhook in step, as manifest saves do.
 		go s.reconcileAllApplicationWebhooks(context.Background())
 	}
