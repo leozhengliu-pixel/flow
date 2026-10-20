@@ -84,9 +84,9 @@ export function CodingActionRow({ action }: { action: StreamAction }) {
   </div>
 }
 
-/** A thought: 12px muted text beside a 2px rail. */
+/** A thought: 12px muted text beside a 2px rail; backticked spans are code chips. */
 export function CodingReasoning({ activity }: { activity: ApplicationActivity }) {
-  return <div className="cs-reasoning"><p data-i18n-ignore>{activity.body}</p></div>
+  return <div className="cs-reasoning"><p data-i18n-ignore><InlineCode text={activity.body}/></p></div>
 }
 
 function GroupChildView({ child }: { child: GroupChild }) {
@@ -118,7 +118,7 @@ export function CodingActivityGroup({ group }: { group: Extract<StreamItem, { ki
       <DisclosureTriangle open={open}/>
     </button>
     {open && <div className="cs-group-children">{group.children.map(child => <GroupChildView key={child.kind === 'tools' ? child.id : child.activity.id} child={child}/>)}</div>}
-    {!open && group.promoted && <div className="cs-reasoning is-promoted"><p data-i18n-ignore>{group.promoted}</p></div>}
+    {!open && group.promoted && <div className="cs-reasoning is-promoted"><p data-i18n-ignore><InlineCode text={group.promoted}/></p></div>}
   </div>
 }
 

@@ -306,7 +306,8 @@ describe('coding session panel', () => {
     ] })
     renderPanel(makeSession({ state: 'complete', phase: 'idle' }))
     const stream = await screen.findByRole('group', { name: 'Session stream' })
-    expect(await within(stream).findByText('You')).toBeVisible()
+    // The prompt carries its author's name (the viewer's own too).
+    expect(await within(stream).findByText('Viewer')).toBeVisible()
     await user.click(within(stream).getByRole('button', { name: /Worked for/ }))
     expect(within(stream).getByText('Looking at auth.ts')).toBeVisible()
     expect(within(stream).getByText('npm test')).toBeVisible()

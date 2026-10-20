@@ -10,6 +10,7 @@ export const codingSessionStatesZhCN: Record<string, string> = {
   "Changed {count} file": "修改了 {count} 个文件",
   "Changed {count} files": "修改了 {count} 个文件",
   "Starting coding session…": "正在启动编码会话…",
+  "Setting up {repo}…": "正在准备 {repo}…",
   "Stopped responding": "已停止响应",
   "Agent didn’t start": "Agent 未启动",
   "Didn’t start": "未启动",
