@@ -60,19 +60,15 @@ describe('agent glyph family', () => {
 })
 
 describe('built-in agent avatar', () => {
-  it('mirrors the 256 tile: a full circle with the mark at 160px offset 48', () => {
+  it('is the mark as a disc: a full circle with the ridgeline cut through it, no inner tile', () => {
     const { container } = render(<AgentAvatarMark title="Flow"/>)
     const svg = container.querySelector('svg[data-agent-avatar]')!
-    expect(svg).toHaveAttribute('viewBox', '0 0 256 256')
+    expect(svg).toHaveAttribute('viewBox', '4 4 40 40')
     expect(svg).toHaveAttribute('aria-label', 'Flow')
-    const disc = svg.querySelector('rect.agent-avatar-mark__disc')!
-    expect(disc).toHaveAttribute('width', '256')
-    expect(disc).toHaveAttribute('rx', '128')
-    const logo = svg.querySelector('svg.agent-avatar-mark__logo')!
-    expect(logo).toHaveAttribute('x', '48')
-    expect(logo).toHaveAttribute('y', '48')
-    expect(logo).toHaveAttribute('width', '160')
-    expect(logo).toHaveAttribute('viewBox', '4 4 40 40')
+    const disc = svg.querySelector('circle.agent-avatar-mark__disc')!
+    expect(disc).toHaveAttribute('r', '20')
+    expect(disc.getAttribute('mask')).toMatch(/^url\(#agent-avatar-/)
+    expect(svg.querySelector('rect[rx="10"]')).toBeNull()
   })
 
   it('recognises the url the server gives the built-in agent', () => {

@@ -36,21 +36,18 @@ export function AgentCloseGlyph(props: GlyphProps) { return <AgentGlyphSvg glyph
 export function AgentToolbarGlyph(props: GlyphProps) { return <AgentGlyphSvg glyph="moveToToolbar" {...props} /> }
 
 /**
- * The built-in agent's avatar, structured "the reference app Agent" avatar: a full-size circle in the primary label
- * colour with the product mark at 62.5% of the box (160 of 256) in the page background colour, so it inverts with the theme.
- * The reference app draws its own logo there; Flow draws its ridgeline mark. Sized by the host class (100% by default).
+ * The built-in agent's avatar: Flow's mark drawn as a disc. The circle is the mark itself, in the primary label colour,
+ * with the ridgeline cut through it (showing the page behind), so a round avatar holds no square tile. Sized by the host
+ * class (100% by default).
  */
 export function AgentAvatarMark({ className, size, title }: { className?: string; size?: number; title?: string }) {
   const id = `agent-avatar-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
   const label = { role: title ? 'img' : undefined, 'aria-label': title, 'aria-hidden': title ? undefined : true } as const
-  return <svg className={className ? `agent-avatar-mark ${className}` : 'agent-avatar-mark'} data-agent-avatar="" width={size} height={size} viewBox="0 0 256 256" fill="none" {...label}>
-    <rect width="256" height="256" rx="128" className="agent-avatar-mark__disc"/>
-    <svg x="48" y="48" width="160" height="160" viewBox="4 4 40 40" className="agent-avatar-mark__logo">
-      <mask id={id} maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="48">
-        <rect width="48" height="48" fill="#fff"/>
-        <path d={FLOW_LOGO_RIDGE} fill="none" stroke="#000" strokeWidth="5"/>
-      </mask>
-      <rect x="4" y="4" width="40" height="40" rx="10" mask={`url(#${id})`}/>
-    </svg>
+  return <svg className={className ? `agent-avatar-mark ${className}` : 'agent-avatar-mark'} data-agent-avatar="" width={size} height={size} viewBox="4 4 40 40" fill="none" {...label}>
+    <mask id={id} maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="48">
+      <rect width="48" height="48" fill="#fff"/>
+      <path d={FLOW_LOGO_RIDGE} fill="none" stroke="#000" strokeWidth="5"/>
+    </mask>
+    <circle cx="24" cy="24" r="20" className="agent-avatar-mark__disc" mask={`url(#${id})`}/>
   </svg>
 }
