@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
-	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -15,21 +14,17 @@ import (
 	"flow/api/internal/domain"
 )
 
-// Like the reference app's agent, Flow's agent writes without asking, with two exceptions that pause for the user's approval
-// (shown as a readable preview with Approve / Reject options):
-//   - deleting more than one item in one go (a turn of delete_* calls naming two or more targets);
-//   - publishing a project or initiative update the agent wrote on its own initiative — the user's latest message
-//     did not ask to post or publish it.
-// The held calls run once the user approves (a picked option or a reply such as "yes" / "批准"); any other reply
-// rejects them.
+// Like the reference app's agent, Flow's agent writes without asking: deletes (one item or many) and status updates it
+// wrote itself run at once. The only calls that pause for the user's approval (Approve / Reject options) are tools
+// of an MCP connector set to always ask (see connectorTool.needsApproval). Approvals saved by earlier versions for
+// bulk deletes or agent-written updates still render (agentApprovalPreview) and still run or drop their held calls
+// once answered. The held calls run once the user approves (a picked option or a reply such as "yes" / "批准");
+// any other reply rejects them.
 
 const (
 	agentApprovalApprove = "approve"
 	agentApprovalReject  = "reject"
 )
-
-// agentApprovalOptions are the choices of an approval question; the app translates the labels.
-var agentApprovalOptions = []domain.AgentQuestionOption{{Label: "Approve", Value: agentApprovalApprove}, {Label: "Reject", Value: agentApprovalReject}}
 
 var agentApprovalWords = map[string]bool{
 	"approve": true, "approved": true, "yes": true, "y": true, "ok": true, "okay": true, "sure": true, "confirm": true,
@@ -47,14 +42,6 @@ func agentApprovalAnswer(reply string) string {
 		return agentApprovalApprove
 	}
 	return agentApprovalReject
-}
-
-var agentPublishRequest = regexp.MustCompile(`(?i)\b(post|publish|share|send|submit)\b|发布|发表|发出|发送|贴出|提交|分享`)
-
-// agentUserAskedToPublish reports whether the user's message asks to post an update, so the agent may publish it
-// without asking again.
-func agentUserAskedToPublish(message string) bool {
-	return agentPublishRequest.MatchString(message)
 }
 
 func agentToolBaseName(name string) string {
@@ -88,89 +75,6 @@ func agentDeleteReferences(call domain.AgentToolCall) []string {
 		}
 	}
 	return refs
-}
-
-// agentApprovalForTurn returns the approval a turn's calls need, holding the calls it names, or nil when they may
-// all run now. latestUser is the user's latest message.
-func (s *server) agentApprovalForTurn(r *http.Request, data domain.Bootstrap, calls []domain.AgentToolCall, latestUser string) *domain.AgentApproval {
-	// The user just approved (for example after the agent asked itself): do not ask twice.
-	if agentApprovalAnswer(latestUser) == agentApprovalApprove {
-		return nil
-	}
-	var deletes, publishes []domain.AgentToolCall
-	targets := []domain.AgentApprovalTarget{}
-	for _, call := range calls {
-		name := agentToolBaseName(call.Name)
-		switch {
-		case strings.HasPrefix(name, "delete_"):
-			refs := agentDeleteReferences(call)
-			for _, ref := range refs {
-				targets = append(targets, s.agentApprovalTarget(r, data, name, ref))
-			}
-			// The approved call deletes exactly the item the preview showed: its id argument is pinned to the
-			// resolved id, so running it later never re-resolves the reference to something else.
-			if len(refs) == 1 {
-				call = agentPinnedDeleteCall(call, targets[len(targets)-1].ID)
-			}
-			deletes = append(deletes, call)
-		case name == "save_status_update":
-			var args struct {
-				ID string `json:"id"`
-			}
-			_ = json.Unmarshal(call.Arguments, &args)
-			if strings.TrimSpace(args.ID) == "" && !agentUserAskedToPublish(latestUser) {
-				publishes = append(publishes, call)
-			}
-		}
-	}
-	approval := &domain.AgentApproval{}
-	if len(targets) > 1 {
-		approval.Kind = "delete"
-		approval.Targets = targets
-		approval.Calls = append(approval.Calls, deletes...)
-	}
-	if len(publishes) > 0 {
-		if approval.Kind == "" {
-			approval.Kind = "publish"
-		}
-		var args struct {
-			Body       string `json:"body"`
-			Health     string `json:"health"`
-			Type       string `json:"type"`
-			Project    string `json:"project"`
-			Initiative string `json:"initiative"`
-		}
-		_ = json.Unmarshal(publishes[0].Arguments, &args)
-		approval.Body, approval.Health = strings.TrimSpace(args.Body), args.Health
-		if args.Type == "initiative" || args.Initiative != "" && args.Project == "" {
-			parent := s.agentApprovalTarget(r, data, "delete_initiative", args.Initiative)
-			approval.Parent = &parent
-		} else if args.Project != "" {
-			parent := s.agentApprovalTarget(r, data, "delete_project", args.Project)
-			approval.Parent = &parent
-		}
-		approval.Calls = append(approval.Calls, publishes...)
-	}
-	if approval.Kind == "" {
-		return nil
-	}
-	return approval
-}
-
-// agentPinnedDeleteCall returns call with its id argument replaced by the resolved id.
-func agentPinnedDeleteCall(call domain.AgentToolCall, id string) domain.AgentToolCall {
-	var args map[string]any
-	if strings.TrimSpace(id) == "" || json.Unmarshal(call.Arguments, &args) != nil {
-		return call
-	}
-	if current, ok := args["id"].(string); !ok || current == id {
-		return call
-	}
-	args["id"] = id
-	if raw, err := json.Marshal(args); err == nil {
-		call.Arguments = raw
-	}
-	return call
 }
 
 // agentIssueReferenceShape is an issue identifier (DEV-42) or internal issue id (issue_42).
@@ -248,92 +152,6 @@ func agentUngroundedIssueMessage(ref string) string {
 	return fmt.Sprintf("Not run: %s has not appeared in this conversation (not in the user's request, the context or any tool result), so it may not be the issue you mean. To create an issue, call save_issue without id. To change or delete an existing issue, look it up first (get_issue, or list_issues with parentId for sub-issues) and use the id or identifier the result gives.", ref)
 }
 
-// agentApprovalTarget names one item a held call would change, for the preview.
-func (s *server) agentApprovalTarget(r *http.Request, data domain.Bootstrap, tool, ref string) domain.AgentApprovalTarget {
-	root := "/" + url.PathEscape(data.Workspace.URLKey)
-	kind := strings.TrimPrefix(tool, "delete_")
-	target := domain.AgentApprovalTarget{Kind: kind, ID: ref, Label: ref}
-	switch kind {
-	case "issue":
-		if issue, ok := s.agentApprovalIssue(r, data, ref); ok {
-			target.ID, target.Label, target.Title, target.SubIssues = issue.ID, issue.Identifier, issue.Title, len(issue.SubIssueIDs)
-			target.Href = root + "/issue/" + url.PathEscape(issue.Identifier)
-		}
-	case "document":
-		if document, err := mcpFindDocument(data, ref); err == nil {
-			target.ID, target.Label, target.Href = document.ID, documentDisplayTitle(document.Title), root+"/document/"+url.PathEscape(document.SlugID)
-		}
-	case "project":
-		if project, err := mcpFindProject(data, ref); err == nil {
-			target.ID, target.Label, target.Href = project.ID, project.Name, root+"/project/"+url.PathEscape(project.SlugID)+"/overview"
-		}
-	case "initiative":
-		if initiative, err := mcpFindInitiative(data, ref); err == nil {
-			target.ID, target.Label, target.Href = initiative.ID, initiative.Name, root+"/initiative/"+url.PathEscape(initiative.SlugID)+"/overview"
-		}
-	}
-	// Other delete tools describe their target (name, linked items) without deleting it.
-	if slices.Contains(mcpDeleteTools, tool) {
-		if preview, err := s.flowDeletePreview(r.Context(), s.agentApprovalActor(r, data), tool, map[string]any{"id": ref}); err == nil {
-			if name, _ := preview["name"].(string); name != "" {
-				target.Label = name
-			}
-			if id, _ := preview["id"].(string); id != "" {
-				target.ID = id
-			}
-			if affected, ok := preview["affected"].(map[string]int); ok && len(affected) > 0 {
-				target.Affected = affected
-			}
-			if restorable, ok := preview["restorable"].(bool); ok && !restorable {
-				target.Permanent = true
-			}
-		}
-	}
-	switch kind {
-	case "label":
-		if label, err := mcpFindLabel(data, ref); err == nil {
-			target.ID, target.Label = label.ID, label.Name
-		}
-	case "view":
-		if view, err := mcpFindView(data, ref); err == nil {
-			target.ID, target.Label = view.ID, view.Name
-		}
-	case "customer":
-		if customer, err := mcpFindCustomer(data, ref); err == nil {
-			target.ID, target.Label = customer.ID, customer.Name
-		}
-	}
-	return target
-}
-
-// agentApprovalIssue loads an issue the viewer can see by id or identifier.
-func (s *server) agentApprovalIssue(r *http.Request, data domain.Bootstrap, ref string) (domain.Issue, bool) {
-	if issue, err := mcpFindIssue(data, ref); err == nil {
-		return issue, true
-	}
-	if s.store == nil {
-		return domain.Issue{}, false
-	}
-	query, err := s.mcpIssueQuery(r.Context(), s.agentApprovalActor(r, data))
-	if err != nil {
-		return domain.Issue{}, false
-	}
-	issue, err := s.store.AuthorizedIssueRecord(r.Context(), query, ref)
-	return issue, err == nil
-}
-
-// agentApprovalActor is who looks the targets up: the viewer (or, in a thread, the person who asked the agent).
-func (s *server) agentApprovalActor(r *http.Request, data domain.Bootstrap) mcpActor {
-	actor := mcpActor{WorkspaceKey: workspaceKey(r), User: data.Viewer, APIKey: domain.APIKey{Scopes: []string{"read"}}}
-	if invoker, ok := r.Context().Value(builtinInvokerContextKey{}).(domain.User); ok {
-		actor.AuthorizationUserID = invoker.ID
-	}
-	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
-		actor.APIKey = key
-	}
-	return actor
-}
-
 // agentApprovalPreview is the approval as markdown: the question the model (and plain-text clients) see.
 func agentApprovalPreview(approval domain.AgentApproval) string {
 	var text strings.Builder
@@ -386,9 +204,6 @@ func agentApprovalPreview(approval domain.AgentApproval) string {
 	}
 	return strings.TrimSpace(text.String())
 }
-
-// agentHeldCallResult is what the model is told for a call that waits for approval.
-const agentHeldCallResult = `{"status":"awaiting_approval","message":"The app asked the user to approve this action. Do not call the tool again; it runs once they approve."}`
 
 // Approval is driven only by real tool calls: Flow holds a call that needs the user's approval and asks for it
 // itself. A model that instead writes the question as its answer ("Allow Code search: search_code?") would end the

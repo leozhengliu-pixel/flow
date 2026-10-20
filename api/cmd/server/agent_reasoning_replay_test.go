@@ -138,11 +138,9 @@ func chatAssistantToolTurns(payload map[string]any) []map[string]any {
 	return turns
 }
 
-// Approving a held bulk delete resumes the run on a thinking model: the run's own tool turns go back with their
-// reasoning, the approved calls (renamed ids the provider never issued) with reasoning_content, and a provider
-// that still asks for it (a restarted server that has not learned it yet) gets the request once more with it.
-// The held calls delete exactly the sub-issues the preview listed, never a look-alike.
-func TestAgentChatApprovalResumeReplaysReasoning(t *testing.T) {
+// A bulk delete on a thinking model runs straight through (no approval): every tool turn of the run goes back with
+// its reasoning, and the deletes remove exactly the sub-issues the model looked up, never a look-alike.
+func TestAgentChatBulkDeleteReplaysReasoning(t *testing.T) {
 	provider := &thinkingChatProvider{}
 	srv, handler := newThinkingChatServer(t, provider)
 	data := srv.store.Bootstrap()
@@ -157,54 +155,27 @@ func TestAgentChatApprovalResumeReplaysReasoning(t *testing.T) {
 		chatText("Deleted both sub-issues."),
 	}
 	streamRuntime(t, handler, "/api/agent/sessions/stream", `{"message":"Delete all sub-issues of `+parent.Identifier+`.","location":"page"}`)
-	if provider.count() != 2 {
-		t.Fatalf("the run must stop on the approval; provider calls = %d", provider.count())
+	if provider.count() != 3 {
+		t.Fatalf("a bulk delete must not stop for approval; provider calls = %d", provider.count())
 	}
-	if turns := chatAssistantToolTurns(provider.body(1)); len(turns) != 1 || turns[0]["reasoning_content"] != "Look up the parent first." {
-		t.Fatalf("the run's tool turn must go back with its reasoning: %v", turns)
+	turns := chatAssistantToolTurns(provider.body(2))
+	if len(turns) != 2 || turns[0]["reasoning_content"] != "Look up the parent first." || turns[1]["reasoning_content"] != "Delete both sub-issues." {
+		t.Fatalf("the run's tool turns must go back with their reasoning: %v", turns)
 	}
 	session := requestJSON[[]domain.AgentSession](t, handler, http.MethodGet, "/api/agent/sessions", nil, http.StatusOK)[0]
-	question := agentQuestionPart(session.Messages[1])
-	if question == nil || question.Question.Approval == nil || len(question.Question.Approval.Calls) != 2 {
-		t.Fatalf("approval question = %#v", question)
-	}
-	// The held calls are pinned to the issues the preview resolved.
-	for index, issue := range []domain.Issue{first, second} {
-		var args map[string]any
-		_ = json.Unmarshal(question.Question.Approval.Calls[index].Arguments, &args)
-		if args["id"] != issue.ID {
-			t.Fatalf("held call %d targets %v, want %s", index, args["id"], issue.ID)
-		}
-	}
-	// A restarted server has not learned that the provider wants reasoning back.
-	agentChatReasoningProviders.Delete(srv.agent.BaseURL + "\x00" + srv.agent.Model)
-	streamRuntime(t, handler, "/api/agent/sessions/"+session.ID+"/messages/stream", fmt.Sprintf(`{"message":"Approve","answer":{"partId":%q,"value":"approve"}}`, question.ID))
-	if provider.count() != 4 || provider.statuses[2] != http.StatusBadRequest || provider.statuses[3] != http.StatusOK {
-		t.Fatalf("the resumed turn must be retried once with reasoning: statuses %v", provider.statuses)
-	}
-	for _, turn := range chatAssistantToolTurns(provider.body(3)) {
-		if _, ok := turn["reasoning_content"]; !ok {
-			t.Fatalf("every tool turn of the retry carries reasoning_content: %v", turn)
-		}
-	}
-	session = requestJSON[domain.AgentSession](t, handler, http.MethodGet, "/api/agent/sessions/"+session.ID, nil, http.StatusOK)
 	reply := session.Messages[len(session.Messages)-1]
-	if reply.Content != "Deleted both sub-issues." {
-		t.Fatalf("the resumed reply failed: %q %+v", reply.Content, reply.Parts)
+	if reply.Content != "Deleted both sub-issues." || agentQuestionPart(reply) != nil {
+		t.Fatalf("the reply must finish without a question: %q %+v", reply.Content, reply.Parts)
 	}
 	for _, issue := range []domain.Issue{first, second} {
 		if status := handlerStatus(handler, http.MethodGet, "/api/issue-records/"+issue.ID); status == http.StatusOK {
-			t.Fatalf("%s was not deleted after approval", issue.Identifier)
+			t.Fatalf("%s was not deleted", issue.Identifier)
 		}
 	}
 	for _, issue := range []domain.Issue{parent, lookalike} {
 		if status := handlerStatus(handler, http.MethodGet, "/api/issue-records/"+issue.ID); status != http.StatusOK {
 			t.Fatalf("%s must not be deleted (status %d)", issue.Identifier, status)
 		}
-	}
-	// Once learned, a resumed turn sends reasoning_content up front.
-	if _, ok := agentChatReasoningProviders.Load(srv.agent.BaseURL + "\x00" + srv.agent.Model); !ok {
-		t.Fatal("the provider's need for reasoning_content was not remembered")
 	}
 }
 

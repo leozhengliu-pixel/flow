@@ -679,7 +679,8 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 	if connectorFailure != "" {
 		messages[0].Content += "\nThe workspace's connected MCP tools are unavailable in this session (" + truncateSettingsText(connectorFailure, 300) + "). If the request needs them, say so.\n"
 	}
-	latestPrompt := task.Prompt
+	// An approval answered since the last run (a connector set to always ask, or a delete or update held by an
+	// earlier version): run or drop the held calls first.
 	if task.PendingTool != nil {
 		call := *task.PendingTool
 		held := agentApprovalBatchCalls(call)
@@ -703,8 +704,6 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 			}
 		}
 		messages = append(append(messages, agentProviderMessage{Role: "assistant", ToolCalls: held}), results...)
-		// The approval answered the held calls; the model should not ask for it again.
-		latestPrompt = agentApprovalApprove
 	}
 	// A comment-thread agent can stop on a question with options, like chat (the reference app's select elicitation).
 	r = r.WithContext(context.WithValue(r.Context(), agentExtraToolsKey{}, []agentProviderTool{askUserToolDefinition}))
@@ -755,17 +754,10 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 				return
 			}
 		}
-		// Like chat: bulk deletes and an update the agent wrote itself wait for approval, and so do tools of a
-		// connector set to always ask.
-		approval := s.agentApprovalForTurn(r, data, turn.ToolCalls, latestPrompt)
-		if approval == nil {
-			approval = &domain.AgentApproval{}
-		}
+		// Like chat: only tools of a connector set to always ask wait for approval.
+		approval := &domain.AgentApproval{Kind: "connector"}
 		for _, call := range turn.ToolCalls {
-			if agentToolNeedsApproval(r.Context(), call.Name) && !slices.ContainsFunc(approval.Calls, func(item domain.AgentToolCall) bool { return item.ID == call.ID }) {
-				if approval.Kind == "" {
-					approval.Kind = "connector"
-				}
+			if agentToolNeedsApproval(r.Context(), call.Name) {
 				approval.Calls = append(approval.Calls, call)
 			}
 		}
@@ -785,12 +777,9 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 			messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: content, IsError: failed}})
 		}
 		if len(approval.Calls) > 0 {
-			// One approval for everything held, as a readable preview with Approve / Reject options.
+			// One approval for everything held, with Approve / Reject options.
 			pendingCall := agentApprovalBatchCall(*approval)
-			body := strings.TrimSpace(strings.TrimSpace(turn.Text) + "\n\n" + agentApprovalPreview(*approval))
-			if approval.Kind == "connector" {
-				body = strings.TrimSpace(strings.TrimSpace(turn.Text) + "\n\nAllow " + agentHeldCallNames(r.Context(), approval.Calls) + "?")
-			}
+			body := strings.TrimSpace(strings.TrimSpace(turn.Text) + "\n\nAllow " + agentHeldCallNames(r.Context(), approval.Calls) + "?")
 			metadata := map[string]any{"options": []any{map[string]any{"label": "Approve", "value": agentApprovalApprove}, map[string]any{"label": "Reject", "value": agentApprovalReject}}}
 			if raw, err := json.Marshal(agentApprovalSummary(*approval)); err == nil {
 				var summary map[string]any

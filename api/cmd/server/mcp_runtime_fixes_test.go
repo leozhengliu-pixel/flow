@@ -1,15 +1,10 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
-
-	"flow/api/internal/domain"
 )
 
 // mcpResultText is content[0].text of a successful tools/call.
@@ -138,26 +133,6 @@ func TestMCPBatchDeleteTakesIDs(t *testing.T) {
 		if definition.Name == "count_issues" || strings.Contains(string(definition.Parameters), `"ids"`) && strings.HasPrefix(definition.Name, "delete_") {
 			t.Errorf("in-process definition changed: %s %s", definition.Name, definition.Parameters)
 		}
-	}
-}
-
-// The bulk-delete approval counts the targets of one batch call, not just the calls.
-func TestAgentApprovalCountsBatchDeleteTargets(t *testing.T) {
-	f := newAgentAttributionFixture(t)
-	team := f.data.Teams[0].ID
-	one := f.issue(f.chat("save_issue", map[string]any{"team": team, "title": "Approval one"}))
-	two := f.issue(f.chat("save_issue", map[string]any{"team": team, "title": "Approval two"}))
-	request := httptest.NewRequest(http.MethodGet, "/", nil)
-	request.Header.Set("X-Workspace-Key", f.data.Workspace.URLKey)
-	request = request.WithContext(context.WithValue(request.Context(), authUserContextKey{}, f.data.Viewer))
-	single := domain.AgentToolCall{ID: "call_1", Name: "delete_issue", Arguments: json.RawMessage(`{"ids":["` + one.Identifier + `"]}`)}
-	if approval := f.s.agentApprovalForTurn(request, f.data, []domain.AgentToolCall{single}, "delete it"); approval != nil {
-		t.Fatalf("one target needs no approval: %+v", approval)
-	}
-	batch := domain.AgentToolCall{ID: "call_2", Name: "delete_issue", Arguments: json.RawMessage(`{"ids":["` + one.Identifier + `","` + two.Identifier + `"]}`)}
-	approval := f.s.agentApprovalForTurn(request, f.data, []domain.AgentToolCall{batch}, "delete both")
-	if approval == nil || approval.Kind != "delete" || len(approval.Targets) != 2 || len(approval.Calls) != 1 {
-		t.Fatalf("batch delete approval = %+v", approval)
 	}
 }
 

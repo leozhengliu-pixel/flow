@@ -174,12 +174,12 @@ The worker iterates the `StreamedRunResult` and produces activities (`agent-work
 ### 6.2 Approvals: `needsApproval`, `RunState` and the policy port
 
 `agent-worker/src/policy.ts` ports `agent_approval_policy.go` and `agentToolNeedsApproval`:
-- `external_*` connector tools ask only when their connector is set to always ask (`toolApproval: "always"`), whatever the tool's annotations; everything else runs automatically. Until `/mcp` passes a connector's setting to the worker, the worker's port keeps asking for every `external_*` call;
-- a model turn whose `delete_*` calls name two or more targets asks once for the whole turn; a second sequential delete in one request asks once for the rest of the request;
-- a new `save_status_update` the user did not ask to post asks;
-- a request that is itself an approval word ("yes", "批准") never asks again.
+- `external_*` connector tools ask only when their connector is set to always ask (`toolApproval: "always"`), whatever the tool's annotations; the run context lists those tools (`alwaysAskTools`). Until `/mcp` passes a connector's setting to the worker, the list is empty and nothing asks;
+- every Flow write runs at once: deletes (one item or many) and status updates the agent wrote itself included. Approvals for bulk deletes and agent-written updates that earlier versions saved still render and still run or drop their held calls when answered, but none are created.
 
-The SDK has no approval hook for MCP tools, so the worker's `Agent` subclass sets `needsApproval` on the converted MCP function tools (`getMcpTools`). The bulk rule needs the whole turn, while `needsApproval` sees one call: a thin `Model` wrapper records each response's function calls into the run context before the runner evaluates them. With parallel tool calls on, a bulk delete arrives as one turn (`delete_issue {ids:[…]}` or several calls) and becomes **one** elicitation (§16.5).
+The SDK has no approval hook for MCP tools, so the worker's `Agent` subclass sets `needsApproval` on the converted MCP function tools (`getMcpTools`). The held calls of one model turn become **one** elicitation (§16.5).
+
+Approval is driven only by real tool calls. A model that writes the approval question as its answer ("Allow <connector>: <tool>?") instead of calling the tool is retried once with a note to call the tool; a second such answer ends the run in error rather than completing it. Later runs replay an answered approval as the person's decision ("Approved: …" / "Rejected: …"), never as the agent's own words.
 
 Every approval and `ask_user` uses the same path. The run ends with `interruptions`; the worker stores `result.state.toString()` (10–17 KB, context included) in `agent_session_states` and releases the slot. When the person answers, Flow enqueues a `resume` run; any worker loads the state with `RunState.fromString`, calls `approve`/`reject` (with a rejection message for the model) and runs it again. Held calls then execute exactly once, through the SDK, with their original call ids. There is no short-wait mode holding a lease: suspension costs about 40 ms to restore (§16.5), so every wait suspends.
 
@@ -295,7 +295,7 @@ sequenceDiagram
   participant A as Flow API
   participant U as User
   participant W2 as worker (process 2)
-  W1->>W1: model turn: delete_issue {ids:[3]} → needsApproval (policy: bulk delete)
+  W1->>W1: model turn: external_… (connector set to always ask) → needsApproval
   W1->>A: PUT …/state (RunState JSON, ~12 KB); elicitation {Approve/Reject, preview}
   W1->>A: complete {status: awaiting}  (slot released)
   U->>A: select "approve" (hours later)
@@ -439,7 +439,7 @@ lanes: { chat: flow-default, thread: flow-default, loop: flow-default }
 - **Prompt injection.**
   - Content from issues, comments, documents and connector results is untrusted. The system prompt says so, and `promptContext` is XML-escaped.
   - The blast radius is bounded by the token scope.
-  - Destructive, bulk and broadcast actions need approval (policy port). The baseline's wrong-target bulk delete (§16.4) shows why the preview must name the targets.
+  - Flow writes run without approval (deletes go to the trash and can be restored); a connector set to always ask holds its calls for approval (policy port). The baseline's wrong-target bulk delete (§16.4) is why writes to an issue the conversation never showed are refused (`agentUngroundedIssueTarget`).
   - There is no shell, file or web egress. `fetch_url` and `web_search` are opt-in and SSRF-safe.
   - The model cannot change its own permissions: `needsApproval`, the tool filter and the token are host-side.
 - **Provider keys.** Only the worker holds them; one-shots in Go keep using the API's existing key.
@@ -519,7 +519,7 @@ mcp_rps ≈ runs_per_second × (tool calls per run 5.5 + 3 per connection)
 - **Baseline:** today's in-process agent through `POST /api/agent/sessions/stream` with `FLOW_AGENT_PROTOCOL=openai-chat-completions`, the same model.
 - **Flow:** a lab API on `:8090` (copy of the dev database, rate limiting off for load, worker secret set) so load and crash tests did not disturb the shared `:8080`; MCP authenticated with a personal API key (read/write) created for the dev user and revoked afterwards, or with run tokens in the queue tests.
 - **Eval:** 38 prompts × 3 repeats × 4 arms (456 cases), each arm-repeat on its own "QA spike – <arm><n>" fixtures, all 12 streams concurrently; results verified against Flow state through MCP.
-  - **Core 15:** R1 capabilities, R2 inventory, R3 table, R4 history; W1 fields, W2 three sub-issues, W3 assign and state, W4 project + milestone + move, W5 design doc; Q1 `ask_user`; A1 bulk-delete approval; Z1 Chinese + write; M1 initiative + link + update; N1 refusal (no code access); S1 stop mid-run + follow-up.
+  - **Core 15:** R1 capabilities, R2 inventory, R3 table, R4 history; W1 fields, W2 three sub-issues, W3 assign and state, W4 project + milestone + move, W5 design doc; Q1 `ask_user`; A1 bulk delete without approval; Z1 Chinese + write; M1 initiative + link + update; N1 refusal (no code access); S1 stop mid-run + follow-up.
   - **23 adapted from the 39 reference-app prompts** (the rest overlap the core set or need non-chat surfaces): relations add/remove/verify, fields + verify, clarify-before-change, rewrite description, web research, owner + state + reminder, single delete without approval, customer + request, unsupported cycle creation, disabled loop, project description edit, update review, draft and post an At-risk update, risk + lead + target date, in-place document edit, save a skill, capability self-report, custom view, initiative update + target date, bulk cleanup via the agent.
 - **Logs:** session scratchpad `worker/` (`eval-full*/`, `load/`, `logs/`).
 - **Reproduce** (credentials from files, never printed):

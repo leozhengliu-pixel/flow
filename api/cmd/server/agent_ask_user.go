@@ -18,8 +18,8 @@ const askUserTool = "ask_user"
 var askUserToolDefinition = agentProviderTool{
 	Name: askUserTool,
 	Description: "Ask the user to choose between options and stop until they answer. The app shows the question with the options as buttons; " +
-		"the user picks one or types something else, and their answer arrives as the next user message. Use it for an approval " +
-		"(options Approve and Reject) and when a required value is genuinely ambiguous — not for choices you can reasonably make yourself. " +
+		"the user picks one or types something else, and their answer arrives as the next user message. Use it when a required " +
+		"value is genuinely ambiguous — not for choices you can reasonably make yourself, and not to ask permission to call a tool (the app asks the user itself when a tool needs approval). " +
 		"Ask one question per call and call nothing else in the same turn.",
 	Parameters: json.RawMessage(`{"type":"object","required":["question","options"],"properties":{` +
 		`"question":{"type":"string","description":"The question, as you would say it to the user (markdown allowed)"},` +

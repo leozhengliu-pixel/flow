@@ -2,7 +2,7 @@
  * Load test: N concurrent sessions in ONE worker process (or N concurrent in-process chats on the Flow API with
  * LOAD_TARGET=baseline), mixed prompts:
  *   ~60% reads, ~25% writes (create a sub-issue), and per LOAD_STOP / LOAD_SUSPEND sessions that are stopped
- *   mid-run (then asked a follow-up) or suspended on a bulk-delete approval (then resumed from the store by a
+ *   mid-run (then asked a follow-up) or suspended on an ask_user question (then resumed from the store by a
  *   fresh session object).
  * Reports success, latency p50/p95/p99, first activity, RSS / heap / CPU / event-loop lag of the worker, model
  * call failures by cause (retried or fatal), tool errors, MCP call latency, and the Flow API process's CPU/RSS.
@@ -56,7 +56,7 @@ for (const kind of kinds) {
 const promptFor = (kind: Kind, i: number) =>
   kind === 'write' ? `Create a sub-issue under ${parent.identifier} titled "${tag} item ${i}" with priority Low.`
     : kind === 'stop' ? `For each of the 10 most recently updated issues, read it with get_issue one at a time and summarize it in one line.`
-      : kind === 'suspend' ? `Delete all sub-issues of ${suspendParents.shift()}.`
+      : kind === 'suspend' ? `Use ask_user to ask me whether to delete all sub-issues of ${suspendParents.shift()} (options Delete and Keep), then do what I pick.`
         : reads[i % reads.length]
 
 async function apiProcess(): Promise<string | undefined> {
@@ -124,7 +124,7 @@ async function workerSession(kind: Kind, i: number): Promise<SessionResult> {
   if (kind === 'suspend' && outcome.status === 'awaiting') {
     await session.close()
     session = worker!.session({ sessionId, systemPrompt, maxTurns: 12 }) // dropped and restored from the store
-    outcome = await session.resume('approve', sink)
+    outcome = await session.resume('Delete', sink)
     collect(outcome)
     result.resumed = outcome.status
   }
@@ -153,7 +153,8 @@ async function baselineSession(kind: Kind, i: number): Promise<SessionResult> {
     result.followUp = last.status
   }
   if (kind === 'suspend' && first.pendingQuestion) {
-    last = await client.turn('Approve', { sessionId: first.sessionId, answer: { partId: first.pendingQuestion.partId, value: 'approve' } })
+    const picked = first.pendingQuestion.options.find(option => option.label === 'Delete') ?? first.pendingQuestion.options[0]
+    last = await client.turn(picked?.label ?? 'Delete', { sessionId: first.sessionId, answer: { partId: first.pendingQuestion.partId, value: picked?.value ?? 'Delete' } })
     result.resumed = last.status
   }
   if (last.status === 'error') result.failures.push(last.body.slice(0, 160))

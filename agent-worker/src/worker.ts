@@ -36,7 +36,7 @@ class FlowAgent extends Agent<FlowRunContext> {
     for (const tool of tools) {
       if (tool.type !== 'function') continue
       const name = tool.name
-      tool.needsApproval = async (context, input, callId) => approvalKind(context.context as FlowRunContext, name, input, callId) !== null
+      tool.needsApproval = async context => approvalKind(context.context as FlowRunContext, name) !== null
     }
     return tools
   }
@@ -141,7 +141,6 @@ export class FlowAgentSession {
         context.answers[item.rawItem.type === 'function_call' ? item.rawItem.callId : ''] = picked?.value ?? answer
         state.approve(item)
       } else if (approve) {
-        if (item.name?.startsWith('delete_')) context.deletesApproved = true
         state.approve(item)
       } else {
         state.reject(item, { message: 'The user rejected this action; nothing was changed. Do not retry it unless the user asks again.' })
@@ -210,7 +209,7 @@ export class FlowAgentSession {
       if (result.error) throw result.error
       const interruptions = result.interruptions ?? []
       if (interruptions.length) {
-        const elicitation = toElicitation(interruptions, context)
+        const elicitation = toElicitation(interruptions)
         // Long waits must not hold the process: the run is serialized and dropped; resume() can run anywhere.
         this.worker.store.saveSuspended(this.sessionId, result.state.toString(), { elicitation })
         emit({ type: 'elicitation', at: Date.now(), elicitation })
@@ -300,7 +299,6 @@ function toActivities(event: RunStreamEvent, context: FlowRunContext, outcome: T
       if (call) call.isError = isError
       // Held calls approved on resume run without a new tool_called event.
       else outcome.toolCalls.push({ callId: raw?.callId, name: raw?.name, isError })
-      if (!isError && String(raw?.name).startsWith('delete_')) context.deletesDone++
       return [{ type: 'action.result', at, activityId: raw?.callId, action: raw?.name, result, isError, ...(custom?.change ? { change: custom.change } : {}) }]
     }
     default:
@@ -309,15 +307,15 @@ function toActivities(event: RunStreamEvent, context: FlowRunContext, outcome: T
 }
 
 /** The held calls of one interruption become one elicitation: ask_user first, else one approval for the turn. */
-function toElicitation(items: RunToolApprovalItem[], context: FlowRunContext): Elicitation {
+function toElicitation(items: RunToolApprovalItem[]): Elicitation {
   const calls = items.map(item => ({ callId: item.rawItem.type === 'function_call' ? item.rawItem.callId : '', name: item.name ?? '', arguments: item.arguments ?? '{}' }))
   const ask = calls.find(call => call.name === 'ask_user')
   if (ask) {
     const request = parseAskUser(ask.arguments)
     return { kind: 'select', callId: ask.callId, body: request.question, options: request.options, allowFreeText: request.allowFreeText }
   }
-  const kinds = calls.map(call => approvalKind(context, call.name, call.arguments, call.callId) ?? 'delete')
-  const kind: ApprovalKind = kinds.includes('connector') ? 'connector' : kinds.includes('delete') ? 'delete' : 'publish'
+  // Only connector tools set to always ask are held (see policy.ts).
+  const kind: ApprovalKind = 'connector'
   return {
     kind: 'approval',
     approval: kind,

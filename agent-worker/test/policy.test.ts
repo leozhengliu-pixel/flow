@@ -4,40 +4,22 @@ import { newRunContext } from '../src/context.js'
 import { approvalKind, isApprovalWord } from '../src/policy.js'
 import { initialGroups, toolOffered } from '../src/tool-groups.js'
 
-test('bulk delete in one turn asks once; a single delete does not', () => {
-  const context = newRunContext('s', 'Delete all sub-issues of DEV-1', [])
+test('deletes and status updates run without approval', () => {
+  const context = newRunContext('s', 'Delete all sub-issues of DEV-1, then write a project update', [])
   context.turns.push([
     { callId: 'a', name: 'delete_issue', arguments: '{"id":"DEV-2"}' },
-    { callId: 'b', name: 'delete_issue', arguments: '{"id":"DEV-3"}' },
+    { callId: 'b', name: 'delete_issue', arguments: '{"ids":["DEV-3","DEV-4"]}' },
   ])
-  context.turns.push([{ callId: 'c', name: 'delete_issue', arguments: '{"id":"DEV-4"}' }])
-  assert.equal(approvalKind(context, 'delete_issue', { id: 'DEV-2' }, 'a'), 'delete')
-  assert.equal(approvalKind(context, 'delete_issue', { id: 'DEV-4' }, 'c'), null)
+  assert.equal(approvalKind(context, 'delete_issue'), null)
+  assert.equal(approvalKind(context, 'save_status_update'), null)
 })
 
-test('sequential deletes ask before the second; approval covers the rest of the request', () => {
-  const context = newRunContext('s', 'Delete DEV-2 and DEV-3', [])
-  context.turns.push([{ callId: 'a', name: 'delete_issue', arguments: '{"id":"DEV-2"}' }])
-  assert.equal(approvalKind(context, 'delete_issue', { id: 'DEV-2' }, 'a'), null)
-  context.deletesDone = 1
-  context.turns.push([{ callId: 'b', name: 'delete_issue', arguments: '{"id":"DEV-3"}' }])
-  assert.equal(approvalKind(context, 'delete_issue', { id: 'DEV-3' }, 'b'), 'delete')
-  context.deletesApproved = true
-  assert.equal(approvalKind(context, 'delete_issue', { id: 'DEV-3' }, 'b'), null)
-})
-
-test('status updates: asks only for a new update the user did not ask to post', () => {
-  assert.equal(approvalKind(newRunContext('s', 'How is the project going?', []), 'save_status_update', { body: 'x' }), 'publish')
-  assert.equal(approvalKind(newRunContext('s', 'Post an update saying we are on track', []), 'save_status_update', { body: 'x' }), null)
-  assert.equal(approvalKind(newRunContext('s', '发布一个进展更新', []), 'save_status_update', { body: 'x' }), null)
-  assert.equal(approvalKind(newRunContext('s', 'How is it going?', []), 'save_status_update', { id: 'upd_1', body: 'x' }), null)
-})
-
-test('connector tools always ask; approval words skip the other rules', () => {
-  assert.equal(approvalKind(newRunContext('s', 'yes', []), 'external_abc', {}), 'connector')
-  const context = newRunContext('s', '批准', [])
-  context.turns.push([{ callId: 'a', name: 'delete_issue', arguments: '{"ids":["DEV-2","DEV-3"]}' }])
-  assert.equal(approvalKind(context, 'delete_issue', { ids: ['DEV-2', 'DEV-3'] }, 'a'), null)
+test('connector tools ask only when their connector is set to always ask', () => {
+  assert.equal(approvalKind(newRunContext('s', 'Search the code', []), 'external_abc'), null)
+  const context = newRunContext('s', 'Search the code', [])
+  context.alwaysAskTools = ['external_abc']
+  assert.equal(approvalKind(context, 'external_abc'), 'connector')
+  assert.equal(approvalKind(context, 'external_def'), null)
   assert.ok(isApprovalWord('Go ahead!'))
   assert.ok(!isApprovalWord('no'))
 })

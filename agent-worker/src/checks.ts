@@ -1,8 +1,9 @@
 /**
  * Targeted checks (per protocol, FLOW_WORKER_PROTOCOL):
  *   parallel        one prompt that should fan out; reports calls per model turn and whether arguments survived
- *   suspend <id>    process A: bulk delete on a fixture until the approval interruption, then exit (state in store)
- *   resume <id>     process B: approve and finish the run suspended by process A
+ *   suspend <id>    process A: asks (ask_user) whether to delete a fixture's sub-issues, then exits on the question
+ *                   (state in store)
+ *   resume <id>     process B: answers Delete and finishes the run suspended by process A
  *   suspend-resume  runs suspend and resume as two child processes and verifies the result through MCP
  *   stop-write      stops the moment the first write is issued, then asks a follow-up in the same session
  */
@@ -45,7 +46,7 @@ switch (command) {
   case 'suspend': {
     const parent = await fixtureWithChildren(3)
     const session = worker.session({ sessionId: arg, systemPrompt })
-    const out = await session.send(`Delete all sub-issues of ${parent.identifier}.`, log)
+    const out = await session.send(`Use ask_user to ask me whether to delete all sub-issues of ${parent.identifier} (options Delete and Keep), then do what I pick.`, log)
     console.log(JSON.stringify({ pid: process.pid, parent: parent.identifier, parentId: parent.id, status: out.status, elicitation: out.elicitation, remaining: (await children(parent.id)).length, stateBytes: worker.store.loadSuspended(arg)?.state.length }))
     await session.close()
     break
@@ -54,7 +55,7 @@ switch (command) {
     const session = worker.session({ sessionId: arg, systemPrompt })
     const started = Date.now()
     let firstEvent = 0
-    const out = await session.resume('approve', a => { firstEvent ||= Date.now(); log(a) })
+    const out = await session.resume('Delete', a => { firstEvent ||= Date.now(); log(a) })
     console.log(JSON.stringify({ pid: process.pid, status: out.status, body: out.body, restoreToFirstActivityMs: firstEvent - started, toolCalls: out.toolCalls }))
     await session.close()
     break
@@ -65,7 +66,7 @@ switch (command) {
     const a = node('suspend')
     const b = node('resume')
     const remaining = (await children(a.parentId)).length
-    console.log(JSON.stringify({ protocol: config.protocol, processA: { pid: a.pid, status: a.status, approval: a.elicitation?.approval, heldCalls: a.elicitation?.callIds?.length, remainingBeforeApproval: a.remaining, stateBytes: a.stateBytes }, processB: { pid: b.pid, status: b.status, restoreToFirstActivityMs: b.restoreToFirstActivityMs, deletesRun: b.toolCalls.length }, remainingAfter: remaining, pass: a.status === 'awaiting' && a.remaining === 3 && b.status === 'response' && remaining === 0 }, null, 2))
+    console.log(JSON.stringify({ protocol: config.protocol, processA: { pid: a.pid, status: a.status, question: a.elicitation?.body, remainingBeforeAnswer: a.remaining, stateBytes: a.stateBytes }, processB: { pid: b.pid, status: b.status, restoreToFirstActivityMs: b.restoreToFirstActivityMs, deletesRun: b.toolCalls.length }, remainingAfter: remaining, pass: a.status === 'awaiting' && a.remaining === 3 && b.status === 'response' && remaining === 0 }, null, 2))
     break
   }
   case 'stop-write': {
