@@ -774,7 +774,7 @@ func (s *Service) resetForTurn(current *domain.CodingSession, now time.Time) {
 	current.ErrorCode, current.Error = "", ""
 	current.StopRequested, current.StoppedBy = false, ""
 	current.SandboxID, current.SandboxAttempts, current.CurrentTurnID = "", 0, ""
-	current.Pushed = false
+	current.Pushed, current.CurrentStep = false, nil
 	if current.HeadSHA != "" || len(current.PullRequests) > 0 {
 		current.ExistingBranch = true
 	}
@@ -885,6 +885,82 @@ func (s *Service) Restart(ctx context.Context, workspaceKey, id, userID string, 
 		return updated, err
 	}
 	s.anchorActivity(ctx, updated, domain.AgentActivity{Type: "retry", ActorID: userID, Body: restartBody(useDefaultModel)})
+	return updated, nil
+}
+
+// StartOver runs the session's task again from its first prompt with model
+// ("Start over with <model>", offered with the routed model's next tier). A
+// finished session that is still warm drains its sandbox first, because the
+// harness runs with the model it started with.
+func (s *Service) StartOver(ctx context.Context, workspaceKey, id, userID, model string) (domain.CodingSession, error) {
+	session, err := s.store.CodingSession(ctx, workspaceKey, id)
+	if err != nil {
+		return session, err
+	}
+	catalog := ModelCatalog(s.cfg.LLM, session.Harness)
+	if model = strings.TrimSpace(model); model == "" || model == domain.CodingModelAuto || len(catalog) > 0 && !slices.Contains(catalog, model) {
+		return session, ErrInvalidInput
+	}
+	if session.ApprovalState == "rejected" || session.Phase != domain.CodingPhaseDone && session.Phase != domain.CodingPhaseIdle {
+		return session, ErrConflict
+	}
+	if s.guard != nil {
+		if err := s.guard.Check(ctx, workspaceKey, session.CreatorID, session.LoopID); err != nil {
+			return session, err
+		}
+	}
+	if session.Phase == domain.CodingPhaseIdle {
+		sandboxes, err := s.store.CodingSandboxes(ctx, workspaceKey, id)
+		if err != nil {
+			return session, err
+		}
+		decision := Decision{Session: cloneSession(session)}
+		s.step.finish(&decision, sandboxes, s.now().UTC())
+		s.runSandboxActions(ctx, decision)
+		if session, err = s.commit(ctx, session, decision.Session); err != nil {
+			return session, err
+		}
+	}
+	items, err := s.store.CodingInbox(ctx, id, 0)
+	if err != nil {
+		return session, err
+	}
+	var first *Turn
+	for _, item := range items {
+		if item.Kind == InboxTurn && item.Turn != nil {
+			turn := *item.Turn
+			first = &turn
+			break
+		}
+	}
+	if first == nil {
+		return session, ErrConflict
+	}
+	if pending, err := s.store.PendingCodingTurns(ctx, id); err != nil {
+		return session, err
+	} else if pending == 0 {
+		turn := *first
+		turn.ID = "turn_" + NewID()
+		turn.Kind = TurnRestart
+		turn.AuthorID = userID
+		if _, err := s.store.EnqueueCodingInbox(ctx, workspaceKey, id, InboxItem{Kind: InboxTurn, Turn: &turn}); err != nil {
+			return session, err
+		}
+	}
+	updated, err := s.update(ctx, workspaceKey, id, func(current *domain.CodingSession) error {
+		if current.Phase != domain.CodingPhaseDone {
+			return ErrConflict
+		}
+		current.ModelSelection, current.Model, current.ModelReason = model, "", ""
+		now := s.now().UTC()
+		current.NextReconcileAt = now
+		s.resetForTurn(current, now)
+		return nil
+	})
+	if err != nil {
+		return updated, err
+	}
+	s.anchorActivity(ctx, updated, domain.AgentActivity{Type: "retry", ActorID: userID, Body: "Started over with " + DescribeModel(s.cfg.LLM, model, slices.Index(catalog, model)).Label})
 	return updated, nil
 }
 

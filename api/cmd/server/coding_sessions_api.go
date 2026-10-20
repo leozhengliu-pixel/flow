@@ -527,7 +527,8 @@ func (s *server) stopCodingSession(w http.ResponseWriter, r *http.Request) {
 	s.respondCodingSession(w, r.Context(), viewer, updated, err)
 }
 
-// restartCodingSession answers POST /api/coding/sessions/{id}/restart; {useDefaultModel:true} is "Restart with default model".
+// restartCodingSession answers POST /api/coding/sessions/{id}/restart; {useDefaultModel:true} is "Restart with default
+// model", {model:"<id>"} is "Start over with <model>".
 func (s *server) restartCodingSession(w http.ResponseWriter, r *http.Request) {
 	viewer, session, ok := s.codingSessionAccess(w, r, true)
 	if !ok {
@@ -535,8 +536,15 @@ func (s *server) restartCodingSession(w http.ResponseWriter, r *http.Request) {
 	}
 	var input struct {
 		UseDefaultModel bool `json:"useDefaultModel"`
+		// Model is "Start over with <model>": the task runs again from its first prompt.
+		Model string `json:"model"`
 	}
 	if !decodeOptionalCodingJSON(w, r, &input) {
+		return
+	}
+	if input.Model != "" {
+		updated, err := s.coding.service.StartOver(r.Context(), viewer.workspace, session.ID, viewer.user.ID, input.Model)
+		s.respondCodingSession(w, r.Context(), viewer, updated, err)
 		return
 	}
 	updated, err := s.coding.service.Restart(r.Context(), viewer.workspace, session.ID, viewer.user.ID, input.UseDefaultModel)

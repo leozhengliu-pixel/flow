@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AGENT_TASK_ACTIVITY_EVENT } from '@/lib/application-agents'
-import { fetchCodingSession, fetchCodingSessions, fetchCodingStatus } from '@/lib/coding-sessions-api'
+import { fetchCodingModels, fetchCodingSession, fetchCodingSessions, fetchCodingStatus } from '@/lib/coding-sessions-api'
 import type { BootstrapData } from '@/types/flow'
-import type { CodingSession, CodingSessionState } from '@/types/coding-sessions'
+import type { CodingModelOption, CodingSession, CodingSessionState } from '@/types/coding-sessions'
 import { CODING_SESSION_EVENT, type CodingSessionEventDetail } from './coding-session-events'
 import { isCodingSessionLive } from './coding-session-model'
 
@@ -13,7 +13,23 @@ const AVAILABILITY_TTL_MS = 5 * 60_000
 let availability: { at: number; promise: Promise<boolean> } | undefined
 
 /** Clears the cached `/api/coding/status` answer (tests, and after an admin toggles coding sessions). */
-export function resetCodingAvailabilityCache() { availability = undefined; listRequests.clear() }
+export function resetCodingAvailabilityCache() { availability = undefined; modelOptions = undefined; listRequests.clear() }
+
+let modelOptions: Promise<CodingModelOption[]> | undefined
+
+/** The catalog label of a model ("GPT-5 Codex"), loaded once from `/api/coding/models`; the id until it loads. */
+export function useCodingModelLabel(model: string | undefined, harness: string | undefined) {
+  const [options, setOptions] = useState<CodingModelOption[]>()
+  useEffect(() => {
+    if (!model) return
+    let active = true
+    modelOptions ??= fetchCodingModels().catch(() => { modelOptions = undefined; return [] })
+    void modelOptions.then(list => { if (active) setOptions(list) })
+    return () => { active = false }
+  }, [model])
+  if (!model) return ''
+  return options?.find(option => option.id === model && !option.auto && (!harness || option.harness === harness))?.label || model
+}
 
 function loadAvailability(): Promise<boolean> {
   if (availability && Date.now() - availability.at < AVAILABILITY_TTL_MS) return availability.promise

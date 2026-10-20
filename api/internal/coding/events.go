@@ -112,10 +112,11 @@ type sessionPatch struct {
 	awaiting    bool
 	running     bool
 	displayName string
+	step        *domain.CodingSessionStep
 }
 
 func (p sessionPatch) empty() bool {
-	return !p.planSet && p.diffs == nil && p.summary == "" && p.errorText == "" && !p.awaiting && !p.running && p.displayName == ""
+	return !p.planSet && p.diffs == nil && p.summary == "" && p.errorText == "" && !p.awaiting && !p.running && p.displayName == "" && p.step == nil
 }
 
 func (p sessionPatch) apply(s *Service, current *domain.CodingSession) {
@@ -131,6 +132,10 @@ func (p sessionPatch) apply(s *Service, current *domain.CodingSession) {
 	}
 	if p.errorText != "" {
 		current.Error = p.errorText
+	}
+	if p.step != nil {
+		step := *p.step
+		current.CurrentStep = &step
 	}
 	if p.running && current.Phase == domain.CodingPhaseSetup {
 		s.step.Enter(current, domain.CodingPhaseRunning, now)
@@ -152,6 +157,7 @@ func (s *Service) applyEvent(ctx context.Context, session domain.CodingSession, 
 		if event.Action == nil || strings.TrimSpace(event.Action.Action) == "" {
 			return "", nil
 		}
+		patch.step = &domain.CodingSessionStep{TurnID: firstNonEmpty(event.TurnID, session.CurrentTurnID), Action: clip(strings.TrimSpace(event.Action.Action), 256), Parameter: firstLine(event.Action.Parameter, 512), At: s.now().UTC()}
 		return s.anchorActivity(ctx, session, actionActivity(*event.Action, event.Ephemeral)), nil
 	case EventStatus:
 		if event.Phase == "running" {

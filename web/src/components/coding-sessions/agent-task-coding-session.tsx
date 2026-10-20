@@ -55,7 +55,8 @@ export function CodingSessionActivityCard({ task, data, agentName }: { task: Anc
   const { session, apply } = useCodingSession(task.codingSessionId ?? '')
   const { dismissed, dismiss } = useDismissedCodingSessions(data.workspace.urlKey, data.viewer.id)
   const opener = useCodingSessionOpener(session, data)
-  if (!available || !task.codingSessionId || dismissed.has(task.codingSessionId)) return null
+  // An archived session (its pull request was closed) leaves the activity feed; the history rows stay.
+  if (!available || !task.codingSessionId || dismissed.has(task.codingSessionId) || session?.archivedAt) return null
   const creator = data.users.find(user => user.id === (session?.creatorId || task.creatorId))
   const agent = data.users.find(user => user.app)
   const at = session?.createdAt || task.createdAt || task.updatedAt
@@ -99,7 +100,7 @@ export function CodingSessionActivityCard({ task, data, agentName }: { task: Anc
 function LiveEmbeddedSession({ sessionId, initial, data }: { sessionId: string; initial?: CodingSession; data: BootstrapData }) {
   const { session } = useCodingSession(sessionId, initial)
   const opener = useCodingSessionOpener(session, data)
-  if (!session) return null
+  if (!session || session.archivedAt) return null
   return <div className="coding-session-embedded" data-state={session.state}>
     <CodingSessionStatusRow session={session} data={data} {...opener.rowProps}/>
     {opener.dialog}

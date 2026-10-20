@@ -8,9 +8,11 @@ import (
 	"flow/api/internal/domain"
 )
 
-// Model routing (design §12). "auto" resolves to the first model of the
-// harness catalog (FLOW_CODING_MODELS_*); a pinned model must be in the
-// catalog when the catalog is non-empty.
+// Model routing (design §12). "auto" routes each session by its task
+// (RouteAutoModel: the tier the task needs, then the first catalog model of
+// that tier) and records why; without a task it resolves to the first model
+// of the harness catalog (FLOW_CODING_MODELS_*). A pinned model must be in
+// the catalog when the catalog is non-empty.
 
 // Reasoning efforts.
 const (
@@ -84,6 +86,106 @@ func ResolveModel(llm config.CodingLLMConfig, harness, selection string) (model 
 	return selection, true
 }
 
+// Model tiers Auto routes between, least to most capable.
+const (
+	ModelTierSmall    = "small"
+	ModelTierStandard = "standard"
+	ModelTierLarge    = "large"
+)
+
+var modelTiers = []string{ModelTierSmall, ModelTierStandard, ModelTierLarge}
+
+// Routing reasons, shown in Session details under the routed model.
+const (
+	routeReasonSmall    = "The task has an exact, narrowly scoped implementation and a directly testable expected result."
+	routeReasonStandard = "The task needs reasoning across a few files, without a broad change."
+	routeReasonLarge    = "The task spans several areas or a broad change, so it needs the most capable model."
+)
+
+// Words that mark a broad task, and words that mark a narrow one.
+var (
+	broadTaskWords  = []string{"refactor", "migrate", "migration", "architecture", "redesign", "rewrite", "overhaul", "across the codebase", "across all", "every module", "multiple services", "end-to-end", "concurrency", "race condition", "performance", "security", "upgrade"}
+	narrowTaskWords = []string{"typo", "rename", "minimal", "one-line", "one line", "small", "simple", "tiny", "bump", "readme", "comment", "docstring", "jsdoc", "copy change", "wording", "add a function", "add an export", "keep it minimal"}
+)
+
+// ClassifyTask picks the tier a task needs from its text (the issue title
+// and the first prompt) and says why.
+func ClassifyTask(task string) (tier, reason string) {
+	text := strings.ToLower(task)
+	contains := func(words []string) bool {
+		return slices.ContainsFunc(words, func(word string) bool { return strings.Contains(text, word) })
+	}
+	switch {
+	case len(text) > 2500 || contains(broadTaskWords):
+		return ModelTierLarge, routeReasonLarge
+	case len(text) < 700 && contains(narrowTaskWords):
+		return ModelTierSmall, routeReasonSmall
+	default:
+		return ModelTierStandard, routeReasonStandard
+	}
+}
+
+// ModelTier is a catalog model's tier: configured, else built-in, else standard.
+func ModelTier(llm config.CodingLLMConfig, model string) string {
+	if tier := llm.ModelInfo[model].Tier; slices.Contains(modelTiers, tier) {
+		return tier
+	}
+	if tier := builtinModelInfo[model].Tier; tier != "" {
+		return tier
+	}
+	return ModelTierStandard
+}
+
+// AutoRoute is Auto's pick for a task: the model, why, and the next more
+// capable catalog model to start over with ("" when Model is the most capable).
+type AutoRoute struct {
+	Model      string
+	Reason     string
+	Escalation string
+}
+
+// RouteAutoModel routes a task: the first catalog model of the tier the task
+// needs, else of the nearest tier (a more capable one first). ok is false
+// when the catalog is empty.
+func RouteAutoModel(llm config.CodingLLMConfig, harness, task string) (AutoRoute, bool) {
+	catalog := ModelCatalog(llm, harness)
+	if len(catalog) == 0 {
+		return AutoRoute{}, false
+	}
+	tier, reason := ClassifyTask(task)
+	want := slices.Index(modelTiers, tier)
+	model := ""
+	for distance := 0; model == "" && distance < len(modelTiers); distance++ {
+		for _, candidate := range []int{want + distance, want - distance} {
+			if candidate < 0 || candidate >= len(modelTiers) || model != "" {
+				continue
+			}
+			for _, entry := range catalog {
+				if ModelTier(llm, entry) == modelTiers[candidate] {
+					model = entry
+					break
+				}
+			}
+		}
+	}
+	return AutoRoute{Model: model, Reason: reason, Escalation: EscalationModel(llm, harness, model)}, true
+}
+
+// EscalationModel is the first catalog model of the nearest tier above
+// model's ("" when none is more capable).
+func EscalationModel(llm config.CodingLLMConfig, harness, model string) string {
+	catalog := ModelCatalog(llm, harness)
+	current := slices.Index(modelTiers, ModelTier(llm, model))
+	for tier := current + 1; tier < len(modelTiers); tier++ {
+		for _, entry := range catalog {
+			if entry != model && ModelTier(llm, entry) == modelTiers[tier] {
+				return entry
+			}
+		}
+	}
+	return ""
+}
+
 // NextAutoModel is the catalog model after current (Auto's fallback when the
 // upstream rejects or is overloaded); ok is false at the end of the catalog.
 func NextAutoModel(llm config.CodingLLMConfig, harness, current string) (string, bool) {
@@ -125,15 +227,15 @@ const defaultFrontierModels = 3
 // builtinModelInfo labels and describes the models Flow ships catalogs for.
 // FLOW_CODING_MODEL_INFO overrides any field.
 var builtinModelInfo = map[string]config.ModelInfo{
-	"claude-opus-4-1":   {Label: "Claude Opus 4.1", Description: "Most capable model for complex tasks"},
-	"claude-opus-4-5":   {Label: "Claude Opus 4.5", Description: "Most capable model for complex tasks"},
-	"claude-sonnet-4-5": {Label: "Claude Sonnet 4.5", Description: "Strong reasoning for multi-file changes"},
-	"claude-haiku-4-5":  {Label: "Claude Haiku 4.5", Description: "Fast model for small fixes and routine edits"},
+	"claude-opus-4-1":   {Label: "Claude Opus 4.1", Description: "Most capable model for complex tasks", Tier: ModelTierLarge},
+	"claude-opus-4-5":   {Label: "Claude Opus 4.5", Description: "Most capable model for complex tasks", Tier: ModelTierLarge},
+	"claude-sonnet-4-5": {Label: "Claude Sonnet 4.5", Description: "Strong reasoning for multi-file changes", Tier: ModelTierStandard},
+	"claude-haiku-4-5":  {Label: "Claude Haiku 4.5", Description: "Fast model for small fixes and routine edits", Tier: ModelTierSmall},
 	"claude-sonnet-4":   {Label: "Claude Sonnet 4", Group: config.ModelGroupOther},
 	"claude-opus-4":     {Label: "Claude Opus 4", Group: config.ModelGroupOther},
-	"gpt-5":             {Label: "GPT-5", Description: "Most capable model for complex tasks"},
-	"gpt-5-codex":       {Label: "GPT-5 Codex", Description: "Strong reasoning for multi-file changes"},
-	"gpt-5-mini":        {Label: "GPT-5 mini", Description: "Best for small fixes and routine edits"},
+	"gpt-5":             {Label: "GPT-5", Description: "Most capable model for complex tasks", Tier: ModelTierLarge},
+	"gpt-5-codex":       {Label: "GPT-5 Codex", Description: "Strong reasoning for multi-file changes", Tier: ModelTierStandard},
+	"gpt-5-mini":        {Label: "GPT-5 mini", Description: "Best for small fixes and routine edits", Tier: ModelTierSmall},
 	"gpt-4.1":           {Label: "GPT-4.1", Group: config.ModelGroupOther},
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchCodingSessionDiff } from '@/lib/coding-sessions-api'
-import { codingSessionPath } from '@/lib/app-routes'
+import { codingSessionPath, reviewAgentPath } from '@/lib/app-routes'
+import { reviewForPullRequest } from './coding-session-model'
 import type { BootstrapData } from '@/types/flow'
 import type { CodingDiffFile, CodingSession, CodingSessionDiff } from '@/types/coding-sessions'
 
@@ -62,7 +63,17 @@ export function codingSessionSubscribed(session: Pick<CodingSession, 'creatorId'
   return userId === session.creatorId || Boolean(session.subscriberIds?.includes(userId))
 }
 
-/** The session page's URL ("Copy › Session URL"). */
+/**
+ * Where a session opens: the review page of its pull request with the agent panel beside the Diff, once the PR is
+ * synced to Reviews; the session's own page (`/diff/<id>`) before that.
+ */
+export function codingSessionHref(session: Pick<CodingSession, 'id' | 'latestPullRequest' | 'pullRequests'>, data: Pick<BootstrapData, 'workspace' | 'reviews'>) {
+  const pr = session.latestPullRequest ?? session.pullRequests?.at(-1)
+  const review = pr ? reviewForPullRequest(pr, data.reviews ?? []) : undefined
+  return review ? reviewAgentPath(data.workspace.urlKey, review, session.id) : codingSessionPath(data.workspace.urlKey, session.id)
+}
+
+/** The session page's URL. */
 export function codingSessionURL(workspace: string, sessionId: string) {
   return `${typeof location === 'undefined' ? '' : location.origin}${codingSessionPath(workspace, sessionId)}`
 }

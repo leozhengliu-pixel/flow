@@ -1716,6 +1716,15 @@ export function reviewPath(
 ) {
   return `${workspaceRootPath(workspaceSlug)}/review/${encode(review.slugId)}${tab === "overview" ? "" : `/${tab}`}`;
 }
+/** A coding session opened on its pull request's review page, with the agent panel beside the Diff (or another tab). */
+export function reviewAgentPath(
+  workspaceSlug: string,
+  review: Pick<CodeReview, "slugId">,
+  sessionId: string,
+  options: { tab?: ReviewRouteTab; showAgent?: boolean } = {},
+) {
+  return `${reviewPath(workspaceSlug, review, options.tab ?? "changes")}?showAgent=${options.showAgent === false ? "false" : "true"}&agentSessionId=${encodeURIComponent(sessionId)}`;
+}
 export function workspaceIssuesPath(
   workspaceSlug: string,
   view: TeamIssuesRouteView = "all",

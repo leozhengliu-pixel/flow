@@ -267,3 +267,13 @@
 .review-comment-actions-menu button{width:100%;height:32px;display:flex;align-items:center;gap:8px;padding:0 8px;border:0;border-radius:7px;background:transparent;color:var(--theme-text-primary);font:13px inherit}
 .review-comment-actions-menu button:hover{background:var(--theme-surface-hover)}
 .review-comment-actions-menu button:disabled{opacity:.45}
+/* A coding session on its pull request's review page: the tab content on the left, the agent panel on the right. */
+.reviews-workspace.has-agent-panel{display:flex;grid-template-columns:none}
+.reviews-workspace.has-agent-panel .reviews-detail-pane{flex:1;width:100%}
+.review-agent-layout{display:flex;min-width:0;min-height:0;height:calc(100% - 96px)}
+.review-agent-layout-main{flex:1;min-width:0;min-height:0;overflow:hidden}
+.review-agent-layout-main>*{height:100%}
+.review-agent-layout>.review-agent-panel{margin:8px 8px 8px 4px}
+.review-detail-tabs>.review-agent-toggle{width:28px;height:28px;padding:0;border:0;background:var(--theme-control);color:var(--text-strong)}
+.review-detail-tabs>.review-agent-toggle[aria-pressed=false]{background:transparent;color:var(--theme-text-secondary)}
+@media (max-width:760px){.review-agent-layout:not(.is-agent-hidden)>.review-agent-layout-main{display:none}.review-agent-layout>.review-agent-panel{flex:1;width:auto;margin:8px}}

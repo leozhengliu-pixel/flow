@@ -16,6 +16,19 @@ import (
 // provisioning reuses a live sandbox the session already owns, and
 // publishing looks the PR/MR up by head branch before creating it.
 
+// taskText is what Auto routes on: the session title and its first prompt.
+func (s *Service) taskText(ctx context.Context, session domain.CodingSession) string {
+	text := session.DisplayTitle
+	if items, err := s.store.CodingInbox(ctx, session.ID, 0); err == nil {
+		for _, item := range items {
+			if item.Kind == InboxTurn && item.Turn != nil {
+				return text + "\n" + item.Turn.Prompt
+			}
+		}
+	}
+	return text
+}
+
 // provision resolves everything a sandbox needs and creates (or binds) it.
 func (s *Service) provision(ctx context.Context, session domain.CodingSession, sandboxes []sandbox.Record) ProvisionOutcome {
 	info, err := s.workspaces.CodingWorkspace(ctx, session.WorkspaceKey)
@@ -47,6 +60,15 @@ func (s *Service) provision(ctx context.Context, session domain.CodingSession, s
 	model, ok := ResolveModel(s.cfg.LLM, harness, selectionModel)
 	if !ok {
 		return ProvisionOutcome{Code: domain.CodingErrModelUnavailable, Message: fmt.Sprintf("No model is available for %s (%s).", harness, selectionModel)}
+	}
+	modelReason, escalation := "", EscalationModel(s.cfg.LLM, harness, model)
+	if selectionModel == "" || selectionModel == domain.CodingModelAuto {
+		if session.Model != "" && slices.Contains(ModelCatalog(s.cfg.LLM, harness), session.Model) {
+			// A routed session keeps its model (and an Auto fallback) across sandboxes.
+			model, modelReason, escalation = session.Model, session.ModelReason, EscalationModel(s.cfg.LLM, harness, session.Model)
+		} else if route, routed := RouteAutoModel(s.cfg.LLM, harness, s.taskText(ctx, session)); routed && route.Model != "" {
+			model, modelReason, escalation = route.Model, route.Reason, route.Escalation
+		}
 	}
 	codeHost := env.CodeHost
 	if codeHost == "" {
@@ -127,6 +149,7 @@ func (s *Service) provision(ctx context.Context, session domain.CodingSession, s
 			target.BaseRef = "main"
 		}
 		target.Harness, target.Model, target.SandboxSize, target.Region, target.SnapshotID = harness, model, size, region, snapshotID
+		target.ModelReason, target.EscalationModel = modelReason, escalation
 		target.SigningFormat, target.SigningPublicKey = signingFormat, signingKey
 		if target.ModelSelection == "" {
 			target.ModelSelection = domain.CodingModelAuto

@@ -734,8 +734,12 @@ The proxy (track E, `internal/llmproxy`) does the following:
    warning metric.
 6. It limits request bodies to 32 MiB and uses `FLOW_CODING_LLM_TIMEOUT`.
 
-**Auto routing:** `auto` resolves to the first model in the harness catalog at provisioning time and is stored in
-`CodingSession.Model`. When the upstream answers model-not-found, overloaded (529) or 503 on an Auto session, the
+**Auto routing:** at provisioning time `auto` classifies the task (the session title and its first prompt) as small,
+standard or large and picks the first catalog model of that tier (`FLOW_CODING_MODEL_INFO` `tier`, built-in tiers for
+well-known models, otherwise standard), falling back to the nearest tier. The pick is stored in `CodingSession.Model`,
+the reason in `modelReason` (shown in Session details), and the next more capable catalog model in `escalationModel`
+("Start over with <model>": `POST /api/coding/sessions/{id}/restart` with `{"model":"<id>"}` runs the first prompt
+again with that model). A routed session keeps its model across sandboxes. When the upstream answers model-not-found, overloaded (529) or 503 on an Auto session, the
 proxy retries the request once with the next catalog model and records the switch as a thought activity ("Switched to
 X"). A pinned model fails with `modelUnavailable` instead, and the UI offers "Restart with default model".
 

@@ -18,6 +18,10 @@ vi.mock('@/lib/coding-sessions-api', () => ({
   approveCodingSession: vi.fn(), dismissCodingSession: vi.fn(), createCodingSessionPullRequest: vi.fn(), promptCodingSession: vi.fn(), fetchCodingSandboxLogs: vi.fn(),
   fixCodingEnvironmentWithAgent: vi.fn(), startReviewCodingSession: vi.fn(), startIssueCodingSession: vi.fn(), fetchCodingEnvironments: vi.fn(),
   fetchCodingSessionArtifacts: vi.fn(async () => []),
+  fetchCodingModels: vi.fn(async () => [
+    { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', harness: 'claudeCode' },
+    { id: 'claude-opus-4-5', label: 'Claude Opus 4.5', harness: 'claudeCode' },
+  ]),
   fetchCodingSessionDiff: vi.fn(async () => ({ source: 'none', additions: 0, deletions: 0, files: [] })), setCodingSessionSubscription: vi.fn(),
   fetchGitHubApp: vi.fn(async () => ({ configured: true, hostName: 'github.com', installations: [] })), startGitHubAppAuthorization: vi.fn(),
 }))
@@ -57,12 +61,13 @@ describe('coding session panel', () => {
     expect(screen.getByRole('img', { name: 'Empty state' })).toBeInTheDocument()
   })
 
-  it('shows phase progress, harness, model and cost while working', () => {
+  it('shows phase progress, harness and model while working, but no cost', () => {
     renderPanel(makeSession({ state: 'pending', phase: 'starting', costMicros: 2_500_000 }))
     const steps = within(screen.getByRole('list', { name: 'Session progress' })).getAllByRole('listitem')
     expect(steps.find(step => step.getAttribute('aria-current') === 'step')).toHaveTextContent('Starting sandbox')
     expect(screen.getByText('Claude Code · claude-sonnet-4-5 (Auto)')).toBeVisible()
-    expect(screen.getByLabelText('Cost')).toHaveTextContent('$2.50')
+    expect(screen.queryByLabelText('Cost')).toBeNull()
+    expect(screen.queryByText('$2.50')).toBeNull()
   })
 
   it('stops a working session from the empty composer', async () => {
@@ -111,6 +116,24 @@ describe('coding session panel', () => {
     expect(onDismiss).toHaveBeenCalled()
   })
 
+  it('shows why Auto routed the session and starts over with the next model up', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.restartCodingSession).mockResolvedValue(makeSession({ state: 'pending', phase: 'queued' }))
+    renderPanel(makeSession({ state: 'complete', phase: 'idle', modelReason: 'The task has an exact, narrowly scoped implementation.', escalationModel: 'claude-opus-4-5' }))
+    await user.click(screen.getByRole('button', { name: 'Session details' }))
+    expect(await screen.findByText('The task has an exact, narrowly scoped implementation.')).toBeVisible()
+    await user.click(await screen.findByRole('menuitem', { name: 'Start over with Claude Opus 4.5' }))
+    expect(api.restartCodingSession).toHaveBeenLastCalledWith('cs-1', { model: 'claude-opus-4-5' })
+  })
+
+  it('offers no start over without a more capable model or while the agent works', async () => {
+    const user = userEvent.setup()
+    renderPanel(makeSession({ escalationModel: 'claude-opus-4-5' }))
+    await user.click(screen.getByRole('button', { name: 'Session details' }))
+    await screen.findByRole('menuitem', { name: 'Send stop request' })
+    expect(screen.queryByRole('menuitem', { name: /Start over with/ })).toBeNull()
+  })
+
   it('sends a stop request from the session menu while the agent works', async () => {
     const user = userEvent.setup()
     vi.mocked(api.stopCodingSession).mockRejectedValue(new Error('Conflict'))
@@ -126,7 +149,9 @@ describe('coding session panel', () => {
     Object.defineProperty(window.navigator, 'clipboard', { value: { writeText, readText: vi.fn() }, configurable: true })
     renderPanel(makeSession({ branchName: 'flow/x' }))
     await user.click(screen.getByRole('button', { name: 'Session details' }))
-    expect(await screen.findByText('Claude Code · claude-sonnet-4-5 (Auto)', { selector: '[role=menuitem] span' })).toBeVisible()
+    expect(await screen.findByText('Claude Sonnet 4.5', { selector: '[role=menuitem] span' })).toBeVisible()
+    expect(screen.getByText('Claude Code', { selector: '[role=menuitem] span' })).toBeVisible()
+    expect(screen.queryByText('Cost')).toBeNull()
     await user.click(screen.getByRole('menuitem', { name: 'Copy' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Session URL' }))
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringMatching(/\/diff\/cs-1$/)))

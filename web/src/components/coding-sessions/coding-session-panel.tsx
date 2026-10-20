@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { MoreHorizontal } from 'lucide-react'
+import { Archive, MoreHorizontal, RotateCcw, X } from 'lucide-react'
 import { restartCodingSession, setCodingSessionSubscription, startReviewCodingSession, stopCodingSession } from '@/lib/coding-sessions-api'
 import { AgentAvatarMark, AgentCodingGlyph } from '@/components/ui/agent-glyph'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -9,12 +9,12 @@ import type { BootstrapData } from '@/types/flow'
 import type { CodingSession } from '@/types/coding-sessions'
 import { CodingSessionConversation } from './coding-session-conversation'
 import { notifyCodingSessionChanged } from './coding-session-events'
-import { CODING_PHASE_LABELS, codingModelLabel, codingSessionCapabilities, codingSessionStalled, formatCodingCost } from './coding-session-model'
+import { CODING_PHASE_LABELS, codingModelLabel, codingSessionCapabilities, codingSessionStalled } from './coding-session-model'
 import { CodingChanges, CodingPhaseProgress, CodingPullRequests, CodingSandboxInfo, CodingStateBadge } from './coding-session-parts'
-import { useCodingSession } from './use-coding-sessions'
+import { useCodingModelLabel, useCodingSession } from './use-coding-sessions'
 import { CodingSessionArtifacts } from './artifacts/coding-session-artifacts'
 import { CodingDiffViewer } from './coding-session-diff'
-import { codingSessionSubscribed, codingSessionURL } from './coding-session-page-model'
+import { codingSessionHref, codingSessionSubscribed } from './coding-session-page-model'
 import './coding-sessions.css'
 
 export type CodingSessionPanelProps = {
@@ -52,7 +52,6 @@ export function CodingSessionPanel({ session, data, onChange, onDismiss, onOpenS
   const busyRef = useRef(false)
   const [error, setError] = useState('')
   const changes = useRef<HTMLDivElement>(null)
-  const can = codingSessionCapabilities(session)
   const model = codingModelLabel(session)
   const phase = CODING_PHASE_LABELS[session.phase]
   /** Runs a session action; false when it failed (the error shows under the panel). */
@@ -75,15 +74,14 @@ export function CodingSessionPanel({ session, data, onChange, onDismiss, onOpenS
   })
   const openChanges = () => changes.current?.querySelector('.coding-diff, .coding-session-empty')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
 
-  const title = session.displayTitle || data.issues.find(issue => issue.id === session.issueId)?.title || session.repository || t('Coding session')
   return <section className={`coding-session-panel${agentHidden ? ' is-agent-hidden' : ''}${className ? ` ${className}` : ''}`} data-state={session.state} data-phase={session.phase} aria-label={t('Coding session')}>
     <div className="coding-session-changes" ref={changes}>
       <div className="coding-session-overview">
         <CodingStateBadge state={session.state} session={session}/>
         {phase && session.state !== 'error' && <span className="coding-session-phase">{t(phase)}</span>}
+        {/* No cost here: spend is reported in Settings › Usage, not on the session. */}
         <span className="coding-session-meta">
           <span className="coding-session-model" data-i18n-ignore>{model.harness} · {model.model}</span>
-          <span className="coding-session-cost" aria-label={t('Cost')}>{formatCodingCost(session.costMicros)}</span>
         </span>
       </div>
       <CodingPhaseProgress session={session}/>
@@ -95,25 +93,60 @@ export function CodingSessionPanel({ session, data, onChange, onDismiss, onOpenS
       <CodingSessionArtifacts sessionId={session.id} artifacts={session.artifacts} refreshKey={session.updatedAt}/>
       <CodingDiffViewer session={session}/>
     </div>
-    <aside className="coding-agent-panel" aria-label={t('Agent')} hidden={agentHidden}>
+    <CodingAgentPanel session={session} data={data} onChange={onChange} onDismiss={onDismiss} onOpenChanges={openChanges} hidden={agentHidden} error={error}/>
+  </section>
+}
+
+/**
+ * The agent panel: the header (session title, Session details, and "Close chat" where the host can close it) over the
+ * conversation and the composer. Mounted beside the session's changes, and on the review page of the session's pull
+ * request (`/review/<slug>/changes?showAgent=true&agentSessionId=<id>`).
+ */
+export function CodingAgentPanel({ session, data, onChange, onDismiss, onOpenChanges, onClose, hidden, error: hostError, className }: { session: CodingSession; data: BootstrapData; onChange: (session: CodingSession) => void; onDismiss?: () => void; /** Shows the session's changes (the end-of-turn diff chip). */ onOpenChanges?: () => void; /** "Close chat" (the review page). */ onClose?: () => void; hidden?: boolean; /** An error of the host's own actions, shown under the conversation. */ error?: string; className?: string }) {
+  const { t } = useI18n()
+  const [busy, setBusy] = useState(false)
+  const busyRef = useRef(false)
+  const [error, setError] = useState('')
+  const can = codingSessionCapabilities(session)
+  const run = async (action: () => Promise<CodingSession | void>, done?: string) => {
+    if (busyRef.current) return
+    busyRef.current = true; setBusy(true); setError('')
+    try {
+      const next = await action()
+      if (next && next.id === session.id) onChange(next)
+      notifyCodingSessionChanged({ sessionId: session.id, agentSessionId: session.agentSessionId, issueId: session.issueId })
+      if (done) toast.success(t(done))
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) }
+    finally { busyRef.current = false; setBusy(false) }
+  }
+  const title = session.displayTitle || data.issues.find(issue => issue.id === session.issueId)?.title || session.repository || t('Coding session')
+  const shownError = error || hostError
+  return <aside className={`coding-agent-panel${className ? ` ${className}` : ''}`} aria-label={t('Agent')} hidden={hidden}>
       <header className="coding-agent-panel-header">
         <CodingAgentAvatar state={session.state} stalled={codingSessionStalled(session)}/>
         <h3 data-i18n-ignore>{title}</h3>
         <CodingSessionMenu session={session} data={data} busy={busy} onChange={onChange} items={can.stop || can.restartWithDefaultModel ? <>
           {can.stop && <DropdownMenuItem disabled={busy || session.stopRequested} onSelect={() => void run(() => stopCodingSession(session.id))}>{t('Send stop request')}</DropdownMenuItem>}
-          {can.restartWithDefaultModel && <DropdownMenuItem disabled={busy} onSelect={() => void run(() => restartCodingSession(session.id, { useDefaultModel: true }), 'Restarted with the default model')}>{t('Start over with {model}').replace('{model}', 'Auto')}</DropdownMenuItem>}
-        </> : undefined} onArchive={can.dismiss ? onDismiss : undefined}/>
+          {can.restartWithDefaultModel && <DropdownMenuItem disabled={busy} onSelect={() => void run(() => restartCodingSession(session.id, { useDefaultModel: true }), 'Restarted with the default model')}><RotateCcw size={14} aria-hidden="true"/>{t('Start over with {model}').replace('{model}', 'Auto')}</DropdownMenuItem>}
+        </> : undefined} onStartOver={can.startOver ? model => void run(() => restartCodingSession(session.id, { model }), 'Started over') : undefined} onArchive={can.dismiss ? onDismiss : undefined}/>
+        {onClose && <button type="button" className="coding-session-icon-button coding-agent-close" aria-label={t('Close chat')} title={t('Close chat')} onClick={onClose}><X size={14}/></button>}
       </header>
-      <CodingSessionConversation session={session} data={data} onChange={onChange} onOpenChanges={openChanges}/>
-      {error && <p className="coding-session-error-text" role="alert">{error}</p>}
+      <CodingSessionConversation session={session} data={data} onChange={onChange} onOpenChanges={onOpenChanges}/>
+      {shownError && <p className="coding-session-error-text" role="alert">{shownError}</p>}
     </aside>
-  </section>
 }
 
-/** "…" Session details: the model, "Subscribe to session", copy actions, session actions and Archive. */
-export function CodingSessionMenu({ session, data, busy, items, onArchive, onChange }: { session: CodingSession; data: BootstrapData; busy?: boolean; items?: ReactNode; onArchive?: () => void; /** Receives the session after a subscription change. */ onChange?: (session: CodingSession) => void }) {
+/**
+ * "…" Session details, like the reference app's: the model with Auto's routing reason, "Subscribe to session", Copy,
+ * the session actions ("Start over with <next model up>") and Archive.
+ */
+export function CodingSessionMenu({ session, data, busy, items, onArchive, onStartOver, onChange }: { session: CodingSession; data: BootstrapData; busy?: boolean; items?: ReactNode; onArchive?: () => void; /** "Start over with <model>"; shown when the session offers a more capable model. */ onStartOver?: (model: string) => void; /** Receives the session after a subscription change. */ onChange?: (session: CodingSession) => void }) {
   const { t } = useI18n()
   const model = codingModelLabel(session)
+  // Catalog labels load when the menu first opens.
+  const [opened, setOpened] = useState(false)
+  const routedLabel = useCodingModelLabel(opened ? session.model : undefined, session.harness)
+  const escalationLabel = useCodingModelLabel(opened && onStartOver ? session.escalationModel : undefined, session.harness)
   const subscribed = codingSessionSubscribed(session, data.viewer.id)
   const [subscribing, setSubscribing] = useState(false)
   const copy = async (text: string, done: string) => {
@@ -131,29 +164,37 @@ export function CodingSessionMenu({ session, data, busy, items, onArchive, onCha
     } catch (cause) { toast.error(cause instanceof Error ? cause.message : t('Could not update subscription')) }
     finally { setSubscribing(false) }
   }
-  return <DropdownMenu>
+  const startOver = onStartOver && session.escalationModel ? onStartOver : undefined
+  return <DropdownMenu onOpenChange={open => { if (open) setOpened(true) }}>
     <DropdownMenuTrigger asChild>
       <button type="button" className="coding-session-icon-button coding-agent-menu-trigger" aria-label={t('Session details')} disabled={busy}><MoreHorizontal size={14}/></button>
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end" className="coding-session-menu">
       <DropdownMenuLabel>{t('Session details')}</DropdownMenuLabel>
-      <DropdownMenuItem disabled className="coding-session-menu-detail"><AgentCodingGlyph size={16}/><span data-i18n-ignore>{model.harness} · {model.model}</span></DropdownMenuItem>
-      <DropdownMenuItem disabled className="coding-session-menu-detail"><span className="coding-session-menu-cost">{t('Cost')}</span><span data-i18n-ignore>{formatCodingCost(session.costMicros)}</span></DropdownMenuItem>
+      <DropdownMenuItem disabled className="coding-session-menu-detail coding-session-menu-model">
+        <AgentCodingGlyph size={16}/>
+        <span className="coding-session-menu-model-text">
+          <span data-i18n-ignore>{routedLabel || model.model}</span>
+          <span className="coding-session-menu-model-reason" data-i18n-ignore>{session.modelReason || model.harness}</span>
+        </span>
+      </DropdownMenuItem>
       <DropdownMenuSeparator/>
       <DropdownMenuItem role="menuitemcheckbox" aria-checked={subscribed} disabled={subscribing} className="coding-session-menu-subscribe" onSelect={event => { event.preventDefault(); void toggleSubscription() }}>
-        <span className="coding-session-menu-cost">{t('Subscribe to session')}</span>
+        <span className="coding-session-menu-grow">{t('Subscribe to session')}</span>
         <span className="coding-session-menu-toggle" data-checked={subscribed || undefined} aria-hidden="true"/>
       </DropdownMenuItem>
-      {items && <><DropdownMenuSeparator/>{items}</>}
       <DropdownMenuSeparator/>
       <DropdownMenuSub>
         <DropdownMenuSubTrigger>{t('Copy')}</DropdownMenuSubTrigger>
         <DropdownMenuSubContent className="coding-session-menu">
-          <DropdownMenuItem onSelect={() => void copy(codingSessionURL(data.workspace.urlKey, session.id), 'Copied session URL')}>{t('Session URL')}</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void copy(`${location.origin}${codingSessionHref(session, data)}`, 'Copied session URL')}>{t('Session URL')}</DropdownMenuItem>
           {session.branchName && <DropdownMenuItem onSelect={() => void copy(session.branchName!, 'Copied branch name')}>{t('Branch name')}</DropdownMenuItem>}
         </DropdownMenuSubContent>
       </DropdownMenuSub>
-      {onArchive && <><DropdownMenuSeparator/><DropdownMenuItem onSelect={onArchive}>{t('Archive')}</DropdownMenuItem></>}
+      {(items || startOver || onArchive) && <DropdownMenuSeparator/>}
+      {items}
+      {startOver && <DropdownMenuItem disabled={busy} onSelect={() => startOver(session.escalationModel!)}><RotateCcw size={14} aria-hidden="true"/>{t('Start over with {model}').replace('{model}', escalationLabel)}</DropdownMenuItem>}
+      {onArchive && <DropdownMenuItem onSelect={onArchive}><Archive size={14} aria-hidden="true"/>{t('Archive')}</DropdownMenuItem>}
     </DropdownMenuContent>
   </DropdownMenu>
 }

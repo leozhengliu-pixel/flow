@@ -1,5 +1,5 @@
 import { format, formatDistanceToNow } from 'date-fns'
-import { Bell, BellOff, CheckCircle2, Copy, Edit3, Ellipsis, Link2, Paperclip, RotateCcw, SmilePlus, Trash2 } from 'lucide-react'
+import { Archive, Bell, BellOff, CheckCircle2, Copy, Edit3, Ellipsis, Link2, Paperclip, RotateCcw, SmilePlus, Trash2 } from 'lucide-react'
 import type { ActivityEvent, Comment, ThreadSubscription, ThreadSubscriptionState, WorkflowState } from '@/types/flow'
 import { Avatar } from '@/components/issue/issue-row'
 import { AttributedAction, ViaApp } from '@/components/ui/via-app'
@@ -19,6 +19,7 @@ import { useI18n } from '@/i18n/i18n'
 import { CalendarIcon, CycleIcon, LabelIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { activityTimeLabel, coalesceIssueEvents, describeIssueActivityParts, issueEventFieldCount, type ActivityContext, type ActivityPart } from './issue-activity-model'
 import { MentionReference } from '@/components/editor/mentions/mention-reference'
+import { IntegrationBrandIcon } from '@/components/settings/integration-brand-icon'
 import { inlineCommentsState } from '@/lib/inline-comments-state'
 import './activity-timeline.css'
 
@@ -349,11 +350,15 @@ export function ActivityTimeline({
   )
 }
 
+/** Rows whose sentence names no actor ("Session with Flow archived"). */
+const ACTORLESS_ACTIVITY = new Set(['issue.coding_session_archived'])
+
 function ActivityRow({ event, description, context }: { event: ActivityEvent; description: ActivityPart[]; context?: ActivityContext }) {
   const { locale } = useI18n()
+  const sentence = description.map((part, index) => typeof part === 'string' ? part : <MentionReference key={`${index}-${part.type}-${part.id}`} id={part.id} label={part.label} type={part.type}/>)
   return (
     <p className="activity-row" data-i18n-ignore>
-      <AttributedAction actor={activityActor(event.actor, event.botActor, context?.users)}>{description.map((part, index) => typeof part === 'string' ? part : <MentionReference key={`${index}-${part.type}-${part.id}`} id={part.id} label={part.label} type={part.type}/>)}</AttributedAction>
+      {ACTORLESS_ACTIVITY.has(event.type) ? sentence : <AttributedAction actor={activityActor(event.actor, event.botActor, context?.users)}>{sentence}</AttributedAction>}
       <span className="activity-time">
         <span className="activity-dot">·</span>
         <a href={`#activity-${event.id}`} title={format(new Date(event.createdAt), 'PPpp')}>
@@ -389,6 +394,9 @@ function ActivityEventIcon({ event, context }: { event: ActivityEvent; context?:
     if ('dueDate' in m) return <CalendarIcon size={14} />
     if ('title' in m) return <Edit3 size={14} />
   }
+  if (event.type === 'issue.coding_session_archived') return <Archive size={14} />
+  // A code host's own change (a closed pull request unassigned the agent): the host's mark.
+  if (event.botActor?.type === 'integration') return <IntegrationBrandIcon provider={event.botActor.id === 'gitlab' ? 'gitlab' : 'github'} size={14}/>
   if (event.type.startsWith('attachment.')) return <Paperclip size={14} />
   if (event.type.includes('relation') || event.type.includes('review')) return <Link2 size={14} />
   const actor = activityActor(event.actor, event.botActor, context?.users)
