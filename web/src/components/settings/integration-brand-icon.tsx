@@ -1,7 +1,30 @@
 import { SlackIcon } from '@/components/issue/issue-icons'
 
-export function IntegrationBrandIcon({ provider, size = 25 }: { provider: 'github' | 'gitlab' | 'slack' | 'jira'; size?: number }) {
+export type IntegrationBrand = 'github' | 'gitlab' | 'slack' | 'jira' | 'google-calendar' | 'notion'
+
+export function IntegrationBrandIcon({ provider, size = 25 }: { provider: IntegrationBrand; size?: number }) {
   if (provider === 'slack') return <SlackIcon size={size}/>
+  if (provider === 'google-calendar') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
+        <path fill="#fff" d="M3.5 1.5h9a2 2 0 0 1 2 2V11l-3.5 3.5H3.5a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z"/>
+        <path fill="#4285F4" d="M3.5 1.5h9a2 2 0 0 1 2 2v1h-13v-1a2 2 0 0 1 2-2Z"/>
+        <path fill="#34A853" d="M1.5 11h9.5v3.5H3.5a2 2 0 0 1-2-2V11Z"/>
+        <path fill="#FBBC04" d="M11 4.5h3.5V11H11Z"/>
+        <path fill="#EA4335" d="M11 11h3.5L11 14.5Z"/>
+        <path fill="#1967D2" d="M1.5 4.5H11V11H1.5Z" opacity=".08"/>
+        <text x="6.25" y="9.9" fill="#4285F4" fontFamily="Arial, sans-serif" fontSize="5" fontWeight="700" textAnchor="middle">31</text>
+      </svg>
+    )
+  }
+  if (provider === 'notion') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
+        <rect x="2" y="1.75" width="12" height="12.5" rx="2" fill="#fff" stroke="#111" strokeWidth="1.2"/>
+        <path fill="#111" d="M5.25 11.25v-6.5h1.2l3.2 4.2v-4.2h1.1v6.5h-1.1L6.4 7v4.25Z"/>
+      </svg>
+    )
+  }
   if (provider === 'jira') {
     return (
       <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">

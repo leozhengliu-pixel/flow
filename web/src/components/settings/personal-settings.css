@@ -347,3 +347,20 @@
   justify-content: flex-end;
 }
 .personal-signing-key-reupload{display:block;color:var(--semantic-warning);font-size:12px;line-height:17px}
+html:root .settings-app .settings-main .personal-page-header:has(+ .personal-connection-list) p{line-height:22px}
+.personal-connection-list .settings-row,.personal-connection-list .code-host-account-row{min-height:0;padding:16px}
+html:root .settings-app .settings-main .personal-connection-list .settings-row-copy{gap:3px}
+html:root .settings-app .settings-main .personal-connection-list .settings-row-copy>strong{line-height:16px}
+html:root .settings-app .settings-main .personal-connection-list .settings-row-copy>span{font-size:12px;line-height:15px}
+.personal-connection-list .settings-row-icon{width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;background:var(--bg-subtle);color:var(--theme-text-primary)}
+.personal-connection-list .settings-row-icon>svg{width:16px;height:16px}
+html:root .settings-app .settings-main .personal-connection-list .personal-action:not(.danger):not(.primary){background:transparent;box-shadow:none}
+html:root .settings-app .settings-main .personal-connection-list .personal-action:not(.danger):not(.primary):hover:not(:disabled){background:var(--bg-hover)}
+.personal-connection-links{margin-top:48px}
+.personal-connection-link{display:block;color:inherit;text-decoration:none;transition:background-color .15s}
+.personal-connection-link:hover{background:var(--bg-hover)}
+.personal-connection-link:focus-visible{outline:1px solid var(--focus-ring);outline-offset:1px}
+.personal-connection-link .settings-row{cursor:pointer}
+.personal-connection-link-chevron{width:16px;height:16px;color:var(--theme-text-secondary)}
+.personal-mcp-anchor{margin-top:-10px;padding-top:10px;border-radius:10px;outline:1px solid transparent;outline-offset:0;transition:outline-color .6s ease-out}
+.personal-mcp-anchor.is-targeted{outline-color:var(--accent-primary);transition:none}

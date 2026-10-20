@@ -11,6 +11,8 @@ const api = vi.hoisted(() => ({
   connectGitLabToken: vi.fn(),
   disconnectCodeHostAccount: vi.fn(),
 }));
+const dialogs = vi.hoisted(() => ({ confirmAction: vi.fn() }));
+vi.mock("@/components/ui/action-dialog-service", () => dialogs);
 vi.mock("@/lib/code-host-accounts-api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/code-host-accounts-api")>("@/lib/code-host-accounts-api");
   return { ...actual, ...api };
@@ -57,15 +59,50 @@ function renderRows() {
 
 beforeEach(() => {
   for (const fn of Object.values(api)) fn.mockReset();
+  dialogs.confirmAction.mockReset();
+  dialogs.confirmAction.mockResolvedValue(true);
 });
 
-it("shows a connected GitHub account with Disconnect", async () => {
+function openAccountMenu(name: string) {
+  fireEvent.keyDown(screen.getByRole("button", { name: `${name} account options` }), { key: "Enter" });
+}
+
+it("shows a linked GitHub account as Connected and disconnects after confirming", async () => {
   api.fetchCodeHostAccounts.mockResolvedValue(response({ accounts: [account()] }));
   api.disconnectCodeHostAccount.mockResolvedValue(undefined);
   renderRows();
-  expect(await screen.findByText("@alice")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+  expect(await screen.findByText(/@alice/)).toBeInTheDocument();
+  expect(screen.getByText("github.com")).toBeInTheDocument();
+  openAccountMenu("GitHub");
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Disconnect…" }));
+  await waitFor(() =>
+    expect(dialogs.confirmAction).toHaveBeenCalledWith(
+      "Disconnect personal GitHub account?",
+      expect.objectContaining({ confirmLabel: "Disconnect" }),
+    ),
+  );
   await waitFor(() => expect(api.disconnectCodeHostAccount).toHaveBeenCalledWith("cha_1"));
+});
+
+it("keeps the account when the disconnect is cancelled", async () => {
+  api.fetchCodeHostAccounts.mockResolvedValue(response({ accounts: [account()] }));
+  dialogs.confirmAction.mockResolvedValueOnce(false);
+  renderRows();
+  expect(await screen.findByText(/@alice/)).toBeInTheDocument();
+  openAccountMenu("GitHub");
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Disconnect…" }));
+  await waitFor(() => expect(dialogs.confirmAction).toHaveBeenCalled());
+  expect(api.disconnectCodeHostAccount).not.toHaveBeenCalled();
+});
+
+it("shows the workspace organization on the linked GitHub row", async () => {
+  api.fetchCodeHostAccounts.mockResolvedValue(response({ accounts: [account()] }));
+  render(
+    <I18nProvider>
+      <CodeHostConnectionRows githubDescription="Review code in Flow" githubOrganization="Acme" />
+    </I18nProvider>,
+  );
+  expect(await screen.findByText("Acme")).toBeInTheDocument();
 });
 
 it("offers Reconnect when the token needs renewing", async () => {
@@ -77,9 +114,22 @@ it("offers Reconnect when the token needs renewing", async () => {
   vi.spyOn(window, "location", "get").mockReturnValue({ ...window.location, assign } as Location);
   renderRows();
   expect(await screen.findByText(/Token revoked/)).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Reconnect" }));
+  expect(screen.getByText("Reconnect needed")).toBeInTheDocument();
+  openAccountMenu("GitHub");
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Reconnect" }));
   await waitFor(() => expect(api.authorizeGitHubAccount).toHaveBeenCalledWith("account"));
   await waitFor(() => expect(assign).toHaveBeenCalledWith("https://github.com/login/oauth/authorize?x"));
+});
+
+it("shows a linked GitLab account with the color logo and keeps self-managed hosts", async () => {
+  const linked = account({ id: "cha_gl", codeHost: "gitlab", login: "bob", hostName: "gitlab.corp.test", instanceId: "gl_2" });
+  api.fetchCodeHostAccounts.mockResolvedValue(response({ accounts: [linked] }));
+  const { container } = renderRows();
+  expect(await screen.findByText(/@bob/)).toBeInTheDocument();
+  expect(screen.getByText("gitlab.corp.test")).toBeInTheDocument();
+  expect(container.querySelector('[data-testid="gitlab-account-row"] path[fill="#FC6D26"]')).not.toBeNull();
+  // A linked account with no other instance needs no "ask an admin" row.
+  expect(screen.queryByText("Ask an admin to connect GitLab")).toBeNull();
 });
 
 it("lists only the provided GitLab instances and shows the token form for one without OAuth", async () => {

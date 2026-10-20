@@ -1,7 +1,9 @@
-import { GitFork, UserRound } from "lucide-react";
+import { ArrowUpRight, ChevronDown, UserRound } from "lucide-react";
 import { useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 
+import { confirmAction } from "@/components/ui/action-dialog-service";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/i18n/i18n";
 import { fillTemplate } from "@/lib/fill-template";
 import {
@@ -20,6 +22,7 @@ import type {
 } from "@/types/code-host-accounts";
 
 import { useCodeHostAccounts, useCodeHostLinkResult } from "./code-host-accounts-hooks";
+import { IntegrationBrandIcon } from "./integration-brand-icon";
 import { SettingsRow } from "./settings-primitives";
 
 import "./code-host-accounts.css";
@@ -72,8 +75,125 @@ function AccountAction({
   );
 }
 
+/** "Connect ↗": the ghost pill that starts a connection on another site. */
+export function ConnectAction({ disabled, onClick }: { disabled?: boolean; onClick: () => void }) {
+  const { t } = useI18n();
+  return (
+    <AccountAction disabled={disabled} onClick={onClick}>
+      {t("Connect")}
+      <ArrowUpRight aria-hidden="true" className="code-host-connect-arrow" />
+    </AccountAction>
+  );
+}
+
+/** "● Connected ⌄" pill whose menu reconnects or disconnects a linked account. */
+function AccountStatusMenu({
+  account,
+  codeHostName,
+  disabled,
+  onReconnect,
+  onDisconnect,
+}: {
+  account: CodeHostAccount;
+  codeHostName: string;
+  disabled?: boolean;
+  onReconnect: () => void;
+  onDisconnect: () => void;
+}) {
+  const { t } = useI18n();
+  const reconnect = account.status === "reconnect";
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={`personal-action code-host-status${reconnect ? " reconnect" : ""}`}
+          aria-label={t("{name} account options").replace("{name}", codeHostName)}
+          disabled={disabled}
+        >
+          <span className="code-host-status-dot" aria-hidden="true" />
+          {reconnect ? t("Reconnect needed") : t("Connected")}
+          <ChevronDown aria-hidden="true" className="code-host-status-chevron" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {reconnect && <DropdownMenuItem onSelect={onReconnect}>{t("Reconnect")}</DropdownMenuItem>}
+        <DropdownMenuItem onSelect={onDisconnect}>{t("Disconnect…")}</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/**
+ * One linked code-host account: a header with the provider and the member's
+ * login, then the account's own row with its status menu.
+ */
+function LinkedAccountCard({
+  account,
+  codeHost,
+  title,
+  description,
+  disabled,
+  onReconnect,
+  onDisconnect,
+}: {
+  account: CodeHostAccount;
+  codeHost: CodeHostKind;
+  title: string;
+  description: string;
+  disabled?: boolean;
+  onReconnect: () => void;
+  onDisconnect: () => void;
+}) {
+  const { t } = useI18n();
+  const name = codeHost === "github" ? "GitHub" : "GitLab";
+  return (
+    <section className="settings-card code-host-account-card" data-testid={`${codeHost}-account-row`}>
+      <div className="code-host-account-header">
+        <span className="settings-row-icon">
+          <IntegrationBrandIcon provider={codeHost} size={16} />
+        </span>
+        <strong>
+          <span data-i18n-ignore>{name}</span>
+          <span className="code-host-account-login" data-i18n-ignore>
+            {" · "}@{account.login}
+          </span>
+        </strong>
+      </div>
+      <div className="code-host-account-row">
+        <div className="settings-row-copy">
+          <strong data-i18n-ignore>{title}</strong>
+          <span>
+            {account.status === "reconnect" && account.statusReason ? (
+              <span data-i18n-ignore>{account.statusReason}</span>
+            ) : (
+              t(description)
+            )}
+          </span>
+        </div>
+        <AccountStatusMenu
+          account={account}
+          codeHostName={name}
+          disabled={disabled}
+          onReconnect={onReconnect}
+          onDisconnect={onDisconnect}
+        />
+      </div>
+    </section>
+  );
+}
+
 /** The GitHub and GitLab rows of Settings › Account › Connected accounts. */
-export function CodeHostConnectionRows({ githubDescription }: { githubDescription: string }) {
+export function CodeHostConnectionRows({
+  githubDescription,
+  gitlabDescription = "Review merge requests in Flow and sync attribution of your git-related actions",
+  githubOrganization,
+}: {
+  githubDescription: string;
+  gitlabDescription?: string;
+  /** The workspace's GitHub organization, shown on the linked account's row. */
+  githubOrganization?: string;
+}) {
   const { t } = useI18n();
   const { data, loaded, reload } = useCodeHostAccounts();
   useCodeHostLinkResult();
@@ -87,10 +207,16 @@ export function CodeHostConnectionRows({ githubDescription }: { githubDescriptio
   const { busy, go } = useRedirect();
   const [removing, setRemoving] = useState("");
 
-  const disconnect = async (id: string) => {
-    setRemoving(id);
+  const disconnect = async (account: CodeHostAccount) => {
+    const name = account.codeHost === "github" ? "GitHub" : "GitLab";
+    const confirmed = await confirmAction(
+      t("Disconnect personal {name} account?").replace("{name}", name),
+      { confirmLabel: t("Disconnect"), danger: true },
+    );
+    if (!confirmed) return;
+    setRemoving(account.id);
     try {
-      await disconnectCodeHostAccount(id);
+      await disconnectCodeHostAccount(account.id);
       await reload();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("Could not disconnect the account"));
@@ -99,78 +225,55 @@ export function CodeHostConnectionRows({ githubDescription }: { githubDescriptio
     }
   };
 
-  const accountDescription = (account: CodeHostAccount, host?: string) => (
-    <span>
-      <span data-i18n-ignore>
-        @{account.login}
-        {host ? ` · ${host}` : ""}
-      </span>
-      {account.status === "reconnect" && (
-        <>
-          {" · "}
-          {account.statusReason ? <span data-i18n-ignore>{account.statusReason}</span> : t("Reconnect needed")}
-        </>
-      )}
-    </span>
-  );
-
-  const renderControls = (account: CodeHostAccount, reconnect: () => void) => (
-    <>
-      {account.status === "reconnect" && (
-        <AccountAction primary disabled={busy} onClick={reconnect}>
-          {t("Reconnect")}
-        </AccountAction>
-      )}
-      <AccountAction danger disabled={removing === account.id} onClick={() => void disconnect(account.id)}>
-        {t("Disconnect")}
-      </AccountAction>
-    </>
-  );
-
   return (
     <>
-      <div className="settings-card" data-testid="github-account-row">
-        <SettingsRow
-          icon={<GitFork />}
-          title={<span data-i18n-ignore>GitHub</span>}
-          description={github ? accountDescription(github) : t(githubDescription)}
-        >
-          {github ? (
-            <div className="code-host-actions">
-              {renderControls(github, () => void go(() => authorizeGitHubAccount("account")))}
-            </div>
-          ) : data?.github.available ? (
-            <AccountAction disabled={busy} onClick={() => void go(() => authorizeGitHubAccount("account"))}>
-              {t("Connect")}
-            </AccountAction>
-          ) : loaded ? (
-            <span className="personal-connection-soon">{t("Not configured")}</span>
-          ) : null}
-        </SettingsRow>
-      </div>
+      {github ? (
+        <LinkedAccountCard
+          account={github}
+          codeHost="github"
+          title={githubOrganization || github.hostName}
+          description={githubDescription}
+          disabled={busy || removing === github.id}
+          onReconnect={() => void go(() => authorizeGitHubAccount("account"))}
+          onDisconnect={() => void disconnect(github)}
+        />
+      ) : (
+        <div className="settings-card" data-testid="github-account-row">
+          <SettingsRow
+            icon={<IntegrationBrandIcon provider="github" size={16} />}
+            title={<span data-i18n-ignore>GitHub</span>}
+            description={t(githubDescription)}
+          >
+            {data?.github.available ? (
+              <ConnectAction disabled={busy} onClick={() => void go(() => authorizeGitHubAccount("account"))} />
+            ) : loaded ? (
+              <span className="personal-connection-soon">{t("Not configured")}</span>
+            ) : null}
+          </SettingsRow>
+        </div>
+      )}
       {gitlab.map((account) => {
         const instance = data?.gitlabInstances.find((item) => item.id === account.instanceId);
         return (
-          <div className="settings-card" key={account.id}>
-            <SettingsRow
-              icon={<GitFork />}
-              title={<span data-i18n-ignore>GitLab</span>}
-              description={accountDescription(account, account.hostName)}
-            >
-              <div className="code-host-actions">
-                {renderControls(account, () => {
-                  if (instance?.oauthAvailable) void go(() => authorizeGitLabAccount(instance.id, "account"));
-                  else document.getElementById("gitlab-token")?.focus();
-                })}
-              </div>
-            </SettingsRow>
-          </div>
+          <LinkedAccountCard
+            key={account.id}
+            account={account}
+            codeHost="gitlab"
+            title={account.hostName}
+            description={gitlabDescription}
+            disabled={busy || removing === account.id}
+            onReconnect={() => {
+              if (instance?.oauthAvailable) void go(() => authorizeGitLabAccount(instance.id, "account"));
+              else document.getElementById("gitlab-token")?.focus();
+            }}
+            onDisconnect={() => void disconnect(account)}
+          />
         );
       })}
-      {data && (unlinkedGitLab.length > 0 || data.gitlabInstances.length === 0) && (
+      {data && (unlinkedGitLab.length > 0 || (data.gitlabInstances.length === 0 && gitlab.length === 0)) && (
         <div className="settings-card">
           <SettingsRow
-            icon={<GitFork />}
+            icon={<IntegrationBrandIcon provider="gitlab" size={16} />}
             title={<span data-i18n-ignore>GitLab</span>}
             description={
               unlinkedGitLab.length

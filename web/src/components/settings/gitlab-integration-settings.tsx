@@ -44,7 +44,6 @@ import { isWorkspaceAdmin } from "@/lib/settings-access";
 import type { GitLabOAuthApplication } from "@/types/code-host-accounts";
 import type { BootstrapData, IntegrationConnection } from "@/types/flow";
 import { GITLAB_BRANCH_FORMATS, gitlabBranchExample } from "@/lib/gitlab-branch-formats";
-import { PersonalCodeHostRow } from "./code-host-accounts";
 import { IntegrationBrandIcon } from "./integration-brand-icon";
 import { SettingsSelect } from "./settings-primitives";
 
@@ -95,12 +94,10 @@ export function GitLabIntegrationSettings({
   data,
   onBack,
   onReload,
-  onOpenConnectedAccounts,
 }: {
   data: BootstrapData;
   onBack: () => void;
   onReload: () => Promise<void>;
-  onOpenConnectedAccounts?: () => void;
 }) {
   const { t, formatDate } = useI18n();
   const connection = data.integrationConnections.find((item) => item.provider === "gitlab");
@@ -292,12 +289,6 @@ export function GitLabIntegrationSettings({
       )}
 
       {connection && <GitLabTokenSection connection={connection} onReload={onReload} />}
-      {connection && (
-        <section className="code-integration-section gitlab-settings-personal" aria-label={t("Your personal GitLab account")}>
-          <PersonalCodeHostRow codeHost="gitlab" onManage={onOpenConnectedAccounts} />
-        </section>
-      )}
-      {connection && isWorkspaceAdmin(data) && <GitLabOAuthApplicationSection connection={connection} />}
       {connection && <GitLabConnectivityIssue connection={connection} onReload={onReload} />}
 
       <div className="gitlab-settings-sections" aria-disabled={!connection || undefined}>
@@ -340,6 +331,8 @@ export function GitLabIntegrationSettings({
         </section>
         <GitLabLinkbacks connection={connection} onChange={updateSetting} />
       </div>
+      {/* Members link their own GitLab accounts on Settings › Account › Connected accounts; admins only register the OAuth app here. */}
+      {connection && isWorkspaceAdmin(data) && <GitLabOAuthApplicationSection connection={connection} />}
     </div>
   );
 }

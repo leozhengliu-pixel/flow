@@ -54,7 +54,6 @@ export function CodeIntegrationSettings(props: {
       data={props.data}
       onBack={props.onBack}
       onReload={props.onReload}
-      onOpenConnectedAccounts={props.onOpenConnectedAccounts}
     />
   ) : (
     <ProviderIntegrationSettings {...props} />
