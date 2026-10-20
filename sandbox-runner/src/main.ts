@@ -13,7 +13,7 @@ import { createLogger, errorMessage, stderrLogger, type Logger } from './log.js'
 import { McpServer } from './mcp/server.js'
 import { registerBuiltinTools } from './mcp/tools/index.js'
 import type { BootstrapResponse } from './protocol.js'
-import { RESTORE_FAILED_EXIT, restoreSnapshot } from './restore.js'
+import { RESTORE_FAILED_EXIT, restoreSnapshot, restoreTarget, RUNNER_READY_FILE } from './restore.js'
 import { AuthError, RuntimeClient } from './runtime-client.js'
 import { Session } from './session.js'
 import { runSnapshot } from './snapshot.js'
@@ -79,6 +79,19 @@ function newGit(config: RunnerConfig, bootstrap?: BootstrapResponse): Git {
   })
 }
 
+/**
+ * Writes the ready marker: the main mode runs only after the restore step
+ * (inline or an init container) succeeded, so the marker tells the debug
+ * terminal that the snapshot is in place. Best effort.
+ */
+async function markRunnerReady(logger: Logger): Promise<void> {
+  try {
+    await writeFile(process.env.FLOW_RUNNER_READY_FILE || RUNNER_READY_FILE, `${new Date().toISOString()}\n`)
+  } catch (error) {
+    logger.warn('ready marker not written', { error: errorMessage(error) })
+  }
+}
+
 async function runMode(modeArg: string | undefined): Promise<number> {
   const config = loadConfig(process.env, modeArg)
   const logger = createLogger()
@@ -100,6 +113,7 @@ async function runMode(modeArg: string | undefined): Promise<number> {
 
   switch (config.mode) {
     case 'debug': {
+      await markRunnerReady(logger)
       // Debug terminals exec into the sandbox; the runner just keeps it alive.
       await new Promise<void>((resolve) => shutdown.signal.addEventListener('abort', () => resolve()))
       return 0
@@ -108,8 +122,9 @@ async function runMode(modeArg: string | undefined): Promise<number> {
       // Init container (Kubernetes) or the first step of the Docker entrypoint.
       // Nothing to restore exits 0; a failed restore exits 86 (snapshotFailed).
       try {
-        const archiveUrl = process.env.FLOW_ARCHIVE_URL || undefined
-        const snapshotId = process.env.FLOW_SNAPSHOT_ID || (archiveUrl ? 'archive' : (await client.bootstrap())?.snapshotId)
+        const target = restoreTarget(process.env)
+        const archiveUrl = target.archiveUrl
+        const snapshotId = target.snapshotId || (archiveUrl ? undefined : (await client.bootstrap())?.snapshotId)
         if (!snapshotId) {
           logger.info('no snapshot to restore')
           return 0

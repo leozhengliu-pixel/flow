@@ -194,13 +194,13 @@ func TestCodingSandboxTokensWarmPoolAndBinding(t *testing.T) {
 	if _, err := repo.db.ExecContext(ctx, `UPDATE coding_sandboxes SET phase='running',started_at=? WHERE id IN ('w1','w2')`, millis(now.Add(-10*time.Minute))); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.BindWarmCodingSandbox(ctx, "medium", "eu", "missing-session"); !errors.Is(err, ErrCodingNotFound) {
+	if _, err := repo.BindWarmCodingSandbox(ctx, "medium", "eu", "missing-session", ""); !errors.Is(err, ErrCodingNotFound) {
 		t.Fatalf("unknown session = %v", err)
 	}
 	insertTestSession(t, repo, "sess1", "acme", "user1", "issue", "")
 	insertTestSession(t, repo, "sess2", "acme", "user1", "issue", "")
 	insertTestSession(t, repo, "sess3", "acme", "user1", "issue", "")
-	bound, err := repo.BindWarmCodingSandbox(ctx, "medium", "eu", "sess1")
+	bound, err := repo.BindWarmCodingSandbox(ctx, "medium", "eu", "sess1", "")
 	if err != nil || bound.ID != "w1" || bound.SessionID != "sess1" || bound.Kind != "session" || bound.WorkspaceKey != "acme" || bound.BilledSeconds < 599 {
 		t.Fatalf("bound = %+v %v", bound, err)
 	}
@@ -209,10 +209,10 @@ func TestCodingSandboxTokensWarmPoolAndBinding(t *testing.T) {
 	if tokenSession != "sess1" {
 		t.Fatalf("the token must move to the session, got %q", tokenSession)
 	}
-	if second, err := repo.BindWarmCodingSandbox(ctx, "medium", "", "sess2"); err != nil || second.ID != "w2" {
+	if second, err := repo.BindWarmCodingSandbox(ctx, "medium", "", "sess2", ""); err != nil || second.ID != "w2" {
 		t.Fatalf("second bind = %+v %v", second, err)
 	}
-	if _, err := repo.BindWarmCodingSandbox(ctx, "medium", "eu", "sess3"); !errors.Is(err, ErrCodingNotFound) {
+	if _, err := repo.BindWarmCodingSandbox(ctx, "medium", "eu", "sess3", ""); !errors.Is(err, ErrCodingNotFound) {
 		t.Fatalf("no running warm sandbox left = %v", err)
 	}
 	// Recycle: the old one (age) and a failed one.

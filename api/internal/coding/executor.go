@@ -167,7 +167,9 @@ func (s *Service) provision(ctx context.Context, session domain.CodingSession, s
 		}
 	}
 	if snapshotID == "" || workspace.ArchiveURL != "" {
-		if bound, err := s.store.BindWarmSandbox(ctx, size, region, session.ID); err == nil && bound.ID != "" {
+		// A warm runner restores the archive itself after binding (through
+		// the archive route, which needs the sandbox bound to the snapshot).
+		if bound, err := s.store.BindWarmSandbox(ctx, size, region, session.ID, snapshotID); err == nil && bound.ID != "" {
 			return ProvisionOutcome{SandboxID: bound.ID, Apply: apply}
 		} else if err != nil && !errors.Is(err, ErrNotFound) && !isNotFound(err) {
 			return ProvisionOutcome{Code: domain.CodingErrSandboxStartFailed, Message: err.Error(), Transient: true}

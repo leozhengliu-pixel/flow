@@ -47,7 +47,7 @@ func (s *Service) buildBootstrap(ctx context.Context, grant SandboxGrant, sessio
 		Environment: BootstrapEnv{EnvironmentID: env.ID, Mise: env.Mise, PrepareScript: env.PrepareScript, DependencyManagement: dependencies, HasSecrets: len(env.Secrets) > 0},
 		Git:         s.sessionGitIdentity(ctx, session, s.signingIdentity(ctx, session, user, policy.CommitSigningEnabled), policy.CommitSigningEnabled),
 		Browser:     BootstrapBrowser{Enabled: s.cfg.BrowserEnabled},
-		Restored:    session.SnapshotID != "",
+		Restored:    session.SnapshotID != "" && s.sandboxRestoresSnapshot(ctx, session, grant.SandboxID),
 		Turn:        turn,
 		Limits:      BootstrapLimits{TurnTimeoutSeconds: int(s.cfg.Timeouts.Turn.Seconds()), HeartbeatSeconds: int(HeartbeatInterval.Seconds()), SetupTimeoutSeconds: int(s.cfg.Timeouts.Setup.Seconds()), StopGraceSeconds: int(s.cfg.Timeouts.StopGrace.Seconds())},
 	}
@@ -64,6 +64,23 @@ func (s *Service) buildBootstrap(ctx context.Context, grant SandboxGrant, sessio
 	}
 	response.Guidance = Guidance(GuidanceInput{Workspace: info.Settings.AgentInstructions, Team: issue.Guidance, Environment: env.CustomGuidance, Issue: issue, BranchName: session.BranchName, BaseRef: session.BaseRef, CodeHost: session.CodeHost, Host: host, Browser: browser})
 	return response, nil
+}
+
+// sandboxRestoresSnapshot reports whether the sandbox was started with the
+// snapshot as its workspace (the restore step or a restored volume ran before
+// the runner). A warm sandbox bound to the session was not: its runner
+// restores the archive itself after bootstrap, so Restored is false for it.
+func (s *Service) sandboxRestoresSnapshot(ctx context.Context, session domain.CodingSession, sandboxID string) bool {
+	records, err := s.store.CodingSandboxes(ctx, session.WorkspaceKey, session.ID)
+	if err != nil {
+		return true // keep the previous behavior when the record cannot be read
+	}
+	for _, record := range records {
+		if record.ID == sandboxID {
+			return record.Workspace.ArchiveURL != "" || record.Workspace.VolumeID != ""
+		}
+	}
+	return true
 }
 
 // CloneURL is the https clone URL of a repository (credentials come from the helper).

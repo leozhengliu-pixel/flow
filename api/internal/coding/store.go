@@ -72,7 +72,10 @@ type SessionStore interface {
 	CreateCodingSandbox(ctx context.Context, record sandbox.Record) error
 	CodingSandboxes(ctx context.Context, workspaceKey, sessionID string) ([]sandbox.Record, error)
 	SetCodingSandboxDesired(ctx context.Context, id string, desired sandbox.Desired) error
-	BindWarmSandbox(ctx context.Context, size, region, sessionID string) (sandbox.Record, error)
+	// BindWarmSandbox claims a warm sandbox for a session; snapshotID (the
+	// snapshot its runner restores after binding, or "") becomes the
+	// sandbox's snapshot binding, which its token grant carries.
+	BindWarmSandbox(ctx context.Context, size, region, sessionID, snapshotID string) (sandbox.Record, error)
 	AuthenticateSandboxToken(ctx context.Context, token string) (SandboxGrant, error)
 	RevokeSandboxTokens(ctx context.Context, sandboxID string) error
 	// RegisterGitRelayPlaceholder stores a placeholder derived from a live
