@@ -1,3 +1,4 @@
+import { reviewsZhCN } from './translations-reviews';
 import { pulseZhCN } from './translations-pulse';
 // coding sessions (track G)
 import { codingSessionUiZhCN } from './translations-coding-session-ui';
@@ -5836,6 +5837,7 @@ Object.assign(zhCN, {
 });
 
 Object.assign(zhCN, pulseZhCN);
+Object.assign(zhCN, reviewsZhCN);
 Object.assign(zhCN, viewFiltersZhCN);
 Object.assign(zhCN, insightsZhCN);
 Object.assign(zhCN, agentTriageZhCN);

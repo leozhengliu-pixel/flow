@@ -1782,6 +1782,8 @@ export interface ReviewEvent {
   id: UUID;
   type: string;
   body?: string;
+  /** Thread root this comment replies to. */
+  parentId?: UUID;
   path?: string;
   line?: number;
   resolved?: boolean;

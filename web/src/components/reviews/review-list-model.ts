@@ -74,7 +74,14 @@ export function compareReviews(a: CodeReview, b: CodeReview, display: ReviewDisp
     : Date.parse(display.ordering === 'opened' ? a.createdAt : a.updatedAt) - Date.parse(display.ordering === 'opened' ? b.createdAt : b.updatedAt)
   return (Number.isFinite(value) ? value : 0) * (display.ordering === 'importance' ? 1 : direction) || b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id)
 }
-const focusLabels: Record<string, string> = { ready: 'Ready to merge', requested: 'Needs your review', team: 'Team reviews', yours: 'Your reviews', completed: 'Completed' }
+// Focus groups in the reference order: ready, needs review (direct, then team),
+// created by you, already reviewing, completed.
+const focusLabels: Record<string, string> = { ready: 'Ready to merge', requested: 'Needs your review', team: 'Needs review from your GitHub team', yours: 'Created by you', reviewing: 'You’re reviewing', completed: 'Completed' }
+const reviewDecisionEvents = new Set(['approved', 'changes_requested', 'review_commented'])
+/** True once the viewer has submitted a review (approve, request changes or review comment). */
+export function viewerHasReviewed(review: CodeReview, viewerId: string) { return review.events.some(event => event.actor.id === viewerId && reviewDecisionEvents.has(event.type)) }
+/** Groups that start collapsed: finished work. */
+export function reviewGroupCollapsedByDefault(id: string) { return id === 'completed' || id === 'merged' || id === 'closed' }
 export function groupReviews(reviews: CodeReview[], display: ReviewDisplay, viewerId: string) {
   const groups = new Map<string, { id: string; label: string; items: CodeReview[] }>()
   for (const review of reviews) {
@@ -82,6 +89,7 @@ export function groupReviews(reviews: CodeReview[], display: ReviewDisplay, view
       : display.grouping === 'repository' ? reviewRepository(review) : display.grouping === 'author' ? review.author.id
       : ['merged', 'closed'].includes(review.status) ? 'completed'
       : review.author.id === viewerId ? reviewImportance(review) === 0 ? 'ready' : 'yours'
+      : viewerHasReviewed(review, viewerId) ? 'reviewing'
       : review.reviewerIds.includes(viewerId) ? 'requested' : 'team'
     const label = display.grouping === 'focus' ? focusLabels[id] : display.grouping === 'status' ? reviewStatusLabels[id] : display.grouping === 'author' ? review.author.displayName : id
     const group = groups.get(id) ?? { id, label, items: [] }
@@ -113,4 +121,30 @@ export function parseReviewDisplay(raw: string | null, view: ReviewView): Review
       showTeams: typeof saved.showTeams === 'boolean' ? saved.showTeams : fallback.showTeams,
       properties: Array.isArray(saved.properties) ? saved.properties.filter((id: ReviewProperty) => reviewPropertyOptions.some(option => option.id === id)) : fallback.properties }
   } catch { return fallback }
+}
+
+/** Compact age used by review rows: 5m, 16h, 3d, 2w, 4mo, 1y. */
+export function reviewShortAge(value: string, now = Date.now()) {
+  const minutes = Math.max(0, Math.floor((now - Date.parse(value)) / 60_000))
+  if (!Number.isFinite(minutes)) return ''
+  if (minutes < 60) return `${Math.max(1, minutes)}m`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d`
+  if (days < 30) return `${Math.floor(days / 7)}w`
+  if (days < 365) return `${Math.floor(days / 30)}mo`
+  return `${Math.floor(days / 365)}y`
+}
+/** Splits a pull request title into text and `inline code` segments. */
+export function reviewTitleSegments(title: string) {
+  const segments: { code: boolean; text: string }[] = []
+  title.split(/(`[^`]+`)/).forEach(part => { if (part) segments.push(part.length > 2 && part.startsWith('`') && part.endsWith('`') ? { code: true, text: part.slice(1, -1) } : { code: false, text: part }) })
+  return segments
+}
+/** Pull request state shown by the row and header icons. */
+export function reviewVisualState(review: CodeReview): 'draft' | 'open' | 'merged' | 'closed' {
+  if (review.status === 'merged') return 'merged'
+  if (review.status === 'closed') return 'closed'
+  return review.draft ? 'draft' : 'open'
 }

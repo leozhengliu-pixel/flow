@@ -293,7 +293,10 @@ export class BackgroundReviewProcessor {
       settle = resolve;
       fail = reject;
     });
-    this.inFlightFile.set(key, promise.finally(() => this.inFlightFile.delete(key)));
+    const tracked: Promise<void> = promise.finally(() => {
+      if (this.inFlightFile.get(key) === tracked) this.inFlightFile.delete(key);
+    });
+    this.inFlightFile.set(key, tracked);
 
     const job: QueueJob = {
       id,
@@ -316,7 +319,12 @@ export class BackgroundReviewProcessor {
       cancel: () => {
         job.cancelled = true;
         job.controller.abort();
+        const queued = this.pendingJobs.some((item) => item.id === job.id);
         this.pendingJobs = this.pendingJobs.filter((item) => item.id !== job.id);
+        // A job dropped before it started must not stay "in flight": a
+        // re-request (remount, StrictMode re-run) would otherwise share its
+        // settled promise and never compute the file.
+        if (queued) this.inFlightFile.delete(key);
         settle();
       },
       setPriority: (next) => {
@@ -418,7 +426,10 @@ export class BackgroundReviewProcessor {
         });
       }
 
-      if (!latest && !job.cancelled) {
+      // A job cancelled mid-flight (e.g. a remounted view re-engaging the same
+      // review) must still settle to a final diff: re-requests of the key share
+      // this in-flight promise, so leaving "computing" would never resolve.
+      if (!latest || latest.state !== "ready") {
         latest = this.computer.computeSync(input, variant);
         this.applyPendingDiffUpdate(
           { key, reviewId: review.id, path: file.path, variant, diff: latest },

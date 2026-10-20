@@ -7,7 +7,7 @@
  */
 import { useCallback, useMemo, useState } from "react";
 
-import { DiffView, type DiffViewMode } from "@/components/reviews/diff-view";
+import { DiffView } from "@/components/reviews/diff-view";
 import { useI18n } from "@/i18n/i18n";
 import type { CodeReview } from "@/types/flow";
 
@@ -22,13 +22,15 @@ export function EditableDiffView({
   review,
   onReload,
   onChangesChange,
+  onExit,
 }: {
   review: CodeReview;
   onReload: () => Promise<void>;
   onChangesChange?: (changes: EditableDiffChange[]) => void;
+  /** Leaves edit mode (the "Edit diff" display option). */
+  onExit?: () => void;
 }) {
   const { t } = useI18n();
-  const [mode, setMode] = useState<DiffViewMode>("split");
   const [edits, setEdits] = useState<Map<string, EditableDiffChange>>(() => new Map());
 
   const dirtyLines = useMemo(() => {
@@ -88,10 +90,9 @@ export function EditableDiffView({
         review={review}
         onReload={onReload}
         editable
+        onEditableChange={onExit ? (value) => !value && onExit() : undefined}
         dirtyLines={dirtyLines}
         onEditLine={onEditLine}
-        mode={mode}
-        onModeChange={setMode}
       />
     </div>
   );
