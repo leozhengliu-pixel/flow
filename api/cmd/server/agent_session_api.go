@@ -262,7 +262,7 @@ func (s *server) sendAgentSessionEvent(ctx context.Context, app domain.Applicati
 		completed, claimed := s.runWebhookDelivery(ctx, delivery.ID, now)
 		return claimed && completed.Status == domain.WebhookDeliverySucceeded
 	}
-	if !integrationEndpointSafe(ctx, target.url, s.authDisabled) {
+	if !integrationEndpointSafe(ctx, target.url, s.authDisabled, outboundTrustedPrivate) {
 		return false
 	}
 	timestamp := now.UnixMilli()
@@ -272,7 +272,7 @@ func (s *server) sendAgentSessionEvent(ctx context.Context, app domain.Applicati
 		return false
 	}
 	setWebhookHeaders(request.Header, domain.WebhookDelivery{ID: eventID, EventType: "AgentSessionEvent"}, timestamp, target.secret, signed)
-	client := secureOutboundClient(webhookDeliveryTimeout)
+	client := secureOutboundClient(webhookDeliveryTimeout, outboundTrustedPrivate)
 	if s.authDisabled && safeLocalDevelopmentURL(target.url) {
 		client = &http.Client{Timeout: webhookDeliveryTimeout}
 	}

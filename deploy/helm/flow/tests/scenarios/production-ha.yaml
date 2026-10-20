@@ -1,6 +1,7 @@
 # Several replicas: external PostgreSQL and Redis Cluster from existing
 # secrets, S3, autoscaling, Ingress, Flow NetworkPolicy, GitHub App key
-# mounted from a Secret, ACL secret from an existing Secret.
+# mounted from a Secret, ACL secret from an existing Secret, an
+# operator-trusted intranet MCP host with an enterprise CA bundle.
 replicaCount: 3
 image:
   digest: sha256:abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd
@@ -9,6 +10,12 @@ config:
   env:
     FLOW_AUTH_EMAIL_ENABLED: "false"
     FLOW_AUTH_OIDC_ENABLED: "true"
+outbound:
+  trustedPrivateEndpoints: [hsb.haier.net, "*.corp.example.com"]
+  trustedPrivateNetworks: [10.218.0.0/16]
+  trustedCA:
+    secretName: flow-enterprise-ca
+    key: ca-bundle.pem
 secrets:
   existingSecret: flow-env
 database:
@@ -57,6 +64,7 @@ topologySpreadConstraints:
       matchLabels: {app.kubernetes.io/name: flow}
 coding:
   enabled: true
+  mcpServers: [mcp-sourcebot-production]
   runtimePort:
     enabled: true
   githubApp:

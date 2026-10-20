@@ -179,6 +179,35 @@ test('opencode invocation: OpenAI-compatible provider at the proxy, --session on
   }
 })
 
+test('workspace MCP servers: every harness gets the gateway servers, never another origin or name', () => {
+  const tmp = tempDir('mcp-gateway')
+  try {
+    const boot = bootstrap()
+    boot.mcpServers = [
+      { name: 'sourcebot', title: 'Sourcebot', url: 'http://flow:8090/internal/coding-runtime/mcp/mcp-sourcebot-production' },
+      { name: 'flow', title: 'Shadow', url: 'http://flow:8090/internal/coding-runtime/mcp/x' },
+      { name: 'elsewhere', title: 'Elsewhere', url: 'https://hsb.example.net/api/mcp' },
+      { name: 'Bad Name', title: 'Bad', url: 'http://flow:8090/internal/coding-runtime/mcp/y' },
+    ]
+    const ctx = harnessContext(tmp.path, boot)
+    const claude = JSON.parse(claudeHarness.invocation(ctx).files[0].content)
+    assert.deepEqual(Object.keys(claude.mcpServers), ['flow', 'sourcebot'])
+    assert.equal(claude.mcpServers.flow.type, 'stdio')
+    assert.deepEqual(claude.mcpServers.sourcebot, { type: 'http', url: 'http://flow:8090/internal/coding-runtime/mcp/mcp-sourcebot-production', headers: { Authorization: 'Bearer fcs_tok' } })
+    const toml = codexConfig(ctx)
+    assert.match(toml, /\[mcp_servers\.sourcebot\]\nurl = "http:\/\/flow:8090\/internal\/coding-runtime\/mcp\/mcp-sourcebot-production"\nbearer_token_env_var = "FLOW_LLM_TOKEN"/)
+    assert.ok(!toml.includes('elsewhere') && !toml.includes('fcs_tok'))
+    const opencode = JSON.parse(opencodeConfig(ctx))
+    assert.deepEqual(Object.keys(opencode.mcp), ['flow', 'sourcebot'])
+    assert.equal(opencode.mcp.sourcebot.type, 'remote')
+    assert.equal(opencode.mcp.sourcebot.headers.Authorization, 'Bearer {env:FLOW_LLM_TOKEN}')
+    // Without servers the configs are unchanged.
+    assert.deepEqual(Object.keys(JSON.parse(claudeHarness.invocation(harnessContext(tmp.path)).files[0].content).mcpServers), ['flow'])
+  } finally {
+    tmp.cleanup()
+  }
+})
+
 test('git helpers: commit subject, numstat parsing, branch policy', () => {
   assert.equal(commitMessage('## Use local dates in formatDate\n\nDetails', 'Co-authored-by: Flow <b@x>'), 'Use local dates in formatDate\n\nCo-authored-by: Flow <b@x>\n')
   assert.equal(commitMessage('', undefined), 'Update from Flow coding session\n')

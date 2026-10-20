@@ -204,7 +204,7 @@ func (c *classicReviewRemote) GraphQL(ctx context.Context, query string, variabl
 // answer into out. GraphQL envelopes (/graphql endpoints) are unwrapped:
 // out receives data, and errors become a reviewRemoteError.
 func (provider *reviewProvider) call(ctx context.Context, method, endpoint string, payload, out any) error {
-	if provider.client == nil && !integrationEndpointSafe(ctx, endpoint, provider.allowLocal) {
+	if provider.client == nil && !integrationEndpointSafe(ctx, endpoint, provider.allowLocal, outboundTrustedPrivate) {
 		return fmt.Errorf("repository API endpoint is not allowed")
 	}
 	var body io.Reader

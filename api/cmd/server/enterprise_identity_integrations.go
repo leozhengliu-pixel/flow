@@ -12,7 +12,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/netip"
 	"net/url"
 	"os"
 	"slices"
@@ -21,7 +20,6 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
-	"flow/api/internal/websearch"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
@@ -198,9 +196,9 @@ func (s *server) verifyIdentityProvider(w http.ResponseWriter, r *http.Request) 
 	snapshot := data.IdentityProviders[index]
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	client := secureOutboundClient(5 * time.Second)
-	if !safeOutboundHTTPS(ctx, snapshot.Issuer) {
-		writeError(w, http.StatusUnprocessableEntity, "identity provider URL must be a public HTTPS endpoint")
+	client := secureOutboundClient(5*time.Second, outboundTrustedPrivate)
+	if err := outboundEndpointError(ctx, snapshot.Issuer, outboundTrustedPrivate); err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "identity provider URL is not reachable: "+err.Error())
 		return
 	}
 	if snapshot.Type == "oidc" {
@@ -224,7 +222,7 @@ func (s *server) verifyIdentityProvider(w http.ResponseWriter, r *http.Request) 
 			AuthorizationEndpoint string `json:"authorization_endpoint"`
 			TokenEndpoint         string `json:"token_endpoint"`
 		}
-		if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&metadata) != nil || strings.TrimRight(metadata.Issuer, "/") != strings.TrimRight(snapshot.Issuer, "/") || !safeOutboundHTTPS(ctx, metadata.AuthorizationEndpoint) || !safeOutboundHTTPS(ctx, metadata.TokenEndpoint) {
+		if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&metadata) != nil || strings.TrimRight(metadata.Issuer, "/") != strings.TrimRight(snapshot.Issuer, "/") || !safeOutboundHTTPS(ctx, metadata.AuthorizationEndpoint, outboundTrustedPrivate) || !safeOutboundHTTPS(ctx, metadata.TokenEndpoint, outboundTrustedPrivate) {
 			writeError(w, http.StatusUnprocessableEntity, "identity provider metadata is invalid")
 			return
 		}
@@ -318,7 +316,7 @@ func (s *server) enterpriseOIDCClient(ctx context.Context, workspaceKey, provide
 		return nil, domain.IdentityProvider{}, errNotFound
 	}
 	p := data.IdentityProviders[i]
-	if !safeOutboundHTTPS(ctx, p.Issuer) {
+	if !safeOutboundHTTPS(ctx, p.Issuer, outboundTrustedPrivate) {
 		return nil, p, errors.New("unsafe identity provider issuer")
 	}
 	secret := ""
@@ -329,7 +327,7 @@ func (s *server) enterpriseOIDCClient(ctx context.Context, workspaceKey, provide
 		return nil, p, errors.New("identity provider client secret is not configured")
 	}
 	redirect := strings.TrimRight(s.allowedOrigin, "/") + "/api/auth/enterprise/" + url.PathEscape(p.ID) + "/callback?workspace=" + url.QueryEscape(workspaceKey)
-	ctx = oidc.ClientContext(ctx, secureOutboundClient(10*time.Second))
+	ctx = oidc.ClientContext(ctx, secureOutboundClient(10*time.Second, outboundTrustedPrivate))
 	client, err := discoverOIDC(ctx, p.Name, p.Issuer, p.ClientID, secret, redirect, p.Scopes)
 	return client, p, err
 }
@@ -774,8 +772,8 @@ func (s *server) processIntegrationDelivery(ctx context.Context, workspace, id s
 	}
 	connectionSnapshot := data.IntegrationConnections[connectionIndex]
 	endpoint := strings.TrimSpace(connectionSnapshot.Config["deliveryURL"])
-	if !integrationEndpointSafe(ctx, endpoint, s.authDisabled) {
-		return domain.IntegrationDelivery{}, fmt.Errorf("%w: delivery URL must be a public HTTPS endpoint", errInvalid)
+	if err := integrationEndpointError(ctx, endpoint, s.authDisabled, outboundTrustedPrivate); err != nil {
+		return domain.IntegrationDelivery{}, fmt.Errorf("%w: delivery URL is not allowed: %s", errInvalid, err.Error())
 	}
 	claimErr := s.store.MutateWorkspace(ctx, workspace, "integration_delivery.claimed", id, nil, func(current *domain.Bootstrap) error {
 		i := slices.IndexFunc(current.IntegrationDeliveries, func(v domain.IntegrationDelivery) bool { return v.ID == id })
@@ -838,7 +836,7 @@ func (s *server) processIntegrationDelivery(ctx context.Context, workspace, id s
 			req.Header.Set("Authorization", "Bearer "+token)
 		}
 	}
-	client := secureOutboundClient(10 * time.Second)
+	client := secureOutboundClient(10*time.Second, outboundTrustedPrivate)
 	if s.authDisabled && safeLocalDevelopmentURL(endpoint) {
 		client = &http.Client{Timeout: 10 * time.Second}
 	}
@@ -917,26 +915,6 @@ func truncateSecurityError(value string) string {
 	return value
 }
 
-func safeOutboundHTTPS(ctx context.Context, raw string) bool {
-	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil {
-		return false
-	}
-	lookupCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	ips, err := net.DefaultResolver.LookupIPAddr(lookupCtx, u.Hostname())
-	if err != nil || len(ips) == 0 {
-		return false
-	}
-	for _, item := range ips {
-		ip, ok := netip.AddrFromSlice(item.IP)
-		if !ok || !websearch.PublicAddr(ip) {
-			return false
-		}
-	}
-	return true
-}
-
 func safeLocalDevelopmentURL(raw string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.User != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") {
@@ -947,35 +925,4 @@ func safeLocalDevelopmentURL(raw string) bool {
 	}
 	ip := net.ParseIP(u.Hostname())
 	return ip != nil && ip.IsLoopback()
-}
-
-func secureOutboundClient(timeout time.Duration) *http.Client {
-	dialer := &net.Dialer{Timeout: 3 * time.Second, KeepAlive: 30 * time.Second}
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	// Environment proxies resolve destinations themselves and bypass our DNS/IP checks.
-	transport.Proxy = nil
-	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
-		host, port, err := net.SplitHostPort(address)
-		if err != nil {
-			return nil, err
-		}
-		ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
-		if err != nil {
-			return nil, err
-		}
-		for _, entry := range ips {
-			ip, ok := netip.AddrFromSlice(entry.IP)
-			if !ok || !websearch.PublicAddr(ip) {
-				continue
-			}
-			return dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
-		}
-		return nil, errors.New("outbound destination does not resolve to a public address")
-	}
-	return &http.Client{Timeout: timeout, Transport: transport, CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 3 || !safeOutboundHTTPS(req.Context(), req.URL.String()) {
-			return errors.New("unsafe redirect")
-		}
-		return nil
-	}}
 }

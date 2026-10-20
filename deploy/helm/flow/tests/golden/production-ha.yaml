@@ -418,6 +418,10 @@ data:
   FLOW_S3_PREFIX: "uploads"
   FLOW_AUTH_EMAIL_ENABLED: "false"
   FLOW_AUTH_OIDC_ENABLED: "true"
+  # Operator-trusted private endpoints (docs/configuration.md).
+  FLOW_TRUSTED_PRIVATE_ENDPOINTS: "hsb.haier.net,*.corp.example.com"
+  FLOW_TRUSTED_PRIVATE_NETWORKS: "10.218.0.0/16"
+  FLOW_TRUSTED_CA_FILE: /var/run/flow/trusted-ca/ca.crt
   # Coding sessions (docs/coding-sessions.md).
   FLOW_CODING_ENABLED: "true"
   FLOW_CODING_PROVIDER: "kubernetes"
@@ -430,6 +434,7 @@ data:
   FLOW_CODING_BRANCH_PREFIX: "flow/"
   FLOW_CODING_PR_MENTION: "@flow"
   FLOW_CODING_BROWSER: "on"
+  FLOW_CODING_MCP_SERVERS: "mcp-sourcebot-production"
   FLOW_CODING_DEBUG_TERMINAL: "on"
   FLOW_CODING_ARTIFACT_MAX_BYTES: "10485760"
   FLOW_CODING_MAX_SESSIONS: "20"
@@ -767,7 +772,7 @@ spec:
         app.kubernetes.io/instance: flow
         app.kubernetes.io/component: api
       annotations:
-        checksum/config: f5ee5f88f6bf19bc7dcf255955989a6acedca9a57139c276710a0bd49e472907
+        checksum/config: 0b9f65b6e18232724913aa27229b6ac30c87395f4117c706eae3d16039d3ada2
         checksum/secret: 8045f7c2ff8fa950c997664b41cb9b101437262f87a59a1b715715201e3b2141
     spec:
       serviceAccountName: flow
@@ -874,6 +879,9 @@ spec:
             - name: github-app-key
               mountPath: /var/run/flow/github-app
               readOnly: true
+            - name: trusted-ca
+              mountPath: /var/run/flow/trusted-ca
+              readOnly: true
       volumes:
         - name: data
           emptyDir: {}
@@ -887,6 +895,12 @@ spec:
             items:
               - key: private-key.pem
                 path: private-key.pem
+        - name: trusted-ca
+          secret:
+            secretName: flow-enterprise-ca
+            items:
+              - key: ca-bundle.pem
+                path: ca.crt
       topologySpreadConstraints:
         - labelSelector:
             matchLabels:

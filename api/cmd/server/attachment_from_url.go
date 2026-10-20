@@ -21,7 +21,7 @@ const maxAttachmentFromURLBytes = 20 << 20
 // redirect hops) must resolve to a public address, so the endpoint can't be
 // used to reach loopback, private networks or cloud metadata services.
 var attachmentFetchClient = func() *http.Client {
-	client := secureOutboundClient(30 * time.Second)
+	client := secureOutboundClient(30*time.Second, outboundPublicOnly)
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 3 || (req.URL.Scheme != "http" && req.URL.Scheme != "https") || req.URL.User != nil {
 			return errors.New("unsafe redirect")

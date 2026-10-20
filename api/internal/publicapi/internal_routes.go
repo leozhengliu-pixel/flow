@@ -739,6 +739,7 @@ var InternalRoutes = []string{
 	// the runner-facing runtime API, the LLM proxy and the GitHub App.
 	"DELETE /api/coding/environments/{id}/secrets/{name}",
 	"DELETE /api/integrations/github-app/authorization",
+	"DELETE /internal/coding-runtime/mcp/{server}", // coding-session MCP gateway (405: no sessions to end)
 	"DELETE /api/integrations/github-app/installations/{id}",
 	"GET /api/coding/environments",
 	"GET /api/coding/environments/{id}",
@@ -763,6 +764,7 @@ var InternalRoutes = []string{
 	"GET /internal/coding-runtime/git/{path...}",
 	"GET /internal/coding-runtime/harness-state",
 	"GET /internal/coding-runtime/inbox",
+	"GET /internal/coding-runtime/mcp/{server}", // coding-session MCP gateway (405: no server streams)
 	"GET /internal/coding-runtime/setup-secrets",
 	"GET /internal/coding-runtime/snapshots/{id}/archive",
 	"GET /internal/llm-proxy/openai/v1/models",
@@ -801,6 +803,7 @@ var InternalRoutes = []string{
 	"POST /internal/coding-runtime/events",
 	"POST /internal/coding-runtime/git/{path...}",
 	"POST /internal/coding-runtime/heartbeat",
+	"POST /internal/coding-runtime/mcp/{server}", // coding-session MCP gateway
 	"POST /internal/coding-runtime/sign",
 	"POST /internal/coding-runtime/snapshots/{id}/complete",
 	"POST /internal/coding-runtime/snapshots/{id}/logs",

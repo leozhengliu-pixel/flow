@@ -1,0 +1,3 @@
+# Trusted hosts must name the networks they resolve to.
+outbound:
+  trustedPrivateEndpoints: [hsb.haier.net]

@@ -62,7 +62,10 @@ func (s *Service) buildBootstrap(ctx context.Context, grant SandboxGrant, sessio
 	if s.HostGuidance != nil {
 		host = s.HostGuidance(session)
 	}
-	response.Guidance = Guidance(GuidanceInput{Workspace: info.Settings.AgentInstructions, Team: issue.Guidance, Environment: env.CustomGuidance, Issue: issue, BranchName: session.BranchName, BaseRef: session.BaseRef, CodeHost: session.CodeHost, Host: host, Browser: browser})
+	if s.MCPServers != nil {
+		response.MCPServers = s.MCPServers(ctx, session, runtime)
+	}
+	response.Guidance = Guidance(GuidanceInput{Workspace: info.Settings.AgentInstructions, Team: issue.Guidance, Environment: env.CustomGuidance, Issue: issue, BranchName: session.BranchName, BaseRef: session.BaseRef, CodeHost: session.CodeHost, Host: host, Browser: browser, MCPServers: response.MCPServers})
 	return response, nil
 }
 
@@ -133,6 +136,8 @@ type GuidanceInput struct {
 	// Host is code-host specific guidance (glab usage for GitLab).
 	Host    string
 	Browser string
+	// MCPServers are the workspace MCP servers behind Flow's gateway.
+	MCPServers []BootstrapMCPServer
 }
 
 // Guidance assembles the system prompt addition for the harness.
@@ -177,6 +182,13 @@ func Guidance(in GuidanceInput) string {
 	section("Repository guidance", in.Environment)
 	section("Code host", in.Host)
 	section("Browser testing", in.Browser)
+	if len(in.MCPServers) > 0 {
+		lines := []string{"These MCP servers were approved by your workspace and are available as tools (Flow relays the calls and records them in the audit log):"}
+		for _, server := range in.MCPServers {
+			lines = append(lines, "- `"+server.Name+"`: "+server.Title)
+		}
+		section("Workspace MCP servers", strings.Join(lines, "\n"))
+	}
 	return out.String()
 }
 

@@ -208,7 +208,29 @@ Sandboxes have no direct Internet access. They reach Flow directly (runtime API 
 - the configured GitHub Enterprise and GitLab hosts, and Flow's own host;
 - per environment, through the ACL helper: `extended` adds the environment's allowed domains, `open` allows any public host, and `none` allows only the environment's code host and Flow.
 
-Model provider APIs are never allowlisted; models are reached through Flow. Private, loopback, link-local (cloud metadata) and CGNAT addresses are always denied, after DNS resolution.
+Model provider APIs are never allowlisted; models are reached through Flow. MCP servers do not need to be allowlisted either: approved workspace MCP connectors reach the agent through Flow's MCP gateway (next section). Private, loopback, link-local (cloud metadata) and CGNAT addresses are always denied, after DNS resolution.
+
+### Extra MCP servers for the agent
+
+To give the sandbox agent extra MCP servers, for example an intranet code-search server:
+
+1. If the server is on a private network, the operator trusts its host and network on the **Flow** Pods (an operator decision that opens exactly those intranet hosts to Flow, not to sandboxes), plus the enterprise CA if needed:
+
+   ```yaml
+   outbound:
+     trustedPrivateEndpoints: [hsb.haier.net]
+     trustedPrivateNetworks: [10.218.0.0/16]
+     trustedCA:
+       secretName: enterprise-ca      # optional, key ca.crt
+   secrets:
+     env:
+       FLOW_MCP_CREDENTIALS: '{"mcp-sourcebot-production":{"url":"https://hsb.haier.net/api/mcp","token":"<server token>"}}'
+   ```
+
+2. A workspace admin adds the connector as a workspace connector and approves it (Settings › Security, or `PUT /api/application-policies` with `{"id":"mcp-sourcebot-production","name":"Sourcebot","kind":"mcp","url":"https://hsb.haier.net/api/mcp","shared":true,"status":"approved"}`).
+3. The admin clicks **Enable for coding sessions** on it (`"codingSessions": true`), or the operator lists it for every workspace with `coding.mcpServers: [mcp-sourcebot-production]` (`FLOW_CODING_MCP_SERVERS`).
+
+New sessions then get a `sourcebot` MCP server in Claude Code, Codex and OpenCode. The harness talks to `{runtime}/internal/coding-runtime/mcp/mcp-sourcebot-production` with its sandbox token; Flow adds the server's credential, checks the approval on every call, audits each tool call and stops answering when the session ends. See [MCP servers](coding-sessions-security.md#mcp-servers) in the security model and [configuration](configuration.md#mcp-servers-in-coding-sessions).
 
 ## GitHub App setup
 

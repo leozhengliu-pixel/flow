@@ -356,6 +356,7 @@ These paths are exempt from browser auth in `publicAuthPath` (done in the skelet
 | `POST /internal/coding-runtime/environment-proposal` | K | Configure/Fix with agent result |
 | `POST /internal/coding-runtime/sign` | E | `SignRequest` → `SignResponse` |
 | `POST /internal/coding-runtime/artifacts` | I | Multipart screenshot upload |
+| `POST /internal/coding-runtime/mcp/{id}` | B | MCP gateway: streamable-HTTP JSON-RPC (`initialize`, `ping`, `tools/list`, `tools/call`) relayed to an approved workspace MCP connector with its server-side credential; `GET`/`DELETE` answer 405 (no server stream, stateless). Listed in `BootstrapResponse.mcpServers`. See [security](coding-sessions-security.md#mcp-servers) |
 | `POST /internal/coding-runtime/egress-check` | H | Squid ACL helper. Authenticated with `FLOW_CODING_EGRESS_ACL_SECRET`, not a sandbox token |
 | `POST /internal/llm-proxy/anthropic/v1/messages[/count_tokens]` | E | Claude Code |
 | `POST /internal/llm-proxy/openai/v1/responses`, `…/chat/completions`, `GET …/models` | E | Codex |

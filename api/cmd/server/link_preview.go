@@ -61,7 +61,7 @@ var (
 )
 
 var linkPreviewHTTPClient = func() *http.Client {
-	client := secureOutboundClient(linkPreviewTimeout)
+	client := secureOutboundClient(linkPreviewTimeout, outboundPublicOnly)
 	client.CheckRedirect = linkPreviewRedirect
 	return client
 }

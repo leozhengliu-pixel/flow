@@ -17,6 +17,7 @@ See the [operator guide](coding-sessions.md) for installation and the
 | Model provider keys | Never enter a sandbox. The harness talks to Flow's LLM proxy with the sandbox token; Flow adds the key upstream. |
 | Code host credentials | GitHub installation tokens (1 hour, one repository, minimal permissions) or GitLab project tokens (one project, revoked at session end), fetched on demand through Flow. When the session's creator linked their own account, pushes go through Flow's git relay, which adds that member's token server side; the sandbox only holds an opaque placeholder that is worthless anywhere but the relay. See [Member credentials](#member-credentials). |
 | Commit signing keys | Stay in Flow. The sandbox asks Flow to sign (`/sign`). |
+| MCP connector credentials and intranet MCP servers | Stay in Flow. The harness calls Flow's MCP gateway with the sandbox token; Flow adds the credential and reaches the server. See [MCP servers](#mcp-servers). |
 | Environment secrets | Served once per sandbox, only during setup, then unset. They can persist on disk or in snapshot archives if the prepare script writes them (the editor warns about this). |
 | Other sandboxes, Flow, the cluster, the cloud account | Isolation, network policy, RBAC and node placement, described below. |
 
@@ -189,6 +190,33 @@ allows; the runner's own push guard is defense in depth, not a boundary),
 exactly as it can with the workspace token. It cannot reach the member's
 other repositories or the host's API as the member.
 
+### MCP servers
+
+Workspace MCP connectors that an admin enabled for coding sessions (or the
+operator listed in `FLOW_CODING_MCP_SERVERS`) are offered to the harness
+through Flow's MCP gateway, `POST /internal/coding-runtime/mcp/{id}`:
+
+- the sandbox authenticates with its sandbox token; the connector's
+  credential (`FLOW_MCP_CREDENTIALS` or the creator's connector
+  authorization) is added by Flow and never enters the sandbox;
+- the sandbox needs no network route to the server. An intranet server is
+  reached from the Flow Pods only, and only if the operator trusts it
+  (`FLOW_TRUSTED_PRIVATE_ENDPOINTS` and `FLOW_TRUSTED_PRIVATE_NETWORKS`, see
+  [Trusted private endpoints](configuration.md#trusted-private-endpoints)),
+  with the same pinned, re-checked dial as every other outbound request.
+  The egress proxy and the sandbox NetworkPolicy are unchanged;
+- every request re-checks the token (refused once the session or the sandbox
+  ends) and the connector (approved, workspace-wide, enabled for coding
+  sessions, in the session's own workspace); a revoked approval applies to
+  the next call;
+- every `tools/call` is audited (`coding_session.mcp_tool_call`).
+
+Residual risk: during the session, code in the sandbox can call the enabled
+servers' tools with the connector's credential, through Flow, and read what
+they return (for a code-search server, whatever that server's token can
+search). Enable only servers whose tools and data are acceptable for any
+coding session of the workspace.
+
 ## Limits of plain runc
 
 When `sandboxes.runtimeClass.name` is empty (runc) and `hostUsers` is true,
@@ -262,6 +290,7 @@ policy engine) before enabling coding sessions for users.
 ## Audit
 
 Flow writes session start, approval, debug terminal use, secret add or delete,
-snapshot builds and PR creation to the workspace audit log. Sandbox logs are
+snapshot builds, PR creation and MCP tool calls relayed by the MCP gateway to
+the workspace audit log. Sandbox logs are
 archived to object storage on stop. The proxy logs every request with the
 sandbox id to stdout (`%un` in the access log).

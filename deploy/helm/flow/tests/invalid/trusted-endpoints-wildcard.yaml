@@ -1,0 +1,4 @@
+# A bare wildcard would trust every host.
+outbound:
+  trustedPrivateEndpoints: ["*"]
+  trustedPrivateNetworks: [10.0.0.0/8]

@@ -50,7 +50,7 @@ func connectorOwner(item applicationPolicy, userID string) string {
 	return userID
 }
 func (s *server) connectorHTTPClient() *http.Client {
-	c := secureOutboundClient(20 * time.Second)
+	c := secureOutboundClient(20*time.Second, outboundTrustedPrivate)
 	if s.authDisabled {
 		c = &http.Client{Timeout: 20 * time.Second, Transport: connectorTransport{base: http.DefaultTransport, allowLocal: true}}
 	}
@@ -250,7 +250,7 @@ func (s *server) discoverConnectorOAuth(ctx context.Context, endpoint string) (o
 	if err != nil {
 		return oauth2.Config{}, "", errInvalid
 	}
-	if !integrationEndpointSafe(ctx, endpoint, s.authDisabled) {
+	if !integrationEndpointSafe(ctx, endpoint, s.authDisabled, outboundTrustedPrivate) {
 		return oauth2.Config{}, "", errInvalid
 	}
 	req, _ := http.NewRequestWithContext(ctx, "POST", endpoint, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"Flow","version":"1"}}}`))
@@ -282,7 +282,7 @@ func (s *server) discoverConnectorOAuth(ctx context.Context, endpoint string) (o
 	}
 	var resource *oauthex.ProtectedResourceMetadata
 	for _, candidate := range candidates {
-		if !integrationEndpointSafe(ctx, candidate, s.authDisabled) {
+		if !integrationEndpointSafe(ctx, candidate, s.authDisabled, outboundTrustedPrivate) {
 			continue
 		}
 		resource, err = oauthex.GetProtectedResourceMetadata(ctx, candidate, endpoint, client)
@@ -294,7 +294,7 @@ func (s *server) discoverConnectorOAuth(ctx context.Context, endpoint string) (o
 		return oauth2.Config{}, "", fmt.Errorf("MCP server did not publish valid protected-resource metadata")
 	}
 	issuer, err := url.Parse(resource.AuthorizationServers[0])
-	if err != nil || !integrationEndpointSafe(ctx, issuer.String(), s.authDisabled) {
+	if err != nil || !integrationEndpointSafe(ctx, issuer.String(), s.authDisabled, outboundTrustedPrivate) {
 		return oauth2.Config{}, "", fmt.Errorf("Invalid authorization issuer")
 	}
 	origin = issuer.Scheme + "://" + issuer.Host
@@ -309,7 +309,7 @@ func (s *server) discoverConnectorOAuth(ctx context.Context, endpoint string) (o
 	if metadata == nil || err != nil || !slices.Contains(metadata.CodeChallengeMethodsSupported, "S256") {
 		return oauth2.Config{}, "", fmt.Errorf("Authorization server must support OAuth PKCE S256")
 	}
-	if !integrationEndpointSafe(ctx, metadata.AuthorizationEndpoint, s.authDisabled) || !integrationEndpointSafe(ctx, metadata.TokenEndpoint, s.authDisabled) {
+	if !integrationEndpointSafe(ctx, metadata.AuthorizationEndpoint, s.authDisabled, outboundTrustedPrivate) || !integrationEndpointSafe(ctx, metadata.TokenEndpoint, s.authDisabled, outboundTrustedPrivate) {
 		return oauth2.Config{}, "", fmt.Errorf("Invalid OAuth endpoints")
 	}
 	config := oauth2.Config{RedirectURL: s.connectorCallbackURL(), Endpoint: oauth2.Endpoint{AuthURL: metadata.AuthorizationEndpoint, TokenURL: metadata.TokenEndpoint, AuthStyle: oauth2.AuthStyleInParams}}
@@ -329,7 +329,7 @@ func (s *server) discoverConnectorOAuth(ctx context.Context, endpoint string) (o
 		}
 	} else if metadata.ClientIDMetadataDocumentSupported && strings.HasPrefix(config.RedirectURL, "https://") {
 		config.ClientID = strings.TrimSuffix(config.RedirectURL, "/callback") + "/client-metadata"
-	} else if metadata.RegistrationEndpoint != "" && integrationEndpointSafe(ctx, metadata.RegistrationEndpoint, s.authDisabled) {
+	} else if metadata.RegistrationEndpoint != "" && integrationEndpointSafe(ctx, metadata.RegistrationEndpoint, s.authDisabled, outboundTrustedPrivate) {
 		registered, err := oauthex.RegisterClient(ctx, metadata.RegistrationEndpoint, &oauthex.ClientRegistrationMetadata{ClientName: "Flow", RedirectURIs: []string{config.RedirectURL}, TokenEndpointAuthMethod: "none", GrantTypes: []string{"authorization_code", "refresh_token"}, ResponseTypes: []string{"code"}, Scope: scope}, client)
 		if err != nil {
 			return config, "", fmt.Errorf("OAuth client registration failed")
@@ -346,7 +346,7 @@ func (s *server) connectorClientMetadata(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *server) exchangeConnectorToken(ctx context.Context, config oauth2.Config, values url.Values) (*oauth2.Token, error) {
-	if !integrationEndpointSafe(ctx, config.Endpoint.TokenURL, s.authDisabled) {
+	if !integrationEndpointSafe(ctx, config.Endpoint.TokenURL, s.authDisabled, outboundTrustedPrivate) {
 		return nil, errInvalid
 	}
 	values.Set("client_id", config.ClientID)

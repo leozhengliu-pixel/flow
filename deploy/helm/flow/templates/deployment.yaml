@@ -198,6 +198,11 @@ spec:
               mountPath: /var/run/flow/opensandbox-ca
               readOnly: true
             {{- end }}
+            {{- if or $v.outbound.trustedCA.secretName $v.outbound.trustedCA.configMapName }}
+            - name: trusted-ca
+              mountPath: /var/run/flow/trusted-ca
+              readOnly: true
+            {{- end }}
             {{- with $v.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -231,6 +236,23 @@ spec:
             items:
               - key: {{ $c.opensandbox.tls.caSecret.key }}
                 path: ca.crt
+        {{- end }}
+        {{- with $v.outbound.trustedCA }}
+        {{- if .secretName }}
+        - name: trusted-ca
+          secret:
+            secretName: {{ .secretName }}
+            items:
+              - key: {{ .key }}
+                path: ca.crt
+        {{- else if .configMapName }}
+        - name: trusted-ca
+          configMap:
+            name: {{ .configMapName }}
+            items:
+              - key: {{ .key }}
+                path: ca.crt
+        {{- end }}
         {{- end }}
         {{- with $v.extraVolumes }}
         {{- toYaml . | nindent 8 }}

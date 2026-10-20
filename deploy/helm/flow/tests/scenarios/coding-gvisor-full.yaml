@@ -10,6 +10,7 @@ coding:
     port: 8090
   instanceId: flow-prod
   secretKey: dGVzdC1rZXktdGVzdC1rZXktdGVzdC1rZXktdGVzdC0=
+  mcpServers: [mcp-sourcebot-production, mcp-docs]
   image:
     repository: registry.example.com/flow-sandbox
     digest: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef

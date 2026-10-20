@@ -93,6 +93,9 @@ type Service struct {
 	// HostGuidance adds code-host specific guidance (track J's
 	// gitlab.AgentGuidance for GitLab environments); nil adds nothing.
 	HostGuidance func(session domain.CodingSession) string
+	// MCPServers lists the MCP servers the session's harness may use
+	// through Flow's MCP gateway (coding_mcp_gateway.go); nil adds none.
+	MCPServers func(ctx context.Context, session domain.CodingSession, runtimeURL string) []BootstrapMCPServer
 	// ResolveCommitSigning resolves the user's signing format and public key
 	// when signed commits are required (track E's resolveCodingCommitSigning).
 	// An error carrying CodingErrorCode() or Code() fails provisioning with

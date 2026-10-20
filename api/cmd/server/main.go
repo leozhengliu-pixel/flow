@@ -29,6 +29,7 @@ import (
 	"flow/api/internal/coordination"
 	"flow/api/internal/domain"
 	"flow/api/internal/objectstore"
+	"flow/api/internal/outbound"
 	"flow/api/internal/publicapi"
 	"flow/api/internal/store"
 	"flow/api/internal/websearch"
@@ -120,6 +121,12 @@ func main() {
 	}
 	for _, warning := range applicationConfig.Warnings {
 		log.Printf("WARNING: %s", warning)
+	}
+	if outboundPolicy, err = outbound.New(applicationConfig.Outbound); err != nil {
+		log.Fatal(err)
+	}
+	if outboundPolicy.HasTrustedEndpoints() {
+		log.Printf("outbound: operator-trusted private endpoints %v in networks %v", applicationConfig.Outbound.TrustedHosts, applicationConfig.Outbound.TrustedNetworks)
 	}
 	if strings.EqualFold(applicationConfig.Storage.Driver, "s3") {
 		// Offloaded database content (document revisions, long agent

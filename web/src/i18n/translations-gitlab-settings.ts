@@ -119,5 +119,6 @@ export const gitlabSettingsZhCN: Record<string, string> = {
   "The access token is inactive or revoked.": "访问令牌未激活或已被吊销。",
   "The access token has expired.": "访问令牌已过期。",
   "The GitLab URL must be a public HTTPS address.": "GitLab URL 必须是公网 HTTPS 地址。",
+  "The GitLab URL resolves to a private address. An operator can allow it with FLOW_TRUSTED_PRIVATE_ENDPOINTS and FLOW_TRUSTED_PRIVATE_NETWORKS; otherwise it must be a public HTTPS address.": "GitLab URL 解析到私有地址。运维人员可以通过 FLOW_TRUSTED_PRIVATE_ENDPOINTS 和 FLOW_TRUSTED_PRIVATE_NETWORKS 放行；否则它必须是公网 HTTPS 地址。",
   "GitLab did not return a replacement token.": "GitLab 未返回新令牌。",
 };

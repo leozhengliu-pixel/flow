@@ -217,7 +217,7 @@ func (s *server) refreshGitLabOAuthConnection(ctx context.Context, workspaceKey 
 		return domain.IntegrationConnection{}, errors.New("GitLab OAuth refresh token is not available")
 	}
 	oauthConfig := integrationOAuthConfigFor("gitlab", snapshot.Config)
-	if oauthConfig.TokenURL == "" || !integrationEndpointSafe(ctx, oauthConfig.TokenURL, s.authDisabled) {
+	if oauthConfig.TokenURL == "" || !integrationEndpointSafe(ctx, oauthConfig.TokenURL, s.authDisabled, outboundTrustedPrivate) {
 		return domain.IntegrationConnection{}, errors.New("GitLab OAuth token endpoint is not configured")
 	}
 	values := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {snapshot.OAuthRefreshToken}, "client_id": {oauthConfig.ClientID}}
@@ -229,7 +229,7 @@ func (s *server) refreshGitLabOAuthConnection(ctx context.Context, workspaceKey 
 		return domain.IntegrationConnection{}, err
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	client := secureOutboundClient(15 * time.Second)
+	client := secureOutboundClient(15*time.Second, outboundTrustedPrivate)
 	if s.loopbackCodeHosts() && safeLocalDevelopmentURL(oauthConfig.TokenURL) {
 		client = &http.Client{Timeout: 15 * time.Second}
 	}
