@@ -202,6 +202,8 @@ type ModelInfo struct {
 	Label       string `json:"label,omitempty"`
 	Group       string `json:"group,omitempty"` // frontier | other
 	Description string `json:"description,omitempty"`
+	// Tier is Auto's routing tier: small | standard | large.
+	Tier string `json:"tier,omitempty"`
 }
 
 // ModelPrice is USD per million tokens.
@@ -562,6 +564,11 @@ func (c CodingLLMConfig) validateModelInfo() error {
 		case "", ModelGroupFrontier, ModelGroupOther:
 		default:
 			return fmt.Errorf("FLOW_CODING_MODEL_INFO group of %q must be frontier or other", model)
+		}
+		switch info.Tier {
+		case "", "small", "standard", "large":
+		default:
+			return fmt.Errorf("FLOW_CODING_MODEL_INFO tier of %q must be small, standard or large", model)
 		}
 	}
 	return nil

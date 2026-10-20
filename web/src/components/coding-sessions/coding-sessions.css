@@ -3,7 +3,6 @@
    48px header, 18px avatar with a 6px status dot, 12/500 day label, error card with a fading danger gradient,
    right-aligned 8px-radius prompt bubbles, 40px status row with a running timer. */
 .coding-session-phase,.coding-session-muted{color:var(--theme-text-tertiary)}
-.coding-session-cost{font-variant-numeric:tabular-nums}
 
 .coding-state-badge{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:9999px;background:var(--theme-control);color:var(--theme-text-secondary);font-size:12px;font-weight:500;white-space:nowrap}
 .coding-state-badge[data-state=active],.coding-state-badge[data-state=pending]{color:var(--accent-primary)}
@@ -100,7 +99,7 @@
 .coding-session-empty-art{color:var(--theme-text-tertiary);margin-bottom:27px}
 .coding-session-empty strong{color:var(--text-body);font:600 15px/23px var(--font)}
 .coding-session-empty span{margin-top:12px;color:var(--theme-text-secondary);font:450 13px/normal var(--font)}
-.coding-agent-panel{flex:0 0 506px;width:506px;max-width:100%;min-height:0;display:flex;flex-direction:column;margin:12px 8px 8px 4px;border:1px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-1);box-shadow:var(--card-shadow);overflow:hidden}
+.coding-agent-panel{flex:0 0 clamp(360px,45%,640px);width:clamp(360px,45%,640px);max-width:100%;min-height:0;display:flex;flex-direction:column;margin:12px 8px 8px 4px;border:1px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-1);box-shadow:var(--card-shadow);overflow:hidden}
 .coding-agent-panel[hidden]{display:none}
 .coding-agent-panel-header{flex:none;display:flex;align-items:center;gap:8px;min-width:0;height:48px;box-sizing:border-box;padding:8px 6px 8px 15px}
 .coding-agent-panel-header h3{flex:1;min-width:0;margin:0;overflow:hidden;color:var(--text-body);font:500 13px/16px var(--font);text-overflow:ellipsis;white-space:nowrap}
@@ -142,9 +141,13 @@
 .coding-session-composer-send:disabled{cursor:default;opacity:.6}
 
 /* Session menu */
-.coding-session-menu{min-width:260px;z-index:720}
+.coding-session-menu{min-width:260px;max-width:320px;z-index:720}
 .coding-session-menu-detail{gap:8px}
-.coding-session-menu-cost{min-width:0;flex:1}
+.coding-session-menu-grow{min-width:0;flex:1}
+/* The model row: the model, then Auto's routing reason (two lines at most). */
+.coding-session-menu-model{align-items:flex-start;height:auto;padding-top:6px;padding-bottom:6px}
+.coding-session-menu-model-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.coding-session-menu-model-reason{display:-webkit-box;overflow:hidden;color:var(--theme-text-secondary);font-size:12px;line-height:16px;-webkit-box-orient:vertical;-webkit-line-clamp:2}
 
 /* Card (agent chat): header "<Agent> started by <member> <time>" over the status row */
 .coding-session-card{display:flex;flex-direction:column;min-width:0;margin:6px 0;border:1px solid var(--border-card);border-radius:8px;background:var(--theme-surface-1);box-shadow:var(--card-shadow)}
@@ -165,7 +168,24 @@
 .coding-session-status-row[data-tone=input] .coding-session-status-icon{color:var(--semantic-warning-text)}
 .coding-session-status-label{flex:none;margin-left:2px;white-space:nowrap}
 .coding-session-status-detail{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* The running tool step's argument ("Bash `git status`"): a single-line code chip. */
+.coding-session-status-code{flex:0 1 auto;min-width:0;overflow:hidden;padding:.5px 3px;border-radius:2.44px;background:var(--cs-code-bg);color:var(--theme-text-secondary);font:500 12.19px/16px var(--font-monospace,monospace);text-overflow:ellipsis;white-space:nowrap}
 .coding-session-status-end{display:inline-flex;align-items:center;gap:8px;margin-left:auto;flex:none;font-variant-numeric:tabular-nums}
+/* A delegated session in issue activity: a 40px header ("Flow started by …", the options on hover) over the status row. */
+.coding-session-activity-card{display:flex;flex-direction:column;min-width:0}
+.coding-session-activity-header{display:flex;align-items:center;gap:6px;min-width:0;height:40px;box-sizing:border-box;padding:6px 16px;border-bottom:.5px solid var(--theme-border)}
+.coding-session-activity-avatar{flex:none;display:grid;width:18px;height:18px;place-items:center}
+.coding-session-activity-avatar-image{width:18px;height:18px;border-radius:50%;font-size:8px}
+.coding-session-activity-byline{display:inline-flex;align-items:center;gap:3px;flex:1;min-width:0;overflow:hidden;color:var(--theme-text-secondary);font:500 13px/16px var(--font);white-space:nowrap}
+.coding-session-activity-byline strong{color:var(--text-body);font-weight:500}
+.coding-session-activity-byline time{margin-left:5px}
+.coding-session-activity-menu{opacity:0;transition:opacity .15s}
+.coding-session-activity-card:hover .coding-session-activity-menu,.coding-session-activity-menu:focus-visible,.coding-session-activity-menu[data-state=open]{opacity:1}
+@media (hover:none){.coding-session-activity-menu{opacity:1}}
+/* The session's PR at the end of the issue row: a 24px pill, PR icon and "#1". */
+.coding-session-pr-chip{display:inline-flex;align-items:center;gap:6px;height:24px;box-sizing:border-box;padding:0 8px;border:.5px solid var(--theme-border);border-radius:48px;background:var(--theme-surface-1);color:var(--theme-text-secondary);font:450 12px/15px var(--font)}
+.coding-session-pr-chip[data-state=merged] svg{color:var(--cs-purple-text)}
+.coding-session-pr-chip[data-state=closed] svg{color:var(--cs-red-text)}
 .coding-session-embedded{border-top:1px solid var(--border-card)}
 
 /* Session dialog: 44px bar (issue › title, Hide agent) over the session view */
@@ -193,6 +213,11 @@ html:root .dialog-content.coding-session-dialog{top:50%;transform:translate(-50%
 .coding-session-page-title{display:inline-flex;align-items:center;gap:6px;flex:1;min-width:0;color:var(--text-body)}
 .coding-session-page-title .coding-diff-glyph{flex:none;color:var(--theme-text-secondary)}
 .coding-session-page-title h2{min-width:0;margin:0;overflow:hidden;font:500 13px/16px var(--font);text-overflow:ellipsis;white-space:nowrap}
+.coding-session-page-additions{flex:none;color:var(--cs-green-text);font:500 13px/16px var(--font);font-variant-numeric:tabular-nums}
+.coding-session-page-pr{display:inline-flex;align-items:center;gap:6px;flex:none;max-width:240px;height:28px;box-sizing:border-box;padding:0 10px 0 8px;border-radius:9999px;color:var(--theme-text-secondary);font:500 12px/1 var(--font-monospace,monospace);text-decoration:none;white-space:nowrap}
+.coding-session-page-pr span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.coding-session-page-pr:hover,.coding-session-page-icon:hover{background:var(--theme-surface-hover);color:var(--text-body)}
+.coding-session-page-icon{display:grid;flex:none;width:28px;height:28px;place-items:center;padding:0;border:0;border-radius:9999px;background:transparent;color:var(--theme-text-secondary);cursor:pointer}
 .coding-session-page-body{flex:1;min-height:0}
 .coding-session-page-message{padding:16px}
 @media (max-width:800px){.coding-session-page-menu{display:grid}}
@@ -253,7 +278,10 @@ a.coding-session-status-row,a.coding-sessions-list-row{text-decoration:none}
 .issue-coding-diffs-row{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:6px;color:var(--text-body);font:500 13px/16px var(--font);text-decoration:none}
 .issue-coding-diffs-row:hover{background:var(--theme-surface-hover)}
 .issue-coding-diffs-row .coding-diff-glyph{flex:none;color:var(--theme-text-secondary)}
-.issue-coding-diffs-label{flex:1;min-width:0}
+.issue-coding-diffs-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.issue-coding-diffs-pr-icon{flex:none;color:var(--theme-text-secondary)}
+.issue-coding-diffs-row[data-pr-state=merged] .issue-coding-diffs-pr-icon{color:var(--cs-purple-text)}
+.issue-coding-diffs-row[data-pr-state=closed] .issue-coding-diffs-pr-icon{color:var(--cs-red-text)}
 
 /* Session details menu: "Subscribe to session" with the compact 22x14 toggle */
 .coding-session-menu-subscribe{gap:8px}

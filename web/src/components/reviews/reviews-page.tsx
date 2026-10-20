@@ -9,7 +9,7 @@ import { CheckboxMark } from "@/components/ui/checkbox-mark";
 import { useI18n } from "@/i18n/i18n";
 import { toggleFavoriteFor } from "@/lib/favorites";
 import { submitReview, updateIntegrationConnection, updateReview, updateUserSettings } from "@/lib/api";
-import { integrationSettingsPath, reviewPath, reviewsPath, type ReviewRouteTab } from "@/lib/app-routes";
+import { integrationSettingsPath, reviewAgentPath, reviewPath, reviewsPath, type ReviewRouteTab } from "@/lib/app-routes";
 import type { BootstrapData, CodeReview } from "@/types/flow";
 
 import "./reviews-page.css";
@@ -38,6 +38,7 @@ import { PullRequestReviewActions } from "./pull-request-review-actions";
 import { reviewPrimaryAction, type ReviewDecision } from "./pull-request-review-model";
 // coding sessions (track G)
 import { ReviewCodingSessionActions } from "@/components/coding-sessions/review-coding-actions";
+import { ReviewAgentPanel, ReviewAgentToggle } from "@/components/coding-sessions/review-agent-panel";
 import { resolvePreferredMergeMethod, type MergeMethod } from "./pull-request-merge-method";
 import { PullRequestReviewShortcutsProvider } from "./pull-request-review-shortcuts-context";
 import { useOptionalPullRequestReviewShortcuts } from "./pull-request-review-shortcuts";
@@ -56,6 +57,8 @@ export function ReviewsPage({
   onReload,
   onOpenSidebar,
   returnPath,
+  agentSessionId,
+  showAgent = true,
 }: {
   data: BootstrapData;
   view: "for-you" | "created";
@@ -65,11 +68,17 @@ export function ReviewsPage({
   onReload: () => Promise<void>;
   onOpenSidebar: () => void;
   returnPath?: string;
+  /** A coding session of this pull request, opened in the agent panel (`?agentSessionId=…`). */
+  agentSessionId?: string;
+  /** `?showAgent=false` hides the agent panel. */
+  showAgent?: boolean;
 }) {
   const { t } = useI18n();
   const [fullWindow, setFullWindow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [picker, setPicker] = useState<"reviewers" | "issues" | null>(null);
+  // A coding session opened on the review (the agent panel) shares the page with the review.
+  const agentOpen = Boolean(review && agentSessionId && showAgent);
   const mutate = async (input: Parameters<typeof updateReview>[1]) => {
     if (!review) return;
     const pending = Object.entries(input).filter(([, value]) => value !== undefined);
@@ -95,7 +104,7 @@ export function ReviewsPage({
         },
       }}
     >
-      <main className={`flow-framed-workspace reviews-workspace ${review ? "has-detail" : ""} ${fullWindow ? "is-full-window" : ""}`}>
+      <main className={`flow-framed-workspace reviews-workspace ${review ? "has-detail" : ""} ${fullWindow ? "is-full-window" : ""} ${agentOpen ? "has-agent-panel" : ""}`}>
         {review ? (
           <section className="reviews-detail-pane">
             <ReviewDetail
@@ -112,6 +121,8 @@ export function ReviewsPage({
               onReload={onReload}
               onOpenPicker={setPicker}
               onOpenSidebar={onOpenSidebar}
+              agentSessionId={agentSessionId}
+              showAgent={showAgent}
             />
           </section>
         ) : (
@@ -340,6 +351,8 @@ function ReviewDetail({
   onReload,
   onOpenPicker,
   onOpenSidebar,
+  agentSessionId,
+  showAgent,
 }: {
   returnPath?: string;
   data: BootstrapData;
@@ -354,6 +367,8 @@ function ReviewDetail({
   onReload: () => Promise<void>;
   onOpenPicker: (value: "reviewers" | "issues") => void;
   onOpenSidebar: () => void;
+  agentSessionId?: string;
+  showAgent?: boolean;
 }) {
   const { t } = useI18n();
   const [mergeMethod, setMergeMethod] = useState<MergeMethod>(() => resolvePreferredMergeMethod(data.userSettings[data.viewer.id]?.mergeStrategy));
@@ -396,6 +411,7 @@ function ReviewDetail({
   };
 
   const shortcuts = useOptionalPullRequestReviewShortcuts();
+  const agentShown = Boolean(agentSessionId) && showAgent !== false;
   useEffect(() => {
     if (!shortcuts) return;
     return shortcuts.register({
@@ -447,6 +463,15 @@ function ReviewDetail({
         onOpenPicker={onOpenPicker}
         onOpenSidebar={onOpenSidebar}
         returnPath={backPath}
+        tabSearch={agentSessionId ? `?showAgent=${agentShown}&agentSessionId=${encodeURIComponent(agentSessionId)}` : ""}
+        tabActions={
+          agentSessionId ? (
+            <ReviewAgentToggle
+              shown={agentShown}
+              onToggle={() => onNavigate(reviewAgentPath(data.workspace.urlKey, review, agentSessionId, { tab, showAgent: !agentShown }))}
+            />
+          ) : undefined
+        }
         menu={
           <PullRequestActionsMenu
             review={review}
@@ -477,7 +502,8 @@ function ReviewDetail({
           </>
         }
       />
-      <div className="review-detail-body">
+      <div className={agentShown ? "review-agent-layout" : "review-agent-layout is-agent-hidden"}>
+      <div className="review-detail-body review-agent-layout-main">
         {tab === "overview" ? (
           <ReviewOverview
             data={data}
@@ -497,6 +523,15 @@ function ReviewDetail({
         ) : (
           <DiffView review={review} onReload={onReload} onEditableChange={setEditableDiff} viewer={data.viewer} />
         )}
+      </div>
+      {agentSessionId && agentShown && (
+        <ReviewAgentPanel
+          sessionId={agentSessionId}
+          data={data}
+          onClose={() => onNavigate(reviewAgentPath(data.workspace.urlKey, review, agentSessionId, { tab, showAgent: false }))}
+          onOpenChanges={() => onNavigate(reviewAgentPath(data.workspace.urlKey, review, agentSessionId, { tab: "changes" }))}
+        />
+      )}
       </div>
     </>
   );

@@ -14,6 +14,15 @@ describe('issue activity projection', () => {
     expect(describeIssueActivity(event({}))).toBeNull()
   })
 
+  it('describes a closed pull request unassigning the agent and archiving its session', () => {
+    const context = makeBootstrap()
+    const agent = context.users.find(user => user.id !== viewer.id) ?? viewer
+    expect(describeIssueActivity(event({ delegate: '', previousDelegate: agent.id, source: 'github' }), context)).toBe(`unassigned ${agent.displayName}`)
+    expect(describeIssueActivity(event({ delegate: '' }), context)).toBe('removed the delegate')
+    expect(describeIssueActivity(event({ sessionId: 'cs-1', agentId: agent.id }, 'issue.coding_session_archived'), context)).toBe(`Session with ${agent.displayName} archived`)
+    expect(describeIssueActivity(event({ sessionId: 'cs-1' }, 'issue.coding_session_archived'), context)).toBe('Session with Flow archived')
+  })
+
   it('describes recurring schedule automation', () => {
     expect(describeIssueActivity(event({ automation: 'recurring', recurringFrom: 'DEV-12', state: 'Todo' }, 'issue.created'))).toBe('created the issue from the recurring schedule of DEV-12')
     expect(describeIssueActivity(event({ recurrence: '', automation: 'recurring', recurringNext: 'DEV-13' }))).toBe('moved the recurring schedule to DEV-13')

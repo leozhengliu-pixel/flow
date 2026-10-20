@@ -78,12 +78,27 @@ export function CodingPullRequestCard({ session, pr, reviews, workspace }: { ses
   </article>
 }
 
-/** The commits a turn pushed: one short SHA, or "N commits" listing each. */
-export function CodingCommitBadge({ commits, pr }: { commits: readonly CodingCommit[]; pr?: Pick<SessionPullRequest, 'codeHost' | 'hostName' | 'repository'> }) {
+/** A turn's change totals for its commit chip ("1 file 4004001 +4 -0"). */
+export type CodingCommitStats = { files: number; additions: number; deletions: number }
+
+/**
+ * The commits a turn pushed: the changed files, the short SHA and +/− (opening the changes when stats are known),
+ * one short SHA, or "N commits" listing each.
+ */
+export function CodingCommitBadge({ commits, pr, stats, onOpenChanges }: { commits: readonly CodingCommit[]; pr?: Pick<SessionPullRequest, 'codeHost' | 'hostName' | 'repository'>; stats?: CodingCommitStats; onOpenChanges?: () => void }) {
   const { t } = useI18n()
   const open = (sha: string) => {
     if (pr) window.open(hostUrl(pr, 'commit', sha), '_blank', 'noopener')
     else void copy(sha, 'Copied commit SHA', t)
+  }
+  if (stats && stats.files > 0) {
+    const last = commits.at(-1)!
+    const files = t(stats.files === 1 ? '{count} file' : '{count} files').replace('{count}', String(stats.files))
+    return <button type="button" className="cs-commit-badge is-stats" title={last.message?.split('\n')[0] || last.sha} aria-label={`${files} ${last.sha.slice(0, 7)} +${stats.additions} -${stats.deletions}`}
+      onClick={() => onOpenChanges ? onOpenChanges() : open(last.sha)}>
+      <span className="cs-commit-files">{files}</span><code data-i18n-ignore>{last.sha.slice(0, 7)}</code>
+      <span className="cs-additions">+{stats.additions}</span><span className="cs-deletions">-{stats.deletions}</span>
+    </button>
   }
   if (commits.length === 1) {
     const [commit] = commits

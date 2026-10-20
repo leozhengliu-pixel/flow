@@ -1,14 +1,15 @@
 import { useState } from 'react'
 import { useInRouterContext } from 'react-router-dom'
-import { AlertTriangle, CheckCircle2, ChevronRight, CircleSlash, GitBranch, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronRight, CircleSlash, GitBranch, GitPullRequest, X } from 'lucide-react'
 import { GridLoader } from '@/components/ui/grid-loader'
 import { activityTimeLabel } from '@/components/activity/issue-activity-model'
 import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { AppLink } from '@/components/ui/app-link'
 import { useI18n } from '@/i18n/i18n'
-import { codingSessionPath, issuePath } from '@/lib/app-routes'
+import { issuePath } from '@/lib/app-routes'
 import { useCodingSessionOpener } from './use-coding-session-opener'
+import { codingSessionHref } from './coding-session-page-model'
 import type { BootstrapData } from '@/types/flow'
 import type { CodingSession } from '@/types/coding-sessions'
 import { CODING_PHASE_LABELS, codingErrorInfo, codingSessionCapabilities, codingSessionStalled, codingRunStartedAt, codingStatusLine, formatCodingElapsed, isCodingSessionTerminal, PULL_REQUEST_STATE_LABELS, pullRequestDisplayState, pullRequestNumberLabel } from './coding-session-model'
@@ -51,12 +52,19 @@ export function CodingSessionStatusRow({ session, data, href, onOpen, surface = 
   const now = useNow(live)
   const started = codingRunStartedAt(session)
   const elapsed = live && started && !Number.isNaN(Date.parse(started)) ? formatCodingElapsed(now - Date.parse(started)) : ''
+  // The issue row ends with the session's PR ("#1") once one is open; the chat card has its own PR line.
+  const pr = surface === 'issue' ? session.latestPullRequest ?? session.pullRequests?.at(-1) : undefined
   const content = <>
     <CodingStatusIcon tone={status.tone}/>
-    <span className="coding-session-status-label">{t(status.label).replace('{count}', String(status.count ?? ''))}</span>
-    {status.detail && <span className="coding-session-status-detail" data-i18n-ignore={status.translateDetail ? undefined : true}>{status.translateDetail ? t(status.detail) : status.detail}</span>}
+    <span className="coding-session-status-label" data-i18n-ignore={status.repo || status.rawLabel ? true : undefined}>{status.rawLabel ? status.label : t(status.label).replace('{count}', String(status.count ?? '')).replace('{repo}', status.repo ?? '')}</span>
+    {status.detail && (status.codeDetail
+      ? <code className="coding-session-status-code" data-i18n-ignore title={status.detail}>{status.detail}</code>
+      : <span className="coding-session-status-detail" data-i18n-ignore={status.translateDetail ? undefined : true}>{status.translateDetail ? t(status.detail) : status.detail}</span>)}
     <span className="coding-session-status-end">
       {elapsed && <time aria-label={t('Elapsed time')}>{elapsed}</time>}
+      {pr && <span className="coding-session-pr-chip" data-state={pullRequestDisplayState(pr)} title={[pr.title, `${pr.repository.split('/').at(-1)}${pullRequestNumberLabel(pr)}`, t(PULL_REQUEST_STATE_LABELS[pullRequestDisplayState(pr)])].filter(Boolean).join('\n')}>
+        <GitPullRequest size={14} aria-hidden="true"/><span data-i18n-ignore>{pullRequestNumberLabel(pr)}</span>
+      </span>}
       <ChevronRight size={16} aria-hidden="true"/>
     </span>
     <span className="sr-only">{t('Show session')}</span>
@@ -168,7 +176,7 @@ export function CodingSessionsList({ data, issueId, creatorId, title = 'Coding s
     <ul>
       {shown.map(session => <li key={session.id} data-state={session.state}>
         {routed
-          ? <AppLink className="coding-sessions-list-row" href={codingSessionPath(data.workspace.urlKey, session.id)}>
+          ? <AppLink className="coding-sessions-list-row" href={codingSessionHref(session, data)}>
             <CodingSessionSummary session={session} data={data}/>
             <time dateTime={session.updatedAt}>{time(session.updatedAt)}</time>
           </AppLink>

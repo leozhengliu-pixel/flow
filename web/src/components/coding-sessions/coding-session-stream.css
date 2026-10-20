@@ -31,6 +31,7 @@
 .cs-start-line a{color:var(--cs-label-muted);text-decoration:none}
 .cs-start-line a:hover{text-decoration:underline}
 .cs-start-line+.cs-turn>.cs-time-marker,.cs-start-line+.cs-start-line{margin-top:4px}
+.cs-turn>.cs-start-line{margin:18px 0 4px}
 .cs-auth-line{display:flex;align-items:center;gap:6px;margin:0;padding:0 10px;color:var(--cs-label-faint);font:450 13px/normal var(--font)}
 .cs-stream-end{flex:none;height:1px}
 
@@ -58,6 +59,11 @@
 .cs-reasoning{position:relative;padding-left:24px}
 .cs-reasoning::before{content:"";position:absolute;top:2px;bottom:2px;left:11px;width:2px;border-radius:1px;background:var(--cs-border-solid)}
 .cs-reasoning p{margin:0;color:var(--cs-label-muted);font:450 12px/1.6 var(--font);white-space:pre-wrap;overflow-wrap:anywhere}
+/* Inline code in responses and narration: a 0.9375em monospace chip on a faint fill; links in the accent colour. */
+.cs-text code,.cs-reasoning code{padding:.5px .25em;border-radius:.2em;background:var(--cs-code-bg);color:inherit;font-family:var(--font-monospace,monospace);font-size:.9375em}
+.cs-text a{color:var(--cs-link-text);text-decoration:none}
+.cs-text a:hover{text-decoration:underline}
+.cs-text a code{color:inherit}
 .cs-reasoning.is-promoted{margin-top:12px}
 
 /* The label swap: the new text slides up from below, the old one out above, both with a short blur. */
@@ -144,10 +150,13 @@
 .cs-branch-chip.is-base{flex:0 0 auto;max-width:40%}
 .cs-branch-chip.is-head{flex:0 1 auto}
 .cs-branch-arrow{flex:none;color:var(--cs-label-faint)}
-.cs-commit-badge{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;height:24px;margin-left:10px;padding:0 8px;border:1px solid var(--cs-border-solid);border-radius:6px;background:var(--cs-control-tertiary);color:var(--cs-label-base);font:450 12px/1 var(--font);cursor:pointer;transition:background-color .15s}
+.cs-commit-badge{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;height:24px;margin-left:10px;padding:0 8px;border:.5px solid var(--cs-border-solid);border-radius:6px;background:var(--cs-control-tertiary);color:var(--cs-label-base);font:450 12px/1 var(--font);cursor:pointer;transition:background-color .15s}
 .cs-commit-badge:hover{background:var(--cs-control-tertiary-hover)}
 .cs-commit-badge code,.cs-commit-sha{color:var(--cs-label-muted);font:450 12px/1 var(--font-monospace,monospace)}
 .cs-commit-message{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-commit-badge.is-stats{gap:6px}
+.cs-commit-badge.is-stats .cs-commit-files{color:var(--cs-label-base)}
+.cs-commit-badge.is-stats .cs-additions,.cs-commit-badge.is-stats .cs-deletions{margin-left:0}
 .cs-uncommitted{display:inline-flex;align-items:center;gap:5px;align-self:flex-start;height:24px;margin-left:10px;padding:0 8px 0 6px;border:0;border-radius:6px;background:var(--cs-control-tertiary);box-shadow:inset 0 0 0 1px var(--cs-border-solid);color:var(--cs-label-base);font:450 12px/1 var(--font);cursor:pointer}
 .cs-uncommitted:hover{background:var(--cs-control-tertiary-hover)}
 .cs-uncommitted .cs-additions,.cs-uncommitted .cs-deletions{margin-left:0}

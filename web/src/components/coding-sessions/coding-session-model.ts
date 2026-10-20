@@ -67,6 +67,8 @@ export type CodingSessionCapabilities = {
   prompt: boolean
   restart: boolean
   restartWithDefaultModel: boolean
+  /** "Start over with <model>": a finished session with a more capable model to run it again with. */
+  startOver: boolean
   approve: boolean
   createPullRequest: boolean
   dismiss: boolean
@@ -83,6 +85,7 @@ export function codingSessionCapabilities(session: CodingSession): CodingSession
     prompt: session.state !== 'stopping' && !awaitingApproval,
     restart: session.state === 'error' || session.state === 'stale',
     restartWithDefaultModel: (session.state === 'error' || session.state === 'stale') && session.modelSelection !== 'auto',
+    startOver: terminal && (session.phase === 'idle' || session.phase === 'done') && session.approvalState !== 'rejected' && Boolean(session.escalationModel),
     approve: awaitingApproval,
     createPullRequest: !hasPullRequest && Boolean(session.branchName) && (publishFailed || (terminal && hasCommits(session))),
     dismiss: terminal,
@@ -167,14 +170,6 @@ export function codingModelLabel(session: Pick<CodingSession, 'harness' | 'model
   const auto = !session.modelSelection || session.modelSelection === 'auto'
   const model = session.model ? (auto ? `${session.model} (Auto)` : session.model) : auto ? 'Auto' : session.modelSelection
   return { harness, model }
-}
-
-/** USD from micro-dollars; sub-cent costs show as "<$0.01". */
-export function formatCodingCost(micros: number): string {
-  if (!micros || micros <= 0) return '$0.00'
-  const dollars = micros / 1_000_000
-  if (dollars < 0.01) return '<$0.01'
-  return `$${dollars.toFixed(2)}`
 }
 
 export type PullRequestDisplayState = 'draft' | 'open' | 'merged' | 'closed'
@@ -288,28 +283,37 @@ export function codingSessionIdsFromMessage(message: Pick<AgentMessage, 'parts'>
 }
 
 export type CodingStatusTone = 'working' | 'input' | 'done' | 'error' | 'stopped'
-export type CodingStatusLine = { tone: CodingStatusTone; label: string; detail?: string; live: boolean; /** Replaces "{count}" in the translated label. */ count?: number; /** The detail is app copy (translated), not the session's own text. */ translateDetail?: boolean }
+export type CodingStatusLine = { tone: CodingStatusTone; label: string; detail?: string; live: boolean; /** Replaces "{count}" in the translated label. */ count?: number; /** Replaces "{repo}" in the translated label. */ repo?: string; /** The detail is app copy (translated), not the session's own text. */ translateDetail?: boolean; /** The label is the session's own text (a tool name), not app copy. */ rawLabel?: boolean; /** The detail is a command or path, shown as code. */ codeDetail?: boolean }
 
 /**
  * The one-line status of a session, as the reference app's session rows show it: the label is translated by the caller,
- * the detail is the session's own text. `issue` is the issue activity row ("Changed 3 files" when complete), `chat` the
- * agent chat card ("Completed").
+ * the detail is the session's own text. `issue` is the issue activity row ("Setting up owner/repo…" while it starts,
+ * "Finished" once a PR is open, "Changed 3 files" for unpublished changes, the running turn's latest tool step
+ * "Bash `git status`"), `chat` the agent chat card ("Completed").
  */
-export function codingStatusLine(session: Pick<CodingSession, 'state' | 'phase' | 'summary' | 'errorCode' | 'diffs' | 'stoppedBy' | 'startedAt'>, errorTitle?: string, surface: 'issue' | 'chat' = 'issue'): CodingStatusLine {
+export function codingStatusLine(session: Pick<CodingSession, 'state' | 'phase' | 'summary' | 'errorCode' | 'diffs' | 'stoppedBy' | 'startedAt' | 'repository' | 'latestPullRequest' | 'pullRequests'> & Partial<Pick<CodingSession, 'currentStep' | 'currentTurnId'>>, errorTitle?: string, surface: 'issue' | 'chat' = 'issue'): CodingStatusLine {
   switch (session.state) {
     case 'error': return { tone: 'error', label: 'Error', detail: errorTitle, live: false }
     case 'complete': {
       if (surface === 'chat') return { tone: 'done', label: 'Completed', detail: session.summary, live: false }
       const files = session.diffs?.length ?? 0
-      return files ? { tone: 'done', label: files === 1 ? 'Changed {count} file' : 'Changed {count} files', count: files, detail: session.summary, live: false } : { tone: 'done', label: 'Finished', detail: session.summary, live: false }
+      const published = Boolean(session.latestPullRequest ?? session.pullRequests?.length)
+      return files && !published ? { tone: 'done', label: files === 1 ? 'Changed {count} file' : 'Changed {count} files', count: files, detail: session.summary, live: false } : { tone: 'done', label: 'Finished', detail: session.summary, live: false }
     }
     case 'stale':
       if (session.stoppedBy) return { tone: 'stopped', label: 'Stopped', live: false }
       return session.startedAt ? { tone: 'error', label: 'Stopped responding', live: false } : { tone: 'error', label: 'Agent didn’t start', detail: 'The request may not have reached the agent', translateDetail: true, live: false }
     case 'stopping': return { tone: 'working', label: 'Stop requested', live: true }
     case 'awaitingInput': return { tone: 'input', label: session.phase === 'awaitingApproval' ? 'Waiting for approval' : 'Needs input', live: false }
-    case 'pending': return { tone: 'working', label: 'Starting coding session…', live: true }
-    default: return { tone: 'working', label: surface === 'chat' ? 'Working for' : 'Thinking…', live: true }
+    case 'pending': return session.repository && session.phase !== 'queued'
+      ? { tone: 'working', label: 'Setting up {repo}…', repo: session.repository, live: true }
+      : { tone: 'working', label: 'Starting coding session…', live: true }
+    default: {
+      const step = session.currentStep
+      if (surface === 'issue' && step?.action && session.phase === 'running' && (!step.turnId || !session.currentTurnId || step.turnId === session.currentTurnId))
+        return { tone: 'working', label: step.action, rawLabel: true, detail: step.parameter || undefined, codeDetail: true, live: true }
+      return { tone: 'working', label: surface === 'chat' ? 'Working for' : 'Thinking…', live: true }
+    }
   }
 }
 

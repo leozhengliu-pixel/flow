@@ -94,6 +94,9 @@ func TestCodingSessionsAPI(t *testing.T) {
 	}
 	requestJSON[map[string]any](t, handler, http.MethodGet, "/api/coding/sessions/missing", nil, http.StatusNotFound)
 	requestJSON[map[string]any](t, handler, http.MethodPost, "/api/coding/sessions/"+session.ID+"/restart", nil, http.StatusConflict)
+	// "Start over with <model>": a catalog model, on a finished session only.
+	requestJSON[map[string]any](t, handler, http.MethodPost, "/api/coding/sessions/"+session.ID+"/restart", map[string]any{"model": "gpt-9"}, http.StatusBadRequest)
+	requestJSON[map[string]any](t, handler, http.MethodPost, "/api/coding/sessions/"+session.ID+"/restart", map[string]any{"model": "gpt-5-codex"}, http.StatusConflict)
 	requestJSON[map[string]any](t, handler, http.MethodPost, "/api/coding/sessions/"+session.ID+"/dismiss", nil, http.StatusConflict)
 	requestJSON[map[string]any](t, handler, http.MethodPost, "/api/coding/sessions/"+session.ID+"/approve", map[string]any{}, http.StatusConflict)
 	requestJSON[map[string]any](t, handler, http.MethodPost, "/api/coding/sessions/"+session.ID+"/prompt", map[string]any{"prompt": ""}, http.StatusBadRequest)

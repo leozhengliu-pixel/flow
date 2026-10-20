@@ -86,7 +86,8 @@ export const fetchCodingSessionDiff = (sessionId: string, signal?: AbortSignal) 
 export const setCodingSessionSubscription = (sessionId: string, subscribed: boolean) =>
   request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/subscription`, jsonRequest("POST", { subscribed }));
 export const stopCodingSession = (sessionId: string) => request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/stop`, { method: "POST" });
-export const restartCodingSession = (sessionId: string, options: { useDefaultModel?: boolean } = {}) =>
+/** `useDefaultModel` restarts with Auto; `model` starts the task over from its first prompt with that model. */
+export const restartCodingSession = (sessionId: string, options: { useDefaultModel?: boolean; model?: string } = {}) =>
   request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/restart`, jsonRequest("POST", options));
 export const approveCodingSession = (sessionId: string, reject = false) =>
   request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/approve`, jsonRequest("POST", { reject }));

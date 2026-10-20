@@ -38,6 +38,8 @@ export function PullRequestHeader({
   returnPath,
   menu,
   actions,
+  tabSearch = "",
+  tabActions,
 }: {
   data: BootstrapData;
   review: CodeReview;
@@ -54,6 +56,10 @@ export function PullRequestHeader({
   menu?: ReactNode;
   /** Primary review actions shown at the right of the tab row. */
   actions?: ReactNode;
+  /** Kept on the tab links (`?showAgent=true&agentSessionId=…`), so the agent panel stays open across tabs. */
+  tabSearch?: string;
+  /** Controls at the end of the tabs row (the agent panel toggle). */
+  tabActions?: ReactNode;
 }) {
   const { t } = useI18n();
   const access = resolveCodeReviewAccess(data);
@@ -161,14 +167,17 @@ export function PullRequestHeader({
               aria-current={tab === item.id ? "page" : undefined}
               title={`${t(item.id === "overview" ? "View overview" : item.id === "review" ? "View guide" : "View diff")}  ${index + 1}`}
               key={item.id}
-              href={reviewPath(workspace, review, item.id)}
-              onClick={go(reviewPath(workspace, review, item.id))}
+              href={reviewPath(workspace, review, item.id) + tabSearch}
+              onClick={go(reviewPath(workspace, review, item.id) + tabSearch)}
             >
               {t(item.label)}
             </a>
           ))}
         </nav>
-        <div className="review-detail-tab-actions">{actions}</div>
+        <div className="review-detail-tab-actions">
+          {actions}
+          {tabActions}
+        </div>
       </div>
     </>
   );

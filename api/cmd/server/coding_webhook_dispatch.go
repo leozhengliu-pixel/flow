@@ -147,6 +147,7 @@ func (s *server) codingWebhookDispatcher() (*coding.WebhookDispatcher, bool) {
 		},
 		Notifier:        notifier,
 		CINotifier:      notifier,
+		Archiver:        notifier,
 		AnchorAppUserID: s.builtinAgentUserID,
 		Config:          s.coding.config,
 	}, true
@@ -427,6 +428,58 @@ func (n *codingTriggerNotifier) ChecksFailed(ctx context.Context, session domain
 	}
 	body += ". Use \"Fix failing checks\" to start a follow-up."
 	return n.appendAnchorActivity(ctx, session, fmt.Sprintf("checks:%d:%s", pullRequest.Number, firstNonEmpty(pullRequest.HeadSHA, status.URL)), domain.AgentActivity{Type: "action", Body: body, URL: status.URL, Metadata: map[string]any{"kind": "checksFailed", "pullRequest": pullRequest.Number}})
+}
+
+// Activity of a session archived because its PR/MR was closed.
+const (
+	activityCodingSessionArchived = "issue.coding_session_archived"
+	// actorBotTypeIntegration attributes a change to a code host ("GitHub unassigned Flow").
+	actorBotTypeIntegration = "integration"
+)
+
+// SessionArchived unassigns the agent from the session's issue when its
+// PR/MR was closed without merging, attributed to the code host, and records
+// that the session was archived.
+func (n *codingTriggerNotifier) SessionArchived(ctx context.Context, session domain.CodingSession, codeHost string) error {
+	if session.IssueID == "" {
+		return nil
+	}
+	agentID := n.s.builtinAgentUserID(ctx, session.WorkspaceKey)
+	hostName := "GitHub"
+	if codeHost == domain.CodeHostGitLab {
+		hostName = "GitLab"
+	}
+	issueID := session.IssueID
+	return n.s.store.MutateWorkspace(withIssueScope(ctx, &issueID), session.WorkspaceKey, "coding_session.archived", session.ID, map[string]any{"sessionId": session.ID, "codeHost": codeHost}, func(data *domain.Bootstrap) error {
+		issue, err := issueByID(data, issueID)
+		if err != nil {
+			return nil // the issue is gone
+		}
+		if slices.ContainsFunc(data.Activities[issueID], func(event domain.ActivityEvent) bool {
+			return event.Type == activityCodingSessionArchived && event.Metadata["sessionId"] == session.ID
+		}) {
+			return nil // a redelivered close
+		}
+		actor := data.Viewer
+		if agent := userByID(data, agentID); agent != nil {
+			actor = *agent
+		}
+		now := time.Now().UTC()
+		if agentID != "" && issue.Delegate != nil && issue.Delegate.ID == agentID {
+			empty := ""
+			changes, err := applyUpdate(data, issue, domain.IssueUpdateInput{DelegateID: &empty})
+			if err == nil {
+				issue.UpdatedAt = now
+				changes["previousDelegate"], changes["source"] = agentID, codeHost
+				data.Activities[issueID] = append(data.Activities[issueID], domain.ActivityEvent{
+					ID: fmt.Sprintf("activity_%d", now.UnixNano()), Type: "issue.updated", CreatedAt: now, Actor: actor, Metadata: changes,
+					BotActor: &domain.ActorBot{ID: codeHost, Type: actorBotTypeIntegration, UserDisplayName: hostName},
+				})
+			}
+		}
+		appendActivity(data, issueID, activityCodingSessionArchived, actor, map[string]string{"sessionId": session.ID, "agentSessionId": session.AgentSessionID, "agentId": agentID})
+		return nil
+	})
 }
 
 // handleCodingElicitationAnswer applies an answer to a coding elicitation

@@ -2836,6 +2836,8 @@ export const zhCN: Record<string, string> = {
   "assigned the issue to {name}": "将事项指派给了 {name}",
   "changed the assignee": "更改了负责人",
   "removed the delegate": "移除了代理人",
+  "unassigned {name}": "取消了 {name} 的指派",
+  "Session with {name} archived": "与 {name} 的会话已归档",
   "delegated the issue to {name}": "将事项委托给了 {name}",
   "changed the delegate": "更改了代理人",
   "removed the issue from its project": "将事项移出了项目",
