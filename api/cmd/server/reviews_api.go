@@ -233,10 +233,13 @@ func (s *server) submitReview(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) commentOnReview(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Body     string `json:"body"`
-		Path     string `json:"path,omitempty"`
-		Line     int    `json:"line,omitempty"`
-		ParentID string `json:"parentId,omitempty"`
+		Body      string `json:"body"`
+		Path      string `json:"path,omitempty"`
+		Line      int    `json:"line,omitempty"`
+		Side      string `json:"side,omitempty"`
+		StartLine int    `json:"startLine,omitempty"`
+		StartSide string `json:"startSide,omitempty"`
+		ParentID  string `json:"parentId,omitempty"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
@@ -245,9 +248,22 @@ func (s *server) commentOnReview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "comment body is required")
 		return
 	}
+	side, startSide, ok := reviewCommentSides(input.Side, input.StartSide)
+	if !ok || input.Line < 0 || input.StartLine < 0 || (input.StartLine > 0 && input.Line == 0) {
+		writeError(w, http.StatusBadRequest, "invalid comment position")
+		return
+	}
 	id, actor := r.PathValue("id"), requestActor(s, r)
+	data := s.workspaceData(r)
+	current, err := reviewByID(data, id)
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	remote, remoteErr := s.reviewRemoteFor(r.Context(), data, current, false)
 	var updated domain.CodeReview
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "review.commented", id, input, func(data *domain.Bootstrap) error {
+	var eventID string
+	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "review.commented", id, input, func(data *domain.Bootstrap) error {
 		index := reviewIndex(*data, id)
 		if index < 0 {
 			return errNotFound
@@ -255,24 +271,59 @@ func (s *server) commentOnReview(w http.ResponseWriter, r *http.Request) {
 		now := time.Now().UTC()
 		review := data.Reviews[index]
 		event := domain.ReviewEvent{ID: fmt.Sprintf("review_event_%d", now.UnixNano()), Type: "commented", Body: strings.TrimSpace(input.Body), Path: strings.TrimSpace(input.Path), Line: input.Line, Actor: actor, CreatedAt: now}
+		if event.Path != "" && event.Line > 0 {
+			event.Side = side
+			if input.StartLine > 0 && (input.StartLine != input.Line || startSide != side) {
+				event.StartLine, event.StartSide = input.StartLine, startSide
+			}
+		}
 		if parentID := strings.TrimSpace(input.ParentID); parentID != "" {
 			// Replies join the thread root and inherit its code location.
 			root := reviewThreadRoot(review, parentID)
 			if root < 0 {
 				return errInvalid
 			}
-			event.ParentID, event.Path, event.Line, event.Resolved = review.Events[root].ID, review.Events[root].Path, review.Events[root].Line, review.Events[root].Resolved
+			parent := review.Events[root]
+			event.ParentID, event.Path, event.Line, event.Resolved = parent.ID, parent.Path, parent.Line, parent.Resolved
+			event.Side, event.StartLine, event.StartSide = parent.Side, parent.StartLine, parent.StartSide
 		}
+		switch {
+		case remote != nil:
+			event.Sync = &domain.ReviewEventSync{State: "pending", Op: "create", AttemptedAt: now}
+		case remoteErr != nil:
+			event.Sync = &domain.ReviewEventSync{State: "failed", Op: "create", Error: reviewSyncErrorMessage(review.Provider, remoteErr), AttemptedAt: now}
+		}
+		eventID = event.ID
 		review.Events = append(review.Events, event)
 		review.UpdatedAt = now
 		data.Reviews[index], updated = review, review
 		return nil
 	})
+	if err == nil && remote != nil {
+		// The comment is kept either way; a failure is recorded on it.
+		if written, writeErr := s.writeBackReviewChange(r.Context(), workspaceKey(r), remote, updated.ID, eventID); writeErr == nil {
+			updated = written
+		}
+	}
 	respondMutation(w, err, http.StatusCreated, updated)
 }
 
+// reviewCommentSides validates the diff sides of a code comment (LEFT: the
+// old file, RIGHT: the new file, the default).
+func reviewCommentSides(side, startSide string) (string, string, bool) {
+	side, startSide = strings.ToUpper(strings.TrimSpace(side)), strings.ToUpper(strings.TrimSpace(startSide))
+	if side == "" {
+		side = "RIGHT"
+	}
+	if startSide == "" {
+		startSide = side
+	}
+	valid := func(value string) bool { return value == "LEFT" || value == "RIGHT" }
+	return side, startSide, valid(side) && valid(startSide)
+}
+
 // resolveReviewThread marks a review comment thread (its root and replies)
-// as resolved or unresolved.
+// as resolved or unresolved, and resolves the code host thread.
 func (s *server) resolveReviewThread(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Resolved *bool `json:"resolved"`
@@ -285,8 +336,21 @@ func (s *server) resolveReviewThread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, commentID := r.PathValue("id"), r.PathValue("commentId")
+	data := s.workspaceData(r)
+	current, err := reviewByID(data, id)
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	remote, remoteErr := s.reviewRemoteFor(r.Context(), data, current, false)
+	op := "unresolve"
+	if *input.Resolved {
+		op = "resolve"
+	}
 	var updated domain.CodeReview
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "review.thread_resolved", id, input, func(data *domain.Bootstrap) error {
+	var rootID string
+	var push bool
+	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "review.thread_resolved", id, input, func(data *domain.Bootstrap) error {
 		index := reviewIndex(*data, id)
 		if index < 0 {
 			return errNotFound
@@ -296,17 +360,35 @@ func (s *server) resolveReviewThread(w http.ResponseWriter, r *http.Request) {
 		if root < 0 {
 			return errNotFound
 		}
-		rootID := review.Events[root].ID
+		rootID = review.Events[root].ID
 		review.Events = slices.Clone(review.Events)
 		for i := range review.Events {
 			if review.Events[i].ID == rootID || review.Events[i].ParentID == rootID {
 				review.Events[i].Resolved = *input.Resolved
 			}
 		}
-		review.UpdatedAt = time.Now().UTC()
+		now := time.Now().UTC()
+		rootEvent := &review.Events[root]
+		// Code threads that exist on the code host resolve there too; a
+		// thread still being created carries its resolution with it.
+		threadOnHost := rootEvent.Remote != nil && (rootEvent.Remote.Kind == reviewRemoteReviewComment || (rootEvent.Remote.Kind == reviewRemoteNote && rootEvent.Path != ""))
+		if threadOnHost && (rootEvent.Sync == nil || rootEvent.Sync.Op != "create") {
+			switch {
+			case remote != nil:
+				rootEvent.Sync, push = &domain.ReviewEventSync{State: "pending", Op: op, AttemptedAt: now}, true
+			case remoteErr != nil:
+				rootEvent.Sync = &domain.ReviewEventSync{State: "failed", Op: op, Error: reviewSyncErrorMessage(review.Provider, remoteErr), AttemptedAt: now}
+			}
+		}
+		review.UpdatedAt = now
 		data.Reviews[index], updated = review, review
 		return nil
 	})
+	if err == nil && push {
+		if written, writeErr := s.writeBackReviewChange(r.Context(), workspaceKey(r), remote, updated.ID, rootID); writeErr == nil {
+			updated = written
+		}
+	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
 

@@ -65,12 +65,28 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid webhook payload")
 		return
 	}
-	if !normalizeCodeReviewEvent(provider, r.Header, &event) {
+	githubEvent := strings.TrimSpace(r.Header.Get("X-GitHub-Event"))
+	// Comment edits, deletions and thread resolution only update the synced comments.
+	activityOnly := provider == "github" && githubReviewActivityOnly(githubEvent, event.Action)
+	if activityOnly || !normalizeCodeReviewEvent(provider, r.Header, &event) {
+		reviewID, err := s.afterCodeReviewWebhook(r.Context(), workspaceKey(r), provider, githubEvent, body)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "could not persist webhook")
+			return
+		}
+		if reviewID != "" {
+			writeJSON(w, http.StatusAccepted, map[string]any{"reviewId": reviewID, "eventId": eventID})
+			return
+		}
 		writeJSON(w, http.StatusAccepted, map[string]any{"ignored": true, "reason": "event is not a pull/merge request"})
 		return
 	}
 	updated, err := s.applyCodeReviewEvent(r.Context(), workspaceKey(r), provider, eventID, event)
 	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not persist webhook")
+		return
+	}
+	if _, err := s.afterCodeReviewWebhook(r.Context(), workspaceKey(r), provider, githubEvent, body); err != nil {
 		writeError(w, http.StatusInternalServerError, "could not persist webhook")
 		return
 	}
@@ -158,9 +174,8 @@ func (s *server) applyCodeReviewEvent(ctx context.Context, workspace, provider, 
 		if index >= 0 {
 			review := data.Reviews[index]
 			review.Events = append(review.Events, domain.ReviewEvent{ID: eventID, Type: reviewEventType(provider, event), Body: provider, Actor: sender, CreatedAt: now})
-			if len(review.Events) > 100 {
-				review.Events = review.Events[len(review.Events)-100:]
-			}
+			// Bound the delivery trail; synced comments and reviews are kept.
+			review.Events = trimReviewDeliveryEvents(review.Events, 100)
 			data.Reviews[index] = review
 			updated = review
 		}

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { teammate, viewer } from '@/test/fixtures'
 import type { CodeReview } from '@/types/flow'
 import { resolveReviewShortcut } from './pull-request-review-shortcuts'
-import { changedSegments, reviewChecksSummary, reviewCodeThreads, reviewDocsOnly, reviewFileGroups, reviewHeaderStat, reviewPrimaryAction, splitReviewPath, splitSuggestionBody } from './pull-request-review-model'
+import { changedSegments, reviewChecksSummary, reviewCodeThreads, reviewDocsOnly, reviewFileGroups, reviewHeaderStat, reviewPrimaryAction, reviewThreadKey, splitReviewPath, splitSuggestionBody } from './pull-request-review-model'
 
 const base = { id: 'r', slugId: 'r', provider: 'github', externalId: 'r', number: 1, title: 'r', description: '', status: 'open', repositoryOwner: 'o', repositoryName: 'n', url: '', author: teammate, reviewerIds: [viewer.id], teamReviewers: [], issueIds: [], baseBranch: 'main', headBranch: 'h', branchState: 'upToDate', additions: 0, deletions: 0, commitCount: 1, checks: [], files: [], events: [], favorite: false, draft: false, quickToReview: false, createdAt: '', updatedAt: '' } as CodeReview
 const key = (key: string, extra: Partial<KeyboardEvent> = {}) => ({ key, code: /^[a-z]$/i.test(key) ? `Key${key.toUpperCase()}` : '', shiftKey: false, altKey: false, metaKey: false, ctrlKey: false, ...extra })
@@ -39,10 +39,13 @@ describe('pull request review model', () => {
       { id: 'b', type: 'commented', body: 'y', path: 'f', line: 2, parentId: 'a', actor: viewer, createdAt: '' },
       { id: 'c', type: 'commented', body: 'z', path: 'f', line: 5, resolved: true, actor: teammate, createdAt: '' },
       { id: 'd', type: 'commented', body: 'general', actor: teammate, createdAt: '' },
+      { id: 'e', type: 'commented', body: 'removed?', path: 'f', line: 2, side: 'LEFT', actor: teammate, createdAt: '' },
     ] })
-    expect(threads.get('f:2')?.map(thread => [thread.root.id, thread.replies.map(reply => reply.id)])).toEqual([['a', ['b']]])
-    expect(threads.get('f:5')?.[0].resolved).toBe(true)
-    expect(threads.size).toBe(2)
+    expect(threads.get(reviewThreadKey('f', undefined, 2))?.map(thread => [thread.root.id, thread.replies.map(reply => reply.id)])).toEqual([['a', ['b']]])
+    expect(threads.get('f:RIGHT:5')?.[0].resolved).toBe(true)
+    // A comment on the old side of line 2 is its own thread.
+    expect(threads.get('f:LEFT:2')?.map(thread => thread.root.id)).toEqual(['e'])
+    expect(threads.size).toBe(3)
   })
   it('resolves reference review shortcuts, including sequences', () => {
     expect(resolveReviewShortcut(key('r'), null)).toEqual({ prefix: 'r' })

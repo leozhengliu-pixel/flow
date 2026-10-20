@@ -752,7 +752,8 @@ as supported.
 Configuration: `FLOW_GITHUB_APP_*` (§8). Required App permissions: Contents RW, Pull requests RW, Metadata R,
 Checks R, Actions R, Commit statuses R, Issues R (for links), Workflows RW (only if agents may edit
 `.github/workflows`; off by default). Events: installation, installation_repositories, pull_request,
-pull_request_review, pull_request_review_comment, issue_comment, check_suite, check_run, push. Webhook URL:
+pull_request_review, pull_request_review_comment, pull_request_review_thread (review thread resolution for the
+Reviews sync), issue_comment, check_suite, check_run, push. Webhook URL:
 `{FLOW_APP_URL}/api/integrations/github-app/webhook`. Setup URL: `/api/integrations/github-app/setup`.
 
 **Install flow:** Settings › Integrations › GitHub › "Install GitHub App" calls `POST /install`, which returns

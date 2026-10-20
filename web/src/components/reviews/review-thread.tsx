@@ -1,10 +1,10 @@
-import { ArrowUp, ChevronsUpDown, CircleCheck, RotateCcw } from "lucide-react";
+import { AlertCircle, ArrowUp, ChevronsUpDown, CircleCheck, LoaderCircle, RotateCcw } from "lucide-react";
 import { useState } from "react";
 
 import { MentionBody } from "@/components/editor/mentions/mention-body";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useI18n } from "@/i18n/i18n";
-import { commentOnReview, resolveReviewThread } from "@/lib/api";
+import { commentOnReview, resolveReviewThread, syncReview } from "@/lib/api";
 import { targetCommentHash } from "@/lib/review-comment-navigation";
 import { toast } from "@/lib/toast";
 import type { CodeReview, ReviewEvent, User } from "@/types/flow";
@@ -80,6 +80,7 @@ export function ReviewThread({
               reply={index > 0}
               target={target}
               resolve={index === 0 ? { resolved: thread.resolved, busy, onToggle: toggleResolved } : undefined}
+              onReload={onReload}
             />
           ))}
           <div className="review-thread-reply">
@@ -113,12 +114,14 @@ function ReviewThreadComment({
   reply,
   target,
   resolve,
+  onReload,
 }: {
   review: CodeReview;
   comment: ReviewEvent;
   reply: boolean;
   target?: SuggestionTarget;
   resolve?: { resolved: boolean; busy: boolean; onToggle: () => void };
+  onReload: () => Promise<void>;
 }) {
   const { t } = useI18n();
   const actor = comment.actor.displayName || comment.actor.name;
@@ -131,6 +134,8 @@ function ReviewThreadComment({
         <time dateTime={comment.createdAt} title={new Date(comment.createdAt).toLocaleString()}>
           {age === "just now" ? t("just now") : age.replace(/ ago$/, ` ${t("ago")}`)}
         </time>
+        {!reply && comment.outdated && <span className="review-thread-outdated">{t("Outdated")}</span>}
+        <ReviewSyncState review={review} event={comment} onReload={onReload} />
         <span className="review-thread-actions">
           {resolve && (
             <button
@@ -181,5 +186,48 @@ export function ReviewCommentBody({ body, target, className = "review-thread-bod
         ),
       )}
     </>
+  );
+}
+
+/**
+ * Shows a local change the code host has not confirmed: "Syncing…" while it is
+ * sent, or "Not synced to GitHub" with the error and a Retry action.
+ */
+export function ReviewSyncState({ review, event, onReload }: { review: CodeReview; event: ReviewEvent; onReload: () => Promise<void> }) {
+  const { t } = useI18n();
+  const [busy, setBusy] = useState(false);
+  const sync = event.sync;
+  if (!sync) return null;
+  const host = review.provider === "gitlab" ? "GitLab" : "GitHub";
+  if (sync.state === "pending") {
+    return (
+      <span className="review-sync-state is-pending">
+        <LoaderCircle />
+        {t("Syncing…")}
+      </span>
+    );
+  }
+  const retry = async () => {
+    setBusy(true);
+    try {
+      const updated = await syncReview(review.id, true);
+      await onReload();
+      const after = updated.events.find((item) => item.id === event.id);
+      if (after?.sync?.state === "failed") toast.error(after.sync.error ?? t("Could not sync with the code host"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("Could not sync with the code host"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const label = t(sync.op === "create" ? "Not synced to {host}" : "Thread state not synced to {host}").replace("{host}", host);
+  return (
+    <span className="review-sync-state is-failed" title={sync.error}>
+      <AlertCircle />
+      <span>{label}</span>
+      <button type="button" className="review-sync-retry" disabled={busy} onClick={() => void retry()}>
+        {t("Retry")}
+      </button>
+    </span>
   );
 }

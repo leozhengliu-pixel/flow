@@ -1938,18 +1938,55 @@ type ReviewFile struct {
 	Patch     string `json:"patch"`
 	// PreviousPath is the old path of a renamed or moved file.
 	PreviousPath string `json:"previousPath,omitempty"`
+	// PatchUnavailable: the code host sent no patch although the file
+	// changed (binary or too large to diff).
+	PatchUnavailable bool `json:"patchUnavailable,omitempty"`
+}
+
+// ReviewEventRemote is the code host object a review event mirrors, so
+// syncs and webhooks update it in place instead of duplicating it.
+type ReviewEventRemote struct {
+	Provider string `json:"provider"`
+	// Kind: review_comment (inline), issue_comment, review (GitHub) or note (GitLab).
+	Kind string `json:"kind"`
+	ID   string `json:"id"`
+	// ThreadID is the GitHub review thread node id or the GitLab discussion id.
+	ThreadID string `json:"threadId,omitempty"`
+	URL      string `json:"url,omitempty"`
+}
+
+// ReviewEventSync is a local change not yet confirmed by the code host.
+type ReviewEventSync struct {
+	State string `json:"state"` // pending | failed
+	// Op is what has to reach the code host: create | resolve | unresolve.
+	Op          string    `json:"op"`
+	Error       string    `json:"error,omitempty"`
+	AttemptedAt time.Time `json:"attemptedAt"`
 }
 
 type ReviewEvent struct {
-	ID        string    `json:"id"`
-	Type      string    `json:"type"`
-	Body      string    `json:"body,omitempty"`
-	ParentID  string    `json:"parentId,omitempty"`
-	Path      string    `json:"path,omitempty"`
-	Line      int       `json:"line,omitempty"`
-	Resolved  bool      `json:"resolved,omitempty"`
-	Actor     User      `json:"actor"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Body     string `json:"body,omitempty"`
+	ParentID string `json:"parentId,omitempty"`
+	Path     string `json:"path,omitempty"`
+	Line     int    `json:"line,omitempty"`
+	// Side is the diff side a code comment is on: LEFT (the old file, e.g. a
+	// removed line) or RIGHT (the new file, the default).
+	Side string `json:"side,omitempty"`
+	// StartLine/StartSide start a multi-line comment range ending at Line.
+	StartLine int    `json:"startLine,omitempty"`
+	StartSide string `json:"startSide,omitempty"`
+	// Outdated: the commented code changed since (Line is the original line).
+	Outdated  bool               `json:"outdated,omitempty"`
+	CommitID  string             `json:"commitId,omitempty"`
+	DiffHunk  string             `json:"diffHunk,omitempty"`
+	Resolved  bool               `json:"resolved,omitempty"`
+	Actor     User               `json:"actor"`
+	CreatedAt time.Time          `json:"createdAt"`
+	UpdatedAt *time.Time         `json:"updatedAt,omitempty"`
+	Remote    *ReviewEventRemote `json:"remote,omitempty"`
+	Sync      *ReviewEventSync   `json:"sync,omitempty"`
 }
 
 type CodeReview struct {
@@ -1978,13 +2015,21 @@ type CodeReview struct {
 	Files           []ReviewFile    `json:"files"`
 	Events          []ReviewEvent   `json:"events"`
 	Previews        []DeployPreview `json:"previews,omitempty"`
-	Favorite        bool            `json:"favorite"`
-	Draft           bool            `json:"draft"`
-	QuickToReview   bool            `json:"quickToReview"`
-	CreatedAt       time.Time       `json:"createdAt"`
-	UpdatedAt       time.Time       `json:"updatedAt"`
-	MergedAt        *time.Time      `json:"mergedAt,omitempty"`
-	ClosedAt        *time.Time      `json:"closedAt,omitempty"`
+	// HeadSHA/BaseSHA/StartSHA are the diff refs inline comments are created against.
+	HeadSHA  string `json:"headSha,omitempty"`
+	BaseSHA  string `json:"baseSha,omitempty"`
+	StartSHA string `json:"startSha,omitempty"`
+	// SyncedAt is the last full sync of files and comments from the code
+	// host; SyncError the reason the last one failed.
+	SyncedAt      *time.Time `json:"syncedAt,omitempty"`
+	SyncError     string     `json:"syncError,omitempty"`
+	Favorite      bool       `json:"favorite"`
+	Draft         bool       `json:"draft"`
+	QuickToReview bool       `json:"quickToReview"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
+	MergedAt      *time.Time `json:"mergedAt,omitempty"`
+	ClosedAt      *time.Time `json:"closedAt,omitempty"`
 }
 
 // DeployPreview is one environment deployment for a pull request's head

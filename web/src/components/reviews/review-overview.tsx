@@ -13,7 +13,7 @@ import { toast } from "@/lib/toast";
 import type { BootstrapData, CodeReview, Issue, ReviewEvent, User } from "@/types/flow";
 
 import { PullRequestCommentActions } from "./pull-request-comment-actions";
-import { ReviewCommentBody } from "./review-thread";
+import { ReviewCommentBody, ReviewSyncState } from "./review-thread";
 import { reviewChecksSummary, reviewCodeThreads, reviewFileGroups, splitReviewPath } from "./pull-request-review-model";
 import { reviewStatus, reviewStatusLabels, reviewTimeAgo } from "./review-list-model";
 import { reviewProviderNoun } from "./review-provider-model";
@@ -420,6 +420,7 @@ function ReviewActivityCard({
                   {t(chip)}
                 </span>
               )}
+              <ReviewSyncState review={review} event={comment} onReload={onReload} />
               <PullRequestCommentActions event={comment} reviewId={review.id} issueIds={review.issueIds} reviewUrl={review.url} />
             </header>
             {comment.body ? <ReviewCommentBody className="review-activity-body" body={comment.body} /> : null}

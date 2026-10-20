@@ -1,0 +1,28 @@
+{
+ "id": 4930193411,
+ "number": 8,
+ "title": "Move arithmetic into lib/ and add squares table",
+ "body": "Renames src/math.js to lib/arithmetic.js, removes the old test, adds a 400-line generated table.",
+ "html_url": "https://github.com/jiaozongben/flow-coding-test/pull/8",
+ "state": "open",
+ "draft": false,
+ "merged": false,
+ "merged_at": null,
+ "additions": 410,
+ "deletions": 12,
+ "commits": 1,
+ "changed_files": 5,
+ "head": {
+  "ref": "review/restructure",
+  "sha": "c0f69e041d76246e7474b962eb44bffd2bfca6ff"
+ },
+ "base": {
+  "ref": "main",
+  "sha": "d8b57bf356d6e15c2d0ead5b0567d9d841192621"
+ },
+ "user": {
+  "login": "jiaozongben",
+  "avatar_url": "https://avatars.githubusercontent.com/u/12377698?v=4",
+  "type": "User"
+ }
+}

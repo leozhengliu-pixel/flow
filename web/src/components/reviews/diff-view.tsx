@@ -19,7 +19,7 @@ import { toast } from "@/lib/toast";
 import type { CodeReview, User } from "@/types/flow";
 
 import { useOptionalPullRequestReviewShortcuts } from "./pull-request-review-shortcuts";
-import { changedSegments, reviewCodeThreads, splitReviewPath } from "./pull-request-review-model";
+import { changedSegments, reviewCodeThreads, reviewThreadKey, splitReviewPath } from "./pull-request-review-model";
 import { DiffCounts } from "./review-overview";
 import { ReviewThread } from "./review-thread";
 import "@/components/project-detail/project-action-menu.css";
@@ -278,7 +278,8 @@ export function DiffView({
               const splitRows = computed?.splitRows ?? pairDiffLines(lines);
               const isCollapsed = collapsed.has(file.path);
               const isReviewed = reviewed.has(file.path);
-              const lineContent = (line: number) => lines.find((item) => item.newNumber === line)?.content;
+              const lineContent = (line: number, side: "LEFT" | "RIGHT") =>
+                lines.find((item) => (side === "LEFT" ? item.kind !== "add" && item.oldNumber === line : item.newNumber === line))?.content;
               return (
                 <article key={file.path} data-diff-file={file.path} data-diff-kind={file.kind} onMouseEnter={() => setHovered(file.path)}>
                   <header>
@@ -307,7 +308,9 @@ export function DiffView({
                     </label>
                     <FileActions path={file.path} url={review.url} />
                   </header>
-                  {isCollapsed ? null : file.kind === "pdf" ? (
+                  {isCollapsed ? null : !lines.length && sourceFile(file.path)?.patchUnavailable ? (
+                    <div className="review-diff-empty">{t("This diff is too large to display")}</div>
+                  ) : file.kind === "pdf" ? (
                     <div className="review-diff-empty">{t("PDF preview is not available in Reviews yet")}</div>
                   ) : file.kind === "binary" ? (
                     <div className="review-diff-empty">{t("Binary file changed")}</div>
@@ -341,18 +344,19 @@ export function DiffView({
                           content: value.content,
                         })
                       }
-                      renderAfterLine={(line) => {
-                        const lineThreads = threads.get(`${file.path}:${line}`) ?? [];
-                        const composing = commentLine?.path === file.path && commentLine.line === line;
+                      renderAfterLine={(line, side) => {
+                        const lineThreads = threads.get(reviewThreadKey(file.path, side, line)) ?? [];
+                        const composing = commentLine?.path === file.path && commentLine.line === line && commentLine.side === side;
                         if (!lineThreads.length && !composing) return null;
                         return (
                           <>
                             {lineThreads.map((thread) => (
-                              <ReviewThread key={thread.root.id} review={review} thread={thread} originalLine={lineContent(line)} viewer={viewer} onReload={onReload} />
+                              <ReviewThread key={thread.root.id} review={review} thread={thread} originalLine={lineContent(line, side)} viewer={viewer} onReload={onReload} />
                             ))}
                             {composing && (
                               <DiffInlineComposer
                                 line={line}
+                                side={side}
                                 body={commentBody}
                                 busy={commentBusy}
                                 onBodyChange={setCommentBody}

@@ -222,7 +222,7 @@ Coding sessions on GitHub need a GitHub App, because only an App can mint short-
    - **Webhook URL**: `https://flow.example.com/api/integrations/github-app/webhook`, active.
    - **Webhook secret**: the value of `FLOW_GITHUB_APP_WEBHOOK_SECRET` (`openssl rand -hex 32`).
 3. Repository permissions: Contents **Read and write**, Pull requests **Read and write**, Metadata **Read**, Checks **Read**, Actions **Read**, Commit statuses **Read**, Issues **Read**. Add Workflows **Read and write** only if agents may edit `.github/workflows` (off by default).
-4. Subscribe to events: Installation, Installation repositories (sent automatically), Pull request, Pull request review, Pull request review comment, Issue comment, Check suite, Check run, Push.
+4. Subscribe to events: Installation, Installation repositories (sent automatically), Pull request, Pull request review, Pull request review comment, Pull request review thread, Issue comment, Check suite, Check run, Push. Reviews mirror pull request files, inline comment threads (with their resolution), conversation comments and reviews, and send comments, replies and thread resolution made in Flow back to GitHub; "Pull request review thread" keeps resolution in sync.
 5. **Where can this GitHub App be installed?** Only on this account, unless several organizations share Flow.
 6. Create the App. Note the **App ID**, the **slug** (from the App's URL), the **Client ID**, and generate a **client secret**.
 7. **Generate a private key** and store it as a Secret (`flow-github-app`, key `private-key.pem`), then reference it with `coding.githubApp.privateKeySecret`. Put the webhook and client secrets in `flow-env`.

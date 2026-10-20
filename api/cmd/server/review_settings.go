@@ -21,6 +21,12 @@ type reviewProvider struct {
 }
 
 func (s *server) reviewProvider(ctx context.Context, data domain.Bootstrap, review domain.CodeReview) (*reviewProvider, error) {
+	return s.reviewProviderFor(ctx, data, review, false)
+}
+
+// reviewProviderFor resolves the classic connection's credentials for a
+// review; readOnly accepts a read-only GitLab token (the review sync reads).
+func (s *server) reviewProviderFor(ctx context.Context, data domain.Bootstrap, review domain.CodeReview, readOnly bool) (*reviewProvider, error) {
 	if review.Provider != "github" && review.Provider != "gitlab" {
 		return nil, nil
 	}
@@ -36,7 +42,7 @@ func (s *server) reviewProvider(ctx context.Context, data domain.Bootstrap, revi
 			// Token connections: the validated access token and its GitLab URL
 			// live in encrypted connector storage.
 			if credential, err := s.gitlabCredential(ctx, data.Workspace.URLKey, connection.ID); err == nil {
-				if connection.Config["readonly"] == "true" {
+				if connection.Config["readonly"] == "true" && !readOnly {
 					return nil, fmt.Errorf("the GitLab access token is read-only (read_api scope)")
 				}
 				return &reviewProvider{base: credential.URL + "/api/v4", token: credential.Token, resource: fmt.Sprintf("/projects/%s/merge_requests/%d", url.PathEscape(review.RepositoryOwner+"/"+review.RepositoryName), review.Number), provider: "gitlab", allowLocal: s.authDisabled}, nil
