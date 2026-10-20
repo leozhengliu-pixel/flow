@@ -453,7 +453,7 @@ func TestReviewActionsActAsTheMember(t *testing.T) {
 	f.gitlab.mu.Lock()
 	f.gitlab.forbidden["glpat-member"] = true
 	f.gitlab.mu.Unlock()
-	if rec := f.do(http.MethodPost, "/api/reviews/"+review.ID+"/submit?workspace=test-workspace", map[string]string{"decision": "approve"}); rec.Code != http.StatusBadGateway {
+	if rec := f.do(http.MethodPost, "/api/reviews/"+review.ID+"/submit?workspace=test-workspace", map[string]string{"decision": "approve"}); rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "can't make this change") {
 		t.Fatalf("forbidden approval: %d %s", rec.Code, rec.Body.String())
 	}
 	if posts := f.gitlab.postsSnapshot(); slices.Contains(posts, "approve "+testWorkspaceToken) {

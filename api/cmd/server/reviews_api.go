@@ -213,7 +213,13 @@ func (s *server) submitReview(w http.ResponseWriter, r *http.Request) {
 	// else the workspace integration).
 	postedAs, remoteRef, err := s.postReviewDecision(r.Context(), data, current, actor, input.Decision, input.Body)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		// The code host refusing the decision (for example approving your
+		// own pull request) is not an outage.
+		status := http.StatusBadGateway
+		if code := reviewRemoteStatus(err); code == http.StatusForbidden || code == http.StatusNotFound || code == http.StatusUnprocessableEntity {
+			status = http.StatusUnprocessableEntity
+		}
+		writeError(w, status, err.Error())
 		return
 	}
 	var updated domain.CodeReview

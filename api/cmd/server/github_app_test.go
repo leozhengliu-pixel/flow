@@ -357,3 +357,21 @@ func TestConfiguredGitHubEndpointsSkipThePublicAddressCheck(t *testing.T) {
 		t.Fatal("an unconfigured host that does not resolve publicly must be refused")
 	}
 }
+
+// GitHub explains refusals such as approving your own pull request in
+// "errors"; Flow shows that instead of a bare "Unprocessable Entity".
+func TestReviewRemoteErrorTextKeepsTheHostsReason(t *testing.T) {
+	cases := map[string]string{
+		`{"message":"Unprocessable Entity","errors":["Can not approve your own pull request"]}`:         "Unprocessable Entity: Can not approve your own pull request",
+		`{"message":"Validation Failed","errors":[{"resource":"Issue","code":"custom","message":"x"}]}`: "Validation Failed: x",
+		`{"message":"Not Found"}`:        "Not Found",
+		`{"error":"insufficient_scope"}`: "insufficient_scope",
+		`{"message":["Not allowed"]}`:    "[Not allowed]",
+		`not json`:                       "",
+	}
+	for raw, want := range cases {
+		if got := reviewRemoteErrorText([]byte(raw)); got != want {
+			t.Errorf("%s: %q, want %q", raw, got, want)
+		}
+	}
+}

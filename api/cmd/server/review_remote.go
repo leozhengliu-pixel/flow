@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +41,43 @@ func (e *reviewRemoteError) Error() string {
 		return fmt.Sprintf("%s: HTTP %d", e.Provider, e.Status)
 	}
 	return fmt.Sprintf("%s: HTTP %d: %s", e.Provider, e.Status, e.Message)
+}
+
+// reviewRemoteErrorText is a code host's error message, with the details
+// GitHub puts in "errors" (strings or objects with a message), such as
+// "Can not approve your own pull request" behind a bare 422.
+func reviewRemoteErrorText(raw []byte) string {
+	var body struct {
+		Message any               `json:"message"`
+		Error   string            `json:"error"`
+		Errors  []json.RawMessage `json:"errors"`
+	}
+	_ = json.Unmarshal(raw, &body)
+	text := body.Error
+	if body.Message != nil {
+		text = fmt.Sprint(body.Message)
+	}
+	details := []string{}
+	for _, item := range body.Errors {
+		var detail string
+		if json.Unmarshal(item, &detail) != nil {
+			var object struct {
+				Message string `json:"message"`
+			}
+			_ = json.Unmarshal(item, &object)
+			detail = object.Message
+		}
+		if detail = strings.TrimSpace(detail); detail != "" && !slices.Contains(details, detail) {
+			details = append(details, detail)
+		}
+	}
+	if len(details) == 0 {
+		return text
+	}
+	if text == "" {
+		return strings.Join(details, "; ")
+	}
+	return text + ": " + strings.Join(details, "; ")
 }
 
 // reviewRemoteStatus is the HTTP status behind a remote error (0 when the
@@ -209,16 +247,7 @@ func (provider *reviewProvider) call(ctx context.Context, method, endpoint strin
 		return fmt.Errorf("repository API response could not be read: %w", err)
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		var message struct {
-			Message any    `json:"message"`
-			Error   string `json:"error"`
-		}
-		_ = json.Unmarshal(raw, &message)
-		text := message.Error
-		if message.Message != nil {
-			text = fmt.Sprint(message.Message)
-		}
-		return &reviewRemoteError{Provider: provider.provider, Status: response.StatusCode, Message: text}
+		return &reviewRemoteError{Provider: provider.provider, Status: response.StatusCode, Message: reviewRemoteErrorText(raw)}
 	}
 	if strings.HasSuffix(endpoint, "/graphql") {
 		var envelope struct {
