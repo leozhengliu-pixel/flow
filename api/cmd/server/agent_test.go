@@ -207,8 +207,9 @@ func TestAgentSessionWriteToolsRunWithoutApproval(t *testing.T) {
 	}
 }
 
-// A connector tool that declares itself destructive waits for the user in chat.
-func TestAgentSessionDestructiveConnectorToolsRequireApproval(t *testing.T) {
+// A call to a connector set to always ask waits for the user in chat, even for a tool the server marks
+// destructive (which otherwise runs at once).
+func TestAgentSessionAskingConnectorToolsRequireApproval(t *testing.T) {
 	var providerCalls, connectorCalls, toolCount atomic.Int32
 	toolCount.Store(3)
 	upstream := fakeCodeMCP(t, &connectorCalls, &toolCount)
@@ -232,7 +233,7 @@ func TestAgentSessionDestructiveConnectorToolsRequireApproval(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repository.Close()
-	setTestConnectors(t, repository, applicationPolicy{ID: "code", Kind: "mcp", Name: "Code search", URL: upstream.URL, Status: "approved", Shared: true})
+	setTestConnectors(t, repository, applicationPolicy{ID: "code", Kind: "mcp", Name: "Code search", URL: upstream.URL, Status: "approved", Shared: true, ToolApproval: connectorToolApprovalAlways})
 	s := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true, agent: appconfig.AgentConfig{Enabled: true, Protocol: "openai-responses", BaseURL: provider.URL, Model: "flow-test", MaxOutputTokens: 256, ToolsEnabled: true, WriteTools: true}, agentClient: provider.Client()}
 	handler := newHandler(s)
 	defer s.stopDeliveryScheduler(context.Background())

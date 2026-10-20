@@ -36,7 +36,7 @@ export const agentRuntimeZhCN: Record<string, string> = {
   "Ask before running tools": "运行工具前询问",
   "Run tools automatically": "自动运行工具",
   "Flow Agent asks before every call to this connector's tools": "Flow Agent 每次调用此连接器的工具前都会询问",
-  "Flow Agent runs this connector's tools without asking, except tools the server marks as destructive": "Flow Agent 无需询问即可运行此连接器的工具，服务器标记为破坏性的工具除外",
+  "Flow Agent runs this connector's tools without asking": "Flow Agent 无需询问即可运行此连接器的工具",
   "Saving {subject}…": "正在保存{subject}…",
   "Searching the web…": "正在搜索网页…",
   "Something else…": "其他…",

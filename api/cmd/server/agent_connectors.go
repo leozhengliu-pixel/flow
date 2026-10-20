@@ -20,16 +20,13 @@ type connectorTool struct {
 	Definition agentProviderTool
 	Policy     applicationPolicy
 	RemoteName string
-	// ReadOnly and Destructive are the tool's MCP annotations (readOnlyHint, destructiveHint). Destructive is
-	// true only when the server declares it: a tool without annotations is not treated as destructive.
-	ReadOnly, Destructive bool
 }
 type connectorToolsKey struct{}
 
-// needsApproval reports whether a call to the tool waits for the user. Connector tools run automatically
-// unless their connector is set to always ask, or the tool declares itself destructive and not read-only.
+// needsApproval reports whether a call to the tool waits for the user. Connector tools run automatically,
+// whatever their MCP annotations say, unless their connector is set to always ask.
 func (t connectorTool) needsApproval() bool {
-	return t.Policy.ToolApproval == connectorToolApprovalAlways || t.Destructive && !t.ReadOnly
+	return t.Policy.ToolApproval == connectorToolApprovalAlways
 }
 
 const (
@@ -236,10 +233,6 @@ func (s *server) discoverConnectorTools(ctx context.Context, data domain.Bootstr
 					Name        string          `json:"name"`
 					Description string          `json:"description"`
 					InputSchema json.RawMessage `json:"inputSchema"`
-					Annotations *struct {
-						ReadOnlyHint    *bool `json:"readOnlyHint"`
-						DestructiveHint *bool `json:"destructiveHint"`
-					} `json:"annotations"`
 				} `json:"tools"`
 				NextCursor string `json:"nextCursor"`
 			}
@@ -252,12 +245,7 @@ func (s *server) discoverConnectorTools(ctx context.Context, data domain.Bootstr
 					return nil, fmt.Errorf("invalid MCP tool definition")
 				}
 				hash := sha256.Sum256([]byte(policy.ID + "\x00" + tool.Name))
-				item := connectorTool{Definition: agentProviderTool{Name: fmt.Sprintf("external_%x", hash[:16]), Description: truncateSettingsText(policy.Name+": "+tool.Description, 2000), Parameters: tool.InputSchema, Access: "write"}, Policy: policy, RemoteName: tool.Name}
-				if annotations := tool.Annotations; annotations != nil {
-					item.ReadOnly = annotations.ReadOnlyHint != nil && *annotations.ReadOnlyHint
-					item.Destructive = annotations.DestructiveHint != nil && *annotations.DestructiveHint
-				}
-				items = append(items, item)
+				items = append(items, connectorTool{Definition: agentProviderTool{Name: fmt.Sprintf("external_%x", hash[:16]), Description: truncateSettingsText(policy.Name+": "+tool.Description, 2000), Parameters: tool.InputSchema, Access: "write"}, Policy: policy, RemoteName: tool.Name})
 				if len(items) > maxConnectorTools {
 					return nil, fmt.Errorf("too many MCP tools (maximum %d)", maxConnectorTools)
 				}

@@ -174,7 +174,7 @@ The worker iterates the `StreamedRunResult` and produces activities (`agent-work
 ### 6.2 Approvals: `needsApproval`, `RunState` and the policy port
 
 `agent-worker/src/policy.ts` ports `agent_approval_policy.go` and `agentToolNeedsApproval`:
-- `external_*` connector tools ask only when the tool declares `destructiveHint: true` without `readOnlyHint: true`, or its connector is set to always ask (`toolApproval: "always"`); everything else runs automatically. Until `/mcp` passes a connector tool's annotations and connector setting to the worker, the worker's port keeps asking for every `external_*` call;
+- `external_*` connector tools ask only when their connector is set to always ask (`toolApproval: "always"`), whatever the tool's annotations; everything else runs automatically. Until `/mcp` passes a connector's setting to the worker, the worker's port keeps asking for every `external_*` call;
 - a model turn whose `delete_*` calls name two or more targets asks once for the whole turn; a second sequential delete in one request asks once for the rest of the request;
 - a new `save_status_update` the user did not ask to post asks;
 - a request that is itself an approval word ("yes", "批准") never asks again.
