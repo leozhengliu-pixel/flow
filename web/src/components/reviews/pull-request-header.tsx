@@ -48,6 +48,8 @@ export function PullRequestHeader({
   onMerge,
   returnPath,
   actions,
+  tabSearch = "",
+  tabActions,
 }: {
   data: BootstrapData;
   review: CodeReview;
@@ -65,6 +67,10 @@ export function PullRequestHeader({
   onMerge: (method: MergeMethod) => Promise<void>;
   returnPath?: string;
   actions?: ReactNode;
+  /** Kept on the tab links (`?showAgent=true&agentSessionId=…`), so the agent panel stays open across tabs. */
+  tabSearch?: string;
+  /** Controls at the end of the tabs row (the agent panel toggle). */
+  tabActions?: ReactNode;
 }) {
   const { t } = useI18n();
   const passed = review.checks.every(
@@ -162,10 +168,10 @@ export function PullRequestHeader({
             <a
               className={tab === value ? "active" : ""}
               key={value}
-              href={reviewPath(data.workspace.urlKey, review, value)}
+              href={reviewPath(data.workspace.urlKey, review, value) + tabSearch}
               onClick={(event) => {
                 event.preventDefault();
-                onNavigate(reviewPath(data.workspace.urlKey, review, value));
+                onNavigate(reviewPath(data.workspace.urlKey, review, value) + tabSearch);
               }}
             >
               {t(value === "overview" ? "Overview" : value === "review" ? "Guide" : "Diff")}
@@ -221,6 +227,7 @@ export function PullRequestHeader({
         >
           {t("Submit review")}
         </button>
+        {tabActions}
       </div>
     </>
   );

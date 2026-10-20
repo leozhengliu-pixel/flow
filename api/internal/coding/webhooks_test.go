@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -316,9 +317,63 @@ func TestWebhookMergedAndClosed(t *testing.T) {
 	closed.ChangeRequest.State = "open" // some hosts send the pre-close state
 	result = f.deliver(t, f.github, closed)
 	for _, action := range result.Actions {
-		if action == WebhookSessionEnded {
-			t.Fatalf("closed must not end sessions: %+v", result)
+		if action == WebhookSessionEnded || action == WebhookSessionArchive {
+			t.Fatalf("closing a merged PR must not end or archive sessions: %+v", result)
 		}
+	}
+}
+
+type recordingArchiver struct{ archived []domain.CodingSession }
+
+func (a *recordingArchiver) SessionArchived(_ context.Context, session domain.CodingSession, codeHost string) error {
+	if codeHost != "github" {
+		return errors.New("code host = " + codeHost)
+	}
+	a.archived = append(a.archived, session)
+	return nil
+}
+
+func TestWebhookClosedArchivesSession(t *testing.T) {
+	f := newWebhookFixture(t)
+	archiver := &recordingArchiver{}
+	f.dispatcher.Archiver = archiver
+	session := f.linkedSession(t, "flow/eng-1")
+	idle := f.store.sessions[session.ID]
+	idle.Phase, idle.State = domain.CodingPhaseIdle, domain.CodingSessionComplete
+	f.store.sessions[session.ID] = idle
+
+	closed := ghEvent(codehost.EventChangeRequestClosed, "flow/eng-1", "", "alice")
+	closed.ChangeRequest.State = "closed"
+	result := f.deliver(t, f.github, closed)
+	if !slices.Contains(result.Actions, WebhookSessionArchive) || !slices.Contains(result.Actions, WebhookSessionEnded) {
+		t.Fatalf("result = %+v", result)
+	}
+	got, _ := f.store.CodingSession(context.Background(), "ws", session.ID)
+	if got.ArchivedAt == nil || got.Phase != domain.CodingPhaseDone || got.State != domain.CodingSessionComplete {
+		t.Fatalf("session = %+v", got)
+	}
+	if len(archiver.archived) != 1 || archiver.archived[0].ID != session.ID || archiver.archived[0].IssueID != "i1" {
+		t.Fatalf("archived = %+v", archiver.archived)
+	}
+	// A redelivery archives nothing again.
+	if result = f.deliver(t, f.github, closed); slices.Contains(result.Actions, WebhookSessionArchive) || len(archiver.archived) != 1 {
+		t.Fatalf("redelivery = %+v, archived %d", result, len(archiver.archived))
+	}
+}
+
+func TestWebhookClosedStopsBusySession(t *testing.T) {
+	f := newWebhookFixture(t)
+	session := f.linkedSession(t, "flow/eng-1")
+	busy := f.store.sessions[session.ID]
+	busy.Phase, busy.State = domain.CodingPhaseRunning, domain.CodingSessionActive
+	f.store.sessions[session.ID] = busy
+
+	closed := ghEvent(codehost.EventChangeRequestClosed, "flow/eng-1", "", "alice")
+	closed.ChangeRequest.State = "closed"
+	f.deliver(t, f.github, closed)
+	got, _ := f.store.CodingSession(context.Background(), "ws", session.ID)
+	if got.ArchivedAt == nil || !got.StopRequested || got.Phase != domain.CodingPhaseRunning {
+		t.Fatalf("session = %+v", got)
 	}
 }
 

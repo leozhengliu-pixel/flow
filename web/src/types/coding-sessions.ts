@@ -152,6 +152,14 @@ export interface CodingArtifact {
   turnId?: string; activityId?: string; group?: string; contentUrl?: string; expiresAt?: string;
 }
 
+/** One tool step of a turn: the tool ("Bash", "Edit") and its argument. */
+export interface CodingSessionStep {
+  turnId?: string;
+  action: string;
+  parameter?: string;
+  at: string;
+}
+
 export interface CodingSession {
   id: string;
   /** The AgentTask anchor; activities are read through the agent session API. */
@@ -167,6 +175,10 @@ export interface CodingSession {
   harness: CodingHarness;
   modelSelection: string;
   model?: string;
+  /** Why Auto routed the session to `model`. */
+  modelReason?: string;
+  /** The next more capable model, offered as "Start over with <model>". */
+  escalationModel?: string;
   reasoningEffort?: CodingReasoningEffort;
   region?: string;
   displayTitle?: string;
@@ -209,6 +221,10 @@ export interface CodingSession {
   currentTurnId?: string;
   lastTurnId?: string;
   turnStartedAt?: string;
+  /** The running turn's latest tool step (the status row's live line). */
+  currentStep?: CodingSessionStep;
+  /** Set when the session was archived (its pull request closed without merging). */
+  archivedAt?: string;
   runningMillis?: number;
   harnessResumeId?: string;
   headSha?: string;

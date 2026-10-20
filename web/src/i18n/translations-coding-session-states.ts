@@ -17,6 +17,7 @@ export const codingSessionStatesZhCN: Record<string, string> = {
   "The request may not have reached the agent": "请求可能未送达 Agent",
   "Send stop request": "发送停止请求",
   "Start over with {model}": "使用 {model} 重新开始",
+  "Started over": "已重新开始",
   "Could not stop the session": "无法停止会话",
   // Work groups and durations
   "Working…": "工作中…",

@@ -3,7 +3,6 @@
    48px header, 18px avatar with a 6px status dot, 12/500 day label, error card with a fading danger gradient,
    right-aligned 8px-radius prompt bubbles, 40px status row with a running timer. */
 .coding-session-phase,.coding-session-muted{color:var(--theme-text-tertiary)}
-.coding-session-cost{font-variant-numeric:tabular-nums}
 
 .coding-state-badge{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:9999px;background:var(--theme-control);color:var(--theme-text-secondary);font-size:12px;font-weight:500;white-space:nowrap}
 .coding-state-badge[data-state=active],.coding-state-badge[data-state=pending]{color:var(--accent-primary)}
@@ -142,9 +141,13 @@
 .coding-session-composer-send:disabled{cursor:default;opacity:.6}
 
 /* Session menu */
-.coding-session-menu{min-width:260px;z-index:720}
+.coding-session-menu{min-width:260px;max-width:320px;z-index:720}
 .coding-session-menu-detail{gap:8px}
-.coding-session-menu-cost{min-width:0;flex:1}
+.coding-session-menu-grow{min-width:0;flex:1}
+/* The model row: the model, then Auto's routing reason (two lines at most). */
+.coding-session-menu-model{align-items:flex-start;height:auto;padding-top:6px;padding-bottom:6px}
+.coding-session-menu-model-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.coding-session-menu-model-reason{display:-webkit-box;overflow:hidden;color:var(--theme-text-secondary);font-size:12px;line-height:16px;-webkit-box-orient:vertical;-webkit-line-clamp:2}
 
 /* Card (agent chat): header "<Agent> started by <member> <time>" over the status row */
 .coding-session-card{display:flex;flex-direction:column;min-width:0;margin:6px 0;border:1px solid var(--border-card);border-radius:8px;background:var(--theme-surface-1);box-shadow:var(--card-shadow)}
@@ -165,6 +168,8 @@
 .coding-session-status-row[data-tone=input] .coding-session-status-icon{color:var(--semantic-warning-text)}
 .coding-session-status-label{flex:none;margin-left:2px;white-space:nowrap}
 .coding-session-status-detail{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* The running tool step's argument ("Bash `git status`"): a single-line code chip. */
+.coding-session-status-code{flex:0 1 auto;min-width:0;overflow:hidden;padding:.5px 3px;border-radius:2.44px;background:var(--cs-code-bg);color:var(--theme-text-secondary);font:500 12.19px/16px var(--font-monospace,monospace);text-overflow:ellipsis;white-space:nowrap}
 .coding-session-status-end{display:inline-flex;align-items:center;gap:8px;margin-left:auto;flex:none;font-variant-numeric:tabular-nums}
 /* A delegated session in issue activity: a 40px header ("Flow started by …", the options on hover) over the status row. */
 .coding-session-activity-card{display:flex;flex-direction:column;min-width:0}

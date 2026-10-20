@@ -22,6 +22,7 @@ import { ChatCodingSessionCards } from './chat-coding-session-cards'
 import { CodingSessionsList } from './coding-session-card'
 import { useDelegateCodingSession } from './coding-session-start'
 import { ReviewCodingSessionActions } from './review-coding-actions'
+import { ReviewAgentPanel, ReviewAgentToggle } from './review-agent-panel'
 import { reviewCommentPrompt } from './review-coding-model'
 import { makeSession } from './coding-session-test-fixtures'
 import { resetCodingAvailabilityCache } from './use-coding-sessions'
@@ -266,6 +267,29 @@ describe('issue activity', () => {
     await waitFor(() => expect(screen.queryByRole('article', { name: 'Coding session' })).toBeNull())
   })
 
+  it('shows the running tool step and leaves the feed once the session is archived', async () => {
+    vi.mocked(listApplicationTasks).mockResolvedValue([{ ...task, codingSessionId: 'cs-1' }])
+    vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession({ currentTurnId: 't1', currentStep: { turnId: 't1', action: 'Bash', parameter: 'git status --short', at: '' } }))
+    const view = render(<MemoryRouter><I18nProvider><IssueAgentTasks issue={makeIssue({ delegate: flowAgent })} data={baseData()}/></I18nProvider></MemoryRouter>)
+    const row = await screen.findByRole('link', { name: /Show session/ })
+    expect(row).toHaveTextContent('Bashgit status --short')
+    expect(within(row).getByText('git status --short').tagName).toBe('CODE')
+    view.unmount()
+    vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession({ state: 'complete', phase: 'done', archivedAt: '2026-10-19T18:40:00Z' }))
+    render(<MemoryRouter><I18nProvider><IssueAgentTasks issue={makeIssue({ delegate: flowAgent })} data={baseData()}/></I18nProvider></MemoryRouter>)
+    await waitFor(() => expect(api.fetchCodingSession).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(screen.queryByRole('article', { name: 'Coding session' })).toBeNull())
+  })
+
+  it('opens a session with a synced pull request on its review page with the agent panel', async () => {
+    vi.mocked(listApplicationTasks).mockResolvedValue([{ ...task, codingSessionId: 'cs-1' }])
+    const pr = { sessionId: 'cs-1', codeHost: 'github' as const, hostName: 'github.com', repository: 'acme/app', number: 1, url: 'https://github.com/acme/app/pull/1', title: 'Add farewell', state: 'open' as const, draft: true, headBranch: 'flow/x', baseBranch: 'main', reviewId: 'review-1', createdAt: '', updatedAt: '' }
+    vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession({ state: 'complete', phase: 'idle', latestPullRequest: pr }))
+    const reviews = [{ id: 'review-1', slugId: 'add-farewell-0123456789ab', provider: 'github', number: 1, repositoryOwner: 'acme', repositoryName: 'app' } as CodeReview]
+    render(<MemoryRouter><I18nProvider><IssueAgentTasks issue={makeIssue({ delegate: flowAgent })} data={baseData({ reviews })}/></I18nProvider></MemoryRouter>)
+    expect(await screen.findByRole('link', { name: /Show session/ })).toHaveAttribute('href', '/workspace/review/add-farewell-0123456789ab/changes?showAgent=true&agentSessionId=cs-1')
+  })
+
   it('matches the session by anchor when the task has no session id', async () => {
     vi.mocked(api.fetchCodingSessions).mockResolvedValue([makeSession({ id: 'other', agentSessionId: 'task-9' }), makeSession({ agentSessionId: 'task-1', branchName: 'flow/anchored' })])
     vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession({ agentSessionId: 'task-1', branchName: 'flow/anchored' }))
@@ -285,6 +309,19 @@ describe('issue activity', () => {
 
 describe('reviews', () => {
   const review = { id: 'review-1', status: 'open', headBranch: 'flow/fix', provider: 'github' } as const
+
+  it("shows the session's agent panel on the review page; Close chat closes it", async () => {
+    const user = userEvent.setup(), onClose = vi.fn(), onToggle = vi.fn()
+    vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession({ state: 'complete', phase: 'idle', displayTitle: 'Add farewell function' }))
+    render(<MemoryRouter><I18nProvider><ReviewAgentPanel sessionId="cs-1" data={baseData()} onClose={onClose}/><ReviewAgentToggle shown onToggle={onToggle}/></I18nProvider></MemoryRouter>)
+    expect(await screen.findByRole('heading', { name: 'Add farewell function' })).toBeVisible()
+    const panel = screen.getByRole('complementary', { name: 'Agent' })
+    expect(vi.mocked(api.fetchCodingSession).mock.calls[0]?.[0]).toBe('cs-1')
+    await user.click(within(panel).getByRole('button', { name: 'Close chat' }))
+    expect(onClose).toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Hide agent' }))
+    expect(onToggle).toHaveBeenCalled()
+  })
 
   it('fixes a pull request with the agent and opens the session', async () => {
     const user = userEvent.setup()

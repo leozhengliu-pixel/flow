@@ -5384,6 +5384,8 @@ function App() {
                   : undefined
               }
               tab={route.kind === "review" ? route.tab : undefined}
+              agentSessionId={route.kind === "review" ? new URLSearchParams(location.search).get("agentSessionId") ?? undefined : undefined}
+              showAgent={new URLSearchParams(location.search).get("showAgent") !== "false"}
               onNavigate={navigateTo}
               onReload={() => reloadReviews(data.workspace.urlKey)}
               onOpenSidebar={() => setMobileSidebarOpen(true)}

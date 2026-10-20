@@ -345,20 +345,24 @@ type CodingArtifact struct {
 
 // CodingSession is the coding part of an agent session.
 type CodingSession struct {
-	ID                      string                    `json:"id"`
-	WorkspaceKey            string                    `json:"-"`
-	AgentSessionID          string                    `json:"agentSessionId"` // the AgentTask anchor
-	IssueID                 string                    `json:"issueId,omitempty"`
-	EnvironmentID           string                    `json:"codingEnvironmentId,omitempty"`
-	SnapshotID              string                    `json:"snapshotId,omitempty"`
-	CreatorID               string                    `json:"creatorId"`
-	Source                  string                    `json:"source"`
-	SourceID                string                    `json:"sourceId,omitempty"` // comment, loop, chat or PR id
-	State                   CodingSessionState        `json:"state"`
-	Phase                   CodingSessionPhase        `json:"phase"`
-	Harness                 string                    `json:"harness"`
-	ModelSelection          string                    `json:"modelSelection"`  // what was asked (auto or an id)
-	Model                   string                    `json:"model,omitempty"` // what Auto resolved to
+	ID             string             `json:"id"`
+	WorkspaceKey   string             `json:"-"`
+	AgentSessionID string             `json:"agentSessionId"` // the AgentTask anchor
+	IssueID        string             `json:"issueId,omitempty"`
+	EnvironmentID  string             `json:"codingEnvironmentId,omitempty"`
+	SnapshotID     string             `json:"snapshotId,omitempty"`
+	CreatorID      string             `json:"creatorId"`
+	Source         string             `json:"source"`
+	SourceID       string             `json:"sourceId,omitempty"` // comment, loop, chat or PR id
+	State          CodingSessionState `json:"state"`
+	Phase          CodingSessionPhase `json:"phase"`
+	Harness        string             `json:"harness"`
+	ModelSelection string             `json:"modelSelection"`  // what was asked (auto or an id)
+	Model          string             `json:"model,omitempty"` // what Auto resolved to
+	// ModelReason is why Auto routed the session to Model; EscalationModel is
+	// the next more capable catalog model ("Start over with <model>").
+	ModelReason             string                    `json:"modelReason,omitempty"`
+	EscalationModel         string                    `json:"escalationModel,omitempty"`
 	ReasoningEffort         string                    `json:"reasoningEffort,omitempty"`
 	Region                  string                    `json:"region,omitempty"`
 	DisplayTitle            string                    `json:"displayTitle,omitempty"`
@@ -413,6 +417,12 @@ type CodingSession struct {
 	CurrentTurnID string     `json:"currentTurnId,omitempty"`
 	LastTurnID    string     `json:"lastTurnId,omitempty"`
 	TurnStartedAt *time.Time `json:"turnStartedAt,omitempty"`
+	// CurrentStep is the latest tool step of the running turn (the issue
+	// status row's live line); it belongs to CurrentStep.TurnID.
+	CurrentStep *CodingSessionStep `json:"currentStep,omitempty"`
+	// ArchivedAt is set when the session is archived (its pull request was
+	// closed without merging); archived sessions leave the issue's activity.
+	ArchivedAt *time.Time `json:"archivedAt,omitempty"`
 	// RunningMillis is the cumulative time spent running turns (sessionTimeout).
 	RunningMillis   int64  `json:"runningMillis,omitempty"`
 	HarnessResumeID string `json:"harnessResumeId,omitempty"`
@@ -432,6 +442,15 @@ type CodingSession struct {
 	UnsubscribedIDs []string `json:"unsubscribedIds,omitempty"`
 	// NextReconcileAt is when the reconciler looks at the session again.
 	NextReconcileAt time.Time `json:"-"`
+}
+
+// CodingSessionStep is one tool step of a turn: the tool ("Bash", "Edit")
+// and its argument (the command, the file).
+type CodingSessionStep struct {
+	TurnID    string    `json:"turnId,omitempty"`
+	Action    string    `json:"action"`
+	Parameter string    `json:"parameter,omitempty"`
+	At        time.Time `json:"at"`
 }
 
 // CodingSessionSubscribed reports whether the user gets the session's

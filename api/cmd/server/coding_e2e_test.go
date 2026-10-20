@@ -407,7 +407,7 @@ func TestCodingSessionEndToEnd(t *testing.T) {
 	// 2. Provisioning (B) creates the sandbox row; the sandbox reconciler (A)
 	// starts it on the fake provider and mints its token.
 	session := e.drive(sessionID, domain.CodingPhaseStarting)
-	if session.EnvironmentID != environment.ID || session.Repository != "acme/web" || session.SandboxID == "" || session.Model != "gpt-5-codex" {
+	if session.EnvironmentID != environment.ID || session.Repository != "acme/web" || session.SandboxID == "" || session.Model != "gpt-5-codex" || session.ModelReason == "" {
 		t.Fatalf("provisioned: %+v", session)
 	}
 	token := e.provider.token(session.SandboxID)
@@ -449,9 +449,14 @@ func TestCodingSessionEndToEnd(t *testing.T) {
 	}
 	events := coding.EventsRequest{Events: []coding.RunnerEvent{
 		{ID: "ev1", TurnID: boot.Turn.ID, Type: coding.EventThought, Body: "Reading the checkout handler"},
+		{ID: "ev1b", TurnID: boot.Turn.ID, Type: coding.EventAction, Action: &coding.ActionDetail{Action: "Bash", Parameter: "go test ./checkout/...\necho done"}},
 		{ID: "ev2", TurnID: boot.Turn.ID, Type: coding.EventResponse, Body: "Fixed the nil pointer in checkout."},
 	}}
 	e.decode(e.do(http.MethodPost, "/internal/coding-runtime/events", events, token, nil), http.StatusOK, nil)
+	// The status row's live step: the latest tool step of the running turn.
+	if step := e.session(sessionID).CurrentStep; step == nil || step.Action != "Bash" || step.Parameter != "go test ./checkout/..." || step.TurnID != boot.Turn.ID {
+		t.Fatalf("current step: %+v", step)
+	}
 	e.github.setBranch(session.BranchName, "c0ffee0000000000000000000000000000000000")
 	complete := coding.TurnCompleteRequest{Status: coding.TurnSuccess, Pushed: true, HeadSHA: "c0ffee0000000000000000000000000000000000", Commits: []domain.CodingCommit{{SHA: "c0ffee0000000000000000000000000000000000", Message: "Fix checkout nil pointer"}}}
 	e.decode(e.do(http.MethodPost, "/internal/coding-runtime/turns/"+url.PathEscape(boot.Turn.ID)+"/complete", complete, token, nil), http.StatusOK, nil)
@@ -523,6 +528,30 @@ func TestCodingSessionEndToEnd(t *testing.T) {
 	}
 	if session = e.session(sessionID); session.Phase != domain.CodingPhaseRunning || session.CurrentTurnID != inbox.Items[0].Turn.ID {
 		t.Fatalf("the answer resumes the session: %s", session.Phase)
+	}
+
+	// 7. Closing the PR without merging archives the session and unassigns
+	// the agent from the issue, attributed to GitHub.
+	closed := `{"action":"closed","number":7,"installation":{"id":42},"repository":{"id":1001,"full_name":"acme/web"},"sender":{"login":"alice","type":"User"},
+"pull_request":{"id":707,"number":7,"title":"Fix checkout","html_url":"https://github.com/acme/web/pull/7","state":"closed","draft":true,"merged":false,"updated_at":"2026-10-19T18:30:00Z",
+"user":{"login":"flow-dev[bot]"},"head":{"ref":"` + session.BranchName + `","sha":"c0ffee0000000000000000000000000000000000"},"base":{"ref":"main","repo":{"full_name":"acme/web"}}}}`
+	if hook := e.githubWebhook("pull_request", "delivery-close-7", closed); hook.Code >= 300 {
+		t.Fatalf("close webhook: %d %s", hook.Code, hook.Body.String())
+	}
+	if session = e.session(sessionID); session.ArchivedAt == nil || !session.StopRequested {
+		t.Fatalf("closing the PR archives (and stops) the busy session: archived=%v stop=%v", session.ArchivedAt, session.StopRequested)
+	}
+	if closedIssue := requestJSON[domain.Issue](t, e.handler, http.MethodGet, "/api/issue-records/"+issue.ID, nil, http.StatusOK); closedIssue.Delegate != nil {
+		t.Fatalf("the agent is unassigned: %+v", closedIssue.Delegate)
+	}
+	history := requestJSON[store.IssueHistory](t, e.handler, http.MethodGet, "/api/issue-records/"+issue.ID+"/history", nil, http.StatusOK)
+	unassigned, archived := false, false
+	for _, event := range history.Activities {
+		unassigned = unassigned || event.Type == "issue.updated" && event.Metadata["previousDelegate"] == agentUser && event.BotActor != nil && event.BotActor.UserDisplayName == "GitHub"
+		archived = archived || event.Type == activityCodingSessionArchived && event.Metadata["sessionId"] == sessionID
+	}
+	if !unassigned || !archived {
+		t.Fatalf("activity: unassigned=%v archived=%v %+v", unassigned, archived, history.Activities)
 	}
 }
 

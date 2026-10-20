@@ -11,7 +11,6 @@ import {
   codingSessionIdFromToolResult,
   codingSessionIdsFromMessage,
   currentSandbox,
-  formatCodingCost,
   normalizeRepository,
   pullRequestDisplayState,
   pullRequestNumberLabel,
@@ -65,13 +64,10 @@ describe('coding session model', () => {
     expect(codingSessionCapabilities(makeSession({ state: 'complete', phase: 'idle', branchName: 'flow/x', commitsByTurnActivityId: { a: [{ sha: 'abc', branch: 'flow/x', signed: false, createdAt: '' }] } })).createPullRequest).toBe(true)
   })
 
-  it('labels the harness, model, cost and PRs', () => {
+  it('labels the harness, model and PRs', () => {
     expect(codingModelLabel(makeSession())).toEqual({ harness: 'Claude Code', model: 'claude-sonnet-4-5 (Auto)' })
     expect(codingModelLabel(makeSession({ harness: 'codex', modelSelection: 'gpt-5', model: undefined }))).toEqual({ harness: 'Codex', model: 'gpt-5' })
     expect(codingModelLabel(makeSession({ model: undefined }))).toEqual({ harness: 'Claude Code', model: 'Auto' })
-    expect(formatCodingCost(0)).toBe('$0.00')
-    expect(formatCodingCost(5_000)).toBe('<$0.01')
-    expect(formatCodingCost(1_234_567)).toBe('$1.23')
     expect(pullRequestDisplayState({ state: 'open', draft: true })).toBe('draft')
     expect(pullRequestDisplayState({ state: 'merged', draft: true })).toBe('merged')
     expect(pullRequestNumberLabel({ codeHost: 'gitlab', number: 4 })).toBe('!4')
@@ -135,6 +131,12 @@ describe('session status line', () => {
     const { codingSessionUiZhCN } = await import('@/i18n/translations-coding-session-ui')
     expect(codingStatusLine({ state: 'active', phase: 'running' })).toEqual({ tone: 'working', label: 'Thinking…', live: true })
     expect(codingStatusLine({ state: 'active', phase: 'running' }, undefined, 'chat').label).toBe('Working for')
+    // The running turn's latest tool step replaces "Thinking…" in the issue row (not a step of an earlier turn).
+    const step = { turnId: 't2', action: 'Bash', parameter: 'git status --short', at: '' }
+    expect(codingStatusLine({ state: 'active', phase: 'running', currentTurnId: 't2', currentStep: step })).toEqual({ tone: 'working', label: 'Bash', rawLabel: true, detail: 'git status --short', codeDetail: true, live: true })
+    expect(codingStatusLine({ state: 'active', phase: 'running', currentTurnId: 't3', currentStep: step }).label).toBe('Thinking…')
+    expect(codingStatusLine({ state: 'active', phase: 'setup', currentTurnId: 't2', currentStep: step }).label).toBe('Thinking…')
+    expect(codingStatusLine({ state: 'active', phase: 'running', currentTurnId: 't2', currentStep: step }, undefined, 'chat').label).toBe('Working for')
     expect(codingStatusLine({ state: 'pending', phase: 'provisioning' })).toEqual({ tone: 'working', label: 'Starting coding session…', live: true })
     expect(codingStatusLine({ state: 'pending', phase: 'provisioning', repository: 'acme/app' })).toEqual({ tone: 'working', label: 'Setting up {repo}…', repo: 'acme/app', live: true })
     expect(codingStatusLine({ state: 'pending', phase: 'queued', repository: 'acme/app' }).label).toBe('Starting coding session…')

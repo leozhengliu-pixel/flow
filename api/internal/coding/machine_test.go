@@ -292,6 +292,37 @@ func TestModelRouting(t *testing.T) {
 	}
 }
 
+func TestAutoRoutesByTask(t *testing.T) {
+	llm := testConfig().LLM
+	llm.CodexModels = []string{"gpt-5-codex", "gpt-5", "gpt-5-mini"}
+	small, ok := RouteAutoModel(llm, "codex", "Add a farewell() function next to greet(). Keep it minimal.")
+	if !ok || small.Model != "gpt-5-mini" || small.Reason != routeReasonSmall || small.Escalation != "gpt-5-codex" {
+		t.Fatalf("small task: %+v", small)
+	}
+	large, _ := RouteAutoModel(llm, "codex", "Refactor the billing module and migrate every caller to the new API.")
+	if large.Model != "gpt-5" || large.Reason != routeReasonLarge || large.Escalation != "" {
+		t.Fatalf("large task: %+v", large)
+	}
+	standard, _ := RouteAutoModel(llm, "codex", "The settings page shows the wrong timezone after saving.")
+	if standard.Model != "gpt-5-codex" || standard.Reason != routeReasonStandard || standard.Escalation != "gpt-5" {
+		t.Fatalf("standard task: %+v", standard)
+	}
+	// Without a model of the tier, the nearest tier is used (a more capable one first).
+	llm.CodexModels = []string{"gpt-5-codex", "gpt-5"}
+	if fallback, _ := RouteAutoModel(llm, "codex", "Fix a typo in the README."); fallback.Model != "gpt-5-codex" || fallback.Reason != routeReasonSmall {
+		t.Fatalf("fallback tier: %+v", fallback)
+	}
+	// Configured tiers override the built-ins; unknown models are standard.
+	llm.CodexModels = []string{"local-a", "local-b"}
+	llm.ModelInfo = map[string]config.ModelInfo{"local-b": {Tier: ModelTierSmall}}
+	if routed, _ := RouteAutoModel(llm, "codex", "Rename the helper."); routed.Model != "local-b" || routed.Escalation != "local-a" {
+		t.Fatalf("configured tier: %+v", routed)
+	}
+	if _, ok := RouteAutoModel(llm, "openSource", "anything"); ok {
+		t.Fatal("an empty catalog routes nothing")
+	}
+}
+
 func TestBranchName(t *testing.T) {
 	if got := BranchName("flow/", "ENG-12", "Fix the login page!", "01jabcdefghjkmnpqrstvwxyz0"); got != "flow/eng-12-fix-the-login-page-vwxyz0" {
 		t.Fatalf("branch %s", got)

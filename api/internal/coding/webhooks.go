@@ -26,7 +26,9 @@ import (
 //     environment exists) starts a pullRequest session on the PR head branch;
 //   - a commenter who is not a Flow member is an external source: unless
 //     trusted, the request becomes an approval-gated session on the PR branch;
-//   - merged/closed updates the PR link; a merge ends an idle session;
+//   - merged/closed updates the PR link; a merge ends an idle session; a
+//     close without merging archives the session (a busy one is stopped)
+//     and the Archiver unassigns the agent from the issue;
 //   - failing CI is surfaced ("Fix failing checks"), never retried automatically.
 
 // FlowCommentMarker is embedded in comments Flow posts, so Flow never reacts
@@ -45,6 +47,7 @@ const (
 	WebhookChecksFailed   WebhookAction = "checksFailed"
 	WebhookRefused        WebhookAction = "refused"
 	WebhookSessionEnded   WebhookAction = "sessionEnded"
+	WebhookSessionArchive WebhookAction = "sessionArchived"
 	WebhookNothingToRoute WebhookAction = "noSession"
 )
 
@@ -87,6 +90,13 @@ type WebhookNotifier interface {
 	ChecksFailed(ctx context.Context, session domain.CodingSession, pullRequest domain.SessionPullRequest, status codehost.CIStatus) error
 }
 
+// WebhookArchiver hears about sessions archived because their PR/MR was
+// closed (optional): the server unassigns the agent from the issue and
+// records both on the issue's activity.
+type WebhookArchiver interface {
+	SessionArchived(ctx context.Context, session domain.CodingSession, codeHost string) error
+}
+
 // WebhookDispatcher maps webhook events to session follow-ups.
 type WebhookDispatcher struct {
 	Sessions   WebhookSessions
@@ -98,6 +108,8 @@ type WebhookDispatcher struct {
 	Notifier TriggerNotifier
 	// CINotifier is optional.
 	CINotifier WebhookNotifier
+	// Archiver is optional.
+	Archiver WebhookArchiver
 	// AnchorAppUserID returns the built-in Flow agent's app user.
 	AnchorAppUserID func(ctx context.Context, workspaceKey string) string
 	Config          config.CodingConfig
@@ -331,9 +343,10 @@ func (d *WebhookDispatcher) dispatchState(ctx context.Context, workspaceKeys []s
 			continue
 		}
 		result.add(WebhookPRState, session.ID)
-		ended := false
-		_, err := d.Sessions.UpdateCodingSession(ctx, session.WorkspaceKey, session.ID, func(current *domain.CodingSession) error {
-			ended = false
+		ended, archived := false, false
+		updated, err := d.Sessions.UpdateCodingSession(ctx, session.WorkspaceKey, session.ID, func(current *domain.CodingSession) error {
+			ended, archived = false, false
+			closes := event.Type == codehost.EventChangeRequestClosed && link.State == "closed" && current.ArchivedAt == nil && closesSession(*current, link)
 			for index := range current.PullRequests {
 				pr := &current.PullRequests[index]
 				if pr.Number == link.Number && strings.EqualFold(pr.Repository, link.Repository) {
@@ -351,6 +364,24 @@ func (d *WebhookDispatcher) dispatchState(ctx context.Context, workspaceKeys []s
 				current.EndedAt = &now
 				ended = true
 			}
+			// A PR closed without merging archives its session: an idle one
+			// ends, a busy one is stopped (its work has nowhere to go).
+			if closes {
+				at := now
+				current.ArchivedAt = &at
+				archived = true
+				switch current.Phase {
+				case domain.CodingPhaseDone:
+				case domain.CodingPhaseIdle:
+					current.Phase = domain.CodingPhaseDone
+					current.State = domain.CodingSessionComplete
+					current.EndedAt = &now
+					ended = true
+				default:
+					current.StopRequested = true
+					current.NextReconcileAt = now
+				}
+			}
 			current.UpdatedAt = now
 			return nil
 		})
@@ -361,8 +392,30 @@ func (d *WebhookDispatcher) dispatchState(ctx context.Context, workspaceKeys []s
 		if ended {
 			result.add(WebhookSessionEnded, session.ID)
 		}
+		if archived {
+			result.add(WebhookSessionArchive, session.ID)
+			if d.Archiver != nil {
+				if err := d.Archiver.SessionArchived(ctx, updated, firstNonEmpty(link.CodeHost, event.CodeHost)); err != nil {
+					errs = append(errs, err)
+				}
+			}
+		}
 	}
 	return result, errors.Join(errs...)
+}
+
+// closesSession reports whether closing link archives the session: the PR/MR
+// was not merged and no other PR/MR linked to the session is still open.
+func closesSession(session domain.CodingSession, link domain.SessionPullRequest) bool {
+	same := func(pr domain.SessionPullRequest) bool {
+		return pr.Number == link.Number && strings.EqualFold(pr.Repository, link.Repository)
+	}
+	for _, pr := range session.PullRequests {
+		if same(pr) && pr.State == "merged" || !same(pr) && pr.State == "open" {
+			return false
+		}
+	}
+	return session.LatestPullRequest == nil || !same(*session.LatestPullRequest) || session.LatestPullRequest.State != "merged"
 }
 
 func (d *WebhookDispatcher) dispatchCI(ctx context.Context, workspaceKeys []string, event codehost.WebhookEvent) (WebhookResult, error) {
