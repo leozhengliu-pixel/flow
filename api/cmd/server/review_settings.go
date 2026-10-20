@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -75,6 +76,8 @@ func (s *server) memberReviewProvider(ctx context.Context, data domain.Bootstrap
 	}
 	client, err := s.outboundClient(ctx, provider.base)
 	if err != nil {
+		// Falls back to the workspace's credentials: say why.
+		log.Printf("reviews: member %s's %s account cannot be used: %v", actor.ID, account.HostName, err)
 		return nil
 	}
 	provider.client = client
