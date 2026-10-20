@@ -763,6 +763,12 @@ user, so this route requires the browser session and checks the state's workspac
 `GET /app/installations/{id}` with an App JWT, upserts `code_host_installations`, and redirects to the coding
 settings. Installation events from webhooks keep the rows current (suspend, delete, repository changes).
 
+**Existing installation:** when the App is already installed on the account and the admin changes nothing, GitHub
+shows the installation's settings and sends no setup redirect. An admin who has linked their own GitHub account then
+sees the installations that account can access (`GET /available-installations`, from `GET /user/installations` with
+the member's user-to-server token) and links one with `POST /installations {installationId}`; Flow checks the id is
+in that list and reads it again with the App JWT before upserting the row.
+
 **Tokens:** the App JWT is RS256, `iat=now-60s`, `exp=now+9m`, `iss=app id`. Installation tokens come from
 `POST /app/installations/{id}/access_tokens` with `repositories:[name]` and the minimum permissions for the purpose
 (git and CLI: contents write, pull_requests write, checks read, actions read, metadata read). They are cached in

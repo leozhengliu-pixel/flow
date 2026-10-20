@@ -35,6 +35,8 @@ func (s *server) registerGitHubAppRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/integrations/github-app/install", s.startGitHubAppInstall)
 	mux.HandleFunc("GET /api/integrations/github-app/setup", s.finishGitHubAppSetup)
 	mux.HandleFunc("DELETE /api/integrations/github-app/installations/{id}", s.removeGitHubAppInstallation)
+	mux.HandleFunc("GET /api/integrations/github-app/available-installations", s.listAvailableGitHubAppInstallations)
+	mux.HandleFunc("POST /api/integrations/github-app/installations", s.linkExistingGitHubAppInstallation)
 	mux.HandleFunc("POST /api/integrations/github-app/webhook", s.gitHubAppWebhook)
 	mux.HandleFunc("POST /api/integrations/github-app/authorize", s.startGitHubAppAuthorization)
 	mux.HandleFunc("DELETE /api/integrations/github-app/authorization", s.removeGitHubAppAuthorization)
@@ -85,7 +87,7 @@ type gitHubAppLinkedAccount struct {
 }
 
 type gitHubAppInstallation struct {
-	ID                  string     `json:"id"`
+	ID                  string     `json:"id,omitempty"` // empty for an installation the workspace has not linked
 	InstallationID      string     `json:"installationId"`
 	AccountLogin        string     `json:"accountLogin"`
 	AccountType         string     `json:"accountType,omitempty"`
@@ -406,6 +408,107 @@ func (s *server) removeGitHubAppInstallation(w http.ResponseWriter, r *http.Requ
 		host.InvalidateInstallation(installations[index].InstallationID)
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// viewerGitHubAppInstallations lists the App installations the viewer's own
+// linked GitHub account can access (admins only). GitHub skips the setup
+// redirect when the App is already installed and nothing changes, so this is
+// how a workspace links an installation that exists already.
+func (s *server) viewerGitHubAppInstallations(w http.ResponseWriter, r *http.Request) ([]domain.CodeHostInstallation, bool) {
+	host := s.gitHubAppHost()
+	if host == nil || !host.Configured() {
+		writeError(w, http.StatusConflict, "The GitHub App is not configured")
+		return nil, false
+	}
+	if !s.requireWorkspaceAdmin(w, r) {
+		return nil, false
+	}
+	user := authUser(r)
+	account, err := s.store.CodeHostAccountFor(r.Context(), user.ID, domain.CodeHostGitHub, host.HostName())
+	if user.ID == "" || err != nil || account.AuthType != domain.CodeHostAuthGitHubApp {
+		writeError(w, http.StatusConflict, "Connect your GitHub account to link an existing installation")
+		return nil, false
+	}
+	tokens, err := s.memberHostTokens(r.Context(), account)
+	if err != nil {
+		if errors.Is(err, codehost.ErrUserNotLinked) {
+			writeError(w, http.StatusConflict, "Reconnect your GitHub account to link an existing installation")
+		} else {
+			writeError(w, http.StatusBadGateway, "Could not reach GitHub")
+		}
+		return nil, false
+	}
+	installations, err := host.UserInstallations(r.Context(), tokens.AccessToken)
+	if err != nil {
+		log.Printf("github app: list installations for %s: %v", account.Login, err)
+		writeError(w, http.StatusBadGateway, "Could not read your GitHub App installations")
+		return nil, false
+	}
+	return installations, true
+}
+
+// listAvailableGitHubAppInstallations — GET
+// /api/integrations/github-app/available-installations (admins): the App
+// installations the viewer's linked GitHub account can access that this
+// workspace has not linked yet.
+func (s *server) listAvailableGitHubAppInstallations(w http.ResponseWriter, r *http.Request) {
+	installations, ok := s.viewerGitHubAppInstallations(w, r)
+	if !ok {
+		return
+	}
+	linked, err := s.store.CodeHostInstallations(r.Context(), s.workspaceData(r).Workspace.URLKey, domain.CodeHostGitHub)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not read GitHub App installations")
+		return
+	}
+	available := []gitHubAppInstallation{}
+	for _, item := range installations {
+		if slices.ContainsFunc(linked, func(existing domain.CodeHostInstallation) bool { return existing.InstallationID == item.InstallationID }) {
+			continue
+		}
+		available = append(available, gitHubAppInstallation{InstallationID: item.InstallationID, AccountLogin: item.AccountLogin, AccountType: item.AccountType, RepositorySelection: item.RepositorySelection, SuspendedAt: item.SuspendedAt})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"installations": available})
+}
+
+// linkExistingGitHubAppInstallation — POST /api/integrations/github-app/installations
+// {installationId} (admins): links an installation the viewer's GitHub
+// account can access, read again with the App JWT, to this workspace.
+func (s *server) linkExistingGitHubAppInstallation(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		InstallationID string `json:"installationId"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	id := strings.TrimSpace(input.InstallationID)
+	installations, ok := s.viewerGitHubAppInstallations(w, r)
+	if !ok {
+		return
+	}
+	if id == "" || !slices.ContainsFunc(installations, func(item domain.CodeHostInstallation) bool { return item.InstallationID == id }) {
+		writeError(w, http.StatusNotFound, "Your GitHub account cannot access this installation")
+		return
+	}
+	host := s.gitHubAppHost()
+	installation, err := host.Installation(r.Context(), id)
+	if err != nil {
+		log.Printf("github app: link installation %s: %v", id, err)
+		writeError(w, http.StatusBadGateway, "Could not read the GitHub App installation")
+		return
+	}
+	installation.WorkspaceKey = s.workspaceData(r).Workspace.URLKey
+	if err := s.store.UpsertCodeHostInstallation(r.Context(), installation); err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not save the GitHub App installation")
+		return
+	}
+	host.InvalidateInstallation(installation.InstallationID)
+	if linked, err := s.store.CodeHostInstallations(r.Context(), installation.WorkspaceKey, domain.CodeHostGitHub); err == nil {
+		if index := slices.IndexFunc(linked, func(item domain.CodeHostInstallation) bool { return item.InstallationID == installation.InstallationID }); index >= 0 {
+			installation.ID = linked[index].ID
+		}
+	}
+	writeJSON(w, http.StatusOK, gitHubAppInstallation{ID: installation.ID, InstallationID: installation.InstallationID, AccountLogin: installation.AccountLogin, AccountType: installation.AccountType, RepositorySelection: installation.RepositorySelection, SuspendedAt: installation.SuspendedAt})
 }
 
 // gitHubAppWebhook — POST /api/integrations/github-app/webhook: verified with

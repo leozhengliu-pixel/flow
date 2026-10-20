@@ -12680,6 +12680,31 @@
         "x-flow-source": "github_app.go"
       }
     },
+    "/api/integrations/github-app/available-installations": {
+      "get": {
+        "operationId": "get_integrations_github_app_available_installations",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "GET /api/integrations/github-app/available-installations",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "github_app.go"
+      }
+    },
     "/api/integrations/github-app/install": {
       "post": {
         "operationId": "post_integrations_github_app_install",
@@ -12687,6 +12712,31 @@
           "integrations"
         ],
         "summary": "POST /api/integrations/github-app/install",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "github_app.go"
+      }
+    },
+    "/api/integrations/github-app/installations": {
+      "post": {
+        "operationId": "post_integrations_github_app_installations",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "POST /api/integrations/github-app/installations",
         "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
         "responses": {
           "2XX": {

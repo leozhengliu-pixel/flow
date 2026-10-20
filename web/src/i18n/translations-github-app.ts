@@ -19,4 +19,8 @@ export const githubAppZhCN: Record<string, string> = {
   "Could not reach GitHub": "无法连接 GitHub",
   "Could not remove the installation": "无法移除安装",
   "Could not unlink the GitHub account": "无法取消关联 GitHub 账户",
+  "Installed on GitHub, not linked to this workspace": "已在 GitHub 上安装，尚未关联到此工作区",
+  "Link installation": "关联安装",
+  "Link": "关联",
+  "Could not link the installation": "无法关联安装",
 };

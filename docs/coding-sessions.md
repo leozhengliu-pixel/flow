@@ -227,7 +227,7 @@ Coding sessions on GitHub need a GitHub App, because only an App can mint short-
 6. Create the App. Note the **App ID**, the **slug** (from the App's URL), the **Client ID**, and generate a **client secret**.
 7. **Generate a private key** and store it as a Secret (`flow-github-app`, key `private-key.pem`), then reference it with `coding.githubApp.privateKeySecret`. Put the webhook and client secrets in `flow-env`.
 8. For GitHub Enterprise Server set `coding.githubApp.host: ghe.example.com` (the API URL is derived as `https://ghe.example.com/api/v3`). The GHES host is added to the egress allowlist automatically.
-9. `helm upgrade`, then in Flow go to **Settings › Integrations › GitHub › Install GitHub App**, choose the repositories, and finish. Flow records the installation and returns to the coding settings.
+9. `helm upgrade`, then in Flow go to **Settings › Integrations › GitHub › Install GitHub App**, choose the repositories, and finish. Flow records the installation and returns to the coding settings. If the App is already installed on that account, GitHub does not send you back: connect your own GitHub account on the same page, then use **Link** next to the installation.
 10. Create an environment for a repository in **Settings › Coding sessions** and start a session from an issue.
 
 Users who must have personal push access (the "require linked account" policy) link their GitHub account through the App's OAuth (Client ID and secret).

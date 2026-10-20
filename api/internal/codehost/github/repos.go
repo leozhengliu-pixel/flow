@@ -438,6 +438,33 @@ func (h *Host) installation(item apiInstallation) domain.CodeHostInstallation {
 	}
 }
 
+// UserInstallations lists the App's installations that the member behind a
+// user-to-server token can access (GET /user/installations). GitHub answers
+// only for this App's own installations, so it is how an admin proves they
+// may link an installation that already exists: GitHub sends no setup
+// redirect when the App is installed already and nothing changes.
+func (h *Host) UserInstallations(ctx context.Context, accessToken string) ([]domain.CodeHostInstallation, error) {
+	const perPage, maxPages = 100, 10
+	installations := []domain.CodeHostInstallation{}
+	for page := 1; page <= maxPages; page++ {
+		var out struct {
+			TotalCount    int               `json:"total_count"`
+			Installations []apiInstallation `json:"installations"`
+		}
+		target := fmt.Sprintf("%s/user/installations?per_page=%d&page=%d", h.apiURL, perPage, page)
+		if err := h.do(ctx, "list_user_installations", http.MethodGet, target, "Bearer "+accessToken, nil, &out); err != nil {
+			return nil, err
+		}
+		for _, item := range out.Installations {
+			installations = append(installations, h.installation(item))
+		}
+		if len(out.Installations) < perPage || len(installations) >= out.TotalCount {
+			break
+		}
+	}
+	return installations, nil
+}
+
 // Installation fetches an installation with the App JWT (setup callback).
 func (h *Host) Installation(ctx context.Context, installationID string) (domain.CodeHostInstallation, error) {
 	if _, err := strconv.ParseInt(installationID, 10, 64); err != nil {

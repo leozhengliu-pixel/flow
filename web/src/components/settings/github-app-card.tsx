@@ -1,14 +1,16 @@
-import { GitPullRequest, Plus, Unplug } from "lucide-react";
+import { GitPullRequest, Link2, Plus, Unplug } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { useI18n } from "@/i18n/i18n";
 import {
+  fetchAvailableGitHubAppInstallations,
   fetchGitHubApp,
+  linkGitHubAppInstallation,
   removeGitHubAppInstallation,
   startGitHubAppInstall,
 } from "@/lib/coding-sessions-api";
 import { toast } from "@/lib/toast";
-import type { GitHubAppStatus } from "@/types/coding-sessions";
+import type { GitHubAppInstallationSummary, GitHubAppStatus } from "@/types/coding-sessions";
 
 /**
  * GitHub App card on the GitHub integration page (coding sessions track D):
@@ -19,14 +21,29 @@ export function GitHubAppCard({ isAdmin }: { isAdmin: boolean }) {
   const { t } = useI18n();
   const [status, setStatus] = useState<GitHubAppStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  // Installations the admin's own GitHub account can access but the
+  // workspace has not linked: GitHub sends no setup redirect when the App is
+  // already installed and nothing changes, so these are linked from here.
+  const [available, setAvailable] = useState<GitHubAppInstallationSummary[]>([]);
 
   const load = useCallback(async () => {
+    let next: GitHubAppStatus | null = null;
     try {
-      setStatus(await fetchGitHubApp());
+      next = await fetchGitHubApp();
     } catch {
-      setStatus(null);
+      next = null;
     }
-  }, []);
+    setStatus(next);
+    if (!isAdmin || !next?.configured || !next.linkedAccount) {
+      setAvailable([]);
+      return;
+    }
+    try {
+      setAvailable((await fetchAvailableGitHubAppInstallations()).installations);
+    } catch {
+      setAvailable([]);
+    }
+  }, [isAdmin]);
 
   useEffect(() => {
     void load();
@@ -41,6 +58,18 @@ export function GitHubAppCard({ isAdmin }: { isAdmin: boolean }) {
       window.location.assign(url);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("Could not reach GitHub"));
+      setBusy(false);
+    }
+  };
+
+  const linkInstallation = async (installationId: string) => {
+    setBusy(true);
+    try {
+      await linkGitHubAppInstallation(installationId);
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("Could not link the installation"));
+    } finally {
       setBusy(false);
     }
   };
@@ -99,6 +128,27 @@ export function GitHubAppCard({ isAdmin }: { isAdmin: boolean }) {
           )}
         </div>
       ))}
+      {isAdmin &&
+        available.map((installation) => (
+          <div className="code-connection-row" key={`available-${installation.installationId}`}>
+            <div className="code-provider-avatar github">
+              <GitPullRequest />
+            </div>
+            <div>
+              <strong data-i18n-ignore>{installation.accountLogin}</strong>
+              <span>{t("Installed on GitHub, not linked to this workspace")}</span>
+            </div>
+            <button
+              className="code-manage"
+              disabled={busy}
+              aria-label={t("Link installation")}
+              onClick={() => void linkInstallation(installation.installationId)}
+            >
+              <Link2 />
+              {t("Link")}
+            </button>
+          </div>
+        ))}
     </section>
   );
 }

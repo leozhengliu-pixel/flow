@@ -342,11 +342,21 @@ export interface CodingUsageSummary {
   sessions: number;
 }
 
+export interface GitHubAppInstallationSummary {
+  /** Flow's row id; empty for an installation the workspace has not linked yet. */
+  id?: string;
+  installationId: string;
+  accountLogin: string;
+  accountType?: string;
+  repositorySelection?: string;
+  suspendedAt?: string;
+}
+
 export interface GitHubAppStatus {
   configured: boolean;
   hostName: string;
   slug?: string;
-  installations: { id: string; installationId: string; accountLogin: string; accountType?: string; repositorySelection?: string; suspendedAt?: string }[];
+  installations: (GitHubAppInstallationSummary & { id: string })[];
   /** User-to-server OAuth is configured, so members can link their GitHub account. */
   canLinkAccount?: boolean;
   /** The viewer's linked GitHub account, when linked. */
