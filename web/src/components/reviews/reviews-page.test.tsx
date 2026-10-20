@@ -12,6 +12,7 @@ import type { CodeReview } from "@/types/flow";
 
 const api = vi.hoisted(() => ({
   commentOnReview: vi.fn(),
+  syncReview: vi.fn(),
   resolveReviewThread: vi.fn(),
   submitReview: vi.fn(),
   updateReview: vi.fn(),
@@ -250,6 +251,7 @@ it("renders split and unified diff rows and posts an inline comment", async () =
     expect(api.commentOnReview).toHaveBeenCalledWith(review.id, "Please add a test", {
       path: "src/index.ts",
       line: 1,
+      side: "RIGHT",
     }),
   );
 });
@@ -465,4 +467,87 @@ it('describes renamed files without content changes and marks added and deleted 
   expect(await screen.findByText('File renamed and moved')).toBeVisible();
   expect(document.querySelector('[data-diff-file="lib/new.js"] .review-file-name')).toHaveAttribute('data-file-status', 'added');
   expect(document.querySelector('[data-diff-file="src/old.test.js"] .review-file-name')).toHaveAttribute('data-file-status', 'deleted');
+});
+
+it("comments on removed lines, shows left-side threads and retries changes that did not reach GitHub", async () => {
+  const user = userEvent.setup();
+  const reviewWithThreads: CodeReview = {
+    ...review,
+    syncedAt: "2026-09-01T00:02:00.000Z",
+    files: [
+      {
+        path: "src/index.ts",
+        status: "modified",
+        additions: 1,
+        deletions: 1,
+        patch: "@@ -1,2 +1,2 @@\n const value = 1;\n-const answer = value;\n+const answer = value + 1;",
+      },
+      { path: "assets/huge.json", status: "modified", additions: 9000, deletions: 3, patch: "", patchUnavailable: true },
+    ],
+    events: [
+      ...review.events,
+      {
+        id: "left-thread",
+        type: "commented",
+        body: "Why was this removed?",
+        path: "src/index.ts",
+        line: 2,
+        side: "LEFT",
+        actor: teammate,
+        createdAt: "2026-09-01T00:03:00.000Z",
+        remote: { provider: "github", kind: "review_comment", id: "11" },
+        postedAs: { provider: "github", login: "teammate-gh", via: "member" },
+      },
+      {
+        id: "failed-reply",
+        type: "commented",
+        body: "It moved",
+        parentId: "left-thread",
+        path: "src/index.ts",
+        line: 2,
+        side: "LEFT",
+        actor: viewer,
+        createdAt: "2026-09-01T00:04:00.000Z",
+        sync: { state: "failed", op: "create", error: "GitHub denied the change", attemptedAt: "2026-09-01T00:04:00.000Z" },
+      },
+    ],
+  };
+  api.syncReview.mockResolvedValue(reviewWithThreads);
+  api.commentOnReview.mockResolvedValue(reviewWithThreads);
+  render(
+    <I18nProvider>
+      <ReviewsPage
+        data={makeBootstrap({
+          viewer,
+          users: [viewer, teammate],
+          reviews: [reviewWithThreads],
+          userSettings: {},
+          integrationConnections: [{ id: "github", provider: "github" }] as never[],
+        })}
+        view="for-you"
+        review={reviewWithThreads}
+        tab="changes"
+        onNavigate={vi.fn()}
+        onReload={vi.fn().mockResolvedValue(undefined)}
+        onOpenSidebar={vi.fn()}
+      />
+    </I18nProvider>,
+  );
+  // Opening the review refreshes it from the code host (not forced).
+  await waitFor(() => expect(api.syncReview).toHaveBeenCalledWith(reviewWithThreads.id, false));
+  // The left-side thread renders under the removed line, with the failed reply.
+  await waitFor(() => expect(screen.getByText("Why was this removed?")).toBeVisible());
+  expect(screen.getByText("Not synced to GitHub")).toBeVisible();
+  // A written-back comment says which code host identity it was posted as.
+  expect(screen.getByText("@teammate-gh")).toBeVisible();
+  expect(screen.getByText("This diff is too large to display")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Retry" }));
+  await waitFor(() => expect(api.syncReview).toHaveBeenCalledWith(reviewWithThreads.id, true));
+
+  await user.click(screen.getByRole("button", { name: /Comment on removed line 2/ }));
+  await user.type(screen.getByRole("textbox", { name: "Inline comment" }), "Keep this");
+  await user.click(screen.getByRole("button", { name: "Comment" }));
+  await waitFor(() =>
+    expect(api.commentOnReview).toHaveBeenCalledWith(reviewWithThreads.id, "Keep this", { path: "src/index.ts", line: 2, side: "LEFT" }),
+  );
 });

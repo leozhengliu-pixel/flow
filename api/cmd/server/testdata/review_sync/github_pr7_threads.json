@@ -1,0 +1,55 @@
+{
+ "data": {
+  "repository": {
+   "pullRequest": {
+    "reviewThreads": {
+     "pageInfo": {
+      "hasNextPage": false,
+      "endCursor": "Y3Vyc29yOnYyOpK0MjAyNi0xMC0yMFQwMjozNjo0OFrOri21jQ=="
+     },
+     "nodes": [
+      {
+       "id": "PRRT_kwDOVPJZYM6uLbWF",
+       "isResolved": false,
+       "isOutdated": false,
+       "comments": {
+        "nodes": [
+         {
+          "databaseId": 4320909403
+         },
+         {
+          "databaseId": 4320909537
+         }
+        ]
+       }
+      },
+      {
+       "id": "PRRT_kwDOVPJZYM6uLbWJ",
+       "isResolved": false,
+       "isOutdated": false,
+       "comments": {
+        "nodes": [
+         {
+          "databaseId": 4320909410
+         }
+        ]
+       }
+      },
+      {
+       "id": "PRRT_kwDOVPJZYM6uLbWN",
+       "isResolved": true,
+       "isOutdated": false,
+       "comments": {
+        "nodes": [
+         {
+          "databaseId": 4320909416
+         }
+        ]
+       }
+      }
+     ]
+    }
+   }
+  }
+ }
+}

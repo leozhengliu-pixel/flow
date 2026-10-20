@@ -1,5 +1,5 @@
 import * as RadixMenu from "@radix-ui/react-dropdown-menu";
-import { CheckCircle2, Copy, ExternalLink, GitBranch, GitMerge, Link2, MoreHorizontal, RotateCcw, Star, Users, X } from "lucide-react";
+import { CheckCircle2, Copy, ExternalLink, GitBranch, GitMerge, Link2, MoreHorizontal, RefreshCw, RotateCcw, Star, Users, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { useI18n } from "@/i18n/i18n";
@@ -22,6 +22,7 @@ export function PullRequestActionsMenu({
   onOpenPicker,
   onQuickApprove,
   onMerge,
+  onSync,
   canQuickApprove,
 }: {
   review: CodeReview;
@@ -30,6 +31,8 @@ export function PullRequestActionsMenu({
   onOpenPicker: (value: "reviewers" | "issues") => void;
   onQuickApprove: () => Promise<void>;
   onMerge: (method: MergeMethod) => Promise<void>;
+  /** Syncs files and comments from the code host and retries unsynced changes. */
+  onSync?: () => Promise<void>;
   canQuickApprove: boolean;
 }) {
   const { t } = useI18n();
@@ -64,6 +67,7 @@ export function PullRequestActionsMenu({
         <RadixMenu.Content data-flow-motion="floating" className="project-action-menu review-actions-menu" align="start" sideOffset={4} collisionPadding={16}>
           <MenuItem icon={<ExternalLink />} label={t(`Open in ${host}`)} shortcut={["O", "then", "G"]} onSelect={() => window.open(review.url, "_blank", "noopener,noreferrer")} />
           <MenuItem icon={<Star />} label={t(review.favorite ? "Unfavorite" : "Favorite")} shortcut={["Alt", "F"]} onSelect={() => void onMutate({ favorite: !review.favorite })} />
+          {onSync && <MenuItem icon={<RefreshCw />} label={t(`Sync with ${host}`)} onSelect={() => void onSync()} />}
           <RadixMenu.Separator />
           <RadixMenu.Sub>
             <RadixMenu.SubTrigger>

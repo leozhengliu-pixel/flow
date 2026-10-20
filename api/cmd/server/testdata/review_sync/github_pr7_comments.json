@@ -1,0 +1,99 @@
+[
+ {
+  "id": 4320909403,
+  "pull_request_review_id": 5580132882,
+  "path": "src/math.js",
+  "line": 11,
+  "original_line": 11,
+  "start_line": null,
+  "original_start_line": null,
+  "side": "RIGHT",
+  "start_side": null,
+  "commit_id": "2e5639ebec70c843f494e8fa2d563e4766f41848",
+  "original_commit_id": "2e5639ebec70c843f494e8fa2d563e4766f41848",
+  "diff_hunk": "@@ -2,6 +2,17 @@ export function add(a, b) {\n   return a + b;\n }\n \n+export function subtract(a, b) {\n+  return a - b;\n+}\n+\n export function divide(a, b) {\n+  if (b === 0) {\n+    throw new RangeError(\"Division by zero\");",
+  "body": "Should this be a TypeError instead?\n\n```suggestion\n    throw new TypeError(\"Division by zero\");\n```",
+  "html_url": "https://github.com/jiaozongben/flow-coding-test/pull/7#discussion_r4320909403",
+  "created_at": "2026-10-20T02:36:48Z",
+  "updated_at": "2026-10-20T02:36:48Z",
+  "subject_type": "line",
+  "user": {
+   "login": "jiaozongben",
+   "avatar_url": "https://avatars.githubusercontent.com/u/12377698?v=4",
+   "type": "User"
+  }
+ },
+ {
+  "id": 4320909410,
+  "pull_request_review_id": 5580132882,
+  "path": "src/math.js",
+  "line": 18,
+  "original_line": 18,
+  "start_line": null,
+  "original_start_line": null,
+  "side": "RIGHT",
+  "start_side": null,
+  "commit_id": "2e5639ebec70c843f494e8fa2d563e4766f41848",
+  "original_commit_id": "2e5639ebec70c843f494e8fa2d563e4766f41848",
+  "diff_hunk": "@@ -2,6 +2,17 @@ export function add(a, b) {\n   return a + b;\n }\n \n+export function subtract(a, b) {\n+  return a - b;\n+}\n+\n export function divide(a, b) {\n+  if (b === 0) {\n+    throw new RangeError(\"Division by zero\");\n+  }\n   return a / b;\n }\n+\n+export function clamp(value, min, max) {\n+  return Math.min(Math.max(value, min), max);\n+}",
+  "body": "What happens when min > max? Maybe validate the bounds.",
+  "html_url": "https://github.com/jiaozongben/flow-coding-test/pull/7#discussion_r4320909410",
+  "created_at": "2026-10-20T02:36:48Z",
+  "updated_at": "2026-10-20T02:36:48Z",
+  "subject_type": "line",
+  "user": {
+   "login": "jiaozongben",
+   "avatar_url": "https://avatars.githubusercontent.com/u/12377698?v=4",
+   "type": "User"
+  }
+ },
+ {
+  "id": 4320909416,
+  "pull_request_review_id": 5580132882,
+  "path": "src/geometry.js",
+  "line": 12,
+  "original_line": 12,
+  "start_line": null,
+  "original_start_line": null,
+  "side": "RIGHT",
+  "start_side": null,
+  "commit_id": "2e5639ebec70c843f494e8fa2d563e4766f41848",
+  "original_commit_id": "2e5639ebec70c843f494e8fa2d563e4766f41848",
+  "diff_hunk": "@@ -0,0 +1,13 @@\n+import { add } from \"./math.js\";\n+\n+export function perimeter(width, height) {\n+  return 2 * add(width, height);\n+}\n+\n+export function area(width, height) {\n+  return width * height;\n+}\n+\n+export function circleArea(radius) {\n+  return Math.PI * radius * radius;",
+  "body": "Nit: use `radius ** 2`.\n\n```suggestion\n  return Math.PI * radius ** 2;\n```",
+  "html_url": "https://github.com/jiaozongben/flow-coding-test/pull/7#discussion_r4320909416",
+  "created_at": "2026-10-20T02:36:48Z",
+  "updated_at": "2026-10-20T02:36:48Z",
+  "subject_type": "line",
+  "user": {
+   "login": "jiaozongben",
+   "avatar_url": "https://avatars.githubusercontent.com/u/12377698?v=4",
+   "type": "User"
+  }
+ },
+ {
+  "id": 4320909537,
+  "pull_request_review_id": 5580133046,
+  "in_reply_to_id": 4320909403,
+  "path": "src/math.js",
+  "line": 11,
+  "original_line": 11,
+  "start_line": null,
+  "original_start_line": null,
+  "side": "RIGHT",
+  "start_side": null,
+  "commit_id": "2e5639ebec70c843f494e8fa2d563e4766f41848",
+  "original_commit_id": "2e5639ebec70c843f494e8fa2d563e4766f41848",
+  "diff_hunk": "@@ -2,6 +2,17 @@ export function add(a, b) {\n   return a + b;\n }\n \n+export function subtract(a, b) {\n+  return a - b;\n+}\n+\n export function divide(a, b) {\n+  if (b === 0) {\n+    throw new RangeError(\"Division by zero\");",
+  "body": "Good point, RangeError felt closer to the intent but happy either way.",
+  "html_url": "https://github.com/jiaozongben/flow-coding-test/pull/7#discussion_r4320909537",
+  "created_at": "2026-10-20T02:36:50Z",
+  "updated_at": "2026-10-20T02:36:50Z",
+  "subject_type": "line",
+  "user": {
+   "login": "jiaozongben",
+   "avatar_url": "https://avatars.githubusercontent.com/u/12377698?v=4",
+   "type": "User"
+  }
+ }
+]

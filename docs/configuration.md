@@ -621,18 +621,29 @@ account" with a shortcut there). With a linked account Flow:
 
 - attributes host activity to the member: PR/MR authors, requested reviewers,
   comment senders in Reviews, and commenters on coding session PRs/MRs;
-- acts as the member: Reviews comments, approvals, change requests, merges
-  and close/reopen are posted with the member's own token, and coding
+- acts as the member: Reviews comments, replies, inline comments, thread
+  resolution, approvals, change requests, merges and close/reopen are posted
+  with the member's own token, and coding
   sessions push, commit and open their PR/MR as the member (see
   [coding-sessions-security.md](coding-sessions-security.md#member-credentials)).
 
 Without a link Flow falls back to the workspace integration, and the action
 shows who it was posted as ("Posted as @flow-bot via the workspace
-integration"). A member token is only ever used for that member's own
-actions. A member who lacks a permission on the host (HTTP 403) is refused;
+integration"). The workspace credentials are tried in order: the GitHub App
+installation, then the classic connection. A member token is only ever used
+for that member's own actions. A member who lacks a permission on the host
+(HTTP 403), or cannot see the pull request or comment (HTTP 404), is refused;
 Flow does not retry with the workspace credential. A token the host rejects
 as invalid (HTTP 401), or a refresh that fails, marks the account
 **Reconnect** and the action falls back to the workspace.
+
+Comments, replies, inline comments and thread resolution are saved in Flow
+first and then written to the host. When the host refuses one (for example
+"Your GitHub account can't make this change"), the change stays in Flow
+marked "Not synced" with the error, and **Retry** sends it again as the same
+member, for instance once they have been given access. Approvals, change
+requests, merges and close/reopen are applied on the host first and fail
+without changing Flow.
 
 Tokens are sealed in the encrypted connector secret store
 (`FLOW_CONNECTOR_SECRET_KEY` is required), never returned by the API, and

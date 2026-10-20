@@ -1779,6 +1779,27 @@ export interface ReviewFile {
   patch: string;
   /** Old path of a renamed or moved file. */
   previousPath?: string;
+  /** The code host sent no patch (binary or too large to diff). */
+  patchUnavailable?: boolean;
+}
+/** Diff side of a code comment: LEFT is the old file (removed lines), RIGHT the new file. */
+export type ReviewCommentSide = "LEFT" | "RIGHT";
+/** The code host object a review event mirrors. */
+export interface ReviewEventRemote {
+  provider: string;
+  kind: "review_comment" | "issue_comment" | "review" | "note";
+  id: string;
+  threadId?: string;
+  url?: string;
+}
+/** A local change the code host has not confirmed yet. */
+export interface ReviewEventSync {
+  state: "pending" | "failed";
+  op: "create" | "resolve" | "unresolve";
+  error?: string;
+  attemptedAt: string;
+  /** The member whose change this is (a resolve can be someone other than the comment's author); retries post as them. */
+  actorId?: UUID;
 }
 export interface ReviewEvent {
   id: UUID;
@@ -1788,9 +1809,21 @@ export interface ReviewEvent {
   parentId?: UUID;
   path?: string;
   line?: number;
+  /** Diff side of a code comment (RIGHT when absent). */
+  side?: ReviewCommentSide;
+  /** Start of a multi-line comment ending at `line`. */
+  startLine?: number;
+  startSide?: ReviewCommentSide;
+  /** The commented code changed since; `line` is where it was. */
+  outdated?: boolean;
+  commitId?: string;
+  diffHunk?: string;
   resolved?: boolean;
   actor: User;
   createdAt: string;
+  updatedAt?: string;
+  remote?: ReviewEventRemote;
+  sync?: ReviewEventSync;
   /** Set on Flow-originated actions that were posted to the code host. */
   postedAs?: { provider: "github" | "gitlab"; login: string; via: "member" | "workspace" };
 }
@@ -1832,6 +1865,13 @@ export interface CodeReview {
   files: ReviewFile[];
   events: ReviewEvent[];
   previews?: DeployPreview[];
+  headSha?: string;
+  baseSha?: string;
+  startSha?: string;
+  /** Last full sync of files and comments from the code host. */
+  syncedAt?: string;
+  /** Why the last sync failed. */
+  syncError?: string;
   favorite: boolean;
   draft: boolean;
   quickToReview: boolean;

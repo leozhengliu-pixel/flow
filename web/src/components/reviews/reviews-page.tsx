@@ -1,5 +1,5 @@
-import { GitMerge, GitPullRequest, PanelRightClose, Search, Zap } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { AlertCircle, GitMerge, GitPullRequest, PanelRightClose, Search, Zap } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/lib/toast";
 
 import { Avatar } from "@/components/issue/issue-row";
@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { CheckboxMark } from "@/components/ui/checkbox-mark";
 import { useI18n } from "@/i18n/i18n";
 import { toggleFavoriteFor } from "@/lib/favorites";
-import { submitReview, updateIntegrationConnection, updateReview, updateUserSettings } from "@/lib/api";
+import { submitReview, syncReview, updateIntegrationConnection, updateReview, updateUserSettings } from "@/lib/api";
 import { integrationSettingsPath, reviewAgentPath, reviewPath, reviewsPath, type ReviewRouteTab } from "@/lib/app-routes";
 import type { BootstrapData, CodeReview } from "@/types/flow";
 
@@ -410,6 +410,42 @@ function ReviewDetail({
     if (data.userSettings[data.viewer.id]?.mergeStrategy !== mergeStrategy) void updateUserSettings({ mergeStrategy }).catch(() => undefined);
   };
 
+  // Files and comments come from the code host: refresh them when the review
+  // opens (skipped server-side when synced in the last 30 seconds).
+  const hostReview = review.provider === "github" || review.provider === "gitlab";
+  const codeHost = review.provider === "gitlab" ? "GitLab" : "GitHub";
+  // "Sync with GitHub": a forced sync that also retries unsynced comments.
+  const syncWithHost = async () => {
+    try {
+      const updated = await syncReview(review.id, true);
+      await onReload();
+      if (updated?.syncError) toast.error(updated.syncError);
+      else toast.success(t(`Synced with ${codeHost}`));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("Could not sync with the code host"));
+    }
+  };
+  const openSync = useRef({ syncedAt: review.syncedAt, onReload });
+  useEffect(() => {
+    openSync.current = { syncedAt: review.syncedAt, onReload };
+  });
+  useEffect(() => {
+    // Once per opened review.
+    if (!hostReview) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const updated = await syncReview(review.id, false);
+        if (!cancelled && updated && updated.syncedAt !== openSync.current.syncedAt) await openSync.current.onReload();
+      } catch {
+        // The review stays as stored; the actions menu can sync again.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [review.id, hostReview]);
+
   const shortcuts = useOptionalPullRequestReviewShortcuts();
   const agentShown = Boolean(agentSessionId) && showAgent !== false;
   useEffect(() => {
@@ -481,6 +517,7 @@ function ReviewDetail({
             onOpenPicker={onOpenPicker}
             onQuickApprove={quickApprove}
             onMerge={merge}
+            onSync={hostReview ? syncWithHost : undefined}
           />
         }
         actions={
@@ -504,6 +541,15 @@ function ReviewDetail({
       />
       <div className={agentShown ? "review-agent-layout" : "review-agent-layout is-agent-hidden"}>
       <div className="review-detail-body review-agent-layout-main">
+        {review.syncError && (
+          <p className="review-detail-sync-error" role="status">
+            <AlertCircle />
+            <span>{t(`Could not sync with ${codeHost}`)}</span>
+            <span data-i18n-ignore title={review.syncError}>
+              {review.syncError}
+            </span>
+          </p>
+        )}
         {tab === "overview" ? (
           <ReviewOverview
             data={data}
