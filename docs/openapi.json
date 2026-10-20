@@ -25730,6 +25730,54 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/reviews/import": {
+      "get": {
+        "operationId": "get_reviews_import",
+        "tags": [
+          "reviews"
+        ],
+        "summary": "GET /api/reviews/import",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      },
+      "post": {
+        "operationId": "post_reviews_import",
+        "tags": [
+          "reviews"
+        ],
+        "summary": "POST /api/reviews/import",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/scim/tokens": {
       "get": {
         "operationId": "get_scim_tokens",
