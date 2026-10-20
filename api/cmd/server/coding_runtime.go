@@ -134,6 +134,9 @@ func (s *server) initCodingCore(services *codingServices) {
 		}
 		return host.SessionGuidance(session.HostName)
 	}
+	// Approved workspace MCP connectors behind Flow's MCP gateway
+	// (coding_mcp_gateway.go), listed in the runner bootstrap.
+	services.service.MCPServers = s.codingMCPServers
 	// Track A: volumesnapshot restores (archive restores need no hook). The
 	// strategy is resolved per call because the provider opens after this.
 	services.service.RestoreSnapshot = func(ctx context.Context, storageRef, sandboxID, workspaceKey string) (sandbox.VolumeSource, error) {
@@ -195,6 +198,7 @@ func (s *server) registerCodingRoutes(mux *http.ServeMux) {
 	s.registerCodingSessionRoutes(mux)
 	s.registerCodingRuntimeRoutes(mux)
 	s.registerCodingGitRelayRoutes(mux)
+	s.registerCodingMCPGatewayRoutes(mux)
 	s.registerCodingEnvironmentRoutes(mux)
 	s.registerCodingLLMProxyRoutes(mux)
 	s.registerGitHubAppRoutes(mux)

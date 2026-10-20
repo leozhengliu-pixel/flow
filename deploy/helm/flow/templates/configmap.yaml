@@ -58,6 +58,16 @@ data:
   {{- range $key, $value := $v.config.env }}
   {{ $key }}: {{ $value | toString | quote }}
   {{- end }}
+  {{- with $v.outbound }}
+  {{- if .trustedPrivateEndpoints }}
+  # Operator-trusted private endpoints (docs/configuration.md).
+  FLOW_TRUSTED_PRIVATE_ENDPOINTS: {{ join "," .trustedPrivateEndpoints | quote }}
+  FLOW_TRUSTED_PRIVATE_NETWORKS: {{ join "," .trustedPrivateNetworks | quote }}
+  {{- end }}
+  {{- if or .trustedCA.secretName .trustedCA.configMapName }}
+  FLOW_TRUSTED_CA_FILE: /var/run/flow/trusted-ca/ca.crt
+  {{- end }}
+  {{- end }}
   # Coding sessions (docs/coding-sessions.md).
   FLOW_CODING_ENABLED: {{ $c.enabled | quote }}
   {{- if $c.enabled }}
@@ -73,6 +83,9 @@ data:
   FLOW_CODING_BRANCH_PREFIX: {{ $c.branchPrefix | quote }}
   FLOW_CODING_PR_MENTION: {{ $c.prMention | quote }}
   FLOW_CODING_BROWSER: {{ ternary "on" "off" $c.browser | quote }}
+  {{- with $c.mcpServers }}
+  FLOW_CODING_MCP_SERVERS: {{ join "," . | quote }}
+  {{- end }}
   FLOW_CODING_DEBUG_TERMINAL: {{ ternary "on" "off" $c.debugTerminal | quote }}
   FLOW_CODING_ARTIFACT_MAX_BYTES: {{ $c.artifactMaxBytes | int64 | quote }}
   FLOW_CODING_MAX_SESSIONS: {{ $c.maxSessions | quote }}

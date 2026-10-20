@@ -1,6 +1,6 @@
 import type { RunnerPaths } from '../config.js'
 import type { StreamMapper, MapperOptions } from '../mapping/common.js'
-import type { BootstrapResponse, HarnessName, Turn } from '../protocol.js'
+import type { BootstrapMCPServer, BootstrapResponse, HarnessName, Turn } from '../protocol.js'
 
 export interface McpServerCommand {
   command: string
@@ -69,6 +69,41 @@ export function withoutProviderKeys(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const out = { ...env }
   for (const name of PROVIDER_KEY_VARS) delete out[name]
   return out
+}
+
+/**
+ * The gateway MCP servers to add to the harness config: valid names only,
+ * never the runner's own "flow" server, and only URLs on Flow's runtime
+ * (the gateway), so a bootstrap can never point the harness elsewhere with
+ * the sandbox token.
+ */
+export function gatewayMcpServers(bootstrap: BootstrapResponse): BootstrapMCPServer[] {
+  const runtime = runtimeOrigin(bootstrap)
+  const seen = new Set<string>(['flow'])
+  return (bootstrap.mcpServers ?? []).filter((server) => {
+    if (!/^[a-z0-9_-]{1,64}$/.test(server.name) || seen.has(server.name)) return false
+    let url: URL
+    try {
+      url = new URL(server.url)
+    } catch {
+      return false
+    }
+    if (!runtime || url.origin !== runtime || !url.pathname.startsWith('/internal/coding-runtime/mcp/')) return false
+    seen.add(server.name)
+    return true
+  })
+}
+
+/** The origin of Flow's runtime API, taken from the LLM proxy URLs. */
+function runtimeOrigin(bootstrap: BootstrapResponse): string | undefined {
+  for (const value of [bootstrap.llm.anthropicBaseUrl, bootstrap.llm.openaiBaseUrl, bootstrap.llm.openSourceBaseUrl]) {
+    try {
+      return new URL(value).origin
+    } catch {
+      // try the next one
+    }
+  }
+  return undefined
 }
 
 /** The prompt text the harness receives: the turn prompt plus attachment links. */

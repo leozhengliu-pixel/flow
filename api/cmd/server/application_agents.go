@@ -97,7 +97,7 @@ func (s *server) configureApplicationInstallation(w http.ResponseWriter, r *http
 			writeError(w, 400, "Requested scopes exceed the application registration")
 			return
 		}
-		if input.WebhookURL != "" && !integrationEndpointSafe(r.Context(), input.WebhookURL, s.authDisabled) {
+		if input.WebhookURL != "" && !integrationEndpointSafe(r.Context(), input.WebhookURL, s.authDisabled, outboundTrustedPrivate) {
 			writeError(w, 400, "Invalid application webhook URL")
 			return
 		}

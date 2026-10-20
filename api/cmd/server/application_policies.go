@@ -12,15 +12,19 @@ import (
 )
 
 type applicationPolicy struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Kind      string    `json:"kind"`
-	URL       string    `json:"url,omitempty"`
-	OwnerID   string    `json:"ownerId"`
-	Shared    bool      `json:"shared"`
-	Status    string    `json:"status"`
-	Scopes    []string  `json:"scopes,omitempty"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	Kind    string   `json:"kind"`
+	URL     string   `json:"url,omitempty"`
+	OwnerID string   `json:"ownerId"`
+	Shared  bool     `json:"shared"`
+	Status  string   `json:"status"`
+	Scopes  []string `json:"scopes,omitempty"`
+	// CodingSessions exposes an approved, shared MCP connector to coding
+	// sessions through Flow's MCP gateway (coding_mcp_gateway.go). Only
+	// workspace admins set it.
+	CodingSessions bool      `json:"codingSessions,omitempty"`
+	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
 func applicationPolicies(data *domain.Bootstrap) []applicationPolicy {
@@ -87,10 +91,13 @@ func (s *server) saveApplicationPolicy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "invalid application")
 		return
 	}
+	if input.Kind != "mcp" {
+		input.CodingSessions = false
+	}
 	if input.Kind == "mcp" {
 		input.URL = strings.TrimSpace(input.URL)
-		if !integrationEndpointSafe(r.Context(), input.URL, s.authDisabled) {
-			writeError(w, 400, "MCP server must use a public HTTPS endpoint")
+		if err := integrationEndpointError(r.Context(), input.URL, s.authDisabled, outboundTrustedPrivate); err != nil {
+			writeError(w, 400, "MCP server must use an HTTPS endpoint Flow may reach: "+err.Error())
 			return
 		}
 		if !view.WorkspaceSettings.MCPConnectorsEnabled {
@@ -98,7 +105,7 @@ func (s *server) saveApplicationPolicy(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if !admin && (input.Kind == "oauth" || input.Shared || input.Status == "approved" || input.Status == "rejected") {
+	if !admin && (input.Kind == "oauth" || input.Shared || input.CodingSessions || input.Status == "approved" || input.Status == "rejected") {
 		writeError(w, 403, "Administrator approval required")
 		return
 	}

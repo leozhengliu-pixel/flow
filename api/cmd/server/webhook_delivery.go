@@ -999,8 +999,8 @@ func (s *server) attemptWebhookDelivery(ctx context.Context, delivery domain.Web
 func (s *server) sendWebhookRequest(ctx context.Context, delivery domain.WebhookDelivery, now time.Time) (int, string, error) {
 	timestamp := now.UnixMilli()
 	body := webhookBodyWithTimestamp(delivery.Payload, timestamp)
-	if !integrationEndpointSafe(ctx, delivery.URL, s.authDisabled) {
-		return 0, "", errors.New("endpoint not allowed: webhooks must use a public HTTPS URL")
+	if err := integrationEndpointError(ctx, delivery.URL, s.authDisabled, outboundTrustedPrivate); err != nil {
+		return 0, "", errors.New("endpoint not allowed: " + err.Error())
 	}
 	secret, _, err := s.store.WebhookSigningSecret(ctx, delivery.SecretRef)
 	if err != nil {
@@ -1013,7 +1013,7 @@ func (s *server) sendWebhookRequest(ctx context.Context, delivery domain.Webhook
 		return 0, "", err
 	}
 	setWebhookHeaders(request.Header, delivery, timestamp, secret, body)
-	client := secureOutboundClient(webhookDeliveryTimeout)
+	client := secureOutboundClient(webhookDeliveryTimeout, outboundTrustedPrivate)
 	if s.authDisabled && safeLocalDevelopmentURL(delivery.URL) {
 		client = &http.Client{Timeout: webhookDeliveryTimeout}
 	}

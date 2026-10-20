@@ -311,6 +311,80 @@ Cluster keys that participate in a single Lua script or transaction use Redis
 hash tags so they remain in one slot. The client follows cluster redirections
 and maintains a connection pool per node.
 
+## Trusted private endpoints
+
+Flow makes server-side requests to URLs that workspace members, admins and
+remote servers supply: MCP connectors, webhooks, identity providers,
+self-hosted GitLab. By default every such request must be HTTPS to a
+**public** address: Flow resolves the host and refuses the request unless
+every DNS answer is a public unicast address, so a workspace cannot use Flow
+to probe the internal network or a cloud metadata service.
+
+An enterprise that runs these services on its intranet can open **specific**
+private hosts. This is an operator decision, made in the deployment's
+environment (or Helm values), never by workspace members or admins, and it
+opens exactly the listed hosts on the listed networks to Flow's server-side
+requests:
+
+| Variable | Helm value | Meaning |
+| --- | --- | --- |
+| `FLOW_TRUSTED_PRIVATE_ENDPOINTS` | `outbound.trustedPrivateEndpoints` | Comma-separated exact hosts (`hsb.haier.net`) or `*.` suffix wildcards (`*.corp.example.com`, which matches any subdomain but not `corp.example.com` itself). A bare `*`, a wildcard over a single label (`*.com`) and metadata or loopback names are refused at startup. |
+| `FLOW_TRUSTED_PRIVATE_NETWORKS` | `outbound.trustedPrivateNetworks` | Comma-separated CIDRs (`10.218.0.0/16`) the trusted hosts may resolve to. Required when hosts are listed; `/0` is refused. |
+| `FLOW_TRUSTED_CA_FILE` | `outbound.trustedCA` (a mounted Secret or ConfigMap) | PEM CA bundle added to the system roots, for intranet certificates issued by an enterprise PKI. TLS verification is never turned off. |
+
+A private destination is allowed only when the URL's host matches a trusted
+host pattern **and** every address it resolves to is inside a trusted
+network. Whatever is listed, these stay blocked: loopback, link-local
+(`169.254.0.0/16`, `fe80::/10`), cloud metadata (`169.254.169.254`,
+`fd00:ec2::/32`, `100.100.100.200`, `metadata.google.internal`, …),
+unspecified, multicast and broadcast addresses. Plain HTTP stays refused (the
+development-only loopback switches are unchanged).
+
+The same policy runs when a URL is saved and on every connection. Flow
+resolves the host, checks every answer and dials the address it checked, so a
+DNS answer that changes after the check (DNS rebinding) is checked again
+rather than trusted; TLS keeps the URL's host name for SNI and certificate
+verification. Redirects are checked the same way, and a request that started
+at a trusted private host may only be redirected to another trusted host.
+Environment proxies (`HTTPS_PROXY`) are not used for these requests, since a
+proxy would resolve the destination itself.
+
+Refusals tell the member what to do without revealing internal addresses, for
+example `hsb.haier.net resolves to a private address; an operator can allow it
+with FLOW_TRUSTED_PRIVATE_ENDPOINTS and FLOW_TRUSTED_PRIVATE_NETWORKS`. The
+resolved addresses are written only to the server log.
+
+Which requests honour the trusted endpoints is decided per caller:
+
+| Honour trusted private endpoints | Public HTTPS only |
+| --- | --- |
+| MCP connectors (install, OAuth discovery, tool calls, URL elicitations, the coding-session MCP gateway); webhooks, application webhooks and the audit log stream; integration deliveries and integration OAuth token/revoke endpoints; enterprise identity providers (OIDC discovery, SAML metadata); self-hosted GitLab and GitHub Enterprise, member code-host links and review provider APIs. | Link previews, attachments imported from a URL and file previews: any member can paste those URLs, so they never reach the intranet. |
+
+Example: an intranet code-search MCP server at `https://hsb.haier.net/api/mcp`
+(resolving to `10.218.161.13`) with a certificate from the enterprise CA:
+
+```dotenv
+FLOW_TRUSTED_PRIVATE_ENDPOINTS=hsb.haier.net
+FLOW_TRUSTED_PRIVATE_NETWORKS=10.218.0.0/16
+FLOW_TRUSTED_CA_FILE=/var/run/flow/trusted-ca/ca.crt   # only if the certificate is not publicly trusted
+FLOW_MCP_CREDENTIALS={"mcp-sourcebot-production":{"url":"https://hsb.haier.net/api/mcp","token":"<server token>"}}
+```
+
+```yaml
+# Helm
+outbound:
+  trustedPrivateEndpoints: [hsb.haier.net]
+  trustedPrivateNetworks: [10.218.0.0/16]
+  trustedCA:
+    secretName: enterprise-ca   # key ca.crt; or configMapName
+```
+
+A workspace admin then installs it (`PUT /api/application-policies` with
+`{"id":"mcp-sourcebot-production","name":"Sourcebot","kind":"mcp","url":"https://hsb.haier.net/api/mcp","shared":true,"status":"approved"}`)
+and, to let coding sessions use it, enables it for coding sessions (see
+[MCP servers in coding sessions](#mcp-servers-in-coding-sessions)). The Flow
+Pods need a network route to the host; sandboxes do not.
+
 ## Object storage
 
 `FLOW_STORAGE_DRIVER` accepts `local` or `s3`. Objects remain private: Flow
@@ -1086,6 +1160,44 @@ keys unreadable; they must be added or uploaded again.
 
 **Commit signing.** A key uploaded under Settings › Account › Commit signing (SSH or unencrypted OpenPGP) is stored encrypted under `FLOW_CODING_SECRET_KEY`, and the private key never enters a sandbox. The runner's `flow-sign` shim calls `POST /internal/coding-runtime/sign`, and Flow answers with an SSHSIG (namespace `git`) or an armored OpenPGP detached signature. When the workspace requires signed commits and the user has no stored key, the session fails with `missingCommitSigningKey`. Keys uploaded before this release stored no private key: `GET /api/account/signing-key` returns `needsReupload: true` for them, and the user must upload the key again.
 
+### MCP servers in coding sessions
+
+Coding-session agents (Claude Code, Codex, OpenCode) can use the workspace's
+approved MCP connectors, for example an intranet code-search server. The
+sandbox never gets the connector's credential or a network route to it:
+Flow's MCP gateway (`/internal/coding-runtime/mcp/{id}`) relays the calls,
+the same way the LLM proxy relays model traffic and the git relay relays
+pushes.
+
+| Variable | Helm value | Meaning |
+| --- | --- | --- |
+| `FLOW_CODING_MCP_SERVERS` | `coding.mcpServers` | Comma-separated application policy ids exposed to coding sessions in every workspace where that policy exists, in addition to the ones a workspace admin enables. |
+
+A connector reaches a session when it is an MCP connector that is
+**approved**, **workspace-wide** (shared), allowed by the workspace's
+connector settings (MCP connectors on, not blocked by sensitive data
+protection), and either enabled for coding sessions by a workspace admin
+(Settings › Security › *Enable for coding sessions*, the policy's
+`codingSessions` field) or listed in `FLOW_CODING_MCP_SERVERS`.
+
+The runner bootstrap lists the session's servers (`mcpServers`), and the
+runner adds each one to the harness config as a streamable-HTTP MCP server at
+the gateway, authenticated with the sandbox token. For every request the
+gateway checks the sandbox token (refused once the session or its sandbox
+ends) and the policy again (refused as soon as an admin revokes it), then
+opens the upstream connection with the stored credential
+(`FLOW_MCP_CREDENTIALS`, or the session creator's connector authorization)
+through the [trusted-endpoint policy](#trusted-private-endpoints). Each
+`tools/call` is written to the workspace audit log as
+`coding_session.mcp_tool_call` (server, tool, outcome, session, sandbox and
+user; not the arguments or results). The gateway is stateless and offers no
+server-to-client stream; elicitation is not available in sandboxes.
+
+For the intranet example above, enable `mcp-sourcebot-production` for coding
+sessions in the workspace, or set `FLOW_CODING_MCP_SERVERS=mcp-sourcebot-production`
+(`coding.mcpServers: [mcp-sourcebot-production]`). Sessions then see a
+`sourcebot` MCP server.
+
 ### Code hosts
 
 **GitHub.** Coding sessions on GitHub use the GitHub App; its settings
@@ -1251,7 +1363,7 @@ Database migration 4 adds per-session authentication context for existing instal
 
 `GET/PUT /api/application-policies` and `DELETE /api/application-policies/{id}` manage application decisions and external Agent MCP connectors. A connector has a server URL, owner, personal/workspace scope and pending/approved/rejected status. Personal connectors are available only to their owner. When `allowedMcpConnectors` is `approved`, discovery and execution require approval; rejected connectors are always blocked. Disabling `mcpConnectorsEnabled` also blocks tools from already-open Agent conversations.
 
-External MCP connectors support Streamable HTTP initialization, JSON/SSE responses, paginated `tools/list` and `tools/call`. They require both `FLOW_AGENT_TOOLS_ENABLED` and `FLOW_AGENT_WRITE_TOOLS` and every call requires interactive approval. Tools from external servers are conservatively treated as potentially mutating. Discovery is bounded to 30 seconds, 10 pages per server and 128 tools total. Execution checks current membership and workspace policy again after approval. Redirects and non-public production endpoints are rejected.
+External MCP connectors support Streamable HTTP initialization, JSON/SSE responses, paginated `tools/list` and `tools/call`. They require both `FLOW_AGENT_TOOLS_ENABLED` and `FLOW_AGENT_WRITE_TOOLS` and every call requires interactive approval. Tools from external servers are conservatively treated as potentially mutating. Discovery is bounded to 30 seconds, 10 pages per server and 128 tools total. Execution checks current membership and workspace policy again after approval. Redirects and non-public production endpoints are rejected, unless the operator trusts the host (see [Trusted private endpoints](#trusted-private-endpoints)).
 
 For servers requiring bearer authentication, set `FLOW_MCP_CREDENTIALS` to a JSON object keyed by connector ID. Each value contains `url` and `token`. The URL must match the registered URL (ignoring a trailing slash). Alternatively, use the connector's advanced authentication headers or its Authorize action. Credentials are never returned by the policy API.
 

@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import type { MapperOptions, StreamMapper } from '../mapping/common.js'
 import { OpenCodeMapper } from '../mapping/opencode.js'
-import { turnPrompt, withoutProviderKeys, type HarnessAdapter, type HarnessContext, type HarnessInvocation } from './types.js'
+import { gatewayMcpServers, turnPrompt, withoutProviderKeys, type HarnessAdapter, type HarnessContext, type HarnessInvocation } from './types.js'
 
 // OpenCode for Linear's "Open source" option, pinned in the image.
 // First turn:  opencode run --format json --auto --thinking -m flow/<m> [--variant <e>]
@@ -13,6 +13,13 @@ import { turnPrompt, withoutProviderKeys, type HarnessAdapter, type HarnessConte
 export function opencodeConfig(ctx: HarnessContext): string {
   const { bootstrap } = ctx
   const model = bootstrap.harness.model
+  const mcp: Record<string, unknown> = {
+    flow: { type: 'local', command: [ctx.mcp.command, ...ctx.mcp.args], environment: ctx.mcp.env, enabled: true },
+  }
+  // Workspace MCP servers behind Flow's gateway, keyed by the sandbox token.
+  for (const server of gatewayMcpServers(bootstrap)) {
+    mcp[server.name] = { type: 'remote', url: server.url, headers: { Authorization: 'Bearer {env:FLOW_LLM_TOKEN}' }, enabled: true }
+  }
   const config = {
     $schema: 'https://opencode.ai/config.json',
     model: `flow/${model}`,
@@ -29,9 +36,7 @@ export function opencodeConfig(ctx: HarnessContext): string {
         models: { [model]: { name: model } },
       },
     },
-    mcp: {
-      flow: { type: 'local', command: [ctx.mcp.command, ...ctx.mcp.args], environment: ctx.mcp.env, enabled: true },
-    },
+    mcp,
   }
   return JSON.stringify(config, null, 2)
 }

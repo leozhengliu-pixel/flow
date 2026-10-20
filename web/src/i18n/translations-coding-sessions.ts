@@ -307,4 +307,8 @@ export const codingSessionsZhCN: Record<string, string> = {
   "Could not copy logs": "无法复制日志",
   "Search repositories...": "搜索仓库...",
   "Could not create the environment": "无法创建环境",
+  // Workspace MCP connectors exposed to coding sessions (MCP gateway)
+  "Enable for coding sessions": "在编码会话中启用",
+  "Disable for coding sessions": "在编码会话中停用",
+  "Coding-session agents reach this server through Flow; its credentials and network stay on the server": "编码会话中的 Agent 通过 Flow 访问此服务器；其凭据和网络始终留在服务器端",
 };

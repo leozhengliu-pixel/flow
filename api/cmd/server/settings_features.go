@@ -2080,7 +2080,7 @@ func (s *server) finishIntegrationOAuthJSON(w http.ResponseWriter, r *http.Reque
 
 func exchangeIntegrationToken(ctx context.Context, tokenURL string, config integrationOAuthConfig, code string, allowLocal bool) (string, string, int64, error) {
 	local := allowLocal && safeLocalDevelopmentURL(tokenURL)
-	if !local && !safeOutboundHTTPS(ctx, tokenURL) {
+	if !local && !safeOutboundHTTPS(ctx, tokenURL, outboundTrustedPrivate) {
 		return "", "", 0, errors.New("unsafe OAuth token endpoint")
 	}
 	values := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "client_id": {config.ClientID}, "redirect_uri": {config.RedirectURI}}
@@ -2093,7 +2093,7 @@ func exchangeIntegrationToken(ctx context.Context, tokenURL string, config integ
 		return "", "", 0, fmt.Errorf("OAuth token exchange failed: %w", err)
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	client := secureOutboundClient(15 * time.Second)
+	client := secureOutboundClient(15*time.Second, outboundTrustedPrivate)
 	if local {
 		client = &http.Client{Timeout: 15 * time.Second}
 	}
@@ -2138,7 +2138,7 @@ func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusServiceUnavailable, "OAuth integration is unavailable; token endpoint is not configured")
 		return
 	}
-	if !integrationEndpointSafe(r.Context(), oauthConfig.TokenURL, s.authDisabled) {
+	if !integrationEndpointSafe(r.Context(), oauthConfig.TokenURL, s.authDisabled, outboundTrustedPrivate) {
 		writeError(w, http.StatusUnprocessableEntity, "unsafe OAuth token endpoint")
 		return
 	}
@@ -2152,7 +2152,7 @@ func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	client := secureOutboundClient(15 * time.Second)
+	client := secureOutboundClient(15*time.Second, outboundTrustedPrivate)
 	if s.authDisabled && safeLocalDevelopmentURL(oauthConfig.TokenURL) {
 		client = &http.Client{Timeout: 15 * time.Second}
 	}
@@ -2227,7 +2227,7 @@ func (s *server) revokeIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 			writeError(w, http.StatusServiceUnavailable, "OAuth integration is unavailable; revoke endpoint is not configured")
 			return
 		}
-		if !integrationEndpointSafe(r.Context(), oauthConfig.RevokeURL, s.authDisabled) {
+		if !integrationEndpointSafe(r.Context(), oauthConfig.RevokeURL, s.authDisabled, outboundTrustedPrivate) {
 			writeError(w, http.StatusUnprocessableEntity, "unsafe OAuth revocation endpoint")
 			return
 		}
@@ -2237,7 +2237,7 @@ func (s *server) revokeIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		client := secureOutboundClient(15 * time.Second)
+		client := secureOutboundClient(15*time.Second, outboundTrustedPrivate)
 		if s.authDisabled && safeLocalDevelopmentURL(oauthConfig.RevokeURL) {
 			client = &http.Client{Timeout: 15 * time.Second}
 		}

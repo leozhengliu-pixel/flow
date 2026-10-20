@@ -65,7 +65,7 @@ func (t connectorTransport) CloseIdleConnections() {
 }
 
 func (t connectorTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	if !integrationEndpointSafe(r.Context(), r.URL.String(), t.allowLocal) {
+	if !integrationEndpointSafe(r.Context(), r.URL.String(), t.allowLocal, outboundTrustedPrivate) {
 		return nil, fmt.Errorf("unsafe MCP destination")
 	}
 	clone := r.Clone(r.Context())
@@ -104,7 +104,7 @@ func (s *server) openConnector(ctx context.Context, item applicationPolicy) (*re
 			headers = credential.Headers
 		}
 	}
-	httpClient := secureOutboundClient(0)
+	httpClient := secureOutboundClient(0, outboundTrustedPrivate)
 	if s.authDisabled && safeLocalDevelopmentURL(item.URL) {
 		httpClient = &http.Client{Transport: http.DefaultTransport}
 	}

@@ -216,6 +216,7 @@ expected_values = {
     "FLOW_CODING_LOCAL_ROOT": "/tmp/development-sandboxes",
     "FLOW_CODING_EGRESS_ALLOWLIST": ".corp-mirror.example.net,pypi.internal.example.com",
     "FLOW_CODING_INSTANCE_ID": "flow-prod",
+    "FLOW_CODING_MCP_SERVERS": "mcp-sourcebot-production,mcp-docs",
 }
 for key, want in expected_values.items():
     if env.get(key) != want:
@@ -283,6 +284,24 @@ if not find(docs, "HorizontalPodAutoscaler") or not find(docs, "PodDisruptionBud
     fail("production-ha", "HPA and PDB")
 if find(docs, "PersistentVolumeClaim"):
     fail("production-ha", "no PVC with S3")
+# Operator-trusted private endpoints and the enterprise CA bundle.
+env = flow_env(docs)
+for key, want in {
+    "FLOW_TRUSTED_PRIVATE_ENDPOINTS": "hsb.haier.net,*.corp.example.com",
+    "FLOW_TRUSTED_PRIVATE_NETWORKS": "10.218.0.0/16",
+    "FLOW_TRUSTED_CA_FILE": "/var/run/flow/trusted-ca/ca.crt",
+    "FLOW_CODING_MCP_SERVERS": "mcp-sourcebot-production",
+}.items():
+    if env.get(key) != want:
+        fail("production-ha", f"{key}={env.get(key)!r}, want {want!r}")
+pod = deployment["spec"]["template"]["spec"]
+mounts = {m["name"]: m for m in pod["containers"][0]["volumeMounts"]}
+volumes = {v["name"]: v for v in pod["volumes"]}
+if mounts.get("trusted-ca", {}).get("mountPath") != "/var/run/flow/trusted-ca" or volumes.get("trusted-ca", {}).get("secret", {}).get("items") != [{"key": "ca-bundle.pem", "path": "ca.crt"}]:
+    fail("production-ha", "enterprise CA bundle must be mounted from its Secret at /var/run/flow/trusted-ca/ca.crt")
+default_env = flow_env(load("default"))
+if any(key.startswith("FLOW_TRUSTED_") for key in default_env):
+    fail("default", "no trusted private endpoints unless the operator lists them")
 
 if failures:
     for failure in failures:

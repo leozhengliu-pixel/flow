@@ -252,6 +252,22 @@ seccompProfile:
 {{- fail "replicaCount > 1 or autoscaling requires storage.driver=s3 or a ReadWriteMany volume" -}}
 {{- end -}}
 {{- end -}}
+{{- with $v.outbound -}}
+{{- if and .trustedPrivateEndpoints (not .trustedPrivateNetworks) -}}
+{{- fail "outbound.trustedPrivateEndpoints requires outbound.trustedPrivateNetworks (the CIDRs the trusted hosts resolve to)" -}}
+{{- end -}}
+{{- if and .trustedPrivateNetworks (not .trustedPrivateEndpoints) -}}
+{{- fail "outbound.trustedPrivateNetworks requires outbound.trustedPrivateEndpoints (networks alone trust no host)" -}}
+{{- end -}}
+{{- range .trustedPrivateEndpoints -}}
+{{- if or (eq . "*") (eq . "*.") -}}
+{{- fail "outbound.trustedPrivateEndpoints: a bare * is not allowed; list exact hosts or *.domain wildcards" -}}
+{{- end -}}
+{{- end -}}
+{{- if and .trustedCA.secretName .trustedCA.configMapName -}}
+{{- fail "outbound.trustedCA: set secretName or configMapName, not both" -}}
+{{- end -}}
+{{- end -}}
 {{- if and $v.postgresql.enabled $v.mysql.enabled -}}
 {{- fail "enable at most one of postgresql.enabled and mysql.enabled" -}}
 {{- end -}}

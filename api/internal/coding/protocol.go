@@ -46,6 +46,23 @@ type BootstrapResponse struct {
 	// Guidance is the system prompt addition: workspace/team agent guidance,
 	// the environment's customGuidance, issue context and browser-testing rules.
 	Guidance string `json:"guidance"`
+	// MCPServers are the extra MCP servers the harness may use: approved
+	// workspace connectors exposed through Flow's MCP gateway. The runner
+	// adds them to the harness config as streamable-HTTP servers
+	// authenticated with the sandbox token; Flow forwards each call with the
+	// stored credential, so neither the credential nor the server's network
+	// is reachable from the sandbox.
+	MCPServers []BootstrapMCPServer `json:"mcpServers,omitempty"`
+}
+
+// BootstrapMCPServer is one MCP server behind Flow's gateway.
+type BootstrapMCPServer struct {
+	// Name is the harness config key ([a-z0-9_-], never "flow").
+	Name string `json:"name"`
+	// Title is the workspace's display name for the server.
+	Title string `json:"title"`
+	// URL is {runtime}/internal/coding-runtime/mcp/{id}.
+	URL string `json:"url"`
 }
 
 // BootstrapRepo is the repository to work on.

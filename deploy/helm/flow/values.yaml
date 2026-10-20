@@ -111,6 +111,31 @@ autoscaling:
 networkPolicy:
   enabled: false
 
+# Trusted private endpoints (docs/configuration.md "Trusted private
+# endpoints"). By default Flow only connects to public HTTPS addresses for
+# URLs that workspace members and admins configure (MCP connectors,
+# webhooks, identity providers, self-hosted GitLab). Listing hosts here is
+# an operator decision that opens those specific intranet hosts to Flow's
+# server-side requests: a host is reachable only if it matches
+# trustedPrivateEndpoints AND every address it resolves to is inside
+# trustedPrivateNetworks. Loopback, link-local and cloud metadata addresses
+# stay blocked whatever is listed. Coding-session sandboxes never get this
+# access; their MCP calls go through Flow's MCP gateway.
+outbound:
+  # Exact hosts or "*." suffix wildcards (no bare "*"), e.g.
+  #   - hsb.haier.net
+  #   - "*.corp.example.com"
+  trustedPrivateEndpoints: []
+  # CIDRs the trusted hosts may resolve to, e.g. ["10.218.0.0/16"].
+  trustedPrivateNetworks: []
+  # PEM CA bundle for enterprise PKI, added to the system roots
+  # (FLOW_TRUSTED_CA_FILE). Certificates are always verified. Name either a
+  # Secret or a ConfigMap holding the bundle under `key`.
+  trustedCA:
+    secretName: ""
+    configMapName: ""
+    key: ca.crt
+
 # Plain FLOW_* settings (see docs/configuration.md), e.g.
 #   FLOW_AUTH_EMAIL_ENABLED: "true"
 config:
@@ -250,6 +275,11 @@ coding:
   instanceId: ""
   # base64 32-byte AES key; empty = secrets.connectorSecretKey.
   secretKey: ""
+  # Application policy ids (approved, shared MCP connectors) every
+  # workspace's coding sessions may use through Flow's MCP gateway
+  # (FLOW_CODING_MCP_SERVERS), besides those a workspace admin enables.
+  # e.g. ["mcp-sourcebot-production"]
+  mcpServers: []
 
   image:
     repository: ghcr.io/leozhengliu-pixel/flow-sandbox

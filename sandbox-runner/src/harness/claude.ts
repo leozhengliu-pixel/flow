@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { ClaudeMapper } from '../mapping/claude.js'
 import type { MapperOptions, StreamMapper } from '../mapping/common.js'
-import { turnPrompt, withoutProviderKeys, type HarnessAdapter, type HarnessContext, type HarnessInvocation } from './types.js'
+import { gatewayMcpServers, turnPrompt, withoutProviderKeys, type HarnessAdapter, type HarnessContext, type HarnessInvocation } from './types.js'
 
 // Claude Code, pinned in the image (deploy/sandbox-image/Dockerfile ARGs).
 // First turn:  claude -p --output-format stream-json --verbose --model <m>
@@ -17,8 +17,17 @@ export const CLAUDE_THINKING_TOKENS: Record<string, string> = { low: '4000', med
 /** Linux limits a single argv string to 128 KiB. */
 const MAX_ARG_BYTES = 120 * 1024
 
+/**
+ * The runner's own "flow" server plus the workspace MCP servers behind
+ * Flow's gateway. The gateway takes the sandbox token (already on disk at
+ * the runner's token file); the servers' own credentials stay in Flow.
+ */
 export function claudeMcpConfig(ctx: HarnessContext): string {
-  return JSON.stringify({ mcpServers: { flow: { type: 'stdio', command: ctx.mcp.command, args: ctx.mcp.args, env: ctx.mcp.env } } }, null, 2)
+  const mcpServers: Record<string, unknown> = { flow: { type: 'stdio', command: ctx.mcp.command, args: ctx.mcp.args, env: ctx.mcp.env } }
+  for (const server of gatewayMcpServers(ctx.bootstrap)) {
+    mcpServers[server.name] = { type: 'http', url: server.url, headers: { Authorization: `Bearer ${ctx.token}` } }
+  }
+  return JSON.stringify({ mcpServers }, null, 2)
 }
 
 export const claudeHarness: HarnessAdapter = {

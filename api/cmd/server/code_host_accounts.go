@@ -316,12 +316,12 @@ func (s *server) outboundClient(ctx context.Context, endpoint string) (*http.Cli
 		return &http.Client{Timeout: 15 * time.Second, CheckRedirect: noRedirect}, nil
 	}
 	if s.configuredGitHubEndpoint(endpoint) {
-		return &http.Client{Timeout: 15 * time.Second, CheckRedirect: noRedirect}, nil
+		return &http.Client{Timeout: 15 * time.Second, CheckRedirect: noRedirect, Transport: operatorCATransport()}, nil
 	}
-	if !safeOutboundHTTPS(ctx, endpoint) {
-		return nil, errors.New("the code host endpoint must be a public HTTPS address")
+	if err := outboundEndpointError(ctx, endpoint, outboundTrustedPrivate); err != nil {
+		return nil, errors.New("the code host endpoint is not allowed: " + err.Error())
 	}
-	client := secureOutboundClient(15 * time.Second)
+	client := secureOutboundClient(15*time.Second, outboundTrustedPrivate)
 	client.CheckRedirect = noRedirect
 	return client, nil
 }

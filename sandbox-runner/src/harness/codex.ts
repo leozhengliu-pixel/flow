@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { CodexMapper } from '../mapping/codex.js'
 import type { MapperOptions, StreamMapper } from '../mapping/common.js'
-import { turnPrompt, withoutProviderKeys, type HarnessAdapter, type HarnessContext, type HarnessInvocation } from './types.js'
+import { gatewayMcpServers, turnPrompt, withoutProviderKeys, type HarnessAdapter, type HarnessContext, type HarnessInvocation } from './types.js'
 
 // Codex CLI, pinned in the image (deploy/sandbox-image/Dockerfile ARGs).
 // First turn:  codex exec --json --model <m> -c model_reasoning_effort="<e>"
@@ -52,6 +52,11 @@ export function codexConfig(ctx: HarnessContext): string {
     'startup_timeout_sec = 30',
     '',
   )
+  // Workspace MCP servers behind Flow's gateway (streamable HTTP); the
+  // bearer is the sandbox token, read from the env like the model key.
+  for (const server of gatewayMcpServers(bootstrap)) {
+    lines.push(`[mcp_servers.${server.name}]`, `url = ${tomlString(server.url)}`, 'bearer_token_env_var = "FLOW_LLM_TOKEN"', 'startup_timeout_sec = 30', 'tool_timeout_sec = 360', '')
+  }
   return lines.join('\n')
 }
 

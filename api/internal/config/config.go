@@ -11,6 +11,7 @@ import (
 
 	"flow/api/internal/coordination"
 	"flow/api/internal/objectstore"
+	"flow/api/internal/outbound"
 	"flow/api/internal/store"
 )
 
@@ -44,6 +45,10 @@ type Config struct {
 	// (FLOW_DEV_ALLOW_LOOPBACK_CODE_HOSTS). Development only: Validate
 	// refuses it when the deployment looks like production.
 	DevAllowLoopbackCodeHosts bool
+	// Outbound is the operator's trusted private endpoints and CA bundle for
+	// server-side requests (FLOW_TRUSTED_PRIVATE_ENDPOINTS,
+	// FLOW_TRUSTED_PRIVATE_NETWORKS, FLOW_TRUSTED_CA_FILE; outbound package).
+	Outbound outbound.Config
 	// DeploymentEnvironment is FLOW_ENV, or else FLOW_ENVIRONMENT, as set by
 	// the operator (empty when neither is set). Development-only switches
 	// refuse to turn on when it names production.
@@ -270,6 +275,7 @@ func Load() (Config, error) {
 		Telemetry: TelemetryConfig{Enabled: boolean("FLOW_TELEMETRY_ENABLED", false) && !boolean("OTEL_SDK_DISABLED", false), ServiceName: value("OTEL_SERVICE_NAME", "flow-api"), Environment: value("FLOW_ENVIRONMENT", "production"), Endpoint: value("OTEL_EXPORTER_OTLP_ENDPOINT", ""), TraceEndpoint: value("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", ""), MetricEndpoint: value("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "")},
 	}
 	config.Coding = loadCoding(appURL)
+	config.Outbound = outbound.LoadConfig()
 	config.resolveTTSCredential()
 	config.resolveAgentMedia()
 	config.clampRetention()
@@ -429,6 +435,9 @@ func (c Config) Validate() error {
 		return err
 	}
 	if err := c.Coding.Validate(); err != nil {
+		return err
+	}
+	if err := outbound.Validate(c.Outbound); err != nil {
 		return err
 	}
 	if c.Telemetry.Enabled && c.Telemetry.Endpoint == "" && (c.Telemetry.TraceEndpoint == "" || c.Telemetry.MetricEndpoint == "") {

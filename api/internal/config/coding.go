@@ -33,12 +33,18 @@ type CodingConfig struct {
 	// signing keys and minted tokens at rest; defaults to FLOW_CONNECTOR_SECRET_KEY.
 	SecretKey string
 
-	Image             string
-	ImagePullPolicy   string
-	ImagePullSecrets  []string
-	BranchPrefix      string
-	PRMention         string
-	BrowserEnabled    bool
+	Image            string
+	ImagePullPolicy  string
+	ImagePullSecrets []string
+	BranchPrefix     string
+	PRMention        string
+	BrowserEnabled   bool
+	// MCPServers lists application policy ids (kind "mcp") that coding
+	// sessions in every workspace may use through Flow's MCP gateway
+	// (FLOW_CODING_MCP_SERVERS), in addition to the ones a workspace admin
+	// enables for coding sessions. The policy must still exist and be
+	// approved in the workspace.
+	MCPServers        []string
 	DebugTerminal     bool
 	ArtifactMaxBytes  int64
 	MaxSessions       int
@@ -267,6 +273,7 @@ func loadCoding(appURL string) CodingConfig {
 		BranchPrefix:      value("FLOW_CODING_BRANCH_PREFIX", "flow/"),
 		PRMention:         value("FLOW_CODING_PR_MENTION", "@flow"),
 		BrowserEnabled:    !switchedOff("FLOW_CODING_BROWSER"),
+		MCPServers:        csvRaw(value("FLOW_CODING_MCP_SERVERS", "")),
 		DebugTerminal:     !switchedOff("FLOW_CODING_DEBUG_TERMINAL"),
 		ArtifactMaxBytes:  int64(integer("FLOW_CODING_ARTIFACT_MAX_BYTES", 10<<20)),
 		MaxSessions:       integer("FLOW_CODING_MAX_SESSIONS", 20),

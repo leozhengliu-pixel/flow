@@ -262,7 +262,7 @@ func (s *server) sendAuditEntry(ctx context.Context, target, secret, deliveryID 
 	if err != nil {
 		return 0, err.Error(), err
 	}
-	if !integrationEndpointSafe(ctx, target, s.authDisabled) {
+	if !integrationEndpointSafe(ctx, target, s.authDisabled, outboundTrustedPrivate) {
 		return 0, "endpoint not allowed", errInvalid
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(body))
@@ -275,7 +275,7 @@ func (s *server) sendAuditEntry(ctx context.Context, target, secret, deliveryID 
 	request.Header.Set("X-Flow-Event", "AuditEntry")
 	request.Header.Set("X-Flow-Delivery", deliveryID)
 	request.Header.Set("X-Flow-Signature", hex.EncodeToString(mac.Sum(nil)))
-	client := secureOutboundClient(10 * time.Second)
+	client := secureOutboundClient(10*time.Second, outboundTrustedPrivate)
 	if s.authDisabled && safeLocalDevelopmentURL(target) {
 		client = &http.Client{Timeout: 10 * time.Second}
 	}

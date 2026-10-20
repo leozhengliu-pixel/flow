@@ -125,6 +125,20 @@ export interface BootstrapResponse {
   turn?: Turn
   limits: BootstrapLimits
   guidance: string
+  /**
+   * Workspace MCP servers behind Flow's MCP gateway (streamable HTTP,
+   * authenticated with the sandbox token). Flow forwards each call with the
+   * server's stored credential; the sandbox never sees it.
+   */
+  mcpServers?: BootstrapMCPServer[]
+}
+
+export interface BootstrapMCPServer {
+  /** Harness config key ([a-z0-9_-], never "flow"). */
+  name: string
+  title: string
+  /** {runtime}/internal/coding-runtime/mcp/{id} */
+  url: string
 }
 
 export interface SetupSecretsResponse {

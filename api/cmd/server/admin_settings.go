@@ -161,6 +161,11 @@ func (s *server) validWebhookURL(value string) (string, error) {
 		return "", fmt.Errorf("%w: webhook URL must use HTTPS", errInvalid)
 	}
 	host := strings.ToLower(parsed.Hostname())
+	if outboundPolicy.HostTrusted(host) {
+		// An operator-trusted private endpoint: deliveries re-check that it
+		// resolves inside FLOW_TRUSTED_PRIVATE_NETWORKS.
+		return value, nil
+	}
 	if host == "localhost" || strings.HasSuffix(host, ".localhost") || strings.HasSuffix(host, ".local") || strings.HasSuffix(host, ".internal") {
 		return "", fmt.Errorf("%w: webhook URL must be publicly reachable", errInvalid)
 	}

@@ -50,7 +50,7 @@ var (
 	// public addresses and follows redirects on the same host; tests replace it
 	// to reach a loopback fake.
 	filePreviewHTTPClient = func() *http.Client {
-		client := secureOutboundClient(filePreviewTimeout)
+		client := secureOutboundClient(filePreviewTimeout, outboundPublicOnly)
 		client.CheckRedirect = filePreviewSameHostRedirect
 		return client
 	}

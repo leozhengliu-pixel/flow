@@ -70,6 +70,31 @@ func TestDevAllowLoopbackCodeHosts(t *testing.T) {
 	}
 }
 
+func TestTrustedPrivateEndpointsConfig(t *testing.T) {
+	t.Setenv("FLOW_TRUSTED_PRIVATE_ENDPOINTS", "hsb.haier.net, *.corp.example.com")
+	t.Setenv("FLOW_TRUSTED_PRIVATE_NETWORKS", "10.218.0.0/16")
+	t.Setenv("FLOW_TRUSTED_CA_FILE", "")
+	t.Setenv("FLOW_CODING_MCP_SERVERS", "mcp-sourcebot-production")
+	loaded, err := Load()
+	if err != nil || len(loaded.Outbound.TrustedHosts) != 2 || len(loaded.Outbound.TrustedNetworks) != 1 || len(loaded.Coding.MCPServers) != 1 {
+		t.Fatalf("trusted endpoints: %+v %+v %v", loaded.Outbound, loaded.Coding.MCPServers, err)
+	}
+	for name, values := range map[string][2]string{
+		"bare wildcard":    {"*", "10.218.0.0/16"},
+		"no networks":      {"hsb.haier.net", ""},
+		"every address":    {"hsb.haier.net", "0.0.0.0/0"},
+		"metadata host":    {"metadata.google.internal", "10.0.0.0/8"},
+		"not a CIDR":       {"hsb.haier.net", "10.218/16"},
+		"top-level suffix": {"*.net", "10.218.0.0/16"},
+	} {
+		t.Setenv("FLOW_TRUSTED_PRIVATE_ENDPOINTS", values[0])
+		t.Setenv("FLOW_TRUSTED_PRIVATE_NETWORKS", values[1])
+		if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_TRUSTED_PRIVATE") {
+			t.Errorf("%s accepted: %v", name, err)
+		}
+	}
+}
+
 func TestWorkspaceRegionSelectorConfig(t *testing.T) {
 	t.Setenv("FLOW_WORKSPACE_REGION_SELECTOR_ENABLED", "false")
 	t.Setenv("FLOW_WORKSPACE_DEFAULT_REGION", "eu")

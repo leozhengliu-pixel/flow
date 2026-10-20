@@ -75,7 +75,7 @@ func (s *server) requestAgentElicitation(ctx context.Context, workspace, session
 	if mode == "" {
 		mode = "form"
 	}
-	if mode == "url" && !integrationEndpointSafe(ctx, params.URL, s.authDisabled) {
+	if mode == "url" && !integrationEndpointSafe(ctx, params.URL, s.authDisabled, outboundTrustedPrivate) {
 		return nil, fmt.Errorf("Invalid external confirmation URL")
 	}
 	schema, _ := json.Marshal(params.RequestedSchema)

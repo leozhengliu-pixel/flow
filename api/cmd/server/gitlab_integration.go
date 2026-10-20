@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/outbound"
 	"flow/api/internal/store"
 )
 
@@ -143,12 +144,17 @@ func (s *server) gitlabClient(ctx context.Context, base string) (*http.Client, e
 		return &http.Client{Timeout: 10 * time.Second, CheckRedirect: noRedirect}, nil
 	}
 	if trusted, err := normalizeGitLabURL(os.Getenv("FLOW_INTEGRATION_GITLAB_HOST"), false); err == nil && os.Getenv("FLOW_INTEGRATION_GITLAB_HOST") != "" && trusted == base {
-		return &http.Client{Timeout: 10 * time.Second, CheckRedirect: noRedirect}, nil
+		return &http.Client{Timeout: 10 * time.Second, CheckRedirect: noRedirect, Transport: operatorCATransport()}, nil
 	}
-	if !safeOutboundHTTPS(ctx, base) {
-		return nil, &gitlabAPIError{Message: "The GitLab URL must be a public HTTPS address."}
+	if err := outboundEndpointError(ctx, base, outboundTrustedPrivate); err != nil {
+		message := "The GitLab URL must be a public HTTPS address."
+		var refusal *outbound.Error
+		if errors.As(err, &refusal) && refusal.Reason == outbound.ReasonPrivate {
+			message = "The GitLab URL resolves to a private address. An operator can allow it with FLOW_TRUSTED_PRIVATE_ENDPOINTS and FLOW_TRUSTED_PRIVATE_NETWORKS; otherwise it must be a public HTTPS address."
+		}
+		return nil, &gitlabAPIError{Message: message}
 	}
-	client := secureOutboundClient(10 * time.Second)
+	client := secureOutboundClient(10*time.Second, outboundTrustedPrivate)
 	client.CheckRedirect = noRedirect
 	return client, nil
 }

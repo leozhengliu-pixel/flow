@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/url"
@@ -144,13 +143,6 @@ func integrationEndpoint(raw string) error {
 		return errors.New("OAuth endpoint must be an HTTP(S) URL")
 	}
 	return nil
-}
-
-func integrationEndpointSafe(ctx context.Context, raw string, allowLocal bool) bool {
-	if allowLocal && safeLocalDevelopmentURL(raw) {
-		return true
-	}
-	return safeOutboundHTTPS(ctx, raw)
 }
 
 func integrationOAuthUnavailable(field string) error {
