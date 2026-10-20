@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"strings"
-	"time"
 
 	"flow/api/internal/codehost"
 	"flow/api/internal/coding"
@@ -17,12 +16,13 @@ import (
 // Credential use follows docs/coding-sessions-security.md: the member's
 // token never reaches the sandbox. Flow's git relay (coding_git_relay.go)
 // adds it server side to the session's own smart-HTTP requests for its one
-// repository, only while the session runs, and only when it is short-lived
-// (GitHub App user tokens, GitLab OAuth tokens); the sandbox's credential
-// helper only gets an opaque placeholder for the relay URL. Personal access
-// tokens and non-expiring OAuth tokens are not used for git: Flow uses them
-// to open the PR/MR as the member, while the relay pushes with the
-// workspace credential.
+// repository, and only while the session runs; the sandbox's credential
+// helper only gets an opaque placeholder for the relay URL. Every kind of
+// member token is used this way: GitHub App user tokens, GitLab OAuth tokens,
+// and also GitLab personal access tokens and non-expiring OAuth tokens. The
+// long-lived ones are safe here because they never leave Flow: no sandbox
+// env, file, bootstrap, credential-helper answer or gh/glab CLI env carries
+// them.
 type codingMemberHosts struct{ s *server }
 
 var _ coding.MemberCodeHost = codingMemberHosts{}
@@ -61,19 +61,25 @@ func (m codingMemberHosts) MemberGitCredential(ctx context.Context, workspaceKey
 	if !ok || account.UserID != userID {
 		return codehost.Credential{}, codehost.ErrUserNotLinked
 	}
-	if account.AuthType == domain.CodeHostAuthPAT {
-		return codehost.Credential{}, codehost.ErrUserNotLinked // never in a sandbox
-	}
 	tokens, err := m.s.memberHostTokens(ctx, account)
 	if err != nil {
 		return codehost.Credential{}, err
 	}
-	if tokens.PrivateToken || tokens.ExpiresAt.IsZero() || time.Until(tokens.ExpiresAt) > codeHostSandboxTokenMaxLifetime {
-		return codehost.Credential{}, codehost.ErrUserNotLinked // long-lived: server side only
+	if tokens.AccessToken == "" {
+		return codehost.Credential{}, codehost.ErrUserNotLinked
 	}
+	// The relay is this credential's only consumer (coding.GitRelay), so a
+	// personal access token or non-expiring OAuth token is allowed: it is
+	// added to the forwarded request server side and never reaches the
+	// sandbox. ExpiresAt is zero for those.
 	username := "x-access-token"
 	if account.CodeHost == domain.CodeHostGitLab {
 		username = "oauth2"
+		if tokens.PrivateToken || account.AuthType == domain.CodeHostAuthPAT {
+			// GitLab accepts a personal access token as the HTTP Basic
+			// password with any non-empty username.
+			username = firstNonEmpty(account.Login, "oauth2")
+		}
 	}
 	return codehost.Credential{Username: username, Password: tokens.AccessToken, ExpiresAt: tokens.ExpiresAt}, nil
 }

@@ -36,6 +36,40 @@ func TestLoadDefaultsAndBackendValidation(t *testing.T) {
 	}
 }
 
+func TestDevAllowLoopbackCodeHosts(t *testing.T) {
+	for _, key := range []string{"FLOW_DEV_ALLOW_LOOPBACK_CODE_HOSTS", "FLOW_ENV", "FLOW_ENVIRONMENT", "FLOW_APP_URL"} {
+		t.Setenv(key, "")
+	}
+	loaded, err := Load()
+	if err != nil || loaded.DevAllowLoopbackCodeHosts {
+		t.Fatalf("loopback code hosts on by default: %v %v", loaded.DevAllowLoopbackCodeHosts, err)
+	}
+	t.Setenv("FLOW_DEV_ALLOW_LOOPBACK_CODE_HOSTS", "true")
+	if loaded, err := Load(); err != nil || !loaded.DevAllowLoopbackCodeHosts {
+		t.Fatalf("dev switch on a local app URL: %v %v", loaded.DevAllowLoopbackCodeHosts, err)
+	}
+	t.Setenv("FLOW_APP_URL", "http://127.0.0.1:8080")
+	if loaded, err := Load(); err != nil || !loaded.DevAllowLoopbackCodeHosts {
+		t.Fatalf("dev switch on a loopback app URL: %v %v", loaded.DevAllowLoopbackCodeHosts, err)
+	}
+	for key, value := range map[string]string{"FLOW_ENV": "production", "FLOW_ENVIRONMENT": "Prod"} {
+		t.Setenv(key, value)
+		if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_DEV_ALLOW_LOOPBACK_CODE_HOSTS") {
+			t.Fatalf("dev switch accepted with %s=%s: %v", key, value, err)
+		}
+		t.Setenv(key, "")
+	}
+	t.Setenv("FLOW_APP_URL", "https://flow.example.com")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_APP_URL") {
+		t.Fatalf("dev switch accepted on a public app URL: %v", err)
+	}
+	t.Setenv("FLOW_DEV_ALLOW_LOOPBACK_CODE_HOSTS", "false")
+	t.Setenv("FLOW_ENV", "production")
+	if loaded, err := Load(); err != nil || loaded.DevAllowLoopbackCodeHosts {
+		t.Fatalf("production with the switch off: %v %v", loaded.DevAllowLoopbackCodeHosts, err)
+	}
+}
+
 func TestWorkspaceRegionSelectorConfig(t *testing.T) {
 	t.Setenv("FLOW_WORKSPACE_REGION_SELECTOR_ENABLED", "false")
 	t.Setenv("FLOW_WORKSPACE_DEFAULT_REGION", "eu")

@@ -55,6 +55,12 @@ func newFakeGitLab(t *testing.T) *fakeGitLab {
 			_ = json.NewEncoder(w).Encode(map[string]any{"id": 7, "name": "Flow", "scopes": scopes, "active": true, "revoked": false, "expires_at": fake.expires[token]})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v4/user":
 			_ = json.NewEncoder(w).Encode(map[string]any{"username": "flow-bot", "bot": false})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v4/users" && r.URL.Query().Get("username") != "":
+			// Coding sessions' access check: every user exists and is a
+			// Developer on every project.
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"id": 42, "username": r.URL.Query().Get("username")}})
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v4/projects/") && strings.Contains(r.URL.Path, "/members/all/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"access_level": 30})
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v4/personal_access_tokens/self/rotate":
 			var input map[string]string
 			_ = json.NewDecoder(r.Body).Decode(&input)
@@ -247,5 +253,48 @@ func TestNormalizeGitLabURL(t *testing.T) {
 	}
 	if err := (&server{}).gitlabRequest(t.Context(), "https://10.0.0.1", "glpat-fake", http.MethodGet, "/user", nil, nil); err == nil || !strings.Contains(err.Error(), "public HTTPS") {
 		t.Fatalf("private GitLab address was not blocked: %v", err)
+	}
+}
+
+// FLOW_DEV_ALLOW_LOOPBACK_CODE_HOSTS lets an auth-enabled server reach a
+// plain-HTTP loopback GitLab; without it (the default) loopback is refused,
+// and private non-loopback ranges stay blocked either way.
+func TestDevLoopbackCodeHostsGitLab(t *testing.T) {
+	fake := newFakeGitLab(t)
+	loopback := strings.TrimRight(fake.URL, "/")
+	var user map[string]any
+
+	off := &server{}
+	if off.loopbackCodeHosts() {
+		t.Fatal("loopback code hosts allowed by default with authentication on")
+	}
+	if _, err := normalizeGitLabURL(loopback, off.loopbackCodeHosts()); err == nil {
+		t.Fatal("plain-HTTP loopback GitLab URL accepted by default")
+	}
+	if err := off.gitlabRequest(t.Context(), loopback, "glpat-fake-api", http.MethodGet, "/user", nil, &user); err == nil {
+		t.Fatal("loopback GitLab reached by default with authentication on")
+	}
+
+	on := &server{devLoopbackCodeHosts: true}
+	if !on.loopbackCodeHosts() || on.authDisabled {
+		t.Fatal("dev switch did not enable loopback code hosts")
+	}
+	for _, local := range []string{loopback, strings.Replace(loopback, "127.0.0.1", "localhost", 1)} {
+		if got, err := normalizeGitLabURL(local, on.loopbackCodeHosts()); err != nil || got != local {
+			t.Fatalf("loopback GitLab URL %q rejected with the dev switch on: %q %v", local, got, err)
+		}
+	}
+	if err := on.gitlabRequest(t.Context(), loopback, "glpat-fake-api", http.MethodGet, "/user", nil, &user); err != nil || user["username"] != "flow-bot" {
+		t.Fatalf("loopback GitLab not reachable with the dev switch on: %#v %v", user, err)
+	}
+	for _, private := range []string{"http://10.0.0.1", "http://192.168.1.5:8080", "http://172.16.0.9", "http://169.254.169.254", "http://gitlab.internal"} {
+		if _, err := normalizeGitLabURL(private, on.loopbackCodeHosts()); err == nil {
+			t.Fatalf("private non-loopback URL %q accepted with the dev switch on", private)
+		}
+	}
+	for _, private := range []string{"https://10.0.0.1", "https://192.168.1.5", "https://169.254.169.254"} {
+		if err := on.gitlabRequest(t.Context(), private, "glpat-fake-api", http.MethodGet, "/user", nil, nil); err == nil || !strings.Contains(err.Error(), "public HTTPS") {
+			t.Fatalf("private GitLab address %q not blocked with the dev switch on: %v", private, err)
+		}
 	}
 }

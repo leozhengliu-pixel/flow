@@ -170,13 +170,13 @@ type MemberCodeHost interface {
 	// MemberAccount is the member's linked account on the host (ok false
 	// when there is none or it needs a reconnect).
 	MemberAccount(ctx context.Context, workspaceKey, userID, codeHost, hostName string) (MemberAccount, bool, error)
-	// MemberGitCredential is a short-lived credential of the member for the
-	// repository, used only server side by Flow's git relay (git_relay.go),
-	// which adds it to the session's own smart-HTTP requests; it is never
-	// served to a sandbox. It returns
-	// codehost.ErrUserNotLinked when the member has no account on the host
-	// or the account's token may not be used for git (a long-lived personal
-	// access token or non-expiring OAuth token).
+	// MemberGitCredential is the member's credential for the repository,
+	// used only server side by Flow's git relay (git_relay.go), which adds it
+	// to the session's own smart-HTTP requests; it is never served to a
+	// sandbox, the CLI env or the bootstrap. It may be long-lived (a GitLab
+	// personal access token or a non-expiring OAuth token; ExpiresAt is then
+	// zero). It returns codehost.ErrUserNotLinked when the member has no
+	// usable account on the host.
 	MemberGitCredential(ctx context.Context, workspaceKey, userID string, repo codehost.RepoRef) (codehost.Credential, error)
 	// MemberActor is the member's token for Flow's own call that opens the
 	// PR/MR (server side; never sent to a sandbox). nil when not linked.

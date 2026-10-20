@@ -98,7 +98,8 @@ all of the following hold:
   cluster, node, metadata or private addresses.
 - **Credentials.** It never holds a model provider key (the LLM proxy adds it),
   a signing key (Flow signs), a member's own code host token (Flow's git
-  relay adds it), or a long-lived code host token: only the sandbox token,
+  relay adds it, even a long-lived personal access token), or a long-lived
+  workspace code host token: only the sandbox token,
   revoked at stop, the workspace's short-lived token for the one
   repository, fetched on demand, and, for a session that pushes as its
   creator, a placeholder that only Flow's relay accepts.
@@ -155,12 +156,18 @@ through Flow's **git relay** instead:
 - **The CLI keeps the workspace credential.** The gh/glab CLI env, which the
   runner writes to `~/.flow/cli-env`, always gets the installation / project
   token, never the member's. So does git straight to the host.
-- **Short-lived only.** The relay pushes with the member's token only when
-  it expires within hours: GitHub App user-to-server tokens (8 hours) and
-  GitLab OAuth tokens (2 hours), both refreshed by Flow. With a GitLab
-  personal access token or a non-expiring GitHub OAuth token the relay pushes
-  with the workspace credential, while Flow still opens the PR/MR as the
-  member server side.
+- **Every member token, through the relay only.** The relay pushes with
+  whatever token the member linked: GitHub App user-to-server tokens
+  (8 hours) and GitLab OAuth tokens (2 hours), both refreshed by Flow, and
+  also GitLab personal access tokens and non-expiring OAuth tokens. A
+  long-lived token is acceptable here because it never leaves Flow except
+  inside the relayed request to the session's repository on its own host
+  (a GitLab personal access token as the HTTP Basic password, with the
+  member's GitLab username): it is never in the sandbox's env or files, the
+  bootstrap, a credential-helper answer (git or `purpose: "cli"`) or the
+  gh/glab CLI env, and the placeholder that unlocks it dies with the session.
+  Revoking a personal access token on GitLab, or unlinking it in Flow, makes
+  the relay fall back to the workspace credential.
 - **Stops at session end.** A finished session's placeholder gets nothing
   (`410 Gone`), a revoked sandbox's gets `401`, and unlinking the account or
   a revoked grant makes the relay fall back to the workspace credential
