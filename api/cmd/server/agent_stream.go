@@ -712,7 +712,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: content, IsError: isError}})
 				continue
 			}
-			if (agentToolNeedsApproval(call.Name)) && !sessionLoopTool(*session, call) {
+			if agentToolNeedsApproval(r.Context(), call.Name) && !sessionLoopTool(*session, call) {
 				approvalID := fmt.Sprintf("agent_approval_%d", time.Now().UnixNano())
 				call.ApprovalID = approvalID
 				call.Status = "pending"
@@ -1002,11 +1002,17 @@ func cleanAgentSessionTitle(text string) string {
 }
 
 // agentToolNeedsApproval reports whether a chat or agent-thread tool call waits
-// for the user. Like the reference app's agent, Flow writes (issues, documents, projects,
-// views, deletes to trash…) apply immediately; only third-party connector
-// tools, which act outside Flow, ask first.
-func agentToolNeedsApproval(name string) bool {
-	return strings.HasPrefix(name, "external_")
+// for the user. Flow writes (issues, documents, projects, views, deletes to
+// trash…) apply immediately, and so do MCP connector tools, unless the tool
+// declares itself destructive or its connector is set to always ask (see
+// connectorTool.needsApproval). A connector tool that is no longer offered
+// does not wait: its execution is refused.
+func agentToolNeedsApproval(ctx context.Context, name string) bool {
+	if !strings.HasPrefix(name, "external_") {
+		return false
+	}
+	tool, ok := offeredConnectorTool(ctx, name)
+	return ok && tool.needsApproval()
 }
 
 // agentToolRequiresApproval reports whether a tool writes workspace data (used

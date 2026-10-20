@@ -7,7 +7,7 @@ import type { WorkspaceSettings } from "@/types/flow";
 import { SettingsSection, SettingsRow } from "./settings-primitives";
 import { ConnectorAuthorization, ConnectorDialog, ConnectorMenu } from './connector-dialog';
 
-type Policy = { id: string; name: string; kind: "mcp" | "oauth"; url?: string; ownerId?: string; shared: boolean; status: string; scopes?: string[]; codingSessions?: boolean };
+type Policy = { id: string; name: string; kind: "mcp" | "oauth"; url?: string; ownerId?: string; shared: boolean; status: string; scopes?: string[]; codingSessions?: boolean; toolApproval?: "always" };
 
 export function ApplicationPolicySettings({ admin }: { admin: boolean }) {
   const [items, setItems] = useState<Policy[]>([]);
@@ -29,10 +29,11 @@ export function ApplicationPolicySettings({ admin }: { admin: boolean }) {
   };
   return <SettingsSection className="connector-settings" title={admin?"Application approvals and Agent connectors":"MCP connectors"} description={admin?undefined:"Add MCP connectors for use with Flow Agent. Workspace admins can manage available connectors in security settings."}>
     {error && <p role="alert">{error}</p>}
-    {items.map(item => <SettingsRow key={item.id} title={item.name} description={`${item.kind === "mcp" ? item.url : item.scopes?.join(", ")} · ${item.status}${item.kind === "mcp" ? item.shared ? " · Workspace" : " · Personal" : ""}${item.kind === "mcp" && item.codingSessions ? " · Coding sessions" : ""}`}>
+    {items.map(item => <SettingsRow key={item.id} title={item.name} description={`${item.kind === "mcp" ? item.url : item.scopes?.join(", ")} · ${item.status}${item.kind === "mcp" ? item.shared ? " · Workspace" : " · Personal" : ""}${item.kind === "mcp" && item.codingSessions ? " · Coding sessions" : ""}${item.kind === "mcp" && item.toolApproval === "always" ? " · Asks before tools" : ""}`}>
         {admin && item.status !== "approved" && <button className="settings-action" disabled={busy} onClick={() => void save({ ...item, status: "approved" })}>Approve</button>}
         {admin && item.status !== "rejected" && <button className="settings-action" disabled={busy} onClick={() => void save({ ...item, status: "rejected" })}>Reject</button>}
         {admin && item.kind === "mcp" && item.shared && item.status === "approved" && <button className="settings-action" disabled={busy} title="Coding-session agents reach this server through Flow; its credentials and network stay on the server" onClick={() => void save({ ...item, codingSessions: !item.codingSessions })}>{item.codingSessions ? "Disable for coding sessions" : "Enable for coding sessions"}</button>}
+        {item.kind === "mcp" && (admin || !item.shared) && <button className="settings-action" disabled={busy} title={item.toolApproval === "always" ? "Flow Agent asks before every call to this connector's tools" : "Flow Agent runs this connector's tools without asking, except tools the server marks as destructive"} onClick={() => { const { toolApproval, ...rest } = item; void save(toolApproval === "always" ? rest : { ...rest, toolApproval: "always" }); }}>{item.toolApproval === "always" ? "Run tools automatically" : "Ask before running tools"}</button>}
         {item.kind==='mcp'&&item.status!=='rejected'&&(admin||!item.shared)&&<ConnectorAuthorization id={item.id}/>}
         {(admin||item.kind==='mcp'&&!item.shared)&&<button className="settings-action" aria-label={`Remove ${item.name}`} title={`Remove ${item.name}`} disabled={busy} onClick={() => void remove(item)}><Trash2 size={14} /></button>}
     </SettingsRow>)}
