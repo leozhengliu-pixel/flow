@@ -130,6 +130,24 @@ it("starts OAuth for an instance with an OAuth application", async () => {
   await waitFor(() => expect(assign).toHaveBeenCalledWith("https://gitlab.corp.test/oauth/authorize?x"));
 });
 
+it("offers only GitLab instances the member has not linked yet", async () => {
+  const linked = account({ id: "cha_gl", codeHost: "gitlab", login: "bob", hostName: "gitlab.corp.test", instanceId: "gl_2" });
+  api.fetchCodeHostAccounts.mockResolvedValue(response({ accounts: [linked], gitlabInstances: instances }));
+  const { unmount } = renderRows();
+  expect(await screen.findByText(/@bob/)).toBeInTheDocument();
+  // Only the unlinked instance is offered, straight to its token form.
+  const select = screen.getByLabelText("GitLab instance") as HTMLSelectElement;
+  expect(Array.from(select.options).map((option) => option.value)).toEqual(["gl_1"]);
+  expect(screen.getByLabelText("Personal access token")).toBeInTheDocument();
+  unmount();
+  // Every instance linked: no connect row at all.
+  api.fetchCodeHostAccounts.mockResolvedValue(response({ accounts: [linked], gitlabInstances: [instances[1]] }));
+  renderRows();
+  expect(await screen.findByText(/@bob/)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Connect with GitLab" })).toBeNull();
+  expect(screen.queryByText("Ask an admin to connect GitLab")).toBeNull();
+});
+
 it("tells members to ask an admin when no GitLab instance exists", async () => {
   api.fetchCodeHostAccounts.mockResolvedValue(response());
   renderRows();

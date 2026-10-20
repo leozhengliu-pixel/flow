@@ -79,6 +79,11 @@ export function CodeHostConnectionRows({ githubDescription }: { githubDescriptio
   useCodeHostLinkResult();
   const github = accountFor(data?.accounts, "github")[0];
   const gitlab = accountFor(data?.accounts, "gitlab");
+  // A member has one account per GitLab host: offer only instances not
+  // linked yet (a linked one reconnects from its own row).
+  const unlinkedGitLab = (data?.gitlabInstances ?? []).filter(
+    (instance) => !gitlab.some((account) => account.instanceId === instance.id || account.hostName === instance.hostName),
+  );
   const { busy, go } = useRedirect();
   const [removing, setRemoving] = useState("");
 
@@ -162,20 +167,20 @@ export function CodeHostConnectionRows({ githubDescription }: { githubDescriptio
           </div>
         );
       })}
-      {data && (
+      {data && (unlinkedGitLab.length > 0 || data.gitlabInstances.length === 0) && (
         <div className="settings-card">
           <SettingsRow
             icon={<GitFork />}
             title={<span data-i18n-ignore>GitLab</span>}
             description={
-              data.gitlabInstances.length
+              unlinkedGitLab.length
                 ? t("Link your GitLab account to review merge requests and act as yourself")
                 : t("Ask an admin to connect GitLab")
             }
-            control={data.gitlabInstances.length > 0}
+            control={unlinkedGitLab.length > 0}
           >
-            {data.gitlabInstances.length > 0 && (
-              <GitLabConnect instances={data.gitlabInstances} onLinked={reload} returnTo="account" />
+            {unlinkedGitLab.length > 0 && (
+              <GitLabConnect instances={unlinkedGitLab} onLinked={reload} returnTo="account" />
             )}
           </SettingsRow>
         </div>
