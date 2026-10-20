@@ -5,6 +5,7 @@ import { ArrowUp, BellOff, BellRing, Copy, FileText, HelpCircle, Link2, MessageC
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { formatDistanceToNowStrict } from 'date-fns'
 import { toast } from '@/lib/toast'
+import { liveActorUser } from '@/lib/actor-attribution'
 import { RichComment } from '@/components/activity/rich-comment'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
 import { insertPickedFiles } from '@/components/issue/editor/insert-picked-files'
@@ -60,6 +61,7 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
   const { item, viewer } = props
   const { t, formatDate } = useI18n()
   const update = item.update
+  const author = liveActorUser(update.user)
   const type = item.kind === 'project' ? t('project') : t('initiative')
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [comment, setComment] = useState<DescriptionSnapshot>()
@@ -149,8 +151,8 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
         {/* The whole status line is the link to the update (the reference app wraps it in one anchor). */}
         <a className="pulse-post-byline" href={pulseUpdateLink(item)} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); props.onNavigate(`${item.source.url}#update-${update.id}`) }}>
           <span className={`pulse-post-health is-${update.health}`}><HealthGlyph className="pulse-health-glyph" health={update.health}/>{t(PULSE_HEALTH_LABELS[item.kind][update.health])}</span>
-          <UserAvatar avatarUrl={update.user.avatarUrl} className="avatar pulse-byline-avatar" name={userName(update.user)}/>
-          <span className="pulse-post-author" data-i18n-ignore>{userName(update.user)}</span>
+          <UserAvatar avatarUrl={author.avatarUrl} className="avatar pulse-byline-avatar" name={userName(author)}/>
+          <span className="pulse-post-author" data-i18n-ignore>{userName(author)}</span>
           <FlowTooltip label={formatDate(created, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}>
             <time dateTime={update.createdAt}>{relativeTime(created, t('just now'))}{update.editedAt ? ` · ${t('edited')}` : ''}</time>
           </FlowTooltip>
@@ -203,10 +205,11 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
 function PulseComment({ comment }: { comment: Comment }) {
   const { formatDate, t } = useI18n()
   const created = new Date(comment.createdAt)
+  const author = liveActorUser(comment.user)
   return <article className="pulse-post-comment">
-    <UserAvatar avatarUrl={comment.user.avatarUrl} className="avatar pulse-byline-avatar" name={userName(comment.user)}/>
+    <UserAvatar avatarUrl={author.avatarUrl} className="avatar pulse-byline-avatar" name={userName(author)}/>
     <div>
-      <header><strong data-i18n-ignore>{userName(comment.user)}</strong><time dateTime={comment.createdAt} title={formatDate(created, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}>{relativeTime(created, t('just now'))}</time></header>
+      <header><strong data-i18n-ignore>{userName(author)}</strong><time dateTime={comment.createdAt} title={formatDate(created, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}>{relativeTime(created, t('just now'))}</time></header>
       <div className="pulse-post-comment-body"><RichComment body={comment.body} data={comment.bodyData} version={comment.version}/></div>
     </div>
   </article>

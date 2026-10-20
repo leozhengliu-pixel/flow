@@ -1,21 +1,36 @@
 import type { ActorBot } from "@/types/flow";
 
-type ActorUser = { displayName?: string; name?: string; avatarUrl?: string; app?: boolean } | null | undefined;
+type ActorUser = { id?: string; displayName?: string; name?: string; avatarUrl?: string; app?: boolean } | null | undefined;
 
-type ApplicationUser = { app?: boolean; oauthClientId?: string; displayName?: string; name?: string; avatarUrl?: string };
+type ApplicationUser = { id?: string; app?: boolean; oauthClientId?: string; displayName?: string; name?: string; avatarUrl?: string };
 
 // The current name and logo of each installed OAuth application, by client
 // ID, from the workspace's app users. Records keep the application's name and
 // logo as they were when written; these show the application as it is now.
 let liveApplications = new Map<string, { name: string; avatarUrl?: string }>();
+// The same, by app user ID: comments embedded in projects, initiatives and updates keep their author as written.
+let liveApplicationUsers = new Map<string, { name: string; avatarUrl?: string }>();
 
 export function setLiveApplicationIdentities(users: readonly ApplicationUser[] | null | undefined): void {
   const next = new Map<string, { name: string; avatarUrl?: string }>();
+  const byUser = new Map<string, { name: string; avatarUrl?: string }>();
   for (const user of users ?? []) {
     const name = user.displayName?.trim() || user.name?.trim();
-    if (user.app && user.oauthClientId && name) next.set(user.oauthClientId, { name, avatarUrl: user.avatarUrl || undefined });
+    if (!user.app || !name) continue;
+    const current = { name, avatarUrl: user.avatarUrl || undefined };
+    if (user.oauthClientId) next.set(user.oauthClientId, current);
+    if (user.id) byUser.set(user.id, current);
   }
   liveApplications = next;
+  liveApplicationUsers = byUser;
+}
+
+/** The record's user, with an application user's current name and logo. */
+export function liveActorUser<T extends ActorUser>(user: T): T {
+  if (!user?.app || !user.id) return user;
+  const current = liveApplicationUsers.get(user.id);
+  if (!current || ((user.displayName || user.name) === current.name && user.avatarUrl === current.avatarUrl)) return user;
+  return { ...user, displayName: current.name, name: current.name, avatarUrl: current.avatarUrl };
 }
 
 /** The record's application attribution with the application's current name and logo. */
@@ -32,6 +47,7 @@ export function liveBotActor<T extends ActorBot | null | undefined>(botActor: T)
  * - Otherwise the record's own user is named and the application shown after "via".
  */
 export function attributedActorName(user: ActorUser, botActor?: ActorBot | null): string {
+  user = liveActorUser(user);
   return botActor?.userDisplayName?.trim() || user?.displayName || user?.name || "";
 }
 
@@ -45,6 +61,7 @@ export function viaAppName(user: ActorUser, botActor?: ActorBot | null): string 
 }
 
 export function attributedActorAvatar(user: ActorUser, botActor?: ActorBot | null): string | undefined {
+  user = liveActorUser(user);
   if (botActor?.userDisplayName?.trim()) return botActor.userAvatarUrl || liveBotActor(botActor).avatarUrl || user?.avatarUrl;
   return user?.avatarUrl;
 }

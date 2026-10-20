@@ -8,6 +8,7 @@ import { ArrowUpRight } from 'lucide-react'
 import { RichComment } from '@/components/activity/rich-comment'
 import { AppLink } from '@/components/ui/app-link'
 import { UserAvatar } from '@/components/ui/user-avatar'
+import { liveActorUser } from '@/lib/actor-attribution'
 import { ProjectGlyph } from '@/components/views/project-glyph'
 import { useI18n } from '@/i18n/i18n'
 import type { Notification, Project } from '@/types/flow'
@@ -35,10 +36,10 @@ export function ProjectAgentReplyInboxView({ workspaceKey, project, notification
       <span>{agentReplyLine({ ...notification, payload: { ...notification.payload, excerpt: '' } }, t)}</span>
       <time dateTime={notification.updatedAt}>{formatDate(notification.updatedAt, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</time>
     </p>
-    {thread.length > 0 && <div className="flow-inbox-document__thread">{thread.map(item => <article key={item.id} className={item.id === notification.commentId ? 'is-target' : undefined}>
-      <header><UserAvatar avatarUrl={item.user.avatarUrl} className="flow-inbox-document__avatar" name={item.user.displayName || item.user.name}/><strong data-i18n-ignore>{item.user.displayName || item.user.name}</strong><time dateTime={item.createdAt}>{formatDate(item.createdAt, { month: 'short', day: 'numeric' })}</time></header>
+    {thread.length > 0 && <div className="flow-inbox-document__thread">{thread.map(item => { const author = liveActorUser(item.user); return <article key={item.id} className={item.id === notification.commentId ? 'is-target' : undefined}>
+      <header><UserAvatar avatarUrl={author.avatarUrl} className="flow-inbox-document__avatar" name={author.displayName || author.name}/><strong data-i18n-ignore>{author.displayName || author.name}</strong><time dateTime={item.createdAt}>{formatDate(item.createdAt, { month: 'short', day: 'numeric' })}</time></header>
       <RichComment body={item.body} data={item.bodyData}/>
-    </article>)}</div>}
+    </article> })}</div>}
     {excerpt && <p className="flow-inbox-document__excerpt" data-i18n-ignore>{excerpt}</p>}
   </div>
 }
