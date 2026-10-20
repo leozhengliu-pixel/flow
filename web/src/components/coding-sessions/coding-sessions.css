@@ -23,6 +23,7 @@
 .coding-session-link{display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;color:var(--theme-text-secondary);font:inherit;font-size:12px;text-decoration:none;cursor:pointer}
 .coding-session-link:hover{color:var(--theme-text-primary)}
 .coding-session-error-text{margin:0;color:var(--semantic-danger-text);font-size:12px}
+.coding-session-error-text.cs-messages-error{display:flex;align-items:center;flex-wrap:wrap;gap:8px;color:var(--theme-text-secondary)}
 .coding-session-summary{margin:0;color:var(--theme-text-secondary);white-space:pre-wrap}
 
 

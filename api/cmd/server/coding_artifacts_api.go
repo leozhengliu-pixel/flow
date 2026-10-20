@@ -90,13 +90,9 @@ var codingArtifacts = codingArtifactHooks{
 	sessions:      func(s *server) codingSessionReader { return s.codingStore() },
 	pullRequests:  func(s *server) codingPullRequestReader { return s.codingStore() },
 	authorize: func(s *server, r *http.Request, session domain.CodingSession) error {
-		if s.authDisabled {
-			return nil
-		}
-		// Sessions are read through their AgentTask anchor, so artifacts follow
-		// the same issue / document / chat visibility rules as the thread.
-		_, _, err := s.authorizedAgentTask(r, session.AgentSessionID, false)
-		return err
+		// The same rule as the session and its thread (its AgentTask anchor:
+		// issue, document, agent chat, pull request, loop, environment).
+		return s.codingSessionAnchorAccess(r, session, false)
 	},
 	background: func(run func()) { go run() },
 }

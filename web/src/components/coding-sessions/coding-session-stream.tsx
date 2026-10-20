@@ -5,7 +5,7 @@ import type { ApplicationActivity } from '@/lib/application-agents'
 import { AppLink } from '@/components/ui/app-link'
 import { GridLoader } from '@/components/ui/grid-loader'
 import { useI18n } from '@/i18n/i18n'
-import { integrationSettingsPath, membersPath, newSigningKeyPath } from '@/lib/app-routes'
+import { integrationSettingsPath, membersPath, newSigningKeyPath, settingsPath } from '@/lib/app-routes'
 import { toast } from '@/lib/toast'
 import type { BootstrapData } from '@/types/flow'
 import type { CodingSession } from '@/types/coding-sessions'
@@ -180,16 +180,27 @@ export function CodingErrorCard({ activity, session, data, onRetry, busy, retry 
         : <AccessPill label={t('Request Flow code access from {name}').replace('{name}', firstAdmin?.displayName || firstAdmin?.name || t('an admin'))}><AppLink className="cs-button is-small" href={membersPath(workspace)}>{t('View admins')}</AppLink></AccessPill>}
     </div>
   }
-  if (variant === 'connect' || variant === 'awaiting') return <div className="cs-access" role="alert" data-code={code}>
-    <p>{t('Flow needs to confirm you’re authorized to make code changes on {host}. Confirm your {host} access to proceed.').replaceAll('{host}', hostName)} <a className="cs-inline-link" href={CODING_SESSIONS_DOCS} target="_blank" rel="noreferrer">{t('Docs')}</a></p>
-    {variant === 'awaiting'
-      ? <AccessPill label={t('Awaiting confirmation of code access from {name}').replace('{name}', creator?.displayName || creator?.name || t('the session creator'))}/>
-      : linked
-        ? <AccessPill label={t('Code access confirmed')}><button type="button" className="cs-button is-primary is-small" disabled={busy} onClick={onRetry}>{t('Resume')}</button></AccessPill>
-        : <AccessPill label={t('Connect {host}').replace('{host}', hostName)}>{host === 'github'
-          ? <button type="button" className="cs-button is-small" onClick={() => void connect()}>{t('Connect')}<ArrowUpRight size={14} aria-hidden="true"/></button>
-          : <AppLink className="cs-button is-small" href={integrationSettingsPath(workspace, 'gitlab')}>{t('Connect')}<ArrowUpRight size={14} aria-hidden="true"/></AppLink>}</AccessPill>}
-  </div>
+  if (variant === 'connect' || variant === 'awaiting') {
+    // requiresGithubConnection / requiresGitlabConnection: the workspace runs sessions with the member's own linked
+    // account (personal Connected accounts), and the creator has none.
+    const linkRequired = code === 'requiresGithubConnection' || code === 'requiresGitlabConnection'
+    const explanation = linkRequired && code
+      ? t(codingErrorInfo(code, { workspace, codeHost: host }).message)
+      : t('Flow needs to confirm you’re authorized to make code changes on {host}. Confirm your {host} access to proceed.').replaceAll('{host}', hostName)
+    return <div className="cs-access" role="alert" data-code={code}>
+      <p>{explanation} <a className="cs-inline-link" href={CODING_SESSIONS_DOCS} target="_blank" rel="noreferrer">{t('Docs')}</a></p>
+      {variant === 'awaiting'
+        ? <AccessPill label={t('Awaiting confirmation of code access from {name}').replace('{name}', creator?.displayName || creator?.name || t('the session creator'))}/>
+        : linked
+          ? <AccessPill label={t('Code access confirmed')}><button type="button" className="cs-button is-primary is-small" disabled={busy} onClick={onRetry}>{t('Resume')}</button></AccessPill>
+          : host === 'github'
+            ? <AccessPill label={t('Connect {host}').replace('{host}', hostName)}><button type="button" className="cs-button is-small" onClick={() => void connect()}>{t('Connect')}<ArrowUpRight size={14} aria-hidden="true"/></button></AccessPill>
+            : <AccessPill label={t('Link your GitLab account')}>
+              <AppLink className="cs-button is-small" href={settingsPath(workspace, 'connections')}>{t('Link GitLab account')}<ArrowUpRight size={14} aria-hidden="true"/></AppLink>
+              {retry && <button type="button" className="cs-button is-small" disabled={busy} onClick={onRetry}>{t('Retry')}</button>}
+            </AccessPill>}
+    </div>
+  }
   const info = code ? codingErrorInfo(code, { workspace, codeHost: session.codeHost }) : undefined
   const raw = activity ? activity.body.replace(/\s*\([a-zA-Z]+\)\s*$/, '') : session.error
   // The agent's own error text, as the reference app shows it; sandbox start problems keep the raw reason for admins (§4.4).

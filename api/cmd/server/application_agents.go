@@ -172,6 +172,10 @@ func (s *server) authorizedAgentTask(r *http.Request, id string, editing bool) (
 	if data.Viewer.App && task.AppUserID != data.Viewer.ID {
 		return task, data, errNotFound
 	}
+	if task.CodingSessionID != "" && data.ViewerRole == "guest" && task.CreatorID != data.Viewer.ID {
+		// Guests see only their own coding sessions, whatever the anchor.
+		return task, data, errNotFound
+	}
 	return task, data, nil
 }
 
@@ -185,6 +189,20 @@ func (s *server) applicationTaskContext(r *http.Request, task domain.AgentTask, 
 			return data, store.ErrAuthForbidden
 		}
 		return data, nil
+	}
+	if codingAnchorResource(task) {
+		// A coding session without an issue (agent chat, pull request, loop,
+		// external): the workspace role is all the rule needs, so it skips
+		// the full bootstrap the document and project branches load.
+		metadata, _, err := s.pagedRealtimeMetadata(r)
+		if err != nil {
+			return metadata, errNotFound
+		}
+		if err := codingAnchorAccess(metadata.Viewer, metadata.ViewerRole, task); err != nil {
+			return metadata, err
+		}
+		metadata.Issues = nil
+		return metadata, nil
 	}
 	data := s.workspaceData(r)
 	if task.ResourceType == "document" {

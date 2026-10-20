@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AgentInlineVideo } from '@/components/agent/agent-inline-video'
 import { openLightbox } from '@/components/editor/lightbox-bridge'
 import { useI18n } from '@/i18n/i18n'
+import { ApiError } from '@/lib/api-client'
 import { fetchCodingSessionArtifacts } from '@/lib/coding-sessions-api'
 import type { CodingArtifact } from '@/types/coding-sessions'
 import { artifactSrc, buildArtifactSections, galleryImages, pairRole, type ArtifactPair } from './coding-artifacts-model'
@@ -39,8 +40,14 @@ export function CodingSessionArtifacts({ sessionId, artifacts, refreshKey, class
     let cancelled = false
     setStatus('loading')
     fetchCodingSessionArtifacts(sessionId).then(
-      items => { if (!cancelled) { setFetched({ sessionId, items }); setStatus('idle') } },
-      () => { if (!cancelled) setStatus('error') },
+      items => { if (!cancelled) { setFetched({ sessionId, items: items ?? [] }); setStatus('idle') } },
+      cause => {
+        if (cancelled) return
+        // Not found: nothing to show here (the session page explains why it can't be read). Only a real failure
+        // (network, server) is an error with Retry.
+        if (cause instanceof ApiError && cause.status === 404) { setFetched({ sessionId, items: [] }); setStatus('idle') }
+        else setStatus('error')
+      },
     )
     return () => { cancelled = true }
   }, [sessionId, refreshKey, reload, hasInitialData])

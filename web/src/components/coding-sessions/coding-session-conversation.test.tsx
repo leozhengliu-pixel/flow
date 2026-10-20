@@ -242,6 +242,32 @@ describe('errors', () => {
     open.mockRestore()
   })
 
+  it('explains the session error even when its messages cannot be loaded, and retries the messages', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getApplicationTask).mockRejectedValue(new Error('resource not found'))
+    // A standalone chat session that failed before it ran: the creator must link their own GitLab account.
+    const view = renderConversation(makeSession({ state: 'error', phase: 'done', issueId: undefined, codeHost: 'gitlab', errorCode: 'requiresGitlabConnection', error: 'This workspace requires your linked GitLab account for coding sessions. Link GitLab in your account settings.', creatorId: viewer.id }))
+    expect(await screen.findByText(/This workspace requires coding sessions to run with your own GitLab access/)).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Link GitLab account' })).toHaveAttribute('href', '/workspace/settings/account/connections')
+    expect(screen.getByText('Couldn’t load this session’s messages.')).toBeVisible()
+    expect(screen.queryByText('resource not found')).toBeNull()
+    const calls = vi.mocked(getApplicationTask).mock.calls.length
+    stream()
+    await user.click(within(screen.getByText('Couldn’t load this session’s messages.').closest('p')!).getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(vi.mocked(getApplicationTask).mock.calls.length).toBeGreaterThan(calls))
+    await waitFor(() => expect(screen.queryByText('Couldn’t load this session’s messages.')).toBeNull())
+    expect(screen.getByRole('link', { name: 'Link GitLab account' })).toBeVisible()
+    view.unmount()
+
+    // Another reader (an admin) waits for the creator; any other code shows the session's own reason.
+    vi.mocked(getApplicationTask).mockRejectedValue(new Error('resource not found'))
+    const other = renderConversation(makeSession({ state: 'error', phase: 'done', codeHost: 'gitlab', errorCode: 'requiresGitlabConnection', creatorId: teammate.id }))
+    expect(await screen.findByText('Awaiting confirmation of code access from Teammate')).toBeVisible()
+    other.unmount()
+    renderConversation(makeSession({ state: 'error', phase: 'done', errorCode: 'harnessFailed', error: 'Codex exited with code 1' }))
+    expect(await screen.findByText('Codex exited with code 1')).toBeVisible()
+  })
+
   it('shows the failed-to-start card for a session the agent never answered, and a fallback without an error activity', async () => {
     stream(activity('prompt', 'Go'))
     const view = renderConversation(makeSession({ state: 'stale', phase: 'done' }))
