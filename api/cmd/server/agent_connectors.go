@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -72,7 +74,13 @@ type connectorTransport struct {
 	endpoint, token string
 	headers         map[string]string
 	allowLocal      bool
+	// unauthorized records that the MCP endpoint answered 401 Unauthorized.
+	unauthorized *atomic.Bool
 }
+
+// errConnectorUnauthorized marks a connection the MCP server refused for
+// missing or rejected credentials: the user needs to (re)authorize it.
+var errConnectorUnauthorized = errors.New("MCP server requires authorization")
 
 func (t connectorTransport) CloseIdleConnections() {
 	if closer, ok := t.base.(interface{ CloseIdleConnections() }); ok {
@@ -95,6 +103,9 @@ func (t connectorTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 		}
 	}
 	response, err := t.base.RoundTrip(clone)
+	if err == nil && response.StatusCode == http.StatusUnauthorized && t.unauthorized != nil && strings.TrimRight(r.URL.String(), "/") == strings.TrimRight(t.endpoint, "/") {
+		t.unauthorized.Store(true)
+	}
 	if err == nil && response.StatusCode != http.StatusSwitchingProtocols {
 		body := response.Body
 		response.Body = struct {
@@ -128,7 +139,8 @@ func (s *server) openConnector(ctx context.Context, item applicationPolicy) (*re
 	if base == nil {
 		base = http.DefaultTransport
 	}
-	httpClient.Transport = connectorTransport{base: base, endpoint: item.URL, token: token, headers: headers, allowLocal: s.authDisabled}
+	unauthorized := &atomic.Bool{}
+	httpClient.Transport = connectorTransport{base: base, endpoint: item.URL, token: token, headers: headers, allowLocal: s.authDisabled, unauthorized: unauthorized}
 	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	options := &mcp.ClientOptions{Capabilities: &mcp.ClientCapabilities{}}
 	if requestContext.Elicit != nil {
@@ -141,6 +153,9 @@ func (s *server) openConnector(ctx context.Context, item applicationPolicy) (*re
 	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: item.URL, HTTPClient: httpClient, MaxRetries: 1, DisableStandaloneSSE: true}, nil)
 	if err != nil {
 		httpClient.CloseIdleConnections()
+		if unauthorized.Load() {
+			return nil, fmt.Errorf("%w: %w", errConnectorUnauthorized, err)
+		}
 		return nil, fmt.Errorf("MCP connection failed; check authorization and server availability: %w", err)
 	}
 	return &remoteMCPClient{session: session, client: httpClient}, nil
@@ -215,7 +230,7 @@ func (s *server) discoverConnectorTools(ctx context.Context, data domain.Bootstr
 		}
 		client, err := s.openConnector(ctx, policy)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", policy.Name, err)
+			return nil, fmt.Errorf("%s: %w", policy.label(), err)
 		}
 		defer client.close()
 		cursor := ""
@@ -245,7 +260,7 @@ func (s *server) discoverConnectorTools(ctx context.Context, data domain.Bootstr
 					return nil, fmt.Errorf("invalid MCP tool definition")
 				}
 				hash := sha256.Sum256([]byte(policy.ID + "\x00" + tool.Name))
-				items = append(items, connectorTool{Definition: agentProviderTool{Name: fmt.Sprintf("external_%x", hash[:16]), Description: truncateSettingsText(policy.Name+": "+tool.Description, 2000), Parameters: tool.InputSchema, Access: "write"}, Policy: policy, RemoteName: tool.Name})
+				items = append(items, connectorTool{Definition: agentProviderTool{Name: fmt.Sprintf("external_%x", hash[:16]), Description: truncateSettingsText(policy.label()+": "+tool.Description, 2000), Parameters: tool.InputSchema, Access: "write"}, Policy: policy, RemoteName: tool.Name})
 				if len(items) > maxConnectorTools {
 					return nil, fmt.Errorf("too many MCP tools (maximum %d)", maxConnectorTools)
 				}

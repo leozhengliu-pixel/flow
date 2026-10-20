@@ -591,6 +591,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/application-policies/{id}/oauth/start", s.startConnectorOAuth)
 	mux.HandleFunc("DELETE /api/application-policies/{id}/authorization", s.disconnectConnectorOAuth)
 	mux.HandleFunc("PUT /api/application-policies/{id}/headers", s.saveConnectorHeaders)
+	mux.HandleFunc("POST /api/application-policies/{id}/connect", s.connectConnector)
 	mux.HandleFunc("GET /api/connector-oauth/callback", s.finishConnectorOAuth)
 	mux.HandleFunc("GET /api/connector-oauth/client-metadata", s.connectorClientMetadata)
 	mux.HandleFunc("PUT /api/application-policies", s.saveApplicationPolicy)

@@ -104,6 +104,7 @@ var InternalRoutes = []string{
 	"DELETE /api/application-policies/{id}/authorization",
 	"GET /api/application-policies",
 	"GET /api/application-policies/{id}/authorization",
+	"POST /api/application-policies/{id}/connect",
 	"POST /api/application-policies/{id}/oauth/start",
 	"PUT /api/application-policies",
 	"PUT /api/application-policies/{id}/headers",

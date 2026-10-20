@@ -41,7 +41,7 @@ func fakeCodeMCP(t *testing.T, calls *atomic.Int32, toolCount *atomic.Int32) *ht
 		switch request.Method {
 		case "initialize":
 			w.Header().Set("Mcp-Session-Id", "code-session")
-			result = map[string]any{"protocolVersion": "2025-11-25", "capabilities": map[string]any{"tools": map[string]any{}}}
+			result = map[string]any{"protocolVersion": "2025-11-25", "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]any{"name": "code-search", "title": "Code Search", "version": "1"}}
 		case "notifications/initialized":
 			w.WriteHeader(202)
 			return
@@ -130,6 +130,51 @@ func TestApplicationPolicyToolApproval(t *testing.T) {
 	}
 	if saved := save("sometimes"); saved.ToolApproval != "" {
 		t.Fatalf("an unknown tool approval value was stored: %+v", saved)
+	}
+}
+
+// Connecting records the connector's tools and takes the server's name for a connector named after its
+// host; a display name renames it without losing the inventory, and a 401 asks for authorization.
+func TestConnectConnectorRecordsToolsAndRenames(t *testing.T) {
+	var calls, toolCount atomic.Int32
+	toolCount.Store(3)
+	upstream := fakeCodeMCP(t, &calls, &toolCount)
+	defer upstream.Close()
+	s, handler, _, _ := applicationFixture(t)
+	setTestConnectors(t, s.store)
+	created := requestJSON[applicationPolicy](t, handler, "PUT", "/api/application-policies", map[string]any{"name": "127.0.0.1", "kind": "mcp", "url": upstream.URL, "tools": []string{"forged"}}, 200)
+	if len(created.Tools) != 0 || created.ConnectedAt != nil {
+		t.Fatalf("clients cannot set the tool inventory: %+v", created)
+	}
+	connected := requestJSON[connectorConnectResult](t, handler, "POST", "/api/application-policies/"+created.ID+"/connect", map[string]any{}, 200)
+	if !connected.Connected || connected.Policy == nil || strings.Join(connected.Policy.Tools, ",") != "search_code,delete_branch,list_branches" || connected.Policy.Name != "Code Search" || connected.Policy.ConnectedAt == nil {
+		t.Fatalf("connect: %+v %+v", connected, connected.Policy)
+	}
+	renamed := requestJSON[applicationPolicy](t, handler, "PUT", "/api/application-policies", map[string]any{"id": created.ID, "name": "Code Search", "kind": "mcp", "url": upstream.URL, "displayName": "  Repo search  "}, 200)
+	if renamed.DisplayName != "Repo search" || renamed.label() != "Repo search" || len(renamed.Tools) != 3 || renamed.ConnectedAt == nil {
+		t.Fatalf("rename: %+v", renamed)
+	}
+	cleared := requestJSON[applicationPolicy](t, handler, "PUT", "/api/application-policies", map[string]any{"id": created.ID, "name": "Code Search", "kind": "mcp", "url": upstream.URL, "displayName": ""}, 200)
+	if cleared.label() != "Code Search" {
+		t.Fatalf("clearing the display name shows the default name: %+v", cleared)
+	}
+	moved := requestJSON[applicationPolicy](t, handler, "PUT", "/api/application-policies", map[string]any{"id": created.ID, "name": "Code Search", "kind": "mcp", "url": upstream.URL + "/other"}, 200)
+	if len(moved.Tools) != 0 || moved.ConnectedAt != nil {
+		t.Fatalf("a new endpoint drops the old inventory: %+v", moved)
+	}
+
+	locked := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusUnauthorized) }))
+	defer locked.Close()
+	private := requestJSON[applicationPolicy](t, handler, "PUT", "/api/application-policies", map[string]any{"name": "Locked", "kind": "mcp", "url": locked.URL}, 200)
+	refused := requestJSON[connectorConnectResult](t, handler, "POST", "/api/application-policies/"+private.ID+"/connect", map[string]any{}, 200)
+	if refused.Connected || !refused.AuthorizationRequired || refused.Error == "" {
+		t.Fatalf("401 must ask for authorization: %+v", refused)
+	}
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNotFound) }))
+	down.Close()
+	gone := requestJSON[applicationPolicy](t, handler, "PUT", "/api/application-policies", map[string]any{"name": "Gone", "kind": "mcp", "url": down.URL}, 200)
+	if failed := requestJSON[connectorConnectResult](t, handler, "POST", "/api/application-policies/"+gone.ID+"/connect", map[string]any{}, 200); failed.Connected || failed.AuthorizationRequired || failed.Error == "" {
+		t.Fatalf("an unreachable server is an error, not an authorization request: %+v", failed)
 	}
 }
 
