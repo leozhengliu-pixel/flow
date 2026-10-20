@@ -1839,6 +1839,20 @@ export interface DeployPreview {
   createdAt: string;
   updatedAt: string;
 }
+/** One import of open pull/merge requests from the connected code hosts ("Sync now"). */
+export interface ReviewImportResult {
+  repositories: number;
+  imported: number;
+  updated: number;
+  closed: number;
+  /** Repositories or connections that could not be read. */
+  errors: string[];
+  /** The run stopped early for a code host's rate limit. */
+  rateLimitedUntil?: string;
+  startedAt: string;
+  finishedAt: string;
+}
+
 export interface CodeReview {
   id: UUID;
   slugId: string;

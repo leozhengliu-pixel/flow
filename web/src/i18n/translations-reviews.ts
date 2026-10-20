@@ -11,6 +11,11 @@ export const reviewsZhCN: Record<string, string> = {
   "Toggle group": "展开/收起分组",
   "Yes": "是",
   "Could not enable code access": "无法启用代码访问",
+  "Sync now": "立即同步",
+  "Synced: {count} new reviews": "已同步：新增 {count} 个评审",
+  "Some repositories could not be synced": "部分仓库无法同步",
+  "No connected repositories to sync": "没有可同步的已连接仓库",
+  "The code host's rate limit is reached; the rest syncs later": "代码托管平台的速率限制已用尽，其余内容稍后同步",
   // --- Pull request page
   "pull request actions": "拉取请求操作",
   "Pull request sections": "拉取请求分区",

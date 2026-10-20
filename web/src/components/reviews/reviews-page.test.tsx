@@ -12,6 +12,7 @@ import type { CodeReview } from "@/types/flow";
 
 const api = vi.hoisted(() => ({
   commentOnReview: vi.fn(),
+  importReviews: vi.fn(),
   syncReview: vi.fn(),
   resolveReviewThread: vi.fn(),
   submitReview: vi.fn(),
@@ -317,6 +318,17 @@ it("keeps a review comment available when posting fails", async () => {
 function renderReviewList(reviews: CodeReview[], view: 'for-you' | 'created' = 'for-you') {
   return render(<I18nProvider><ReviewsPage data={makeBootstrap({ viewer, users: [viewer, teammate], reviews, teamMembers: [], userSettings: {}, integrationConnections: [{ id: 'github', provider: 'github' }] as never[] })} view={view} onNavigate={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)} onOpenSidebar={vi.fn()}/></I18nProvider>);
 }
+
+it('imports open pull and merge requests from the list with Sync now', async () => {
+  const user = userEvent.setup();
+  const onReload = vi.fn().mockResolvedValue(undefined);
+  api.importReviews.mockResolvedValue({ repositories: 2, imported: 3, updated: 1, closed: 0, errors: [], startedAt: '2026-10-20T00:00:00Z', finishedAt: '2026-10-20T00:00:01Z' });
+  render(<I18nProvider><ReviewsPage data={makeBootstrap({ viewer, users: [viewer, teammate], reviews: [review], teamMembers: [], userSettings: {}, integrationConnections: [{ id: 'gitlab', provider: 'gitlab' }] as never[] })} view="for-you" onNavigate={vi.fn()} onReload={onReload} onOpenSidebar={vi.fn()}/></I18nProvider>);
+  await user.click(screen.getByRole('button', { name: 'Sync now' }));
+  await waitFor(() => expect(onReload).toHaveBeenCalled());
+  expect(api.importReviews).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole('button', { name: 'Sync now' })).not.toBeDisabled();
+});
 
 it('opens filter submenus on hover, supports multiple statuses, and clears actual list filters', async () => {
   const user = userEvent.setup({ skipHover: true });

@@ -1,4 +1,4 @@
-import { AlertCircle, GitMerge, GitPullRequest, PanelRightClose, Search, Zap } from "lucide-react";
+import { AlertCircle, GitMerge, GitPullRequest, PanelRightClose, RefreshCw, Search, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/lib/toast";
 
@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { CheckboxMark } from "@/components/ui/checkbox-mark";
 import { useI18n } from "@/i18n/i18n";
 import { toggleFavoriteFor } from "@/lib/favorites";
-import { submitReview, syncReview, updateIntegrationConnection, updateReview, updateUserSettings } from "@/lib/api";
+import { importReviews, submitReview, syncReview, updateIntegrationConnection, updateReview, updateUserSettings } from "@/lib/api";
 import { integrationSettingsPath, reviewAgentPath, reviewPath, reviewsPath, type ReviewRouteTab } from "@/lib/app-routes";
 import type { BootstrapData, CodeReview } from "@/types/flow";
 
@@ -167,6 +167,24 @@ function ReviewList({
   const groups = useMemo(() => groupReviews(visible, display, data.viewer.id), [visible, display, data.viewer.id]);
   const isCollapsed = (id: string) => reviewGroupCollapsedByDefault(id) !== toggledGroups.has(id);
   const access = resolveCodeReviewAccess(data);
+  // "Sync now": imports the open pull and merge requests of every connected
+  // repository, for code hosts whose webhooks do not reach Flow.
+  const [syncing, setSyncing] = useState(false);
+  const syncNow = async () => {
+    setSyncing(true);
+    try {
+      const result = await importReviews();
+      await onReload();
+      if (result.rateLimitedUntil) toast.error(t("The code host's rate limit is reached; the rest syncs later"));
+      else if (result.errors.length) toast.error(`${t("Some repositories could not be synced")}: ${result.errors[0]}`);
+      else if (!result.repositories) toast.error(t("No connected repositories to sync"));
+      else toast.success(t("Synced: {count} new reviews").replace("{count}", String(result.imported)));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("Could not sync with the code host"));
+    } finally {
+      setSyncing(false);
+    }
+  };
   const tabs = [
     { id: "for-you" as const, label: "For you", path: reviewsPath(data.workspace.urlKey) },
     { id: "created" as const, label: "Created", path: reviewsPath(data.workspace.urlKey, "created") },
@@ -179,6 +197,9 @@ function ReviewList({
         </button>
         <h1>{t("Reviews")}</h1>
         <div>
+          <button type="button" className="review-ghost-button" aria-label={t("Sync now")} title={t("Sync now")} disabled={syncing} aria-busy={syncing} onClick={() => void syncNow()}>
+            <RefreshCw className={syncing ? "reviews-sync-spinning" : undefined} />
+          </button>
           <ReviewFilters filters={filters} data={data} items={baseItems} onChange={setFilters} filterBarHost={filterHost} />
           <ReviewDisplayMenu display={display} view={view} onChange={setDisplay} />
         </div>

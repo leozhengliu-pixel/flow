@@ -12,6 +12,7 @@ import type {
   BootstrapData,
   DocumentRevision,
   CodeReview,
+  ReviewImportResult,
   CommitSigningKey,
   Comment,
   Customer,
@@ -1333,6 +1334,13 @@ export function resolveReviewThread(id: string, commentId: string, resolved: boo
  */
 export function syncReview(id: string, force = true): Promise<CodeReview> {
   return request(`/api/reviews/${encodeURIComponent(id)}/sync`, jsonRequest("POST", { force }));
+}
+/**
+ * Imports the open pull and merge requests of every connected repository
+ * (new ones become reviews; closed and merged ones are updated).
+ */
+export function importReviews(): Promise<ReviewImportResult> {
+  return request("/api/reviews/import", jsonRequest("POST", {}));
 }
 export function fetchWebhooks(): Promise<Webhook[]> {
   return request("/api/webhooks");

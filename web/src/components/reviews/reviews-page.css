@@ -469,7 +469,8 @@ article>header .review-diff-counts{margin-left:auto;margin-right:4px}
 .review-sync-retry:hover:not(:disabled){background:var(--ui-pill-hover-bg)}
 .review-sync-retry:disabled{opacity:.6}
 @keyframes review-sync-spin{to{transform:rotate(360deg)}}
-@media(prefers-reduced-motion:reduce){.review-sync-state.is-pending svg{animation:none}}
+.reviews-sync-spinning{animation:review-sync-spin 1s linear infinite}
+@media(prefers-reduced-motion:reduce){.review-sync-state.is-pending svg,.reviews-sync-spinning{animation:none}}
 .review-detail-sync-error{display:flex;align-items:center;gap:6px;margin:0 0 8px;color:var(--review-state-closed);font:450 12px/16px var(--font)}
 .review-detail-sync-error svg{flex:none;width:13px;height:13px}
 .review-posted-as{color:var(--theme-text-tertiary);font-size:11px;line-height:16px}.review-thread-comment>.review-posted-as,.review-activity-comment-entry>.review-posted-as{display:block;margin:2px 0 4px}

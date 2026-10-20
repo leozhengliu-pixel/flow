@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +35,73 @@ type reviewRemoteError struct {
 	Provider string
 	Status   int
 	Message  string
+	// RateLimited: the host refused the call for its rate limit; RetryAt is
+	// when it says to try again (zero when it did not say).
+	RateLimited bool
+	RetryAt     time.Time
+}
+
+// reviewRateLimit is the last rate limit budget a token credential's
+// answers reported (GitHub X-RateLimit-*, GitLab RateLimit-*).
+type reviewRateLimit struct {
+	mu        sync.Mutex
+	known     bool
+	remaining int
+	reset     time.Time
+}
+
+func (r *reviewRateLimit) note(header http.Header) {
+	remaining := firstNonEmpty(header.Get("X-RateLimit-Remaining"), header.Get("RateLimit-Remaining"))
+	value, err := strconv.Atoi(strings.TrimSpace(remaining))
+	if err != nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.known, r.remaining, r.reset = true, value, reviewRateLimitReset(header)
+}
+
+func (r *reviewRateLimit) budget() (remaining int, reset time.Time, known bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.remaining, r.reset, r.known
+}
+
+// reviewRateLimitReset is when a rate limited answer says to retry:
+// Retry-After seconds, else the reset epoch of the window.
+func reviewRateLimitReset(header http.Header) time.Time {
+	if seconds, err := strconv.Atoi(strings.TrimSpace(header.Get("Retry-After"))); err == nil && seconds >= 0 {
+		return time.Now().Add(time.Duration(seconds) * time.Second).UTC()
+	}
+	if epoch, err := strconv.ParseInt(strings.TrimSpace(firstNonEmpty(header.Get("X-RateLimit-Reset"), header.Get("RateLimit-Reset"))), 10, 64); err == nil && epoch > 0 {
+		return time.Unix(epoch, 0).UTC()
+	}
+	return time.Time{}
+}
+
+// reviewRemoteRateLimited reports a call refused for the host's rate limit
+// and when to retry (zero when unknown).
+func reviewRemoteRateLimited(err error) (bool, time.Time) {
+	var remote *reviewRemoteError
+	if errors.As(err, &remote) && remote.RateLimited {
+		return true, remote.RetryAt
+	}
+	var api *githubhost.APIError
+	if errors.As(err, &api) && errors.Is(err, codehost.ErrTransient) && (api.Status == http.StatusTooManyRequests || api.Status == http.StatusForbidden) {
+		return true, time.Time{}
+	}
+	return false, time.Time{}
+}
+
+// reviewRemoteBudget is the rate limit budget a remote last saw (known is
+// false for remotes that do not report it, such as the GitHub App).
+func reviewRemoteBudget(remote reviewRemote) (remaining int, reset time.Time, known bool) {
+	if budgeted, ok := remote.(interface {
+		budget() (int, time.Time, bool)
+	}); ok {
+		return budgeted.budget()
+	}
+	return 0, time.Time{}, false
 }
 
 func (e *reviewRemoteError) Error() string {
@@ -184,6 +252,8 @@ func newClassicReviewRemote(provider *reviewProvider, review domain.CodeReview) 
 
 func (c *classicReviewRemote) Provider() string { return c.provider.provider }
 
+func (c *classicReviewRemote) budget() (int, time.Time, bool) { return c.provider.rate.budget() }
+
 func (c *classicReviewRemote) PostedAs() *domain.ReviewPostedAs {
 	postedAs := c.provider.postedAs
 	return &postedAs
@@ -246,8 +316,14 @@ func (provider *reviewProvider) call(ctx context.Context, method, endpoint strin
 	if err != nil {
 		return fmt.Errorf("repository API response could not be read: %w", err)
 	}
+	provider.rate.note(response.Header)
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return &reviewRemoteError{Provider: provider.provider, Status: response.StatusCode, Message: reviewRemoteErrorText(raw)}
+		remoteErr := &reviewRemoteError{Provider: provider.provider, Status: response.StatusCode, Message: reviewRemoteErrorText(raw)}
+		if response.StatusCode == http.StatusTooManyRequests || (response.StatusCode == http.StatusForbidden &&
+			(firstNonEmpty(response.Header.Get("X-RateLimit-Remaining"), response.Header.Get("RateLimit-Remaining")) == "0" || response.Header.Get("Retry-After") != "")) {
+			remoteErr.RateLimited, remoteErr.RetryAt = true, reviewRateLimitReset(response.Header)
+		}
+		return remoteErr
 	}
 	if strings.HasSuffix(endpoint, "/graphql") {
 		var envelope struct {
@@ -323,6 +399,12 @@ func (f *fallbackRemote) PostedAs() *domain.ReviewPostedAs {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return reviewRemotePostedAs(f.remotes[f.chosen])
+}
+
+func (f *fallbackRemote) budget() (int, time.Time, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return reviewRemoteBudget(f.remotes[f.chosen])
 }
 
 func (f *fallbackRemote) try(call func(reviewRemote) error) error {

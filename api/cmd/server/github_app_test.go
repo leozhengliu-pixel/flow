@@ -35,6 +35,8 @@ type gitHubAppFixture struct {
 	server  *server
 	handler http.Handler
 	api     *httptest.Server
+	// routes are extra API answers by "METHOD /path" (http.HandlerFunc).
+	routes *sync.Map
 }
 
 func newGitHubAppFixture(t *testing.T) *gitHubAppFixture {
@@ -47,8 +49,13 @@ func newGitHubAppFixture(t *testing.T) *gitHubAppFixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { repository.Close() })
+	routes := &sync.Map{}
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if route, ok := routes.Load(r.Method + " " + r.URL.Path); ok {
+			route.(http.HandlerFunc)(w, r)
+			return
+		}
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/app/installations/42":
 			if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ey") {
@@ -73,7 +80,7 @@ func newGitHubAppFixture(t *testing.T) *gitHubAppFixture {
 	keyPEM := string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}))
 	s := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true}
 	s.initCoding(appconfig.CodingConfig{Provider: appconfig.CodingProviderDisabled, GitHubApp: appconfig.GitHubAppConfig{AppID: "123", Slug: "flow-dev", PrivateKey: keyPEM, WebhookSecret: "whsec", Host: "github.com", APIURL: api.URL}})
-	return &gitHubAppFixture{t: t, repo: repository, dbPath: dbPath, server: s, handler: newHandler(s), api: api}
+	return &gitHubAppFixture{t: t, repo: repository, dbPath: dbPath, server: s, handler: newHandler(s), api: api, routes: routes}
 }
 
 func (f *gitHubAppFixture) do(method, target string, body []byte, header http.Header) *httptest.ResponseRecorder {

@@ -195,18 +195,9 @@ func (s *server) applyCodeReviewEvent(ctx context.Context, workspace, provider, 
 			if data.IntegrationConnections[connectionIndex].Provider == provider {
 				data.IntegrationConnections[connectionIndex].LastWebhookAt = &now
 				data.IntegrationConnections[connectionIndex].LastError = ""
-				if data.IntegrationConnections[connectionIndex].LinkbackEnabled && updated.URL != "" {
-					for issueIndex := range data.Issues {
-						if !slices.Contains(updated.IssueIDs, data.Issues[issueIndex].ID) || slices.ContainsFunc(data.Issues[issueIndex].Attachments, func(item domain.Attachment) bool {
-							return item.Provider == provider && item.ProviderID == updated.ExternalID
-						}) {
-							continue
-						}
-						data.Issues[issueIndex].Attachments = append(data.Issues[issueIndex].Attachments, domain.Attachment{ID: fmt.Sprintf("attachment_%s_%d", provider, now.UnixNano()), IssueID: data.Issues[issueIndex].ID, Title: updated.Title, URL: updated.URL, ContentType: "text/uri-list", CreatedAt: now, Creator: sender, Provider: provider, ProviderID: updated.ExternalID, ProviderURL: updated.URL, LinkbackURL: updated.URL, SyncStatus: "synced"})
-					}
-				}
 			}
 		}
+		appendReviewLinkbacks(data, provider, updated, sender, now)
 		if !slices.ContainsFunc(data.Notifications, func(item domain.Notification) bool { return item.SourceID == eventID }) {
 			data.Notifications = appendCodeReviewNotifications(data, updated, event, eventID, now)
 		}
@@ -221,6 +212,24 @@ func (s *server) applyCodeReviewEvent(ctx context.Context, workspace, provider, 
 		}
 	}
 	return updated, nil
+}
+
+// appendReviewLinkbacks attaches the pull/merge request to its linked
+// issues when a connection of its code host has linkbacks enabled.
+func appendReviewLinkbacks(data *domain.Bootstrap, provider string, review domain.CodeReview, actor domain.User, now time.Time) {
+	if review.URL == "" || !slices.ContainsFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool {
+		return item.Provider == provider && item.LinkbackEnabled
+	}) {
+		return
+	}
+	for issueIndex := range data.Issues {
+		if !slices.Contains(review.IssueIDs, data.Issues[issueIndex].ID) || slices.ContainsFunc(data.Issues[issueIndex].Attachments, func(item domain.Attachment) bool {
+			return item.Provider == provider && item.ProviderID == review.ExternalID
+		}) {
+			continue
+		}
+		data.Issues[issueIndex].Attachments = append(data.Issues[issueIndex].Attachments, domain.Attachment{ID: fmt.Sprintf("attachment_%s_%d", provider, now.UnixNano()), IssueID: data.Issues[issueIndex].ID, Title: review.Title, URL: review.URL, ContentType: "text/uri-list", CreatedAt: now, Creator: actor, Provider: provider, ProviderID: review.ExternalID, ProviderURL: review.URL, LinkbackURL: review.URL, SyncStatus: "synced"})
+	}
 }
 
 func (s *server) slackWebhook(w http.ResponseWriter, r *http.Request) {
