@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -90,6 +91,8 @@ import {
   SettingsToggle,
   type SettingsSelectOption,
 } from "./settings-primitives";
+
+import { CodeHostConnectionRows } from "./code-host-accounts";
 
 import "./personal-settings.css";
 import {
@@ -3588,15 +3591,6 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
       oauth: true,
     },
     {
-      provider: "github",
-      name: "GitHub",
-      description: p(
-        "Review code in Flow and sync attribution of your git-related actions",
-      ),
-      icon: <GitFork />,
-      oauth: true,
-    },
-    {
       provider: "google-calendar",
       name: "Google Calendar",
       description: p(
@@ -3632,11 +3626,12 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
         {p("Connected accounts")}
       </PersonalPageTitle>
       <div className="personal-connection-list">
-        {entries.map((item) => {
+        {entries.map((item, index) => {
           const connection = integrations.get(item.provider);
           const canConnect = item.oauth;
           return (
-            <div className="settings-card" key={item.provider}>
+            <Fragment key={item.provider}>
+            <div className="settings-card">
               <PersonalRow
                 icon={item.icon}
                 title={<span data-i18n-ignore>{item.name}</span>}
@@ -3651,6 +3646,12 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
                 )}
               </PersonalRow>
             </div>
+            {index === 0 && (
+              <CodeHostConnectionRows
+                githubDescription="Review code in Flow and sync attribution of your git-related actions"
+              />
+            )}
+            </Fragment>
           );
         })}
       </div>

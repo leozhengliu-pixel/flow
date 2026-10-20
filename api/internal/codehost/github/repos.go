@@ -268,11 +268,122 @@ func (h *Host) InstallURL(state string) string {
 
 // AuthorizeURL starts user-to-server OAuth to link a user's GitHub account.
 func (h *Host) AuthorizeURL(state, redirectURI string) string {
+	return h.AuthorizeURLWithChallenge(state, redirectURI, "")
+}
+
+// AuthorizeURLWithChallenge is AuthorizeURL with a PKCE S256 code challenge.
+func (h *Host) AuthorizeURLWithChallenge(state, redirectURI, challenge string) string {
 	values := url.Values{"client_id": {h.cfg.ClientID}, "state": {state}}
 	if redirectURI != "" {
 		values.Set("redirect_uri", redirectURI)
 	}
+	if challenge != "" {
+		values.Set("code_challenge", challenge)
+		values.Set("code_challenge_method", "S256")
+	}
 	return h.webURL + "/login/oauth/authorize?" + values.Encode()
+}
+
+// APIURL is the REST base the App talks to (api.github.com or <ghe>/api/v3).
+func (h *Host) APIURL() string { return h.apiURL }
+
+// SetWebURL overrides the web base used for OAuth (tests point it at a fake
+// GitHub; production derives it from the host).
+func (h *Host) SetWebURL(webURL string) { h.webURL = strings.TrimRight(webURL, "/") }
+
+// UserToken is a member's user-to-server token pair. GitHub Apps with
+// expiring user tokens issue 8-hour access tokens and 6-month refresh
+// tokens; without expiry both expiry times are zero.
+type UserToken struct {
+	AccessToken      string    `json:"accessToken"`
+	RefreshToken     string    `json:"refreshToken,omitempty"`
+	ExpiresAt        time.Time `json:"expiresAt,omitempty"`
+	RefreshExpiresAt time.Time `json:"refreshExpiresAt,omitempty"`
+}
+
+type oauthTokenResponse struct {
+	AccessToken           string `json:"access_token"`
+	RefreshToken          string `json:"refresh_token"`
+	ExpiresIn             int64  `json:"expires_in"`
+	RefreshTokenExpiresIn int64  `json:"refresh_token_expires_in"`
+	Error                 string `json:"error"`
+	Description           string `json:"error_description"`
+}
+
+func (h *Host) userToken(out oauthTokenResponse) (UserToken, error) {
+	if out.AccessToken == "" {
+		if out.Error == "bad_refresh_token" || out.Error == "bad_verification_code" {
+			return UserToken{}, fmt.Errorf("%w: github: %s", codehost.ErrUserNotLinked, out.Error)
+		}
+		return UserToken{}, fmt.Errorf("github: authorization failed: %s %s", out.Error, out.Description)
+	}
+	token := UserToken{AccessToken: out.AccessToken, RefreshToken: out.RefreshToken}
+	now := h.now().UTC()
+	if out.ExpiresIn > 0 {
+		token.ExpiresAt = now.Add(time.Duration(out.ExpiresIn) * time.Second)
+	}
+	if out.RefreshTokenExpiresIn > 0 {
+		token.RefreshExpiresAt = now.Add(time.Duration(out.RefreshTokenExpiresIn) * time.Second)
+	}
+	return token, nil
+}
+
+// ExchangeUserToken finishes user-to-server OAuth (with the PKCE verifier
+// when one was sent) and returns the member's identity and token pair.
+func (h *Host) ExchangeUserToken(ctx context.Context, code, redirectURI, verifier string) (UserLink, UserToken, error) {
+	if !h.CanAuthorizeUsers() {
+		return UserLink{}, UserToken{}, fmt.Errorf("%w: GitHub App user authorization is not configured", codehost.ErrNotConnected)
+	}
+	body := map[string]string{"client_id": h.cfg.ClientID, "client_secret": h.cfg.ClientSecret, "code": code}
+	if redirectURI != "" {
+		body["redirect_uri"] = redirectURI
+	}
+	if verifier != "" {
+		body["code_verifier"] = verifier
+	}
+	var out oauthTokenResponse
+	if err := h.do(ctx, "oauth_exchange", http.MethodPost, h.webURL+"/login/oauth/access_token", "", body, &out); err != nil {
+		return UserLink{}, UserToken{}, err
+	}
+	token, err := h.userToken(out)
+	if err != nil {
+		return UserLink{}, UserToken{}, err
+	}
+	link, err := h.UserForToken(ctx, token.AccessToken)
+	return link, token, err
+}
+
+// UserForToken reads GET /user with a member's token.
+func (h *Host) UserForToken(ctx context.Context, accessToken string) (UserLink, error) {
+	var user struct {
+		Login string `json:"login"`
+		ID    int64  `json:"id"`
+	}
+	if err := h.do(ctx, "get_user", http.MethodGet, h.apiURL+"/user", "Bearer "+accessToken, nil, &user); err != nil {
+		return UserLink{}, err
+	}
+	if user.Login == "" {
+		return UserLink{}, errors.New("github: authorization returned no user")
+	}
+	return UserLink{Login: user.Login, ID: user.ID, HostName: h.cfg.Host, LinkedAt: h.now().UTC()}, nil
+}
+
+// RefreshUserToken exchanges a refresh token for a new pair (GitHub rotates
+// the refresh token). A rejected refresh token is ErrUserNotLinked: the
+// member must reconnect.
+func (h *Host) RefreshUserToken(ctx context.Context, refreshToken string) (UserToken, error) {
+	if !h.CanAuthorizeUsers() {
+		return UserToken{}, fmt.Errorf("%w: GitHub App user authorization is not configured", codehost.ErrNotConnected)
+	}
+	if strings.TrimSpace(refreshToken) == "" {
+		return UserToken{}, fmt.Errorf("%w: no refresh token", codehost.ErrUserNotLinked)
+	}
+	body := map[string]string{"client_id": h.cfg.ClientID, "client_secret": h.cfg.ClientSecret, "grant_type": "refresh_token", "refresh_token": refreshToken}
+	var out oauthTokenResponse
+	if err := h.do(ctx, "oauth_refresh", http.MethodPost, h.webURL+"/login/oauth/access_token", "", body, &out); err != nil {
+		return UserToken{}, err
+	}
+	return h.userToken(out)
 }
 
 // ExchangeUserCode finishes user-to-server OAuth and returns the user's

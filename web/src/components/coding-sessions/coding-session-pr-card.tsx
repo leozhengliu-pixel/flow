@@ -3,7 +3,8 @@ import { FileDiff, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullReques
 import { AppLink } from '@/components/ui/app-link'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useI18n } from '@/i18n/i18n'
-import { reviewPath } from '@/lib/app-routes'
+import { reviewPath, settingsPath } from '@/lib/app-routes'
+import { fillTemplate } from '@/lib/fill-template'
 import { toast } from '@/lib/toast'
 import type { CodeReview } from '@/types/flow'
 import type { CodingCommit, CodingSession, SessionPullRequest } from '@/types/coding-sessions'
@@ -46,7 +47,7 @@ function BranchChip({ pr, branch, kind }: { pr: SessionPullRequest; branch: stri
  * The session's pull request after the last response: changed files with +/−, the status icon and label, the title, and
  * the base ← head branches. The whole card opens the PR (Flow's review page when it is synced, else the code host).
  */
-export function CodingPullRequestCard({ session, pr, reviews, workspace }: { session: Pick<CodingSession, 'diffs'>; pr: SessionPullRequest; reviews: readonly CodeReview[]; workspace: string }) {
+export function CodingPullRequestCard({ session, pr, reviews, workspace }: { session: Pick<CodingSession, 'diffs' | 'pushIdentity'>; pr: SessionPullRequest; reviews: readonly CodeReview[]; workspace: string }) {
   const { t } = useI18n()
   const review = reviewForPullRequest(pr, reviews)
   const status = pullRequestCardStatus(pr, review)
@@ -75,6 +76,12 @@ export function CodingPullRequestCard({ session, pr, reviews, workspace }: { ses
       <span className="sr-only">{t('from')}</span>
       <BranchChip pr={pr} branch={pr.headBranch} kind="head"/>
     </div>
+    {pr.openedAs && <div className="cs-pr-card-opened">
+      {fillTemplate(t(pr.openedVia === 'workspace' ? 'Opened by the workspace integration ({login})' : 'Opened as {login}'), { login: <span data-i18n-ignore>@{pr.openedAs}</span> })}
+    </div>}
+    {(pr.openedVia === 'workspace' || session.pushIdentity?.via === 'workspace') && <div className="cs-pr-card-link-account">
+      <AppLink href={settingsPath(workspace, 'connections')}>{t(pr.codeHost === 'gitlab' ? 'Link your GitLab account to push as yourself' : 'Link your GitHub account to push as yourself')}</AppLink>
+    </div>}
   </article>
 }
 

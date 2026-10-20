@@ -1255,6 +1255,7 @@ function SettingsBodyContent(
         data={props.data}
         onBack={() => props.onNavigate("integrations")}
         onReload={props.onReload}
+        onOpenConnectedAccounts={() => props.onNavigate("connections")}
       />
     );
   if (page === "integrations" && props.integrationSlug)

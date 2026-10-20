@@ -222,3 +222,7 @@
   .cs-turn-items>*,.cs-prompt-row,.cs-plan,.cs-plan-heading,.cs-plan-list,.cs-plan-list li,.cs-group-children,.cs-action-result,.cs-slide-label-item{animation:none}
   .cs-slide-label-item.is-leaving{display:none}
 }
+.cs-pr-card-opened{position:relative;color:var(--theme-text-tertiary);font-size:11px;line-height:16px;pointer-events:none}
+.cs-pr-card-link-account{position:relative;z-index:1;font-size:11px;line-height:16px}
+.cs-pr-card-link-account a{color:var(--theme-text-secondary);text-decoration:underline;text-underline-offset:2px}
+.cs-pr-card-link-account a:hover{color:var(--theme-text-primary)}

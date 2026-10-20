@@ -594,7 +594,7 @@ a second copy of the same events.
 | `FLOW_GITHUB_APP_SLUG` | empty | App slug, used for the install link `https://<host>/apps/<slug>/installations/new` |
 | `FLOW_GITHUB_APP_PRIVATE_KEY` (`_FILE`) | empty | PEM private key (PKCS#1 or PKCS#8). Required when `FLOW_GITHUB_APP_ID` is set |
 | `FLOW_GITHUB_APP_WEBHOOK_SECRET` (`_FILE`) | empty | Webhook secret (`X-Hub-Signature-256`). Required when `FLOW_GITHUB_APP_ID` is set |
-| `FLOW_GITHUB_APP_CLIENT_ID` / `FLOW_GITHUB_APP_CLIENT_SECRET` (`_FILE`) | empty | User-to-server OAuth, which lets members link their GitHub account for personal access checks |
+| `FLOW_GITHUB_APP_CLIENT_ID` / `FLOW_GITHUB_APP_CLIENT_SECRET` (`_FILE`) | empty | User-to-server OAuth, which lets members link their own GitHub account (see [Members' personal accounts](#members-personal-github-and-gitlab-accounts)) |
 | `FLOW_GITHUB_APP_HOST` | `github.com` | GitHub Enterprise Server host |
 | `FLOW_GITHUB_APP_API_URL` | `https://api.github.com`, or `https://<host>/api/v3` for GHE | REST API base |
 
@@ -608,9 +608,77 @@ Register the App with these settings:
 Installation tokens are minted for one repository with minimal permissions.
 They are cached in memory until 5 minutes before they expire and are never
 persisted. Each sandbox gets its own token, which is revoked when the sandbox
-stops. Linked GitHub accounts are stored as an identity (login and id) in
-connector secrets, so `FLOW_CONNECTOR_SECRET_KEY` must be set. The OAuth token
-is discarded after linking.
+stops. Members' linked GitHub accounts are described in the next section.
+
+## Members' personal GitHub and GitLab accounts
+
+Code hosting works at two levels. An admin connects the workspace once (the
+GitHub App or a GitHub connection, a GitLab connection for gitlab.com or a
+self-hosted instance); that covers repository access, sync and webhooks. Each
+member can then link their own account in **Settings › Account › Connected
+accounts** (the GitHub and GitLab integration pages show "Your personal
+account" with a shortcut there). With a linked account Flow:
+
+- attributes host activity to the member: PR/MR authors, requested reviewers,
+  comment senders in Reviews, and commenters on coding session PRs/MRs;
+- acts as the member: Reviews comments, approvals, change requests, merges
+  and close/reopen are posted with the member's own token, and coding
+  sessions push, commit and open their PR/MR as the member (see
+  [coding-sessions-security.md](coding-sessions-security.md#member-credentials)).
+
+Without a link Flow falls back to the workspace integration, and the action
+shows who it was posted as ("Posted as @flow-bot via the workspace
+integration"). A member token is only ever used for that member's own
+actions. A member who lacks a permission on the host (HTTP 403) is refused;
+Flow does not retry with the workspace credential. A token the host rejects
+as invalid (HTTP 401), or a refresh that fails, marks the account
+**Reconnect** and the action falls back to the workspace.
+
+Tokens are sealed in the encrypted connector secret store
+(`FLOW_CONNECTOR_SECRET_KEY` is required), never returned by the API, and
+never logged. Every link flow uses a one-time server-side state with a PKCE
+(S256) challenge, bound to the member who started it. Linking and unlinking
+write `code_host_account.linked` / `code_host_account.unlinked` audit entries.
+The routes (`/api/account/code-host-accounts…`) accept only the signed-in
+member's session, not API keys.
+
+**GitHub.** When the GitHub App has `FLOW_GITHUB_APP_CLIENT_ID` and
+`FLOW_GITHUB_APP_CLIENT_SECRET`, members link through the App's user-to-server
+OAuth (callback: the App's setup URL above). Turn on **Expire user
+authorization tokens** in the App settings: access tokens then last 8 hours
+and Flow refreshes them. Without App credentials, a classic GitHub OAuth app
+from `FLOW_INTEGRATION_GITHUB_CLIENT_ID` / `_CLIENT_SECRET` is used (callback
+`{FLOW_APP_URL}/api/account/code-host-accounts/oauth/callback`, scopes
+`repo read:user user:email`); its tokens do not expire, so they are used only
+server side.
+
+**GitLab, including self-hosted.** Members only see instances an admin
+connected to the workspace (Settings › Integrations › GitLab); they never type
+a host, so Flow cannot be pointed at an arbitrary server and no token is sent
+anywhere else. A link is keyed by the instance URL and stops applying if the
+admin points the connection at another host.
+
+- *OAuth (preferred).* On the GitLab instance, register an application (Admin
+  Area › Applications for an instance-wide one, or a group or user
+  application):
+  - Redirect URI: `{FLOW_APP_URL}/api/account/code-host-accounts/oauth/callback`
+    (also shown on the GitLab integration page);
+  - Confidential: yes; Scopes: `api` and `read_user`.
+
+  Paste its **Application ID** and **Secret** into the GitLab integration page
+  ("OAuth application for member sign-in"). The secret is stored encrypted and
+  never shown again. GitLab access tokens last 2 hours; Flow refreshes them
+  with this application, and revokes the token when a member unlinks.
+- *Personal access token (fallback).* When no application is configured,
+  members paste a personal access token with the `read_user` and `api`
+  scopes. Flow validates it against `/api/v4/personal_access_tokens/self` and
+  `/api/v4/user` and lists missing scopes. A personal access token stays on
+  the server: Flow uses it for Reviews actions and to open MRs as the member,
+  but never hands it to a coding sandbox.
+
+Self-hosted instances on a private network must be named in
+`FLOW_INTEGRATION_GITLAB_HOST` (as for the workspace connection); other hosts
+must be public HTTPS addresses.
 
 ## Coding sessions
 

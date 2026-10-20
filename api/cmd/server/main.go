@@ -337,6 +337,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/account/identities", s.listAccountIdentities)
 	mux.HandleFunc("DELETE /api/account/identities/{id}", s.unlinkAccountIdentity)
 	mux.HandleFunc("POST /api/account/change-password", s.changeAccountPassword)
+	s.registerCodeHostAccountRoutes(mux)
 	mux.HandleFunc("GET /api/realtime/events", s.realtimeEvents)
 	mux.HandleFunc("GET /api/realtime/changes", s.realtimeChanges)
 	mux.HandleFunc("GET /api/realtime/socket", s.realtimeSocket)

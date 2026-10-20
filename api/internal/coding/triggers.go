@@ -611,8 +611,8 @@ func (t *Triggers) StartForChangeRequest(ctx context.Context, reviews ReviewSess
 	if kind == TurnKindFollowUp && strings.TrimSpace(trigger.Prompt) == "" {
 		return TriggerResult{}, &TriggerError{Code: domain.CodingErrInternal, Message: "A follow-up needs a prompt."}
 	}
-	if kind == TurnKindRebase && !RebaseAllowed(change.HeadBranch, firstNonEmpty(t.Config.BranchPrefix, "flow/"), trigger.ConfirmForcePush) {
-		return TriggerResult{}, &TriggerError{Code: domain.CodingErrPermissionDenied, Message: "Rebasing force-pushes " + change.HeadBranch + ", which Flow did not create. Confirm the force push to continue."}
+	rebaseRefused := func(linked []domain.CodingSession) bool {
+		return kind == TurnKindRebase && !trigger.ConfirmForcePush && !flowBranch(change.HeadBranch, firstNonEmpty(t.Config.BranchPrefix, "flow/"), linked)
 	}
 	if change.State == "merged" || change.State == "closed" {
 		return TriggerResult{}, &TriggerError{Code: domain.CodingErrPermissionDenied, Message: "This pull request is " + change.State + "."}
@@ -623,6 +623,11 @@ func (t *Triggers) StartForChangeRequest(ctx context.Context, reviews ReviewSess
 		return TriggerResult{}, fmt.Errorf("coding trigger: linked sessions: %w", err)
 	}
 	linked = FilterSessions(linked, func(session domain.CodingSession) bool { return session.WorkspaceKey == trigger.WorkspaceKey })
+	if rebaseRefused(linked) {
+		// Flow's own branches: the deployment prefix, or a member branch of
+		// a session linked to this PR/MR.
+		return TriggerResult{}, &TriggerError{Code: domain.CodingErrPermissionDenied, Message: "Rebasing force-pushes " + change.HeadBranch + ", which Flow did not create. Confirm the force push to continue."}
+	}
 	if target, ok := latestFollowUpTarget(linked); ok {
 		updated, err := t.Starter.PromptCodingSession(ctx, trigger.WorkspaceKey, target.ID, Turn{
 			ID: turnID(trigger.WorkspaceKey, target.ID, "review", trigger.IdempotencyKey, kind, prompt), Prompt: prompt, AuthorID: trigger.CreatorID, Kind: kind,

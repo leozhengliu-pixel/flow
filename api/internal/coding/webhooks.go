@@ -471,7 +471,7 @@ func (d *WebhookDispatcher) dispatchComment(ctx context.Context, workspaceKeys [
 		result.Reason = "no mention"
 		return result, nil
 	}
-	if command.Kind == TurnKindRebase && !RebaseAllowed(event.ChangeRequest.HeadBranch, d.branchPrefix(), false) {
+	if command.Kind == TurnKindRebase && !flowBranch(event.ChangeRequest.HeadBranch, d.branchPrefix(), linked) {
 		d.reply(ctx, workspaceKeys, linked, event, "Flow only rebases its own `"+d.branchPrefix()+"` branches from a comment, because a rebase force-pushes. Use \"Rebase\" on the review page in Flow and confirm the force push.")
 		result.add(WebhookRefused, "")
 		result.Reason = "rebase needs confirmation"

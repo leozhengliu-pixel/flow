@@ -1791,6 +1791,8 @@ export interface ReviewEvent {
   resolved?: boolean;
   actor: User;
   createdAt: string;
+  /** Set on Flow-originated actions that were posted to the code host. */
+  postedAs?: { provider: "github" | "gitlab"; login: string; via: "member" | "workspace" };
 }
 /** A preview environment deployed from a pull request's head branch. */
 export interface DeployPreview {

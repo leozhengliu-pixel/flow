@@ -235,6 +235,166 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/account/code-host-accounts": {
+      "get": {
+        "operationId": "get_account_code_host_accounts",
+        "tags": [
+          "account"
+        ],
+        "summary": "GET /api/account/code-host-accounts",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "code_host_accounts.go"
+      }
+    },
+    "/api/account/code-host-accounts/{id}": {
+      "delete": {
+        "operationId": "delete_account_code_host_accounts_id",
+        "tags": [
+          "account"
+        ],
+        "summary": "DELETE /api/account/code-host-accounts/{id}",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "code_host_accounts.go"
+      }
+    },
+    "/api/account/code-host-accounts/github/authorize": {
+      "post": {
+        "operationId": "post_account_code_host_accounts_github_authorize",
+        "tags": [
+          "account"
+        ],
+        "summary": "POST /api/account/code-host-accounts/github/authorize",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "code_host_accounts.go"
+      }
+    },
+    "/api/account/code-host-accounts/gitlab/authorize": {
+      "post": {
+        "operationId": "post_account_code_host_accounts_gitlab_authorize",
+        "tags": [
+          "account"
+        ],
+        "summary": "POST /api/account/code-host-accounts/gitlab/authorize",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "code_host_accounts.go"
+      }
+    },
+    "/api/account/code-host-accounts/gitlab/token": {
+      "post": {
+        "operationId": "post_account_code_host_accounts_gitlab_token",
+        "tags": [
+          "account"
+        ],
+        "summary": "POST /api/account/code-host-accounts/gitlab/token",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "code_host_accounts.go"
+      }
+    },
+    "/api/account/code-host-accounts/oauth/callback": {
+      "get": {
+        "operationId": "get_account_code_host_accounts_oauth_callback",
+        "tags": [
+          "account"
+        ],
+        "summary": "GET /api/account/code-host-accounts/oauth/callback",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "code_host_accounts.go"
+      }
+    },
     "/api/account/identities": {
       "get": {
         "operationId": "get_account_identities",
@@ -12628,6 +12788,107 @@
         },
         "x-flow-internal": true,
         "x-flow-source": "github_app.go"
+      }
+    },
+    "/api/integrations/gitlab/{id}/oauth-application": {
+      "delete": {
+        "operationId": "delete_integrations_gitlab_id_oauth_application",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "DELETE /api/integrations/gitlab/{id}/oauth-application",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "code_host_accounts.go"
+      },
+      "get": {
+        "operationId": "get_integrations_gitlab_id_oauth_application",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "GET /api/integrations/gitlab/{id}/oauth-application",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "code_host_accounts.go"
+      },
+      "put": {
+        "operationId": "put_integrations_gitlab_id_oauth_application",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "PUT /api/integrations/gitlab/{id}/oauth-application",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "code_host_accounts.go"
       }
     },
     "/api/integrations/gitlab/{id}/token": {

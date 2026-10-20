@@ -89,6 +89,8 @@ func mergeSessionPullRequest(existing, next domain.SessionPullRequest) domain.Se
 	keep(&next.HeadSHA, existing.HeadSHA)
 	keep(&next.ReviewID, existing.ReviewID)
 	keep(&next.HostName, existing.HostName)
+	keep(&next.OpenedAs, existing.OpenedAs)
+	keep(&next.OpenedVia, existing.OpenedVia)
 	if existing.State == "merged" {
 		next.State = "merged"
 	}

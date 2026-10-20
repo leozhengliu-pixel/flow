@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -115,7 +116,9 @@ func (s *server) getGitHubApp(w http.ResponseWriter, r *http.Request) {
 		status.Installations = append(status.Installations, gitHubAppInstallation{ID: item.ID, InstallationID: item.InstallationID, AccountLogin: item.AccountLogin, AccountType: item.AccountType, RepositorySelection: item.RepositorySelection, SuspendedAt: item.SuspendedAt})
 	}
 	if user := authUser(r); user.ID != "" && status.Configured {
-		if link, err := host.UserLink(r.Context(), user.ID); err == nil {
+		if account, err := s.store.CodeHostAccountFor(r.Context(), user.ID, domain.CodeHostGitHub, host.HostName()); err == nil {
+			status.LinkedAccount = &gitHubAppLinkedAccount{Login: account.Login, LinkedAt: account.LinkedAt}
+		} else if link, err := host.UserLink(r.Context(), user.ID); err == nil {
 			status.LinkedAccount = &gitHubAppLinkedAccount{Login: link.Login, LinkedAt: link.LinkedAt}
 		}
 	}
@@ -223,22 +226,31 @@ func (s *server) startGitHubAppAuthorization(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusUnauthorized, "sign in to link a GitHub account")
 		return
 	}
-	state, err := s.signGitHubAppState(gitHubAppState{Workspace: s.workspaceData(r).Workspace.URLKey, User: user.ID, Purpose: "link"})
+	// The member account flow (one-time state with PKCE), returning to the
+	// GitHub integration page.
+	state, challenge, err := s.newCodeHostLinkState(r.Context(), codeHostLinkState{UserID: user.ID, Workspace: s.workspaceData(r).Workspace.URLKey, CodeHost: domain.CodeHostGitHub, Method: domain.CodeHostAuthGitHubApp, ReturnTo: "integration"})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not start GitHub authorization")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"url": host.AuthorizeURL(state, gitHubAppSetupURL())})
+	writeJSON(w, http.StatusOK, map[string]string{"url": host.AuthorizeURLWithChallenge(state, gitHubAppSetupURL(), challenge)})
 }
 
 // removeGitHubAppAuthorization — DELETE /api/integrations/github-app/authorization:
-// forgets the viewer's linked GitHub account.
+// forgets the viewer's linked GitHub account and its tokens.
 func (s *server) removeGitHubAppAuthorization(w http.ResponseWriter, r *http.Request) {
 	host := s.gitHubAppHost()
 	user := authUser(r)
 	if host == nil || user.ID == "" {
 		w.WriteHeader(http.StatusNoContent)
 		return
+	}
+	if account, err := s.store.CodeHostAccountFor(r.Context(), user.ID, domain.CodeHostGitHub, host.HostName()); err == nil {
+		if _, err := s.store.DeleteCodeHostAccount(r.Context(), user.ID, account.ID); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not unlink the GitHub account")
+			return
+		}
+		s.auditCodeHostAccount(r.Context(), r, workspaceKey(r), "code_host_account.unlinked", account)
 	}
 	if err := s.store.DeleteConnectorSecret(r.Context(), githubhost.UserLinkSecretID(host.HostName(), user.ID)); err != nil {
 		writeError(w, http.StatusInternalServerError, "could not unlink the GitHub account")
@@ -254,6 +266,12 @@ func (s *server) removeGitHubAppAuthorization(w http.ResponseWriter, r *http.Req
 // the state's workspace.
 func (s *server) finishGitHubAppSetup(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
+	if strings.HasPrefix(query.Get("state"), codeHostLinkStatePrefix) {
+		// A member linking their GitHub account (code_host_accounts.go): the
+		// App's callback URL is this setup URL.
+		s.finishCodeHostAccountLink(w, r)
+		return
+	}
 	host := s.gitHubAppHost()
 	if host == nil || !host.Configured() {
 		s.gitHubAppSetupResult(w, r, "", "error", "The GitHub App is not configured")
@@ -275,14 +293,17 @@ func (s *server) finishGitHubAppSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	result := ""
 	if code := strings.TrimSpace(query.Get("code")); code != "" && host.CanAuthorizeUsers() {
-		link, err := host.ExchangeUserCode(r.Context(), code, gitHubAppSetupURL())
+		// A link started before member accounts kept tokens (signed state, no
+		// PKCE): store it like a new link.
+		link, token, err := host.ExchangeUserToken(r.Context(), code, gitHubAppSetupURL(), "")
 		if err != nil {
 			s.gitHubAppSetupResult(w, r, state.Workspace, "error", "GitHub authorization failed")
 			log.Printf("github app: user authorization: %v", err)
 			return
 		}
-		raw, _ := json.Marshal(link)
-		if err := s.store.PutConnectorSecret(r.Context(), githubhost.UserLinkSecretID(host.HostName(), state.User), raw, time.Now().AddDate(10, 0, 0)); err != nil {
+		account := domain.CodeHostAccount{UserID: state.User, CodeHost: domain.CodeHostGitHub, HostName: host.HostName(), BaseURL: "https://" + host.HostName(), ExternalUserID: strconv.FormatInt(link.ID, 10), Login: link.Login, AuthType: domain.CodeHostAuthGitHubApp}
+		tokens := codeHostAccountTokens{AccessToken: token.AccessToken, RefreshToken: token.RefreshToken, ExpiresAt: token.ExpiresAt, RefreshExpiresAt: token.RefreshExpiresAt}
+		if _, err := s.saveCodeHostAccount(r.Context(), r, account, tokens, state.Workspace); err != nil {
 			s.gitHubAppSetupResult(w, r, state.Workspace, "error", "Could not save the linked GitHub account (FLOW_CONNECTOR_SECRET_KEY)")
 			return
 		}

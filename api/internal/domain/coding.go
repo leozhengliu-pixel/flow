@@ -286,23 +286,77 @@ type CodingSandboxRecord struct {
 
 // SessionPullRequest links a PR/MR to a session (agentSessionToPullRequests).
 type SessionPullRequest struct {
-	SessionID  string    `json:"sessionId"`
-	CodeHost   string    `json:"codeHost"`
-	HostName   string    `json:"hostName"`
-	Repository string    `json:"repository"`
-	Number     int       `json:"number"`
-	ExternalID string    `json:"externalId,omitempty"`
-	URL        string    `json:"url"`
-	Title      string    `json:"title,omitempty"`
-	State      string    `json:"state"` // open | closed | merged
-	Draft      bool      `json:"draft"`
-	HeadBranch string    `json:"headBranch"`
-	BaseBranch string    `json:"baseBranch"`
-	HeadSHA    string    `json:"headSha,omitempty"`
-	ReviewID   string    `json:"reviewId,omitempty"` // the matching CodeReview, when synced
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	SessionID  string `json:"sessionId"`
+	CodeHost   string `json:"codeHost"`
+	HostName   string `json:"hostName"`
+	Repository string `json:"repository"`
+	Number     int    `json:"number"`
+	ExternalID string `json:"externalId,omitempty"`
+	URL        string `json:"url"`
+	Title      string `json:"title,omitempty"`
+	State      string `json:"state"` // open | closed | merged
+	Draft      bool   `json:"draft"`
+	HeadBranch string `json:"headBranch"`
+	BaseBranch string `json:"baseBranch"`
+	HeadSHA    string `json:"headSha,omitempty"`
+	ReviewID   string `json:"reviewId,omitempty"` // the matching CodeReview, when synced
+	// OpenedAs is the host login the PR/MR was opened as; OpenedVia is
+	// "member" (the session creator's linked account) or "workspace" (the
+	// workspace GitHub App / GitLab connection).
+	OpenedAs  string    `json:"openedAs,omitempty"`
+	OpenedVia string    `json:"openedVia,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
+
+// CodingPushIdentity says whose code host identity a session pushes and
+// opens its PR/MR with: "member" when the creator linked an account on the
+// session's host, otherwise "workspace" (the App / connection token).
+type CodingPushIdentity struct {
+	Via      string `json:"via"`
+	CodeHost string `json:"codeHost,omitempty"`
+	HostName string `json:"hostName,omitempty"`
+	Login    string `json:"login,omitempty"`
+}
+
+// CodeHostAccount is a member's personal GitHub or GitLab account linked in
+// Settings › Account › Connected accounts. Tokens are never part of it; they
+// live encrypted in the connector secret store.
+type CodeHostAccount struct {
+	ID             string `json:"id"`
+	UserID         string `json:"-"`
+	CodeHost       string `json:"codeHost"`
+	HostName       string `json:"hostName"`
+	BaseURL        string `json:"baseUrl"`
+	ExternalUserID string `json:"externalUserId"`
+	Login          string `json:"login"`
+	// Email is the commit email the host reported (GitLab commit_email /
+	// public email), when any.
+	Email    string   `json:"-"`
+	AuthType string   `json:"authType"` // githubApp | oauth | pat
+	Scopes   []string `json:"scopes"`
+	Status   string   `json:"status"` // active | reconnect
+	// StatusReason explains a "reconnect" status.
+	StatusReason string `json:"statusReason,omitempty"`
+	// WorkspaceKey / ConnectionID: the workspace GitLab connection a GitLab
+	// account was linked through (its OAuth application refreshes the token).
+	WorkspaceKey   string     `json:"-"`
+	ConnectionID   string     `json:"instanceId,omitempty"`
+	TokenExpiresAt *time.Time `json:"tokenExpiresAt,omitempty"`
+	LinkedAt       time.Time  `json:"linkedAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
+}
+
+// Code host account auth types and statuses.
+const (
+	CodeHostAuthGitHubApp      = "githubApp"
+	CodeHostAuthOAuth          = "oauth"
+	CodeHostAuthPAT            = "pat"
+	CodeHostAccountActive      = "active"
+	CodeHostAccountReconnect   = "reconnect"
+	CodeHostAccountActorMember = "member"
+	CodeHostAccountActorBot    = "workspace"
+)
 
 // CodingCommit is a commit the runner pushed, keyed to the turn's activity.
 type CodingCommit struct {
@@ -361,19 +415,22 @@ type CodingSession struct {
 	Model          string             `json:"model,omitempty"` // what Auto resolved to
 	// ModelReason is why Auto routed the session to Model; EscalationModel is
 	// the next more capable catalog model ("Start over with <model>").
-	ModelReason             string                    `json:"modelReason,omitempty"`
-	EscalationModel         string                    `json:"escalationModel,omitempty"`
-	ReasoningEffort         string                    `json:"reasoningEffort,omitempty"`
-	Region                  string                    `json:"region,omitempty"`
-	DisplayTitle            string                    `json:"displayTitle,omitempty"`
-	Summary                 string                    `json:"summary,omitempty"`
-	Plan                    []AgentPlanStep           `json:"plan,omitempty"`
-	ExternalURLs            []AgentExternalURL        `json:"externalUrls,omitempty"`
-	Diffs                   []CodingDiffSummary       `json:"diffs,omitempty"`
-	CodeHost                string                    `json:"codeHost,omitempty"`
-	Repository              string                    `json:"repository,omitempty"`
-	BranchName              string                    `json:"branchName,omitempty"`
-	BaseRef                 string                    `json:"baseRef,omitempty"`
+	ModelReason     string              `json:"modelReason,omitempty"`
+	EscalationModel string              `json:"escalationModel,omitempty"`
+	ReasoningEffort string              `json:"reasoningEffort,omitempty"`
+	Region          string              `json:"region,omitempty"`
+	DisplayTitle    string              `json:"displayTitle,omitempty"`
+	Summary         string              `json:"summary,omitempty"`
+	Plan            []AgentPlanStep     `json:"plan,omitempty"`
+	ExternalURLs    []AgentExternalURL  `json:"externalUrls,omitempty"`
+	Diffs           []CodingDiffSummary `json:"diffs,omitempty"`
+	CodeHost        string              `json:"codeHost,omitempty"`
+	Repository      string              `json:"repository,omitempty"`
+	BranchName      string              `json:"branchName,omitempty"`
+	BaseRef         string              `json:"baseRef,omitempty"`
+	// PushIdentity is whose host identity the session pushes and opens its
+	// PR/MR with (set when the session is created).
+	PushIdentity            *CodingPushIdentity       `json:"pushIdentity,omitempty"`
 	PullRequests            []SessionPullRequest      `json:"pullRequests,omitempty"`
 	LatestPullRequest       *SessionPullRequest       `json:"latestPullRequest,omitempty"`
 	CommitsByTurnActivityID map[string][]CodingCommit `json:"commitsByTurnActivityId,omitempty"`
