@@ -568,6 +568,8 @@ var InternalRoutes = []string{
 	"GET /api/resource-preferences",
 	// /api/reviews
 	"GET /api/reviews",
+	"GET /api/reviews/import",
+	"POST /api/reviews/import",
 	"GET /api/reviews/{id}",
 	"PATCH /api/reviews/{id}",
 	"POST /api/reviews/{id}/comments",
