@@ -8,7 +8,7 @@ import {
   Mail,
   TriangleAlert,
 } from "lucide-react";
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { toast } from "@/lib/toast";
 
@@ -35,8 +35,16 @@ import {
   updateIntegrationConnection,
 } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
+import {
+  fetchGitLabOAuthApplication,
+  removeGitLabOAuthApplication,
+  saveGitLabOAuthApplication,
+} from "@/lib/code-host-accounts-api";
+import { isWorkspaceAdmin } from "@/lib/settings-access";
+import type { GitLabOAuthApplication } from "@/types/code-host-accounts";
 import type { BootstrapData, IntegrationConnection } from "@/types/flow";
 import { GITLAB_BRANCH_FORMATS, gitlabBranchExample } from "@/lib/gitlab-branch-formats";
+import { PersonalCodeHostRow } from "./code-host-accounts";
 import { IntegrationBrandIcon } from "./integration-brand-icon";
 import { SettingsSelect } from "./settings-primitives";
 
@@ -87,10 +95,12 @@ export function GitLabIntegrationSettings({
   data,
   onBack,
   onReload,
+  onOpenConnectedAccounts,
 }: {
   data: BootstrapData;
   onBack: () => void;
   onReload: () => Promise<void>;
+  onOpenConnectedAccounts?: () => void;
 }) {
   const { t, formatDate } = useI18n();
   const connection = data.integrationConnections.find((item) => item.provider === "gitlab");
@@ -282,6 +292,12 @@ export function GitLabIntegrationSettings({
       )}
 
       {connection && <GitLabTokenSection connection={connection} onReload={onReload} />}
+      {connection && (
+        <section className="code-integration-section gitlab-settings-personal" aria-label={t("Your personal GitLab account")}>
+          <PersonalCodeHostRow codeHost="gitlab" onManage={onOpenConnectedAccounts} />
+        </section>
+      )}
+      {connection && isWorkspaceAdmin(data) && <GitLabOAuthApplicationSection connection={connection} />}
       {connection && <GitLabConnectivityIssue connection={connection} onReload={onReload} />}
 
       <div className="gitlab-settings-sections" aria-disabled={!connection || undefined}>
@@ -497,12 +513,18 @@ function GitLabSetupForm({
   );
 }
 
-function CopyField({ id, label, value, kind }: { id?: string; label?: string; value: string; kind: "URL" | "secret" }) {
+function CopyField({ id, label, value, kind }: { id?: string; label?: string; value: string; kind: "URL" | "secret" | "redirect" }) {
   const { t } = useI18n();
   const copy = () =>
     void navigator.clipboard?.writeText(value).then(() =>
       toast.info(t("Copied to clipboard"), {
-        description: t(kind === "URL" ? "The webhook URL has been copied to your clipboard." : "The webhook secret has been copied to your clipboard."),
+        description: t(
+          kind === "URL"
+            ? "The webhook URL has been copied to your clipboard."
+            : kind === "redirect"
+              ? "The redirect URL has been copied to your clipboard."
+              : "The webhook secret has been copied to your clipboard.",
+        ),
       }),
     );
   return (
@@ -847,6 +869,127 @@ function GitLabLinkbacks({
       {row("privateLinkbacks", "Private/Internal repositories", privateOn)}
       {row("publicLinkbacks", "Public repositories", publicOn)}
       {(privateOn || publicOn) && row("includeDescriptions", "Include issue descriptions in comments", enabled("includeDescriptions", true))}
+    </section>
+  );
+}
+
+/** Admin-only: the OAuth application members use to link their own GitLab account. */
+export function GitLabOAuthApplicationSection({ connection }: { connection: IntegrationConnection }) {
+  const { t } = useI18n();
+  const [app, setApp] = useState<GitLabOAuthApplication | null>(null);
+  const [applicationId, setApplicationId] = useState("");
+  const [secret, setSecret] = useState("");
+  const [busy, setBusy] = useState(false);
+  const host = (connection.config?.host || "https://gitlab.com").replace(/^https?:\/\//, "");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchGitLabOAuthApplication(connection.id)
+      .then((value) => {
+        if (cancelled) return;
+        setApp(value);
+        setApplicationId(value.applicationId);
+      })
+      .catch((error) => toast.error(error instanceof Error ? error.message : t("Could not load the OAuth application")));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connection.id]);
+
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!applicationId.trim() || !secret.trim()) return;
+    setBusy(true);
+    try {
+      const saved = await saveGitLabOAuthApplication(connection.id, {
+        applicationId: applicationId.trim(),
+        secret: secret.trim(),
+      });
+      setApp(saved);
+      setApplicationId(saved.applicationId);
+      setSecret("");
+      toast.success(t("OAuth application saved"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("Could not save the OAuth application"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    try {
+      await removeGitLabOAuthApplication(connection.id);
+      setApp((current) => (current ? { ...current, configured: false, applicationId: "" } : current));
+      setApplicationId("");
+      setSecret("");
+      toast.info(t("OAuth application removed"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("Could not remove the OAuth application"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!app) return null;
+  return (
+    <section className="gitlab-settings-card gitlab-settings-setup" aria-label={t("OAuth application for member sign-in")}>
+      <header>
+        <h3>{t("OAuth application for member sign-in")}</h3>
+        <span>
+          {template(
+            t(
+              "Register an OAuth application on {host} (Admin Area › Applications, or a group/user application) with this redirect URL, then paste its Application ID and Secret. Without it, members link with a personal access token.",
+            ),
+            { host: <b data-i18n-ignore>{host}</b> },
+          )}
+        </span>
+      </header>
+      <form noValidate onSubmit={(event) => void save(event)}>
+        <div className="gitlab-settings-field">
+          <label htmlFor="gitlab-oauth-redirect">{t("Redirect URL")}</label>
+          <CopyField id="gitlab-oauth-redirect" label={t("Redirect URL")} value={app.redirectUrl} kind="redirect" />
+        </div>
+        <div className="gitlab-settings-field">
+          <label htmlFor="gitlab-oauth-scopes">{t("Scopes")}</label>
+          <input id="gitlab-oauth-scopes" readOnly value={app.scopes.join(" ")} data-i18n-ignore />
+        </div>
+        <div className="gitlab-settings-field">
+          <label htmlFor="gitlab-oauth-app-id">{t("Application ID")}</label>
+          <input
+            id="gitlab-oauth-app-id"
+            autoComplete="off"
+            value={applicationId}
+            onChange={(event) => setApplicationId(event.target.value)}
+          />
+        </div>
+        <div className="gitlab-settings-field">
+          <label htmlFor="gitlab-oauth-secret">{t("Secret")}</label>
+          <input
+            id="gitlab-oauth-secret"
+            type="password"
+            autoComplete="off"
+            placeholder={app.configured ? t("Saved — enter a new secret to replace it") : ""}
+            value={secret}
+            onChange={(event) => setSecret(event.target.value)}
+          />
+        </div>
+        <footer>
+          {app.configured && (
+            <button type="button" className="gitlab-settings-button" disabled={busy} onClick={() => void remove()}>
+              {t("Remove")}
+            </button>
+          )}
+          <button
+            type="submit"
+            className="gitlab-settings-button primary"
+            disabled={busy || !applicationId.trim() || !secret.trim()}
+          >
+            {t("Save")}
+          </button>
+        </footer>
+      </form>
     </section>
   );
 }

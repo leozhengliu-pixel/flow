@@ -36,6 +36,8 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
+	var statusPostedAs *domain.ReviewPostedAs
+	statusActor := requestActor(s, r)
 	if input.Status != nil {
 		if !slices.Contains([]string{"open", "inReview", "approved", "merged", "closed"}, *input.Status) {
 			writeError(w, 400, "invalid review status")
@@ -61,10 +63,12 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if current.Status != *input.Status {
-				if err := s.syncReviewStatus(r.Context(), data, current, *input.Status, method); err != nil {
+				posted, err := s.syncReviewStatusAs(r.Context(), data, current, statusActor, *input.Status, method)
+				if err != nil {
 					writeError(w, http.StatusBadGateway, err.Error())
 					return
 				}
+				statusPostedAs = posted
 			}
 		}
 	}
@@ -111,8 +115,12 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 			if !slices.Contains([]string{"open", "inReview", "approved", "merged", "closed"}, *input.Status) {
 				return errInvalid
 			}
-			review.Status = *input.Status
 			now := time.Now().UTC()
+			if statusPostedAs != nil && review.Status != *input.Status {
+				// Merged / closed / reopened on the code host as this identity.
+				review.Events = append(review.Events, domain.ReviewEvent{ID: fmt.Sprintf("review_event_%d", now.UnixNano()), Type: map[string]string{"merged": "merged", "closed": "closed", "open": "reopened"}[*input.Status], Actor: statusActor, PostedAs: statusPostedAs, CreatedAt: now})
+			}
+			review.Status = *input.Status
 			if review.Status == "merged" {
 				review.MergedAt, review.ClosedAt = &now, nil
 			} else if review.Status == "closed" {
@@ -185,22 +193,31 @@ func (s *server) submitReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, actor := r.PathValue("id"), requestActor(s, r)
-	if input.Decision == "approve" {
-		data := s.workspaceData(r)
-		review, err := reviewByID(data, id)
-		if err != nil {
-			respondMutation(w, err, 200, nil)
+	data := s.workspaceData(r)
+	current, err := reviewByID(data, id)
+	if err != nil {
+		respondMutation(w, err, 200, nil)
+		return
+	}
+	if current.Status == "merged" || current.Status == "closed" {
+		writeError(w, http.StatusConflict, "closed reviews cannot be submitted")
+		return
+	}
+	if input.Decision == "approve" && data.UserSettings[actor.ID].AutoConvertDrafts {
+		if err := s.markReviewReady(r.Context(), data, current); err != nil {
+			writeError(w, 502, err.Error())
 			return
 		}
-		if data.UserSettings[actor.ID].AutoConvertDrafts {
-			if err := s.markReviewReady(r.Context(), data, review); err != nil {
-				writeError(w, 502, err.Error())
-				return
-			}
-		}
+	}
+	// Post the review to GitHub/GitLab as the member (their linked account,
+	// else the workspace integration).
+	postedAs, err := s.postReviewActivity(r.Context(), data, current, actor, map[string]string{"approve": "approve", "requestChanges": "requestChanges", "comment": "comment"}[input.Decision], input.Body, "", 0)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
 	}
 	var updated domain.CodeReview
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "review.submitted", id, input, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "review.submitted", id, input, func(data *domain.Bootstrap) error {
 		index := reviewIndex(*data, id)
 		if index < 0 {
 			return errNotFound
@@ -219,7 +236,7 @@ func (s *server) submitReview(w http.ResponseWriter, r *http.Request) {
 			review.Status, eventType = "inReview", "changes_requested"
 		}
 		now := time.Now().UTC()
-		review.Events = append(review.Events, domain.ReviewEvent{ID: fmt.Sprintf("review_event_%d", now.UnixNano()), Type: eventType, Body: strings.TrimSpace(input.Body), Actor: actor, CreatedAt: now})
+		review.Events = append(review.Events, domain.ReviewEvent{ID: fmt.Sprintf("review_event_%d", now.UnixNano()), Type: eventType, Body: strings.TrimSpace(input.Body), Actor: actor, PostedAs: postedAs, CreatedAt: now})
 		review.UpdatedAt = now
 		data.Reviews[index], updated = review, review
 		return nil
@@ -246,15 +263,38 @@ func (s *server) commentOnReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, actor := r.PathValue("id"), requestActor(s, r)
+	snapshot := s.workspaceData(r)
+	current, err := reviewByID(snapshot, id)
+	if err != nil {
+		respondMutation(w, err, http.StatusCreated, nil)
+		return
+	}
+	path, line, kind := strings.TrimSpace(input.Path), input.Line, "comment"
+	if parentID := strings.TrimSpace(input.ParentID); parentID != "" {
+		root := reviewThreadRoot(current, parentID)
+		if root < 0 {
+			respondMutation(w, errInvalid, http.StatusCreated, nil)
+			return
+		}
+		path, line = "", 0 // replies are posted as conversation comments
+	}
+	if path != "" && line > 0 {
+		kind = "inlineComment"
+	}
+	postedAs, err := s.postReviewActivity(r.Context(), snapshot, current, actor, kind, input.Body, path, line)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
 	var updated domain.CodeReview
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "review.commented", id, input, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "review.commented", id, input, func(data *domain.Bootstrap) error {
 		index := reviewIndex(*data, id)
 		if index < 0 {
 			return errNotFound
 		}
 		now := time.Now().UTC()
 		review := data.Reviews[index]
-		event := domain.ReviewEvent{ID: fmt.Sprintf("review_event_%d", now.UnixNano()), Type: "commented", Body: strings.TrimSpace(input.Body), Path: strings.TrimSpace(input.Path), Line: input.Line, Actor: actor, CreatedAt: now}
+		event := domain.ReviewEvent{ID: fmt.Sprintf("review_event_%d", now.UnixNano()), Type: "commented", Body: strings.TrimSpace(input.Body), Path: strings.TrimSpace(input.Path), Line: input.Line, Actor: actor, PostedAs: postedAs, CreatedAt: now}
 		if parentID := strings.TrimSpace(input.ParentID); parentID != "" {
 			// Replies join the thread root and inherit its code location.
 			root := reviewThreadRoot(review, parentID)

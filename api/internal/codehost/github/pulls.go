@@ -171,13 +171,36 @@ func (h *Host) CreateChangeRequest(ctx context.Context, workspaceKey string, inp
 	}
 	body := map[string]any{"title": input.Title, "head": head, "base": input.Base, "body": input.Body, "draft": input.Draft, "maintainer_can_modify": true}
 	var out apiPullRequest
-	err = h.tokenRequest(ctx, "create_pull_request", http.MethodPost, repoPath(owner, name)+"/pulls", token, body, &out)
-	if err != nil && isStatus(err, http.StatusUnprocessableEntity) && input.Draft && strings.Contains(strings.ToLower(err.Error()), "draft") {
-		// Draft pull requests are unavailable on some plans; open a regular one.
-		body["draft"] = false
-		err = h.tokenRequest(ctx, "create_pull_request", http.MethodPost, repoPath(owner, name)+"/pulls", token, body, &out)
+	create := func(authorization string) error {
+		err := h.do(ctx, "create_pull_request", http.MethodPost, h.apiURL+repoPath(owner, name)+"/pulls", authorization, body, &out)
+		if err != nil && isStatus(err, http.StatusUnprocessableEntity) && body["draft"] == true && strings.Contains(strings.ToLower(err.Error()), "draft") {
+			// Draft pull requests are unavailable on some plans; open a regular one.
+			body["draft"] = false
+			err = h.do(ctx, "create_pull_request", http.MethodPost, h.apiURL+repoPath(owner, name)+"/pulls", authorization, body, &out)
+		}
+		return err
 	}
-	if err != nil && isStatus(err, http.StatusUnprocessableEntity) && strings.Contains(strings.ToLower(err.Error()), "already exists") {
+	alreadyExists := func(err error) bool {
+		return isStatus(err, http.StatusUnprocessableEntity) && strings.Contains(strings.ToLower(err.Error()), "already exists")
+	}
+	byMember := false
+	if input.ActAs != nil && strings.TrimSpace(input.ActAs.Token) != "" {
+		// The member's user-to-server token: the pull request is theirs. A
+		// rejected token (revoked, expired, no access) falls back to the App.
+		err = create("Bearer " + input.ActAs.Token)
+		switch {
+		case err == nil:
+			byMember = true
+		case alreadyExists(err):
+		case isStatus(err, http.StatusUnauthorized), isStatus(err, http.StatusForbidden), isStatus(err, http.StatusNotFound), isStatus(err, http.StatusUnprocessableEntity):
+			err = create("token " + token)
+		default:
+			return codehost.ChangeRequest{}, err
+		}
+	} else {
+		err = create("token " + token)
+	}
+	if err != nil && alreadyExists(err) {
 		if existing, findErr := h.findOpen(ctx, token, input.Repo, owner, name, input.Head); findErr == nil && existing != nil {
 			return *existing, nil
 		}
@@ -189,7 +212,9 @@ func (h *Host) CreateChangeRequest(ctx context.Context, workspaceKey string, inp
 		// Labels are best effort: the PR exists either way.
 		_ = h.tokenRequest(ctx, "label_pull_request", http.MethodPost, repoPath(owner, name)+"/issues/"+strconv.Itoa(out.Number)+"/labels", token, map[string]any{"labels": input.Labels}, nil)
 	}
-	return h.changeRequest(input.Repo, out), nil
+	change := h.changeRequest(input.Repo, out)
+	change.OpenedByMember = byMember
+	return change, nil
 }
 
 // UpdateChangeRequestBody replaces the pull request description.

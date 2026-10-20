@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"flow/api/internal/codehost"
 	"flow/api/internal/domain"
 	"flow/api/internal/sandbox"
 )
@@ -146,6 +147,38 @@ type UserInfo struct {
 	// SigningFormat / SigningPublicKey describe the user's commit signing key.
 	SigningFormat    string
 	SigningPublicKey string
+}
+
+// MemberAccount is a member's linked code host account, without secrets.
+type MemberAccount struct {
+	CodeHost   string
+	HostName   string
+	Login      string
+	ExternalID string
+	// Name is the member's display name in the workspace; Email the commit
+	// email for the host (GitHub noreply, GitLab commit email or noreply).
+	Name  string
+	Email string
+	// Username is the member's Flow username (their branch prefix).
+	Username string
+}
+
+// MemberCodeHost resolves members' own linked GitHub / GitLab accounts
+// (implemented by the server). Every method is keyed by the one member a
+// session belongs to; implementations never return another member's token.
+type MemberCodeHost interface {
+	// MemberAccount is the member's linked account on the host (ok false
+	// when there is none or it needs a reconnect).
+	MemberAccount(ctx context.Context, workspaceKey, userID, codeHost, hostName string) (MemberAccount, bool, error)
+	// MemberGitCredential is a short-lived credential of the member for the
+	// repository, for the sandbox's git credential helper only. It returns
+	// codehost.ErrUserNotLinked when the member has no account on the host
+	// or the account's token may not enter a sandbox (a long-lived personal
+	// access token or non-expiring OAuth token).
+	MemberGitCredential(ctx context.Context, workspaceKey, userID string, repo codehost.RepoRef) (codehost.Credential, error)
+	// MemberActor is the member's token for Flow's own call that opens the
+	// PR/MR (server side; never sent to a sandbox). nil when not linked.
+	MemberActor(ctx context.Context, workspaceKey, userID string, repo codehost.RepoRef) (*codehost.ActingUser, error)
 }
 
 // Directory resolves issues and users (implemented by the server).

@@ -1,0 +1,9 @@
+.code-host-actions{display:flex;gap:8px;align-items:center}
+.code-host-connect{display:flex;flex-direction:column;gap:10px;align-items:flex-end;min-width:240px;max-width:320px}
+.code-host-connect select,.code-host-token input{box-sizing:border-box;width:100%;height:30px;padding:0 8px;border:.5px solid var(--theme-border-strong);border-radius:7px;background:var(--theme-surface-2);color:var(--theme-text-primary);font:13px inherit}
+.code-host-token{display:flex;flex-direction:column;gap:6px;width:100%}
+.code-host-token label{color:var(--theme-text-secondary);font-size:12px}
+.code-host-token p{margin:0;color:var(--theme-text-tertiary);font-size:11px;line-height:16px}
+.code-host-token a{color:var(--theme-text-secondary);text-decoration:underline}
+.code-host-token button{align-self:flex-end}
+.code-host-token .code-host-error{color:var(--semantic-danger)}

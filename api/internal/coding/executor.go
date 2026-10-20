@@ -90,6 +90,9 @@ func (s *Service) provision(ctx context.Context, session domain.CodingSession, s
 			identity.Login, identity.Email = user.Login, user.Email
 		}
 	}
+	if account, ok := s.memberAccount(ctx, session.WorkspaceKey, session.CreatorID, codeHost, env.HostName); ok && account.Login != "" {
+		identity.Login = account.Login
+	}
 	if err := host.CheckUserAccess(ctx, session.WorkspaceKey, repo, identity); err != nil && !errors.Is(err, codehost.ErrNotImplemented) {
 		return hostFailure(host, codeHost, err)
 	}
@@ -298,15 +301,24 @@ func (s *Service) publish(ctx context.Context, session domain.CodingSession) Pub
 	if err != nil && !errors.Is(err, codehost.ErrNotFound) {
 		return failure(err, domain.CodingErrPullRequestFailed)
 	}
+	openedAs, openedVia := "", ""
 	if change == nil {
-		created, err := host.CreateChangeRequest(ctx, session.WorkspaceKey, codehost.CreateChangeRequestInput{Repo: repo, Head: session.BranchName, Base: session.BaseRef, Title: pullRequestTitle(session), Body: s.pullRequestBody(ctx, session), Draft: true})
+		actor := s.memberActor(ctx, session, repo)
+		created, err := host.CreateChangeRequest(ctx, session.WorkspaceKey, codehost.CreateChangeRequestInput{Repo: repo, Head: session.BranchName, Base: session.BaseRef, Title: pullRequestTitle(session), Body: s.pullRequestBody(ctx, session), Draft: true, ActAs: actor})
 		if err != nil {
 			return failure(err, domain.CodingErrPullRequestFailed)
 		}
 		change = &created
+		openedAs, openedVia = created.AuthorLogin, domain.CodeHostAccountActorBot
+		if created.OpenedByMember {
+			openedVia = domain.CodeHostAccountActorMember
+			if openedAs == "" && actor != nil {
+				openedAs = actor.Login
+			}
+		}
 	}
 	now := s.now().UTC()
-	pr := domain.SessionPullRequest{SessionID: session.ID, CodeHost: session.CodeHost, HostName: session.HostName, Repository: session.Repository, Number: change.Number, ExternalID: change.ExternalID, URL: change.URL, Title: change.Title, State: change.State, Draft: change.Draft, HeadBranch: change.HeadBranch, BaseBranch: change.BaseBranch, HeadSHA: head, CreatedAt: now, UpdatedAt: now}
+	pr := domain.SessionPullRequest{SessionID: session.ID, CodeHost: session.CodeHost, HostName: session.HostName, Repository: session.Repository, Number: change.Number, ExternalID: change.ExternalID, URL: change.URL, Title: change.Title, State: change.State, Draft: change.Draft, HeadBranch: change.HeadBranch, BaseBranch: change.BaseBranch, HeadSHA: head, OpenedAs: openedAs, OpenedVia: openedVia, CreatedAt: now, UpdatedAt: now}
 	if pr.State == "" {
 		pr.State = "open"
 	}

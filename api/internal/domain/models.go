@@ -1941,15 +1941,26 @@ type ReviewFile struct {
 }
 
 type ReviewEvent struct {
-	ID        string    `json:"id"`
-	Type      string    `json:"type"`
-	Body      string    `json:"body,omitempty"`
-	ParentID  string    `json:"parentId,omitempty"`
-	Path      string    `json:"path,omitempty"`
-	Line      int       `json:"line,omitempty"`
-	Resolved  bool      `json:"resolved,omitempty"`
-	Actor     User      `json:"actor"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Body     string `json:"body,omitempty"`
+	ParentID string `json:"parentId,omitempty"`
+	Path     string `json:"path,omitempty"`
+	Line     int    `json:"line,omitempty"`
+	Resolved bool   `json:"resolved,omitempty"`
+	Actor    User   `json:"actor"`
+	// PostedAs is the code host identity a Flow-originated comment, review
+	// or merge was posted to GitHub/GitLab with.
+	PostedAs  *ReviewPostedAs `json:"postedAs,omitempty"`
+	CreatedAt time.Time       `json:"createdAt"`
+}
+
+// ReviewPostedAs: Via is "member" (the actor's linked account) or
+// "workspace" (the workspace integration's credential).
+type ReviewPostedAs struct {
+	Provider string `json:"provider"`
+	Login    string `json:"login"`
+	Via      string `json:"via"`
 }
 
 type CodeReview struct {
