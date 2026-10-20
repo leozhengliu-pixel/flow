@@ -35,6 +35,7 @@ import type {
   Invitation,
   InvitationPreview,
   SCIMToken,
+  ReviewCommentSide,
   WebhookFailureEvent,
   WebhookDelivery,
   WebhookDeliveryPage,
@@ -1311,7 +1312,7 @@ export function submitReview(
 export function commentOnReview(
   id: string,
   body: string,
-  location?: { path: string; line: number } | { parentId: string },
+  location?: { path: string; line: number; side?: ReviewCommentSide; startLine?: number; startSide?: ReviewCommentSide } | { parentId: string },
 ): Promise<CodeReview> {
   return request(
     `/api/reviews/${id}/comments`,
@@ -1324,6 +1325,14 @@ export function resolveReviewThread(id: string, commentId: string, resolved: boo
     `/api/reviews/${id}/comments/${encodeURIComponent(commentId)}`,
     jsonRequest("PATCH", { resolved }),
   );
+}
+/**
+ * Syncs files and comments from the code host and retries local changes that
+ * did not reach it. Without `force`, a review synced in the last 30 seconds is
+ * returned as is.
+ */
+export function syncReview(id: string, force = true): Promise<CodeReview> {
+  return request(`/api/reviews/${encodeURIComponent(id)}/sync`, jsonRequest("POST", { force }));
 }
 export function fetchWebhooks(): Promise<Webhook[]> {
   return request("/api/webhooks");

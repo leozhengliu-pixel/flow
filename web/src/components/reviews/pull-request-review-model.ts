@@ -1,4 +1,5 @@
-import type { CodeReview, ReviewFile } from "@/types/flow";
+import type { DiffLine } from "@/lib/diff-computer";
+import type { CodeReview, ReviewCommentSide, ReviewFile } from "@/types/flow";
 
 import type { MergeMethod } from "./pull-request-merge-method";
 import { reviewReadyToMerge } from "./review-list-model";
@@ -95,14 +96,19 @@ export function splitSuggestionBody(body: string) {
 
 export type ReviewThreadModel = { root: CodeReview["events"][number]; replies: CodeReview["events"][number][]; resolved: boolean };
 
-/** Code comment threads (root + replies) keyed by "path:line". */
+/** Thread map key of a code location: "path:SIDE:line" (RIGHT when the side is unknown). */
+export function reviewThreadKey(path: string, side: ReviewCommentSide | undefined, line: number) {
+  return `${path}:${side ?? "RIGHT"}:${line}`;
+}
+
+/** Code comment threads (root + replies) keyed by reviewThreadKey (path, diff side, line). */
 export function reviewCodeThreads(review: CodeReview) {
   const comments = review.events.filter((event) => event.path && event.line && (event.type === "commented" || event.type === "review_commented"));
   const roots = comments.filter((event) => !event.parentId || !comments.some((item) => item.id === event.parentId));
   const threads = new Map<string, ReviewThreadModel[]>();
   for (const root of roots) {
     const replies = comments.filter((event) => event.parentId === root.id);
-    const key = `${root.path}:${root.line}`;
+    const key = reviewThreadKey(root.path ?? "", root.side, root.line ?? 0);
     threads.set(key, [...(threads.get(key) ?? []), { root, replies, resolved: Boolean(root.resolved) }]);
   }
   return threads;
@@ -127,4 +133,12 @@ export function reviewHeaderStat(review: CodeReview) {
   if (!review.files.length) return { additions: review.additions, deletions: review.deletions };
   const implementation = reviewFileGroups(review.files).find((group) => group.id === "implementation");
   return { additions: implementation?.additions ?? 0, deletions: implementation?.deletions ?? 0 };
+}
+
+/** The comment anchor of a diff cell: removed lines and the old column comment on the LEFT (old) side. */
+export function diffCommentAnchor(line: DiffLine | undefined, column: "old" | "new" | "unified"): { line: number; side: ReviewCommentSide } | null {
+  if (!line) return null;
+  if (column === "old" || (column === "unified" && line.kind === "remove")) return line.oldNumber ? { line: line.oldNumber, side: "LEFT" } : null;
+  if (column === "new" && line.kind === "remove") return null;
+  return line.newNumber ? { line: line.newNumber, side: "RIGHT" } : null;
 }

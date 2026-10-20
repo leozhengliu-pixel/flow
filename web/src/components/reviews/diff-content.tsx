@@ -8,8 +8,20 @@ import { Fragment, type ReactNode } from "react";
 import { ReviewCode } from "@/components/reviews/review-code";
 import type { DiffHunk, DiffLine } from "@/lib/diff-computer";
 import { useI18n } from "@/i18n/i18n";
+import type { ReviewCommentSide } from "@/types/flow";
 
-export type DiffCommentTarget = { path: string; line: number };
+import { diffCommentAnchor } from "./pull-request-review-model";
+
+/** Where a code comment goes: a line number on the old (LEFT) or new (RIGHT) side of the diff. */
+export type DiffCommentTarget = { path: string; line: number; side: ReviewCommentSide };
+
+/** Thread anchors shown under a unified row: an unchanged line carries threads of both sides. */
+function unifiedAnchors(line: DiffLine): Array<{ line: number; side: ReviewCommentSide }> {
+  if (line.kind === "remove") return line.oldNumber ? [{ line: line.oldNumber, side: "LEFT" }] : [];
+  const anchors: Array<{ line: number; side: ReviewCommentSide }> = line.newNumber ? [{ line: line.newNumber, side: "RIGHT" }] : [];
+  if (line.kind !== "add" && line.oldNumber) anchors.push({ line: line.oldNumber, side: "LEFT" });
+  return anchors;
+}
 
 export function DiffHunkHeader({ hunk, hidden }: { hunk: DiffHunk; hidden: number }) {
   const { t } = useI18n();
@@ -51,16 +63,21 @@ export function DiffLineCell({
 }) {
   const { t } = useI18n();
   const lineNumber = side === "old" ? line?.oldNumber : side === "new" ? line?.newNumber : (line?.newNumber ?? line?.oldNumber);
-  // Code comments anchor to the new side of the diff (removed lines have no new line number).
-  const commentNumber = line?.newNumber;
+  // Removed lines and the old column comment on the old (LEFT) side of the diff.
+  const anchor = diffCommentAnchor(line, side);
   const canEdit = Boolean(editable && line && side !== "old" && line.kind !== "remove");
 
   return (
     <div className={`review-diff-cell is-${line?.kind ?? "empty"}${dirty ? " is-dirty" : ""}`} data-line-old={line?.oldNumber} data-line-new={line?.newNumber}>
       <span className="review-diff-number">
         {side === "unified" && line?.kind === "remove" ? <Minus className="review-diff-removed-mark" aria-label={`${t("Removed line")} ${line.oldNumber ?? ""}`} /> : (lineNumber ?? "")}
-        {commentNumber && onComment ? (
-          <button aria-label={`${t("Comment on line")} ${commentNumber}`} className="review-diff-comment-button" onClick={() => onComment({ path, line: commentNumber })} type="button">
+        {anchor && onComment ? (
+          <button
+            aria-label={`${t(anchor.side === "LEFT" ? "Comment on removed line" : "Comment on line")} ${anchor.line}`}
+            className="review-diff-comment-button"
+            onClick={() => onComment({ path, ...anchor })}
+            type="button"
+          >
             <MessageSquarePlus />
           </button>
         ) : null}
@@ -95,6 +112,7 @@ export function DiffLineCell({
 /** Inline code comment composer card shown under the commented line. */
 export function DiffInlineComposer({
   line,
+  side = "RIGHT",
   body,
   busy,
   onBodyChange,
@@ -102,6 +120,7 @@ export function DiffInlineComposer({
   onSubmit,
 }: {
   line: number;
+  side?: ReviewCommentSide;
   body: string;
   busy: boolean;
   onBodyChange: (value: string) => void;
@@ -120,7 +139,7 @@ export function DiffInlineComposer({
       <textarea
         autoFocus
         aria-label={t("Inline comment")}
-        aria-description={`${t("Comment on line")} ${line}`}
+        aria-description={`${t(side === "LEFT" ? "Comment on removed line" : "Comment on line")} ${line}`}
         value={body}
         onChange={(event) => onBodyChange(event.target.value)}
         onKeyDown={(event) => {
@@ -172,15 +191,36 @@ export function DiffContentRows({
   editable?: boolean;
   dirtyLines?: Set<string>;
   onEdit?: (value: { path: string; line: DiffLine; content: string }) => void;
-  /** Threads and the inline composer, rendered under the row for a line number. */
-  renderAfterLine?: (line: number) => ReactNode;
+  /** Threads and the inline composer, rendered under the row for a line number on one side of the diff. */
+  renderAfterLine?: (line: number, side: ReviewCommentSide) => ReactNode;
 }) {
   const dirtyKey = (line?: DiffLine) => (line ? `${path}:${line.newNumber ?? line.oldNumber}:${line.kind}` : "");
+  const render = (anchors: Array<{ line: number; side: ReviewCommentSide }>) => {
+    if (!renderAfterLine) return null;
+    const content = anchors.map((anchor) => ({ key: `${anchor.side}:${anchor.line}`, node: renderAfterLine(anchor.line, anchor.side) })).filter((item) => item.node);
+    return content.length ? content.map((item) => <Fragment key={item.key}>{item.node}</Fragment>) : null;
+  };
   const after = (line?: DiffLine) => {
-    const number = line?.newNumber;
-    if (!number || !renderAfterLine) return null;
-    const content = renderAfterLine(number);
+    const content = line ? render(unifiedAnchors(line)) : null;
     return content ? <div className="review-diff-annotation">{content}</div> : null;
+  };
+  // Split rows: old-side threads sit under the old column, new-side ones under the new column.
+  const afterSplit = (row: { left?: DiffLine; right?: DiffLine }) => {
+    const leftAnchor = diffCommentAnchor(row.left, "old");
+    const rightAnchor = diffCommentAnchor(row.right, "new");
+    const left = leftAnchor ? render([leftAnchor]) : null;
+    const right = rightAnchor ? render([rightAnchor]) : null;
+    if (!left && !right) return null;
+    return (
+      <div className="review-diff-annotation is-split">
+        <div className="review-diff-annotation-side" data-side="LEFT">
+          {left}
+        </div>
+        <div className="review-diff-annotation-side" data-side="RIGHT">
+          {right}
+        </div>
+      </div>
+    );
   };
   const unifiedRows = (rows: DiffLine[]) =>
     rows.map((line, index) => (
@@ -198,7 +238,7 @@ export function DiffContentRows({
           <DiffLineCell line={row.left} side="old" path={path} onComment={onComment} />
           <DiffLineCell line={row.right} side="new" path={path} onComment={onComment} editable={editable} dirty={dirtyLines?.has(dirtyKey(row.right))} onEdit={onEdit} />
         </div>
-        {after(row.right)}
+        {afterSplit(row)}
       </Fragment>
     ));
   const pair = (rows: DiffLine[]) => {

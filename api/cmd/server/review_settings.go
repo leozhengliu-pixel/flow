@@ -1,24 +1,25 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"flow/api/internal/domain"
 )
 
+// reviewProvider is one token-based credential for a review's code host:
+// the acting member's linked account, or the workspace's classic
+// connection (OAuth / access token). It is used through classicReviewRemote.
 type reviewProvider struct {
-	base, token, resource, provider string
-	allowLocal                      bool
+	base, token, provider string
+	allowLocal            bool
 	// bearer sends a GitLab token as "Authorization: Bearer" (OAuth); GitLab
 	// access tokens use PRIVATE-TOKEN. GitHub tokens are always Bearer.
 	bearer bool
@@ -31,24 +32,6 @@ type reviewProvider struct {
 	account  *domain.CodeHostAccount
 }
 
-// reviewProviderError is a non-2xx answer of the code host to an action.
-type reviewProviderError struct {
-	provider string
-	status   int
-}
-
-func (e *reviewProviderError) Error() string {
-	return fmt.Sprintf("%s rejected the action (%d)", e.provider, e.status)
-}
-
-func reviewProviderStatus(err error) int {
-	var providerErr *reviewProviderError
-	if errors.As(err, &providerErr) {
-		return providerErr.status
-	}
-	return 0
-}
-
 // reviewHostName is the host of the review's PR/MR URL ("" when unknown).
 func reviewHostName(review domain.CodeReview) string {
 	parsed, err := url.Parse(strings.TrimSpace(review.URL))
@@ -56,13 +39,6 @@ func reviewHostName(review domain.CodeReview) string {
 		return ""
 	}
 	return strings.ToLower(parsed.Host)
-}
-
-func reviewResource(review domain.CodeReview) string {
-	if review.Provider == "gitlab" {
-		return fmt.Sprintf("/projects/%s/merge_requests/%d", url.PathEscape(review.RepositoryOwner+"/"+review.RepositoryName), review.Number)
-	}
-	return fmt.Sprintf("/repos/%s/%s/pulls/%d", url.PathEscape(review.RepositoryOwner), url.PathEscape(review.RepositoryName), review.Number)
 }
 
 // memberReviewProvider acts as the member with their own linked account on
@@ -80,7 +56,7 @@ func (s *server) memberReviewProvider(ctx context.Context, data domain.Bootstrap
 	if err != nil {
 		return nil
 	}
-	provider := &reviewProvider{token: tokens.AccessToken, resource: reviewResource(review), provider: review.Provider, allowLocal: s.authDisabled, bearer: !tokens.PrivateToken, account: &account,
+	provider := &reviewProvider{token: tokens.AccessToken, provider: review.Provider, allowLocal: s.authDisabled, bearer: !tokens.PrivateToken, account: &account,
 		postedAs: domain.ReviewPostedAs{Provider: review.Provider, Login: account.Login, Via: domain.CodeHostAccountActorMember}}
 	if review.Provider == "gitlab" {
 		client, err := s.gitlabClient(ctx, instance.BaseURL)
@@ -105,37 +81,33 @@ func (s *server) memberReviewProvider(ctx context.Context, data domain.Bootstrap
 	return provider
 }
 
-// withReviewProvider runs an action on the code host as the actor: with
-// their linked account when they have one, otherwise with the workspace
-// integration. A member token the host rejects as invalid (401) marks the
-// account "reconnect" and the action falls back to the workspace; a member
-// who lacks permission (403) is refused rather than escalated. It returns
-// who the action was posted as, or nil when the review has no code host.
-func (s *server) withReviewProvider(ctx context.Context, data domain.Bootstrap, review domain.CodeReview, actor domain.User, action func(*reviewProvider) error) (*domain.ReviewPostedAs, error) {
-	if member := s.memberReviewProvider(ctx, data, review, actor); member != nil {
-		err := action(member)
-		if err == nil {
-			postedAs := member.postedAs
-			return &postedAs, nil
-		}
-		if reviewProviderStatus(err) != http.StatusUnauthorized {
-			return nil, err
-		}
-		s.markCodeHostAccountReconnect(ctx, *member.account, "The code host rejected the token. Reconnect the account.")
+// withReviewRemote runs a synchronous action (approve, request changes,
+// merge, close, reopen, ready for review) on the code host as the actor,
+// through the same credential path as comment write-back (reviewRemoteAs).
+// It returns who the action was posted as, or nil when the review has no
+// code host.
+func (s *server) withReviewRemote(ctx context.Context, data domain.Bootstrap, review domain.CodeReview, actor domain.User, action func(reviewRemote) error) (*domain.ReviewPostedAs, error) {
+	if review.Provider != "github" && review.Provider != "gitlab" {
+		return nil, nil
 	}
-	provider, err := s.reviewProvider(ctx, data, review)
-	if err != nil || provider == nil {
+	remote, err := s.reviewRemoteAs(ctx, data, review, actor, false)
+	if err != nil {
 		return nil, err
 	}
-	if err := action(provider); err != nil {
+	if remote == nil {
+		return nil, &reviewCredentialError{message: fmt.Sprintf("connect %s before changing this review", review.Provider)}
+	}
+	if err := action(remote); err != nil {
 		return nil, err
 	}
-	postedAs := provider.postedAs
-	return &postedAs, nil
+	return reviewRemotePostedAs(remote), nil
 }
 
-func (s *server) reviewProvider(ctx context.Context, data domain.Bootstrap, review domain.CodeReview) (*reviewProvider, error) {
-	provider, err := s.workspaceReviewProvider(ctx, data, review)
+// reviewProviderFor resolves the classic connection's credentials for a
+// review; readOnly accepts a read-only GitLab token (the review sync reads).
+// A connection that cannot be used is a *reviewCredentialError.
+func (s *server) reviewProviderFor(ctx context.Context, data domain.Bootstrap, review domain.CodeReview, readOnly bool) (*reviewProvider, error) {
+	provider, err := s.workspaceReviewProvider(ctx, data, review, readOnly)
 	if err != nil {
 		return nil, &reviewCredentialError{message: err.Error()}
 	}
@@ -145,7 +117,7 @@ func (s *server) reviewProvider(ctx context.Context, data domain.Bootstrap, revi
 	return provider, nil
 }
 
-func (s *server) workspaceReviewProvider(ctx context.Context, data domain.Bootstrap, review domain.CodeReview) (*reviewProvider, error) {
+func (s *server) workspaceReviewProvider(ctx context.Context, data domain.Bootstrap, review domain.CodeReview, readOnly bool) (*reviewProvider, error) {
 	if review.Provider != "github" && review.Provider != "gitlab" {
 		return nil, nil
 	}
@@ -161,10 +133,10 @@ func (s *server) workspaceReviewProvider(ctx context.Context, data domain.Bootst
 			// Token connections: the validated access token and its GitLab URL
 			// live in encrypted connector storage.
 			if credential, err := s.gitlabCredential(ctx, data.Workspace.URLKey, connection.ID); err == nil {
-				if connection.Config["readonly"] == "true" {
+				if connection.Config["readonly"] == "true" && !readOnly {
 					return nil, fmt.Errorf("the GitLab access token is read-only (read_api scope)")
 				}
-				return &reviewProvider{base: credential.URL + "/api/v4", token: credential.Token, resource: fmt.Sprintf("/projects/%s/merge_requests/%d", url.PathEscape(review.RepositoryOwner+"/"+review.RepositoryName), review.Number), provider: "gitlab", allowLocal: s.authDisabled, postedAs: domain.ReviewPostedAs{Login: workspaceIntegrationLogin(connection)}}, nil
+				return &reviewProvider{base: credential.URL + "/api/v4", token: credential.Token, provider: "gitlab", allowLocal: s.authDisabled, postedAs: domain.ReviewPostedAs{Login: workspaceIntegrationLogin(connection)}}, nil
 			}
 		}
 		if token == "" {
@@ -173,7 +145,7 @@ func (s *server) workspaceReviewProvider(ctx context.Context, data domain.Bootst
 		if token == "" {
 			return nil, fmt.Errorf("repository credentials are required for %s actions", review.Provider)
 		}
-		base, resource := "https://api.github.com", fmt.Sprintf("/repos/%s/%s/pulls/%d", url.PathEscape(review.RepositoryOwner), url.PathEscape(review.RepositoryName), review.Number)
+		base := "https://api.github.com"
 		configuredBase := strings.TrimRight(os.Getenv("FLOW_INTEGRATION_"+strings.ToUpper(review.Provider)+"_API_URL"), "/")
 		if review.Provider == "gitlab" {
 			host := strings.TrimRight(os.Getenv("FLOW_INTEGRATION_GITLAB_HOST"), "/")
@@ -184,7 +156,6 @@ func (s *server) workspaceReviewProvider(ctx context.Context, data domain.Bootst
 				return nil, fmt.Errorf("configure the GitLab host in the deployment before using repository actions")
 			}
 			base = host + "/api/v4"
-			resource = fmt.Sprintf("/projects/%s/merge_requests/%d", url.PathEscape(review.RepositoryOwner+"/"+review.RepositoryName), review.Number)
 		}
 		if configuredBase != "" {
 			base = configuredBase
@@ -195,57 +166,9 @@ func (s *server) workspaceReviewProvider(ctx context.Context, data domain.Bootst
 			}
 			base = strings.TrimRight(custom, "/")
 		}
-		return &reviewProvider{base: base, token: token, resource: resource, provider: review.Provider, allowLocal: s.authDisabled, postedAs: domain.ReviewPostedAs{Login: workspaceIntegrationLogin(connection)}}, nil
+		return &reviewProvider{base: base, token: token, provider: review.Provider, allowLocal: s.authDisabled, postedAs: domain.ReviewPostedAs{Login: workspaceIntegrationLogin(connection)}}, nil
 	}
 	return nil, fmt.Errorf("connect %s before changing this review", review.Provider)
-}
-
-func (provider *reviewProvider) request(ctx context.Context, method, path string, payload any) (map[string]any, error) {
-	endpoint := provider.base + path
-	if provider.client == nil && !integrationEndpointSafe(ctx, endpoint, provider.allowLocal) {
-		return nil, fmt.Errorf("repository API endpoint is not allowed")
-	}
-	var body io.Reader
-	if payload != nil {
-		encoded, err := json.Marshal(payload)
-		if err != nil {
-			return nil, err
-		}
-		body = bytes.NewReader(encoded)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, endpoint, body)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	if provider.provider == "gitlab" && !provider.bearer {
-		req.Header.Set("PRIVATE-TOKEN", provider.token)
-	} else {
-		req.Header.Set("Authorization", "Bearer "+provider.token)
-	}
-	if provider.provider != "gitlab" {
-		req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	}
-	client := provider.client
-	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	}
-	response, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("repository API request failed: %w", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, &reviewProviderError{provider: provider.provider, status: response.StatusCode}
-	}
-	result := map[string]any{}
-	if response.StatusCode != 204 {
-		if err = json.NewDecoder(io.LimitReader(response.Body, 2<<20)).Decode(&result); err != nil {
-			return nil, fmt.Errorf("invalid repository API response")
-		}
-	}
-	return result, nil
 }
 
 func (s *server) syncReviewStatus(ctx context.Context, data domain.Bootstrap, review domain.CodeReview, status, method string) error {
@@ -257,54 +180,66 @@ func (s *server) syncReviewStatus(ctx context.Context, data domain.Bootstrap, re
 // linked account, else the workspace integration) and reports who it was
 // posted as.
 func (s *server) syncReviewStatusAs(ctx context.Context, data domain.Bootstrap, review domain.CodeReview, actor domain.User, status, method string) (*domain.ReviewPostedAs, error) {
-	return s.withReviewProvider(ctx, data, review, actor, func(provider *reviewProvider) error {
-		return reviewStatusAction(ctx, provider, status, method)
+	return s.withReviewRemote(ctx, data, review, actor, func(remote reviewRemote) error {
+		return reviewStatusAction(ctx, remote, review, status, method)
 	})
 }
 
-func reviewStatusAction(ctx context.Context, provider *reviewProvider, status, method string) error {
-	var err error
+// reviewRequestPath is the pull/merge request below the repository.
+func reviewRequestPath(provider string, review domain.CodeReview) string {
+	if provider == domain.CodeHostGitLab {
+		return "/merge_requests/" + strconv.Itoa(review.Number)
+	}
+	return "/pulls/" + strconv.Itoa(review.Number)
+}
+
+func reviewStatusAction(ctx context.Context, remote reviewRemote, review domain.CodeReview, status, method string) error {
+	provider := remote.Provider()
+	resource := reviewRequestPath(provider, review)
 	if status == "merged" {
-		if provider.provider == "github" {
-			result, err := provider.request(ctx, http.MethodPut, provider.resource+"/merge", map[string]string{"merge_method": method})
-			if err != nil {
+		if provider == domain.CodeHostGitHub {
+			var result struct {
+				Merged bool `json:"merged"`
+			}
+			if err := remote.REST(ctx, http.MethodPut, resource+"/merge", map[string]string{"merge_method": method}, &result); err != nil {
 				return err
 			}
-			if result["merged"] != true {
+			if !result.Merged {
 				return fmt.Errorf("pull request could not be merged")
 			}
 			return nil
 		}
 		if method == "rebase" {
-			state, err := provider.request(ctx, http.MethodGet, provider.resource+"?include_rebase_in_progress=true&include_diverged_commits_count=true", nil)
-			if err != nil {
+			var state struct {
+				RebaseInProgress     bool `json:"rebase_in_progress"`
+				DivergedCommitsCount int  `json:"diverged_commits_count"`
+			}
+			if err := remote.REST(ctx, http.MethodGet, resource+"?include_rebase_in_progress=true&include_diverged_commits_count=true", nil, &state); err != nil {
 				return err
 			}
-			if state["rebase_in_progress"] == true {
+			if state.RebaseInProgress {
 				return fmt.Errorf("repository rebase is still in progress")
 			}
-			if count, _ := state["diverged_commits_count"].(float64); count > 0 {
-				if _, err := provider.request(ctx, http.MethodPut, provider.resource+"/rebase", map[string]bool{"skip_ci": false}); err != nil {
+			if state.DivergedCommitsCount > 0 {
+				if err := remote.REST(ctx, http.MethodPut, resource+"/rebase", map[string]bool{"skip_ci": false}, nil); err != nil {
 					return err
 				}
 				return fmt.Errorf("rebase started; retry merging after the repository finishes rebasing")
 			}
 		}
-		_, err := provider.request(ctx, http.MethodPut, provider.resource+"/merge", map[string]bool{"squash": method == "squash"})
-		return err
+		return remote.REST(ctx, http.MethodPut, resource+"/merge", map[string]bool{"squash": method == "squash"}, nil)
 	}
 	if status == "closed" || status == "open" {
-		if provider.provider == "github" {
-			_, err = provider.request(ctx, http.MethodPatch, provider.resource, map[string]string{"state": status})
-		} else {
-			event := "reopen"
-			if status == "closed" {
-				event = "close"
-			}
-			_, err = provider.request(ctx, http.MethodPut, provider.resource, map[string]string{"state_event": event})
+		if provider == domain.CodeHostGitHub {
+			return remote.REST(ctx, http.MethodPatch, resource, map[string]string{"state": status}, nil)
 		}
+		event := "reopen"
+		if status == "closed" {
+			event = "close"
+		}
+		return remote.REST(ctx, http.MethodPut, resource, map[string]string{"state_event": event}, nil)
 	}
-	return err
+	return nil
 }
 
 func mergeMethod(preference string) string {
@@ -322,35 +257,32 @@ func (s *server) markReviewReady(ctx context.Context, data domain.Bootstrap, rev
 	if !review.Draft {
 		return nil
 	}
-	_, err := s.withReviewProvider(ctx, data, review, data.Viewer, func(provider *reviewProvider) error {
-		return markReviewReadyAction(ctx, provider, review)
+	_, err := s.withReviewRemote(ctx, data, review, data.Viewer, func(remote reviewRemote) error {
+		return markReviewReadyAction(ctx, remote, review)
 	})
 	return err
 }
 
-func markReviewReadyAction(ctx context.Context, provider *reviewProvider, review domain.CodeReview) error {
-	if provider.provider == "gitlab" {
+func markReviewReadyAction(ctx context.Context, remote reviewRemote, review domain.CodeReview) error {
+	resource := reviewRequestPath(remote.Provider(), review)
+	if remote.Provider() == domain.CodeHostGitLab {
 		title := strings.TrimSpace(review.Title)
 		for _, prefix := range []string{"Draft:", "WIP:", "draft:", "wip:"} {
 			title = strings.TrimSpace(strings.TrimPrefix(title, prefix))
 		}
-		_, err := provider.request(ctx, http.MethodPut, provider.resource, map[string]string{"title": title})
+		return remote.REST(ctx, http.MethodPut, resource, map[string]string{"title": title}, nil)
+	}
+	var pull struct {
+		NodeID string `json:"node_id"`
+	}
+	if err := remote.REST(ctx, http.MethodGet, resource, nil, &pull); err != nil {
 		return err
 	}
-	pr, err := provider.request(ctx, http.MethodGet, provider.resource, nil)
-	if err != nil {
-		return err
-	}
-	id, _ := pr["node_id"].(string)
-	if id == "" {
+	if pull.NodeID == "" {
 		return fmt.Errorf("GitHub pull request node ID is unavailable")
 	}
-	result, err := provider.request(ctx, http.MethodPost, "/graphql", map[string]any{"query": "mutation($id: ID!) { markPullRequestReadyForReview(input: {pullRequestId: $id}) { pullRequest { id isDraft } } }", "variables": map[string]string{"id": id}})
-	if err != nil {
-		return err
-	}
-	if errors, ok := result["errors"].([]any); ok && len(errors) > 0 {
-		return fmt.Errorf("GitHub rejected the draft conversion")
+	if err := remote.GraphQL(ctx, "mutation($id: ID!) { markPullRequestReadyForReview(input: {pullRequestId: $id}) { pullRequest { id isDraft } } }", map[string]any{"id": pull.NodeID}, nil); err != nil {
+		return fmt.Errorf("GitHub rejected the draft conversion: %w", err)
 	}
 	return nil
 }
@@ -367,61 +299,65 @@ type reviewCredentialError struct{ message string }
 
 func (e *reviewCredentialError) Error() string { return e.message }
 
-// postReviewActivity posts a Flow comment or review decision to the PR/MR
-// as the actor (their linked account, else the workspace integration) and
-// reports who it was posted as. A review without a code host, or a workspace
-// without a usable credential, keeps the activity in Flow only (nil, nil).
-func (s *server) postReviewActivity(ctx context.Context, data domain.Bootstrap, review domain.CodeReview, actor domain.User, kind, body, path string, line int) (*domain.ReviewPostedAs, error) {
-	if (review.Provider != "github" && review.Provider != "gitlab") || review.Number <= 0 || review.RepositoryOwner == "" || review.RepositoryName == "" {
-		return nil, nil
-	}
-	body = strings.TrimSpace(body)
-	if kind == "comment" && body == "" {
-		return nil, nil
-	}
-	postedAs, err := s.withReviewProvider(ctx, data, review, actor, func(provider *reviewProvider) error {
-		return reviewActivityAction(ctx, provider, kind, body, path, line)
-	})
-	var credentialErr *reviewCredentialError
-	if errors.As(err, &credentialErr) {
-		return nil, nil
-	}
+// postReviewActivity posts a Flow review decision to the PR/MR as the actor
+// (their linked account, else the workspace integration) and reports who it
+// was posted as. A review without a code host, or a workspace without a
+// usable credential, keeps the activity in Flow only (nil, nil).
+func (s *server) postReviewActivity(ctx context.Context, data domain.Bootstrap, review domain.CodeReview, actor domain.User, kind, body string) (*domain.ReviewPostedAs, error) {
+	postedAs, _, err := s.postReviewDecision(ctx, data, review, actor, kind, body)
 	return postedAs, err
 }
 
-// reviewActivityAction: kind is comment, inlineComment, approve or
-// requestChanges.
-func reviewActivityAction(ctx context.Context, provider *reviewProvider, kind, body, path string, line int) error {
-	if provider.provider == "gitlab" {
+// postReviewDecision is postReviewActivity that also returns the code host
+// object it created (the review or note), so syncs update the Flow event
+// instead of duplicating it.
+func (s *server) postReviewDecision(ctx context.Context, data domain.Bootstrap, review domain.CodeReview, actor domain.User, kind, body string) (*domain.ReviewPostedAs, *domain.ReviewEventRemote, error) {
+	if (review.Provider != "github" && review.Provider != "gitlab") || review.Number <= 0 || review.RepositoryOwner == "" || review.RepositoryName == "" {
+		return nil, nil, nil
+	}
+	body = strings.TrimSpace(body)
+	if kind == "comment" && body == "" {
+		return nil, nil, nil
+	}
+	var ref *domain.ReviewEventRemote
+	postedAs, err := s.withReviewRemote(ctx, data, review, actor, func(remote reviewRemote) error {
+		var err error
+		ref, err = reviewActivityAction(ctx, remote, review, kind, body)
+		return err
+	})
+	var credentialErr *reviewCredentialError
+	if errors.As(err, &credentialErr) {
+		return nil, nil, nil
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return postedAs, ref, nil
+}
+
+// reviewActivityAction posts a review decision: kind is approve,
+// requestChanges or comment. It returns the created review or comment.
+func reviewActivityAction(ctx context.Context, remote reviewRemote, review domain.CodeReview, kind, body string) (*domain.ReviewEventRemote, error) {
+	resource := reviewRequestPath(remote.Provider(), review)
+	if remote.Provider() == domain.CodeHostGitLab {
 		switch kind {
 		case "approve":
-			if _, err := provider.request(ctx, http.MethodPost, provider.resource+"/approve", map[string]string{}); err != nil {
-				return err
+			if err := remote.REST(ctx, http.MethodPost, resource+"/approve", map[string]string{}, nil); err != nil {
+				return nil, err
 			}
 			if body == "" {
-				return nil
+				return nil, nil
 			}
 		case "requestChanges":
 			if body == "" {
 				body = "Changes requested."
 			}
-		case "inlineComment":
-			mr, err := provider.request(ctx, http.MethodGet, provider.resource, nil)
-			if err != nil {
-				return err
-			}
-			refs, _ := mr["diff_refs"].(map[string]any)
-			if refs != nil {
-				position := map[string]any{"position_type": "text", "base_sha": refs["base_sha"], "head_sha": refs["head_sha"], "start_sha": refs["start_sha"], "new_path": path, "old_path": path, "new_line": line}
-				_, err = provider.request(ctx, http.MethodPost, provider.resource+"/discussions", map[string]any{"body": body, "position": position})
-				if err == nil || (reviewProviderStatus(err) != http.StatusBadRequest && reviewProviderStatus(err) != http.StatusUnprocessableEntity) {
-					return err
-				}
-			}
-			body = fmt.Sprintf("`%s:%d`\n\n%s", path, line, body)
 		}
-		_, err := provider.request(ctx, http.MethodPost, provider.resource+"/notes", map[string]string{"body": body})
-		return err
+		var note gitlabAPINote
+		if err := remote.REST(ctx, http.MethodPost, resource+"/notes", map[string]string{"body": body}, &note); err != nil {
+			return nil, err
+		}
+		return reviewCreatedRef(domain.CodeHostGitLab, reviewRemoteNote, note.ID, ""), nil
 	}
 	switch kind {
 	case "approve", "requestChanges":
@@ -436,22 +372,22 @@ func reviewActivityAction(ctx context.Context, provider *reviewProvider, kind, b
 		if body != "" {
 			payload["body"] = body
 		}
-		_, err := provider.request(ctx, http.MethodPost, provider.resource+"/reviews", payload)
-		return err
-	case "inlineComment":
-		pr, err := provider.request(ctx, http.MethodGet, provider.resource, nil)
-		if err != nil {
-			return err
+		var created githubAPIReview
+		if err := remote.REST(ctx, http.MethodPost, resource+"/reviews", payload, &created); err != nil {
+			return nil, err
 		}
-		head, _ := pr["head"].(map[string]any)
-		if sha, _ := head["sha"].(string); sha != "" {
-			_, err = provider.request(ctx, http.MethodPost, provider.resource+"/comments", map[string]any{"body": body, "commit_id": sha, "path": path, "line": line, "side": "RIGHT"})
-			if err == nil || reviewProviderStatus(err) != http.StatusUnprocessableEntity {
-				return err
-			}
-		}
-		body = fmt.Sprintf("`%s:%d`\n\n%s", path, line, body)
+		return reviewCreatedRef(domain.CodeHostGitHub, reviewRemoteReview, created.ID, created.HTMLURL), nil
 	}
-	_, err := provider.request(ctx, http.MethodPost, strings.Replace(provider.resource, "/pulls/", "/issues/", 1)+"/comments", map[string]string{"body": body})
-	return err
+	var comment githubAPIIssueComment
+	if err := remote.REST(ctx, http.MethodPost, "/issues/"+strconv.Itoa(review.Number)+"/comments", map[string]string{"body": body}, &comment); err != nil {
+		return nil, err
+	}
+	return reviewCreatedRef(domain.CodeHostGitHub, reviewRemoteIssueComment, comment.ID, comment.HTMLURL), nil
+}
+
+func reviewCreatedRef(provider, kind string, id int64, link string) *domain.ReviewEventRemote {
+	if id == 0 {
+		return nil
+	}
+	return &domain.ReviewEventRemote{Provider: provider, Kind: kind, ID: strconv.FormatInt(id, 10), URL: link}
 }

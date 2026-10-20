@@ -1,0 +1,28 @@
+[
+ {
+  "id": 5580132882,
+  "body": "Review notes",
+  "state": "COMMENTED",
+  "html_url": "https://github.com/jiaozongben/flow-coding-test/pull/7#pullrequestreview-5580132882",
+  "commit_id": "2e5639ebec70c843f494e8fa2d563e4766f41848",
+  "submitted_at": "2026-10-20T02:36:48Z",
+  "user": {
+   "login": "jiaozongben",
+   "avatar_url": "https://avatars.githubusercontent.com/u/12377698?u=ae9c2ee308a2fcc08c5e0d4c1b8adc5866e3d5c2&v=4",
+   "type": "User"
+  }
+ },
+ {
+  "id": 5580133046,
+  "body": "",
+  "state": "COMMENTED",
+  "html_url": "https://github.com/jiaozongben/flow-coding-test/pull/7#pullrequestreview-5580133046",
+  "commit_id": "2e5639ebec70c843f494e8fa2d563e4766f41848",
+  "submitted_at": "2026-10-20T02:36:50Z",
+  "user": {
+   "login": "jiaozongben",
+   "avatar_url": "https://avatars.githubusercontent.com/u/12377698?u=ae9c2ee308a2fcc08c5e0d4c1b8adc5866e3d5c2&v=4",
+   "type": "User"
+  }
+ }
+]

@@ -93,4 +93,17 @@ export const reviewsZhCN: Record<string, string> = {
   "{count} resolved comment from {names}": "{count} 条来自 {names} 的已解决评论",
   "{count} resolved comments from {names}": "{count} 条来自 {names} 的已解决评论",
   "{resolved} of {total} code comments resolved": "已解决 {resolved}/{total} 条代码评论",
+  // --- Code host sync (files, comments, write-back)
+  "Comment on removed line": "评论已删除的行",
+  "This diff is too large to display": "此差异过大，无法显示",
+  "Syncing…": "正在同步…",
+  "Could not sync with the code host": "无法与代码托管平台同步",
+  "Not synced to {host}": "未同步到 {host}",
+  "Thread state not synced to {host}": "讨论状态未同步到 {host}",
+  "Sync with GitHub": "与 GitHub 同步",
+  "Sync with GitLab": "与 GitLab 同步",
+  "Synced with GitHub": "已与 GitHub 同步",
+  "Synced with GitLab": "已与 GitLab 同步",
+  "Could not sync with GitHub": "无法与 GitHub 同步",
+  "Could not sync with GitLab": "无法与 GitLab 同步",
 };

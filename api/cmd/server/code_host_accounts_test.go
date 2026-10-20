@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -37,6 +38,7 @@ type memberGitLab struct {
 	oauth     map[string]bool     // valid OAuth access tokens
 	refresh   map[string]bool     // valid refresh tokens
 	forbidden map[string]bool     // tokens refused (403) on approvals
+	readOnly  map[string]bool     // tokens refused (403) on every write
 	expiresIn int64
 	issued    int
 	posts     []string // "path auth-token"
@@ -47,7 +49,7 @@ const testWorkspaceToken = "glpat-workspace"
 
 func newMemberGitLab(t *testing.T) *memberGitLab {
 	t.Helper()
-	fake := &memberGitLab{scopes: map[string][]string{testWorkspaceToken: {"api"}, "glpat-member": {"api", "read_user"}, "glpat-noscope": {"read_api"}}, oauth: map[string]bool{}, refresh: map[string]bool{}, forbidden: map[string]bool{}, expiresIn: 7200}
+	fake := &memberGitLab{scopes: map[string][]string{testWorkspaceToken: {"api"}, "glpat-member": {"api", "read_user"}, "glpat-noscope": {"read_api"}}, oauth: map[string]bool{}, refresh: map[string]bool{}, forbidden: map[string]bool{}, readOnly: map[string]bool{}, expiresIn: 7200}
 	fake.Server = httptest.NewServer(http.HandlerFunc(fake.serve))
 	t.Cleanup(fake.Close)
 	return fake
@@ -114,16 +116,34 @@ func (f *memberGitLab) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"id": 42, "username": username, "commit_email": ""})
 	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/v4/projects/acme/app/merge_requests/3/"):
-		if strings.HasSuffix(r.URL.Path, "/approve") && f.forbidden[token] {
+		if (strings.HasSuffix(r.URL.Path, "/approve") && f.forbidden[token]) || f.readOnly[token] {
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 		f.posts = append(f.posts, strings.TrimPrefix(r.URL.Path, "/api/v4/projects/acme/app/merge_requests/3/")+" "+token)
 		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"id":1}`))
+		if strings.HasSuffix(r.URL.Path, "/discussions") {
+			// Comments are written back as discussions (threaded on GitLab).
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"id":"d%d","notes":[{"id":%d}]}`, len(f.posts), len(f.posts))))
+			return
+		}
+		_, _ = w.Write([]byte(fmt.Sprintf(`{"id":%d}`, len(f.posts))))
+	case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/api/v4/projects/acme/app/merge_requests/3/discussions/"):
+		// Thread resolution.
+		if f.readOnly[token] {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		_, _ = w.Write([]byte(`{}`))
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
+}
+
+func (f *memberGitLab) seenSnapshot() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.seen)
 }
 
 func (f *memberGitLab) postsSnapshot() []string {
@@ -397,13 +417,16 @@ func TestReviewActionsActAsTheMember(t *testing.T) {
 	if last.PostedAs == nil || last.PostedAs.Via != domain.CodeHostAccountActorMember || last.PostedAs.Login != "alice-gl" || last.PostedAs.Provider != "gitlab" {
 		t.Fatalf("posted as %+v", last.PostedAs)
 	}
-	if posts := f.gitlab.postsSnapshot(); len(posts) != 1 || posts[0] != "notes glpat-member" {
+	if last.Sync != nil || last.Remote == nil || last.Remote.ThreadID == "" {
+		t.Fatalf("comment not written back: sync %+v remote %+v", last.Sync, last.Remote)
+	}
+	if posts := f.gitlab.postsSnapshot(); len(posts) != 1 || posts[0] != "discussions glpat-member" {
 		t.Fatalf("posts %v", posts)
 	}
 	// Another member without a link: the workspace integration posts.
 	data, _ := f.repo.WorkspaceMetadata("test-workspace")
 	other := domain.User{ID: "member-without-link", Name: "Other"}
-	postedAs, err := f.server.postReviewActivity(t.Context(), data, review, other, "comment", "From the workspace", "", 0)
+	postedAs, err := f.server.postReviewActivity(t.Context(), data, review, other, "comment", "From the workspace")
 	if err != nil || postedAs == nil || postedAs.Via != domain.CodeHostAccountActorBot || postedAs.Login != "flow-bot" {
 		t.Fatalf("workspace fallback %+v %v", postedAs, err)
 	}

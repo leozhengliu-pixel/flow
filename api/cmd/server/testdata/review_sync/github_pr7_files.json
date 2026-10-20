@@ -1,0 +1,26 @@
+[
+ {
+  "filename": "src/geometry.js",
+  "status": "added",
+  "additions": 13,
+  "deletions": 0,
+  "changes": 13,
+  "patch": "@@ -0,0 +1,13 @@\n+import { add } from \"./math.js\";\n+\n+export function perimeter(width, height) {\n+  return 2 * add(width, height);\n+}\n+\n+export function area(width, height) {\n+  return width * height;\n+}\n+\n+export function circleArea(radius) {\n+  return Math.PI * radius * radius;\n+}"
+ },
+ {
+  "filename": "src/geometry.test.js",
+  "status": "added",
+  "additions": 7,
+  "deletions": 0,
+  "changes": 7,
+  "patch": "@@ -0,0 +1,7 @@\n+import { test } from \"node:test\";\n+import assert from \"node:assert/strict\";\n+import { perimeter, area, circleArea } from \"./geometry.js\";\n+\n+test(\"perimeter\", () => assert.equal(perimeter(2, 3), 10));\n+test(\"area\", () => assert.equal(area(2, 3), 6));\n+test(\"circleArea\", () => assert.ok(Math.abs(circleArea(1) - Math.PI) < 1e-9));"
+ },
+ {
+  "filename": "src/math.js",
+  "status": "modified",
+  "additions": 11,
+  "deletions": 0,
+  "changes": 11,
+  "patch": "@@ -2,6 +2,17 @@ export function add(a, b) {\n   return a + b;\n }\n \n+export function subtract(a, b) {\n+  return a - b;\n+}\n+\n export function divide(a, b) {\n+  if (b === 0) {\n+    throw new RangeError(\"Division by zero\");\n+  }\n   return a / b;\n }\n+\n+export function clamp(value, min, max) {\n+  return Math.min(Math.max(value, min), max);\n+}"
+ }
+]

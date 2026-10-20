@@ -438,8 +438,12 @@ func (s *server) gitHubAppWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	switch event.Type {
 	case codehost.EventIgnored:
-		writeJSON(w, http.StatusAccepted, map[string]any{"ignored": true, "deliveryId": event.DeliveryID})
-		return
+		// Comment edits, deletions and thread resolution still update the
+		// review's synced comments.
+		if !githubReviewActivityEvent(r.Header.Get("X-GitHub-Event")) {
+			writeJSON(w, http.StatusAccepted, map[string]any{"ignored": true, "deliveryId": event.DeliveryID})
+			return
+		}
 	case codehost.EventInstallation:
 		if err := s.applyGitHubAppInstallationEvent(r.Context(), host, event); err != nil {
 			log.Printf("github app webhook %s: installation: %v", event.DeliveryID, err)
@@ -502,7 +506,7 @@ func (s *server) applyGitHubAppInstallationEvent(ctx context.Context, host *gith
 }
 
 // codeReviewGitHubEvents are the App events the CodeReview sync understands.
-var codeReviewGitHubEvents = []string{"pull_request", "pull_request_review", "pull_request_review_comment", "issue_comment"}
+var codeReviewGitHubEvents = []string{"pull_request", "pull_request_review", "pull_request_review_comment", "pull_request_review_thread", "issue_comment"}
 
 func (s *server) applyGitHubAppWorkspaceEvent(ctx context.Context, workspace, githubEvent string, event codehost.WebhookEvent, body []byte) error {
 	reviewID := ""
@@ -513,12 +517,16 @@ func (s *server) applyGitHubAppWorkspaceEvent(ctx context.Context, workspace, gi
 		}
 		header := http.Header{}
 		header.Set("X-GitHub-Event", githubEvent)
-		if normalizeCodeReviewEvent(domain.CodeHostGitHub, header, &review) {
+		if event.Type != codehost.EventIgnored && !githubReviewActivityOnly(githubEvent, review.Action) && normalizeCodeReviewEvent(domain.CodeHostGitHub, header, &review) {
 			updated, err := s.applyCodeReviewEvent(ctx, workspace, domain.CodeHostGitHub, event.DeliveryID, review)
 			if err != nil {
 				return fmt.Errorf("code review sync: %w", err)
 			}
 			reviewID = updated.ID
+		}
+		// Files, comments, reviews and thread resolution of the review.
+		if _, err := s.afterCodeReviewWebhook(ctx, workspace, domain.CodeHostGitHub, githubEvent, body); err != nil {
+			return fmt.Errorf("code review comment sync: %w", err)
 		}
 	}
 	if err := s.updateSessionPullRequests(ctx, workspace, event, body, reviewID); err != nil {
