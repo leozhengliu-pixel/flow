@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"maps"
 	"net/http"
 	"net/url"
@@ -387,6 +389,92 @@ func agentApprovalPreview(approval domain.AgentApproval) string {
 
 // agentHeldCallResult is what the model is told for a call that waits for approval.
 const agentHeldCallResult = `{"status":"awaiting_approval","message":"The app asked the user to approve this action. Do not call the tool again; it runs once they approve."}`
+
+// Approval is driven only by real tool calls: Flow holds a call that needs the user's approval and asks for it
+// itself. A model that instead writes the question as its answer ("Allow Code search: search_code?") would end the
+// run with nothing to approve, so such a turn is retried once with agentTextApprovalNudge and then fails with
+// agentTextApprovalError.
+const (
+	agentTextApprovalNudge = "Your last reply asked for permission in text instead of calling a tool, so nothing ran and the user has nothing to approve. Do not ask for approval in text: Flow asks the user itself when a tool needs approval and resumes you afterwards. Call the tool you need now, or answer without it."
+	agentTextApprovalError = "The agent asked for approval in text instead of calling the tool; nothing ran. Retry."
+)
+
+// agentTextApprovalLine is Flow's own approval phrasing, "Allow <names>?", on a line of its own.
+var agentTextApprovalLine = regexp.MustCompile(`^(?i:allow)\s+(.+?)\s*[?？]$`)
+
+// agentTextApprovalRequest reports whether a reply without tool calls asks the user to allow a tool offered in ctx,
+// in Flow's approval phrasing: a line "Allow <names>?" where a name is an offered tool ("search_code",
+// "save_issue") or a connector's tool ("Code search: search_code"). Logs the turn's shape (never its text) so a
+// recurrence shows whether the provider reported tool calls it did not deliver.
+func (s *server) agentTextApprovalRequest(ctx context.Context, turn agentProviderTurn) bool {
+	if len(turn.ToolCalls) > 0 || strings.TrimSpace(turn.Text) == "" {
+		return false
+	}
+	tools, connectors := map[string]bool{}, map[string]bool{}
+	for _, tool := range s.agentTurnTools(ctx) {
+		tools[tool.Name], tools[strings.TrimPrefix(tool.Name, "mcp__flow.")] = true, true
+	}
+	if items, ok := ctx.Value(connectorToolsKey{}).([]connectorTool); ok {
+		for _, tool := range items {
+			tools[tool.RemoteName], connectors[strings.ToLower(tool.Policy.Name)] = true, true
+		}
+	}
+	for _, line := range strings.Split(turn.Text, "\n") {
+		match := agentTextApprovalLine.FindStringSubmatch(strings.Trim(strings.TrimSpace(line), "*_`> -"))
+		if match == nil {
+			continue
+		}
+		for _, name := range strings.Split(match[1], ",") {
+			name = strings.Trim(strings.TrimSpace(name), "*_`\"'")
+			connector, tool, prefixed := strings.Cut(name, ":")
+			if tools[name] || prefixed && (connectors[strings.ToLower(strings.TrimSpace(connector))] || tools[strings.TrimSpace(tool)]) {
+				slog.WarnContext(ctx, "agent asked for tool approval in text", "protocol", s.agent.Protocol, "model", s.agent.Model, "stop_reason", turn.StopReason, "text_bytes", len(turn.Text), "reasoning_bytes", len(turn.Reasoning))
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// agentApprovalNarration is what an approval question said before Flow's own question (the turn's text), so a later
+// run replays the agent's words without the question: replayed as the agent's own text, "Allow …?" taught models
+// to ask for approval in text instead of calling the tool.
+func agentApprovalNarration(activity domain.AgentActivity) string {
+	body := strings.TrimSpace(activity.Body)
+	if index := strings.LastIndex(body, "Allow "); index >= 0 && strings.HasSuffix(body, "?") && (index == 0 || strings.HasSuffix(body[:index], "\n\n")) {
+		return strings.TrimSpace(body[:index])
+	}
+	var approval domain.AgentApproval
+	if raw, err := json.Marshal(activity.SignalMetadata["approval"]); err == nil && json.Unmarshal(raw, &approval) == nil {
+		if preview := agentApprovalPreview(approval); preview != "" && strings.HasSuffix(body, preview) {
+			return strings.TrimSpace(strings.TrimSuffix(body, preview))
+		}
+	}
+	return ""
+}
+
+// agentApprovalOutcome is the person's answer to an approval as a later run reads it: what they decided about which
+// calls (and their reply when it was more than the decision), rather than the bare "approve" or "reject".
+func agentApprovalOutcome(ctx context.Context, activity domain.AgentActivity) string {
+	names := agentHeldCallNames(ctx, agentApprovalBatchCalls(*activity.ToolCall))
+	text := "Approved: " + names + " (Flow ran it)."
+	if activity.ToolCall.Status != "approved" {
+		text = "Rejected: " + names + " (nothing ran)."
+	}
+	// A picked option is its value, optionally followed by the person's note ("approve\n\nOnly the main repo").
+	body := strings.TrimSpace(activity.Body)
+	for _, value := range []string{agentApprovalApprove, agentApprovalReject} {
+		if body == value {
+			body = ""
+		} else if rest, ok := strings.CutPrefix(body, value+"\n\n"); ok {
+			body = strings.TrimSpace(rest)
+		}
+	}
+	if body != "" {
+		text += "\n" + body
+	}
+	return text
+}
 
 // agentApprovalBatchTool names the pending tool of an agent thread that holds the calls of one approval.
 const agentApprovalBatchTool = "flow_approval"

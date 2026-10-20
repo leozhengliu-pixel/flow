@@ -410,6 +410,8 @@ func (s *server) requestChatCompletions(ctx context.Context, messages []agentPro
 	}
 	turn := agentProviderTurn{}
 	calls := map[int]*domain.AgentToolCall{}
+	// slots maps a delta index to the call it currently continues (see the parallel calls without an index below).
+	slots := map[int]int{}
 	err = readSSE(response.Body, func(_ string, data string) error {
 		if data == "[DONE]" {
 			return nil
@@ -457,11 +459,24 @@ func (s *server) requestChatCompletions(ctx context.Context, messages []agentPro
 			}
 		}
 		for _, delta := range choice.Delta.ToolCalls {
-			call := calls[delta.Index]
+			// Some gateways stream parallel calls without an index (all 0): a chunk with a different call id starts
+			// a new call instead of being appended to the previous one's name and arguments.
+			index, ok := slots[delta.Index]
+			if !ok {
+				index = delta.Index
+			}
+			call := calls[index]
+			if call != nil && delta.ID != "" && call.ID != "" && delta.ID != call.ID {
+				index = len(calls)
+				for calls[index] != nil {
+					index++
+				}
+				slots[delta.Index], call = index, nil
+			}
 			started := call == nil
 			if started {
 				call = &domain.AgentToolCall{ID: delta.ID, Status: "running"}
-				calls[delta.Index] = call
+				calls[index] = call
 			}
 			if delta.ID != "" {
 				call.ID = delta.ID
@@ -487,6 +502,10 @@ func (s *server) requestChatCompletions(ctx context.Context, messages []agentPro
 		return nil
 	})
 	turn.ToolCalls = indexedToolCalls(calls)
+	if err == nil && turn.StopReason == "tool_calls" && len(turn.ToolCalls) == 0 {
+		// The provider says the model called tools but none arrived in a shape Flow reads.
+		slog.WarnContext(ctx, "agent provider finished with tool_calls but sent no tool calls", "model", s.agent.Model, "text_bytes", len(turn.Text), "reasoning_bytes", len(turn.Reasoning))
+	}
 	return turn, err
 }
 
