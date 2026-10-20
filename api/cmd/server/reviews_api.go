@@ -36,6 +36,8 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
+	var statusPostedAs *domain.ReviewPostedAs
+	statusActor := requestActor(s, r)
 	if input.Status != nil {
 		if !slices.Contains([]string{"open", "inReview", "approved", "merged", "closed"}, *input.Status) {
 			writeError(w, 400, "invalid review status")
@@ -61,10 +63,12 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if current.Status != *input.Status {
-				if err := s.syncReviewStatus(r.Context(), data, current, *input.Status, method); err != nil {
+				posted, err := s.syncReviewStatusAs(r.Context(), data, current, statusActor, *input.Status, method)
+				if err != nil {
 					writeError(w, http.StatusBadGateway, err.Error())
 					return
 				}
+				statusPostedAs = posted
 			}
 		}
 	}
@@ -111,8 +115,12 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 			if !slices.Contains([]string{"open", "inReview", "approved", "merged", "closed"}, *input.Status) {
 				return errInvalid
 			}
-			review.Status = *input.Status
 			now := time.Now().UTC()
+			if statusPostedAs != nil && review.Status != *input.Status {
+				// Merged / closed / reopened on the code host as this identity.
+				review.Events = append(review.Events, domain.ReviewEvent{ID: fmt.Sprintf("review_event_%d", now.UnixNano()), Type: map[string]string{"merged": "merged", "closed": "closed", "open": "reopened"}[*input.Status], Actor: statusActor, PostedAs: statusPostedAs, CreatedAt: now})
+			}
+			review.Status = *input.Status
 			if review.Status == "merged" {
 				review.MergedAt, review.ClosedAt = &now, nil
 			} else if review.Status == "closed" {
@@ -185,22 +193,31 @@ func (s *server) submitReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, actor := r.PathValue("id"), requestActor(s, r)
-	if input.Decision == "approve" {
-		data := s.workspaceData(r)
-		review, err := reviewByID(data, id)
-		if err != nil {
-			respondMutation(w, err, 200, nil)
+	data := s.workspaceData(r)
+	current, err := reviewByID(data, id)
+	if err != nil {
+		respondMutation(w, err, 200, nil)
+		return
+	}
+	if current.Status == "merged" || current.Status == "closed" {
+		writeError(w, http.StatusConflict, "closed reviews cannot be submitted")
+		return
+	}
+	if input.Decision == "approve" && data.UserSettings[actor.ID].AutoConvertDrafts {
+		if err := s.markReviewReady(r.Context(), data, current); err != nil {
+			writeError(w, 502, err.Error())
 			return
 		}
-		if data.UserSettings[actor.ID].AutoConvertDrafts {
-			if err := s.markReviewReady(r.Context(), data, review); err != nil {
-				writeError(w, 502, err.Error())
-				return
-			}
-		}
+	}
+	// Post the review to GitHub/GitLab as the member (their linked account,
+	// else the workspace integration).
+	postedAs, remoteRef, err := s.postReviewDecision(r.Context(), data, current, actor, input.Decision, input.Body)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
 	}
 	var updated domain.CodeReview
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "review.submitted", id, input, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "review.submitted", id, input, func(data *domain.Bootstrap) error {
 		index := reviewIndex(*data, id)
 		if index < 0 {
 			return errNotFound
@@ -219,7 +236,7 @@ func (s *server) submitReview(w http.ResponseWriter, r *http.Request) {
 			review.Status, eventType = "inReview", "changes_requested"
 		}
 		now := time.Now().UTC()
-		review.Events = append(review.Events, domain.ReviewEvent{ID: fmt.Sprintf("review_event_%d", now.UnixNano()), Type: eventType, Body: strings.TrimSpace(input.Body), Actor: actor, CreatedAt: now})
+		review.Events = append(review.Events, domain.ReviewEvent{ID: fmt.Sprintf("review_event_%d", now.UnixNano()), Type: eventType, Body: strings.TrimSpace(input.Body), Actor: actor, PostedAs: postedAs, Remote: remoteRef, CreatedAt: now})
 		review.UpdatedAt = now
 		data.Reviews[index], updated = review, review
 		return nil
@@ -260,7 +277,9 @@ func (s *server) commentOnReview(w http.ResponseWriter, r *http.Request) {
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}
-	remote, remoteErr := s.reviewRemoteFor(r.Context(), data, current, false)
+	// Saved in Flow first, then written back as the member (their linked
+	// account, else the workspace credentials); see reviewRemoteAs.
+	remote, remoteErr := s.reviewRemoteAs(r.Context(), data, current, actor, false)
 	var updated domain.CodeReview
 	var eventID string
 	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "review.commented", id, input, func(data *domain.Bootstrap) error {
@@ -289,9 +308,9 @@ func (s *server) commentOnReview(w http.ResponseWriter, r *http.Request) {
 		}
 		switch {
 		case remote != nil:
-			event.Sync = &domain.ReviewEventSync{State: "pending", Op: "create", AttemptedAt: now}
+			event.Sync = &domain.ReviewEventSync{State: "pending", Op: "create", AttemptedAt: now, ActorID: actor.ID}
 		case remoteErr != nil:
-			event.Sync = &domain.ReviewEventSync{State: "failed", Op: "create", Error: reviewSyncErrorMessage(review.Provider, remoteErr), AttemptedAt: now}
+			event.Sync = &domain.ReviewEventSync{State: "failed", Op: "create", Error: reviewSyncErrorMessage(review.Provider, remoteErr), AttemptedAt: now, ActorID: actor.ID}
 		}
 		eventID = event.ID
 		review.Events = append(review.Events, event)
@@ -335,14 +354,14 @@ func (s *server) resolveReviewThread(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "resolved is required")
 		return
 	}
-	id, commentID := r.PathValue("id"), r.PathValue("commentId")
+	id, commentID, actor := r.PathValue("id"), r.PathValue("commentId"), requestActor(s, r)
 	data := s.workspaceData(r)
 	current, err := reviewByID(data, id)
 	if err != nil {
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}
-	remote, remoteErr := s.reviewRemoteFor(r.Context(), data, current, false)
+	remote, remoteErr := s.reviewRemoteAs(r.Context(), data, current, actor, false)
 	op := "unresolve"
 	if *input.Resolved {
 		op = "resolve"
@@ -375,9 +394,9 @@ func (s *server) resolveReviewThread(w http.ResponseWriter, r *http.Request) {
 		if threadOnHost && (rootEvent.Sync == nil || rootEvent.Sync.Op != "create") {
 			switch {
 			case remote != nil:
-				rootEvent.Sync, push = &domain.ReviewEventSync{State: "pending", Op: op, AttemptedAt: now}, true
+				rootEvent.Sync, push = &domain.ReviewEventSync{State: "pending", Op: op, AttemptedAt: now, ActorID: actor.ID}, true
 			case remoteErr != nil:
-				rootEvent.Sync = &domain.ReviewEventSync{State: "failed", Op: op, Error: reviewSyncErrorMessage(review.Provider, remoteErr), AttemptedAt: now}
+				rootEvent.Sync = &domain.ReviewEventSync{State: "failed", Op: op, Error: reviewSyncErrorMessage(review.Provider, remoteErr), AttemptedAt: now, ActorID: actor.ID}
 			}
 		}
 		review.UpdatedAt = now

@@ -17,6 +17,7 @@ import { ReviewCommentBody, ReviewSyncState } from "./review-thread";
 import { reviewChecksSummary, reviewCodeThreads, reviewFileGroups, splitReviewPath } from "./pull-request-review-model";
 import { reviewStatus, reviewStatusLabels, reviewTimeAgo } from "./review-list-model";
 import { reviewProviderNoun } from "./review-provider-model";
+import { PostedAsCaption } from "./posted-as-caption";
 import { ReviewStateIcon, ReviewTitle } from "./review-state-icon";
 import "@/components/project-detail/project-action-menu.css";
 
@@ -423,6 +424,7 @@ function ReviewActivityCard({
               <ReviewSyncState review={review} event={comment} onReload={onReload} />
               <PullRequestCommentActions event={comment} reviewId={review.id} issueIds={review.issueIds} reviewUrl={review.url} />
             </header>
+            <PostedAsCaption postedAs={comment.postedAs} />
             {comment.body ? <ReviewCommentBody className="review-activity-body" body={comment.body} /> : null}
             {index === 0 && summary && (
               <a
@@ -511,6 +513,12 @@ function ReviewActivityItem({ data, review, event }: { data: BootstrapData; revi
             {age}
           </time>
         </span>
+        {event.postedAs && (
+          <>
+            {" · "}
+            <PostedAsCaption postedAs={event.postedAs} />
+          </>
+        )}
       </p>
     </li>
   );

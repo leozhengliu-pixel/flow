@@ -1798,6 +1798,8 @@ export interface ReviewEventSync {
   op: "create" | "resolve" | "unresolve";
   error?: string;
   attemptedAt: string;
+  /** The member whose change this is (a resolve can be someone other than the comment's author); retries post as them. */
+  actorId?: UUID;
 }
 export interface ReviewEvent {
   id: UUID;
@@ -1822,6 +1824,8 @@ export interface ReviewEvent {
   updatedAt?: string;
   remote?: ReviewEventRemote;
   sync?: ReviewEventSync;
+  /** Set on Flow-originated actions that were posted to the code host. */
+  postedAs?: { provider: "github" | "gitlab"; login: string; via: "member" | "workspace" };
 }
 /** A preview environment deployed from a pull request's head branch. */
 export interface DeployPreview {

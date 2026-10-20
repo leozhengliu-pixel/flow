@@ -132,6 +132,22 @@ type ChangeRequest struct {
 	// HeadRepository is the head's repository full name when it differs
 	// from Repo (a fork); "" means the same repository. (track L, additive)
 	HeadRepository string `json:"headRepository,omitempty"`
+
+	// OpenedByMember is true when CreateChangeRequest opened the PR/MR with
+	// the input's ActAs token (the member's own account).
+	OpenedByMember bool `json:"-"`
+}
+
+// ActingUser is a member's own short-lived host credential, used to open a
+// PR/MR as that member. It is only ever built for the member who asked for
+// the action, used for one request, and never persisted or logged.
+type ActingUser struct {
+	FlowUserID string
+	Login      string
+	Token      string
+	// Bearer sends "Authorization: Bearer"; otherwise GitLab's PRIVATE-TOKEN
+	// header (personal access tokens). GitHub user tokens are always Bearer.
+	Bearer bool
 }
 
 // CreateChangeRequestInput opens a draft PR/MR.
@@ -143,6 +159,10 @@ type CreateChangeRequestInput struct {
 	Body   string // markdown: summary, issue link, screenshots
 	Draft  bool
 	Labels []string
+	// ActAs, when set, opens the PR/MR as the member. When the host rejects
+	// the member's token the workspace credential opens it instead
+	// (ChangeRequest.OpenedByMember tells which).
+	ActAs *ActingUser
 }
 
 // CIStatus is the combined check/pipeline status of a ref.

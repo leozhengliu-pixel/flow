@@ -173,7 +173,29 @@ func (h *Host) CreateChangeRequest(ctx context.Context, workspaceKey string, inp
 		payload["labels"] = strings.Join(input.Labels, ",")
 	}
 	var created apiMergeRequest
-	if _, err := client.do(ctx, http.MethodPost, "/projects/"+projectPath(input.Repo)+"/merge_requests", payload, &created); err != nil {
+	path := "/projects/" + projectPath(input.Repo) + "/merge_requests"
+	byMember := false
+	if input.ActAs != nil && strings.TrimSpace(input.ActAs.Token) != "" {
+		// The member's own token (OAuth or personal access token) on the same
+		// admin-configured instance: the MR is theirs. A rejected token falls
+		// back to the workspace connection.
+		member, clientErr := h.clientWithToken(ctx, connection, input.ActAs.Token)
+		if clientErr != nil {
+			return codehost.ChangeRequest{}, clientErr
+		}
+		member.bearer = input.ActAs.Bearer
+		_, err = member.do(ctx, http.MethodPost, path, payload, &created)
+		switch status := statusOf(err); {
+		case err == nil:
+			byMember = true
+		case status == http.StatusConflict:
+		case status == http.StatusUnauthorized, status == http.StatusForbidden, status == http.StatusNotFound:
+			_, err = client.do(ctx, http.MethodPost, path, payload, &created)
+		}
+	} else {
+		_, err = client.do(ctx, http.MethodPost, path, payload, &created)
+	}
+	if err != nil {
 		if statusOf(err) == http.StatusConflict {
 			if existing, findErr := h.findOpen(ctx, connection, client, input.Repo, input.Head); findErr == nil && existing != nil {
 				return *existing, nil
@@ -181,7 +203,9 @@ func (h *Host) CreateChangeRequest(ctx context.Context, workspaceKey string, inp
 		}
 		return codehost.ChangeRequest{}, err
 	}
-	return created.changeRequest(connection, input.Repo), nil
+	change := created.changeRequest(connection, input.Repo)
+	change.OpenedByMember = byMember
+	return change, nil
 }
 
 // UpdateChangeRequestBody replaces the MR description.

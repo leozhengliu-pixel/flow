@@ -769,9 +769,9 @@ settings. Installation events from webhooks keep the rows current (suspend, dele
 memory per (installation, repo, permissions) until 5 min before expiry and never persisted. The runner gets them
 through `POST /credentials`. Expiry is 1h, so long sessions refresh transparently because git asks the helper again.
 
-**Personal access** (Linear's `personalAccessDenied` and `requiresGithubConnection`): when the policy requires it, the
-requesting user must have linked GitHub (App user-to-server OAuth with `FLOW_GITHUB_APP_CLIENT_ID`, stored in
-connector secrets), and `GET /repos/{o}/{r}/collaborators/{login}/permission` must return write or admin.
+**Personal access** (`personalAccessDenied` and `requiresGithubConnection`): when the policy requires it, the
+requesting user must have linked GitHub (App user-to-server OAuth with `FLOW_GITHUB_APP_CLIENT_ID`, a member account
+in `code_host_accounts`), and `GET /repos/{o}/{r}/collaborators/{login}/permission` must return write or admin.
 
 **PRs:** in `publishing`, Flow calls `BranchHead` to verify the runner's reported SHA, then
 `FindChangeRequest(head)` and, if there is none, `POST /repos/{o}/{r}/pulls {draft:true, head, base, title, body}`.
@@ -781,10 +781,30 @@ anchor (so the existing agent session UI shows it), and adds a response activity
 consumes the same webhooks (D routes App PR events into the current review applier), so App-created PRs appear under
 Reviews and in the issue's PR list without OAuth or PAT.
 
-**Commit identity:** the author is the requesting user (Flow name, and the primary email or the
-`<id>+<login>@users.noreply.github.com` address when linked). The committer is the App bot
-`<slug>[bot] <appid+slug[bot]@users.noreply.github.com>`, or the user when commits are signed with the user's key
-(GitHub verifies the signature against the committer). The trailer is `Co-authored-by: Flow <bot email>`.
+**Commit identity:** without a linked account the author is the requesting user (Flow name and primary email) and
+the committer is the App bot `<slug>[bot] <appid+slug[bot]@users.noreply.github.com>`, or the user when commits are
+signed with the user's key (GitHub verifies the signature against the committer). The trailer is
+`Co-authored-by: Flow <bot email>`.
+
+**Pushing as the member.** When the session's creator linked their GitHub account (Settings › Account › Connected
+accounts; App user-to-server OAuth with PKCE, 8-hour tokens refreshed by Flow, stored sealed in connector secrets,
+see `code_host_accounts.go`), the session acts as that member end to end:
+
+- the branch is `<username>/<identifier>-<title>-<suffix>` (the member's Flow username), and the bootstrap's
+  `repo.branchPrefix` is that prefix so the runner's push guard allows it;
+- author and committer are the member: their workspace display name and
+  `<id>+<login>@users.noreply.<host>`, unsigned unless signed commits are on (no bot trailer);
+- the git credential helper's `POST /credentials {purpose:"git"}` returns the member's user token for the session's
+  repository (`coding.MemberCodeHost.MemberGitCredential`), so pushes are the member's; `{purpose:"cli"}` (written
+  to `~/.flow/cli-env`) still gets the installation token;
+- Flow opens the draft PR with the member's token (`CreateChangeRequestInput.ActAs`); a token GitHub rejects falls
+  back to the App. `SessionPullRequest.openedAs` / `openedVia` record which;
+- the App bot only posts Flow's back-link comments.
+
+The member's token is looked up from the session's creator, which comes from the sandbox token, never from the
+request; a finished session gets `410 Gone`. Without a link (or with a non-expiring OAuth token, which stays server
+side) the session pushes with the installation token, `CodingSession.pushIdentity.via` is `workspace`, and the
+session suggests linking the account. Details: [security model](coding-sessions-security.md#member-credentials).
 
 **Webhooks to follow-ups:** `ParseWebhook` verifies `X-Hub-Signature-256` and normalizes the delivery
 (`codehost.WebhookEvent`). `github_app.go` stores deliveries idempotently (by `X-GitHub-Delivery`, reusing the
@@ -808,6 +828,15 @@ workspace's GitLab connections (`gitlab_integration.go` token connections, `inte
 
 Group and deploy tokens were rejected: deploy tokens cannot use the API (no `glab` and no CI status), and group
 tokens are broader than one project.
+
+**Members' GitLab accounts.** A member may link their own account on an instance the workspace connected (OAuth
+through an application the admin registered on that instance, or a personal access token with `read_user` and
+`api`). Sessions then push and open the MR as the member like on GitHub (§13): branch `<username>/…`, author and
+committer the member's display name with their GitLab commit email or `<id>-<username>@users.noreply.<host>`, and the
+MR opened with the member's token. Only the OAuth token (2 hours, refreshed by Flow) is served to the git credential
+helper, as `oauth2:<token>`; a personal access token never enters the sandbox, so those sessions push with the mode
+above while Flow still opens the MR as the member. The member's username also satisfies the personal access check
+(`GET /projects/:id/members/all/:user_id`, Developer or higher).
 
 **glab and gh in the sandbox:** the image installs both. Neither is ever configured at build time. The runner fetches
 the credential (`POST /credentials {purpose:"cli"}`) and exports the returned `CLIEnv` only into the harness

@@ -693,6 +693,11 @@ func adminOnlyRequest(r *http.Request) bool {
 	if (path == "/api/integrations/gitlab" && r.Method == http.MethodPut) || (strings.HasPrefix(path, "/api/integrations/gitlab/") && strings.Contains(path, "/token")) {
 		return true
 	}
+	// The OAuth application members link GitLab through is a workspace
+	// credential too (members may read its id and redirect URL).
+	if strings.HasPrefix(path, "/api/integrations/gitlab/") && strings.HasSuffix(path, "/oauth-application") && r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return true
+	}
 	if path == "/api/workspace/agent-guidance" {
 		return false
 	}

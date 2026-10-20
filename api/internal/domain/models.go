@@ -1962,6 +1962,9 @@ type ReviewEventSync struct {
 	Op          string    `json:"op"`
 	Error       string    `json:"error,omitempty"`
 	AttemptedAt time.Time `json:"attemptedAt"`
+	// ActorID is the member whose change this is (a resolve may come from
+	// someone other than the comment's author); retries post as them.
+	ActorID string `json:"actorId,omitempty"`
 }
 
 type ReviewEvent struct {
@@ -1987,6 +1990,18 @@ type ReviewEvent struct {
 	UpdatedAt *time.Time         `json:"updatedAt,omitempty"`
 	Remote    *ReviewEventRemote `json:"remote,omitempty"`
 	Sync      *ReviewEventSync   `json:"sync,omitempty"`
+	// PostedAs is the code host identity a Flow-originated comment, review
+	// or merge was posted to GitHub/GitLab with (set once the code host
+	// accepted it).
+	PostedAs *ReviewPostedAs `json:"postedAs,omitempty"`
+}
+
+// ReviewPostedAs: Via is "member" (the actor's linked account) or
+// "workspace" (the workspace integration's credential).
+type ReviewPostedAs struct {
+	Provider string `json:"provider"`
+	Login    string `json:"login"`
+	Via      string `json:"via"`
 }
 
 type CodeReview struct {

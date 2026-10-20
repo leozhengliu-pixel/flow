@@ -534,9 +534,19 @@ func (s *Service) Credentials(ctx context.Context, token string, request Credent
 	if grant.Kind == sandbox.KindSnapshot {
 		access = codehost.AccessRead // a snapshot build only clones
 	}
-	credential, err := host.MintCredential(ctx, codehost.CredentialRequest{WorkspaceKey: session.WorkspaceKey, SessionID: session.ID, SandboxID: grant.SandboxID, Repo: codehost.RepoRef{CodeHost: session.CodeHost, HostName: session.HostName, FullName: session.Repository}, Access: access})
+	// The creator's own short-lived token for git when they linked an
+	// account; another member's token is never looked up (the session, and
+	// so the creator, comes from the sandbox token). A done session never
+	// gets here (sessionFor returns ErrGone), so serving stops at session end.
+	credential, member, err := s.memberGitCredential(ctx, session, request.Purpose, access)
 	if err != nil {
 		return CredentialResponse{}, err
+	}
+	if !member {
+		credential, err = host.MintCredential(ctx, codehost.CredentialRequest{WorkspaceKey: session.WorkspaceKey, SessionID: session.ID, SandboxID: grant.SandboxID, Repo: codehost.RepoRef{CodeHost: session.CodeHost, HostName: session.HostName, FullName: session.Repository}, Access: access})
+		if err != nil {
+			return CredentialResponse{}, err
+		}
 	}
 	response := CredentialResponse{Username: credential.Username, Password: credential.Password, ExpiresAt: credential.ExpiresAt}
 	if request.Purpose == "cli" {

@@ -496,6 +496,7 @@ it("comments on removed lines, shows left-side threads and retries changes that 
         actor: teammate,
         createdAt: "2026-09-01T00:03:00.000Z",
         remote: { provider: "github", kind: "review_comment", id: "11" },
+        postedAs: { provider: "github", login: "teammate-gh", via: "member" },
       },
       {
         id: "failed-reply",
@@ -537,6 +538,8 @@ it("comments on removed lines, shows left-side threads and retries changes that 
   // The left-side thread renders under the removed line, with the failed reply.
   await waitFor(() => expect(screen.getByText("Why was this removed?")).toBeVisible());
   expect(screen.getByText("Not synced to GitHub")).toBeVisible();
+  // A written-back comment says which code host identity it was posted as.
+  expect(screen.getByText("@teammate-gh")).toBeVisible();
   expect(screen.getByText("This diff is too large to display")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Retry" }));
   await waitFor(() => expect(api.syncReview).toHaveBeenCalledWith(reviewWithThreads.id, true));

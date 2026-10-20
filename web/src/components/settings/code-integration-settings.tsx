@@ -35,6 +35,7 @@ import {
   isGithubEnterpriseCloudConnection,
   type GitHubSettingsMetadataItem,
 } from "@/lib/github-settings-metadata";
+import { PersonalCodeHostRow } from "./code-host-accounts";
 import { GitHubAppCard } from "./github-app-card";
 import { GitLabIntegrationSettings } from "./gitlab-integration-settings";
 import { SettingsSelect } from "./settings-primitives";
@@ -46,9 +47,15 @@ export function CodeIntegrationSettings(props: {
   data: BootstrapData;
   onBack: () => void;
   onReload: () => Promise<void>;
+  onOpenConnectedAccounts?: () => void;
 }) {
   return props.provider === "gitlab" ? (
-    <GitLabIntegrationSettings data={props.data} onBack={props.onBack} onReload={props.onReload} />
+    <GitLabIntegrationSettings
+      data={props.data}
+      onBack={props.onBack}
+      onReload={props.onReload}
+      onOpenConnectedAccounts={props.onOpenConnectedAccounts}
+    />
   ) : (
     <ProviderIntegrationSettings {...props} />
   );
@@ -59,11 +66,13 @@ function ProviderIntegrationSettings({
   data,
   onBack,
   onReload,
+  onOpenConnectedAccounts,
 }: {
   provider: "github" | "gitlab";
   data: BootstrapData;
   onBack: () => void;
   onReload: () => Promise<void>;
+  onOpenConnectedAccounts?: () => void;
 }) {
   const { t, formatDate } = useI18n();
   const connections = data.integrationConnections.filter(
@@ -414,6 +423,11 @@ function ProviderIntegrationSettings({
 
       {/* coding sessions (track D): GitHub App install card */}
       {provider === "github" && <GitHubAppCard isAdmin={isWorkspaceAdmin(data)} />}
+      {provider === "github" && (
+        <section className="code-integration-section" aria-label={t("Your personal GitHub account")}>
+          <PersonalCodeHostRow codeHost="github" onManage={onOpenConnectedAccounts} />
+        </section>
+      )}
       {provider === "github" && connections[0] && (
         <section className="code-integration-section" aria-labelledby="github-code-access-heading">
           <div className="code-section-title">

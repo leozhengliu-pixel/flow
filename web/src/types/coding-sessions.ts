@@ -140,6 +140,9 @@ export interface SessionPullRequest {
   baseBranch: string;
   headSha?: string;
   reviewId?: string;
+  /** Host login the PR/MR was opened as. */
+  openedAs?: string;
+  openedVia?: "member" | "workspace";
   createdAt: string;
   updatedAt: string;
 }
@@ -190,6 +193,8 @@ export interface CodingSession {
   repository?: string;
   branchName?: string;
   baseRef?: string;
+  /** Whose code host identity the session pushes and opens its PR/MR with. */
+  pushIdentity?: { via: "member" | "workspace"; codeHost?: CodeHostKind; hostName?: string; login?: string };
   pullRequests?: SessionPullRequest[];
   latestPullRequest?: SessionPullRequest;
   commitsByTurnActivityId?: Record<string, CodingCommit[]>;

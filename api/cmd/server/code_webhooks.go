@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"slices"
 	"strconv"
@@ -131,10 +132,17 @@ func (s *server) applyCodeReviewEvent(ctx context.Context, workspace, provider, 
 	if provider == "github" {
 		appUsers = s.githubAppUsers(ctx, workspace)
 	}
+	authorLogin, senderLogin := event.PullRequest.User.Login, event.Sender.Login
+	if provider == "gitlab" {
+		authorLogin, senderLogin = firstNonEmpty(event.PullRequest.User.Login, event.User.Username, event.User.Login), firstNonEmpty(event.User.Username, event.User.Login)
+	}
+	// Members who linked their GitHub / GitLab account are attributed
+	// exactly (author, sender, reviewers), before any name heuristics.
+	linked := s.codeReviewLinkedMembers(ctx, workspace, provider, event, authorLogin, senderLogin)
 	err := s.store.MutateWorkspace(codeReviewScope(ctx, provider, eventID, event), workspace, "code_review.webhook", eventID, map[string]any{"provider": provider, "action": event.Action}, func(data *domain.Bootstrap) error {
 		mergedNow, mergedWorkspace = false, data.Workspace.URLKey
-		author := githubActor(appUsers, event.PullRequest.User.Login, data.Viewer)
-		sender := githubActor(appUsers, event.Sender.Login, data.Viewer)
+		author := linkedActor(linked, appUsers, authorLogin, data.Viewer)
+		sender := linkedActor(linked, appUsers, senderLogin, data.Viewer)
 		if existing := slices.IndexFunc(data.Reviews, func(item domain.CodeReview) bool {
 			return slices.ContainsFunc(item.Events, func(reviewEvent domain.ReviewEvent) bool { return reviewEvent.ID == eventID })
 		}); existing >= 0 {
@@ -149,13 +157,13 @@ func (s *server) applyCodeReviewEvent(ctx context.Context, workspace, provider, 
 		now := time.Now().UTC()
 		if index < 0 {
 			review := event.toReview(provider, author, now)
-			review.ReviewerIDs = reviewerIDs(data, event)
+			review.ReviewerIDs = linkedReviewerIDs(data, event, linked)
 			data.Reviews = append([]domain.CodeReview{review}, data.Reviews...)
 			index = 0
 		} else {
 			review := data.Reviews[index]
 			event.applyToReview(&review, now)
-			review.ReviewerIDs = reviewerIDs(data, event)
+			review.ReviewerIDs = linkedReviewerIDs(data, event, linked)
 			data.Reviews[index] = review
 		}
 		if index >= 0 {
@@ -709,4 +717,45 @@ func uniqueStrings(values []string) []string {
 		}
 	}
 	return result
+}
+
+// codeReviewLinkedMembers maps the event's logins (author, sender,
+// reviewers) of members who linked an account on the event's host.
+func (s *server) codeReviewLinkedMembers(ctx context.Context, workspace, provider string, event externalCodeReviewEvent, logins ...string) map[string]domain.User {
+	if s.store == nil {
+		return nil
+	}
+	data, ok := s.store.WorkspaceMetadataFields(workspace, "users", "members")
+	if !ok {
+		return nil
+	}
+	hostName := ""
+	for _, candidate := range []string{event.PullRequest.HTMLURL, event.ObjectAttributes.URL, event.Project.WebURL, event.ExternalURL} {
+		if parsed, err := url.Parse(strings.TrimSpace(candidate)); err == nil && parsed.Host != "" {
+			hostName = strings.ToLower(parsed.Host)
+			break
+		}
+	}
+	return s.codeHostMemberLogins(ctx, &data, provider, hostName, append(logins, reviewerLogins(event)...)...)
+}
+
+// linkedActor attributes a host login: a member's linked account first, then
+// an application's GitHub username, else fallback.
+func linkedActor(linked, appUsers map[string]domain.User, login string, fallback domain.User) domain.User {
+	if user, ok := linked[strings.ToLower(strings.TrimSpace(login))]; ok && login != "" {
+		return user
+	}
+	return githubActor(appUsers, login, fallback)
+}
+
+// linkedReviewerIDs are the requested reviewers: linked members exactly,
+// then the name heuristics of reviewerIDs.
+func linkedReviewerIDs(data *domain.Bootstrap, event externalCodeReviewEvent, linked map[string]domain.User) []string {
+	result := []string{}
+	for _, login := range reviewerLogins(event) {
+		if user, ok := linked[strings.ToLower(login)]; ok {
+			result = append(result, user.ID)
+		}
+	}
+	return uniqueStrings(append(result, reviewerIDs(data, event)...))
 }

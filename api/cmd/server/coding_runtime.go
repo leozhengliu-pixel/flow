@@ -116,6 +116,9 @@ func (s *server) initCodingCore(services *codingServices) {
 		}
 		return coding.MergeArtifactSection(body, section)
 	}
+	// Members' linked GitHub / GitLab accounts: push, commit and open the
+	// PR/MR as the session's creator (code_host_accounts_coding.go).
+	services.service.Members = codingMemberHosts{s: s}
 	// Track J: GitLab guidance (glab usage; MR notes only when the sandbox
 	// token can write them). Session credentials are revoked through
 	// coding.SessionCredentialRevoker, which *gitlab.Host implements, and host

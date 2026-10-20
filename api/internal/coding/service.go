@@ -112,6 +112,10 @@ type Service struct {
 	// session reconciler is the only owner of that transition; the hook runs
 	// after the version-checked commit, so a lost race never notifies twice.
 	ApprovalExpired func(ctx context.Context, session domain.CodingSession)
+	// Members resolves the session creator's linked GitHub / GitLab account:
+	// with one the session pushes, commits and opens its PR/MR as the member;
+	// without one (or nil) it uses the workspace credential.
+	Members MemberCodeHost
 }
 
 // codedError extracts an explicit session error code from an error.
@@ -273,15 +277,27 @@ func (s *Service) Start(ctx context.Context, in StartInput) (domain.CodingSessio
 	if title == "" {
 		title = firstLine(in.Prompt, 80)
 	}
+	member, linked := s.creatorAccount(ctx, in.WorkspaceKey, in.CreatorID, in.EnvironmentID)
 	branch := strings.TrimSpace(in.BranchName)
 	if branch == "" {
-		branch = BranchName(s.cfg.BranchPrefix, issue.Identifier, title, id)
+		prefix := s.cfg.BranchPrefix
+		if linked && member.Username != "" {
+			// Pushed as the member: their branch, under their own prefix.
+			prefix = member.Username + "/"
+		}
+		branch = BranchName(prefix, issue.Identifier, title, id)
 	}
 	session := domain.CodingSession{
 		ID: id, WorkspaceKey: in.WorkspaceKey, AgentSessionID: anchorID, IssueID: in.IssueID, EnvironmentID: in.EnvironmentID, CreatorID: in.CreatorID,
 		Source: in.Source, SourceID: in.SourceID, Harness: harness, ModelSelection: selection, ReasoningEffort: NormalizeEffort(effort),
 		DisplayTitle: title, BranchName: branch, BaseRef: strings.TrimSpace(in.BaseRef), ExistingBranch: in.ExistingBranch, LoopID: in.LoopID,
 		CreatedAt: now, UpdatedAt: now, Version: 1, NextReconcileAt: now,
+	}
+	if s.Members != nil {
+		session.PushIdentity = &domain.CodingPushIdentity{Via: domain.CodeHostAccountActorBot}
+		if linked {
+			session.PushIdentity = &domain.CodingPushIdentity{Via: domain.CodeHostAccountActorMember, CodeHost: member.CodeHost, HostName: member.HostName, Login: member.Login}
+		}
 	}
 	if session.EnvironmentID == "" && len(in.EnvironmentCandidates) > 0 {
 		session.EnvironmentCandidates = slices.Clone(in.EnvironmentCandidates)

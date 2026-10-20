@@ -205,10 +205,23 @@ func (s *server) dispatchCodingWebhook(ctx context.Context, workspace string, ev
 // user's name, display name or email local part, or the email matches.
 type codingCommenterResolver struct{ s *server }
 
-func (r codingCommenterResolver) ResolveCommenter(_ context.Context, workspace, _, _, login, email string) (coding.Commenter, error) {
+func (r codingCommenterResolver) ResolveCommenter(ctx context.Context, workspace, codeHost, hostName, login, email string) (coding.Commenter, error) {
 	data, ok := r.s.store.WorkspaceMetadataFields(workspace, "members", "users")
 	if !ok {
 		return coding.Commenter{}, nil
+	}
+	// A member who linked this host account is matched exactly first.
+	if login != "" && codeHost != "" {
+		if user, linked := r.s.codeHostMemberLogins(ctx, &data, codeHost, hostName, login)[strings.ToLower(strings.TrimSpace(login))]; linked {
+			for _, member := range data.Members {
+				if member.User.ID == user.ID {
+					return coding.Commenter{UserID: user.ID, Member: codingMemberRole(member.Role)}, nil
+				}
+			}
+			if len(data.Members) == 0 && r.s.authDisabled {
+				return coding.Commenter{UserID: user.ID, Member: true}, nil
+			}
+		}
 	}
 	login = strings.ToLower(strings.TrimSpace(login))
 	email = strings.ToLower(strings.TrimSpace(email))

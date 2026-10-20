@@ -374,23 +374,21 @@ func (s *server) syncReview(ctx context.Context, workspace, reviewID string, for
 	if !force && review.SyncedAt != nil && time.Since(*review.SyncedAt) < reviewSyncFreshness {
 		return review, nil
 	}
+	// Reads use the workspace credentials; each pending change is retried as
+	// its member (their linked account first), with the same rules as when
+	// it was made, so a member's change can be retried even when the
+	// workspace itself cannot reach the code host.
 	remote, err := s.reviewRemoteFor(ctx, data, review, true)
-	if remote == nil && err == nil {
+	pending := slices.ContainsFunc(review.Events, func(event domain.ReviewEvent) bool { return event.Sync != nil })
+	if remote == nil && err == nil && !pending {
 		return review, errReviewNotSynced
 	}
 	var snapshot reviewSnapshot
-	pushed := map[string]reviewPushResult{}
-	if err == nil {
-		if writer, writeErr := s.reviewRemoteFor(ctx, data, review, false); writer != nil && writeErr == nil {
-			pushed = pushPendingReviewChanges(ctx, writer, review)
-		} else if writeErr != nil {
-			for _, event := range review.Events {
-				if event.Sync != nil {
-					pushed[event.ID] = reviewPushResult{op: event.Sync.Op, err: writeErr}
-				}
-			}
-		}
+	pushed := pushPendingReviewChanges(ctx, s.memberReviewWriter(ctx, data, review), review)
+	fetched := false
+	if remote != nil && err == nil {
 		snapshot, err = fetchReviewSnapshot(ctx, remote, review)
+		fetched = err == nil
 	}
 	appUsers := map[string]domain.User{}
 	if review.Provider == domain.CodeHostGitHub {
@@ -406,13 +404,16 @@ func (s *server) syncReview(ctx context.Context, workspace, reviewID string, for
 		}
 		current := data.Reviews[index]
 		applyReviewPushResults(&current, review.Provider, pushed, now)
-		if err != nil {
+		switch {
+		case err != nil:
 			current.SyncError = reviewSyncErrorMessage(review.Provider, err)
-		} else {
+		case fetched:
 			mergeReviewSnapshot(&current, snapshot, reviewActorResolver(data, review.Provider, appUsers), now)
 			current.SyncError = ""
 		}
-		current.SyncedAt = &now
+		if fetched || err != nil {
+			current.SyncedAt = &now
+		}
 		data.Reviews[index], updated = current, current
 		return nil
 	})

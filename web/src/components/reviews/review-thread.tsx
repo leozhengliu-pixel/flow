@@ -13,6 +13,7 @@ import { PullRequestCommentActions } from "./pull-request-comment-actions";
 import { reviewTimeAgo } from "./review-list-model";
 import { splitSuggestionBody, type ReviewThreadModel } from "./pull-request-review-model";
 import { ReviewCode } from "./review-code";
+import { PostedAsCaption } from "./posted-as-caption";
 
 type SuggestionTarget = { path: string; line: number; content?: string };
 
@@ -152,6 +153,7 @@ function ReviewThreadComment({
           <PullRequestCommentActions event={comment} reviewId={review.id} issueIds={review.issueIds} reviewUrl={review.url} />
         </span>
       </header>
+      <PostedAsCaption postedAs={comment.postedAs} />
       <ReviewCommentBody body={comment.body ?? ""} target={target} />
     </div>
   );

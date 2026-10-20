@@ -75,9 +75,10 @@ func reviewRemoteDenied(err error) bool {
 // reviewSyncErrorMessage is the error shown next to a change that did not
 // reach the code host.
 func reviewSyncErrorMessage(provider string, err error) string {
-	name := "GitHub"
-	if provider == "gitlab" {
-		name = "GitLab"
+	name := reviewHostLabel(provider)
+	var memberErr *reviewMemberAccessError
+	if errors.As(err, &memberErr) {
+		return memberErr.Error() + ". Your change is kept in Flow; retry once your account has access."
 	}
 	switch reviewRemoteStatus(err) {
 	case http.StatusUnauthorized, http.StatusForbidden:
@@ -90,13 +91,65 @@ func reviewSyncErrorMessage(provider string, err error) string {
 	return fmt.Sprintf("Could not reach %s: %v", name, err)
 }
 
-// classicReviewRemote is a classic connection (OAuth / access token).
+func reviewHostLabel(provider string) string {
+	if provider == domain.CodeHostGitLab {
+		return "GitLab"
+	}
+	return "GitHub"
+}
+
+// reviewMemberAccessError: the acting member's own account was refused
+// (403) or cannot see the pull request or comment (404). Flow does not
+// retry with the workspace credential, which would let the member do what
+// they cannot do on the code host.
+type reviewMemberAccessError struct {
+	provider, login string
+	err             error
+}
+
+func (e *reviewMemberAccessError) Error() string {
+	account := "Your " + reviewHostLabel(e.provider) + " account"
+	if e.login != "" {
+		account += " (@" + e.login + ")"
+	}
+	if reviewRemoteStatus(e.err) == http.StatusNotFound {
+		return fmt.Sprintf("%s can't see this pull request or comment (%v)", account, e.err)
+	}
+	return fmt.Sprintf("%s can't make this change on the pull request (%v)", account, e.err)
+}
+
+func (e *reviewMemberAccessError) Unwrap() error { return e.err }
+
+// reviewRemotePostedAs is the identity a remote's last successful call used
+// (nil when it cannot tell).
+func reviewRemotePostedAs(remote reviewRemote) *domain.ReviewPostedAs {
+	if identified, ok := remote.(interface{ PostedAs() *domain.ReviewPostedAs }); ok {
+		return identified.PostedAs()
+	}
+	return nil
+}
+
+// classicReviewRemote is a token credential: the workspace's classic
+// connection (OAuth / access token) or the acting member's linked account.
 type classicReviewRemote struct {
 	provider *reviewProvider
 	repoPath string
 }
 
+func newClassicReviewRemote(provider *reviewProvider, review domain.CodeReview) *classicReviewRemote {
+	repoPath := "/repos/" + url.PathEscape(review.RepositoryOwner) + "/" + url.PathEscape(review.RepositoryName)
+	if provider.provider == domain.CodeHostGitLab {
+		repoPath = "/projects/" + url.PathEscape(review.RepositoryOwner+"/"+review.RepositoryName)
+	}
+	return &classicReviewRemote{provider: provider, repoPath: repoPath}
+}
+
 func (c *classicReviewRemote) Provider() string { return c.provider.provider }
+
+func (c *classicReviewRemote) PostedAs() *domain.ReviewPostedAs {
+	postedAs := c.provider.postedAs
+	return &postedAs
+}
 
 func (c *classicReviewRemote) REST(ctx context.Context, method, path string, body, out any) error {
 	return c.provider.call(ctx, method, c.provider.base+c.repoPath+path, body, out)
@@ -113,7 +166,7 @@ func (c *classicReviewRemote) GraphQL(ctx context.Context, query string, variabl
 // answer into out. GraphQL envelopes (/graphql endpoints) are unwrapped:
 // out receives data, and errors become a reviewRemoteError.
 func (provider *reviewProvider) call(ctx context.Context, method, endpoint string, payload, out any) error {
-	if !integrationEndpointSafe(ctx, endpoint, provider.allowLocal) {
+	if provider.client == nil && !integrationEndpointSafe(ctx, endpoint, provider.allowLocal) {
 		return fmt.Errorf("repository API endpoint is not allowed")
 	}
 	var body io.Reader
@@ -132,13 +185,20 @@ func (provider *reviewProvider) call(ctx context.Context, method, endpoint strin
 	req.Header.Set("User-Agent", "flow-review-sync")
 	if provider.provider == "gitlab" {
 		req.Header.Set("Accept", "application/json")
-		req.Header.Set("PRIVATE-TOKEN", provider.token)
+		if provider.bearer {
+			req.Header.Set("Authorization", "Bearer "+provider.token)
+		} else {
+			req.Header.Set("PRIVATE-TOKEN", provider.token)
+		}
 	} else {
 		req.Header.Set("Accept", "application/vnd.github+json")
 		req.Header.Set("Authorization", "Bearer "+provider.token)
 		req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	}
-	client := http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	client := provider.client
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	}
 	response, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("repository API request failed: %w", err)
@@ -204,6 +264,14 @@ type appReviewRemote struct {
 
 func (a *appReviewRemote) Provider() string { return domain.CodeHostGitHub }
 
+func (a *appReviewRemote) PostedAs() *domain.ReviewPostedAs {
+	login := "GitHub App"
+	if slug := a.host.Slug(); slug != "" {
+		login = slug + "[bot]"
+	}
+	return &domain.ReviewPostedAs{Provider: domain.CodeHostGitHub, Login: login, Via: domain.CodeHostAccountActorBot}
+}
+
 func (a *appReviewRemote) REST(ctx context.Context, method, path string, body, out any) error {
 	return a.host.RepoAPI(ctx, a.workspace, a.repo, method, path, body, out)
 }
@@ -212,8 +280,8 @@ func (a *appReviewRemote) GraphQL(ctx context.Context, query string, variables m
 	return a.host.GraphQL(ctx, a.workspace, a.repo, query, variables, out)
 }
 
-// fallbackRemote tries each credential in order until one is allowed, then
-// keeps using it.
+// fallbackRemote tries each workspace credential in order until one is
+// allowed, then keeps using it.
 type fallbackRemote struct {
 	mu      sync.Mutex
 	remotes []reviewRemote
@@ -221,6 +289,12 @@ type fallbackRemote struct {
 }
 
 func (f *fallbackRemote) Provider() string { return f.remotes[0].Provider() }
+
+func (f *fallbackRemote) PostedAs() *domain.ReviewPostedAs {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return reviewRemotePostedAs(f.remotes[f.chosen])
+}
 
 func (f *fallbackRemote) try(call func(reviewRemote) error) error {
 	f.mu.Lock()
@@ -249,10 +323,114 @@ func (f *fallbackRemote) GraphQL(ctx context.Context, query string, variables ma
 	return f.try(func(remote reviewRemote) error { return remote.GraphQL(ctx, query, variables, out) })
 }
 
-// reviewRemoteFor returns how to reach a review's pull/merge request, or nil
-// when the review has no code host counterpart Flow can reach (local
-// reviews, no connection). An error means a connection exists but cannot be
-// used (missing credentials), which callers surface.
+// memberReviewRemote acts as a member: their linked account first, then the
+// workspace credentials only when the host rejects the member's token as
+// invalid (401, which also marks the account "Reconnect"). A member refused
+// (403) or not shown the object (404) gets a *reviewMemberAccessError and
+// nothing is retried with the workspace credential.
+type memberReviewRemote struct {
+	s       *server
+	member  reviewRemote
+	account domain.CodeHostAccount
+	// workspace is nil when the workspace has no usable credential
+	// (workspaceErr says why, if a connection exists).
+	workspace    reviewRemote
+	workspaceErr error
+	mu           sync.Mutex
+	revoked      bool
+	used         reviewRemote
+}
+
+func (m *memberReviewRemote) Provider() string { return m.member.Provider() }
+
+func (m *memberReviewRemote) PostedAs() *domain.ReviewPostedAs {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.used == nil {
+		return nil
+	}
+	return reviewRemotePostedAs(m.used)
+}
+
+func (m *memberReviewRemote) try(ctx context.Context, call func(reviewRemote) error) error {
+	m.mu.Lock()
+	revoked := m.revoked
+	m.mu.Unlock()
+	if !revoked {
+		err := call(m.member)
+		switch status := reviewRemoteStatus(err); {
+		case err == nil:
+			m.mu.Lock()
+			m.used = m.member
+			m.mu.Unlock()
+			return nil
+		case status == http.StatusUnauthorized:
+			m.mu.Lock()
+			first := !m.revoked
+			m.revoked = true
+			m.mu.Unlock()
+			if first {
+				m.s.markCodeHostAccountReconnect(ctx, m.account, "The code host rejected the token. Reconnect the account.")
+			}
+			if m.workspace == nil {
+				if m.workspaceErr != nil {
+					return m.workspaceErr
+				}
+				return fmt.Errorf("%s rejected your account's token; reconnect it in Settings: %w", reviewHostLabel(m.Provider()), err)
+			}
+		case status == http.StatusForbidden || status == http.StatusNotFound:
+			return &reviewMemberAccessError{provider: m.Provider(), login: m.account.Login, err: err}
+		default:
+			return err
+		}
+	}
+	if m.workspace == nil {
+		if m.workspaceErr != nil {
+			return m.workspaceErr
+		}
+		return fmt.Errorf("connect %s before changing this review", m.Provider())
+	}
+	if err := call(m.workspace); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	m.used = m.workspace
+	m.mu.Unlock()
+	return nil
+}
+
+func (m *memberReviewRemote) REST(ctx context.Context, method, path string, body, out any) error {
+	return m.try(ctx, func(remote reviewRemote) error { return remote.REST(ctx, method, path, body, out) })
+}
+
+func (m *memberReviewRemote) GraphQL(ctx context.Context, query string, variables map[string]any, out any) error {
+	return m.try(ctx, func(remote reviewRemote) error { return remote.GraphQL(ctx, query, variables, out) })
+}
+
+// reviewRemoteAs is the one credential path for everything Flow writes to a
+// review's code host on a member's behalf (comments, replies, inline
+// comments, resolution, approvals, merge, close, reopen): the actor's
+// linked account first (memberReviewRemote), else the workspace order of
+// reviewRemoteFor. Without a linked account (webhooks, system actions,
+// apps) it is reviewRemoteFor.
+func (s *server) reviewRemoteAs(ctx context.Context, data domain.Bootstrap, review domain.CodeReview, actor domain.User, readOnly bool) (reviewRemote, error) {
+	workspace, workspaceErr := s.reviewRemoteFor(ctx, data, review, readOnly)
+	if (review.Provider != domain.CodeHostGitHub && review.Provider != domain.CodeHostGitLab) || review.Number <= 0 || review.RepositoryOwner == "" || review.RepositoryName == "" {
+		return workspace, workspaceErr
+	}
+	member := s.memberReviewProvider(ctx, data, review, actor)
+	if member == nil {
+		return workspace, workspaceErr
+	}
+	return &memberReviewRemote{s: s, member: newClassicReviewRemote(member, review), account: *member.account, workspace: workspace, workspaceErr: workspaceErr}, nil
+}
+
+// reviewRemoteFor returns how to reach a review's pull/merge request with
+// the workspace's credentials (the GitHub App installation, then the
+// classic connection), or nil when the review has no code host counterpart
+// Flow can reach (local reviews, no connection). An error means a
+// connection exists but cannot be used (missing credentials), which callers
+// surface.
 func (s *server) reviewRemoteFor(ctx context.Context, data domain.Bootstrap, review domain.CodeReview, readOnly bool) (reviewRemote, error) {
 	if (review.Provider != domain.CodeHostGitHub && review.Provider != domain.CodeHostGitLab) || review.Number <= 0 || review.RepositoryOwner == "" || review.RepositoryName == "" {
 		return nil, nil
@@ -279,11 +457,7 @@ func (s *server) reviewRemoteFor(ctx context.Context, data domain.Bootstrap, rev
 			return nil, err
 		}
 		if err == nil && provider != nil {
-			repoPath := "/repos/" + url.PathEscape(review.RepositoryOwner) + "/" + url.PathEscape(review.RepositoryName)
-			if provider.provider == domain.CodeHostGitLab {
-				repoPath = "/projects/" + url.PathEscape(review.RepositoryOwner+"/"+review.RepositoryName)
-			}
-			remotes = append(remotes, &classicReviewRemote{provider: provider, repoPath: repoPath})
+			remotes = append(remotes, newClassicReviewRemote(provider, review))
 		}
 	}
 	switch len(remotes) {

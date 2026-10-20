@@ -30,7 +30,49 @@ type reviewPushResult struct {
 	op       string
 	remote   *domain.ReviewEventRemote
 	threadID string
+	// postedAs is the identity a created comment reached the code host as.
+	postedAs *domain.ReviewPostedAs
 	err      error
+}
+
+// reviewWriter returns the credential path a pending change is sent with:
+// its member's (reviewRemoteAs). nil, nil leaves the change pending.
+type reviewWriter func(domain.ReviewEvent) (reviewRemote, error)
+
+// sameReviewWriter sends every change with one remote.
+func sameReviewWriter(remote reviewRemote) reviewWriter {
+	return func(domain.ReviewEvent) (reviewRemote, error) { return remote, nil }
+}
+
+// reviewChangeActor is the member a pending change belongs to: whoever
+// resolved the thread for resolution changes, else the comment's author.
+func reviewChangeActor(data *domain.Bootstrap, event domain.ReviewEvent) domain.User {
+	if event.Sync != nil && event.Sync.ActorID != "" && event.Sync.ActorID != event.Actor.ID {
+		if user := userByID(data, event.Sync.ActorID); user != nil {
+			return *user
+		}
+		return domain.User{ID: event.Sync.ActorID}
+	}
+	return event.Actor
+}
+
+// memberReviewWriter sends each change as its member, one credential path
+// per member for the whole push.
+func (s *server) memberReviewWriter(ctx context.Context, data domain.Bootstrap, review domain.CodeReview) reviewWriter {
+	type writer struct {
+		remote reviewRemote
+		err    error
+	}
+	byActor := map[string]writer{}
+	return func(event domain.ReviewEvent) (reviewRemote, error) {
+		actor := reviewChangeActor(&data, event)
+		if cached, ok := byActor[actor.ID]; ok {
+			return cached.remote, cached.err
+		}
+		remote, err := s.reviewRemoteAs(ctx, data, review, actor, false)
+		byActor[actor.ID] = writer{remote: remote, err: err}
+		return remote, err
+	}
 }
 
 func reviewEventByID(review domain.CodeReview, id string) (domain.ReviewEvent, bool) {
@@ -231,7 +273,7 @@ func pushReviewThreadResolution(ctx context.Context, remote reviewRemote, review
 
 // pushPendingReviewChanges sends every local change still waiting for the
 // code host, oldest first (so thread roots exist before their replies).
-func pushPendingReviewChanges(ctx context.Context, remote reviewRemote, review domain.CodeReview) map[string]reviewPushResult {
+func pushPendingReviewChanges(ctx context.Context, writer reviewWriter, review domain.CodeReview) map[string]reviewPushResult {
 	results := map[string]reviewPushResult{}
 	working := review
 	working.Events = slices.Clone(review.Events)
@@ -244,17 +286,27 @@ func pushPendingReviewChanges(ctx context.Context, remote reviewRemote, review d
 	slices.SortStableFunc(order, func(a, b int) int { return working.Events[a].CreatedAt.Compare(working.Events[b].CreatedAt) })
 	for _, index := range order {
 		event := working.Events[index]
+		if event.Sync.Op == "create" && event.Remote != nil {
+			results[event.ID] = reviewPushResult{op: "create", remote: event.Remote}
+			continue
+		}
+		remote, err := writer(event)
+		if err != nil {
+			results[event.ID] = reviewPushResult{op: event.Sync.Op, err: err}
+			continue
+		}
+		if remote == nil {
+			continue
+		}
 		switch event.Sync.Op {
 		case "create":
-			if event.Remote != nil {
-				results[event.ID] = reviewPushResult{op: "create", remote: event.Remote}
-				continue
-			}
 			ref, err := pushReviewComment(ctx, remote, working, event)
-			results[event.ID] = reviewPushResult{op: "create", remote: ref, err: err}
+			result := reviewPushResult{op: "create", remote: ref, err: err}
 			if err == nil {
 				working.Events[index].Remote = ref
+				result.postedAs = reviewRemotePostedAs(remote)
 			}
+			results[event.ID] = result
 		case "resolve", "unresolve":
 			threadID, err := pushReviewThreadResolution(ctx, remote, working, event, event.Sync.Op == "resolve")
 			results[event.ID] = reviewPushResult{op: event.Sync.Op, threadID: threadID, err: err}
@@ -279,7 +331,14 @@ func applyReviewPushResults(review *domain.CodeReview, provider string, results 
 			continue
 		}
 		if event.Sync == nil || event.Sync.Op != result.op {
-			// Confirmed by a webhook meanwhile, or changed again since the push started.
+			// Confirmed by a webhook meanwhile, or changed again since the push
+			// started; a comment adopted by a webhook still learns who it was
+			// posted as.
+			if event.Sync == nil && result.op == "create" && result.err == nil && result.postedAs != nil && event.PostedAs == nil {
+				postedAs := *result.postedAs
+				event.PostedAs = &postedAs
+				events[index] = event
+			}
 			continue
 		}
 		if result.err != nil {
@@ -292,6 +351,10 @@ func applyReviewPushResults(review *domain.CodeReview, provider string, results 
 			continue
 		}
 		event.Sync = nil
+		if result.postedAs != nil {
+			postedAs := *result.postedAs
+			event.PostedAs = &postedAs
+		}
 		if result.remote != nil {
 			ref := *result.remote
 			event.Remote = &ref
@@ -341,7 +404,7 @@ func (s *server) writeBackReviewChange(ctx context.Context, workspace string, re
 	}
 	pushCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	results := pushPendingReviewChanges(pushCtx, remote, pending)
+	results := pushPendingReviewChanges(pushCtx, sameReviewWriter(remote), pending)
 	var updated domain.CodeReview
 	err = s.store.MutateWorkspace(ctx, workspace, "review.written_back", review.ID, map[string]any{"events": eventIDs}, func(data *domain.Bootstrap) error {
 		index := reviewIndex(*data, review.ID)
