@@ -562,6 +562,7 @@ var InternalRoutes = []string{
 	"GET /api/reviews/{id}",
 	"PATCH /api/reviews/{id}",
 	"POST /api/reviews/{id}/comments",
+	"PATCH /api/reviews/{id}/comments/{commentId}",
 	"POST /api/reviews/{id}/submit",
 	"PUT /api/reviews/{id}/previews",
 	// /api/scim

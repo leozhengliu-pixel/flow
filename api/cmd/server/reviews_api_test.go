@@ -71,3 +71,45 @@ func TestReviewLifecycleAndCodeConnections(t *testing.T) {
 		t.Fatalf("connection-specific disconnect failed: %#v", connections)
 	}
 }
+
+func TestReviewCommentRepliesAndThreadResolution(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	review := bootstrap.Reviews[0]
+	base := "/api/reviews/" + review.ID + "/comments"
+
+	updated := requestJSON[domain.CodeReview](t, handler, http.MethodPost, base, map[string]any{"body": "Guard NaN?", "path": "src/math.js", "line": 12}, http.StatusCreated)
+	root := updated.Events[len(updated.Events)-1]
+	updated = requestJSON[domain.CodeReview](t, handler, http.MethodPost, base, map[string]any{"body": "Will do", "parentId": root.ID}, http.StatusCreated)
+	reply := updated.Events[len(updated.Events)-1]
+	if reply.ParentID != root.ID || reply.Path != "src/math.js" || reply.Line != 12 {
+		t.Fatalf("reply must join the thread and inherit its location: %#v", reply)
+	}
+	// Replying to a reply still attaches to the thread root.
+	updated = requestJSON[domain.CodeReview](t, handler, http.MethodPost, base, map[string]any{"body": "Thanks", "parentId": reply.ID}, http.StatusCreated)
+	if nested := updated.Events[len(updated.Events)-1]; nested.ParentID != root.ID {
+		t.Fatalf("nested reply must attach to the root: %#v", nested)
+	}
+	requestJSON[any](t, handler, http.MethodPost, base, map[string]any{"body": "x", "parentId": "missing"}, http.StatusBadRequest)
+	requestJSON[any](t, handler, http.MethodPost, base, map[string]any{"body": "x", "parentId": review.Events[0].ID}, http.StatusBadRequest)
+
+	updated = requestJSON[domain.CodeReview](t, handler, http.MethodPatch, base+"/"+reply.ID, map[string]any{"resolved": true}, http.StatusOK)
+	for _, event := range updated.Events {
+		if (event.ID == root.ID || event.ParentID == root.ID) && !event.Resolved {
+			t.Fatalf("whole thread must resolve: %#v", event)
+		}
+	}
+	updated = requestJSON[domain.CodeReview](t, handler, http.MethodPatch, base+"/"+root.ID, map[string]any{"resolved": false}, http.StatusOK)
+	for _, event := range updated.Events {
+		if event.Resolved {
+			t.Fatalf("thread must reopen: %#v", event)
+		}
+	}
+	requestJSON[any](t, handler, http.MethodPatch, base+"/"+root.ID, map[string]any{}, http.StatusBadRequest)
+	requestJSON[any](t, handler, http.MethodPatch, base+"/missing", map[string]any{"resolved": true}, http.StatusNotFound)
+}

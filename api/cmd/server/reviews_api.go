@@ -233,9 +233,10 @@ func (s *server) submitReview(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) commentOnReview(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Body string `json:"body"`
-		Path string `json:"path,omitempty"`
-		Line int    `json:"line,omitempty"`
+		Body     string `json:"body"`
+		Path     string `json:"path,omitempty"`
+		Line     int    `json:"line,omitempty"`
+		ParentID string `json:"parentId,omitempty"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
@@ -253,12 +254,79 @@ func (s *server) commentOnReview(w http.ResponseWriter, r *http.Request) {
 		}
 		now := time.Now().UTC()
 		review := data.Reviews[index]
-		review.Events = append(review.Events, domain.ReviewEvent{ID: fmt.Sprintf("review_event_%d", now.UnixNano()), Type: "commented", Body: strings.TrimSpace(input.Body), Path: strings.TrimSpace(input.Path), Line: input.Line, Actor: actor, CreatedAt: now})
+		event := domain.ReviewEvent{ID: fmt.Sprintf("review_event_%d", now.UnixNano()), Type: "commented", Body: strings.TrimSpace(input.Body), Path: strings.TrimSpace(input.Path), Line: input.Line, Actor: actor, CreatedAt: now}
+		if parentID := strings.TrimSpace(input.ParentID); parentID != "" {
+			// Replies join the thread root and inherit its code location.
+			root := reviewThreadRoot(review, parentID)
+			if root < 0 {
+				return errInvalid
+			}
+			event.ParentID, event.Path, event.Line, event.Resolved = review.Events[root].ID, review.Events[root].Path, review.Events[root].Line, review.Events[root].Resolved
+		}
+		review.Events = append(review.Events, event)
 		review.UpdatedAt = now
 		data.Reviews[index], updated = review, review
 		return nil
 	})
 	respondMutation(w, err, http.StatusCreated, updated)
+}
+
+// resolveReviewThread marks a review comment thread (its root and replies)
+// as resolved or unresolved.
+func (s *server) resolveReviewThread(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Resolved *bool `json:"resolved"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if input.Resolved == nil {
+		writeError(w, http.StatusBadRequest, "resolved is required")
+		return
+	}
+	id, commentID := r.PathValue("id"), r.PathValue("commentId")
+	var updated domain.CodeReview
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "review.thread_resolved", id, input, func(data *domain.Bootstrap) error {
+		index := reviewIndex(*data, id)
+		if index < 0 {
+			return errNotFound
+		}
+		review := data.Reviews[index]
+		root := reviewThreadRoot(review, commentID)
+		if root < 0 {
+			return errNotFound
+		}
+		rootID := review.Events[root].ID
+		review.Events = slices.Clone(review.Events)
+		for i := range review.Events {
+			if review.Events[i].ID == rootID || review.Events[i].ParentID == rootID {
+				review.Events[i].Resolved = *input.Resolved
+			}
+		}
+		review.UpdatedAt = time.Now().UTC()
+		data.Reviews[index], updated = review, review
+		return nil
+	})
+	respondMutation(w, err, http.StatusOK, updated)
+}
+
+// reviewThreadRoot returns the index of the comment that starts the thread
+// containing commentID, or -1 when commentID is not a review comment.
+func reviewThreadRoot(review domain.CodeReview, commentID string) int {
+	index := slices.IndexFunc(review.Events, func(event domain.ReviewEvent) bool { return event.ID == commentID })
+	if index < 0 || !reviewCommentEvent(review.Events[index]) {
+		return -1
+	}
+	if parent := review.Events[index].ParentID; parent != "" {
+		if root := slices.IndexFunc(review.Events, func(event domain.ReviewEvent) bool { return event.ID == parent }); root >= 0 {
+			return root
+		}
+	}
+	return index
+}
+
+func reviewCommentEvent(event domain.ReviewEvent) bool {
+	return event.Type == "commented" || event.Type == "review_commented" || event.Path != ""
 }
 
 func reviewIndex(data domain.Bootstrap, id string) int {
