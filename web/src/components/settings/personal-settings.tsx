@@ -30,7 +30,7 @@ import {
 import * as Popover from "@radix-ui/react-popover";
 import { toast } from "@/lib/toast";
 import { NotificationChannelSettings } from './notification-channel-settings';
-import { ApplicationPolicySettings } from './application-policy-settings';
+import { PersonalConnectorSettings } from './personal-connectors';
 import { toCredentialCreationOptions, serializeCreationCredential } from '@/lib/webauthn';
 import { roleSatisfiesSecurityPermission } from '@/lib/security-setting'
 import { ReviewCode } from '@/components/reviews/review-code';
@@ -3778,7 +3778,10 @@ function Agents({ data, values, setValue, onNavigate, p }: PersonalProps) {
         </SettingsGroup>
         <div id="mcp-connectors" ref={mcpAnchor} className={`personal-mcp-anchor${mcpTargeted ? " is-targeted" : ""}`}>
         {data.workspaceSettings?.mcpConnectorsEnabled ? (
-          <ApplicationPolicySettings admin={false} />
+          <PersonalConnectorSettings
+            viewerId={data.viewer.id}
+            requireApproval={data.workspaceSettings?.allowedMcpConnectors === "approved"}
+          />
         ) : (
           <SettingsGroup
             title={p("MCP connectors")}

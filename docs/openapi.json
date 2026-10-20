@@ -2588,6 +2588,41 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/application-policies/{id}/connect": {
+      "post": {
+        "operationId": "post_application_policies_id_connect",
+        "tags": [
+          "application-policies"
+        ],
+        "summary": "POST /api/application-policies/{id}/connect",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/application-policies/{id}/headers": {
       "put": {
         "operationId": "put_application_policies_id_headers",

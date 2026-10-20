@@ -3,7 +3,10 @@ import { ChevronRight, Link2, Plus, Trash2 } from "lucide-react";
 import * as Popover from "@radix-ui/react-popover";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { usePropertyCommand } from "@/components/property/use-property-command";
+import { useOptionalTranslate } from "@/i18n/i18n";
 import { jsonRequest, request } from "@/lib/api-client";
+import { toast } from "@/lib/toast";
+import { authorizeConnector, connectConnector, removeConnectorPolicy } from "./connector-api";
 import "./connector-dialog.css";
 
 type ConnectorEntry={id:string;label:string;url:string;keywords:string;children?:ConnectorEntry[]};
@@ -30,9 +33,13 @@ CONNECTOR_CATALOG.sort((a,b)=>a.label.localeCompare(b.label));
 
 export function ConnectorMenu({
   onChoose,
+  compact = false,
 }: {
   onChoose: (name: string, url: string) => void;
+  /** A round "+" button (the populated list's header) instead of the "Add connector" pill. */
+  compact?: boolean;
 }) {
+  const t = useOptionalTranslate();
   const [open, setOpen] = useState(false);
   const [region,setRegion]=useState<string>();
   const [focusRegion,setFocusRegion]=useState(false);
@@ -50,10 +57,16 @@ export function ConnectorMenu({
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
-        <button type="button" className="settings-action">
-          <Plus size={14} />
-          Add connector
-        </button>
+        {compact ? (
+          <button type="button" className="connector-add-icon" aria-label={t("Add connector")}>
+            <Plus size={14} />
+          </button>
+        ) : (
+          <button type="button" className="settings-action">
+            <Plus size={14} />
+            Add connector
+          </button>
+        )}
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
@@ -107,12 +120,16 @@ export function ConnectorDialog({
   admin,
   onClose,
   onSaved,
+  connect = false,
 }: {
   initial: { name: string; url: string };
   admin: boolean;
   onClose: () => void;
   onSaved: () => Promise<void>;
+  /** Connect to the new connector before closing (personal connectors). */
+  connect?: boolean;
 }) {
+  const t = useOptionalTranslate();
   const [url, setURL] = useState(initial.url);
   const [name, setName] = useState(initial.name);
   const [shared, setShared] = useState(false);
@@ -149,6 +166,23 @@ export function ConnectorDialog({
           `/api/application-policies/${encodeURIComponent(policy.id)}/headers`,
           jsonRequest("PUT", { headers: configuredHeaders }),
         );
+      if (connect) {
+        // Personal connectors are checked right away: a server that needs
+        // sign-in starts authorization, one that cannot be reached is not kept.
+        const pending = toast.loading(t("Connecting to MCP server…"));
+        const result = await connectConnector(policy.id).finally(() => toast.dismiss(pending));
+        if (result.authorizationRequired) {
+          await onSaved();
+          await authorizeConnector(policy.id);
+          return;
+        }
+        if (!result.connected) {
+          await removeConnectorPolicy(policy.id);
+          setSavedID("");
+          setError(result.error || t("Could not connect to the MCP server"));
+          return;
+        }
+      }
       await onSaved();
       onClose();
     } catch (reason) {

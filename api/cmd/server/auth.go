@@ -180,7 +180,7 @@ func apiKeyRestrictedPersonalPath(path string) bool {
 	if path == "/api/oauth/authorization-request" || strings.HasPrefix(path, "/api/oauth/authorizations/") {
 		return true
 	}
-	if strings.HasPrefix(path, "/api/application-policies/") && (strings.HasSuffix(path, "/oauth/start") || strings.HasSuffix(path, "/headers")) {
+	if strings.HasPrefix(path, "/api/application-policies/") && (strings.HasSuffix(path, "/oauth/start") || strings.HasSuffix(path, "/headers") || strings.HasSuffix(path, "/connect")) {
 		return true
 	}
 	return path == "/api/api-keys" || strings.HasPrefix(path, "/api/api-keys/") || path == "/api/account" || strings.HasPrefix(path, "/api/account/")

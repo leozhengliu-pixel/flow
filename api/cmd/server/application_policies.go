@@ -26,8 +26,24 @@ type applicationPolicy struct {
 	CodingSessions bool `json:"codingSessions,omitempty"`
 	// ToolApproval is "always" when Flow Agent asks before every call to this
 	// MCP connector's tools. Empty (the default) runs them all automatically.
-	ToolApproval string    `json:"toolApproval,omitempty"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	ToolApproval string `json:"toolApproval,omitempty"`
+	// DisplayName overrides Name in Flow's UI and agent tool descriptions.
+	// Empty shows Name, the connector's default name.
+	DisplayName string `json:"displayName,omitempty"`
+	// Tools are the tool names the connector offered the last time its owner
+	// connected to it (POST /api/application-policies/{id}/connect). Only the
+	// server sets them.
+	Tools       []string   `json:"tools,omitempty"`
+	ConnectedAt *time.Time `json:"connectedAt,omitempty"`
+	UpdatedAt   time.Time  `json:"updatedAt"`
+}
+
+// label is the connector's name as people see it.
+func (p applicationPolicy) label() string {
+	if p.DisplayName != "" {
+		return p.DisplayName
+	}
+	return p.Name
 }
 
 const connectorToolApprovalAlways = "always"
@@ -102,6 +118,15 @@ func (s *server) saveApplicationPolicy(w http.ResponseWriter, r *http.Request) {
 	if input.Kind != "mcp" || input.ToolApproval != connectorToolApprovalAlways {
 		input.ToolApproval = ""
 	}
+	input.DisplayName = strings.TrimSpace(input.DisplayName)
+	if input.Kind != "mcp" {
+		input.DisplayName = ""
+	}
+	if len(input.DisplayName) > 200 {
+		writeError(w, 400, "invalid application")
+		return
+	}
+	input.Tools, input.ConnectedAt = nil, nil
 	if input.Kind == "mcp" {
 		input.URL = strings.TrimSpace(input.URL)
 		if err := integrationEndpointError(r.Context(), input.URL, s.authDisabled, outboundTrustedPrivate); err != nil {
@@ -139,6 +164,10 @@ func (s *server) saveApplicationPolicy(w http.ResponseWriter, r *http.Request) {
 				return store.ErrAuthForbidden
 			}
 			input.OwnerID = previous.OwnerID
+			// The tool inventory belongs to the endpoint it was read from.
+			if previous.URL == input.URL {
+				input.Tools, input.ConnectedAt = previous.Tools, previous.ConnectedAt
+			}
 			// Approvals cannot be carried over to another endpoint by its owner.
 			if !admin && previous.URL == input.URL {
 				input.Status = previous.Status
