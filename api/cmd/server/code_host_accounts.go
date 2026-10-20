@@ -305,10 +305,17 @@ func doCodeHostJSON(ctx context.Context, client *http.Client, method, endpoint s
 
 // outboundClient reaches a deployment-configured endpoint (GitHub OAuth app
 // endpoints and API): public HTTPS through the hardened dialer, loopback
-// only in local development.
+// only in local development. The GitHub host the operator configured (the
+// GitHub App's, or personal OAuth's) is reached like the GitHub App client
+// reaches it, without the public-address check: resolvers that answer with
+// synthetic addresses (fake-IP proxies, 198.18.0.0/15) would otherwise make
+// members' requests fail and fall back to the workspace's credentials.
 func (s *server) outboundClient(ctx context.Context, endpoint string) (*http.Client, error) {
 	noRedirect := func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	if s.loopbackCodeHosts() && safeLocalDevelopmentURL(endpoint) {
+		return &http.Client{Timeout: 15 * time.Second, CheckRedirect: noRedirect}, nil
+	}
+	if s.configuredGitHubEndpoint(endpoint) {
 		return &http.Client{Timeout: 15 * time.Second, CheckRedirect: noRedirect}, nil
 	}
 	if !safeOutboundHTTPS(ctx, endpoint) {
@@ -317,6 +324,29 @@ func (s *server) outboundClient(ctx context.Context, endpoint string) (*http.Cli
 	client := secureOutboundClient(15 * time.Second)
 	client.CheckRedirect = noRedirect
 	return client, nil
+}
+
+// configuredGitHubEndpoint reports whether endpoint is an HTTPS URL on a
+// GitHub host from the deployment's configuration: the GitHub App's web or
+// API host, or the personal OAuth app's authorize, token or API host.
+func (s *server) configuredGitHubEndpoint(endpoint string) bool {
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed.Scheme != "https" || parsed.User != nil || parsed.Hostname() == "" {
+		return false
+	}
+	configured := []string{}
+	if host := s.gitHubAppHost(); host != nil && host.Configured() {
+		configured = append(configured, "https://"+host.HostName(), host.APIURL())
+	}
+	if config, ok := s.githubPersonalOAuth(); ok {
+		configured = append(configured, "https://"+config.HostName, config.APIURL, config.AuthorizeURL, config.TokenURL)
+	}
+	for _, raw := range configured {
+		if candidate, err := url.Parse(raw); err == nil && candidate.Scheme == "https" && strings.EqualFold(candidate.Host, parsed.Host) {
+			return true
+		}
+	}
+	return false
 }
 
 // ---------------------------------------------------------------- state

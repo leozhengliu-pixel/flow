@@ -331,3 +331,29 @@ func TestGitHubAppWebhookSkipsReviewSyncWithClassicConnection(t *testing.T) {
 		t.Fatalf("the classic connection already syncs reviews; the App must not add a second copy (%d → %d)", before, after)
 	}
 }
+
+// The deployment's own GitHub hosts are reached without the public-address
+// check (like the GitHub App client), so members' requests work behind
+// resolvers that return synthetic addresses; other hosts keep it.
+func TestConfiguredGitHubEndpointsSkipThePublicAddressCheck(t *testing.T) {
+	f := newGitHubAppFixture(t)
+	s := f.server
+	s.coding.config.GitHubApp.APIURL = "https://api.flow-test.invalid"
+	s.initCoding(appconfig.CodingConfig{Provider: appconfig.CodingProviderDisabled, GitHubApp: s.coding.config.GitHubApp})
+	for _, endpoint := range []string{"https://api.flow-test.invalid/repos/acme/app/issues/1/comments", "https://github.com/acme/app.git/info/refs"} {
+		if !s.configuredGitHubEndpoint(endpoint) {
+			t.Fatalf("%s is the configured GitHub host", endpoint)
+		}
+		if client, err := s.outboundClient(t.Context(), endpoint); err != nil || client == nil || client.CheckRedirect == nil {
+			t.Fatalf("configured endpoint %s: %v", endpoint, err)
+		}
+	}
+	for _, endpoint := range []string{"http://api.flow-test.invalid/", "https://user@github.com/", "https://other.flow-test.invalid/", "https://github.com.flow-test.invalid/"} {
+		if s.configuredGitHubEndpoint(endpoint) {
+			t.Fatalf("%s is not a configured GitHub endpoint", endpoint)
+		}
+	}
+	if _, err := s.outboundClient(t.Context(), "https://other.flow-test.invalid/"); err == nil {
+		t.Fatal("an unconfigured host that does not resolve publicly must be refused")
+	}
+}
