@@ -58,11 +58,12 @@ func (m memberSessions) CodingSession(_ context.Context, _ string, id string) (d
 
 // fakeMembers is a MemberCodeHost with one linked account per user.
 type fakeMembers struct {
-	mu        sync.Mutex
-	accounts  map[string]MemberAccount
-	tokens    map[string]string // user → short-lived token
-	longLived map[string]bool   // user → only a long-lived token (PAT)
-	asked     []string
+	mu       sync.Mutex
+	accounts map[string]MemberAccount
+	tokens   map[string]string // user → short-lived token
+	pats     map[string]string // user → long-lived token (GitLab PAT, non-expiring OAuth)
+	unlinked map[string]bool   // user → unlinked since the session started
+	asked    []string
 }
 
 func (f *fakeMembers) MemberAccount(_ context.Context, _, userID, codeHost, hostName string) (MemberAccount, bool, error) {
@@ -77,14 +78,25 @@ func (f *fakeMembers) MemberGitCredential(_ context.Context, _, userID string, r
 	f.mu.Lock()
 	f.asked = append(f.asked, userID)
 	f.mu.Unlock()
+	if f.unlinked[userID] || f.accounts[userID].HostName != repo.HostName {
+		return codehost.Credential{}, codehost.ErrUserNotLinked
+	}
+	if pat, ok := f.pats[userID]; ok {
+		// Long-lived: no expiry. CLIEnv is set to prove the service never
+		// passes it on.
+		return codehost.Credential{Username: f.accounts[userID].Login, Password: pat, CLIEnv: map[string]string{"GITLAB_TOKEN": pat}}, nil
+	}
 	token, ok := f.tokens[userID]
-	if !ok || f.longLived[userID] || f.accounts[userID].HostName != repo.HostName {
+	if !ok {
 		return codehost.Credential{}, codehost.ErrUserNotLinked
 	}
 	return codehost.Credential{Username: "x-access-token", Password: token, ExpiresAt: time.Now().Add(8 * time.Hour), CLIEnv: map[string]string{"GH_TOKEN": token}}, nil
 }
 
 func (f *fakeMembers) MemberActor(_ context.Context, _, userID string, _ codehost.RepoRef) (*codehost.ActingUser, error) {
+	if pat, ok := f.pats[userID]; ok {
+		return &codehost.ActingUser{FlowUserID: userID, Login: f.accounts[userID].Login, Token: pat}, nil
+	}
 	token, ok := f.tokens[userID]
 	if !ok {
 		return nil, nil
@@ -263,11 +275,11 @@ func TestCredentialsCLIPurposeNeverGetsTheMemberToken(t *testing.T) {
 	}
 }
 
-// Without a linked account (or with only a long-lived token), the session
+// Without a linked account (or after the member unlinked it), the session
 // falls back to the workspace installation / project token.
 func TestCredentialsFallBackToTheWorkspaceToken(t *testing.T) {
 	service, host, members := memberFixture(domain.CodingPhaseRunning)
-	members.longLived = map[string]bool{"bob": true}
+	members.unlinked = map[string]bool{"bob": true}
 	for _, token := range []string{SandboxTokenPrefix + "s-carol", SandboxTokenPrefix + "s-bob"} {
 		response, err := service.Credentials(context.Background(), token, CredentialRequest{Protocol: "https", Host: "github.com", Path: "acme/app", Purpose: "git"})
 		if err != nil || response.Password != "ghs_minted" {
@@ -277,8 +289,8 @@ func TestCredentialsFallBackToTheWorkspaceToken(t *testing.T) {
 	if len(host.requests) != 2 || host.requests[0].Access != codehost.AccessWrite {
 		t.Fatalf("mint requests %+v", host.requests)
 	}
-	// Bob pushes through the relay, but his token may not be used there
-	// (long-lived): the relay forwards with the workspace credential.
+	// Bob pushes through the relay, but he unlinked his account since the
+	// session started: the relay forwards with the workspace credential.
 	relay, err := service.Credentials(context.Background(), SandboxTokenPrefix+"s-bob", relayCredentialRequest("github.com/acme/app.git"))
 	if err != nil {
 		t.Fatal(err)
@@ -286,6 +298,68 @@ func TestCredentialsFallBackToTheWorkspaceToken(t *testing.T) {
 	target, err := service.GitRelay(context.Background(), relay.Password, GitRelayPath{HostName: "github.com", Repository: "acme/app", Service: GitServiceReceivePack})
 	if err != nil || target.Password != "ghs_minted" || target.Member {
 		t.Fatalf("relay fallback %+v %v", target, err)
+	}
+}
+
+// A member linked with a long-lived token (a GitLab personal access token)
+// pushes as themselves through the relay: the relay forwards with the PAT,
+// while the credential helper (git and CLI), the CLI env and the bootstrap
+// never carry it.
+func TestGitRelayForwardsALongLivedMemberToken(t *testing.T) {
+	service, _, members := memberFixture(domain.CodingPhaseRunning)
+	const pat = "glpat-dave-secret"
+	sessions := service.store.(memberSessions)
+	sessions.sessions["s-dave"] = domain.CodingSession{ID: "s-dave", WorkspaceKey: "w", CreatorID: "dave", SandboxID: "sb-dave", Phase: domain.CodingPhaseRunning, CodeHost: domain.CodeHostGitLab, HostName: "gitlab.example", Repository: "acme/api",
+		BranchName: "dave/eng-2-x", PushIdentity: &domain.CodingPushIdentity{Via: domain.CodeHostAccountActorMember, CodeHost: domain.CodeHostGitLab, HostName: "gitlab.example", Login: "dave-gl"}}
+	sessions.grants[SandboxTokenPrefix+"s-dave"] = SandboxGrant{WorkspaceKey: "w", SandboxID: "sb-dave", SessionID: "s-dave", Kind: sandbox.KindSession}
+	members.accounts["dave"] = MemberAccount{CodeHost: domain.CodeHostGitLab, HostName: "gitlab.example", Login: "dave-gl", ExternalID: "33", Name: "Dave D", Email: "33-dave-gl@users.noreply.gitlab.example", Username: "dave"}
+	members.pats = map[string]string{"dave": pat}
+	gitlabHost := &mintingHost{Stub: codehost.Stub{HostKind: domain.CodeHostGitLab}}
+	service.hosts[domain.CodeHostGitLab] = gitlabHost
+	token := SandboxTokenPrefix + "s-dave"
+
+	for _, request := range []CredentialRequest{
+		{Protocol: "https", Host: "gitlab.example", Path: "acme/api.git", Purpose: "git"},
+		{Protocol: "https", Host: "gitlab.example", Purpose: "cli"},
+		relayCredentialRequest("gitlab.example/acme/api.git"),
+	} {
+		response, err := service.Credentials(context.Background(), token, request)
+		raw, _ := json.Marshal(response)
+		if err != nil || strings.Contains(string(raw), pat) {
+			t.Fatalf("%+v: %s %v", request, raw, err)
+		}
+	}
+	relay, _ := service.Credentials(context.Background(), token, relayCredentialRequest("gitlab.example/acme/api.git"))
+	if !strings.HasPrefix(relay.Password, GitRelayPlaceholderPrefix) {
+		t.Fatalf("relay placeholder %+v", relay)
+	}
+	minted := len(gitlabHost.requests)
+	target, err := service.GitRelay(context.Background(), relay.Password, GitRelayPath{HostName: "gitlab.example", Repository: "acme/api", Service: GitServiceReceivePack})
+	if err != nil || target.Password != pat || target.Username != "dave-gl" || !target.Member || target.CodeHost != domain.CodeHostGitLab {
+		t.Fatalf("relay target %+v %v", target, err)
+	}
+	if len(gitlabHost.requests) != minted {
+		t.Fatal("the relay minted a workspace credential although the member's PAT is usable")
+	}
+	credential, ok, err := service.memberGitCredential(context.Background(), sessions.sessions["s-dave"], "git", codehost.AccessWrite)
+	if err != nil || !ok || credential.CLIEnv != nil {
+		t.Fatalf("the CLI env must never carry the member's token: %+v %v %v", credential, ok, err)
+	}
+	if _, ok, _ := service.memberGitCredential(context.Background(), sessions.sessions["s-dave"], "cli", codehost.AccessWrite); ok {
+		t.Fatal("a CLI request got the member's token")
+	}
+
+	service.workspaces = staticWorkspaces{}
+	response, err := service.buildBootstrap(context.Background(), SandboxGrant{SandboxID: "sb-dave", SessionID: "s-dave"}, sessions.sessions["s-dave"], nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(response)
+	if strings.Contains(string(raw), pat) {
+		t.Fatalf("bootstrap leaks the PAT: %s", raw)
+	}
+	if response.Repo.PushURL != testRuntimeURL+"/internal/coding-runtime/git/gitlab.example/acme/api.git" {
+		t.Fatalf("PAT member session must push through the relay: %+v", response.Repo)
 	}
 }
 

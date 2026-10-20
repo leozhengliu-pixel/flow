@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -36,6 +38,16 @@ type Config struct {
 	Retention            RetentionConfig
 	// Coding configures coding sessions (coding.go).
 	Coding CodingConfig
+	// DevAllowLoopbackCodeHosts lets the workspace GitLab integration and
+	// members' personal GitLab links use plain-HTTP loopback URLs
+	// (http://127.0.0.1, http://localhost) while authentication stays on
+	// (FLOW_DEV_ALLOW_LOOPBACK_CODE_HOSTS). Development only: Validate
+	// refuses it when the deployment looks like production.
+	DevAllowLoopbackCodeHosts bool
+	// DeploymentEnvironment is FLOW_ENV, or else FLOW_ENVIRONMENT, as set by
+	// the operator (empty when neither is set). Development-only switches
+	// refuse to turn on when it names production.
+	DeploymentEnvironment string
 	// Warnings lists settings Load adjusted (for example a feature turned
 	// off for a missing credential); the server logs them at startup.
 	Warnings []string
@@ -184,6 +196,8 @@ func Load() (Config, error) {
 		StaticPath:                     value("FLOW_STATIC_PATH", ""),
 		AppURL:                         appURL,
 		AuthDisabled:                   boolean("FLOW_AUTH_DISABLED", false),
+		DevAllowLoopbackCodeHosts:      boolean("FLOW_DEV_ALLOW_LOOPBACK_CODE_HOSTS", false),
+		DeploymentEnvironment:          strings.ToLower(value("FLOW_ENV", value("FLOW_ENVIRONMENT", ""))),
 		WorkspaceRegionSelectorEnabled: boolean("FLOW_WORKSPACE_REGION_SELECTOR_ENABLED", true),
 		WorkspaceDefaultRegion:         strings.ToLower(value("FLOW_WORKSPACE_DEFAULT_REGION", "us")),
 		WorkspaceTutorial:              !switchedOff("FLOW_WORKSPACE_TUTORIAL"),
@@ -302,6 +316,9 @@ func (c *Config) resolveAgentMedia() {
 }
 
 func (c Config) Validate() error {
+	if err := c.validateDevLoopbackCodeHosts(); err != nil {
+		return err
+	}
 	if !validWorkspaceRegion(c.WorkspaceDefaultRegion) {
 		return fmt.Errorf("FLOW_WORKSPACE_DEFAULT_REGION must be one of us, eu, uk, ca, cn, asia, jp, sg, in, au, br")
 	}
@@ -418,6 +435,37 @@ func (c Config) Validate() error {
 		return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT or both signal-specific trace and metric endpoints are required when telemetry is enabled")
 	}
 	return nil
+}
+
+// validateDevLoopbackCodeHosts refuses FLOW_DEV_ALLOW_LOOPBACK_CODE_HOSTS on
+// anything that looks like a production deployment: FLOW_ENV or
+// FLOW_ENVIRONMENT naming production, or an app URL that is not a loopback
+// address.
+func (c Config) validateDevLoopbackCodeHosts() error {
+	if !c.DevAllowLoopbackCodeHosts {
+		return nil
+	}
+	switch c.DeploymentEnvironment {
+	case "prod", "production":
+		return fmt.Errorf("FLOW_DEV_ALLOW_LOOPBACK_CODE_HOSTS is a development-only setting and cannot be enabled when FLOW_ENV/FLOW_ENVIRONMENT=%s", c.DeploymentEnvironment)
+	}
+	if !loopbackURL(c.AppURL) {
+		return fmt.Errorf("FLOW_DEV_ALLOW_LOOPBACK_CODE_HOSTS is a development-only setting and requires FLOW_APP_URL on localhost or a loopback address")
+	}
+	return nil
+}
+
+func loopbackURL(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Hostname() == "" {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // validateRuntime checks the agent runtime settings: the worker runtime needs a worker secret, and a secret must

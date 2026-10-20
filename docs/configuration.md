@@ -284,6 +284,8 @@ docker run --rm -v flow_flow-api-data:/data alpine:3.22 chown -R 65532:65532 /da
 
 Development account tokens are disabled by default. Set
 `FLOW_DEV_AUTH_TOKENS=true` only in an isolated local environment.
+`FLOW_DEV_ALLOW_LOOPBACK_CODE_HOSTS` is likewise development only and off by
+default (see [Development only: loopback GitLab](#development-only-loopback-gitlab)).
 
 Standalone example:
 
@@ -661,7 +663,8 @@ and Flow refreshes them. Without App credentials, a classic GitHub OAuth app
 from `FLOW_INTEGRATION_GITHUB_CLIENT_ID` / `_CLIENT_SECRET` is used (callback
 `{FLOW_APP_URL}/api/account/code-host-accounts/oauth/callback`, scopes
 `repo read:user user:email`); its tokens do not expire, so they are used only
-server side.
+server side (Flow's own API calls, and coding-session pushes through Flow's
+git relay; never in a sandbox).
 
 **GitLab, including self-hosted.** Members only see instances an admin
 connected to the workspace (Settings › Integrations › GitLab); they never type
@@ -684,12 +687,29 @@ admin points the connection at another host.
   members paste a personal access token with the `read_user` and `api`
   scopes. Flow validates it against `/api/v4/personal_access_tokens/self` and
   `/api/v4/user` and lists missing scopes. A personal access token stays on
-  the server: Flow uses it for Reviews actions and to open MRs as the member,
-  but never hands it to a coding sandbox.
+  the server: Flow uses it for Reviews actions, to open MRs as the member,
+  and for the member's coding-session pushes, which go through Flow's git
+  relay where Flow adds the token itself. It is never handed to a coding
+  sandbox (see [docs/coding-sessions-security.md](coding-sessions-security.md#member-credentials)).
 
 Self-hosted instances on a private network must be named in
 `FLOW_INTEGRATION_GITLAB_HOST` (as for the workspace connection); other hosts
 must be public HTTPS addresses.
+
+### Development only: loopback GitLab
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FLOW_DEV_ALLOW_LOOPBACK_CODE_HOSTS` | `false` | Development only. Lets the workspace GitLab integration and members' personal GitLab links use a plain-HTTP loopback URL (`http://127.0.0.1:<port>`, `http://localhost:<port>`) while authentication stays enabled, for example to run a local GitLab or a fake one. |
+
+Without it, a plain-HTTP loopback GitLab URL is accepted only when
+`FLOW_AUTH_DISABLED=true`; otherwise GitLab must be a public HTTPS address (or
+the host named in `FLOW_INTEGRATION_GITLAB_HOST`). The switch only covers
+loopback addresses: private ranges such as `10.0.0.0/8`, `172.16.0.0/12`,
+`192.168.0.0/16` and link-local addresses stay blocked. Flow refuses to start
+with it on when `FLOW_ENV` or `FLOW_ENVIRONMENT` is `production` (or `prod`),
+or when `FLOW_APP_URL` is not a localhost or loopback URL. Never set it in a
+shared or production deployment.
 
 ## Coding sessions
 

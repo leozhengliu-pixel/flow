@@ -230,7 +230,7 @@ func (s *server) refreshGitLabOAuthConnection(ctx context.Context, workspaceKey 
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	client := secureOutboundClient(15 * time.Second)
-	if s.authDisabled && safeLocalDevelopmentURL(oauthConfig.TokenURL) {
+	if s.loopbackCodeHosts() && safeLocalDevelopmentURL(oauthConfig.TokenURL) {
 		client = &http.Client{Timeout: 15 * time.Second}
 	}
 	response, err := client.Do(request)

@@ -56,12 +56,6 @@ const (
 	// codeHostTokenRefreshMargin refreshes access tokens this long before
 	// they expire.
 	codeHostTokenRefreshMargin = 5 * time.Minute
-	// codeHostSandboxTokenMaxLifetime: only tokens that expire within this
-	// window are used for a coding session's pushes (through Flow's git
-	// relay, never in the sandbox; GitHub App user tokens: 8h, GitLab OAuth:
-	// 2h). Personal access tokens and non-expiring OAuth tokens are only used
-	// for Flow's own API calls.
-	codeHostSandboxTokenMaxLifetime = 9 * time.Hour
 )
 
 // gitlabMemberScopes are the scopes members' GitLab links need: read_user
@@ -314,7 +308,7 @@ func doCodeHostJSON(ctx context.Context, client *http.Client, method, endpoint s
 // only in local development.
 func (s *server) outboundClient(ctx context.Context, endpoint string) (*http.Client, error) {
 	noRedirect := func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	if s.authDisabled && safeLocalDevelopmentURL(endpoint) {
+	if s.loopbackCodeHosts() && safeLocalDevelopmentURL(endpoint) {
 		return &http.Client{Timeout: 15 * time.Second, CheckRedirect: noRedirect}, nil
 	}
 	if !safeOutboundHTTPS(ctx, endpoint) {

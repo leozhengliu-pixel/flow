@@ -415,7 +415,7 @@ func (s *server) gitlabFilePreviewCredential(ctx context.Context, data domain.Bo
 			continue
 		}
 		token := strings.TrimSpace(connection.OAuthAccessToken)
-		base, err := normalizeGitLabURL(connection.Config["host"], s.authDisabled)
+		base, err := normalizeGitLabURL(connection.Config["host"], s.loopbackCodeHosts())
 		if token == "" {
 			if credential, credentialErr := s.gitlabCredential(ctx, data.Workspace.URLKey, connection.ID); credentialErr == nil {
 				token, base, err = credential.Token, credential.URL, nil

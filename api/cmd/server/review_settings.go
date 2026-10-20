@@ -56,7 +56,7 @@ func (s *server) memberReviewProvider(ctx context.Context, data domain.Bootstrap
 	if err != nil {
 		return nil
 	}
-	provider := &reviewProvider{token: tokens.AccessToken, provider: review.Provider, allowLocal: s.authDisabled, bearer: !tokens.PrivateToken, account: &account,
+	provider := &reviewProvider{token: tokens.AccessToken, provider: review.Provider, allowLocal: s.loopbackCodeHosts(), bearer: !tokens.PrivateToken, account: &account,
 		postedAs: domain.ReviewPostedAs{Provider: review.Provider, Login: account.Login, Via: domain.CodeHostAccountActorMember}}
 	if review.Provider == "gitlab" {
 		client, err := s.gitlabClient(ctx, instance.BaseURL)
@@ -136,7 +136,7 @@ func (s *server) workspaceReviewProvider(ctx context.Context, data domain.Bootst
 				if connection.Config["readonly"] == "true" && !readOnly {
 					return nil, fmt.Errorf("the GitLab access token is read-only (read_api scope)")
 				}
-				return &reviewProvider{base: credential.URL + "/api/v4", token: credential.Token, provider: "gitlab", allowLocal: s.authDisabled, postedAs: domain.ReviewPostedAs{Login: workspaceIntegrationLogin(connection)}}, nil
+				return &reviewProvider{base: credential.URL + "/api/v4", token: credential.Token, provider: "gitlab", allowLocal: s.loopbackCodeHosts(), postedAs: domain.ReviewPostedAs{Login: workspaceIntegrationLogin(connection)}}, nil
 			}
 		}
 		if token == "" {
@@ -166,7 +166,7 @@ func (s *server) workspaceReviewProvider(ctx context.Context, data domain.Bootst
 			}
 			base = strings.TrimRight(custom, "/")
 		}
-		return &reviewProvider{base: base, token: token, provider: review.Provider, allowLocal: s.authDisabled, postedAs: domain.ReviewPostedAs{Login: workspaceIntegrationLogin(connection)}}, nil
+		return &reviewProvider{base: base, token: token, provider: review.Provider, allowLocal: s.loopbackCodeHosts(), postedAs: domain.ReviewPostedAs{Login: workspaceIntegrationLogin(connection)}}, nil
 	}
 	return nil, fmt.Errorf("connect %s before changing this review", review.Provider)
 }

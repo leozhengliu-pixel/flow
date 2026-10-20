@@ -14,8 +14,9 @@ import (
 // session's creator linked their GitHub or GitLab account, the session's
 // branch carries their prefix, its commits are authored and committed by
 // them (display name + host email), its pushes go through Flow's git relay,
-// which adds their own short-lived token for the session's one repository
-// server side (git_relay.go; the sandbox only ever sees a placeholder), and
+// which adds their own token (OAuth, GitHub App user token, or a GitLab
+// personal access token) for the session's one repository server side
+// (git_relay.go; the sandbox only ever sees a placeholder), and
 // Flow opens the PR/MR with their token. Without a linked account everything
 // falls back to the workspace App / connection credential, with the member
 // still the commit author. The bot identity only posts Flow's back-links.
@@ -53,8 +54,10 @@ func (s *Service) memberAccount(ctx context.Context, workspaceKey, userID, codeH
 // memberGitCredential is the session creator's own credential for the git
 // relay to forward the session's pushes with (server side only; it is never
 // returned to a sandbox). ok is false when the workspace credential must be
-// used instead (no linked account, a long-lived token, a snapshot build or a
-// gh/glab CLI request).
+// used instead (no linked account, a snapshot build or a gh/glab CLI
+// request). Long-lived tokens (personal access tokens, non-expiring OAuth
+// tokens) are allowed: this credential only ever leaves Flow inside the
+// relayed request to the code host.
 func (s *Service) memberGitCredential(ctx context.Context, session domain.CodingSession, purpose string, access codehost.Access) (codehost.Credential, bool, error) {
 	if s.Members == nil || session.CreatorID == "" || session.ID == "" || purpose == "cli" || access != codehost.AccessWrite {
 		return codehost.Credential{}, false, nil

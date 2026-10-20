@@ -352,8 +352,14 @@ func TestGitLabMemberPersonalAccessToken(t *testing.T) {
 	host := strings.TrimPrefix(f.gitlab.URL, "http://")
 	repo := codehost.RepoRef{CodeHost: domain.CodeHostGitLab, HostName: host, FullName: "acme/app"}
 	members := codingMemberHosts{s: f.server}
-	if _, err := members.MemberGitCredential(t.Context(), "test-workspace", f.viewer.ID, repo); !errors.Is(err, codehost.ErrUserNotLinked) {
-		t.Fatalf("a personal access token must never be served to a sandbox: %v", err)
+	// The git relay (server side only) may push with the PAT; it is never
+	// served to a sandbox (coding_git_relay_test.go).
+	credential, err := members.MemberGitCredential(t.Context(), "test-workspace", f.viewer.ID, repo)
+	if err != nil || credential.Password != "glpat-member" || credential.Username != "alice-gl" || !credential.ExpiresAt.IsZero() || credential.CLIEnv != nil {
+		t.Fatalf("relay credential for a personal access token: %+v %v", credential, err)
+	}
+	if _, err := members.MemberGitCredential(t.Context(), "test-workspace", "another-member", repo); !errors.Is(err, codehost.ErrUserNotLinked) {
+		t.Fatalf("another member got this member's PAT for git: %v", err)
 	}
 	actor, err := members.MemberActor(t.Context(), "test-workspace", f.viewer.ID, repo)
 	if err != nil || actor == nil || actor.Token != "glpat-member" || actor.Bearer || actor.FlowUserID != f.viewer.ID {

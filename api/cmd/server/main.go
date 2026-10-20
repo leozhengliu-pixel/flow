@@ -50,6 +50,7 @@ type server struct {
 	objectStore                    objectstore.Store
 	staticPath                     string
 	authDisabled                   bool
+	devLoopbackCodeHosts           bool // FLOW_DEV_ALLOW_LOOPBACK_CODE_HOSTS (development only): loopback GitLab with auth on
 	mailer                         *smtpMailer
 	authLimiter                    authRateLimitBackend
 	realtime                       *realtimeHub
@@ -164,6 +165,7 @@ func main() {
 		objectStore:                    objects,
 		staticPath:                     applicationConfig.StaticPath,
 		authDisabled:                   applicationConfig.AuthDisabled,
+		devLoopbackCodeHosts:           applicationConfig.DevAllowLoopbackCodeHosts,
 		coordinator:                    redisCoordinator,
 		mailer:                         smtpMailerFromEnv(),
 		externalAuth:                   external,

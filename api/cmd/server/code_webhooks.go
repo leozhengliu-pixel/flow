@@ -377,7 +377,7 @@ func (s *server) testIntegrationConnection(w http.ResponseWriter, r *http.Reques
 			writeError(w, http.StatusUnprocessableEntity, "GitLab API token is required to test the connection")
 			return
 		}
-		base, err := normalizeGitLabURL(host, s.authDisabled)
+		base, err := normalizeGitLabURL(host, s.loopbackCodeHosts())
 		if err != nil {
 			persistIntegrationTestError(s, r, provider, id, err.Error())
 			writeError(w, http.StatusUnprocessableEntity, err.Error())

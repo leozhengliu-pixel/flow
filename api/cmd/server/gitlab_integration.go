@@ -124,13 +124,22 @@ func normalizeGitLabURL(raw string, allowLocal bool) (string, error) {
 	return strings.ToLower(u.Scheme) + "://" + strings.ToLower(u.Host) + path, nil
 }
 
+// loopbackCodeHosts reports whether code-host URLs (GitLab instances, code
+// host OAuth endpoints) may be plain-HTTP loopback addresses: in local
+// development with authentication disabled, or when the development-only
+// FLOW_DEV_ALLOW_LOOPBACK_CODE_HOSTS switch is on. Private non-loopback
+// ranges are never allowed this way.
+func (s *server) loopbackCodeHosts() bool {
+	return s.authDisabled || s.devLoopbackCodeHosts
+}
+
 // gitlabClient returns an HTTP client that may reach base. Public HTTPS hosts
 // go through the SSRF-hardened dialer; a host the deployment configured in
 // FLOW_INTEGRATION_GITLAB_HOST is trusted even on a private network, and
-// loopback hosts are allowed only in local development.
+// loopback hosts are allowed only in local development (loopbackCodeHosts).
 func (s *server) gitlabClient(ctx context.Context, base string) (*http.Client, error) {
 	noRedirect := func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	if s.authDisabled && safeLocalDevelopmentURL(base) {
+	if s.loopbackCodeHosts() && safeLocalDevelopmentURL(base) {
 		return &http.Client{Timeout: 10 * time.Second, CheckRedirect: noRedirect}, nil
 	}
 	if trusted, err := normalizeGitLabURL(os.Getenv("FLOW_INTEGRATION_GITLAB_HOST"), false); err == nil && os.Getenv("FLOW_INTEGRATION_GITLAB_HOST") != "" && trusted == base {
@@ -370,7 +379,7 @@ func (s *server) connectGitLabToken(w http.ResponseWriter, r *http.Request, name
 	if strings.TrimSpace(rawURL) == "" {
 		rawURL = input["gitlabUrl"]
 	}
-	base, err := normalizeGitLabURL(rawURL, s.authDisabled)
+	base, err := normalizeGitLabURL(rawURL, s.loopbackCodeHosts())
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -504,7 +513,7 @@ func (s *server) updateGitLabToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "resource not found")
 		return
 	}
-	base, err := normalizeGitLabURL(connection.Config["host"], s.authDisabled)
+	base, err := normalizeGitLabURL(connection.Config["host"], s.loopbackCodeHosts())
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
