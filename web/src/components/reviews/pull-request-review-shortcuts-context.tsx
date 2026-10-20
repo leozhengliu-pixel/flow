@@ -11,6 +11,7 @@ import {
 
 import {
   PullRequestReviewShortcutsContext,
+  resolveReviewShortcut,
   type PullRequestReviewShortcutHandlers,
   type PullRequestReviewShortcutsContextValue,
 } from "./pull-request-review-shortcuts";
@@ -57,30 +58,31 @@ export function PullRequestReviewShortcutsProvider({
 
   useEffect(() => {
     if (!enabled) return;
+    let prefix: string | null = null;
+    let prefixTimer = 0;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.defaultPrevented || event.repeat) return;
       if (isEditableTarget(event.target)) return;
-      const map: Record<string, keyof PullRequestReviewShortcutHandlers> = {
-        f: "focusFileFilter",
-        "/": "searchInFiles",
-        o: "toggleHoveredFile",
-        v: "markHoveredFileReviewed",
-        c: "markHoveredSectionReviewed",
-        s: "submitReview",
-        l: "toggleReviewLayout",
-        j: "nextFile",
-        k: "previousFile",
-        a: "approve",
-      };
-      const handlerKey = map[event.key];
-      if (!handlerKey) return;
-      const handler = resolve(handlerKey);
+      // Ignore keys typed into menus and dialogs layered over the page.
+      if (event.target instanceof HTMLElement && event.target.closest("[role=dialog],[role=menu],[role=listbox]")) return;
+      const result = resolveReviewShortcut(event, prefix);
+      window.clearTimeout(prefixTimer);
+      prefix = result.prefix;
+      if (prefix) {
+        prefixTimer = window.setTimeout(() => (prefix = null), 1200);
+        return;
+      }
+      if (!result.handler) return;
+      const handler = resolve(result.handler);
       if (!handler) return;
       event.preventDefault();
       handler();
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    return () => {
+      window.clearTimeout(prefixTimer);
+      window.removeEventListener("keydown", onKeyDown);
+    };
   }, [enabled, resolve]);
 
   const value = useMemo<PullRequestReviewShortcutsContextValue>(
@@ -96,6 +98,16 @@ export function PullRequestReviewShortcutsProvider({
       nextFile: () => resolve("nextFile")?.(),
       previousFile: () => resolve("previousFile")?.(),
       approve: () => resolve("approve")?.(),
+      openDisplayOptions: () => resolve("openDisplayOptions")?.(),
+      toggleLineWrapping: () => resolve("toggleLineWrapping")?.(),
+      toggleAllFiles: () => resolve("toggleAllFiles")?.(),
+      markAllFilesReviewed: () => resolve("markAllFilesReviewed")?.(),
+      openInProvider: () => resolve("openInProvider")?.(),
+      selectReviewers: () => resolve("selectReviewers")?.(),
+      toggleFavorite: () => resolve("toggleFavorite")?.(),
+      openOverview: () => resolve("openOverview")?.(),
+      openGuide: () => resolve("openGuide")?.(),
+      openDiff: () => resolve("openDiff")?.(),
       register,
     }),
     [register, resolve],

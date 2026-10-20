@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { makeBootstrap, teammate, viewer } from '@/test/fixtures'
 import type { CodeReview } from '@/types/flow'
-import { changeReviewGrouping, compareReviews, defaultReviewDisplay, groupReviews, matchesReviewFilters, parseReviewDisplay, parseReviewFilters, reviewBaseItems } from './review-list-model'
+import { changeReviewGrouping, compareReviews, defaultReviewDisplay, groupReviews, matchesReviewFilters, parseReviewDisplay, parseReviewFilters, reviewBaseItems, reviewReadyToMerge, reviewShortAge, reviewTimeAgo, reviewTitleSegments, reviewVisualState } from './review-list-model'
 
 function item(id: string, changes: Partial<CodeReview> = {}): CodeReview {
   return { id, slugId: id, provider: 'github', externalId: id, number: 1, title: id, description: '', status: 'open', repositoryOwner: 'org', repositoryName: 'repo', url: '', author: teammate, reviewerIds: [viewer.id], teamReviewers: [], issueIds: [], baseBranch: 'main', headBranch: 'feature', branchState: 'upToDate', additions: 0, deletions: 0, commitCount: 1, checks: [], files: [], events: [], favorite: false, draft: false, quickToReview: false, createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-02T00:00:00Z', ...changes }
@@ -52,5 +52,30 @@ describe('review list contracts', () => {
     expect(parseReviewFilters('[{"id":"__proto__","values":[]}]')).toEqual([])
     expect(parseReviewDisplay('{"grouping":"focus","ordering":"importance"}', 'created')).toMatchObject({ grouping: 'status', ordering: 'opened' })
     expect(parseReviewDisplay('{"properties":["id","nonexistent"]}', 'for-you').properties).toEqual(['id'])
+  })
+})
+
+describe('review list helpers', () => {
+  it('places reviews the viewer already reviewed under You’re reviewing', () => {
+    const reviewed = item('r', { events: [{ id: 'e', type: 'approved', actor: viewer, createdAt: '2026-09-01T00:00:00Z' }] })
+    expect(groupReviews([reviewed, item('n')], defaultReviewDisplay('for-you'), viewer.id).map(g => [g.id, g.label])).toEqual([['requested', 'Needs your review'], ['reviewing', 'You’re reviewing']])
+  })
+  it('formats compact ages, title code segments and visual states', () => {
+    const now = Date.parse('2026-09-10T12:00:00Z')
+    expect(['2026-09-10T11:59:50Z', '2026-09-10T11:15:00Z', '2026-09-09T20:00:00Z', '2026-09-07T12:00:00Z', '2026-08-20T12:00:00Z', '2026-05-01T12:00:00Z', '2024-09-01T12:00:00Z'].map(value => reviewShortAge(value, now))).toEqual(['10s', '45m', '16h', '3d', '3w', '4mo', '2y'])
+    expect(['2026-09-10T11:59:50Z', '2026-09-10T11:58:00Z', '2026-09-10T00:00:00Z'].map(value => reviewTimeAgo(value, now))).toEqual(['just now', '2min ago', '12h ago'])
+    expect(reviewTitleSegments('Add `mod(a, b)` now')).toEqual([{ code: false, text: 'Add ' }, { code: true, text: 'mod(a, b)' }, { code: false, text: ' now' }])
+    expect([item('a', { draft: true }), item('b'), item('c', { status: 'merged' }), item('d', { status: 'closed', draft: true })].map(reviewVisualState)).toEqual(['draft', 'open', 'merged', 'closed'])
+  })
+})
+
+describe('ready to merge', () => {
+  it('treats the viewer\'s open, green, non-draft pull requests as ready to merge', () => {
+    expect(reviewReadyToMerge(item('a'))).toBe(true)
+    expect(reviewReadyToMerge(item('b', { draft: true }))).toBe(false)
+    expect(reviewReadyToMerge(item('c', { status: 'inReview' }))).toBe(false)
+    expect(reviewReadyToMerge(item('d', { branchState: 'conflicted' }))).toBe(false)
+    expect(reviewReadyToMerge(item('e', { checks: [{ id: 'x', name: 'ci', status: 'failed' }] }))).toBe(false)
+    expect(groupReviews([item('mine', { author: viewer, reviewerIds: [] })], defaultReviewDisplay('for-you'), viewer.id)[0].id).toBe('ready')
   })
 })

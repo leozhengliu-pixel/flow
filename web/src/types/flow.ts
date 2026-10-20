@@ -1777,11 +1777,15 @@ export interface ReviewFile {
   additions: number;
   deletions: number;
   patch: string;
+  /** Old path of a renamed or moved file. */
+  previousPath?: string;
 }
 export interface ReviewEvent {
   id: UUID;
   type: string;
   body?: string;
+  /** Thread root this comment replies to. */
+  parentId?: UUID;
   path?: string;
   line?: number;
   resolved?: boolean;

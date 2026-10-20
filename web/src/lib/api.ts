@@ -1311,11 +1311,18 @@ export function submitReview(
 export function commentOnReview(
   id: string,
   body: string,
-  location?: { path: string; line: number },
+  location?: { path: string; line: number } | { parentId: string },
 ): Promise<CodeReview> {
   return request(
     `/api/reviews/${id}/comments`,
     jsonRequest("POST", { body, ...location }),
+  );
+}
+/** Resolves or reopens the comment thread containing `commentId`. */
+export function resolveReviewThread(id: string, commentId: string, resolved: boolean): Promise<CodeReview> {
+  return request(
+    `/api/reviews/${id}/comments/${encodeURIComponent(commentId)}`,
+    jsonRequest("PATCH", { resolved }),
   );
 }
 export function fetchWebhooks(): Promise<Webhook[]> {

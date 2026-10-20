@@ -118,4 +118,22 @@ describe("BackgroundReviewProcessor (LS-0097)", () => {
     expect(structural?.lines.map((l) => l.kind)).toContain("remove");
     expect(structural?.lines.map((l) => l.kind)).toContain("add");
   });
+
+  it("still computes every file when a prefetch is cancelled and re-requested (remounted view)", async () => {
+    const processor = BackgroundReviewProcessor.initialize({ computer: new DiffComputer(), concurrency: 1, preferStructural: false });
+    const review = makeReview([
+      makeFile("a.ts", "@@ -1,1 +1,1 @@\n-old\n+new\n"),
+      makeFile("b.ts", "@@ -1,1 +1,2 @@\n context\n+added\n"),
+      makeFile("c.ts", "@@ -1,1 +1,1 @@\n-x\n+y\n"),
+    ]);
+    // First mount: starts a.ts and queues the rest, then unmounts immediately.
+    processor.prefetchReview(review, { priority: "high", variants: ["basic"] }).cancel();
+    // Remount: the same review is requested again.
+    await processor.prefetchReview(review, { priority: "high", variants: ["basic"] }).promise;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    for (const path of ["a.ts", "b.ts", "c.ts"]) {
+      expect(processor.getComputedDiff(review.id, path, "basic")?.state).toBe("ready");
+    }
+    expect(processor.areAllDiffsReady(review, "basic")).toBe(true);
+  });
 });
