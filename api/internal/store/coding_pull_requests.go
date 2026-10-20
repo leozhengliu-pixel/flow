@@ -321,6 +321,19 @@ func (s *SQLiteStore) ClaimCodeHostWebhookDelivery(ctx context.Context, codeHost
 	return count > 0, nil
 }
 
+// LastCodeHostWebhookDelivery is when the workspace last claimed a delivery
+// from the code host (zero when none is kept, i.e. none in the retention window).
+func (s *SQLiteStore) LastCodeHostWebhookDelivery(ctx context.Context, codeHost, workspaceKey string) (time.Time, error) {
+	var last sql.NullInt64
+	if err := s.db.QueryRowContext(ctx, `SELECT MAX(created_at) FROM code_host_webhook_deliveries WHERE code_host=? AND workspace_key=?`, codeHost, workspaceKey).Scan(&last); err != nil {
+		return time.Time{}, err
+	}
+	if !last.Valid {
+		return time.Time{}, nil
+	}
+	return time.UnixMilli(last.Int64).UTC(), nil
+}
+
 // ReleaseCodeHostWebhookDelivery forgets a claim whose processing failed,
 // so GitHub's redelivery is applied.
 func (s *SQLiteStore) ReleaseCodeHostWebhookDelivery(ctx context.Context, codeHost, deliveryID, workspaceKey string) error {

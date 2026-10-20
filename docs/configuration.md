@@ -655,6 +655,57 @@ the secret before persisting the pull/merge request and creating Inbox
 notifications. The delivery ID is used for idempotency, so provider retries do
 not duplicate notifications.
 
+### Importing pull and merge requests without webhooks
+
+When webhooks cannot reach Flow (an intranet deployment, local development, a
+broken delivery), Flow lists open pull and merge requests itself and creates or
+refreshes their reviews:
+
+- **Sync now** on the Reviews list (`POST /api/reviews/import`) runs an import
+  at once. `GET /api/reviews/import` reports the last run and whether background
+  imports run for the workspace.
+- **Background imports** run every `FLOW_REVIEW_IMPORT_INTERVAL` for each
+  workspace that has a code host source without a working webhook.
+
+What is listed:
+
+| Source | Repositories |
+| --- | --- |
+| GitHub App | Every repository of the workspace's installations (the installation's repository selection). |
+| Classic GitHub connection | The token's repositories (`/user/repos`), limited to the connection's `organization` when one is set. |
+| GitLab connection (gitlab.com or self-managed) | Projects the token is a member of with Reporter access or more, limited to the connection's `organization` (group) when one is set. |
+
+Archived repositories are skipped. For each repository, Flow lists the open
+requests (up to 1,000), creates a review for each new one, updates title,
+description, branches and draft state of the others, and reads the state of
+reviews that are open in Flow but no longer listed, so closed and merged
+requests are updated (a merge request deleted on GitLab reads as closed).
+Imported reviews link issues whose identifier appears in the title, description
+or branch and run the teams' Git automations (opened, draft, merged) with the
+same team and repository rules as webhooks; they do not create Inbox
+notifications. Files and comments come from the same full sync as "Sync with
+GitHub/GitLab", queued one review after the other, and only for requests that
+are new, have a new head commit or changed since their last sync.
+
+Imports and webhooks share one review per request: a review is matched by code
+host and external id (or repository and number) inside the workspace write, so
+a webhook and an import racing for the same request leave a single review.
+
+Code host requests go through the same credentials and outbound policy as the
+review sync (see [Trusted private endpoints](#trusted-private-endpoints) for
+self-hosted GitLab and GitHub Enterprise on a private network). A run stops
+when a token has fewer than 100 requests left in its rate limit window
+(`X-RateLimit-Remaining` / `RateLimit-Remaining`) or the host answers with a
+rate limit; the rest is imported after the reset.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FLOW_REVIEW_IMPORT` | `auto` | `auto`: background imports for workspaces with a source whose webhook is not working (a classic connection without a webhook secret, or one that delivered no pull/merge request webhook in 7 days; a GitHub App installation with no delivery in 7 days). `always`: every workspace with a code host source. `off`: only **Sync now**. |
+| `FLOW_REVIEW_IMPORT_INTERVAL` | `10m` | Period of the background import per workspace (a Go duration, at least `1m`). `0` turns background imports off. |
+
+With Redis coordination, one instance runs the background imports (leader lock
+`review-import`).
+
 ## GitHub App
 
 Coding sessions (see [Code hosts](#code-hosts)) use a GitHub App: only an App can mint short-lived,

@@ -31,6 +31,8 @@ type reviewProvider struct {
 	// acting member's own account when the member's token is used.
 	postedAs domain.ReviewPostedAs
 	account  *domain.CodeHostAccount
+	// rate is the budget the host's last answer reported.
+	rate reviewRateLimit
 }
 
 // reviewHostName is the host of the review's PR/MR URL ("" when unknown).
