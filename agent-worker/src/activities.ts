@@ -7,7 +7,7 @@ import type { ModelCallRecord } from './models.js'
 
 export type Elicitation =
   | { kind: 'select'; callId: string; body: string; options: { label: string; value: string }[]; allowFreeText: boolean }
-  | { kind: 'approval'; approval: 'connector' | 'delete' | 'publish'; callIds: string[]; body: string; options: { label: string; value: string }[] }
+  | { kind: 'approval'; approval: 'connector'; callIds: string[]; body: string; options: { label: string; value: string }[] }
 
 export type FlowActivity =
   | { type: 'thought'; at: number; body: string; ephemeral: boolean }

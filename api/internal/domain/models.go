@@ -226,14 +226,16 @@ type AgentQuestion struct {
 	AllowFreeText bool                  `json:"allowFreeText"`
 	Selected      string                `json:"selected,omitempty"`
 	Answer        string                `json:"answer,omitempty"`
-	// Approval is set when the question asks to approve actions the agent held back (bulk deletes, publishing an
-	// update it wrote): the app shows a readable preview, and the held calls run once the user approves.
+	// Approval is set when the question asks to approve actions the agent held back (saved by earlier versions for
+	// bulk deletes or an update it wrote): the app shows a readable preview, and the held calls run once the user
+	// approves.
 	Approval *AgentApproval `json:"approval,omitempty"`
 }
 
 // AgentApproval is a set of tool calls waiting for the user's approval, with what they would change.
 type AgentApproval struct {
-	// Kind is "delete" (several items to the trash) or "publish" (a project or initiative update).
+	// Kind is "connector" (tools of a connector set to always ask), or, in approvals saved by earlier versions,
+	// "delete" (several items to the trash) or "publish" (a project or initiative update).
 	Kind    string                `json:"kind"`
 	Targets []AgentApprovalTarget `json:"targets,omitempty"`
 	// Body and Health are the update to publish; Parent names its project or initiative.
