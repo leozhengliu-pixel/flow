@@ -46,8 +46,8 @@ describe('coding session model', () => {
     }
     expect(codingErrorInfo('noGitHubConnection', { workspace: 'acme' }).actions[0]).toEqual({ kind: 'link', label: 'Connect GitHub', href: '/acme/settings/integrations/github' })
     expect(codingErrorInfo('missingCommitSigningKey', { workspace: 'acme' }).actions[0]).toMatchObject({ href: '/acme/settings/account/security/commit-signing-key' })
-    expect(codingErrorInfo('requiresGithubConnection', { workspace: 'acme' }).actions[0]).toMatchObject({ label: 'Link GitHub account', href: '/acme/settings/integrations/github' })
-    expect(codingErrorInfo('requiresGitlabConnection', { workspace: 'acme' }).actions[0]).toMatchObject({ label: 'Link GitLab account', href: '/acme/settings/integrations/gitlab' })
+    expect(codingErrorInfo('requiresGithubConnection', { workspace: 'acme' }).actions[0]).toMatchObject({ label: 'Link GitHub account', href: '/acme/settings/account/connections' })
+    expect(codingErrorInfo('requiresGitlabConnection', { workspace: 'acme' }).actions[0]).toMatchObject({ label: 'Link GitLab account', href: '/acme/settings/account/connections' })
     expect(codingErrorInfo('gitlabTransientError', { workspace: 'acme' }).title).toBe('GitLab didn’t respond')
     expect(codingErrorInfo('quotaExceeded', { workspace: 'acme' }).actions[0]).toMatchObject({ href: '/acme/settings/usage/spend-limits' })
     expect(codingErrorInfo('noCodeAccess', { workspace: 'acme', codeHost: 'gitlab' }).actions[0]).toMatchObject({ href: '/acme/settings/integrations/gitlab' })

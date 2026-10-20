@@ -123,8 +123,9 @@ func (s *server) codingViewerFor(w http.ResponseWriter, r *http.Request) (coding
 	return viewer, true
 }
 
-// codingSessionAccess loads a session the viewer may see (guests only their
-// own); editing additionally requires a member, the creator or an admin.
+// codingSessionAccess loads a session the viewer may see: its anchor's rule
+// (codingSessionAnchorAccess), and guests only their own. Editing additionally
+// needs the creator or edit access to the anchor's resource.
 func (s *server) codingSessionAccess(w http.ResponseWriter, r *http.Request, editing bool) (codingViewer, domain.CodingSession, bool) {
 	viewer, ok := s.codingViewerFor(w, r)
 	if !ok {
@@ -136,6 +137,11 @@ func (s *server) codingSessionAccess(w http.ResponseWriter, r *http.Request, edi
 	}
 	if err == nil && editing && viewer.guest() && session.CreatorID != viewer.user.ID {
 		err = coding.ErrForbidden
+	}
+	if err == nil {
+		// The thread, artifacts and actions follow the anchor's rule; the
+		// session itself does too.
+		err = s.codingSessionAnchorAccess(r, session, editing)
 	}
 	if err != nil {
 		writeCodingError(w, err)
@@ -402,6 +408,10 @@ func (s *server) listCodingSessions(w http.ResponseWriter, r *http.Request) {
 		writeCodingError(w, err)
 		return
 	}
+	// List only what the viewer could open (the anchor's rule).
+	sessions = coding.FilterSessions(sessions, func(session domain.CodingSession) bool {
+		return s.codingSessionAnchorAccess(r, session, false) == nil
+	})
 	writeJSON(w, http.StatusOK, sessions)
 }
 

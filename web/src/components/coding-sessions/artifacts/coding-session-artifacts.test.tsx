@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
+import { ApiError } from '@/lib/api-client'
 import { zhCN } from '@/i18n/translations'
 import type { CodingArtifact } from '@/types/coding-sessions'
 
@@ -162,6 +163,27 @@ describe('CodingSessionArtifacts', () => {
     expect(await screen.findByRole('img', { name: 'Recovered' })).toBeInTheDocument()
     expect(api.fetchCodingSessionArtifacts).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('shows the empty state, not an error, for an empty list or a session it cannot read; only a real failure is an error', async () => {
+    api.fetchCodingSessionArtifacts.mockResolvedValueOnce([])
+    const empty = renderGallery({ sessionId: 'never-ran' })
+    await waitFor(() => expect(api.fetchCodingSessionArtifacts).toHaveBeenCalledWith('never-ran'))
+    await waitFor(() => expect(empty.container).toBeEmptyDOMElement())
+    expect(screen.queryByRole('alert')).toBeNull()
+    empty.unmount()
+
+    api.fetchCodingSessionArtifacts.mockRejectedValueOnce(new ApiError('Coding session not found', 404))
+    const missing = renderGallery({ sessionId: 'gone' })
+    await waitFor(() => expect(missing.container).toBeEmptyDOMElement())
+    expect(screen.queryByText("Couldn't load screenshots")).toBeNull()
+    missing.unmount()
+
+    api.fetchCodingSessionArtifacts.mockRejectedValueOnce(new ApiError('Could not read session artifacts', 500))
+    renderGallery({ sessionId: 'broken' })
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent("Couldn't load screenshots")
+    expect(within(alert).getByRole('button', { name: 'Retry' })).toBeVisible()
   })
 
   it('renders nothing without screenshots or videos', async () => {

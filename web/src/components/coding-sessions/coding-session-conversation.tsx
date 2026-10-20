@@ -75,7 +75,7 @@ function useAnchorActivities(workspace: string, agentSessionId: string, issueId:
     void load().catch(cause => { if (!abort.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause)) })
     return () => abort.abort()
   }, [workspace, agentSessionId, revision, tick])
-  return { activities, error, loaded }
+  return { activities, error, loaded, retry: () => setTick(value => value + 1) }
 }
 
 /** Follows the end of the stream while the reader is there; `away` once the end is 70px out of view (the "Latest" button). */
@@ -121,7 +121,7 @@ type ConversationProps = {
  */
 export function CodingSessionConversation({ session, data, onChange, onOpenChanges }: ConversationProps) {
   const { t } = useI18n()
-  const { activities, error, loaded } = useAnchorActivities(data.workspace.urlKey, session.agentSessionId, session.issueId, `${session.version}:${session.updatedAt}`)
+  const { activities, error, loaded, retry: reloadMessages } = useAnchorActivities(data.workspace.urlKey, session.agentSessionId, session.issueId, `${session.version}:${session.updatedAt}`)
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
   const scroller = useRef<HTMLDivElement>(null)
@@ -165,7 +165,9 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
     : undefined
   const showUncommitted = Boolean(onOpenChanges && session.diffs?.length && !generating && !pr && !allCommits.length)
   const stale = session.state === 'stale' && !session.stoppedBy && loaded && !agentActive
-  const missingError = session.state === 'error' && loaded && !lastErrorId
+  // The session's own error (errorCode / error from GET session) when the thread has no error activity, or when the
+  // thread could not be loaded at all: the reason must show either way.
+  const missingError = session.state === 'error' && !lastErrorId && (loaded || Boolean(error))
   const lastAgentText = [...items].reverse().find(item => item.kind === 'text') as Extract<StreamItem, { kind: 'text' }> | undefined
   const creator = data.users.find(user => user.id === session.creatorId)
   const issue = session.issueId ? data.issues.find(candidate => candidate.id === session.issueId) : undefined
@@ -232,7 +234,10 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
       {showUncommitted && onOpenChanges && <CodingUncommittedChanges session={session} onOpen={onOpenChanges}/>}
       {missingError && <CodingErrorCard session={session} data={data} busy={busy} onRetry={retry} retry={can.restart}/>}
       {stale && <CodingStaleCard busy={busy} onRetry={retry}/>}
-      {error && <p className="coding-session-error-text" role="alert">{error}</p>}
+      {error && <p className="coding-session-error-text cs-messages-error" role="alert" title={error}>
+        <span>{t('Couldn’t load this session’s messages.')}</span>
+        <button type="button" className="cs-button is-ghost is-small" onClick={reloadMessages}>{t('Retry')}</button>
+      </p>}
       {!generating && (lastAgentText || links.length > 0) && <footer className="cs-turn-footer" data-links={links.length > 0 || undefined}>
         {links.length === 1 && <a className="cs-button is-ghost is-small" href={links[0].url} target="_blank" rel="noreferrer"><span data-i18n-ignore>{links[0].label}</span><ArrowUpRight size={14} aria-hidden="true"/></a>}
         {links.length > 1 && <DropdownMenu>
