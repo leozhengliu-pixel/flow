@@ -437,8 +437,8 @@ function IntegrationsPage({data,onOpen}:{data:BootstrapData;onOpen:(provider:Int
   const normalized = query.trim().toLowerCase();
   const list = catalog.filter(item => !normalized || `${item.name} ${item.description}`.toLowerCase().includes(normalized));
   const sections = integrationCategories(list).map(category => ({ category, items: list.filter(item => item.category === category) }));
-  const enabledCount = data.integrationConnections.filter(item => item.status === "connected" || item.status === "configured").length
-    + (data.oauthAuthorizations ?? []).filter(item => !item.revokedAt).length;
+  // Authorized applications are not integrations; Settings › Applications lists them.
+  const enabledCount = data.integrationConnections.filter(item => item.status === "connected" || item.status === "configured").length;
   return <div className="feature-integrations"><FeatureShell title="Integrations" description="Enhance your Flow experience with a wide variety of add-ons and integrations">
     <div className="feature-integration-toolbar">
       <div className="feature-integration-search"><Search size={16}/><input aria-label={t("Search integrations")} placeholder={t("Search integrations")} value={query} onChange={event=>setQuery(event.target.value)}/></div>

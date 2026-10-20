@@ -1,12 +1,13 @@
 /**
- * LS-0248 EnabledIntegrationsSettingsPage — merge connections + authorized apps.
+ * LS-0248 EnabledIntegrationsSettingsPage — the workspace's enabled integrations.
+ * Authorized OAuth applications and app-user installations are not integrations:
+ * they are listed in Settings › Applications, as in the reference app.
  */
-import { KnownAppIcon } from "@/components/ui/app-logo";
-import { AppWindow, Plug } from "lucide-react";
+import { Plug } from "lucide-react";
 
 import { IntegrationBrandIcon } from "@/components/settings/integration-brand-icon";
 import { useI18n } from "@/i18n/i18n";
-import { disconnectIntegration, revokeOAuthAuthorization } from "@/lib/api";
+import { disconnectIntegration } from "@/lib/api";
 import {
   getIntegrationCatalogEntry,
   primaryIntegrations,
@@ -23,11 +24,9 @@ type Props = {
 
 export function EnabledIntegrationsSettingsPage({ data, onBack, onOpenSlug, onReload }: Props) {
   const { t, formatDate } = useI18n();
-  const authorizations = (data.oauthAuthorizations ?? []).filter((item) => !item.revokedAt);
   const connections = data.integrationConnections.filter(
     (item) => item.status === "connected" || item.status === "configured",
   );
-  const empty = !connections.length && !authorizations.length;
 
   const revokeConnection = async (provider: string) => {
     try {
@@ -46,7 +45,7 @@ export function EnabledIntegrationsSettingsPage({ data, onBack, onOpenSlug, onRe
             {t("Integrations")}
           </button>
           <h1>{t("Enabled integrations")}</h1>
-          <p>{t("Workspace connections and applications currently enabled for this workspace.")}</p>
+          <p>{t("Integrations currently enabled for this workspace.")}</p>
         </header>
 
         {connections.length > 0 && (
@@ -102,51 +101,7 @@ export function EnabledIntegrationsSettingsPage({ data, onBack, onOpenSlug, onRe
           </section>
         )}
 
-        {authorizations.length > 0 && (
-          <section className="feature-section">
-            <header>
-              <h2>{t("Applications")}</h2>
-              <p>{t("Third-party applications authorized for this workspace")}</p>
-            </header>
-            <div className="feature-card">
-              {authorizations.map((item) => (
-                <div key={item.id} className="feature-row">
-                  <span className="feature-row-icon">
-                    <KnownAppIcon name={item.clientName} size={16} fallback={<AppWindow size={16} />} />
-                  </span>
-                  <div>
-                    <strong data-i18n-ignore>{item.clientName}</strong>
-                    <span>
-                      MCP · {item.scopes.join(", ")} ·{" "}
-                      {item.lastUsedAt
-                        ? `${t("last used")} ${formatDate(item.lastUsedAt)}`
-                        : `${t("authorized")} ${formatDate(item.createdAt)}`}
-                    </span>
-                  </div>
-                  <aside>
-                    <button
-                      type="button"
-                      className="feature-button danger"
-                      onClick={() =>
-                        void revokeOAuthAuthorization(item.id)
-                          .then(onReload)
-                          .catch((error: unknown) =>
-                            toast.error(
-                              error instanceof Error ? error.message : t("Could not revoke access"),
-                            ),
-                          )
-                      }
-                    >
-                      {t("Revoke access")}
-                    </button>
-                  </aside>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {empty && (
+        {!connections.length && (
           <div className="feature-empty">
             <Plug size={24} />
             <h3>{t("No enabled integrations")}</h3>
