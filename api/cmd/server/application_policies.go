@@ -23,9 +23,15 @@ type applicationPolicy struct {
 	// CodingSessions exposes an approved, shared MCP connector to coding
 	// sessions through Flow's MCP gateway (coding_mcp_gateway.go). Only
 	// workspace admins set it.
-	CodingSessions bool      `json:"codingSessions,omitempty"`
-	UpdatedAt      time.Time `json:"updatedAt"`
+	CodingSessions bool `json:"codingSessions,omitempty"`
+	// ToolApproval is "always" when Flow Agent asks before every call to this
+	// MCP connector's tools. Empty (the default) runs them automatically,
+	// except tools that declare themselves destructive.
+	ToolApproval string    `json:"toolApproval,omitempty"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 }
+
+const connectorToolApprovalAlways = "always"
 
 func applicationPolicies(data *domain.Bootstrap) []applicationPolicy {
 	items := []applicationPolicy{}
@@ -93,6 +99,9 @@ func (s *server) saveApplicationPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 	if input.Kind != "mcp" {
 		input.CodingSessions = false
+	}
+	if input.Kind != "mcp" || input.ToolApproval != connectorToolApprovalAlways {
+		input.ToolApproval = ""
 	}
 	if input.Kind == "mcp" {
 		input.URL = strings.TrimSpace(input.URL)

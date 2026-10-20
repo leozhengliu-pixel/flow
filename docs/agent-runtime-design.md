@@ -174,7 +174,7 @@ The worker iterates the `StreamedRunResult` and produces activities (`agent-work
 ### 6.2 Approvals: `needsApproval`, `RunState` and the policy port
 
 `agent-worker/src/policy.ts` ports `agent_approval_policy.go` and `agentToolNeedsApproval`:
-- `external_*` connector tools always ask;
+- `external_*` connector tools ask only when the tool declares `destructiveHint: true` without `readOnlyHint: true`, or its connector is set to always ask (`toolApproval: "always"`); everything else runs automatically. Until `/mcp` passes a connector tool's annotations and connector setting to the worker, the worker's port keeps asking for every `external_*` call;
 - a model turn whose `delete_*` calls name two or more targets asks once for the whole turn; a second sequential delete in one request asks once for the rest of the request;
 - a new `save_status_update` the user did not ask to post asks;
 - a request that is itself an approval word ("yes", "批准") never asks again.
@@ -206,7 +206,7 @@ Phase 0 records changes in `/mcp` when the call carries a run token: `before`/`a
 
 - **Threads and delegation.** Mention or delegation creates the task (unchanged). Instead of `executeBuiltinApplication` in-process, Flow enqueues an `agent_runs` row (priority 1). The payload's `context` already carries the rendered thread prompt (phase 0). On delegation, AIG behaviour is: move the issue to the first started state, then ack within 10 s.
 - **Loops.** A loop run is an `agent_runs` row (priority 2) with the loop's instructions and scope; `finish_run` is a host tool; `maxTurns` = `FLOW_LOOP_MAX_TURNS`; the run lease timeout = `FLOW_LOOP_RUN_TIMEOUT`; budget is enforced from usage per model call (the runner's `Usage`) against the loop's credit budget. `loopScope` stays in `/mcp` through the token.
-- **External MCP connectors (`external_*`).** Stay proxied by Flow, which holds the credentials; exposed through `/mcp` to the run token only when allowed. Every call needs approval.
+- **External MCP connectors (`external_*`).** Stay proxied by Flow, which holds the credentials; exposed through `/mcp` to the run token only when allowed. Calls follow the connector approval rule in §6.2.
 - **Web search.** Expose Flow's `web_search` and `fetch_url` (SSRF-safe) through `/mcp` when `agentWebSearch` is on. Provider-hosted web search (Responses `web_search`) is possible per model but bypasses Flow's controls.
 
 ## 7. Sequence diagrams

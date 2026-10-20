@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -15,9 +16,12 @@ import (
 
 	appconfig "flow/api/internal/config"
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
-// fakeCodeMCP is a streamable-HTTP MCP server with read-only code tools; tools/list returns toolCount tools.
+// fakeCodeMCP is a streamable-HTTP MCP server with code tools; tools/list returns toolCount tools: search_code
+// (no annotations), delete_branch (destructiveHint), list_branches (readOnlyHint and destructiveHint), then
+// unannotated tool_N.
 func fakeCodeMCP(t *testing.T, calls *atomic.Int32, toolCount *atomic.Int32) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "DELETE" {
@@ -44,7 +48,14 @@ func fakeCodeMCP(t *testing.T, calls *atomic.Int32, toolCount *atomic.Int32) *ht
 		case "tools/list":
 			tools := []any{map[string]any{"name": "search_code", "description": "Search the repository", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}}}}}
 			for index := int32(1); index < toolCount.Load(); index++ {
-				tools = append(tools, map[string]any{"name": fmt.Sprintf("tool_%d", index), "inputSchema": map[string]any{"type": "object"}})
+				tool := map[string]any{"name": fmt.Sprintf("tool_%d", index), "inputSchema": map[string]any{"type": "object"}}
+				switch index {
+				case 1:
+					tool["name"], tool["annotations"] = "delete_branch", map[string]any{"destructiveHint": true}
+				case 2:
+					tool["name"], tool["annotations"] = "list_branches", map[string]any{"readOnlyHint": true, "destructiveHint": true}
+				}
+				tools = append(tools, tool)
 			}
 			result = map[string]any{"tools": tools}
 		case "tools/call":
@@ -61,17 +72,132 @@ func fakeCodeMCP(t *testing.T, calls *atomic.Int32, toolCount *atomic.Int32) *ht
 	}))
 }
 
-// A delegated issue gets the delegating user's connector tools like chat: the call waits for approval, the approval
-// runs it through the delegation path with the call and its result in the activity log, and a connector revoked
-// before a held call is approved is refused and no longer offered.
+// connectorToolName is the external_ name an agent is offered for a connector's tool.
+func connectorToolName(policyID, tool string) string {
+	hash := sha256.Sum256([]byte(policyID + "\x00" + tool))
+	return fmt.Sprintf("external_%x", hash[:16])
+}
+
+// setTestConnectors enables MCP connectors in the fixture workspace and replaces its connectors.
+func setTestConnectors(t *testing.T, repository *store.SQLiteStore, policies ...applicationPolicy) {
+	t.Helper()
+	if err := repository.MutateWorkspace(t.Context(), repository.Bootstrap().Workspace.URLKey, "application_policy.updated", "code", nil, func(data *domain.Bootstrap) error {
+		data.WorkspaceSettings.MCPConnectorsEnabled = true
+		setApplicationPolicies(data, policies)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Connector tools run without asking unless they declare themselves destructive (and not read-only) or their
+// connector is set to always ask; the annotations are read during discovery.
+func TestConnectorToolApprovalRule(t *testing.T) {
+	var calls, toolCount atomic.Int32
+	toolCount.Store(4)
+	upstream := fakeCodeMCP(t, &calls, &toolCount)
+	defer upstream.Close()
+	s := &server{authDisabled: true}
+	s.agent.ToolsEnabled, s.agent.WriteTools = true, true
+	for _, approval := range []string{"", connectorToolApprovalAlways} {
+		data := domain.Bootstrap{WorkspaceSettings: domain.WorkspaceSettings{MCPConnectorsEnabled: true}, Settings: map[string]any{}}
+		setApplicationPolicies(&data, []applicationPolicy{{ID: "code", Kind: "mcp", Name: "Code search", URL: upstream.URL, Status: "approved", Shared: true, ToolApproval: approval}})
+		ctx, tools, err := s.withConnectorTools(t.Context(), data, connectorRequestContext{UserID: "user"})
+		if err != nil || len(tools) != 4 {
+			t.Fatalf("discovery: %v %d", err, len(tools))
+		}
+		want := map[string]bool{"search_code": false, "delete_branch": true, "list_branches": false, "tool_3": false}
+		for name, held := range want {
+			held = held || approval == connectorToolApprovalAlways
+			if got := agentToolNeedsApproval(ctx, connectorToolName("code", name)); got != held {
+				t.Errorf("toolApproval=%q %s: needs approval %v, want %v", approval, name, got, held)
+			}
+		}
+		if agentToolNeedsApproval(ctx, connectorToolName("gone", "search_code")) || agentToolNeedsApproval(ctx, "save_issue") {
+			t.Fatal("a tool that is not an offered connector tool does not wait for approval")
+		}
+	}
+}
+
+// A connector's tool approval setting is saved as "always" or cleared; other values are not stored.
+func TestApplicationPolicyToolApproval(t *testing.T) {
+	s, handler, _, _ := applicationFixture(t)
+	setTestConnectors(t, s.store)
+	save := func(value string) applicationPolicy {
+		return requestJSON[applicationPolicy](t, handler, "PUT", "/api/application-policies", map[string]any{"id": "code", "name": "Code search", "kind": "mcp", "url": "http://127.0.0.1:9/mcp", "status": "approved", "toolApproval": value}, 200)
+	}
+	if saved := save("always"); saved.ToolApproval != connectorToolApprovalAlways {
+		t.Fatalf("always ask was not saved: %+v", saved)
+	}
+	if saved := save("sometimes"); saved.ToolApproval != "" {
+		t.Fatalf("an unknown tool approval value was stored: %+v", saved)
+	}
+}
+
+// Chat runs a connector tool without annotations straight through and shows the call and its result.
+func TestAgentSessionConnectorToolsRunWithoutApproval(t *testing.T) {
+	var providerCalls, connectorCalls, toolCount atomic.Int32
+	toolCount.Store(1)
+	upstream := fakeCodeMCP(t, &connectorCalls, &toolCount)
+	defer upstream.Close()
+	external := connectorToolName("code", "search_code")
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		call := providerCalls.Add(1)
+		w.Header().Set("Content-Type", "text/event-stream")
+		if call == 1 {
+			_, _ = w.Write([]byte("event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"item_search\",\"call_id\":\"call_search\",\"type\":\"function_call\",\"name\":\"" + external + "\",\"arguments\":\"{}\"}}\n\n" +
+				"event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"item_id\":\"item_search\",\"arguments\":\"{\\\"query\\\":\\\"roundTotal\\\"}\"}\n\n" +
+				"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"))
+			return
+		}
+		_, _ = w.Write([]byte("event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"Found it.\"}\n\n" +
+			"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"))
+	}))
+	defer provider.Close()
+	repository, err := store.OpenSQLiteTestFixture(t.TempDir() + "/flow.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	setTestConnectors(t, repository, applicationPolicy{ID: "code", Kind: "mcp", Name: "Code search", URL: upstream.URL, Status: "approved", Shared: true})
+	s := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true, agent: appconfig.AgentConfig{Enabled: true, Protocol: "openai-responses", BaseURL: provider.URL, Model: "flow-test", MaxOutputTokens: 256, ToolsEnabled: true, WriteTools: true}, agentClient: provider.Client()}
+	handler := newHandler(s)
+	defer s.stopDeliveryScheduler(context.Background())
+	host := httptest.NewServer(handler)
+	defer host.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, host.URL+"/api/agent/sessions/stream", strings.NewReader(`{"message":"Where are totals rounded?","location":"page"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := host.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream := string(body)
+	if strings.Contains(stream, "tool.approval_required") || connectorCalls.Load() != 1 || providerCalls.Load() != 2 || !strings.Contains(stream, "Found it.") || !strings.Contains(stream, "invoice.go:42") {
+		t.Fatalf("an unannotated connector tool must run without approval calls=%d/%d: %s", providerCalls.Load(), connectorCalls.Load(), stream)
+	}
+}
+
+// A delegated issue gets the delegating user's connector tools like chat: a tool without annotations runs at once
+// and is logged with its result, a destructive tool waits for approval, a read-only one does not, a connector set
+// to always ask holds every call, and a connector revoked before a held call is approved is refused and no longer
+// offered.
 func TestBuiltinDelegationUsesConnectorTools(t *testing.T) {
 	s, handler, data, _ := applicationFixture(t)
 	var calls, toolCount atomic.Int32
-	toolCount.Store(1)
+	toolCount.Store(3)
 	upstream := fakeCodeMCP(t, &calls, &toolCount)
 	defer upstream.Close()
-	hash := sha256.Sum256([]byte("code\x00search_code"))
-	external := fmt.Sprintf("external_%x", hash[:16])
+	external := connectorToolName("code", "search_code")
 
 	var mu sync.Mutex
 	var requests []string
@@ -89,8 +215,14 @@ func TestBuiltinDelegationUsesConnectorTools(t *testing.T) {
 		_, _ = io.WriteString(w, reply)
 	}))
 	defer provider.Close()
-	searchCall := func(id string) string {
-		return "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"" + id + "\",\"function\":{\"name\":\"" + external + "\",\"arguments\":\"{\\\"query\\\":\\\"roundTotal\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n"
+	toolCall := func(id, tool string) string {
+		return "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"" + id + "\",\"function\":{\"name\":\"" + connectorToolName("code", tool) + "\",\"arguments\":\"{\\\"query\\\":\\\"roundTotal\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n"
+	}
+	// next scripts the model's next request to call tool.
+	next := func(id, tool string) {
+		mu.Lock()
+		script[len(requests)] = toolCall(id, tool)
+		mu.Unlock()
 	}
 	s.agent = appconfig.AgentConfig{Enabled: true, ToolsEnabled: true, WriteTools: true, Protocol: "openai-chat-completions", BaseURL: provider.URL, Model: "test", APIKey: "test", Timeout: 5 * time.Second}
 	s.agentClient = provider.Client()
@@ -98,10 +230,10 @@ func TestBuiltinDelegationUsesConnectorTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	setConnectors := func(enabled bool, policies ...applicationPolicy) {
+	setConnectors := func(policies ...applicationPolicy) {
 		t.Helper()
 		if err := s.store.MutateWorkspace(t.Context(), data.Workspace.URLKey, "application_policy.updated", "code", nil, func(data *domain.Bootstrap) error {
-			data.WorkspaceSettings.MCPConnectorsEnabled = enabled
+			data.WorkspaceSettings.MCPConnectorsEnabled = true
 			setApplicationPolicies(data, policies)
 			return nil
 		}); err != nil {
@@ -110,11 +242,20 @@ func TestBuiltinDelegationUsesConnectorTools(t *testing.T) {
 	}
 	codePolicy := applicationPolicy{ID: "code", Kind: "mcp", Name: "Code search", URL: upstream.URL, Status: "approved", OwnerID: data.Viewer.ID}
 	// Another member's personal connector is never offered to this delegator.
-	setConnectors(true, codePolicy, applicationPolicy{ID: "private", Kind: "mcp", Name: "Private", URL: upstream.URL, Status: "approved", OwnerID: "someone-else"})
+	setConnectors(codePolicy, applicationPolicy{ID: "private", Kind: "mcp", Name: "Private", URL: upstream.URL, Status: "approved", OwnerID: "someone-else"})
+	lastActivity := func(task domain.AgentTask) domain.AgentActivity {
+		activities, _ := s.store.AgentActivities(t.Context(), data.Workspace.URLKey, task.ID, "")
+		return activities[len(activities)-1]
+	}
+	prompt := func(task domain.AgentTask, body string) domain.AgentTask {
+		task = requestJSON[domain.AgentTask](t, handler, "POST", "/api/agent-tasks/"+task.ID+"/activities", map[string]any{"expectedVersion": task.Version, "type": "prompt", "body": body}, 200)
+		s.deliverApplicationTask(t.Context(), task)
+		task, _ = s.store.AgentTask(t.Context(), data.Workspace.URLKey, task.ID)
+		return task
+	}
 
-	mu.Lock()
-	script[0] = searchCall("c_1")
-	mu.Unlock()
+	// A tool without annotations runs without asking.
+	next("c_1", "search_code")
 	issue := requestJSON[domain.Issue](t, handler, "POST", "/api/issues", map[string]any{"title": "Where are invoice totals rounded?", "teamId": data.Teams[0].ID, "delegateId": app.UserID}, 201)
 	task, _ := s.store.AgentTask(t.Context(), data.Workspace.URLKey, issue.AgentSessionID)
 	s.deliverApplicationTask(t.Context(), task)
@@ -122,22 +263,11 @@ func TestBuiltinDelegationUsesConnectorTools(t *testing.T) {
 	mu.Lock()
 	first := requests[0]
 	mu.Unlock()
-	privateHash := sha256.Sum256([]byte("private\x00search_code"))
-	if !strings.Contains(first, external) || strings.Contains(first, fmt.Sprintf("%x", privateHash[:16])) || !strings.Contains(first, "connected MCP servers (Code search)") {
+	if !strings.Contains(first, external) || strings.Contains(first, connectorToolName("private", "search_code")) || !strings.Contains(first, "connected MCP servers (Code search)") {
 		t.Fatalf("delegation must offer the delegator's connector tools: %s", first)
 	}
-	if task.Status != "awaitingInput" || task.PendingTool == nil || calls.Load() != 0 {
-		t.Fatalf("a connector call waits for approval: status=%s pending=%+v calls=%d", task.Status, task.PendingTool, calls.Load())
-	}
-	if activities, _ := s.store.AgentActivities(t.Context(), data.Workspace.URLKey, task.ID, ""); !strings.Contains(activities[len(activities)-1].Body, "Allow Code search: search_code?") {
-		t.Fatalf("the approval names the connector and its tool: %+v", activities[len(activities)-1])
-	}
-
-	task = requestJSON[domain.AgentTask](t, handler, "POST", "/api/agent-tasks/"+task.ID+"/activities", map[string]any{"expectedVersion": task.Version, "type": "prompt", "body": agentApprovalApprove}, 200)
-	s.deliverApplicationTask(t.Context(), task)
-	task, _ = s.store.AgentTask(t.Context(), data.Workspace.URLKey, task.ID)
-	if task.Status != "complete" || calls.Load() != 1 {
-		t.Fatalf("the approved connector call must run: status=%s calls=%d", task.Status, calls.Load())
+	if task.Status != "complete" || task.PendingTool != nil || calls.Load() != 1 {
+		t.Fatalf("an unannotated connector call runs without approval: status=%s pending=%+v calls=%d", task.Status, task.PendingTool, calls.Load())
 	}
 	activities, _ := s.store.AgentActivities(t.Context(), data.Workspace.URLKey, task.ID, "")
 	logged := false
@@ -147,6 +277,9 @@ func TestBuiltinDelegationUsesConnectorTools(t *testing.T) {
 			parameter, _ := activity.Metadata["parameter"].(string)
 			logged = strings.Contains(result, "src/billing/invoice.go:42") && strings.Contains(parameter, "Code search") && strings.Contains(parameter, "roundTotal")
 		}
+		if strings.Contains(activity.Body, "Approved action") || strings.Contains(activity.Body, "Allow ") {
+			t.Fatalf("an automatic connector call must not read as an approval: %+v", activity)
+		}
 	}
 	if !logged {
 		t.Fatalf("the connector call and its result are missing from the activity log: %+v", activities)
@@ -155,15 +288,16 @@ func TestBuiltinDelegationUsesConnectorTools(t *testing.T) {
 	if !strings.Contains(requests[len(requests)-1], "invoice.go:42") {
 		t.Fatalf("the connector result must reach the model: %s", requests[len(requests)-1])
 	}
-	script[len(requests)] = searchCall("c_2")
 	mu.Unlock()
 
-	// A held call approved after the connector was disconnected is refused, and the next turn is not offered it.
-	task = requestJSON[domain.AgentTask](t, handler, "POST", "/api/agent-tasks/"+task.ID+"/activities", map[string]any{"expectedVersion": task.Version, "type": "prompt", "body": "Search again"}, 200)
-	s.deliverApplicationTask(t.Context(), task)
-	task, _ = s.store.AgentTask(t.Context(), data.Workspace.URLKey, task.ID)
-	if task.PendingTool == nil {
-		t.Fatalf("the second call should wait for approval: %+v", task)
+	// A destructive tool waits for approval; the approval runs it.
+	next("c_2", "delete_branch")
+	task = prompt(task, "Delete the branch")
+	if task.Status != "awaitingInput" || task.PendingTool == nil || calls.Load() != 1 {
+		t.Fatalf("a destructive connector call waits for approval: status=%s pending=%+v calls=%d", task.Status, task.PendingTool, calls.Load())
+	}
+	if body := lastActivity(task).Body; !strings.Contains(body, "Allow Code search: delete_branch?") {
+		t.Fatalf("the approval names the connector and its tool: %s", body)
 	}
 	mu.Lock()
 	if followUp := requests[len(requests)-1]; !strings.Contains(followUp, "Earlier connector call search_code") || !strings.Contains(followUp, "invoice.go:42") {
@@ -171,15 +305,35 @@ func TestBuiltinDelegationUsesConnectorTools(t *testing.T) {
 		t.Fatalf("a later run keeps earlier connector results: %s", followUp)
 	}
 	mu.Unlock()
-	setConnectors(true)
+	task = prompt(task, agentApprovalApprove)
+	if task.Status != "complete" || calls.Load() != 2 {
+		t.Fatalf("the approved connector call must run: status=%s calls=%d", task.Status, calls.Load())
+	}
+
+	// A tool that declares itself read-only runs without asking even when also marked destructive.
+	next("c_3", "list_branches")
+	task = prompt(task, "List branches")
+	if task.Status != "complete" || task.PendingTool != nil || calls.Load() != 3 {
+		t.Fatalf("a read-only connector call runs without approval: status=%s calls=%d", task.Status, calls.Load())
+	}
+
+	// A connector set to always ask holds every call; one approved after the connector was disconnected is refused,
+	// and the next turn is not offered it.
+	codePolicy.ToolApproval = connectorToolApprovalAlways
+	setConnectors(codePolicy)
+	next("c_4", "search_code")
+	task = prompt(task, "Search again")
+	if task.PendingTool == nil || calls.Load() != 3 {
+		t.Fatalf("a connector set to always ask must hold the call: %+v calls=%d", task, calls.Load())
+	}
+	setConnectors()
 	mu.Lock()
 	before := len(requests)
 	mu.Unlock()
-	task = requestJSON[domain.AgentTask](t, handler, "POST", "/api/agent-tasks/"+task.ID+"/activities", map[string]any{"expectedVersion": task.Version, "type": "prompt", "body": agentApprovalApprove}, 200)
-	s.deliverApplicationTask(t.Context(), task)
+	prompt(task, agentApprovalApprove)
 	mu.Lock()
 	defer mu.Unlock()
-	if calls.Load() != 1 {
+	if calls.Load() != 3 {
 		t.Fatalf("a revoked connector was still called (%d calls)", calls.Load())
 	}
 	resumed := requests[before]

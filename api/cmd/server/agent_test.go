@@ -207,14 +207,18 @@ func TestAgentSessionWriteToolsRunWithoutApproval(t *testing.T) {
 	}
 }
 
-// Third-party connector tools act outside Flow, so they still wait for the user.
-func TestAgentSessionExternalToolsRequireApproval(t *testing.T) {
-	var providerCalls atomic.Int32
+// A connector tool that declares itself destructive waits for the user in chat.
+func TestAgentSessionDestructiveConnectorToolsRequireApproval(t *testing.T) {
+	var providerCalls, connectorCalls, toolCount atomic.Int32
+	toolCount.Store(3)
+	upstream := fakeCodeMCP(t, &connectorCalls, &toolCount)
+	defer upstream.Close()
+	external := connectorToolName("code", "delete_branch")
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		call := providerCalls.Add(1)
 		w.Header().Set("Content-Type", "text/event-stream")
 		if call == 1 {
-			_, _ = w.Write([]byte("event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"item_write\",\"call_id\":\"call_write\",\"type\":\"function_call\",\"name\":\"external_demo_send\",\"arguments\":\"{}\"}}\n\n" +
+			_, _ = w.Write([]byte("event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"item_write\",\"call_id\":\"call_write\",\"type\":\"function_call\",\"name\":\"" + external + "\",\"arguments\":\"{}\"}}\n\n" +
 				"event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"item_id\":\"item_write\",\"arguments\":\"{}\"}\n\n" +
 				"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"))
 			return
@@ -228,6 +232,7 @@ func TestAgentSessionExternalToolsRequireApproval(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repository.Close()
+	setTestConnectors(t, repository, applicationPolicy{ID: "code", Kind: "mcp", Name: "Code search", URL: upstream.URL, Status: "approved", Shared: true})
 	s := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true, agent: appconfig.AgentConfig{Enabled: true, Protocol: "openai-responses", BaseURL: provider.URL, Model: "flow-test", MaxOutputTokens: 256, ToolsEnabled: true, WriteTools: true}, agentClient: provider.Client()}
 	handler := newHandler(s)
 	defer s.stopDeliveryScheduler(context.Background())
@@ -271,7 +276,7 @@ func TestAgentSessionExternalToolsRequireApproval(t *testing.T) {
 	if approvalID == "" {
 		t.Fatalf("approval event not emitted: %v %s", scanner.Err(), stream.String())
 	}
-	if providerCalls.Load() != 1 || strings.Contains(stream.String(), "event: tool.completed") {
+	if providerCalls.Load() != 1 || connectorCalls.Load() != 0 || strings.Contains(stream.String(), "event: tool.completed") {
 		t.Fatal("tool continued before approval")
 	}
 	resolve := httptest.NewRecorder()
@@ -294,7 +299,7 @@ func TestAgentSessionExternalToolsRequireApproval(t *testing.T) {
 	if err := scanner.Err(); err != nil {
 		t.Fatalf("stream did not resume after approval: %v", err)
 	}
-	if providerCalls.Load() != 2 || !strings.Contains(stream.String(), "tool.approval_required") || !strings.Contains(stream.String(), "tool.approval_resolved") || !strings.Contains(stream.String(), "Write approved.") || !strings.Contains(stream.String(), "session.completed") {
+	if providerCalls.Load() != 2 || connectorCalls.Load() != 1 || !strings.Contains(stream.String(), "tool.approval_required") || !strings.Contains(stream.String(), "tool.approval_resolved") || !strings.Contains(stream.String(), "Write approved.") || !strings.Contains(stream.String(), "session.completed") {
 		t.Fatalf("approval stream incomplete calls=%d body=%s", providerCalls.Load(), stream.String())
 	}
 }

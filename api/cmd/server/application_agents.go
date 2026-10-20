@@ -742,13 +742,14 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 				return
 			}
 		}
-		// Like chat: bulk deletes and an update the agent wrote itself wait for approval; connector tools always do.
+		// Like chat: bulk deletes and an update the agent wrote itself wait for approval, and so do destructive
+		// connector tools and tools of a connector set to always ask.
 		approval := s.agentApprovalForTurn(r, data, turn.ToolCalls, latestPrompt)
 		if approval == nil {
 			approval = &domain.AgentApproval{}
 		}
 		for _, call := range turn.ToolCalls {
-			if agentToolNeedsApproval(call.Name) && !slices.ContainsFunc(approval.Calls, func(item domain.AgentToolCall) bool { return item.ID == call.ID }) {
+			if agentToolNeedsApproval(r.Context(), call.Name) && !slices.ContainsFunc(approval.Calls, func(item domain.AgentToolCall) bool { return item.ID == call.ID }) {
 				if approval.Kind == "" {
 					approval.Kind = "connector"
 				}
@@ -839,7 +840,7 @@ func (s *server) builtinThreadHistory(r *http.Request, task domain.AgentTask, is
 			case activity.Type == "prompt" && body != "":
 				messages = append(messages, agentProviderMessage{Role: "user", Content: agentModelUserText(body, nil, issueTitle)})
 			case activity.Type == "action" && !activity.Ephemeral && activity.Metadata["connector"] != nil:
-				// Connector calls end a run on their approval: a later run keeps what earlier calls returned (as logged,
+				// A later run (after an approval or a reply) keeps what earlier calls returned (as logged,
 				// at most 2 KB each) instead of calling the connector again.
 				parameter, _ := activity.Metadata["parameter"].(string)
 				result, _ := activity.Metadata["result"].(string)
@@ -1007,7 +1008,7 @@ func builtinTaskPromptFor(task domain.AgentTask, data domain.Bootstrap, canCode 
 	if len(connectors) > 0 {
 		fmt.Fprintf(&text, "You can use the tools of the connected MCP servers (%s). When the issue needs what they provide, such as searching or reading code, call them "+
 			"instead of guessing, and cite what you found: for code, the repository and branch, file paths and line numbers, and your reasoning. "+
-			"Each connector call waits for the person's approval, so make only the calls you need and answer as soon as the results are enough.\n", strings.Join(connectors, ", "))
+			"Make only the calls you need and answer as soon as the results are enough.\n", strings.Join(connectors, ", "))
 	}
 	text.WriteString("End with a short reply in the language of the issue: what you did and what is left. Refer to the issue by its identifier only; do not repeat its title.")
 	return text.String()

@@ -47,6 +47,24 @@ describe('application settings behavior', () => {
     await screen.findByText('Approved');
     expect(screen.queryByRole('button', { name: /coding sessions/ })).not.toBeInTheDocument();
   });
+  it('lets a connector owner switch between running tools automatically and asking first', async () => {
+    const policy = { id: 'mcp', name: 'Personal connector', kind: 'mcp', status: 'approved', shared: false, url: 'https://example.test/mcp' };
+    request.mockResolvedValue([policy]);
+    const { unmount } = render(<ApplicationPolicySettings admin={false} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Ask before running tools' }));
+    await waitFor(() => expect(request).toHaveBeenCalledWith('/api/application-policies', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ ...policy, toolApproval: 'always' }) })));
+    unmount();
+    request.mockResolvedValue([{ ...policy, toolApproval: 'always' }]);
+    render(<ApplicationPolicySettings admin={false} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Run tools automatically' }));
+    await waitFor(() => expect(request).toHaveBeenCalledWith('/api/application-policies', expect.objectContaining({ method: 'PUT', body: JSON.stringify(policy) })));
+  });
+  it('does not offer the tool approval setting of a workspace connector to members', async () => {
+    request.mockResolvedValue([{ id: 'w', name: 'Workspace tools', kind: 'mcp', status: 'approved', shared: true, url: 'https://example.test/mcp' }]);
+    render(<ApplicationPolicySettings admin={false} />);
+    await screen.findByText('Workspace tools');
+    expect(screen.queryByRole('button', { name: 'Ask before running tools' })).not.toBeInTheDocument();
+  });
   it('keeps the privacy editor open when persistence fails', async () => {
     const save = vi.fn().mockRejectedValue(new Error('Save failed'));
     const close = vi.fn();
