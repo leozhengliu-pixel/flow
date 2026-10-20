@@ -20,6 +20,7 @@ import type {
   CodingStatus,
   CodingUsageSummary,
   CreateCodingSessionInput,
+  GitHubAppInstallationSummary,
   GitHubAppStatus,
   ReviewCodingSessionKind,
 } from "@/types/coding-sessions";
@@ -110,5 +111,11 @@ export const fetchGitHubApp = () => request<GitHubAppStatus>("/api/integrations/
 export const startGitHubAppInstall = () => request<{ url: string }>("/api/integrations/github-app/install", { method: "POST" });
 export const removeGitHubAppInstallation = (installationId: string) =>
   request<void>(`/api/integrations/github-app/installations/${id(installationId)}`, { method: "DELETE" });
+/** App installations the admin's linked GitHub account can access that the workspace has not linked yet. */
+export const fetchAvailableGitHubAppInstallations = () =>
+  request<{ installations: GitHubAppInstallationSummary[] }>("/api/integrations/github-app/available-installations");
+/** Links an existing installation (GitHub sends no setup redirect when the App is already installed). */
+export const linkGitHubAppInstallation = (installationId: string) =>
+  request<GitHubAppInstallationSummary>("/api/integrations/github-app/installations", jsonRequest("POST", { installationId }));
 /** Links the viewer's GitHub account (user-to-server OAuth) for personal access checks. */
 export const startGitHubAppAuthorization = () => request<{ url: string }>("/api/integrations/github-app/authorize", { method: "POST" });

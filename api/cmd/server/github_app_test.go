@@ -56,6 +56,13 @@ func newGitHubAppFixture(t *testing.T) *gitHubAppFixture {
 				return
 			}
 			_, _ = w.Write([]byte(`{"id":42,"account":{"login":"acme","type":"Organization"},"repository_selection":"selected"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/user/installations":
+			// Only the member's own user-to-server token sees installations.
+			if r.Header.Get("Authorization") != "Bearer ghu_admin" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			_, _ = w.Write([]byte(`{"total_count":2,"installations":[{"id":42,"account":{"login":"acme","type":"Organization"},"repository_selection":"selected"},{"id":43,"account":{"login":"admin-user","type":"User"},"repository_selection":"all"}]}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = w.Write([]byte(`{"message":"Not Found"}`))
@@ -157,6 +164,54 @@ func TestGitHubAppInstallAndSetup(t *testing.T) {
 	}
 	if rec := f.do(http.MethodDelete, "/api/integrations/github-app/installations/42?workspace=test-workspace", nil, nil); rec.Code != http.StatusNotFound {
 		t.Fatalf("second unlink: %d", rec.Code)
+	}
+}
+
+// GitHub sends no setup redirect when the App is already installed and the
+// admin changes nothing, so an admin links an existing installation that
+// their own linked GitHub account can access.
+func TestGitHubAppLinksExistingInstallationThroughTheAdminsAccount(t *testing.T) {
+	f := newGitHubAppFixture(t)
+	available := "/api/integrations/github-app/available-installations?workspace=test-workspace"
+	if rec := f.do(http.MethodGet, available, nil, nil); rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "Connect your GitHub account") {
+		t.Fatalf("without a linked account: %d %s", rec.Code, rec.Body.String())
+	}
+	viewer := f.repo.Account().Viewer
+	account, err := f.repo.UpsertCodeHostAccount(t.Context(), domain.CodeHostAccount{ID: "cha_admin", UserID: viewer.ID, CodeHost: domain.CodeHostGitHub, HostName: "github.com", BaseURL: "https://github.com", ExternalUserID: "7", Login: "admin-user", AuthType: domain.CodeHostAuthGitHubApp})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.server.writeCodeHostTokens(t.Context(), account.ID, codeHostAccountTokens{AccessToken: "ghu_admin", ExpiresAt: time.Now().Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	var list struct {
+		Installations []gitHubAppInstallation `json:"installations"`
+	}
+	rec := f.do(http.MethodGet, available, nil, nil)
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil || rec.Code != http.StatusOK || len(list.Installations) != 2 || list.Installations[0].InstallationID != "42" || list.Installations[0].AccountLogin != "acme" {
+		t.Fatalf("available: %d %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "ghu_") {
+		t.Fatalf("available installations leak the member token: %s", rec.Body.String())
+	}
+	// An installation the admin's account cannot access is refused.
+	link := "/api/integrations/github-app/installations?workspace=test-workspace"
+	if rec := f.do(http.MethodPost, link, []byte(`{"installationId":"99"}`), nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("foreign installation: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = f.do(http.MethodPost, link, []byte(`{"installationId":"42"}`), nil)
+	var linked gitHubAppInstallation
+	if err := json.Unmarshal(rec.Body.Bytes(), &linked); err != nil || rec.Code != http.StatusOK || linked.ID == "" || linked.AccountLogin != "acme" {
+		t.Fatalf("link: %d %s", rec.Code, rec.Body.String())
+	}
+	installations, err := f.repo.CodeHostInstallations(t.Context(), "test-workspace", "github")
+	if err != nil || len(installations) != 1 || installations[0].InstallationID != "42" || installations[0].ID != linked.ID {
+		t.Fatalf("installation not stored: %+v %v", installations, err)
+	}
+	rec = f.do(http.MethodGet, available, nil, nil)
+	_ = json.Unmarshal(rec.Body.Bytes(), &list)
+	if len(list.Installations) != 1 || list.Installations[0].InstallationID != "43" {
+		t.Fatalf("linked installation still offered: %s", rec.Body.String())
 	}
 }
 
