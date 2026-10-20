@@ -1936,6 +1936,8 @@ type ReviewFile struct {
 	Additions int    `json:"additions"`
 	Deletions int    `json:"deletions"`
 	Patch     string `json:"patch"`
+	// PreviousPath is the old path of a renamed or moved file.
+	PreviousPath string `json:"previousPath,omitempty"`
 }
 
 type ReviewEvent struct {

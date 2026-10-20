@@ -12,6 +12,7 @@ import type { CodeReview } from "@/types/flow";
 
 const api = vi.hoisted(() => ({
   commentOnReview: vi.fn(),
+  resolveReviewThread: vi.fn(),
   submitReview: vi.fn(),
   updateReview: vi.fn(),
 }));
@@ -97,9 +98,10 @@ it("renders provider review activity and submits the compact comment composer", 
     </I18nProvider>,
   );
 
-  expect(screen.getByText("Opened by")).toBeVisible();
+  expect(screen.getByText(/Opened by/)).toBeVisible();
   expect(screen.getByText(/with 1 commit/)).toBeVisible();
-  expect(screen.getByText("requested review from")).toBeVisible();
+  expect(screen.getByText(/requested review from/)).toBeVisible();
+  expect(screen.getByRole("complementary", { name: "Review details" })).toBeVisible();
   expect(screen.getByRole("button", { name: "Copy URL" })).toBeVisible();
   expect(
     screen.getByRole("button", { name: "Review diff in full window" }),
@@ -182,8 +184,9 @@ it("uses merge-request identifiers and actions for GitLab reviews", async () => 
     </I18nProvider>,
   );
 
-  expect(screen.getByText("!27 Improve release workflow")).toBeVisible();
+  expect(screen.getByRole("heading", { level: 2, name: "Improve release workflow" })).toBeVisible();
   expect(screen.getByText("platform/api!27")).toBeVisible();
+  expect(screen.getByRole("button", { name: "merge request actions" })).toBeVisible();
 });
 
 it("renders split and unified diff rows and posts an inline comment", async () => {
@@ -221,10 +224,11 @@ it("renders split and unified diff rows and posts an inline comment", async () =
     </I18nProvider>,
   );
 
-  expect(screen.getByRole("button", { name: "Split" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  // Unified is the default layout; Split lives in the diff display options.
+  await user.click(screen.getByRole("button", { name: "Display options" }));
+  expect(screen.getByRole("button", { name: "Unified" })).toHaveAttribute("aria-pressed", "true");
+  await user.click(screen.getByRole("button", { name: "Split" }));
+  expect(screen.getByRole("button", { name: "Split" })).toHaveAttribute("aria-pressed", "true");
   await waitFor(() =>
     expect(
       screen.getByText(
@@ -273,10 +277,10 @@ it("reports quick-approve failures and unlocks the action", async () => {
   );
 
   await user.click(screen.getByRole("button", { name: "pull request actions" }));
-  const approve = screen.getByRole("button", { name: "Quick approve" });
-  await user.click(approve);
+  await user.click(await screen.findByRole("menuitem", { name: /Quick approve/ }));
   await waitFor(() => expect(api.submitReview).toHaveBeenCalledWith(review.id, { decision: "approve", body: "" }));
-  expect(approve).not.toBeDisabled();
+  await user.click(screen.getByRole("button", { name: "pull request actions" }));
+  expect(await screen.findByRole("menuitem", { name: /Quick approve/ })).not.toHaveAttribute("data-disabled");
 });
 
 it("keeps a review comment available when posting fails", async () => {
@@ -356,4 +360,109 @@ it('uses Created view defaults and omits Focus and GitHub team review controls',
   expect(screen.getByRole('combobox', { name: 'Closed reviews' })).toHaveTextContent('Past week');
   await user.click(screen.getByRole('combobox', { name: 'Grouping' }));
   expect(screen.queryByRole('option', { name: 'Focus' })).not.toBeInTheDocument();
+});
+
+function renderDetail(item: CodeReview, tab: "overview" | "changes" = "overview") {
+  return render(<I18nProvider><ReviewsPage data={makeBootstrap({ viewer, users: [viewer, teammate], reviews: [item], userSettings: {}, integrationConnections: [{ id: 'github', provider: 'github' }] as never[] })} view="for-you" review={item} tab={tab} onNavigate={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)} onOpenSidebar={vi.fn()}/></I18nProvider>);
+}
+
+it('groups For you by focus with provider labels, collapses completed work and shows compact ages', async () => {
+  const user = userEvent.setup();
+  const now = Date.now();
+  renderReviewList([
+    { ...review, id: 'mine', title: 'Add `mod(a, b)` helper', author: viewer, reviewerIds: [], createdAt: new Date(now - 16 * 3_600_000).toISOString() },
+    { ...review, id: 'done', title: 'Old change', author: viewer, status: 'closed', closedAt: new Date(now - 3_600_000).toISOString() },
+  ]);
+  expect(screen.getByRole('button', { name: /Ready to merge/ })).toHaveAttribute('aria-expanded', 'true');
+  expect(document.querySelector('.review-title-code')).toHaveTextContent('mod(a, b)');
+  expect(screen.getByText('16h')).toBeVisible();
+  const completed = screen.getByRole('button', { name: /Completed/ });
+  expect(completed).toHaveAttribute('aria-expanded', 'false');
+  expect(completed).toHaveTextContent('1');
+  expect(screen.queryByText('Old change')).not.toBeInTheDocument();
+  await user.click(completed);
+  expect(screen.getByText('Old change')).toBeVisible();
+});
+
+it('submits a review from the popover and requires a summary to request changes', async () => {
+  const user = userEvent.setup();
+  api.submitReview.mockResolvedValue(review);
+  renderDetail(review);
+  await user.click(screen.getByRole('button', { name: 'Submit review' }));
+  expect(screen.getByRole('button', { name: /Request changes/ })).toBeDisabled();
+  await user.type(screen.getByRole('textbox', { name: 'Review summary' }), 'Looks right');
+  await user.click(screen.getByRole('button', { name: /Approve/ }));
+  await waitFor(() => expect(api.submitReview).toHaveBeenCalledWith(review.id, { decision: 'approve', body: 'Looks right' }));
+});
+
+it('opens the submit review popover with the R then S sequence', async () => {
+  const user = userEvent.setup();
+  renderDetail(review);
+  await user.keyboard('rs');
+  expect(await screen.findByRole('textbox', { name: 'Review summary' })).toBeVisible();
+});
+
+it('shows author actions instead of review submission on a draft the viewer opened', () => {
+  renderDetail({ ...review, author: viewer, reviewerIds: [], draft: true });
+  expect(screen.getByRole('button', { name: 'Ready for review' })).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Submit review' })).not.toBeInTheDocument();
+});
+
+it('renders inline threads with suggestions, replies to the thread and resolves it', async () => {
+  const user = userEvent.setup();
+  api.commentOnReview.mockResolvedValue(review);
+  api.resolveReviewThread.mockResolvedValue(review);
+  const withThread: CodeReview = {
+    ...review,
+    files: [{ path: 'src/index.ts', status: 'modified', additions: 1, deletions: 1, patch: '@@ -1,2 +1,2 @@\n const value = 1;\n-const answer = value;\n+const answer = value + 1;' }],
+    events: [
+      ...review.events,
+      { id: 'c1', type: 'commented', body: 'Prefer a constant\n\n```suggestion\nconst answer = 2;\n```', path: 'src/index.ts', line: 2, actor: teammate, createdAt: '2026-09-01T01:00:00.000Z' },
+      { id: 'c2', type: 'commented', body: 'Will do', parentId: 'c1', path: 'src/index.ts', line: 2, actor: viewer, createdAt: '2026-09-01T02:00:00.000Z' },
+    ],
+  };
+  renderDetail(withThread, 'changes');
+  expect(await screen.findByText('Suggested change')).toBeVisible();
+  expect(screen.getByText((_text, element) => element?.classList.contains('review-code') === true && element.textContent === 'const answer = 2;')).toBeVisible();
+  expect(screen.getByText('Will do')).toBeVisible();
+  await user.type(screen.getByRole('textbox', { name: 'Reply' }), 'Done');
+  await user.click(screen.getByRole('button', { name: 'Submit reply' }));
+  await waitFor(() => expect(api.commentOnReview).toHaveBeenCalledWith(review.id, 'Done', { parentId: 'c1' }));
+  await user.click(screen.getByRole('button', { name: 'Resolve thread' }));
+  await waitFor(() => expect(api.resolveReviewThread).toHaveBeenCalledWith(review.id, 'c1', true));
+});
+
+it('shows conversation comments and reviews as cards with replies and a resolved-thread summary', async () => {
+  const user = userEvent.setup();
+  api.commentOnReview.mockResolvedValue(review);
+  renderDetail({
+    ...review,
+    events: [
+      ...review.events,
+      { id: 'issue-comment', type: 'commented', body: 'Looks good overall', actor: teammate, createdAt: '2026-09-01T01:00:00.000Z' },
+      { id: 'summary', type: 'review_commented', body: 'Review notes', actor: teammate, createdAt: '2026-09-01T02:00:00.000Z' },
+      { id: 'code-1', type: 'commented', body: 'Inline only', path: 'src/a.ts', line: 3, actor: teammate, createdAt: '2026-09-01T02:00:00.000Z' },
+      { id: 'code-2', type: 'commented', body: 'Nit', path: 'src/a.ts', line: 9, resolved: true, actor: teammate, createdAt: '2026-09-01T02:00:00.000Z' },
+    ],
+  });
+  expect(screen.getByText('Looks good overall')).toBeVisible();
+  expect(screen.getByText('Reviewed')).toBeVisible();
+  expect(screen.getByRole('link', { name: /1 of 2 code comments resolved/ })).toBeVisible();
+  expect(screen.queryByText('Inline only')).not.toBeInTheDocument();
+  await user.type(screen.getAllByRole('textbox', { name: 'Reply' })[0], 'Thanks{Enter}');
+  await waitFor(() => expect(api.commentOnReview).toHaveBeenCalledWith(review.id, 'Thanks', { parentId: 'issue-comment' }));
+});
+
+it('describes renamed files without content changes and marks added and deleted files', async () => {
+  renderDetail({
+    ...review,
+    files: [
+      { path: 'lib/arithmetic.js', previousPath: 'src/math.js', status: 'renamed', additions: 0, deletions: 0, patch: '' },
+      { path: 'lib/new.js', status: 'added', additions: 1, deletions: 0, patch: '@@ -0,0 +1 @@\n+export const a = 1;' },
+      { path: 'src/old.test.js', status: 'deleted', additions: 0, deletions: 1, patch: '@@ -1 +0,0 @@\n-old();' },
+    ],
+  }, 'changes');
+  expect(await screen.findByText('File renamed and moved')).toBeVisible();
+  expect(document.querySelector('[data-diff-file="lib/new.js"] .review-file-name')).toHaveAttribute('data-file-status', 'added');
+  expect(document.querySelector('[data-diff-file="src/old.test.js"] .review-file-name')).toHaveAttribute('data-file-status', 'deleted');
 });

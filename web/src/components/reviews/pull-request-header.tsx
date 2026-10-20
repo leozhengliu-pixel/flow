@@ -1,52 +1,42 @@
 /**
- * LS-0505 PullRequestHeader — title / status / branch / draft / approve / merge chrome.
- * Adds squash&merge method picker + merge-queue affordance without requiring full GitHub ACL.
+ * PullRequestHeader — the pull request page chrome: breadcrumb row (issue ›
+ * state icon, title, diff stat, favorite, actions) with the repository pill,
+ * copy-link and full-window controls, then the Overview / Guide / Diff tab
+ * pills with the primary review actions on the right.
  */
-import * as Popover from "@radix-ui/react-popover";
 import type { ReactNode } from "react";
-import {
-  ChevronLeft,
-  ChevronRight,
-  GitBranch,
-  GitMerge,
-  Link2,
-  Maximize2,
-  PanelRightClose,
-  Star,
-} from "lucide-react";
+import { Expand, FileDiff, Link2, PanelLeft, Shrink, Star } from "lucide-react";
 
 import { useI18n } from "@/i18n/i18n";
 import { issuePath, reviewPath, reviewsPath, type ReviewRouteTab } from "@/lib/app-routes";
 import { resolveCodeReviewAccess } from "@/lib/code-access";
+import { toast } from "@/lib/toast";
 import type { BootstrapData, CodeReview, Issue } from "@/types/flow";
 
-import { ReviewProviderIcon } from "./review-provider";
+import { reviewDocsOnly, reviewHeaderStat } from "./pull-request-review-model";
+import { CodeHostIcon } from "./review-provider";
 import { reviewProviderIdentifier } from "./review-provider-model";
+import { ReviewStateIcon, ReviewTitle } from "./review-state-icon";
 
-import type { MergeMethod } from "./pull-request-merge-method";
-
-const MERGE_LABELS: Record<MergeMethod, string> = {
-  squash: "Squash and merge",
-  merge: "Create a merge commit",
-  rebase: "Rebase and merge",
-};
+const REVIEW_TABS: { id: ReviewRouteTab; label: string }[] = [
+  { id: "overview", label: "Overview" },
+  { id: "review", label: "Guide" },
+  { id: "changes", label: "Diff" },
+];
 
 export function PullRequestHeader({
   data,
   review,
   issues,
   tab,
-  busy,
   fullWindow,
-  mergeMethod,
-  onMergeMethodChange,
   onToggleFull,
   onNavigate,
   onMutate,
-  onOpenSubmit,
   onOpenPicker,
-  onMerge,
+  onOpenSidebar,
   returnPath,
+  menu,
   actions,
   tabSearch = "",
   tabActions,
@@ -55,17 +45,16 @@ export function PullRequestHeader({
   review: CodeReview;
   issues: Issue[];
   tab: ReviewRouteTab;
-  busy: boolean;
   fullWindow: boolean;
-  mergeMethod: MergeMethod;
-  onMergeMethodChange: (method: MergeMethod) => void;
   onToggleFull: (value: boolean) => void;
   onNavigate: (path: string) => void;
-  onMutate: (input: { favorite?: boolean; status?: CodeReview["status"] }) => Promise<void>;
-  onOpenSubmit: () => void;
+  onMutate: (input: { favorite?: boolean }) => Promise<void>;
   onOpenPicker: (value: "reviewers" | "issues") => void;
-  onMerge: (method: MergeMethod) => Promise<void>;
+  onOpenSidebar?: () => void;
   returnPath?: string;
+  /** The "Pull request actions" menu trigger. */
+  menu?: ReactNode;
+  /** Primary review actions shown at the right of the tab row. */
   actions?: ReactNode;
   /** Kept on the tab links (`?showAgent=true&agentSessionId=…`), so the agent panel stays open across tabs. */
   tabSearch?: string;
@@ -73,161 +62,122 @@ export function PullRequestHeader({
   tabActions?: ReactNode;
 }) {
   const { t } = useI18n();
-  const passed = review.checks.every(
-    (check) => check.status === "passed" || check.status === "skipped",
-  );
-  const closed = review.status === "merged" || review.status === "closed";
   const access = resolveCodeReviewAccess(data);
-  const queueEnabled = Boolean(data.userSettings[data.viewer.id]?.checksMergeQueue);
-  const showQueue =
-    queueEnabled &&
-    !closed &&
-    (review.branchState === "behind" || review.status === "approved");
+  const workspace = data.workspace.urlKey;
+  const stat = reviewHeaderStat(review);
+  const go = (path: string) => (event: React.MouseEvent) => {
+    event.preventDefault();
+    onNavigate(path);
+  };
+  const copyUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(location.href.split("#")[0]);
+      toast.success(t("Copied URL to clipboard"));
+    } catch {
+      toast.error(t("Could not copy to clipboard"));
+    }
+  };
 
   return (
     <>
       <header className="review-detail-top" data-code-access={access.reason}>
-        {fullWindow && (
-          <button
-            className="review-full-menu"
-            aria-label={t("Menu")}
-            onClick={() => onToggleFull(false)}
-          >
-            <PanelRightClose />
-          </button>
-        )}
         <button
-          className="review-mobile-back"
-          aria-label={t("Back to reviews")}
-          onClick={() => onNavigate(returnPath ?? reviewsPath(data.workspace.urlKey))}
+          className="review-ghost-button review-menu-button"
+          aria-label={t("Menu")}
+          data-sidebar-trigger
+          onClick={() => (fullWindow ? onToggleFull(false) : onOpenSidebar ? onOpenSidebar() : onNavigate(returnPath ?? reviewsPath(workspace)))}
+          type="button"
         >
-          <ChevronLeft />
+          <PanelLeft />
         </button>
-        <div>
+        <nav className="review-breadcrumb" aria-label={t("Breadcrumb")}>
           {issues[0] ? (
-            <a
-              href={issuePath(data.workspace.urlKey, issues[0])}
-              onClick={(event) => {
-                event.preventDefault();
-                onNavigate(issuePath(data.workspace.urlKey, issues[0]));
-              }}
-              data-i18n-ignore
-            >
+            <a className="review-breadcrumb-issue" href={issuePath(workspace, issues[0])} onClick={go(issuePath(workspace, issues[0]))} data-i18n-ignore>
               {issues[0].identifier}
             </a>
           ) : (
-            <button type="button" onClick={() => onOpenPicker("issues")}>
+            <button className="review-breadcrumb-issue" type="button" onClick={() => onOpenPicker("issues")}>
               {t("No issue")}
             </button>
           )}
-          <ChevronRight />
-          <ReviewProviderIcon provider={review.provider} />
-          <strong data-i18n-ignore>
-            {reviewProviderIdentifier(review)} {review.title}
-          </strong>
-          {review.draft ? <em className="review-draft-pill">{t("Draft")}</em> : null}
+          <span className="review-breadcrumb-separator" aria-hidden="true">
+            ›
+          </span>
+          <ReviewStateIcon review={review} className="review-breadcrumb-state" />
+          <a className="review-breadcrumb-title" href={reviewPath(workspace, review)} onClick={go(reviewPath(workspace, review))}>
+            <h2 data-i18n-ignore>
+              <ReviewTitle title={review.title} />
+            </h2>
+          </a>
+          <button
+            className="review-diff-stat"
+            type="button"
+            aria-label={t("View diff")}
+            onClick={() => onNavigate(reviewPath(workspace, review, "changes"))}
+          >
+            {reviewDocsOnly(review) ? (
+              <span className="review-diff-docs">{t("Docs only")}</span>
+            ) : (
+              <>
+                <span className="review-diff-added">+{stat.additions}</span>
+                {(stat.deletions > 0 || review.deletions > 0) && <span className="review-diff-removed">-{stat.deletions}</span>}
+                <FileDiff />
+              </>
+            )}
+          </button>
+          <button
+            className="review-ghost-button"
+            aria-label={t(review.favorite ? "Remove from favorites" : "Add to favorites")}
+            aria-pressed={review.favorite}
+            onClick={() => void onMutate({ favorite: !review.favorite })}
+            type="button"
+          >
+            <Star fill={review.favorite ? "currentColor" : "none"} />
+          </button>
+          {menu}
+        </nav>
+        <div className="review-detail-top-actions">
+          <a className="review-repository-pill" href={review.url} target="_blank" rel="noreferrer" data-i18n-ignore>
+            <CodeHostIcon provider={review.provider} />
+            <span>
+              {review.repositoryName}
+              {reviewProviderIdentifier(review)}
+            </span>
+          </a>
+          <button className="review-ghost-button" aria-label={t("Copy URL")} onClick={() => void copyUrl()} type="button">
+            <Link2 />
+          </button>
+          <button
+            className="review-ghost-button"
+            aria-label={t(fullWindow ? "Exit full window" : "Review diff in full window")}
+            aria-pressed={fullWindow}
+            title={t(fullWindow ? "Exit full window" : "Review diff in full window")}
+            onClick={() => onToggleFull(!fullWindow)}
+            type="button"
+          >
+            {fullWindow ? <Shrink /> : <Expand />}
+          </button>
         </div>
-        <span className="review-diff-count">
-          <b>+{review.additions}</b>
-          <i>-{review.deletions}</i>
-        </span>
-        <button
-          aria-label={t(review.favorite ? "Remove from favorites" : "Add to favorites")}
-          onClick={() => void onMutate({ favorite: !review.favorite })}
-          type="button"
-        >
-          <Star fill={review.favorite ? "currentColor" : "none"} />
-        </button>
-        {actions}
-        <button
-          aria-label={t("Copy URL")}
-          onClick={() => void navigator.clipboard.writeText(location.href)}
-          type="button"
-        >
-          <Link2 />
-        </button>
-        <button
-          aria-label={t("Copy branch name")}
-          onClick={() => void navigator.clipboard.writeText(review.headBranch)}
-          type="button"
-        >
-          <GitBranch />
-        </button>
-        <button
-          aria-label={t(fullWindow ? "Exit full window" : "Review diff in full window")}
-          aria-pressed={fullWindow}
-          onClick={() => onToggleFull(!fullWindow)}
-          type="button"
-        >
-          <Maximize2 />
-        </button>
       </header>
       <div className="review-detail-tabs">
-        <nav>
-          {(["overview", "review", "changes"] as const).map((value) => (
+        <nav aria-label={t("Pull request sections")}>
+          {REVIEW_TABS.map((item, index) => (
             <a
-              className={tab === value ? "active" : ""}
-              key={value}
-              href={reviewPath(data.workspace.urlKey, review, value) + tabSearch}
-              onClick={(event) => {
-                event.preventDefault();
-                onNavigate(reviewPath(data.workspace.urlKey, review, value) + tabSearch);
-              }}
+              className={tab === item.id ? "active" : ""}
+              aria-current={tab === item.id ? "page" : undefined}
+              title={`${t(item.id === "overview" ? "View overview" : item.id === "review" ? "View guide" : "View diff")}  ${index + 1}`}
+              key={item.id}
+              href={reviewPath(workspace, review, item.id) + tabSearch}
+              onClick={go(reviewPath(workspace, review, item.id) + tabSearch)}
             >
-              {t(value === "overview" ? "Overview" : value === "review" ? "Guide" : "Diff")}
+              {t(item.label)}
             </a>
           ))}
         </nav>
-        {showQueue ? (
-          <span className="review-merge-queue" title={t("Checks & merge queue")}>
-            {t("Merge queue")}
-          </span>
-        ) : null}
-        <Popover.Root>
-          <Popover.Trigger asChild>
-            <button
-              disabled={busy || closed || !passed}
-              type="button"
-              aria-label={t("Merge options")}
-            >
-              <GitMerge />
-              {t(MERGE_LABELS[mergeMethod])}
-            </button>
-          </Popover.Trigger>
-          <Popover.Portal>
-            <Popover.Content
-              data-flow-motion="floating"
-              className="review-merge-method-menu"
-              align="end"
-              sideOffset={5}
-            >
-              {(Object.keys(MERGE_LABELS) as MergeMethod[]).map((method) => (
-                <button
-                  key={method}
-                  type="button"
-                  aria-checked={mergeMethod === method}
-                  role="menuitemradio"
-                  onClick={() => {
-                    onMergeMethodChange(method);
-                    void onMerge(method);
-                  }}
-                >
-                  <GitMerge />
-                  {t(MERGE_LABELS[method])}
-                </button>
-              ))}
-            </Popover.Content>
-          </Popover.Portal>
-        </Popover.Root>
-        <button
-          className="review-submit"
-          disabled={busy || closed}
-          onClick={onOpenSubmit}
-          type="button"
-        >
-          {t("Submit review")}
-        </button>
-        {tabActions}
+        <div className="review-detail-tab-actions">
+          {actions}
+          {tabActions}
+        </div>
       </div>
     </>
   );
