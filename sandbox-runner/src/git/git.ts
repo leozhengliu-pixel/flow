@@ -128,10 +128,18 @@ export class Git {
     return result.code === 0
   }
 
-  /** Points the repo's credential helper at Flow (idempotent). */
-  async configureCredentials(): Promise<void> {
+  /**
+   * Points the repo's credential helper at Flow and sets origin's push URL
+   * (idempotent). A session that pushes as its creator pushes through Flow's
+   * git relay (`pushUrl`): the helper gets only a placeholder for it and
+   * Flow adds the member's token server side. Fetches keep using the clone
+   * URL. Without a push URL any earlier one (a restored workspace) is removed.
+   */
+  async configureCredentials(pushUrl?: string): Promise<void> {
     await this.git(['config', '--local', '--replace-all', 'credential.helper', this.credentialHelper])
     await this.git(['config', '--local', 'credential.useHttpPath', 'true'])
+    if (pushUrl) await this.git(['remote', 'set-url', '--push', 'origin', pushUrl])
+    else await this.git(['config', '--local', '--unset-all', 'remote.origin.pushurl'], { check: false })
   }
 
   async configureIdentity(identity: BootstrapGit): Promise<void> {

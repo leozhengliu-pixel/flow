@@ -164,6 +164,56 @@ func (s *SQLiteStore) queryCodeHostAccounts(ctx context.Context, query string, a
 	return accounts, rows.Err()
 }
 
+// addCodeHostAccountRefreshLease adds the refresh lease (migration 12).
+// GitHub and GitLab rotate the refresh token on use, so two API replicas
+// refreshing the same account at once would invalidate each other: the
+// lease makes exactly one replica refresh while the others wait and re-read.
+func (s *SQLiteStore) addCodeHostAccountRefreshLease(ctx context.Context) error {
+	for _, statement := range []string{
+		`ALTER TABLE code_host_accounts ADD COLUMN refresh_lease_owner VARCHAR(64) NOT NULL DEFAULT ''`,
+		`ALTER TABLE code_host_accounts ADD COLUMN refresh_lease_until BIGINT NOT NULL DEFAULT 0`,
+	} {
+		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+			message := strings.ToLower(err.Error())
+			if strings.Contains(message, "duplicate column") || strings.Contains(message, "already exists") {
+				continue
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// ClaimCodeHostAccountRefresh takes the account's refresh lease for owner
+// until now+lease when nobody holds an unexpired one (or owner already
+// does). The claim is one conditional UPDATE, a compare-and-swap that the
+// database serializes on the row (SQLite, MySQL and Postgres alike), so
+// across all API replicas at most one owner holds the lease at a time. It
+// reports whether owner holds the lease.
+func (s *SQLiteStore) ClaimCodeHostAccountRefresh(ctx context.Context, id, owner string, lease time.Duration) (bool, error) {
+	if id == "" || owner == "" || len(owner) > 64 {
+		return false, errors.New("code host account refresh lease: id and owner are required")
+	}
+	now := time.Now()
+	result, err := s.db.ExecContext(ctx, `UPDATE code_host_accounts SET refresh_lease_owner=?,refresh_lease_until=? WHERE id=? AND (refresh_lease_until<? OR refresh_lease_owner=?)`,
+		owner, now.Add(lease).UnixMilli(), id, now.UnixMilli(), owner)
+	if err != nil {
+		return false, err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return count == 1, nil
+}
+
+// ReleaseCodeHostAccountRefresh gives up owner's refresh lease (a lease that
+// another owner took over after it expired is left alone).
+func (s *SQLiteStore) ReleaseCodeHostAccountRefresh(ctx context.Context, id, owner string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE code_host_accounts SET refresh_lease_owner='',refresh_lease_until=0 WHERE id=? AND refresh_lease_owner=?`, id, owner)
+	return err
+}
+
 // SetCodeHostAccountStatus marks an account active or as needing a
 // reconnect (revoked or expired token), with a reason.
 func (s *SQLiteStore) SetCodeHostAccountStatus(ctx context.Context, id, status, reason string, expiresAt *time.Time) error {

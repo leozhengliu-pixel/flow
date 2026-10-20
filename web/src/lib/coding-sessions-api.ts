@@ -112,4 +112,3 @@ export const removeGitHubAppInstallation = (installationId: string) =>
   request<void>(`/api/integrations/github-app/installations/${id(installationId)}`, { method: "DELETE" });
 /** Links the viewer's GitHub account (user-to-server OAuth) for personal access checks. */
 export const startGitHubAppAuthorization = () => request<{ url: string }>("/api/integrations/github-app/authorize", { method: "POST" });
-export const removeGitHubAppAuthorization = () => request<void>("/api/integrations/github-app/authorization", { method: "DELETE" });

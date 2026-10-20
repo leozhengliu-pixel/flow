@@ -517,6 +517,14 @@ func (s *Service) Credentials(ctx context.Context, token string, request Credent
 	if request.Purpose != "" && request.Purpose != "git" && request.Purpose != "cli" {
 		return CredentialResponse{}, ErrInvalidInput
 	}
+	if relayPath, relay := gitRelayCredentialPath(request.Path); relay {
+		// The push URL through Flow's git relay (the runtime URL, which is
+		// plain HTTP inside the cluster): only a placeholder, never a token.
+		if request.Protocol != "" && request.Protocol != "https" && request.Protocol != "http" {
+			return CredentialResponse{}, ErrForbidden
+		}
+		return s.relayCredential(ctx, token, grant, request, relayPath)
+	}
 	if request.Protocol != "" && request.Protocol != "https" {
 		return CredentialResponse{}, ErrForbidden
 	}
@@ -534,19 +542,13 @@ func (s *Service) Credentials(ctx context.Context, token string, request Credent
 	if grant.Kind == sandbox.KindSnapshot {
 		access = codehost.AccessRead // a snapshot build only clones
 	}
-	// The creator's own short-lived token for git when they linked an
-	// account; another member's token is never looked up (the session, and
-	// so the creator, comes from the sandbox token). A done session never
-	// gets here (sessionFor returns ErrGone), so serving stops at session end.
-	credential, member, err := s.memberGitCredential(ctx, session, request.Purpose, access)
+	// Straight to the host: always the workspace's repository-scoped
+	// credential. A creator's own token never reaches the sandbox; their
+	// pushes go through the git relay (git_relay.go), which adds it server
+	// side. A done session never gets here (sessionFor returns ErrGone).
+	credential, err := host.MintCredential(ctx, codehost.CredentialRequest{WorkspaceKey: session.WorkspaceKey, SessionID: session.ID, SandboxID: grant.SandboxID, Repo: codehost.RepoRef{CodeHost: session.CodeHost, HostName: session.HostName, FullName: session.Repository}, Access: access})
 	if err != nil {
 		return CredentialResponse{}, err
-	}
-	if !member {
-		credential, err = host.MintCredential(ctx, codehost.CredentialRequest{WorkspaceKey: session.WorkspaceKey, SessionID: session.ID, SandboxID: grant.SandboxID, Repo: codehost.RepoRef{CodeHost: session.CodeHost, HostName: session.HostName, FullName: session.Repository}, Access: access})
-		if err != nil {
-			return CredentialResponse{}, err
-		}
 	}
 	response := CredentialResponse{Username: credential.Username, Password: credential.Password, ExpiresAt: credential.ExpiresAt}
 	if request.Purpose == "cli" {

@@ -794,16 +794,22 @@ see `code_host_accounts.go`), the session acts as that member end to end:
   `repo.branchPrefix` is that prefix so the runner's push guard allows it;
 - author and committer are the member: their workspace display name and
   `<id>+<login>@users.noreply.<host>`, unsigned unless signed commits are on (no bot trailer);
-- the git credential helper's `POST /credentials {purpose:"git"}` returns the member's user token for the session's
-  repository (`coding.MemberCodeHost.MemberGitCredential`), so pushes are the member's; `{purpose:"cli"}` (written
-  to `~/.flow/cli-env`) still gets the installation token;
+- pushes go through Flow's git relay: the bootstrap's `repo.pushUrl` is
+  `<runtime>/internal/coding-runtime/git/<host>/<owner>/<repo>.git`, which the runner sets as origin's push URL
+  (fetches keep using `cloneUrl`). For that URL the git credential helper gets only an opaque placeholder (`fgr_…`,
+  derived from the sandbox token, stored next to it and revoked with it); the relay (`coding_git_relay.go`,
+  `coding.GitRelay`) accepts only the three smart-HTTP endpoints of the session's repository, swaps the placeholder
+  for the member's user token (`coding.MemberCodeHost.MemberGitCredential`) and forwards to
+  `https://<host>/<owner>/<repo>.git/…`. The member's token never enters the sandbox. Straight to the host, the
+  helper gets the installation token, and so does `{purpose:"cli"}` (written to `~/.flow/cli-env`);
 - Flow opens the draft PR with the member's token (`CreateChangeRequestInput.ActAs`); a token GitHub rejects falls
   back to the App. `SessionPullRequest.openedAs` / `openedVia` record which;
 - the App bot only posts Flow's back-link comments.
 
 The member's token is looked up from the session's creator, which comes from the sandbox token, never from the
-request; a finished session gets `410 Gone`. Without a link (or with a non-expiring OAuth token, which stays server
-side) the session pushes with the installation token, `CodingSession.pushIdentity.via` is `workspace`, and the
+request; a finished session gets `410 Gone`. The relay serves only while the session runs. Without a link the
+session pushes straight to the host with the installation token (with a non-expiring OAuth token, which is never used
+for git, the relay pushes with the installation token), `CodingSession.pushIdentity.via` is `workspace`, and the
 session suggests linking the account. Details: [security model](coding-sessions-security.md#member-credentials).
 
 **Webhooks to follow-ups:** `ParseWebhook` verifies `X-Hub-Signature-256` and normalizes the delivery
@@ -833,9 +839,9 @@ tokens are broader than one project.
 through an application the admin registered on that instance, or a personal access token with `read_user` and
 `api`). Sessions then push and open the MR as the member like on GitHub (§13): branch `<username>/…`, author and
 committer the member's display name with their GitLab commit email or `<id>-<username>@users.noreply.<host>`, and the
-MR opened with the member's token. Only the OAuth token (2 hours, refreshed by Flow) is served to the git credential
-helper, as `oauth2:<token>`; a personal access token never enters the sandbox, so those sessions push with the mode
-above while Flow still opens the MR as the member. The member's username also satisfies the personal access check
+MR opened with the member's token. Pushes go through Flow's git relay (§13): only the OAuth token (2 hours,
+refreshed by Flow) is used there, as `oauth2:<token>` added by Flow, and never enters the sandbox; with a personal
+access token the relay pushes with the mode above while Flow still opens the MR as the member. The member's username also satisfies the personal access check
 (`GET /projects/:id/members/all/:user_id`, Developer or higher).
 
 **glab and gh in the sandbox:** the image installs both. Neither is ever configured at build time. The runner fetches

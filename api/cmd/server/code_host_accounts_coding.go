@@ -14,14 +14,15 @@ import (
 // (coding.MemberCodeHost). Every lookup is keyed by the session creator the
 // coding service passes; nothing here can return another member's token.
 //
-// Credential delivery follows docs/coding-sessions-security.md: the
-// member's token reaches the sandbox only through the git credential helper
-// (fetched per git operation from Flow's runtime API with the sandbox
-// token, never in the environment or on disk), only for the session's one
+// Credential use follows docs/coding-sessions-security.md: the member's
+// token never reaches the sandbox. Flow's git relay (coding_git_relay.go)
+// adds it server side to the session's own smart-HTTP requests for its one
 // repository, only while the session runs, and only when it is short-lived
-// (GitHub App user tokens, GitLab OAuth tokens). Personal access tokens and
-// non-expiring OAuth tokens stay server side: Flow uses them to open the
-// PR/MR as the member, while git pushes with the workspace credential.
+// (GitHub App user tokens, GitLab OAuth tokens); the sandbox's credential
+// helper only gets an opaque placeholder for the relay URL. Personal access
+// tokens and non-expiring OAuth tokens are not used for git: Flow uses them
+// to open the PR/MR as the member, while the relay pushes with the
+// workspace credential.
 type codingMemberHosts struct{ s *server }
 
 var _ coding.MemberCodeHost = codingMemberHosts{}

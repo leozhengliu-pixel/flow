@@ -15,7 +15,7 @@ See the [operator guide](coding-sessions.md) for installation and the
 | Asset | Protection |
 | --- | --- |
 | Model provider keys | Never enter a sandbox. The harness talks to Flow's LLM proxy with the sandbox token; Flow adds the key upstream. |
-| Code host credentials | GitHub installation tokens (1 hour, one repository, minimal permissions) or GitLab project tokens (one project, revoked at session end), fetched on demand through Flow. When the session's creator linked their own account, the git credential helper gets that member's short-lived token instead (GitHub App user token, 8 hours; GitLab OAuth token, 2 hours), only for the session's repository and only while the session runs. See [Member credentials](#member-credentials). |
+| Code host credentials | GitHub installation tokens (1 hour, one repository, minimal permissions) or GitLab project tokens (one project, revoked at session end), fetched on demand through Flow. When the session's creator linked their own account, pushes go through Flow's git relay, which adds that member's token server side; the sandbox only holds an opaque placeholder that is worthless anywhere but the relay. See [Member credentials](#member-credentials). |
 | Commit signing keys | Stay in Flow. The sandbox asks Flow to sign (`/sign`). |
 | Environment secrets | Served once per sandbox, only during setup, then unset. They can persist on disk or in snapshot archives if the prepare script writes them (the editor warns about this). |
 | Other sandboxes, Flow, the cluster, the cloud account | Isolation, network policy, RBAC and node placement, described below. |
@@ -97,9 +97,11 @@ all of the following hold:
   through the egress proxy, filtered per environment network mode; never the
   cluster, node, metadata or private addresses.
 - **Credentials.** It never holds a model provider key (the LLM proxy adds it),
-  a signing key (Flow signs), or a long-lived code host token: only the
-  sandbox token, revoked at stop, and a short-lived token for the one
-  repository (the workspace's, or the creator's own), fetched on demand.
+  a signing key (Flow signs), a member's own code host token (Flow's git
+  relay adds it), or a long-lived code host token: only the sandbox token,
+  revoked at stop, the workspace's short-lived token for the one
+  repository, fetched on demand, and, for a session that pushes as its
+  creator, a placeholder that only Flow's relay accepts.
   Environment secrets are served once, during setup only.
 - **Review.** Its only durable output is a pushed branch under
   `FLOW_CODING_BRANCH_PREFIX` and a draft PR or MR that a human reviews and
@@ -121,39 +123,64 @@ committed by the member (their display name and host email: GitHub
 `<id>-<username>@users.noreply.<host>`), and Flow opens the PR/MR with the
 member's token. The bot identity only posts Flow's back-link comments.
 
-The member's credential follows the same model as the workspace's:
+A member's user token is not narrowed to one repository the way an
+installation token is: it reaches everything the member and the GitHub App
+(or the GitLab `api` scope) can. So it never enters the sandbox. Pushes go
+through Flow's **git relay** instead:
 
-- **On demand, never at rest in the sandbox.** It is not in the bootstrap,
-  the environment or any file. Git's credential helper asks Flow
+- **Push URL through Flow.** The bootstrap's `repo.pushUrl` is
+  `<runtime URL>/internal/coding-runtime/git/<host>/<owner>/<repo>.git`, and
+  the runner sets it as origin's push URL. Fetches keep going straight to the
+  host with the workspace's repository-scoped token.
+- **Placeholder in the sandbox.** For the relay URL the git credential helper
   (`POST /internal/coding-runtime/credentials`, authenticated with the sandbox
-  token) for each fetch and push and hands the answer to git in memory. The
-  gh/glab CLI env, which the runner writes to `~/.flow/cli-env`, always gets
-  the workspace credential, never the member's.
-- **One member, one repository.** The session (and so the member) comes from
-  the sandbox token, not from the request; another member's token is never
-  looked up. The helper's host and path must be the session's repository.
-- **Short-lived only.** Only tokens that expire within hours enter a
-  sandbox: GitHub App user-to-server tokens (8 hours, refreshed by Flow) and
-  GitLab OAuth tokens (2 hours). A GitLab personal access token or a
-  non-expiring GitHub OAuth token never reaches a sandbox; such sessions push
-  with the workspace credential while Flow still opens the PR/MR as the member
-  server side.
-- **Stops at session end.** A finished session's sandbox token gets nothing
-  (the runtime API answers `410 Gone`), and unlinking the account or a revoked
-  grant stops serving immediately. Flow cannot revoke a GitHub user token on
-  its own without revoking the member's whole authorization, so a token copied
-  out of a sandbox stays valid until it expires (at most 8 hours).
-- **Fallback.** Without a linked account (or with only a long-lived token)
-  the session uses the installation / project token as before, with the
-  member still the commit author, and the session shows "Link your GitHub
-  account to push as yourself".
+  token) gets only an opaque placeholder (`fgr_…`). It is derived from the
+  sandbox token, stored hashed next to it, and expires and is revoked with
+  it. It is not a sandbox token: the runtime API, the LLM proxy and the
+  egress proxy refuse it. Sent to the code host, its API or any other
+  address, it carries no credential at all.
+- **Flow adds the token, for one repository only.** The relay accepts only
+  the three git smart-HTTP endpoints of the session's repository
+  (`GET …/info/refs?service=git-upload-pack|git-receive-pack`,
+  `POST …/git-upload-pack`, `POST …/git-receive-pack`). It resolves the
+  session (and so the member) from the placeholder, never from the request,
+  swaps the placeholder for the member's token, and forwards the request to
+  `https://<host>/<owner>/<repo>.git/…` without following redirects. Any other
+  repository, host or path is refused before a token is looked up; the
+  host's `WWW-Authenticate` and error bodies are not passed back.
+- **Why Flow and not the egress proxy.** Sandboxes reach code hosts through
+  `CONNECT` tunnels. The proxy cannot add a header inside TLS without
+  intercepting it, so Flow, which the sandbox already reaches directly, does
+  it.
+- **The CLI keeps the workspace credential.** The gh/glab CLI env, which the
+  runner writes to `~/.flow/cli-env`, always gets the installation / project
+  token, never the member's. So does git straight to the host.
+- **Short-lived only.** The relay pushes with the member's token only when
+  it expires within hours: GitHub App user-to-server tokens (8 hours) and
+  GitLab OAuth tokens (2 hours), both refreshed by Flow. With a GitLab
+  personal access token or a non-expiring GitHub OAuth token the relay pushes
+  with the workspace credential, while Flow still opens the PR/MR as the
+  member server side.
+- **Stops at session end.** A finished session's placeholder gets nothing
+  (`410 Gone`), a revoked sandbox's gets `401`, and unlinking the account or
+  a revoked grant makes the relay fall back to the workspace credential
+  immediately.
+- **Fallback.** Without a linked account the session has no relay and pushes
+  with the installation / project token as before, with the member still the
+  commit author, and the session shows "Link your GitHub account to push as
+  yourself".
 
-Residual risk: a member's user token is not narrowed to one repository the
-way an installation token is. Code in the sandbox that calls the credential
-helper itself can obtain it and use it, until it expires, for anything the
-member and the GitHub App (or the GitLab `api` scope) allow. Members who do
-not want that can leave their account unlinked; sessions then push with the
-repository-scoped workspace token.
+Refreshing a member's token is serialized across all Flow replicas: GitHub
+and GitLab rotate the refresh token on use, so one replica takes a lease on
+the account row (a compare-and-swap in the database) and refreshes while the
+others wait for its result, instead of spending the same refresh token twice
+and forcing the member to reconnect.
+
+Residual risk: during the session, code in the sandbox can push to the
+session's repository through the relay as the member (any branch the token
+allows; the runner's own push guard is defense in depth, not a boundary),
+exactly as it can with the workspace token. It cannot reach the member's
+other repositories or the host's API as the member.
 
 ## Limits of plain runc
 

@@ -249,7 +249,18 @@ func (s Store) SandboxCounts(ctx context.Context) (map[sandbox.Kind]map[sandbox.
 }
 
 func (s Store) AuthenticateSandboxToken(ctx context.Context, token string) (coding.SandboxGrant, error) {
-	grant, err := s.SQLiteStore.AuthenticateSandboxToken(ctx, token)
+	return sandboxGrant(s.SQLiteStore.AuthenticateSandboxToken(ctx, token))
+}
+
+func (s Store) AuthenticateGitRelayPlaceholder(ctx context.Context, placeholder string) (coding.SandboxGrant, error) {
+	return sandboxGrant(s.SQLiteStore.AuthenticateGitRelayPlaceholder(ctx, placeholder))
+}
+
+func (s Store) RegisterGitRelayPlaceholder(ctx context.Context, token, placeholder string) error {
+	return mapErr(s.SQLiteStore.RegisterGitRelayPlaceholder(ctx, token, placeholder))
+}
+
+func sandboxGrant(grant store.CodingSandboxGrant, err error) (coding.SandboxGrant, error) {
 	if err != nil {
 		return coding.SandboxGrant{}, mapErr(err)
 	}

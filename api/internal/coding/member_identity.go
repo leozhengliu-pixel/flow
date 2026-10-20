@@ -13,9 +13,10 @@ import (
 // Pushing as the member (docs/coding-sessions-design.md §13). When the
 // session's creator linked their GitHub or GitLab account, the session's
 // branch carries their prefix, its commits are authored and committed by
-// them (display name + host email), the git credential helper is served
-// their own short-lived token for the session's one repository, and Flow
-// opens the PR/MR with their token. Without a linked account everything
+// them (display name + host email), its pushes go through Flow's git relay,
+// which adds their own short-lived token for the session's one repository
+// server side (git_relay.go; the sandbox only ever sees a placeholder), and
+// Flow opens the PR/MR with their token. Without a linked account everything
 // falls back to the workspace App / connection credential, with the member
 // still the commit author. The bot identity only posts Flow's back-links.
 
@@ -49,11 +50,11 @@ func (s *Service) memberAccount(ctx context.Context, workspaceKey, userID, codeH
 	return account, ok
 }
 
-// memberGitCredential serves the session creator's own credential to the
-// git credential helper. ok is false when the workspace credential must be
-// used instead (no linked account, a token that may not enter a sandbox, a
-// snapshot build or a gh/glab CLI request, whose env the runner writes to
-// disk).
+// memberGitCredential is the session creator's own credential for the git
+// relay to forward the session's pushes with (server side only; it is never
+// returned to a sandbox). ok is false when the workspace credential must be
+// used instead (no linked account, a long-lived token, a snapshot build or a
+// gh/glab CLI request).
 func (s *Service) memberGitCredential(ctx context.Context, session domain.CodingSession, purpose string, access codehost.Access) (codehost.Credential, bool, error) {
 	if s.Members == nil || session.CreatorID == "" || session.ID == "" || purpose == "cli" || access != codehost.AccessWrite {
 		return codehost.Credential{}, false, nil
