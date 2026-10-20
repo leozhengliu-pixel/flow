@@ -692,11 +692,12 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 		return err
 	}
 	scope := s.newLoopScope(data, loop, trigger)
-	if connectors, err := s.discoverConnectorTools(ctx, data); err == nil {
+	connectorCtx, connectors, discoverErr := s.withConnectorTools(request.Context(), data, connectorRequestContext{Workspace: workspace, UserID: owner.ID})
+	request = request.WithContext(connectorCtx)
+	if discoverErr == nil {
 		connectors = slices.DeleteFunc(connectors, func(tool connectorTool) bool { return !slices.Contains(loop.ConnectorIDs, tool.Policy.ID) })
 		request = request.WithContext(context.WithValue(request.Context(), connectorToolsKey{}, connectors))
 	}
-	request = request.WithContext(context.WithValue(request.Context(), connectorContextKey{}, connectorRequestContext{Workspace: workspace, UserID: owner.ID}))
 	request = request.WithContext(context.WithValue(request.Context(), agentToolFilterKey{}, scope.offers))
 	// "Team access" covers what the run can read, not only what it may change:
 	// its tools run with a key restricted to the loop's teams, so lists,

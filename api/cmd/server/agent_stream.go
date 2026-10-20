@@ -324,7 +324,6 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			})
 		}
 	}
-	r = r.WithContext(context.WithValue(r.Context(), connectorContextKey{}, connectorContext))
 	// Chat can stop on a question with options (ask_user); a loop draft adds the loop builder's own question tool.
 	extraTools := []agentProviderTool{askUserToolDefinition}
 	if writer != nil && sessionHasDraftLoop(data, *session) {
@@ -338,11 +337,11 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		}
 	}
 
-	connectors, err := s.discoverConnectorTools(r.Context(), data)
+	connectorCtx, _, err := s.withConnectorTools(r.Context(), data, connectorContext)
+	r = r.WithContext(connectorCtx)
 	if err != nil {
 		return s.persistAgentFailure(r, *session, messageID, "", parts, started, err)
 	}
-	r = r.WithContext(context.WithValue(r.Context(), connectorToolsKey{}, connectors))
 	emit := func(event agentProviderEvent) error {
 		streamBytes += len(event.Delta)
 		if streamBytes > 8<<20 || len(parts) > 1024 {

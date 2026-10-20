@@ -380,7 +380,7 @@ func (s *server) renderAgentRunTaskContext(r *http.Request, task domain.AgentTas
 	}
 	invoker, _ := request.Context().Value(builtinInvokerContextKey{}).(domain.User)
 	actor := mcpActor{WorkspaceKey: task.WorkspaceKey, User: appUser, APIKey: key, AuthorizationUserID: invoker.ID}
-	refs := findAgentMessageReferences(data, s.builtinTaskPrompt(task, data)+"\n"+task.Prompt)
+	refs := findAgentMessageReferences(data, s.builtinTaskPrompt(ctx, task, data)+"\n"+task.Prompt)
 	extra := s.agentRunReferencedIssues(ctx, actor, refs.IssueIdentifiers, data.Issues)
 	messages := s.builtinThreadMessages(request, task, data, append(slices.Clone(data.Issues), extra...))
 	prompt := &agentRunPromptContext{System: messages[0].Content, PendingTool: task.PendingTool, LatestPrompt: task.Prompt, WebAccess: agentWebAccess(data.WorkspaceSettings)}
