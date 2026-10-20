@@ -708,11 +708,24 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 	}
 	// A comment-thread agent can stop on a question with options, like chat (the reference app's select elicitation).
 	r = r.WithContext(context.WithValue(r.Context(), agentExtraToolsKey{}, []agentProviderTool{askUserToolDefinition}))
+	textApprovalRetried := false
 	for round := 0; round < maxAgentToolTurns; round++ {
 		turn, err := s.requestAgentTurn(r.Context(), messages, emit)
 		if err != nil {
 			_ = appendActivity("error", "Agent execution failed. Check the provider configuration and retry.")
 			return
+		}
+		// Asking for approval in text instead of calling the tool is not an answer: nothing ran and there is nothing
+		// to approve. One corrective retry, then the run fails instead of completing on the question.
+		if s.agentTextApprovalRequest(r.Context(), turn) {
+			pending.Reset()
+			if textApprovalRetried {
+				_ = appendActivity("error", agentTextApprovalError)
+				return
+			}
+			textApprovalRetried = true
+			messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, Reasoning: turn.Reasoning}, agentProviderMessage{Role: "user", Content: agentTextApprovalNudge})
+			continue
 		}
 		if len(turn.ToolCalls) == 0 {
 			// Links to this workspace's pages under a made-up host point at the app instead.
@@ -833,10 +846,18 @@ func (s *server) builtinThreadHistory(r *http.Request, task domain.AgentTask, is
 				if id, ok := activity.Metadata["activityId"].(string); ok {
 					deleted[id] = true
 				}
+			case activity.Type == "elicitation" && activity.ToolCall != nil:
+				// An approval question: Flow asked it, not the agent, so only the agent's own words before it are
+				// replayed (the person's answer follows as an outcome, the calls' results as connector calls).
+				if narration := agentApprovalNarration(activity); narration != "" && !deleted[activity.ID] {
+					messages = append(messages, agentProviderMessage{Role: "assistant", Content: narration})
+				}
 			case activity.Type == "elicitation" || activity.Type == "response":
 				if body != "" && !deleted[activity.ID] {
 					messages = append(messages, agentProviderMessage{Role: "assistant", Content: body})
 				}
+			case activity.Type == "prompt" && activity.ToolCall != nil:
+				messages = append(messages, agentProviderMessage{Role: "user", Content: agentApprovalOutcome(r.Context(), activity)})
 			case activity.Type == "prompt" && body != "":
 				messages = append(messages, agentProviderMessage{Role: "user", Content: agentModelUserText(body, nil, issueTitle)})
 			case activity.Type == "action" && !activity.Ephemeral && activity.Metadata["connector"] != nil:

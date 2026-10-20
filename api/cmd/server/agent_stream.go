@@ -445,6 +445,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	// The question the reply stopped on (ask_user), which becomes the end of the reply.
 	asked := ""
 	seenNarration := map[string]bool{}
+	textApprovalRetried := false
 	for turnIndex := 0; turnIndex < maxAgentToolTurns; turnIndex++ {
 		turnStart := len(parts)
 		// The loop builder's intro and later replies are separate paragraphs.
@@ -526,6 +527,31 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 					return domain.AgentSession{}, err
 				}
 			}
+		}
+		// Asking for approval in text instead of calling the tool is not an answer (nothing ran, nothing to approve):
+		// the text leaves the reply, the model is told to call the tool once, and a second such turn fails the reply.
+		if s.agentTextApprovalRequest(r.Context(), turn) {
+			if textIndex, ok := partIndex["text"]; ok {
+				cleaned := &strings.Builder{}
+				cleaned.WriteString(finalText)
+				partText["text"] = cleaned
+				parts[textIndex].Text = finalText
+				if strings.TrimSpace(finalText) == "" {
+					parts = removeAgentPart(parts, partIndex, textIndex)
+					delete(partText, "text")
+				}
+			}
+			if writer != nil {
+				if err := writer.send(agentStreamEvent{Type: "text.replaced", MessageID: messageID, Delta: finalText}); err != nil {
+					return domain.AgentSession{}, err
+				}
+			}
+			if textApprovalRetried {
+				return s.persistAgentFailure(r, *session, messageID, finalText, parts, started, errors.New(agentTextApprovalError))
+			}
+			textApprovalRetried = true
+			messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, Reasoning: turn.Reasoning}, agentProviderMessage{Role: "user", Content: agentTextApprovalNudge})
+			continue
 		}
 		finalText += turn.Text
 		if len(turn.ToolCalls) == 0 {
