@@ -1003,9 +1003,8 @@ func cleanAgentSessionTitle(text string) string {
 
 // agentToolNeedsApproval reports whether a chat or agent-thread tool call waits
 // for the user. Flow writes (issues, documents, projects, views, deletes to
-// trash…) apply immediately, and so do MCP connector tools, unless the tool
-// declares itself destructive or its connector is set to always ask (see
-// connectorTool.needsApproval). A connector tool that is no longer offered
+// trash…) apply immediately, and so do MCP connector tools, unless their
+// connector is set to always ask (see connectorTool.needsApproval). A connector tool that is no longer offered
 // does not wait: its execution is refused.
 func agentToolNeedsApproval(ctx context.Context, name string) bool {
 	if !strings.HasPrefix(name, "external_") {

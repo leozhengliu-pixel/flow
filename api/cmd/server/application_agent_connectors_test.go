@@ -90,8 +90,8 @@ func setTestConnectors(t *testing.T, repository *store.SQLiteStore, policies ...
 	}
 }
 
-// Connector tools run without asking unless they declare themselves destructive (and not read-only) or their
-// connector is set to always ask; the annotations are read during discovery.
+// Connector tools run without asking, whatever their annotations (destructive ones included), unless their
+// connector is set to always ask.
 func TestConnectorToolApprovalRule(t *testing.T) {
 	var calls, toolCount atomic.Int32
 	toolCount.Store(4)
@@ -106,9 +106,8 @@ func TestConnectorToolApprovalRule(t *testing.T) {
 		if err != nil || len(tools) != 4 {
 			t.Fatalf("discovery: %v %d", err, len(tools))
 		}
-		want := map[string]bool{"search_code": false, "delete_branch": true, "list_branches": false, "tool_3": false}
-		for name, held := range want {
-			held = held || approval == connectorToolApprovalAlways
+		for _, name := range []string{"search_code", "delete_branch", "list_branches", "tool_3"} {
+			held := approval == connectorToolApprovalAlways
 			if got := agentToolNeedsApproval(ctx, connectorToolName("code", name)); got != held {
 				t.Errorf("toolApproval=%q %s: needs approval %v, want %v", approval, name, got, held)
 			}
@@ -188,8 +187,8 @@ func TestAgentSessionConnectorToolsRunWithoutApproval(t *testing.T) {
 }
 
 // A delegated issue gets the delegating user's connector tools like chat: a tool without annotations runs at once
-// and is logged with its result, a destructive tool waits for approval, a read-only one does not, a connector set
-// to always ask holds every call, and a connector revoked before a held call is approved is refused and no longer
+// and is logged with its result, so do tools marked destructive or read-only, a connector set to always ask holds
+// every call, and a connector revoked before a held call is approved is refused and no longer
 // offered.
 func TestBuiltinDelegationUsesConnectorTools(t *testing.T) {
 	s, handler, data, _ := applicationFixture(t)
@@ -290,14 +289,11 @@ func TestBuiltinDelegationUsesConnectorTools(t *testing.T) {
 	}
 	mu.Unlock()
 
-	// A destructive tool waits for approval; the approval runs it.
+	// A tool the server marks destructive runs without asking too, and a later run keeps earlier connector results.
 	next("c_2", "delete_branch")
 	task = prompt(task, "Delete the branch")
-	if task.Status != "awaitingInput" || task.PendingTool == nil || calls.Load() != 1 {
-		t.Fatalf("a destructive connector call waits for approval: status=%s pending=%+v calls=%d", task.Status, task.PendingTool, calls.Load())
-	}
-	if body := lastActivity(task).Body; !strings.Contains(body, "Allow Code search: delete_branch?") {
-		t.Fatalf("the approval names the connector and its tool: %s", body)
+	if task.Status != "complete" || task.PendingTool != nil || calls.Load() != 2 {
+		t.Fatalf("a destructive connector call runs without approval: status=%s pending=%+v calls=%d", task.Status, task.PendingTool, calls.Load())
 	}
 	mu.Lock()
 	if followUp := requests[len(requests)-1]; !strings.Contains(followUp, "Earlier connector call search_code") || !strings.Contains(followUp, "invoice.go:42") {
@@ -305,12 +301,8 @@ func TestBuiltinDelegationUsesConnectorTools(t *testing.T) {
 		t.Fatalf("a later run keeps earlier connector results: %s", followUp)
 	}
 	mu.Unlock()
-	task = prompt(task, agentApprovalApprove)
-	if task.Status != "complete" || calls.Load() != 2 {
-		t.Fatalf("the approved connector call must run: status=%s calls=%d", task.Status, calls.Load())
-	}
 
-	// A tool that declares itself read-only runs without asking even when also marked destructive.
+	// So does a tool marked both read-only and destructive.
 	next("c_3", "list_branches")
 	task = prompt(task, "List branches")
 	if task.Status != "complete" || task.PendingTool != nil || calls.Load() != 3 {
@@ -325,6 +317,9 @@ func TestBuiltinDelegationUsesConnectorTools(t *testing.T) {
 	task = prompt(task, "Search again")
 	if task.PendingTool == nil || calls.Load() != 3 {
 		t.Fatalf("a connector set to always ask must hold the call: %+v calls=%d", task, calls.Load())
+	}
+	if body := lastActivity(task).Body; !strings.Contains(body, "Allow Code search: search_code?") {
+		t.Fatalf("the approval names the connector and its tool: %s", body)
 	}
 	setConnectors()
 	mu.Lock()

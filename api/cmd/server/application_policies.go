@@ -25,8 +25,7 @@ type applicationPolicy struct {
 	// workspace admins set it.
 	CodingSessions bool `json:"codingSessions,omitempty"`
 	// ToolApproval is "always" when Flow Agent asks before every call to this
-	// MCP connector's tools. Empty (the default) runs them automatically,
-	// except tools that declare themselves destructive.
+	// MCP connector's tools. Empty (the default) runs them all automatically.
 	ToolApproval string    `json:"toolApproval,omitempty"`
 	UpdatedAt    time.Time `json:"updatedAt"`
 }

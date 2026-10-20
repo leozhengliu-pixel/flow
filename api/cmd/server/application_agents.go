@@ -742,8 +742,8 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 				return
 			}
 		}
-		// Like chat: bulk deletes and an update the agent wrote itself wait for approval, and so do destructive
-		// connector tools and tools of a connector set to always ask.
+		// Like chat: bulk deletes and an update the agent wrote itself wait for approval, and so do tools of a
+		// connector set to always ask.
 		approval := s.agentApprovalForTurn(r, data, turn.ToolCalls, latestPrompt)
 		if approval == nil {
 			approval = &domain.AgentApproval{}
