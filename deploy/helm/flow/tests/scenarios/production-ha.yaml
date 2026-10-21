@@ -16,6 +16,16 @@ outbound:
   trustedCA:
     secretName: flow-enterprise-ca
     key: ca-bundle.pem
+integrations:
+  googleCalendar:
+    clientId: google-client.apps.example.com
+    clientSecret: google-secret-value
+    syncInterval: 30m
+  notion:
+    connectionUrl: https://www.notion.com/connections/flow
+  reviewImport:
+    mode: "on"
+    interval: 15m
 secrets:
   existingSecret: flow-env
 database:

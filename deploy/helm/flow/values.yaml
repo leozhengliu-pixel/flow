@@ -136,6 +136,31 @@ outbound:
     configMapName: ""
     key: ca.crt
 
+# Personal Google Calendar and Notion connections (docs/configuration.md
+# "Personal Google Calendar and Notion connections"). Each row in Settings >
+# Account > Connected accounts shows "Not configured" until its values are set.
+# Google Calendar also needs secrets.connectorSecretKey.
+integrations:
+  googleCalendar:
+    # Google OAuth client (type Web application). Redirect URI:
+    # {config.appUrl}/api/account/connections/google-calendar/callback
+    clientId: ""
+    # Stored in the chart's Secret. Alternatively set FLOW_GOOGLE_OAUTH_CLIENT_SECRET
+    # in secrets.existingSecret and leave this empty.
+    clientSecret: ""
+    # How often each connected member's calendar is read (5m to 24h).
+    # Empty keeps the server default (15m).
+    syncInterval: ""
+  notion:
+    # HTTPS address of the Notion connection page members are sent to.
+    connectionUrl: ""
+  # Pull-request/merge-request import for approved repositories.
+  reviewImport:
+    # "" keeps the server default (off) | on | off
+    mode: ""
+    # Go duration of at least 1m; 0 turns the import off. Empty keeps 10m.
+    interval: ""
+
 # Plain FLOW_* settings (see docs/configuration.md), e.g.
 #   FLOW_AUTH_EMAIL_ENABLED: "true"
 config:

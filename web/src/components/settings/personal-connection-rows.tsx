@@ -23,6 +23,7 @@ import "./code-host-accounts.css";
 
 const GOOGLE_DESCRIPTION = "Sync your calendar out-of-office status with Flow";
 const NOTION_DESCRIPTION = "Preview issues, projects, and views within Notion";
+const NOTION_ENABLED_DESCRIPTION = "Previews are on. Authorize Flow in Notion to see them there.";
 
 /** Loads the viewer's Google Calendar and Notion connections. */
 function usePersonalConnections() {
@@ -70,12 +71,18 @@ function usePersonalConnectionResult() {
 function ConnectionStatusMenu({
   name,
   reconnect,
+  connectedLabel,
+  manageLabel,
   disabled,
   onReconnect,
+  onManage,
   onDisconnect,
 }: {
   name: string;
   reconnect: boolean;
+  connectedLabel?: string;
+  manageLabel?: string;
+  onManage?: () => void;
   disabled?: boolean;
   onReconnect?: () => void;
   onDisconnect: () => void;
@@ -91,11 +98,12 @@ function ConnectionStatusMenu({
           disabled={disabled}
         >
           <span className="code-host-status-dot" aria-hidden="true" />
-          {reconnect ? t("Reconnect needed") : t("Connected")}
+          {reconnect ? t("Reconnect needed") : (connectedLabel ?? t("Connected"))}
           <ChevronDown aria-hidden="true" className="code-host-status-chevron" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        {onManage && manageLabel && <DropdownMenuItem onSelect={onManage}>{manageLabel}</DropdownMenuItem>}
         {reconnect && onReconnect && <DropdownMenuItem onSelect={onReconnect}>{t("Reconnect")}</DropdownMenuItem>}
         <DropdownMenuItem onSelect={onDisconnect}>{t("Disconnect…")}</DropdownMenuItem>
       </DropdownMenuContent>
@@ -111,7 +119,10 @@ function ConnectionRow({
   loaded,
   busy,
   unavailableHint,
+  connectedLabel,
+  manageLabel,
   onConnect,
+  onManage,
   onDisconnect,
 }: {
   provider: "google-calendar" | "notion";
@@ -121,6 +132,9 @@ function ConnectionRow({
   loaded: boolean;
   busy: boolean;
   unavailableHint: string;
+  connectedLabel?: string;
+  manageLabel?: string;
+  onManage?: () => void;
   onConnect: () => void;
   onDisconnect: (connection: PersonalConnection) => void;
 }) {
@@ -133,6 +147,9 @@ function ConnectionRow({
       <ConnectionStatusMenu
         name={name}
         reconnect={reconnect}
+        connectedLabel={connectedLabel}
+        manageLabel={manageLabel}
+        onManage={onManage}
         disabled={busy}
         onReconnect={onConnect}
         onDisconnect={() => onDisconnect(connection)}
@@ -198,6 +215,14 @@ export function PersonalConnectionRows() {
 
   const google = data?.googleCalendar;
   const googleConnection = google?.connection;
+  // Flow cannot see Notion's side of the authorization, so the Notion row
+  // only reports that previews are on and offers a way back to Notion.
+  const manageNotion = () =>
+    void run(async () => {
+      const { url } = await connectNotion();
+      window.open(url, "_blank", "noopener,noreferrer");
+      setBusy(false);
+    }, t("Could not start the connection"));
   const away = googleConnection?.status === "active" && googleConnection.awayUntil && new Date(googleConnection.awayUntil) > new Date();
   let googleDescription: ReactNode = t(GOOGLE_DESCRIPTION);
   if (googleConnection?.status === "reconnect" && googleConnection.statusReason) {
@@ -227,8 +252,11 @@ export function PersonalConnectionRows() {
       <ConnectionRow
         provider="notion"
         name="Notion"
-        description={t(NOTION_DESCRIPTION)}
+        description={t(data?.notion?.connection ? NOTION_ENABLED_DESCRIPTION : NOTION_DESCRIPTION)}
         option={data?.notion}
+        connectedLabel={t("Previews on")}
+        manageLabel={t("Manage in Notion")}
+        onManage={manageNotion}
         loaded={data !== null}
         busy={busy}
         unavailableHint={t("An operator must set the Notion connection URL for this deployment.")}

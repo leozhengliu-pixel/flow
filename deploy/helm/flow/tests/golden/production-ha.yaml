@@ -384,7 +384,7 @@ metadata:
     app.kubernetes.io/instance: flow
 type: Opaque
 stringData:
-
+  FLOW_GOOGLE_OAUTH_CLIENT_SECRET: "google-secret-value"
 ---
 # Source: flow/templates/configmap.yaml
 apiVersion: v1
@@ -418,6 +418,11 @@ data:
   FLOW_S3_PREFIX: "uploads"
   FLOW_AUTH_EMAIL_ENABLED: "false"
   FLOW_AUTH_OIDC_ENABLED: "true"
+  FLOW_GOOGLE_OAUTH_CLIENT_ID: "google-client.apps.example.com"
+  FLOW_GOOGLE_CALENDAR_SYNC_INTERVAL: "30m"
+  FLOW_NOTION_CONNECTION_URL: "https://www.notion.com/connections/flow"
+  FLOW_REVIEW_IMPORT: "on"
+  FLOW_REVIEW_IMPORT_INTERVAL: "15m"
   # Operator-trusted private endpoints (docs/configuration.md).
   FLOW_TRUSTED_PRIVATE_ENDPOINTS: "hsb.haier.net,*.corp.example.com"
   FLOW_TRUSTED_PRIVATE_NETWORKS: "10.218.0.0/16"

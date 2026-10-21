@@ -58,6 +58,23 @@ data:
   {{- range $key, $value := $v.config.env }}
   {{ $key }}: {{ $value | toString | quote }}
   {{- end }}
+  {{- with $v.integrations }}
+  {{- with .googleCalendar.clientId }}
+  FLOW_GOOGLE_OAUTH_CLIENT_ID: {{ . | quote }}
+  {{- end }}
+  {{- with .googleCalendar.syncInterval }}
+  FLOW_GOOGLE_CALENDAR_SYNC_INTERVAL: {{ . | quote }}
+  {{- end }}
+  {{- with .notion.connectionUrl }}
+  FLOW_NOTION_CONNECTION_URL: {{ . | quote }}
+  {{- end }}
+  {{- with .reviewImport.mode }}
+  FLOW_REVIEW_IMPORT: {{ . | quote }}
+  {{- end }}
+  {{- with .reviewImport.interval }}
+  FLOW_REVIEW_IMPORT_INTERVAL: {{ . | quote }}
+  {{- end }}
+  {{- end }}
   {{- with $v.outbound }}
   {{- if .trustedPrivateEndpoints }}
   # Operator-trusted private endpoints (docs/configuration.md).
