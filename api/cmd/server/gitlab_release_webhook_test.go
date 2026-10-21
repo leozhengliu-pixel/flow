@@ -22,6 +22,7 @@ type gitlabReleaseHookResponse struct {
 	Release                 *releaseCIRelease `json:"release"`
 	SkippedIssueIdentifiers []string          `json:"skippedIssueIdentifiers"`
 	UnknownIssueIdentifiers []string          `json:"unknownIssueIdentifiers"`
+	RejectedLinks           int               `json:"rejectedLinks"`
 }
 
 type gitlabReleaseHookEnv struct {

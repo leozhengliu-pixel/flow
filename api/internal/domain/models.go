@@ -1048,7 +1048,11 @@ type ReleaseResource struct {
 	URL        string `json:"url,omitempty"`
 	DocumentID string `json:"documentId,omitempty"`
 	// Content holds markdown for documents attached by CI (the --document option).
-	Content   string    `json:"content,omitempty"`
+	Content string `json:"content,omitempty"`
+	// Source names the integration that owns a synced link ("gitlab" for a
+	// GitLab Release Hook). Empty for links added by hand or by the CI API;
+	// only owned links are reconciled on later deliveries.
+	Source    string    `json:"source,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
