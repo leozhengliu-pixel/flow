@@ -33,6 +33,7 @@ import { aiSettingsZhCN } from './translations-ai-settings';
 import { webhookSettingsZhCN } from './translations-webhook-settings';
 import { billingUsageSettingsZhCN } from './translations-billing-usage-settings';
 import { teamMemberOriginsZhCN } from './translations-team-member-origins';
+import { scimProvisioningZhCN } from './translations-scim-provisioning';
 import { agentMentionsZhCN } from './translations-agent-mentions';
 import { loopRunsZhCN } from './translations-loop-runs';
 import { agentStepsZhCN } from './translations-agent-steps';
@@ -5873,6 +5874,8 @@ for (const [key, value] of Object.entries(aiSettingsZhCN)) if (!(key in zhCN)) z
 Object.assign(zhCN, webhookSettingsZhCN);
 for (const [key, value] of Object.entries(billingUsageSettingsZhCN)) if (!(key in zhCN)) zhCN[key] = value;
 Object.assign(zhCN, teamMemberOriginsZhCN);
+// SCIM provisioning: only fills keys the shared dictionary does not already translate.
+for (const [key, value] of Object.entries(scimProvisioningZhCN)) if (!(key in zhCN)) zhCN[key] = value;
 Object.assign(zhCN, loopRunsZhCN);
 Object.assign(zhCN, agentMentionsZhCN);
 Object.assign(zhCN, agentThreadsZhCN);

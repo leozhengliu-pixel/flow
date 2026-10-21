@@ -71,6 +71,9 @@ export function IdentityProviderSettingsPage({
     member: data.workspaceSettings.scimRoleGroups?.member ?? "",
     guest: data.workspaceSettings.scimRoleGroups?.guest ?? "",
   });
+  const [teamGroups, setTeamGroups] = useState<Record<string, string>>(
+    data.workspaceSettings.scimTeamGroupMapping ?? {},
+  );
   const [busy, setBusy] = useState("");
   const [revealedSecret, setRevealedSecret] = useState("");
 
@@ -82,6 +85,10 @@ export function IdentityProviderSettingsPage({
       guest: data.workspaceSettings.scimRoleGroups?.guest ?? "",
     });
   }, [data.workspaceSettings.scimRoleGroups]);
+  useEffect(
+    () => setTeamGroups(data.workspaceSettings.scimTeamGroupMapping ?? {}),
+    [data.workspaceSettings.scimTeamGroupMapping],
+  );
 
   useEffect(() => {
     void listSCIMTokens()
@@ -257,10 +264,36 @@ export function IdentityProviderSettingsPage({
           </div>
         </Row>
         <p className="identity-provider-help">
-          Use the work email as userName. Setting a user inactive or deleting
-          them in your identity provider suspends the member; their work stays
-          in Flow and they can be restored later.
+          Use the work email as userName. While SCIM is on, the role, name,
+          email and status of provisioned members are managed in your identity
+          provider; turn SCIM off or revoke every token to manage them in Flow.
         </p>
+        <Row
+          title="When a user is deprovisioned"
+          description={
+            (settings.scimDeprovisionAction ?? "suspend") === "remove"
+              ? "Removed from the workspace and its teams. Their account and work stay; provisioning them again adds them back."
+              : "Suspended in the workspace. Their work stays and provisioning them again restores them."
+          }
+        >
+          <Select
+            label="When a user is deprovisioned"
+            value={settings.scimDeprovisionAction ?? "suspend"}
+            options={[
+              { value: "suspend", label: "Suspend" },
+              { value: "remove", label: "Remove from workspace" },
+            ]}
+            onChange={(value) =>
+              void saveSettings(
+                {
+                  ...settings,
+                  scimDeprovisionAction: value as "suspend" | "remove",
+                },
+                "Deprovisioning setting saved",
+              )
+            }
+          />
+        </Row>
         {activeTokens.map((token) => (
           <Row
             key={token.id}
@@ -296,6 +329,7 @@ export function IdentityProviderSettingsPage({
                 onClick={() =>
                   void revokeSCIMToken(token.id)
                     .then(async () => {
+                      setRevealedSecret("");
                       setTokens(await listSCIMTokens());
                       toast.success("SCIM token revoked");
                     })
@@ -418,6 +452,52 @@ export function IdentityProviderSettingsPage({
             }
           />
         </Row>
+      </Section>
+
+      <Section title="Team groups">
+        <p className="identity-provider-help">
+          Map an IdP group display name to a team. Members of the group are
+          added to the team and removed when they leave the group; members
+          added in Flow are kept.
+        </p>
+        {data.teams.map((team) => (
+          <label key={team.id} className="identity-provider-role-row">
+            <span data-i18n-ignore>{team.name}</span>
+            <input
+              className="settings-input"
+              data-i18n-ignore
+              aria-label={`IdP group for ${team.name}`}
+              value={teamGroups[team.id] ?? ""}
+              placeholder={`${team.key.toLowerCase()}-group`}
+              onChange={(event) =>
+                setTeamGroups((current) => ({
+                  ...current,
+                  [team.id]: event.target.value,
+                }))
+              }
+            />
+          </label>
+        ))}
+        <div className="settings-section-action">
+          <ActionButton
+            primary
+            onClick={() =>
+              void saveSettings(
+                {
+                  ...settings,
+                  scimTeamGroupMapping: Object.fromEntries(
+                    Object.entries(teamGroups)
+                      .map(([teamId, group]) => [teamId, group.trim()])
+                      .filter(([, group]) => group),
+                  ),
+                },
+                "Team groups saved",
+              )
+            }
+          >
+            Save team groups
+          </ActionButton>
+        </div>
       </Section>
     </div>
   );

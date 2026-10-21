@@ -56,6 +56,8 @@ export interface WorkspaceMember {
   status: "active" | "suspended" | "departed";
   joinedAt: string;
   lastSeenAt?: string;
+  /** "scim" while SCIM provisioning manages the member: role, name, email and status change in the identity provider. */
+  managedBy?: "scim";
 }
 /**
  * What created a team membership. Syncs remove only memberships they added
@@ -1534,6 +1536,8 @@ export interface WorkspaceSettings {
   scimRoleGroups?: Record<string, string>;
   scimTeamGroupMapping?: Record<string, string>;
   scimDefaultRole?: string;
+  /** What a SCIM deprovision does: suspend the member (default) or remove them from the workspace. */
+  scimDeprovisionAction?: "suspend" | "remove";
   /** Wave 10 LS-0094 — none | allowlist */
   trustedSourcesMode?: "none" | "allowlist";
   trustedSourcesAllowlist?: string[];

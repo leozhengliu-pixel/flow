@@ -31,6 +31,7 @@ import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { InviteMembersDialog } from "@/components/workspace-directory/invite-members-dialog";
 import type { BootstrapData, Invitation, WorkspaceMember } from "@/types/flow";
 import { SettingsPageTitle as PageTitle } from "./settings-primitives";
+import "./workspace-members-scim.css";
 import {
   MEMBER_GROUPS,
   availableMemberFilters,
@@ -50,6 +51,9 @@ import {
   type MemberGroup,
   type MemberSort,
 } from "./workspace-members";
+
+const SCIM_MANAGED_HINT = "Managed by SCIM. Change their role, name, email or status in your identity provider.";
+const isSCIMManaged = (member: WorkspaceMember) => member.managedBy === "scim";
 
 type AssignableRole = "admin" | "member" | "guest";
 type ConfirmKind = "suspend" | "activate" | "remove" | "revoke";
@@ -262,24 +266,34 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
     }
     if (!manageable(member)) return [];
     const suspended = member.status === "suspended";
+    // SCIM-managed members: role, name, email and status change in the identity provider.
+    const locked = isSCIMManaged(member);
+    const lockedProps = locked ? { disabled: true, title: t(SCIM_MANAGED_HINT) } : {};
     return [
-      suspended ? [<DropdownMenuItem key="activate" onSelect={() => setConfirmTarget({ members: [member], action: "activate" })}>{t("Activate user…")}</DropdownMenuItem>] : [],
-      suspended ? [] : [<DropdownMenuItem key="role" onSelect={() => openRoles([member])}>{t("Change role…")}</DropdownMenuItem>],
+      locked
+        ? [
+            <div key="scim" className="settings-member-scim-note" role="note">
+              {t(SCIM_MANAGED_HINT)}
+            </div>,
+          ]
+        : [],
+      suspended ? [<DropdownMenuItem key="activate" {...lockedProps} onSelect={() => setConfirmTarget({ members: [member], action: "activate" })}>{t("Activate user…")}</DropdownMenuItem>] : [],
+      suspended ? [] : [<DropdownMenuItem key="role" {...lockedProps} onSelect={() => openRoles([member])}>{t("Change role…")}</DropdownMenuItem>],
       [
-        <DropdownMenuItem key="name" onSelect={() => openIdentity(member, "displayName")}>{t("Update name…")}</DropdownMenuItem>,
+        <DropdownMenuItem key="name" {...lockedProps} onSelect={() => openIdentity(member, "displayName")}>{t("Update name…")}</DropdownMenuItem>,
         <DropdownMenuItem key="username" onSelect={() => openIdentity(member, "username")}>{t("Update username…")}</DropdownMenuItem>,
-        ...(suspended ? [] : [<DropdownMenuItem key="email" onSelect={() => openIdentity(member, "email")}>{t("Update email…")}</DropdownMenuItem>]),
+        ...(suspended ? [] : [<DropdownMenuItem key="email" {...lockedProps} onSelect={() => openIdentity(member, "email")}>{t("Update email…")}</DropdownMenuItem>]),
       ],
-      suspended ? [] : [<DropdownMenuItem key="suspend" onSelect={() => setConfirmTarget({ members: [member], action: "suspend" })}>{t("Suspend user…")}</DropdownMenuItem>],
+      suspended ? [] : [<DropdownMenuItem key="suspend" {...lockedProps} onSelect={() => setConfirmTarget({ members: [member], action: "suspend" })}>{t("Suspend user…")}</DropdownMenuItem>],
       suspended ? [] : [<DropdownMenuItem key="teams" onSelect={() => openTeams("manage", [member])}>{t("Manage teams…")}</DropdownMenuItem>],
-      [<DropdownMenuItem key="remove" className="danger-item" onSelect={() => setConfirmTarget({ members: [member], action: "remove" })}>{t("Remove from workspace…")}</DropdownMenuItem>],
+      [<DropdownMenuItem key="remove" className="danger-item" {...lockedProps} onSelect={() => setConfirmTarget({ members: [member], action: "remove" })}>{t("Remove from workspace…")}</DropdownMenuItem>],
     ].filter((group) => group.length > 0);
   };
 
   /** Actions on the selection (the reference app's bulk actions), shown in the bulk bar and in a selected row's menu. */
   const bulkActions = (targets: WorkspaceMember[]): ReactNode[][] => {
     if (!targets.length) return [];
-    const others = targets.every(manageable);
+    const others = targets.every(manageable) && !targets.some(isSCIMManaged);
     const allActive = targets.every((member) => member.status === "active");
     const items: ReactNode[] = [];
     if (allActive) {
@@ -400,6 +414,11 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
             )}
             <small data-i18n-ignore>{personUsername(member.user)}</small>
           </i>
+          {isSCIMManaged(member) && (
+            <em className="settings-member-scim-badge" title={t(SCIM_MANAGED_HINT)}>
+              {t("Managed by SCIM")}
+            </em>
+          )}
         </span>
         <span>
           {!app && member.user.email && (

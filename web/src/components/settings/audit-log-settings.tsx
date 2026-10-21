@@ -47,11 +47,15 @@ const TEAM_MEMBER_SOURCES: Record<string, string> = {
   scim: "Via SCIM",
 };
 
-/** "Ada · ENG", the member and team a team_member entry is about. */
+/** Resource types whose entries name who they are about and how the change was made (metadata.source). */
+const SUBJECT_RESOURCES = new Set(["team_member", "workspace_member", "scim_group"]);
+
+/** "Ada · ENG" for a team_member entry, the member for workspace_member, the group for scim_group. */
 function teamMemberSubject(item: AuditLogEntry) {
-  if (item.resourceType !== "team_member") return "";
+  if (!SUBJECT_RESOURCES.has(item.resourceType)) return "";
   const metadata = item.metadata ?? {};
   const text = (key: string) => (typeof metadata[key] === "string" ? (metadata[key] as string) : "");
+  if (item.resourceType === "scim_group") return text("scimGroupName") || item.resourceId;
   return [text("userName") || text("userEmail") || item.resourceId, text("teamKey") || text("teamName")]
     .filter(Boolean)
     .join(" · ");
@@ -160,7 +164,7 @@ export function AuditLogSettings({ data }: { data: BootstrapData }) {
                 <small>{item.actor.email}</small>
               </div>
               <code>{item.action.replaceAll("_", " ")}</code>
-              {item.resourceType === "team_member" ? (
+              {SUBJECT_RESOURCES.has(item.resourceType) ? (
                 <span className="settings-audit-resource">
                   {item.resourceType.replaceAll("_", " ")}
                   <small title={teamMemberSubject(item)}>
