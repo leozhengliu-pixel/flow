@@ -67,7 +67,7 @@ describe('coding session page', () => {
   })
 
   it('moves to the review page (replacing the entry) once the session’s PR has its review', async () => {
-    const review = { id: 'review-6', slugId: 'add-shout-6', provider: 'github', number: 6, repositoryOwner: 'PocklyApp', repositoryName: 'qa-coding-session', url: pullRequest.url, title: 'Add shout(name)' }
+    const review = { id: 'review-6', slugId: 'add-shout-6', provider: 'github', number: 6, repositoryOwner: 'PocklyApp', repositoryName: 'qa-coding-session', url: 'https://github.com/PocklyApp/qa-coding-session/pull/6', title: 'Add shout(name)' }
     const withReview = () => makeBootstrap({ reviews: [review], issues: [issue] } as never)
     vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession({ issueId: issue.id }))
     const navigate = vi.fn()

@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { AgentInlineVideo } from '@/components/agent/agent-inline-video'
 import { openLightbox } from '@/components/editor/lightbox-bridge'
 import { useI18n } from '@/i18n/i18n'
-import { ApiError } from '@/lib/api-client'
-import { fetchCodingSessionArtifacts } from '@/lib/coding-sessions-api'
 import type { CodingArtifact } from '@/types/coding-sessions'
 import { artifactSrc, buildArtifactSections, galleryImages, pairRole, type ArtifactPair } from './coding-artifacts-model'
 import styles from './coding-session-artifacts.module.css'
+import { useCodingSessionArtifacts } from './use-coding-session-artifacts'
 
 export type CodingSessionArtifactsProps = {
   sessionId: string
@@ -19,48 +18,8 @@ export type CodingSessionArtifactsProps = {
   withScreenshots?: boolean
 }
 
-type Status = 'idle' | 'loading' | 'error'
 type OpenImage = (artifact: CodingArtifact) => void
 type ImageFailed = (artifact: CodingArtifact) => void
-
-/**
- * A session's captures: `initial` (e.g. `session.artifacts`) when given, else fetched, and refetched when `refreshKey`
- * changes. `expired` refetches once when a signed URL stopped loading (stable contentUrls never expire).
- */
-export function useCodingSessionArtifacts(sessionId: string, initial?: CodingArtifact[], refreshKey?: string | number) {
-  const [fetched, setFetched] = useState<{ sessionId: string; items: CodingArtifact[] }>()
-  const [status, setStatus] = useState<Status>(initial ? 'idle' : 'loading')
-  const [reload, setReload] = useState(0)
-  const first = useRef({ sessionId, refreshKey })
-  const expiredRefetch = useRef(false)
-  const hasInitialData = Boolean(initial)
-
-  useEffect(() => {
-    const unchanged = first.current.sessionId === sessionId && first.current.refreshKey === refreshKey
-    if (hasInitialData && unchanged && reload === 0) return
-    let cancelled = false
-    setStatus('loading')
-    fetchCodingSessionArtifacts(sessionId).then(
-      items => { if (!cancelled) { setFetched({ sessionId, items: items ?? [] }); setStatus('idle') } },
-      cause => {
-        if (cancelled) return
-        // Not found: nothing to show here (the session page explains why it can't be read). Only a real failure
-        // (network, server) is an error with Retry.
-        if (cause instanceof ApiError && cause.status === 404) { setFetched({ sessionId, items: [] }); setStatus('idle') }
-        else setStatus('error')
-      },
-    )
-    return () => { cancelled = true }
-  }, [sessionId, refreshKey, reload, hasInitialData])
-
-  const items = fetched && fetched.sessionId === sessionId ? fetched.items : initial
-  const expired: ImageFailed = artifact => {
-    if (artifact.contentUrl || expiredRefetch.current) return
-    expiredRefetch.current = true
-    setReload(value => value + 1)
-  }
-  return { items, status, expired, retry: () => setReload(value => value + 1) }
-}
 
 /**
  * The before/after gallery of a coding session: comparison cards for "before"/"after" screenshots of the same flow,
