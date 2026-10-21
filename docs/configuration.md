@@ -501,6 +501,78 @@ Set `scimRoleGroups` for role group display names and
 SCIM pushes then add and remove managed team memberships without removing
 manually assigned members.
 
+### SCIM provisioning
+
+Flow implements SCIM 2.0 (RFC 7643/7644) for user and group provisioning.
+
+- **Base URL:** `https://<flow-host>/scim/v2/<workspace-url-key>` (shown with a
+  copy button under Settings → Security → identity provider → SCIM
+  provisioning). Okta calls it the SCIM connector base URL, Microsoft Entra ID
+  the Tenant URL.
+- **Authentication:** `Authorization: Bearer <token>` with a workspace SCIM
+  token. Creating a token enables SCIM; tokens can be rotated and revoked, and
+  the settings page shows when each was last used. Requests for another
+  workspace, with a revoked token, or while SCIM is disabled are rejected.
+- **Endpoints:** `ServiceProviderConfig`, `ResourceTypes` (+ `/{id}`),
+  `Schemas` (+ `/{id}`), `Users` (list, create, get, `PUT`, `PATCH`, `DELETE`)
+  and `Groups` (list, create, get, `PUT`, `PATCH`, `DELETE`). Bulk, sort,
+  ETags and password changes are not supported (declared in
+  `ServiceProviderConfig`). Responses use `application/scim+json`; errors are
+  SCIM error bodies with `status` as a string and `scimType` (`invalidFilter`,
+  `invalidValue`, `invalidSyntax`, `invalidPath`, `noTarget`, `uniqueness`,
+  `tooMany`, `mutability`).
+- **User attributes:** `userName` (use the work email; unique per workspace,
+  compared case-insensitively), `externalId`, `name.givenName`,
+  `name.familyName`, `name.formatted`, `displayName`, `active`, `emails` (the
+  primary, else the work, else the first email becomes the member's email) and
+  `roles` (write-only: `owner`, `admin`, `member`, `guest` or a value mapped by
+  `scimRoleMapping`; otherwise `scimDefaultRole`). The member's name is
+  `name.formatted`, else given and family name, else `displayName`, else
+  `userName`. Other attributes, including the enterprise extension, are
+  accepted and ignored. An existing account with the same email is linked
+  rather than duplicated and keeps its workspace role unless `roles` is sent.
+- **Deprovisioning:** `active: false` suspends the member and `active: true`
+  restores them. `DELETE /Users/{id}` also suspends the account (it is never
+  deleted, so its issues and comments stay attributed), ends its SCIM group
+  memberships and SCIM-managed team memberships, and makes the resource return
+  404; creating the same `externalId` again restores the same account.
+- **Groups:** a group whose display name matches `scimRoleGroups` (or
+  `flow-owners`, `flow-admins`, `flow-guests`) sets its members' role; when a
+  member is in several role groups the most recent membership wins. A group
+  mapped in `scimTeamGroupMapping`, or whose `externalId` is a team ID or key,
+  manages that team's membership (shown as managed by SCIM; manual members are
+  never removed). Teams not linked yet are listed as groups so a directory
+  can find them by name; the first `PATCH`/`PUT` to such a team's id links
+  it. Deleting a linked group unlinks the team and leaves its members as
+  ordinary members. Group `displayName` and non-empty `externalId` are unique.
+- **Filters:** `filter` supports attribute paths (`userName`, `externalId`,
+  `id`, `displayName`, `name.*`, `emails.value`, `emails[type eq "work"].value`,
+  `active`, `members.value`, `members[value eq "…"]`, `meta.created`,
+  `meta.lastModified`), the operators `eq ne co sw ew pr gt ge lt le`, and
+  `and`/`or`/`not (…)` with parentheses. Attribute names and keywords are
+  case-insensitive; strings compare case-insensitively except `id`,
+  `externalId` and `members.value`. An `eq` on `userName`, `externalId`, `id`,
+  `emails.value` or `displayName` is answered from indexes; other user filters
+  scan at most 100,000 users (`tooMany` beyond that). Invalid filters return
+  400 `invalidFilter`.
+- **Paging and projection:** `startIndex` (1-based) and `count` (default 100,
+  maximum 1000, `0` returns only `totalResults`) apply to Users and Groups.
+  `attributes` and `excludedAttributes` (for example
+  `excludedAttributes=members`) are honoured on reads and writes.
+- **PATCH:** `op` is case-insensitive (`Add`, `Replace`, `Remove`); `replace`
+  without `path` takes an object of attributes; `active` accepts booleans or
+  the strings `"True"`/`"False"`; paths such as `name.givenName`,
+  `emails[type eq "work"].value`, `members` and `members[value eq "<id>"]`
+  work. Group member adds and removes are applied in order, are idempotent,
+  and an unknown user in an add is 400 `invalidValue`.
+
+Setup notes: in **Okta**, use a SCIM 2.0 app with HTTP Header (bearer)
+authentication, set the unique identifier to the email, and enable Create,
+Update and Deactivate users plus Push Groups. In **Microsoft Entra ID**, set
+the provisioning mode to Automatic with the base URL as Tenant URL and the
+token as Secret Token, map `userName` to the user principal name or mail, and
+keep `externalId` mapped to `objectId` (or `mailNickname`).
+
 ## Flow Agent
 
 Flow Agent streams provider output through a unified SSE transport. It supports
