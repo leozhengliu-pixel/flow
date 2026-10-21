@@ -15,7 +15,7 @@ it('shows the SCIM base URL and only tokens that still work, with their last use
     { id: 'revoked', workspaceId: 'workspace-1', name: 'Old SCIM', createdAt: '2025-01-01T00:00:00Z', revokedAt: '2025-06-01T00:00:00Z' },
   ])
   const data = makeBootstrap({ identityProviders: [{ id: 'idp', workspaceId: 'workspace-1', type: 'saml', name: 'Okta', issuer: 'https://idp.example.com', scopes: [], domains: [], enabled: true, enforced: false, discoveryStatus: 'verified', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' }] })
-  render(<I18nProvider><IdentityProviderSettingsPage data={data} providerId="idp" onReload={async () => {}} onBack={() => {}}/></I18nProvider>)
+  render(<I18nProvider><IdentityProviderSettingsPage data={data} providerId="idp" onReload={vi.fn().mockResolvedValue(undefined)} onBack={vi.fn()}/></I18nProvider>)
   expect(screen.getByRole('textbox', { name: 'SCIM base URL' })).toHaveValue(`${window.location.origin}/scim/v2/workspace`)
   expect(await screen.findByText('Okta SCIM')).toBeInTheDocument()
   expect(screen.getByText(/Last used/)).toBeInTheDocument()
