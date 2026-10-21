@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -334,24 +336,52 @@ func fetchReviewSnapshot(ctx context.Context, remote reviewRemote, review domain
 	return fetchGitHubReviewSnapshot(ctx, remote, review)
 }
 
-// fetchPages reads a paginated list endpoint (per_page=100) until a short page.
+// reviewDefaultPageSize is the page size of every paginated read, except
+// those that name their own (see fetchPagesSized).
+const reviewDefaultPageSize = 100
+
+// fetchPages reads a paginated list endpoint (per_page=100) until a short
+// page. Hitting maxPages stops silently; use fetchPagesSized when a
+// truncated list must be told apart.
 func fetchPages[T any](ctx context.Context, remote reviewRemote, path string, maxPages int) ([]T, error) {
-	separator := "?"
-	if strings.Contains(path, "?") {
-		separator = "&"
+	all, _, err := fetchPagesSized[T](ctx, remote, path, reviewDefaultPageSize, maxPages)
+	return all, err
+}
+
+// reviewPagePath sets page and per_page on path's query, keeping every other
+// parameter and replacing any page or per_page the path already carried.
+func reviewPagePath(path string, pageSize, page int) (string, error) {
+	target, err := url.Parse(path)
+	if err != nil {
+		return "", fmt.Errorf("invalid paginated path: %w", err)
 	}
-	all := []T{}
+	query := target.Query()
+	query.Set("per_page", strconv.Itoa(pageSize))
+	query.Set("page", strconv.Itoa(page))
+	target.RawQuery = query.Encode()
+	return target.String(), nil
+}
+
+// fetchPagesSized reads a paginated list endpoint with an explicit page size
+// until a short page. truncated is true when maxPages was used up on a full
+// page, so more items may remain.
+func fetchPagesSized[T any](ctx context.Context, remote reviewRemote, path string, pageSize, maxPages int) (all []T, truncated bool, err error) {
+	all = []T{}
 	for page := 1; page <= maxPages; page++ {
+		target, err := reviewPagePath(path, pageSize, page)
+		if err != nil {
+			return nil, false, err
+		}
 		var items []T
-		if err := remote.REST(ctx, http.MethodGet, fmt.Sprintf("%s%sper_page=100&page=%d", path, separator, page), nil, &items); err != nil {
-			return nil, err
+		if err := remote.REST(ctx, http.MethodGet, target, nil, &items); err != nil {
+			return nil, false, err
 		}
 		all = append(all, items...)
-		if len(items) < 100 {
-			break
+		if len(items) < pageSize {
+			return all, false, nil
 		}
 	}
-	return all, nil
+	return all, true, nil
 }
 
 // reviewSyncFreshness: a non-forced sync (opening the review) is skipped
