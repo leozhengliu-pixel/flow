@@ -41,7 +41,7 @@ const (
 )
 
 func connectorAllowed(settings domain.WorkspaceSettings, item applicationPolicy, userID string) bool {
-	return settings.MCPConnectorsEnabled && !settings.HIPAACompliance && item.Kind == "mcp" && item.Status != "rejected" &&
+	return settings.MCPConnectorsActive() && item.Kind == "mcp" && item.Status != "rejected" &&
 		(item.Shared || item.OwnerID == userID) && (settings.AllowedMCPConnectors != "approved" || item.Status == "approved")
 }
 

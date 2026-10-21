@@ -1491,7 +1491,10 @@ type WorkspaceSettings struct {
 	PinnedViewPermission    string             `json:"pinnedViewPermission,omitempty"`
 	AgentGuidancePermission string             `json:"agentGuidancePermission,omitempty"`
 	AgentInstructions       string             `json:"agentInstructions,omitempty"`
-	PreventGuestAgents      bool               `json:"preventGuestAgents"`
+	// AgentInstructionsEditedByID and AgentInstructionsEditedAt say who last changed the guidance and when.
+	AgentInstructionsEditedByID string     `json:"agentInstructionsEditedById,omitempty"`
+	AgentInstructionsEditedAt   *time.Time `json:"agentInstructionsEditedAt,omitempty"`
+	PreventGuestAgents          bool       `json:"preventGuestAgents"`
 	// AgentWebSearch is the older opt-in flag (off by default before web access became default-on). It is kept in
 	// step with the effective setting for older clients and no longer decides it.
 	AgentWebSearch bool `json:"agentWebSearch"`
@@ -1500,8 +1503,12 @@ type WorkspaceSettings struct {
 	AgentWebAccess *bool `json:"agentWebAccess,omitempty"`
 	// AgentWebSearchDisabled mirrors !AgentWebAccessEnabled() for older clients; true always meant an admin turned
 	// web access off.
-	AgentWebSearchDisabled       bool              `json:"agentWebSearchDisabled"`
-	ExternalLoopTriggers         bool              `json:"externalLoopTriggers"`
+	AgentWebSearchDisabled bool `json:"agentWebSearchDisabled"`
+	ExternalLoopTriggers   bool `json:"externalLoopTriggers"`
+	// MCPConnectors is the admin's explicit choice for Flow Agent's MCP connectors: nil when never set (they are on,
+	// like the reference app), or the choice. MCPConnectorsActive resolves it.
+	MCPConnectors *bool `json:"mcpConnectors,omitempty"`
+	// MCPConnectorsEnabled mirrors the resolved setting (ignoring HIPAA mode) for older clients.
 	MCPConnectorsEnabled         bool              `json:"mcpConnectorsEnabled"`
 	ReviewThirdPartyApplications bool              `json:"reviewThirdPartyApplications"`
 	AllowedMCPConnectors         string            `json:"allowedMcpConnectors,omitempty"`
@@ -1601,6 +1608,17 @@ type TriageIntelligenceSettings struct {
 	DuplicateAction   string `json:"duplicateAction"`
 	RelatedAction     string `json:"relatedAction"`
 	WorkspaceGuidance string `json:"workspaceGuidance,omitempty"`
+	// ValueRules override the assignee, project, label and team actions for one specific value (a user, project,
+	// label or team): the filter button next to each of those rows.
+	ValueRules []TriageValueRule `json:"valueRules,omitempty"`
+}
+
+// TriageValueRule sets what happens to suggestions of Kind (assignee, project, label or team) that point at Value
+// (the user, project, label or team id): suggest, auto or hide.
+type TriageValueRule struct {
+	Kind   string `json:"kind"`
+	Value  string `json:"value"`
+	Action string `json:"action"`
 }
 
 type ReleasePipeline struct {
@@ -3146,6 +3164,24 @@ func (settings WorkspaceSettings) AgentWebAccessEnabled() bool {
 		return *settings.AgentWebAccess
 	}
 	return !settings.AgentWebSearchDisabled
+}
+
+// MCPConnectorsActive reports whether Flow Agent may use MCP connectors in the workspace: the admin's explicit choice
+// when there is one, otherwise on. HIPAA mode always turns it off.
+func (settings WorkspaceSettings) MCPConnectorsActive() bool {
+	if settings.HIPAACompliance {
+		return false
+	}
+	if settings.MCPConnectors != nil {
+		return *settings.MCPConnectors
+	}
+	return true
+}
+
+// SetMCPConnectors records an admin's explicit choice and keeps the older mirror in step.
+func (settings *WorkspaceSettings) SetMCPConnectors(enabled bool) {
+	settings.MCPConnectors = &enabled
+	settings.MCPConnectorsEnabled = enabled
 }
 
 // SetAgentWebAccess records an admin's explicit web access choice and keeps the older flags in step.

@@ -322,7 +322,7 @@ func generateIssueSuggestions(data *domain.Bootstrap, issue *domain.Issue, now t
 	result := make([]domain.IssueSuggestion, 0, 7)
 	rank := 0
 	add := func(kind, target string, score float64, reasons []string) {
-		action, exists := triageSuggestionAction(settings, kind)
+		action, exists := triageActionForTarget(settings, kind, target)
 		if !exists || action == "hide" || strings.TrimSpace(target) == "" {
 			return
 		}
@@ -427,6 +427,86 @@ func triageSuggestionAction(settings domain.TriageIntelligenceSettings, kind str
 		action = "suggest"
 	}
 	return action, true
+}
+
+// triageValueRuleKinds are the suggestion kinds a per-value rule can target.
+var triageValueRuleKinds = []string{"assignee", "project", "label", "team"}
+
+// triageActionForTarget is the action for one suggestion: the per-value rule for its target (a user, project, label or
+// team) when there is one, else the setting for its kind.
+func triageActionForTarget(settings domain.TriageIntelligenceSettings, kind, target string) (string, bool) {
+	action, exists := triageSuggestionAction(settings, kind)
+	if !exists || target == "" {
+		return action, exists
+	}
+	for _, rule := range settings.ValueRules {
+		if rule.Kind == kind && rule.Value == target {
+			return rule.Action, true
+		}
+	}
+	return action, true
+}
+
+const maxTriageValueRules = 200
+
+// normalizeTriageValueRules validates the per-value rules of a settings patch: a known kind and action, an existing
+// target, and one rule per target (the last wins). A rule equal to its kind's default is kept: it still pins the value
+// when the default changes later.
+func normalizeTriageValueRules(data *domain.Bootstrap, settings *domain.TriageIntelligenceSettings) error {
+	if len(settings.ValueRules) > maxTriageValueRules {
+		return fmt.Errorf("%w: at most %d Triage Intelligence value rules", errInvalid, maxTriageValueRules)
+	}
+	rules := make([]domain.TriageValueRule, 0, len(settings.ValueRules))
+	index := map[string]int{}
+	for _, rule := range settings.ValueRules {
+		rule.Kind, rule.Value, rule.Action = strings.TrimSpace(rule.Kind), strings.TrimSpace(rule.Value), strings.TrimSpace(rule.Action)
+		if !slices.Contains(triageValueRuleKinds, rule.Kind) || !slices.Contains([]string{"suggest", "auto", "hide"}, rule.Action) {
+			return fmt.Errorf("%w: invalid Triage Intelligence value rule", errInvalid)
+		}
+		known := false
+		switch rule.Kind {
+		case "assignee":
+			known = userByID(data, rule.Value) != nil
+		case "project":
+			known = projectByID(data, rule.Value) != nil
+		case "label":
+			known = labelByID(data, rule.Value) != nil
+		case "team":
+			known = teamByID(data, rule.Value) != nil
+		}
+		if !known {
+			return fmt.Errorf("%w: unknown %s in Triage Intelligence value rule", errInvalid, rule.Kind)
+		}
+		key := rule.Kind + "\x00" + rule.Value
+		if at, seen := index[key]; seen {
+			rules[at] = rule
+			continue
+		}
+		index[key] = len(rules)
+		rules = append(rules, rule)
+	}
+	if len(rules) == 0 {
+		rules = nil
+	}
+	settings.ValueRules = rules
+	return nil
+}
+
+// triageSuggestionTarget is the id a suggestion points at.
+func triageSuggestionTarget(suggestion *domain.IssueSuggestion) string {
+	switch suggestion.Type {
+	case "assignee":
+		return suggestion.SuggestedUserID
+	case "project":
+		return suggestion.SuggestedProjectID
+	case "label":
+		return suggestion.SuggestedLabelID
+	case "team":
+		return suggestion.SuggestedTeamID
+	case "similarIssue", "relatedIssue":
+		return suggestion.SuggestedIssueID
+	}
+	return ""
 }
 
 func similarTriageIssues(data *domain.Bootstrap, issue *domain.Issue) []triageSuggestionCandidate {
@@ -691,7 +771,7 @@ func inferTeam(data *domain.Bootstrap, issue *domain.Issue, candidates []triageS
 }
 
 func applyTriageSuggestionAction(data *domain.Bootstrap, issue *domain.Issue, suggestion *domain.IssueSuggestion, now time.Time) bool {
-	action, exists := triageSuggestionAction(data.WorkspaceSettings.FeatureSettings.TriageIntelligence, suggestion.Type)
+	action, exists := triageActionForTarget(data.WorkspaceSettings.FeatureSettings.TriageIntelligence, suggestion.Type, triageSuggestionTarget(suggestion))
 	if !exists || action != "auto" {
 		return false
 	}

@@ -655,6 +655,11 @@ type agentFeedbackInput struct {
 
 const maxAgentFeedbackComment = 4000
 
+// onlyRemoves is true for a request that records nothing: it clears a rating and carries no note.
+func (input agentFeedbackInput) onlyRemoves() bool {
+	return input.Rating != nil && *input.Rating == "" && (input.Comment == nil || strings.TrimSpace(*input.Comment) == "")
+}
+
 func (input agentFeedbackInput) validate() error {
 	if input.Rating != nil && *input.Rating != "" && *input.Rating != "positive" && *input.Rating != "negative" {
 		return fmt.Errorf("%w: rating must be positive, negative or empty", errInvalid)
@@ -683,6 +688,10 @@ func (s *server) updateAgentMessageFeedback(w http.ResponseWriter, r *http.Reque
 		session, err := ownedAgentSession(data, id)
 		if err != nil {
 			return err
+		}
+		// With usage feedback turned off nothing new is recorded; taking back a rating already given still works.
+		if !usageFeedbackEnabled(data.WorkspaceSettings) && !input.onlyRemoves() {
+			return store.ErrAuthForbidden
 		}
 		for index := range session.Messages {
 			message := &session.Messages[index]
@@ -742,6 +751,9 @@ func (s *server) createAgentSessionFeedback(w http.ResponseWriter, r *http.Reque
 		session, err := ownedAgentSession(data, id)
 		if err != nil {
 			return err
+		}
+		if !usageFeedbackEnabled(data.WorkspaceSettings) {
+			return store.ErrAuthForbidden
 		}
 		session.Feedback = append(session.Feedback, domain.AgentFeedback{Comment: comment, UpdatedAt: time.Now().UTC()})
 		updated = *session
