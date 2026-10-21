@@ -21,6 +21,8 @@ export interface InboxPageAdapter extends InboxPersistenceAdapter {
 export interface InboxDetailRenderResult {
   content: ReactNode
   fullBleed?: boolean
+  /** The content brings its own header (an embedded review page), so the inbox detail header is left out. */
+  chromeless?: boolean
   loading?: boolean
   error?: boolean
   retry?: () => void
@@ -109,6 +111,7 @@ export function InboxPage(props: InboxPageProps) {
       issue={detail.issue}
       issues={detail.issues}
       fullBleed={detail.fullBleed}
+      chromeless={detail.chromeless}
       subscribed={props.subscribed?.(selected)}
       onBack={closeDetail}
       onOpenIssue={props.onOpenIssue}

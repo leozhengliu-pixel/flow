@@ -31,7 +31,7 @@ import { effectivePulseFrequency, isPulseSummaryNotification, pulseSummaryText, 
 import { agentReplyLine, finishedSessionTarget } from './agent-reply-notification'
 import { PulseSummaryView } from './pulse-summary-view'
 import { usePagedInbox } from './use-paged-inbox'
-import { ReviewAgentPanel } from '@/components/coding-sessions/review-agent-panel'
+import { EmbeddedReview } from '@/components/reviews/embedded-review'
 import { PullRequestInboxView } from '@/components/reviews/pull-request-inbox-view'
 import { markdownPlainText } from '@/lib/markdown-plain-text'
 import { DocumentInboxView } from './hosts/document-inbox-view'
@@ -82,6 +82,8 @@ export interface InboxAppPageProps {
   /** `sessionId` opens the review with that coding session's agent panel. */
   onOpenReview?: (review: CodeReview, sessionId?: string) => void
   onOpenSettings?: () => void
+  /** Paths from an embedded review page (its issue breadcrumb, open in full page). */
+  onNavigate?: (path: string) => void
   onCreateProjectUpdate?: (projectId: string, input: { body: string; health?: Project['health'] }) => Promise<ProjectUpdate | void>
   onCreateInitiativeUpdate?: (initiativeId: string, input: { body: string; health?: Project['health'] }) => Promise<InitiativeUpdate | void>
   onSubscriberChange?: (issue: Issue, subscribed: boolean) => Promise<void> | void
@@ -105,7 +107,7 @@ export interface InboxAppPageProps {
   onLoadIssueContext?: (issueId: string) => Promise<void> | void
 }
 
-export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpenProject, onOpenInitiative, onOpenReview, onOpenSettings, onCreateProjectUpdate, onCreateInitiativeUpdate, onSubscriberChange, onUpdateIssue, onDeleteIssue, onCreateRelation, onDeleteRelation, onCreateSubIssue, onReactIssue, onCreateComment, onEditComment, onDeleteComment, onReactComment, onUploadAttachment, onDeleteAttachment, onCopyIssueLink, onOpenSidebar, activeTab = 'all', onTabChange, onLoadIssueContext }: InboxAppPageProps) {
+export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpenProject, onOpenInitiative, onOpenReview, onOpenSettings, onNavigate, onCreateProjectUpdate, onCreateInitiativeUpdate, onSubscriberChange, onUpdateIssue, onDeleteIssue, onCreateRelation, onDeleteRelation, onCreateSubIssue, onReactIssue, onCreateComment, onEditComment, onDeleteComment, onReactComment, onUploadAttachment, onDeleteAttachment, onCopyIssueLink, onOpenSidebar, activeTab = 'all', onTabChange, onLoadIssueContext }: InboxAppPageProps) {
   const { t } = useI18n()
   // Paged workspaces ship no notifications in the bootstrap: read them from the API.
   const paged = Boolean(data.issueCollectionPaged)
@@ -448,13 +450,10 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
       if (projection?.sessionId && sessionReview) {
         const sessionId = projection.sessionId
         return {
-          content: <div className="review-agent-layout" key={projection.id}>
-            <div className="review-agent-layout-main" style={{ overflow: 'auto' }}>
-              <PullRequestInboxView data={data} review={sessionReview} onOpen={() => onOpenReview?.(sessionReview, sessionId)} onReload={onReload} onAccessAction={() => onOpenSettings?.()} />
-            </div>
-            <ReviewAgentPanel sessionId={sessionId} data={data} onClose={() => setSelectedId(null)} />
-          </div>,
+          content: <EmbeddedReview key={projection.id} data={data} review={sessionReview} sessionId={sessionId} onReload={async () => { await onReload() }}
+            onNavigate={path => onNavigate ? onNavigate(path) : onOpenReview?.(sessionReview, sessionId)} />,
           fullBleed: true,
+          chromeless: true,
         }
       }
       if (projection && review && !issue) return { content: <PullRequestInboxView data={data} review={review} onOpen={() => onOpenReview?.(review)} onReload={onReload} onAccessAction={() => onOpenSettings?.()} /> }

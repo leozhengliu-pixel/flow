@@ -499,6 +499,8 @@ function useInboxShortcut(key: string, action: (event: KeyboardEvent) => boolean
 
 function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
+  // Keys typed inside an embedded review page belong to its own shortcuts.
+  if (target.closest('[data-embedded-review]')) return true
   return target.isContentEditable || target.matches('input, textarea, select, [role="textbox"], [role="searchbox"]')
 }
 

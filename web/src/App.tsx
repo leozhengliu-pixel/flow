@@ -5920,6 +5920,7 @@ function App() {
             onOpenInitiative={openInitiative}
             onCreateProjectUpdate={addProjectUpdate}
             onCreateInitiativeUpdate={addInitiativeUpdate}
+            onNavigate={navigateTo}
             onOpenReview={(review, sessionId) =>
               navigateTo(sessionId ? reviewAgentPath(data.workspace.urlKey, review, sessionId) : reviewPath(data.workspace.urlKey, review))
             }
