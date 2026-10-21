@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"slices"
 	"strings"
@@ -43,6 +44,7 @@ func (s *server) createSCIMToken(w http.ResponseWriter, r *http.Request) {
 			if next.WorkspaceSettings.SCIMDefaultRole == "" {
 				next.WorkspaceSettings.SCIMDefaultRole = "member"
 			}
+			appendAudit(next, "created", "scim_token", item.ID, map[string]any{"name": item.Name})
 			return nil
 		})
 	}
@@ -55,6 +57,15 @@ func (s *server) revokeSCIMToken(w http.ResponseWriter, r *http.Request) {
 	}
 	data := s.workspaceData(r)
 	err := s.store.RevokeSCIMToken(r.Context(), data.Workspace.ID, r.PathValue("id"))
+	if err == nil {
+		auditCtx := store.WithMetadataFields(r.Context(), "auditLog")
+		if auditErr := s.store.MutateWorkspace(auditCtx, workspaceKey(r), "scim.token_revoked", r.PathValue("id"), nil, func(next *domain.Bootstrap) error {
+			appendAudit(next, "revoked", "scim_token", r.PathValue("id"), nil)
+			return nil
+		}); auditErr != nil {
+			log.Printf("SCIM token audit: %v", auditErr)
+		}
+	}
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
 
@@ -132,7 +143,9 @@ func scimMeta(resourceType, location string, created, modified time.Time) map[st
 // scimUserResource is the User resource for a SCIM user, as a map so the
 // same value is filtered, projected and written.
 func scimUserResource(base string, item store.SCIMUser) map[string]any {
-	name := map[string]any{"formatted": item.User.Name}
+	// name is what the IdP wrote: the formatted name, else given and family
+	// name.
+	name := map[string]any{}
 	if full := item.Name.FullName(); full != "" {
 		name["formatted"] = full
 	}
@@ -142,22 +155,87 @@ func scimUserResource(base string, item store.SCIMUser) map[string]any {
 	if item.Name.FamilyName != "" {
 		name["familyName"] = item.Name.FamilyName
 	}
+	for key, value := range map[string]string{"middleName": item.Name.MiddleName, "honorificPrefix": item.Name.HonorificPrefix, "honorificSuffix": item.Name.HonorificSuffix} {
+		if value != "" {
+			name[key] = value
+		}
+	}
+	meta := scimMeta("User", base+"/Users/"+item.User.ID, item.CreatedAt, item.UpdatedAt)
+	meta["version"] = scimUserVersion(item)
 	resource := map[string]any{
-		"schemas":     []string{scimSchemaUser},
-		"id":          item.User.ID,
-		"userName":    item.UserName,
-		"name":        name,
-		"displayName": item.User.DisplayName,
-		"active":      item.User.Active,
-		"meta":        scimMeta("User", base+"/Users/"+item.User.ID, item.CreatedAt, item.UpdatedAt),
+		"schemas":  []string{scimSchemaUser},
+		"id":       item.User.ID,
+		"userName": item.UserName,
+		"active":   item.Active(),
+		"meta":     meta,
+	}
+	if len(name) > 0 {
+		resource["name"] = name
+	}
+	if !item.NoDisplayName && item.User.DisplayName != "" {
+		resource["displayName"] = item.User.DisplayName
 	}
 	if !item.ExternalIDDefaulted && item.ExternalID != "" {
 		resource["externalId"] = item.ExternalID
 	}
-	if item.User.Email != "" {
-		resource["emails"] = []map[string]any{{"value": item.User.Email, "type": "work", "primary": true}}
+	if emails := scimUserEmails(item); len(emails) > 0 {
+		resource["emails"] = emails
+	}
+	profile := item.Profile
+	for key, value := range map[string]string{"title": profile.Title, "nickName": profile.NickName, "userType": profile.UserType, "preferredLanguage": profile.PreferredLanguage, "locale": profile.Locale, "timezone": profile.Timezone} {
+		if value != "" {
+			resource[key] = value
+		}
+	}
+	if len(profile.PhoneNumbers) > 0 {
+		resource["phoneNumbers"] = scimObjects(profile.PhoneNumbers)
+	}
+	if len(profile.Addresses) > 0 {
+		resource["addresses"] = scimObjects(profile.Addresses)
+	}
+	if !profile.Enterprise.IsZero() {
+		resource[scimSchemaEnterpriseUser] = scimObject(profile.Enterprise)
+		resource["schemas"] = []string{scimSchemaUser, scimSchemaEnterpriseUser}
 	}
 	return resource
+}
+
+// scimUserEmails is the emails list the IdP sent, with the account email (as
+// Flow normalized it) in place of its entry; without a stored list, the
+// account email as the primary work email.
+func scimUserEmails(item store.SCIMUser) []map[string]any {
+	if item.User.Email == "" {
+		return nil
+	}
+	emails := []map[string]any{}
+	found := false
+	for _, email := range item.Profile.Emails {
+		entry := scimObject(email)
+		if strings.EqualFold(email.Value, item.User.Email) {
+			entry["value"], found = item.User.Email, true
+		}
+		emails = append(emails, entry)
+	}
+	if !found {
+		return []map[string]any{{"value": item.User.Email, "type": "work", "primary": true}}
+	}
+	return emails
+}
+
+// scimObject converts a struct to its JSON object form.
+func scimObject(value any) map[string]any {
+	raw, _ := json.Marshal(value)
+	result := map[string]any{}
+	_ = json.Unmarshal(raw, &result)
+	return result
+}
+
+func scimObjects[T any](values []T) []map[string]any {
+	result := make([]map[string]any, 0, len(values))
+	for _, value := range values {
+		result = append(result, scimObject(value))
+	}
+	return result
 }
 
 // scimFilterable converts a resource to plain JSON values (slices of maps
@@ -175,9 +253,15 @@ var scimUserPushdown = map[string]string{"username": "userName", "externalid": "
 // total match count. An equality on userName, externalId, id, email or
 // displayName is answered from the store's indexes; other filters scan the
 // workspace in batches (bounded by scimFilterScanLimit).
+//
+// sortBy on userName, displayName, externalId, emails.value, id,
+// meta.created or meta.lastModified is ordered in SQL; other attributes
+// (name.familyName, title, the enterprise extension, …) are sorted in
+// memory after the same bounded scan.
 func (s *server) listSCIMUserResources(ctx context.Context, workspaceID, base string, filter scimFilter, params scimListParams) ([]map[string]any, int, error) {
-	if filter == nil {
-		items, total, err := s.store.ListSCIMUsers(ctx, workspaceID, store.SCIMUserQuery{Offset: params.startIndex - 1, Limit: params.count})
+	sortBy, sqlSort := scimUserSQLSort(params.sortPath)
+	if filter == nil && sqlSort {
+		items, total, err := s.store.ListSCIMUsers(ctx, workspaceID, store.SCIMUserQuery{SortBy: sortBy, Descending: params.descending, Offset: params.startIndex - 1, Limit: params.count})
 		resources := make([]map[string]any, 0, len(items))
 		for _, item := range items {
 			resources = append(resources, scimUserResource(base, item))
@@ -185,6 +269,9 @@ func (s *server) listSCIMUserResources(ctx context.Context, workspaceID, base st
 		return resources, total, err
 	}
 	query := store.SCIMUserQuery{Limit: 1000}
+	if sqlSort {
+		query.SortBy, query.Descending = sortBy, params.descending
+	}
 	keys := make([]string, 0, len(scimUserPushdown))
 	for key := range scimUserPushdown {
 		keys = append(keys, key)
@@ -192,6 +279,8 @@ func (s *server) listSCIMUserResources(ctx context.Context, workspaceID, base st
 	if attribute, value, ok := scimEqualityPushdown(filter, keys...); ok {
 		query.Attribute, query.Value = scimUserPushdown[attribute], value
 	}
+	// Without a SQL order the whole match set is sorted before paging.
+	keepAll := !sqlSort
 	resources := []map[string]any{}
 	matched := 0
 	for {
@@ -200,23 +289,34 @@ func (s *server) listSCIMUserResources(ctx context.Context, workspaceID, base st
 			return nil, 0, err
 		}
 		if query.Attribute == "" && total > scimFilterScanLimit {
-			return nil, 0, &scimRequestError{status: http.StatusBadRequest, scimType: scimTooMany, detail: "filter would scan too many users; filter by userName, externalId, id, emails.value or displayName with eq"}
+			return nil, 0, &scimRequestError{status: http.StatusBadRequest, scimType: scimTooMany, detail: "filter or sort would scan too many users; filter by userName, externalId, id, emails.value or displayName with eq"}
 		}
 		for _, item := range items {
 			resource := scimUserResource(base, item)
-			if !filter.matches(scimFilterable(resource)) {
+			if filter != nil && !filter.matches(scimFilterable(resource)) {
 				continue
 			}
 			matched++
-			if matched >= params.startIndex && len(resources) < params.count {
+			if keepAll || matched >= params.startIndex && len(resources) < params.count {
 				resources = append(resources, resource)
 			}
 		}
 		query.Offset += len(items)
 		if len(items) == 0 || query.Offset >= total {
-			return resources, matched, nil
+			break
 		}
 	}
+	if keepAll {
+		sortSCIMResources(resources, params)
+		resources = scimPage(resources, params)
+	}
+	return resources, matched, nil
+}
+
+// scimPage is one page (startIndex, count) of a complete, ordered result.
+func scimPage(resources []map[string]any, params scimListParams) []map[string]any {
+	start := min(params.startIndex-1, len(resources))
+	return resources[start:min(start+params.count, len(resources))]
 }
 
 func (s *server) scimUsers(w http.ResponseWriter, r *http.Request) {
@@ -254,14 +354,21 @@ func (s *server) scimUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input.Role, input.RoleExplicit = s.scimRole(workspaceKey, payload.role()), payload.role() != ""
+	input.KeepRemoved = s.scimDeprovisionAction(workspaceKey) == scimDeprovisionRemove
 	item, err := s.store.CreateSCIMUser(r.Context(), workspaceID, input)
 	if err != nil {
 		writeSCIMStoreError(w, err)
 		return
 	}
+	action := "provisioned"
+	if item.Restored {
+		action = "restored"
+	}
+	s.recordSCIMAudit(r, workspaceKey, []scimAuditEntry{scimUserAudit(action, item, map[string]any{"role": item.Role, "active": item.Active(), "linkedExistingAccount": item.Linked})})
+	s.applySCIMProfileSettings(r.Context(), workspaceKey, item.User.ID, store.SCIMProfile{}, item.Profile)
 	resource := scimUserResource(base, item)
 	w.Header().Set("Location", base+"/Users/"+item.User.ID)
-	writeSCIM(w, http.StatusCreated, readSCIMProjection(r).apply(resource))
+	writeSCIMResource(w, http.StatusCreated, readSCIMProjection(r).apply(resource), scimUserVersion(item))
 }
 
 func (s *server) scimUser(w http.ResponseWriter, r *http.Request) {
@@ -275,27 +382,21 @@ func (s *server) scimUser(w http.ResponseWriter, r *http.Request) {
 		writeSCIMStoreError(w, err)
 		return
 	}
-	switch r.Method {
-	case http.MethodGet:
-		writeSCIM(w, http.StatusOK, readSCIMProjection(r).apply(scimUserResource(base, current)))
+	version := scimUserVersion(current)
+	if r.Method == http.MethodGet {
+		if !scimNotModified(w, r, version) {
+			writeSCIMResource(w, http.StatusOK, readSCIMProjection(r).apply(scimUserResource(base, current)), version)
+		}
 		return
-	case http.MethodDelete:
-		groups, err := s.store.DeprovisionSCIMUser(r.Context(), workspaceID, current.User.ID)
-		if err != nil {
+	}
+	if scimPreconditionFailed(w, r, version) {
+		return
+	}
+	mode := s.scimDeprovisionAction(workspaceKey)
+	if r.Method == http.MethodDelete {
+		if err := s.deprovisionSCIMUser(r, workspaceKey, workspaceID, current, mode); err != nil {
 			writeSCIMStoreError(w, err)
 			return
-		}
-		for _, groupID := range groups {
-			group, err := s.store.SCIMGroup(r.Context(), workspaceID, groupID)
-			if err != nil {
-				continue
-			}
-			if teamID := s.scimTeamForGroup(workspaceKey, group); teamID != "" {
-				if err := s.syncSCIMGroupTeam(r, workspaceKey, workspaceID, group, teamID); err != nil {
-					writeSCIMRequestError(w, err)
-					return
-				}
-			}
 		}
 		writeSCIM(w, http.StatusNoContent, nil)
 		return
@@ -331,22 +432,93 @@ func (s *server) scimUser(w http.ResponseWriter, r *http.Request) {
 			input.Role, input.RoleExplicit = s.scimRole(workspaceKey, role), true
 		}
 	}
+	input.KeepRemoved = mode == scimDeprovisionRemove
+	before := s.scimMemberStates(r.Context(), workspaceID, current.User.ID)
 	item, err := s.store.UpdateSCIMUser(r.Context(), workspaceID, current.User.ID, input)
 	if err != nil {
 		writeSCIMStoreError(w, err)
 		return
 	}
-	writeSCIM(w, http.StatusOK, readSCIMProjection(r).apply(scimUserResource(base, item)))
+	entries := []scimAuditEntry{}
+	if changed := scimChangedAttributes(scimUserResource(base, current), scimUserResource(base, item)); len(changed) > 0 {
+		entries = append(entries, scimUserAudit("updated", item, map[string]any{"changedFields": changed}))
+	}
+	switch {
+	case current.Active() && !item.Active():
+		removed := false
+		if mode == scimDeprovisionRemove {
+			if removed, err = s.removeSCIMMember(r, workspaceKey, workspaceID, item.User.ID); err != nil {
+				writeSCIMStoreError(w, err)
+				return
+			}
+			if item, err = s.store.SCIMUser(r.Context(), workspaceID, item.User.ID); err != nil {
+				writeSCIMStoreError(w, err)
+				return
+			}
+		}
+		action := "suspended"
+		if removed {
+			action = "removed"
+		}
+		entries = append(entries, scimUserAudit(action, item, map[string]any{"deprovisionAction": mode}))
+	case !current.Active() && item.Active():
+		entries = append(entries, scimUserAudit("restored", item, map[string]any{"role": item.Role}))
+		if _, wasMember := before[item.User.ID]; !wasMember {
+			// Removed on deprovisioning: rejoin the teams linked to their groups.
+			if err := s.resyncSCIMUserTeams(r, workspaceKey, workspaceID, item.User.ID); err != nil {
+				writeSCIMRequestError(w, err)
+				return
+			}
+		}
+	}
+	entries = append(entries, s.scimRoleChangeAudits(r.Context(), workspaceID, before, s.scimMemberStates(r.Context(), workspaceID, item.User.ID), nil)...)
+	s.recordSCIMAudit(r, workspaceKey, entries)
+	s.applySCIMProfileSettings(r.Context(), workspaceKey, item.User.ID, current.Profile, item.Profile)
+	writeSCIMResource(w, http.StatusOK, readSCIMProjection(r).apply(scimUserResource(base, item)), scimUserVersion(item))
+}
+
+// deprovisionSCIMUser handles DELETE /Users/{id}: the member is suspended
+// (default) or, with the workspace's deprovisioning set to remove, removed
+// from the workspace. Either way the account and its work stay, the SCIM
+// identity is kept as deleted (so creating the same externalId again
+// restores the same account) and the user's SCIM group and linked team
+// memberships end.
+func (s *server) deprovisionSCIMUser(r *http.Request, workspaceKey, workspaceID string, current store.SCIMUser, mode string) error {
+	groups, err := s.store.DeprovisionSCIMUser(r.Context(), workspaceID, current.User.ID)
+	if err != nil {
+		return err
+	}
+	for _, groupID := range groups {
+		group, err := s.store.SCIMGroup(r.Context(), workspaceID, groupID)
+		if err != nil {
+			continue
+		}
+		if err := s.syncSCIMGroupTeamIfLinked(r, workspaceKey, workspaceID, group); err != nil {
+			return err
+		}
+	}
+	metadata := map[string]any{"deprovisionAction": mode, "scimGroupsLeft": len(groups)}
+	if mode == scimDeprovisionRemove {
+		removed, err := s.removeSCIMMember(r, workspaceKey, workspaceID, current.User.ID)
+		if err != nil {
+			return err
+		}
+		metadata["removedFromWorkspace"] = removed
+	}
+	s.recordSCIMAudit(r, workspaceKey, []scimAuditEntry{scimUserAudit("deprovisioned", current, metadata)})
+	return nil
 }
 
 // Groups.
 
 func scimGroupResourceFromStore(base string, group store.SCIMGroup, withMembers bool) map[string]any {
+	meta := scimMeta("Group", base+"/Groups/"+group.ID, group.CreatedAt, group.UpdatedAt)
+	meta["version"] = scimGroupVersion(group)
 	resource := map[string]any{
 		"schemas":     []string{scimSchemaGroup},
 		"id":          group.ID,
 		"displayName": group.DisplayName,
-		"meta":        scimMeta("Group", base+"/Groups/"+group.ID, group.CreatedAt, group.UpdatedAt),
+		"meta":        meta,
 	}
 	if group.ExternalID != "" {
 		resource["externalId"] = group.ExternalID
@@ -371,6 +543,7 @@ func scimTeamResource(base string, team domain.Team, members []domain.TeamMember
 		"displayName": team.Name,
 		"meta":        map[string]any{"resourceType": "Group", "location": base + "/Groups/" + team.ID},
 	}
+	resource["meta"].(map[string]any)["version"] = scimTeamVersion(team)
 	if withMembers {
 		values := []map[string]any{}
 		for _, member := range members {
@@ -421,6 +594,9 @@ func (s *server) scimGroups(w http.ResponseWriter, r *http.Request) {
 			writeSCIMStoreError(w, err)
 			return
 		}
+		roleUsers := s.scimRoleAffectedUsers(r.Context(), workspaceID, group, role, input.memberValues())
+		beforeStates := s.scimMemberStates(r.Context(), workspaceID, roleUsers...)
+		empty := group
 		if group, err = s.store.ReplaceSCIMGroupMembers(r.Context(), workspaceID, group.ID, input.memberValues()); err != nil {
 			_ = s.store.DeleteSCIMGroup(r.Context(), workspaceID, group.ID)
 			writeSCIMStoreError(w, err)
@@ -430,8 +606,9 @@ func (s *server) scimGroups(w http.ResponseWriter, r *http.Request) {
 			writeSCIMRequestError(w, err)
 			return
 		}
+		s.auditSCIMGroupWrite(r, workspaceKey, workspaceID, "created", &empty, &group, roleUsers, beforeStates)
 		w.Header().Set("Location", base+"/Groups/"+group.ID)
-		writeSCIM(w, http.StatusCreated, readSCIMProjection(r).apply(scimGroupResourceFromStore(base, group, true)))
+		writeSCIMResource(w, http.StatusCreated, readSCIMProjection(r).apply(scimGroupResourceFromStore(base, group, true)), scimGroupVersion(group))
 		return
 	}
 	filter, err := parseSCIMFilter(r.URL.Query().Get("filter"))
@@ -460,18 +637,18 @@ func (s *server) scimGroups(w http.ResponseWriter, r *http.Request) {
 	for _, team := range s.unlinkedSCIMTeams(workspaceKey, groups) {
 		all = append(all, scimTeamResource(base, team, teamMembers, withMembers))
 	}
-	resources := []map[string]any{}
-	total := 0
+	matched := []map[string]any{}
 	for _, resource := range all {
-		if filter != nil && !filter.matches(scimFilterable(resource)) {
-			continue
-		}
-		total++
-		if total >= params.startIndex && len(resources) < params.count {
-			resources = append(resources, projection.apply(resource))
+		if filter == nil || filter.matches(scimFilterable(resource)) {
+			matched = append(matched, resource)
 		}
 	}
-	writeSCIM(w, http.StatusOK, scimListResponse(total, params, resources))
+	sortSCIMResources(matched, params)
+	resources := scimPage(matched, params)
+	for index := range resources {
+		resources[index] = projection.apply(resources[index])
+	}
+	writeSCIM(w, http.StatusOK, scimListResponse(len(matched), params, resources))
 }
 
 func (s *server) syncSCIMGroupTeamIfLinked(r *http.Request, workspaceKey, workspaceID string, group store.SCIMGroup) error {
@@ -513,33 +690,60 @@ func (s *server) scimGroup(w http.ResponseWriter, r *http.Request) {
 	base := scimBaseURL(r, workspaceKey)
 	projection := readSCIMProjection(r)
 	writes := r.Method == http.MethodPatch || r.Method == http.MethodPut
-	group, team, err := s.scimGroupOrTeam(r.Context(), workspaceKey, workspaceID, r.PathValue("id"), writes)
+	group, team, err := s.scimGroupOrTeam(r.Context(), workspaceKey, workspaceID, r.PathValue("id"), false)
 	if err != nil {
 		writeSCIMStoreError(w, err)
 		return
 	}
-	switch {
-	case r.Method == http.MethodGet && team != nil:
-		var members []domain.TeamMember
-		if projection.wants("members") {
-			if members, err = s.store.ListTeamMembers(r.Context(), workspaceID); err != nil {
-				writeSCIMRequestError(w, err)
+	linkedTeam := false
+	if team != nil {
+		version := scimTeamVersion(*team)
+		switch {
+		case r.Method == http.MethodGet:
+			if scimNotModified(w, r, version) {
 				return
 			}
+			var members []domain.TeamMember
+			if projection.wants("members") {
+				if members, err = s.store.ListTeamMembers(r.Context(), workspaceID); err != nil {
+					writeSCIMRequestError(w, err)
+					return
+				}
+			}
+			writeSCIMResource(w, http.StatusOK, projection.apply(scimTeamResource(base, *team, members, projection.wants("members"))), version)
+			return
+		case !writes:
+			writeSCIMError(w, http.StatusNotFound, "", "resource not found")
+			return
+		case scimPreconditionFailed(w, r, version):
+			return
 		}
-		writeSCIM(w, http.StatusOK, projection.apply(scimTeamResource(base, *team, members, projection.wants("members"))))
-		return
-	case team != nil:
-		writeSCIMError(w, http.StatusNotFound, "", "resource not found")
-		return
-	case r.Method == http.MethodGet:
-		writeSCIM(w, http.StatusOK, projection.apply(scimGroupResourceFromStore(base, group, projection.wants("members"))))
-		return
-	case r.Method == http.MethodDelete:
+		// The first write to a team links a SCIM group to it.
+		if group, _, err = s.scimGroupOrTeam(r.Context(), workspaceKey, workspaceID, team.ID, true); err != nil {
+			writeSCIMStoreError(w, err)
+			return
+		}
+		linkedTeam = true
+	} else {
+		version := scimGroupVersion(group)
+		if r.Method == http.MethodGet {
+			if !scimNotModified(w, r, version) {
+				writeSCIMResource(w, http.StatusOK, projection.apply(scimGroupResourceFromStore(base, group, projection.wants("members"))), version)
+			}
+			return
+		}
+		if scimPreconditionFailed(w, r, version) {
+			return
+		}
+	}
+	if r.Method == http.MethodDelete {
+		roleUsers := s.scimRoleAffectedUsers(r.Context(), workspaceID, group, group.Role, nil)
+		beforeStates := s.scimMemberStates(r.Context(), workspaceID, roleUsers...)
 		if err := s.store.DeleteSCIMGroup(r.Context(), workspaceID, group.ID); err != nil {
 			writeSCIMStoreError(w, err)
 			return
 		}
+		s.auditSCIMGroupWrite(r, workspaceKey, workspaceID, "deleted", &group, nil, roleUsers, beforeStates)
 		writeSCIM(w, http.StatusNoContent, nil)
 		return
 	}
@@ -561,17 +765,98 @@ func (s *server) scimGroup(w http.ResponseWriter, r *http.Request) {
 		}
 		change = scimGroupChange{displayName: payload.DisplayName, externalID: payload.ExternalID, members: payload.memberValues(), replaceMembers: true}
 	}
+	nextRole := group.Role
+	if strings.TrimSpace(change.displayName) != "" {
+		nextRole = scimGroupRole(s.scimWorkspaceSettings(workspaceKey), strings.TrimSpace(change.displayName))
+	}
+	roleUsers := s.scimRoleAffectedUsers(r.Context(), workspaceID, group, nextRole, append(append(slices.Clone(change.members), change.add...), change.remove...))
+	beforeStates := s.scimMemberStates(r.Context(), workspaceID, roleUsers...)
 	updated, err := s.applySCIMGroupChange(r, workspaceKey, workspaceID, group, change)
 	if err != nil {
 		writeSCIMStoreError(w, err)
 		return
 	}
-	writeSCIM(w, http.StatusOK, projection.apply(scimGroupResourceFromStore(base, updated, true)))
+	action := "updated"
+	if linkedTeam {
+		action = "linked"
+	}
+	s.auditSCIMGroupWrite(r, workspaceKey, workspaceID, action, &group, &updated, roleUsers, beforeStates)
+	writeSCIMResource(w, http.StatusOK, projection.apply(scimGroupResourceFromStore(base, updated, true)), scimGroupVersion(updated))
+}
+
+// scimRoleAffectedUsers lists the users whose workspace role a write to a
+// role group can change (its current members and the member values the
+// write names), or none for a group that is not a role group before or
+// after the write.
+func (s *server) scimRoleAffectedUsers(ctx context.Context, workspaceID string, group store.SCIMGroup, nextRole string, values []string) []string {
+	if group.Role == "" && nextRole == "" {
+		return nil
+	}
+	ids := scimGroupMemberIDs(group.Members)
+	seen := map[string]bool{}
+	for _, id := range ids {
+		seen[id] = true
+	}
+	for _, value := range values {
+		if item, err := s.store.SCIMUser(ctx, workspaceID, value); err == nil && !seen[item.User.ID] {
+			seen[item.User.ID] = true
+			ids = append(ids, item.User.ID)
+		}
+	}
+	return ids
+}
+
+// auditSCIMGroupWrite audits a group create, link, update or delete: the
+// group entry, its net member change and the role changes it caused.
+func (s *server) auditSCIMGroupWrite(r *http.Request, workspaceKey, workspaceID, action string, before, after *store.SCIMGroup, roleUsers []string, beforeStates map[string]store.SCIMMemberState) {
+	entries := []scimAuditEntry{}
+	subject := before
+	if after != nil {
+		subject = after
+	}
+	metadata := scimGroupAuditSubject(*subject)
+	if teamID := s.scimTeamForGroup(workspaceKey, *subject); teamID != "" {
+		metadata["teamId"] = teamID
+	}
+	switch action {
+	case "updated":
+		changed := []string{}
+		if before.DisplayName != after.DisplayName {
+			changed = append(changed, "displayName")
+		}
+		if before.ExternalID != after.ExternalID {
+			changed = append(changed, "externalId")
+		}
+		if before.Role != after.Role {
+			changed = append(changed, "role")
+			metadata["roleBefore"] = before.Role
+		}
+		if len(changed) > 0 {
+			metadata["changedFields"] = changed
+			entries = append(entries, scimAuditEntry{action: action, resourceType: scimAuditGroupResource, resourceID: subject.ID, metadata: metadata})
+		}
+	case "deleted":
+		metadata["memberCount"] = len(before.Members)
+		entries = append(entries, scimAuditEntry{action: action, resourceType: scimAuditGroupResource, resourceID: subject.ID, metadata: metadata})
+	default: // created, linked
+		entries = append(entries, scimAuditEntry{action: action, resourceType: scimAuditGroupResource, resourceID: subject.ID, metadata: metadata})
+	}
+	if after != nil {
+		if entry, ok := scimGroupMemberAudit(*after, before.Members); ok {
+			entries = append(entries, entry)
+		}
+	}
+	if len(roleUsers) > 0 {
+		afterStates := s.scimMemberStates(r.Context(), workspaceID, roleUsers...)
+		entries = append(entries, s.scimRoleChangeAudits(r.Context(), workspaceID, beforeStates, afterStates, map[string]any{"scimGroupId": subject.ID, "scimGroupName": subject.DisplayName})...)
+	}
+	s.recordSCIMAudit(r, workspaceKey, entries)
 }
 
 // scimGroupChange is the net effect of a PUT or a PATCH on a group.
 type scimGroupChange struct {
 	displayName, externalID string
+	clearExternalID         bool     // PATCH remove of externalId
 	members                 []string // replacement list when replaceMembers
 	replaceMembers          bool
 	add, remove             []string
@@ -585,8 +870,21 @@ func (s *server) applySCIMGroupChange(r *http.Request, workspaceKey, workspaceID
 	}
 	role := scimGroupRole(s.scimWorkspaceSettings(workspaceKey), displayName)
 	var err error
+	linkedTeam := s.scimTeamForGroup(workspaceKey, group)
+	if change.clearExternalID && group.ExternalID != "" {
+		if group, err = s.store.ClearSCIMGroupExternalID(ctx, workspaceID, group.ID); err != nil {
+			return store.SCIMGroup{}, err
+		}
+	}
 	if displayName != group.DisplayName || role != group.Role || (change.externalID != "" && change.externalID != group.ExternalID) {
 		if group, err = s.store.UpdateSCIMGroup(ctx, workspaceID, group.ID, change.externalID, displayName, role); err != nil {
+			return store.SCIMGroup{}, err
+		}
+	}
+	if linkedTeam != "" && linkedTeam != s.scimTeamForGroup(workspaceKey, group) {
+		// No longer linked to that team: its members stay as ordinary
+		// members, as when the group is deleted.
+		if err := s.store.DetachSCIMGroupTeams(ctx, workspaceID, group.ID); err != nil {
 			return store.SCIMGroup{}, err
 		}
 	}

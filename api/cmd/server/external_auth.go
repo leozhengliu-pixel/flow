@@ -256,6 +256,9 @@ func (s *server) finishOIDC(w http.ResponseWriter, r *http.Request) {
 	}
 	if role := externalOIDCRole(s.externalAuth.config.OIDC, claims); role != "" {
 		for _, membership := range session.Memberships {
+			if s.scimManagesMember(r.Context(), membership.Workspace.ID, session.User.ID) {
+				continue // SCIM provisioning owns this member's role
+			}
 			if err := s.store.UpdateMemberRole(r.Context(), membership.Workspace.ID, session.User.ID, role); err != nil {
 				writeError(w, http.StatusForbidden, "could not apply identity role")
 				return

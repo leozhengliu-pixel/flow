@@ -11,26 +11,31 @@ import (
 )
 
 const (
-	scimSchemaUser          = "urn:ietf:params:scim:schemas:core:2.0:User"
-	scimSchemaGroup         = "urn:ietf:params:scim:schemas:core:2.0:Group"
-	scimSchemaSPC           = "urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"
-	scimSchemaResourceType  = "urn:ietf:params:scim:schemas:core:2.0:ResourceType"
-	scimSchemaSchema        = "urn:ietf:params:scim:schemas:core:2.0:Schema"
-	scimMessageListResponse = "urn:ietf:params:scim:api:messages:2.0:ListResponse"
-	scimMessageError        = "urn:ietf:params:scim:api:messages:2.0:Error"
-	scimMessagePatchOp      = "urn:ietf:params:scim:api:messages:2.0:PatchOp"
-	scimDefaultCount        = 100
-	scimMaxCount            = 1000
-	scimFilterScanLimit     = 100000
-	scimInvalidFilter       = "invalidFilter"
-	scimInvalidValue        = "invalidValue"
-	scimInvalidSyntax       = "invalidSyntax"
-	scimInvalidPath         = "invalidPath"
-	scimNoTarget            = "noTarget"
-	scimUniqueness          = "uniqueness"
-	scimTooMany             = "tooMany"
-	scimMutability          = "mutability"
-	scimContentType         = "application/scim+json; charset=utf-8"
+	scimSchemaUser           = "urn:ietf:params:scim:schemas:core:2.0:User"
+	scimSchemaEnterpriseUser = "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"
+	scimSchemaGroup          = "urn:ietf:params:scim:schemas:core:2.0:Group"
+	scimSchemaSPC            = "urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"
+	scimSchemaResourceType   = "urn:ietf:params:scim:schemas:core:2.0:ResourceType"
+	scimSchemaSchema         = "urn:ietf:params:scim:schemas:core:2.0:Schema"
+	scimMessageListResponse  = "urn:ietf:params:scim:api:messages:2.0:ListResponse"
+	scimMessageError         = "urn:ietf:params:scim:api:messages:2.0:Error"
+	scimMessagePatchOp       = "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+	scimMessageBulkRequest   = "urn:ietf:params:scim:api:messages:2.0:BulkRequest"
+	scimMessageBulkResponse  = "urn:ietf:params:scim:api:messages:2.0:BulkResponse"
+	scimBulkMaxOperations    = 1000
+	scimBulkMaxPayload       = 1 << 20
+	scimDefaultCount         = 100
+	scimMaxCount             = 1000
+	scimFilterScanLimit      = 100000
+	scimInvalidFilter        = "invalidFilter"
+	scimInvalidValue         = "invalidValue"
+	scimInvalidSyntax        = "invalidSyntax"
+	scimInvalidPath          = "invalidPath"
+	scimNoTarget             = "noTarget"
+	scimUniqueness           = "uniqueness"
+	scimTooMany              = "tooMany"
+	scimMutability           = "mutability"
+	scimContentType          = "application/scim+json; charset=utf-8"
 )
 
 // writeSCIM writes a SCIM response body with the SCIM media type.
@@ -104,6 +109,9 @@ func scimBaseURL(r *http.Request, workspaceKey string) string {
 type scimListParams struct {
 	startIndex int
 	count      int
+	sortBy     string // as sent; "" when unsorted
+	sortPath   []string
+	descending bool
 }
 
 func readSCIMListParams(r *http.Request) scimListParams {
@@ -117,6 +125,14 @@ func readSCIMListParams(r *http.Request) scimListParams {
 			params.count = min(max(value, 0), scimMaxCount)
 		}
 	}
+	if sortBy := strings.TrimSpace(query.Get("sortBy")); sortBy != "" {
+		if path, err := scimAttributePath(sortBy); err == nil {
+			params.sortBy, params.sortPath = sortBy, path
+		}
+	}
+	// sortOrder defaults to ascending (RFC 7644 §3.4.2.3); it only applies
+	// with sortBy.
+	params.descending = params.sortBy != "" && strings.EqualFold(strings.TrimSpace(query.Get("sortOrder")), "descending")
 	return params
 }
 
@@ -237,11 +253,11 @@ func (s *server) scimServiceProviderConfig(w http.ResponseWriter, r *http.Reques
 	writeSCIM(w, http.StatusOK, map[string]any{
 		"schemas":        []string{scimSchemaSPC},
 		"patch":          map[string]bool{"supported": true},
-		"bulk":           map[string]any{"supported": false, "maxOperations": 0, "maxPayloadSize": 0},
+		"bulk":           map[string]any{"supported": true, "maxOperations": scimBulkMaxOperations, "maxPayloadSize": scimBulkMaxPayload},
 		"filter":         map[string]any{"supported": true, "maxResults": scimMaxCount},
 		"changePassword": map[string]bool{"supported": false},
-		"sort":           map[string]bool{"supported": false},
-		"etag":           map[string]bool{"supported": false},
+		"sort":           map[string]bool{"supported": true},
+		"etag":           map[string]bool{"supported": true},
 		"authenticationSchemes": []map[string]any{{
 			"type": "oauthbearertoken", "name": "OAuth Bearer Token", "primary": true,
 			"description": "Authentication with a workspace SCIM token, sent as Authorization: Bearer <token>.",
@@ -252,7 +268,7 @@ func (s *server) scimServiceProviderConfig(w http.ResponseWriter, r *http.Reques
 
 func scimResourceTypes(base string) []map[string]any {
 	return []map[string]any{
-		{"schemas": []string{scimSchemaResourceType}, "id": "User", "name": "User", "endpoint": "/Users", "description": "Workspace member", "schema": scimSchemaUser, "meta": map[string]any{"resourceType": "ResourceType", "location": base + "/ResourceTypes/User"}},
+		{"schemas": []string{scimSchemaResourceType}, "id": "User", "name": "User", "endpoint": "/Users", "description": "Workspace member", "schema": scimSchemaUser, "schemaExtensions": []map[string]any{{"schema": scimSchemaEnterpriseUser, "required": false}}, "meta": map[string]any{"resourceType": "ResourceType", "location": base + "/ResourceTypes/User"}},
 		{"schemas": []string{scimSchemaResourceType}, "id": "Group", "name": "Group", "endpoint": "/Groups", "description": "Directory group: a role group or a group linked to a team", "schema": scimSchemaGroup, "meta": map[string]any{"resourceType": "ResourceType", "location": base + "/ResourceTypes/Group"}},
 	}
 }
@@ -296,6 +312,9 @@ func scimSchemas(base string) []map[string]any {
 				scimAttribute("formatted", "string", map[string]any{"description": "Full name; used when givenName and familyName are not sent."}),
 				scimAttribute("givenName", "string", nil),
 				scimAttribute("familyName", "string", nil),
+				scimAttribute("middleName", "string", nil),
+				scimAttribute("honorificPrefix", "string", nil),
+				scimAttribute("honorificSuffix", "string", nil),
 			}}),
 			scimAttribute("displayName", "string", map[string]any{"description": "Name shown in the workspace."}),
 			scimAttribute("active", "boolean", map[string]any{"description": "false suspends the member; true restores them."}),
@@ -307,8 +326,46 @@ func scimSchemas(base string) []map[string]any {
 			scimAttribute("roles", "complex", map[string]any{"multiValued": true, "mutability": "writeOnly", "returned": "never", "description": "Workspace role (owner, admin, member, guest or a mapped role value).", "subAttributes": []map[string]any{
 				scimAttribute("value", "string", nil),
 			}}),
+			scimAttribute("title", "string", map[string]any{"description": "Job title; shown as the member's job title in Flow."}),
+			scimAttribute("nickName", "string", nil),
+			scimAttribute("userType", "string", nil),
+			scimAttribute("preferredLanguage", "string", nil),
+			scimAttribute("locale", "string", nil),
+			scimAttribute("timezone", "string", map[string]any{"description": "IANA time zone; used for the member's Pulse delivery when they have not set one."}),
+			scimAttribute("phoneNumbers", "complex", map[string]any{"multiValued": true, "subAttributes": []map[string]any{
+				scimAttribute("value", "string", nil),
+				scimAttribute("display", "string", nil),
+				scimAttribute("type", "string", map[string]any{"canonicalValues": []string{"work", "home", "mobile", "fax", "pager", "other"}}),
+				scimAttribute("primary", "boolean", nil),
+			}}),
+			scimAttribute("addresses", "complex", map[string]any{"multiValued": true, "subAttributes": []map[string]any{
+				scimAttribute("formatted", "string", nil),
+				scimAttribute("streetAddress", "string", nil),
+				scimAttribute("locality", "string", nil),
+				scimAttribute("region", "string", nil),
+				scimAttribute("postalCode", "string", nil),
+				scimAttribute("country", "string", nil),
+				scimAttribute("type", "string", map[string]any{"canonicalValues": []string{"work", "home", "other"}}),
+				scimAttribute("primary", "boolean", nil),
+			}}),
 		},
 		"meta": map[string]any{"resourceType": "Schema", "location": base + "/Schemas/" + scimSchemaUser},
+	}
+	enterprise := map[string]any{
+		"schemas": []string{scimSchemaSchema}, "id": scimSchemaEnterpriseUser, "name": "EnterpriseUser", "description": "Enterprise User",
+		"attributes": []map[string]any{
+			scimAttribute("employeeNumber", "string", nil),
+			scimAttribute("costCenter", "string", nil),
+			scimAttribute("organization", "string", nil),
+			scimAttribute("division", "string", nil),
+			scimAttribute("department", "string", nil),
+			scimAttribute("manager", "complex", map[string]any{"description": "The member's manager, as the directory identifies them.", "subAttributes": []map[string]any{
+				scimAttribute("value", "string", nil),
+				scimAttribute("$ref", "reference", map[string]any{"referenceTypes": []string{"User"}}),
+				scimAttribute("displayName", "string", nil),
+			}}),
+		},
+		"meta": map[string]any{"resourceType": "Schema", "location": base + "/Schemas/" + scimSchemaEnterpriseUser},
 	}
 	group := map[string]any{
 		"schemas": []string{scimSchemaSchema}, "id": scimSchemaGroup, "name": "Group", "description": "Directory group",
@@ -322,7 +379,7 @@ func scimSchemas(base string) []map[string]any {
 		},
 		"meta": map[string]any{"resourceType": "Schema", "location": base + "/Schemas/" + scimSchemaGroup},
 	}
-	return []map[string]any{user, group}
+	return []map[string]any{user, enterprise, group}
 }
 
 func (s *server) scimSchemas(w http.ResponseWriter, r *http.Request) {

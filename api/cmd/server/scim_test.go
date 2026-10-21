@@ -315,6 +315,24 @@ func TestSCIMEntraProvisioningSequence(t *testing.T) {
 	if patched["emails"].([]any)[0].(map[string]any)["value"] != "updatedemail@microsoft.com" || patched["name"].(map[string]any)["familyName"] != "updatedFamilyName" || patched["name"].(map[string]any)["givenName"] != "givenName" {
 		t.Fatalf("Entra attribute PATCH = %v", patched)
 	}
+	if extension, _ := patched[scimSchemaEnterpriseUser].(map[string]any); extension["department"] != "Research" || extension["employeeNumber"] != "123" || patched["title"] != "Engineer" {
+		t.Fatalf("Entra extension PATCH = %v", patched)
+	}
+	// Entra's default manager mapping and its removal ({"value": ""}), and
+	// the work and mobile phone mappings that create entries by type.
+	managed := f.call(t, http.MethodPatch, "/scim/v2/test-workspace/Users/"+userID, `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[
+		{"op":"Add","path":"urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager","value":"5c3e7c9d-manager"},
+		{"op":"Add","path":"phoneNumbers[type eq \"work\"].value","value":"+1 425 555 0100"},
+		{"op":"Add","path":"phoneNumbers[type eq \"mobile\"].value","value":"+1 425 555 0199"},
+		{"op":"Add","path":"addresses[type eq \"work\"].country","value":"US"},
+		{"op":"Add","path":"preferredLanguage","value":"en-US"}]}`, http.StatusOK)
+	if extension := managed[scimSchemaEnterpriseUser].(map[string]any); extension["manager"].(map[string]any)["value"] != "5c3e7c9d-manager" || len(managed["phoneNumbers"].([]any)) != 2 || managed["addresses"].([]any)[0].(map[string]any)["country"] != "US" || managed["preferredLanguage"] != "en-US" {
+		t.Fatalf("Entra manager/phone PATCH = %v", managed)
+	}
+	unmanaged := f.call(t, http.MethodPatch, "/scim/v2/test-workspace/Users/"+userID, `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"Replace","path":"urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager","value":{"value":""}}]}`, http.StatusOK)
+	if extension := unmanaged[scimSchemaEnterpriseUser].(map[string]any); extension["manager"] != nil {
+		t.Fatalf("Entra manager removal = %v", unmanaged)
+	}
 	disabled := f.call(t, http.MethodPatch, "/scim/v2/test-workspace/Users/"+userID, `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"Replace","path":"active","value":"False"}]}`, http.StatusOK)
 	if disabled["active"] != false {
 		t.Fatalf("active \"False\" = %v", disabled)
@@ -412,6 +430,18 @@ func TestSCIMOktaProvisioningSequence(t *testing.T) {
 	if put["name"].(map[string]any)["familyName"] != "Renamed" || put["displayName"] != "Okta Renamed" {
 		t.Fatalf("Okta PUT = %v", put)
 	}
+	// Okta profile push with the attributes its SCIM 2.0 app maps by
+	// default (title, phones, address, locale, time zone, enterprise).
+	profile := f.call(t, http.MethodPut, "/scim/v2/test-workspace/Users/"+userID, `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User","urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"],
+		"id":"`+userID+`","userName":"okta.user@example.com","name":{"givenName":"Okta","familyName":"Renamed","middleName":"Q","honorificPrefix":"Dr."},
+		"emails":[{"primary":true,"value":"okta.user@example.com","type":"work"}],"displayName":"Okta Renamed","nickName":"oki","title":"Director","userType":"Employee",
+		"preferredLanguage":"de-DE","locale":"de-DE","timezone":"America/Los_Angeles","active":true,
+		"phoneNumbers":[{"value":"555-0100","type":"work","primary":true},{"value":"555-0199","type":"mobile"}],
+		"addresses":[{"streetAddress":"1 Market St","locality":"San Francisco","region":"CA","postalCode":"94105","country":"US","type":"work","primary":true}],
+		"urn:ietf:params:scim:schemas:extension:enterprise:2.0:User":{"employeeNumber":"1001","costCenter":"CC1","organization":"Okta Org","division":"West","department":"Sales","manager":{"value":"00u1manager","displayName":"Okta Manager"}}}`, http.StatusOK)
+	if profile["title"] != "Director" || profile["name"].(map[string]any)["middleName"] != "Q" || len(profile["phoneNumbers"].([]any)) != 2 || profile[scimSchemaEnterpriseUser].(map[string]any)["manager"].(map[string]any)["displayName"] != "Okta Manager" {
+		t.Fatalf("Okta profile PUT = %v", profile)
+	}
 	other := f.call(t, http.MethodPost, "/scim/v2/test-workspace/Users", `{"userName":"other@example.com","emails":[{"value":"other@example.com","primary":true}]}`, http.StatusCreated)
 	requireSCIMError(t, f.call(t, http.MethodPut, "/scim/v2/test-workspace/Users/"+other["id"].(string), `{"userName":"okta.user@example.com"}`, http.StatusConflict), "409", "uniqueness")
 
@@ -446,6 +476,12 @@ func TestSCIMOktaProvisioningSequence(t *testing.T) {
 	}
 	if status, _ := workspaceMemberStatus(t, f, userID); status != "suspended" {
 		t.Fatalf("Okta deactivated member status = %q", status)
+	}
+	if deactivated[scimSchemaEnterpriseUser].(map[string]any)["department"] != "Sales" {
+		t.Fatalf("deactivation dropped the profile: %v", deactivated)
+	}
+	if actions := scimAuditActions(scimAuditEntries(t, f.repository, scimAuditMemberResource), userID); !slices.Equal(actions, []string{"provisioned", "updated", "updated", "suspended"}) {
+		t.Fatalf("Okta audit trail = %v", actions)
 	}
 
 	// Okta lists groups (role groups, linked groups and teams to import) in pages.
@@ -547,27 +583,35 @@ func TestSCIMDiscoveryEndpoints(t *testing.T) {
 	f := newSCIMFixture(t)
 	config := f.call(t, http.MethodGet, "/scim/v2/test-workspace/ServiceProviderConfig", nil, http.StatusOK)
 	schemes := config["authenticationSchemes"].([]any)
-	if config["filter"].(map[string]any)["supported"] != true || config["bulk"].(map[string]any)["supported"] != false || config["etag"].(map[string]any)["supported"] != false || schemes[0].(map[string]any)["type"] != "oauthbearertoken" || config["meta"].(map[string]any)["resourceType"] != "ServiceProviderConfig" {
+	if config["filter"].(map[string]any)["supported"] != true || config["bulk"].(map[string]any)["supported"] != true || config["bulk"].(map[string]any)["maxOperations"] != float64(scimBulkMaxOperations) || config["bulk"].(map[string]any)["maxPayloadSize"] != float64(scimBulkMaxPayload) || config["etag"].(map[string]any)["supported"] != true || config["sort"].(map[string]any)["supported"] != true || schemes[0].(map[string]any)["type"] != "oauthbearertoken" || config["meta"].(map[string]any)["resourceType"] != "ServiceProviderConfig" {
 		t.Fatalf("ServiceProviderConfig = %v", config)
 	}
 	types := f.call(t, http.MethodGet, "/scim/v2/test-workspace/ResourceTypes", nil, http.StatusOK)
 	if types["totalResults"] != float64(2) {
 		t.Fatalf("ResourceTypes = %v", types)
 	}
+	userType := f.call(t, http.MethodGet, "/scim/v2/test-workspace/ResourceTypes/User", nil, http.StatusOK)
+	if extensions, _ := userType["schemaExtensions"].([]any); len(extensions) != 1 || extensions[0].(map[string]any)["schema"] != scimSchemaEnterpriseUser || extensions[0].(map[string]any)["required"] != false {
+		t.Fatalf("User resource type = %v", userType)
+	}
 	groupType := f.call(t, http.MethodGet, "/scim/v2/test-workspace/ResourceTypes/Group", nil, http.StatusOK)
 	if groupType["endpoint"] != "/Groups" || groupType["schema"] != scimSchemaGroup {
 		t.Fatalf("Group resource type = %v", groupType)
 	}
 	schemas := f.call(t, http.MethodGet, "/scim/v2/test-workspace/Schemas", nil, http.StatusOK)
-	if schemas["totalResults"] != float64(2) {
+	if schemas["totalResults"] != float64(3) {
 		t.Fatalf("Schemas = %v", schemas)
+	}
+	enterprise := f.call(t, http.MethodGet, "/scim/v2/test-workspace/Schemas/"+scimSchemaEnterpriseUser, nil, http.StatusOK)
+	if len(enterprise["attributes"].([]any)) != 6 {
+		t.Fatalf("enterprise schema = %v", enterprise)
 	}
 	user := f.call(t, http.MethodGet, "/scim/v2/test-workspace/Schemas/"+scimSchemaUser, nil, http.StatusOK)
 	attributes := map[string]bool{}
 	for _, item := range user["attributes"].([]any) {
 		attributes[item.(map[string]any)["name"].(string)] = true
 	}
-	for _, name := range []string{"userName", "name", "displayName", "active", "emails"} {
+	for _, name := range []string{"userName", "name", "displayName", "active", "emails", "title", "phoneNumbers", "addresses", "preferredLanguage", "locale", "timezone"} {
 		if !attributes[name] {
 			t.Fatalf("User schema lacks %s: %v", name, user)
 		}

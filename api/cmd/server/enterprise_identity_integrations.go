@@ -422,7 +422,8 @@ func (s *server) finishEnterpriseOIDC(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if role := identityRole(provider, claims); role != "" {
+	// SCIM provisioning owns the role of the members it manages.
+	if role := identityRole(provider, claims); role != "" && !s.scimManagesMember(ctx, workspaceID, session.User.ID) {
 		if err := s.store.UpdateMemberRole(ctx, workspaceID, session.User.ID, role); err != nil {
 			writeError(w, http.StatusInternalServerError, "could not apply identity role")
 			return
