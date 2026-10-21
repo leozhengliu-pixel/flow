@@ -69,9 +69,20 @@ func TestCodingSessionDiff(t *testing.T) {
 		t.Fatalf("summary diff (unpushed branch must not call the host): %+v", view)
 	}
 
-	// Pushed: the branch compared with its base on the code host, with hunks and line numbers.
+	// A head SHA alone (the clone baseline of a branch that never reached the host) is no evidence of a push.
 	if _, err := s.store.UpdateCodingSession(t.Context(), ws, session.ID, func(current *domain.CodingSession) error {
 		current.HeadSHA = "head"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if view = requestJSON[codingDiffView](t, handler, http.MethodGet, path, nil, http.StatusOK); view.Source != "summary" || host.calls.Load() != 0 {
+		t.Fatalf("a head SHA is not proof of a push: %+v", view)
+	}
+
+	// Pushed: the branch compared with its base on the code host, with hunks and line numbers.
+	if _, err := s.store.UpdateCodingSession(t.Context(), ws, session.ID, func(current *domain.CodingSession) error {
+		current.ExistingBranch = true
 		return nil
 	}); err != nil {
 		t.Fatal(err)
