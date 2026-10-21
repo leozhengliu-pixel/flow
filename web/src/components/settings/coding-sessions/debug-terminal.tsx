@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Maximize2, Minus, Play, RotateCcw, Square } from "lucide-react";
+import { Maximize2, Minus, RotateCcw, Square } from "lucide-react";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useI18n } from "@/i18n/i18n";
@@ -248,7 +248,7 @@ export function DebugTerminal({ environmentId, disabled, available = true }: { e
           </button>
         ) : (
           <button type="button" className="cs-icon-button" aria-label={t("Start terminal")} title={t("Start terminal")} disabled={disabled || !available} onClick={() => void connect()}>
-            <Play size={14} />
+            <PlayGlyph />
           </button>
         )}
       </div>
@@ -266,7 +266,7 @@ export function DebugTerminal({ environmentId, disabled, available = true }: { e
             <span className="cs-terminal-dialog-actions">
               {state === "connected" && <CodingButton small onClick={() => void runPrepare()}>Run prepare script</CodingButton>}
               <button type="button" className="cs-icon-button" aria-label={startLabel} title={startLabel} disabled={disabled || !available || (live && state !== "connected")} onClick={() => void connect()}>
-                {running ? <RotateCcw size={14} /> : <Play size={14} />}
+                {running ? <RotateCcw size={14} /> : <PlayGlyph />}
               </button>
               <button type="button" className="cs-icon-button" aria-label={t("Minimize terminal")} title={t("Minimize terminal")} onClick={() => setOpen(false)}>
                 <Minus size={14} />
@@ -282,5 +282,14 @@ export function DebugTerminal({ environmentId, disabled, available = true }: { e
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/** The filled 16px play triangle of "Start terminal". */
+function PlayGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="m5.604 2.41 7.23 4.502a1.375 1.375 0 0 1-.02 2.345L5.585 13.6a1.375 1.375 0 0 1-2.083-1.18V3.576A1.375 1.375 0 0 1 5.604 2.41Z" />
+    </svg>
   );
 }
