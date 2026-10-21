@@ -25,10 +25,24 @@ describe('application settings behavior', () => {
     fireEvent.click(await screen.findByRole('option', {name:'Custom URL…'}));
     fireEvent.click(screen.getByRole('button', {name:'Advanced…'}));
     expect(screen.queryByLabelText('Workspace connector')).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Tools' } });
+    // A member names nothing here: the connector takes its host name until the server reports one.
+    expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Connector URL'), { target: { value: 'https://example.test/mcp' } });
     fireEvent.submit(screen.getByLabelText('Connector URL').closest('form')!);
     await waitFor(() => expect(request).toHaveBeenCalledWith('/api/application-policies', expect.objectContaining({ body: expect.stringContaining('"status":"pending"') })));
+  });
+  it('names the validation error under the URL field instead of a native bubble', async () => {
+    render(<ApplicationPolicySettings admin={false} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Add connector' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Custom URL…' }));
+    const submit = screen.getByRole('button', { name: 'Add connector', hidden: false });
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Please enter a valid URL starting with http:// or https://.');
+    fireEvent.change(screen.getByLabelText('Connector URL'), { target: { value: 'notaurl' } });
+    fireEvent.submit(screen.getByLabelText('Connector URL').closest('form')!);
+    expect(screen.getByRole('alert')).toHaveTextContent('valid URL');
+    expect(request).not.toHaveBeenCalledWith('/api/application-policies', expect.objectContaining({ method: 'PUT' }));
   });
   it('lets an administrator expose an approved workspace connector to coding sessions', async () => {
     const policy = { id: 'mcp-sourcebot-production', name: 'Sourcebot', kind: 'mcp', status: 'approved', shared: true, url: 'https://hsb.example.net/api/mcp' };
