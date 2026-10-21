@@ -55,10 +55,14 @@ describe('coding session panel', () => {
     expect(screen.getAllByText(label)[0]).toBeVisible()
   })
 
-  it('shows the session screenshots (track I artifacts mounted directly)', () => {
-    renderPanel(makeSession({ artifacts: [{ id: 'a1', sessionId: 'session-1', kind: 'screenshot', label: 'Empty state', url: '/signed/a1.png', contentUrl: '/api/coding/sessions/session-1/artifacts/a1/content', contentType: 'image/png', sizeBytes: 100, createdAt: '2026-10-18T10:00:00Z' }] }))
-    expect(screen.getByRole('region', { name: 'Screenshots' })).toBeVisible()
-    expect(screen.getByRole('img', { name: 'Empty state' })).toBeInTheDocument()
+  it('shows plain screenshots in the conversation and keeps before/after pairs in the changes pane', async () => {
+    const shot = { id: 'a1', sessionId: 'session-1', kind: 'screenshot', label: 'Empty state', url: '/signed/a1.png', contentUrl: '/api/coding/sessions/session-1/artifacts/a1/content', contentType: 'image/png', sizeBytes: 100, createdAt: '2026-10-18T10:00:00Z' } as const
+    renderPanel(makeSession({ artifacts: [shot, { ...shot, id: 'a2', label: 'after', group: 'Login' }] }))
+    const gallery = screen.getByRole('region', { name: 'Screenshots' })
+    expect(within(gallery).queryByRole('img', { name: 'Empty state' })).toBeNull()
+    expect(within(gallery).getByRole('group', { name: 'Login' })).toBeVisible()
+    const agent = screen.getByRole('complementary', { name: 'Agent' })
+    expect(await within(agent).findByRole('img', { name: 'Empty state' })).toBeInTheDocument()
   })
 
   it('shows phase progress, harness and model while working, but no cost', () => {

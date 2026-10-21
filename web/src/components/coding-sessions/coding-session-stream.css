@@ -231,3 +231,9 @@
 .cs-pr-card-link-account{position:relative;z-index:1;font-size:11px;line-height:16px}
 .cs-pr-card-link-account a{color:var(--theme-text-secondary);text-decoration:underline;text-underline-offset:2px}
 .cs-pr-card-link-account a:hover{color:var(--theme-text-primary)}
+/* The agent's screenshots under its message (reference: the image at the message width, 6px corners, up to 600px
+   tall, zoom-in cursor, opening the image viewer). */
+.cs-shots{display:flex;flex-direction:column;gap:8px;padding:0 10px}
+.cs-shot{display:block;width:100%;padding:0;border:0;border-radius:6px;background:none;cursor:zoom-in}
+.cs-shot:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.cs-shot img{display:block;width:100%;height:auto;max-height:600px;object-fit:contain;border-radius:6px}
