@@ -331,7 +331,7 @@ export function GitLabIntegrationSettings({
           </div>
         </section>
         <GitLabLinkbacks connection={connection} onChange={updateSetting} />
-        {connection && <ReviewImportSettings provider="gitlab" data={data} className="gitlab-settings-card" />}
+        {connection && <ReviewImportSettings provider="gitlab" data={data} />}
       </div>
       {/* Members link their own GitLab accounts on Settings › Account › Connected accounts; admins only register the OAuth app here. */}
       {connection && isWorkspaceAdmin(data) && <GitLabOAuthApplicationSection connection={connection} />}

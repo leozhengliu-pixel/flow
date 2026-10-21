@@ -485,11 +485,7 @@ function ProviderIntegrationSettings({
         </>
       )}
       {provider === "github" && (
-        <ReviewImportSettings
-          provider="github"
-          data={data}
-          className="code-integration-section"
-        />
+        <ReviewImportSettings provider="github" data={data} />
       )}
       <Dialog
         open={Boolean(disconnecting)}
