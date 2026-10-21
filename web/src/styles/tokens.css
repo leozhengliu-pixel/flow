@@ -977,4 +977,4 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 
 /* Add-connector dialog: inline URL error (settings/connector-dialog.css). */
 :root{--connector-dialog-error:#ff8683}
-:root[data-theme="light"]{--connector-dialog-error:var(--danger)}
+:root[data-theme="light"]{--connector-dialog-error:#e2253b}
