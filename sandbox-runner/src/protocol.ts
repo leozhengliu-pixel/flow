@@ -268,6 +268,9 @@ export interface CredentialRequest {
   host: string
   path?: string
   purpose: 'git' | 'cli'
+  /** git's "erase": the host rejected the credential with this fingerprint (hex SHA-256, never the value). */
+  rejected?: boolean
+  fingerprint?: string
 }
 
 export interface CredentialResponse {

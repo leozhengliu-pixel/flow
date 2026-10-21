@@ -41,10 +41,13 @@ type mintedToken struct {
 	credential   codehost.Credential
 }
 
-// tokenCache keeps minted project tokens in memory (never persisted) so the
-// git credential helper, which asks on every fetch and push, reuses one
-// token per session and project. After a restart the next mint rotates the
-// existing token by name instead of creating a second one.
+// tokenCache remembers the project tokens this process minted (for
+// revocation and the sweep). Without a shared token store it also serves
+// them, so the git credential helper, which asks on every fetch and push,
+// reuses one token per session and project; that is only correct with a
+// single replica: another replica rotating or revoking the token leaves this
+// copy stale (GitLab answers "HTTP Basic: Access denied"). With a shared
+// store (SetSharedTokens) every replica serves the token in the store.
 type tokenCache struct {
 	mu     sync.Mutex
 	tokens map[string]*mintedToken
@@ -81,6 +84,12 @@ func (c *tokenCache) put(key string, token *mintedToken, repo codehost.RepoRef) 
 	defer c.mu.Unlock()
 	c.tokens[key] = token
 	c.projects[token.workspaceKey+"\x00"+token.connectionID+"\x00"+token.project] = repo
+}
+
+func (c *tokenCache) drop(key string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.tokens, key)
 }
 
 func (c *tokenCache) remove(match func(*mintedToken) bool) []*mintedToken {
@@ -208,29 +217,64 @@ func (h *Host) mintProjectToken(ctx context.Context, connection Connection, requ
 		return codehost.Credential{}, fmt.Errorf("%w: session or sandbox id is required", codehost.ErrNoAccess)
 	}
 	project := projectPath(request.Repo)
-	key := connection.WorkspaceKey + "\x00" + connection.ID + "\x00" + project + "\x00" + name
+	key := tokenKey(connection.WorkspaceKey, connection.ID, project, name)
+	if store, _ := h.sharedTokens(); store != nil {
+		return h.mintSharedProjectToken(ctx, store, connection, request, name, project, key)
+	}
 	unlock := h.tokens.lock(key)
 	defer unlock()
 	if cached := h.tokens.get(key); cached != nil && cached.credential.ExpiresAt.Sub(h.now()) > tokenRefreshMargin {
 		return cached.credential, nil
 	}
-	client, err := h.client(ctx, connection)
+	minted, expiresAt, err := h.createOrRotateProjectToken(ctx, connection, project, name)
 	if err != nil {
 		return codehost.Credential{}, err
 	}
+	credential := projectCredential(connection, project, name, minted.ID, minted.Token, expiresAt)
+	h.tokens.put(key, &mintedToken{workspaceKey: connection.WorkspaceKey, connectionID: connection.ID, project: project, ownerID: tokenOwner(name), tokenID: minted.ID, credential: credential}, request.Repo)
+	return credential, nil
+}
+
+func tokenKey(workspaceKey, connectionID, project, name string) string {
+	return workspaceKey + "\x00" + connectionID + "\x00" + project + "\x00" + name
+}
+
+func tokenOwner(name string) string {
+	return strings.TrimPrefix(strings.TrimPrefix(name, SessionTokenPrefix), SandboxTokenPrefix)
+}
+
+func projectCredential(connection Connection, project, name string, tokenID int64, token string, expiresAt time.Time) codehost.Credential {
+	return codehost.Credential{
+		Username:  tokenUsername,
+		Password:  token,
+		ExpiresAt: expiresAt,
+		RevokeID:  encodeRevokeID(connection.ID, project, tokenID, name),
+		CLIEnv:    CLIEnv(connection, token),
+	}
+}
+
+// createOrRotateProjectToken mints the project token named name: it rotates
+// the active token of that name (GitLab revokes the old value at once) or
+// creates one. The caller holds the token's lock: a rotation invalidates
+// every copy of the old value.
+func (h *Host) createOrRotateProjectToken(ctx context.Context, connection Connection, project, name string) (apiAccessToken, time.Time, error) {
+	client, err := h.client(ctx, connection)
+	if err != nil {
+		return apiAccessToken{}, time.Time{}, err
+	}
 	existing, err := h.listProjectTokens(ctx, client, project, func(token apiAccessToken) bool { return token.Name == name })
 	if err != nil {
-		return codehost.Credential{}, projectTokenError(err)
+		return apiAccessToken{}, time.Time{}, projectTokenError(err)
 	}
 	expiresDate, expiresAt := tokenExpiry(h.now())
 	var minted apiAccessToken
 	if len(existing) > 0 {
-		// Restart or expiry: rotate the token we already own (GitLab revokes
-		// the old value) instead of piling up a second token.
+		// Restart, expiry or a lost shared copy: rotate the token we already
+		// own (GitLab revokes the old value) instead of piling up a second one.
 		sort.Slice(existing, func(i, j int) bool { return existing[i].ID > existing[j].ID })
 		_, err = client.do(ctx, http.MethodPost, fmt.Sprintf("/projects/%s/access_tokens/%d/rotate", project, existing[0].ID), map[string]any{"expires_at": expiresDate}, &minted)
 		if err != nil && !errors.Is(err, codehost.ErrNotFound) {
-			return codehost.Credential{}, projectTokenError(err)
+			return apiAccessToken{}, time.Time{}, projectTokenError(err)
 		}
 		if err != nil {
 			// GitLab before 16.0 has no rotation endpoint: replace the token.
@@ -244,22 +288,13 @@ func (h *Host) mintProjectToken(ctx context.Context, connection Connection, requ
 	if minted.Token == "" {
 		payload := map[string]any{"name": name, "scopes": h.tokenScopes(), "access_level": accessDeveloper, "expires_at": expiresDate}
 		if _, err := client.do(ctx, http.MethodPost, "/projects/"+project+"/access_tokens", payload, &minted); err != nil {
-			return codehost.Credential{}, projectTokenError(err)
+			return apiAccessToken{}, time.Time{}, projectTokenError(err)
 		}
 	}
 	if minted.Token == "" || minted.ID == 0 {
-		return codehost.Credential{}, &Error{Kind: codehost.ErrTransient, Message: "GitLab did not return the project access token."}
+		return apiAccessToken{}, time.Time{}, &Error{Kind: codehost.ErrTransient, Message: "GitLab did not return the project access token."}
 	}
-	credential := codehost.Credential{
-		Username:  tokenUsername,
-		Password:  minted.Token,
-		ExpiresAt: parseExpiry(minted.ExpiresAt, expiresAt),
-		RevokeID:  encodeRevokeID(connection.ID, project, minted.ID),
-		CLIEnv:    CLIEnv(connection, minted.Token),
-	}
-	owner := strings.TrimPrefix(strings.TrimPrefix(name, SessionTokenPrefix), SandboxTokenPrefix)
-	h.tokens.put(key, &mintedToken{workspaceKey: connection.WorkspaceKey, connectionID: connection.ID, project: project, ownerID: owner, tokenID: minted.ID, credential: credential}, request.Repo)
-	return credential, nil
+	return minted, parseExpiry(minted.ExpiresAt, expiresAt), nil
 }
 
 // projectTokenError explains 403/404 from the access token API: the
@@ -301,34 +336,43 @@ func (h *Host) revokeProjectToken(ctx context.Context, client *apiClient, projec
 	return err
 }
 
-func encodeRevokeID(connectionID, project string, tokenID int64) string {
-	return strings.Join([]string{revokePrefix, connectionID, project, strconv.FormatInt(tokenID, 10)}, "|")
+// encodeRevokeID: gitlab-pat|<connection>|<project>|<token id>|<token name>.
+func encodeRevokeID(connectionID, project string, tokenID int64, name string) string {
+	return strings.Join([]string{revokePrefix, connectionID, project, strconv.FormatInt(tokenID, 10), name}, "|")
 }
 
-func decodeRevokeID(value string) (connectionID, project string, tokenID int64, ok bool) {
+// decodeRevokeID also reads the older four-part form (without the name).
+func decodeRevokeID(value string) (connectionID, project string, tokenID int64, name string, ok bool) {
 	parts := strings.Split(value, "|")
-	if len(parts) != 4 || parts[0] != revokePrefix || parts[1] == "" || parts[2] == "" {
-		return "", "", 0, false
+	if len(parts) != 4 && len(parts) != 5 || parts[0] != revokePrefix || parts[1] == "" || parts[2] == "" {
+		return "", "", 0, "", false
 	}
 	id, err := strconv.ParseInt(parts[3], 10, 64)
 	if err != nil || id <= 0 {
-		return "", "", 0, false
+		return "", "", 0, "", false
 	}
-	return parts[1], parts[2], id, true
+	if len(parts) == 5 {
+		name = parts[4]
+	}
+	return parts[1], parts[2], id, name, true
 }
 
 // RevokeCredential revokes a project access token early. OAuth and
 // connection credentials have no RevokeID and are left alone. Revoking an
 // already revoked or expired token succeeds.
 func (h *Host) RevokeCredential(ctx context.Context, workspaceKey string, credential codehost.Credential) error {
-	connectionID, project, tokenID, ok := decodeRevokeID(credential.RevokeID)
+	connectionID, project, tokenID, name, ok := decodeRevokeID(credential.RevokeID)
 	if !ok {
 		return nil
 	}
 	h.tokens.remove(func(token *mintedToken) bool {
 		return token.workspaceKey == workspaceKey && token.connectionID == connectionID && token.tokenID == tokenID
 	})
-	return h.revoke(ctx, workspaceKey, connectionID, project, tokenID)
+	err := h.revoke(ctx, workspaceKey, connectionID, project, tokenID)
+	if name != "" {
+		err = errors.Join(err, h.forgetSharedToken(ctx, workspaceKey, name, tokenID))
+	}
+	return err
 }
 
 func (h *Host) revoke(ctx context.Context, workspaceKey, connectionID, project string, tokenID int64) error {
@@ -351,17 +395,26 @@ func (h *Host) revoke(ctx context.Context, workspaceKey, connectionID, project s
 }
 
 // RevokeSessionCredentials revokes every project token Flow minted for a
-// session (or a session-less sandbox id) and still remembers. The session
-// layer calls it when a session ends; SweepProjectTokens catches the rest
-// (tokens minted before a restart).
+// session (or a session-less sandbox id): the ones this process remembers
+// and, with a shared token store, the ones any replica minted (and drops
+// them from the store, so no replica serves them again). The session layer
+// calls it when a session ends; SweepProjectTokens catches the rest (tokens
+// minted before a restart).
 func (h *Host) RevokeSessionCredentials(ctx context.Context, workspaceKey, ownerID string) error {
 	removed := h.tokens.remove(func(token *mintedToken) bool {
 		return token.workspaceKey == workspaceKey && token.ownerID == ownerID
 	})
 	var errs []error
+	revoked := map[int64]bool{}
 	for _, token := range removed {
 		if err := h.revoke(ctx, workspaceKey, token.connectionID, token.project, token.tokenID); err != nil {
 			errs = append(errs, err)
+		}
+		revoked[token.tokenID] = true
+	}
+	if strings.TrimSpace(ownerID) != "" {
+		for _, name := range []string{SessionTokenPrefix + ownerID, SandboxTokenPrefix + ownerID} {
+			errs = append(errs, h.revokeSharedTokens(ctx, workspaceKey, name, revoked))
 		}
 	}
 	return errors.Join(errs...)
@@ -420,6 +473,9 @@ func (h *Host) SweepProjectTokens(ctx context.Context, workspaceKey string, proj
 			h.tokens.remove(func(cached *mintedToken) bool {
 				return cached.connectionID == connection.ID && cached.tokenID == token.ID
 			})
+			if err := h.forgetSharedToken(ctx, workspaceKey, token.Name, token.ID); err != nil {
+				errs = append(errs, err)
+			}
 			revoked++
 			log.Printf("coding sessions: revoked GitLab project token %s (id %d) in %s", token.Name, token.ID, repo.FullName)
 		}

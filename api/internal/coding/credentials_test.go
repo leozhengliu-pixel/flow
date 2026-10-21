@@ -108,3 +108,49 @@ func TestHarnessStateKeyIsStorable(t *testing.T) {
 		t.Fatalf("local object store: %v", err)
 	}
 }
+
+// gitlabGrantStore: a GitLab session's sandbox in setup.
+type gitlabGrantStore struct{ grantStore }
+
+func (g gitlabGrantStore) CodingSession(_ context.Context, workspaceKey, id string) (domain.CodingSession, error) {
+	return domain.CodingSession{ID: id, WorkspaceKey: workspaceKey, SandboxID: g.grant.SandboxID, Phase: domain.CodingPhaseSetup, CodeHost: domain.CodeHostGitLab, HostName: "gitlab.example.com", Repository: "acme/app"}, nil
+}
+
+type invalidatingHost struct {
+	mintingHost
+	invalidated []string
+}
+
+func (h *invalidatingHost) InvalidateCredential(_ context.Context, request codehost.CredentialRequest, fingerprint string) (bool, error) {
+	h.invalidated = append(h.invalidated, request.SessionID+"/"+request.Repo.FullName+"/"+fingerprint)
+	return true, nil
+}
+
+// git's "erase" after GitLab refused a credential: Flow passes the
+// fingerprint (never a value) to the host, mints nothing and answers empty;
+// the runner's single retry ("get") mints again. Another repository is refused.
+func TestRejectedCredentialIsReportedToTheHost(t *testing.T) {
+	host := &invalidatingHost{mintingHost: mintingHost{Stub: codehost.Stub{HostKind: domain.CodeHostGitLab}}}
+	grant := SandboxGrant{WorkspaceKey: "w", SandboxID: "sb2", SessionID: "s1", Kind: sandbox.KindSession}
+	service := &Service{store: gitlabGrantStore{grantStore{grant: grant}}, hosts: map[string]codehost.Host{domain.CodeHostGitLab: host}, now: time.Now}
+	ctx := context.Background()
+	fp := codehost.CredentialFingerprint("glpat-rejected")
+	erase := CredentialRequest{Protocol: "https", Host: "gitlab.example.com", Path: "acme/app.git", Purpose: "git", Rejected: true, Fingerprint: fp}
+	response, err := service.Credentials(ctx, SandboxTokenPrefix+"x", erase)
+	if err != nil || response.Password != "" || len(host.requests) != 0 {
+		t.Fatalf("erase: %+v %v minted=%d", response, err, len(host.requests))
+	}
+	if len(host.invalidated) != 1 || host.invalidated[0] != "s1/acme/app/"+fp {
+		t.Fatalf("invalidated: %v", host.invalidated)
+	}
+	other := erase
+	other.Path = "acme/other.git"
+	if _, err := service.Credentials(ctx, SandboxTokenPrefix+"x", other); !errors.Is(err, ErrForbidden) || len(host.invalidated) != 1 {
+		t.Fatalf("another repository: %v %v", err, host.invalidated)
+	}
+	get := erase
+	get.Rejected, get.Fingerprint = false, ""
+	if response, err := service.Credentials(ctx, SandboxTokenPrefix+"x", get); err != nil || response.Password == "" || len(host.requests) != 1 || host.requests[0].Access != codehost.AccessWrite {
+		t.Fatalf("the retry mints a write credential: %+v %v %+v", response, err, host.requests)
+	}
+}

@@ -19,6 +19,7 @@ import (
 	"flow/api/internal/codehost/gitlab"
 	"flow/api/internal/coding"
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // GitLab as a coding-session code host (docs/coding-sessions-design.md §14).
@@ -43,6 +44,18 @@ func (s *server) wireGitLabCodingHost() {
 		return
 	}
 	host.SetConnectionSource(gitlabCodingSource{s: s})
+	// Project tokens are served from the shared encrypted store so every
+	// replica hands out the same current token (a per-process copy goes stale
+	// when another replica rotates or revokes it).
+	if store.ConnectorSecretsConfigured() {
+		var lock gitlab.TokenLocker
+		if s.coordinator != nil {
+			lock = s.coordinator.WithWorkspaceLock
+		}
+		host.SetSharedTokens(s.store, lock)
+	} else if s.coding.config.Enabled && host.CredentialMode() == gitlab.ModeProjectToken {
+		log.Printf("WARNING: coding sessions: FLOW_CONNECTOR_SECRET_KEY is not set; GitLab project tokens are kept per process, which is only correct with a single Flow replica")
+	}
 	if s.coding.config.Enabled && host.CredentialMode() == gitlab.ModeConnection {
 		log.Printf("WARNING: coding sessions: FLOW_CODING_GITLAB_CREDENTIAL_MODE=connection hands the long-lived GitLab connection token to sandboxes; prefer project-token")
 	}
