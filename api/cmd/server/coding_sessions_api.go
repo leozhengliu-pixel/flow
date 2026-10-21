@@ -63,7 +63,7 @@ func codingErrorStatus(err error) (int, string) {
 		return http.StatusUnauthorized, "tokenInvalid"
 	case errors.Is(err, coding.ErrGone):
 		return http.StatusGone, "gone"
-	case errors.Is(err, coding.ErrForbidden), errors.Is(err, store.ErrAuthForbidden):
+	case errors.Is(err, coding.ErrForbidden), errors.Is(err, store.ErrAuthForbidden), errors.Is(err, domain.ErrCodingAnchorRevoked):
 		return http.StatusForbidden, string(domain.CodingErrPermissionDenied)
 	case errors.Is(err, codehost.ErrNotConnected), errors.Is(err, codehost.ErrNoAccess), errors.Is(err, codehost.ErrUserNoAccess):
 		return http.StatusForbidden, string(codehost.ErrorCode("", err))
@@ -587,6 +587,9 @@ func (s *server) approveCodingSession(w http.ResponseWriter, r *http.Request) {
 			decision = coding.DecisionReject
 		}
 		updated, err := triggers.DecideApproval(r.Context(), viewer.workspace, session.ID, viewer.user.ID, codingMemberRole(viewer.role), decision)
+		if codingNotificationOnly(err) {
+			err = nil // the decision committed: answer with the decided session
+		}
 		var triggerErr *coding.TriggerError
 		if errors.As(err, &triggerErr) {
 			writeJSON(w, http.StatusConflict, map[string]any{"error": triggerErr.Message, "code": triggerErr.Code})

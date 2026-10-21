@@ -133,7 +133,7 @@ func (s *server) startCodingSessionFromTool(ctx context.Context, actor mcpActor,
 		trigger.Prompt = prompt
 	}
 	result, err := triggers.StartForIssue(ctx, trigger)
-	if err != nil {
+	if err != nil && !codingNotificationOnly(err) {
 		if code := coding.TriggerErrorCode(err); code != "" {
 			return codingToolError{Code: code, Error: strings.TrimPrefix(err.Error(), "coding trigger: "+string(code)+": ")}, nil
 		}

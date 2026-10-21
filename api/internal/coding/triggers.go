@@ -42,6 +42,29 @@ func TriggerErrorCode(err error) domain.CodingErrorCode {
 	return ""
 }
 
+// NotificationError is a notification (an elicitation or a decision on the
+// session's anchor, an Inbox notice) that failed after the action it reports
+// was committed. The trigger's result still describes that action: callers
+// answer with it and log the failure. Every notification is keyed, so
+// repeating the trigger or the decision delivers it once.
+type NotificationError struct {
+	Step string
+	Err  error
+}
+
+func (e *NotificationError) Error() string {
+	return "coding trigger: " + e.Step + " notification: " + e.Err.Error()
+}
+
+func (e *NotificationError) Unwrap() error { return e.Err }
+
+// NotificationFailed reports whether err only says a notification failed
+// after the action committed.
+func NotificationFailed(err error) bool {
+	var notificationError *NotificationError
+	return errors.As(err, &notificationError)
+}
+
 // Turn kinds used by triggers (Turn.Kind).
 const (
 	TurnKindInitial   = "initial"
@@ -247,6 +270,10 @@ type TriggerResult struct {
 	Pick     *EnvironmentPick      `json:"environment,omitempty"`
 	Approval bool                  `json:"approvalRequired"`
 	Message  string                `json:"message,omitempty"`
+	// NotificationPending is set when the session was started but its
+	// approval or repository request could not be posted yet; repeating
+	// the trigger posts it.
+	NotificationPending bool `json:"notificationPending,omitempty"`
 }
 
 // activeSessionStates are the states of sessions that can take a follow-up
@@ -356,22 +383,28 @@ func (t *Triggers) StartForIssue(ctx context.Context, trigger IssueTrigger) (Tri
 
 func (t *Triggers) start(ctx context.Context, start TriggerStartRequest, pick *EnvironmentPick) (TriggerResult, error) {
 	session, created, err := t.Starter.StartCodingSession(ctx, start)
+	if errors.Is(err, domain.ErrCodingAnchorRevoked) {
+		return TriggerResult{}, &TriggerError{Code: domain.CodingErrPermissionDenied, Message: "The agent's access to this delegation was withdrawn; delegate the issue again to start a coding session."}
+	}
 	if err != nil {
 		return TriggerResult{}, err
 	}
 	result := TriggerResult{Outcome: OutcomeStarted, Session: &session, Created: created, Pick: pick, Approval: start.RequireApproval}
 	// Notifications are idempotent, so a retried trigger (same idempotency
-	// key, created=false) re-sends nothing new but repairs a lost one.
+	// key, created=false) re-sends nothing new but repairs a lost one. The
+	// session exists either way: a failed notification is reported with it.
 	switch session.Phase {
 	case domain.CodingPhaseAwaitingApproval:
 		result.Approval = true
 		if err := t.notifier().ApprovalRequested(ctx, session, start); err != nil {
-			return result, fmt.Errorf("coding trigger: approval notification: %w", err)
+			result.NotificationPending = true
+			return result, &NotificationError{Step: "approval", Err: err}
 		}
 	case domain.CodingPhaseAwaitingUser:
 		if session.EnvironmentID == "" {
 			if err := t.notifier().EnvironmentSelectionRequested(ctx, session, start.EnvironmentSuggestions); err != nil {
-				return result, fmt.Errorf("coding trigger: environment elicitation: %w", err)
+				result.NotificationPending = true
+				return result, &NotificationError{Step: "environment elicitation", Err: err}
 			}
 		}
 	}
@@ -386,6 +419,14 @@ func (t *Triggers) continueIssueSession(ctx context.Context, trigger IssueTrigge
 	session, ok := latestOpenSession(sessions)
 	if !ok {
 		return TriggerResult{}, false, nil
+	}
+	if session.Phase == domain.CodingPhaseAwaitingApproval {
+		// A retried trigger repairs an approval request whose notification
+		// failed (notifications are keyed, so a delivered one is not repeated).
+		request := TriggerStartRequest{WorkspaceKey: trigger.WorkspaceKey, IssueID: trigger.Issue.ID, TeamID: trigger.Issue.TeamID, Title: trigger.Issue.Title, Prompt: prompt, ExternalSource: trigger.Issue.Origin.Source}
+		if err := t.notifier().ApprovalRequested(ctx, session, request); err != nil {
+			return TriggerResult{Outcome: OutcomeNotStarted, Session: &session, Approval: true, NotificationPending: true}, true, &NotificationError{Step: "approval", Err: err}
+		}
 	}
 	if trigger.AnchorTaskID != "" && session.AgentSessionID == trigger.AnchorTaskID && trigger.EnvironmentID == "" {
 		// The same anchor again (a retried delegation): nothing new to do.

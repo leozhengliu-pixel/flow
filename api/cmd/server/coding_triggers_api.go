@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -56,7 +57,25 @@ func writeCodingTriggerError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, "Not found")
 		return
 	}
+	if errors.Is(err, coding.ErrVersionConflict) {
+		// A concurrent change to the session's agent task: nothing was
+		// created, and retrying with the same key is safe.
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "The session changed while starting; try again.", "code": "conflict"})
+		return
+	}
 	writeError(w, http.StatusInternalServerError, "Coding session could not be started")
+}
+
+// codingNotificationOnly reports whether err only says a notification
+// failed after the trigger or decision committed, and logs it. The caller
+// answers with the committed outcome (TriggerResult.NotificationPending
+// tells the client); repeating the request posts the notification once.
+func codingNotificationOnly(err error) bool {
+	if !coding.NotificationFailed(err) {
+		return false
+	}
+	log.Printf("%v (the action committed; repeating it posts the notification)", err)
+	return true
 }
 
 func writeCodingTriggerResult(w http.ResponseWriter, result coding.TriggerResult) {
@@ -145,7 +164,7 @@ func (s *server) startIssueCodingSession(w http.ResponseWriter, r *http.Request)
 	trigger.Harness, trigger.Model = strings.TrimSpace(input.Harness), strings.TrimSpace(input.Model)
 	trigger.IdempotencyKey = issueCodingIdempotencyKey(trigger, issue.ID, r.Header.Get("Idempotency-Key"))
 	result, err := triggers.StartForIssue(r.Context(), trigger)
-	if err != nil {
+	if err != nil && !codingNotificationOnly(err) {
 		writeCodingTriggerError(w, err)
 		return
 	}
@@ -287,7 +306,7 @@ func (s *server) startReviewCodingSession(w http.ResponseWriter, r *http.Request
 		trigger.IdempotencyKey = "review:" + review.ID + ":" + key
 	}
 	result, err := triggers.StartForChangeRequest(r.Context(), stores.webhooks, trigger)
-	if err != nil {
+	if err != nil && !codingNotificationOnly(err) {
 		writeCodingTriggerError(w, err)
 		return
 	}
