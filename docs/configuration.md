@@ -514,28 +514,84 @@ Flow implements SCIM 2.0 (RFC 7643/7644) for user and group provisioning.
   the settings page shows when each was last used. Requests for another
   workspace, with a revoked token, or while SCIM is disabled are rejected.
 - **Endpoints:** `ServiceProviderConfig`, `ResourceTypes` (+ `/{id}`),
-  `Schemas` (+ `/{id}`), `Users` (list, create, get, `PUT`, `PATCH`, `DELETE`)
-  and `Groups` (list, create, get, `PUT`, `PATCH`, `DELETE`). Bulk, sort,
-  ETags and password changes are not supported (declared in
-  `ServiceProviderConfig`). Responses use `application/scim+json`; errors are
-  SCIM error bodies with `status` as a string and `scimType` (`invalidFilter`,
-  `invalidValue`, `invalidSyntax`, `invalidPath`, `noTarget`, `uniqueness`,
-  `tooMany`, `mutability`).
+  `Schemas` (+ `/{id}`), `Users` (list, create, get, `PUT`, `PATCH`, `DELETE`,
+  `POST /Users/.search`), `Groups` (the same, with `POST /Groups/.search`) and
+  `POST /Bulk`. Searching several resource types at once (`POST /.search`)
+  answers 501, and password changes are not supported. Responses use
+  `application/scim+json`; errors, including unknown paths (404) and methods
+  (405), are SCIM error bodies with `status` as a string and `scimType`
+  (`invalidFilter`, `invalidValue`, `invalidSyntax`, `invalidPath`,
+  `noTarget`, `uniqueness`, `tooMany`, `mutability`).
 - **User attributes:** `userName` (use the work email; unique per workspace,
-  compared case-insensitively), `externalId`, `name.givenName`,
-  `name.familyName`, `name.formatted`, `displayName`, `active`, `emails` (the
-  primary, else the work, else the first email becomes the member's email) and
-  `roles` (write-only: `owner`, `admin`, `member`, `guest` or a value mapped by
-  `scimRoleMapping`; otherwise `scimDefaultRole`). The member's name is
-  `name.formatted`, else given and family name, else `displayName`, else
-  `userName`. Other attributes, including the enterprise extension, are
-  accepted and ignored. An existing account with the same email is linked
-  rather than duplicated and keeps its workspace role unless `roles` is sent.
-- **Deprovisioning:** `active: false` suspends the member and `active: true`
-  restores them. `DELETE /Users/{id}` also suspends the account (it is never
-  deleted, so its issues and comments stay attributed), ends its SCIM group
-  memberships and SCIM-managed team memberships, and makes the resource return
-  404; creating the same `externalId` again restores the same account.
+  compared case-insensitively), `externalId` (case-exact; it can be changed or
+  removed, and must stay unique), `name` (`formatted`, `givenName`,
+  `familyName`, `middleName`, `honorificPrefix`, `honorificSuffix`),
+  `displayName`, `active`, `emails` (kept as sent; the primary, else the work,
+  else the first email becomes the member's email), `title`, `nickName`,
+  `userType`, `preferredLanguage`, `locale`, `timezone`, `phoneNumbers`,
+  `addresses` and `roles` (write-only: `owner`, `admin`, `member`, `guest` or
+  a value mapped by `scimRoleMapping`; otherwise `scimDefaultRole`). The
+  enterprise extension
+  (`urn:ietf:params:scim:schemas:extension:enterprise:2.0:User`:
+  `employeeNumber`, `costCenter`, `organization`, `division`, `department`,
+  `manager.value`/`$ref`/`displayName`) is stored and returned, listed in
+  `/Schemas` and as a `schemaExtensions` entry of the User resource type. The
+  member's name is `name.formatted`, else given and family name, else
+  `displayName`, else `userName`. `title` becomes the member's job title, and
+  `timezone` (an IANA zone) sets their Pulse delivery zone when they have not
+  set one. An existing account with the same email is linked rather than
+  duplicated and keeps its workspace role unless `roles` is sent.
+- **Deprovisioning:** what deprovisioning does is the workspace setting
+  `scimDeprovisionAction` (identity provider page › "When a user is
+  deprovisioned"):
+  - `suspend` (default): `active: false` and `DELETE /Users/{id}` suspend the
+    member;
+  - `remove`: they remove the member from the workspace the way an admin's
+    removal does (team memberships end and are audited, the departure is
+    recorded, assignee suggestions for them are dropped).
+
+  Either way the account is never deleted, so its issues and comments stay
+  attributed; `active: true` restores the member (with `remove`, they rejoin
+  the teams linked to their SCIM groups). After `active: false` the user
+  stays readable as an inactive SCIM resource. `DELETE` also ends the user's
+  SCIM group memberships and SCIM-managed team memberships and makes the
+  resource return 404; creating the same `externalId` again restores the same
+  account and its membership. Changes to the setting are audited.
+- **ETags:** Users and Groups carry a weak version (`meta.version` and the
+  `ETag` header). `If-Match` on `PUT`, `PATCH` and `DELETE` answers 412 when
+  the resource changed since (`*` matches any version); `If-None-Match` on a
+  `GET` of one resource answers 304 when it has not.
+- **Sorting:** `sortBy` and `sortOrder` (`ascending`, the default, or
+  `descending`) on Users and Groups. Users sorted by `userName`,
+  `displayName`, `externalId`, `emails.value`, `id`, `meta.created` or
+  `meta.lastModified` are ordered by the database; any other attribute
+  (`name.familyName`, `title`, enterprise attributes, …) is sorted after the
+  same bounded scan as filters. Missing values sort last ascending and first
+  descending.
+- **Bulk:** `POST /Bulk` takes at most 1,000 operations and 1 MB (413
+  beyond). `POST` operations need a `bulkId`; `bulkId:<id>` in a path or in
+  data refers to the resource that operation created, and an operation that
+  refers to a later one runs after it (circular or failed references answer
+  409 `invalidValue`). `version` is sent as `If-Match`. `failOnErrors` stops
+  after that many errors. Each operation runs through the same handler as
+  the single request, with the same token, validation and audit.
+- **Audit log:** user provisioning, updates (the names of the changed
+  attributes, never their values), suspensions, restores, deprovisioning,
+  removals, role changes, group creates, links, updates, deletes and member
+  changes are audit log entries with `metadata.source` `scim` and the SCIM
+  token that made them (resource types `workspace_member` and `scim_group`);
+  SCIM token creation, rotation and revocation and turning SCIM on or off
+  are audited too. Team membership changes keep their `team_member` entries.
+- **SCIM-managed members:** while SCIM is on and the workspace has an
+  unrevoked SCIM token, members with an active SCIM identity are shown as
+  "Managed by SCIM" and their workspace role, name, email and status
+  (suspend, activate, remove) can only change through SCIM: the members API
+  answers 403 with code `SCIM_MANAGED`, and SSO role claims do not change
+  their role. Their username and non-SCIM team memberships stay editable;
+  team memberships a SCIM group manages stay protected (409). To manage such
+  members in Flow, turn **Enable SCIM** off or revoke every SCIM token (a
+  workspace admin can always do either); turning SCIM back on locks them
+  again.
 - **Groups:** a group whose display name matches `scimRoleGroups` (or
   `flow-owners`, `flow-admins`, `flow-guests`) sets its members' role; when a
   member is in several role groups the most recent membership wins. A group
@@ -548,7 +604,9 @@ Flow implements SCIM 2.0 (RFC 7643/7644) for user and group provisioning.
 - **Filters:** `filter` supports attribute paths (`userName`, `externalId`,
   `id`, `displayName`, `name.*`, `emails.value`, `emails[type eq "work"].value`,
   `active`, `members.value`, `members[value eq "…"]`, `meta.created`,
-  `meta.lastModified`), the operators `eq ne co sw ew pr gt ge lt le`, and
+  `meta.lastModified`, the profile attributes and enterprise attributes such
+  as `urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:department`),
+  the operators `eq ne co sw ew pr gt ge lt le`, and
   `and`/`or`/`not (…)` with parentheses. Attribute names and keywords are
   case-insensitive; strings compare case-insensitively except `id`,
   `externalId` and `members.value`. An `eq` on `userName`, `externalId`, `id`,
@@ -562,8 +620,13 @@ Flow implements SCIM 2.0 (RFC 7643/7644) for user and group provisioning.
 - **PATCH:** `op` is case-insensitive (`Add`, `Replace`, `Remove`); `replace`
   without `path` takes an object of attributes; `active` accepts booleans or
   the strings `"True"`/`"False"`; paths such as `name.givenName`,
-  `emails[type eq "work"].value`, `members` and `members[value eq "<id>"]`
-  work. Group member adds and removes are applied in order, are idempotent,
+  `emails[type eq "work"].value`, `phoneNumbers[type eq "mobile"].value` (an
+  add or replace that matches no entry creates it),
+  `addresses[type eq "work"].locality`, enterprise paths
+  (`urn:…:enterprise:2.0:User:manager` with an id, an object, or
+  `{"value": ""}` to clear it), `members` and `members[value eq "<id>"]`
+  work. `remove` of `externalId`, `displayName`, `name` or a profile attribute
+  clears it; `active` cannot be removed (send `false`). Group member adds and removes are applied in order, are idempotent,
   and an unknown user in an add is 400 `invalidValue`.
 
 Setup notes: in **Okta**, use a SCIM 2.0 app with HTTP Header (bearer)
@@ -571,7 +634,14 @@ authentication, set the unique identifier to the email, and enable Create,
 Update and Deactivate users plus Push Groups. In **Microsoft Entra ID**, set
 the provisioning mode to Automatic with the base URL as Tenant URL and the
 token as Secret Token, map `userName` to the user principal name or mail, and
-keep `externalId` mapped to `objectId` (or `mailNickname`).
+keep `externalId` mapped to `objectId` (or `mailNickname`). Okta deactivates
+a user with `active: false` and rarely sends `DELETE`; Microsoft Entra ID
+sends `active: false` when a user is disabled or soft-deleted and `DELETE`
+when the user is permanently deleted. Both therefore follow the workspace's
+deprovisioning setting. The default Okta and Entra attribute mappings
+(title, phones, address, preferred language, locale, time zone, employee
+number, department, cost center, organization, division, manager) are stored
+and read back.
 
 ## Flow Agent
 
