@@ -38,6 +38,7 @@ export const reviewsZhCN: Record<string, string> = {
   "Rate limited until": "速率受限至",
   "Retrying later": "稍后重试",
   "Retry after": "重试时间",
+  "Retry after: {time}": "重试时间：{time}",
   "Each run reads up to {repositories} repositories and {requests} requests and makes at most {writes} changes.": "每次运行最多读取 {repositories} 个仓库和 {requests} 个请求，最多写入 {writes} 次更改。",
   // --- Pull request page
   "pull request actions": "拉取请求操作",

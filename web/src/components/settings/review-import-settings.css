@@ -3,8 +3,9 @@
 .review-import-settings .feature-section:first-child{margin-top:16px}
 .review-import-status{display:contents}
 .review-import-add{gap:8px}
-.review-import-add input{min-width:0;flex:1;height:32px;box-sizing:border-box;padding:0 12px;border:1px solid var(--theme-border-strong);border-radius:8px;outline:0;background:var(--theme-surface-2);color:var(--theme-text-primary);font:13px inherit}
-.review-import-add input:focus{border-color:var(--focus-ring);box-shadow:0 0 0 2px var(--accent-soft)}
+.review-import-add input{min-width:0;flex:1;height:32px;box-sizing:border-box;padding:6px 12px;border:.5px solid var(--form-control-border);border-radius:8px;outline:0;background:var(--form-control-bg);color:var(--set-label);font:400 13px/normal var(--font)}
+.review-import-add input::placeholder{color:var(--form-control-placeholder)}
+.review-import-add input:focus{border-color:var(--focus-ring);box-shadow:0 0 0 1px var(--focus-ring)}
 .review-import-settings .feature-row dl{flex:1;display:flex;flex-wrap:wrap;gap:6px 28px;margin:0}
 .review-import-settings .feature-row dl div{display:flex;flex-direction:column;gap:1px}
 .review-import-settings .feature-row dt{color:var(--theme-text-secondary);font-size:12px}
