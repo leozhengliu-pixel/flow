@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowUpRight, ChevronRight, Plus, TriangleAlert, X } from "lucide-react";
+import { Archive, ArrowUpRight, ChevronRight, MoreHorizontal, Plus, TriangleAlert, X } from "lucide-react";
+import { confirmAction } from "@/components/ui/action-dialog-service";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AgentCodingGlyph, LoopsGlyph } from "@/components/ui/agent-glyph";
 import { useI18n } from "@/i18n/i18n";
-import { createCodingEnvironment, fetchCommitSigningKey, unarchiveCodingEnvironment } from "@/lib/api";
+import { archiveCodingEnvironment, createCodingEnvironment, fetchCommitSigningKey, unarchiveCodingEnvironment } from "@/lib/api";
 import { codingEnvironmentIdFromPath, codingEnvironmentPath, settingsPath, type IntegrationProvider, type SettingsPageId } from "@/lib/app-routes";
 import { toast } from "@/lib/toast";
 import type { BootstrapData, CodingEnvironment, CodingHarness, CodingSettings, CodingStatus, WorkspaceSettings } from "@/types/flow";
@@ -14,7 +15,6 @@ import {
   HARNESS_OPTIONS,
   SNAPSHOT_STATUS_LABEL,
   TRUSTED_SOURCE_OPTIONS,
-  codeHostLabel,
   hasConnectedCodeHost,
   modelOptions,
   reasoningOptions,
@@ -124,14 +124,19 @@ function CodingSessionsOverview({ data, settings: workspaceSettings, disabled, o
         id="environments"
         title="Environments"
         description="Create reusable environments for coding sessions."
-        action={environments.length > 0 ? (
-          <NewEnvironmentButton status={status} environments={environments} disabled={controlsDisabled} onOpenEnvironment={onOpenEnvironment} />
-        ) : undefined}
       >
         <CodingCard className="cs-environments">
           {error && <p className="cs-inline-error" role="alert">{error}</p>}
+          {environments.length > 0 && (
+            <div className="feature-row cs-row cs-environments-header">
+              <h3>{t(environments.length === 1 ? "1 environment" : "{count} environments").replace("{count}", String(environments.length))}</h3>
+              <aside>
+                <NewEnvironmentButton status={status} environments={environments} disabled={controlsDisabled} onOpenEnvironment={onOpenEnvironment} />
+              </aside>
+            </div>
+          )}
           {environments.map((environment) => (
-            <EnvironmentRow key={environment.id} environment={environment} onOpen={() => onOpenEnvironment(environment.id)} />
+            <EnvironmentRow key={environment.id} environment={environment} disabled={controlsDisabled} onOpen={() => onOpenEnvironment(environment.id)} onArchived={() => void reload()} />
           ))}
           {loaded && !environments.length && !error && (
             <div className="feature-row cs-row cs-empty-row">
@@ -218,7 +223,7 @@ function NewEnvironmentButton({ status, environments, disabled, onOpenEnvironmen
     setCreating(true);
     try {
       const created = await createCodingEnvironment({
-        name: repository.fullName.split("/").pop() || repository.fullName,
+        name: repository.fullName,
         codeHost: repository.codeHost,
         hostName: repository.hostName,
         repository: repository.fullName,
@@ -316,23 +321,54 @@ function PolicyRows({ settings, update, models, status, disabled }: { settings: 
   );
 }
 
-function EnvironmentRow({ environment, onOpen }: { environment: CodingEnvironment; onOpen: () => void }) {
+/**
+ * One environment: a 64px row (32px tile, the name) that opens the editor; hovering shows the "…" menu with
+ * "Archive environment" (confirmed first). The snapshot state stays as a badge.
+ */
+function EnvironmentRow({ environment, disabled, onOpen, onArchived }: { environment: CodingEnvironment; disabled?: boolean; onOpen: () => void; onArchived: () => void }) {
   const { t } = useI18n();
   const snapshot = environment.latestSnapshot;
+  const host = environment.hostName && environment.hostName !== "github.com" && environment.hostName !== "gitlab.com" ? `${environment.hostName}/` : "";
+  const archive = async () => {
+    const confirmed = await confirmAction(t("Archive this environment?"), {
+      description: t("Archived environments can’t be used for new coding sessions."),
+      confirmLabel: t("Archive environment"),
+      danger: true,
+    });
+    if (!confirmed) return;
+    try {
+      await archiveCodingEnvironment(environment.id);
+      toast.success(t("Environment archived"));
+      onArchived();
+    } catch (reason) {
+      toast.error(errorMessage(reason, "Could not archive the environment"));
+    }
+  };
   return (
-    <button type="button" className="feature-row feature-row-link cs-row cs-environment-row" onClick={onOpen} aria-label={`${environment.name} ${environment.repository}`}>
-      <span className="feature-row-icon"><IntegrationBrandIcon provider={environment.codeHost} size={16} /></span>
+    <div className="feature-row cs-row cs-environment-row">
+      <button type="button" className="cs-environment-open" onClick={onOpen} aria-label={environment.name} title={`${host}${environment.repository}`} />
+      <span className="feature-row-icon cs-environment-tile"><IntegrationBrandIcon provider={environment.codeHost} size={16} /></span>
       <div>
         <strong data-i18n-ignore>{environment.name}</strong>
-        <span data-i18n-ignore>{environment.hostName && environment.hostName !== "github.com" && environment.hostName !== "gitlab.com" ? `${environment.hostName}/` : ""}{environment.repository}</span>
       </div>
       <aside>
         {environment.pendingProposal && <span className="cs-badge is-accent">{t("Proposal ready")}</span>}
         {snapshot && <span className={`cs-badge is-${snapshot.status}`}>{t(SNAPSHOT_STATUS_LABEL[snapshot.status])}</span>}
-        <span className="feature-state" data-i18n-ignore>{codeHostLabel(environment.codeHost)}</span>
-        <ChevronRight size={15} />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className="cs-icon-button cs-environment-menu" aria-label={t("Open menu")} disabled={disabled}>
+              <MoreHorizontal size={16} />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => void archive()}>
+              <Archive size={14} />
+              {t("Archive environment")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </aside>
-    </button>
+    </div>
   );
 }
 

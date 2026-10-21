@@ -311,4 +311,8 @@ export const codingSessionsZhCN: Record<string, string> = {
   "Enable for coding sessions": "在编码会话中启用",
   "Disable for coding sessions": "在编码会话中停用",
   "Coding-session agents reach this server through Flow; its credentials and network stay on the server": "编码会话中的 Agent 通过 Flow 访问此服务器；其凭据和网络始终留在服务器端",
+  "1 environment": "1 个环境",
+  "{count} environments": "{count} 个环境",
+  "Archive this environment?": "归档此环境？",
+  "Archived environments can’t be used for new coding sessions.": "已归档的环境不能用于新的编码会话。",
 };

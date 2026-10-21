@@ -184,8 +184,8 @@ describe("Coding sessions settings page", () => {
   it("lists environments and opens the editor", async () => {
     vi.mocked(fetchCodingEnvironments).mockResolvedValue([makeEnvironment({ latestSnapshot: { id: "s1", environmentId: "env1", status: "ready", strategy: "archive", configHash: "", image: "", baseRef: "main", createdAt: "" } })]);
     renderCodingSettings();
-    const row = await screen.findByRole("button", { name: "Web acme/web" });
-    expect(within(row).getByText("Ready")).toBeVisible();
+    const row = await screen.findByRole("button", { name: "Web" });
+    expect(within(row.closest(".cs-environment-row") as HTMLElement).getByText("Ready")).toBeVisible();
     fireEvent.click(row);
     expect(screen.getByTestId("location")).toHaveTextContent(`${ROOT}/environments/env1`);
   });
@@ -198,7 +198,7 @@ describe("Coding sessions settings page", () => {
     const picker = await screen.findByTestId("repository-picker");
     expect(within(picker).getByPlaceholderText("Search repositories...")).toHaveFocus();
     await user.click(await within(picker).findByRole("button", { name: "acme/api" }));
-    await waitFor(() => expect(createCodingEnvironment).toHaveBeenCalledWith({ name: "api", codeHost: "github", hostName: "github.com", repository: "acme/api", repositoryId: "2", defaultBranch: "trunk" }));
+    await waitFor(() => expect(createCodingEnvironment).toHaveBeenCalledWith({ name: "acme/api", codeHost: "github", hostName: "github.com", repository: "acme/api", repositoryId: "2", defaultBranch: "trunk" }));
     expect(fetchCodingRepositories).toHaveBeenCalledWith({ codeHost: "github", hostName: "github.com", q: undefined });
     expect(toast.success).toHaveBeenCalledWith("Environment created");
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(`${ROOT}/environments/env-api`));
@@ -208,7 +208,7 @@ describe("Coding sessions settings page", () => {
     const user = userEvent.setup();
     vi.mocked(fetchCodingEnvironments).mockImplementation(async (archived) => (archived ? [] : [makeEnvironment()]));
     renderCodingSettings();
-    await screen.findByRole("button", { name: "Web acme/web" });
+    await screen.findByRole("button", { name: "Web" });
     await user.click(screen.getByRole("button", { name: "New environment" }));
     await user.click(await screen.findByRole("button", { name: "acme/web" }));
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(`${ROOT}/environments/env1`));

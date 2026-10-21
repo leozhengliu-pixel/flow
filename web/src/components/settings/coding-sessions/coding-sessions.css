@@ -42,6 +42,21 @@
 .cs-archived-toggle { display: flex; justify-content: flex-end; margin: 10px 16px 0; }
 .cs-environments.is-archived { margin-top: 10px; }
 .cs-environment-row aside { gap: 8px; }
+/* The list's header row ("1 environment" + New environment) and 64px rows: a 32px tile, the name, the "…" menu on hover. */
+.cs-environments-header { min-height: 60px; }
+.cs-environments-header h3 { flex: 1; margin: 0; color: var(--theme-text-primary); font: 500 13px/normal var(--font); }
+.cs-environments-header aside { margin-left: auto; }
+.cs-environment-row { position: relative; min-height: 64px; padding: 16px; }
+.cs-environment-row:hover, .cs-environment-row:focus-within { background: var(--cs-environment-hover); }
+.cs-environment-row:last-child { border-radius: 0 0 10px 10px; }
+.cs-environment-open { position: absolute; inset: 0; z-index: 0; width: 100%; padding: 0; border: 0; border-radius: inherit; background: transparent; cursor: default; }
+.cs-environment-open:focus-visible { outline: 0; }
+.cs-environment-row > :not(.cs-environment-open) { position: relative; z-index: 1; pointer-events: none; }
+.cs-environment-row > aside, .cs-environment-row > aside * { pointer-events: auto; }
+.cs-environment-row > div strong { color: var(--theme-text-primary); font: 500 13px/normal var(--font); }
+.cs-environment-tile { width: 32px; height: 32px; flex: 0 0 32px; border: 0; border-radius: 6px; background: var(--cs-environment-tile); color: var(--theme-text-primary); }
+.cs-environment-row .cs-environment-menu { width: 32px; min-width: 32px; height: 32px; flex: 0 0 32px; border-radius: 9999px; opacity: 0; }
+.cs-environment-row:hover .cs-environment-menu, .cs-environment-row:focus-within .cs-environment-menu, .cs-environment-menu[data-state="open"] { opacity: 1; }
 .cs-badge { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border: .5px solid var(--theme-border); border-radius: 9999px; color: var(--theme-text-secondary) !important; font-size: 11px !important; font-weight: 500; line-height: 20px !important; white-space: nowrap; }
 .cs-badge.is-ready { color: var(--semantic-success) !important; }
 .cs-badge.is-failed { color: var(--semantic-danger) !important; }
@@ -93,6 +108,8 @@
 .feature-select.cs-select-small { width: 160px; min-width: 160px; height: 24px; padding: 1px 24px 1px 10px; color: var(--text-label); font-size: 12px; }
 .feature-select.cs-select-small > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .feature-select.cs-select-small svg[data-flow-glyph] { right: 9px; }
+/* The settings shell sizes every .feature-select at 30px; the small select (Add tool…, tool versions) stays 24px. */
+html:root .settings-app .settings-main .feature-select.cs-select-small { height: 24px; color: var(--text-label); }
 body .cs-select-menu.is-small { min-width: 160px; max-height: 320px; overflow-y: auto; }
 body .cs-select-menu.is-small .menu-item { height: 24px; padding: 0 35px 0 12px; font-size: 12px; line-height: 18px; }
 body .cs-select-menu .menu-item.has-detail { height: auto; min-height: 50px; padding-top: 7px; padding-bottom: 7px; }
@@ -132,6 +149,7 @@ body .cs-select-menu .cs-select-group { height: 29px; padding: 8px 25px 6px 12px
 /* Tool versions */
 .cs-tools-row { min-height: 81px !important; align-items: flex-start !important; }
 .cs-tools-row > div { max-width: 231px; padding-top: 6px; }
+.cs-tools-row > aside { align-self: center; margin-left: auto; }
 .cs-tools { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .cs-tool-box { box-sizing: border-box; width: 365px; max-width: 100%; height: 44px; display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border: 1px solid var(--theme-border); border-radius: 8px; }
 .cs-tool-box > strong { min-width: 0; flex: 1; overflow: hidden; color: var(--text-strong) !important; font-size: 13px; font-weight: 500 !important; text-overflow: ellipsis; white-space: nowrap; }
@@ -238,7 +256,7 @@ body .cs-owner-menu { max-height: 320px; overflow-y: auto; }
 .cs-repo-trigger { min-width: 220px; max-width: 320px; }
 .cs-repo-trigger-label { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 .cs-repo-trigger-label > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cs-repo-popover { z-index: 1000; box-sizing: border-box; width: 278px; overflow: hidden; border: 1px solid var(--theme-border); border-radius: 12px; background: var(--theme-surface-2); box-shadow: var(--shadow-control); color: var(--theme-text-primary); }
+.cs-repo-popover { z-index: 1000; box-sizing: border-box; width: 278px; overflow: hidden; border: .5px solid var(--theme-border-strong); border-radius: 12px; background: var(--theme-surface-2); box-shadow: var(--shadow-control); color: var(--theme-text-primary); }
 .cs-repo-search-row { box-sizing: border-box; height: 37px; display: flex; align-items: center; padding: 0 12px 0 14px; border-bottom: 1px solid var(--theme-border-subtle); }
 .cs-repo-search { box-sizing: border-box; width: 100%; height: 36px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--theme-text-primary); font: 13px var(--font); }
 .cs-repo-search::placeholder { color: var(--text-placeholder); }

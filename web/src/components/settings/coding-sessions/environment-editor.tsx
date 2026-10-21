@@ -319,10 +319,10 @@ export function EnvironmentEditorPage({ data, environmentId, disabled, onBack, o
             {t(gitlabCredentialNote(status?.codeHosts?.find((item) => item.codeHost === "gitlab")?.credentialMode))}
           </p>
         )}
-        <CodingRow title="Agent">
+        <CodingRow title="Agent" description="Choose which agent Flow uses in coding sessions">
           <CodingSelect label="Environment agent" value={draft.harness} disabled={locked} options={harnessOptions} onChange={(value) => update({ harness: value as EnvironmentDraft["harness"], model: "auto" })} />
         </CodingRow>
-        <CodingRow title="Model">
+        <CodingRow title="Model" description="May affect quality and cost of code changes">
           <CodingSelect label="Environment model" value={draft.model} disabled={locked} options={modelOptions(models, environmentHarness)} menuClassName="cs-model-menu" onChange={(model) => update({ model })} />
         </CodingRow>
         <CodingRow title="Sandbox size" description="Set CPU and memory for new coding sessions in this environment">
