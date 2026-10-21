@@ -124,3 +124,16 @@ it("turns on Notion and goes to its connection page", async () => {
   fireEvent.click(await within(row("notion")).findByRole("button", { name: /Connect/ }));
   await waitFor(() => expect(assign).toHaveBeenCalledWith("https://www.notion.com/connections/flow"));
 });
+
+it("says previews are on for Notion, not that Notion authorized Flow, and offers Manage in Notion", async () => {
+  api.fetchPersonalConnections.mockResolvedValue(response({ notion: { available: true, connection: connection({ provider: "notion", account: undefined }) } }));
+  api.connectNotion.mockResolvedValue({ url: "https://www.notion.com/connections/flow" });
+  const open = vi.spyOn(window, "open").mockReturnValue(null);
+  renderRows();
+  expect(await within(row("notion")).findByText("Previews on")).toBeInTheDocument();
+  expect(within(row("notion")).queryByText("Connected")).not.toBeInTheDocument();
+  expect(within(row("notion")).getByText(/Authorize Flow in Notion/)).toBeInTheDocument();
+  fireEvent.keyDown(screen.getByRole("button", { name: "Notion account options" }), { key: "Enter" });
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Manage in Notion" }));
+  await waitFor(() => expect(open).toHaveBeenCalledWith("https://www.notion.com/connections/flow", "_blank", "noopener,noreferrer"));
+});

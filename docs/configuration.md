@@ -723,6 +723,9 @@ outbound policy as the review sync (see
 | `FLOW_REVIEW_IMPORT` | `off` | `on` lets workspace admins turn the import on for their approved repositories. `off` turns it off for every workspace, including **Sync now**. The earlier values `auto` and `always` mean `on` (still opt-in per workspace). |
 | `FLOW_REVIEW_IMPORT_INTERVAL` | `10m` | Period of the background import per workspace (a Go duration, at least `1m`). `0` turns the import off. |
 
+With the Helm chart these are `integrations.reviewImport.mode` and
+`integrations.reviewImport.interval`.
+
 Before setting `FLOW_REVIEW_IMPORT=on` on a deployment, have a workspace admin
 approve the repositories to import; workspaces that never turned the import on
 are not touched.
@@ -870,6 +873,12 @@ variables below.
 | `FLOW_NOTION_CONNECTION_URL` | unset | HTTPS address of the Notion connection page members are sent to (the Notion connection gallery page of your link-preview connection). |
 | `FLOW_DEV_GOOGLE_BASE_URL` | unset | Development only, honored only with `FLOW_AUTH_DISABLED=true` or `FLOW_DEV_ALLOW_LOOPBACK_CODE_HOSTS=true`: a loopback fake that replaces Google's authorize, token, revoke, userinfo and Calendar endpoints. |
 
+With the Helm chart these are `integrations.googleCalendar.clientId`,
+`.clientSecret` (stored in the chart's Secret, or set
+`FLOW_GOOGLE_OAUTH_CLIENT_SECRET` in `secrets.existingSecret`),
+`.syncInterval` and `integrations.notion.connectionUrl`.
+`FLOW_DEV_GOOGLE_BASE_URL` is deliberately not exposed by the chart.
+
 **Google Calendar.** A member authorizes Flow (OAuth, PKCE, offline access) with
 the scopes `openid`, `email` and
 `https://www.googleapis.com/auth/calendar.events.readonly`. Flow reads only the
@@ -890,9 +899,11 @@ through the outbound policy for public HTTPS addresses.
 
 **Notion.** Notion's link previews are a connection on Notion's side: a member
 pastes a Flow link into Notion and authorizes it there. The Connected accounts
-row turns on previews for the member (Flow cannot see Notion's side of the
-authorization) and opens `FLOW_NOTION_CONNECTION_URL`; Disconnect turns them
-off. While on, `GET /api/notion/link-preview?url=` answers with the title,
+row turns on previews for the member and opens `FLOW_NOTION_CONNECTION_URL`.
+Flow cannot see Notion's side of the authorization, so the row says "Previews
+on" (not "Connected"), reminds the member to authorize Flow in Notion, and its
+menu offers "Manage in Notion" (opens the connection page again) and
+Disconnect, which turns previews off. While on, `GET /api/notion/link-preview?url=` answers with the title,
 status, assignee and team of an issue or project link of this deployment, as
 the signed-in member (their session or the OAuth token Notion holds for them),
 with the same access checks as the issue and project reads. Register the

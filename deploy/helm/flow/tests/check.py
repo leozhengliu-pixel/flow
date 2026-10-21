@@ -302,6 +302,24 @@ if mounts.get("trusted-ca", {}).get("mountPath") != "/var/run/flow/trusted-ca" o
 default_env = flow_env(load("default"))
 if any(key.startswith("FLOW_TRUSTED_") for key in default_env):
     fail("default", "no trusted private endpoints unless the operator lists them")
+# Personal connections and review import: plain values in the ConfigMap, the
+# Google client secret only in the Secret, the dev-only base URL never.
+config_data = find(docs, "ConfigMap", "flow")[0].get("data") or {}
+secret_data = find(docs, "Secret", "flow")[0].get("stringData") or {}
+for key, want in {
+    "FLOW_GOOGLE_OAUTH_CLIENT_ID": "google-client.apps.example.com",
+    "FLOW_GOOGLE_CALENDAR_SYNC_INTERVAL": "30m",
+    "FLOW_NOTION_CONNECTION_URL": "https://www.notion.com/connections/flow",
+    "FLOW_REVIEW_IMPORT": "on",
+    "FLOW_REVIEW_IMPORT_INTERVAL": "15m",
+}.items():
+    if config_data.get(key) != want:
+        fail("production-ha", f"ConfigMap {key}={config_data.get(key)!r}, want {want!r}")
+if secret_data.get("FLOW_GOOGLE_OAUTH_CLIENT_SECRET") != "google-secret-value" or "FLOW_GOOGLE_OAUTH_CLIENT_SECRET" in config_data:
+    fail("production-ha", "the Google OAuth client secret belongs in the Secret only")
+for key in default_env:
+    if key.startswith(("FLOW_GOOGLE_", "FLOW_NOTION_", "FLOW_REVIEW_IMPORT", "FLOW_DEV_")):
+        fail("default", f"{key} must not render unless configured")
 
 if failures:
     for failure in failures:

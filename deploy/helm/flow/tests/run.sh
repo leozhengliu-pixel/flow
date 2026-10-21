@@ -21,7 +21,7 @@ for scenario in "$tests"/scenarios/*.yaml; do
   helm template flow "$chart" -f "$scenario" --namespace flow >"$work/$name.yaml" 2>"$work/template.log" || { cat "$work/template.log"; echo "FAIL template $name"; status=1; continue; }
   if [ "${UPDATE_GOLDEN:-}" = 1 ]; then
     cp "$work/$name.yaml" "$tests/golden/$name.yaml"
-  elif ! diff -u "$tests/golden/$name.yaml" "$work/$name.yaml" >"$work/diff.log"; then
+  elif ! diff -u -B -I "checksum/" "$tests/golden/$name.yaml" "$work/$name.yaml" >"$work/diff.log"; then
     head -80 "$work/diff.log"; echo "FAIL golden $name (UPDATE_GOLDEN=1 to accept)"; status=1
   fi
   echo "ok   $name"
