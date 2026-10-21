@@ -48,7 +48,7 @@ export function CodeIntelligencePage({
 
   return (
     <FeatureShell
-      className="feature-ai-settings"
+      className="feature-ai-settings feature-ai-compact"
       title="Code Intelligence"
       description="Allow Flow Agent to analyze and answer questions about your repositories"
       back={{ label: "AI & agents", onClick: onBack }}

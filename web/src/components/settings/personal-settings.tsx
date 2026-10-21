@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import * as Popover from "@radix-ui/react-popover";
 import { toast } from "@/lib/toast";
+import { mcpConnectorsEnabled } from "@/lib/mcp-connectors";
 import { NotificationChannelSettings } from './notification-channel-settings';
 import { PersonalConnectorSettings } from './personal-connectors';
 import { toCredentialCreationOptions, serializeCreationCredential } from '@/lib/webauthn';
@@ -3765,7 +3766,7 @@ function Agents({ data, values, setValue, onNavigate, p }: PersonalProps) {
           </PersonalRow>
         </SettingsGroup>
         <div id="mcp-connectors" ref={mcpAnchor} className={`personal-mcp-anchor${mcpTargeted ? " is-targeted" : ""}`}>
-        {data.workspaceSettings?.mcpConnectorsEnabled ? (
+        {mcpConnectorsEnabled(data.workspaceSettings) ? (
           <PersonalConnectorSettings
             viewerId={data.viewer.id}
             requireApproval={data.workspaceSettings?.allowedMcpConnectors === "approved"}

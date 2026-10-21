@@ -3,11 +3,13 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
+import { fetchAICredits } from '@/lib/ai-credits-api'
 import { makeBootstrap, teammate, viewer } from '@/test/fixtures'
 import type { SpendLimitSettings, WorkspaceMember } from '@/types/flow'
 
 const api = vi.hoisted(() => ({ updateWorkspacePreferences: vi.fn().mockResolvedValue({}) }))
 vi.mock('@/lib/api', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/api')>()), ...api }))
+vi.mock('@/lib/ai-credits-api', () => ({ fetchAICredits: vi.fn() }))
 
 import { UsageSettings } from './usage-settings'
 
@@ -31,12 +33,15 @@ function renderUsage(view?: 'analytics' | 'spend-limits' | 'user-limits' | 'loop
   return { onOpenView, onReload }
 }
 
-beforeEach(() => api.updateWorkspacePreferences.mockClear())
+beforeEach(() => {
+  api.updateWorkspacePreferences.mockClear()
+  vi.mocked(fetchAICredits).mockResolvedValue({ includedMicros: 10_000_000, spentMicros: 510_000, remainingMicros: 9_490_000 })
+})
 
 it('lists credits, automatic reload and spend limits and opens the sub-pages', async () => {
   const { onOpenView } = renderUsage()
   expect(screen.getByRole('heading', { level: 1, name: 'Usage & limits' })).toBeInTheDocument()
-  expect(screen.getByText('$0.00 remaining')).toBeInTheDocument()
+  expect(await screen.findByText('$9.49 remaining')).toBeInTheDocument()
   expect(screen.getByText('No limits set')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Manage' })).toBeDisabled()
   await userEvent.click(screen.getByRole('button', { name: /Usage explorer/ }))

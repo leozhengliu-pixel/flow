@@ -1,9 +1,10 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { updateWorkspaceAgentGuidance, updateWorkspacePreferences } from '@/lib/api'
+import { fetchAICredits } from '@/lib/ai-credits-api'
 import { parseAppRoute, settingsPath, type SettingsPageId } from '@/lib/app-routes'
 import { makeBootstrap } from '@/test/fixtures'
 import type { BootstrapData, WorkspaceSettings } from '@/types/flow'
@@ -12,8 +13,9 @@ import { FeatureSettingsPage } from './feature-settings'
 vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), updateWorkspacePreferences: vi.fn(), updateWorkspaceAgentGuidance: vi.fn() }))
 vi.mock('@/lib/application-agents', async original => ({
   ...await original<typeof import('@/lib/application-agents')>(),
-  listApplications: vi.fn().mockResolvedValue([{ id: 'app1', clientId: 'client1', name: 'Flow QA OAuth app', active: true, allPublicTeams: true, teamIds: [], builtin: false, scopes: [] }]),
+  listApplications: vi.fn().mockResolvedValue([{ id: 'app0', clientId: 'flow-builtin', name: 'Flow', active: true, allPublicTeams: true, teamIds: [], builtin: true, scopes: [] }, { id: 'app1', clientId: 'client1', name: 'Flow QA OAuth app', active: true, allPublicTeams: true, teamIds: [], builtin: false, scopes: [] }]),
 }))
+vi.mock('@/lib/ai-credits-api', () => ({ fetchAICredits: vi.fn() }))
 vi.mock('@/lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 vi.mock('./coding-sessions/use-coding-settings', () => ({
   useCodingStatus: () => ({ status: { codeHosts: [{ codeHost: 'github', hostName: 'github.com', connected: true }] }, loaded: true }),
@@ -23,6 +25,7 @@ const settings = { sessionDurationDays: 30, featureFlags: {}, featureSettings: {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(fetchAICredits).mockResolvedValue({ includedMicros: 10_000_000, spentMicros: 510_000, remainingMicros: 9_490_000 })
   localStorage.setItem('flow:locale', 'en-US')
 })
 
@@ -42,11 +45,13 @@ describe('AI & agents hub', () => {
     const navigate = renderPage('ai')
     expect(screen.getByRole('heading', { level: 1, name: 'AI & agents' })).toBeVisible()
     expect(screen.getAllByRole('heading', { level: 2 }).map(item => item.textContent)).toEqual(['Flow Agent', 'Flow Agent integrations', 'Installed Agents', 'AI'])
-    expect(screen.getByText('$0.00 remaining')).toBeVisible()
+    expect(await screen.findByText('$9.49 remaining')).toBeVisible()
     expect(screen.getByRole('checkbox', { name: 'Enable usage feedback' })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Suggest branch name in prompts' })).toBeChecked()
     expect(await screen.findByText('Flow QA OAuth app')).toBeVisible()
     expect(screen.getByText('Access to all public teams')).toBeVisible()
+    // The built-in Flow agent has its own page; it is not an installed agent with a detail page.
+    expect(screen.queryByText('Flow', { selector: 'strong' })).toBeNull()
 
     const user = userEvent.setup()
     for (const [name, page] of [
@@ -62,6 +67,13 @@ describe('AI & agents hub', () => {
       await user.click(row as HTMLElement)
       expect(navigate).toHaveBeenLastCalledWith(page)
     }
+  })
+
+  it('shows no balance rather than a made-up one when it cannot be read', async () => {
+    vi.mocked(fetchAICredits).mockRejectedValue(new Error('offline'))
+    renderPage('ai')
+    await screen.findByText('Flow QA OAuth app')
+    expect(screen.queryByText(/remaining/)).toBeNull()
   })
 
   it('saves the usage feedback and branch name switches as feature flags', async () => {
@@ -100,6 +112,23 @@ describe('Flow Agent page', () => {
     expect(navigate).toHaveBeenLastCalledWith('ai-updates')
   })
 
+  it('turns MCP connectors on until an admin turns them off, and off in HIPAA mode', async () => {
+    vi.mocked(updateWorkspacePreferences).mockResolvedValue(settings)
+    const neverSet = { ...settings, mcpConnectorsEnabled: false } as WorkspaceSettings
+    const view = (workspaceSettings: WorkspaceSettings) => renderPage('ai-agent', { workspaceSettings })
+    view(neverSet)
+    expect(screen.getByRole('checkbox', { name: 'Enable MCP connectors' })).toBeChecked()
+    await userEvent.setup().click(screen.getByRole('checkbox', { name: 'Enable MCP connectors' }))
+    await waitFor(() => expect(updateWorkspacePreferences).toHaveBeenCalledWith({ mcpConnectors: false }, 'workspace'))
+    cleanup()
+    view({ ...settings, mcpConnectors: false } as WorkspaceSettings)
+    expect(screen.getByRole('checkbox', { name: 'Enable MCP connectors' })).not.toBeChecked()
+    cleanup()
+    view({ ...settings, mcpConnectors: true, hipaaCompliance: true } as WorkspaceSettings)
+    expect(screen.getByRole('checkbox', { name: 'Enable MCP connectors' })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Enable MCP connectors' })).toBeDisabled()
+  })
+
   it('saves the workspace guidance when the field loses focus', async () => {
     vi.mocked(updateWorkspaceAgentGuidance).mockResolvedValue({ instructions: 'Be brief and kind.' })
     renderPage('ai-agent')
@@ -110,6 +139,15 @@ describe('Flow Agent page', () => {
     await user.type(field, 'Be brief and kind.')
     await user.tab()
     await waitFor(() => expect(updateWorkspaceAgentGuidance).toHaveBeenCalledWith('Be brief and kind.'))
+  })
+
+  it('shows who last edited the workspace guidance, and nothing before it was edited', () => {
+    const edited = { ...settings, agentInstructionsEditedById: 'user-1', agentInstructionsEditedAt: new Date(Date.now() - 5 * 60_000).toISOString() } as WorkspaceSettings
+    renderPage('ai-agent', { workspaceSettings: edited })
+    expect(screen.getByTestId('guidance-last-edit')).toHaveTextContent('Last edit by Viewer 5 minutes ago')
+    cleanup()
+    renderPage('ai-agent')
+    expect(screen.queryByTestId('guidance-last-edit')).toBeNull()
   })
 
   it('does not save unchanged guidance', async () => {
@@ -156,6 +194,56 @@ describe('sub-pages', () => {
     const user = userEvent.setup()
     await user.click(screen.getByRole('combobox', { name: 'Assignee is suggested' }))
     expect((await screen.findAllByRole('menuitem')).map(item => item.textContent)).toEqual(['Show', 'Auto-apply', 'Hide'])
+  })
+})
+
+describe('Triage Intelligence value filters', () => {
+  const triage = (valueRules?: unknown[]) => ({ ...settings, featureFlags: { 'triage-intelligence': true }, featureSettings: { triageIntelligence: { assigneeAction: 'suggest', projectAction: 'auto', labelAction: 'suggest', teamAction: 'hide', duplicateAction: 'suggest', relatedAction: 'suggest', ...(valueRules ? { valueRules } : {}) } } }) as unknown as WorkspaceSettings
+
+  it('puts a filter button on the assignee, project, label and team rows only', () => {
+    renderPage('triage-intelligence', { workspaceSettings: triage() })
+    expect(screen.getAllByRole('button', { name: /^Filter by value:/ }).map(item => item.getAttribute('aria-label'))).toEqual([
+      'Filter by value: Assignee is suggested', 'Filter by value: Project is suggested', 'Filter by value: Label is suggested', 'Filter by value: Team is suggested',
+    ])
+  })
+
+  it('adds a rule for a picked value that starts as its row default, and saves it with the settings', async () => {
+    vi.mocked(updateWorkspacePreferences).mockResolvedValue(settings)
+    renderPage('triage-intelligence', { workspaceSettings: triage() })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Filter by value: Project is suggested' }))
+    expect((await screen.findAllByRole('menuitem')).map(item => item.textContent)).toEqual(['Project one'])
+    await user.click(screen.getByRole('menuitem', { name: 'Project one' }))
+    await waitFor(() => expect(updateWorkspacePreferences).toHaveBeenCalledWith(expect.objectContaining({
+      featureSettings: { triageIntelligence: expect.objectContaining({ projectAction: 'auto', valueRules: [{ kind: 'project', value: 'project-1', action: 'auto' }] }) },
+    }), 'workspace'))
+  })
+
+  it('lists the saved rules under their row, changes one and removes one', async () => {
+    const saved = triage([{ kind: 'assignee', value: 'user-2', action: 'hide' }, { kind: 'label', value: 'label-1', action: 'auto' }])
+    vi.mocked(updateWorkspacePreferences).mockResolvedValue(saved)
+    renderPage('triage-intelligence', { workspaceSettings: saved })
+    const user = userEvent.setup()
+    const rule = screen.getByTestId('triage-rule-assignee-user-2')
+    expect(within(rule).getByText('Teammate')).toBeVisible()
+    expect(within(rule).getByRole('combobox')).toHaveTextContent('Hide')
+    expect(within(screen.getByTestId('triage-rule-label-label-1')).getByRole('combobox')).toHaveTextContent('Auto-apply')
+    // The already-ruled value is not offered again.
+    await user.click(screen.getByRole('button', { name: 'Filter by value: Assignee is suggested' }))
+    const offered = await screen.findAllByRole('menuitem')
+    expect(offered).toHaveLength(1)
+    expect(offered[0]).toHaveTextContent('Viewer')
+    await user.keyboard('{Escape}')
+
+    await user.click(within(rule).getByRole('combobox'))
+    await user.click(await screen.findByRole('menuitem', { name: 'Show' }))
+    await waitFor(() => expect(updateWorkspacePreferences).toHaveBeenLastCalledWith(expect.objectContaining({
+      featureSettings: { triageIntelligence: expect.objectContaining({ valueRules: [{ kind: 'assignee', value: 'user-2', action: 'suggest' }, { kind: 'label', value: 'label-1', action: 'auto' }] }) },
+    }), 'workspace'))
+    await user.click(within(screen.getByTestId('triage-rule-label-label-1')).getByRole('button', { name: /^Remove rule/ }))
+    await waitFor(() => expect(updateWorkspacePreferences).toHaveBeenLastCalledWith(expect.objectContaining({
+      featureSettings: { triageIntelligence: expect.objectContaining({ valueRules: [{ kind: 'assignee', value: 'user-2', action: 'hide' }] }) },
+    }), 'workspace'))
   })
 })
 

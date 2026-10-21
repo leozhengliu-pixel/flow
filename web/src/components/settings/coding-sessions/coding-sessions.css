@@ -12,6 +12,10 @@
 .cs-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .cs-header > div { min-width: 0; }
 .cs-header-link { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; height: 24px; margin: 36px -6px 0 0; padding: 0 6px 0 8px; border: 1px solid transparent; border-radius: 9999px; background: none; color: var(--text-body); font: 500 12px var(--font); cursor: pointer; }
+/* Dark theme: the reference app's "Manage credits" link and empty-state text use these two greys. */
+:root:not([data-theme="light"]) .cs-header-link { color: var(--settings-text-soft); }
+:root:not([data-theme="light"]) .cs-header-link:hover { color: var(--text-strong); }
+:root:not([data-theme="light"]) .cs-empty-text { color: var(--settings-text-muted) !important; line-height: normal !important; }
 .cs-header-link:hover { background: var(--theme-surface-hover); color: var(--text-strong); }
 .cs-header-link:focus-visible, .cs-text-button:focus-visible, .cs-icon-button:focus-visible, .cs-inline-link:focus-visible { outline: 0; box-shadow: 0 0 0 2px var(--focus-ring); border-radius: 6px; }
 .cs-row-warning { display: inline-flex !important; align-items: center; gap: 4px; }

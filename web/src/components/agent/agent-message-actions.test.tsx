@@ -17,6 +17,8 @@ vi.mock('@/lib/toast', () => toasts)
 
 import { AgentPage } from './agent-page'
 import { AgentReplyActions, AgentUserMessageActions } from './agent-message-actions'
+import { AgentChatMenu } from './agent-chat-actions'
+import { ApplicationStoreContext } from '@/store/application-store-contexts'
 
 const question: AgentMessage = {
   id: 'reply', role: 'assistant', content: 'Which priority should the issue have?', createdAt: '2026-10-12T00:00:01Z',
@@ -53,6 +55,29 @@ describe('agent reply and message actions', () => {
     await user.click(pressed)
     expect(api.updateAgentMessageFeedback).toHaveBeenLastCalledWith('session-q', 'reply', { rating: '' })
     expect(screen.getByRole('button', { name: 'This was helpful' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('hides the thumbs and "Leave feedback…" while usage feedback is off, keeping Copy message', async () => {
+    const user = userEvent.setup()
+    const store = (flag?: boolean) => ({ data: null, session: null, account: null, userSettings: undefined, workspaceSettings: { featureFlags: flag === undefined ? {} : { 'usage-feedback': flag } } as never })
+    const { rerender } = render(<I18nProvider><ApplicationStoreContext.Provider value={store(false)}><AgentReplyActions content="Answer" message={{ id: 'reply' }} sessionId="session-q"/></ApplicationStoreContext.Provider></I18nProvider>)
+    expect(screen.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Copy message'])
+    expect(api.updateAgentMessageFeedback).not.toHaveBeenCalled()
+    // Never set, or on: the controls are there.
+    for (const flag of [undefined, true]) {
+      rerender(<I18nProvider><ApplicationStoreContext.Provider value={store(flag)}><AgentReplyActions content="Answer" message={{ id: 'reply' }} sessionId="session-q"/></ApplicationStoreContext.Provider></I18nProvider>)
+      expect(screen.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['This was helpful', 'Leave feedback…', 'Copy message'])
+    }
+    // The chat menu offers "Leave feedback…" only while it is on.
+    const menu = (flag: boolean) => <I18nProvider><ApplicationStoreContext.Provider value={store(flag)}><AgentChatMenu onCopy={vi.fn()} onDelete={vi.fn()} onFeedback={vi.fn()} onRename={vi.fn()}/></ApplicationStoreContext.Provider></I18nProvider>
+    rerender(menu(false))
+    await user.click(screen.getByRole('button', { name: 'Chat options' }))
+    expect(screen.getByRole('menuitem', { name: /Copy as markdown/ })).toBeVisible()
+    expect(screen.queryByRole('menuitem', { name: /Leave feedback/ })).toBeNull()
+    await user.keyboard('{Escape}')
+    rerender(menu(true))
+    await user.click(screen.getByRole('button', { name: 'Chat options' }))
+    expect(screen.getByRole('menuitem', { name: /Leave feedback/ })).toBeVisible()
   })
 
   it('keeps the previous rating when saving fails', async () => {
