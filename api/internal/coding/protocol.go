@@ -276,6 +276,12 @@ type CredentialRequest struct {
 	Host     string `json:"host"`
 	Path     string `json:"path,omitempty"`
 	Purpose  string `json:"purpose"` // git | cli
+	// Rejected reports a credential the code host refused (git's credential
+	// helper "erase"); Fingerprint is its hex SHA-256, never the value. Flow
+	// drops its current credential when it is that one and the host confirms
+	// it is no longer valid, so the runner's single retry gets a fresh one.
+	Rejected    bool   `json:"rejected,omitempty"`
+	Fingerprint string `json:"fingerprint,omitempty"`
 }
 
 // CredentialResponse is the minted short-lived credential.

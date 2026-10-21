@@ -11,6 +11,8 @@ package codehost
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -102,6 +104,24 @@ type Credential struct {
 	RevokeID  string    `json:"-"`
 	// CLIEnv is the env for gh/glab (GH_TOKEN/GH_HOST or GITLAB_TOKEN/GITLAB_HOST).
 	CLIEnv map[string]string `json:"cliEnv,omitempty"`
+}
+
+// CredentialInvalidator is implemented by hosts whose minted credentials can
+// go stale before their expiry (GitLab project tokens: rotated or revoked).
+// git reports a credential the host rejected through the helper's "erase";
+// fingerprint is CredentialFingerprint of the rejected password. The host
+// drops its current credential for the request only when the fingerprint
+// matches it and the host confirms it is no longer valid, so the next mint
+// returns a fresh one. dropped reports whether it did.
+type CredentialInvalidator interface {
+	InvalidateCredential(ctx context.Context, request CredentialRequest, fingerprint string) (dropped bool, err error)
+}
+
+// CredentialFingerprint identifies a credential value without revealing it
+// (hex SHA-256; logs use its first 12 characters).
+func CredentialFingerprint(password string) string {
+	sum := sha256.Sum256([]byte(password))
+	return hex.EncodeToString(sum[:])
 }
 
 // UserIdentity is the requesting Flow user's identity on the host.

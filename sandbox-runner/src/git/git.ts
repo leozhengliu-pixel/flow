@@ -45,6 +45,18 @@ export class BranchNotFoundError extends Error {
   }
 }
 
+/**
+ * True when preparing the workspace failed because the code host refused
+ * the credentials (e.g. GitLab's "HTTP Basic: Access denied", 401/403), not
+ * because a branch is missing: the session fails with noCodeAccess.
+ */
+export function isRemoteAuthFailure(error: unknown): boolean {
+  if (error instanceof BranchNotFoundError) return false
+  if (error instanceof RemoteQueryError) return error.kind === 'auth'
+  if (error instanceof CommandError) return /^git\b/.test(error.command) && !error.result.timedOut && classifyRemoteFailure(error.result.stderr) === 'auth'
+  return false
+}
+
 /** Classifies a failed git network command from its stderr. */
 export function classifyRemoteFailure(stderr: string, timedOut = false): RemoteFailure {
   if (/authentication failed|could not read (username|password)|terminal prompts disabled|invalid username or password|returned error: 40[13]|http(\/[\d.]+)? 40[13]|permission denied|access denied|repository not found|not authorized|bad credentials/i.test(stderr)) return 'auth'
@@ -159,14 +171,28 @@ export class Git {
     return ['-c', 'credential.helper=', '-c', `credential.helper=${this.credentialHelper}`, '-c', 'credential.useHttpPath=true']
   }
 
+  /**
+   * Runs a git network command, retrying it once when the host rejected the
+   * credential: git's credential "erase" has already told Flow, which drops a
+   * token the host confirms is dead (e.g. rotated or revoked by another Flow
+   * replica), so the retry's "get" receives a fresh one. Never more than one
+   * retry; other failures are returned as they are.
+   */
+  private async network(args: string[], options: RunOptions): Promise<RunResult> {
+    const first = await this.runImpl('git', args, { ...options, check: false })
+    if (first.code === 0 || first.timedOut || classifyRemoteFailure(first.stderr) !== 'auth') return first
+    return this.runImpl('git', args, { ...options, check: false })
+  }
+
+  private repoNetwork(args: string[], options: RunOptions = {}): Promise<RunResult> {
+    return this.network(args, { cwd: this.repoDir, env: this.env, timeoutMs: 10 * 60_000, ...options })
+  }
+
   async clone(cloneUrl: string, onLine?: RunOptions['onLine']): Promise<void> {
     const parent = this.repoDir.replace(/\/[^/]+\/?$/, '') || '/'
-    await this.runImpl('git', [...this.helperArgs(), 'clone', '--no-tags', '--progress', cloneUrl, this.repoDir], {
-      cwd: parent,
-      env: this.env,
-      timeoutMs: 30 * 60_000,
-      onLine,
-    })
+    const args = [...this.helperArgs(), 'clone', '--no-tags', '--progress', cloneUrl, this.repoDir]
+    const result = await this.network(args, { cwd: parent, env: this.env, timeoutMs: 30 * 60_000, onLine })
+    if (result.code !== 0) throw new CommandError(`git ${args.join(' ')}`, result)
   }
 
   async isRepo(): Promise<boolean> {
@@ -209,7 +235,8 @@ export class Git {
   }
 
   async fetch(): Promise<void> {
-    await this.git(['fetch', '--no-tags', '--prune', 'origin'], { timeoutMs: 15 * 60_000 })
+    const result = await this.repoNetwork(['fetch', '--no-tags', '--prune', 'origin'], { timeoutMs: 15 * 60_000 })
+    if (result.code !== 0) throw new CommandError('git fetch --no-tags --prune origin', result)
   }
 
   /**
@@ -219,7 +246,7 @@ export class Git {
    * RemoteQueryError.
    */
   async remoteBranchHead(branch: string): Promise<string | undefined> {
-    const result = await this.git([...this.helperArgs(), 'ls-remote', '--exit-code', '--heads', 'origin', `refs/heads/${branch}`], { check: false, timeoutMs: 2 * 60_000 })
+    const result = await this.repoNetwork([...this.helperArgs(), 'ls-remote', '--exit-code', '--heads', 'origin', `refs/heads/${branch}`], { timeoutMs: 2 * 60_000 })
     if (result.code === 0) {
       const sha = result.stdout
         .split('\n')
@@ -257,7 +284,7 @@ export class Git {
     let checkout: BranchCheckout
     if (remote) {
       if ((await this.revParse(`refs/remotes/origin/${branch}`)) !== remote) {
-        const fetched = await this.git([...this.helperArgs(), 'fetch', '--no-tags', 'origin', `+refs/heads/${branch}:refs/remotes/origin/${branch}`], { check: false, timeoutMs: 15 * 60_000 })
+        const fetched = await this.repoNetwork([...this.helperArgs(), 'fetch', '--no-tags', 'origin', `+refs/heads/${branch}:refs/remotes/origin/${branch}`], { timeoutMs: 15 * 60_000 })
         if (fetched.code !== 0) throw new RemoteQueryError(classifyRemoteFailure(fetched.stderr, fetched.timedOut), branch, fetched.stderr.trim().slice(-1000))
       }
       if (local && local !== remote && !(await this.isAncestor(local, remote))) {
@@ -340,7 +367,8 @@ export class Git {
     const args = [...this.helperArgs(), 'push', '--porcelain']
     if (options.forceWithLease) args.push('--force-with-lease')
     args.push('origin', `HEAD:refs/heads/${branch}`)
-    await this.git(args, { timeoutMs: 15 * 60_000 })
+    const result = await this.repoNetwork(args, { timeoutMs: 15 * 60_000 })
+    if (result.code !== 0) throw new CommandError(`git ${args.join(' ')}`, result)
   }
 
   async diffSummary(base: string): Promise<CodingDiffSummary[]> {

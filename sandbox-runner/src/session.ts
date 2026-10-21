@@ -7,7 +7,7 @@ import { CliEnvRefresher } from './cli-env.js'
 import type { RunnerConfig } from './config.js'
 import { baseEnv, mcpCommand, runnerGuidance, writeRuntimeInfo } from './environment.js'
 import { EventBuffer } from './event-buffer.js'
-import { checkBranchAllowed, commitMessage, isSigningFailure, summaryTitle, type Git } from './git/git.js'
+import { checkBranchAllowed, commitMessage, isRemoteAuthFailure, isSigningFailure, summaryTitle, type Git } from './git/git.js'
 import { resumeFailed, type HarnessAdapter, type HarnessContext } from './harness/types.js'
 import { errorMessage, silentLogger, type Logger } from './log.js'
 import { EventFactory, harnessError, type TurnOutcome } from './mapping/common.js'
@@ -362,7 +362,10 @@ export class Session {
       if (error instanceof AuthError) throw error
       const message = error instanceof SetupError ? error.message : `Workspace preparation failed: ${errorMessage(error)}`
       const tail = error instanceof SetupError ? error.logTail : error instanceof CommandError ? error.result.stderr.slice(-2000) : ''
-      const detail: ErrorDetail = { code: 'environmentSetupFailed', message: tail ? `${message}\n\n${tail}` : message }
+      // A refused credential is an access problem, never "branch not found" or a generic setup failure.
+      const code = isRemoteAuthFailure(error) ? 'noCodeAccess' : 'environmentSetupFailed'
+      const lead = code === 'noCodeAccess' ? `The code host rejected Flow's repository credentials while preparing the workspace. ${message}` : message
+      const detail: ErrorDetail = { code, message: tail ? `${lead}\n\n${tail}` : lead }
       this.logger.error('setup failed', { error: message })
       this.buffer.push(this.events.error(detail))
       if (this.bootstrap.turn) {

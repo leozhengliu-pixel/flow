@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, chmodSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import {
+  credentialFingerprint,
   credentialRequest,
   formatCredentialOutput,
   parseCredentialInput,
@@ -56,6 +57,26 @@ test('runCredentialHelper only answers get', async () => {
   assert.equal(await runCredentialHelper('erase', 'protocol=https\nhost=github.com\n', deps), '')
   assert.equal(await runCredentialHelper('get', 'protocol=https\nhost=gitlab.com\npath=g/p.git\n', deps), 'username=oauth2\npassword=tok\n')
   assert.deepEqual(calls, [{ protocol: 'https', host: 'gitlab.com', path: 'g/p.git', purpose: 'git' }])
+})
+
+test('erase reports the rejected credential to Flow by fingerprint, never by value', async () => {
+  const calls: CredentialRequest[] = []
+  const deps = {
+    credentials: async (request: CredentialRequest) => {
+      calls.push(request)
+      return { username: '', password: '', expiresAt: '' }
+    },
+  }
+  const out = await runCredentialHelper('erase', 'protocol=https\nhost=gitlab.example.com\npath=acme/app.git\nusername=flow-cs\npassword=glpat-rejected\n', deps)
+  assert.equal(out, '')
+  assert.equal(calls.length, 1)
+  assert.deepEqual(calls[0], { protocol: 'https', host: 'gitlab.example.com', path: 'acme/app.git', purpose: 'git', rejected: true, fingerprint: credentialFingerprint('glpat-rejected') })
+  assert.match(calls[0].fingerprint ?? '', /^[0-9a-f]{64}$/)
+  assert.ok(!JSON.stringify(calls).includes('glpat-rejected'), 'the value never leaves the sandbox')
+  // Nothing to report without a password or for a non-http(s) URL.
+  await runCredentialHelper('erase', 'protocol=https\nhost=gitlab.example.com\n', deps)
+  await runCredentialHelper('erase', 'protocol=ssh\nhost=gitlab.example.com\npassword=x\n', deps)
+  assert.equal(calls.length, 1)
 })
 
 test('parseSignArgs recognizes git ssh and gpg invocations', () => {

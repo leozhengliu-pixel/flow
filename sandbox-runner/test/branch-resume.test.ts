@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { BranchNotFoundError, classifyRemoteFailure, Git, RemoteQueryError, type Runner } from '../src/git/git.js'
+import { BranchNotFoundError, classifyRemoteFailure, Git, isRemoteAuthFailure, RemoteQueryError, type Runner } from '../src/git/git.js'
+import { run } from '../src/process.js'
 import type { BootstrapRepo } from '../src/protocol.js'
 import { sh, tempDir } from './helpers.js'
 
@@ -309,6 +310,116 @@ test('resume: an unconfirmed existing branch is not recovered on auth, network o
     }
     // A confirmed existing branch that is gone still fails.
     await assert.rejects(git.checkoutSessionBranch({ ...f.repo, existingBranch: true }), BranchNotFoundError)
+  } finally {
+    f.cleanup()
+  }
+})
+
+// GitLab answers a stale or revoked token with "HTTP Basic: Access denied"
+// (git exit 128). That is an auth failure (session error noCodeAccess),
+// never "the branch does not exist"; the operation is retried exactly once,
+// after git's credential "erase" let Flow drop the dead token.
+const DENIED =
+  "remote: HTTP Basic: Access denied. If a password was provided for Git authentication, the password was incorrect or you're required to use a token instead of a password.\nfatal: Authentication failed for 'https://gitlab.example.com/acme/app.git/'"
+
+/** The real runner, except that the first `deny` ls-remote calls are refused by the host. */
+function deniedFirst(deny: number): Runner {
+  return async (command, args, options) => {
+    if (args.includes('ls-remote') && deny-- > 0) return { code: 128, stdout: '', stderr: DENIED, timedOut: false }
+    return run(command, args, options)
+  }
+}
+
+test('resume: GitLab "HTTP Basic: Access denied" is an auth failure, retried once, never branch-not-found', async () => {
+  const f = fixture()
+  try {
+    const git = await f.clone('repo')
+    assert.equal(classifyRemoteFailure(DENIED), 'auth')
+    assert.equal(classifyRemoteFailure('fatal: unable to access: The requested URL returned error: 403'), 'auth')
+    for (const repo of [
+      { ...f.repo, existingBranch: false },
+      { ...f.repo, existingBranch: true },
+      { ...f.repo, existingBranch: true, branchUnconfirmed: true },
+    ]) {
+      const calls: string[][] = []
+      const fakeRun: Runner = async (_command, args) => {
+        calls.push(args)
+        if (args.includes('ls-remote')) return { code: 128, stdout: '', stderr: DENIED, timedOut: false }
+        return { code: 0, stdout: '', stderr: '', timedOut: false }
+      }
+      const fake = new Git({ repoDir: git.repoDir, env: f.env, credentialHelper: 'h', signProgram: 's', run: fakeRun })
+      const error = await fake.checkoutSessionBranch(repo).then(
+        () => undefined,
+        (e: unknown) => e,
+      )
+      assert.ok(error instanceof RemoteQueryError && error.kind === 'auth' && !(error instanceof BranchNotFoundError), `auth failure for ${JSON.stringify(repo)}`)
+      assert.equal(isRemoteAuthFailure(error), true)
+      assert.equal(calls.filter((args) => args.includes('ls-remote')).length, 2, 'one retry, no more')
+      assert.ok(!calls.some((args) => args.includes('checkout')), 'nothing checked out')
+    }
+    assert.equal(isRemoteAuthFailure(new BranchNotFoundError('flow/x')), false)
+    assert.equal(isRemoteAuthFailure(new RemoteQueryError('network', 'flow/x', '')), false)
+  } finally {
+    f.cleanup()
+  }
+})
+
+test('resume: after one rejected token the retry continues on the original branch (pushed or unpushed)', async () => {
+  const f = fixture()
+  try {
+    // Pushed branch (with or without its MR): origin has it; the first query
+    // hits a dead token, the retry sees the branch and checks it out.
+    const other = await f.clone('other')
+    await other.checkoutSessionBranch(f.repo)
+    writeFileSync(join(other.repoDir, 'theirs.txt'), 't\n')
+    const pushed = await other.commitAll('Pushed\n', identity)
+    await other.push('flow/x')
+    const fresh = await f.clone('fresh')
+    const retried = new Git({ repoDir: fresh.repoDir, env: f.env, credentialHelper: 'h', signProgram: 's', run: deniedFirst(1) })
+    const result = await retried.checkoutSessionBranch({ ...f.repo, existingBranch: true })
+    assert.equal(result.source, 'remote')
+    assert.equal(await retried.head(), pushed)
+    assert.equal(f.in(retried.repoDir, ['symbolic-ref', '--short', 'HEAD']), 'flow/x')
+    // Unpushed branch: the retry gets the host's "no such branch"; the branch starts from the exact baseline.
+    const unpushed = await f.clone('unpushed')
+    const again = new Git({ repoDir: unpushed.repoDir, env: f.env, credentialHelper: 'h', signProgram: 's', run: deniedFirst(1) })
+    const created = await again.checkoutSessionBranch({ ...f.repo, branchName: 'flow/new', baseSha: f.baseline })
+    assert.equal(created.source, 'created')
+    assert.equal(created.base, f.baseline)
+    assert.equal(remoteHas(f, 'flow/new'), false)
+  } finally {
+    f.cleanup()
+  }
+})
+
+test('clone and push retry once on a rejected credential; other failures are not retried', async () => {
+  const f = fixture()
+  try {
+    const attempts: Record<string, number> = {}
+    const scripted =
+      (outcomes: Record<string, Array<{ code: number; stderr: string }>>): Runner =>
+      async (_command, args) => {
+        const op = ['clone', 'push'].find((name) => args.includes(name)) ?? 'other'
+        attempts[op] = (attempts[op] ?? 0) + 1
+        const next = outcomes[op]?.shift() ?? { code: 0, stderr: '' }
+        return { code: next.code, stdout: '', stderr: next.stderr, timedOut: false }
+      }
+    const repoDir = join(f.root, 'workspace', 'cloned')
+    const opts = { repoDir, env: f.env, credentialHelper: 'h', signProgram: 's' }
+    await new Git({ ...opts, run: scripted({ clone: [{ code: 128, stderr: DENIED }] }) }).clone(f.origin)
+    assert.equal(attempts.clone, 2)
+    const error = await new Git({ ...opts, run: scripted({ clone: [{ code: 128, stderr: DENIED }, { code: 128, stderr: DENIED }] }) })
+      .clone(f.origin)
+      .then(
+        () => undefined,
+        (e: unknown) => e,
+      )
+    assert.equal(attempts.clone, 4, 'at most one retry')
+    assert.equal(isRemoteAuthFailure(error), true)
+    await assert.rejects(new Git({ ...opts, run: scripted({ push: [{ code: 128, stderr: 'fatal: unable to access: Could not resolve host: gitlab.example.com' }] }) }).push('flow/x'))
+    assert.equal(attempts.push, 1, 'a network failure is not retried here')
+    await new Git({ ...opts, run: scripted({ push: [{ code: 128, stderr: DENIED }] }) }).push('flow/x')
+    assert.equal(attempts.push, 3)
   } finally {
     f.cleanup()
   }

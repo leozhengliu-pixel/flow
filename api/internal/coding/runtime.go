@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -524,6 +525,9 @@ func (s *Service) Credentials(ctx context.Context, token string, request Credent
 		if request.Protocol != "" && request.Protocol != "https" && request.Protocol != "http" {
 			return CredentialResponse{}, ErrForbidden
 		}
+		if request.Rejected {
+			return CredentialResponse{}, nil // the relay re-reads the credential on every request
+		}
 		return s.relayCredential(ctx, token, grant, request, relayPath)
 	}
 	if request.Protocol != "" && request.Protocol != "https" {
@@ -547,7 +551,21 @@ func (s *Service) Credentials(ctx context.Context, token string, request Credent
 	// credential. A creator's own token never reaches the sandbox; their
 	// pushes go through the git relay (git_relay.go), which adds it server
 	// side. A done session never gets here (sessionFor returns ErrGone).
-	credential, err := host.MintCredential(ctx, codehost.CredentialRequest{WorkspaceKey: session.WorkspaceKey, SessionID: session.ID, SandboxID: grant.SandboxID, Repo: codehost.RepoRef{CodeHost: session.CodeHost, HostName: session.HostName, FullName: session.Repository}, Access: access})
+	hostRequest := codehost.CredentialRequest{WorkspaceKey: session.WorkspaceKey, SessionID: session.ID, SandboxID: grant.SandboxID, Repo: codehost.RepoRef{CodeHost: session.CodeHost, HostName: session.HostName, FullName: session.Repository}, Access: access}
+	if request.Rejected {
+		// git's "erase": the host refused the credential. Only the current
+		// credential, and only when the host confirms it is dead, is dropped;
+		// nothing is minted here (the runner retries once with "get").
+		if invalidator, ok := host.(codehost.CredentialInvalidator); ok {
+			dropped, err := invalidator.InvalidateCredential(ctx, hostRequest, request.Fingerprint)
+			if err != nil {
+				slog.Warn("coding credential invalidation failed", "session", session.ID, "sandbox", grant.SandboxID, "error", err)
+			}
+			slog.Info("coding credential rejected by the code host", "session", session.ID, "sandbox", grant.SandboxID, "fingerprint", shortFingerprint(request.Fingerprint), "dropped", dropped)
+		}
+		return CredentialResponse{}, nil
+	}
+	credential, err := host.MintCredential(ctx, hostRequest)
 	if err != nil {
 		return CredentialResponse{}, err
 	}
@@ -556,6 +574,15 @@ func (s *Service) Credentials(ctx context.Context, token string, request Credent
 		response.CLIEnv = credential.CLIEnv
 	}
 	return response, nil
+}
+
+// shortFingerprint is the loggable prefix of a credential fingerprint.
+func shortFingerprint(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) > 12 {
+		value = value[:12]
+	}
+	return value
 }
 
 // Sign signs a commit payload with the session creator's key through the

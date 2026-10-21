@@ -80,6 +80,9 @@ type Host struct {
 
 	mu     sync.RWMutex
 	source ConnectionSource
+	// shared/sharedLock: the project tokens every replica serves (SetSharedTokens).
+	shared     SharedTokenStore
+	sharedLock TokenLocker
 
 	tokens *tokenCache
 }

@@ -1378,6 +1378,13 @@ draft merge request itself, so the sandbox token never needs to create one.
   (or higher) on each project. On GitLab.com, project access tokens need the
   **Premium or Ultimate** tier; self-managed GitLab offers them on every tier.
   Without these, sessions fail with `noCodeAccess` and explain what is missing.
+  With more than one Flow replica, set `FLOW_CONNECTOR_SECRET_KEY` (and Redis):
+  every replica then serves the session's current token from the encrypted
+  store, minting is serialized across replicas, and a stop on any replica
+  revokes it for all of them. Without the key the token is kept per process,
+  which is only correct with a single replica (Flow logs a warning). When
+  GitLab rejects a token, the sandbox's git reports it, Flow drops it once
+  GitLab confirms it is no longer active, and git retries the operation once.
 - `oauth`: sandboxes get the workspace's GitLab OAuth access token (about 2
   hours; Flow refreshes it with `FLOW_INTEGRATION_GITLAB_TOKEN_URL`). It is not
   limited to one project.

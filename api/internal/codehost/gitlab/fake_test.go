@@ -128,6 +128,10 @@ func (f *fakeGitLab) serve(w http.ResponseWriter, r *http.Request) {
 			f.bodies[key] = append(f.bodies[key], body)
 		}
 	}
+	if strings.Contains(path, ".git/") {
+		f.serveGit(w, r, path)
+		return
+	}
 	token := r.Header.Get("PRIVATE-TOKEN")
 	if bearer := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "); bearer != "" && token == "" {
 		token = bearer
@@ -194,6 +198,39 @@ func (f *fakeGitLab) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.serveProject(w, r, project, sub, query)
+}
+
+// serveGit is GitLab's git smart-HTTP auth check: HTTP Basic with an active
+// project access token of that project, else 401 "HTTP Basic: Access denied"
+// (what git prints before exiting 128).
+func (f *fakeGitLab) serveGit(w http.ResponseWriter, r *http.Request, path string) {
+	repo, _, _ := strings.Cut(strings.TrimPrefix(path, "/"), ".git/")
+	project := f.projects[repo]
+	_, password, ok := r.BasicAuth()
+	if project != nil && ok {
+		for _, token := range project.Tokens {
+			if token.Active && token.Token == password {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		}
+	}
+	w.Header().Set("WWW-Authenticate", `Basic realm="GitLab"`)
+	w.WriteHeader(http.StatusUnauthorized)
+	_, _ = w.Write([]byte("HTTP Basic: Access denied"))
+}
+
+// gitStatus is the status of a git ls-remote (info/refs) with credential.
+func (f *fakeGitLab) gitStatus(t *testing.T, credential codehost.Credential) int {
+	t.Helper()
+	request, _ := http.NewRequest(http.MethodGet, f.URL+"/acme/platform/api.git/info/refs?service=git-upload-pack", nil)
+	request.SetBasicAuth(credential.Username, credential.Password)
+	resp, err := f.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	return resp.StatusCode
 }
 
 func (f *fakeGitLab) sortedProjects() []*fakeProject {
@@ -334,6 +371,13 @@ func (f *fakeGitLab) serveTokens(w http.ResponseWriter, r *http.Request, project
 		token := &fakeToken{ID: id, Name: old.Name, Token: fmt.Sprintf("glpat-project-%d", id), Active: true, Scopes: old.Scopes, Level: old.Level, ExpiresAt: f.body(r)["expires_at"].(string), CreatedAt: time.Now().UTC()}
 		project.Tokens = append(project.Tokens, token)
 		write(w, http.StatusOK, tokenJSON(token, true))
+	case len(segments) == 2 && r.Method == http.MethodGet:
+		token := find(segments[1])
+		if token == nil {
+			write(w, http.StatusNotFound, map[string]any{"message": "404 Not Found"})
+			return
+		}
+		write(w, http.StatusOK, tokenJSON(token, false))
 	case len(segments) == 2 && r.Method == http.MethodDelete:
 		token := find(segments[1])
 		if token == nil || !token.Active {
@@ -421,7 +465,7 @@ type fakeSource struct {
 }
 
 func (s *fakeSource) GitLabConnections(context.Context, string) ([]Connection, error) {
-	return s.connections, nil
+	return append([]Connection(nil), s.connections...), nil // a fresh slice, as the server's source builds
 }
 
 func (s *fakeSource) GitLabAPIToken(_ context.Context, _, id string) (string, error) {

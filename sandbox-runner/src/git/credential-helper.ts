@@ -1,10 +1,12 @@
+import { createHash } from 'node:crypto'
 import type { CredentialRequest, CredentialResponse } from '../protocol.js'
 
 // git credential helper (`credential.helper=/opt/flow/bin/flow-git-credential`).
 // git runs `<helper> get|store|erase` with `key=value` lines on stdin
 // (gitcredentials(7)). For `get` we ask Flow for a short-lived token
-// (POST /credentials {purpose:"git"}); `store` and `erase` are no-ops because
-// nothing is persisted in the sandbox. git asks again for every operation,
+// (POST /credentials {purpose:"git"}); `erase` reports a rejected token to
+// Flow (fingerprint only); `store` is a no-op because nothing is persisted
+// in the sandbox. git asks again for every operation,
 // so an expired GitHub installation token is refreshed transparently. For
 // Flow's git relay URL (origin's push URL when the session pushes as its
 // creator) Flow answers with an opaque placeholder; the relay adds the
@@ -59,8 +61,26 @@ export interface CredentialHelperDeps {
   credentials: (request: CredentialRequest) => Promise<CredentialResponse>
 }
 
-/** Runs one helper invocation and returns what to print on stdout. */
+/** Hex SHA-256 of a credential value: how a rejected credential is named to Flow (never the value). */
+export function credentialFingerprint(password: string): string {
+  return createHash('sha256').update(password, 'utf8').digest('hex')
+}
+
+/**
+ * Runs one helper invocation and returns what to print on stdout. `erase` is
+ * git reporting that the host rejected the credential we gave it (HTTP 401):
+ * Flow is told which one (by fingerprint) so it drops it when the host
+ * confirms it is dead, and the caller's single retry gets a fresh one.
+ * `store` is a no-op: nothing is persisted in the sandbox.
+ */
 export async function runCredentialHelper(action: string, stdinText: string, deps: CredentialHelperDeps): Promise<string> {
+  if (action === 'erase') {
+    const input = parseCredentialInput(stdinText)
+    const request = credentialRequest(input)
+    if (!request || !input.password) return ''
+    await deps.credentials({ ...request, rejected: true, fingerprint: credentialFingerprint(input.password) })
+    return ''
+  }
   if (action !== 'get') return ''
   const request = credentialRequest(parseCredentialInput(stdinText))
   if (!request) return ''
