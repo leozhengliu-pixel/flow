@@ -20,7 +20,7 @@ export function issuePromptInput(issue:Issue,data:BootstrapData|undefined,url:st
 
 /** "Copy as prompt": the viewer's prompt template (the reference app's by default) filled in for the issue. */
 export function issueWorkPrompt(issue:Issue,data:BootstrapData|undefined,url:string) {
-  return renderCodingPrompt(data?.userSettings?.[data.viewer.id]?.codingPromptTemplate,issuePromptInput(issue,data,url))
+  return renderCodingPrompt(data?.userSettings?.[data.viewer.id]?.codingPromptTemplate,issuePromptInput(issue,data,url),{omitBranchName:data?.workspaceSettings?.featureFlags?.['suggest-branch-name']===false})
 }
 
 /**

@@ -330,6 +330,11 @@ func (s *server) updateWorkspacePreferences(w http.ResponseWriter, r *http.Reque
 		if len(triageIntelligence.WorkspaceGuidance) > 8000 {
 			return errInvalid
 		}
+		input.FeatureSettings.InitiativeUpdateGuidance = strings.TrimSpace(input.FeatureSettings.InitiativeUpdateGuidance)
+		input.FeatureSettings.ProjectUpdateGuidance = strings.TrimSpace(input.FeatureSettings.ProjectUpdateGuidance)
+		if len(input.FeatureSettings.InitiativeUpdateGuidance) > 8000 || len(input.FeatureSettings.ProjectUpdateGuidance) > 8000 {
+			return fmt.Errorf("%w: update guidance is limited to 8000 characters", errInvalid)
+		}
 		input.FeatureSettings.CustomerExcludedDomains = normalizedCustomerSources(input.FeatureSettings.CustomerExcludedDomains)
 		input.FeatureSettings.CustomerGenericDomains = normalizedCustomerSources(input.FeatureSettings.CustomerGenericDomains)
 		applyCustomerExclusionChanges(data, data.WorkspaceSettings.FeatureSettings.CustomerExcludedDomains, input.FeatureSettings.CustomerExcludedDomains, time.Now().UTC())

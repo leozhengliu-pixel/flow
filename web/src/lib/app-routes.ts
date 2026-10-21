@@ -69,6 +69,12 @@ export type SettingsPageId =
   | "project-statuses"
   | "project-updates"
   | "ai"
+  | "ai-agent"
+  | "code-intelligence"
+  | "triage-intelligence"
+  | "ai-summaries"
+  | "ai-updates"
+  | "installed-agents"
   | "loops"
   | "coding-sessions"
   | "coding-environments"
@@ -422,6 +428,23 @@ const TEAM_ARCHIVE_TABS = new Set<TeamArchiveTab>([
   "recently-deleted-releases",
 ]);
 
+/** `/settings/ai/<segment>` → the page it shows. */
+const AI_SUBPAGE_SEGMENTS: Record<string, SettingsPageId> = {
+  agent: "ai-agent",
+  "code-intelligence": "code-intelligence",
+  triage: "triage-intelligence",
+  summaries: "ai-summaries",
+  updates: "ai-updates",
+};
+const AI_SUBPAGE_PATHS: Partial<Record<SettingsPageId, string>> = {
+  "ai-agent": "ai/agent",
+  "code-intelligence": "ai/code-intelligence",
+  "triage-intelligence": "ai/triage",
+  "ai-summaries": "ai/summaries",
+  "ai-updates": "ai/updates",
+  "installed-agents": "agents",
+};
+
 /**
  * Settings URLs that the reference app uses for pages Flow keeps elsewhere.
  * Returns the canonical settings segments, or undefined when no alias applies.
@@ -431,6 +454,10 @@ function settingsAlias(rest: string[]): string[] | undefined {
   // coding sessions (track F): `environments` (legacy page, redirects) and `environments/:id|new` (editor).
   if (first === "ai" && second === "coding-sessions")
     return third === "environments" && rest.length <= 4 ? ["coding-environments"] : rest.length === 2 ? ["coding-sessions"] : undefined;
+  // Settings › AI & agents sub-pages and the workspace Agents page.
+  if (first === "ai" && rest.length === 2 && second && Object.hasOwn(AI_SUBPAGE_SEGMENTS, second))
+    return [AI_SUBPAGE_SEGMENTS[second]];
+  if (first === "agents" && rest.length === 1) return ["installed-agents"];
   if (first === "skill" && second && second !== "new" && third === "edit" && rest.length === 3)
     return ["skill", second];
   if (first === "labels" && rest.length === 1) return ["issue-labels"];
@@ -1904,6 +1931,12 @@ const SETTINGS_PAGES = new Set<SettingsPageId>([
   "project-statuses",
   "project-updates",
   "ai",
+  "ai-agent",
+  "code-intelligence",
+  "triage-intelligence",
+  "ai-summaries",
+  "ai-updates",
+  "installed-agents",
   "loops",
   "coding-sessions",
   "coding-environments",
@@ -1973,6 +2006,8 @@ export function settingsPath(
   teamSubPath?: string,
 ) {
   const root = `${workspaceRootPath(workspaceSlug)}/settings`;
+  const aiSubPath = AI_SUBPAGE_PATHS[page];
+  if (aiSubPath) return `${root}/${aiSubPath}`;
   if (page === "coding-sessions") return `${root}/ai/coding-sessions`;
   if (page === "coding-environments") return `${root}/ai/coding-sessions/environments`;
   if (page === "team" && teamKey) {

@@ -1409,6 +1409,9 @@ export interface FeatureSettings {
     scope: "all" | "selected";
     allowedRepositories: string[];
   };
+  /** Workspace-wide instructions for how Flow Agent writes initiative / project updates. */
+  initiativeUpdateGuidance?: string;
+  projectUpdateGuidance?: string;
 }
 
 export interface AsksSlackChannelMapping {

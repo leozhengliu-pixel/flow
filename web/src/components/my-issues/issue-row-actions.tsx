@@ -92,7 +92,7 @@ function ActionGroups({ row, onDelete }: { row: MyIssuesRowData; onDelete?: () =
   const settings = data.userSettings?.[viewerId]
   const tools = enabledCodingTools(settings)
   const branch = issue ? configuredIssueBranch(issue, data) : `${row.identifier.toLowerCase()}-${row.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50)}`
-  const prompt = () => issue ? issueWorkPrompt(issue, data, url) : renderCodingPrompt(settings?.codingPromptTemplate, { identifier: row.identifier, title: row.title, description: row.description, branchName: branch, url })
+  const prompt = () => issue ? issueWorkPrompt(issue, data, url) : renderCodingPrompt(settings?.codingPromptTemplate, { identifier: row.identifier, title: row.title, description: row.description, branchName: branch, url }, { omitBranchName: data.workspaceSettings?.featureFlags?.['suggest-branch-name'] === false })
   const copy = (text: string, message: string) => void navigator.clipboard.writeText(text).then(() => toast.success(message)).catch(() => toast.error('Could not copy'))
   const copyLink = () => {
     const html = `<a href="${url}">${row.identifier} ${row.title.replace(/</g, '&lt;')}</a>`

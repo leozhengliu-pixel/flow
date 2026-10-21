@@ -66,6 +66,9 @@ export const CODING_TOOLS: CodingTool[] = [
 /** The reference app's default prompt template ("Work on the reference app issue …"), with Flow's name. */
 export const DEFAULT_CODING_PROMPT_TEMPLATE = "Work on Flow issue {{issue.identifier}}:\n\nSuggested branch name: {{issue.branchName}}\n\n{{context}}";
 
+/** The default prompt without its suggested branch name ("Suggest branch name in prompts" turned off). */
+export const DEFAULT_CODING_PROMPT_TEMPLATE_WITHOUT_BRANCH = "Work on Flow issue {{issue.identifier}}:\n\n{{context}}";
+
 /** A description inside the issue block: inline when it is one line, else on lines of its own (as the reference app writes it). */
 function descriptionElement(description: string | undefined): string[] {
   const text = description?.trim();
@@ -90,7 +93,7 @@ export function codingPromptContext(issue: CodingPromptIssue): string {
 }
 
 /** Renders the user's prompt template for an issue. */
-export function renderCodingPrompt(template: string | undefined, issue: CodingPromptIssue): string {
+export function renderCodingPrompt(template: string | undefined, issue: CodingPromptIssue, options: { omitBranchName?: boolean } = {}): string {
   const context = codingPromptContext(issue);
   const values: Record<string, string> = {
     "issue.identifier": issue.identifier,
@@ -99,7 +102,9 @@ export function renderCodingPrompt(template: string | undefined, issue: CodingPr
     "issue.url": issue.url,
     context,
   };
-  return (template?.trim() || DEFAULT_CODING_PROMPT_TEMPLATE).replace(/\{\{\s*([\w.]+)\s*\}\}/g, (match, key: string) => values[key] ?? match);
+  // The workspace setting only shapes the default prompt; a template the member wrote is rendered as written.
+  const fallback = options.omitBranchName ? DEFAULT_CODING_PROMPT_TEMPLATE_WITHOUT_BRANCH : DEFAULT_CODING_PROMPT_TEMPLATE;
+  return (template?.trim() || fallback).replace(/\{\{\s*([\w.]+)\s*\}\}/g, (match, key: string) => values[key] ?? match);
 }
 
 export function enabledCodingTools(settings: CodingToolSettings | undefined): CodingTool[] {

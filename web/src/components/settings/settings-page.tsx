@@ -261,7 +261,12 @@ export async function preloadSettingsPage(page: SettingsPageProps['page'], optio
   if (page === 'integrations' && options.integrationSlug) return IntegrationSettingsPage.preload()
   if (page === 'asks' && options.asksEmailIntakeMode) return NewAsksEmailIntakePage.preload()
   if (page === 'asks' && options.asksIntegrationId) return AsksSlackSettingsPage.preload()
-  if (['ai', 'coding-sessions', 'coding-environments', 'initiatives', 'documents', 'customer-requests', 'releases', 'pulse', 'asks', 'emojis', 'integrations'].includes(page)) return FeatureSettingsPage.preload()
+  if (['ai', 'ai-agent', 'code-intelligence', 'triage-intelligence', 'ai-summaries', 'ai-updates', 'installed-agents', 'coding-sessions', 'coding-environments', 'initiatives', 'documents', 'customer-requests', 'releases', 'pulse', 'asks', 'emojis', 'integrations'].includes(page)) return FeatureSettingsPage.preload()
+}
+
+/** The sidebar entry a settings page highlights: AI & agents covers its sub-pages and the workspace Agents page. */
+function settingsNavPage(page: SettingsPageId): SettingsPageId {
+  return ["ai-agent", "code-intelligence", "triage-intelligence", "ai-summaries", "ai-updates", "installed-agents", "coding-sessions", "coding-environments"].includes(page) ? "ai" : page;
 }
 
 type StoredSettings = {
@@ -701,7 +706,7 @@ export function SettingsPage(props: SettingsPageProps) {
                   <SettingsNavButton
                     key={item.id}
                     item={item}
-                    active={props.page === item.id}
+                    active={settingsNavPage(props.page) === item.id}
                     onClick={() => {
                       props.onNavigate(item.id);
                       setMobileNav(false);
@@ -1308,6 +1313,12 @@ function SettingsBodyContent(
   if (
     [
       "ai",
+      "ai-agent",
+      "code-intelligence",
+      "triage-intelligence",
+      "ai-summaries",
+      "ai-updates",
+      "installed-agents",
       "loops",
       "coding-sessions",
       "coding-environments",
@@ -1326,6 +1337,12 @@ function SettingsBodyContent(
         page={
           page as
             | "ai"
+            | "ai-agent"
+            | "code-intelligence"
+            | "triage-intelligence"
+            | "ai-summaries"
+            | "ai-updates"
+            | "installed-agents"
             | "loops"
             | "coding-sessions"
             | "coding-environments"

@@ -27,7 +27,7 @@ const MEMBER_READ_ONLY_PAGES: ReadonlySet<SettingsPageId> = new Set([
 
 /** Feature pages members may open; the page itself disables admin-only controls. */
 const MEMBER_SELF_GATED_PAGES: ReadonlySet<SettingsPageId> = new Set([
-  'ai', 'coding-sessions', 'coding-environments', 'loops', 'releases', 'pulse', 'asks', 'emojis', 'integrations',
+  'ai', 'ai-agent', 'code-intelligence', 'triage-intelligence', 'ai-summaries', 'ai-updates', 'installed-agents', 'coding-sessions', 'coding-environments', 'loops', 'releases', 'pulse', 'asks', 'emojis', 'integrations',
 ])
 
 export function isWorkspaceAdmin(data: Pick<BootstrapData, 'viewerRole'>): boolean {

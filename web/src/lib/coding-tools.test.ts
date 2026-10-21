@@ -27,6 +27,12 @@ describe("coding tools", () => {
     expect(renderCodingPrompt("{{issue.branchName}} {{ issue.identifier }} {{nope}}", issue)).toBe("me/flo-7-fix-login FLO-7 {{nope}}");
   });
 
+  it("leaves the suggested branch name out of the default prompt only when asked", () => {
+    expect(renderCodingPrompt(undefined, issue, { omitBranchName: true })).not.toContain("branch");
+    expect(renderCodingPrompt(undefined, issue, { omitBranchName: true })).toContain("Work on Flow issue FLO-7:\n\n<issue");
+    expect(renderCodingPrompt("Branch {{issue.branchName}}", issue, { omitBranchName: true })).toBe("Branch me/flo-7-fix-login");
+  });
+
   it("lists enabled tools in catalog order", () => {
     expect(enabledCodingTools({ enabledCodingTools: ["cursor", "codex"] }).map((tool) => tool.id)).toEqual(["codex", "cursor"]);
   });
