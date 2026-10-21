@@ -253,7 +253,7 @@ function OAuthMarks({ clientName, logoUri, redirectUri, t }: { clientName: strin
       {logo ? <img src={logo} alt=""/> : known ? <KnownAppMark app={known} size={32} decorative/> : <ApplicationIconPlaceholder/>}
     </span>
     <ArrowRightLeft aria-hidden="true" className="oauth-marks-arrows"/>
-    <span className="oauth-mark is-flow" role="img" aria-label="Flow"><FlowLogo size={34}/></span>
+    <span className="oauth-mark is-flow" role="img" aria-label="Flow"><FlowLogo size={56} variant="ridge"/></span>
   </div>
 }
 
