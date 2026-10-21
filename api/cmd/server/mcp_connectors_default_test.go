@@ -8,8 +8,8 @@ import (
 	"flow/api/internal/domain"
 )
 
-// MCP connectors are on until an admin turns them off, and a settings page that saves the whole object must not turn
-// "never set" into an explicit choice. HIPAA mode always forces them off.
+// A new workspace starts with MCP connectors on, a settings page that saves the whole object keeps the choice, and
+// HIPAA mode always forces them off.
 func TestMCPConnectorsDefaultOnAndTriState(t *testing.T) {
 	_, handler := newLoopTestServer(t, &fakeLoopProvider{})
 	read := func() domain.WorkspaceSettings {
@@ -29,15 +29,15 @@ func TestMCPConnectorsDefaultOnAndTriState(t *testing.T) {
 	}
 
 	settings := read()
-	if settings.MCPConnectors != nil || !settings.MCPConnectorsEnabled || !settings.MCPConnectorsActive() {
-		t.Fatalf("never set: choice=%v mirror=%v active=%v", settings.MCPConnectors, settings.MCPConnectorsEnabled, settings.MCPConnectorsActive())
+	if settings.MCPConnectors == nil || !*settings.MCPConnectors || !settings.MCPConnectorsEnabled || !settings.MCPConnectorsActive() {
+		t.Fatalf("new workspace: choice=%v mirror=%v active=%v", settings.MCPConnectors, settings.MCPConnectorsEnabled, settings.MCPConnectorsActive())
 	}
 
 	body := whole()
 	body["preventGuestAgents"] = true
 	settings = patch(body)
-	if settings.MCPConnectors != nil || !settings.MCPConnectorsActive() {
-		t.Fatalf("whole-object save made the choice explicit: %v", settings.MCPConnectors)
+	if settings.MCPConnectors == nil || !*settings.MCPConnectors || !settings.MCPConnectorsActive() {
+		t.Fatalf("whole-object save changed the choice: %v", settings.MCPConnectors)
 	}
 
 	settings = patch(map[string]any{"mcpConnectors": false})
