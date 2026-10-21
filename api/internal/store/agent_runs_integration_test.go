@@ -61,7 +61,18 @@ func TestExternalDatabaseAgentRunQueue(t *testing.T) {
 		group.Add(1)
 		go func(owner string, repo *SQLiteStore) {
 			defer group.Done()
-			for range 5 {
+			// SKIP LOCKED returns nothing while another claimer holds the
+			// candidate rows, so a claimer polls (as the dispatcher does)
+			// until the queue is drained rather than trying a fixed number
+			// of times.
+			deadline := time.Now().Add(30 * time.Second)
+			for time.Now().Before(deadline) {
+				mu.Lock()
+				drained := len(owners) == len(ids)
+				mu.Unlock()
+				if drained {
+					return
+				}
 				runs, err := repo.ClaimAgentRuns(context.Background(), AgentRunClaim{Owner: owner, Free: map[int]int{1: 1}, Lease: time.Minute})
 				if err != nil {
 					t.Error(err)

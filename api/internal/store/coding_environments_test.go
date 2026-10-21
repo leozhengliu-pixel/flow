@@ -163,7 +163,12 @@ func testCodingEnvironmentCRUD(t *testing.T, repository *SQLiteStore) {
 func TestCodingEnvironmentSecrets(t *testing.T) {
 	withCodingSecretKey(t)
 	for name, repository := range openCodingEnvironmentStores(t) {
-		t.Run(name, func(t *testing.T) { testCodingEnvironmentSecrets(t, repository) })
+		t.Run(name, func(t *testing.T) {
+			// The test rotates and restores the key and its cleanup clears it,
+			// so every store needs its own key.
+			withCodingSecretKey(t)
+			testCodingEnvironmentSecrets(t, repository)
+		})
 	}
 }
 

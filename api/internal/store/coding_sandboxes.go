@@ -256,7 +256,7 @@ func (s *SQLiteStore) LeaseSandboxes(ctx context.Context, owner string, lease ti
 	if s.dialect != "sqlite" {
 		query += " FOR UPDATE SKIP LOCKED"
 		var err error
-		if tx, err = s.db.BeginTx(ctx, nil); err != nil {
+		if tx, err = s.db.BeginTx(ctx, claimTxOptions); err != nil {
 			return nil, err
 		}
 		defer tx.Rollback()
