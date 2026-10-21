@@ -77,13 +77,13 @@ export function FlowMenuContent({ label, children, className = '', onCloseAutoFo
 }
 
 /** The same menu as a Radix DropdownMenu surface (a header "…" button). */
-export function FlowDropdownMenuContent({ label, children, className = '', onCloseAutoFocus, align = 'start' }: ContentProps & { align?: 'start' | 'center' | 'end' }) {
+export function FlowDropdownMenuContent({ label, children, className = '', onCloseAutoFocus, align = 'start', alignOffset, sideOffset = 4 }: ContentProps & { align?: 'start' | 'center' | 'end'; alignOffset?: number; sideOffset?: number }) {
   const registry = useMemo(() => new Set<ShortcutEntry>(), [])
   const onKeyDown = useShortcutKeys(registry)
   useQueuedShortcut(registry)
   return <KitContext.Provider value={DROPDOWN_KIT}>
     <RegistryContext.Provider value={registry}>
-      <DropdownMenu.Content data-flow-motion="floating" aria-label={label} align={align} sideOffset={4} className={`flow-menu ${className}`} collisionPadding={8} onCloseAutoFocus={onCloseAutoFocus} onKeyDown={onKeyDown}>
+      <DropdownMenu.Content data-flow-motion="floating" aria-label={label} align={align} alignOffset={alignOffset} sideOffset={sideOffset} className={`flow-menu ${className}`} collisionPadding={8} onCloseAutoFocus={onCloseAutoFocus} onKeyDown={onKeyDown}>
         {children}
       </DropdownMenu.Content>
     </RegistryContext.Provider>

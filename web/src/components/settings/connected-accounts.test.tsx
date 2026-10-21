@@ -11,8 +11,6 @@ const api = vi.hoisted(() => ({
   connectGitLabToken: vi.fn(),
   disconnectCodeHostAccount: vi.fn(),
 }));
-const dialogs = vi.hoisted(() => ({ confirmAction: vi.fn() }));
-vi.mock("@/components/ui/action-dialog-service", () => dialogs);
 vi.mock("@/lib/code-host-accounts-api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/code-host-accounts-api")>("@/lib/code-host-accounts-api");
   return { ...actual, ...api };
@@ -59,8 +57,6 @@ function renderRows() {
 
 beforeEach(() => {
   for (const fn of Object.values(api)) fn.mockReset();
-  dialogs.confirmAction.mockReset();
-  dialogs.confirmAction.mockResolvedValue(true);
 });
 
 function openAccountMenu(name: string) {
@@ -75,23 +71,21 @@ it("shows a linked GitHub account as Connected and disconnects after confirming"
   expect(screen.getByText("github.com")).toBeInTheDocument();
   openAccountMenu("GitHub");
   fireEvent.click(await screen.findByRole("menuitem", { name: "Disconnect…" }));
-  await waitFor(() =>
-    expect(dialogs.confirmAction).toHaveBeenCalledWith(
-      "Disconnect personal GitHub account?",
-      expect.objectContaining({ confirmLabel: "Disconnect" }),
-    ),
-  );
+  expect(await screen.findByRole("dialog", { name: "Disconnect personal GitHub account?" })).toBeInTheDocument();
+  expect(api.disconnectCodeHostAccount).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
   await waitFor(() => expect(api.disconnectCodeHostAccount).toHaveBeenCalledWith("cha_1"));
 });
 
 it("keeps the account when the disconnect is cancelled", async () => {
   api.fetchCodeHostAccounts.mockResolvedValue(response({ accounts: [account()] }));
-  dialogs.confirmAction.mockResolvedValueOnce(false);
   renderRows();
   expect(await screen.findByText(/@alice/)).toBeInTheDocument();
   openAccountMenu("GitHub");
   fireEvent.click(await screen.findByRole("menuitem", { name: "Disconnect…" }));
-  await waitFor(() => expect(dialogs.confirmAction).toHaveBeenCalled());
+  expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   expect(api.disconnectCodeHostAccount).not.toHaveBeenCalled();
 });
 

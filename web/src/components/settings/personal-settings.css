@@ -356,9 +356,18 @@ html:root .settings-app .settings-main .personal-connection-list .settings-row-c
 .personal-connection-list .settings-row-icon>svg{width:16px;height:16px}
 html:root .settings-app .settings-main .personal-connection-list .personal-action:not(.danger):not(.primary){background:transparent;box-shadow:none}
 html:root .settings-app .settings-main .personal-connection-list .personal-action:not(.danger):not(.primary):hover:not(:disabled){background:var(--bg-hover)}
+html:root .settings-app .settings-main .personal-connection-list .settings-row-icon{background:var(--security-api-key-icon-bg);color:var(--theme-text-primary)}
+html:root .settings-app .settings-main .personal-connection-list .settings-row-icon>svg{color:var(--theme-text-primary)}
+html:root .settings-app .settings-main .personal-connection-list .personal-action:not(.danger):not(.primary){color:var(--security-api-key-action-fg)}
+html:root .settings-app .settings-main .personal-connection-list .personal-action:not(.danger):not(.primary):hover:not(:disabled),html:root .settings-app .settings-main .personal-connection-list .personal-action[data-state=open]{background:var(--pt-list-button-hover-bg);color:var(--bright)}
+.personal-connection-list .personal-action{margin-right:-6px}
+html:root .settings-app .settings-main .personal-connection-links .settings-row-copy>strong{line-height:15.5px}
+html:root .settings-app .settings-main .personal-connection-links .settings-row-copy>span{line-height:14.5px}
 .personal-connection-links{margin-top:48px}
 .personal-connection-link{display:block;color:inherit;text-decoration:none;transition:background-color .15s}
 .personal-connection-link:hover{background:var(--bg-hover)}
+.personal-connection-link:hover{background:var(--security-api-key-row-hover)}
+.personal-connection-link .personal-connection-link-chevron{color:var(--set-desc)}
 .personal-connection-link:focus-visible{outline:1px solid var(--focus-ring);outline-offset:1px}
 .personal-connection-link .settings-row{cursor:pointer}
 .personal-connection-link-chevron{width:16px;height:16px;color:var(--theme-text-secondary)}
