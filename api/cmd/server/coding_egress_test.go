@@ -122,6 +122,9 @@ func TestEgressDecide(t *testing.T) {
 		{"auth unknown token", EgressCheckRequest{SandboxID: "sb-default", SandboxToken: "fcs_nope"}, false, egressReasonInvalidToken, ""},
 		{"auth empty token", EgressCheckRequest{SandboxID: "sb-default"}, false, egressReasonInvalidToken, ""},
 		{"sandbox mismatch", EgressCheckRequest{SandboxID: "sb-other", SandboxToken: "fcs_default", Host: "github.com", Port: 443}, false, egressReasonSandboxMismatch, ""},
+		{"another sandbox's token under its own id", EgressCheckRequest{SandboxID: "sb-extended", SandboxToken: "fcs_default", Host: "github.com", Port: 443}, false, egressReasonSandboxMismatch, ""},
+		{"missing identity", EgressCheckRequest{SandboxToken: "fcs_default", Host: "github.com", Port: 443}, false, egressReasonSandboxMismatch, ""},
+		{"auth missing identity", EgressCheckRequest{SandboxToken: "fcs_default"}, false, egressReasonSandboxMismatch, ""},
 		{"warm unbound", EgressCheckRequest{SandboxID: "sb-warm", SandboxToken: "fcs_warm", Host: "github.com", Port: 443}, false, egressReasonWarmUnbound, ""},
 		{"warm bound", EgressCheckRequest{SandboxID: "sb-bound", SandboxToken: "fcs_bound", Host: "github.com", Port: 443}, true, egressReasonAllowed, "default"},
 		{"default registry", EgressCheckRequest{SandboxID: "sb-default", SandboxToken: "fcs_default", Host: "registry.npmjs.org", Port: 443}, true, egressReasonAllowed, "default"},
@@ -187,7 +190,7 @@ func TestEgressDecideErrors(t *testing.T) {
 	}
 	decider = testEgressDecider()
 	decider.hosts[domain.CodeHostGitLab] = fakeEgressHost{Stub: codehost.Stub{HostKind: domain.CodeHostGitLab}, err: errors.New("gitlab down")}
-	if _, err := decider.Decide(context.Background(), EgressCheckRequest{SandboxToken: "fcs_default", Host: "github.com", Port: 443}); err == nil {
+	if _, err := decider.Decide(context.Background(), EgressCheckRequest{SandboxID: "sb-default", SandboxToken: "fcs_default", Host: "github.com", Port: 443}); err == nil {
 		t.Fatal("code host failure must be an error")
 	}
 }

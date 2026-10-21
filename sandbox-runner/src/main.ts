@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { ensureCliEnv, readCliEnvState } from './cli-env.js'
 import { ConfigError, defaultPaths, loadConfig, readToken, type RunnerConfig } from './config.js'
 import { baseEnv, RUNTIME_INFO_FILE, type RuntimeInfo } from './environment.js'
+import { proxyEnvShell, runnerProxyEnv } from './proxy-env.js'
 import { Git } from './git/git.js'
 import { runCredentialHelper } from './git/credential-helper.js'
 import { runSign } from './git/sign.js'
@@ -29,6 +30,7 @@ const USAGE = `usage: flow-runner <command>
   sign <ssh-keygen/gpg arguments>                commit signing through Flow
   mcp                                            Flow MCP server (stdio)
   cli-env ensure                                 refresh gh/glab credentials if needed
+  proxy-env                                      print shell exports of the egress proxy variables
   version`
 
 const MODES = new Set(['session', 'snapshot', 'debug', 'warm', 'restore'])
@@ -250,6 +252,18 @@ async function main(argv: string[]): Promise<number> {
         })
       } catch (error) {
         process.stderr.write(`flow-runner cli-env: ${errorMessage(error)}\n`)
+      }
+      return 0
+    }
+    case 'proxy-env': {
+      // Sourced by /etc/profile.d/flow-egress-proxy.sh so login shells
+      // (debug terminals) reach the egress proxy as this sandbox. Prints
+      // nothing without a proxy; never fails the shell.
+      try {
+        const info = resolveRuntime()
+        process.stdout.write(proxyEnvShell(runnerProxyEnv(process.env, info.sandboxId, info.tokenFile)))
+      } catch (error) {
+        process.stderr.write(`flow-runner proxy-env: ${errorMessage(error)}\n`)
       }
       return 0
     }

@@ -8,6 +8,7 @@ import { errorMessage, silentLogger, type Logger } from './log.js'
 import { EventFactory } from './mapping/common.js'
 import type { BootstrapResponse, HeartbeatRequest, HeartbeatResponse, SetupSecretsResponse, SnapshotCompleteRequest } from './protocol.js'
 import { AuthError } from './runtime-client.js'
+import { sandboxSecrets } from './proxy-env.js'
 import { prepareRepository, runSetup, SetupError, SetupLog } from './setup.js'
 
 // Snapshot mode (§10, §16 step 7): clone at the base revision, run the full
@@ -91,6 +92,7 @@ export async function runSnapshot(deps: SnapshotDeps): Promise<number> {
     logger.info('snapshot', { line })
     shipper.push(line)
   })
+  log.redact(sandboxSecrets(config.tokenFile)())
   const heartbeats = new AbortController()
   const heartbeatLoop = (async () => {
     const interval = deps.heartbeatMs ?? Math.max(1, bootstrap.limits.heartbeatSeconds || 15) * 1000

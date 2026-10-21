@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import type { RunnerConfig } from './config.js'
 import type { McpServerCommand } from './harness/types.js'
 import type { BootstrapResponse } from './protocol.js'
+import { runnerProxyEnv } from './proxy-env.js'
 import { envVars } from './setup.js'
 
 // The environment every child of the runner gets (setup commands, the
@@ -57,6 +58,9 @@ export function baseEnv(config: RunnerConfig, bootstrap: BootstrapResponse | und
   }
   if (bootstrap?.git.committerName) env.GIT_COMMITTER_NAME = bootstrap.git.committerName
   if (bootstrap?.git.committerEmail) env.GIT_COMMITTER_EMAIL = bootstrap.git.committerEmail
+  // The egress proxy needs this sandbox's identity; the token is read now
+  // (it may have been rewritten since the last spawn).
+  Object.assign(env, runnerProxyEnv(env, config.sandboxId, config.tokenFile))
   return env
 }
 

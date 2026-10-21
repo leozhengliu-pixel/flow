@@ -38,6 +38,7 @@ check zstd --version
 check tar --zstd --version
 check tini --version
 check /opt/flow/bin/flow-runner version
+check test -r /etc/profile.d/flow-egress-proxy.sh
 for shim in flow-runner flow-git-credential flow-sign gh glab; do
   check test -x "/opt/flow/bin/$shim"
 done

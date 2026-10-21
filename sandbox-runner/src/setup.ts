@@ -5,6 +5,7 @@ import type { RunnerPaths } from './config.js'
 import type { Git, Runner } from './git/git.js'
 import { errorMessage } from './log.js'
 import { CommandError, run } from './process.js'
+import { networkFailureHint } from './proxy-env.js'
 import type { BootstrapResponse, CodingEnvVar, CodingMiseConfig, RunnerEvent } from './protocol.js'
 import type { EventFactory } from './mapping/common.js'
 
@@ -204,7 +205,10 @@ async function runGeneratedInstallers(deps: SetupDeps): Promise<void> {
       check: false,
       timeoutMs: remaining(deps),
     })
-    if (result.code !== 0) deps.log.line(`warning: ${installer.name} install failed with exit code ${result.code}; continuing`)
+    if (result.code !== 0) {
+      const hint = networkFailureHint(deps.log.tail(40))
+      deps.log.line(`warning: ${installer.name} install failed with exit code ${result.code}${hint ? ` (${hint})` : ''}; continuing`)
+    }
   }
 }
 
@@ -248,6 +252,9 @@ export async function runSetup(deps: SetupDeps): Promise<void> {
       error instanceof CommandError
         ? `${error.command.split(' ').slice(0, 2).join(' ')} exited with ${error.result.code}${error.result.timedOut ? ' (setup timed out)' : ''}`
         : errorMessage(error)
-    throw new SetupError(`Environment setup failed: ${reason}`, log.tail())
+    // Name the cause (proxy 407, egress 403/503, missing tool, upstream
+    // failure) instead of a generic network error.
+    const hint = networkFailureHint(log.tail())
+    throw new SetupError(`Environment setup failed: ${reason}${hint ? ` (${hint})` : ''}`, log.tail())
   }
 }

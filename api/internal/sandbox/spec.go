@@ -100,15 +100,38 @@ func RunnerEnv(c config.CodingConfig, spec SandboxSpec, mode string) []EnvVar {
 	if spec.Workspace.ArchiveURL != "" {
 		env = append(env, EnvVar{EnvArchiveURL, spec.Workspace.ArchiveURL})
 	}
-	if spec.ProxyURL != "" {
+	if proxy := ProxyBaseURL(spec.ProxyURL); proxy != "" {
 		for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"} {
-			env = append(env, EnvVar{name, spec.ProxyURL})
+			env = append(env, EnvVar{name, proxy})
 		}
 	}
 	if noProxy := NoProxy(c, spec); noProxy != "" {
 		env = append(env, EnvVar{"NO_PROXY", noProxy}, EnvVar{"no_proxy", noProxy})
 	}
 	return env
+}
+
+// ProxyBaseURL is the egress proxy URL a sandbox's environment carries: the
+// configured URL without any user info. The proxy authenticates every
+// sandbox by its own identity (http://<sandboxId>:<token>@proxy, see
+// deploy/egress-proxy), and the token rotates and lives only in the token
+// file, so the container environment never holds a credential: the runner
+// adds the sandbox's identity, read from the token file, to the proxy
+// variables of every process it starts (sandbox-runner/src/proxy-env.ts),
+// and login shells (debug terminals) get it from /etc/profile.d. A
+// credential in the configured URL would be one identity shared by every
+// sandbox, so it is dropped. "" when raw is empty or not a URL with a host.
+func ProxyBaseURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" {
+		return ""
+	}
+	parsed.User = nil
+	return parsed.String()
 }
 
 // RestoreEnv is the restore step's environment (it talks to Flow directly,
