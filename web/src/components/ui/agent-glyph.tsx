@@ -16,13 +16,15 @@ type GlyphProps = Omit<SVGProps<SVGSVGElement>, 'name'> & { size?: number | stri
  *  - `LoopsGlyph`: Loops (nav, settings). `AgentMinimizeGlyph`, `AgentFullPageGlyph`, `AgentCloseGlyph`: the floating chat's header controls.
  *  - `AgentCodingGlyph`: "Coding sessions". `CodeIntelligenceGlyph`: "Code Intelligence". `AgentHistoryGlyph`: "Chat history".
  */
-type GlyphName = 'agentPointer' | 'agentWrite' | 'aiBurst' | 'agentCoding' | 'codeIntelligence' | 'chatHistory' | 'moveToToolbar' | 'copyMessage' | 'loops' | 'chatMinimize' | 'openFullPage' | 'closeChat'
+type GlyphName = 'agentPointer' | 'agentPointerFilled' | 'agentWrite' | 'aiBurst' | 'agentCoding' | 'codeIntelligence' | 'chatHistory' | 'moveToToolbar' | 'copyMessage' | 'loops' | 'chatMinimize' | 'openFullPage' | 'closeChat'
 
 function AgentGlyphSvg({ glyph, size = 16, ...props }: GlyphProps & { glyph: GlyphName }) {
   return <FlowGlyph name={glyph} size={typeof size === 'number' ? size : Number.parseFloat(size) || 16} data-agent-glyph={glyph} {...props} />
 }
 
 export function AgentCursorGlyph(props: GlyphProps) { return <AgentGlyphSvg glyph="agentPointer" {...props} /> }
+/** The filled cursor: the pressed "Hide agent" toggle of a coding session. */
+export function AgentCursorFilledGlyph(props: GlyphProps) { return <AgentGlyphSvg glyph="agentPointerFilled" {...props} /> }
 export function AgentWriteGlyph(props: GlyphProps) { return <AgentGlyphSvg glyph="agentWrite" {...props} /> }
 export function AiBurstGlyph(props: GlyphProps) { return <AgentGlyphSvg glyph="aiBurst" {...props} /> }
 export function AgentCodingGlyph(props: GlyphProps) { return <AgentGlyphSvg glyph="agentCoding" {...props} /> }

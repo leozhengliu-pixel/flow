@@ -272,4 +272,9 @@ export const codingSessionUiZhCN: Record<string, string> = {
   "Open sidebar": "打开侧边栏",
   "Hide agent": "隐藏 Agent",
   "1 file": "1 个文件",
+  "Session archived": "会话已归档",
+  "Work on {issue}": "处理 {issue}",
+  "Send a message to {agent}": "向 {agent} 发送消息",
+  "Copy session URL": "复制会话链接",
+  "Stopped. Send another prompt when you’re ready.": "已停止。准备好后再发送一条指令。",
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useInRouterContext } from 'react-router-dom'
-import { AlertTriangle, CheckCircle2, ChevronRight, CircleSlash, GitBranch, GitPullRequest, X } from 'lucide-react'
+import { AlertTriangle, CircleSlash, GitBranch, GitPullRequest, X } from 'lucide-react'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { GridLoader } from '@/components/ui/grid-loader'
 import { activityTimeLabel } from '@/components/activity/issue-activity-model'
 import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
@@ -12,7 +13,7 @@ import { useCodingSessionOpener } from './use-coding-session-opener'
 import { codingSessionHref } from './coding-session-page-model'
 import type { BootstrapData } from '@/types/flow'
 import type { CodingSession } from '@/types/coding-sessions'
-import { CODING_PHASE_LABELS, codingErrorInfo, codingSessionCapabilities, codingSessionStalled, codingRunStartedAt, codingStatusLine, formatCodingElapsed, isCodingSessionTerminal, PULL_REQUEST_STATE_LABELS, pullRequestDisplayState, pullRequestNumberLabel } from './coding-session-model'
+import { CODING_PHASE_LABELS, codingErrorInfo, codingSessionCapabilities, codingSessionStalled, codingRunStartedAt, codingStatusLine, formatCodingElapsed, isCodingSessionTerminal, plainSummary, PULL_REQUEST_STATE_LABELS, pullRequestDisplayState, pullRequestNumberLabel } from './coding-session-model'
 import { CodingStateBadge } from './coding-session-parts'
 import { CodingAgentAvatar, CodingSessionView } from './coding-session-panel'
 import { useCodingSession, useCodingSessions, useDismissedCodingSessions, useNow } from './use-coding-sessions'
@@ -59,13 +60,13 @@ export function CodingSessionStatusRow({ session, data, href, onOpen, surface = 
     <span className="coding-session-status-label" data-i18n-ignore={status.repo || status.rawLabel ? true : undefined}>{status.rawLabel ? status.label : t(status.label).replace('{count}', String(status.count ?? '')).replace('{repo}', status.repo ?? '')}</span>
     {status.detail && (status.codeDetail
       ? <code className="coding-session-status-code" data-i18n-ignore title={status.detail}>{status.detail}</code>
-      : <span className="coding-session-status-detail" data-i18n-ignore={status.translateDetail ? undefined : true}>{status.translateDetail ? t(status.detail) : status.detail}</span>)}
+      : <span className="coding-session-status-detail" data-i18n-ignore={status.translateDetail ? undefined : true}>{status.translateDetail ? t(status.detail) : plainSummary(status.detail)}</span>)}
     <span className="coding-session-status-end">
       {elapsed && <time aria-label={t('Elapsed time')}>{elapsed}</time>}
       {pr && <span className="coding-session-pr-chip" data-state={pullRequestDisplayState(pr)} title={[pr.title, `${pr.repository.split('/').at(-1)}${pullRequestNumberLabel(pr)}`, t(PULL_REQUEST_STATE_LABELS[pullRequestDisplayState(pr)])].filter(Boolean).join('\n')}>
         <GitPullRequest size={14} aria-hidden="true"/><span data-i18n-ignore>{pullRequestNumberLabel(pr)}</span>
       </span>}
-      <ChevronRight size={16} aria-hidden="true"/>
+      <FlowGlyph name="rowChevron" size={16} className="coding-session-status-chevron"/>
     </span>
     <span className="sr-only">{t('Show session')}</span>
   </>
@@ -79,7 +80,8 @@ function CodingStatusIcon({ tone }: { tone: ReturnType<typeof codingStatusLine>[
   if (tone === 'working') return <GridLoader variant="agent" size={16} className="coding-session-status-icon is-working"/>
   if (tone === 'input') return <GridLoader variant="read" size={16} className="coding-session-status-icon is-input"/>
   if (tone === 'error') return <AlertTriangle size={16} aria-hidden="true" className="coding-session-status-icon"/>
-  if (tone === 'done') return <CheckCircle2 size={16} aria-hidden="true" className="coding-session-status-icon"/>
+  // Finished: the static plus of the dotted grid (lit dots only).
+  if (tone === 'done') return <GridLoader variant="unread" size={16} dimColor="transparent" className="coding-session-status-icon is-done"/>
   return <CircleSlash size={16} aria-hidden="true" className="coding-session-status-icon"/>
 }
 

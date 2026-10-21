@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { ArrowUpRight, ChevronDown } from 'lucide-react'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { approveCodingSession, promptCodingSession, restartCodingSession, stopCodingSession } from '@/lib/coding-sessions-api'
 import { AGENT_TASK_ACTIVITY_EVENT, getApplicationTask, type ApplicationActivity } from '@/lib/application-agents'
 import { AgentAnswerText } from '@/components/agent/agent-answer'
@@ -16,7 +17,7 @@ import type { BootstrapData } from '@/types/flow'
 import type { CodingSession } from '@/types/coding-sessions'
 import { CodingComposer, type ComposerRequest } from './coding-session-composer'
 import { CODING_SESSION_EVENT, notifyCodingSessionChanged, type CodingSessionEventDetail } from './coding-session-events'
-import { CODING_PHASE_LABELS, codingModelLabel, codingSessionCapabilities } from './coding-session-model'
+import { CODING_PHASE_LABELS, CODING_STOPPED_MESSAGE, codingModelLabel, codingSessionCapabilities } from './coding-session-model'
 import { CodingPlanPill } from './coding-session-plan'
 import { CodingCommitBadge, CodingPullRequestCard, CodingUncommittedChanges, type CodingCommitStats } from './coding-session-pr-card'
 import { CodingActionRow, CodingActivityGroup, CodingAuthLine, CodingErrorCard, CodingLatestButton, CodingReasoning, CodingShimmer, CodingStaleCard, CodingTimeMarker } from './coding-session-stream'
@@ -105,6 +106,12 @@ function PromptTime({ at }: { at: string }) {
   return <time dateTime={at} title={full} aria-label={full}>{activityTimeLabel(at, Date.now(), locale).replace(/m(?= ago$)/, 'min')}</time>
 }
 
+/** A prompt's text with its backticked spans as inline code chips (the rest stays as typed, line breaks included). */
+function PromptText({ text }: { text: string }) {
+  const parts = text.split(/(`[^`\n]+`)/g)
+  return <>{parts.map((part, index) => part.length > 2 && part.startsWith('`') && part.endsWith('`') ? <code key={index}>{part.slice(1, -1)}</code> : part)}</>
+}
+
 const AGENT_TYPES = new Set(['thought', 'action', 'response', 'elicitation', 'error'])
 
 type ConversationProps = {
@@ -165,6 +172,8 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
     : undefined
   const showUncommitted = Boolean(onOpenChanges && session.diffs?.length && !generating && !pr && !allCommits.length)
   const stale = session.state === 'stale' && !session.stoppedBy && loaded && !agentActive
+  // A member's stop ends with the agent's "Stopped. Send another prompt…" when the thread has no reply after it.
+  const stopReply = session.state === 'stale' && Boolean(session.stoppedBy) && loaded && items.at(-1)?.kind !== 'text'
   // The session's own error (errorCode / error from GET session) when the thread has no error activity, or when the
   // thread could not be loaded at all: the reason must show either way.
   const missingError = session.state === 'error' && !lastErrorId && (loaded || Boolean(error))
@@ -199,17 +208,19 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
   }
   const links = (session.externalUrls ?? []).filter(link => /^https?:\/\//i.test(link.url))
   const startedByAgent = turns[0] && !turns[0].prompt
+  // A delegated session starts from its issue: the first turn shows the delegating member's "Work on <issue>" prompt.
+  const issuePrompt = startedByAgent && issue
   // "Flow routed this session to <model>" follows the first prompt (above the work it routed).
   const routed = session.modelSelection === 'auto' && session.model
     ? <p className="cs-start-line"><span><strong>{t('Flow')}</strong> {t('routed this session to')} <strong data-i18n-ignore>{model.model.replace(/ \(Auto\)$/, '')}</strong></span></p>
     : null
   return <>
     <div ref={scroller} className="coding-agent-stream cs-stream" role="group" aria-label={t('Session stream')}>
-      {startedByAgent && <p className="cs-start-line">
+      {startedByAgent && !issuePrompt && <p className="cs-start-line">
         <UserAvatar className="coding-session-prompt-avatar" name={creator?.displayName || creator?.name || t('Flow')} avatarUrl={creator?.avatarUrl}/>
         <span><strong data-i18n-ignore>{creator ? creator.displayName || creator.name : t('Flow')}</strong> {issue ? <>{t('started the session from')} <AppLink href={issuePath(data.workspace.urlKey, issue)} data-i18n-ignore>{issue.identifier}</AppLink></> : t('started the session')}</span>
       </p>}
-      {routed && !turns[0]?.prompt && routed}
+      {routed && !turns[0]?.prompt && !issuePrompt && routed}
       {turns.map((turn, index) => {
         const last = index === turns.length - 1
         const turnCommits = commits.get(turn.id)
@@ -218,13 +229,20 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
           {turn.prompt && <div className="cs-prompt-row">
             <div className="coding-session-prompt">
               <header><UserAvatar className="coding-session-prompt-avatar" name={userName(turn.prompt.activity.actorId)} avatarUrl={data.users.find(user => user.id === turn.prompt!.activity.actorId)?.avatarUrl}/><strong data-i18n-ignore>{userName(turn.prompt.activity.actorId)}</strong><PromptTime at={turn.prompt.activity.createdAt}/></header>
-              {turn.prompt.stop ? <p><em>{t('Stop requested')}</em></p> : turn.prompt.activity.body && <p data-i18n-ignore>{turn.prompt.activity.body}</p>}
+              {turn.prompt.stop ? <p><em>{t('Stop requested')}</em></p> : turn.prompt.activity.body && <p data-i18n-ignore><PromptText text={turn.prompt.activity.body}/></p>}
               <AgentMessageAttachments attachments={turn.prompt.activity.metadata?.attachments}/>
             </div>
           </div>}
-          {index === 0 && turn.prompt && routed}
-          {turn.items.length > 0 && <div className="cs-turn-items">
+          {index === 0 && !turn.prompt && issuePrompt && issue && <div className="cs-prompt-row">
+            <div className="coding-session-prompt">
+              <header><UserAvatar className="coding-session-prompt-avatar" name={userName(session.creatorId)} avatarUrl={creator?.avatarUrl}/><strong data-i18n-ignore>{userName(session.creatorId)}</strong><PromptTime at={session.createdAt}/></header>
+              <p>{t('Work on {issue}').split('{issue}').map((part, position) => position ? <Fragment key={position}><AppLink href={issuePath(data.workspace.urlKey, issue)} data-i18n-ignore>{issue.identifier}</AppLink>{part}</Fragment> : part)}</p>
+            </div>
+          </div>}
+          {index === 0 && (turn.prompt || issuePrompt) && routed}
+          {(turn.items.length > 0 || (last && stopReply)) && <div className="cs-turn-items">
             {turn.items.map((item, position) => renderItem(item, item.kind === 'thinking' ? 'thinking' : item.kind === 'group' ? item.id : `${item.activity.id}-${position}`))}
+            {last && stopReply && <p className="cs-text cs-stop-reply">{t(CODING_STOPPED_MESSAGE)}</p>}
             {turnCommits?.length ? <CodingCommitBadge commits={turnCommits} stats={commitStats} onOpenChanges={onOpenChanges} pr={pr ?? (session.repository ? { codeHost: session.codeHost ?? 'github', hostName: session.hostName ?? '', repository: session.repository } : undefined)}/> : null}
           </div>}
         </section>
@@ -247,12 +265,13 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
         <span className="cs-composer-spacer"/>
         {lastAgentText && <button type="button" className="coding-session-icon-button cs-copy" aria-label={t('Copy message')} onClick={() => void copy(lastAgentText.activity.body)}><AgentCopyGlyph size={14}/></button>}
       </footer>}
+      {session.archivedAt && <p className="cs-archived-divider" role="status"><span><FlowGlyph name="agentSessionDismissed" size={16}/>{t('Session archived')}</span></p>}
       <div ref={sentinel} className="cs-stream-end" aria-hidden="true"/>
     </div>
     {away && <CodingLatestButton working={generating} onClick={jump}/>}
     <div className="cs-composer-area">
       <CodingPlanPill plan={session.plan} updatedAt={session.updatedAt} complete={session.state === 'complete'}/>
-      {(can.prompt || request) && <CodingComposer data={data} sessionId={session.id} generating={generating} stopPending={stopRequested(session)} canPrompt={can.prompt} busy={busy} request={request}
+      {(can.prompt || request) && !session.archivedAt && <CodingComposer data={data} sessionId={session.id} generating={generating} stopPending={stopRequested(session)} canPrompt={can.prompt} busy={busy} request={request}
         onSend={(text, files) => run(() => promptCodingSession(session.id, text, undefined, files))}
         onStop={() => void run(() => stopCodingSession(session.id))}
         onApprove={async reject => { await run(() => approveCodingSession(session.id, reject), reject ? 'Rejected coding session' : 'Approved coding session') }}/>}

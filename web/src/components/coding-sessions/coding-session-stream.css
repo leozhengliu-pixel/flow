@@ -13,11 +13,11 @@
 .cs-button:disabled{opacity:.6;cursor:default}
 
 /* Stream and turns */
-.coding-agent-stream.cs-stream{gap:0;padding:0 18px 12px 8px}
-.cs-turn{display:flex;flex-direction:column;gap:8px;padding-bottom:24px}
+.coding-agent-stream.cs-stream{gap:0;padding:4px 8px 20px}
+.cs-turn{display:flex;flex-direction:column;gap:8px;padding-bottom:26px}
 .cs-turn[data-last]{padding-bottom:8px}
 .cs-turn>.cs-prompt-row+.cs-turn-items{margin-top:18px}
-.cs-time-marker{align-self:center;padding:8px 0;color:var(--cs-label-faint);font:500 12px/normal var(--font)}
+.cs-time-marker{align-self:center;margin-bottom:4px;padding:8px 0;color:var(--cs-label-faint);font:500 12px/normal var(--font)}
 .cs-prompt-row{display:flex;justify-content:flex-end;animation:cs-enter-prompt .15s ease-out}
 .cs-prompt-row em{font-style:italic}
 .cs-turn-items{display:flex;flex-direction:column;align-items:stretch;gap:12px;min-width:0}
@@ -27,13 +27,17 @@
 .cs-text{padding:0 10px;color:var(--cs-label-base);font:450 13px/20.8px var(--font);overflow-wrap:anywhere}
 .cs-approval-text{margin:12px 0 0}
 .cs-start-line{display:flex;align-items:center;gap:8px;margin:12px 0 0;padding:0 10px;color:var(--cs-label-muted);font:450 12px/normal var(--font)}
-.cs-start-line strong{color:var(--cs-label-base);font-weight:500}
+.cs-start-line strong{color:inherit;font-weight:500}
 .cs-start-line a{color:var(--cs-label-muted);text-decoration:none}
 .cs-start-line a:hover{text-decoration:underline}
 .cs-start-line+.cs-turn>.cs-time-marker,.cs-start-line+.cs-start-line{margin-top:4px}
 .cs-turn>.cs-start-line{margin:18px 0 4px}
 .cs-auth-line{display:flex;align-items:center;gap:6px;margin:0;padding:0 10px;color:var(--cs-label-faint);font:450 13px/normal var(--font)}
 .cs-stream-end{flex:none;height:1px}
+/* "Session archived": a hairline on both sides of the faint label, after the last turn. */
+.cs-archived-divider{display:flex;align-items:center;gap:12px;margin:0;padding:8px 0 8px 8px;color:var(--cs-label-faint);font:500 12px/16px var(--font)}
+.cs-archived-divider::before,.cs-archived-divider::after{content:"";flex:1;height:1px;background:var(--cs-border-thin)}
+.cs-archived-divider span{display:inline-flex;align-items:center;gap:6px;flex:none}
 
 /* Action rows and work groups */
 .cs-action{display:flex;flex-direction:column;min-width:0;padding:0 10px}
@@ -42,7 +46,8 @@
 .cs-action-header.is-disclosure{align-self:flex-start;max-width:calc(100% + 16px);margin:0 -8px;padding:0 8px;border-radius:4px;cursor:pointer}
 .cs-action-header.is-disclosure:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
 .cs-action-label{flex:none;white-space:nowrap}
-.cs-action-detail{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-action-detail{min-width:0;overflow:hidden;font-family:var(--cs-terminal-font);text-overflow:ellipsis;white-space:nowrap}
+.cs-group[data-loading]>.cs-group-header .cs-action-detail{color:var(--cs-label-faint)}
 .cs-action-label code,.cs-action-detail code,.cs-group-label code{padding:0;border:0;background:none;box-shadow:none;color:inherit;font:inherit;font-family:var(--font-monospace,monospace)}
 .cs-action-result{display:flex;flex-direction:column;gap:12px;padding-top:12px;animation:cs-fade .15s ease-out}
 .cs-action-result pre{max-height:240px;margin:0;padding:8px 10px;overflow:auto;border-radius:6px;background:var(--cs-bg-base);color:var(--cs-label-muted);font:12px/1.5 var(--font-monospace,monospace);white-space:pre-wrap;overflow-wrap:anywhere}
@@ -60,7 +65,7 @@
 .cs-reasoning::before{content:"";position:absolute;top:2px;bottom:2px;left:11px;width:2px;border-radius:1px;background:var(--cs-border-solid)}
 .cs-reasoning p{margin:0;color:var(--cs-label-muted);font:450 12px/1.6 var(--font);white-space:pre-wrap;overflow-wrap:anywhere}
 /* Inline code in responses and narration: a 0.9375em monospace chip on a faint fill; links in the accent colour. */
-.cs-text code,.cs-reasoning code{padding:.5px .25em;border-radius:.2em;background:var(--cs-code-bg);color:inherit;font-family:var(--font-monospace,monospace);font-size:.9375em}
+.cs-text code,.cs-reasoning code{padding:.5px .25em;border-radius:.2em;background:var(--cs-code-bg);box-shadow:inset 0 0 0 .5px var(--cs-code-ring);color:inherit;font-family:var(--cs-terminal-font);font-size:.9375em}
 .cs-text a{color:var(--cs-link-text);text-decoration:none}
 .cs-text a:hover{text-decoration:underline}
 .cs-text a code{color:inherit}
@@ -75,7 +80,7 @@
 @keyframes cs-slide-out{to{opacity:0;transform:translateY(-16px);filter:blur(4px)}}
 
 /* The accent shimmer: the purple sweep clipped to the muted text, 1.8s travel then a 0.6s pause. */
-.cs-shimmer{position:relative;display:inline-block;color:var(--cs-label-muted);white-space:nowrap}
+.cs-shimmer{position:relative;display:inline-block;color:var(--cs-label-faint);white-space:nowrap}
 .cs-shimmer-sweep{position:absolute;inset:0;color:transparent;background:var(--agent-working-shine) no-repeat -180px center/180px 72px;-webkit-background-clip:text;background-clip:text;mix-blend-mode:screen;animation:cs-shimmer 2.4s linear infinite;pointer-events:none}
 :root[data-theme="light"] .cs-shimmer-sweep{mix-blend-mode:normal}
 @keyframes cs-shimmer{0%{background-position:-180px center}75%,100%{background-position:calc(100% + 180px) center}}
@@ -134,8 +139,8 @@
 .cs-pr-card-stats{display:flex;align-items:center;justify-content:space-between;min-height:22px;color:var(--cs-label-base);font:450 12px/normal var(--font)}
 .cs-pr-card-stats strong{margin-right:4px;font-weight:500}
 .cs-tabular{font-variant-numeric:tabular-nums}
-.cs-additions{margin-left:6px;color:var(--cs-green-text);font-variant-numeric:tabular-nums}
-.cs-deletions{margin-left:6px;color:var(--cs-red-text);font-variant-numeric:tabular-nums}
+.cs-additions{margin-left:6px;color:var(--cs-diff-add);font-variant-numeric:tabular-nums}
+.cs-deletions{margin-left:6px;color:var(--cs-diff-del);font-variant-numeric:tabular-nums}
 .cs-pr-card-title{display:flex;align-items:center;gap:6px;min-width:0;color:var(--cs-label-base);font:500 12px/normal var(--font)}
 .cs-pr-card-status{display:inline-flex;align-items:center;gap:4px;flex:none}
 .cs-pr-status-icon{color:var(--cs-green-base)}
@@ -152,7 +157,7 @@
 .cs-branch-arrow{flex:none;color:var(--cs-label-faint)}
 .cs-commit-badge{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;height:24px;margin-left:10px;padding:0 8px;border:.5px solid var(--cs-border-solid);border-radius:6px;background:var(--cs-control-tertiary);color:var(--cs-label-base);font:450 12px/1 var(--font);cursor:pointer;transition:background-color .15s}
 .cs-commit-badge:hover{background:var(--cs-control-tertiary-hover)}
-.cs-commit-badge code,.cs-commit-sha{color:var(--cs-label-muted);font:450 12px/1 var(--font-monospace,monospace)}
+.cs-commit-badge code,.cs-commit-sha{color:var(--cs-label-muted);font:400 12px/18px var(--cs-terminal-font)}
 .cs-commit-message{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cs-commit-badge.is-stats{gap:6px}
 .cs-commit-badge.is-stats .cs-commit-files{color:var(--cs-label-base)}

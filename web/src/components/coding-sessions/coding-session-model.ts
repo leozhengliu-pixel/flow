@@ -309,13 +309,17 @@ export function codingStatusLine(session: Pick<CodingSession, 'state' | 'phase' 
       return files && !published ? { tone: 'done', label: files === 1 ? 'Changed {count} file' : 'Changed {count} files', count: files, detail: session.summary, live: false } : { tone: 'done', label: 'Finished', detail: session.summary, live: false }
     }
     case 'stale':
-      if (session.stoppedBy) return { tone: 'stopped', label: 'Stopped', live: false }
+      // A member's stop ends the turn like any other in the issue row: "Finished" and the agent's last words.
+      if (session.stoppedBy) return surface === 'issue'
+        ? { tone: 'done', label: 'Finished', detail: CODING_STOPPED_MESSAGE, translateDetail: true, live: false }
+        : { tone: 'stopped', label: 'Stopped', live: false }
       return session.startedAt ? { tone: 'error', label: 'Stopped responding', live: false } : { tone: 'error', label: 'Agent didn’t start', detail: 'The request may not have reached the agent', translateDetail: true, live: false }
     case 'stopping': return { tone: 'working', label: 'Stop requested', live: true }
     case 'awaitingInput': return { tone: 'input', label: session.phase === 'awaitingApproval' ? 'Waiting for approval' : 'Needs input', live: false }
     case 'pending': return session.repository && session.phase !== 'queued'
       ? { tone: 'working', label: 'Setting up {repo}…', repo: session.repository, live: true }
-      : { tone: 'working', label: 'Starting coding session…', live: true }
+      // Before the repository is known the row shows no timer (the reference starts it with "Setting up …").
+      : { tone: 'working', label: 'Starting coding session…', live: false }
     default: {
       const step = session.currentStep
       if (surface === 'issue' && step?.action && session.phase === 'running' && (!step.turnId || !session.currentTurnId || step.turnId === session.currentTurnId))
@@ -323,6 +327,24 @@ export function codingStatusLine(session: Pick<CodingSession, 'state' | 'phase' 
       return { tone: 'working', label: surface === 'chat' ? 'Working for' : 'Thinking…', live: true }
     }
   }
+}
+
+/** The agent's reply to a member's stop (the stream's last message and the issue row's summary). */
+export const CODING_STOPPED_MESSAGE = 'Stopped. Send another prompt when you’re ready.'
+
+/**
+ * A message as one line of plain text (the status row's summary): markdown links keep their label, code spans, emphasis
+ * and heading marks are dropped, and line breaks become spaces.
+ */
+export function plainSummary(text: string): string {
+  return text
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/`+([^`]*)`+/g, '$1')
+    .replace(/(\*\*|__)(.+?)\1/g, '$2')
+    .replace(/(^|\s)[*_](\S[^*_]*?)[*_](?=\s|$|[.,;:!?])/g, '$1$2')
+    .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+\.)\s+/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 /** Elapsed time like the reference app's session timer: "02:42", "1:02:42". */
