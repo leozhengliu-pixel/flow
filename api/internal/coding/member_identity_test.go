@@ -408,7 +408,7 @@ func TestBootstrapUsesMemberIdentityWithoutTheToken(t *testing.T) {
 		t.Fatalf("bootstrap leaks a token: %s", raw)
 	}
 	git := response.Git
-	if git.AuthorName != "Alice A" || git.AuthorEmail != "11+alice-gh@users.noreply.github.com" || git.CommitterName != "Alice A" || git.CommitterEmail != git.AuthorEmail || git.CoAuthorTrailer != "" {
+	if git.AuthorName != "Alice A" || git.AuthorEmail != "11+alice-gh@users.noreply.github.com" || git.CommitterName != "Alice A" || git.CommitterEmail != git.AuthorEmail || !strings.HasPrefix(git.CoAuthorTrailer, "Co-Authored-By: ") {
 		t.Fatalf("member git identity %+v", git)
 	}
 	if response.Repo.BranchPrefix != "alice/" {

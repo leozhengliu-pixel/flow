@@ -127,11 +127,7 @@ func CloneURL(hostName, repository string) string {
 // the author; the committer is the bot unless commits are signed with the
 // user's key (hosts verify the signature against the committer).
 func (s *Service) gitIdentity(session domain.CodingSession, user UserInfo, signed bool) BootstrapGit {
-	botName, botEmail := "Flow", "flow@users.noreply."+fallback(session.HostName, "flow.local")
-	if session.CodeHost != domain.CodeHostGitLab && s.cfg.GitHubApp.Slug != "" {
-		botName = s.cfg.GitHubApp.Slug + "[bot]"
-		botEmail = s.cfg.GitHubApp.AppID + "+" + s.cfg.GitHubApp.Slug + "[bot]@users.noreply." + fallback(s.cfg.GitHubApp.Host, "github.com")
-	}
+	botName, botEmail := s.botIdentity(session)
 	authorName := fallback(user.Name, botName)
 	authorEmail := user.Email
 	if authorEmail == "" && user.Login != "" && session.CodeHost == domain.CodeHostGitHub {
@@ -149,6 +145,15 @@ func (s *Service) gitIdentity(session domain.CodingSession, user UserInfo, signe
 // coAuthorTrailer is the trailer line every commit of a session carries, in
 // Claude Code's spelling ("Co-Authored-By: Name <email>"). The name and email
 // are the bot's identity, so the code host links the commit to the app.
+// botIdentity is the agent's commit identity on the session's host: the GitHub App's bot when one is configured
+// (so the host links commits to the app), otherwise Flow.
+func (s *Service) botIdentity(session domain.CodingSession) (string, string) {
+	if session.CodeHost != domain.CodeHostGitLab && s.cfg.GitHubApp.Slug != "" {
+		return s.cfg.GitHubApp.Slug + "[bot]", s.cfg.GitHubApp.AppID + "+" + s.cfg.GitHubApp.Slug + "[bot]@users.noreply." + fallback(s.cfg.GitHubApp.Host, "github.com")
+	}
+	return "Flow", "flow@users.noreply." + fallback(session.HostName, "flow.local")
+}
+
 func coAuthorTrailer(name, email string) string {
 	return "Co-Authored-By: " + name + " <" + email + ">"
 }

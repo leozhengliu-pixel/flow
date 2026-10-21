@@ -159,10 +159,13 @@ func sessionBranchPrefix(session domain.CodingSession, deploymentPrefix string) 
 
 // sessionGitIdentity is the bootstrap commit identity: the member's own
 // identity when they linked an account on the session's host, otherwise
-// the member as author and the bot as committer (gitIdentity).
+// the member as author and the bot as committer (gitIdentity). Either way
+// the agent is credited with a Co-Authored-By trailer.
 func (s *Service) sessionGitIdentity(ctx context.Context, session domain.CodingSession, user UserInfo, signed bool) BootstrapGit {
 	if account, ok := s.memberAccount(ctx, session.WorkspaceKey, session.CreatorID, session.CodeHost, session.HostName); ok && account.Email != "" {
-		return memberGitIdentity(account, user, signed)
+		git := memberGitIdentity(account, user, signed)
+		git.CoAuthorTrailer = coAuthorTrailer(s.botIdentity(session))
+		return git
 	}
 	return s.gitIdentity(session, user, signed)
 }
