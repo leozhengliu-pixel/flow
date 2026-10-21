@@ -937,6 +937,8 @@ export interface ReleaseResource {
   documentId?: UUID;
   /** Markdown of a document attached by CI (no workspace document). */
   content?: string;
+  /** Integration that owns a synced link ("gitlab"); empty for links added by hand. */
+  source?: string;
   createdAt: string;
 }
 export interface Release {

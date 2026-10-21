@@ -2762,6 +2762,8 @@ export interface ReleaseResource {
   createdAt: string
   documentId?: string
   id: string
+  /** Source names the integration that owns a synced link ("gitlab" for a GitLab Release Hook). Empty for links added by hand or by the CI API; only owned links are reconciled on later deliveries. */
+  source?: string
   title: string
   type: string
   url?: string
@@ -2773,6 +2775,8 @@ export interface ReleaseResourcePartial {
   createdAt?: string
   documentId?: string
   id: string
+  /** Source names the integration that owns a synced link ("gitlab" for a GitLab Release Hook). Empty for links added by hand or by the CI API; only owned links are reconciled on later deliveries. */
+  source?: string
   title?: string
   type?: string
   url?: string

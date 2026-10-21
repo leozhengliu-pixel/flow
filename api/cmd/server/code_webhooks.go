@@ -58,7 +58,7 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if isGitLabReleaseHook(provider, r.Header, body) {
-		s.applyGitLabReleaseHook(w, r, body)
+		s.handleGitLabReleaseHook(w, r, body)
 		return
 	}
 	var event externalCodeReviewEvent

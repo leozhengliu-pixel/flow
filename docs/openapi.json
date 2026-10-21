@@ -46661,6 +46661,10 @@
           "id": {
             "type": "string"
           },
+          "source": {
+            "description": "Source names the integration that owns a synced link (\"gitlab\" for a GitLab Release Hook). Empty for links added by hand or by the CI API; only owned links are reconciled on later deliveries.",
+            "type": "string"
+          },
           "title": {
             "type": "string"
           },
@@ -46693,6 +46697,10 @@
             "type": "string"
           },
           "id": {
+            "type": "string"
+          },
+          "source": {
+            "description": "Source names the integration that owns a synced link (\"gitlab\" for a GitLab Release Hook). Empty for links added by hand or by the CI API; only owned links are reconciled on later deliveries.",
             "type": "string"
           },
           "title": {

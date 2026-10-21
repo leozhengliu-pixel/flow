@@ -563,7 +563,10 @@ func (s *server) applyReleaseCIOperation(ctx context.Context, base, workspace, p
 			release.CommitSHA = input.CommitSHA
 		}
 		outcome.result.SkippedIssueIdentifiers, outcome.result.UnknownIssueIdentifiers = applyReleaseCIIssues(data, release, input)
-		applyReleaseCIResources(release, input, now)
+		if options.source != "" {
+			reconcileReleaseSourceLinks(release, options.source, input.Links, now)
+		}
+		applyReleaseCIResources(release, input, now, options.source != "")
 		if options.hasNotes {
 			setReleaseNotes(data, release, options.notes, now, "note_updated")
 		}
@@ -877,11 +880,15 @@ func applyReleaseCIIssues(data *domain.Bootstrap, release *domain.Release, input
 
 // applyReleaseCIResources adds links (deduplicated by URL) and upserts
 // documents by title --link and --document flags.
-func applyReleaseCIResources(release *domain.Release, input releaseCIInput, now time.Time) {
+func applyReleaseCIResources(release *domain.Release, input releaseCIInput, now time.Time, linksReconciled bool) {
 	if release.Resources == nil {
 		release.Resources = []domain.ReleaseResource{}
 	}
-	for index, link := range input.Links {
+	links := input.Links
+	if linksReconciled { // a webhook's links were already reconciled with their owner marker
+		links = nil
+	}
+	for index, link := range links {
 		address := strings.TrimSpace(link.URL)
 		if address == "" || slices.ContainsFunc(release.Resources, func(item domain.ReleaseResource) bool { return item.Type == "link" && item.URL == address }) {
 			continue

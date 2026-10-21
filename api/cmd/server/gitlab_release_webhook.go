@@ -5,11 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // GitLab Release Hooks mirror a project's releases into a release pipeline.
@@ -30,6 +33,116 @@ type gitlabReleaseHook struct {
 	Commit      struct {
 		ID string `json:"id"`
 	} `json:"commit"`
+	Assets struct {
+		Links []struct {
+			Name     string `json:"name"`
+			URL      string `json:"url"`
+			LinkType string `json:"link_type"`
+		} `json:"links"`
+		// Sources (zip/tar.gz archives of the tag) are not mapped: GitLab
+		// generates them for every tag, they carry nothing release-specific
+		// beyond the "GitLab release" link and would only crowd the
+		// release's resources.
+	} `json:"assets"`
+}
+
+const (
+	gitlabReleaseMaxLinks     = 50
+	gitlabReleaseMaxURLLength = 2048
+	gitlabReleaseMaxNameRunes = 200
+)
+
+// gitlabReleaseLinkURL accepts only absolute http(s) URLs of bounded length.
+func gitlabReleaseLinkURL(raw string) (string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || len(raw) > gitlabReleaseMaxURLLength {
+		return "", false
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return "", false
+	}
+	return raw, true
+}
+
+// gitlabReleaseLinks maps the release page and assets.links onto Flow release
+// links (name -> title, url) and counts the links dropped for an invalid URL
+// or the cap. link_type (package, image, runbook, other) has no counterpart
+// on Flow resources and is not stored. Duplicate URLs keep their first name.
+func gitlabReleaseLinks(hook gitlabReleaseHook) ([]releaseCILink, int) {
+	var links []releaseCILink
+	rejected := 0
+	add := func(address, name, fallback string) {
+		address, ok := gitlabReleaseLinkURL(address)
+		if !ok {
+			rejected++
+			return
+		}
+		if slices.ContainsFunc(links, func(item releaseCILink) bool { return item.URL == address }) {
+			return
+		}
+		if len(links) >= gitlabReleaseMaxLinks {
+			rejected++
+			return
+		}
+		name = strings.TrimSpace(name)
+		if name == "" {
+			name = fallback
+		}
+		if runes := []rune(name); len(runes) > gitlabReleaseMaxNameRunes {
+			name = string(runes[:gitlabReleaseMaxNameRunes])
+		}
+		links = append(links, releaseCILink{URL: address, Label: name})
+	}
+	if strings.TrimSpace(hook.URL) != "" {
+		add(hook.URL, "GitLab release", "GitLab release")
+	}
+	for _, link := range hook.Assets.Links {
+		add(link.URL, link.Name, strings.TrimSpace(link.URL))
+	}
+	return links, rejected
+}
+
+// reconcileReleaseSourceLinks makes the links owned by source match desired:
+// owned links no longer present are removed, renamed ones are retitled, new
+// ones are added. Links without that owner (added in Flow) are never touched,
+// and a desired URL a user already has as a manual link is not duplicated.
+func reconcileReleaseSourceLinks(release *domain.Release, source string, desired []releaseCILink, now time.Time) {
+	release.Resources = slices.DeleteFunc(release.Resources, func(item domain.ReleaseResource) bool {
+		return item.Type == "link" && item.Source == source && !slices.ContainsFunc(desired, func(link releaseCILink) bool { return link.URL == item.URL })
+	})
+	for index, link := range desired {
+		existing := slices.IndexFunc(release.Resources, func(item domain.ReleaseResource) bool { return item.Type == "link" && item.URL == link.URL })
+		switch {
+		case existing < 0:
+			release.Resources = append(release.Resources, domain.ReleaseResource{ID: fmt.Sprintf("release_resource_%d_g%d", now.UnixNano(), index), Type: "link", Title: link.Label, URL: link.URL, Source: source, CreatedAt: now})
+		case release.Resources[existing].Source == source:
+			release.Resources[existing].Title = link.Label
+		}
+	}
+}
+
+// handleGitLabReleaseHook applies an authenticated Release Hook and, when the
+// delivery was accepted, stamps the GitLab connection's lastWebhookAt like
+// merge request hooks do. A bad signature never reaches here; rejected
+// payloads (4xx) do not count as a working webhook.
+func (s *server) handleGitLabReleaseHook(w http.ResponseWriter, r *http.Request, body []byte) {
+	recorder := &statusRecorder{ResponseWriter: w}
+	s.applyGitLabReleaseHook(recorder, r, body)
+	if recorder.status < 200 || recorder.status >= 300 {
+		return
+	}
+	now := time.Now().UTC()
+	scope := store.WithMutationScope(r.Context(), store.MutationScope{Resources: []string{"gitlab.release_hook"}})
+	_ = s.store.MutateWorkspace(scope, workspaceKey(r), "gitlab.release_webhook", "gitlab.release_hook", map[string]string{}, func(data *domain.Bootstrap) error {
+		for i := range data.IntegrationConnections {
+			if data.IntegrationConnections[i].Provider == "gitlab" {
+				data.IntegrationConnections[i].LastWebhookAt = &now
+				data.IntegrationConnections[i].LastError = ""
+			}
+		}
+		return nil
+	})
 }
 
 // gitlabReleaseIssueKey finds issue identifiers (KEY-123) in release names and notes.
@@ -50,23 +163,22 @@ func isGitLabReleaseHook(provider string, header http.Header, body []byte) bool 
 }
 
 // gitlabReleaseInput maps a Release Hook onto a CI sync that completes the release.
-func gitlabReleaseInput(hook gitlabReleaseHook) releaseCIInput {
+func gitlabReleaseInput(hook gitlabReleaseHook) (releaseCIInput, int) {
 	tag, name := strings.TrimSpace(hook.Tag), strings.TrimSpace(hook.Name)
 	if name == "" {
 		name = tag
 	}
 	description := hook.Description
 	input := releaseCIInput{Name: name, Version: tag, Description: &description, CommitSHA: strings.TrimSpace(hook.Commit.ID), Stage: "completed"}
-	if address := strings.TrimSpace(hook.URL); address != "" {
-		input.Links = []releaseCILink{{URL: address, Label: "GitLab release"}}
-	}
+	var rejected int
+	input.Links, rejected = gitlabReleaseLinks(hook)
 	for _, identifier := range gitlabReleaseIssueKey.FindAllString(name+"\n"+hook.Description, -1) {
 		identifier = strings.ToUpper(identifier)
 		if !slices.ContainsFunc(input.IssueReferences, func(item releaseCIIssueReference) bool { return item.Identifier == identifier }) {
 			input.IssueReferences = append(input.IssueReferences, releaseCIIssueReference{Identifier: identifier})
 		}
 	}
-	return input
+	return input, rejected
 }
 
 // gitlabReleasePipeline resolves the hook's target pipeline: ?pipeline=<id or
@@ -124,7 +236,8 @@ func (s *server) applyGitLabReleaseHook(w http.ResponseWriter, r *http.Request, 
 		}
 		return
 	}
-	outcome, err := s.applyReleaseCIOperation(r.Context(), releaseAppBaseURL(s, r), workspace, pipelineID, "sync", gitlabReleaseInput(hook), releaseCIOptions{source: "gitlab", looseVersionMatch: true})
+	input, rejectedLinks := gitlabReleaseInput(hook)
+	outcome, err := s.applyReleaseCIOperation(r.Context(), releaseAppBaseURL(s, r), workspace, pipelineID, "sync", input, releaseCIOptions{source: "gitlab", looseVersionMatch: true})
 	var ciErr releaseCIError
 	switch {
 	case errors.As(err, &ciErr):
@@ -132,6 +245,6 @@ func (s *server) applyGitLabReleaseHook(w http.ResponseWriter, r *http.Request, 
 	case err != nil:
 		respondMutation(w, err, http.StatusAccepted, nil)
 	default:
-		writeJSON(w, http.StatusAccepted, map[string]any{"pipelineId": pipelineID, "created": outcome.created, "success": outcome.result.Success, "release": outcome.result.Release, "skippedIssueIdentifiers": outcome.result.SkippedIssueIdentifiers, "unknownIssueIdentifiers": outcome.result.UnknownIssueIdentifiers})
+		writeJSON(w, http.StatusAccepted, map[string]any{"pipelineId": pipelineID, "created": outcome.created, "success": outcome.result.Success, "release": outcome.result.Release, "skippedIssueIdentifiers": outcome.result.SkippedIssueIdentifiers, "unknownIssueIdentifiers": outcome.result.UnknownIssueIdentifiers, "rejectedLinks": rejectedLinks})
 	}
 }
