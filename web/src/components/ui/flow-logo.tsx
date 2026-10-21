@@ -7,10 +7,15 @@ export const FLOW_LOGO_RIDGE = 'M0 33C11 33 14 13 24 13C31 13 33 26 37 26C40.5 2
  * Flow's mark: a rounded tile with a one-stroke ridgeline cut through it. Draws in currentColor.
  * `outline` draws it as a hairline drawing instead (the reference app's faint background mark): each piece is filled with
  * `--flow-logo-outline-fill` and edged with a 0.5px `--flow-logo-outline-stroke`, both set by the host.
+ * `ridge` draws only the ridgeline, in currentColor, for a host that is itself the tile (a brand tile on a consent
+ * screen): the tile with its ridge then reads as the mark, without a second tile inside it.
  */
-export function FlowLogo({ className, size, title, variant = 'solid' }: { className?: string; size?: number; title?: string; variant?: 'solid' | 'outline' }) {
+export function FlowLogo({ className, size, title, variant = 'solid' }: { className?: string; size?: number; title?: string; variant?: 'solid' | 'outline' | 'ridge' }) {
   const id = `flow-logo-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
   const label = { role: title ? 'img' : undefined, 'aria-label': title, 'aria-hidden': title ? undefined : true } as const
+  if (variant === 'ridge') return <svg className={className} width={size} height={size} viewBox="4 4 40 40" fill="none" {...label}>
+    <path d={FLOW_LOGO_RIDGE} stroke="currentColor" strokeWidth="5"/>
+  </svg>
   if (variant === 'outline') return <svg className={className} width={size} height={size} viewBox="4 4 40 40" fill="none" overflow="visible" {...label}>
     <mask id={`${id}-cut`} maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="48">
       <rect width="48" height="48" fill="#fff"/>

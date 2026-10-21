@@ -48,6 +48,10 @@ describe('OAuth consent page', () => {
     api.fetchOAuthAuthorizationRequest.mockResolvedValue(consent())
     renderAt('?client_id=c1&redirect_uri=http%3A%2F%2Flocalhost%3A8765%2Fcallback&response_type=code&scope=read,write&state=s')
     expect(await screen.findByRole('heading', { name: 'QA OAuth is requesting access' })).toBeVisible()
+    // Flow's brand tile is the mark itself: only the ridgeline is drawn on it, never a second tile inside.
+    const flowMark = screen.getByRole('img', { name: 'Flow' })
+    expect(flowMark.querySelector('rect')).toBeNull()
+    expect(flowMark.querySelectorAll('path')).toHaveLength(1)
     expect(screen.getByText((_, element) => element?.tagName === 'P' && element.textContent === 'Authenticating with your flow-app workspace')).toBeVisible()
     const list = screen.getByRole('list')
     expect(within(list).getAllByRole('listitem').map(item => item.textContent)).toEqual(['Read access to your workspace', 'Write access to your workspace'])
