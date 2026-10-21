@@ -1865,6 +1865,11 @@ export interface DeployPreview {
 /** A repository or request whose code host call failed, and when it is retried. */
 export interface ReviewImportFailure {
   target: string;
+  /** Kind of failure (rate_limited, upstream_error, auth_failed, repository_not_found, …); translate it, fall back to message. */
+  code?: string;
+  /** Values for the translated text (status, provider). */
+  params?: Record<string, string>;
+  /** English diagnostic text from the server. */
   message: string;
   failures?: number;
   backoffUntil?: string;

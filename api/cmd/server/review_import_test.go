@@ -515,8 +515,14 @@ func TestReviewImportReadsOnlyApprovedRepositoriesOfAWideConnection(t *testing.T
 	}
 
 	// Approvals are validated.
-	requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/reviews/import", map[string]any{"repositories": []map[string]string{{"provider": "gitlab", "repository": "no-slash"}}}, http.StatusBadRequest)
-	requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/reviews/import", map[string]any{"repositories": []map[string]string{{"provider": "github", "repository": "acme/store"}}}, http.StatusBadRequest)
+	invalid := requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/reviews/import", map[string]any{"repositories": []map[string]string{{"provider": "gitlab", "repository": "no-slash"}}}, http.StatusBadRequest)
+	if invalid["code"] != reviewImportCodeRepositoryInvalid || invalid["params"].(map[string]any)["repository"] != "no-slash" {
+		t.Fatalf("invalid repository answer = %+v", invalid)
+	}
+	unconnected := requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/reviews/import", map[string]any{"repositories": []map[string]string{{"provider": "github", "repository": "acme/store"}}}, http.StatusBadRequest)
+	if unconnected["code"] != reviewImportCodeSourceNotConnected || unconnected["params"].(map[string]any)["provider"] != "GitHub" {
+		t.Fatalf("unconnected answer = %+v", unconnected)
+	}
 }
 
 func TestReviewImportBacksOffAFailingMergeRequestAndContinues(t *testing.T) {
@@ -538,7 +544,8 @@ func TestReviewImportBacksOffAFailingMergeRequestAndContinues(t *testing.T) {
 		t.Fatal("one failing merge request blocked the others")
 	}
 	status := requestJSON[reviewImportStatus](t, handler, http.MethodGet, "/api/reviews/import", nil, http.StatusOK)
-	if len(status.Backoffs) != 1 || status.Backoffs[0].BackoffUntil == nil || !strings.Contains(status.Backoffs[0].Message, "500") {
+	if len(status.Backoffs) != 1 || status.Backoffs[0].BackoffUntil == nil || !strings.Contains(status.Backoffs[0].Message, "500") ||
+		status.Backoffs[0].Code != reviewImportCodeUpstreamError || status.Backoffs[0].Params["status"] != "500" || result.Failures[0].Code != reviewImportCodeUpstreamError {
 		t.Fatalf("backoff not reported: %+v", status.Backoffs)
 	}
 	diffs := fake.requested("/merge_requests/2/diffs")
