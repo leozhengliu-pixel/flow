@@ -218,6 +218,16 @@ func (h *Host) UpdateChangeRequestBody(ctx context.Context, workspaceKey string,
 	return err
 }
 
+// CloseChangeRequest closes the MR without merging it.
+func (h *Host) CloseChangeRequest(ctx context.Context, workspaceKey string, repo codehost.RepoRef, number int) error {
+	_, client, err := h.repoClient(ctx, workspaceKey, repo)
+	if err != nil {
+		return err
+	}
+	_, err = client.do(ctx, http.MethodPut, mergeRequestPath(repo, number), map[string]any{"state_event": "close"}, nil)
+	return err
+}
+
 // Comment adds an MR note.
 func (h *Host) Comment(ctx context.Context, workspaceKey string, repo codehost.RepoRef, number int, body string) error {
 	_, client, err := h.repoClient(ctx, workspaceKey, repo)

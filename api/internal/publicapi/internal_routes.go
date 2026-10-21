@@ -787,6 +787,7 @@ var InternalRoutes = []string{
 	"POST /api/coding/sessions",
 	"POST /api/coding/sessions/{id}/approve",
 	"POST /api/coding/sessions/{id}/dismiss",
+	"POST /api/coding/sessions/{id}/archive",
 	"POST /api/coding/sessions/{id}/prompt",
 	"POST /api/coding/sessions/{id}/pull-request",
 	"POST /api/coding/sessions/{id}/restart",

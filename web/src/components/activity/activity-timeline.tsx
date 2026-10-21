@@ -358,7 +358,7 @@ function ActivityRow({ event, description, context }: { event: ActivityEvent; de
   const sentence = description.map((part, index) => typeof part === 'string' ? part : <MentionReference key={`${index}-${part.type}-${part.id}`} id={part.id} label={part.label} type={part.type}/>)
   return (
     <p className="activity-row" data-i18n-ignore>
-      {ACTORLESS_ACTIVITY.has(event.type) ? sentence : <AttributedAction actor={activityActor(event.actor, event.botActor, context?.users)}>{sentence}</AttributedAction>}
+      {ACTORLESS_ACTIVITY.has(event.type) && !event.metadata?.archivedBy ? sentence : <AttributedAction actor={activityActor(event.actor, event.botActor, context?.users)}>{sentence}</AttributedAction>}
       <span className="activity-time">
         <span className="activity-dot">·</span>
         <a href={`#activity-${event.id}`} title={format(new Date(event.createdAt), 'PPpp')}>

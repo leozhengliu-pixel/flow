@@ -104,6 +104,15 @@ func TestCodingSessionsAPI(t *testing.T) {
 	if !stopped.StopRequested {
 		t.Fatalf("stop: %+v", stopped)
 	}
+	// Archiving (removing the agent and choosing to archive its session) is idempotent and keeps the first time.
+	archived := requestJSON[domain.CodingSession](t, handler, http.MethodPost, "/api/coding/sessions/"+session.ID+"/archive", nil, http.StatusOK)
+	if archived.ArchivedAt == nil {
+		t.Fatalf("archive: %+v", archived)
+	}
+	if again := requestJSON[domain.CodingSession](t, handler, http.MethodPost, "/api/coding/sessions/"+session.ID+"/archive", nil, http.StatusOK); again.ArchivedAt == nil || !again.ArchivedAt.Equal(*archived.ArchivedAt) {
+		t.Fatalf("second archive: %+v", again)
+	}
+	requestJSON[map[string]any](t, handler, http.MethodPost, "/api/coding/sessions/missing/archive", nil, http.StatusNotFound)
 	usage := requestJSON[codingUsageView](t, handler, http.MethodGet, "/api/coding/usage", nil, http.StatusOK)
 	if usage.ByUser == nil || usage.TotalCostMicros != 0 {
 		t.Fatalf("usage: %+v", usage)

@@ -1027,6 +1027,48 @@ func (s *Service) Dismiss(ctx context.Context, workspaceKey, id, userID string) 
 	return session, ErrConflict
 }
 
+// Archive archives a session at a member's request (removing the agent from
+// the issue and choosing to archive its session): an idle session ends, a busy
+// one is stopped, and the session leaves the issue's activity. The returned
+// bool is false when the session was already archived. Callers close the
+// session's open PRs/MRs afterwards.
+func (s *Service) Archive(ctx context.Context, workspaceKey, id, userID string) (domain.CodingSession, bool, error) {
+	archived := false
+	session, err := s.update(ctx, workspaceKey, id, func(current *domain.CodingSession) error {
+		if current.ArchivedAt != nil {
+			return ErrNoChange
+		}
+		now := s.now().UTC()
+		current.ArchivedAt = &now
+		switch current.Phase {
+		case domain.CodingPhaseDone:
+		case domain.CodingPhaseIdle:
+			current.Phase = domain.CodingPhaseDone
+			current.State = domain.CodingSessionComplete
+			current.EndedAt = &now
+		default:
+			current.StopRequested = true
+			if current.StoppedBy == "" {
+				current.StoppedBy = userID
+			}
+			current.NextReconcileAt = now
+		}
+		current.UpdatedAt = now
+		archived = true
+		return nil
+	})
+	if errors.Is(err, ErrNoChange) {
+		session, err = s.store.CodingSession(ctx, workspaceKey, id)
+		return session, false, err
+	}
+	if err != nil {
+		return session, false, err
+	}
+	s.inbox.notify(id)
+	s.Wake()
+	return session, archived, nil
+}
+
 // FailSession ends a session with an error code (used by metering when a
 // spend limit is reached mid-turn, and by the runtime for runner errors).
 func (s *Service) FailSession(ctx context.Context, workspaceKey, id string, code domain.CodingErrorCode, message string) (domain.CodingSession, error) {
