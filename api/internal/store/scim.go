@@ -277,7 +277,7 @@ func (s *SQLiteStore) ListSCIMUsers(ctx context.Context, workspaceID string, que
 	case "userName":
 		where, args = ` AND lower(i.username)=?`, append(args, strings.ToLower(value))
 	case "externalId":
-		where, args = ` AND i.subject=?`, append(args, value)
+		where, args = ` AND `+s.scimExactEquals("i.subject"), append(args, value)
 	case "id":
 		where, args = ` AND u.id=?`, append(args, value)
 	case "email":
@@ -310,9 +310,15 @@ func (s *SQLiteStore) ListSCIMUsers(ctx context.Context, workspaceID string, que
 	return result, total, rows.Err()
 }
 
+// scimExactEquals compares column with a bound value byte for byte: externalId is case-exact in SCIM, and MySQL's
+// default collation would otherwise match "EXT-3" to "ext-3".
+func (s *SQLiteStore) scimExactEquals(column string) string {
+	return s.metadataRecordKeyEquals(column, "?")
+}
+
 // SCIMUser finds a SCIM user by Flow user id or externalId.
 func (s *SQLiteStore) SCIMUser(ctx context.Context, workspaceID, id string) (SCIMUser, error) {
-	item, err := scanSCIMUser(s.db.QueryRowContext(ctx, `SELECT `+scimUserColumns+scimUserFrom+` AND (u.id=? OR i.subject=?) ORDER BY CASE WHEN u.id=? THEN 0 ELSE 1 END LIMIT 1`, workspaceID, workspaceID, id, id, id))
+	item, err := scanSCIMUser(s.db.QueryRowContext(ctx, `SELECT `+scimUserColumns+scimUserFrom+` AND (u.id=? OR `+s.scimExactEquals("i.subject")+`) ORDER BY CASE WHEN u.id=? THEN 0 ELSE 1 END LIMIT 1`, workspaceID, workspaceID, id, id, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return SCIMUser{}, ErrSCIMNotFound
 	}
@@ -348,7 +354,7 @@ func (s *SQLiteStore) CreateSCIMUser(ctx context.Context, workspaceID string, in
 		subject, defaulted = input.UserName, true
 	}
 	var count int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM auth_identities WHERE provider='scim' AND issuer=? AND (subject=? OR lower(username)=?)`, workspaceID, subject, strings.ToLower(input.UserName)).Scan(&count); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM auth_identities WHERE provider='scim' AND issuer=? AND (`+s.scimExactEquals("subject")+` OR lower(username)=?)`, workspaceID, subject, strings.ToLower(input.UserName)).Scan(&count); err != nil {
 		return SCIMUser{}, err
 	}
 	if count > 0 {
@@ -360,7 +366,7 @@ func (s *SQLiteStore) CreateSCIMUser(ctx context.Context, workspaceID string, in
 	// The account is a SCIM user deleted earlier (restored), an existing
 	// account with the same email (linked), or new.
 	var userID string
-	err := s.db.QueryRowContext(ctx, `SELECT user_id FROM auth_identities WHERE provider=? AND issuer=? AND subject=?`, scimDeletedProvider, workspaceID, subject).Scan(&userID)
+	err := s.db.QueryRowContext(ctx, `SELECT user_id FROM auth_identities WHERE provider=? AND issuer=? AND `+s.scimExactEquals("subject"), scimDeletedProvider, workspaceID, subject).Scan(&userID)
 	restored := err == nil
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return SCIMUser{}, err
@@ -400,7 +406,7 @@ func (s *SQLiteStore) CreateSCIMUser(ctx context.Context, workspaceID string, in
 		return SCIMUser{}, err
 	}
 	if restored {
-		_, err = s.db.ExecContext(ctx, `UPDATE auth_identities SET provider='scim',username=?,claims_json=? WHERE provider=? AND issuer=? AND subject=?`, input.UserName, claims, scimDeletedProvider, workspaceID, subject)
+		_, err = s.db.ExecContext(ctx, `UPDATE auth_identities SET provider='scim',username=?,claims_json=? WHERE provider=? AND issuer=? AND `+s.scimExactEquals("subject"), input.UserName, claims, scimDeletedProvider, workspaceID, subject)
 	} else {
 		_, err = s.db.ExecContext(ctx, `INSERT INTO auth_identities(id,user_id,provider,issuer,subject,identity_key,username,claims_json,created_at,last_login_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, fmt.Sprintf("identity_%d", now.UnixNano()), userID, "scim", workspaceID, subject, externalIdentityKey("scim", workspaceID, subject), input.UserName, claims, stamp, stamp)
 	}
@@ -438,7 +444,7 @@ func (s *SQLiteStore) UpdateSCIMUser(ctx context.Context, workspaceID, userID st
 	if input.ExternalID != "" && input.ExternalID != current.ExternalID && !current.ExternalIDDefaulted {
 		return SCIMUser{}, fmt.Errorf("%w: externalId cannot be changed", ErrSCIMInvalid)
 	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE auth_identities SET username=?,claims_json=? WHERE provider='scim' AND issuer=? AND subject=?`, input.UserName, scimClaimsJSON(input.Name, current.ExternalIDDefaulted), workspaceID, current.ExternalID); err != nil {
+	if _, err := s.db.ExecContext(ctx, `UPDATE auth_identities SET username=?,claims_json=? WHERE provider='scim' AND issuer=? AND `+s.scimExactEquals("subject"), input.UserName, scimClaimsJSON(input.Name, current.ExternalIDDefaulted), workspaceID, current.ExternalID); err != nil {
 		return SCIMUser{}, err
 	}
 	now := time.Now().UTC()
@@ -552,7 +558,7 @@ func (s *SQLiteStore) DeprovisionSCIMUser(ctx context.Context, workspaceID, id s
 		{`UPDATE auth_users SET active=0,updated_at=? WHERE id=?`, []any{stamp, item.User.ID}},
 		{`UPDATE workspace_memberships SET status='suspended' WHERE workspace_id=? AND user_id=?`, []any{workspaceID, item.User.ID}},
 		{`DELETE FROM scim_group_memberships WHERE workspace_id=? AND user_id=?`, []any{workspaceID, item.User.ID}},
-		{`UPDATE auth_identities SET provider=? WHERE provider='scim' AND issuer=? AND subject=?`, []any{scimDeletedProvider, workspaceID, item.ExternalID}},
+		{`UPDATE auth_identities SET provider=? WHERE provider='scim' AND issuer=? AND ` + s.scimExactEquals("subject"), []any{scimDeletedProvider, workspaceID, item.ExternalID}},
 	}
 	for _, statement := range statements {
 		if _, err := tx.ExecContext(ctx, statement.query, statement.args...); err != nil {
@@ -627,7 +633,7 @@ func (s *SQLiteStore) CreateSCIMGroup(ctx context.Context, workspaceID, external
 
 func (s *SQLiteStore) checkSCIMGroupUnique(ctx context.Context, workspaceID, groupID, externalID, displayName string) error {
 	var count int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM scim_groups WHERE workspace_id=? AND id<>? AND (lower(display_name)=? OR (external_id<>'' AND external_id=?))`, workspaceID, groupID, strings.ToLower(displayName), externalID).Scan(&count); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM scim_groups WHERE workspace_id=? AND id<>? AND (lower(display_name)=? OR (external_id<>'' AND `+s.scimExactEquals("external_id")+`))`, workspaceID, groupID, strings.ToLower(displayName), externalID).Scan(&count); err != nil {
 		return err
 	}
 	if count > 0 {
@@ -639,7 +645,7 @@ func (s *SQLiteStore) checkSCIMGroupUnique(ctx context.Context, workspaceID, gro
 func (s *SQLiteStore) SCIMGroup(ctx context.Context, workspaceID, id string) (SCIMGroup, error) {
 	var group SCIMGroup
 	var created, updated string
-	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,external_id,display_name,role,created_at,updated_at FROM scim_groups WHERE workspace_id=? AND (id=? OR external_id=?) ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END LIMIT 1`, workspaceID, id, id, id).Scan(&group.ID, &group.WorkspaceID, &group.ExternalID, &group.DisplayName, &group.Role, &created, &updated)
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,external_id,display_name,role,created_at,updated_at FROM scim_groups WHERE workspace_id=? AND (id=? OR `+s.scimExactEquals("external_id")+`) ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END LIMIT 1`, workspaceID, id, id, id).Scan(&group.ID, &group.WorkspaceID, &group.ExternalID, &group.DisplayName, &group.Role, &created, &updated)
 	if err != nil {
 		return SCIMGroup{}, err
 	}
