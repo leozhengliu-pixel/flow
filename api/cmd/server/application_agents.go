@@ -937,10 +937,11 @@ func agentApprovalSummary(approval domain.AgentApproval) domain.AgentApproval {
 // person delegates an issue to an agent, the issue moves to the team's first
 // "started" status unless it is already started, completed or canceled. An
 // update that sets a status itself keeps it, and agents delegating (to
-// themselves) leave the status alone.
-func delegationStartedState(data *domain.Bootstrap, issue domain.Issue, input domain.IssueUpdateInput) *string {
+// themselves) leave the status alone. It also returns the agent, which the
+// history credits with that status change.
+func delegationStartedState(data *domain.Bootstrap, issue domain.Issue, input domain.IssueUpdateInput) (*string, string) {
 	if input.StateID != nil || data.Viewer.App || data.Viewer.ID == "" {
-		return nil
+		return nil, ""
 	}
 	target := ""
 	if input.DelegateID != nil {
@@ -951,14 +952,14 @@ func delegationStartedState(data *domain.Bootstrap, issue domain.Issue, input do
 		}
 	}
 	if target == "" || issue.Delegate != nil && issue.Delegate.ID == target {
-		return nil
+		return nil, ""
 	}
 	if delegate := userByID(data, target); delegate == nil || !delegate.CanDelegateToTeam(issue.Team) {
-		return nil
+		return nil, ""
 	}
 	switch issue.State.Type {
 	case "started", "completed", "canceled":
-		return nil
+		return nil, ""
 	}
 	priority := issue.Priority
 	if input.Priority != nil {
@@ -966,13 +967,60 @@ func delegationStartedState(data *domain.Bootstrap, issue domain.Issue, input do
 	}
 	if settings := teamSettings(data, issue.Team.ID); issue.State.Type == "backlog" && issue.TriagedAt == nil && settings.TriageEnabled && settings.TriageRequirePriority && priority == 0 {
 		// The team requires a priority before an issue leaves triage.
-		return nil
+		return nil, ""
 	}
 	state := stateForTeamByType(data, issue.Team.ID, "started")
 	if state == nil {
-		return nil
+		return nil, ""
 	}
-	return &state.ID
+	return &state.ID, target
+}
+
+// delegationStatusActorChange marks an update's changes when delegating moved the issue to a started status;
+// its value is the agent. appendIssueUpdateActivity reads and removes it.
+const delegationStatusActorChange = "stateChangedByDelegate"
+
+// delegationStatusChanges are the change keys of a status move that the history credits to the agent.
+var delegationStatusChanges = []string{"stateBefore", "stateBeforeId", "stateBeforeType", "state", "stateId", "stateType"}
+
+// appendIssueUpdateActivity records an issue update in the history. When delegating moved the issue to a
+// started status, the person's row keeps the delegation (and any other change) and the status move becomes a
+// second row by the agent, as the agent picking the issue up is what starts it. The returned event is the
+// person's row (the one notifications follow); it is the agent's row when nothing else changed.
+func appendIssueUpdateActivity(data *domain.Bootstrap, issueID string, changes map[string]string) domain.ActivityEvent {
+	agentID := changes[delegationStatusActorChange]
+	delete(changes, delegationStatusActorChange)
+	agent := userByID(data, agentID)
+	if agent == nil || changes["stateId"] == "" {
+		return appendActivity(data, issueID, "issue.updated", data.Viewer, changes)
+	}
+	status := map[string]string{}
+	for _, key := range delegationStatusChanges {
+		if value, ok := changes[key]; ok {
+			status[key] = value
+			delete(changes, key)
+		}
+	}
+	var primary domain.ActivityEvent
+	if len(changes) > 0 {
+		primary = appendActivity(data, issueID, "issue.updated", data.Viewer, changes)
+	}
+	moved := appendActivity(data, issueID, "issue.updated", *agent, status)
+	if primary.ID == "" {
+		return moved
+	}
+	if moved.ID == primary.ID {
+		// Both rows were stamped in the same nanosecond; keep the ids distinct.
+		items := data.Activities[issueID]
+		items[len(items)-1].ID += "_status"
+		moved = items[len(items)-1]
+	}
+	if !moved.CreatedAt.After(primary.CreatedAt) {
+		// The agent's row follows the delegation in the history.
+		items := data.Activities[issueID]
+		items[len(items)-1].CreatedAt = primary.CreatedAt.Add(time.Microsecond)
+	}
+	return primary
 }
 
 // acknowledgeBuiltinTask posts the built-in agent's first activity as soon as

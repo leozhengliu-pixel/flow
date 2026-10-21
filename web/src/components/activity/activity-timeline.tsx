@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n/i18n'
 import { CalendarIcon, CycleIcon, LabelIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
-import { activityTimeLabel, coalesceIssueEvents, describeIssueActivityParts, issueEventFieldCount, type ActivityContext, type ActivityPart } from './issue-activity-model'
+import { activityTimeLabel, coalesceIssueEvents, describeIssueActivityParts, withoutSessionDelegations, issueEventFieldCount, type ActivityContext, type ActivityPart } from './issue-activity-model'
 import { MentionReference } from '@/components/editor/mentions/mention-reference'
 import { IntegrationBrandIcon } from '@/components/settings/integration-brand-icon'
 import { inlineCommentsState } from '@/lib/inline-comments-state'
@@ -117,8 +117,9 @@ export function ActivityTimeline({
   // Consecutive field changes by one actor read as one row ("Flow set priority to Urgent and set the estimate to 3
   // on behalf of Dev User"), unless a comment was posted between them.
   const commentTimes = topLevel.map((comment) => new Date(comment.createdAt).getTime())
+  // A delegation's row gives way to the card of the session it started.
   const coalesced = coalesceIssueEvents(
-    [...events].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
+    withoutSessionDelegations([...events], renderAgentSession ? standaloneSessions : []).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
     (previous, next) => !commentTimes.some((time) => time > new Date(previous.createdAt).getTime() && time < new Date(next.createdAt).getTime()),
   )
   const eventItems = coalesced.flatMap((event) => {

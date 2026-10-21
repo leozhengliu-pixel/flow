@@ -161,6 +161,29 @@ func TestDelegationMovesIssueToFirstStartedStatus(t *testing.T) {
 	if updated.State.ID != started.ID || updated.Assignee == nil || updated.Assignee.ID != data.Viewer.ID || updated.Delegate == nil || updated.Delegate.ID != app.UserID {
 		t.Fatalf("delegation: state=%s assignee=%+v delegate=%+v", updated.State.Name, updated.Assignee, updated.Delegate)
 	}
+	// The history keeps the delegation as the person's row and credits the status move to the agent, after it.
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, "GET", "/api/bootstrap", nil, 200)
+	var delegated, moved *domain.ActivityEvent
+	for index, item := range bootstrap.Activities[issue.ID] {
+		if item.Type != "issue.updated" {
+			continue
+		}
+		if item.Metadata["delegate"] == app.UserID {
+			delegated = &bootstrap.Activities[issue.ID][index]
+		}
+		if item.Metadata["stateId"] == started.ID {
+			moved = &bootstrap.Activities[issue.ID][index]
+		}
+	}
+	if delegated == nil || moved == nil || delegated == moved {
+		t.Fatalf("delegation history: %+v", bootstrap.Activities[issue.ID])
+	}
+	if delegated.Actor.ID != data.Viewer.ID || delegated.Metadata["state"] != "" || delegated.Metadata[delegationStatusActorChange] != "" || updated.AgentSessionID == "" || delegated.Metadata["agentSessionId"] != updated.AgentSessionID {
+		t.Fatalf("delegation row: %+v", *delegated)
+	}
+	if moved.Actor.ID != app.UserID || moved.Metadata["stateBefore"] != unstarted.Name || moved.Metadata["delegate"] != "" || !moved.CreatedAt.After(delegated.CreatedAt) || moved.ID == delegated.ID {
+		t.Fatalf("status row: %+v (delegation %+v)", *moved, *delegated)
+	}
 	// Picking the agent in the assignee menu delegates the same way.
 	other := requestJSON[domain.Issue](t, handler, "POST", "/api/issues", map[string]any{"title": "Assign agent", "teamId": data.Teams[0].ID, "stateId": unstarted.ID}, 201)
 	updated = requestJSON[domain.Issue](t, handler, "PATCH", "/api/issue-records/"+other.ID, map[string]any{"assigneeId": app.UserID}, 200)

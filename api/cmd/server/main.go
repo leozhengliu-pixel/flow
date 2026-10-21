@@ -4666,7 +4666,7 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 		issue.Version++
 		updated = *issue
 		payload.Issue = updated
-		activity := appendActivity(data, id, "issue.updated", data.Viewer, changes)
+		activity := appendIssueUpdateActivity(data, id, changes)
 		appendIssueNotifications(data, *issue, activity, nil)
 		return nil
 	})
@@ -4808,7 +4808,7 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 			applySLARules(data, issue, issue.UpdatedAt)
 			issue.Version++
 			updated = append(updated, *issue)
-			activity := appendActivity(data, id, "issue.updated", data.Viewer, changes)
+			activity := appendIssueUpdateActivity(data, id, changes)
 			appendIssueNotifications(data, *issue, activity, nil)
 		}
 		if !changed {
@@ -5616,8 +5616,10 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		issue.DocumentContent.UpdatedAt = now
 		changes["documentContent"] = issue.DocumentContent.ID
 	}
-	if stateID := delegationStartedState(data, *issue, input); stateID != nil {
+	startedByDelegate := ""
+	if stateID, agentID := delegationStartedState(data, *issue, input); stateID != nil {
 		input.StateID = stateID
+		startedByDelegate = agentID
 	}
 	if input.StateID != nil {
 		value := stateForTeam(data, issue.Team.ID, *input.StateID)
@@ -5663,6 +5665,9 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 			}
 			issue.State = *value
 			applyStatusWorkflow(data, issue, previousState, now)
+			if startedByDelegate != "" {
+				changes[delegationStatusActorChange] = startedByDelegate
+			}
 		}
 		if value.Type == "started" && issue.Assignee == nil && data.UserSettings[data.Viewer.ID].AssignStarted {
 			issue.Assignee = &data.Viewer
@@ -5744,6 +5749,10 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 			}
 		}
 		changes["delegate"] = *input.DelegateID
+		if issue.AgentSessionID != "" && previousDelegate != *input.DelegateID {
+			// The session the delegation started: its card in the activity stands in for this row.
+			changes["agentSessionId"] = issue.AgentSessionID
+		}
 	}
 	if input.ProjectID != nil {
 		current := ""

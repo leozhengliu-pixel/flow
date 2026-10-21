@@ -79,8 +79,8 @@ export function IssueAgentTasksProvider({ issue, data, resourceType = 'issue', c
   const directory = useTaskDirectory(issue, data, resourceType, true)
   const idsKey = directory.tasks.map(task => task.commentId).filter(Boolean).sort().join(',')
   const ids = useMemo(() => new Set(idsKey ? idsKey.split(',') : []), [idsKey])
-  const standaloneKey = byCreation(directory.tasks.filter(task => !task.commentId)).map(task => `${task.id}|${taskCreatedAt(task)}`).join(',')
-  const standalone = useMemo<StandaloneAgentSession[]>(() => standaloneKey ? standaloneKey.split(',').map(item => { const [id, createdAt] = item.split('|'); return { id, createdAt } }) : [], [standaloneKey])
+  const standaloneKey = byCreation(directory.tasks.filter(task => !task.commentId)).map(task => `${task.id}|${taskCreatedAt(task)}|${task.appUserId}`).join(',')
+  const standalone = useMemo<StandaloneAgentSession[]>(() => standaloneKey ? standaloneKey.split(',').map(item => { const [id, createdAt, agentId] = item.split('|'); return { id, createdAt, agentId } }) : [], [standaloneKey])
   return <TaskDirectory.Provider value={{ ...directory, onUpload }}><CommentThreads.Provider value={ids}><StandaloneSessions.Provider value={standalone}>{children}</StandaloneSessions.Provider></CommentThreads.Provider></TaskDirectory.Provider>
 }
 
