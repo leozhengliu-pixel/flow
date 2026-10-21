@@ -74,9 +74,9 @@ export const reviewsZhCN: Record<string, string> = {
   "Comment URL copied to clipboard": "已复制评论 URL 到剪贴板",
   "Comment content copied to clipboard": "已复制评论内容到剪贴板",
   "Copy comment as Markdown": "以 Markdown 复制评论",
-  "Send to agent": "发送给智能体",
-  "Sent comment to agent": "已将评论发送给智能体",
-  "Could not send to agent": "无法发送给智能体",
+  "Send to agent": "发送给 Agent",
+  "Sent comment to agent": "已将评论发送给 Agent",
+  "Could not send to agent": "无法发送给 Agent",
   // --- Inbox pull request view
   "GitHub pull request": "GitHub 拉取请求",
   "GitLab merge request": "GitLab 合并请求",
