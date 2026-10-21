@@ -14,6 +14,8 @@ import {
 } from "@/lib/integration-catalog";
 import type { BootstrapData } from "@/types/flow";
 import { toast } from "@/lib/toast";
+// The page's own layout (feature-* classes): without it, opening this route first renders unstyled.
+import "./feature-settings.css";
 
 type Props = {
   data: BootstrapData;

@@ -67,7 +67,7 @@ const matchesSession = (detail: CodingSessionEventDetail | undefined, session: P
  * anchor), and by a fallback poll while it is live.
  */
 export function useCodingSession(sessionId: string | undefined, initial?: CodingSession) {
-  const [session, setSession] = useState<CodingSession | undefined>(initial?.id === sessionId ? initial : undefined)
+  const [session, setSession] = useState<CodingSession | undefined>(sessionId && initial?.id === sessionId ? initial : undefined)
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
   const latest = useRef(session)

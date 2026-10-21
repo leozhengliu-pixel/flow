@@ -18,6 +18,7 @@ import type {
   CodingSessionState,
   CodingSettings,
   CodingStatus,
+  CodingTriggerResult,
   CodingUsageSummary,
   CreateCodingSessionInput,
   GitHubAppInstallationSummary,
@@ -101,10 +102,19 @@ export const fetchCodingSandboxLogs = (sessionId: string, sandboxId: string) =>
 export const fetchCodingSessionArtifacts = (sessionId: string) => request<CodingArtifact[]>(`/api/coding/sessions/${id(sessionId)}/artifacts`);
 
 // Triggers (track G calls, track L serves).
+/**
+ * The session a trigger started or continued. The endpoints answer `{ outcome, session, … }`, not the session itself;
+ * a trigger that started nothing rejects with the server's reason.
+ */
+export function triggerSession(result: CodingTriggerResult | null | undefined): CodingSession {
+  const session = result?.session
+  if (session?.id) return session
+  throw new Error(result?.message || "Could not start coding session");
+}
 export const startIssueCodingSession = (issueId: string, input: { prompt?: string; environmentId?: string } = {}) =>
-  request<CodingSession>(`/api/issues/${id(issueId)}/coding-session`, jsonRequest("POST", input));
+  request<CodingTriggerResult>(`/api/issues/${id(issueId)}/coding-session`, jsonRequest("POST", input)).then(triggerSession);
 export const startReviewCodingSession = (reviewId: string, input: { kind: ReviewCodingSessionKind; prompt?: string }) =>
-  request<CodingSession>(`/api/reviews/${id(reviewId)}/coding-session`, jsonRequest("POST", input));
+  request<CodingTriggerResult>(`/api/reviews/${id(reviewId)}/coding-session`, jsonRequest("POST", input)).then(triggerSession);
 
 // GitHub App (track F calls, track D serves).
 export const fetchGitHubApp = () => request<GitHubAppStatus>("/api/integrations/github-app");

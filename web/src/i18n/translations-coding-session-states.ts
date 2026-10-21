@@ -60,6 +60,7 @@ export const codingSessionStatesZhCN: Record<string, string> = {
   "Something went wrong while running this session.": "运行此会话时出错。",
   "Flow failed to start.": "Flow 未能启动。",
   "Couldn’t load this session’s messages.": "无法加载此会话的消息。",
+  "Couldn’t show this coding session.": "无法显示此编码会话。",
   "Your workspace requires signed commits for coding sessions. Add a signing key to continue.": "你的工作区要求编码会话使用签名提交。请添加签名密钥以继续。",
   "Signing key needed to proceed": "需要签名密钥才能继续",
   "Add signing key": "添加签名密钥",

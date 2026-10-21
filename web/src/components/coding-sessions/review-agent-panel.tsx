@@ -1,6 +1,7 @@
 import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData } from '@/types/flow'
+import { CodingSessionErrorBoundary } from './coding-session-error-boundary'
 import { CodingAgentPanel } from './coding-session-panel'
 import { useCodingAvailability, useCodingSession, useDismissedCodingSessions } from './use-coding-sessions'
 import './coding-sessions.css'
@@ -19,8 +20,10 @@ export function ReviewAgentPanel({ sessionId, data, onClose, onOpenChanges }: { 
   if (!session) return <aside className="coding-agent-panel review-agent-panel" aria-label={t('Agent')}>
     {error ? <p className="coding-session-error-text" role="alert">{error}</p> : <p className="coding-session-muted" role="status">{t('Loading coding session…')}</p>}
   </aside>
-  return <CodingAgentPanel session={session} data={data} onChange={apply} onClose={onClose} onOpenChanges={onOpenChanges} className="review-agent-panel"
-    onDismiss={() => { dismiss(session.id); onClose() }}/>
+  return <CodingSessionErrorBoundary className="coding-agent-panel review-agent-panel">
+    <CodingAgentPanel session={session} data={data} onChange={apply} onClose={onClose} onOpenChanges={onOpenChanges} className="review-agent-panel"
+      onDismiss={() => { dismiss(session.id); onClose() }}/>
+  </CodingSessionErrorBoundary>
 }
 
 /** "Hide agent" / "Show agent" at the end of the review's tabs row. */
