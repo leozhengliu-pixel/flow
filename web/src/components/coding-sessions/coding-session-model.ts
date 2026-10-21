@@ -79,7 +79,8 @@ export function codingSessionCapabilities(session: CodingSession): CodingSession
   const terminal = isCodingSessionTerminal(session)
   const awaitingApproval = session.phase === 'awaitingApproval'
   const hasPullRequest = Boolean(session.latestPullRequest || session.pullRequests?.length)
-  const publishFailed = session.errorCode === 'pushFailed' || session.errorCode === 'pullRequestFailed'
+  const pullRequestFailed = session.errorCode === 'pullRequestFailed'
+  const pushFailed = session.errorCode === 'pushFailed'
   return {
     stop: !terminal && session.state !== 'stopping' && !awaitingApproval,
     prompt: session.state !== 'stopping' && !awaitingApproval,
@@ -87,12 +88,19 @@ export function codingSessionCapabilities(session: CodingSession): CodingSession
     restartWithDefaultModel: (session.state === 'error' || session.state === 'stale') && session.modelSelection !== 'auto',
     startOver: terminal && (session.phase === 'idle' || session.phase === 'done') && session.approvalState !== 'rejected' && Boolean(session.escalationModel),
     approve: awaitingApproval,
-    createPullRequest: !hasPullRequest && Boolean(session.branchName) && (publishFailed || (terminal && hasCommits(session))),
+    createPullRequest: !hasPullRequest && Boolean(session.branchName) && (pullRequestFailed || (branchPublished(session) && (pushFailed || terminal))),
     dismiss: terminal,
   }
 }
 
 const hasCommits = (session: CodingSession) => Object.values(session.commitsByTurnActivityId ?? {}).some(list => list.length > 0)
+
+/**
+ * Whether the server knows the branch reached the code host: a turn pushed it (`pushed` / `existingBranch`) or
+ * recorded commits (only pushed turns record them). `headSha` is no evidence: a turn stopped before its first
+ * commit reports the clone baseline.
+ */
+const branchPublished = (session: CodingSession) => Boolean(session.pushed || session.existingBranch) || hasCommits(session)
 
 export type CodingErrorAction =
   | { kind: 'link'; label: string; href: string }

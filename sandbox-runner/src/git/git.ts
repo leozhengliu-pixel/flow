@@ -59,6 +59,8 @@ export interface BranchCheckout {
   source: 'remote' | 'kept' | 'created'
   base?: string
   note?: string
+  /** created again because an unconfirmed existing branch is definitely absent on origin: its unpushed commits are gone. */
+  recovered?: boolean
 }
 
 /** Non-interactive git environment (no prompts, no pager, no system askpass). */
@@ -269,12 +271,15 @@ export class Git {
     } else if (local) {
       await this.git(['checkout', branch])
       checkout = { source: 'kept', note: `kept the workspace's unpublished ${branch}` }
-    } else if (repo.existingBranch) {
+    } else if (repo.existingBranch && !repo.branchUnconfirmed) {
       throw new BranchNotFoundError(branch)
     } else {
       const { base, note } = await this.branchBase(repo)
       await this.git(['checkout', '-b', branch, base])
       checkout = { source: 'created', base, note }
+      // origin definitely has no such branch (remoteBranchHead throws on every other outcome) and nothing proves it
+      // was ever published: start it again; origin is never touched.
+      if (repo.existingBranch) checkout.recovered = true
     }
     return checkout
   }

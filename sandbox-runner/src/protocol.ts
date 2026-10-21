@@ -49,6 +49,11 @@ export interface BootstrapRepo {
   baseSha?: string
   branchName: string
   existingBranch: boolean
+  /**
+   * Additive: existingBranch is only an unconfirmed guess (no PR/MR and no push the session ever recorded). If origin
+   * definitely has no such branch the runner starts it again instead of failing with "branch not found".
+   */
+  branchUnconfirmed?: boolean
   /** Additive (track C): FLOW_CODING_BRANCH_PREFIX, so the runner can refuse other branches. */
   branchPrefix?: string
 }

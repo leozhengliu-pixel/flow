@@ -1162,7 +1162,12 @@ func (s *Service) CreatePullRequest(ctx context.Context, workspaceKey, id string
 	if err != nil {
 		return session, err
 	}
-	if session.Repository == "" || session.BranchName == "" || session.HeadSHA == "" && !session.ExistingBranch && len(session.CommitsByTurnActivityID) == 0 {
+	if session.Repository == "" || session.BranchName == "" {
+		return session, ErrConflict
+	}
+	// HeadSHA is no proof the branch was pushed (it can be the clone
+	// baseline); only the explicit published state or recorded commits are.
+	if !session.Pushed && !session.ExistingBranch && len(session.PullRequests) == 0 && len(session.CommitsByTurnActivityID) == 0 {
 		if commits, _ := s.store.CodingCommits(ctx, id); len(commits) == 0 {
 			return session, ErrConflict
 		}

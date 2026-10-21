@@ -88,7 +88,7 @@ func codingDiffRefs(session domain.CodingSession) (base, head string) {
 func (s *server) codingSessionDiff(ctx context.Context, workspace string, session domain.CodingSession) codingDiffView {
 	base, head := codingDiffRefs(session)
 	view := codingDiffView{Source: "none", Base: base, Head: head, Files: []codingDiffFile{}}
-	pushed := session.HeadSHA != "" || session.LatestPullRequest != nil || len(session.PullRequests) > 0 || session.ExistingBranch
+	pushed := session.Pushed || session.ExistingBranch || session.LatestPullRequest != nil || len(session.PullRequests) > 0 || len(session.CommitsByTurnActivityID) > 0
 	var host codehost.Host
 	if s.coding != nil {
 		host = s.coding.hosts[session.CodeHost]
