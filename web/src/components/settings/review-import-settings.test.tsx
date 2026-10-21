@@ -16,6 +16,11 @@ vi.mock("@/lib/api", async (importOriginal) => ({
   ...api,
 }));
 
+const toastError = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/toast", () => ({ toast: { error: toastError, success: vi.fn() } }));
+
+import { ApiError } from "@/lib/api-client";
+
 import { ReviewImportSettings } from "./review-import-settings";
 
 const status = (overrides: Partial<ReviewImportStatus> = {}): ReviewImportStatus => ({
@@ -73,4 +78,44 @@ it("shows the last run, backoffs and a server-wide off switch read-only to membe
   const backoffs = screen.getByRole("list", { name: "Retrying later" });
   expect(within(backoffs).getByText("acme/store#7")).toBeInTheDocument();
   expect(within(backoffs).getByText("merge request diffs: HTTP 500")).toBeInTheDocument();
+});
+
+it("translates backoff codes in zh-CN and falls back to the server message for unknown or missing codes", async () => {
+  localStorage.setItem("flow:locale", "zh-CN");
+  try {
+    api.fetchReviewImport.mockResolvedValue(status({
+      enabled: true,
+      backoffs: [
+        { target: "github:acme/store#1", code: "upstream_error", params: { status: "502" }, message: "github: HTTP 502: bad gateway", failures: 1, backoffUntil: "2026-10-20T08:20:15Z" },
+        { target: "github:acme/store#2", code: "no_source", params: { provider: "GitHub" }, message: "no connected GitHub source reaches this repository", failures: 1 },
+        { target: "github:acme/store#3", code: "from_a_newer_server", message: "a newer failure", failures: 1 },
+        { target: "github:acme/store#4", message: "an old row without a code", failures: 1 },
+      ],
+    }));
+    render(<I18nProvider><ReviewImportSettings provider="github" data={makeBootstrap({ viewerRole: "member" })} /></I18nProvider>);
+
+    const backoffs = await screen.findByRole("list");
+    expect(within(backoffs).getByText("代码托管平台暂时出现问题，稍后重试")).toHaveAttribute("title", "github: HTTP 502: bad gateway");
+    expect(within(backoffs).getByText("没有已连接的 GitHub 来源可访问此仓库")).toBeInTheDocument();
+    expect(within(backoffs).getByText("a newer failure")).toBeInTheDocument();
+    expect(within(backoffs).getByText("an old row without a code")).toBeInTheDocument();
+    expect(within(backoffs).queryByText("github: HTTP 502: bad gateway")).not.toBeInTheDocument();
+  } finally {
+    localStorage.removeItem("flow:locale");
+  }
+});
+
+it("shows coded request errors in the member's language", async () => {
+  localStorage.setItem("flow:locale", "zh-CN");
+  try {
+    const user = userEvent.setup();
+    api.fetchReviewImport.mockResolvedValue(status());
+    api.updateReviewImport.mockRejectedValue(new ApiError("Connect GitHub before approving its repositories", 400, "source_not_connected", undefined, { provider: "GitHub" }));
+    render(<I18nProvider><ReviewImportSettings provider="github" data={makeBootstrap({ viewerRole: "admin" })} /></I18nProvider>);
+    await user.type(await screen.findByRole("combobox"), "acme/other");
+    await user.click(screen.getByRole("button", { name: "批准" }));
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("请先连接 GitHub，再批准其仓库"));
+  } finally {
+    localStorage.removeItem("flow:locale");
+  }
 });

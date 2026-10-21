@@ -126,7 +126,7 @@ func (r reviewImportRepository) placeholder() domain.CodeReview {
 func normalizeImportRepository(input reviewImportRepository) (reviewImportRepository, error) {
 	provider := strings.ToLower(strings.TrimSpace(input.Provider))
 	if provider != domain.CodeHostGitHub && provider != domain.CodeHostGitLab {
-		return input, errors.New("provider must be github or gitlab")
+		return input, &reviewImportRequestError{code: reviewImportCodeProviderInvalid, message: "provider must be github or gitlab"}
 	}
 	name := strings.TrimSpace(input.FullName)
 	isURL := strings.Contains(name, "://")
@@ -153,7 +153,7 @@ func normalizeImportRepository(input reviewImportRepository) (reviewImportReposi
 		valid = false
 	}
 	if !valid {
-		return input, fmt.Errorf("%q is not a repository (owner/name)", input.FullName)
+		return input, &reviewImportRequestError{code: reviewImportCodeRepositoryInvalid, message: fmt.Sprintf("%q is not a repository (owner/name)", input.FullName), params: map[string]string{"repository": input.FullName}}
 	}
 	return reviewImportRepository{Provider: provider, FullName: name}, nil
 }
@@ -168,10 +168,15 @@ type reviewImportConfig struct {
 
 // reviewImportFailure is a repository or request whose remote call failed.
 type reviewImportFailure struct {
-	Target       string     `json:"target"`
-	Message      string     `json:"message"`
-	Failures     int        `json:"failures,omitempty"`
-	BackoffUntil *time.Time `json:"backoffUntil,omitempty"`
+	Target string `json:"target"`
+	// Code names the kind of failure for clients to translate (see
+	// reviewImportClassify); Params are its values (status, provider).
+	// Message stays English diagnostic text.
+	Code         string            `json:"code,omitempty"`
+	Params       map[string]string `json:"params,omitempty"`
+	Message      string            `json:"message"`
+	Failures     int               `json:"failures,omitempty"`
+	BackoffUntil *time.Time        `json:"backoffUntil,omitempty"`
 }
 
 // reviewImportResult is what one run did.
@@ -204,6 +209,14 @@ var (
 	errReviewImportOff      = errors.New("pull and merge request import is turned off on this server")
 	errReviewImportDisabled = errors.New("pull and merge request import is not turned on for this workspace")
 )
+
+// reviewImportRequestError is a rejected PATCH input with its machine code.
+type reviewImportRequestError struct {
+	code, message string
+	params        map[string]string
+}
+
+func (e *reviewImportRequestError) Error() string { return e.message }
 
 // reviewImportRateLimit stops a run: a code host's rate limit is (nearly) spent.
 type reviewImportRateLimit struct{ until time.Time }
@@ -478,11 +491,12 @@ func (run *reviewImportRun) fail(ctx context.Context, item store.ReviewImportIte
 	if len(message) > 300 {
 		message = message[:300] + "…"
 	}
-	item.LastError = message
+	code, params := reviewImportClassify(err)
+	item.LastError = reviewImportEncodeError(code, params, message)
 	run.save(ctx, item)
 	run.result.Failed++
 	until := item.BackoffUntil
-	run.addError(reviewImportFailure{Target: target, Message: message, Failures: item.Failures, BackoffUntil: &until})
+	run.addError(reviewImportFailure{Target: target, Code: code, Params: params, Message: message, Failures: item.Failures, BackoffUntil: &until})
 }
 
 // succeed clears an item's backoff.
@@ -517,7 +531,7 @@ func (run *reviewImportRun) execute(ctx context.Context, cursor int, repositorie
 	}
 	data, ok := run.s.store.WorkspaceMetadata(run.workspace)
 	if !ok {
-		run.addError(reviewImportFailure{Target: run.workspace, Message: "workspace not found"})
+		run.addError(reviewImportFailure{Target: run.workspace, Code: reviewImportCodeWorkspaceMissing, Message: "workspace not found"})
 		return cursor
 	}
 	start := max(cursor, 0) % len(repositories)
@@ -562,7 +576,7 @@ func (run *reviewImportRun) scanRepository(ctx context.Context, data domain.Boot
 	label := reviewHostLabel(repository.Provider) + " " + repository.FullName
 	stored, err := run.s.store.ReviewImportItems(ctx, run.workspace, repository.key())
 	if err != nil {
-		run.addError(reviewImportFailure{Target: label, Message: err.Error()})
+		run.addError(reviewImportFailure{Target: label, Code: reviewImportCodeUnknown, Message: err.Error()})
 		return batch, nil, true, false
 	}
 	for _, item := range stored {
@@ -577,7 +591,7 @@ func (run *reviewImportRun) scanRepository(ctx context.Context, data domain.Boot
 	}
 	remote, err := run.s.reviewRemoteFor(ctx, data, repository.placeholder(), true)
 	if err == nil && remote == nil {
-		err = errors.New("no connected " + reviewHostLabel(repository.Provider) + " source reaches this repository")
+		err = &reviewImportNoSourceError{provider: repository.Provider}
 	}
 	if err != nil {
 		run.fail(ctx, repositoryItem, label, err)
@@ -887,7 +901,7 @@ func (run *reviewImportRun) apply(ctx context.Context, batches []reviewImportBat
 	})
 	run.result.Writes++
 	if err != nil {
-		run.addError(reviewImportFailure{Target: strings.Join(names, ", "), Message: err.Error()})
+		run.addError(reviewImportFailure{Target: strings.Join(names, ", "), Code: reviewImportCodeUnknown, Message: err.Error()})
 		return map[string]string{}
 	}
 	run.result.Imported += imported
@@ -1104,7 +1118,8 @@ func (s *server) reviewImportStatus(ctx context.Context, workspace string) (revi
 	}
 	for _, item := range backoffs {
 		until := item.BackoffUntil
-		status.Backoffs = append(status.Backoffs, reviewImportFailure{Target: item.Key, Message: item.LastError, Failures: item.Failures, BackoffUntil: &until})
+		code, params, message := reviewImportDecodeError(item.LastError)
+		status.Backoffs = append(status.Backoffs, reviewImportFailure{Target: item.Key, Code: code, Params: params, Message: message, Failures: item.Failures, BackoffUntil: &until})
 	}
 	return status, nil
 }
@@ -1121,7 +1136,7 @@ func (s *server) reviewImportWorkspace(r *http.Request) string {
 func (s *server) getReviewImport(w http.ResponseWriter, r *http.Request) {
 	status, err := s.reviewImportStatus(r.Context(), s.reviewImportWorkspace(r))
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Could not read the pull request import")
+		writeReviewImportError(w, http.StatusInternalServerError, reviewImportCodeReadFailed, "Could not read the pull request import", nil)
 		return
 	}
 	writeJSON(w, http.StatusOK, status)
@@ -1140,7 +1155,7 @@ func (s *server) updateReviewImport(w http.ResponseWriter, r *http.Request) {
 	workspace := s.reviewImportWorkspace(r)
 	record, config, _, err := s.loadReviewImport(r.Context(), workspace)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Could not read the pull request import")
+		writeReviewImportError(w, http.StatusInternalServerError, reviewImportCodeReadFailed, "Could not read the pull request import", nil)
 		return
 	}
 	changed := false
@@ -1150,11 +1165,16 @@ func (s *server) updateReviewImport(w http.ResponseWriter, r *http.Request) {
 		for _, item := range *input.Repositories {
 			repository, err := normalizeImportRepository(item)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+				var invalid *reviewImportRequestError
+				if errors.As(err, &invalid) {
+					writeReviewImportError(w, http.StatusBadRequest, invalid.code, invalid.message, invalid.params)
+				} else {
+					writeError(w, http.StatusBadRequest, err.Error())
+				}
 				return
 			}
 			if !s.reviewImportSourceConnected(r.Context(), data, repository.Provider) {
-				writeError(w, http.StatusBadRequest, "Connect "+reviewHostLabel(repository.Provider)+" before approving its repositories")
+				writeReviewImportError(w, http.StatusBadRequest, reviewImportCodeSourceNotConnected, "Connect "+reviewHostLabel(repository.Provider)+" before approving its repositories", map[string]string{"provider": reviewHostLabel(repository.Provider)})
 				return
 			}
 			if !seen[repository.key()] {
@@ -1163,7 +1183,7 @@ func (s *server) updateReviewImport(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if len(repositories) > reviewImportMaxApproved {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("Approve at most %d repositories", reviewImportMaxApproved))
+			writeReviewImportError(w, http.StatusBadRequest, reviewImportCodeTooManyRepos, fmt.Sprintf("Approve at most %d repositories", reviewImportMaxApproved), map[string]string{"max": strconv.Itoa(reviewImportMaxApproved)})
 			return
 		}
 		changed = !slices.Equal(repositories, config.Repositories)
@@ -1182,7 +1202,7 @@ func (s *server) updateReviewImport(w http.ResponseWriter, r *http.Request) {
 		next = now
 	}
 	if err := s.store.SaveReviewImportSettings(r.Context(), workspace, string(raw), config.Enabled, next); err != nil {
-		writeError(w, http.StatusInternalServerError, "Could not save the pull request import")
+		writeReviewImportError(w, http.StatusInternalServerError, reviewImportCodeSaveFailed, "Could not save the pull request import", nil)
 		return
 	}
 	s.getReviewImport(w, r)
@@ -1211,7 +1231,7 @@ func (s *server) importReviewsFromCodeHosts(w http.ResponseWriter, r *http.Reque
 	workspace := s.reviewImportWorkspace(r)
 	if _, _, last, err := s.loadReviewImport(r.Context(), workspace); err == nil && last != nil && last.RateLimitedUntil != nil && time.Now().Before(*last.RateLimitedUntil) {
 		until := *last.RateLimitedUntil
-		writeJSON(w, http.StatusTooManyRequests, map[string]any{"error": "The code host's rate limit is spent; try again after " + until.Format(time.RFC3339), "rateLimitedUntil": until})
+		writeJSON(w, http.StatusTooManyRequests, map[string]any{"error": "The code host's rate limit is spent; try again after " + until.Format(time.RFC3339), "code": reviewImportCodeRateLimited, "rateLimitedUntil": until})
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
@@ -1219,14 +1239,14 @@ func (s *server) importReviewsFromCodeHosts(w http.ResponseWriter, r *http.Reque
 	result, err := s.runReviewImport(ctx, workspace, "manual")
 	switch {
 	case errors.Is(err, errReviewImportRunning):
-		writeError(w, http.StatusConflict, "A sync with the code hosts is already running")
+		writeReviewImportError(w, http.StatusConflict, reviewImportCodeAlreadyRunning, "A sync with the code hosts is already running", nil)
 	case errors.Is(err, errReviewImportOff):
-		writeError(w, http.StatusConflict, "Pull and merge request import is turned off on this server")
+		writeReviewImportError(w, http.StatusConflict, reviewImportCodeServerOff, "Pull and merge request import is turned off on this server", nil)
 	case errors.Is(err, errReviewImportDisabled):
-		writeError(w, http.StatusConflict, "Turn on pull request import in the GitHub or GitLab settings first")
+		writeReviewImportError(w, http.StatusConflict, reviewImportCodeWorkspaceOff, "Turn on pull request import in the GitHub or GitLab settings first", nil)
 	case err != nil:
 		log.Printf("review import workspace=%s: %v", workspace, err)
-		writeError(w, http.StatusInternalServerError, "Could not sync with the code hosts")
+		writeReviewImportError(w, http.StatusInternalServerError, reviewImportCodeSyncFailed, "Could not sync with the code hosts", nil)
 	default:
 		writeJSON(w, http.StatusOK, result)
 	}

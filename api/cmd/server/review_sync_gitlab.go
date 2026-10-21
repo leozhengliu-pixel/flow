@@ -158,7 +158,7 @@ func fetchGitLabReviewSnapshot(ctx context.Context, remote reviewRemote, review 
 	diffs, truncated, err := fetchPagesSized[gitlabAPIDiff](ctx, remote, base+"/diffs", gitlabDiffsPageSize, gitlabDiffsMaxPages)
 	if err == nil && truncated {
 		// Never mirror a partial file list as the whole merge request.
-		err = fmt.Errorf("too many changed files to sync (read %d files in %d pages of %d, more remain)", len(diffs), gitlabDiffsMaxPages, gitlabDiffsPageSize)
+		err = fmt.Errorf("%w (read %d files in %d pages of %d, more remain)", errReviewTooManyFiles, len(diffs), gitlabDiffsMaxPages, gitlabDiffsPageSize)
 	}
 	if reviewRemoteStatus(err) == http.StatusNotFound {
 		// GitLab before 15.7: the single-response changes endpoint.

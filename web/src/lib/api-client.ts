@@ -4,13 +4,16 @@ export class ApiError<T = unknown> extends Error {
   status: number
   code?: string
   current?: T
+  /** Values for the message of the error code (a provider name, a limit). */
+  params?: Record<string, string>
 
-  constructor(message: string, status: number, code?: string, current?: T) {
+  constructor(message: string, status: number, code?: string, current?: T, params?: Record<string, string>) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
     this.current = current
+    this.params = params
   }
 }
 
@@ -30,7 +33,7 @@ export async function request<T>(url: string, init?: ApiRequestInit): Promise<T>
 	const response = await apiFetch(url, init)
 	if (!response.ok) {
 		const payload = await response.json().catch(() => null)
-		throw new ApiError(payload?.error_description || payload?.error || `Request failed: ${response.status}`, response.status, payload?.code ?? payload?.error, payload?.current)
+		throw new ApiError(payload?.error_description || payload?.error || `Request failed: ${response.status}`, response.status, payload?.code ?? payload?.error, payload?.current, payload?.params && typeof payload.params === 'object' ? payload.params : undefined)
 	}
 	if (response.status === 204) return undefined as T
 	return response.json()

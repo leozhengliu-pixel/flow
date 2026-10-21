@@ -3,10 +3,11 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/toast";
 
 import { useI18n } from "@/i18n/i18n";
-import { fetchReviewImport, importReviews, updateReviewImport } from "@/lib/api";
+import { ApiError, fetchReviewImport, importReviews, updateReviewImport } from "@/lib/api";
 import { isWorkspaceAdmin } from "@/lib/settings-access";
 import type { BootstrapData, ReviewImportRepository, ReviewImportStatus } from "@/types/flow";
 
+import { reviewImportErrorText } from "./review-import-errors";
 import { FeatureButton, FeatureCard, FeatureRow, FeatureSection, Toggle } from "./feature-primitives";
 
 import "./feature-settings.css";
@@ -45,13 +46,16 @@ export function ReviewImportSettings({ provider, data }: { provider: "github" | 
     return [...names].sort();
   }, [data.reviews, provider, status?.repositories]);
 
+  const requestErrorText = (error: unknown, fallback: string) =>
+    error instanceof ApiError ? reviewImportErrorText(t, error, fallback) : error instanceof Error ? error.message : fallback;
+
   const save = async (input: { enabled?: boolean; repositories?: ReviewImportRepository[] }) => {
     setBusy(true);
     try {
       setStatus(await updateReviewImport(input));
       return true;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("Could not update the pull request import"));
+      toast.error(requestErrorText(error, t("Could not update the pull request import")));
       return false;
     } finally {
       setBusy(false);
@@ -69,10 +73,14 @@ export function ReviewImportSettings({ provider, data }: { provider: "github" | 
     try {
       const result = await importReviews();
       if (result.rateLimitedUntil) toast.error(t("The code host's rate limit is reached; the rest syncs later"));
-      else if (result.errors.length) toast.error(`${t("Some repositories could not be synced")}: ${result.errors[0]}`);
+      else if (result.errors.length) {
+        const failure = result.failures?.[0];
+        const detail = failure ? `${failure.target}: ${reviewImportErrorText(t, failure)}` : result.errors[0];
+        toast.error(`${t("Some repositories could not be synced")}: ${detail}`);
+      }
       else toast.success(t("Synced: {count} new reviews").replace("{count}", String(result.imported)));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("Could not sync with the code host"));
+      toast.error(requestErrorText(error, t("Could not sync with the code host")));
     } finally {
       setSyncing(false);
       fetchReviewImport().then(setStatus).catch(() => undefined);
@@ -193,7 +201,7 @@ export function ReviewImportSettings({ provider, data }: { provider: "github" | 
                   <li key={item.target} className="feature-row">
                     <div>
                       <strong data-i18n-ignore>{item.target.replace(/^(github|gitlab):/, "")}</strong>
-                      <span>{item.message}</span>
+                      <span title={item.message}>{reviewImportErrorText(t, item)}</span>
                       {item.backoffUntil && <span>{t("Retry after: {time}").replace("{time}", dateTime(item.backoffUntil))}</span>}
                     </div>
                   </li>
