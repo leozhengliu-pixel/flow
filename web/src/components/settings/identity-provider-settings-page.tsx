@@ -108,6 +108,9 @@ export function IdentityProviderSettingsPage({
     );
   }
 
+  const activeTokens = tokens.filter((token) => !token.revokedAt);
+  const scimBaseURL = `${window.location.origin}/scim/v2/${encodeURIComponent(data.workspace.urlKey)}`;
+
   const saveSettings = async (next: WorkspaceSettings, message: string) => {
     setSettings(next);
     try {
@@ -230,11 +233,43 @@ export function IdentityProviderSettingsPage({
             }
           />
         </Row>
-        {tokens.map((token) => (
+        <Row
+          title="SCIM base URL"
+          description="Enter this as the SCIM connector base URL (tenant URL) in your identity provider, with a SCIM token as the bearer token."
+        >
+          <div className="settings-inline-actions identity-provider-base-url">
+            <input
+              className="settings-input"
+              data-i18n-ignore
+              aria-label="SCIM base URL"
+              readOnly
+              value={scimBaseURL}
+              onFocus={(event) => event.currentTarget.select()}
+            />
+            <ActionButton
+              onClick={() => {
+                void navigator.clipboard.writeText(scimBaseURL);
+                toast.success("Copied");
+              }}
+            >
+              Copy URL
+            </ActionButton>
+          </div>
+        </Row>
+        <p className="identity-provider-help">
+          Use the work email as userName. Setting a user inactive or deleting
+          them in your identity provider suspends the member; their work stays
+          in Flow and they can be restored later.
+        </p>
+        {activeTokens.map((token) => (
           <Row
             key={token.id}
             title={token.name}
-            description={`Created ${new Date(token.createdAt).toLocaleString()}`}
+            description={
+              token.lastUsedAt
+                ? `Created ${new Date(token.createdAt).toLocaleString()} · Last used ${new Date(token.lastUsedAt).toLocaleString()}`
+                : `Created ${new Date(token.createdAt).toLocaleString()} · Never used`
+            }
           >
             <div className="settings-inline-actions">
               <ActionButton
@@ -278,7 +313,7 @@ export function IdentityProviderSettingsPage({
             </div>
           </Row>
         ))}
-        {!tokens.length ? (
+        {!activeTokens.length ? (
           <div className="settings-empty compact">
             <KeyRound size={22} />
             <h3>No SCIM tokens</h3>

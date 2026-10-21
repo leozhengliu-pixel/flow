@@ -119,6 +119,8 @@ export interface SCIMToken {
   name: string;
   secret?: string;
   createdAt: string;
+  lastUsedAt?: string;
+  revokedAt?: string;
 }
 
 export interface WebhookFailureEvent {

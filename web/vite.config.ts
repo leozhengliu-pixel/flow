@@ -64,6 +64,6 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    proxy: { '/api': { target: apiProxyTarget, ws: true }, '/uploads': apiProxyTarget },
+    proxy: { '/api': { target: apiProxyTarget, ws: true }, '/uploads': apiProxyTarget, '/scim': apiProxyTarget },
   },
 })
