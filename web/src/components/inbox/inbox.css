@@ -591,13 +591,6 @@
     gap: 4px;
   }
 }
-.flow-inbox-review-detail{padding:28px;max-width:680px;color:var(--theme-text-primary)}
-.flow-inbox-review-detail header{display:flex;align-items:flex-start;gap:12px;padding-bottom:18px;border-bottom:.5px solid var(--theme-border)}
-.flow-inbox-review-detail header h2{margin:4px 0 0;font-size:20px;line-height:26px}
-.flow-inbox-review-detail header small,.flow-inbox-review-detail>p,.flow-inbox-review-detail dt{color:var(--theme-text-secondary);font-size:12px}
-.flow-inbox-review-provider{width:30px;height:30px;display:grid;place-items:center;border-radius:7px;background:var(--theme-surface-active);font-size:10px;font-weight:600}
-.flow-inbox-review-provider.github{color:var(--theme-text-primary)}.flow-inbox-review-provider.gitlab{color:var(--inbox-review-gitlab)}
-.flow-inbox-review-detail dl{display:grid;grid-template-columns:100px 1fr;gap:10px;margin:22px 0}.flow-inbox-review-detail dl div{display:contents}.flow-inbox-review-detail dt{margin:0}.flow-inbox-review-detail dd{margin:0;font-size:12px}.flow-inbox-review-detail>button{height:30px;padding:0 12px;border:0;border-radius:7px;background:var(--accent-primary);color:var(--on-accent);font:500 12px inherit}
 .flow-inbox__tabs{display:inline-flex;align-items:center;gap:2px;margin-left:8px}.flow-inbox__tabs button{height:26px;padding:0 8px;color:var(--inbox-muted);background:transparent;border:0;border-radius:6px;font:500 12px/16px inherit;cursor:default}.flow-inbox__tabs button:hover,.flow-inbox__tabs button[data-active="true"]{color:var(--inbox-text);background:var(--inbox-hover)}.flow-inbox__tabs button:focus-visible{outline:1px solid var(--focus-ring);outline-offset:1px}.flow-inbox__tab-count{display:inline-flex;min-width:14px;height:14px;margin-left:5px;align-items:center;justify-content:center;padding:0 3px;color:var(--inbox-muted);background:var(--theme-control-hover);border-radius:7px;font-size:9px;line-height:14px}
 .flow-inbox-notification-list > [role="listitem"]:first-child { padding-top: 8px; }
 .flow-inbox-menu__priority-row { height: 48px; padding: 8px 16px; }
@@ -755,13 +748,9 @@
   color: var(--theme-text-primary);
 }
 
-.pull-request-inbox-view .pull-request-inbox-diff{margin-top:18px;max-height:420px;overflow:auto;border:.5px solid var(--theme-border);border-radius:10px}
-.pull-request-inbox-view .pull-request-inbox-diff .review-changes{height:auto;padding:10px}
-.pull-request-inbox-diff-empty{display:flex;align-items:center;gap:8px;margin-top:16px;padding:12px;border:.5px dashed var(--theme-border);border-radius:8px;color:var(--theme-text-secondary);font-size:12px}
 .pull-request-inbox-actions{display:flex;align-items:center;gap:10px;margin-top:18px}
 .pull-request-inbox-actions>a{display:inline-flex;align-items:center;gap:6px;color:var(--theme-text-secondary);font-size:12px;text-decoration:none}
 .pull-request-inbox-actions>a:hover{color:var(--theme-text-primary)}
-.pull-request-inbox-view .code-review-access{margin-top:14px}
 
 /* Inbox display options — the reference app geometry (301×210): priority row to +41, selects at +61/+93 (99×24 at x+186),
    separator, then 32px toggle rows at +138/+170. Values stay on one line. */

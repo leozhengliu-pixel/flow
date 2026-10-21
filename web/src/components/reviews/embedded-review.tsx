@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ReviewRouteTab } from "@/lib/app-routes";
-import { reviewAgentPath } from "@/lib/app-routes";
+import { reviewAgentPath, reviewPath } from "@/lib/app-routes";
 import type { BootstrapData, CodeReview } from "@/types/flow";
 
 import { EMBEDDED_REVIEW_NARROW_WIDTH, nextEmbeddedAgentShown, parseEmbeddedReviewPath } from "./embedded-review-model";
@@ -20,12 +20,13 @@ export function EmbeddedReview({
 }: {
   data: BootstrapData;
   review: CodeReview;
-  sessionId: string;
+  /** The coding session of this pull request; without one (a review request) the review has no agent panel. */
+  sessionId?: string;
   onReload: () => Promise<void>;
   /** Paths outside this review (the issue breadcrumb) and the full page. */
   onNavigate: (path: string) => void;
 }) {
-  const [state, setState] = useState<{ tab: ReviewRouteTab; showAgent: boolean }>({ tab: "changes", showAgent: true });
+  const [state, setState] = useState<{ tab: ReviewRouteTab; showAgent: boolean }>({ tab: sessionId ? "changes" : "overview", showAgent: Boolean(sessionId) });
   const rootRef = useRef<HTMLDivElement>(null);
   const [narrow, setNarrow] = useState(false);
   useEffect(() => {
@@ -58,7 +59,7 @@ export function EmbeddedReview({
         showAgent={state.showAgent}
         onNavigate={navigate}
         onReload={onReload}
-        embedded={{ onOpenFull: () => onNavigate(reviewAgentPath(workspaceKey, review, sessionId, { tab: state.tab, showAgent: state.showAgent })) }}
+        embedded={{ onOpenFull: () => onNavigate(sessionId ? reviewAgentPath(workspaceKey, review, sessionId, { tab: state.tab, showAgent: state.showAgent }) : reviewPath(workspaceKey, review, state.tab)) }}
       />
     </div>
   );

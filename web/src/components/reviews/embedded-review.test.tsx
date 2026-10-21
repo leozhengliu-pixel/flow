@@ -75,6 +75,18 @@ it("opens the full review page from the expand control", async () => {
   expect(onNavigate).toHaveBeenCalledWith(`/${data.workspace.urlKey}/review/review-one/changes?showAgent=true&agentSessionId=session-1`);
 });
 
+it("hosts a review request without an agent panel, on Overview, with a plain full-page path", async () => {
+  const user = userEvent.setup();
+  const gitlabReview = { ...review, provider: "gitlab" as const };
+  const data = makeBootstrap({ viewer, users: [viewer, teammate], reviews: [gitlabReview], userSettings: {}, integrationConnections: [{ id: "gitlab", provider: "gitlab" }] as never[] });
+  const onNavigate = vi.fn();
+  render(<EmbeddedReview data={data} review={gitlabReview} onReload={async () => undefined} onNavigate={onNavigate} />);
+  expect(screen.getByRole("link", { name: "Overview" }).getAttribute("aria-current")).toBe("page");
+  expect(document.querySelector(".has-agent-panel")).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Review diff in full window" }));
+  expect(onNavigate).toHaveBeenCalledWith(`/${data.workspace.urlKey}/review/review-one`);
+});
+
 it("keeps review shortcuts and inbox shortcuts apart", () => {
   const hostKeys = vi.fn();
   window.addEventListener("keydown", hostKeys);
