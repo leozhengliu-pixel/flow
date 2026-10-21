@@ -122,6 +122,13 @@ func buildWorkspaceAgentPrompt(data domain.Bootstrap, issues []domain.Issue, ski
 	if guidance := strings.TrimSpace(data.WorkspaceSettings.AgentInstructions); guidance != "" {
 		fmt.Fprintf(&prompt, "\nWorkspace guidance:\n%s\n", truncateSettingsText(guidance, workspaceAgentGuidanceLimit))
 	}
+	// Settings › AI & agents › Updates: how the agent writes project and initiative updates (save_status_update).
+	if guidance := strings.TrimSpace(data.WorkspaceSettings.FeatureSettings.ProjectUpdateGuidance); guidance != "" {
+		fmt.Fprintf(&prompt, "\nWhen writing a project update:\n%s\n", truncateSettingsText(guidance, 8000))
+	}
+	if guidance := strings.TrimSpace(data.WorkspaceSettings.FeatureSettings.InitiativeUpdateGuidance); guidance != "" {
+		fmt.Fprintf(&prompt, "\nWhen writing an initiative update:\n%s\n", truncateSettingsText(guidance, 8000))
+	}
 	if guidance := strings.TrimSpace(data.UserSettings[data.Viewer.ID].AgentInstructions); guidance != "" {
 		fmt.Fprintf(&prompt, "\nPersonal guidance:\n%s\n", truncateSettingsText(guidance, 4000))
 	}
