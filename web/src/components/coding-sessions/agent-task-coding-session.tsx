@@ -1,4 +1,4 @@
-import { MoreHorizontal } from 'lucide-react'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { activityTimeLabel } from '@/components/activity/issue-activity-model'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { UserAvatar } from '@/components/ui/user-avatar'
@@ -9,7 +9,7 @@ import type { BootstrapData } from '@/types/flow'
 import type { CodingSession } from '@/types/coding-sessions'
 import { CodingSessionStatusRow } from './coding-session-card'
 import { notifyCodingSessionChanged } from './coding-session-events'
-import { codingSessionSubscribed } from './coding-session-page-model'
+import { codingSessionSubscribed, codingSessionURL } from './coding-session-page-model'
 import { useCodingSessionOpener } from './use-coding-session-opener'
 import { useCodingAvailability, useCodingSession, useCodingSessions, useDismissedCodingSessions } from './use-coding-sessions'
 import './coding-sessions.css'
@@ -62,9 +62,10 @@ export function CodingSessionActivityCard({ task, data, agentName }: { task: Anc
   const at = session?.createdAt || task.createdAt || task.updatedAt
   const age = shortAge(at, locale)
   const subscribed = session ? codingSessionSubscribed(session, data.viewer.id) : false
+  // "Copy link" copies the session's own URL, like the reference app's agent-session link.
   const copyLink = async () => {
-    const link = `${location.href.split('#')[0]}#agent-session-${task.id}`
-    try { await navigator.clipboard.writeText(link); toast.success(t('Link copied')) }
+    const link = codingSessionURL(data.workspace.urlKey, task.codingSessionId!)
+    try { await navigator.clipboard.writeText(link); toast.success(t('Link copied to clipboard')) }
     catch { toast.error(t('Could not copy')) }
   }
   // Archiving ends the session and closes its open pull requests; the card leaves the feed at once.
@@ -90,12 +91,12 @@ export function CodingSessionActivityCard({ task, data, agentName }: { task: Anc
         {age && <time dateTime={at} title={new Date(at!).toLocaleString(locale)}>{age}</time>}
       </span>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild><button type="button" className="coding-session-icon-button coding-session-activity-menu" aria-label={t('Agent chat options')}><MoreHorizontal size={14}/></button></DropdownMenuTrigger>
+        <DropdownMenuTrigger asChild><button type="button" className="coding-session-icon-button coding-session-activity-menu" aria-label={t('Agent chat options')}><FlowGlyph name="ellipsis" size={14}/></button></DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="coding-session-menu">
-          <DropdownMenuItem onSelect={() => void copyLink()}>{t('Copy link')}</DropdownMenuItem>
-          {session && <DropdownMenuItem onSelect={() => void toggleSubscription()}>{t(subscribed ? 'Unsubscribe from chat' : 'Subscribe to chat')}</DropdownMenuItem>}
+          <DropdownMenuItem onSelect={() => void copyLink()}><FlowGlyph name="copyLink" size={16}/>{t('Copy link')}</DropdownMenuItem>
+          {session && <DropdownMenuItem onSelect={() => void toggleSubscription()}><FlowGlyph name={subscribed ? 'unsubscribe' : 'subscribe'} size={16}/>{t(subscribed ? 'Unsubscribe from chat' : 'Subscribe to chat')}</DropdownMenuItem>}
           <DropdownMenuSeparator/>
-          <DropdownMenuItem onSelect={() => void archive()}>{t('Archive')}</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void archive()}><FlowGlyph name="agentSessionDismissed" size={16}/>{t('Archive')}</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </header>

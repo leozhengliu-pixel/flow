@@ -206,7 +206,7 @@ export function CodingComposer({ data, sessionId, generating, stopPending, canPr
         <button type="button" className="coding-session-icon-button" aria-label={t('Remove {name}').replace('{name}', file.name)} onClick={() => attachments.remove(file.key)}><X size={12}/></button>
       </li>)}
     </ul>}
-    <textarea rows={1} aria-label={t('Follow-up prompt')} placeholder={t('Tell {agent} what to do next…').replace('{agent}', agentName)} value={value} disabled={!canPrompt}
+    <textarea rows={1} aria-label={t('Send a message to {agent}').replace('{agent}', agentName)} placeholder={t('Tell {agent} what to do next…').replace('{agent}', agentName)} value={value} disabled={!canPrompt}
       onChange={event => setValue(event.target.value)}
       onPaste={event => {
         const pasted = pastedAgentFiles(event.clipboardData)
@@ -224,7 +224,6 @@ export function CodingComposer({ data, sessionId, generating, stopPending, canPr
         event.target.value = ''
         void attachments.attach(picked)
       }}/>
-      <button type="button" className="coding-session-composer-attach" aria-label={t('Attach files')} disabled={!canPrompt || attachments.files.length >= AGENT_UPLOAD_MAX_ITEMS} onClick={() => picker.current?.click()}><AgentAttachIcon size={14}/></button>
       {options.length > 0 && <div className="cs-options" role="group" aria-label={t('Options')}>
         {inline
           ? options.map(option => <button key={option.value} type="button" className="cs-option-chip" aria-pressed={selected === option.value} title={option.label === option.value ? option.label : `${option.label}\n${option.value}`}
@@ -232,6 +231,8 @@ export function CodingComposer({ data, sessionId, generating, stopPending, canPr
           : <OptionDropdown options={options} selected={choice} onSelect={option => setSelected(option.value)}/>}
       </div>}
       <span className="cs-composer-spacer"/>
+      {/* Attach sits beside send on the right, like the reference app's composer. */}
+      <button type="button" className="coding-session-composer-attach" aria-label={t('Attach images, files, or videos')} title={t('Attach images, files, or videos')} disabled={!canPrompt || attachments.files.length >= AGENT_UPLOAD_MAX_ITEMS} onClick={() => picker.current?.click()}><AgentAttachIcon size={14}/></button>
       {stopMode
         ? <button type="button" className="coding-session-composer-send is-stop" aria-label={t('Stop agent')} title={stopPending ? t('Stop request already sent, waiting for {agent}').replace('{agent}', agentName) : t('Stop agent')} disabled={busy || stopPending} onClick={onStop}><AgentStopIcon size={14}/></button>
         : choice || queueMode

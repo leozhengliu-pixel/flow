@@ -1,5 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { Archive, MoreHorizontal, RotateCcw, X } from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
+import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { restartCodingSession, setCodingSessionSubscription, startReviewCodingSession, stopCodingSession } from '@/lib/coding-sessions-api'
 import { AgentAvatarMark, AgentCodingGlyph } from '@/components/ui/agent-glyph'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -126,11 +128,12 @@ export function CodingAgentPanel({ session, data, onChange, onDismiss, onOpenCha
       <header className="coding-agent-panel-header">
         <CodingAgentAvatar state={session.state} stalled={codingSessionStalled(session)}/>
         <h3 data-i18n-ignore>{title}</h3>
+        {session.archivedAt && <span className="coding-agent-archived">{t('Archived')}</span>}
         <CodingSessionMenu session={session} data={data} busy={busy} onChange={onChange} items={can.stop || can.restartWithDefaultModel ? <>
           {can.stop && <DropdownMenuItem disabled={busy || session.stopRequested} onSelect={() => void run(() => stopCodingSession(session.id))}>{t('Send stop request')}</DropdownMenuItem>}
           {can.restartWithDefaultModel && <DropdownMenuItem disabled={busy} onSelect={() => void run(() => restartCodingSession(session.id, { useDefaultModel: true }), 'Restarted with the default model')}><RotateCcw size={14} aria-hidden="true"/>{t('Start over with {model}').replace('{model}', 'Auto')}</DropdownMenuItem>}
         </> : undefined} onStartOver={can.startOver ? model => void run(() => restartCodingSession(session.id, { model }), 'Started over') : undefined} onArchive={can.dismiss ? onDismiss : undefined}/>
-        {onClose && <button type="button" className="coding-session-icon-button coding-agent-close" aria-label={t('Close chat')} title={t('Close chat')} onClick={onClose}><X size={14}/></button>}
+        {onClose && <ScopedFlowTooltip label={t('Close')} shortcut="Esc" align="end"><button type="button" className="coding-session-icon-button coding-agent-close" aria-label={t('Close chat')} onClick={onClose}><FlowGlyph name="closeChat" size={14}/></button></ScopedFlowTooltip>}
       </header>
       <CodingSessionConversation session={session} data={data} onChange={onChange} onOpenChanges={onOpenChanges}/>
       {shownError && <p className="coding-session-error-text" role="alert">{shownError}</p>}
@@ -167,9 +170,11 @@ export function CodingSessionMenu({ session, data, busy, items, onArchive, onSta
   }
   const startOver = onStartOver && session.escalationModel ? onStartOver : undefined
   return <DropdownMenu onOpenChange={open => { if (open) setOpened(true) }}>
-    <DropdownMenuTrigger asChild>
-      <button type="button" className="coding-session-icon-button coding-agent-menu-trigger" aria-label={t('Session details')} disabled={busy}><MoreHorizontal size={14}/></button>
-    </DropdownMenuTrigger>
+    <ScopedFlowTooltip label={t('Session details')} align="end">
+      <DropdownMenuTrigger asChild>
+        <button type="button" className="coding-session-icon-button coding-agent-menu-trigger" aria-label={t('Session details')} disabled={busy}><FlowGlyph name="ellipsis" size={14}/></button>
+      </DropdownMenuTrigger>
+    </ScopedFlowTooltip>
     <DropdownMenuContent align="end" className="coding-session-menu">
       <DropdownMenuLabel>{t('Session details')}</DropdownMenuLabel>
       <DropdownMenuItem disabled className="coding-session-menu-detail coding-session-menu-model">
@@ -186,16 +191,15 @@ export function CodingSessionMenu({ session, data, busy, items, onArchive, onSta
       </DropdownMenuItem>
       <DropdownMenuSeparator/>
       <DropdownMenuSub>
-        <DropdownMenuSubTrigger>{t('Copy')}</DropdownMenuSubTrigger>
-        <DropdownMenuSubContent className="coding-session-menu">
-          <DropdownMenuItem onSelect={() => void copy(`${location.origin}${codingSessionHref(session, data)}`, 'Copied session URL')}>{t('Session URL')}</DropdownMenuItem>
-          {session.branchName && <DropdownMenuItem onSelect={() => void copy(session.branchName!, 'Copied branch name')}>{t('Branch name')}</DropdownMenuItem>}
+        <DropdownMenuSubTrigger><FlowGlyph name="copy" size={16}/>{t('Copy')}</DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="coding-session-menu is-submenu">
+          <DropdownMenuItem onSelect={() => void copy(`${location.origin}${codingSessionHref(session, data)}`, 'Link copied to clipboard')}>{t('Session URL')}</DropdownMenuItem>
         </DropdownMenuSubContent>
       </DropdownMenuSub>
       {(items || startOver || onArchive) && <DropdownMenuSeparator/>}
       {items}
       {startOver && <DropdownMenuItem disabled={busy} onSelect={() => startOver(session.escalationModel!)}><RotateCcw size={14} aria-hidden="true"/>{t('Start over with {model}').replace('{model}', escalationLabel)}</DropdownMenuItem>}
-      {onArchive && <DropdownMenuItem onSelect={onArchive}><Archive size={14} aria-hidden="true"/>{t('Archive')}</DropdownMenuItem>}
+      {onArchive && <DropdownMenuItem onSelect={onArchive}><FlowGlyph name="agentSessionDismissed" size={16}/>{t('Archive')}</DropdownMenuItem>}
     </DropdownMenuContent>
   </DropdownMenu>
 }
