@@ -21,6 +21,8 @@ export interface EventBufferOptions {
   random?: () => number
   /** Called once when Flow rejects the token (the sandbox is going away). */
   onFatal?: (error: Error) => void
+  /** Values masked in every event (the sandbox token, which processes see in their proxy variables). */
+  secrets?: () => string[]
 }
 
 interface Entry {
@@ -49,6 +51,7 @@ export class EventBuffer {
   private readonly sleep: (ms: number) => Promise<void>
   private readonly random: () => number
   private readonly onFatal?: (error: Error) => void
+  private readonly secrets?: () => string[]
 
   constructor(options: EventBufferOptions) {
     this.post = options.post
@@ -60,6 +63,7 @@ export class EventBuffer {
     this.sleep = options.sleep ?? defaultSleep
     this.random = options.random ?? Math.random
     this.onFatal = options.onFatal
+    this.secrets = options.secrets
   }
 
   get pending(): number {
@@ -77,8 +81,17 @@ export class EventBuffer {
 
   push(...events: RunnerEvent[]): void {
     if (this.closed || this.fatal) return
-    for (const event of events) {
-      const size = Buffer.byteLength(JSON.stringify(event))
+    const secrets = (this.secrets?.() ?? []).filter((secret) => secret.length >= 8)
+    for (const original of events) {
+      let json = JSON.stringify(original)
+      let event = original
+      for (const secret of secrets) {
+        if (json.includes(secret)) {
+          json = json.split(secret).join('***')
+          event = JSON.parse(json) as RunnerEvent
+        }
+      }
+      const size = Buffer.byteLength(json)
       this.queue.push({ event, size, inflight: false })
       this.bytes += size
     }

@@ -158,8 +158,9 @@ func (d egressDecider) Decide(ctx context.Context, request EgressCheckRequest) (
 		return EgressCheckResponse{}, err
 	}
 	// The proxy user name must be the token's sandbox, so a leaked token
-	// cannot be replayed under another sandbox's identity in the logs.
-	if id := strings.TrimSpace(request.SandboxID); id != "" && id != grant.SandboxID {
+	// cannot be replayed under another sandbox's identity (or none) in the
+	// logs. The runner always sends both (sandbox-runner/src/proxy-env.ts).
+	if id := strings.TrimSpace(request.SandboxID); id != grant.SandboxID {
 		return deny(egressReasonSandboxMismatch, ""), nil
 	}
 	if grant.Kind == sandbox.KindWarm && grant.SessionID == "" {
