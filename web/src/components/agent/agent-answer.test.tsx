@@ -12,6 +12,7 @@ vi.mock('@/lib/agent-stream', () => streams)
 
 import { AgentChatPanel } from './agent-chat-panel'
 import { AgentRichText } from './agent-rich-text'
+import { AgentAnswerText } from './agent-answer'
 import { linkAgentEntities, parseAgentAnswer, splitAgentSuggestions } from './agent-answer-content'
 
 const data = makeBootstrap({
@@ -131,5 +132,12 @@ describe('Agent answer code blocks', () => {
     expect(block.querySelector('.flow-code-block__language')).toHaveAttribute('data-readonly')
     await waitFor(() => expect(block.querySelector('.hljs-keyword')).toHaveTextContent('const'))
     expect(block.querySelector('.hljs-control')).toHaveTextContent('return')
+  })
+})
+
+describe('agent text without a body', () => {
+  it('renders nothing instead of failing when a message has no body', () => {
+    const { container } = render(<><AgentRichText content={undefined}/><AgentAnswerText className="answer" data={makeBootstrap()} markdown={undefined}/></>)
+    expect(container.querySelectorAll('[role="document"]').length).toBe(2)
   })
 })

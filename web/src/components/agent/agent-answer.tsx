@@ -20,7 +20,8 @@ import styles from './agent-answer.module.css'
  * labels, milestones, customers, releases, views, reviews, updates and comments) rendered as inline entity chips.
  * Accepts raw markdown or markdown already linked by `parseAgentAnswer`; linking is idempotent.
  */
-export function AgentAnswerText({ ariaLabel, className, data, markdown }: { ariaLabel?: string; className: string; data?: BootstrapData; markdown: string }) {
+export function AgentAnswerText({ ariaLabel, className, data, markdown: text }: { ariaLabel?: string; className: string; data?: BootstrapData; markdown: string | undefined }) {
+  const markdown = text ?? ''
   const linked = useMemo(() => data ? linkAgentEntities(markdown, data, { all: true }).markdown : markdown, [data, markdown])
   return (
     <AgentEntityDataContext.Provider value={data}>
