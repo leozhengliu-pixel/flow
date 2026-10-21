@@ -15,6 +15,8 @@ export type CodingSessionArtifactsProps = {
   /** The list is refetched whenever this changes (e.g. `session.updatedAt`). */
   refreshKey?: string | number
   className?: string
+  /** Lists the plain screenshots too (default); false where the conversation shows them under their turn. */
+  withScreenshots?: boolean
 }
 
 type Status = 'idle' | 'loading' | 'error'
@@ -22,20 +24,19 @@ type OpenImage = (artifact: CodingArtifact) => void
 type ImageFailed = (artifact: CodingArtifact) => void
 
 /**
- * The before/after gallery of a coding session: comparison cards for "before"/"after" screenshots of the same
- * flow, a thumbnail grid for the other screenshots and the recorded videos. Renders nothing without media.
+ * A session's captures: `initial` (e.g. `session.artifacts`) when given, else fetched, and refetched when `refreshKey`
+ * changes. `expired` refetches once when a signed URL stopped loading (stable contentUrls never expire).
  */
-export function CodingSessionArtifacts({ sessionId, artifacts, refreshKey, className }: CodingSessionArtifactsProps) {
-  const { t } = useI18n()
+export function useCodingSessionArtifacts(sessionId: string, initial?: CodingArtifact[], refreshKey?: string | number) {
   const [fetched, setFetched] = useState<{ sessionId: string; items: CodingArtifact[] }>()
-  const [status, setStatus] = useState<Status>(artifacts ? 'idle' : 'loading')
+  const [status, setStatus] = useState<Status>(initial ? 'idle' : 'loading')
   const [reload, setReload] = useState(0)
-  const initial = useRef({ sessionId, refreshKey })
+  const first = useRef({ sessionId, refreshKey })
   const expiredRefetch = useRef(false)
-  const hasInitialData = Boolean(artifacts)
+  const hasInitialData = Boolean(initial)
 
   useEffect(() => {
-    const unchanged = initial.current.sessionId === sessionId && initial.current.refreshKey === refreshKey
+    const unchanged = first.current.sessionId === sessionId && first.current.refreshKey === refreshKey
     if (hasInitialData && unchanged && reload === 0) return
     let cancelled = false
     setStatus('loading')
@@ -52,7 +53,24 @@ export function CodingSessionArtifacts({ sessionId, artifacts, refreshKey, class
     return () => { cancelled = true }
   }, [sessionId, refreshKey, reload, hasInitialData])
 
-  const items = fetched && fetched.sessionId === sessionId ? fetched.items : artifacts
+  const items = fetched && fetched.sessionId === sessionId ? fetched.items : initial
+  const expired: ImageFailed = artifact => {
+    if (artifact.contentUrl || expiredRefetch.current) return
+    expiredRefetch.current = true
+    setReload(value => value + 1)
+  }
+  return { items, status, expired, retry: () => setReload(value => value + 1) }
+}
+
+/**
+ * The before/after gallery of a coding session: comparison cards for "before"/"after" screenshots of the same flow,
+ * a thumbnail grid for the other screenshots (left out with `withScreenshots={false}` where the conversation shows
+ * them under the turn that took them, as in the reference app) and the recorded videos. Renders nothing without media.
+ */
+export function CodingSessionArtifacts({ sessionId, artifacts, refreshKey, className, withScreenshots = true }: CodingSessionArtifactsProps) {
+  const { t } = useI18n()
+  const { items: loaded, status, expired: failed, retry } = useCodingSessionArtifacts(sessionId, artifacts, refreshKey)
+  const items = useMemo(() => withScreenshots ? loaded : loaded?.filter(item => item.kind !== 'screenshot' || pairRole(item)), [loaded, withScreenshots])
   const sections = useMemo(() => buildArtifactSections(items ?? []), [items])
   const images = useMemo(() => galleryImages(sections), [sections])
 
@@ -62,14 +80,6 @@ export function CodingSessionArtifacts({ sessionId, artifacts, refreshKey, class
     const lightboxItems = images.map(image => ({ src: artifactSrc(image), alt: imageAlt(image, t), title: imageAlt(image, t) }))
     if (!openLightbox(lightboxItems, index)) window.open(src, '_blank', 'noopener')
   }
-  // A signed URL may have expired: refetch the list once to get fresh ones (stable contentUrls never expire).
-  const failed: ImageFailed = artifact => {
-    if (artifact.contentUrl || expiredRefetch.current) return
-    expiredRefetch.current = true
-    setReload(value => value + 1)
-  }
-  const retry = () => setReload(value => value + 1)
-
   const mediaCount = images.length + sections.reduce((total, section) => total + section.videos.length, 0)
   const screenshotCount = images.length
   if (!mediaCount) {

@@ -93,7 +93,8 @@ export function CodingSessionPanel({ session, data, onChange, onDismiss, onOpenS
       <CodingPullRequests session={session} reviews={data.reviews ?? []} busy={busy} onFixChecks={(_, review) => void startOther(() => startReviewCodingSession(review.id, { kind: 'fix' }), 'Started a session to fix failing checks')}/>
       <CodingSandboxInfo session={session}/>
       <CodingChanges session={session} commitsOnly/>
-      <CodingSessionArtifacts sessionId={session.id} artifacts={session.artifacts} refreshKey={session.updatedAt}/>
+      {/* Plain screenshots show in the conversation, under the turn that took them; pairs and recordings stay here. */}
+      <CodingSessionArtifacts sessionId={session.id} artifacts={session.artifacts} refreshKey={session.updatedAt} withScreenshots={false}/>
       <CodingDiffViewer session={session}/>
     </div>
     <CodingAgentPanel session={session} data={data} onChange={onChange} onDismiss={onDismiss} onOpenChanges={openChanges} hidden={agentHidden} error={error}/>

@@ -62,3 +62,28 @@ export function galleryImages(sections: readonly ArtifactSection[]): CodingArtif
     ...section.shots,
   ])
 }
+
+/** Screenshots that are not half of a before/after pair: shown in the conversation, under the turn that took them. */
+export const inlineScreenshots = (artifacts: readonly CodingArtifact[]) =>
+  artifacts.filter(artifact => artifact.kind === 'screenshot' && !pairRole(artifact)).sort((a, b) => time(a) - time(b))
+
+/**
+ * The inline screenshots per conversation turn (like the reference app, where the agent's screenshot sits in its
+ * final message): `turnId` is the turn's prompt activity, or `turn_<session>` for the first turn; captures of other
+ * turns go to the last turn.
+ */
+export function screenshotsByTurn(turns: readonly { id: string; promptActivityId?: string }[], sessionId: string, artifacts: readonly CodingArtifact[]): Map<string, CodingArtifact[]> {
+  const result = new Map<string, CodingArtifact[]>()
+  const shots = inlineScreenshots(artifacts)
+  if (!turns.length || !shots.length) return result
+  const keys = new Map<string, string>()
+  turns.forEach((turn, index) => {
+    if (turn.promptActivityId) keys.set(turn.promptActivityId, turn.id)
+    if (index === 0) keys.set(`turn_${sessionId}`, turn.id)
+  })
+  for (const shot of shots) {
+    const turn = (shot.turnId && keys.get(shot.turnId)) || turns.at(-1)!.id
+    result.set(turn, [...(result.get(turn) ?? []), shot])
+  }
+  return result
+}

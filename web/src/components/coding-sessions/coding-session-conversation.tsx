@@ -22,6 +22,10 @@ import { CodingPlanPill } from './coding-session-plan'
 import { CodingCommitBadge, CodingPullRequestCard, CodingUncommittedChanges, type CodingCommitStats } from './coding-session-pr-card'
 import { CodingActionRow, CodingActivityGroup, CodingAuthLine, CodingErrorCard, CodingLatestButton, CodingReasoning, CodingShimmer, CodingStaleCard, CodingTimeMarker } from './coding-session-stream'
 import { buildStreamItems, buildStreamTurns, commitsByTurn, isCodingSessionGenerating, pendingElicitation, stopRequested, type StreamItem } from './coding-session-stream-model'
+import { useCodingSessionArtifacts } from './artifacts/coding-session-artifacts'
+import { artifactSrc, screenshotsByTurn } from './artifacts/coding-artifacts-model'
+import { openLightbox } from '@/components/editor/lightbox-bridge'
+import type { CodingArtifact } from '@/types/coding-sessions'
 import './coding-session-stream.css'
 
 /** Loads every activity of the session's AgentTask anchor, then only newer ones on each push. */
@@ -138,6 +142,9 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
   const items = useMemo(() => buildStreamItems(activities, generating), [activities, generating])
   const turns = useMemo(() => buildStreamTurns(items), [items])
   const commits = useMemo(() => commitsByTurn(turns, session), [turns, session])
+  // The agent's screenshots sit under the turn that took them, at the end of its message (as in the reference app).
+  const { items: artifacts, expired: artifactExpired } = useCodingSessionArtifacts(session.id, session.artifacts, session.updatedAt)
+  const shots = useMemo(() => screenshotsByTurn(turns.map(turn => ({ id: turn.id, promptActivityId: turn.prompt?.activity.id })), session.id, artifacts ?? []), [turns, session.id, artifacts])
   const { away, jump } = useStreamFollow(scroller, sentinel, `${activities.length}:${activities.at(-1)?.id}:${generating}`)
 
   const run = async (action: () => Promise<CodingSession | void>, done?: string): Promise<boolean> => {
@@ -242,6 +249,7 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
           {index === 0 && (turn.prompt || issuePrompt) && routed}
           {(turn.items.length > 0 || (last && stopReply)) && <div className="cs-turn-items">
             {turn.items.map((item, position) => renderItem(item, item.kind === 'thinking' ? 'thinking' : item.kind === 'group' ? item.id : `${item.activity.id}-${position}`))}
+            {shots.get(turn.id)?.length ? <CodingTurnScreenshots shots={shots.get(turn.id)!} all={[...shots.values()].flat()} onExpired={artifactExpired}/> : null}
             {last && stopReply && <p className="cs-text cs-stop-reply">{t(CODING_STOPPED_MESSAGE)}</p>}
             {turnCommits?.length ? <CodingCommitBadge commits={turnCommits} stats={commitStats} onOpenChanges={onOpenChanges} pr={pr ?? (session.repository ? { codeHost: session.codeHost ?? 'github', hostName: session.hostName ?? '', repository: session.repository } : undefined)}/> : null}
           </div>}
@@ -277,4 +285,21 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
         onApprove={async reject => { await run(() => approveCodingSession(session.id, reject), reject ? 'Rejected coding session' : 'Approved coding session') }}/>}
     </div>
   </>
+}
+
+/**
+ * A turn's screenshots in the conversation: each image at the message width (up to 600px tall, 6px corners), opening
+ * the image viewer over every inline screenshot of the session.
+ */
+function CodingTurnScreenshots({ shots, all, onExpired }: { shots: CodingArtifact[]; all: CodingArtifact[]; onExpired: (artifact: CodingArtifact) => void }) {
+  const { t } = useI18n()
+  const open = (shot: CodingArtifact) => {
+    const index = Math.max(0, all.findIndex(item => item.id === shot.id))
+    if (!openLightbox(all.map(item => ({ src: artifactSrc(item), alt: item.label, title: item.label })), index)) window.open(artifactSrc(shot), '_blank', 'noopener')
+  }
+  return <div className="cs-shots">
+    {shots.map(shot => <button key={shot.id} type="button" className="cs-shot" aria-label={t('View image')} onClick={() => open(shot)}>
+      <img src={artifactSrc(shot)} alt={shot.label} loading="lazy" data-i18n-ignore onError={() => onExpired(shot)}/>
+    </button>)}
+  </div>
 }

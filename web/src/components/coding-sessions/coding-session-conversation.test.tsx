@@ -2,6 +2,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
+import { registerLightboxOpener } from '@/components/editor/lightbox-bridge'
 import { makeBootstrap, teammate, viewer } from '@/test/fixtures'
 import * as api from '@/lib/coding-sessions-api'
 import { getApplicationTask, type ApplicationActivity, type ApplicationTask } from '@/lib/application-agents'
@@ -13,6 +14,7 @@ import { makeSession } from './coding-session-test-fixtures'
 vi.mock('@/lib/coding-sessions-api', () => ({
   promptCodingSession: vi.fn(), stopCodingSession: vi.fn(), restartCodingSession: vi.fn(), approveCodingSession: vi.fn(),
   fetchGitHubApp: vi.fn(async () => ({ configured: true, hostName: 'github.com', installations: [] })), startGitHubAppAuthorization: vi.fn(),
+  fetchCodingSessionArtifacts: vi.fn(async () => []),
 }))
 vi.mock('@/lib/application-agents', async original => ({ ...await original<typeof import('@/lib/application-agents')>(), getApplicationTask: vi.fn() }))
 vi.mock('@/components/agent/agent-rich-text', () => ({ AgentRichText: ({ content }: { content: string }) => <div>{content}</div> }))
@@ -76,6 +78,24 @@ describe('work groups', () => {
     renderConversation(makeSession({ state: 'stale', phase: 'done', stoppedBy: viewer.id }))
     const stop = await screen.findByText('Stop requested')
     expect(stop.tagName).toBe('EM')
+  })
+})
+
+describe('screenshots', () => {
+  it('shows the turn’s screenshots under its message and opens the image viewer; before/after pairs stay out', async () => {
+    const user = userEvent.setup()
+    const opened = vi.fn()
+    registerLightboxOpener(opened)
+    stream(activity('prompt', 'Take a screenshot'), activity('response', 'Done. The screenshot is attached.'))
+    const shot = { id: 'shot-1', sessionId: 'cs-1', kind: 'screenshot', label: 'Hello from QA', url: 'https://example.test/shot.png', contentType: 'image/png', sizeBytes: 10, createdAt: at(30), turnId: 'a001' } as const
+    const pair = { ...shot, id: 'before-1', label: 'before', group: 'Login' }
+    renderConversation(makeSession({ state: 'complete', phase: 'done', artifacts: [shot, pair] }))
+    const image = await screen.findByRole('img', { name: 'Hello from QA' })
+    expect(screen.queryByRole('img', { name: 'before' })).toBeNull()
+    expect(image.closest('.cs-turn')).toHaveTextContent('Done. The screenshot is attached.')
+    await user.click(screen.getByRole('button', { name: 'View image' }))
+    expect(opened).toHaveBeenCalledWith([{ src: 'https://example.test/shot.png', alt: 'Hello from QA', title: 'Hello from QA' }], 0)
+    registerLightboxOpener(null)
   })
 })
 
