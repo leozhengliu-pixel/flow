@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"flow/api/internal/coding"
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
 )
@@ -607,6 +606,9 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 	// runTool records a tool step and runs it; the result is what the model reads. A connector (MCP) call is
 	// logged like an agent's action activity (action, parameter, result) so the thread's activity shows what the
 	// connector was asked and what it answered; false means the session can no longer be written.
+	// guard bounds the run's read-only preparation (connector calls) and answers identical repeats from the
+	// earlier result, so a run asked to implement something decides instead of searching until the turn limit.
+	guard := newBuiltinRunGuard(s.builtinCodingContextFor(r.Context(), task, data))
 	runTool := func(call domain.AgentToolCall) (string, bool, bool) {
 		connector, external := offeredConnectorTool(r.Context(), call.Name)
 		if !external {
@@ -614,17 +616,29 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 				return "", false, false
 			}
 			result, err := execute(call)
-			if err != nil {
+			content, failed := string(result), err != nil
+			if failed {
 				// The model reports what failed, so it needs the real reason.
-				return agentToolErrorContent(err), true, true
+				content = agentToolErrorContent(err)
 			}
-			return string(result), false, true
+			if call.Name == startCodingSessionTool {
+				content = s.recordCodingStart(r.Context(), task.WorkspaceKey, guard, content, failed)
+			}
+			return content, failed, true
 		}
 		parameter := connector.Policy.Name
 		if args := strings.TrimSpace(string(call.Arguments)); args != "" && args != "{}" {
 			parameter += " " + truncateSettingsText(args, 500)
 		}
 		metadata := map[string]any{"action": connector.RemoteName, "parameter": parameter, "connector": connector.Policy.Name}
+		if content, failed, handled := guard.before(call); handled {
+			// Not run: an identical repeat or a call over budget, logged so the thread shows it was skipped.
+			metadata["result"] = "Not run: " + truncateSettingsText(strings.SplitN(content, "\n", 2)[0], 300)
+			if appendAgentActivity(domain.AgentActivity{Type: "action", Body: connector.RemoteName, Metadata: metadata}) != nil {
+				return "", false, false
+			}
+			return content, failed, true
+		}
 		if err := appendAgentActivity(domain.AgentActivity{Type: "action", Body: connector.RemoteName, Ephemeral: true, Metadata: maps.Clone(metadata)}); err != nil {
 			return "", false, false
 		}
@@ -636,6 +650,7 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 				logged += "\n" + detail
 			}
 		}
+		guard.after(call, content, err != nil)
 		metadata["result"] = logged
 		if appendAgentActivity(domain.AgentActivity{Type: "action", Body: connector.RemoteName, Metadata: metadata}) != nil {
 			return "", false, false
@@ -717,7 +732,19 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 	r = r.WithContext(context.WithValue(r.Context(), agentExtraToolsKey{}, []agentProviderTool{askUserToolDefinition}))
 	textApprovalRetried := false
 	for round := 0; round < maxAgentToolTurns; round++ {
-		turn, err := s.requestAgentTurn(r.Context(), messages, emit)
+		turnCtx := r.Context()
+		if offered, _ := turnCtx.Value(connectorToolsKey{}).([]connectorTool); len(offered) > 0 && guard.mustDecide(round) {
+			// The preparation budget is spent or the run is near its turn limit: the model decides without
+			// connector tools (start Coding, or reply with what it found and the blocker).
+			turnCtx = context.WithValue(turnCtx, agentToolFilterKey{}, func(tool agentProviderTool) bool { return !strings.HasPrefix(tool.Name, "external_") })
+			if !guard.decided {
+				guard.decided = true
+				if last := len(messages) - 1; last >= 0 && messages[last].ToolResult != nil {
+					messages[last].ToolResult.Content += guard.decisionNudge()
+				}
+			}
+		}
+		turn, err := s.requestAgentTurn(turnCtx, messages, emit)
 		if err != nil {
 			_ = appendActivity("error", "Agent execution failed. Check the provider configuration and retry.")
 			return
@@ -736,7 +763,9 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 		}
 		if len(turn.ToolCalls) == 0 {
 			// Links to this workspace's pages under a made-up host point at the app instead.
-			_ = appendActivity("response", rebaseAgentWorkspaceLinks(turn.Text, data.Workspace.URLKey, agentLinkBaseURL(r)))
+			// "Done" is only said with the coding session's evidence; otherwise its real state is posted.
+			reply := s.builtinFinalReply(r.Context(), task, guard, turn.Text)
+			_ = appendActivity("response", rebaseAgentWorkspaceLinks(reply, data.Workspace.URLKey, agentLinkBaseURL(r)))
 			return
 		}
 		messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, ToolCalls: turn.ToolCalls, Reasoning: turn.Reasoning})
@@ -805,7 +834,12 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 			return
 		}
 	}
-	_ = appendActivity("error", "Agent reached its tool execution limit.")
+	if guard.started != nil && guard.started.delivery != codingNotStarted {
+		// Coding was requested: the thread reports the session's state rather than a failed run.
+		_ = appendActivity("response", codingDeliveryReply(guard.started.delivery, guard.started.blocker, guard.coding))
+		return
+	}
+	_ = appendActivity("error", "Agent reached its tool execution limit without starting Coding or reporting a blocker.")
 }
 
 // builtinThreadMessages is the conversation a built-in thread run starts from: the system prompt (rules, workspace,
@@ -971,10 +1005,9 @@ func builtinTaskContext(task domain.AgentTask) string {
 	return "\nThis session is a comment thread on the " + firstNonEmpty(task.ResourceType, "issue") + ", not the chat panel: your final reply is posted in the thread as Markdown. Do not end it with a ```suggestions block.\n"
 }
 
-// builtinTaskPrompt is builtinTaskPromptFor with whether this agent can
-// start coding sessions in the task's workspace.
+// builtinTaskPrompt is builtinTaskPromptWith with what this run knows about coding (whether it can start coding
+// sessions, whether the issue asks for code changes, a coding environment the instructions name).
 func (s *server) builtinTaskPrompt(ctx context.Context, task domain.AgentTask, data domain.Bootstrap) string {
-	canCode := s.agent.ToolsEnabled && s.agent.WriteTools && s.codingEnabled() && workspaceFeatureEnabled(data.WorkspaceSettings, coding.FeatureFlag)
 	connectors := []string{}
 	offered, _ := ctx.Value(connectorToolsKey{}).([]connectorTool)
 	for _, tool := range offered {
@@ -982,15 +1015,21 @@ func (s *server) builtinTaskPrompt(ctx context.Context, task domain.AgentTask, d
 			connectors = append(connectors, tool.Policy.Name)
 		}
 	}
-	return builtinTaskPromptFor(task, data, canCode, connectors)
+	return builtinTaskPromptWith(task, data, s.builtinCodingContextFor(ctx, task, data), connectors)
 }
 
-// builtinTaskPromptFor is the first user message of a built-in agent session:
-// the mention's comment, or — for a delegated issue — what delegation means
-// and what work to do. With canCode (coding sessions on and the
-// start_coding_session tool offered) code changes go to a coding session;
-// connectors names the MCP connectors whose tools the session is offered.
+// builtinTaskPromptFor is builtinTaskPromptWith knowing only whether the agent can start coding sessions.
 func builtinTaskPromptFor(task domain.AgentTask, data domain.Bootstrap, canCode bool, connectors []string) string {
+	return builtinTaskPromptWith(task, data, builtinCodingContext{CanCode: canCode}, connectors)
+}
+
+// builtinTaskPromptWith is the first user message of a built-in agent session:
+// the mention's comment, or — for a delegated issue — what delegation means
+// and what work to do. With coding.CanCode (coding sessions on and the
+// start_coding_session tool offered) code changes go to a coding session, and
+// when the issue clearly asks for them that is the first step; connectors
+// names the MCP connectors whose tools the session is offered.
+func builtinTaskPromptWith(task domain.AgentTask, data domain.Bootstrap, coding builtinCodingContext, connectors []string) string {
 	prompt := task.InitialPrompt
 	if prompt == "" {
 		prompt = task.Prompt
@@ -1012,21 +1051,41 @@ func builtinTaskPromptFor(task domain.AgentTask, data domain.Bootstrap, canCode 
 	if instructions := strings.TrimSpace(strings.TrimPrefix(prompt, issue.Title)); instructions != "" {
 		fmt.Fprintf(&text, "Instructions from %s:\n%s\n", delegator, instructions)
 	}
-	text.WriteString("Start working on it now and do the work you can do in Flow:\n" +
-		"- triage it: set the priority, labels, estimate or project when they are unset and the issue makes them clear;\n" +
+	developing := coding.CanCode && coding.Development
+	if developing {
+		fmt.Fprintf(&text, "This issue asks for code changes. Your first step is start_coding_session with issueId %s", issue.Identifier)
+		if coding.EnvironmentID != "" {
+			fmt.Fprintf(&text, " and environmentId %s (named in the instructions)", coding.EnvironmentID)
+		}
+		text.WriteString(" and a prompt that restates the change, the tests to run and that a draft pull/merge request is wanted. " +
+			"Do not search or read the code before it: the coding agent clones the repository and reads it itself. " +
+			"Its result says whether the session started, waits for approval or could not start; report exactly that. " +
+			"The work is delivered only when the session shows the code changes, test results and the draft pull/merge request, so do not say the development is done in this reply.\n" +
+			"Then do the work you can do in Flow:\n")
+	} else {
+		text.WriteString("Start working on it now and do the work you can do in Flow:\n")
+	}
+	text.WriteString("- triage it: set the priority, labels, estimate or project when they are unset and the issue makes them clear;\n" +
 		"- break larger work down into sub-issues;\n" +
 		"- write the plan or spec it needs (as your reply, or as a comment or description update);\n" +
 		"- when what is wanted is genuinely ambiguous, call ask_user with a short question and options instead of guessing.\n")
-	if canCode {
+	if coding.CanCode && !developing {
 		text.WriteString("If the issue asks for code changes (a fix, an implementation, tests or a pull request), call start_coding_session now with its issueId and a prompt " +
-			"that describes the change: a coding agent changes the code in a sandbox and opens a draft pull request. Do not write the code or a plan for it yourself.\n")
-	} else if len(connectors) == 0 {
+			"that describes the change: a coding agent changes the code in a sandbox and opens a draft pull request. Do not write the code or a plan for it yourself. " +
+			"Pass environmentId when the instructions name a coding environment; otherwise leave it out and the session picks the repository or asks.\n")
+	} else if !coding.CanCode && len(connectors) == 0 {
 		text.WriteString("You have no access to code or repositories. If the issue needs code changes, say so in one sentence and do the parts you can do here.\n")
 	}
 	if len(connectors) > 0 {
-		fmt.Fprintf(&text, "You can use the tools of the connected MCP servers (%s). When the issue needs what they provide, such as searching or reading code, call them "+
-			"instead of guessing, and cite what you found: for code, the repository and branch, file paths and line numbers, and your reasoning. "+
-			"Make only the calls you need and answer as soon as the results are enough.\n", strings.Join(connectors, ", "))
+		fmt.Fprintf(&text, "You can use the tools of the connected MCP servers (%s). ", strings.Join(connectors, ", "))
+		if coding.CanCode {
+			text.WriteString("Use them to answer questions about code, not to prepare code changes: for those, start the coding session instead of reading the code yourself. ")
+		} else {
+			text.WriteString("When the issue needs what they provide, such as searching or reading code, call them instead of guessing. ")
+		}
+		fmt.Fprintf(&text, "Cite what you found: for code, the repository and branch, file paths and line numbers, and your reasoning. "+
+			"Pass each tool only the arguments its schema lists, never repeat a call with the same arguments, and stop after a few calls: "+
+			"this session allows at most %d connector calls before you must answer or start Coding.\n", builtinPrepMaxCalls)
 	}
 	text.WriteString("End with a short reply in the language of the issue: what you did and what is left. Refer to the issue by its identifier only; do not repeat its title.")
 	return text.String()
