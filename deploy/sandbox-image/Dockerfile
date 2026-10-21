@@ -99,6 +99,8 @@ RUN groupadd --gid 1000 flow && \
 
 COPY --from=runner-build /src/sandbox-runner/dist/flow-runner.mjs /opt/flow/runner/flow-runner.mjs
 COPY deploy/sandbox-image/bin/ /opt/flow/bin/
+# Login shells (debug terminals) add the sandbox's egress proxy identity.
+COPY --chmod=0644 deploy/sandbox-image/profile/flow-egress-proxy.sh /etc/profile.d/flow-egress-proxy.sh
 
 # Browser testing layer (track I owns install-browser.sh). The glob always
 # matches verify-image.sh, so the build works before that script lands.

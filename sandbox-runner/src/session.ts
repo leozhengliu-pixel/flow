@@ -33,6 +33,7 @@ import type {
 } from './protocol.js'
 import { AsyncQueue } from './queue.js'
 import { AuthError } from './runtime-client.js'
+import { sandboxSecrets } from './proxy-env.js'
 import { prepareRepository, runSetup, SetupError, SetupLog } from './setup.js'
 
 // Session mode (§16): bootstrap → prepare workspace (and setup) → turns.
@@ -121,6 +122,8 @@ export class Session {
   private readonly harness: HarnessAdapter
   private readonly logger: Logger
   private readonly buffer: EventBuffer
+  /** The sandbox token values, masked in events and setup logs. */
+  private readonly secrets: () => string[]
   private readonly events: EventFactory
   private readonly turns = new AsyncQueue<Turn>()
   private readonly seenTurns = new Set<string>()
@@ -154,10 +157,12 @@ export class Session {
     this.newId = deps.newId ?? (() => crypto.randomUUID())
     this.events = new EventFactory({ newId: this.newId, now: deps.now })
     this.resumeId = deps.bootstrap.harness.resumeId || undefined
+    this.secrets = sandboxSecrets(this.config.tokenFile)
     this.buffer = new EventBuffer({
       post: (events) => this.api.postEvents(events),
       logger: this.logger,
       onFatal: () => this.requestStop({ by: 'Flow', reason: 'revoked' }),
+      secrets: this.secrets,
     })
     this.harnessState = deps.harnessState ?? defaultHarnessState(this.api, this.config.paths.home, this.harness, this.logger)
   }
@@ -320,6 +325,7 @@ export class Session {
     this.setPhase('setup')
     await writeRuntimeInfo(this.config)
     const log = new SetupLog((line) => this.logger.info('setup', { line }))
+    log.redact(this.secrets())
     const setupStarted = Date.now()
     const deadline = setupStarted + Math.max(60, this.bootstrap.limits.setupTimeoutSeconds || 1200) * 1000
     const setupDeps = {
