@@ -557,7 +557,7 @@ Settings › AI & agents shows the workspace's remaining AI credits on its Usage
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `FLOW_AI_INCLUDED_CREDITS_USD` | empty | Dollar amount of AI credits every workspace on this deployment includes, for example `10` or `9.99`. The remaining balance is this amount minus all coding-session and loop spend recorded for the workspace since it started, never below `$0.00`. Unset, empty, zero or invalid means no included credits: the balance shows `$0.00 remaining`, as in a workspace without credits. Spend limits (Usage & limits) are separate and are enforced per period. |
+| `FLOW_AI_INCLUDED_CREDITS_USD` | empty | Dollar amount of AI credits every workspace on this deployment includes, for example `10` or `9.99` (Helm: `integrations.aiCredits.includedUsd`). The remaining balance is this amount minus all coding-session and loop spend recorded for the workspace since it started, never below `$0.00`. Unset, empty, zero or invalid means no included credits: the balance shows `$0.00 remaining`, as in a workspace without credits. Spend limits (Usage & limits) are separate and are enforced per period. |
 
 `GET /api/workspace/ai-credits` returns `{ includedMicros, spentMicros, remainingMicros }` (millionths of a dollar) for
 any workspace member.

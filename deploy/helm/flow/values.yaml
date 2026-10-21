@@ -160,6 +160,10 @@ integrations:
     mode: ""
     # Go duration of at least 1m; 0 turns the import off. Empty keeps 10m.
     interval: ""
+  # AI credits included with this deployment, in US dollars (Settings > AI & agents >
+  # Usage shows them minus recorded coding-session and loop spend). Empty shows $0.00.
+  aiCredits:
+    includedUsd: ""
 
 # Plain FLOW_* settings (see docs/configuration.md), e.g.
 #   FLOW_AUTH_EMAIL_ENABLED: "true"

@@ -74,6 +74,9 @@ data:
   {{- with .reviewImport.interval }}
   FLOW_REVIEW_IMPORT_INTERVAL: {{ . | quote }}
   {{- end }}
+  {{- with .aiCredits.includedUsd }}
+  FLOW_AI_INCLUDED_CREDITS_USD: {{ . | quote }}
+  {{- end }}
   {{- end }}
   {{- with $v.outbound }}
   {{- if .trustedPrivateEndpoints }}
