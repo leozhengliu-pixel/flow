@@ -283,6 +283,10 @@ func (s *server) completeAgentRun(w http.ResponseWriter, r *http.Request, caller
 		return
 	}
 	run, err := s.store.FinishAgentRun(r.Context(), run.ID, caller.worker, store.AgentRunResult{Status: input.Status, Error: input.Error, Usage: input.Usage}, time.Now())
+	if err == nil && (input.Status == "done" || input.Status == "failed") {
+		// A finished run that should have entered Coding and did not is moved into it (or reports the blocker).
+		s.ensureWorkerRunCoding(r, run)
+	}
 	switch {
 	case errors.Is(err, store.ErrAgentRunInput):
 		writeError(w, http.StatusBadRequest, "status must be done, failed, canceled, awaiting or interrupted, and usage a JSON value under 64 KB")
@@ -354,30 +358,11 @@ func (s *server) agentRunPayload(w http.ResponseWriter, r *http.Request, _ agent
 // renderAgentRunTaskContext renders the prompt context of a built-in agent session (comment thread or
 // delegation) as executeBuiltinApplication builds it, plus the issues the request names.
 func (s *server) renderAgentRunTaskContext(r *http.Request, task domain.AgentTask) (*agentRunPromptContext, error) {
-	ctx := r.Context()
-	app, err := s.store.ApplicationByUser(ctx, task.AppUserID)
-	if err != nil || !app.Active || !app.Builtin || !slices.Contains(app.AccessTeamIDs(), task.TeamID) {
-		return nil, store.ErrAuthForbidden
-	}
-	appUser := app.User()
-	key := domain.APIKey{CreatorID: appUser.ID, SubjectUserID: appUser.ID, Actor: "app", Scopes: app.Scopes, TeamRestriction: "selected", TeamIDs: app.AccessTeamIDs(), OAuthClientID: app.ClientID}
-	ctx = context.WithValue(ctx, authUserContextKey{}, appUser)
-	ctx = context.WithValue(ctx, workspaceKeyContextKey{}, task.WorkspaceKey)
-	ctx = context.WithValue(ctx, apiKeyContextKey{}, key)
-	ctx = store.ContextWithActor(ctx, appUser)
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://flow.internal/api/agent-tasks/"+task.ID, nil)
+	request, data, appUser, key, err := s.builtinRunRequest(r, task)
 	if err != nil {
 		return nil, err
 	}
-	data, err := s.applicationTaskContext(request, task, false)
-	if err != nil {
-		return nil, err
-	}
-	data.Viewer, data.ViewerRole = appUser, "app"
-	request, data, err = s.builtinApplicationContext(request, app, task)
-	if err != nil {
-		return nil, err
-	}
+	ctx := request.Context()
 	invoker, _ := request.Context().Value(builtinInvokerContextKey{}).(domain.User)
 	actor := mcpActor{WorkspaceKey: task.WorkspaceKey, User: appUser, APIKey: key, AuthorizationUserID: invoker.ID}
 	refs := findAgentMessageReferences(data, s.builtinTaskPrompt(ctx, task, data)+"\n"+task.Prompt)
@@ -391,6 +376,74 @@ func (s *server) renderAgentRunTaskContext(r *http.Request, task domain.AgentTas
 		prompt.ReferencedIssues = append(prompt.ReferencedIssues, issue.Identifier)
 	}
 	return prompt, nil
+}
+
+// builtinRunRequest is a request acting as a built-in agent session's application (its scopes and teams, the
+// person who delegated or mentioned it) with the session's context, as executeBuiltinApplication runs it.
+func (s *server) builtinRunRequest(r *http.Request, task domain.AgentTask) (*http.Request, domain.Bootstrap, domain.User, domain.APIKey, error) {
+	ctx := r.Context()
+	app, err := s.store.ApplicationByUser(ctx, task.AppUserID)
+	if err != nil || !app.Active || !app.Builtin || !slices.Contains(app.AccessTeamIDs(), task.TeamID) {
+		return nil, domain.Bootstrap{}, domain.User{}, domain.APIKey{}, store.ErrAuthForbidden
+	}
+	appUser := app.User()
+	key := domain.APIKey{CreatorID: appUser.ID, SubjectUserID: appUser.ID, Actor: "app", Scopes: app.Scopes, TeamRestriction: "selected", TeamIDs: app.AccessTeamIDs(), OAuthClientID: app.ClientID}
+	ctx = context.WithValue(ctx, authUserContextKey{}, appUser)
+	ctx = context.WithValue(ctx, workspaceKeyContextKey{}, task.WorkspaceKey)
+	ctx = context.WithValue(ctx, apiKeyContextKey{}, key)
+	ctx = store.ContextWithActor(ctx, appUser)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://flow.internal/api/agent-tasks/"+task.ID, nil)
+	if err != nil {
+		return nil, domain.Bootstrap{}, domain.User{}, domain.APIKey{}, err
+	}
+	data, err := s.applicationTaskContext(request, task, false)
+	if err != nil {
+		return nil, domain.Bootstrap{}, domain.User{}, domain.APIKey{}, err
+	}
+	data.Viewer, data.ViewerRole = appUser, "app"
+	request, data, err = s.builtinApplicationContext(request, app, task)
+	if err != nil {
+		return nil, domain.Bootstrap{}, domain.User{}, domain.APIKey{}, err
+	}
+	return request, data, appUser, key, nil
+}
+
+// ensureWorkerRunCoding gives a worker run the in-process agent's Coding guarantee. The worker runs its own model
+// loop (agent-worker), so Flow cannot bound its connector reads or step in at its forced-decision turn; it checks
+// when the run finishes instead: a delegation whose request clearly asks for code changes, with Coding available
+// and no coding session yet, is moved into Coding through the same tool path (or ends with the environment
+// blocker), and the thread gets the action and the session's state. Mentions and replies are left to the worker:
+// they share the delegation's session (issueCodingIdempotencyKey) only when the issue is delegated.
+func (s *server) ensureWorkerRunCoding(r *http.Request, run store.AgentRun) {
+	task, err := s.store.AgentTask(r.Context(), run.WorkspaceKey, run.SessionID)
+	if err != nil || task.Trigger != "delegation" || task.CodingSessionID != "" {
+		return
+	}
+	request, data, _, _, err := s.builtinRunRequest(r, task)
+	if err != nil {
+		return
+	}
+	guard := newBuiltinRunGuard(s.builtinCodingContextFor(request.Context(), task, data))
+	if !guard.codingDue() {
+		return
+	}
+	appendActivity := func(activity domain.AgentActivity) error {
+		activity.ActorID = task.AppUserID
+		next, err := appendBuiltinActivity(request.Context(), s.store, task, activity)
+		if err == nil {
+			task = next
+		}
+		return err
+	}
+	execute := func(call domain.AgentToolCall) ([]byte, error) { return s.executeAgentTool(request, data, call) }
+	issueTitle := ""
+	if len(data.Issues) == 1 {
+		issueTitle = data.Issues[0].Title
+	}
+	state, ok := s.builtinCodingTransfer(request.Context(), task, guard, issueTitle, "the run finished without starting Coding", execute, appendActivity)
+	if ok {
+		_ = appendActivity(domain.AgentActivity{Type: "response", Body: state})
+	}
 }
 
 // agentRunReferencedIssues loads the issues named by identifier that the actor can see and that are not loaded

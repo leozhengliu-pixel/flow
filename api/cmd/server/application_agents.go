@@ -609,6 +609,21 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 	// guard bounds the run's read-only preparation (connector calls) and answers identical repeats from the
 	// earlier result, so a run asked to implement something decides instead of searching until the turn limit.
 	guard := newBuiltinRunGuard(s.builtinCodingContextFor(r.Context(), task, data))
+	guard.hadSession = task.CodingSessionID != ""
+	issueTitle := ""
+	if len(data.Issues) == 1 {
+		issueTitle = data.Issues[0].Title
+	}
+	// transfer moves a run that must enter Coding into it when the model did not (see builtin_coding_transfer.go)
+	// and posts the reply with the session's state, after text (the model's own reply, if any).
+	transfer := func(reason, text string) {
+		state, ok := s.builtinCodingTransfer(r.Context(), task, guard, issueTitle, reason, execute, appendAgentActivity)
+		if !ok {
+			return
+		}
+		reply := s.builtinReplyWithCoding(r.Context(), task, guard, text, state)
+		_ = appendActivity("response", rebaseAgentWorkspaceLinks(reply, data.Workspace.URLKey, agentLinkBaseURL(r)))
+	}
 	runTool := func(call domain.AgentToolCall) (string, bool, bool) {
 		connector, external := offeredConnectorTool(r.Context(), call.Name)
 		if !external {
@@ -650,7 +665,8 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 				logged += "\n" + detail
 			}
 		}
-		guard.after(call, content, err != nil)
+		// A failed call or one that found nothing is a call without progress.
+		guard.after(call, content, err != nil || connectorFoundNothing(result))
 		metadata["result"] = logged
 		if appendAgentActivity(domain.AgentActivity{Type: "action", Body: connector.RemoteName, Metadata: metadata}) != nil {
 			return "", false, false
@@ -731,6 +747,7 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 	// A comment-thread agent can stop on a question with options, like chat (the reference app's select elicitation).
 	r = r.WithContext(context.WithValue(r.Context(), agentExtraToolsKey{}, []agentProviderTool{askUserToolDefinition}))
 	textApprovalRetried := false
+	decisionRound := -1
 	for round := 0; round < maxAgentToolTurns; round++ {
 		turnCtx := r.Context()
 		if offered, _ := turnCtx.Value(connectorToolsKey{}).([]connectorTool); len(offered) > 0 && guard.mustDecide(round) {
@@ -738,7 +755,7 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 			// connector tools (start Coding, or reply with what it found and the blocker).
 			turnCtx = context.WithValue(turnCtx, agentToolFilterKey{}, func(tool agentProviderTool) bool { return !strings.HasPrefix(tool.Name, "external_") })
 			if !guard.decided {
-				guard.decided = true
+				guard.decided, decisionRound = true, round
 				if last := len(messages) - 1; last >= 0 && messages[last].ToolResult != nil {
 					messages[last].ToolResult.Content += guard.decisionNudge()
 				}
@@ -762,10 +779,22 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 			continue
 		}
 		if len(turn.ToolCalls) == 0 {
+			if guard.codingDue() {
+				// A plan or a "done" claim instead of Coding: Flow starts it and reports its real state.
+				transfer("the agent replied without starting Coding", turn.Text)
+				return
+			}
 			// Links to this workspace's pages under a made-up host point at the app instead.
 			// "Done" is only said with the coding session's evidence; otherwise its real state is posted.
 			reply := s.builtinFinalReply(r.Context(), task, guard, turn.Text)
 			_ = appendActivity("response", rebaseAgentWorkspaceLinks(reply, data.Workspace.URLKey, agentLinkBaseURL(r)))
+			return
+		}
+		if round == decisionRound && guard.codingDue() && !callsTool(turn.ToolCalls, startCodingSessionTool) && !callsTool(turn.ToolCalls, askUserTool) {
+			// The forced-decision turn passed without Coding (the model kept searching or did something else):
+			// Flow starts it instead of running this turn's calls, and the run ends with its state.
+			pending.Reset()
+			transfer("the read-only budget was spent without starting Coding", "")
 			return
 		}
 		messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, ToolCalls: turn.ToolCalls, Reasoning: turn.Reasoning})
@@ -833,6 +862,10 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 			}
 			return
 		}
+	}
+	if guard.codingDue() {
+		transfer("the run reached its turn limit without starting Coding", "")
+		return
 	}
 	if guard.started != nil && guard.started.delivery != codingNotStarted {
 		// Coding was requested: the thread reports the session's state rather than a failed run.
@@ -1102,8 +1135,10 @@ func builtinTaskPromptWith(task domain.AgentTask, data domain.Bootstrap, coding 
 	developing := coding.CanCode && coding.Development
 	if developing {
 		fmt.Fprintf(&text, "This issue asks for code changes. Your first step is start_coding_session with issueId %s", issue.Identifier)
-		if coding.EnvironmentID != "" {
-			fmt.Fprintf(&text, " and environmentId %s (named in the instructions)", coding.EnvironmentID)
+		if coding.EnvironmentKnown {
+			fmt.Fprintf(&text, " and environmentId %s (its coding environment)", coding.EnvironmentID)
+		} else if len(coding.Environments) > 0 {
+			fmt.Fprintf(&text, " (no coding environment is known: %s; leave environmentId out and the session asks which one)", coding.environmentBlocker())
 		}
 		text.WriteString(" and a prompt that restates the change, the tests to run and that a draft pull/merge request is wanted. " +
 			"Do not search or read the code before it: the coding agent clones the repository and reads it itself. " +
