@@ -248,6 +248,7 @@ func (s *server) rotateSCIMToken(w http.ResponseWriter, r *http.Request) {
 	_ = s.store.RevokeSCIMToken(r.Context(), data.Workspace.ID, tokenID)
 	_ = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "scim.token_rotated", tokenID, nil, func(next *domain.Bootstrap) error {
 		next.WorkspaceSettings.SCIMEnabled = true
+		appendAudit(next, "rotated", "scim_token", tokenID, map[string]any{"name": name, "replacementId": item.ID})
 		return nil
 	})
 	respondMutation(w, nil, http.StatusCreated, item)

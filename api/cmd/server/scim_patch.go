@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -39,13 +40,22 @@ type scimMemberValue struct {
 }
 
 type scimUserPayload struct {
-	ExternalID  string          `json:"externalId"`
-	UserName    string          `json:"userName"`
-	DisplayName string          `json:"displayName"`
-	Name        *store.SCIMName `json:"name"`
-	Active      any             `json:"active"`
-	Emails      []any           `json:"emails"`
-	Roles       any             `json:"roles"`
+	ExternalID        string                `json:"externalId"`
+	UserName          string                `json:"userName"`
+	DisplayName       string                `json:"displayName"`
+	Name              *store.SCIMName       `json:"name"`
+	Active            any                   `json:"active"`
+	Emails            []any                 `json:"emails"`
+	Roles             any                   `json:"roles"`
+	Title             string                `json:"title"`
+	NickName          string                `json:"nickName"`
+	UserType          string                `json:"userType"`
+	PreferredLanguage string                `json:"preferredLanguage"`
+	Locale            string                `json:"locale"`
+	Timezone          string                `json:"timezone"`
+	PhoneNumbers      []store.SCIMTypedItem `json:"phoneNumbers"`
+	Addresses         []store.SCIMAddress   `json:"addresses"`
+	Enterprise        *store.SCIMEnterprise `json:"urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"`
 }
 
 type scimGroupPayload struct {
@@ -75,6 +85,10 @@ func (p scimUserPayload) input(current *store.SCIMUser) (store.SCIMUserInput, er
 	if p.Name != nil {
 		input.Name = *p.Name
 	}
+	input.Profile = store.SCIMProfile{Title: p.Title, NickName: p.NickName, UserType: p.UserType, PreferredLanguage: p.PreferredLanguage, Locale: p.Locale, Timezone: p.Timezone, PhoneNumbers: p.PhoneNumbers, Addresses: p.Addresses}
+	if p.Enterprise != nil {
+		input.Profile.Enterprise = *p.Enterprise
+	}
 	if current != nil {
 		input.Active, input.Email, input.AvatarURL = current.User.Active, current.User.Email, current.User.AvatarURL
 	}
@@ -87,6 +101,15 @@ func (p scimUserPayload) input(current *store.SCIMUser) (store.SCIMUserInput, er
 	}
 	if email := scimPickEmail(p.Emails); email != "" {
 		input.Email = email
+	}
+	for _, item := range p.Emails {
+		if object, ok := item.(map[string]any); ok {
+			raw, _ := json.Marshal(object)
+			var email store.SCIMTypedItem
+			if json.Unmarshal(raw, &email) == nil {
+				input.Profile.Emails = append(input.Profile.Emails, email)
+			}
+		}
 	}
 	return input, nil
 }
@@ -219,13 +242,20 @@ type scimPatchPath struct {
 	attr, sub string
 	filter    scimFilter
 	ignore    bool
+	// enterprise is set for a path in the enterprise User extension; attr
+	// is then "" for the whole extension object.
+	enterprise bool
 }
 
 func parseSCIMPatchPath(raw string, coreSchema string) (scimPatchPath, error) {
 	path := strings.TrimSpace(raw)
 	lower := strings.ToLower(path)
+	enterprise := strings.ToLower(scimSchemaEnterpriseUser)
 	if prefix := strings.ToLower(coreSchema) + ":"; strings.HasPrefix(lower, prefix) {
 		path, lower = path[len(prefix):], lower[len(prefix):]
+	} else if coreSchema == scimSchemaUser && (lower == enterprise || strings.HasPrefix(lower, enterprise+":")) {
+		attr, sub, _ := strings.Cut(strings.TrimPrefix(lower[len(enterprise):], ":"), ".")
+		return scimPatchPath{enterprise: true, attr: attr, sub: sub}, nil
 	} else if strings.HasPrefix(lower, "urn:") {
 		return scimPatchPath{ignore: true}, nil
 	}
@@ -272,11 +302,22 @@ func scimUserStateFrom(current store.SCIMUser) *scimUserState {
 	if current.ExternalIDDefaulted {
 		externalID = ""
 	}
-	name := current.Name
-	if name.FullName() == "" && current.User.Name != "" {
-		name.Formatted = current.User.Name
+	displayName := current.User.DisplayName
+	if current.NoDisplayName {
+		displayName = ""
 	}
-	return &scimUserState{input: store.SCIMUserInput{ExternalID: externalID, UserName: current.UserName, DisplayName: current.User.DisplayName, Name: name, Email: current.User.Email, AvatarURL: current.User.AvatarURL, Active: current.User.Active}}
+	profile := current.Profile
+	profile.PhoneNumbers, profile.Addresses = slices.Clone(profile.PhoneNumbers), slices.Clone(profile.Addresses)
+	// The emails as the resource shows them, so a filtered path such as
+	// emails[type eq "work"].value finds the account email.
+	profile.Emails = nil
+	for _, email := range scimUserEmails(current) {
+		raw, _ := json.Marshal(email)
+		var item store.SCIMTypedItem
+		_ = json.Unmarshal(raw, &item)
+		profile.Emails = append(profile.Emails, item)
+	}
+	return &scimUserState{input: store.SCIMUserInput{ExternalID: externalID, UserName: current.UserName, DisplayName: displayName, Name: current.Name, Email: current.User.Email, AvatarURL: current.User.AvatarURL, Active: current.Active(), Profile: profile}}
 }
 
 func (st *scimUserState) apply(operation scimPatchOperation) error {
@@ -306,6 +347,9 @@ func (st *scimUserState) set(kind, rawPath string, value any) error {
 	path, err := parseSCIMPatchPath(rawPath, scimSchemaUser)
 	if err != nil || path.ignore {
 		return err
+	}
+	if path.enterprise {
+		return st.setEnterprise(kind, path, value)
 	}
 	remove := kind == "remove"
 	text := func() (string, error) {
@@ -344,42 +388,241 @@ func (st *scimUserState) set(kind, rawPath string, value any) error {
 		}
 		st.input.DisplayName = value
 	case "externalid":
-		if !remove {
-			value, err := text()
-			if err != nil {
-				return err
-			}
-			st.input.ExternalID = value
-		}
-	case "name":
-		return st.setName(kind, path.sub, value)
-	case "emails":
 		if remove {
-			st.input.Email = ""
+			st.input.ExternalID, st.input.ClearExternalID = "", true
 			return nil
 		}
-		if path.filter == nil && path.sub == "" {
-			if email := scimPickEmail(scimValueList(value)); email != "" {
-				st.input.Email = email
-			}
-			return nil
-		}
-		if object, ok := value.(map[string]any); ok {
-			value = scimLookup(object, "value")
-		}
-		email, err := text()
+		value, err := text()
 		if err != nil {
 			return err
 		}
-		st.input.Email = email
+		st.input.ExternalID, st.input.ClearExternalID = value, false
+	case "name":
+		return st.setName(kind, path.sub, value)
+	case "emails":
+		if path.sub == "value" {
+			if object, ok := value.(map[string]any); ok {
+				value = scimLookup(object, "value")
+			}
+		}
+		if err := scimPatchTypedList(&st.input.Profile.Emails, kind, path, value); err != nil {
+			return err
+		}
+		emails := []any{}
+		for _, email := range st.input.Profile.Emails {
+			emails = append(emails, scimObject(email))
+		}
+		st.input.Email = scimPickEmail(emails)
 	case "roles":
 		role := ""
 		if !remove {
 			role = (scimUserPayload{Roles: value}).role()
 		}
 		st.roleValue = &role
+	case "title", "nickname", "usertype", "preferredlanguage", "locale", "timezone":
+		next := ""
+		if !remove {
+			if next, err = text(); err != nil {
+				return err
+			}
+		}
+		profile := &st.input.Profile
+		fields := map[string]*string{"title": &profile.Title, "nickname": &profile.NickName, "usertype": &profile.UserType, "preferredlanguage": &profile.PreferredLanguage, "locale": &profile.Locale, "timezone": &profile.Timezone}
+		*fields[path.attr] = next
+	case "phonenumbers":
+		return scimPatchTypedList(&st.input.Profile.PhoneNumbers, kind, path, value)
+	case "addresses":
+		return scimPatchTypedList(&st.input.Profile.Addresses, kind, path, value)
 	}
 	return nil
+}
+
+// setEnterprise applies an operation on the enterprise User extension: the
+// whole extension object, one attribute, or manager / manager.value.
+func (st *scimUserState) setEnterprise(kind string, path scimPatchPath, value any) error {
+	enterprise := &st.input.Profile.Enterprise
+	if path.attr == "" {
+		if kind == "remove" {
+			*enterprise = store.SCIMEnterprise{}
+			return nil
+		}
+		object, ok := value.(map[string]any)
+		if !ok {
+			return scimBadRequest(scimInvalidValue, "the enterprise extension needs an object value")
+		}
+		if kind == "replace" {
+			*enterprise = store.SCIMEnterprise{}
+		}
+		for _, key := range scimSortedKeys(object) {
+			attr, sub, _ := strings.Cut(strings.ToLower(key), ".")
+			if err := st.setEnterprise("replace", scimPatchPath{enterprise: true, attr: attr, sub: sub}, object[key]); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if path.attr == "manager" {
+		return setSCIMManager(&enterprise.Manager, kind, path.sub, value)
+	}
+	text := ""
+	if kind != "remove" {
+		result, ok := scimString(value)
+		if !ok {
+			return scimBadRequest(scimInvalidValue, path.attr+" needs a string value")
+		}
+		text = strings.TrimSpace(result)
+	}
+	switch path.attr {
+	case "employeenumber":
+		enterprise.EmployeeNumber = text
+	case "costcenter":
+		enterprise.CostCenter = text
+	case "organization":
+		enterprise.Organization = text
+	case "division":
+		enterprise.Division = text
+	case "department":
+		enterprise.Department = text
+	}
+	return nil
+}
+
+// setSCIMManager sets the enterprise manager from an object
+// ({"value": "<id>"}; an empty value clears it, as Microsoft Entra ID sends
+// on removal), a bare id, or a manager.value / manager.displayName path.
+func setSCIMManager(manager *store.SCIMManager, kind, sub string, value any) error {
+	if kind == "remove" {
+		switch sub {
+		case "value":
+			manager.Value = ""
+		case "displayname":
+			manager.DisplayName = ""
+		default:
+			*manager = store.SCIMManager{}
+		}
+		return nil
+	}
+	if object, ok := value.(map[string]any); ok && sub == "" {
+		id, _ := scimString(scimLookup(object, "value"))
+		ref, _ := scimString(scimLookup(object, "$ref"))
+		display, _ := scimString(scimLookup(object, "displayName"))
+		*manager = store.SCIMManager{Value: strings.TrimSpace(id), Ref: strings.TrimSpace(ref), DisplayName: strings.TrimSpace(display)}
+		return nil
+	}
+	result, ok := scimString(value)
+	if !ok {
+		return scimBadRequest(scimInvalidValue, "manager needs a string or object value")
+	}
+	if sub == "displayname" {
+		manager.DisplayName = strings.TrimSpace(result)
+	} else {
+		manager.Value = strings.TrimSpace(result)
+	}
+	return nil
+}
+
+// scimPatchTypedList applies an operation to a multi-valued complex
+// attribute (phoneNumbers, addresses) through its JSON objects:
+//   - without a filter, add appends values, replace replaces the list and
+//     remove clears it;
+//   - a value filter (phoneNumbers[type eq "work"]) selects entries; with a
+//     sub-attribute only that sub-attribute changes. A replace or add that
+//     matches nothing with an `attr eq "x"` filter creates the entry, as
+//     Microsoft Entra ID expects for phoneNumbers[type eq "work"].value.
+func scimPatchTypedList[T any](target *[]T, kind string, path scimPatchPath, value any) error {
+	items := make([]map[string]any, 0, len(*target))
+	for _, item := range *target {
+		items = append(items, scimObject(item))
+	}
+	values := []map[string]any{}
+	for _, item := range scimValueList(value) {
+		switch typed := item.(type) {
+		case map[string]any:
+			values = append(values, typed)
+		case string:
+			values = append(values, map[string]any{"value": typed})
+		}
+	}
+	merge := func(item map[string]any) {
+		for _, object := range values {
+			for key, sub := range object {
+				scimSetKey(item, key, sub)
+			}
+		}
+	}
+	if path.filter == nil && path.sub == "" {
+		switch kind {
+		case "remove":
+			items = nil
+		case "replace":
+			items = values
+		default:
+			items = append(items, values...)
+		}
+	} else {
+		matched := false
+		result := make([]map[string]any, 0, len(items))
+		for _, item := range items {
+			if path.filter != nil && !path.filter.matches(item) {
+				result = append(result, item)
+				continue
+			}
+			matched = true
+			switch {
+			case kind == "remove" && path.sub == "":
+				continue
+			case kind == "remove":
+				scimSetKey(item, path.sub, nil)
+			case path.sub == "":
+				merge(item)
+			default:
+				scimSetKey(item, path.sub, value)
+			}
+			result = append(result, item)
+		}
+		if compare, ok := path.filter.(scimCompareFilter); ok && !matched && kind != "remove" && compare.op == "eq" && len(compare.path) == 1 {
+			item := map[string]any{}
+			scimSetKey(item, compare.path[0], compare.value)
+			if path.sub != "" {
+				scimSetKey(item, path.sub, value)
+			} else {
+				merge(item)
+			}
+			result = append(result, item)
+		}
+		items = result
+	}
+	raw, _ := json.Marshal(items)
+	var next []T
+	if err := json.Unmarshal(raw, &next); err != nil {
+		return scimBadRequest(scimInvalidValue, "invalid value for "+path.attr+": "+err.Error())
+	}
+	*target = next
+	return nil
+}
+
+// scimCanonicalKeys spells sub-attributes of phoneNumbers and addresses as
+// the schema does, since PATCH paths arrive lower-cased.
+var scimCanonicalKeys = map[string]string{"value": "value", "display": "display", "type": "type", "primary": "primary", "formatted": "formatted", "streetaddress": "streetAddress", "locality": "locality", "region": "region", "postalcode": "postalCode", "country": "country"}
+
+// scimSetKey sets, or with a nil value deletes, a key compared
+// case-insensitively.
+func scimSetKey(object map[string]any, key string, value any) {
+	for existing := range object {
+		if strings.EqualFold(existing, key) {
+			delete(object, existing)
+		}
+	}
+	if canonical, ok := scimCanonicalKeys[strings.ToLower(key)]; ok {
+		key = canonical
+	}
+	if value == nil {
+		return
+	}
+	if text, ok := value.(string); ok && key == "primary" {
+		value, _ = strconv.ParseBool(text)
+	}
+	object[key] = value
 }
 
 func (st *scimUserState) setName(kind, sub string, value any) error {
@@ -418,6 +661,12 @@ func (st *scimUserState) setName(kind, sub string, value any) error {
 		name.FamilyName = text
 	case "formatted":
 		name.Formatted = text
+	case "middlename":
+		name.MiddleName = text
+	case "honorificprefix":
+		name.HonorificPrefix = text
+	case "honorificsuffix":
+		name.HonorificSuffix = text
 	}
 	return nil
 }
@@ -488,10 +737,10 @@ func (s *server) scimGroupPatchChange(ctx context.Context, workspaceID string, g
 				change.displayName = strings.TrimSpace(text)
 			}
 		case "externalid":
-			if kind != "remove" {
-				if text, ok := scimString(value); ok {
-					change.externalID = strings.TrimSpace(text)
-				}
+			if kind == "remove" {
+				change.externalID, change.clearExternalID = "", true
+			} else if text, ok := scimString(value); ok {
+				change.externalID, change.clearExternalID = strings.TrimSpace(text), false
 			}
 		case "members":
 			if path.filter != nil {

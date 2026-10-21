@@ -33982,6 +33982,76 @@
         }
       }
     },
+    "/scim/v2/{workspace}/.search": {
+      "post": {
+        "operationId": "post_scim_v2_workspace__search",
+        "tags": [
+          "scim"
+        ],
+        "summary": "POST /scim/v2/{workspace}/.search",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "workspace",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
+    "/scim/v2/{workspace}/Bulk": {
+      "post": {
+        "operationId": "post_scim_v2_workspace_Bulk",
+        "tags": [
+          "scim"
+        ],
+        "summary": "POST /scim/v2/{workspace}/Bulk",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "workspace",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
     "/scim/v2/{workspace}/Groups": {
       "get": {
         "operationId": "get_scim_v2_workspace_Groups",
@@ -34022,6 +34092,41 @@
           "scim"
         ],
         "summary": "POST /scim/v2/{workspace}/Groups",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "workspace",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
+    "/scim/v2/{workspace}/Groups/.search": {
+      "post": {
+        "operationId": "post_scim_v2_workspace_Groups__search",
+        "tags": [
+          "scim"
+        ],
+        "summary": "POST /scim/v2/{workspace}/Groups/.search",
         "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
         "parameters": [
           {
@@ -34447,6 +34552,41 @@
           "scim"
         ],
         "summary": "POST /scim/v2/{workspace}/Users",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "workspace",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
+    "/scim/v2/{workspace}/Users/.search": {
+      "post": {
+        "operationId": "post_scim_v2_workspace_Users__search",
+        "tags": [
+          "scim"
+        ],
+        "summary": "POST /scim/v2/{workspace}/Users/.search",
         "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
         "parameters": [
           {

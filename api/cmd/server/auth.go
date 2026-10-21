@@ -2183,6 +2183,11 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := r.PathValue("userId")
+	// The username is a Flow handle and stays editable; the role, name and
+	// email of a SCIM-managed member come from the identity provider.
+	if (input.Role != "" || input.DisplayName != "" || input.Email != "") && s.refuseSCIMManagedMember(w, r, data.Workspace.ID, userID) {
+		return
+	}
 	// A username is the workspace handle kept in the member's account settings,
 	// validated like a self-service change; the account name stays as it is.
 	username := ""
@@ -2429,6 +2434,9 @@ func (s *server) suspendMember(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "You cannot suspend yourself")
 		return
 	}
+	if s.refuseSCIMManagedMember(w, r, data.Workspace.ID, r.PathValue("userId")) {
+		return
+	}
 	if s.authDisabled {
 		userID := r.PathValue("userId")
 		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.suspended", userID, nil, func(workspace *domain.Bootstrap) error {
@@ -2465,6 +2473,9 @@ func (s *server) resumeMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := r.PathValue("userId")
+	if s.refuseSCIMManagedMember(w, r, data.Workspace.ID, userID) {
+		return
+	}
 	if s.authDisabled {
 		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.resumed", userID, nil, func(workspace *domain.Bootstrap) error {
 			materializeDevelopmentMembers(workspace)
@@ -2498,6 +2509,9 @@ func (s *server) removeMember(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.PathValue("userId") == actorID {
 		writeError(w, http.StatusBadRequest, "You cannot remove yourself")
+		return
+	}
+	if s.refuseSCIMManagedMember(w, r, data.Workspace.ID, r.PathValue("userId")) {
 		return
 	}
 	if s.authDisabled {
