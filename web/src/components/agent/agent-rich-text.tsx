@@ -9,7 +9,9 @@ import { AgentEntityNode } from './agent-entity-node'
 import styles from './agent-rich-text.module.css'
 import './agent-chat-document.css'
 
-export function AgentRichText({ ariaLabel = 'AI message', className = 'agent-rich-text', content }: { ariaLabel?: string; className?: string; content: string }) {
+export function AgentRichText({ ariaLabel = 'AI message', className = 'agent-rich-text', content: text }: { ariaLabel?: string; className?: string; content: string | undefined }) {
+  // An activity can arrive without a body (an action or an empty reply): show nothing rather than fail.
+  const content = text ?? ''
   const editor = useEditor({
     immediatelyRender: false,
     editable: false,
