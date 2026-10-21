@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import userEvent from '@testing-library/user-event'
 import type { ComponentProps } from 'react'
@@ -193,27 +193,25 @@ describe('removing the agent from the issue', () => {
     return onUpdate
   }
 
-  it('offers to archive the agent session and archives it when confirmed', async () => {
-    vi.mocked(api.fetchCodingSessions).mockResolvedValue([makeSession({ id: 'cs-1' }), makeSession({ id: 'cs-2', archivedAt: '2026-10-20T00:00:00Z' })])
+  it('archives the running agent session without a second question', async () => {
+    vi.mocked(api.fetchCodingSessions).mockResolvedValue([
+      makeSession({ id: 'cs-1' }),
+      makeSession({ id: 'cs-2', archivedAt: '2026-10-20T00:00:00Z' }),
+      makeSession({ id: 'cs-3', state: 'complete', phase: 'done' }),
+    ])
     vi.mocked(api.archiveCodingSession).mockResolvedValue(makeSession({ id: 'cs-1', archivedAt: '2026-10-20T00:00:00Z' }))
     const onUpdate = await removeAgent()
     expect(onUpdate).toHaveBeenCalledWith({ delegateId: '' })
     await waitFor(() => expect(api.archiveCodingSession).toHaveBeenCalledTimes(1))
     expect(api.archiveCodingSession).toHaveBeenCalledWith('cs-1')
-    expect(confirmAction).toHaveBeenCalledWith('Archive session with Flow?', expect.objectContaining({ confirmLabel: 'Archive session', cancelLabel: 'Skip' }))
+    expect(confirmAction).not.toHaveBeenCalled()
   })
 
-  it('keeps the session when the prompt is skipped, and does not ask without one', async () => {
-    vi.mocked(api.fetchCodingSessions).mockResolvedValue([makeSession({ id: 'cs-1' })])
-    vi.mocked(confirmAction).mockResolvedValueOnce(false)
+  it('does nothing when no session is running', async () => {
+    vi.mocked(api.fetchCodingSessions).mockResolvedValue([makeSession({ id: 'cs-3', state: 'complete', phase: 'done' })])
     await removeAgent()
-    await waitFor(() => expect(confirmAction).toHaveBeenCalled())
+    await waitFor(() => expect(api.fetchCodingSessions).toHaveBeenCalled())
     expect(api.archiveCodingSession).not.toHaveBeenCalled()
-    vi.mocked(confirmAction).mockClear()
-    vi.mocked(api.fetchCodingSessions).mockResolvedValue([])
-    cleanup()
-    await removeAgent()
-    await waitFor(() => expect(api.fetchCodingSessions).toHaveBeenCalledTimes(2))
     expect(confirmAction).not.toHaveBeenCalled()
   })
 })

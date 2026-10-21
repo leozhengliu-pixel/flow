@@ -16,7 +16,7 @@ import './inbox-date-control.css'
 import { GridLoader } from '@/components/ui/grid-loader'
 import { AvatarImage } from '@/components/ui/user-avatar'
 
-export type InboxNotificationKind = 'comment' | 'assignment' | 'mention' | 'status' | 'project' | 'review' | 'pulse' | 'generic'
+export type InboxNotificationKind = 'comment' | 'finished' | 'assignment' | 'mention' | 'status' | 'project' | 'review' | 'pulse' | 'generic'
 export type InboxSnoozePreset = 'hour' | 'tomorrow' | 'nextWeek' | 'month' | {
   kind: 'custom'
   snoozedUntil: string
@@ -532,6 +532,7 @@ function actorColor(value: string) {
 
 function KindIcon({ kind, state }: { kind: InboxNotificationKind; state?: Pick<WorkflowState, 'id' | 'name' | 'color' | 'type'> }) {
   if (kind === 'review') return <svg viewBox="0 0 16 16"><path d="M9.897 1.085a.75.75 0 0 1 .588.883l-2.5 12.5a.75.75 0 0 1-1.47-.295l2.5-12.5a.75.75 0 0 1 .882-.588m1.844 3.185a.75.75 0 0 1 1.06.042l3 3.25a.75.75 0 0 1 0 1.017l-3 3.25a.75.75 0 1 1-1.102-1.017l2.53-2.742L11.7 5.33a.75.75 0 0 1 .042-1.06m-7.543.042A.75.75 0 1 1 5.3 5.329L2.771 8.07l2.53 2.742A.75.75 0 1 1 4.2 11.829l-3-3.25a.75.75 0 0 1 0-1.017z" /></svg>
+  if (kind === 'finished') return <svg viewBox="0 0 16 16"><path d="m4 8.4 2.6 2.6L12 5.6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
   if (kind === 'status' && state) return <StatusIcon state={state} size={16} />
   if (kind === 'project') return <svg viewBox="0 0 16 16"><path d="m8 1.8 5.2 3v6.4L8 14.2l-5.2-3V4.8L8 1.8Z M2.8 4.8 8 7.9l5.2-3.1M8 7.9v6.3" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" /></svg>
   if (kind === 'comment') return <svg viewBox="0 0 16 16"><path d="M6.27246 4.61328C6.34825 4.59068 6.4363 4.6001 6.5127 4.63477C6.58913 4.66988 6.64925 4.72787 6.68164 4.7998C6.71377 4.8718 6.716 4.95477 6.69141 5.03516C6.66653 5.1151 6.61688 5.18691 6.5498 5.22852C6.49137 5.26498 6.43537 5.30181 6.38086 5.33984C5.63535 5.83563 5.24006 6.55883 5.17773 7.29395C5.29094 7.27427 5.40754 7.26274 5.52637 7.2627C6.64457 7.2627 7.55148 8.16897 7.55176 9.28711C7.55176 10.4055 6.64474 11.3125 5.52637 11.3125C4.40834 11.3121 3.50195 10.4052 3.50195 9.28711V8.4873L3.50098 8.48828C3.499 8.39852 3.49934 8.30601 3.50293 8.2168C3.51156 6.5902 4.7032 5.09714 6.05078 4.6875C6.12397 4.66097 6.19724 4.6368 6.27246 4.61328ZM11.2725 4.61328C11.3482 4.59068 11.4363 4.6001 11.5127 4.63477C11.5891 4.66988 11.6492 4.72787 11.6816 4.7998C11.7138 4.8718 11.716 4.95477 11.6914 5.03516C11.6665 5.1151 11.6169 5.18691 11.5498 5.22852C11.4914 5.26498 11.4354 5.30181 11.3809 5.33984C10.6353 5.83563 10.2401 6.55883 10.1777 7.29395C10.2909 7.27427 10.4075 7.26274 10.5264 7.2627C11.6446 7.2627 12.5515 8.16897 12.5518 9.28711C12.5518 10.4055 11.6447 11.3125 10.5264 11.3125C9.40834 11.3121 8.50195 10.4052 8.50195 9.28711V8.4873L8.50098 8.48828C8.499 8.39852 8.49934 8.30601 8.50293 8.2168C8.51156 6.5902 9.7032 5.09714 11.0508 4.6875C11.124 4.66097 11.1972 4.6368 11.2725 4.61328Z" /></svg>

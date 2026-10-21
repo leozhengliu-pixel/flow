@@ -15,6 +15,9 @@ describe('agent reply notifications', () => {
     expect(agentReplyLine(notification('response'), zh)).toBe('Flow 回复了：Two fields changed.')
     expect(agentReplyLine(notification('elicitation', '用哪个优先级？'), zh)).toBe('Flow 正在等待你的回复：用哪个优先级？')
     expect(agentReplyLine(notification('error', ''), zh)).toBe('Flow 出错了')
+    expect(agentReplyLine(notification('finished'), source => source)).toBe('Flow finished: Two fields changed.')
+    expect(agentReplyLine(notification('finished', ''), source => source)).toBe('Flow finished')
+    expect(agentReplyLine(notification('finished'), zh)).toBe('Flow 已完成：Two fields changed.')
   })
 
   it('words document thread replies like issue thread replies and links to the comment', () => {

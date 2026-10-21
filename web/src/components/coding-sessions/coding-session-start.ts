@@ -1,13 +1,12 @@
 import { createElement, useCallback, useRef, useState, type ReactNode } from 'react'
 import { useI18n } from '@/i18n/i18n'
 import { ApiError } from '@/lib/api-client'
-import { confirmAction } from '@/components/ui/action-dialog-service'
 import { archiveCodingSession, fetchCodingEnvironments, fetchCodingSessions, startIssueCodingSession } from '@/lib/coding-sessions-api'
 import { toast } from '@/lib/toast'
 import type { BootstrapData, Issue, IssueUpdateInput, User } from '@/types/flow'
 import type { CodingEnvironment, CodingSession } from '@/types/coding-sessions'
 import { notifyCodingSessionChanged } from './coding-session-events'
-import { codingErrorInfo, isCodingErrorCode, readLastUsedEnvironment, suggestEnvironment, writeLastUsedEnvironment } from './coding-session-model'
+import { codingErrorInfo, isCodingErrorCode, isCodingSessionTerminal, readLastUsedEnvironment, suggestEnvironment, writeLastUsedEnvironment } from './coding-session-model'
 import { CodingEnvironmentPickerDialog } from './start-coding-session'
 import { useCodingAvailability } from './use-coding-sessions'
 
@@ -80,8 +79,8 @@ export function useIssueCodingSessionStarter(issue: StartIssue, data: BootstrapD
 
 /**
  * Delegating an issue to the built-in Flow agent starts a coding session for it when coding sessions are on and an
- * environment exists. Removing that agent from the issue offers to archive its session ("Archive session with
- * <agent>?"; archiving ends the session and closes its open pull requests). Wraps the delegate picker's `onUpdate`;
+ * environment exists. Removing that agent from the issue archives its running session (archiving ends the session
+ * and closes its open pull requests); the unassign flow's "Remove <agent> too?" dialog is the only question. Wraps the delegate picker's `onUpdate`;
  * other updates pass straight through.
  */
 export function useDelegateCodingSession(issue: StartIssue, data: BootstrapData, onUpdate: (input: IssueUpdateInput) => void | Promise<void>) {
@@ -93,7 +92,7 @@ export function useDelegateCodingSession(issue: StartIssue, data: BootstrapData,
     await onUpdate(input)
     if (!available || input.delegateId === undefined) return
     if (input.delegateId === '') {
-      if (previousDelegate?.builtinAgent) await offerArchive(issue, previousDelegate.displayName || previousDelegate.name, t)
+      if (previousDelegate?.builtinAgent) await archiveWorkingSessions(issue, t)
       return
     }
     const delegate = data.users.find(user => user.id === input.delegateId)
@@ -103,17 +102,14 @@ export function useDelegateCodingSession(issue: StartIssue, data: BootstrapData,
   return { onUpdate: update, element: starter.element }
 }
 
-/** After the agent left the issue: ask whether to archive its (still unarchived) coding sessions, then do it. */
-async function offerArchive(issue: StartIssue, agentName: string, t: Translate) {
+/**
+ * After the agent left the issue its still-running sessions end with it, without a second question: the unassign
+ * flow's "Remove agent" already said "remove it and archive its working session". Finished sessions stay as they are.
+ */
+async function archiveWorkingSessions(issue: StartIssue, t: Translate) {
   let sessions: CodingSession[]
-  try { sessions = (await fetchCodingSessions({ issueId: issue.id })).filter(session => !session.archivedAt) }
+  try { sessions = (await fetchCodingSessions({ issueId: issue.id })).filter(session => !session.archivedAt && !isCodingSessionTerminal(session)) }
   catch { return }
-  if (!sessions.length) return
-  const confirmed = await confirmAction(t('Archive session with {name}?').replace('{name}', agentName), {
-    description: t('{name} has been removed from this issue. Do you want to archive the agent session?').replace('{name}', agentName),
-    confirmLabel: t('Archive session'), cancelLabel: t('Skip'), danger: false,
-  })
-  if (!confirmed) return
   for (const session of sessions) {
     try {
       const archived = await archiveCodingSession(session.id)
