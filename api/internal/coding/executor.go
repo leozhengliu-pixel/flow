@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode"
 
 	"flow/api/internal/codehost"
 	"flow/api/internal/domain"
@@ -344,33 +345,37 @@ func short(sha string) string {
 	return sha
 }
 
+// pullRequestTitle rewrites the session title into a PR title: a leading
+// "label:" prefix (up to four words, e.g. "QA coding session:") is dropped,
+// the first letter is capitalised and a trailing period is removed.
 func pullRequestTitle(session domain.CodingSession) string {
-	if title := strings.TrimSpace(session.DisplayTitle); title != "" {
-		return title
+	title := firstLine(session.DisplayTitle, 200)
+	if head, rest, ok := strings.Cut(title, ":"); ok && len(strings.Fields(head)) <= 4 && strings.TrimSpace(rest) != "" && !strings.Contains(head, "/") {
+		title = strings.TrimSpace(rest)
 	}
-	return "Flow coding session"
+	title = strings.TrimRight(strings.TrimSpace(title), ".")
+	if title == "" {
+		return "Flow coding session"
+	}
+	runes := []rune(title)
+	runes[0] = unicode.ToUpper(runes[0])
+	return firstLine(string(runes), 72)
 }
 
+// pullRequestBody is one line: the agent's summary of what changed. Without a
+// summary it falls back to a reference to the issue, then to the title.
 func (s *Service) pullRequestBody(ctx context.Context, session domain.CodingSession) string {
-	var body strings.Builder
-	if summary := strings.TrimSpace(session.Summary); summary != "" {
-		body.WriteString(summary)
-		body.WriteString("\n\n")
-	}
-	if session.IssueID != "" && s.directory != nil {
-		if issue, err := s.directory.CodingIssue(ctx, session.WorkspaceKey, session.IssueID); err == nil {
-			if issue.Identifier != "" {
-				body.WriteString("Fixes " + issue.Identifier)
-			}
-			if issue.URL != "" {
-				body.WriteString(" (" + issue.URL + ")")
-			}
-			body.WriteString("\n\n")
+	body := firstLine(session.Summary, 400)
+	if body == "" && session.IssueID != "" && s.directory != nil {
+		if issue, err := s.directory.CodingIssue(ctx, session.WorkspaceKey, session.IssueID); err == nil && issue.Identifier != "" {
+			body = "Fixes " + issue.Identifier
 		}
 	}
-	body.WriteString("Opened by a Flow coding session. Review the changes before merging.")
-	if s.DecoratePullRequestBody != nil {
-		return s.DecoratePullRequestBody(ctx, session, body.String())
+	if body == "" {
+		body = pullRequestTitle(session)
 	}
-	return body.String()
+	if s.DecoratePullRequestBody != nil {
+		return s.DecoratePullRequestBody(ctx, session, body)
+	}
+	return body
 }
