@@ -7,6 +7,7 @@ import { ScopedFlowTooltip as FlowTooltip } from '@/components/ui/tooltip'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
 import { useI18n } from '@/i18n/i18n'
+import { useUsageFeedbackEnabled } from '@/lib/usage-feedback'
 import type { AgentFeedback, AgentMessage, AgentSession } from '@/types/flow'
 import { AgentAttachIcon } from './agent-icons'
 import { AGENT_ATTACHMENT_ACCEPT, agentFileContext, attachAgentFiles } from './agent-attachments'
@@ -35,6 +36,7 @@ export function AgentReplyActions({ content, message, sessionId, onSessionChange
   className?: string
 }) {
   const { t } = useI18n()
+  const feedbackEnabled = useUsageFeedbackEnabled()
   const [rating, setRating] = useState<Rating | undefined>(message.feedback?.rating)
   const [dialogOpen, setDialogOpen] = useState(false)
   useEffect(() => setRating(message.feedback?.rating), [message.feedback?.rating])
@@ -53,14 +55,14 @@ export function AgentReplyActions({ content, message, sessionId, onSessionChange
   }
   return <div className={`${styles.replyActions}${className ? ` ${className}` : ''}`} data-agent-reply-actions="">
     <div className={styles.group}>
-      <div className={styles.group}>
+      {feedbackEnabled && <div className={styles.group}>
         <ActionButton label={t(rating === 'positive' ? 'Remove feedback' : 'This was helpful')} pressed={rating === 'positive'} onClick={() => void save(rating === 'positive' ? '' : 'positive')}>
           <FlowGlyph name={rating === 'positive' ? 'thumbsUpFilled' : 'thumbsUp'} size={14}/>
         </ActionButton>
         <ActionButton label={t(rating === 'negative' ? 'Remove feedback' : 'Leave feedback…')} pressed={rating === 'negative'} onClick={() => rating === 'negative' ? void save('') : setDialogOpen(true)}>
           <FlowGlyph name={rating === 'negative' ? 'thumbsDownFilled' : 'thumbsDown'} size={14}/>
         </ActionButton>
-      </div>
+      </div>}
       <ActionButton label={t('Copy message')} onClick={() => copyAgentMessage(content, t)}>
         <FlowGlyph name="copyMessage" size={14}/>
       </ActionButton>

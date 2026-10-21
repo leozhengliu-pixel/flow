@@ -55,4 +55,11 @@ export const aiSettingsZhCN: Record<string, string> = {
   "When enabled, Flow Agent can read and understand your codebase": "启用后，Flow Agent 可以阅读并理解你的代码库",
   "By default, Code Intelligence only uses connected repos that a member can access on GitHub.": "默认情况下，代码智能仅使用成员在 GitHub 上有权访问的已连接仓库。",
   "{count} repositories selected": "已选择 {count} 个仓库",
+  "{amount} remaining": "剩余 {amount}",
+  "Last edit by {name} {time}": "{name} 最后编辑于 {time}",
+  "Last edited {time}": "最后编辑于 {time}",
+  "just now": "刚刚",
+  "Filter by value": "按值筛选",
+  "No matching options": "没有匹配的选项",
+  "Remove rule": "移除规则",
 };

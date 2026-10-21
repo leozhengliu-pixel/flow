@@ -127,6 +127,7 @@ import { workspaceRegionLabel } from "@/components/workspace/workspace-regions";
 import { SidebarCustomization } from "@/components/layout/sidebar";
 import { useSidebarCustomizationState } from "@/components/layout/sidebar-customization-state";
 import { agentWebAccessEnabled } from "@/lib/agent-web-access";
+import { mcpConnectorsEnabled } from "@/lib/mcp-connectors";
 import { InstalledApplicationPage, InstalledApplicationsPage } from "./installed-applications-section";
 import { OAuthApplicationsSection } from "./oauth-applications-section";
 import { WorkspaceMembersPage } from "./workspace-members-page";
@@ -2337,7 +2338,14 @@ function SecurityPage({
           </Row>
         </Group>
         <Group title="MCP connectors">
-          {toggle("Enable Flow Agent MCP connectors", "mcpConnectorsEnabled", "Allow Flow Agent to use MCP connectors")}
+          <Row title="Enable Flow Agent MCP connectors" description="Allow Flow Agent to use MCP connectors">
+            <Toggle
+              label="Enable Flow Agent MCP connectors"
+              checked={mcpConnectorsEnabled(settings)}
+              disabled={Boolean(settings.hipaaCompliance)}
+              onChange={(value) => void save({ ...settings, mcpConnectors: value })}
+            />
+          </Row>
           <Row title="Active MCP connections" description="Review MCP connections from all workspace members">
             <ActionButton onClick={() => onNavigate("applications")}>Review</ActionButton>
           </Row>

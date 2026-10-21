@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, ArrowUpRight, Box, ChevronRight, Copy, Eye, EyeOff, Check, Link2, MessageSquare, SquareUser, Tag, TrendingUp, Users } from "lucide-react";
 
@@ -12,7 +12,12 @@ import { settingsPath, type SettingsPageId } from "@/lib/app-routes";
 import { updateWorkspaceAgentGuidance, updateIntegrationConnection, type updateWorkspacePreferences } from "@/lib/api";
 import { DEFAULT_REPOSITORY_ACCESS, githubConnection, type RepositoryAccessSettings } from "@/lib/code-access";
 import { toast } from "@/lib/toast";
-import type { BootstrapData, FeatureSettings, WorkspaceSettings } from "@/types/flow";
+import { formatCredits, useAICredits } from "@/lib/ai-credits";
+import { mcpConnectorsEnabled } from "@/lib/mcp-connectors";
+import { USAGE_FEEDBACK_FLAG, usageFeedbackEnabled } from "@/lib/usage-feedback";
+import type { BootstrapData, FeatureSettings, TriageIntelligenceAction, TriageValueRuleKind, WorkspaceSettings } from "@/types/flow";
+import { triageValueOptions, type TriageValueOption } from "./triage-value-options";
+import { TriageValueFilter, TriageValueRuleRow } from "./triage-value-rules";
 import { CodingSessionsAIRow } from "./coding-sessions/coding-sessions-settings";
 import { CodeIntelligencePage } from "./code-intelligence-settings";
 import { FeatureCard, FeatureLinkRow, FeatureRow, FeatureSection, FeatureSelect, FeatureShell, Toggle, type FeatureIcon } from "./feature-primitives";
@@ -62,10 +67,11 @@ export function AiSettingsHub({ data, settings, busy, setEnabled, onNavigateSett
   const workspace = data.workspace.urlKey;
   const [applications, setApplications] = useState<ApplicationInstallation[]>([]);
   const isAdmin = ["admin", "owner"].includes(data.viewerRole);
+  const credits = useAICredits();
   useEffect(() => {
     if (!isAdmin) return;
     let active = true;
-    void listApplications(workspace).then((items) => active && setApplications(items.filter((item) => item.active))).catch(() => undefined);
+    void listApplications(workspace).then((items) => active && setApplications(items.filter((item) => item.active && !item.builtin))).catch(() => undefined);
     return () => {
       active = false;
     };
@@ -74,11 +80,11 @@ export function AiSettingsHub({ data, settings, busy, setEnabled, onNavigateSett
     <FeatureShell className="feature-ai-settings" title="AI & agents" description="Automate your product development processes and operations with AI">
       <div className="feature-card-stack">
         <FeatureCard>
-          <FeatureLinkRow title="Usage" description="$0.00 remaining" onClick={go("usage")} />
+          <FeatureLinkRow title="Usage" description={credits ? t("{amount} remaining").replace("{amount}", formatCredits(credits.remainingMicros)) : undefined} onClick={go("usage")} />
         </FeatureCard>
         <FeatureCard>
           <FeatureRow title="Enable usage feedback" description="Improve AI functionality by sharing usage feedback. Never used to train models">
-            <Toggle checked={flag("usage-feedback", true)} disabled={busy} label="Enable usage feedback" onChange={(value) => setEnabled("usage-feedback", value)} />
+            <Toggle checked={usageFeedbackEnabled(settings)} disabled={busy} label="Enable usage feedback" onChange={(value) => setEnabled(USAGE_FEEDBACK_FLAG, value)} />
           </FeatureRow>
         </FeatureCard>
       </div>
@@ -99,7 +105,7 @@ export function AiSettingsHub({ data, settings, busy, setEnabled, onNavigateSett
         <div className="feature-card-stack">
           {applications.map((item) => (
             <FeatureCard key={item.id}>
-              <button type="button" className="feature-row feature-row-link" onClick={() => navigate(`${settingsPath(workspace, "applications")}/${encodeURIComponent(item.clientId)}`)}>
+              <button type="button" className="feature-row feature-row-link feature-agent-row" onClick={() => navigate(`${settingsPath(workspace, "applications")}/${encodeURIComponent(item.clientId)}`)}>
                 <span className="feature-row-icon feature-agent-avatar" aria-hidden="true" data-i18n-ignore>{initials(item.name)}</span>
                 <div>
                   <strong data-i18n-ignore>{item.name}</strong>
@@ -132,7 +138,33 @@ export function AiSettingsHub({ data, settings, busy, setEnabled, onNavigateSett
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
 const TriageGlyph: FeatureIcon = ({ size = 16 }) => <FlowGlyph name="triage" size={Number(size) || 16} />;
 
-/** A borderless-looking multi-line field that saves when it loses focus. */
+/** "just now" / "34 minutes ago" in the active language. */
+function useLongRelative() {
+  const { t, locale } = useI18n();
+  return (iso: string) => {
+    const seconds = (Date.parse(iso) - Date.now()) / 1000;
+    if (!Number.isFinite(seconds) || Math.abs(seconds) < 45) return t("just now");
+    const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [["day", 86400], ["hour", 3600], ["minute", 60]];
+    const [unit, size] = units.find(([, size]) => Math.abs(seconds) >= size) ?? units[2];
+    return new Intl.RelativeTimeFormat(locale, { numeric: "auto", style: "long" }).format(Math.round(seconds / size), unit);
+  };
+}
+
+/** "Last edit by Name 34 minutes ago" under a guidance field. */
+function GuidanceEdited({ data, settings }: { data: BootstrapData; settings: WorkspaceSettings }) {
+  const { t } = useI18n();
+  const relative = useLongRelative();
+  if (!settings.agentInstructionsEditedAt) return null;
+  const editor = data.users.find((user) => user.id === settings.agentInstructionsEditedById);
+  const name = editor?.displayName || editor?.name;
+  return (
+    <p className="feature-guidance-meta" data-testid="guidance-last-edit">
+      {t(name ? "Last edit by {name} {time}" : "Last edited {time}").replace("{name}", name ?? "").replace("{time}", relative(settings.agentInstructionsEditedAt))}
+    </p>
+  );
+}
+
+/** A borderless-looking multi-line field that saves when it loses focus (no button, no debounce, no toast). */
 function GuidanceField({ label, value, disabled, placeholder = "Optional agent guidance...", onSave }: { label: string; value: string; disabled?: boolean; placeholder?: string; onSave: (value: string) => Promise<void> | void }) {
   const { t } = useI18n();
   const [draft, setDraft] = useState(value);
@@ -168,7 +200,7 @@ export function AiAgentSettings({ data, settings, busy, setEnabled, save, onRelo
     }
   };
   return (
-    <FeatureShell className="feature-ai-settings" title="Flow Agent" description="Create issues and answer questions about your workspace" back={{ ...AI_BACK, onClick: () => onNavigateSettings?.("ai") }}>
+    <FeatureShell className="feature-ai-settings feature-ai-compact" title="Flow Agent" description="Create issues and answer questions about your workspace" back={{ ...AI_BACK, onClick: () => onNavigateSettings?.("ai") }}>
       <FeatureCard>
         <FeatureRow title="Enable Flow Agent" description="Allow conversations with Flow Agent inside your workspace">
           <Toggle checked={settings.featureFlags["ai-agent"] ?? true} disabled={busy} label="Enable Flow Agent" onChange={(value) => setEnabled("ai-agent", value)} />
@@ -183,7 +215,7 @@ export function AiAgentSettings({ data, settings, busy, setEnabled, save, onRelo
       >
         <FeatureCard>
           <FeatureRow title="Enable MCP connectors" description="Allow Flow Agent to use MCP connectors.">
-            <Toggle checked={Boolean(settings.mcpConnectorsEnabled)} disabled={busy} label="Enable MCP connectors" onChange={(value) => void save({ mcpConnectorsEnabled: value })} />
+            <Toggle checked={mcpConnectorsEnabled(settings)} disabled={busy || Boolean(settings.hipaaCompliance)} label="Enable MCP connectors" onChange={(value) => void save({ mcpConnectors: value })} />
           </FeatureRow>
           <FeatureRow title="Allowed MCP connectors" description="Configure which MCP connectors can be used in this workspace">
             <button type="button" className="feature-section-link is-action" onClick={() => onNavigateSettings?.("security")}>
@@ -199,11 +231,15 @@ export function AiAgentSettings({ data, settings, busy, setEnabled, save, onRelo
             <FeatureLinkRow icon={TrendingUp} title="Updates" description="Customize how project and initiative updates should be written" onClick={() => onNavigateSettings?.("ai-updates")} />
           </FeatureCard>
           <GuidanceField label="Workspace guidance" value={settings.agentInstructions ?? ""} disabled={!canEditGuidance} onSave={saveGuidance} />
+          <GuidanceEdited data={data} settings={settings} />
         </div>
       </FeatureSection>
     </FeatureShell>
   );
 }
+
+/** The Behavior rows that take a per-value filter. */
+const FILTERABLE: TriageValueRuleKind[] = ["assignee", "project", "label", "team"];
 
 const TRIAGE_ROWS: Array<[keyof FeatureSettings["triageIntelligence"], string, FeatureIcon, boolean]> = [
   ["assigneeAction", "Assignee is suggested", Users, true],
@@ -215,19 +251,22 @@ const TRIAGE_ROWS: Array<[keyof FeatureSettings["triageIntelligence"], string, F
 ];
 
 /** Settings › AI & agents › Triage Intelligence. */
-export function TriageIntelligenceSettings({ settings, busy, setEnabled, setFeature, onNavigateSettings }: AiPageProps) {
+export function TriageIntelligenceSettings({ data, settings, busy, setEnabled, setFeature, onNavigateSettings }: AiPageProps) {
   const { t } = useI18n();
   const config = settings.featureSettings.triageIntelligence;
   const enabled = settings.featureFlags["triage-intelligence"] ?? false;
+  const rules = config.valueRules ?? [];
   const update = <K extends keyof typeof config>(key: K, value: (typeof config)[K]) => setFeature("triageIntelligence", { ...config, [key]: value });
   const options = [
     { value: "suggest", label: "Show", icon: <Eye size={14} /> },
     { value: "auto", label: "Auto-apply", icon: <Check size={14} /> },
     { value: "hide", label: "Hide", icon: <EyeOff size={14} /> },
   ];
+  const valueOptions = Object.fromEntries(FILTERABLE.map((kind) => [kind, triageValueOptions(data, kind)])) as Record<TriageValueRuleKind, TriageValueOption[]>;
+  const ruleKind = (key: string): TriageValueRuleKind | undefined => FILTERABLE.find((kind) => `${kind}Action` === key);
   return (
     <FeatureShell
-      className="feature-ai-settings"
+      className="feature-ai-settings feature-ai-triage"
       title="Triage Intelligence"
       description={<>{t("Flow uses agentic AI to automatically find related issues & duplicates, and infer properties like team, project, labels, and assignee.")} <DocsLink href={DOCS_TRIAGE} /></>}
       back={{ ...AI_BACK, onClick: () => onNavigateSettings?.("ai") }}
@@ -239,11 +278,38 @@ export function TriageIntelligenceSettings({ settings, busy, setEnabled, setFeat
       </FeatureCard>
       <FeatureSection title="Behavior" description="Define rules for showing, hiding, or auto-applying suggestions" disabled={!enabled}>
         <FeatureCard>
-          {TRIAGE_ROWS.map(([key, title, Icon]) => (
-            <FeatureRow key={key} icon={Icon} title={title}>
-              <FeatureSelect label={title} value={config[key] as string} options={options} disabled={busy || !enabled} onChange={(value) => update(key, value as never)} />
-            </FeatureRow>
-          ))}
+          {TRIAGE_ROWS.map(([key, title, Icon]) => {
+            const kind = ruleKind(key);
+            return (
+              <Fragment key={key}>
+                <FeatureRow icon={Icon} title={title}>
+                  <FeatureSelect label={title} value={config[key] as string} options={options} disabled={busy || !enabled} onChange={(value) => update(key, value as never)} />
+                  {!kind && <span className="feature-filter-spacer" aria-hidden="true" />}
+                  {kind && (
+                    <TriageValueFilter
+                      kind={kind}
+                      title={title}
+                      options={valueOptions[kind]}
+                      rules={rules}
+                      disabled={busy || !enabled}
+                      onAdd={(option) => setFeature("triageIntelligence", { ...config, valueRules: [...rules, { kind, value: option.value, action: config[key] as TriageIntelligenceAction }] })}
+                    />
+                  )}
+                </FeatureRow>
+                {kind && rules.filter((rule) => rule.kind === kind).map((rule) => (
+                  <TriageValueRuleRow
+                    key={`${rule.kind}:${rule.value}`}
+                    rule={rule}
+                    option={valueOptions[kind].find((option) => option.value === rule.value)}
+                    actions={options}
+                    disabled={busy || !enabled}
+                    onChange={(action) => setFeature("triageIntelligence", { ...config, valueRules: rules.map((item) => (item === rule ? { ...item, action } : item)) })}
+                    onRemove={() => setFeature("triageIntelligence", { ...config, valueRules: rules.filter((item) => item !== rule) })}
+                  />
+                ))}
+              </Fragment>
+            );
+          })}
         </FeatureCard>
       </FeatureSection>
       <FeatureSection title="Workspace guidance" description="Optionally provide additional context and instructions for Triage Intelligence in this workspace" disabled={!enabled}>
@@ -270,7 +336,7 @@ export function ResolvedSummariesSettings({ settings, busy, setEnabled, onNaviga
 export function UpdateGuidanceSettings({ settings, busy, setFeature, onNavigateSettings }: AiPageProps) {
   const isEditable = !busy;
   return (
-    <FeatureShell className="feature-ai-settings" title="Initiative and project updates" description="Customize how project and initiative updates should be written" back={{ ...AI_BACK, onClick: () => onNavigateSettings?.("ai-agent") }}>
+    <FeatureShell className="feature-ai-settings feature-ai-updates" title="Initiative and project updates" description="Customize how project and initiative updates should be written" back={{ ...AI_BACK, onClick: () => onNavigateSettings?.("ai-agent") }}>
       <FeatureSection title="Initiative updates">
         <GuidanceField label="Initiative updates" placeholder="Optional guidance..." value={settings.featureSettings.initiativeUpdateGuidance ?? ""} disabled={!isEditable} onSave={(value) => setFeature("initiativeUpdateGuidance", value)} />
       </FeatureSection>
@@ -292,7 +358,7 @@ export function InstalledAgentsSettings({ data, settings, busy, onReload, onNavi
   useEffect(() => {
     if (!isAdmin) return;
     let active = true;
-    void listApplications(workspace).then((items) => active && setApplications(items.filter((item) => item.active))).catch(() => undefined);
+    void listApplications(workspace).then((items) => active && setApplications(items.filter((item) => item.active && !item.builtin))).catch(() => undefined);
     return () => {
       active = false;
     };
@@ -308,7 +374,7 @@ export function InstalledAgentsSettings({ data, settings, busy, onReload, onNavi
   const count = applications.length;
   const open = (item: ApplicationInstallation) => navigate(`${settingsPath(workspace, "applications")}/${encodeURIComponent(item.clientId)}`);
   const rows: ReactNode = applications.map((item) => (
-    <button key={item.id} type="button" className="feature-row feature-row-link" onClick={() => open(item)}>
+    <button key={item.id} type="button" className="feature-row feature-row-link feature-agent-row" onClick={() => open(item)}>
       <span className="feature-row-icon feature-agent-avatar" aria-hidden="true" data-i18n-ignore>{initials(item.name)}</span>
       <div>
         <strong data-i18n-ignore>{item.name}</strong>
@@ -339,7 +405,10 @@ export function InstalledAgentsSettings({ data, settings, busy, onReload, onNavi
         {rows}
       </FeatureCard>
       <FeatureSection title="Workspace guidance" description="An agent automatically receives the full issue context when working on an issue. You can provide additional workspace-wide guidance, though adherence is controlled by the agent integration.">
-        <GuidanceField label="Installed agents guidance" value={settings.agentInstructions ?? ""} disabled={busy || !canEditGuidance} onSave={saveGuidance} />
+        <div className="feature-card-stack">
+          <GuidanceField label="Installed agents guidance" value={settings.agentInstructions ?? ""} disabled={busy || !canEditGuidance} onSave={saveGuidance} />
+          <GuidanceEdited data={data} settings={settings} />
+        </div>
       </FeatureSection>
     </FeatureShell>
   );

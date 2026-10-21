@@ -4,6 +4,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { useI18n } from '@/i18n/i18n'
 import { FlowDropdownMenuContent, FlowMenuItem, FlowMenuSeparator } from '@/components/ui/row-context-menu'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
+import { useUsageFeedbackEnabled } from '@/lib/usage-feedback'
 import { RENAME_CHAT_SHORTCUT, deleteChatShortcut } from './agent-chat-commands'
 import './agent-rename-palette.css'
 
@@ -19,6 +20,7 @@ export function AgentChatMenu({ align = 'start', className, unsaved = false, onC
   onRename: () => void
 }) {
   const { t } = useI18n()
+  const feedbackEnabled = useUsageFeedbackEnabled()
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
@@ -28,7 +30,7 @@ export function AgentChatMenu({ align = 'start', className, unsaved = false, onC
         <FlowDropdownMenuContent align={align} label={t('Chat options')}>
           <FlowMenuItem icon={<FlowGlyph name="edit"/>} disabled={unsaved} label="Rename…" shortcut={RENAME_CHAT_SHORTCUT} onSelect={onRename}/>
           <FlowMenuItem icon={<FlowGlyph name="copy"/>} label="Copy as markdown" onSelect={onCopy}/>
-          <FlowMenuItem icon={<FlowGlyph name="thumbsDown"/>} label="Leave feedback…" onSelect={onFeedback}/>
+          {feedbackEnabled && <FlowMenuItem icon={<FlowGlyph name="thumbsDown"/>} label="Leave feedback…" onSelect={onFeedback}/>}
           <FlowMenuSeparator/>
           <FlowMenuItem icon={<FlowGlyph name="delete"/>} disabled={unsaved} label="Delete" shortcut={deleteChatShortcut()} onSelect={onDelete}/>
         </FlowDropdownMenuContent>

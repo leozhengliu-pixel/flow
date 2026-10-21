@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useI18n } from "@/i18n/i18n";
 import { updateWorkspacePreferences } from "@/lib/api";
+import { formatCredits, useAICredits } from "@/lib/ai-credits";
 import type { UsageSettingsView } from "@/lib/app-routes";
 import { toast } from "@/lib/toast";
 import type { BootstrapData, SpendLimitReset, SpendLimitSettings } from "@/types/flow";
@@ -72,6 +73,7 @@ function DocsLink({ children }: { children: string }) {
 function UsageOverview({ data, onOpenView }: UsageProps) {
   const { t } = useI18n();
   const [creditsOpen, setCreditsOpen] = useState(false);
+  const credits = useAICredits();
   const limits = data.workspaceSettings?.spendLimits;
   const limitSummary = [limits?.workspaceLimit, limits?.userLimit, limits?.loopLimit].some((value) => (value ?? 0) > 0) ? t("Limits set") : t("No limits set");
   const unavailable = t("Billing is not available in Flow");
@@ -106,7 +108,7 @@ function UsageOverview({ data, onOpenView }: UsageProps) {
         </header>
         <div className="usage-card usage-row usage-row-short">
           <strong>{t("Workspace credits")}</strong>
-          <strong>{t("$0.00 remaining")}</strong>
+          <strong data-testid="workspace-credits">{credits ? t("{amount} remaining").replace("{amount}", formatCredits(credits.remainingMicros)) : "…"}</strong>
         </div>
         <div className="usage-card usage-row">
           <span className="usage-row-copy">

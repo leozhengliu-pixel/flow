@@ -3,9 +3,12 @@ import userEvent from '@testing-library/user-event'
 import { expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
+import { fetchAICredits } from '@/lib/ai-credits-api'
 import { makeBootstrap, viewer } from '@/test/fixtures'
 import type { WorkspaceMember } from '@/types/flow'
 import { BillingSettings } from './billing-settings'
+
+vi.mock('@/lib/ai-credits-api', () => ({ fetchAICredits: vi.fn().mockResolvedValue({ includedMicros: 5_000_000, spentMicros: 1_250_000, remainingMicros: 3_750_000 }) }))
 
 const members = [{ user: viewer, role: 'owner', status: 'active', joinedAt: '2026-01-01T00:00:00Z' }] as unknown as WorkspaceMember[]
 
@@ -36,6 +39,14 @@ it('disables plan changes it cannot perform and says why', () => {
     expect(button).toHaveAttribute('title', 'Billing is not available in Flow')
   }
   expect(screen.getByRole('note')).toHaveTextContent('Billing is not available in Flow')
+})
+
+it('shows the remaining AI credits on the usage row, and none when they cannot be read', async () => {
+  renderBilling()
+  expect(await screen.findByText('$3.75 remaining')).toBeVisible()
+  vi.mocked(fetchAICredits).mockRejectedValueOnce(new Error('offline'))
+  renderBilling()
+  expect(screen.getAllByText(/remaining/)).toHaveLength(1)
 })
 
 it('opens Usage & limits from the usage row', async () => {

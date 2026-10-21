@@ -1,5 +1,6 @@
 import { ChevronRight, Info } from "lucide-react";
 import { useI18n } from "@/i18n/i18n";
+import { formatCredits, useAICredits } from "@/lib/ai-credits";
 import type { BootstrapData } from "@/types/flow";
 import { SettingsPageTitle } from "./settings-primitives";
 import { CheckGlyph } from "./billing-glyphs";
@@ -44,6 +45,7 @@ export function BillingSettings({ data, onOpenUsage }: { data: BootstrapData; on
   const { t } = useI18n();
   const users = (data.members ?? []).filter((member) => member.status === "active" && !member.user.app).length || 1;
   const unavailable = t("Billing is not available in Flow");
+  const credits = useAICredits();
   return (
     <div className="billing-page">
       <SettingsPageTitle
@@ -109,7 +111,7 @@ export function BillingSettings({ data, onOpenUsage }: { data: BootstrapData; on
       <button type="button" className="billing-card billing-usage-row" onClick={onOpenUsage}>
         <span>
           <strong>{t("Usage")}</strong>
-          <span>{t("$0.00 remaining")}</span>
+          {credits && <span>{t("{amount} remaining").replace("{amount}", formatCredits(credits.remainingMicros))}</span>}
         </span>
         <ChevronRight size={16} aria-hidden="true" />
       </button>

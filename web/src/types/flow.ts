@@ -1432,6 +1432,15 @@ export interface TriageIntelligenceSettings {
   duplicateAction: TriageIntelligenceAction;
   relatedAction: TriageIntelligenceAction;
   workspaceGuidance?: string;
+  /** Overrides of the row's action for one specific user, project, label or team. */
+  valueRules?: TriageValueRule[];
+}
+export type TriageValueRuleKind = "assignee" | "project" | "label" | "team";
+export interface TriageValueRule {
+  kind: TriageValueRuleKind;
+  /** The user, project, label or team id. */
+  value: string;
+  action: TriageIntelligenceAction;
 }
 export interface CodingAgentEnvironment {
   id: string;
@@ -1493,6 +1502,9 @@ export interface WorkspaceSettings {
   pinnedViewPermission?: string;
   agentGuidancePermission?: string;
   agentInstructions?: string;
+  /** Who last changed the agent guidance and when ("Last edit by …" under the field). */
+  agentInstructionsEditedById?: string;
+  agentInstructionsEditedAt?: string;
   preventGuestAgents?: boolean;
   /** Older opt-in flag, kept in step with the effective setting; agentWebAccess decides web access now. */
   agentWebSearch?: boolean;
@@ -1501,6 +1513,9 @@ export interface WorkspaceSettings {
   /** Mirrors !agentWebAccess for older clients. */
   agentWebSearchDisabled?: boolean;
   externalLoopTriggers?: boolean;
+  /** Flow Agent's MCP connectors as an admin set them; absent when never set (connectors are on). */
+  mcpConnectors?: boolean;
+  /** Mirrors the effective setting for older clients (ignores HIPAA mode). */
   mcpConnectorsEnabled?: boolean;
   reviewThirdPartyApplications?: boolean;
   allowedMcpConnectors?: "all" | "approved";
