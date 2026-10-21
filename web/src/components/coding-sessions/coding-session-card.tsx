@@ -13,8 +13,9 @@ import { useCodingSessionOpener } from './use-coding-session-opener'
 import { codingSessionHref } from './coding-session-page-model'
 import type { BootstrapData } from '@/types/flow'
 import type { CodingSession } from '@/types/coding-sessions'
-import { CODING_PHASE_LABELS, codingErrorInfo, codingSessionCapabilities, codingSessionStalled, codingRunStartedAt, codingStatusLine, formatCodingElapsed, isCodingSessionTerminal, plainSummary, PULL_REQUEST_STATE_LABELS, pullRequestDisplayState, pullRequestNumberLabel } from './coding-session-model'
+import { CODING_PHASE_LABELS, codingErrorInfo, codingSessionCapabilities, codingSessionStalled, codingRunStartedAt, codingStatusLine, formatCodingElapsed, isCodingSessionTerminal, plainSummary, PULL_REQUEST_STATE_LABELS, pullRequestDisplayState, pullRequestNumberLabel, reviewForPullRequest } from './coding-session-model'
 import { CodingStateBadge } from './coding-session-parts'
+import { CodingPullRequestHover } from './coding-pr-hover-card'
 import { CodingAgentAvatar, CodingSessionView } from './coding-session-panel'
 import { useCodingSession, useCodingSessions, useDismissedCodingSessions, useNow } from './use-coding-sessions'
 import { stopCodingSession } from '@/lib/coding-sessions-api'
@@ -63,9 +64,12 @@ export function CodingSessionStatusRow({ session, data, href, onOpen, surface = 
       : <span className="coding-session-status-detail" data-i18n-ignore={status.translateDetail ? undefined : true}>{status.translateDetail ? t(status.detail) : plainSummary(status.detail)}</span>)}
     <span className="coding-session-status-end">
       {elapsed && <time aria-label={t('Elapsed time')}>{elapsed}</time>}
-      {pr && <span className="coding-session-pr-chip" data-state={pullRequestDisplayState(pr)} title={[pr.title, `${pr.repository.split('/').at(-1)}${pullRequestNumberLabel(pr)}`, t(PULL_REQUEST_STATE_LABELS[pullRequestDisplayState(pr)])].filter(Boolean).join('\n')}>
-        <GitPullRequest size={14} aria-hidden="true"/><span data-i18n-ignore>{pullRequestNumberLabel(pr)}</span>
-      </span>}
+      {/* Hovering the chip shows the PR hover card above it, left-aligned (as in the reference app). */}
+      {pr && <CodingPullRequestHover pr={pr} review={reviewForPullRequest(pr, data.reviews ?? [])} session={session} side="top" align="start">
+        <span className="coding-session-pr-chip" data-state={pullRequestDisplayState(pr)} aria-label={[pr.title, `${pr.repository.split('/').at(-1)}${pullRequestNumberLabel(pr)}`, t(PULL_REQUEST_STATE_LABELS[pullRequestDisplayState(pr)])].filter(Boolean).join(', ')}>
+          <GitPullRequest size={14} aria-hidden="true"/><span data-i18n-ignore>{pullRequestNumberLabel(pr)}</span>
+        </span>
+      </CodingPullRequestHover>}
       <FlowGlyph name="rowChevron" size={16} className="coding-session-status-chevron"/>
     </span>
     <span className="sr-only">{t('Show session')}</span>

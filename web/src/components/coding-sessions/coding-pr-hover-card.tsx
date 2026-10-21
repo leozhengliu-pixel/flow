@@ -50,13 +50,16 @@ export function CodingPullRequestHoverCard({ pr, review, session }: { pr: Sessio
   </div>
 }
 
-/** Opens the pull request hover card beside `children` (to its left, like the reference app's issue sidebar). */
-export function CodingPullRequestHover({ children, side = 'left', ...card }: { children: ReactElement; side?: 'left' | 'top' | 'bottom' | 'right'; pr: SessionPullRequest; review?: CodeReview; session?: Pick<CodingSession, 'diffs'> }) {
+/**
+ * Opens the pull request hover card beside `children`: to its left in the issue sidebar, above the session card's PR
+ * chip (left-aligned, 8px off), like the reference app.
+ */
+export function CodingPullRequestHover({ children, side = 'left', align = 'center', ...card }: { children: ReactElement; side?: 'left' | 'top' | 'bottom' | 'right'; align?: 'start' | 'center' | 'end'; pr: SessionPullRequest; review?: CodeReview; session?: Pick<CodingSession, 'diffs'> }) {
   return <Tooltip.Provider delayDuration={400} skipDelayDuration={150}>
     <Tooltip.Root>
       <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
       <Tooltip.Portal>
-        <Tooltip.Content data-flow-motion="tooltip" className="coding-pr-hover" side={side} align="center" sideOffset={7} collisionPadding={8}>
+        <Tooltip.Content data-flow-motion="tooltip" className="coding-pr-hover" side={side} align={align} sideOffset={side === 'top' ? 8 : 7} collisionPadding={8}>
           <CodingPullRequestHoverCard {...card}/>
         </Tooltip.Content>
       </Tooltip.Portal>

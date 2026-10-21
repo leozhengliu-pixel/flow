@@ -7,6 +7,7 @@ import * as api from '@/lib/coding-sessions-api'
 import { getApplicationTask } from '@/lib/application-agents'
 import { makeBootstrap, makeIssue, viewer } from '@/test/fixtures'
 import { CodingSessionPage } from './coding-session-page'
+import { CodingSessionStatusRow } from './coding-session-card'
 import { codingDiffTree, codingSessionSubscribed } from './coding-session-page-model'
 import { IssueCodingDiffs } from './issue-coding-diffs'
 import { makeSession } from './coding-session-test-fixtures'
@@ -21,6 +22,7 @@ vi.mock('@/lib/coding-sessions-api', () => ({
 vi.mock('@/lib/application-agents', async original => ({ ...await original<typeof import('@/lib/application-agents')>(), getApplicationTask: vi.fn() }))
 
 const issue = makeIssue()
+const pullRequest = { sessionId: 'cs-1', codeHost: 'github', hostName: 'github.com', repository: 'PocklyApp/qa-coding-session', number: 6, url: 'https://github.com/PocklyApp/qa-coding-session/pull/6', title: 'Add shout(name)', state: 'open', draft: true, createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z' } as never
 const data = () => makeBootstrap({ reviews: [], issues: [issue] } as never)
 
 function Location() {
@@ -52,8 +54,16 @@ describe('coding session page', () => {
     expect(within(page).getByRole('heading', { level: 2, name: 'Fix login' })).toBeVisible()
     expect(await within(page).findByText('No changes yet')).toBeVisible()
     expect(within(page).getByRole('complementary', { name: 'Agent' })).toBeVisible()
+    // Without a pull request the bar offers only the agent toggle (no "Copy URL").
+    expect(within(page).queryByRole('button', { name: 'Copy URL' })).toBeNull()
     await user.click(within(page).getByRole('button', { name: 'Hide agent' }))
     expect(navigate).toHaveBeenCalledWith('/workspace/diff/cs-1?showAgent=false', { replace: true })
+  })
+
+  it('offers Copy URL once the session has a pull request', async () => {
+    vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession({ issueId: issue.id, latestPullRequest: pullRequest }))
+    renderPage()
+    expect(await screen.findByRole('button', { name: 'Copy URL' })).toBeVisible()
   })
 
   it('keeps the agent hidden from ?showAgent=false', async () => {
@@ -89,6 +99,20 @@ describe('issue sidebar Diffs › Code changes', () => {
     const { container } = render(<MemoryRouter><I18nProvider><IssueCodingDiffs issue={issue} data={data()}/></I18nProvider></MemoryRouter>)
     await waitFor(() => expect(api.fetchCodingSessions).toHaveBeenCalled())
     expect(container).toBeEmptyDOMElement()
+  })
+})
+
+describe('issue session card PR chip', () => {
+  it('opens the PR hover card above the chip', async () => {
+    const user = userEvent.setup()
+    const session = makeSession({ issueId: issue.id, state: 'complete', phase: 'idle', summary: 'Done', latestPullRequest: pullRequest, diffs: [{ path: 'src/greet.js', additions: 4, deletions: 0, status: 'modified' }] })
+    render(<MemoryRouter><I18nProvider><CodingSessionStatusRow session={session} data={data()} href="/workspace/diff/cs-1"/></I18nProvider></MemoryRouter>)
+    await user.hover(screen.getByLabelText(/Add shout\(name\), qa-coding-session#6, Draft/))
+    const card = (await screen.findAllByText('qa-coding-session#6')).map(node => node.closest('.coding-pr-hover-card')).find(Boolean)!
+    expect(card).toHaveTextContent('Add shout(name)')
+    expect(card).toHaveTextContent('Draft')
+    expect(card).toHaveTextContent('1 file')
+    expect(card).toHaveTextContent('+4')
   })
 })
 
