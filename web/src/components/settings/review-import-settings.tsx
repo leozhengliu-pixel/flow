@@ -83,6 +83,11 @@ export function ReviewImportSettings({ provider, data }: { provider: "github" | 
   const last = status.last;
   const placeholder = provider === "github" ? "owner/repository" : "group/project";
   const dateTime = (value: string) => formatDate(value, { dateStyle: "medium", timeStyle: "short" });
+  // A run that started and finished the same day names the date once.
+  const runRange = (start: string, end: string) =>
+    new Date(start).toDateString() === new Date(end).toDateString()
+      ? `${dateTime(start)} – ${formatDate(end, { timeStyle: "short" })}`
+      : `${dateTime(start)} – ${dateTime(end)}`;
   const backoffs = status.backoffs.filter((item) => item.target.startsWith(`${provider}:`));
 
   return (
@@ -157,7 +162,7 @@ export function ReviewImportSettings({ provider, data }: { provider: "github" | 
                 status.running
                   ? t("Running…")
                   : last
-                    ? `${dateTime(last.startedAt)} – ${dateTime(last.finishedAt)}`
+                    ? runRange(last.startedAt, last.finishedAt)
                     : t("Not run yet")
               }
               description={last?.partial && !status.running ? t("Stopped at a limit; the next run continues") : undefined}
@@ -189,7 +194,7 @@ export function ReviewImportSettings({ provider, data }: { provider: "github" | 
                     <div>
                       <strong data-i18n-ignore>{item.target.replace(/^(github|gitlab):/, "")}</strong>
                       <span>{item.message}</span>
-                      {item.backoffUntil && <span>{t("Retry after")}: {dateTime(item.backoffUntil)}</span>}
+                      {item.backoffUntil && <span>{t("Retry after: {time}").replace("{time}", dateTime(item.backoffUntil))}</span>}
                     </div>
                   </li>
                 ))}
