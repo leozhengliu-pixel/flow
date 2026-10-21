@@ -30,6 +30,7 @@ const CONNECTOR_CATALOG: ConnectorEntry[] = [
   ["Jam", "https://mcp.jam.dev/mcp"],
   ["Notion", "https://mcp.notion.com/mcp"],
   ["PostHog", "https://mcp.posthog.com/mcp"],
+  ["Rootly", "https://mcp.rootly.com/mcp"],
   ["Sanity", "https://mcp.sanity.io"],
   ["Sentry", "https://mcp.sentry.dev/mcp"],
   ["Slack Personal", "https://mcp.slack.com/mcp"],
@@ -48,6 +49,11 @@ CONNECTOR_CATALOG.push(
     ["EU1 - Europe", "https://mcp.datadoghq.eu/api/unstable/mcp-server/mcp"],
     ["AP1 - Japan", "https://mcp.ap1.datadoghq.com/api/unstable/mcp-server/mcp"],
     ["AP2 - Australia", "https://mcp.ap2.datadoghq.com/api/unstable/mcp-server/mcp"],
+  ]),
+  regions("Typeform", [
+    ["Typeform", "https://api.typeform.com/mcp"],
+    ["Typeform (EU data center 1)", "https://api.eu.typeform.com/mcp"],
+    ["Typeform (EU data center 2)", "https://api.typeform.eu/mcp"],
   ]),
   { id: "glean", label: "Glean", url: "", keywords: "Glean" },
 );
@@ -200,10 +206,12 @@ export function ConnectorMenu({
                             onClick={() => {
                               setOpen(false);
                               setRegion(undefined);
-                              onChoose(`${item.label} ${child.label}`, child.url);
+                              onChoose(child.label.startsWith(item.label) ? child.label : `${item.label} ${child.label}`, child.url);
                             }}
                           >
+                            {child.label.startsWith(item.label) && <ConnectorBrandIcon name={item.label} />}
                             <span>{child.label}</span>
+                            {child.label.startsWith(item.label) && <small>{child.url.replace("https://", "")}</small>}
                           </button>
                         ))}
                       </div>
@@ -403,8 +411,10 @@ export function ConnectorDialog({
                   <label>
                     <small>Header value</small>
                     <input
-                      type="password"
-                      autoComplete="new-password"
+                      type="text"
+                      autoComplete="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
                       placeholder="secret"
                       value={header.value}
                       onChange={(e) =>

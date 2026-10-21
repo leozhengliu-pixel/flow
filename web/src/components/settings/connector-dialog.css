@@ -17,10 +17,11 @@
 .connector-menu [role=option][aria-selected=true]{color:var(--pk-text-strong)}
 .connector-menu [role=option][aria-selected=true]::before{background:var(--pk-hover)}
 .connector-menu [role=option]>svg:not(.connector-menu-more),.connector-brand-blank{flex:none;width:16px;height:16px}
+.connector-menu [role=option]>.connector-brand-mark{color:var(--pk-muted)}
 .connector-menu [role=option]>span{flex:none}
 .connector-menu [role=option]>small{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--pk-faint);font:inherit}
 .connector-menu [role=option]>.connector-menu-more{flex:none;margin-left:auto;color:var(--pk-muted)}
-.connector-region-menu{width:200px;height:auto}
+.connector-region-menu{width:auto;min-width:200px;height:auto}
 .connector-region-menu [role=listbox]{padding:6px 0}
 .connector-region-menu [role=option]:hover,.connector-region-menu [role=option]:focus-visible{color:var(--pk-text-strong)}
 .connector-region-menu [role=option]:hover::before,.connector-region-menu [role=option]:focus-visible::before{background:var(--pk-hover)}
