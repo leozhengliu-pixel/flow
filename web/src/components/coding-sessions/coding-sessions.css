@@ -275,14 +275,32 @@ a.coding-session-status-row,a.coding-sessions-list-row{text-decoration:none}
 @media (max-width:900px){.coding-diff-body{grid-template-columns:minmax(0,1fr)}.coding-diff-tree{display:none}}
 
 /* Issue sidebar: Diffs › Code changes */
-.issue-coding-diffs{display:flex;flex-direction:column;gap:2px;margin-bottom:16px}
-.issue-coding-diffs-row{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:6px;color:var(--text-body);font:500 13px/16px var(--font);text-decoration:none}
-.issue-coding-diffs-row:hover{background:var(--theme-surface-hover)}
+.issue-coding-diffs{display:flex;flex-direction:column;gap:0;margin-bottom:16px}
+/* A content-wide pill (28px, 6px sides) with a 16px state glyph; hovering tints it and shows the chevron. */
+.issue-coding-diffs-row{box-sizing:border-box;align-self:flex-start;max-width:100%;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 6px;border-radius:9999px;color:var(--text);font:500 13px/normal var(--font);text-decoration:none;cursor:default}
+.issue-coding-diffs-row:hover{background:var(--cs-diffs-row-hover)}
 .issue-coding-diffs-row .coding-diff-glyph{flex:none;color:var(--theme-text-secondary)}
-.issue-coding-diffs-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.issue-coding-diffs-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .issue-coding-diffs-pr-icon{flex:none;color:var(--theme-text-secondary)}
-.issue-coding-diffs-row[data-pr-state=merged] .issue-coding-diffs-pr-icon{color:var(--cs-purple-text)}
-.issue-coding-diffs-row[data-pr-state=closed] .issue-coding-diffs-pr-icon{color:var(--cs-red-text)}
+.issue-coding-diffs-chevron{flex:none;margin-left:-2px;opacity:0;color:var(--text)}
+.issue-coding-diffs-row:hover .issue-coding-diffs-chevron,.issue-coding-diffs-row:focus-visible .issue-coding-diffs-chevron{opacity:1}
+/* Pull request state glyphs: open green, merged purple, closed red, draft grey. */
+.coding-pr-glyph{flex:none;color:var(--theme-text-secondary)}
+[data-pr-state=open] .coding-pr-glyph{color:var(--cs-green-text)}
+[data-pr-state=merged] .coding-pr-glyph{color:var(--cs-purple-text)}
+[data-pr-state=closed] .coding-pr-glyph{color:var(--cs-pr-closed)}
+/* The pull request hover card (issue Diffs row, session card PR chip). */
+.coding-pr-hover{z-index:60}
+.coding-pr-hover-card{box-sizing:border-box;width:297px;max-width:calc(100vw - 16px);display:flex;flex-direction:column;gap:8px;padding:11px 15px;border:.5px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-2);box-shadow:var(--shadow);color:var(--theme-text-primary)}
+.coding-pr-hover-card-head{display:flex;align-items:flex-start;gap:8px}
+.coding-pr-hover-card-titles{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.coding-pr-hover-card-titles strong{overflow:hidden;color:var(--theme-text-primary);font:500 13px/normal var(--font);text-overflow:ellipsis;white-space:nowrap}
+.coding-pr-hover-card-titles span{overflow:hidden;color:var(--theme-text-secondary);font:450 12px/normal var(--font);text-overflow:ellipsis;white-space:nowrap}
+.coding-pr-hover-card-avatar{flex:none;width:16px;height:16px;font-size:9px}
+.coding-pr-hover-card-meta{display:flex;align-items:center;gap:6px;padding-left:24px;color:var(--theme-text-secondary);font:450 13px/normal var(--font);white-space:nowrap}
+.coding-pr-hover-card-meta .coding-additions{color:var(--cs-diff-add)}
+.coding-pr-hover-card-meta .coding-deletions{color:var(--cs-diff-delete)}
+
 
 /* Session details menu: "Subscribe to session" with the compact 22x14 toggle */
 .coding-session-menu-subscribe{gap:8px}

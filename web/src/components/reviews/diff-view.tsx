@@ -5,7 +5,7 @@
  */
 import * as Popover from "@radix-ui/react-popover";
 import * as RadixMenu from "@radix-ui/react-dropdown-menu";
-import { ArrowRight, ChevronDown, Columns2, Copy, ExternalLink, FileCode2, GitCommitHorizontal, ListTree, MessageSquare, MoreHorizontal, Rows2, Search } from "lucide-react";
+import { ArrowRight, Columns2, Copy, ExternalLink, GitCommitHorizontal, ListTree, MessageSquare, MoreHorizontal, Rows2, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DiffContentRows, DiffInlineComposer, type DiffCommentTarget } from "@/components/reviews/diff-content";
@@ -21,6 +21,7 @@ import type { CodeReview, User } from "@/types/flow";
 import { useOptionalPullRequestReviewShortcuts } from "./pull-request-review-shortcuts";
 import { changedSegments, reviewCodeThreads, reviewThreadKey, splitReviewPath } from "./pull-request-review-model";
 import { DiffCounts } from "./review-overview";
+import { ReviewFileCaret, ReviewFileTypeIcon } from "./review-file-type-icon";
 import { ReviewThread } from "./review-thread";
 import "@/components/project-detail/project-action-menu.css";
 
@@ -253,7 +254,7 @@ export function DiffView({
                 return (
                   <li key={file.path}>
                     <button type="button" aria-current={hovered === file.path || undefined} data-file-status={file.status} onClick={() => scrollToFile(file.path)}>
-                      <FileCode2 />
+                      <ReviewFileTypeIcon path={file.path} className="review-file-tree-icon" />
                       <span className="review-file-name" data-i18n-ignore>
                         {name}
                       </span>
@@ -290,8 +291,8 @@ export function DiffView({
                       aria-label={t(isCollapsed ? "Expand file contents" : "Collapse file contents")}
                       onClick={() => toggleCollapsed(file.path)}
                     >
-                      <FileCode2 className="review-file-icon" />
-                      <ChevronDown className="review-file-chevron" />
+                      <ReviewFileTypeIcon path={file.path} className="review-file-icon" />
+                      <ReviewFileCaret className="review-file-chevron" />
                     </button>
                     <DiffFileName path={file.path} previousPath={sourceFile(file.path)?.previousPath} status={file.status} />
                     {computed?.state === "computing" || computed?.state === "pending" ? <small className="review-diff-compute-status">{t("Computing…")}</small> : null}

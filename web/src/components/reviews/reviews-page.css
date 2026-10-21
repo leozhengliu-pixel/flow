@@ -199,11 +199,11 @@
 
 /* ---- Diff ---- */
 .review-changes{box-sizing:border-box;min-height:0;flex:1;display:flex;flex-direction:column;gap:8px;padding:0 10px 0 14px;overflow:hidden}
-.review-changes-toolbar{box-sizing:border-box;height:36px;flex:0 0 36px;display:flex;align-items:center;gap:6px;padding:6px 10px 6px 12px;border-radius:8px;background:var(--review-card-bg);box-shadow:0 0 0 1px var(--review-card-border-faint)}
+.review-changes-toolbar{box-sizing:border-box;height:36px;flex:0 0 36px;display:flex;align-items:center;gap:6px;padding:6px 10px 6px 12px;border-radius:8px;background:var(--review-card-bg);box-shadow:0 0 0 var(--review-card-ring) var(--review-card-border-faint)}
 .review-toolbar-pill{box-sizing:border-box;height:24px;display:inline-flex;align-items:center;gap:6px;padding:0 10px 0 6px;border:0;border-radius:9999px;background:transparent;color:var(--review-fg-muted);font:450 12px/normal var(--font)}
 button.review-toolbar-pill:hover,.review-toolbar-pill[aria-pressed=true]{background:var(--ui-pill-hover-bg);color:var(--review-fg)}
 .review-toolbar-pill svg{width:14px;height:14px}
-.review-toolbar-pill small{color:var(--review-fg-faint);font:500 12px/normal var(--font)}
+.review-toolbar-pill small{color:var(--review-fg-faint);font:500 12px/normal var(--font);font-variant-numeric:tabular-nums}
 .review-changes-display{margin-left:auto}
 .review-diff-compute-status{margin-left:6px;color:var(--review-fg-faint);font:500 11px/normal var(--font);font-style:normal}
 .review-diff-options{width:300px}
@@ -218,21 +218,22 @@ button.review-toolbar-pill:hover,.review-toolbar-pill[aria-pressed=true]{backgro
 .review-file-tree input{box-sizing:border-box;width:100%;height:28px;padding:6px 28px 6px 26px;border:1px solid var(--review-input-border);border-radius:8px;outline:0;background:var(--review-pane-bg);color:var(--review-fg-strong);font:400 13px/normal var(--font)}
 .review-file-tree input:focus{border-color:var(--accent-primary)}
 .review-file-tree ul{margin:0;padding:0 2px 0 1px;list-style:none}
-.review-file-tree button{box-sizing:border-box;width:100%;height:28px;display:flex;align-items:center;gap:6px;padding:5px;border:0;border-radius:5px;background:transparent;color:var(--review-fg);font:450 12px/normal var(--font);text-align:left}
+.review-file-tree button{box-sizing:border-box;width:100%;height:28px;display:flex;align-items:center;gap:8px;padding:5px;border:0;border-radius:5px;background:transparent;color:var(--review-fg);font:450 12px/normal var(--font);text-align:left}
 .review-file-tree button:hover,.review-file-tree button[aria-current=true]{background:var(--ui-pill-active-bg)}
 .review-file-tree button svg{width:14px;height:14px;flex:none;color:var(--review-fg-faint)}
+.review-file-tree button .review-file-tree-icon{filter:grayscale(1)}
 .review-file-tree .review-file-name{font-weight:450}
 .review-changes-files{min-width:0;flex:1;overflow-y:auto;padding-bottom:72px}
-.review-changes-files>article{margin-bottom:8px;border-radius:8px;background:var(--review-card-bg);box-shadow:0 0 0 1px var(--review-card-border-faint);scroll-margin-top:0}
-.review-changes-files>article>header{position:sticky;top:0;z-index:2;box-sizing:border-box;height:36px;display:flex;align-items:center;gap:4px;padding:6px 12px 6px 16px;border-radius:8px 8px 0 0;background:var(--review-card-bg);box-shadow:0 1px 0 var(--review-card-border-faint)}
+.review-changes-files>article{margin-bottom:8px;border-radius:8px;background:var(--review-card-bg);box-shadow:0 0 0 var(--review-card-ring) var(--review-card-border-faint);scroll-margin-top:0}
+.review-changes-files>article>header{position:sticky;top:0;z-index:2;box-sizing:border-box;height:36px;display:flex;align-items:center;gap:4px;padding:6px 12px 6px 16px;border-radius:8px 8px 0 0;background:var(--review-card-bg);box-shadow:0 var(--review-card-ring) 0 var(--review-card-border-faint)}
 .review-file-collapse{width:24px;height:24px;flex:0 0 24px;display:grid;place-items:center;margin-left:-4px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--review-fg-muted)}
-.review-file-collapse:hover{background:var(--ui-pill-hover-bg)}
 .review-file-collapse svg{width:16px;height:16px}
-.review-file-icon{width:14px!important;height:14px!important;color:var(--review-fg-faint)}
-.review-file-chevron{display:none;transition:transform .12s ease}
-.review-changes-files>article>header:hover .review-file-chevron,.review-file-collapse:focus-visible .review-file-chevron{display:block}
-.review-changes-files>article>header:hover .review-file-icon,.review-file-collapse:focus-visible .review-file-icon{display:none}
-.review-file-collapse[aria-expanded=false] .review-file-chevron{transform:rotate(-90deg)}
+/* The file type glyph, greyscale; hovering the button swaps it for the collapse caret (down when open). */
+.review-file-icon{filter:grayscale(1)}
+.review-file-chevron{display:none;transform:rotate(90deg);transition:transform .15s}
+.review-file-collapse:hover .review-file-chevron,.review-file-collapse:focus-visible .review-file-chevron{display:block}
+.review-file-collapse:hover .review-file-icon,.review-file-collapse:focus-visible .review-file-icon{display:none}
+.review-file-collapse[aria-expanded=false] .review-file-chevron{transform:none}
 article>header .review-file-name{font:450 12px/normal var(--font);color:var(--review-fg)}
 article>header .review-file-directory{flex:1;margin-left:2px;font:450 12px/normal var(--font);color:var(--review-fg-muted)}
 .review-file-status{flex:none;padding:1px 6px;border-radius:9999px;background:var(--ui-pill-active-bg);color:var(--review-fg-muted);font:500 11px/normal var(--font)}

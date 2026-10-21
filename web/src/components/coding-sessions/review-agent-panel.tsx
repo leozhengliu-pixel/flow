@@ -1,9 +1,11 @@
+/* oxlint-disable react/only-export-components -- the panel, its toggle and the hook that finds the review's session belong together. */
 import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { useI18n } from '@/i18n/i18n'
-import type { BootstrapData } from '@/types/flow'
+import type { BootstrapData, CodeReview } from '@/types/flow'
 import { CodingSessionErrorBoundary } from './coding-session-error-boundary'
+import { reviewForPullRequest } from './coding-session-model'
 import { CodingAgentPanel } from './coding-session-panel'
-import { useCodingAvailability, useCodingSession, useDismissedCodingSessions } from './use-coding-sessions'
+import { useCodingAvailability, useCodingSession, useCodingSessions, useDismissedCodingSessions } from './use-coding-sessions'
 import './coding-sessions.css'
 
 /**
@@ -24,6 +26,21 @@ export function ReviewAgentPanel({ sessionId, data, onClose, onOpenChanges }: { 
     <CodingAgentPanel session={session} data={data} onChange={apply} onClose={onClose} onOpenChanges={onOpenChanges} className="review-agent-panel"
       onDismiss={() => { dismiss(session.id); onClose() }}/>
   </CodingSessionErrorBoundary>
+}
+
+/**
+ * The coding session that opened (or pushed to) this pull request, found through the review's linked issue, so the
+ * review page offers "Show agent" even when its URL names no session (opened from the Reviews list or the issue).
+ */
+export function useReviewCodingSessionId(review: Pick<CodeReview, 'id' | 'issueIds' | 'provider' | 'number' | 'repositoryOwner' | 'repositoryName'> | undefined, data: BootstrapData, enabled = true): string | undefined {
+  const issueId = review?.issueIds?.[0]
+  const available = useCodingAvailability(data, enabled && Boolean(issueId))
+  const { sessions } = useCodingSessions({ issueId }, available && Boolean(issueId))
+  if (!review || !available) return undefined
+  const linked = sessions
+    .filter(session => (session.pullRequests ?? []).some(pr => reviewForPullRequest(pr, [review as CodeReview])?.id === review.id))
+    .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0))
+  return linked[0]?.id
 }
 
 /** "Hide agent" / "Show agent" at the end of the review's tabs row. */
