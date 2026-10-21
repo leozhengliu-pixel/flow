@@ -2,12 +2,14 @@ import { AlertCircle, RefreshCw, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/toast";
 
-import { Toggle } from "@/components/ui/toggle";
 import { useI18n } from "@/i18n/i18n";
 import { fetchReviewImport, importReviews, updateReviewImport } from "@/lib/api";
 import { isWorkspaceAdmin } from "@/lib/settings-access";
 import type { BootstrapData, ReviewImportRepository, ReviewImportStatus } from "@/types/flow";
 
+import { FeatureButton, FeatureCard, FeatureRow, FeatureSection, Toggle } from "./feature-primitives";
+
+import "./feature-settings.css";
 import "./review-import-settings.css";
 
 /**
@@ -15,7 +17,7 @@ import "./review-import-settings.css";
  * admin turns it on, and limited to the repositories they approve here. The
  * server may turn it off for everyone (FLOW_REVIEW_IMPORT).
  */
-export function ReviewImportSettings({ provider, data, className }: { provider: "github" | "gitlab"; data: BootstrapData; className?: string }) {
+export function ReviewImportSettings({ provider, data }: { provider: "github" | "gitlab"; data: BootstrapData }) {
   const { t, formatDate } = useI18n();
   const admin = isWorkspaceAdmin(data);
   const [status, setStatus] = useState<ReviewImportStatus>();
@@ -84,117 +86,128 @@ export function ReviewImportSettings({ provider, data, className }: { provider: 
   const backoffs = status.backoffs.filter((item) => item.target.startsWith(`${provider}:`));
 
   return (
-    <section className={`review-import-settings ${className ?? ""}`} aria-labelledby={`review-import-${provider}`}>
-      <header>
-        <h2 id={`review-import-${provider}`}>{t("Import pull requests without webhooks")}</h2>
-        <p>{t("Flow reads the open pull and merge requests of approved repositories only. Use it when webhooks cannot reach Flow.")}</p>
-      </header>
-      {!status.available && (
-        <p className="review-import-notice" role="note">
-          <AlertCircle aria-hidden="true" />
-          {t("Turned off on this server. An administrator of the deployment can allow it with FLOW_REVIEW_IMPORT=on.")}
-        </p>
-      )}
-      <div className="review-import-row">
-        <div>
-          <strong>{t("Import approved repositories")}</strong>
-          <span>
-            {t("Runs every {minutes} minutes and with Sync now; nothing outside the approved list is read.").replace("{minutes}", String(Math.round(status.interval / 60)))}
-          </span>
-        </div>
-        <Toggle checked={status.enabled} disabled={!admin || busy} label={t("Import approved repositories")} onChange={(enabled) => void save({ enabled })} size="regular" />
-      </div>
-      <div className="review-import-repositories">
-        <strong>{t("Approved repositories")}</strong>
-        {approved.length ? (
-          <ul>
-            {approved.map((item) => (
-              <li key={item.repository}>
-                <span data-i18n-ignore>{item.repository}</span>
-                {admin && (
-                  <button type="button" aria-label={`${t("Remove")} ${item.repository}`} disabled={busy} onClick={() => remove(item.repository)}>
-                    <X aria-hidden="true" />
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <span className="review-import-empty">{t("No repositories approved. Nothing is imported until you add one.")}</span>
-        )}
-        {admin && (
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void add();
-            }}
+    <div className="review-import-settings">
+      <FeatureSection title="Import pull requests without webhooks" description="Flow reads the open pull and merge requests of approved repositories only. Use it when webhooks cannot reach Flow.">
+        <FeatureCard>
+          <FeatureRow
+            title="Import approved repositories"
+            description={t("Runs every {minutes} minutes and with Sync now; nothing outside the approved list is read.").replace("{minutes}", String(Math.round(status.interval / 60)))}
           >
-            <input
-              aria-label={t("Repository to approve")}
-              placeholder={placeholder}
-              value={draft}
-              list={`review-import-suggestions-${provider}`}
-              onChange={(event) => setDraft(event.target.value)}
-            />
-            <datalist id={`review-import-suggestions-${provider}`}>
-              {suggestions.map((name) => (
-                <option key={name} value={name} />
-              ))}
-            </datalist>
-            <button type="submit" className="review-import-button" disabled={busy || !draft.trim()}>
-              {t("Approve")}
-            </button>
-          </form>
-        )}
-      </div>
-      <div className="review-import-status" aria-live="polite">
-        <div className="review-import-status-head">
-          <strong>{t("Last run")}</strong>
-          {admin && status.active && (
-            <button type="button" className="review-import-button" disabled={syncing || status.running} aria-busy={syncing} onClick={() => void syncNow()}>
-              <RefreshCw aria-hidden="true" className={syncing ? "review-import-spinning" : undefined} />
-              {t("Sync now")}
-            </button>
+            <Toggle checked={status.enabled} disabled={!admin || busy || !status.available} label="Import approved repositories" onChange={(enabled) => void save({ enabled })} />
+          </FeatureRow>
+          {!status.available && (
+            <div className="feature-row" role="note">
+              <span className="feature-row-icon"><AlertCircle size={16} aria-hidden="true" /></span>
+              <div>
+                <span>{t("Turned off on this server. An administrator of the deployment can allow it with FLOW_REVIEW_IMPORT=on.")}</span>
+              </div>
+            </div>
           )}
-        </div>
-        {status.running && <span>{t("Running…")}</span>}
-        {last ? (
-          <>
-            <span>
-              {dateTime(last.startedAt)} – {dateTime(last.finishedAt)}
-              {last.partial ? ` · ${t("Stopped at a limit; the next run continues")}` : ""}
-            </span>
-            <dl>
-              <div><dt>{t("Scanned")}</dt><dd>{last.scanned ?? 0}</dd></div>
-              <div><dt>{t("Imported")}</dt><dd>{last.imported}</dd></div>
-              <div><dt>{t("Updated")}</dt><dd>{last.updated}</dd></div>
-              <div><dt>{t("Unchanged")}</dt><dd>{last.skippedUnchanged ?? 0}</dd></div>
-              <div><dt>{t("Failed")}</dt><dd>{last.failed ?? 0}</dd></div>
-            </dl>
-          </>
-        ) : (
-          <span>{t("Not run yet")}</span>
-        )}
-        {status.nextRunAt && <span>{t("Next run")}: {dateTime(status.nextRunAt)}</span>}
-        {status.rateLimitedUntil && <span>{t("Rate limited until")}: {dateTime(status.rateLimitedUntil)}</span>}
-        {backoffs.length > 0 && (
-          <ul className="review-import-backoffs" aria-label={t("Retrying later")}>
-            {backoffs.map((item) => (
-              <li key={item.target}>
-                <span data-i18n-ignore>{item.target.replace(/^(github|gitlab):/, "")}</span>
-                <span>{item.message}</span>
-                {item.backoffUntil && <span>{t("Retry after")}: {dateTime(item.backoffUntil)}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-        <span className="review-import-limits">
-          {t("Each run reads up to {repositories} repositories and {requests} requests and makes at most {writes} changes.")
-            .replace("{repositories}", String(status.limits.repositoriesPerRun))
-            .replace("{requests}", String(status.limits.requestsPerRun))
-            .replace("{writes}", String(status.limits.writesPerRun))}
-        </span>
-      </div>
-    </section>
+        </FeatureCard>
+      </FeatureSection>
+      <FeatureSection title="Approved repositories">
+        <FeatureCard>
+          {approved.map((item) => (
+            <FeatureRow key={item.repository} title={item.repository} businessTitle>
+              {admin && (
+                <FeatureButton type="button" aria-label={`${t("Remove")} ${item.repository}`} disabled={busy} onClick={() => remove(item.repository)}>
+                  <X size={14} aria-hidden="true" />
+                </FeatureButton>
+              )}
+            </FeatureRow>
+          ))}
+          {!approved.length && (
+            <div className="feature-row">
+              <div><span>{t("No repositories approved. Nothing is imported until you add one.")}</span></div>
+            </div>
+          )}
+          {admin && (
+            <form
+              className="feature-row review-import-add"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void add();
+              }}
+            >
+              <input
+                aria-label={t("Repository to approve")}
+                placeholder={placeholder}
+                value={draft}
+                list={`review-import-suggestions-${provider}`}
+                onChange={(event) => setDraft(event.target.value)}
+              />
+              <datalist id={`review-import-suggestions-${provider}`}>
+                {suggestions.map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
+              <FeatureButton type="submit" disabled={busy || !draft.trim()}>
+                Approve
+              </FeatureButton>
+            </form>
+          )}
+        </FeatureCard>
+      </FeatureSection>
+      <FeatureSection title="Last run">
+        <FeatureCard>
+          <div aria-live="polite" className="review-import-status">
+            <FeatureRow
+              businessTitle
+              title={
+                status.running
+                  ? t("Running…")
+                  : last
+                    ? `${dateTime(last.startedAt)} – ${dateTime(last.finishedAt)}`
+                    : t("Not run yet")
+              }
+              description={last?.partial && !status.running ? t("Stopped at a limit; the next run continues") : undefined}
+            >
+              {admin && status.active && (
+                <FeatureButton type="button" disabled={syncing || status.running} aria-busy={syncing} onClick={() => void syncNow()}>
+                  <RefreshCw size={14} aria-hidden="true" className={syncing ? "review-import-spinning" : undefined} />
+                  Sync now
+                </FeatureButton>
+              )}
+            </FeatureRow>
+            {last && (
+              <div className="feature-row">
+                <dl>
+                  <div><dt>{t("Scanned")}</dt><dd>{last.scanned ?? 0}</dd></div>
+                  <div><dt>{t("Imported")}</dt><dd>{last.imported}</dd></div>
+                  <div><dt>{t("Updated")}</dt><dd>{last.updated}</dd></div>
+                  <div><dt>{t("Unchanged")}</dt><dd>{last.skippedUnchanged ?? 0}</dd></div>
+                  <div><dt>{t("Failed")}</dt><dd>{last.failed ?? 0}</dd></div>
+                </dl>
+              </div>
+            )}
+            {status.nextRunAt && <FeatureRow title="Next run" description={dateTime(status.nextRunAt)} />}
+            {status.rateLimitedUntil && <FeatureRow title="Rate limited until" description={dateTime(status.rateLimitedUntil)} />}
+            {backoffs.length > 0 && (
+              <ul className="review-import-backoffs" aria-label={t("Retrying later")}>
+                {backoffs.map((item) => (
+                  <li key={item.target} className="feature-row">
+                    <div>
+                      <strong data-i18n-ignore>{item.target.replace(/^(github|gitlab):/, "")}</strong>
+                      <span>{item.message}</span>
+                      {item.backoffUntil && <span>{t("Retry after")}: {dateTime(item.backoffUntil)}</span>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="feature-row">
+              <div>
+                <span>
+                  {t("Each run reads up to {repositories} repositories and {requests} requests and makes at most {writes} changes.")
+                    .replace("{repositories}", String(status.limits.repositoriesPerRun))
+                    .replace("{requests}", String(status.limits.requestsPerRun))
+                    .replace("{writes}", String(status.limits.writesPerRun))}
+                </span>
+              </div>
+            </div>
+          </div>
+        </FeatureCard>
+      </FeatureSection>
+    </div>
   );
 }
