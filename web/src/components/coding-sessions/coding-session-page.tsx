@@ -7,7 +7,7 @@ import { StatusIcon } from '@/components/issue/issue-icons'
 import { AgentCursorFilledGlyph, AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { AppLink } from '@/components/ui/app-link'
 import { useI18n } from '@/i18n/i18n'
-import { agentPath, codingSessionPath, issuePath, reviewPath } from '@/lib/app-routes'
+import { agentPath, codingSessionPath, issuePath, reviewAgentPath, reviewPath } from '@/lib/app-routes'
 import { toast } from '@/lib/toast'
 import type { BootstrapData } from '@/types/flow'
 import { CodingDiffGlyph } from './coding-diff-glyph'
@@ -42,6 +42,15 @@ export function CodingSessionPage({ data, sessionId, onNavigate, onOpenSidebar }
     try { await navigator.clipboard.writeText(codingSessionURL(workspace, sessionId)); toast.success(t('Link copied to clipboard')) }
     catch { toast.error(t('Could not copy')) }
   }
+  // Once the agent's pull request has its review, the session continues on the review page: like the reference app,
+  // the open session page replaces itself with the PR's Diff tab, the agent panel kept as it was.
+  const reviewSlug = review?.slugId
+  useEffect(() => {
+    if (!session || !review) return
+    onNavigate(reviewAgentPath(workspace, review, session.id, { showAgent }), { replace: true })
+    // Only a new review (or session) moves the page; toggling the agent panel does not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.id, reviewSlug])
   const toggleAgent = () => onNavigate(codingSessionPath(workspace, sessionId, { showAgent: !showAgent }), { replace: true })
   // "]" shows or hides the agent panel, as the toggle's tooltip says (not while typing).
   useEffect(() => {

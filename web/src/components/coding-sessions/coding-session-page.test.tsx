@@ -66,6 +66,24 @@ describe('coding session page', () => {
     expect(await screen.findByRole('button', { name: 'Copy URL' })).toBeVisible()
   })
 
+  it('moves to the review page (replacing the entry) once the session’s PR has its review', async () => {
+    const review = { id: 'review-6', slugId: 'add-shout-6', provider: 'github', number: 6, repositoryOwner: 'PocklyApp', repositoryName: 'qa-coding-session', url: pullRequest.url, title: 'Add shout(name)' }
+    const withReview = () => makeBootstrap({ reviews: [review], issues: [issue] } as never)
+    vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession({ issueId: issue.id }))
+    const navigate = vi.fn()
+    const page = (bootstrap: ReturnType<typeof data>) => <MemoryRouter initialEntries={['/workspace/diff/cs-1']}><I18nProvider><Routes>
+      <Route path="/:ws/diff/:id" element={<CodingSessionPage data={bootstrap} sessionId="cs-1" onNavigate={navigate} onOpenSidebar={vi.fn()}/>}/>
+    </Routes></I18nProvider></MemoryRouter>
+    const view = render(page(withReview()))
+    await screen.findByRole('heading', { level: 2 })
+    // No PR yet: the session page stays.
+    expect(navigate).not.toHaveBeenCalled()
+    vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession({ issueId: issue.id, latestPullRequest: pullRequest }))
+    view.unmount()
+    render(page(withReview()))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/workspace/review/add-shout-6/changes?showAgent=true&agentSessionId=cs-1', { replace: true }))
+  })
+
   it('keeps the agent hidden from ?showAgent=false', async () => {
     vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession())
     renderPage('/workspace/diff/cs-1?showAgent=false')
