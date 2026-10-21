@@ -200,3 +200,65 @@ func TestContinueRepairsAnExistingBranchFlagWithoutEvidence(t *testing.T) {
 		t.Fatalf("no commit was ever recorded, so the branch was never published: %+v", boot.Repo)
 	}
 }
+
+// flaggedByTheOldGuess is a session whose ExistingBranch came from the old
+// head-SHA heuristic: commits are recorded (never pushed), no push is.
+func flaggedByTheOldGuess(t *testing.T, h *harness, prompt string, mutate func(*domain.CodingSession)) coding.BootstrapResponse {
+	t.Helper()
+	wip := "4444444444444444444444444444444444444444"
+	session := stoppedFirstTurn(t, h, prompt, coding.TurnCompleteRequest{
+		HeadSHA: wip, Commits: []domain.CodingCommit{{SHA: wip, Message: "WIP: stopped by user"}},
+		Error: &coding.ErrorDetail{Code: domain.CodingErrPushFailed, Message: "Pushing failed"},
+	})
+	if _, err := h.store.UpdateCodingSession(context.Background(), workspace, session.ID, func(current *domain.CodingSession) error {
+		current.ExistingBranch = true
+		if mutate != nil {
+			mutate(current)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return continueBootstrap(t, h, session.ID)
+}
+
+func TestContinueMarksAGuessedExistingBranchAsUnconfirmed(t *testing.T) {
+	h := newHarness(t)
+	boot := flaggedByTheOldGuess(t, h, "Old guess with commits", nil)
+	if !boot.Repo.ExistingBranch || !boot.Repo.BranchUnconfirmed {
+		t.Fatalf("a flag without any recorded push is a guess the runner may recover from: %+v", boot.Repo)
+	}
+}
+
+func TestContinueKeepsConfirmedPublishEvidenceStrict(t *testing.T) {
+	cases := map[string]func(*domain.CodingSession){
+		"a recorded push": func(s *domain.CodingSession) { s.BranchPushed = true },
+		"a pull request": func(s *domain.CodingSession) {
+			s.PullRequests = []domain.SessionPullRequest{{Number: 9, URL: "https://github.com/acme/app/pull/9", HeadBranch: s.BranchName, State: "open"}}
+		},
+		"a pull request session": func(s *domain.CodingSession) { s.Source = domain.CodingSourcePullRequest },
+		"someone else's branch":  func(s *domain.CodingSession) { s.BranchName = "feature/theirs" },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t)
+			boot := flaggedByTheOldGuess(t, h, "Confirmed "+name, mutate)
+			if !boot.Repo.ExistingBranch || boot.Repo.BranchUnconfirmed {
+				t.Fatalf("%s is confirmed evidence; a missing branch must fail, not start over: %+v", name, boot.Repo)
+			}
+		})
+	}
+}
+
+func TestPushedTurnRecordsTheBranchPushedEvidence(t *testing.T) {
+	h := newHarness(t)
+	wip := "5555555555555555555555555555555555555555"
+	session := stoppedFirstTurn(t, h, "Pushed evidence", coding.TurnCompleteRequest{HeadSHA: wip, Pushed: true, Commits: []domain.CodingCommit{{SHA: wip, Message: "WIP"}}})
+	if !session.BranchPushed {
+		t.Fatal("a pushed turn records the durable push evidence")
+	}
+	boot := continueBootstrap(t, h, session.ID)
+	if !boot.Repo.ExistingBranch || boot.Repo.BranchUnconfirmed || !h.session(session.ID).BranchPushed {
+		t.Fatalf("the evidence survives continuing: %+v", boot.Repo)
+	}
+}

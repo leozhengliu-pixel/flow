@@ -127,6 +127,7 @@ export async function prepareRepository(deps: SetupDeps, options: { detach?: boo
   const branch = bootstrap.repo.branchName
   const checkout = await git.checkoutSessionBranch(bootstrap.repo)
   if (checkout.note) log.line(`note: ${checkout.note}`)
+  if (checkout.recovered) deps.emit(deps.events.thought(`${branch} was not found on the code host and was never confirmed pushed, so earlier commits on it that were not pushed are lost. Starting ${branch} again from ${checkout.base}.`))
   if (checkout.source === 'remote') log.line(`checked out ${branch} from origin`)
   else if (checkout.source === 'kept') log.line(`checked out the workspace's ${branch}`)
   else log.line(`created ${branch} from ${checkout.base}`)

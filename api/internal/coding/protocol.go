@@ -80,6 +80,11 @@ type BootstrapRepo struct {
 	BranchName string `json:"branchName"`
 	// ExistingBranch is true for follow-ups on a pushed branch / PR fixes.
 	ExistingBranch bool `json:"existingBranch"`
+	// BranchUnconfirmed marks ExistingBranch as a guess: no push, PR/MR or
+	// PR-sourced branch was ever recorded for the session. When the code host
+	// definitely has no such branch the runner starts it again from the base
+	// instead of failing with "branch not found".
+	BranchUnconfirmed bool `json:"branchUnconfirmed,omitempty"`
 	// coding sessions (track C): BranchPrefix is FLOW_CODING_BRANCH_PREFIX.
 	// The runner refuses to push branches outside it unless ExistingBranch
 	// (defense in depth, §19). Empty means the runner's default "flow/".

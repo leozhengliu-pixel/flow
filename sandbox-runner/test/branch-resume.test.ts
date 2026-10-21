@@ -248,3 +248,68 @@ test('resume: a failed remote query is an error of its kind, never "branch not f
     f.cleanup()
   }
 })
+
+test('resume: an unconfirmed existing branch that origin definitely lacks is started again from the base, never pushed', async () => {
+  const f = fixture()
+  try {
+    const fresh = await f.clone('repo')
+    const result = await fresh.checkoutSessionBranch({ ...f.repo, existingBranch: true, branchUnconfirmed: true })
+    assert.equal(result.source, 'created')
+    assert.equal(result.recovered, true)
+    assert.equal(result.base, 'origin/main')
+    assert.equal(f.in(fresh.repoDir, ['symbolic-ref', '--short', 'HEAD']), 'flow/x')
+    assert.equal(remoteHas(f, 'flow/x'), false, 'recovery never publishes a branch')
+    // The recorded baseline is used when origin still has it.
+    const exact = await f.clone('repo2')
+    const again = await exact.checkoutSessionBranch({ ...f.repo, baseSha: f.baseline, existingBranch: true, branchUnconfirmed: true })
+    assert.equal(again.base, f.baseline)
+    // A preserved workspace still wins over rebuilding.
+    writeFileSync(join(fresh.repoDir, 'work.txt'), 'w\n')
+    const sha = await fresh.commitAll('Work\n', identity)
+    const kept = await fresh.checkoutSessionBranch({ ...f.repo, existingBranch: true, branchUnconfirmed: true })
+    assert.equal(kept.source, 'kept')
+    assert.equal(kept.recovered, undefined)
+    assert.equal(await fresh.head(), sha)
+    // An existing remote branch is checked out, never overwritten.
+    const other = await f.clone('other')
+    await other.checkoutSessionBranch(f.repo)
+    writeFileSync(join(other.repoDir, 'theirs.txt'), 't\n')
+    const theirs = await other.commitAll('Theirs\n', identity)
+    await other.push('flow/x')
+    const lateClone = await f.clone('late')
+    const remote = await lateClone.checkoutSessionBranch({ ...f.repo, existingBranch: true, branchUnconfirmed: true })
+    assert.equal(remote.source, 'remote')
+    assert.equal(await lateClone.head(), theirs)
+    assert.equal(f.in(f.origin, ['rev-parse', 'refs/heads/flow/x']), theirs)
+  } finally {
+    f.cleanup()
+  }
+})
+
+test('resume: an unconfirmed existing branch is not recovered on auth, network or unknown failures', async () => {
+  const f = fixture()
+  try {
+    const git = await f.clone('repo')
+    for (const [stderr, code, timedOut] of [
+      ['fatal: Authentication failed', 128, false],
+      ['remote: Repository not found.', 128, false],
+      ['fatal: unable to access: Could not resolve host: github.com', 128, false],
+      ['', 124, true],
+      ['fatal: something odd', 128, false],
+    ] as Array<[string, number, boolean]>) {
+      const calls: string[][] = []
+      const run: Runner = async (_command, args) => {
+        calls.push(args)
+        if (args.includes('ls-remote')) return { code, stdout: '', stderr, timedOut }
+        return { code: 1, stdout: '', stderr: '', timedOut: false }
+      }
+      const fake = new Git({ repoDir: git.repoDir, env: f.env, credentialHelper: 'h', signProgram: 's', run })
+      await assert.rejects(fake.checkoutSessionBranch({ ...f.repo, existingBranch: true, branchUnconfirmed: true }), (error: unknown) => error instanceof RemoteQueryError && !(error instanceof BranchNotFoundError))
+      assert.ok(!calls.some((args) => args.includes('checkout')), `no checkout after: ${stderr || 'timeout'}`)
+    }
+    // A confirmed existing branch that is gone still fails.
+    await assert.rejects(git.checkoutSessionBranch({ ...f.repo, existingBranch: true }), BranchNotFoundError)
+  } finally {
+    f.cleanup()
+  }
+})

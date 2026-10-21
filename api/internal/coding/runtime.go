@@ -445,6 +445,7 @@ func (s *Service) completeDecision(session domain.CodingSession, sandboxes []san
 	}
 	if request.Pushed {
 		ns.Pushed = true
+		ns.BranchPushed = true
 		ns.ExistingBranch = true
 	}
 	switch {

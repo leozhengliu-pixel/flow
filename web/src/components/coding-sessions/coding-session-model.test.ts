@@ -64,6 +64,15 @@ describe('coding session model', () => {
     expect(codingSessionCapabilities(makeSession({ state: 'complete', phase: 'idle', branchName: 'flow/x', commitsByTurnActivityId: { a: [{ sha: 'abc', branch: 'flow/x', signed: false, createdAt: '' }] } })).createPullRequest).toBe(true)
   })
 
+  it('offers Create PR from the explicit published state, never from headSha alone', () => {
+    const done = { state: 'complete', phase: 'idle', branchName: 'flow/x' } as const
+    expect(codingSessionCapabilities(makeSession({ ...done, headSha: 'abc123' })).createPullRequest).toBe(false)
+    expect(codingSessionCapabilities(makeSession({ ...done, headSha: 'abc123', existingBranch: true })).createPullRequest).toBe(true)
+    expect(codingSessionCapabilities(makeSession({ ...done, pushed: true })).createPullRequest).toBe(true)
+    expect(codingSessionCapabilities(makeSession({ state: 'error', phase: 'done', errorCode: 'pushFailed', branchName: 'flow/x', headSha: 'abc123' })).createPullRequest).toBe(false)
+    expect(codingSessionCapabilities(makeSession({ state: 'error', phase: 'done', errorCode: 'pushFailed', branchName: 'flow/x', existingBranch: true })).createPullRequest).toBe(true)
+  })
+
   it('labels the harness, model and PRs', () => {
     expect(codingModelLabel(makeSession())).toEqual({ harness: 'Claude Code', model: 'claude-sonnet-4-5 (Auto)' })
     expect(codingModelLabel(makeSession({ harness: 'codex', modelSelection: 'gpt-5', model: undefined }))).toEqual({ harness: 'Codex', model: 'gpt-5' })

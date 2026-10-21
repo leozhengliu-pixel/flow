@@ -489,9 +489,13 @@ type CodingSession struct {
 	HarnessResumeID string `json:"harnessResumeId,omitempty"`
 	HeadSHA         string `json:"headSha,omitempty"`
 	// Pushed is set by a turn that pushed commits; publishing clears it.
-	Pushed         bool   `json:"pushed,omitempty"`
-	ExistingBranch bool   `json:"existingBranch,omitempty"`
-	HostName       string `json:"hostName,omitempty"`
+	Pushed         bool `json:"pushed,omitempty"`
+	ExistingBranch bool `json:"existingBranch,omitempty"`
+	// BranchPushed is set once a turn pushed the branch and never cleared: the
+	// confirmed evidence behind ExistingBranch (older sessions only carry the
+	// possibly guessed flag).
+	BranchPushed bool   `json:"branchPushed,omitempty"`
+	HostName     string `json:"hostName,omitempty"`
 	// SigningFormat / SigningPublicKey are resolved at provisioning when
 	// signed commits are required (track E's commit signing).
 	SigningFormat    string `json:"signingFormat,omitempty"`

@@ -52,6 +52,7 @@ func (s *Service) buildBootstrap(ctx context.Context, grant SandboxGrant, sessio
 		Limits:      BootstrapLimits{TurnTimeoutSeconds: int(s.cfg.Timeouts.Turn.Seconds()), HeartbeatSeconds: int(HeartbeatInterval.Seconds()), SetupTimeoutSeconds: int(s.cfg.Timeouts.Setup.Seconds()), StopGraceSeconds: int(s.cfg.Timeouts.StopGrace.Seconds())},
 	}
 	response.Repo.BaseSHA = s.unpublishedBaseline(ctx, session)
+	response.Repo.BranchUnconfirmed = branchUnconfirmed(session, response.Repo.BranchPrefix)
 	if s.usesGitRelay(session) {
 		response.Repo.PushURL = GitRelayURL(runtime, session.HostName, session.Repository)
 	}
@@ -68,6 +69,18 @@ func (s *Service) buildBootstrap(ctx context.Context, grant SandboxGrant, sessio
 	}
 	response.Guidance = Guidance(GuidanceInput{Workspace: info.Settings.AgentInstructions, Team: issue.Guidance, Environment: env.CustomGuidance, Issue: issue, BranchName: session.BranchName, BaseRef: session.BaseRef, CodeHost: session.CodeHost, Host: host, Browser: browser, MCPServers: response.MCPServers})
 	return response, nil
+}
+
+// branchUnconfirmed reports whether ExistingBranch is only a guess: sessions
+// flagged by the old head-SHA heuristic carry the flag without any recorded
+// push. A recorded push (BranchPushed), a PR/MR, a PR-sourced session or a
+// branch outside the session branch prefix (someone else's branch) is
+// confirmed evidence and is never recovered by starting over.
+func branchUnconfirmed(session domain.CodingSession, prefix string) bool {
+	if !session.ExistingBranch || session.BranchPushed || session.Pushed || len(session.PullRequests) > 0 || session.Source == domain.CodingSourcePullRequest {
+		return false
+	}
+	return prefix != "" && strings.HasPrefix(session.BranchName, prefix)
 }
 
 // unpublishedBaseline is the exact revision an unpublished branch is created
