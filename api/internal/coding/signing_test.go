@@ -26,7 +26,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-const commitPayload = "tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904\nauthor Ada <ada@example.com> 1700000000 +0000\ncommitter Ada <ada@example.com> 1700000000 +0000\n\nAdd feature\n\nCo-authored-by: Flow <bot@example.com>\n"
+const commitPayload = "tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904\nauthor Ada <ada@example.com> 1700000000 +0000\ncommitter Ada <ada@example.com> 1700000000 +0000\n\nAdd feature\n\nCo-Authored-By: flow[bot] <bot@example.com>\n"
 
 func sshKeyPEM(t *testing.T, key any, passphrase string) []byte {
 	t.Helper()

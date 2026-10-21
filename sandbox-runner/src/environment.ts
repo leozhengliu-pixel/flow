@@ -91,6 +91,7 @@ export function runnerGuidance(bootstrap: BootstrapResponse, repoDir: string): s
     '## Flow coding sandbox',
     `- You are working in an isolated Flow sandbox on branch \`${bootstrap.repo.branchName}\` of ${repo}, in ${repoDir}. FLOW_SANDBOX=1 is set.`,
     '- When your turn ends, Flow commits any uncommitted changes, pushes the branch and opens or updates the draft pull/merge request. Do not create pull or merge requests yourself, do not push other branches and do not rewrite pushed history.',
+    ...(bootstrap.git.coAuthorTrailer ? ['- Every commit in this sandbox automatically gets a `Co-Authored-By:` trailer (added by a git hook). Do not add a co-author trailer or a "Generated with" line to commit messages yourself.'] : []),
     `- ${cli} is authenticated for reading CI status, checks and review comments.`,
     '- If you cannot continue without a decision from the user, call the `ask_user` tool (Flow MCP server) and then end your turn.',
     '- Finish with a short summary of what you changed. Its first line becomes the commit message, so make it a concise imperative sentence.',

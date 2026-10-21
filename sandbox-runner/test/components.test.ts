@@ -210,7 +210,7 @@ test('workspace MCP servers: every harness gets the gateway servers, never anoth
 })
 
 test('git helpers: commit subject, numstat parsing, branch policy', () => {
-  assert.equal(commitMessage('## Use local dates in formatDate\n\nDetails', 'Co-authored-by: Flow <b@x>'), 'Use local dates in formatDate\n\nCo-authored-by: Flow <b@x>\n')
+  assert.equal(commitMessage('## Use local dates in formatDate\n\nDetails', 'Co-Authored-By: flow[bot] <b@x>'), 'Use local dates in formatDate\n\nCo-Authored-By: flow[bot] <b@x>\n')
   assert.equal(commitMessage('', undefined), 'Update from Flow coding session\n')
   assert.equal(commitMessage('x'.repeat(100)).split('\n')[0].length, 72)
   // A title-sized first line becomes the session (and PR) title; a long prose line is never cut into one.
@@ -256,7 +256,7 @@ test('Git against a real repository: clone, branch, signed-off identity, commit,
     const start = await git.head()
     assert.equal(await git.commitAll('nothing\n', bootstrap().git), '')
     writeFileSync(join(repoDir, 'hello.txt'), 'hello\n')
-    const sha = await git.commitAll('Add hello\n\nCo-authored-by: Flow <b@x>\n', bootstrap().git)
+    const sha = await git.commitAll('Add hello\n\nCo-Authored-By: flow[bot] <b@x>\n', bootstrap().git)
     assert.match(sha, /^[0-9a-f]{40}$/)
     const log = sh('git', ['log', '-1', '--format=%an|%cn|%s'], { cwd: repoDir, env }).trim()
     assert.equal(log, 'Ada|bot|Add hello')

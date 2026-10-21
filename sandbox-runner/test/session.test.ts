@@ -181,7 +181,7 @@ function bootstrap(overrides: Partial<BootstrapResponse> = {}): BootstrapRespons
     harness: { name: 'claudeCode', model: 'claude-sonnet-4-5' },
     llm: { anthropicBaseUrl: 'http://flow/internal/llm-proxy/anthropic', openaiBaseUrl: 'http://flow/internal/llm-proxy/openai/v1', openSourceBaseUrl: 'http://flow/internal/llm-proxy/opensource/v1' },
     environment: { mise: {}, dependencyManagement: 'custom-only', hasSecrets: false },
-    git: { authorName: 'Ada', authorEmail: 'ada@example.com', committerName: 'flow[bot]', committerEmail: 'bot@example.com', coAuthorTrailer: 'Co-authored-by: Flow <bot@example.com>' },
+    git: { authorName: 'Ada', authorEmail: 'ada@example.com', committerName: 'flow[bot]', committerEmail: 'bot@example.com', coAuthorTrailer: 'Co-Authored-By: flow[bot] <bot@example.com>' },
     browser: { enabled: false },
     turn: { id: 'turn_1', prompt: 'Create hello.txt', kind: 'initial' },
     limits: { turnTimeoutSeconds: 600, heartbeatSeconds: 15, setupTimeoutSeconds: 600, stopGraceSeconds: 1 },
@@ -272,7 +272,7 @@ test('runs the first turn, commits, pushes, completes, then resumes for a follow
     assert.equal(c1.request.harnessSessionId, sessionId)
     assert.equal(c1.request.commits?.[0].turnActivityId, 'turn_1')
     assert.equal(c1.request.summary, 'Created `hello.txt` containing a greeting.\n\nThe file prints `hello`.')
-    assert.equal(t.git.commitMessages[0], 'Created `hello.txt` containing a greeting.\n\nCo-authored-by: Flow <bot@example.com>\n')
+    assert.equal(t.git.commitMessages[0], 'Created `hello.txt` containing a greeting.\n\nCo-Authored-By: flow[bot] <bot@example.com>\n')
     assert.equal(c1.request.displayTitle, 'Created `hello.txt` containing a greeting.')
     assert.deepEqual(t.git.pushes, [{ branch: 'flow/fix-dates', forceWithLease: false }])
     assert.equal(c2.request.status, 'awaitingInput', 'ask_user ends the turn awaiting input')
