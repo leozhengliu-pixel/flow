@@ -746,6 +746,7 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   --agent-discard-cancel-fg: lch(90.826% 1.425 272);
   --agent-discard-cancel-ring: none;
   --agent-discard-danger-bg: lch(58% 73 29);
+  --agent-discard-danger-focus: lch(62.5% 73 29);
   --agent-discard-danger-fg: lch(100% 5 286.91);
 }
 :root[data-theme="light"] {
