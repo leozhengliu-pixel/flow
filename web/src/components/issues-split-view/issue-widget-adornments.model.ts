@@ -7,6 +7,9 @@ export interface IssueWidgetAdornmentsModel {
   pullRequestCount: number
   blockedByCount: number
   blockingCount: number
+  /** Ids of the issues behind the counts (hover card). The paged list only carries these, not the issues. */
+  blockedByIds?: readonly string[]
+  blockingIds?: readonly string[]
 }
 
 /** Prefer merged > closed > approved > inReview > open > draft for row chrome. */

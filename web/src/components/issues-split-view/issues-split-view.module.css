@@ -386,21 +386,32 @@
 .adornments {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   color: var(--issue-muted);
   font-size: 12px;
   line-height: 1;
 }
+/* A pull request / blocked / blocking chip: a bordered pill, 24px high. */
 .adornment {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  height: 18px;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border: 0.5px solid var(--relation-chip-border);
+  border-radius: 9999px;
+  background: var(--bg-panel);
+  color: var(--issue-muted);
+  font-weight: 450;
 }
 .adornment svg {
-  width: 12px;
-  height: 12px;
-  flex: 0 0 12px;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+}
+.adornment[data-compact] {
+  padding: 0 5px;
 }
 .adornment[data-pr-lifecycle='merged'] {
   color: var(--accent-primary, #5e6ad2);
@@ -408,11 +419,54 @@
 .adornment[data-pr-lifecycle='closed'] {
   color: var(--theme-text-tertiary, var(--issue-muted));
 }
-.adornment[data-relation='blocked_by'] {
-  color: var(--priority-urgent, #eb5757);
+.adornment[data-relation] svg {
+  color: var(--relation-ink);
 }
-.adornment[data-relation='blocks'] {
-  color: var(--issue-muted);
+.relationHover {
+  z-index: 1000;
+  box-sizing: border-box;
+  width: 236px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+  border: 0.5px solid var(--theme-border-strong);
+  border-radius: 10px;
+  outline: 0;
+  background: var(--theme-surface-2);
+  box-shadow: 0 9px 48px var(--shadow-color-medium), 0 6px 24px var(--shadow-color), 0 1px 1px var(--shadow-color-soft);
+  color: var(--theme-text-primary);
+}
+.relationHoverBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+}
+.relationHoverKind {
+  color: var(--theme-text-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+.relationHoverTitle {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 450;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.relationHoverDivider {
+  height: 0;
+  margin: 4px 0 2px;
+  border-top: 0.5px solid var(--theme-border);
+}
+.relationHoverStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 18px;
 }
 
 @media (max-width: 1100px) {

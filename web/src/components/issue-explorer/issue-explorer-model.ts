@@ -97,6 +97,8 @@ export function issueToExplorerRow(issue: Issue, workspaceSlug: string, issues: 
     pullRequestLifecycle: resolveExplorerPullRequestLifecycle(issuePullRequests),
     blockedByCount: (issue.relations ?? []).filter(relation => relation.type === 'blocked_by').length,
     blockingCount: (issue.relations ?? []).filter(relation => relation.type === 'blocks').length,
+    blockedByIds: (issue.relations ?? []).filter(relation => relation.type === 'blocked_by').map(relation => relation.relatedIssueId),
+    blockingIds: (issue.relations ?? []).filter(relation => relation.type === 'blocks').map(relation => relation.relatedIssueId),
     hasContent: Boolean(issue.title?.trim() || issue.description?.trim()),
     estimate: issue.estimate,
     dueDate: issue.dueDate,
