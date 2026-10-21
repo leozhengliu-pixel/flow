@@ -15,97 +15,6 @@ import (
 	"flow/api/internal/domain"
 )
 
-// sourcebotMCP is a code-search MCP server shaped like the one in the report: glob, read_file and list_repos, where
-// list_repos takes only a query. calls counts tools/call requests per tool.
-func sourcebotMCP(t *testing.T, mu *sync.Mutex, calls map[string]int) *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "DELETE" {
-			w.WriteHeader(200)
-			return
-		}
-		var request struct {
-			ID     json.RawMessage `json:"id"`
-			Method string          `json:"method"`
-			Params map[string]any  `json:"params"`
-		}
-		if r.Method != "POST" || json.NewDecoder(r.Body).Decode(&request) != nil {
-			w.WriteHeader(400)
-			return
-		}
-		var result any
-		switch request.Method {
-		case "initialize":
-			w.Header().Set("Mcp-Session-Id", "sourcebot")
-			result = map[string]any{"protocolVersion": "2025-11-25", "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]any{"name": "sourcebot", "version": "1"}}
-		case "notifications/initialized":
-			w.WriteHeader(202)
-			return
-		case "tools/list":
-			result = map[string]any{"tools": []any{
-				map[string]any{"name": "glob", "description": "Find files by pattern", "inputSchema": map[string]any{"type": "object", "required": []any{"pattern"}, "properties": map[string]any{"pattern": map[string]any{"type": "string"}, "repo": map[string]any{"type": "string"}}}},
-				map[string]any{"name": "read_file", "description": "Read a file", "inputSchema": map[string]any{"type": "object", "required": []any{"path"}, "properties": map[string]any{"path": map[string]any{"type": "string"}, "repo": map[string]any{"type": "string"}}}},
-				map[string]any{"name": "list_repos", "description": "List indexed repositories", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}}}},
-			}}
-		case "tools/call":
-			name, _ := request.Params["name"].(string)
-			mu.Lock()
-			calls[name]++
-			mu.Unlock()
-			result = map[string]any{"content": []any{map[string]any{"type": "text", "text": "acme/api@main api/go.mod"}}, "isError": false}
-		default:
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": request.ID, "error": map[string]any{"code": -32601, "message": "Method not found"}})
-			return
-		}
-		raw, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": request.ID, "result": result})
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write(raw)
-	}))
-}
-
-// chatToolCallSSE is one chat-completions streamed turn calling tool with args.
-func chatToolCallSSE(id, tool string, args map[string]any) string {
-	rawArgs, _ := json.Marshal(args)
-	chunk, _ := json.Marshal(map[string]any{"choices": []any{map[string]any{"delta": map[string]any{"tool_calls": []any{map[string]any{"index": 0, "id": id, "function": map[string]any{"name": tool, "arguments": string(rawArgs)}}}}, "finish_reason": "tool_calls"}}})
-	return "data: " + string(chunk) + "\n\ndata: [DONE]\n\n"
-}
-
-func chatTextSSE(text string) string {
-	chunk, _ := json.Marshal(map[string]any{"choices": []any{map[string]any{"delta": map[string]any{"content": text}}}})
-	return "data: " + string(chunk) + "\n\ndata: [DONE]\n\n"
-}
-
-type scriptedRequest struct {
-	Messages []struct {
-		Role    string `json:"role"`
-		Content any    `json:"content"`
-	} `json:"messages"`
-	Tools []struct {
-		Function struct {
-			Name        string `json:"name"`
-			Description string `json:"description"`
-		} `json:"function"`
-	} `json:"tools"`
-}
-
-func (r scriptedRequest) offers(name string) bool {
-	for _, tool := range r.Tools {
-		if tool.Function.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-func (r scriptedRequest) offersConnectors() bool {
-	for _, tool := range r.Tools {
-		if strings.HasPrefix(tool.Function.Name, "external_") {
-			return true
-		}
-	}
-	return false
-}
-
 // The reported loop: a delegated development issue (Chinese instructions with an environmentId) where the model
 // keeps searching code — the same glob twice, then list_repos with a path it does not take. The repeat is answered
 // from the first result, the bad arguments are refused before they reach the server, the preparation budget then
@@ -131,7 +40,7 @@ func TestBuiltinDelegationDevelopmentLoopStartsCoding(t *testing.T) {
 
 	var mcpMu sync.Mutex
 	upstreamCalls := map[string]int{}
-	upstream := sourcebotMCP(t, &mcpMu, upstreamCalls)
+	upstream := sourcebotMCP(t, &mcpMu, upstreamCalls, nil)
 	defer upstream.Close()
 	setTestConnectors(t, s.store, applicationPolicy{ID: "sourcebot", Kind: "mcp", Name: "Sourcebot", URL: upstream.URL, Status: "approved", Shared: true})
 	glob, listRepos := connectorToolName("sourcebot", "glob"), connectorToolName("sourcebot", "list_repos")
@@ -313,7 +222,7 @@ func TestBuiltinRunGuardConverges(t *testing.T) {
 		t.Fatal("over budget, a new call is refused without running")
 	}
 
-	coding := newBuiltinRunGuard(builtinCodingContext{CanCode: true, Development: true, Issue: "ENG-1", EnvironmentID: "env_1"})
+	coding := newBuiltinRunGuard(builtinCodingContext{CanCode: true, Development: true, Issue: "ENG-1", EnvironmentID: "env_1", EnvironmentKnown: true})
 	for index := range builtinCodingPrepMaxCalls {
 		call := domain.AgentToolCall{Name: "external_x", Arguments: json.RawMessage(`{"n":` + string(rune('0'+index)) + `}`)}
 		coding.after(call, "ok", false)

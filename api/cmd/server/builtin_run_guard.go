@@ -37,11 +37,18 @@ const (
 // builtinCodingContext is what a built-in thread run knows about coding: whether it can start a coding session,
 // whether the issue or the instructions ask for code changes, and a coding environment they name.
 type builtinCodingContext struct {
-	CanCode       bool
+	CanCode bool
+	// Development is set when the request clearly asks for code changes: development wording, no investigation /
+	// explanation / planning / review wording in the request, and no "do not change the code" anywhere.
 	Development   bool
 	EnvironmentID string
-	Issue         string // the delegated or mentioned issue's identifier
-	Chinese       bool
+	// EnvironmentKnown is set when EnvironmentID is one of the workspace's coding environments: the one the
+	// instructions name, the only one matching the issue's repository, or the workspace's only environment.
+	EnvironmentKnown bool
+	// Environments are the workspace's coding environments, listed in the blocker when none is known.
+	Environments []domain.CodingEnvironment
+	Issue        string // the delegated or mentioned issue's identifier
+	Chinese      bool
 }
 
 // builtinDevelopmentIntent matches a request to change code: implement, fix, refactor, write tests, open a PR/MR
@@ -49,38 +56,151 @@ type builtinCodingContext struct {
 var builtinDevelopmentIntent = regexp.MustCompile(`(?i)实现|开发|修复|修改代码|改代码|写代码|编写代码|提交代码|单元测试|跑测试|运行测试|执行测试|补充测试|重构|草稿\s*(MR|PR)|合并请求|拉取请求|(创建|提交?|开|发起)\s*(一个|个)?\s*(草稿)?\s*(MR|PR)\b|` +
 	`\b(implement|implementing|fix|develop|refactor|patch|write (the )?code|code changes?|pull request|merge request|draft (pr|mr)|open (a |an )?(draft )?(pr|mr)|run (the )?tests|add (unit )?tests|unit tests?)\b`)
 
+// builtinDevelopmentNoun is a development word used as a noun ("why the fix failed"), removed before matching.
+var builtinDevelopmentNoun = regexp.MustCompile(`(?i)\b(the|a|this|that|its|their|our)\s+(fix|patch|implementation|refactor(ing)?)\b`)
+
+// builtinAnalysisIntent matches a request to investigate, explain, plan, estimate or review — work that reads and
+// answers, never one that changes code.
+var builtinAnalysisIntent = regexp.MustCompile(`(?i)分析|原因|为什么|为何|解释|讲解|讲一下|说明一下|调研|排查|定位|评估|估算|工作量|方案|计划|规划|评审|审查|审阅|总结|梳理|看一下|看看|` +
+	`\b(analy[sz]e|analy[sz]ing|analysis|investigate|investigating|investigation|explain|explaining|explanation|why|root cause|plan|planning|proposal|estimate|estimating|estimation|review|reviewing|assess|assessment|evaluate|evaluation|summari[sz]e|research|look into|take a look)\b`)
+
+// builtinCodingVeto matches an explicit "do not change the code" ("先不要改代码", "don't change code"): it vetoes
+// Coding wherever it appears.
+var builtinCodingVeto = regexp.MustCompile(`(?i)(不要|别|不用|无需|不需要|请勿|勿|不必|暂不|先不|不)\s*(去)?\s*(修改|改动|改|动|写|编写|提交)\s*(任何)?\s*(的)?\s*代码|只(做)?(分析|调研|评估|评审|讨论|出方案|给方案|给出方案)|` +
+	`\b(don'?t|do not|without|no need to|not to|never)\s+(change|changing|modify|modifying|touch|touching|write|writing|edit|editing|commit|committing)\s+(any\s+|the\s+)?code\b|\bno code changes?\b|\b(don'?t|do not)\s+(implement|fix|start coding|open (a |an )?(pr|mr))\b`)
+
+// builtinRequestsDevelopment reports whether request (the delegator's instructions, the mention's comment or the
+// person's latest reply) clearly asks for code changes. The issue's title and description count for a delegation:
+// without instructions the issue is the request, and instructions that neither ask for development nor for
+// analysis ("please handle this") defer to it; a mention or a reply (no issue text) decides on its own words.
+// An investigation, explanation, plan, estimate or review never counts, and an explicit "do not change the code"
+// anywhere vetoes it.
+func builtinRequestsDevelopment(request, issueTitle, issueDescription string) bool {
+	if builtinCodingVeto.MatchString(request + "\n" + issueTitle + "\n" + issueDescription) {
+		return false
+	}
+	development := func(text string) bool {
+		return builtinDevelopmentIntent.MatchString(builtinDevelopmentNoun.ReplaceAllString(text, ""))
+	}
+	if request = strings.TrimSpace(request); request != "" {
+		if builtinAnalysisIntent.MatchString(request) {
+			return false
+		}
+		if development(request) || issueTitle+issueDescription == "" {
+			return development(request)
+		}
+	}
+	// The issue is the request: development only when nothing in it asks for analysis instead (a mixed request, such
+	// as "analyse the cause and propose a fix", is left to the agent and never starts Coding by itself).
+	issue := issueTitle + "\n" + issueDescription
+	return development(issue) && !builtinAnalysisIntent.MatchString(issue)
+}
+
 // builtinEnvironmentMention captures an environment id the instructions spell out ("environmentId: env_123",
 // "环境 ID：env_123").
 var builtinEnvironmentMention = regexp.MustCompile("(?i)(?:environment[ _-]?id|coding environment|环境\\s*(?:id|ID)?)\\s*[:：=]?\\s*[`\"'“]?([A-Za-z0-9][A-Za-z0-9_.:-]{2,63})")
 
-// builtinCodingContextFor reads the coding context of a run from the task and its issue.
+// builtinCodingContextFor reads the coding context of a run from the task and its issue. The request is the
+// person's latest message when it is a reply in the thread, otherwise the instructions (a delegation) or the
+// comment (a mention); the issue's own text counts only for a delegation.
 func (s *server) builtinCodingContextFor(ctx context.Context, task domain.AgentTask, data domain.Bootstrap) builtinCodingContext {
 	result := builtinCodingContext{CanCode: s.agent.ToolsEnabled && s.agent.WriteTools && s.codingEnabled() && workspaceFeatureEnabled(data.WorkspaceSettings, coding.FeatureFlag)}
-	text := strings.TrimSpace(task.InitialPrompt + "\n" + task.Prompt)
+	initial := firstNonEmpty(task.InitialPrompt, task.Prompt)
+	text := strings.TrimSpace(initial + "\n" + task.Prompt)
+	var issue *domain.Issue
 	if len(data.Issues) == 1 && (task.ResourceType == "" || task.ResourceType == "issue") {
-		issue := data.Issues[0]
+		issue = &data.Issues[0]
 		result.Issue = issue.Identifier
 		text += "\n" + issue.Title + "\n" + issue.Description
 	}
-	result.Development = builtinDevelopmentIntent.MatchString(text)
+	request, title, description := initial, "", ""
+	if issue != nil && task.Trigger == "delegation" {
+		request = strings.TrimPrefix(strings.TrimSpace(initial), issue.Title)
+		title, description = issue.Title, issue.Description
+	}
+	if reply := strings.TrimSpace(task.Prompt); reply != "" && reply != strings.TrimSpace(initial) && task.PendingTool == nil {
+		// A reply in the thread is the request now (an approval answer continues the earlier one).
+		request, title, description = reply, "", ""
+	}
+	result.Development = builtinRequestsDevelopment(request, title, description)
 	result.Chinese = containsHan(text)
 	if match := builtinEnvironmentMention.FindStringSubmatch(text); match != nil {
 		result.EnvironmentID = strings.TrimRight(match[1], ".:")
 	}
 	if result.CanCode && s.store != nil {
 		if environments, err := s.store.ListCodingEnvironments(ctx, task.WorkspaceKey, false); err == nil {
-			known := slices.ContainsFunc(environments, func(item domain.CodingEnvironment) bool { return item.ID == result.EnvironmentID })
-			if !known {
-				for _, environment := range environments {
-					if environment.ID != "" && strings.Contains(text, environment.ID) {
-						result.EnvironmentID = environment.ID
-						break
-					}
-				}
-			}
+			result.Environments = environments
+			result.resolveEnvironment(text, issue, data)
 		}
 	}
 	return result
+}
+
+// resolveEnvironment decides the coding environment of the run: the one the instructions name (by id); else the
+// only environment whose repository the issue links or the text names; else the workspace's only environment. A
+// named id that is not an environment, or several candidates, leave it unknown.
+func (c *builtinCodingContext) resolveEnvironment(text string, issue *domain.Issue, data domain.Bootstrap) {
+	byID := func(id string) bool {
+		return id != "" && slices.ContainsFunc(c.Environments, func(item domain.CodingEnvironment) bool { return item.ID == id })
+	}
+	if byID(c.EnvironmentID) {
+		c.EnvironmentKnown = true
+		return
+	}
+	for _, environment := range c.Environments {
+		if environment.ID != "" && strings.Contains(text, environment.ID) {
+			c.EnvironmentID, c.EnvironmentKnown = environment.ID, true
+			return
+		}
+	}
+	if c.EnvironmentID != "" {
+		return // named, but not an environment of this workspace
+	}
+	repositories := []string{}
+	if issue != nil {
+		for _, linked := range linkedRepositoriesForIssue(data, *issue) {
+			repositories = append(repositories, strings.ToLower(linked.Repository))
+		}
+	}
+	lower := strings.ToLower(text)
+	matches := []string{}
+	for _, environment := range c.Environments {
+		repository := strings.ToLower(strings.Trim(environment.Repository, "/"))
+		if repository != "" && (slices.Contains(repositories, repository) || strings.Contains(lower, repository)) {
+			matches = append(matches, environment.ID)
+		}
+	}
+	switch {
+	case len(matches) == 1:
+		c.EnvironmentID, c.EnvironmentKnown = matches[0], true
+	case len(matches) == 0 && len(c.Environments) == 1:
+		c.EnvironmentID, c.EnvironmentKnown = c.Environments[0].ID, true
+	}
+}
+
+// environmentBlocker says why Coding cannot start without a person choosing the environment.
+func (c builtinCodingContext) environmentBlocker() string {
+	names := make([]string, 0, len(c.Environments))
+	for index, environment := range c.Environments {
+		if index == 8 {
+			names = append(names, fmt.Sprintf("… %d more", len(c.Environments)-index))
+			break
+		}
+		names = append(names, fmt.Sprintf("%s (%s, %s)", firstNonEmpty(environment.Name, environment.ID), environment.ID, environment.Repository))
+	}
+	switch {
+	case len(c.Environments) == 0 && c.Chinese:
+		return "工作区还没有 Coding 环境，需要管理员在 设置 › Coding 环境 中添加"
+	case len(c.Environments) == 0:
+		return "the workspace has no coding environment yet; an admin adds one in Settings › Coding environments"
+	case c.EnvironmentID != "" && c.Chinese:
+		return "指定的 environmentId " + c.EnvironmentID + " 不是本工作区的 Coding 环境；可用的环境：" + strings.Join(names, "，")
+	case c.EnvironmentID != "":
+		return "environmentId " + c.EnvironmentID + " is not a coding environment of this workspace; available: " + strings.Join(names, ", ")
+	case c.Chinese:
+		return "说明中没有指定 Coding 环境，且有多个环境可选：" + strings.Join(names, "，") + "。请在说明中写明 environmentId"
+	}
+	return "the instructions name no coding environment and several could apply: " + strings.Join(names, ", ") + ". Name one with environmentId"
 }
 
 func containsHan(text string) bool {
@@ -104,6 +224,27 @@ type builtinRunGuard struct {
 	decided bool
 	// started is what start_coding_session returned in this run.
 	started *codingStartOutcome
+	// hadSession is set when the session already had a coding session when the run began (an earlier run
+	// started Coding): the run never starts another one by itself.
+	hadSession bool
+}
+
+// codingDue reports whether this run must still enter Coding: the request clearly asks for code changes, Coding is
+// available, and neither this run nor an earlier one started it.
+func (g *builtinRunGuard) codingDue() bool {
+	return g.coding.CanCode && g.coding.Development && g.started == nil && !g.hadSession
+}
+
+// transferCall is the start_coding_session call Flow makes for the agent when the model did not (codingDue with a
+// known environment).
+func (g *builtinRunGuard) transferCall(issueTitle string) domain.AgentToolCall {
+	prompt := "Make the code changes " + firstNonEmpty(g.coding.Issue, "the issue") + " asks for"
+	if issueTitle != "" {
+		prompt += " (" + issueTitle + ")"
+	}
+	prompt += ", following the issue's description and the delegator's instructions. Add or update the tests, run them, and open a draft pull/merge request."
+	args, _ := json.Marshal(map[string]any{"issueId": g.coding.Issue, "environmentId": g.coding.EnvironmentID, "prompt": prompt})
+	return domain.AgentToolCall{ID: "flow_coding_transfer", Name: startCodingSessionTool, Arguments: args}
 }
 
 func newBuiltinRunGuard(coding builtinCodingContext) *builtinRunGuard {
@@ -153,12 +294,12 @@ func (g *builtinRunGuard) before(call domain.AgentToolCall) (content string, fai
 	return "", false, false
 }
 
-// after records a connector call that ran: a failure (arguments the tool's schema rejects, an upstream error) is
-// a call without progress; every result is kept for repeats.
-func (g *builtinRunGuard) after(call domain.AgentToolCall, content string, failed bool) {
+// after records a connector call that ran: a failure (arguments the tool's schema rejects, an upstream error) or
+// an empty result is a call without progress; every result is kept for repeats.
+func (g *builtinRunGuard) after(call domain.AgentToolCall, content string, noProgress bool) {
 	g.calls++
 	g.bytes += len(content)
-	if failed {
+	if noProgress {
 		g.noProgress++
 	}
 	g.results[canonicalToolCallKey(call)] = content
@@ -171,8 +312,10 @@ func (g *builtinRunGuard) decisionText() string {
 	}
 	if g.coding.CanCode && g.coding.Development {
 		args := "issueId " + firstNonEmpty(g.coding.Issue, "of the issue")
-		if g.coding.EnvironmentID != "" {
+		if g.coding.EnvironmentKnown {
 			args += ", environmentId " + g.coding.EnvironmentID
+		} else if g.coding.CanCode {
+			args += "; no coding environment is known: " + g.coding.environmentBlocker()
 		}
 		return "Stop searching and decide now: call start_coding_session (" + args + ") with a prompt that states the change, the tests to run and that a draft MR is wanted — the coding agent reads the repository itself. If something blocks it, reply with the blocker instead."
 	}
