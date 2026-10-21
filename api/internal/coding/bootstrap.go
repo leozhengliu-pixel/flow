@@ -138,12 +138,19 @@ func (s *Service) gitIdentity(session domain.CodingSession, user UserInfo, signe
 		authorEmail = user.Login + "@users.noreply." + fallback(session.HostName, "github.com")
 	}
 	authorEmail = fallback(authorEmail, botEmail)
-	git := BootstrapGit{AuthorName: authorName, AuthorEmail: authorEmail, CommitterName: botName, CommitterEmail: botEmail, CoAuthorTrailer: "Co-authored-by: Flow <" + botEmail + ">"}
+	git := BootstrapGit{AuthorName: authorName, AuthorEmail: authorEmail, CommitterName: botName, CommitterEmail: botEmail, CoAuthorTrailer: coAuthorTrailer(botName, botEmail)}
 	if signed && user.SigningFormat != "" {
 		git.CommitterName, git.CommitterEmail = authorName, authorEmail
 		git.SigningFormat, git.SigningPublicKey = user.SigningFormat, user.SigningPublicKey
 	}
 	return git
+}
+
+// coAuthorTrailer is the trailer line every commit of a session carries, in
+// Claude Code's spelling ("Co-Authored-By: Name <email>"). The name and email
+// are the bot's identity, so the code host links the commit to the app.
+func coAuthorTrailer(name, email string) string {
+	return "Co-Authored-By: " + name + " <" + email + ">"
 }
 
 func fallback(value, otherwise string) string {

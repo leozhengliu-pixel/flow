@@ -129,7 +129,9 @@ type BootstrapGit struct {
 	// by Flow through POST /sign, the private key never enters the sandbox.
 	SigningFormat    string `json:"signingFormat,omitempty"`
 	SigningPublicKey string `json:"signingPublicKey,omitempty"` // ssh public key or PGP key id
-	// CoAuthorTrailer is appended to commit messages (e.g. the bot).
+	// CoAuthorTrailer is the full trailer line ("Co-Authored-By: Name <email>")
+	// every commit of the session carries: the runner appends it to its own
+	// commits and the sandbox's prepare-commit-msg hook to the agent's.
 	CoAuthorTrailer string `json:"coAuthorTrailer,omitempty"`
 }
 

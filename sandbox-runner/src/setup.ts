@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, normalize, relative, resolve } from 'node:path'
 import type { RunnerPaths } from './config.js'
+import { configureCoAuthorHook } from './git/coauthor-hook.js'
 import type { Git, Runner } from './git/git.js'
 import { errorMessage } from './log.js'
 import { CommandError, run } from './process.js'
@@ -120,6 +121,8 @@ export async function prepareRepository(deps: SetupDeps, options: { detach?: boo
     await git.configureCredentials(bootstrap.repo.pushUrl)
     deps.emit(deps.events.action({ action: 'Cloned repo', parameter: bootstrap.repo.fullName || bootstrap.repo.cloneUrl }))
   }
+  // Commits the agent makes itself carry the co-author trailer too (a failure here never blocks the session).
+  await configureCoAuthorHook(git, bootstrap.git.coAuthorTrailer).catch((error) => log.line(`note: co-author hook not installed: ${errorMessage(error)}`))
   if (options.detach) {
     await git.git(['checkout', '--detach', git.baseRevision(bootstrap.repo)])
     return
