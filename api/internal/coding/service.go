@@ -771,33 +771,66 @@ func (s *Service) Prompt(ctx context.Context, workspaceKey, id string, in Prompt
 		return session, err
 	}
 	s.inbox.notify(id)
+	recorded := s.commitsRecorded(ctx, id)
+	reset := false
 	updated, err := s.update(ctx, workspaceKey, id, func(current *domain.CodingSession) error {
 		now := s.now().UTC()
 		current.NextReconcileAt = now
-		switch current.Phase {
-		case domain.CodingPhaseDone:
-			s.resetForTurn(current, now)
-		case domain.CodingPhaseAwaitingUser:
-			if current.SandboxID == "" {
-				s.resetForTurn(current, now)
-			}
+		reset = current.Phase == domain.CodingPhaseDone || current.Phase == domain.CodingPhaseAwaitingUser && current.SandboxID == ""
+		if reset {
+			s.resetForTurn(current, now, recorded)
 		}
 		return nil
 	})
+	if err == nil && reset {
+		s.noteUnpublishedCommits(ctx, updated, recorded)
+	}
 	return updated, err
 }
 
 // resetForTurn re-queues a session for a new turn (continue / restart / a
-// follow-up after the idle TTL): the pushed branch is checked out again.
-func (s *Service) resetForTurn(current *domain.CodingSession, now time.Time) {
+// follow-up after the idle TTL): a published branch is checked out again, an
+// unpublished one is created again. recorded says whether the session has
+// recorded commits (true when that could not be read).
+func (s *Service) resetForTurn(current *domain.CodingSession, now time.Time, recorded bool) {
 	current.ErrorCode, current.Error = "", ""
 	current.StopRequested, current.StoppedBy = false, ""
 	current.SandboxID, current.SandboxAttempts, current.CurrentTurnID = "", 0, ""
+	current.ExistingBranch = branchPublished(*current, recorded)
 	current.Pushed, current.CurrentStep = false, nil
-	if current.HeadSHA != "" || len(current.PullRequests) > 0 {
-		current.ExistingBranch = true
-	}
 	s.step.Enter(current, domain.CodingPhaseQueued, now)
+}
+
+// branchPublished reports whether the session's branch is known to exist on
+// the code host: a turn pushed it (completeDecision sets ExistingBranch with
+// Pushed, which publishing and the session end clear again), it has a PR/MR,
+// or the session works on a PR's branch. HeadSHA is no evidence: a turn
+// stopped before its first commit reports the clone baseline. An
+// ExistingBranch without any recorded commit can only come from that guess
+// (every pushed turn records its commits), so it is dropped; the runner still
+// checks out a remote branch of that name if one exists.
+func branchPublished(session domain.CodingSession, recorded bool) bool {
+	if session.Pushed || len(session.PullRequests) > 0 || session.Source == domain.CodingSourcePullRequest {
+		return true
+	}
+	return session.ExistingBranch && recorded
+}
+
+// commitsRecorded reports whether the session recorded commits; a failed
+// read counts as recorded so that no publish evidence is dropped.
+func (s *Service) commitsRecorded(ctx context.Context, id string) bool {
+	commits, err := s.store.CodingCommits(ctx, id)
+	return err != nil || len(commits) > 0
+}
+
+// noteUnpublishedCommits tells the session that a re-queued turn starts its
+// branch again without commits that were recorded but never pushed (their
+// sandbox is gone), instead of dropping them silently.
+func (s *Service) noteUnpublishedCommits(ctx context.Context, session domain.CodingSession, recorded bool) {
+	if !recorded || session.ExistingBranch || session.BranchName == "" {
+		return
+	}
+	s.anchorActivity(ctx, session, domain.AgentActivity{Type: "thought", Body: "Earlier commits on " + session.BranchName + " were never pushed and the sandbox that held them is gone; this run starts " + session.BranchName + " again from " + fallback(session.BaseRef, "the base branch") + "."})
 }
 
 func (s *Service) matchEnvironment(ctx context.Context, workspaceKey, answer string) string {
@@ -888,6 +921,7 @@ func (s *Service) Restart(ctx context.Context, workspaceKey, id, userID string, 
 			return session, err
 		}
 	}
+	recorded := s.commitsRecorded(ctx, id)
 	updated, err := s.update(ctx, workspaceKey, id, func(current *domain.CodingSession) error {
 		if current.Phase != domain.CodingPhaseDone {
 			return ErrConflict
@@ -897,12 +931,13 @@ func (s *Service) Restart(ctx context.Context, workspaceKey, id, userID string, 
 		}
 		now := s.now().UTC()
 		current.NextReconcileAt = now
-		s.resetForTurn(current, now)
+		s.resetForTurn(current, now, recorded)
 		return nil
 	})
 	if err != nil {
 		return updated, err
 	}
+	s.noteUnpublishedCommits(ctx, updated, recorded)
 	s.anchorActivity(ctx, updated, domain.AgentActivity{Type: "retry", ActorID: userID, Body: restartBody(useDefaultModel)})
 	return updated, nil
 }
@@ -966,6 +1001,7 @@ func (s *Service) StartOver(ctx context.Context, workspaceKey, id, userID, model
 			return session, err
 		}
 	}
+	recorded := s.commitsRecorded(ctx, id)
 	updated, err := s.update(ctx, workspaceKey, id, func(current *domain.CodingSession) error {
 		if current.Phase != domain.CodingPhaseDone {
 			return ErrConflict
@@ -973,12 +1009,13 @@ func (s *Service) StartOver(ctx context.Context, workspaceKey, id, userID, model
 		current.ModelSelection, current.Model, current.ModelReason = model, "", ""
 		now := s.now().UTC()
 		current.NextReconcileAt = now
-		s.resetForTurn(current, now)
+		s.resetForTurn(current, now, recorded)
 		return nil
 	})
 	if err != nil {
 		return updated, err
 	}
+	s.noteUnpublishedCommits(ctx, updated, recorded)
 	s.anchorActivity(ctx, updated, domain.AgentActivity{Type: "retry", ActorID: userID, Body: "Started over with " + DescribeModel(s.cfg.LLM, model, slices.Index(catalog, model)).Label})
 	return updated, nil
 }

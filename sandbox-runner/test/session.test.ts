@@ -103,7 +103,9 @@ class FakeGit {
   async configureCredentials() {}
   async configureIdentity() {}
   async fetch() {}
-  async checkoutSessionBranch() {}
+  async checkoutSessionBranch() {
+    return { source: 'remote' as const }
+  }
   baseRevision() {
     return 'origin/main'
   }

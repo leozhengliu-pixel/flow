@@ -440,7 +440,9 @@ func (c StepConfig) requeue(d *Decision, sandboxes []sandbox.Record, now time.Ti
 	}
 	s := &d.Session
 	s.SandboxID, s.SandboxAttempts, s.CurrentTurnID = "", 0, ""
-	if s.HeadSHA != "" {
+	// A pushed branch already set ExistingBranch; HeadSHA alone may be the
+	// clone baseline of a branch that never reached the code host.
+	if s.Pushed || len(s.PullRequests) > 0 {
 		s.ExistingBranch = true
 	}
 	c.Enter(s, domain.CodingPhaseQueued, now)

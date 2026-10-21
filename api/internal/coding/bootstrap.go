@@ -51,6 +51,7 @@ func (s *Service) buildBootstrap(ctx context.Context, grant SandboxGrant, sessio
 		Turn:        turn,
 		Limits:      BootstrapLimits{TurnTimeoutSeconds: int(s.cfg.Timeouts.Turn.Seconds()), HeartbeatSeconds: int(HeartbeatInterval.Seconds()), SetupTimeoutSeconds: int(s.cfg.Timeouts.Setup.Seconds()), StopGraceSeconds: int(s.cfg.Timeouts.StopGrace.Seconds())},
 	}
+	response.Repo.BaseSHA = s.unpublishedBaseline(ctx, session)
 	if s.usesGitRelay(session) {
 		response.Repo.PushURL = GitRelayURL(runtime, session.HostName, session.Repository)
 	}
@@ -67,6 +68,21 @@ func (s *Service) buildBootstrap(ctx context.Context, grant SandboxGrant, sessio
 	}
 	response.Guidance = Guidance(GuidanceInput{Workspace: info.Settings.AgentInstructions, Team: issue.Guidance, Environment: env.CustomGuidance, Issue: issue, BranchName: session.BranchName, BaseRef: session.BaseRef, CodeHost: session.CodeHost, Host: host, Browser: browser, MCPServers: response.MCPServers})
 	return response, nil
+}
+
+// unpublishedBaseline is the exact revision an unpublished branch is created
+// from again: the head an earlier turn reported when it never committed (the
+// clone baseline). Empty for a new or published branch, after unpushed
+// commits (their head never reached the code host) or when the commits
+// cannot be read; the runner then branches from the base ref.
+func (s *Service) unpublishedBaseline(ctx context.Context, session domain.CodingSession) string {
+	if session.ExistingBranch || session.HeadSHA == "" {
+		return ""
+	}
+	if commits, err := s.store.CodingCommits(ctx, session.ID); err != nil || len(commits) > 0 {
+		return ""
+	}
+	return session.HeadSHA
 }
 
 // sandboxRestoresSnapshot reports whether the sandbox was started with the

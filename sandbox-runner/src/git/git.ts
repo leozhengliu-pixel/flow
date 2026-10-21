@@ -17,6 +17,50 @@ export interface GitOptions {
 
 export class BranchPolicyError extends Error {}
 
+/** Why asking the code host about a branch failed: never read as "the branch does not exist". */
+export type RemoteFailure = 'auth' | 'network' | 'unavailable' | 'unknown'
+
+export class RemoteQueryError extends Error {
+  constructor(
+    readonly kind: RemoteFailure,
+    readonly branch: string,
+    detail: string,
+  ) {
+    const what = {
+      auth: 'the code host rejected the credentials or denied access',
+      network: 'the code host could not be reached',
+      unavailable: 'the code host is unavailable',
+      unknown: 'the query failed',
+    }[kind]
+    super(`Could not check whether branch ${branch} exists on origin: ${what}.${detail ? `\n${detail}` : ''}`)
+    this.name = 'RemoteQueryError'
+  }
+}
+
+/** A branch the session expects on origin (pushed before, or a PR's branch) is gone and the workspace has no copy. */
+export class BranchNotFoundError extends Error {
+  constructor(readonly branch: string) {
+    super(`Branch ${branch} was published before but no longer exists on origin, and this workspace has no copy of it. Restore the branch on the code host or start over.`)
+    this.name = 'BranchNotFoundError'
+  }
+}
+
+/** Classifies a failed git network command from its stderr. */
+export function classifyRemoteFailure(stderr: string, timedOut = false): RemoteFailure {
+  if (/authentication failed|could not read (username|password)|terminal prompts disabled|invalid username or password|returned error: 40[13]|http(\/[\d.]+)? 40[13]|permission denied|access denied|repository not found|not authorized|bad credentials/i.test(stderr)) return 'auth'
+  if (/returned error: 5\d\d|http(\/[\d.]+)? 5\d\d|service unavailable|bad gateway|gateway time-?out|internal server error|server is (busy|unavailable)|try again later|rate limit/i.test(stderr)) return 'unavailable'
+  if (timedOut || /could not resolve host|connection (refused|reset|timed out)|operation timed out|failed to connect|network is unreachable|no route to host|ssl|tls|gnutls|early eof|unexpected disconnect|rpc failed|remote end hung up|timed out/i.test(stderr)) return 'network'
+  return 'unknown'
+}
+
+/** How checkoutSessionBranch prepared the branch (for the setup log). */
+export interface BranchCheckout {
+  /** remote: origin's branch; kept: the workspace's own branch (unpushed work); created: a new branch from `base`. */
+  source: 'remote' | 'kept' | 'created'
+  base?: string
+  note?: string
+}
+
 /** Non-interactive git environment (no prompts, no pager, no system askpass). */
 export function gitEnv(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return {
@@ -166,22 +210,83 @@ export class Git {
     await this.git(['fetch', '--no-tags', '--prune', 'origin'], { timeoutMs: 15 * 60_000 })
   }
 
-  async remoteBranchExists(branch: string): Promise<boolean> {
-    const result = await this.git(['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`], { check: false })
-    return result.code === 0
+  /**
+   * The branch's head on origin, asked from the code host itself (not from
+   * possibly stale remote-tracking refs): undefined only when the host
+   * answered that the branch does not exist. Any other failure throws a
+   * RemoteQueryError.
+   */
+  async remoteBranchHead(branch: string): Promise<string | undefined> {
+    const result = await this.git([...this.helperArgs(), 'ls-remote', '--exit-code', '--heads', 'origin', `refs/heads/${branch}`], { check: false, timeoutMs: 2 * 60_000 })
+    if (result.code === 0) {
+      const sha = result.stdout
+        .split('\n')
+        .map((line) => line.split('\t'))
+        .find(([, ref]) => ref === `refs/heads/${branch}`)?.[0]
+      if (sha) return sha
+    }
+    if (result.code === 2 && !result.timedOut) return undefined
+    throw new RemoteQueryError(classifyRemoteFailure(result.stderr, result.timedOut), branch, result.stderr.trim().slice(-1000))
   }
 
-  /** Checks out the session branch: the existing remote branch, or a new one from base. */
-  async checkoutSessionBranch(repo: BootstrapRepo): Promise<void> {
+  private async revParse(ref: string): Promise<string | undefined> {
+    const result = await this.git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { check: false })
+    return result.code === 0 ? result.stdout.trim() : undefined
+  }
+
+  private async isAncestor(ancestor: string, descendant: string): Promise<boolean> {
+    return (await this.git(['merge-base', '--is-ancestor', ancestor, descendant], { check: false })).code === 0
+  }
+
+  /**
+   * Checks out the session branch. origin's branch when it exists (unless
+   * the workspace's copy has commits origin lacks: those are kept); the
+   * workspace's own unpublished branch when there is one (a preserved
+   * workspace keeps its commits and uncommitted changes); otherwise a new
+   * branch from the exact baseline. An expected branch (`existingBranch`)
+   * that is gone fails with BranchNotFoundError instead of starting over,
+   * and a failed query fails instead of counting as "not found". Nothing is
+   * ever pushed here, so origin's branch is never overwritten.
+   */
+  async checkoutSessionBranch(repo: BootstrapRepo): Promise<BranchCheckout> {
     const branch = repo.branchName
-    if (await this.remoteBranchExists(branch)) {
-      await this.git(['checkout', '-B', branch, `origin/${branch}`])
+    const remote = await this.remoteBranchHead(branch)
+    const local = await this.revParse(`refs/heads/${branch}`)
+    let checkout: BranchCheckout
+    if (remote) {
+      if ((await this.revParse(`refs/remotes/origin/${branch}`)) !== remote) {
+        const fetched = await this.git([...this.helperArgs(), 'fetch', '--no-tags', 'origin', `+refs/heads/${branch}:refs/remotes/origin/${branch}`], { check: false, timeoutMs: 15 * 60_000 })
+        if (fetched.code !== 0) throw new RemoteQueryError(classifyRemoteFailure(fetched.stderr, fetched.timedOut), branch, fetched.stderr.trim().slice(-1000))
+      }
+      if (local && local !== remote && !(await this.isAncestor(local, remote))) {
+        await this.git(['checkout', branch])
+        checkout = { source: 'kept', note: `kept the workspace's ${branch}: it has commits origin/${branch} does not` }
+      } else {
+        await this.git(['checkout', '-B', branch, `origin/${branch}`])
+        checkout = { source: 'remote' }
+      }
+      await this.git(['branch', '--set-upstream-to', `origin/${branch}`], { check: false })
+    } else if (local) {
+      await this.git(['checkout', branch])
+      checkout = { source: 'kept', note: `kept the workspace's unpublished ${branch}` }
     } else if (repo.existingBranch) {
-      throw new CommandError(`git checkout ${branch}`, { code: 1, stdout: '', stderr: `branch ${branch} does not exist on origin`, timedOut: false })
+      throw new BranchNotFoundError(branch)
     } else {
-      await this.git(['checkout', '-B', branch, this.baseRevision(repo)])
+      const { base, note } = await this.branchBase(repo)
+      await this.git(['checkout', '-b', branch, base])
+      checkout = { source: 'created', base, note }
     }
-    await this.git(['branch', '--set-upstream-to', `origin/${branch}`], { check: false })
+    return checkout
+  }
+
+  /** The exact baseline for a new branch: baseSha when origin still has it, else origin's base ref. */
+  private async branchBase(repo: BootstrapRepo): Promise<{ base: string; note?: string }> {
+    const fallback = `origin/${repo.baseRef}`
+    if (!repo.baseSha) return { base: fallback }
+    if (await this.revParse(repo.baseSha)) return { base: repo.baseSha }
+    await this.git([...this.helperArgs(), 'fetch', '--no-tags', 'origin', repo.baseSha], { check: false, timeoutMs: 15 * 60_000 })
+    if (await this.revParse(repo.baseSha)) return { base: repo.baseSha }
+    return { base: fallback, note: `baseline ${repo.baseSha.slice(0, 12)} is not on origin; branching from ${fallback}` }
   }
 
   baseRevision(repo: BootstrapRepo): string {
