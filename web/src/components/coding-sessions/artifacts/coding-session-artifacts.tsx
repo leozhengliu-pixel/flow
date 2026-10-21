@@ -52,7 +52,7 @@ export function CodingSessionArtifacts({ sessionId, artifacts, refreshKey, class
     return () => { cancelled = true }
   }, [sessionId, refreshKey, reload, hasInitialData])
 
-  const items = fetched?.sessionId === sessionId ? fetched.items : artifacts
+  const items = fetched && fetched.sessionId === sessionId ? fetched.items : artifacts
   const sections = useMemo(() => buildArtifactSections(items ?? []), [items])
   const images = useMemo(() => galleryImages(sections), [sections])
 

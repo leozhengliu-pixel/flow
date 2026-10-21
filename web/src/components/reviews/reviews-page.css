@@ -69,7 +69,7 @@
 .review-menu-button{display:none!important}
 .reviews-workspace.is-full-window .review-menu-button{display:grid!important;margin:0 14px 0 -1px}
 .review-breadcrumb{min-width:0;flex:1;display:flex;align-items:center;margin-left:-5px}
-.review-breadcrumb-issue{box-sizing:border-box;height:24px;flex:none;display:flex;align-items:center;padding:3px 5px;border:0;border-radius:8px;background:transparent;color:var(--review-fg-muted);font:500 13px/16px var(--font);text-decoration:none}
+.review-breadcrumb-issue{box-sizing:border-box;height:24px;flex:none;display:block;max-width:200px;overflow:hidden;padding:3px 5px;border:0;border-radius:8px;background:transparent;color:var(--review-fg-muted);font:500 13px/18px var(--font);text-align:left;text-decoration:none;text-overflow:ellipsis;white-space:nowrap}
 .review-breadcrumb-issue:hover{background:var(--ui-pill-hover-bg);color:var(--review-fg)}
 .review-breadcrumb-separator{flex:none;margin:0 8px 0 3px;color:var(--review-fg-muted);font:500 13px/16px var(--font)}
 .review-breadcrumb-state{width:16px;height:16px}
@@ -305,10 +305,13 @@ article>header .review-diff-counts{margin-left:auto;margin-right:4px}
 .review-thread>footer{display:flex;justify-content:flex-end;padding:0 12px 10px}
 
 /* Picker dialog. */
-.review-picker-dialog{z-index:701;width:460px;border-color:var(--popover-border);background:var(--theme-surface-2);box-shadow:var(--shadow-dialog);color:var(--review-fg)}
+.review-picker-dialog{z-index:701;width:min(460px,calc(100vw - 32px));padding:16px;border-color:var(--popover-border);background:var(--theme-surface-2);box-shadow:var(--shadow-dialog);color:var(--review-fg)}
+.review-picker-dialog>h2{margin:0 32px 12px 0;font-size:15px;font-weight:500;line-height:20px}
 .review-picker-dialog>label{height:36px;display:flex;align-items:center;gap:7px;padding:0 9px;border:.5px solid var(--theme-border-strong);border-radius:7px}
 .review-picker-dialog>label svg{width:14px}
 .review-picker-dialog input{width:100%;border:0;outline:0;background:transparent;color:var(--review-fg)}
+/* The search box draws the border; the generic light-theme dialog field border must not draw a second one inside it. */
+html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkbox]):not([type=radio]):not([type=color]){min-width:0;height:100%;padding:0;border:0;border-radius:0;background:transparent;font:450 13px/normal var(--font)}
 .review-picker-dialog [role=listbox]{max-height:320px;overflow:auto;margin-top:7px}
 .review-picker-dialog [role=option]{width:100%;height:34px;display:grid;grid-template-columns:16px 20px minmax(0,1fr);align-items:center;gap:7px;padding:0 7px;border:0;border-radius:7px;background:transparent;color:var(--review-fg);text-align:left}
 .review-picker-dialog [role=option]:hover,.review-picker-dialog [role=option][aria-selected=true]{background:var(--theme-surface-hover)}

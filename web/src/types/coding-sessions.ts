@@ -364,3 +364,15 @@ export interface GitHubAppStatus {
 }
 
 export type ReviewCodingSessionKind = "fix" | "followUp" | "rebase" | "lint" | "test";
+
+/**
+ * What `POST /api/issues/{id}/coding-session` and `POST /api/reviews/{id}/coding-session` return: the outcome and the
+ * session it started or continued (absent when nothing started, with `message` saying why).
+ */
+export interface CodingTriggerResult {
+  outcome: "started" | "continued" | "environmentChosen" | "notStarted";
+  session?: CodingSession;
+  created: boolean;
+  approvalRequired?: boolean;
+  message?: string;
+}

@@ -14,6 +14,7 @@ import { CodingChanges, CodingPhaseProgress, CodingPullRequests, CodingSandboxIn
 import { useCodingModelLabel, useCodingSession } from './use-coding-sessions'
 import { CodingSessionArtifacts } from './artifacts/coding-session-artifacts'
 import { CodingDiffViewer } from './coding-session-diff'
+import { CodingSessionErrorBoundary } from './coding-session-error-boundary'
 import { codingSessionHref, codingSessionSubscribed } from './coding-session-page-model'
 import './coding-sessions.css'
 
@@ -33,7 +34,7 @@ export function CodingSessionView({ sessionId, initial, ...props }: CodingSessio
   const { t } = useI18n()
   const { session, error, apply } = useCodingSession(sessionId, initial)
   if (!session) return error ? <p className="coding-session-error-text" role="alert">{error}</p> : <p className="coding-session-muted" role="status">{t('Loading coding session…')}</p>
-  return <CodingSessionPanel session={session} onChange={apply} {...props}/>
+  return <CodingSessionErrorBoundary><CodingSessionPanel session={session} onChange={apply} {...props}/></CodingSessionErrorBoundary>
 }
 
 /** The agent avatar with the session's status dot (the reference app's 18px avatar with a 6px dot ringed in the panel colour). */

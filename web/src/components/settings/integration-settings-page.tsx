@@ -20,6 +20,8 @@ import {
 import type { BootstrapData } from "@/types/flow";
 import { toast } from "@/lib/toast";
 import { useState } from "react";
+// The page's own layout (feature-* classes): without it, opening this route first renders unstyled.
+import "./feature-settings.css";
 
 type Props = {
   slug: string;
