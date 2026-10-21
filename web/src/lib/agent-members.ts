@@ -23,8 +23,15 @@ export function isAgentUserId(id: string | undefined) {
   return Boolean(id?.startsWith('app_'))
 }
 
+/** Picked in a list row's agent submenu: take the delegated agent off the issue (the human assignee stays). */
+export const NO_AGENT_ID = '__no-agent__'
+/** Confirmed "Remove <agent> too?" after unassigning from a list row: clears the assignee and the delegate together. */
+export const CLEAR_ASSIGNEE_AND_AGENT_ID = '__clear-assignee-and-agent__'
+
 /** The update for picking someone as assignee: an agent is delegated to, a person assigned. */
-export function assigneeUpdate(id: string): { assigneeId: string } | { delegateId: string } {
+export function assigneeUpdate(id: string): { assigneeId: string } | { delegateId: string } | { assigneeId: string; delegateId: string } {
+  if (id === NO_AGENT_ID) return { delegateId: '' }
+  if (id === CLEAR_ASSIGNEE_AND_AGENT_ID) return { assigneeId: '', delegateId: '' }
   return isAgentUserId(id) ? { delegateId: id } : { assigneeId: id }
 }
 

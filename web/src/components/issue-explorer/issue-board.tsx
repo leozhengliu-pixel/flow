@@ -8,14 +8,14 @@ import { Clock3, Ellipsis, Link2, Minus, Plus } from 'lucide-react'
 import { IssueReleaseChip } from '@/components/issue/issue-release-chip'
 import { Virtuoso } from 'react-virtuoso'
 import { toast } from '@/lib/toast'
-import { DelegateAvatar, IssueContextMenu, IssueParentTrail, RowCommandPicker, SubIssueProgress, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData, type MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
+import { IssueAssigneeSlot } from '@/components/my-issues/issue-assignee-slot'
+import { IssueContextMenu, IssueParentTrail, RowCommandPicker, SubIssueProgress, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData, type MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
 import type { MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
-import { CalendarIcon, CycleIcon, NoAssigneeIcon, PriorityIcon, StatusIcon } from '@/components/issue/issue-icons'
+import { CalendarIcon, CycleIcon, PriorityIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { DueDatePicker } from '@/components/issue/due-date-picker'
 import { IssueSLAIndicator } from '@/components/issue/issue-sla-indicator'
 import { useI18n } from '@/i18n/i18n'
 import styles from './issue-board.module.css'
-import { UserAvatar } from '@/components/ui/user-avatar'
 import { toggleGroupedLabelIds } from '@/lib/labels'
 import { boardDropRejectReason } from './issue-board-drop'
 
@@ -251,12 +251,7 @@ export function IssueBoardCard({ issue, properties, propertyOptions, selected, d
       {properties.has('id') && <span data-i18n-ignore>{issue.identifier}</span>}
       {issue.ancestors?.length?<IssueParentTrail ancestors={issue.ancestors} board/>:null}
     </div>}
-      {properties.has('assignee') && issue.delegate && <DelegateAvatar delegate={issue.delegate} className={styles.delegateAvatar}/>}
-      {properties.has('assignee') && <RowCommandPicker
-        propertyLabel="Assignee" label={issue.assignee ? `Assign to. Current assignee is ${issue.assignee.name}` : 'Assign issue'} searchLabel="Assign to…"
-        selectedIds={[issue.assignee?.id ?? '']} options={propertyOptions.assignee} onSelect={value => change('assignee', value)} triggerClassName={styles.assigneeTrigger}
-        trigger={issue.assignee ? <BoardAssigneeAvatar assignee={issue.assignee}/> : <span className={styles.noAssignee}><NoAssigneeIcon size={18}/></span>}
-      />}
+      {properties.has('assignee') && <IssueAssigneeSlot issue={issue} options={propertyOptions.assignee} onChange={value => change('assignee', value)} label="Assign issue" triggerClassName={styles.assigneeTrigger} avatarClassName={styles.avatar} emptyClassName={styles.noAssignee} hoverPlacement="below"/>}
     <div className={styles.titleRow} data-has-status={properties.has('status')} data-has-assignee={properties.has('assignee')} data-has-heading={properties.has('id') || Boolean(issue.ancestors?.length)}>
       {properties.has('status') && <RowCommandPicker propertyLabel="Status" label={`Change status. Current status is ${issue.state.name}`} searchLabel="Change status..." searchShortcut="S" selectedIds={[issue.state.id]} options={scopedOptions.status} onSelect={value => change('status', value)} triggerClassName={styles.status} trigger={<StatusIcon state={issue.state} size={14}/>}/>}
       <strong className={styles.title} data-single-line={Boolean(issue.ancestors?.length) && !properties.has('id')} data-i18n-ignore>{issue.title}</strong>
@@ -291,7 +286,6 @@ function CardProperties({ issue, properties, propertyOptions, onPropertyChange }
 }
 
 function Badge({ children, color }: { children: string; color: string }) { return <span className={styles.badge}><i className={styles.labelDot} style={{ backgroundColor: color }}/><span data-i18n-ignore>{children}</span></span> }
-function BoardAssigneeAvatar({ assignee }: { assignee: NonNullable<MyIssuesRowData['assignee']> }) { return <UserAvatar avatarUrl={assignee.avatarUrl} className={styles.avatar} color={assignee.color ?? 'var(--avatar-fallback)'} name={assignee.name}/> }
 const CARD_DATE_FORMAT = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
 function formatDate(value: string) { return CARD_DATE_FORMAT.format(new Date(value.length === 10 ? `${value}T00:00:00` : value)) }
 function formatTimeInStatus(minutes: number) { if (minutes < 60) return `${Math.max(0, minutes)}m`; const hours = minutes / 60; if (hours < 24) return `${Math.round(hours * 10) / 10}h`; return `${Math.round((hours / 24) * 10) / 10}d` }
