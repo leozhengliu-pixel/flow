@@ -395,6 +395,156 @@
         "x-flow-source": "code_host_accounts.go"
       }
     },
+    "/api/account/connections": {
+      "get": {
+        "operationId": "get_account_connections",
+        "tags": [
+          "account"
+        ],
+        "summary": "GET /api/account/connections",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "personal_connections.go"
+      }
+    },
+    "/api/account/connections/google-calendar": {
+      "delete": {
+        "operationId": "delete_account_connections_google_calendar",
+        "tags": [
+          "account"
+        ],
+        "summary": "DELETE /api/account/connections/google-calendar",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "personal_connections.go"
+      }
+    },
+    "/api/account/connections/google-calendar/authorize": {
+      "post": {
+        "operationId": "post_account_connections_google_calendar_authorize",
+        "tags": [
+          "account"
+        ],
+        "summary": "POST /api/account/connections/google-calendar/authorize",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "personal_connections.go"
+      }
+    },
+    "/api/account/connections/google-calendar/callback": {
+      "get": {
+        "operationId": "get_account_connections_google_calendar_callback",
+        "tags": [
+          "account"
+        ],
+        "summary": "GET /api/account/connections/google-calendar/callback",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "personal_connections.go"
+      }
+    },
+    "/api/account/connections/notion": {
+      "delete": {
+        "operationId": "delete_account_connections_notion",
+        "tags": [
+          "account"
+        ],
+        "summary": "DELETE /api/account/connections/notion",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "personal_connections.go"
+      }
+    },
+    "/api/account/connections/notion/connect": {
+      "post": {
+        "operationId": "post_account_connections_notion_connect",
+        "tags": [
+          "account"
+        ],
+        "summary": "POST /api/account/connections/notion/connect",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "personal_connections.go"
+      }
+    },
     "/api/account/identities": {
       "get": {
         "operationId": "get_account_identities",
@@ -19017,6 +19167,31 @@
         },
         "x-flow-internal": true,
         "x-flow-source": "main.go"
+      }
+    },
+    "/api/notion/link-preview": {
+      "get": {
+        "operationId": "get_notion_link_preview",
+        "tags": [
+          "notion"
+        ],
+        "summary": "GET /api/notion/link-preview",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "personal_connections.go"
       }
     },
     "/api/oauth-applications": {

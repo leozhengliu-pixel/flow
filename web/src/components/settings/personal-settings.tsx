@@ -90,6 +90,7 @@ import {
 } from "./settings-primitives";
 
 import { CodeHostConnectionRows, ConnectAction } from "./code-host-accounts";
+import { PersonalConnectionRows } from "./personal-connection-rows";
 import { IntegrationBrandIcon } from "./integration-brand-icon";
 
 import "./personal-settings.css";
@@ -3588,20 +3589,6 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
       icon: <IntegrationBrandIcon provider="slack" size={16} />,
       available: true,
     },
-    {
-      provider: "google-calendar",
-      name: "Google Calendar",
-      description: p("Sync your calendar out-of-office status with Flow"),
-      icon: <IntegrationBrandIcon provider="google-calendar" size={16} />,
-      available: false,
-    },
-    {
-      provider: "notion",
-      name: "Notion",
-      description: p("Preview issues, projects, and views within Notion"),
-      icon: <IntegrationBrandIcon provider="notion" size={16} />,
-      available: false,
-    },
   ];
   const github = integrations.get("github");
   return (
@@ -3634,6 +3621,7 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
             </div>
           );
         })}
+        <PersonalConnectionRows />
         <CodeHostConnectionRows
           githubDescription="Review code in Flow and sync attribution of your git-related actions"
           githubOrganization={github?.config?.organization || github?.name}

@@ -1167,3 +1167,5 @@ html:root body .detail-sub-unassigned:not(#_) { width: 18px; height: 18px; flex:
 html:root body .issue-document .sub-issue-editor:not(#_) { border: 1px solid var(--sub-editor-border); background: var(--sub-editor-bg); box-shadow: var(--pk-shadow); }
 html:root body .sub-issue-title-editor:not(#_),
 html:root body .sub-issue-title-editor:not(#_) .ProseMirror { color: var(--pk-text-strong); font-weight: 600; }
+/* "Away" after a person's name in assignee menus (an active out-of-office, e.g. synced from their calendar). */
+.property-command-away { margin-left: 6px; color: var(--theme-text-secondary); font-size: 12px; font-weight: 400; }

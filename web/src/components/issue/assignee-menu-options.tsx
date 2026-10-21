@@ -19,6 +19,7 @@ export function assigneeMenuOptions(users: User[], { teamId, allowAgents = true,
       keywords: user.email,
       icon: <AssigneeMenuAvatar user={user}/>,
       shortcut: assigneeShortcut(index + 1),
+      ...(user.outOfOfficeUntil && new Date(user.outOfOfficeUntil).getTime() > Date.now() ? { labelContent: <>{user.displayName}<span className="property-command-away">Away</span></> } : {}),
       ...(user.app ? agentHoverProps(user) : {}),
     })),
   ]

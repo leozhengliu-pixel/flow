@@ -7,6 +7,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- Settings › Account › Connected accounts: Google Calendar (members show as
+  out of office from their calendar's out-of-office events) and Notion (link
+  previews of issues and projects) connections, configured with
+  `FLOW_GOOGLE_OAUTH_CLIENT_ID` / `_SECRET` and `FLOW_NOTION_CONNECTION_URL`.
+
 ## [0.1.0] - 2026-10-17
 
 The release series has been reset to v0.1.0 using the current main branch.

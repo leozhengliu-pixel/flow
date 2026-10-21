@@ -23,6 +23,12 @@ var InternalRoutes = []string{
 	"POST /api/account/code-host-accounts/github/authorize",
 	"POST /api/account/code-host-accounts/gitlab/authorize",
 	"POST /api/account/code-host-accounts/gitlab/token",
+	"DELETE /api/account/connections/google-calendar",
+	"DELETE /api/account/connections/notion",
+	"GET /api/account/connections",
+	"GET /api/account/connections/google-calendar/callback",
+	"POST /api/account/connections/google-calendar/authorize",
+	"POST /api/account/connections/notion/connect",
 	"DELETE /api/account/identities/{id}",
 	"DELETE /api/account/passkeys/{id}",
 	"DELETE /api/account/sessions/others",
@@ -450,6 +456,8 @@ var InternalRoutes = []string{
 	"POST /api/migrations/{id}/invite-users",
 	"POST /api/migrations/{id}/linear/scan",
 	"POST /api/migrations/{id}/rollback",
+	// /api/notion
+	"GET /api/notion/link-preview",
 	// /api/notification-deliveries
 	"GET /api/notification-deliveries",
 	"POST /api/notification-deliveries/{id}/retry",

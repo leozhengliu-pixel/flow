@@ -26,6 +26,7 @@ import { agentHistoryZhCN } from './translations-agent-history';
 import { gitlabSettingsZhCN } from './translations-gitlab-settings';
 import { githubAppZhCN } from './translations-github-app';
 import { codeHostAccountsZhCN } from './translations-code-host-accounts';
+import { personalConnectionsZhCN } from './translations-personal-connections';
 import { mcpConnectorsZhCN } from './translations-mcp-connectors';
 import { codingSessionsZhCN } from './translations-coding-sessions';
 import { aiSettingsZhCN } from './translations-ai-settings';
@@ -5861,6 +5862,7 @@ Object.assign(zhCN, agentHistoryZhCN);
 Object.assign(zhCN, gitlabSettingsZhCN);
 for (const [key, value] of Object.entries(githubAppZhCN)) if (!(key in zhCN)) zhCN[key] = value;
 for (const [key, value] of Object.entries(codeHostAccountsZhCN)) if (!(key in zhCN)) zhCN[key] = value;
+for (const [key, value] of Object.entries(personalConnectionsZhCN)) if (!(key in zhCN)) zhCN[key] = value;
 for (const [key, value] of Object.entries(mcpConnectorsZhCN)) if (!(key in zhCN)) zhCN[key] = value;
 // coding sessions (track F): only fills keys the shared dictionary does not already translate.
 for (const [key, value] of Object.entries(codingSessionsZhCN)) if (!(key in zhCN)) zhCN[key] = value;

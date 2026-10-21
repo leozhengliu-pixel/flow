@@ -58,6 +58,10 @@ export function PriorityPicker({ value, onChange }: { value: number; onChange: (
   /></div>
 }
 
+function isAwayNow(until?: string) {
+  return Boolean(until) && new Date(until as string).getTime() > Date.now()
+}
+
 export type PersonPickerOption = {
   searchOnly?: boolean
   /** Agent members open the reference app's agent hover card (the "Agent" pill lives there, never in the row). */
@@ -74,6 +78,8 @@ export type PersonPickerOption = {
   invited?: boolean
   disabled?: boolean
   end?: string
+  /** Out of office until (set while a calendar or profile out-of-office is active): the row shows "Away". */
+  outOfOfficeUntil?: string
   groupId?: string
   groupLabel?: string
   hoverContent?: ReactNode
@@ -162,6 +168,7 @@ export function PersonPicker({ ariaLabel, closeOnSelect, emptyOptionLabel, empty
         searchOnly: person.searchOnly,
         icon: person.icon ?? <PersonAvatar person={person}/>,
         end: person.end ?? (person.invited ? 'Invited' : undefined),
+        ...(isAwayNow(person.outOfOfficeUntil) ? { labelContent: <>{person.label}<span className="property-command-away">{t('Away')}</span></> } : {}),
         disabled: person.disabled,
         groupId: unselectedGroupLabel ? grouped ? person.groupId ?? `people-${unselectedGroupLabel}` : undefined : person.groupId,
         groupLabel: unselectedGroupLabel ? grouped ? person.groupLabel ?? unselectedGroupLabel : undefined : person.groupLabel,
