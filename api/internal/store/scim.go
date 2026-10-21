@@ -585,7 +585,8 @@ func (s *SQLiteStore) writeSCIMUser(ctx context.Context, workspaceID, userID str
 		}
 	}
 	stamp := now.Format(time.RFC3339Nano)
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,status=excluded.status,last_seen_at=excluded.last_seen_at`, workspaceID, userID, role, status, stamp, stamp); err != nil {
+	// Provisioning is not activity: last_seen_at stays unset (or as it was), so a provisioned member is not shown online.
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,NULL) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,status=excluded.status`, workspaceID, userID, role, status, stamp); err != nil {
 		return SCIMUser{}, err
 	}
 	if err := s.setSCIMUserRole(ctx, workspaceID, userID, role, now); err != nil {

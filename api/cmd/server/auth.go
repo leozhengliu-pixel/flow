@@ -2197,8 +2197,14 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "Usernames can only contain lowercase letters, numbers, periods, underscores and hyphens")
 			return
 		}
+		// Members an identity provider provisioned may not be in the workspace's user list until they sign in.
+		member, memberErr := s.store.HasWorkspaceMembership(r.Context(), data.Workspace.ID, userID)
+		if memberErr != nil {
+			writeError(w, http.StatusInternalServerError, memberErr.Error())
+			return
+		}
 		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.username_updated", userID, map[string]string{"username": username}, func(workspace *domain.Bootstrap) error {
-			if !slices.ContainsFunc(bootstrapUsers(workspace), func(user domain.User) bool { return user.ID == userID }) {
+			if !member && !slices.ContainsFunc(bootstrapUsers(workspace), func(user domain.User) bool { return user.ID == userID }) {
 				return errNotFound
 			}
 			if usernameTaken(*workspace, userID, username) {
@@ -2217,6 +2223,21 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		input.Username = ""
+		if input.Role == "" && input.DisplayName == "" && input.Email == "" {
+			// Only the handle changed: answer with the member as stored (this includes members an identity provider
+			// provisioned who are not in the development member list).
+			members, err := s.store.ListMembers(r.Context(), data.Workspace.ID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if index := slices.IndexFunc(members, func(member domain.WorkspaceMember) bool { return member.User.ID == userID }); index >= 0 {
+				writeJSON(w, http.StatusOK, members[index])
+				return
+			}
+			writeJSON(w, http.StatusOK, domain.WorkspaceMember{User: domain.User{ID: userID}})
+			return
+		}
 	}
 	if s.authDisabled {
 		var updated domain.WorkspaceMember

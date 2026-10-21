@@ -569,6 +569,14 @@ func (s *SQLiteStore) EnsureWorkspaceMembership(ctx context.Context, workspaceID
 	return err
 }
 
+// HasWorkspaceMembership reports whether userID has a membership row in the workspace (any status), including
+// members provisioned by an identity provider who have not signed in yet.
+func (s *SQLiteStore) HasWorkspaceMembership(ctx context.Context, workspaceID, userID string) (bool, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID).Scan(&count)
+	return count > 0, err
+}
+
 func (s *SQLiteStore) VerifyEmail(ctx context.Context, token string) error {
 	userID, err := s.consumeAuthToken(ctx, token, "verify")
 	if err != nil {
