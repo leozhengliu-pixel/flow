@@ -171,6 +171,8 @@ export function EnvironmentEditorPage({ data, environmentId, disabled, onBack, o
   const connectedKinds = useMemo(() => [...new Set((status?.codeHosts ?? []).filter((host) => host.connected).map((host) => host.codeHost))], [status]);
 
   const save = async () => {
+    // Like the reference app, "Save changes" stays enabled; with nothing changed it does nothing (no request, no toast).
+    if (!isNew && !dirty) return;
     if (errors.length || repoInUse) return;
     setSaving(true);
     setSaveError(undefined);
@@ -257,7 +259,7 @@ export function EnvironmentEditorPage({ data, environmentId, disabled, onBack, o
                 Configure with agent
               </CodingButton>
             )}
-            <CodingButton primary disabled={locked || !dirty || errors.length > 0 || Boolean(repoInUse)} onClick={() => void save()}>
+            <CodingButton primary disabled={locked || (isNew && !dirty) || (dirty && errors.length > 0) || Boolean(repoInUse)} onClick={() => void save()}>
               {isNew ? "Create environment" : "Save changes"}
             </CodingButton>
           </div>
