@@ -120,8 +120,16 @@ export async function prepareRepository(deps: SetupDeps, options: { detach?: boo
     await git.configureCredentials(bootstrap.repo.pushUrl)
     deps.emit(deps.events.action({ action: 'Cloned repo', parameter: bootstrap.repo.fullName || bootstrap.repo.cloneUrl }))
   }
-  if (options.detach) await git.git(['checkout', '--detach', git.baseRevision(bootstrap.repo)])
-  else await git.checkoutSessionBranch(bootstrap.repo)
+  if (options.detach) {
+    await git.git(['checkout', '--detach', git.baseRevision(bootstrap.repo)])
+    return
+  }
+  const branch = bootstrap.repo.branchName
+  const checkout = await git.checkoutSessionBranch(bootstrap.repo)
+  if (checkout.note) log.line(`note: ${checkout.note}`)
+  if (checkout.source === 'remote') log.line(`checked out ${branch} from origin`)
+  else if (checkout.source === 'kept') log.line(`checked out the workspace's ${branch}`)
+  else log.line(`created ${branch} from ${checkout.base}`)
 }
 
 /** Writes mise files and tools, then runs `mise install`. */
