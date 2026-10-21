@@ -33,7 +33,7 @@ export function CodingSessionPage({ data, sessionId, onNavigate, onOpenSidebar }
   const showAgent = new URLSearchParams(location.search).get('showAgent') !== 'false'
   const issue = session?.issueId ? data.issues.find(item => item.id === session.issueId) : undefined
   const leave = () => onNavigate(issue ? issuePath(workspace, issue) : agentPath(workspace))
-  // The header's change count, the PR reference (Flow's review when synced, else the code host) and "Copy URL".
+  // The header's change count, the PR reference (Flow's review when synced, else the code host) and "Copy URL" (with a PR).
   const additions = (session?.diffs ?? []).reduce((sum, diff) => sum + diff.additions, 0)
   const pr = session?.latestPullRequest ?? session?.pullRequests?.at(-1)
   const review = pr ? reviewForPullRequest(pr, data.reviews ?? []) : undefined
@@ -71,7 +71,8 @@ export function CodingSessionPage({ data, sessionId, onNavigate, onOpenSidebar }
         if (!review || !prHref || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return
         event.preventDefault(); onNavigate(prHref)
       }}><FlowBranchIcon/><span data-i18n-ignore>{`${pr.repository.split('/').at(-1)}${pullRequestNumberLabel(pr)}`}</span></a></ScopedFlowTooltip>}
-      <ScopedFlowTooltip label={t('Copy session URL')} align="end"><button type="button" className="coding-session-page-icon" aria-label={t('Copy URL')} onClick={() => void copyURL()}><FlowUrlIcon/></button></ScopedFlowTooltip>
+      {/* Like the reference app, a session without a pull request offers only the agent toggle here. */}
+      {pr && <ScopedFlowTooltip label={t('Copy session URL')} align="end"><button type="button" className="coding-session-page-icon" aria-label={t('Copy URL')} onClick={() => void copyURL()}><FlowUrlIcon/></button></ScopedFlowTooltip>}
       <ScopedFlowTooltip label={t(showAgent ? 'Hide agent' : 'Show agent')} shortcut="]" align="end">
         <button type="button" className="coding-session-agent-toggle" aria-pressed={showAgent} aria-label={t(showAgent ? 'Hide agent' : 'Show agent')} onClick={toggleAgent}>{showAgent ? <AgentCursorFilledGlyph size={14}/> : <AgentCursorGlyph size={14}/>}</button>
       </ScopedFlowTooltip>

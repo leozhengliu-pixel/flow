@@ -306,7 +306,7 @@ a.coding-session-status-row,a.coding-sessions-list-row{text-decoration:none}
 [data-pr-state=closed] .coding-pr-glyph{color:var(--cs-pr-closed)}
 /* The pull request hover card (issue Diffs row, session card PR chip). */
 .coding-pr-hover{z-index:60}
-.coding-pr-hover-card{box-sizing:border-box;width:297px;max-width:calc(100vw - 16px);display:flex;flex-direction:column;gap:8px;padding:11px 15px;border:.5px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-2);box-shadow:var(--shadow);color:var(--theme-text-primary)}
+.coding-pr-hover-card{box-sizing:border-box;width:max-content;min-width:237px;max-width:min(520px, calc(100vw - 16px));display:flex;flex-direction:column;gap:8px;padding:11px 15px;border:.5px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-2);box-shadow:var(--shadow);color:var(--theme-text-primary)}
 .coding-pr-hover-card-head{display:flex;align-items:flex-start;gap:8px}
 .coding-pr-hover-card-titles{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .coding-pr-hover-card-titles strong{overflow:hidden;color:var(--theme-text-primary);font:500 13px/normal var(--font);text-overflow:ellipsis;white-space:nowrap}
