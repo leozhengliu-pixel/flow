@@ -29,6 +29,8 @@ func TestExternalDatabaseSCIM(t *testing.T) {
 		{"user queries", checkSCIMUserQueries},
 		{"delete and restore", checkSCIMDeleteAndRestore},
 		{"group member patches", checkSCIMGroupMemberPatches},
+		{"profile and sorting", checkSCIMProfileAndSort},
+		{"removed membership and managed marker", checkSCIMRemovedMembership},
 	}
 	for index, item := range checks {
 		t.Run(item.name, func(t *testing.T) {

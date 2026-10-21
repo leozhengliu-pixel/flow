@@ -75,7 +75,14 @@ type WorkspaceMember struct {
 	Status     string     `json:"status"`
 	JoinedAt   time.Time  `json:"joinedAt"`
 	LastSeenAt *time.Time `json:"lastSeenAt,omitempty"`
+	// ManagedBy is "scim" while the workspace's SCIM provisioning manages
+	// the member: their role, name, email and status are changed in the
+	// identity provider, not in Flow.
+	ManagedBy string `json:"managedBy,omitempty"`
 }
+
+// MemberManagedBySCIM marks a member provisioned by an active SCIM connection.
+const MemberManagedBySCIM = "scim"
 
 // IssuePermission grants access to an issue (and, for sub-issues, may be
 // inherited from an ancestor) to an individual, team, or the workspace.
@@ -1528,6 +1535,11 @@ type WorkspaceSettings struct {
 	// matching SCIM group owns membership for that team.
 	SCIMTeamGroupMapping map[string]string `json:"scimTeamGroupMapping,omitempty"`
 	SCIMDefaultRole      string            `json:"scimDefaultRole,omitempty"`
+	// SCIMDeprovisionAction is what a SCIM deprovision (DELETE, or active
+	// false) does to the member: "suspend" (default) keeps them suspended in
+	// the workspace; "remove" removes them from the workspace and its teams.
+	// The account and its work are never deleted either way.
+	SCIMDeprovisionAction string `json:"scimDeprovisionAction,omitempty"`
 	// TrustedSourcesMode: "none" | "allowlist" (Wave 10 / LS-0094 foundations).
 	TrustedSourcesMode      string    `json:"trustedSourcesMode,omitempty"`
 	TrustedSourcesAllowlist []string  `json:"trustedSourcesAllowlist,omitempty"`

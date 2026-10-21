@@ -766,6 +766,12 @@ func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.B
 		data.AuditLog = []domain.AuditLogEntry{}
 	}
 	data.Members, _ = s.ListMembers(ctx, data.Workspace.ID)
+	if !data.WorkspaceSettings.SCIMEnabled {
+		// Turning SCIM provisioning off hands every member back to admins.
+		for index := range data.Members {
+			data.Members[index].ManagedBy = ""
+		}
+	}
 	data.TeamMembers, _ = s.ListTeamMembers(ctx, data.Workspace.ID)
 	data.DepartedMembers = nil
 	if isWorkspaceAdminRole(role) {
@@ -874,7 +880,8 @@ func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.B
 
 func (s *SQLiteStore) ListMembers(ctx context.Context, workspaceID string) ([]domain.WorkspaceMember, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT u.id,u.email,u.name,u.display_name,u.avatar_url,u.email_verified_at,u.active,m.role,m.status,m.joined_at,m.last_seen_at,
-		COALESCE((SELECT i.subject FROM auth_identities i WHERE i.user_id=u.id AND (i.provider IN ('oidc','saml') OR (i.provider='scim' AND i.issuer=m.workspace_id)) ORDER BY CASE WHEN i.provider='scim' THEN 0 ELSE 1 END,i.created_at,i.id LIMIT 1),'')
+		COALESCE((SELECT i.subject FROM auth_identities i WHERE i.user_id=u.id AND (i.provider IN ('oidc','saml') OR (i.provider='scim' AND i.issuer=m.workspace_id)) ORDER BY CASE WHEN i.provider='scim' THEN 0 ELSE 1 END,i.created_at,i.id LIMIT 1),''),
+		CASE WHEN `+scimManagedMemberSQL+` THEN 1 ELSE 0 END
 		FROM workspace_memberships m JOIN auth_users u ON u.id=m.user_id WHERE m.workspace_id=? ORDER BY lower(u.display_name)`, workspaceID)
 	if err != nil {
 		return nil, err
@@ -884,9 +891,9 @@ func (s *SQLiteStore) ListMembers(ctx context.Context, workspaceID string) ([]do
 	for rows.Next() {
 		var user domain.User
 		var nullableEmail, verified, lastSeen sql.NullString
-		var active int
+		var active, managed int
 		var role, status, joinedRaw string
-		if err := rows.Scan(&user.ID, &nullableEmail, &user.Name, &user.DisplayName, &user.AvatarURL, &verified, &active, &role, &status, &joinedRaw, &lastSeen, &user.UserID); err != nil {
+		if err := rows.Scan(&user.ID, &nullableEmail, &user.Name, &user.DisplayName, &user.AvatarURL, &verified, &active, &role, &status, &joinedRaw, &lastSeen, &user.UserID, &managed); err != nil {
 			return nil, err
 		}
 		user.Email = nullableEmail.String
@@ -897,7 +904,11 @@ func (s *SQLiteStore) ListMembers(ctx context.Context, workspaceID string) ([]do
 			value, _ := time.Parse(time.RFC3339Nano, lastSeen.String)
 			last = &value
 		}
-		result = append(result, domain.WorkspaceMember{User: user, Role: role, Status: status, JoinedAt: joined, LastSeenAt: last})
+		member := domain.WorkspaceMember{User: user, Role: role, Status: status, JoinedAt: joined, LastSeenAt: last}
+		if managed == 1 {
+			member.ManagedBy = domain.MemberManagedBySCIM
+		}
+		result = append(result, member)
 	}
 	err = rows.Err()
 	rows.Close()
