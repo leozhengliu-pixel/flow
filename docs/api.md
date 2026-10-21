@@ -345,6 +345,19 @@ the API key or SCIM connection that made it.
 `GET /api/workspace/audit-log?resourceType=team_member&resourceId=<userId>`
 answers "who removed this person, when, and how".
 
+SCIM provisioning writes its own entries with `source` `scim`: resource type
+`workspace_member` (`provisioned`, `updated` with `changedFields`,
+`suspended`, `restored`, `deprovisioned`, `removed`, `role_changed` with
+`roleBefore`/`roleAfter`) and `scim_group` (`created`, `linked`, `updated`,
+`deleted`, `members_changed` with the added and removed user ids).
+
+Workspace members provisioned by an active SCIM connection have
+`managedBy: "scim"`; changing their role, name or email
+(`PATCH /api/workspaces/{workspaceKey}/members/{userId}`), suspending,
+resuming or removing them answers 403 with code `SCIM_MANAGED` until SCIM is
+turned off or every SCIM token is revoked (see the SCIM section of the
+configuration guide).
+
 ## Audit log
 
 `GET /api/workspace/audit-log` (workspace admins or the `admin` scope) accepts

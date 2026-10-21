@@ -9,6 +9,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- SCIM provisioning: ETags (`If-Match`/`If-None-Match`), `sortBy`/`sortOrder`,
+  `POST /Bulk`, `POST /Users/.search` and `/Groups/.search`, the enterprise
+  User extension and profile attributes, audit log entries for every
+  provisioning change, a "When a user is deprovisioned" setting (suspend or
+  remove from the workspace), team group mapping on the identity provider
+  page, and "Managed by SCIM" members whose role, name, email and status
+  change only in the identity provider.
 - Settings › Account › Connected accounts: Google Calendar (members show as
   out of office from their calendar's out-of-office events) and Notion (link
   previews of issues and projects) connections, configured with
