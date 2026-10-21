@@ -641,3 +641,50 @@ func TestSCIMLinksExistingAccountsAndKeepsRoles(t *testing.T) {
 		t.Fatalf("profile PATCH reset role to %s", role)
 	}
 }
+
+// A userName change keeps the account: with or without an externalId, the user stays reachable by id and is found
+// by the new userName, not the old one.
+func TestSCIMUserNameChangeKeepsTheUser(t *testing.T) {
+	f := newSCIMFixture(t)
+	for _, externalID := range []string{"", "ext-rename"} {
+		body := map[string]any{"schemas": []string{"urn:ietf:params:scim:schemas:core:2.0:User"}, "userName": "before-" + externalID + "@example.com", "active": true}
+		if externalID != "" {
+			body["externalId"] = externalID
+		}
+		created := f.call(t, http.MethodPost, "/scim/v2/test-workspace/Users", body, http.StatusCreated)
+		id := created["id"].(string)
+		renamed := "after-" + externalID + "@example.com"
+		f.call(t, http.MethodPatch, "/scim/v2/test-workspace/Users/"+id, map[string]any{"schemas": []string{"urn:ietf:params:scim:api:messages:2.0:PatchOp"},
+			"Operations": []map[string]any{{"op": "replace", "path": "userName", "value": renamed}}}, http.StatusOK)
+		if got := f.call(t, http.MethodGet, "/scim/v2/test-workspace/Users/"+id, nil, http.StatusOK); got["userName"] != renamed {
+			t.Fatalf("externalId %q: after PATCH userName = %v", externalID, got["userName"])
+		}
+		replaced := map[string]any{"schemas": []string{"urn:ietf:params:scim:schemas:core:2.0:User"}, "userName": "again-" + externalID + "@example.com", "active": true}
+		if externalID != "" {
+			replaced["externalId"] = externalID
+		}
+		f.call(t, http.MethodPut, "/scim/v2/test-workspace/Users/"+id, replaced, http.StatusOK)
+		if list := f.call(t, http.MethodGet, "/scim/v2/test-workspace/Users?filter="+filterQuery(`userName eq "again-`+externalID+`@example.com"`), nil, http.StatusOK); list["totalResults"] != float64(1) {
+			t.Fatalf("externalId %q: lookup by new userName = %v", externalID, list)
+		}
+		if list := f.call(t, http.MethodGet, "/scim/v2/test-workspace/Users?filter="+filterQuery(`userName eq "`+renamed+`"`), nil, http.StatusOK); list["totalResults"] != float64(0) {
+			t.Fatalf("externalId %q: old userName still matches = %v", externalID, list)
+		}
+	}
+}
+
+// A member provisioned by SCIM who has never signed in can have their Flow username changed, and provisioning
+// alone does not mark them as seen (online).
+func TestSCIMProvisionedMemberUsernameAndPresence(t *testing.T) {
+	f := newSCIMFixture(t)
+	created := f.call(t, http.MethodPost, "/scim/v2/test-workspace/Users", map[string]any{"schemas": []string{"urn:ietf:params:scim:schemas:core:2.0:User"}, "userName": "never.signed.in@example.com", "externalId": "ext-never", "active": true}, http.StatusCreated)
+	id := created["id"].(string)
+	members, err := f.repository.ListMembers(t.Context(), f.seed.Workspace.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if member := findWorkspaceMember(members, id); member == nil || member.LastSeenAt != nil {
+		t.Fatalf("provisioned member = %+v, want present with no last seen time", member)
+	}
+	requestJSON[domain.WorkspaceMember](t, f.handler, http.MethodPatch, "/api/workspaces/test-workspace/members/"+id, map[string]any{"username": "never-signed-in"}, http.StatusOK)
+}
