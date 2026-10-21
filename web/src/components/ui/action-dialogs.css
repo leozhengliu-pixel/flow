@@ -175,3 +175,20 @@
 .action-dialog-choices{display:flex;flex-direction:column;gap:8px;margin-top:14px}
 .action-dialog-choice{display:flex;align-items:center;gap:8px;font-size:13px;line-height:18px;color:var(--theme-text-primary);cursor:pointer}
 .action-dialog-choice input{accent-color:var(--accent-primary)}
+
+/* Confirmations (confirmAction), measured on the reference app's shared confirm dialog (delete issue, archive
+   environment): 24px padding, 15px/23px title and description, 20px above the buttons, the red action
+   lch(58 73 29). Colours are the shared confirm-dialog tokens in tokens.css (dark and light). */
+:root .dialog-overlay.action-dialog-confirm-overlay{background:var(--agent-discard-overlay)}
+:root .dialog-content.action-dialog.action-dialog-confirm{padding:24px;border-color:var(--agent-discard-border);background:var(--agent-discard-bg);box-shadow:var(--agent-discard-shadow)}
+:root .dialog-content.action-dialog.action-dialog-confirm h2{margin:0;color:var(--agent-discard-title);font-size:15px;font-weight:600;line-height:23px;text-wrap:pretty}
+:root .dialog-content.action-dialog.action-dialog-confirm>p{margin:6px 0 0;color:var(--agent-discard-text);font-size:15px;font-weight:450;line-height:23px;text-wrap:pretty}
+:root .dialog-content.action-dialog.action-dialog-confirm>footer{margin:20px 0 0;padding:0}
+:root .dialog-content.action-dialog.action-dialog-confirm>h2+footer{margin-top:26px}
+:root .dialog-content.action-dialog.action-dialog-confirm>footer button{border-color:transparent;background:var(--agent-discard-cancel-bg);color:var(--agent-discard-cancel-fg);box-shadow:var(--agent-discard-cancel-ring);font:500 13px/normal var(--font);transition:background-color .15s}
+:root .dialog-content.action-dialog.action-dialog-confirm>footer button:hover:not(:disabled){background:var(--agent-discard-cancel-hover-bg)}
+:root .dialog-content.action-dialog.action-dialog-confirm>footer button.danger{background:var(--agent-discard-danger-bg);color:var(--agent-discard-danger-fg);box-shadow:none}
+:root .dialog-content.action-dialog.action-dialog-confirm>footer button.danger:hover:not(:disabled){background:var(--agent-discard-danger-bg)}
+:root .dialog-content.action-dialog.action-dialog-confirm>footer button.primary,:root .dialog-content.action-dialog.action-dialog-confirm>footer button.primary:hover:not(:disabled){background:var(--accent-primary);color:var(--on-accent);box-shadow:none}
+:root .dialog-content.action-dialog.action-dialog-confirm>footer button.danger:focus-visible{outline:1px solid lch(62.5 73 29);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){:root .dialog-content.action-dialog.action-dialog-confirm>footer button{transition:none}}

@@ -139,14 +139,18 @@ export function ActionDialogHost() {
     if (request.kind === "prompt" || request.kind === "stringValidated") {
       event.preventDefault();
       requestAnimationFrame(() => document.querySelector<HTMLInputElement>(".action-dialog input")?.focus());
+    } else if (request.kind === "confirm") {
+      // Like the reference app's confirm dialog, the action button has focus.
+      event.preventDefault();
+      (event.currentTarget as HTMLElement | null)?.querySelector<HTMLButtonElement>("footer button:last-child")?.focus();
     }
   };
 
   return (
     <Dialog open={Boolean(request)} onOpenChange={open => !open && onCancel()}>
       <DialogContent
-        className="action-dialog"
-        overlayClassName="action-dialog-overlay"
+        className={displayRequest?.kind === "confirm" ? "action-dialog action-dialog-confirm" : "action-dialog"}
+        overlayClassName={request?.kind === "confirm" ? "action-dialog-overlay action-dialog-confirm-overlay" : "action-dialog-overlay"}
         aria-hidden={!request || undefined}
         inert={!request || undefined}
         onOpenAutoFocus={openAutoFocus}
