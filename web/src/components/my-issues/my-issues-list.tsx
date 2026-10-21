@@ -152,6 +152,8 @@ export interface MyIssuesRowData {
   pullRequestLifecycle?: 'open' | 'inReview' | 'approved' | 'merged' | 'closed' | 'draft'
   blockedByCount?: number
   blockingCount?: number
+  blockedByIds?: readonly string[]
+  blockingIds?: readonly string[]
   releaseCount?: number
   releases?: IssueReleaseEntry[]
   hasContent?: boolean
@@ -319,7 +321,7 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
     if ((event.target as Element).closest('button,input,[role="checkbox"]')) { event.preventDefault(); return }
     if (onOpen && !event.metaKey && !event.ctrlKey && !event.shiftKey && event.button === 0) { event.preventDefault(); open() }
   }
-  const columns = ['8px', '18px', displayProperties.has('priority') && '16px', displayProperties.has('id') && 'var(--issue-identifier-width, 52px)', displayProperties.has('status') && '22px', 'minmax(80px,1fr)', displayProperties.has('created') && '60px', displayProperties.has('updated') && '60px', displayProperties.has('myActivity') && '60px', displayProperties.has('timeInStatus') && '72px', displayProperties.has('links') && '52px', displayProperties.has('pullRequests') && '52px', '18px'].filter(Boolean).join(' ')
+  const columns = ['8px', '18px', displayProperties.has('priority') && '16px', displayProperties.has('id') && 'var(--issue-identifier-width, 52px)', displayProperties.has('status') && '22px', 'minmax(80px,1fr)', displayProperties.has('created') && '60px', displayProperties.has('updated') && '60px', displayProperties.has('myActivity') && '60px', displayProperties.has('timeInStatus') && '72px', displayProperties.has('links') && '52px', '18px'].filter(Boolean).join(' ')
   const change = (property: MyIssuesEditableProperty, value: string | string[]) => onPropertyChange?.(issue, property, value)
   return <ContextMenu.Root>
     <ContextMenu.Trigger asChild>
@@ -367,6 +369,15 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
             {displayProperties.has('customers') && (issue.customerCount ?? issue.customerIds?.length ?? 0) > 0 ? <CustomersRowChip customers={issue.customers ?? []} customerCount={issue.customerCount ?? issue.customerIds?.length ?? 0} importantCustomerIds={issue.importantCustomerIds ?? []} settings={issue.customerRevenueSettings}/> : null}
             {displayProperties.has('customerRevenue') && issue.customers?.length ? <CustomerRevenueRowChip customers={issue.customers} settings={issue.customerRevenueSettings}/> : null}
             {displayProperties.has('dueDate') && issue.dueDate ? <DueDatePicker value={issue.dueDate} allowRemove={!issue.recurrence} onChange={value => change('dueDate', value)} ariaLabel={`Change due date. Current due date is ${formatDueDate(issue.dueDate)}`} triggerClassName={styles.propertyTrigger} trigger={<time className={styles.dueDate} dateTime={issue.dueDate}><CalendarIcon size={13}/>{formatDueDate(issue.dueDate)}</time>}/> : null}
+            {displayProperties.has('pullRequests') || issue.blockedByCount || issue.blockingCount ? <IssueWidgetAdornments
+              showPullRequests={displayProperties.has('pullRequests')}
+              pullRequestLifecycle={issue.pullRequestLifecycle}
+              pullRequestCount={issue.pullRequestCount ?? 0}
+              blockedByCount={issue.blockedByCount ?? 0}
+              blockingCount={issue.blockingCount ?? 0}
+              blockedByIds={issue.blockedByIds}
+              blockingIds={issue.blockingIds}
+            /> : null}
             {displayProperties.has('sla') && issue.sla && <IssueSLAIndicator compact sla={issue.sla} ruleName={issue.sla.ruleName}/>}
             {displayProperties.has('estimate') && issue.estimate != null && <span className={styles.badge} aria-label={`Estimate ${issue.estimate}`}>{issue.estimate}</span>}
             {displayProperties.has('assignee') && issue.delegate ? <DelegateAvatar delegate={issue.delegate}/> : null}
@@ -379,17 +390,6 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
         {displayProperties.has('myActivity') && <time className={styles.rowDate} aria-label={issue.myActivityAt ? `My activity ${formatFullDate(issue.myActivityAt)}` : 'No activity'} dateTime={issue.myActivityAt}>{issue.myActivityAt ? formatRowDate(issue.myActivityAt) : null}</time>}
         {displayProperties.has('timeInStatus') && <time className={styles.rowDate} aria-label={issue.timeInStatusMinutes == null ? 'Time in status unavailable' : `${formatTimeInStatus(issue.timeInStatusMinutes)} in status`}>{issue.timeInStatusMinutes == null ? null : <><Clock3 size={12}/>{formatTimeInStatus(issue.timeInStatusMinutes)}</>}</time>}
         {displayProperties.has('links') && <span className={styles.rowDate} aria-label={issue.linkCount ? `${issue.linkCount} links` : 'No links'}>{issue.linkCount ? <><Link2 size={12}/>{issue.linkCount}</> : null}</span>}
-        {displayProperties.has('pullRequests') || issue.blockedByCount || issue.blockingCount ? (
-          <span className={styles.rowDate}>
-            <IssueWidgetAdornments
-              showPullRequests={displayProperties.has('pullRequests')}
-              pullRequestLifecycle={issue.pullRequestLifecycle}
-              pullRequestCount={issue.pullRequestCount ?? 0}
-              blockedByCount={issue.blockedByCount ?? 0}
-              blockingCount={issue.blockingCount ?? 0}
-            />
-          </span>
-        ) : null}
         <span aria-hidden="true"/>
       </a>
     </ContextMenu.Trigger>

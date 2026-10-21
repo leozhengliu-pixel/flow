@@ -1,5 +1,5 @@
 import { GitPullRequest } from 'lucide-react'
-import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
+import { IssueRelationChip } from './issue-relation-chip'
 import styles from './issues-split-view.module.css'
 import type { IssueWidgetAdornmentsModel, PullRequestLifecycle } from './issue-widget-adornments.model'
 
@@ -21,15 +21,18 @@ function PrIcon({ lifecycle }: { lifecycle?: PullRequestLifecycle }) {
 }
 
 /**
- * LS-0359 — IssueWidget adornments (PR lifecycle + Blocked/Blocking) for list rows.
+ * Pull request and blocked / blocking chips of a list row (`compact`: icon-only, as on a board card).
  */
 export function IssueWidgetAdornments({
   pullRequestLifecycle,
   pullRequestCount,
   blockedByCount,
   blockingCount,
+  blockedByIds,
+  blockingIds,
   showPullRequests = true,
-}: IssueWidgetAdornmentsModel & { showPullRequests?: boolean }) {
+  compact = false,
+}: IssueWidgetAdornmentsModel & { showPullRequests?: boolean; compact?: boolean }) {
   const showPr = showPullRequests && pullRequestCount > 0
   const showBlocked = blockedByCount > 0
   const showBlocking = blockingCount > 0
@@ -48,28 +51,8 @@ export function IssueWidgetAdornments({
           <span>{pullRequestCount}</span>
         </span>
       ) : null}
-      {showBlocked ? (
-        <span
-          className={styles.adornment}
-          data-relation="blocked_by"
-          aria-label={blockedByCount === 1 ? 'Blocked by 1 issue' : `Blocked by ${blockedByCount} issues`}
-          title="Blocked by"
-        >
-          <IssueActionGlyph label="Blocked by…" fallback={<span aria-hidden="true">⊘</span>} />
-          {blockedByCount > 1 ? <span>{blockedByCount}</span> : null}
-        </span>
-      ) : null}
-      {showBlocking ? (
-        <span
-          className={styles.adornment}
-          data-relation="blocks"
-          aria-label={blockingCount === 1 ? 'Blocking 1 issue' : `Blocking ${blockingCount} issues`}
-          title="Blocking"
-        >
-          <IssueActionGlyph label="Blocking…" fallback={<span aria-hidden="true">⊞</span>} />
-          {blockingCount > 1 ? <span>{blockingCount}</span> : null}
-        </span>
-      ) : null}
+      {showBlocked ? <IssueRelationChip kind="blocked_by" count={blockedByCount} ids={blockedByIds} compact={compact}/> : null}
+      {showBlocking ? <IssueRelationChip kind="blocks" count={blockingCount} ids={blockingIds} compact={compact}/> : null}
     </span>
   )
 }

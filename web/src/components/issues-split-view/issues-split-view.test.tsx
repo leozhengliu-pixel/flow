@@ -174,4 +174,15 @@ describe('IssueWidgetAdornments', () => {
     expect(screen.getByLabelText('Blocked by 1 issue')).toBeInTheDocument()
     expect(screen.getByLabelText('Blocking 3 issues')).toBeInTheDocument()
   })
+
+  it('shows the relation count even for a single issue and drops it on a compact (board) chip', () => {
+    const { container, rerender } = renderWithI18n(
+      <IssueWidgetAdornments pullRequestCount={0} blockedByCount={1} blockingCount={2} />,
+    )
+    expect(container.querySelector('[data-relation="blocked_by"]')).toHaveTextContent('1')
+    expect(container.querySelector('[data-relation="blocks"]')).toHaveTextContent('2')
+    rerender(<I18nProvider><IssueWidgetAdornments pullRequestCount={0} blockedByCount={1} blockingCount={2} compact /></I18nProvider>)
+    expect(container.querySelector('[data-relation="blocked_by"]')).toHaveTextContent('')
+    expect(container.querySelector('[data-relation="blocked_by"]')).toHaveAttribute('data-compact')
+  })
 })
