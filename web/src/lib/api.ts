@@ -13,6 +13,8 @@ import type {
   DocumentRevision,
   CodeReview,
   ReviewImportResult,
+  ReviewImportRepository,
+  ReviewImportStatus,
   CommitSigningKey,
   Comment,
   Customer,
@@ -1336,11 +1338,20 @@ export function syncReview(id: string, force = true): Promise<CodeReview> {
   return request(`/api/reviews/${encodeURIComponent(id)}/sync`, jsonRequest("POST", { force }));
 }
 /**
- * Imports the open pull and merge requests of every connected repository
- * (new ones become reviews; closed and merged ones are updated).
+ * Imports the open pull and merge requests of the approved repositories
+ * (new ones become reviews; closed and merged ones are updated). Admins only,
+ * and only when the import is turned on for the workspace.
  */
 export function importReviews(): Promise<ReviewImportResult> {
   return request("/api/reviews/import", jsonRequest("POST", {}));
+}
+/** The pull/merge request import's setting, approved repositories and last run. */
+export function fetchReviewImport(): Promise<ReviewImportStatus> {
+  return request("/api/reviews/import");
+}
+/** Turns the import on or off and replaces the approved repositories (admins). */
+export function updateReviewImport(input: { enabled?: boolean; repositories?: ReviewImportRepository[] }): Promise<ReviewImportStatus> {
+  return request("/api/reviews/import", jsonRequest("PATCH", input));
 }
 export function fetchWebhooks(): Promise<Webhook[]> {
   return request("/api/webhooks");

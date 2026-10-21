@@ -701,6 +701,11 @@ func adminOnlyRequest(r *http.Request) bool {
 	if path == "/api/workspace/agent-guidance" {
 		return false
 	}
+	// Turning the pull/merge request import on, approving its repositories
+	// and running it ("Sync now") are workspace settings; members read status.
+	if path == "/api/reviews/import" && r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return true
+	}
 	if strings.Contains(path, "/members/") && !strings.Contains(path, "/teams/") || path == "/api/events" {
 		return true
 	}
@@ -904,6 +909,18 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		}
 		// A team setting: workspace admins manage it for private teams they have not joined.
 		return slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) && (access.Admin || access.WorkspaceAdmin || slices.Contains(access.VisibleTeamIDs, teamID))
+	}
+	// The pull/merge request import is a workspace setting, not a review:
+	// "import" is not a review id, so the per-review team check must not see
+	// it. Active members and admins read its status; changing or running it
+	// is admin-only (adminOnlyRequest). Guests do not see it.
+	if r.URL.Path == "/api/reviews/import" {
+		data, ok := s.store.WorkspaceSettingsMetadata(workspace)
+		if !ok {
+			return false
+		}
+		role, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
+		return err == nil && status == "active" && role != "guest"
 	}
 	if r.URL.Path == "/api/workspace/preferences" {
 		data, ok := s.store.WorkspaceSettingsMetadata(workspace)

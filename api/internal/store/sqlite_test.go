@@ -232,9 +232,9 @@ func TestSchemaMigrationsAreVersionedAndIdempotent(t *testing.T) {
 	if err := repository.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	// Twelve schema migrations plus the data migrations run after load (incl. the coding environments move, track K).
-	if count != 16 {
-		t.Fatalf("schema migration count = %d, want 16", count)
+	// Thirteen schema migrations plus the data migrations run after load (incl. the coding environments move, track K).
+	if count != 17 {
+		t.Fatalf("schema migration count = %d, want 17", count)
 	}
 	if err := repository.Close(); err != nil {
 		t.Fatal(err)
@@ -247,8 +247,8 @@ func TestSchemaMigrationsAreVersionedAndIdempotent(t *testing.T) {
 	if err := reopened.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 16 {
-		t.Fatalf("schema migration count after reopen = %d, want 16", count)
+	if count != 17 {
+		t.Fatalf("schema migration count after reopen = %d, want 17", count)
 	}
 }
 

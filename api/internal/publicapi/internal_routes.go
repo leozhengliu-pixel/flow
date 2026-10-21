@@ -570,6 +570,7 @@ var InternalRoutes = []string{
 	// /api/reviews
 	"GET /api/reviews",
 	"GET /api/reviews/import",
+	"PATCH /api/reviews/import",
 	"POST /api/reviews/import",
 	"GET /api/reviews/{id}",
 	"PATCH /api/reviews/{id}",

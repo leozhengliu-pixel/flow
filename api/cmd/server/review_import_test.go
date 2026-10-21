@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"path/filepath"
 	"slices"
@@ -28,16 +30,22 @@ type fakeImportHost struct {
 	paths    []string               // GET request URIs
 	headers  map[string]string      // added to every answer
 	limited  string                 // "METHOD path" answered with a rate limit
+	failing  map[string]int         // path suffix answered with a status
 	repos    []map[string]any
 	notFound map[int]bool
+	// listing, when set, is called (unlocked) before a request list is answered.
+	listing func()
 }
 
 func newFakeImportHost(t *testing.T, gitlab bool) *fakeImportHost {
-	f := &fakeImportHost{t: t, gitlab: gitlab, pulls: map[int]map[string]any{}, headers: map[string]string{}, notFound: map[int]bool{}}
-	if gitlab {
-		f.repos = []map[string]any{{"path_with_namespace": "group/sub/app"}, {"path_with_namespace": "group/archived", "archived": true}}
-	} else {
-		f.repos = []map[string]any{{"full_name": "acme/store"}, {"full_name": "acme/old", "archived": true}, {"full_name": "other/tool"}}
+	f := &fakeImportHost{t: t, gitlab: gitlab, pulls: map[int]map[string]any{}, headers: map[string]string{}, notFound: map[int]bool{}, failing: map[string]int{}}
+	// A wide token: hundreds of repositories the import must never enumerate.
+	for index := range 300 {
+		if gitlab {
+			f.repos = append(f.repos, map[string]any{"path_with_namespace": fmt.Sprintf("wide/project-%d", index)})
+		} else {
+			f.repos = append(f.repos, map[string]any{"full_name": fmt.Sprintf("acme/repo-%d", index)})
+		}
 	}
 	f.server = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.server.Close)
@@ -56,6 +64,19 @@ func (f *fakeImportHost) open(number int, title, branch string) {
 	}
 	f.pulls[number] = map[string]any{"id": 9000 + number, "number": number, "title": title, "body": "Body " + title, "state": "open", "html_url": fmt.Sprintf("https://github.com/acme/store/pull/%d", number),
 		"user": map[string]any{"login": "alice"}, "base": map[string]any{"ref": "main"}, "head": map[string]any{"ref": branch, "sha": "sha-" + branch}, "requested_reviewers": []any{}, "created_at": now, "updated_at": now}
+}
+
+// push moves a request's head to a new commit.
+func (f *fakeImportHost) push(number int, sha string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	pull := f.pulls[number]
+	if f.gitlab {
+		pull["sha"] = sha
+	} else {
+		pull["head"] = map[string]any{"ref": pull["head"].(map[string]any)["ref"], "sha": sha}
+	}
+	pull["updated_at"] = time.Now().Add(time.Minute).UTC().Format(time.RFC3339)
 }
 
 // finish closes (or merges) a request.
@@ -88,6 +109,25 @@ func (f *fakeImportHost) requested(fragment string) int {
 	return count
 }
 
+// requestedPath counts requests of exactly path (no query).
+func (f *fakeImportHost) requestedPath(path string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	count := 0
+	for _, item := range f.paths {
+		if before, _, _ := strings.Cut(item, "?"); before == path {
+			count++
+		}
+	}
+	return count
+}
+
+func (f *fakeImportHost) total() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.paths)
+}
+
 func (f *fakeImportHost) serve(w http.ResponseWriter, r *http.Request) {
 	token := r.Header.Get("Authorization") == "Bearer local-test-token"
 	if f.gitlab {
@@ -97,12 +137,22 @@ func (f *fakeImportHost) serve(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"message": "Bad credentials"})
 		return
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	repo, list, single := "/repos/acme/store", "/pulls", "/pulls/"
+	if f.gitlab {
+		repo, list, single = "/api/v4/projects/group%2Fsub%2Fapp", "/merge_requests", "/merge_requests/"
+	}
 	path := r.URL.EscapedPath()
+	f.mu.Lock()
 	if r.Method == http.MethodGet {
 		f.paths = append(f.paths, r.URL.RequestURI())
 	}
+	listing := f.listing
+	f.mu.Unlock()
+	if listing != nil && path == repo+list {
+		listing()
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	for key, value := range f.headers {
 		w.Header().Set(key, value)
 	}
@@ -111,6 +161,12 @@ func (f *fakeImportHost) serve(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(time.Now().Add(30*time.Minute).Unix(), 10))
 		writeJSON(w, http.StatusForbidden, map[string]string{"message": "API rate limit exceeded"})
 		return
+	}
+	for suffix, status := range f.failing {
+		if strings.HasSuffix(path, suffix) {
+			writeJSON(w, status, map[string]string{"message": "Internal Server Error"})
+			return
+		}
 	}
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
@@ -131,10 +187,6 @@ func (f *fakeImportHost) serve(w http.ResponseWriter, r *http.Request) {
 		if state := f.pulls[number]["state"]; state == "open" || state == "opened" {
 			open = append(open, f.pulls[number])
 		}
-	}
-	repo, list, single := "/repos/acme/store", "/pulls", "/pulls/"
-	if f.gitlab {
-		repo, list, single = "/api/v4/projects/group%2Fsub%2Fapp", "/merge_requests", "/merge_requests/"
 	}
 	switch {
 	case !f.gitlab && path == "/user/repos", f.gitlab && path == "/api/v4/projects":
@@ -164,9 +216,43 @@ func (f *fakeImportHost) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// newReviewImportServer is a workspace with a classic connection to fake.
+// importRecorder counts the review import's workspace writes and realtime events.
+type importRecorder struct {
+	mu     sync.Mutex
+	events []string
+}
+
+func (r *importRecorder) sink(workspace string, event domain.RealtimeEvent) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.events = append(r.events, event.Type)
+}
+
+func (r *importRecorder) count(types ...string) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	count := 0
+	for _, item := range r.events {
+		if len(types) == 0 || slices.Contains(types, item) {
+			count++
+		}
+	}
+	return count
+}
+
+func (r *importRecorder) reset() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.events = nil
+}
+
+// newReviewImportServer is a workspace with a classic connection to fake,
+// with the import allowed on the server (FLOW_REVIEW_IMPORT=on) but not yet
+// turned on for the workspace.
 func newReviewImportServer(t *testing.T, fake *fakeImportHost, config map[string]string) (http.Handler, *server, *store.SQLiteStore) {
 	t.Helper()
+	t.Setenv("FLOW_REVIEW_IMPORT", "on")
+	t.Setenv("FLOW_REVIEW_IMPORT_INTERVAL", "")
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -187,8 +273,20 @@ func newReviewImportServer(t *testing.T, fake *fakeImportHost, config map[string
 	}); err != nil {
 		t.Fatal(err)
 	}
-	s := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true}
+	limits := defaultReviewImportLimits
+	limits.Writes, limits.WriteDelay = 200, 0
+	s := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true, reviewImportLimits: &limits}
 	return newHandler(s), s, repository
+}
+
+// approveImport turns the import on for the workspace with these repositories.
+func approveImport(t *testing.T, handler http.Handler, provider string, repositories ...string) reviewImportStatus {
+	t.Helper()
+	items := []reviewImportRepository{}
+	for _, name := range repositories {
+		items = append(items, reviewImportRepository{Provider: provider, FullName: name})
+	}
+	return requestJSON[reviewImportStatus](t, handler, http.MethodPatch, "/api/reviews/import", map[string]any{"enabled": true, "repositories": items}, http.StatusOK)
 }
 
 func importedReviews(repository *store.SQLiteStore, provider string) map[int][]domain.CodeReview {
@@ -201,28 +299,38 @@ func importedReviews(repository *store.SQLiteStore, provider string) map[int][]d
 	return result
 }
 
-func TestReviewImportCreatesOpenPullRequestsWithoutDuplicates(t *testing.T) {
+func TestReviewImportCreatesOpenPullRequestsAndSkipsUnchangedOnes(t *testing.T) {
 	fake := newFakeImportHost(t, false)
-	for number := 1; number <= 105; number++ {
+	for number := 1; number <= 40; number++ {
 		fake.open(number, fmt.Sprintf("Change %d", number), fmt.Sprintf("change-%d", number))
 	}
-	fake.open(106, "TST-1 Fix the checkout", "tst-1-fix")
+	fake.open(41, "TST-1 Fix the checkout", "tst-1-fix")
 	handler, _, repository := newReviewImportServer(t, fake, nil)
+	recorder := &importRecorder{}
+	repository.SetRealtimeSink(recorder.sink)
+	approveImport(t, handler, "github", "acme/store")
 
 	result := requestJSON[reviewImportResult](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusOK)
-	if result.Repositories != 1 || result.Imported != 106 || result.Updated != 0 || len(result.Errors) != 0 {
+	if result.Repositories != 1 || result.Imported != 41 || result.Updated != 0 || result.Synced != 41 || len(result.Errors) != 0 || result.Trigger != "manual" {
 		t.Fatalf("first import = %+v", result)
 	}
-	if fake.requested("/repos/acme/store/pulls?state=open") != 2 || fake.requested("other/tool") != 0 || fake.requested("acme/old") != 0 {
-		t.Fatalf("listing must page through the organization's active repositories: %v", fake.paths)
+	if fake.requested("/user/repos") != 0 || fake.requested("acme/repo-") != 0 {
+		t.Fatalf("the import enumerated the token's repositories: %v", fake.paths)
+	}
+	// One coalesced write and realtime event for the whole run, then one per synced review.
+	if got := recorder.count("review.imported"); got != 1 {
+		t.Fatalf("review.imported events = %d, want 1", got)
+	}
+	if got := recorder.count("review.synced"); got != 41 {
+		t.Fatalf("review.synced events = %d, want 41", got)
 	}
 	reviews := importedReviews(repository, "github")
-	if len(reviews) != 106 {
+	if len(reviews) != 41 {
 		t.Fatalf("imported reviews = %d", len(reviews))
 	}
-	linked := reviews[106][0]
-	if linked.ExternalID != "9106" || linked.RepositoryOwner != "acme" || linked.RepositoryName != "store" || linked.Status != "open" || linked.HeadBranch != "tst-1-fix" ||
-		linked.URL != "https://github.com/acme/store/pull/106" || linked.Author.ID != "github:alice" || linked.Description != "Body TST-1 Fix the checkout" {
+	linked := reviews[41][0]
+	if linked.ExternalID != "9041" || linked.RepositoryOwner != "acme" || linked.RepositoryName != "store" || linked.Status != "open" || linked.HeadBranch != "tst-1-fix" ||
+		linked.URL != "https://github.com/acme/store/pull/41" || linked.Author.ID != "github:alice" || linked.Description != "Body TST-1 Fix the checkout" || linked.SyncedAt == nil {
 		t.Fatalf("imported review = %+v", linked)
 	}
 	issue := repository.Bootstrap().Issues[slices.IndexFunc(repository.Bootstrap().Issues, func(issue domain.Issue) bool { return issue.Identifier == "TST-1" })]
@@ -230,9 +338,26 @@ func TestReviewImportCreatesOpenPullRequestsWithoutDuplicates(t *testing.T) {
 		t.Fatalf("issue not linked from the title: %v", linked.IssueIDs)
 	}
 
+	// Nothing changed on the code host: no workspace write, no realtime
+	// event, no full sync.
+	recorder.reset()
+	events, err := repository.Events(t.Context(), "review-import")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := fake.requested("/files")
 	again := requestJSON[reviewImportResult](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusOK)
-	if again.Imported != 0 || again.Updated != 0 || again.Closed != 0 {
-		t.Fatalf("re-sync changed reviews: %+v", again)
+	if again.Imported != 0 || again.Updated != 0 || again.Closed != 0 || again.Synced != 0 || again.Writes != 0 || again.SkippedUnchanged != 41 || again.Scanned != 41 {
+		t.Fatalf("unchanged re-import = %+v", again)
+	}
+	if got := recorder.count(); got != 0 {
+		t.Fatalf("an unchanged import published %d realtime events: %v", got, recorder.events)
+	}
+	if after, _ := repository.Events(t.Context(), "review-import"); len(after) != len(events) {
+		t.Fatalf("an unchanged import wrote review.imported")
+	}
+	if fake.requested("/files") != files {
+		t.Fatal("an unchanged pull request was synced again")
 	}
 	for number, items := range importedReviews(repository, "github") {
 		if len(items) != 1 {
@@ -240,8 +365,16 @@ func TestReviewImportCreatesOpenPullRequestsWithoutDuplicates(t *testing.T) {
 		}
 	}
 	status := requestJSON[reviewImportStatus](t, handler, http.MethodGet, "/api/reviews/import", nil, http.StatusOK)
-	if status.Last == nil || status.Last.Repositories != 1 || status.Running || status.Background == "" {
+	if status.Last == nil || status.Last.SkippedUnchanged != 41 || status.Running || !status.Active || !status.Available || !status.Enabled || status.NextRunAt == nil ||
+		len(status.Repositories) != 1 || status.Repositories[0].FullName != "acme/store" {
 		t.Fatalf("status = %+v", status)
+	}
+
+	// A new head commit: that review only is updated and synced again.
+	fake.push(7, "sha-new")
+	pushed := requestJSON[reviewImportResult](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusOK)
+	if pushed.Synced != 1 || pushed.Updated != 0 || pushed.Writes != 1 || fake.requested("/pulls/7/files") != 2 || fake.requested("/pulls/8/files") != 1 {
+		t.Fatalf("pushed = %+v", pushed)
 	}
 }
 
@@ -251,6 +384,7 @@ func TestReviewImportUpdatesClosedAndMergedPullRequests(t *testing.T) {
 		fake.open(number, fmt.Sprintf("Change %d", number), fmt.Sprintf("change-%d", number))
 	}
 	handler, _, repository := newReviewImportServer(t, fake, nil)
+	approveImport(t, handler, "github", "acme/store")
 	requestJSON[reviewImportResult](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusOK)
 
 	fake.finish(1, true)
@@ -258,9 +392,10 @@ func TestReviewImportUpdatesClosedAndMergedPullRequests(t *testing.T) {
 	fake.mu.Lock()
 	fake.pulls[3]["title"] = "Change 3, renamed"
 	fake.pulls[3]["draft"] = true
+	fake.pulls[3]["updated_at"] = time.Now().Add(time.Minute).UTC().Format(time.RFC3339)
 	fake.mu.Unlock()
 	result := requestJSON[reviewImportResult](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusOK)
-	if result.Imported != 0 || result.Closed != 2 || result.Updated != 3 {
+	if result.Imported != 0 || result.Closed != 2 || result.Updated != 3 || result.SkippedUnchanged != 1 {
 		t.Fatalf("second import = %+v", result)
 	}
 	reviews := importedReviews(repository, "github")
@@ -275,8 +410,9 @@ func TestReviewImportUpdatesClosedAndMergedPullRequests(t *testing.T) {
 	}
 	// Closed requests are read once; a reopened one is open again.
 	fake.open(2, "Change 2", "change-2")
+	mergedReads := fake.requestedPath("/repos/acme/store/pulls/1")
 	result = requestJSON[reviewImportResult](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusOK)
-	if result.Updated != 1 || importedReviews(repository, "github")[2][0].Status != "open" || fake.requested("/repos/acme/store/pulls/1") != 1 {
+	if result.Updated != 1 || importedReviews(repository, "github")[2][0].Status != "open" || fake.requestedPath("/repos/acme/store/pulls/1") != mergedReads {
 		t.Fatalf("reopen = %+v; requests %v", result, fake.paths)
 	}
 }
@@ -285,6 +421,7 @@ func TestReviewImportAndWebhooksShareOneReview(t *testing.T) {
 	fake := newFakeImportHost(t, false)
 	fake.open(1, "Change 1", "change-1")
 	handler, _, repository := newReviewImportServer(t, fake, map[string]string{"webhookSecret": "secret"})
+	approveImport(t, handler, "github", "acme/store")
 	opened := func(number int, delivery string) {
 		fake.mu.Lock()
 		pull := fake.pulls[number]
@@ -333,38 +470,34 @@ func TestReviewImportAndWebhooksShareOneReview(t *testing.T) {
 	}
 }
 
-func TestReviewImportQueuesFullSyncOfImportedReviews(t *testing.T) {
-	previous := reviewSyncRunner
-	reviewSyncRunner = func(job func()) { job() }
-	t.Cleanup(func() { reviewSyncRunner = previous })
-	fake := newFakeImportHost(t, false)
-	fake.open(1, "Change 1", "change-1")
-	handler, _, repository := newReviewImportServer(t, fake, nil)
-	requestJSON[reviewImportResult](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusOK)
-	review := importedReviews(repository, "github")[1][0]
-	if review.SyncedAt == nil || review.SyncError != "" || review.HeadSHA != "sha-change-1" {
-		t.Fatalf("imported review was not synced: %+v", review)
-	}
-	// Nothing changed on the code host: no second full sync.
-	files := fake.requested("/pulls/1/files")
-	requestJSON[reviewImportResult](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusOK)
-	if fake.requested("/pulls/1/files") != files {
-		t.Fatal("an unchanged pull request was synced again")
-	}
-}
-
-func TestReviewImportGitLabSelfManagedMergeRequests(t *testing.T) {
+func TestReviewImportReadsOnlyApprovedRepositoriesOfAWideConnection(t *testing.T) {
+	// GitLab without an organization filter, a token reaching 300 projects.
 	fake := newFakeImportHost(t, true)
 	fake.open(3, "Rename math", "rename")
+	handler, _, repository := newReviewImportServer(t, fake, nil)
+
+	// Turned on with nothing approved: nothing is read or imported.
+	status := requestJSON[reviewImportStatus](t, handler, http.MethodPatch, "/api/reviews/import", map[string]any{"enabled": true}, http.StatusOK)
+	if !status.Active || len(status.Repositories) != 0 {
+		t.Fatalf("status = %+v", status)
+	}
+	result := requestJSON[reviewImportResult](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusOK)
+	if result.Repositories != 0 || result.Imported != 0 || fake.total() != 0 || len(importedReviews(repository, "gitlab")) != 0 {
+		t.Fatalf("an empty approval imported: %+v %v", result, fake.paths)
+	}
+
+	// One approved project: only it is read.
+	approveImport(t, handler, "gitlab", "https://gitlab.intranet.example/group/sub/app/-/merge_requests")
 	fake.open(4, "Add docs", "docs")
 	fake.open(5, "Experiment", "experiment")
-	handler, _, repository := newReviewImportServer(t, fake, nil)
-	result := requestJSON[reviewImportResult](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusOK)
+	result = requestJSON[reviewImportResult](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusOK)
 	if result.Repositories != 1 || result.Imported != 3 || len(result.Errors) != 0 {
 		t.Fatalf("gitlab import = %+v (%v)", result, fake.paths)
 	}
-	if fake.requested("min_access_level=20") != 1 || fake.requested("group%2Farchived") != 0 {
-		t.Fatalf("project listing = %v", fake.paths)
+	for _, path := range fake.paths {
+		if !strings.HasPrefix(path, "/api/v4/projects/group%2Fsub%2Fapp/") {
+			t.Fatalf("read outside the approved project: %s", path)
+		}
 	}
 	review := importedReviews(repository, "gitlab")[3][0]
 	if review.RepositoryOwner != "group" || review.RepositoryName != "sub/app" || review.ExternalID != "5003" || review.BaseBranch != "main" || review.Author.ID != "gitlab:alice" {
@@ -380,6 +513,138 @@ func TestReviewImportGitLabSelfManagedMergeRequests(t *testing.T) {
 	if result.Closed != 3 || reviews[3][0].Status != "merged" || reviews[4][0].Status != "closed" || reviews[5][0].Status != "closed" {
 		t.Fatalf("gitlab states = %+v: %s %s %s", result, reviews[3][0].Status, reviews[4][0].Status, reviews[5][0].Status)
 	}
+
+	// Approvals are validated.
+	requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/reviews/import", map[string]any{"repositories": []map[string]string{{"provider": "gitlab", "repository": "no-slash"}}}, http.StatusBadRequest)
+	requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/reviews/import", map[string]any{"repositories": []map[string]string{{"provider": "github", "repository": "acme/store"}}}, http.StatusBadRequest)
+}
+
+func TestReviewImportBacksOffAFailingMergeRequestAndContinues(t *testing.T) {
+	fake := newFakeImportHost(t, true)
+	for number := 1; number <= 3; number++ {
+		fake.open(number, fmt.Sprintf("Change %d", number), fmt.Sprintf("change-%d", number))
+	}
+	fake.failing["/merge_requests/2/diffs"] = http.StatusInternalServerError
+	handler, s, repository := newReviewImportServer(t, fake, nil)
+	approveImport(t, handler, "gitlab", "group/sub/app")
+
+	result := requestJSON[reviewImportResult](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusOK)
+	if result.Imported != 3 || result.Synced != 2 || result.Failed != 1 || len(result.Failures) != 1 || result.Failures[0].BackoffUntil == nil ||
+		time.Until(*result.Failures[0].BackoffUntil) < 10*time.Minute || !strings.Contains(result.Failures[0].Target, "#2") {
+		t.Fatalf("first import = %+v", result)
+	}
+	reviews := importedReviews(repository, "gitlab")
+	if reviews[1][0].SyncedAt == nil || reviews[3][0].SyncedAt == nil || reviews[3][0].SyncError != "" {
+		t.Fatal("one failing merge request blocked the others")
+	}
+	status := requestJSON[reviewImportStatus](t, handler, http.MethodGet, "/api/reviews/import", nil, http.StatusOK)
+	if len(status.Backoffs) != 1 || status.Backoffs[0].BackoffUntil == nil || !strings.Contains(status.Backoffs[0].Message, "500") {
+		t.Fatalf("backoff not reported: %+v", status.Backoffs)
+	}
+	diffs := fake.requested("/merge_requests/2/diffs")
+
+	// Not retried before the backoff expires, by Sync now or the scheduler.
+	again := requestJSON[reviewImportResult](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusOK)
+	if fake.requested("/merge_requests/2/diffs") != diffs || again.BackedOff != 1 || again.Failed != 0 || again.Writes != 0 {
+		t.Fatalf("retried during backoff: %+v", again)
+	}
+	s.runReviewImportTick(t.Context(), time.Now().Add(time.Hour))
+	if fake.requested("/merge_requests/2/diffs") != diffs {
+		t.Fatal("the scheduler retried during backoff")
+	}
+
+	// Once it expires, it is retried and the next backoff is longer.
+	items, err := repository.ReviewImportItems(t.Context(), "test-workspace", "gitlab:group/sub/app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	item := items["gitlab:group/sub/app#2"]
+	item.BackoffUntil = time.Now().Add(-time.Second)
+	if err := repository.SaveReviewImportItem(t.Context(), "test-workspace", item); err != nil {
+		t.Fatal(err)
+	}
+	retried := requestJSON[reviewImportResult](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusOK)
+	if fake.requested("/merge_requests/2/diffs") == diffs || retried.Failed != 1 || retried.Failures[0].Failures != 2 || time.Until(*retried.Failures[0].BackoffUntil) < 25*time.Minute {
+		t.Fatalf("retry = %+v", retried)
+	}
+	// Recovered: synced, backoff cleared.
+	delete(fake.failing, "/merge_requests/2/diffs")
+	items, _ = repository.ReviewImportItems(t.Context(), "test-workspace", "gitlab:group/sub/app")
+	item = items["gitlab:group/sub/app#2"]
+	item.BackoffUntil = time.Now().Add(-time.Second)
+	_ = repository.SaveReviewImportItem(t.Context(), "test-workspace", item)
+	recovered := requestJSON[reviewImportResult](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusOK)
+	status = requestJSON[reviewImportStatus](t, handler, http.MethodGet, "/api/reviews/import", nil, http.StatusOK)
+	if recovered.Synced != 1 || len(status.Backoffs) != 0 {
+		t.Fatalf("recovery = %+v, backoffs %+v", recovered, status.Backoffs)
+	}
+}
+
+func TestReviewImportRunsOnOneReplicaAtATime(t *testing.T) {
+	fake := newFakeImportHost(t, false)
+	fake.open(1, "Change 1", "change-1")
+	handler, first, repository := newReviewImportServer(t, fake, nil)
+	approveImport(t, handler, "github", "acme/store")
+	// A second replica on the same database.
+	second := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true, reviewImportLimits: first.reviewImportLimits}
+
+	entered, release := make(chan struct{}), make(chan struct{})
+	var once, released sync.Once
+	t.Cleanup(func() { released.Do(func() { close(release) }) })
+	fake.listing = func() {
+		once.Do(func() {
+			close(entered)
+			<-release
+		})
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := first.runReviewImport(t.Context(), "test-workspace", "schedule")
+		done <- err
+	}()
+	<-entered
+	if _, err := second.runReviewImport(t.Context(), "test-workspace", "manual"); !errors.Is(err, errReviewImportRunning) {
+		t.Fatalf("second replica ran while the first held the lease: %v", err)
+	}
+	second.runReviewImportTick(t.Context(), time.Now().Add(time.Hour))
+	if lists := fake.requestedPath("/repos/acme/store/pulls"); lists != 1 {
+		t.Fatalf("lists = %d", lists)
+	}
+	status := requestJSON[reviewImportStatus](t, newHandler(second), http.MethodGet, "/api/reviews/import", nil, http.StatusOK)
+	if !status.Running {
+		t.Fatal("status does not show the running import")
+	}
+	released.Do(func() { close(release) })
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if len(importedReviews(repository, "github")[1]) != 1 {
+		t.Fatal("the first replica's run did not finish")
+	}
+	// The lease is released: the second replica runs next.
+	if _, err := second.runReviewImport(t.Context(), "test-workspace", "manual"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReviewImportBoundsARunAndResumesAtTheCursor(t *testing.T) {
+	fake := newFakeImportHost(t, false)
+	fake.open(1, "Change 1", "change-1")
+	handler, s, _ := newReviewImportServer(t, fake, nil)
+	limits := *s.reviewImportLimits
+	limits.Repositories = 2
+	s.reviewImportLimits = &limits
+	// Five approved repositories: the fake has only acme/store, so the
+	// others fail (and back off) — each run reads two.
+	approveImport(t, handler, "github", "acme/store", "acme/a", "acme/b", "acme/c", "acme/d")
+	first := requestJSON[reviewImportResult](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusOK)
+	if !first.Partial || fake.requestedPath("/repos/acme/store/pulls") != 1 || fake.requestedPath("/repos/acme/a/pulls") != 1 || fake.requestedPath("/repos/acme/b/pulls") != 0 {
+		t.Fatalf("first run = %+v %v", first, fake.paths)
+	}
+	second := requestJSON[reviewImportResult](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusOK)
+	if !second.Partial || fake.requestedPath("/repos/acme/b/pulls") != 1 || fake.requestedPath("/repos/acme/c/pulls") != 1 || fake.requestedPath("/repos/acme/store/pulls") != 1 {
+		t.Fatalf("second run did not resume at the cursor: %+v %v", second, fake.paths)
+	}
 }
 
 func TestReviewImportStopsAtTheRateLimit(t *testing.T) {
@@ -387,80 +652,105 @@ func TestReviewImportStopsAtTheRateLimit(t *testing.T) {
 	fake.open(1, "Change 1", "change-1")
 	fake.headers["X-RateLimit-Remaining"] = "12"
 	fake.headers["X-RateLimit-Reset"] = strconv.FormatInt(time.Now().Add(20*time.Minute).Unix(), 10)
-	handler, _, repository := newReviewImportServer(t, fake, nil)
+	handler, _, _ := newReviewImportServer(t, fake, nil)
+	approveImport(t, handler, "github", "acme/store")
 	result := requestJSON[reviewImportResult](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusOK)
-	if result.RateLimitedUntil == nil || time.Until(*result.RateLimitedUntil) < 15*time.Minute || fake.requested("/pulls") != 0 || len(importedReviews(repository, "github")) != 0 {
-		t.Fatalf("a nearly spent budget must stop the run before listing pulls: %+v %v", result, fake.paths)
+	if result.RateLimitedUntil == nil || time.Until(*result.RateLimitedUntil) < 15*time.Minute || fake.requested("/files") != 0 {
+		t.Fatalf("a nearly spent budget must stop the run before the full syncs: %+v %v", result, fake.paths)
 	}
-	// Sync now waits until the reset.
+	// Sync now waits until the reset; so does the schedule.
 	requestJSON[map[string]any](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusTooManyRequests)
+	status := requestJSON[reviewImportStatus](t, handler, http.MethodGet, "/api/reviews/import", nil, http.StatusOK)
+	if status.NextRunAt == nil || time.Until(*status.NextRunAt) < 15*time.Minute || status.RateLimitedUntil == nil {
+		t.Fatalf("status = %+v", status)
+	}
 
 	fake = newFakeImportHost(t, false)
 	fake.open(1, "Change 1", "change-1")
 	fake.limited = "GET /repos/acme/store/pulls"
 	handler, _, _ = newReviewImportServer(t, fake, nil)
+	approveImport(t, handler, "github", "acme/store")
 	result = requestJSON[reviewImportResult](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusOK)
 	if result.RateLimitedUntil == nil || result.Imported != 0 {
 		t.Fatalf("a rate limited answer must stop the run: %+v", result)
 	}
 }
 
-func TestReviewImportNeededWithoutWorkingWebhooks(t *testing.T) {
-	fake := newFakeImportHost(t, false)
-	_, s, repository := newReviewImportServer(t, fake, nil)
-	data := repository.Bootstrap()
-	if reason := s.reviewImportNeeded(t.Context(), data, "auto"); !strings.Contains(reason, "GitHub has no webhook") {
-		t.Fatalf("no webhook secret: %q", reason)
-	}
-	index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == "github-import" })
-	data.IntegrationConnections[index].Config["webhookSecret"] = "secret"
-	if reason := s.reviewImportNeeded(t.Context(), data, "auto"); !strings.Contains(reason, "no webhook recently") {
-		t.Fatalf("never delivered: %q", reason)
-	}
-	recent := time.Now().Add(-time.Hour)
-	data.IntegrationConnections[index].LastWebhookAt = &recent
-	if reason := s.reviewImportNeeded(t.Context(), data, "auto"); reason != "" {
-		t.Fatalf("healthy webhook: %q", reason)
-	}
-	if reason := s.reviewImportNeeded(t.Context(), data, "always"); reason == "" {
-		t.Fatal("always imports")
-	}
-	data.IntegrationConnections[index].LastWebhookAt = nil
-	if reason := s.reviewImportNeeded(t.Context(), data, "off"); reason != "" {
-		t.Fatalf("off: %q", reason)
-	}
-}
-
 func TestReviewImportSchedulerRunsDueWorkspaces(t *testing.T) {
 	fake := newFakeImportHost(t, false)
 	fake.open(1, "Change 1", "change-1")
-	_, s, repository := newReviewImportServer(t, fake, nil)
-	settings := reviewImportSettings{Mode: "auto", Interval: 10 * time.Minute}
+	handler, s, repository := newReviewImportServer(t, fake, nil)
 	now := time.Now()
-	s.runReviewImportTick(t.Context(), settings, now)
-	if len(importedReviews(repository, "github")) != 1 {
-		t.Fatal("the background import did not run for a workspace without webhooks")
+	s.runReviewImportTick(t.Context(), now)
+	if fake.total() != 0 {
+		t.Fatal("the scheduler ran for a workspace that did not turn the import on")
 	}
-	lists := fake.requested("/pulls?state=open")
-	s.runReviewImportTick(t.Context(), settings, now.Add(time.Minute))
-	if fake.requested("/pulls?state=open") != lists {
+	approveImport(t, handler, "github", "acme/store")
+	s.runReviewImportTick(t.Context(), time.Now())
+	if len(importedReviews(repository, "github")) != 1 {
+		t.Fatal("the background import did not run for an enabled workspace")
+	}
+	lists := fake.requestedPath("/repos/acme/store/pulls")
+	s.runReviewImportTick(t.Context(), time.Now().Add(time.Minute))
+	if fake.requestedPath("/repos/acme/store/pulls") != lists {
 		t.Fatal("ran again before the interval")
 	}
-	s.runReviewImportTick(t.Context(), settings, now.Add(11*time.Minute))
-	if fake.requested("/pulls?state=open") != lists+1 {
+	s.runReviewImportTick(t.Context(), time.Now().Add(11*time.Minute))
+	if fake.requestedPath("/repos/acme/store/pulls") != lists+1 {
 		t.Fatal("did not run after the interval")
+	}
+	status := requestJSON[reviewImportStatus](t, handler, http.MethodGet, "/api/reviews/import", nil, http.StatusOK)
+	if status.Last == nil || status.Last.Trigger != "schedule" {
+		t.Fatalf("status = %+v", status)
+	}
+}
+
+func TestReviewImportIsOffByDefaultAndEnvOffIsHard(t *testing.T) {
+	fake := newFakeImportHost(t, false)
+	fake.open(1, "Change 1", "change-1")
+	handler, s, _ := newReviewImportServer(t, fake, nil)
+
+	// Allowed on the server, never turned on for the workspace.
+	status := requestJSON[reviewImportStatus](t, handler, http.MethodGet, "/api/reviews/import", nil, http.StatusOK)
+	if status.Enabled || status.Active || !status.Available || len(status.Repositories) != 0 || status.Last != nil {
+		t.Fatalf("default status = %+v", status)
+	}
+	requestJSON[map[string]any](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusConflict)
+
+	// The workspace turned it on, the server is off: nothing runs.
+	approveImport(t, handler, "github", "acme/store")
+	for _, value := range []string{"", "off", "nonsense"} {
+		t.Setenv("FLOW_REVIEW_IMPORT", value)
+		requestJSON[map[string]any](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusConflict)
+		s.runReviewImportTick(t.Context(), time.Now().Add(time.Hour))
+		status = requestJSON[reviewImportStatus](t, handler, http.MethodGet, "/api/reviews/import", nil, http.StatusOK)
+		if status.Available || status.Active || !status.Enabled {
+			t.Fatalf("FLOW_REVIEW_IMPORT=%q status = %+v", value, status)
+		}
+	}
+	t.Setenv("FLOW_REVIEW_IMPORT", "on")
+	t.Setenv("FLOW_REVIEW_IMPORT_INTERVAL", "0")
+	requestJSON[map[string]any](t, handler, http.MethodPost, "/api/reviews/import", nil, http.StatusConflict)
+	s.runReviewImportTick(t.Context(), time.Now().Add(time.Hour))
+	if fake.total() != 0 {
+		t.Fatalf("an import ran while the server had it off: %v", fake.paths)
 	}
 }
 
 func TestReviewImportSettingsFromEnv(t *testing.T) {
 	t.Setenv("FLOW_REVIEW_IMPORT", "")
 	t.Setenv("FLOW_REVIEW_IMPORT_INTERVAL", "")
-	if settings := reviewImportSettingsFromEnv(); settings.Mode != "auto" || settings.Interval != reviewImportDefaultInterval {
+	if settings := reviewImportSettingsFromEnv(); settings.Mode != "off" || settings.Interval != reviewImportDefaultInterval {
 		t.Fatalf("default = %+v", settings)
 	}
-	t.Setenv("FLOW_REVIEW_IMPORT", "always")
+	for _, value := range []string{"on", "auto", "always"} {
+		t.Setenv("FLOW_REVIEW_IMPORT", value)
+		if settings := reviewImportSettingsFromEnv(); settings.Mode != "on" {
+			t.Fatalf("%s = %+v", value, settings)
+		}
+	}
 	t.Setenv("FLOW_REVIEW_IMPORT_INTERVAL", "30m")
-	if settings := reviewImportSettingsFromEnv(); settings.Mode != "always" || settings.Interval != 30*time.Minute {
+	if settings := reviewImportSettingsFromEnv(); settings.Mode != "on" || settings.Interval != 30*time.Minute {
 		t.Fatalf("configured = %+v", settings)
 	}
 	t.Setenv("FLOW_REVIEW_IMPORT_INTERVAL", "0")
@@ -469,7 +759,44 @@ func TestReviewImportSettingsFromEnv(t *testing.T) {
 	}
 }
 
+func TestReviewImportEndpointsForAdminsAndMembers(t *testing.T) {
+	t.Setenv("FLOW_REVIEW_IMPORT", "on")
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	api := httptest.NewServer(newHandler(&server{store: repository, uploadPath: t.TempDir()}))
+	defer api.Close()
+	login := func(email string) *http.Client {
+		jar, _ := cookiejar.New(nil)
+		client := &http.Client{Jar: jar}
+		authRequest[domain.AuthSession](t, client, http.MethodPost, api.URL+"/api/auth/login", map[string]string{"email": email, "password": "test-password"}, "", http.StatusOK)
+		return client
+	}
+	admin, member := login("admin@example.test"), login("member@example.test")
+	authRequest[domain.WorkspaceMember](t, admin, http.MethodPatch, api.URL+"/api/workspaces/test-workspace/members/usr_member", map[string]string{"role": "member"}, "", http.StatusOK)
+	endpoint := api.URL + "/api/reviews/import"
+
+	// Admins read, configure and run it (never "outside your teams").
+	authRequest[reviewImportStatus](t, admin, http.MethodGet, endpoint, nil, "test-workspace", http.StatusOK)
+	status := authRequest[reviewImportStatus](t, admin, http.MethodPatch, endpoint, map[string]any{"enabled": true}, "test-workspace", http.StatusOK)
+	if !status.Active {
+		t.Fatalf("status = %+v", status)
+	}
+	if result := authRequest[reviewImportResult](t, admin, http.MethodPost, endpoint, map[string]any{}, "test-workspace", http.StatusOK); result.Repositories != 0 {
+		t.Fatalf("result = %+v", result)
+	}
+	// Members read the status; changing or running it is for admins.
+	if status := authRequest[reviewImportStatus](t, member, http.MethodGet, endpoint, nil, "test-workspace", http.StatusOK); !status.Enabled {
+		t.Fatalf("member status = %+v", status)
+	}
+	authRequest[map[string]any](t, member, http.MethodPatch, endpoint, map[string]any{"enabled": false}, "test-workspace", http.StatusForbidden)
+	authRequest[map[string]any](t, member, http.MethodPost, endpoint, map[string]any{}, "test-workspace", http.StatusForbidden)
+}
+
 func TestReviewImportThroughGitHubAppInstallation(t *testing.T) {
+	t.Setenv("FLOW_REVIEW_IMPORT", "on")
 	f := newGitHubAppFixture(t)
 	f.install()
 	answer := func(status int, body any) http.HandlerFunc {
@@ -481,9 +808,9 @@ func TestReviewImportThroughGitHubAppInstallation(t *testing.T) {
 	pull := map[string]any{"id": 9921, "number": 21, "title": "Fix checkout", "state": "open", "html_url": "https://github.com/acme/store/pull/21", "user": map[string]any{"login": "alice"},
 		"base": map[string]any{"ref": "main"}, "head": map[string]any{"ref": "flow/fix", "sha": "abc"}}
 	f.routes.Store("GET /repos/acme/store/pulls", answer(http.StatusOK, []any{pull}))
-	data := f.repo.Bootstrap()
-	if reason := f.server.reviewImportNeeded(t.Context(), data, "auto"); !strings.Contains(reason, "GitHub App") {
-		t.Fatalf("an App without deliveries needs imports: %q", reason)
+	body, _ := json.Marshal(map[string]any{"enabled": true, "repositories": []map[string]string{{"provider": "github", "repository": "acme/store"}}})
+	if rec := f.do(http.MethodPatch, "/api/reviews/import?workspace=test-workspace", body, http.Header{"Content-Type": {"application/json"}}); rec.Code != http.StatusOK {
+		t.Fatalf("approve: %d %s", rec.Code, rec.Body.String())
 	}
 	rec := f.do(http.MethodPost, "/api/reviews/import?workspace=test-workspace", nil, nil)
 	var result reviewImportResult
@@ -500,8 +827,5 @@ func TestReviewImportThroughGitHubAppInstallation(t *testing.T) {
 	}
 	if reviews := importedReviews(f.repo, "github"); len(reviews[21]) != 1 {
 		t.Fatalf("webhook duplicated the imported review: %d", len(reviews[21]))
-	}
-	if reason := f.server.reviewImportNeeded(t.Context(), f.repo.Bootstrap(), "auto"); reason != "" {
-		t.Fatalf("an App delivering webhooks needs no background import: %q", reason)
 	}
 }

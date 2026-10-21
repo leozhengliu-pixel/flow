@@ -57,7 +57,7 @@ type server struct {
 	realtime                       *realtimeHub
 	coordinator                    *coordination.Redis
 	coordinationStarted            atomic.Bool
-	reviewImports                  reviewImportTracker // runs of the open pull/merge request import (review_import.go)
+	reviewImportLimits             *reviewImportLimits // per-run bounds of the pull/merge request import (nil: defaults; review_import.go)
 	workflowSchedulerStarted       atomic.Bool
 	deliverySchedulerStarted       atomic.Bool
 	settingsLastSweep              atomic.Int64
@@ -629,6 +629,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/reviews/{id}/sync", s.syncReviewFromCodeHost)
 	mux.HandleFunc("GET /api/reviews/import", s.getReviewImport)
 	mux.HandleFunc("POST /api/reviews/import", s.importReviewsFromCodeHosts)
+	mux.HandleFunc("PATCH /api/reviews/import", s.updateReviewImport)
 	mux.HandleFunc("POST /api/sla-rules", s.createSLARule)
 	mux.HandleFunc("PATCH /api/sla-rules/{id}", s.updateSLARule)
 	mux.HandleFunc("DELETE /api/sla-rules/{id}", s.deleteSLARule)

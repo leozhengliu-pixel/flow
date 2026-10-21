@@ -45,6 +45,7 @@ import type { GitLabOAuthApplication } from "@/types/code-host-accounts";
 import type { BootstrapData, IntegrationConnection } from "@/types/flow";
 import { GITLAB_BRANCH_FORMATS, gitlabBranchExample } from "@/lib/gitlab-branch-formats";
 import { IntegrationBrandIcon } from "./integration-brand-icon";
+import { ReviewImportSettings } from "./review-import-settings";
 import { SettingsSelect } from "./settings-primitives";
 
 import "./gitlab-integration-settings.css";
@@ -330,6 +331,7 @@ export function GitLabIntegrationSettings({
           </div>
         </section>
         <GitLabLinkbacks connection={connection} onChange={updateSetting} />
+        {connection && <ReviewImportSettings provider="gitlab" data={data} className="gitlab-settings-card" />}
       </div>
       {/* Members link their own GitLab accounts on Settings › Account › Connected accounts; admins only register the OAuth app here. */}
       {connection && isWorkspaceAdmin(data) && <GitLabOAuthApplicationSection connection={connection} />}
