@@ -323,11 +323,16 @@ it('imports open pull and merge requests from the list with Sync now', async () 
   const user = userEvent.setup();
   const onReload = vi.fn().mockResolvedValue(undefined);
   api.importReviews.mockResolvedValue({ repositories: 2, imported: 3, updated: 1, closed: 0, errors: [], startedAt: '2026-10-20T00:00:00Z', finishedAt: '2026-10-20T00:00:01Z' });
-  render(<I18nProvider><ReviewsPage data={makeBootstrap({ viewer, users: [viewer, teammate], reviews: [review], teamMembers: [], userSettings: {}, integrationConnections: [{ id: 'gitlab', provider: 'gitlab' }] as never[] })} view="for-you" onNavigate={vi.fn()} onReload={onReload} onOpenSidebar={vi.fn()}/></I18nProvider>);
+  render(<I18nProvider><ReviewsPage data={makeBootstrap({ viewer, viewerRole: 'admin', users: [viewer, teammate], reviews: [review], teamMembers: [], userSettings: {}, integrationConnections: [{ id: 'gitlab', provider: 'gitlab' }] as never[] })} view="for-you" onNavigate={vi.fn()} onReload={onReload} onOpenSidebar={vi.fn()}/></I18nProvider>);
   await user.click(screen.getByRole('button', { name: 'Sync now' }));
   await waitFor(() => expect(onReload).toHaveBeenCalled());
   expect(api.importReviews).toHaveBeenCalledTimes(1);
   expect(screen.getByRole('button', { name: 'Sync now' })).not.toBeDisabled();
+});
+
+it('offers Sync now only to workspace admins', () => {
+  render(<I18nProvider><ReviewsPage data={makeBootstrap({ viewer, viewerRole: 'member', users: [viewer, teammate], reviews: [review], teamMembers: [], userSettings: {}, integrationConnections: [{ id: 'gitlab', provider: 'gitlab' }] as never[] })} view="for-you" onNavigate={vi.fn()} onReload={vi.fn()} onOpenSidebar={vi.fn()}/></I18nProvider>);
+  expect(screen.queryByRole('button', { name: 'Sync now' })).toBeNull();
 });
 
 it('opens filter submenus on hover, supports multiple statuses, and clears actual list filters', async () => {
