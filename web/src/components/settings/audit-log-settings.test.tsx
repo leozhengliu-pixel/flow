@@ -36,6 +36,19 @@ it("names the member, team and source of team membership changes", () => {
   expect(screen.getByText("webhook")).toBeInTheDocument();
 });
 
+it("names the member or group of SCIM provisioning entries with their source", () => {
+  const scimActor = { id: "scim", name: "SCIM", displayName: "SCIM provisioning", email: "", active: true, emailVerified: false };
+  renderLog([
+    { id: "audit_4", actor: scimActor, action: "deprovisioned", resourceType: "workspace_member", resourceId: "user-9", metadata: { userName: "Grace", source: "scim", deprovisionAction: "remove" }, createdAt: "2026-10-13T09:00:00.000Z" },
+    { id: "audit_3", actor: scimActor, action: "members_changed", resourceType: "scim_group", resourceId: "scimg_1", metadata: { scimGroupName: "Engineering", source: "scim" }, createdAt: "2026-10-13T08:30:00.000Z" },
+  ] as AuditLogEntry[]);
+  expect(screen.getByText("Grace")).toBeInTheDocument();
+  expect(screen.getByText("Engineering")).toBeInTheDocument();
+  expect(screen.getAllByText(/Via SCIM/)).toHaveLength(2);
+  expect(screen.getByText("workspace member")).toBeInTheDocument();
+  expect(screen.getByText("scim group")).toBeInTheDocument();
+});
+
 it("translates the change source in zh-CN", async () => {
   localStorage.setItem("flow:locale", "zh-CN");
   renderLog([{ ...removal, metadata: { ...removal.metadata, source: "scim" } }]);

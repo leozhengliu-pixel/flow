@@ -1,0 +1,32 @@
+/* Members managed by SCIM provisioning: a badge on the row and a note atop its menu. */
+.settings-member-directory-row > span:first-child > .settings-member-scim-badge {
+  flex: none;
+  padding: 1px 6px;
+  border: 0.5px solid var(--theme-border);
+  border-radius: 9999px;
+  color: var(--theme-text-secondary);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.settings-member-scim-note {
+  max-width: 220px;
+  padding: 6px 8px;
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: normal;
+}
+
+.settings-member-action-menu:has(.settings-member-scim-note) {
+  width: 240px;
+}
+
+/* Actions the identity provider owns read as unavailable; the title explains why. */
+.settings-member-action-menu .menu-item[data-disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: auto;
+}

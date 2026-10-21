@@ -342,6 +342,30 @@ it("manages a member's teams from the row menu", async () => {
   );
 });
 
+it("locks the role, profile and status of members managed by SCIM", async () => {
+  const user = userEvent.setup();
+  const input = props();
+  const data = input.data as unknown as { members: WorkspaceMember[] };
+  data.members = data.members.map((item) => (item.user.id === teammate.id ? { ...item, managedBy: "scim" } : item));
+  renderMembers(input);
+
+  const badge = within(row("Teammate")).getByText("Managed by SCIM");
+  expect(badge).toHaveAttribute("title", expect.stringContaining("identity provider"));
+  expect(within(row("Viewer")).queryByText("Managed by SCIM")).toBeNull();
+
+  await user.click(screen.getByRole("button", { name: "Open menu Teammate" }));
+  const menu = await screen.findByRole("menu");
+  expect(within(menu).getByRole("note")).toHaveTextContent("Change their role, name, email or status in your identity provider.");
+  for (const name of ["Change role…", "Update name…", "Update email…", "Suspend user…", "Remove from workspace…"]) {
+    expect(within(menu).getByRole("menuitem", { name })).toHaveAttribute("aria-disabled", "true");
+  }
+  expect(within(menu).getByRole("menuitem", { name: "Update username…" })).not.toHaveAttribute("aria-disabled");
+  expect(within(menu).getByRole("menuitem", { name: "Manage teams…" })).not.toHaveAttribute("aria-disabled");
+  await user.click(within(menu).getByRole("menuitem", { name: "Remove from workspace…" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(api.removeMember).not.toHaveBeenCalled();
+});
+
 it("removes a member from the workspace", async () => {
   const user = userEvent.setup();
   renderMembers();
