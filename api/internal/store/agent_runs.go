@@ -404,7 +404,7 @@ func (s *SQLiteStore) ClaimAgentRuns(ctx context.Context, claim AgentRunClaim) (
 	selectRows := func(query string, args ...any) (*sql.Rows, error) { return s.db.QueryContext(ctx, query, args...) }
 	if locking {
 		var err error
-		tx, err = s.db.BeginTx(ctx, nil)
+		tx, err = s.db.BeginTx(ctx, claimTxOptions)
 		if err != nil {
 			return nil, err
 		}

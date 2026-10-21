@@ -379,6 +379,13 @@ func (d *sqlDatabase) QueryRowContext(ctx context.Context, query string, args ..
 	return d.DB.QueryRowContext(ctx, rewriteSQL(query, d.dialect), args...)
 }
 
+// claimTxOptions is the isolation for lease/claim transactions that select
+// candidates with FOR UPDATE SKIP LOCKED. MySQL's default REPEATABLE READ takes
+// gap and next-key locks on the scanned index range, which SKIP LOCKED does not
+// skip, so concurrent claimers deadlock (error 1213) on the follow-up UPDATE.
+// READ COMMITTED locks only the matched rows (and is PostgreSQL's default).
+var claimTxOptions = &sql.TxOptions{Isolation: sql.LevelReadCommitted}
+
 func (d *sqlDatabase) BeginTx(ctx context.Context, options *sql.TxOptions) (*sqlTx, error) {
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == d {
 		return nil, errors.New("cannot start a transaction inside a workspace read snapshot")

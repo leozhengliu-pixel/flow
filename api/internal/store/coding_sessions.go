@@ -548,7 +548,7 @@ func (s *SQLiteStore) LeaseCodingSessions(ctx context.Context, owner string, lea
 	}
 	var claimed []candidate
 	if locking {
-		tx, err := s.db.BeginTx(ctx, nil)
+		tx, err := s.db.BeginTx(ctx, claimTxOptions)
 		if err != nil {
 			return nil, err
 		}
