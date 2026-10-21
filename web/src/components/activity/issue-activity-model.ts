@@ -181,6 +181,29 @@ export function mergeIssueEvents(previous: ActivityEvent, next: ActivityEvent): 
   return { ...previous, metadata: { ...previous.metadata, ...next.metadata } }
 }
 
+/** A session card the timeline shows; it stands in for the history row of the delegation that started it. */
+export type ActivitySessionCard = { id: string; createdAt: string; agentId?: string }
+
+/**
+ * Drops "delegated the issue to <agent>" from the history once the session that delegation started shows as a card
+ * (the card says who started it). The row names the session it started; older rows match a card by the same agent
+ * created within a minute of them. Other changes in the same row stay.
+ */
+export function withoutSessionDelegations(events: ActivityEvent[], sessions: readonly ActivitySessionCard[]): ActivityEvent[] {
+  if (!sessions.length) return events
+  return events.flatMap(event => {
+    const m = event.metadata
+    if (event.type !== 'issue.updated' || !m?.delegate) return [event]
+    const at = Date.parse(event.createdAt)
+    const shown = m.agentSessionId
+      ? sessions.some(session => session.id === m.agentSessionId)
+      : sessions.some(session => session.agentId === m.delegate && Math.abs(Date.parse(session.createdAt) - at) <= 60_000)
+    if (!shown) return [event]
+    const { delegate: _delegate, agentSessionId: _session, ...rest } = m
+    return describeIssueActivityParts({ ...event, metadata: rest }) ? [{ ...event, metadata: rest }] : []
+  })
+}
+
 /**
  * Folds consecutive field changes into single rows; `events` must be in time order. `canJoin` can keep rows apart
  * (the timeline keeps a comment posted between two changes between them).

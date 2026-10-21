@@ -7,7 +7,7 @@ export const TaskDirectory = createContext<Directory | null>(null)
 export const CommentThreads = createContext<ReadonlySet<string>>(new Set())
 export function useAgentCommentThreadIds() { return useContext(CommentThreads) }
 /** Agent sessions that do not hang off a comment (delegations, agent-opened sessions), oldest first. */
-export type StandaloneAgentSession = { id: string; createdAt: string }
+export type StandaloneAgentSession = { id: string; createdAt: string; /** The agent working the session. */ agentId?: string }
 export const StandaloneSessions = createContext<readonly StandaloneAgentSession[]>([])
 /** The issue's standalone agent sessions, so the activity timeline can place them at their chronological position. */
 export function useStandaloneAgentSessions() { return useContext(StandaloneSessions) }

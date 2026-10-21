@@ -445,7 +445,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		}
 		issue.UpdatedAt = time.Now().UTC()
 		applySLARules(data, issue, issue.UpdatedAt)
-		activity := appendActivity(data, id, "issue.updated", data.Viewer, changes)
+		activity := appendIssueUpdateActivity(data, id, changes)
 		appendIssueNotifications(data, *issue, activity, nil)
 		return nil
 	})
