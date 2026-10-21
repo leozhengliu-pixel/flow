@@ -525,6 +525,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/workspace/preferences", s.getWorkspacePreferences)
 	mux.HandleFunc("PATCH /api/workspace/preferences", s.updateWorkspacePreferences)
 	mux.HandleFunc("PATCH /api/workspace/agent-guidance", s.updateWorkspaceAgentGuidance)
+	mux.HandleFunc("GET /api/workspace/ai-credits", s.getAIUsageCredits)
+	mux.HandleFunc("GET /api/workspace/agent-feedback", s.listAgentFeedback)
 	mux.HandleFunc("POST /api/workspace/welcome-message/test", s.testWelcomeMessage)
 	mux.HandleFunc("GET /api/api-keys", s.listAPIKeys)
 	mux.HandleFunc("POST /api/api-keys", s.createAPIKey)

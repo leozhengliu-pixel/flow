@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"flow/api/internal/domain"
 )
@@ -167,7 +168,13 @@ func (s *server) updateWorkspaceAgentGuidance(w http.ResponseWriter, r *http.Req
 		return
 	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "workspace.agent_guidance_updated", "workspace", nil, func(data *domain.Bootstrap) error {
-		data.WorkspaceSettings.AgentInstructions = strings.TrimSpace(input.Instructions)
+		next := strings.TrimSpace(input.Instructions)
+		if next != data.WorkspaceSettings.AgentInstructions {
+			// "Last edit by …" under the guidance field.
+			editedAt := time.Now().UTC()
+			data.WorkspaceSettings.AgentInstructionsEditedByID, data.WorkspaceSettings.AgentInstructionsEditedAt = data.Viewer.ID, &editedAt
+		}
+		data.WorkspaceSettings.AgentInstructions = next
 		return nil
 	})
 	respondMutation(w, err, 200, map[string]string{"instructions": strings.TrimSpace(input.Instructions)})

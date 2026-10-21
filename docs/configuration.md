@@ -550,6 +550,34 @@ For a legacy OpenAI-compatible endpoint, use
 `FLOW_AGENT_PROTOCOL=openai-chat-completions`. Responses and Messages streams
 are normalized into text, reasoning, tool-call, error, and completion events.
 
+### AI credits, usage feedback and MCP connectors
+
+Settings › AI & agents shows the workspace's remaining AI credits on its Usage row, and Usage & limits shows them under
+"Workspace credits". Credits apply to Coding sessions and Loops, the usage Flow meters in `coding_usage_records`.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FLOW_AI_INCLUDED_CREDITS_USD` | empty | Dollar amount of AI credits every workspace on this deployment includes, for example `10` or `9.99`. The remaining balance is this amount minus all coding-session and loop spend recorded for the workspace since it started, never below `$0.00`. Unset, empty, zero or invalid means no included credits: the balance shows `$0.00 remaining`, as in a workspace without credits. Spend limits (Usage & limits) are separate and are enforced per period. |
+
+`GET /api/workspace/ai-credits` returns `{ includedMicros, spentMicros, remainingMicros }` (millionths of a dollar) for
+any workspace member.
+
+"Enable usage feedback" (the `usage-feedback` workspace feature flag, on by default) controls the thumbs up / down and
+"Leave feedback…" controls on Flow Agent answers. While it is off the controls are hidden and the API refuses to record
+a new rating or note (`403`); taking back an existing rating still works. Ratings and notes are stored with the
+conversation, and workspace admins can export them without any conversation text through
+`GET /api/workspace/agent-feedback` (JSON, or `?format=csv`). The loop run thumbs are not part of this switch.
+
+"Enable MCP connectors" is on until a workspace admin turns it off. A workspace's explicit choice is stored as
+`mcpConnectors` in the workspace settings; a workspace that never set it (including every workspace created before the
+switch defaulted to on, whatever older `mcpConnectorsEnabled` value it stored) has connectors on. HIPAA mode always
+turns connectors off whatever the choice is. The Allowed MCP connectors policy keeps applying while connectors are on.
+
+Triage Intelligence's Behavior rows (assignee, project, label and team) take per-value rules in
+`featureSettings.triageIntelligence.valueRules`: `{ kind, value, action }` with the user, project, label or team id and
+`suggest`, `auto` or `hide`. A rule overrides the row's action for suggestions that point at that value; the other
+values keep the row's action.
+
 ### Loop runs
 
 Loop runs are stored in their own tables (`loop_run_records` for each run's
@@ -1486,7 +1514,7 @@ Database migration 4 adds per-session authentication context for existing instal
 
 `reviewThirdPartyApplications` gates incoming OAuth applications. An authorization attempt creates an approval request without issuing a code. Administrators review it in Security settings. Approval binds the client ID and its scopes; requesting additional scopes requires another decision. Rejecting or removing approval blocks existing access tokens and refresh tokens while the policy is enabled. A delegated API key needs the `admin` scope to approve applications.
 
-`GET/PUT /api/application-policies` and `DELETE /api/application-policies/{id}` manage application decisions and external Agent MCP connectors. A connector has a server URL, owner, personal/workspace scope and pending/approved/rejected status. Personal connectors are available only to their owner. When `allowedMcpConnectors` is `approved`, discovery and execution require approval; rejected connectors are always blocked. Disabling `mcpConnectorsEnabled` also blocks tools from already-open Agent conversations.
+`GET/PUT /api/application-policies` and `DELETE /api/application-policies/{id}` manage application decisions and external Agent MCP connectors. A connector has a server URL, owner, personal/workspace scope and pending/approved/rejected status. Personal connectors are available only to their owner. When `allowedMcpConnectors` is `approved`, discovery and execution require approval; rejected connectors are always blocked. Turning MCP connectors off (`mcpConnectors: false`; they are on until an admin does, and HIPAA mode forces them off) also blocks tools from already-open Agent conversations.
 
 External MCP connectors support Streamable HTTP initialization, JSON/SSE responses, paginated `tools/list` and `tools/call`. They require both `FLOW_AGENT_TOOLS_ENABLED` and `FLOW_AGENT_WRITE_TOOLS`. In chat, comment threads and delegated issues, Flow Agent runs connector tools without asking, and records each call (connector, tool, arguments and a truncated result) in the conversation or the issue's agent activity. Tool annotations such as `destructiveHint` do not change this. It asks first only when the connector is set to always ask: `"toolApproval": "always"` on the connector (**Ask before running tools** in its settings row; workspace admins for workspace connectors, owners for personal ones). That is the only approval Flow Agent asks for: its own writes, deletes and status updates included, run at once. Loops run connector tools unattended. Discovery is bounded to 30 seconds, 10 pages per server and 128 tools total. Every call checks current membership and workspace policy again before it runs, so a connector removed, rejected or revoked since discovery is refused. Redirects and non-public production endpoints are rejected, unless the operator trusts the host (see [Trusted private endpoints](#trusted-private-endpoints)).
 

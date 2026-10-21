@@ -282,7 +282,7 @@ func (s *server) runTriageIntelligence(ctx context.Context, actor mcpActor, issu
 	// so the inverse relation is persisted too.
 	scope := []string{issueID}
 	for _, item := range generated {
-		if action, _ := triageSuggestionAction(settings, item.Type); action == "auto" && item.SuggestedIssueID != "" && !slices.Contains(scope, item.SuggestedIssueID) {
+		if action, _ := triageActionForTarget(settings, item.Type, triageSuggestionTarget(&item)); action == "auto" && item.SuggestedIssueID != "" && !slices.Contains(scope, item.SuggestedIssueID) {
 			scope = append(scope, item.SuggestedIssueID)
 		}
 	}
@@ -849,7 +849,7 @@ func (plan *triageAIPlan) suggestions(settings domain.TriageIntelligenceSettings
 	result := []domain.IssueSuggestion{}
 	rank := 0
 	for _, pick := range plan.Picks {
-		action, exists := triageSuggestionAction(settings, pick.Kind)
+		action, exists := triageActionForTarget(settings, pick.Kind, pick.TargetID)
 		if !exists || action == "hide" {
 			continue
 		}

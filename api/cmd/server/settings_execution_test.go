@@ -299,7 +299,7 @@ func TestMCPConnectorDiscoveryExecutionAndRevocation(t *testing.T) {
 			if err != nil || !strings.Contains(string(result), "found") {
 				t.Fatalf("execution: %s %v", result, err)
 			}
-			err = repo.MutateWorkspace(t.Context(), "test-workspace", "application_policy.updated", "connector", nil, func(data *domain.Bootstrap) error { data.WorkspaceSettings.MCPConnectorsEnabled = false; return nil })
+			err = repo.MutateWorkspace(t.Context(), "test-workspace", "application_policy.updated", "connector", nil, func(data *domain.Bootstrap) error { data.WorkspaceSettings.SetMCPConnectors(false); return nil })
 			if err != nil {
 				t.Fatal(err)
 			}

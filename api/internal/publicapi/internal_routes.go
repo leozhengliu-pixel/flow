@@ -678,6 +678,8 @@ var InternalRoutes = []string{
 	"POST /api/workflows/{id}/run",
 	// /api/workspace
 	"DELETE /api/workspace/audit-log-stream",
+	"GET /api/workspace/agent-feedback",
+	"GET /api/workspace/ai-credits",
 	"GET /api/workspace/audit-log-stream",
 	"GET /api/workspace/loop-settings",
 	"GET /api/workspace/preferences",

@@ -330,6 +330,9 @@ func (s *server) updateWorkspacePreferences(w http.ResponseWriter, r *http.Reque
 		if len(triageIntelligence.WorkspaceGuidance) > 8000 {
 			return errInvalid
 		}
+		if err := normalizeTriageValueRules(data, triageIntelligence); err != nil {
+			return err
+		}
 		input.FeatureSettings.InitiativeUpdateGuidance = strings.TrimSpace(input.FeatureSettings.InitiativeUpdateGuidance)
 		input.FeatureSettings.ProjectUpdateGuidance = strings.TrimSpace(input.FeatureSettings.ProjectUpdateGuidance)
 		if len(input.FeatureSettings.InitiativeUpdateGuidance) > 8000 || len(input.FeatureSettings.ProjectUpdateGuidance) > 8000 {
@@ -384,6 +387,7 @@ func (s *server) updateWorkspacePreferences(w http.ResponseWriter, r *http.Reque
 		}
 		ensureAllowedAuthServices(&input, data.WorkspaceSettings, patch)
 		reconcileAgentWebAccess(&input, data.WorkspaceSettings, patch)
+		reconcileMCPConnectors(&input, data.WorkspaceSettings, patch)
 		input.UpdatedAt = time.Now().UTC()
 		data.WorkspaceSettings = input
 		updated = input

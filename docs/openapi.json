@@ -31013,6 +31013,31 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/workspace/agent-feedback": {
+      "get": {
+        "operationId": "get_workspace_agent_feedback",
+        "tags": [
+          "workspace"
+        ],
+        "summary": "GET /api/workspace/agent-feedback",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/workspace/agent-guidance": {
       "patch": {
         "operationId": "patch_workspace_agent_guidance",
@@ -31020,6 +31045,31 @@
           "workspace"
         ],
         "summary": "PATCH /api/workspace/agent-guidance",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/workspace/ai-credits": {
+      "get": {
+        "operationId": "get_workspace_ai_credits",
+        "tags": [
+          "workspace"
+        ],
+        "summary": "GET /api/workspace/ai-credits",
         "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
         "responses": {
           "2XX": {

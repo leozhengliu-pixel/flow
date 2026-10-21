@@ -46,6 +46,12 @@ func normalizeParity(data *domain.Bootstrap) {
 		data.IssueSuggestions = []domain.IssueSuggestion{}
 	}
 	normalizeTriageIntelligenceSettings(&data.WorkspaceSettings.FeatureSettings.TriageIntelligence)
+	// MCP connectors are on until an admin turns them off; the mirror field older clients read follows the choice.
+	if data.WorkspaceSettings.MCPConnectors == nil {
+		data.WorkspaceSettings.MCPConnectorsEnabled = true
+	} else {
+		data.WorkspaceSettings.MCPConnectorsEnabled = *data.WorkspaceSettings.MCPConnectors
+	}
 }
 
 func normalizeTriageIntelligenceSettings(settings *domain.TriageIntelligenceSettings) {

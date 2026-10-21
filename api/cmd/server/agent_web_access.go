@@ -28,3 +28,22 @@ func reconcileAgentWebAccess(input *domain.WorkspaceSettings, previous domain.Wo
 		input.AgentWebSearchDisabled = previous.AgentWebSearchDisabled
 	}
 }
+
+// reconcileMCPConnectors decides Flow Agent's MCP connector switch after a workspace preferences patch, like
+// reconcileAgentWebAccess: only a patch that changes the setting records an explicit choice, so settings pages that echo
+// the whole object (with mcpConnectorsEnabled as they last read it) cannot turn "never set" (on) into an explicit value.
+// Clients send mcpConnectors; mcpConnectorsEnabled (the older client) still works when it changes the value.
+func reconcileMCPConnectors(input *domain.WorkspaceSettings, previous domain.WorkspaceSettings, patch map[string]json.RawMessage) {
+	_, hasChoice := patch["mcpConnectors"]
+	_, hasMirror := patch["mcpConnectorsEnabled"]
+	resolved := previous.MCPConnectors == nil || *previous.MCPConnectors
+	switch {
+	case hasChoice && input.MCPConnectors != nil:
+		input.SetMCPConnectors(*input.MCPConnectors)
+	case hasMirror && input.MCPConnectorsEnabled != resolved:
+		input.SetMCPConnectors(input.MCPConnectorsEnabled)
+	default:
+		input.MCPConnectors = previous.MCPConnectors
+		input.MCPConnectorsEnabled = resolved
+	}
+}

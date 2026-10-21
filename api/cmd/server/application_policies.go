@@ -133,7 +133,7 @@ func (s *server) saveApplicationPolicy(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 400, "MCP server must use an HTTPS endpoint Flow may reach: "+err.Error())
 			return
 		}
-		if !view.WorkspaceSettings.MCPConnectorsEnabled {
+		if !view.WorkspaceSettings.MCPConnectorsActive() {
 			writeError(w, 403, "MCP connectors are disabled")
 			return
 		}
