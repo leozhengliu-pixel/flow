@@ -60,6 +60,22 @@ describe('personal MCP connectors', () => {
     await waitFor(() => expect(request).toHaveBeenCalledWith('/api/application-policies', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ ...own, displayName: 'Wiki docs' }) })));
   });
 
+  it('focuses the close button when the rename dialog opens', async () => {
+    respond([own]);
+    render(<I18nProvider><PersonalConnectorSettings viewerId="me" /></I18nProvider>);
+    fireEvent.click(within(await openMenu()).getByText('Rename…'));
+    const input = await screen.findByLabelText('Display name');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus());
+    expect(input).not.toHaveFocus();
+  });
+
+  it('opens the tool list on hover', async () => {
+    respond([own]);
+    render(<I18nProvider><PersonalConnectorSettings viewerId="me" /></I18nProvider>);
+    fireEvent.pointerEnter(await screen.findByRole('button', { name: '3 tools' }));
+    expect(await screen.findByText('ask_question')).toBeInTheDocument();
+  });
+
   it('reconnects and reports the result', async () => {
     respond([own]);
     render(<I18nProvider><PersonalConnectorSettings viewerId="me" /></I18nProvider>);

@@ -15,10 +15,12 @@ export interface PropertyCommandOption {
   searchOnly?: boolean
 }
 
-export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus = true, closeOnSelect = true, keepSelectedVisible = false, onOpenChange, onSelect, open, options, resetKey, selectedIds = [], personOptions = false }: {
+export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus = true, closeOnSelect = true, keepSelectedVisible = false, pinnedIds, onOpenChange, onSelect, open, options, resetKey, selectedIds = [], personOptions = false }: {
   autoFocus?: boolean
   closeOnSelect?: boolean
   keepSelectedVisible?: boolean
+  /** Options that stay listed whatever the search says (a "Custom…" row); they are highlighted when nothing else matches. */
+  pinnedIds?: string[]
   onOpenChange: (open: boolean) => void
   onSelect: (option: T) => void | Promise<void>
   open: boolean
@@ -45,7 +47,9 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const selectionKey = JSON.stringify(selectedIds)
   const selectedSet = useMemo(() => new Set<string>(JSON.parse(selectionKey)), [selectionKey])
-  const filteredOptions = useMemo(() => options.filter(option => (!option.searchOnly || normalizedQuery.length > 1 || selectedSet.has(option.id)) && (!normalizedQuery || (keepSelectedVisible && selectedSet.has(option.id)) || matchesOption(option, normalizedQuery))), [keepSelectedVisible, normalizedQuery, options, selectedSet, matchesOption])
+  const pinnedKey = (pinnedIds ?? []).join('\n')
+  const pinnedSet = useMemo(() => new Set<string>(pinnedKey ? pinnedKey.split('\n') : []), [pinnedKey])
+  const filteredOptions = useMemo(() => options.filter(option => pinnedSet.has(option.id) || ((!option.searchOnly || normalizedQuery.length > 1 || selectedSet.has(option.id)) && (!normalizedQuery || (keepSelectedVisible && selectedSet.has(option.id)) || matchesOption(option, normalizedQuery)))), [keepSelectedVisible, normalizedQuery, options, pinnedSet, selectedSet, matchesOption])
 
   useEffect(() => {
     if (!open) return
@@ -110,7 +114,8 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
   const onQueryChange = (value: string) => {
     setQuery(value)
     const normalized = value.trim().toLocaleLowerCase()
-    setActiveId(options.find(option => !option.disabled && (!option.searchOnly || normalized.length > 1 || selectedSet.has(option.id)) && matchesOption(option, normalized))?.id)
+    const matched = options.find(option => !option.disabled && (!option.searchOnly || normalized.length > 1 || selectedSet.has(option.id)) && matchesOption(option, normalized))
+    setActiveId((matched ?? options.find(option => !option.disabled && pinnedSet.has(option.id)))?.id)
   }
 
   return {

@@ -14,3 +14,13 @@ it('opens a regional submenu with the keyboard and chooses the focused child',as
  await waitFor(()=>expect(within(list).getByRole('option',{name:'US'})).toHaveFocus());await user.keyboard('{ArrowDown}{Enter}');
  expect(choose).toHaveBeenCalledWith('Amplitude EU','https://mcp.eu.amplitude.com/mcp');
 });
+it('keeps Custom URL listed and highlighted when the search finds no connector',async()=>{
+ const user=userEvent.setup();const choose=vi.fn();render(<ConnectorMenu onChoose={choose}/>);
+ await user.click(screen.getByRole('button',{name:'Add connector'}));await user.type(screen.getByRole('searchbox',{name:'Search connectors'}),'zzqq');
+ const options=screen.getAllByRole('option');
+ expect(options.map(item=>item.textContent)).toEqual(['Custom URL…']);
+ expect(options[0]).toHaveAttribute('aria-selected','true');
+ expect(screen.queryByText('No connectors found')).not.toBeInTheDocument();
+ await user.keyboard('{Enter}');
+ expect(choose).toHaveBeenCalledWith('','');
+});

@@ -294,20 +294,50 @@ function ConnectorRow({
   );
 }
 
-/** "N tools": opens the list of the connector's tool names. */
+/** "N tools": the list of the connector's tool names opens on hover (or focus, or a click) and stays while the pointer is on it. */
 function ConnectorTools({ tools }: { tools: string[] }) {
   const t = useOptionalTranslate();
+  const [open, setOpen] = useState(false);
+  const timer = useRef<number>(undefined);
+  const show = () => {
+    window.clearTimeout(timer.current);
+    setOpen(true);
+  };
+  const hide = () => {
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setOpen(false), 120);
+  };
+  useEffect(() => () => window.clearTimeout(timer.current), []);
   const text = count(t, tools.length, "1 tool", "{count} tools");
   if (!tools.length) return <span>{text}</span>;
   return (
-    <Popover.Root>
-      <Popover.Trigger asChild>
-        <button type="button" className="personal-connector-tools">
+    <Popover.Root open={open} onOpenChange={(next) => !next && setOpen(false)}>
+      <Popover.Anchor asChild>
+        <button
+          type="button"
+          className="personal-connector-tools"
+          data-state={open ? "open" : "closed"}
+          aria-expanded={open}
+          onPointerEnter={show}
+          onPointerLeave={hide}
+          onFocus={show}
+          onBlur={hide}
+          onClick={show}
+        >
           {text}
         </button>
-      </Popover.Trigger>
+      </Popover.Anchor>
       <Popover.Portal>
-        <Popover.Content className="personal-connector-tool-list" data-flow-motion="floating" align="start" sideOffset={6}>
+        <Popover.Content
+          className="personal-connector-tool-list"
+          data-flow-motion="floating"
+          align="start"
+          sideOffset={8}
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          onCloseAutoFocus={(event) => event.preventDefault()}
+          onPointerEnter={show}
+          onPointerLeave={hide}
+        >
           <ul data-i18n-ignore>
             {tools.map((tool) => (
               <li key={tool}>{tool}</li>
@@ -344,8 +374,9 @@ function RenameConnectorDialog({
         aria-describedby={undefined}
         closeLabel={t("Close")}
         onOpenAutoFocus={(event) => {
+          // The close button takes focus first; the name field is one Tab away.
           event.preventDefault();
-          input.current?.focus();
+          (event.target as HTMLElement).querySelector<HTMLElement>(".dialog-close")?.focus();
         }}
       >
         <form

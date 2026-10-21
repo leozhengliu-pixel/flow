@@ -974,3 +974,7 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 
 /* Settings (dark): the soft white of section headings and links, and the muted grey of state and empty-state text. */
 :root{--settings-text-soft:lch(90.826% 1.425 272);--settings-text-muted:lch(63.304% 1.425 272)}
+
+/* Add-connector dialog: inline URL error (settings/connector-dialog.css). */
+:root{--connector-dialog-error:#ff8683}
+:root[data-theme="light"]{--connector-dialog-error:var(--danger)}

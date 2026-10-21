@@ -1,16 +1,66 @@
-.connector-menu{width:299px;max-width:calc(100vw - 24px);max-height:534px;border:.5px solid var(--theme-border-strong);border-radius:12px;background:var(--theme-menu-bg,var(--theme-surface-1));color:var(--theme-text-primary);overflow:hidden;box-shadow:var(--menu-shadow);z-index:710;font-size:13px}.connector-menu>input{height:40px;width:100%;border:0;border-bottom:.5px solid var(--theme-border);padding:10px 14px;color:inherit;background:transparent;font:inherit;outline:0}.connector-menu [role=listbox]{overflow:auto;max-height:492px;padding:6px 0}.connector-menu [role=listbox]>small{display:block;padding:4px 14px;color:var(--theme-text-tertiary)}.connector-menu [role=option]{display:flex;align-items:center;gap:8px;height:32px;width:100%;padding:0 18px 0 14px;border:0;background:transparent;color:inherit;font:inherit;text-align:left}.connector-menu [role=option][aria-selected=true]{background:var(--theme-control-hover)}.connector-menu [role=option]>svg{flex:none}.connector-menu [role=option]>span{flex:none}.connector-menu [role=option]>small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--theme-text-tertiary);font-size:12px}.connector-menu p{padding:8px 14px}.connector-dialog.dialog-content{width:680px;max-width:calc(100vw - 32px);border-radius:12px;padding:16px;max-height:calc(100dvh - 48px);overflow:auto;background:var(--theme-surface-1);color:var(--theme-text-primary)}.connector-dialog h2{font-size:15px;line-height:23px;margin:0 0 20px;font-weight:600}.connector-dialog label{display:grid;gap:8px;font-size:13px;line-height:20px}.connector-dialog input:not([type=checkbox]){width:100%;min-width:0;height:32px;border:.5px solid var(--theme-border-strong);border-radius:8px;padding:6px 12px;background:var(--theme-surface-1);color:inherit;font:inherit}.connector-dialog footer{display:flex;gap:8px;align-items:center;margin-top:48px}.connector-dialog footer>span{flex:1}.connector-dialog footer button{display:inline-flex;gap:6px;align-items:center;justify-content:center;height:32px;padding:0 12px;border:.5px solid var(--theme-border);border-radius:9999px;background:var(--theme-control);color:inherit;font:500 13px var(--font)}.connector-dialog footer button[type=submit]{background:var(--accent-primary);color:var(--theme-on-primary)}.connector-dialog>.dialog-close{display:none}.connector-dialog .connector-advanced{display:grid;gap:12px;margin-top:24px}.connector-advanced>small{font-size:12px;color:var(--theme-text-secondary)}.connector-header-inputs{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 28px;gap:8px;align-items:end}.connector-header-inputs>button{width:28px;height:32px;border:0;background:transparent;color:var(--theme-text-secondary)}.connector-dialog .connector-shared{display:flex;align-items:center;gap:8px}.connector-shared input{width:16px;height:16px;accent-color:var(--accent-primary)}.connector-dialog [role=alert],.connector-authorization [role=alert]{font-size:12px;color:var(--danger);overflow-wrap:anywhere}.connector-authorization{max-width:240px}.connector-dialog button:disabled{opacity:.5}.connector-empty{box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;min-height:56px;width:100%;gap:16px;padding:8px 15px}.connector-empty h3{font-size:13px;line-height:20px;margin:0;color:var(--theme-text-secondary);font-weight:400}
-.connector-dialog.dialog-content{left:calc(50% + 118px);top:calc(100dvh / 3);transform:translate(-50%,-33.333333%);padding:12px 16px;background:var(--theme-surface-2)}
+/*
+ * Add-connector menu and dialog, shared by Settings › Agent personalization and the admin connector list.
+ * Menu: the shared menu surface, 281px wide and 342px tall, a 36px search row, a 30px "MCPs" header and 32px
+ * rows (14px/18px inset, 16px brand mark, 8px gaps, 8px highlight 6px in from each side).
+ * Dialog: 680px wide, centered over the settings content, 12px/16px padding, same surface as the rename dialog.
+ */
+.connector-menu{box-sizing:border-box;display:flex;flex-direction:column;width:281px;height:342px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);overflow:hidden;border:.5px solid var(--pk-border);border-radius:12px;background:var(--pk-surface);box-shadow:var(--pk-shadow);color:var(--pk-text);z-index:710;font:450 13px/normal var(--font);outline:0}
+.connector-menu>input{flex:none;box-sizing:border-box;width:100%;height:36px;margin:0;padding:10px 12px 9px 14px;border:0;border-radius:0;box-shadow:inset 0 -.5px 0 var(--pk-divider);color:var(--pk-text);background:transparent;font:450 13px/normal var(--font);outline:0;-webkit-appearance:none;appearance:none}
+.connector-menu>input::placeholder{color:var(--pk-muted)}
+.connector-menu>input::-webkit-search-cancel-button{display:none}
+.connector-menu [role=listbox]{flex:1;min-height:0;overflow:auto;padding:0;scrollbar-width:none}
+.connector-menu [role=listbox]::-webkit-scrollbar{display:none}
+.connector-menu [role=listbox]>small{display:block;padding:8px 14px;color:var(--pk-muted);font:500 12px/14px var(--font)}
+.connector-menu [role=option]{position:relative;box-sizing:border-box;display:flex;align-items:center;gap:8px;width:100%;height:32px;padding:0 18px 0 14px;border:0;outline:0;background:transparent;color:inherit;font:inherit;text-align:left;white-space:nowrap;cursor:default}
+.connector-menu [role=option]::before{content:"";position:absolute;inset:0 6px;border-radius:8px;pointer-events:none}
+.connector-menu [role=option]>*{position:relative;z-index:1}
+.connector-menu [role=option][aria-selected=true]{color:var(--pk-text-strong)}
+.connector-menu [role=option][aria-selected=true]::before{background:var(--pk-hover)}
+.connector-menu [role=option]>svg:not(.connector-menu-more),.connector-brand-blank{flex:none;width:16px;height:16px}
+.connector-menu [role=option]>span{flex:none}
+.connector-menu [role=option]>small{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--pk-faint);font:inherit}
+.connector-menu [role=option]>.connector-menu-more{flex:none;margin-left:auto;color:var(--pk-muted)}
+.connector-region-menu{width:200px;height:auto}
+.connector-region-menu [role=listbox]{padding:6px 0}
+.connector-region-menu [role=option]:hover,.connector-region-menu [role=option]:focus-visible{color:var(--pk-text-strong)}
+.connector-region-menu [role=option]:hover::before,.connector-region-menu [role=option]:focus-visible::before{background:var(--pk-hover)}
+
+.connector-dialog.dialog-content{left:calc(50% + 118px);top:calc(100dvh / 3);transform:translate(-50%,-33.333333%);box-sizing:border-box;width:680px;max-width:calc(100vw - 32px);max-height:calc(100dvh - 48px);overflow:auto;padding:12px 16px;border:.5px solid var(--agent-discard-border);border-radius:12px;background:var(--agent-discard-bg);box-shadow:var(--agent-discard-shadow);color:var(--agent-discard-cancel-fg)}
 @media(max-width:900px){.connector-dialog.dialog-content{left:50%;width:min(680px,calc(100vw - 32px))}}
+.connector-dialog>.dialog-close{display:none}
+.connector-dialog h2{margin:0 0 25px;color:var(--agent-discard-cancel-fg);font:600 15px/23px var(--font)}
+.connector-dialog label{display:grid;gap:7px}
+.connector-dialog label>span{color:var(--agent-discard-cancel-fg);font:500 13px/16px var(--font)}
+.connector-dialog input:not([type=checkbox]){box-sizing:border-box;width:100%;min-width:0;height:32px;padding:6px 12px;border:.5px solid var(--release-input-border);border-radius:8px;outline:0;background:var(--agent-discard-bg);color:var(--bright);font:400 13px var(--font)}
+.connector-dialog input:not([type=checkbox]):focus{border-color:var(--focus-ring);box-shadow:0 0 0 1px var(--focus-ring)}
+.connector-dialog input::placeholder{color:var(--tpl-issue-placeholder)}
+.connector-dialog p[role=alert]{margin:1px 0 0;color:var(--connector-dialog-error);font:450 11px/13px var(--font);overflow-wrap:anywhere}
+.connector-dialog footer{display:flex;gap:8px;align-items:center;margin-top:48px}
+.connector-dialog footer>span{flex:1}
+.connector-dialog footer button,.connector-dialog .connector-add-header{display:inline-flex;gap:6px;align-items:center;justify-content:center;box-sizing:border-box;height:32px;padding:0 12px;border:.5px solid transparent;border-radius:9999px;background:var(--agent-discard-cancel-bg);color:var(--agent-discard-cancel-fg);box-shadow:var(--agent-discard-cancel-ring);font:500 13px var(--font)}
+.connector-dialog footer button:hover:not(:disabled),.connector-dialog .connector-add-header:hover:not(:disabled){background:var(--agent-discard-cancel-hover-bg)}
+.connector-dialog footer button.primary{background:var(--accent-primary);color:var(--on-accent);box-shadow:none}
+.connector-dialog footer button.primary:hover:not(:disabled){background:var(--accent-primary-hover,var(--accent-primary))}
+.connector-dialog footer button.connector-advanced-toggle{background:transparent;box-shadow:none}
+.connector-dialog footer button.connector-advanced-toggle:hover:not(:disabled){background:var(--agent-discard-cancel-hover-bg)}
+.connector-dialog button:disabled{opacity:.5}
+.connector-dialog .connector-advanced{display:grid;gap:16px;margin-top:51px}
+.connector-dialog .connector-advanced:has(>label){margin-top:24px}
+.connector-dialog .connector-headers-copy{display:grid;gap:4.5px}
+.connector-dialog .connector-headers-copy strong{color:var(--bright);font:500 13px/15.5px var(--font)}
+.connector-dialog .connector-headers-copy small,.connector-header-inputs small{color:var(--set-desc);font:450 11px/13px var(--font)}
+.connector-header-inputs{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 32px;gap:8px;align-items:end;margin-top:-4px}
+.connector-header-inputs label{gap:12px}
+.connector-header-inputs>button{display:grid;place-items:center;width:32px;height:32px;padding:0;border:0;border-radius:9999px;background:transparent;color:var(--agent-discard-cancel-fg)}
+.connector-header-inputs>button:hover{background:var(--agent-discard-cancel-hover-bg)}
+.connector-dialog .connector-add-header{justify-self:start;height:24px;margin-top:-4px;padding:0 7px;font-size:12px}
+.connector-dialog .connector-shared{display:flex;align-items:center;gap:8px}
+.connector-shared input{width:16px;height:16px;accent-color:var(--accent-primary)}
+.connector-authorization [role=alert]{font-size:12px;color:var(--danger);overflow-wrap:anywhere}
+.connector-authorization{max-width:240px}
+.connector-empty{box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;min-height:56px;width:100%;gap:16px;padding:8px 15px}
+.connector-empty h3{font-size:13px;line-height:20px;margin:0;color:var(--theme-text-secondary);font-weight:400}
 .connector-settings .settings-row-copy>span{overflow-wrap:anywhere}
 @media(max-width:760px){.connector-settings .settings-row{flex-wrap:wrap;gap:12px}.connector-settings .settings-row-copy{flex-basis:100%}.connector-settings .settings-control{flex-wrap:wrap}}
-:root[data-theme="light"] .connector-menu{border:.5px solid var(--theme-border);border-radius:12px;background:var(--theme-surface-2);color:var(--text);box-shadow:var(--shadow-control)}
-:root[data-theme="light"] .connector-menu>input{border-color:var(--border);color:var(--text)}
-:root[data-theme="light"] .connector-menu [role=listbox]>small,:root[data-theme="light"] .connector-menu [role=option]>small,:root[data-theme="light"] .connector-advanced>small,:root[data-theme="light"] .connector-empty h3{color:var(--muted)}
-:root[data-theme="light"] .connector-header-inputs>button{width:28px;height:28px;color:var(--theme-text-primary)}
-:root[data-theme="light"] .connector-header-inputs>button:hover{background:var(--theme-surface-hover);color:var(--theme-text-primary)}
-:root[data-theme="light"] .connector-menu [role=option][aria-selected=true]{background:var(--theme-control-hover)}
-:root[data-theme="light"] .connector-dialog.dialog-content{background:var(--theme-surface-2);color:var(--text)}
-:root[data-theme="light"] .connector-dialog h2{color:var(--theme-text-primary)}
-:root[data-theme="light"] .connector-dialog input:not([type=checkbox]){border-color:var(--border-strong);background:var(--theme-surface-1);color:var(--text)}
-:root[data-theme="light"] .connector-dialog footer button{border-color:var(--border);background:var(--theme-control);color:var(--text)}
-:root[data-theme="light"] .connector-dialog footer button[type=submit]{background:var(--accent-primary);color:var(--theme-on-primary)}
+:root[data-theme="light"] .connector-empty h3{color:var(--muted)}
+:root[data-theme="light"] .connector-menu>input::placeholder{color:var(--pk-muted)}

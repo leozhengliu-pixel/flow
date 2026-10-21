@@ -1,5 +1,6 @@
 /** Chinese copy for personal MCP connectors (Settings › Agent personalization). Merged into zhCN by translations.ts. */
 export const mcpConnectorsZhCN: Record<string, string> = {
+  "Please enter a valid URL starting with http:// or https://.": "请输入以 http:// 或 https:// 开头的有效 URL。",
   "1 connector added": "已添加 1 个连接器",
   "{count} connectors added": "已添加 {count} 个连接器",
   "1 tool": "1 个工具",
