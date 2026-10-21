@@ -211,6 +211,7 @@ func main() {
 	go s.runApplicationAgentWorker(shutdownSignal)
 	go s.runRecurringIssueScheduler(shutdownSignal)
 	go s.runReviewImportScheduler(shutdownSignal)
+	go s.runPersonalConnectionScheduler(shutdownSignal)
 	go s.runStorageMaintenance(shutdownSignal, applicationConfig.Retention.DomainEvents)
 	go func() {
 		<-shutdownSignal.Done()
@@ -352,6 +353,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/account/identities/{id}", s.unlinkAccountIdentity)
 	mux.HandleFunc("POST /api/account/change-password", s.changeAccountPassword)
 	s.registerCodeHostAccountRoutes(mux)
+	s.registerPersonalConnectionRoutes(mux)
 	mux.HandleFunc("GET /api/realtime/events", s.realtimeEvents)
 	mux.HandleFunc("GET /api/realtime/changes", s.realtimeChanges)
 	mux.HandleFunc("GET /api/realtime/socket", s.realtimeSocket)
@@ -1103,6 +1105,7 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 		materializeDevelopmentMembers(&data)
 	}
 	sanitizeBootstrap(&data)
+	s.applyCalendarAway(r.Context(), &data)
 	s.applyLoopRunCounts(r.Context(), data.Workspace.URLKey, data.Loops)
 	if leanBootstrapRequested(r) {
 		// Everything before the streamed body; the body is a pure encode of data.

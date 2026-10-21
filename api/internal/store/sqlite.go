@@ -362,6 +362,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		{version: 11, name: "members' code host accounts", apply: s.createCodeHostAccountsSchema},
 		{version: 12, name: "code host account refresh lease", apply: s.addCodeHostAccountRefreshLease},
 		{version: 13, name: "review import state", apply: s.createReviewImportSchema},
+		{version: 14, name: "members' personal connections", apply: s.createPersonalConnectionsSchema},
 		// Versions from 1000 up are data migrations (runDataMigrations),
 		// which run after the workspaces are loaded.
 	}

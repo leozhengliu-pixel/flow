@@ -857,6 +857,48 @@ with it on when `FLOW_ENV` or `FLOW_ENVIRONMENT` is `production` (or `prod`),
 or when `FLOW_APP_URL` is not a localhost or loopback URL. Never set it in a
 shared or production deployment.
 
+### Personal Google Calendar and Notion connections
+
+Settings › Account › Connected accounts has a Google Calendar and a Notion row
+for each member. Both rows show "Not configured" until the operator sets the
+variables below.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FLOW_GOOGLE_OAUTH_CLIENT_ID` / `FLOW_GOOGLE_OAUTH_CLIENT_SECRET` | unset | A Google OAuth client (type Web application). Authorized redirect URI: `{FLOW_APP_URL}/api/account/connections/google-calendar/callback`. Enable the Google Calendar API in the project. Needs `FLOW_CONNECTOR_SECRET_KEY`. |
+| `FLOW_GOOGLE_CALENDAR_SYNC_INTERVAL` | `15m` | How often each connected member's calendar is read (5 minutes to 24 hours). |
+| `FLOW_NOTION_CONNECTION_URL` | unset | HTTPS address of the Notion connection page members are sent to (the Notion connection gallery page of your link-preview connection). |
+| `FLOW_DEV_GOOGLE_BASE_URL` | unset | Development only, honored only with `FLOW_AUTH_DISABLED=true` or `FLOW_DEV_ALLOW_LOOPBACK_CODE_HOSTS=true`: a loopback fake that replaces Google's authorize, token, revoke, userinfo and Calendar endpoints. |
+
+**Google Calendar.** A member authorizes Flow (OAuth, PKCE, offline access) with
+the scopes `openid`, `email` and
+`https://www.googleapis.com/auth/calendar.events.readonly`. Flow reads only the
+member's out-of-office events (`eventTypes=outOfOffice`, next 14 days, one
+request per member per interval) and shows the member as out of office while
+one is active (profile card, "Away" in assignee pickers). All-day events are
+read as UTC. The sync is off unless the Google client and
+`FLOW_CONNECTOR_SECRET_KEY` are set, reads at most 25 members a minute, backs
+off exponentially (up to 6 hours) after errors, and writes to the database
+only when a member's window changed. Replicas share the work through a
+database claim on each connection (`personal_connections.sync_next_at`), so a
+calendar is read once per interval however many replicas run. The tokens are
+sealed in the connector secret store; Disconnect revokes the grant at Google
+and deletes them, and a grant Google revoked turns the row into "Reconnect
+needed". Link and unlink write `personal_connection.linked` /
+`personal_connection.unlinked` audit entries. Google's endpoints are reached
+through the outbound policy for public HTTPS addresses.
+
+**Notion.** Notion's link previews are a connection on Notion's side: a member
+pastes a Flow link into Notion and authorizes it there. The Connected accounts
+row turns on previews for the member (Flow cannot see Notion's side of the
+authorization) and opens `FLOW_NOTION_CONNECTION_URL`; Disconnect turns them
+off. While on, `GET /api/notion/link-preview?url=` answers with the title,
+status, assignee and team of an issue or project link of this deployment, as
+the signed-in member (their session or the OAuth token Notion holds for them),
+with the same access checks as the issue and project reads. Register the
+connection with Notion as an OAuth application of Flow (Settings › API ›
+OAuth applications) whose redirect URI is the one Notion gives you.
+
 ## Coding sessions
 
 Coding sessions run an agent (Claude Code, Codex or OpenCode) in a sandbox Pod
