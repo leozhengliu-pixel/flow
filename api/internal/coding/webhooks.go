@@ -56,6 +56,10 @@ type WebhookResult struct {
 	Actions    []WebhookAction `json:"actions"`
 	SessionIDs []string        `json:"sessionIds,omitempty"`
 	Reason     string          `json:"reason,omitempty"`
+	// NotificationPending is set when the state change was committed but a
+	// notification about it failed (returned as a NotificationError); the
+	// keyed notification is posted once when the delivery is repeated.
+	NotificationPending bool `json:"notificationPending,omitempty"`
 }
 
 func (r *WebhookResult) add(action WebhookAction, sessionID string) {
@@ -441,7 +445,12 @@ func (d *WebhookDispatcher) dispatchCI(ctx context.Context, workspaceKeys []stri
 			}
 		}
 	}
-	return result, errors.Join(errs...)
+	if len(errs) > 0 {
+		// The failed checks are recorded as routed; only the notices failed.
+		result.NotificationPending = true
+		return result, &NotificationError{Step: "checks failed", Err: errors.Join(errs...)}
+	}
+	return result, nil
 }
 
 func (d *WebhookDispatcher) dispatchComment(ctx context.Context, workspaceKeys []string, event codehost.WebhookEvent) (WebhookResult, error) {
@@ -578,12 +587,15 @@ func (d *WebhookDispatcher) dispatchComment(ctx context.Context, workspaceKeys [
 		return result, err
 	}
 	if session.Phase == domain.CodingPhaseAwaitingApproval {
+		result.add(WebhookApproval, session.ID)
 		if d.Notifier != nil {
 			if err := d.Notifier.ApprovalRequested(ctx, session, start); err != nil {
-				return result, fmt.Errorf("coding webhook: approval notification: %w", err)
+				// The session exists either way; the keyed request is
+				// posted once when the delivery is repeated.
+				result.NotificationPending = true
+				return result, &NotificationError{Step: "approval", Err: err}
 			}
 		}
-		result.add(WebhookApproval, session.ID)
 		return result, nil
 	}
 	if created {

@@ -192,7 +192,14 @@ func (s *server) dispatchCodingWebhook(ctx context.Context, workspace string, ev
 	}
 	result, err := dispatcher.Dispatch(ctx, workspaces, event)
 	if err != nil {
-		return err
+		if !coding.NotificationFailed(err) {
+			return err
+		}
+		// The state change committed; only a notification failed. Log it
+		// once and answer success so the host does not redeliver (a
+		// redelivery posts the keyed notification only once anyway).
+		log.Printf("coding webhook %s %s: %v (committed %v sessions=%v; repeating the delivery posts the notification)", event.CodeHost, event.Type, err, result.Actions, result.SessionIDs)
+		return nil
 	}
 	if len(result.SessionIDs) > 0 {
 		log.Printf("coding webhook %s %s: %v sessions=%v", event.CodeHost, event.Type, result.Actions, result.SessionIDs)
