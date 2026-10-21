@@ -375,4 +375,6 @@ export interface CodingTriggerResult {
   created: boolean;
   approvalRequired?: boolean;
   message?: string;
+  /** The session started but its approval or repository request is not posted yet; repeating the request posts it. */
+  notificationPending?: boolean;
 }

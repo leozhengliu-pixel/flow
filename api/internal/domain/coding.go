@@ -27,6 +27,10 @@ var (
 	ErrCodingRepoInUse       = errors.New("coding: repository already has an active environment")
 	ErrCodingTokenInvalid    = errors.New("coding: sandbox token is invalid, expired or revoked")
 	ErrCodingInvalidInput    = errors.New("coding: invalid input")
+	// ErrCodingAnchorRevoked refuses a session on an ended AgentTask whose
+	// access was withdrawn (a system cancel, the delegation removed, the
+	// application uninstalled or deactivated): reusing it would restore it.
+	ErrCodingAnchorRevoked = errors.New("coding: the session's agent task was revoked")
 )
 
 // CodingSessionState is the user-facing state, matching Linear's

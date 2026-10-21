@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -42,6 +43,7 @@ var (
 	ErrCodingLeaseLost       = domain.ErrCodingLeaseLost
 	ErrCodingTokenInvalid    = domain.ErrCodingTokenInvalid
 	ErrCodingInput           = domain.ErrCodingInvalidInput
+	ErrCodingAnchorRevoked   = domain.ErrCodingAnchorRevoked
 )
 
 // CodingSessionFilter narrows ListCodingSessions.
@@ -132,17 +134,121 @@ func (s *SQLiteStore) CreateCodingSession(ctx context.Context, session domain.Co
 		return found, false, nil
 	}
 	session.Version = 1
+	// A reused anchor that already ended is reopened in the session's
+	// transaction (or refused when its access was withdrawn). Another
+	// writer moving it between the check and the write retries the check.
+	for attempt := 0; attempt < 3; attempt++ {
+		ended, err := s.endedCodingAnchor(ctx, anchor)
+		if err != nil {
+			return session, false, err
+		}
+		moved, err := s.insertCodingSession(ctx, session, anchor, ended, idempotencyKey)
+		if err != nil {
+			if found, ok := existing(); ok {
+				return found, false, nil // a concurrent create won the unique index
+			}
+			return session, false, err
+		}
+		if moved {
+			continue
+		}
+		if anchorTask, err := s.AgentTask(ctx, session.WorkspaceKey, anchor.ID); err == nil {
+			s.publishAgentTaskUpdate(session.WorkspaceKey, anchorTask)
+		}
+		s.publishCodingSessionUpdate(session.WorkspaceKey, "coding_session.created", session)
+		return session, true, nil
+	}
+	if found, ok := existing(); ok {
+		return found, false, nil
+	}
+	return session, false, ErrCodingVersionConflict
+}
+
+// endedCodingAnchor reads a reused anchor that already ended (nil when the
+// anchor is new or still open). Its delegation must still hold: the same
+// application, still installed and active with access to the task's team,
+// and not canceled by anyone but a person; otherwise reopening it would
+// restore access that was withdrawn, so it is refused.
+func (s *SQLiteStore) endedCodingAnchor(ctx context.Context, anchor domain.AgentTask) (*domain.AgentTask, error) {
+	task, err := s.AgentTask(ctx, anchor.WorkspaceKey, anchor.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if task.Status != "complete" && task.Status != "error" && task.Status != "canceled" {
+		return nil, nil
+	}
+	if anchor.AppUserID != "" && task.AppUserID != anchor.AppUserID {
+		return nil, ErrCodingAnchorRevoked
+	}
+	app, err := s.ApplicationByUser(ctx, task.AppUserID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrCodingAnchorRevoked
+	}
+	if err != nil {
+		return nil, err
+	}
+	if app.WorkspaceKey != anchor.WorkspaceKey || !app.Active || task.TeamID != "" && !slices.Contains(app.AccessTeamIDs(), task.TeamID) {
+		return nil, ErrCodingAnchorRevoked
+	}
+	if task.Status == "canceled" {
+		stopped, err := s.agentTaskStoppedByPerson(ctx, task)
+		if err != nil {
+			return nil, err
+		}
+		if !stopped {
+			return nil, ErrCodingAnchorRevoked
+		}
+	}
+	return &task, nil
+}
+
+// agentTaskStoppedByPerson reports whether a canceled task's last state
+// change is a person's stop. The application worker's revocations carry no
+// actor, and removing the delegation or uninstalling the application cancels
+// without any activity.
+func (s *SQLiteStore) agentTaskStoppedByPerson(ctx context.Context, task domain.AgentTask) (bool, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT data FROM application_agent_activities WHERE session_id=? ORDER BY id DESC LIMIT 50`, task.ID)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var raw []byte
+		var activity domain.AgentActivity
+		if err := rows.Scan(&raw); err != nil {
+			return false, err
+		}
+		if err := json.Unmarshal(raw, &activity); err != nil {
+			return false, err
+		}
+		if activity.Type == "feedback" || activity.Type == "deleted" {
+			continue // markers leave the state as it was
+		}
+		stop := activity.Type == "canceled" || activity.Type == "prompt" && activity.Signal == "stop"
+		return stop && activity.ActorID != "" && activity.ActorID != task.AppUserID, nil
+	}
+	return false, rows.Err()
+}
+
+// insertCodingSession writes the session and links its anchor in one
+// transaction. An ended anchor is reopened (pending, with an audit activity
+// naming the session and its requester) only when it is still in the state
+// endedCodingAnchor read; moved is true when it was not.
+func (s *SQLiteStore) insertCodingSession(ctx context.Context, session domain.CodingSession, anchor domain.AgentTask, ended *domain.AgentTask, idempotencyKey string) (moved bool, err error) {
 	raw, err := json.Marshal(session)
 	if err != nil {
-		return session, false, err
+		return false, err
 	}
 	anchorRaw, err := json.Marshal(anchor)
 	if err != nil {
-		return session, false, err
+		return false, err
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return session, false, err
+		return false, err
 	}
 	defer tx.Rollback()
 	resource := anchor.IssueID
@@ -157,26 +263,41 @@ func (s *SQLiteStore) CreateCodingSession(ctx context.Context, session domain.Co
 	// session drives it (next_attempt parks it like an agent-initiated session).
 	if _, err := tx.ExecContext(ctx, `INSERT INTO application_agent_tasks(id,workspace_key,issue_id,app_user_id,status,version,data,created_at,next_attempt,stale_at) VALUES(?,?,?,?,?,1,?,?,?,?) ON CONFLICT(id) DO NOTHING`,
 		anchor.ID, anchor.WorkspaceKey, resource, anchor.AppUserID, anchor.Status, anchorRaw, created.Format(time.RFC3339Nano), agentSessionNeverDue, agentTaskStaleAt(anchor)); err != nil {
-		return session, false, err
+		return false, err
 	}
 	// A reused anchor (an existing delegation task, track L) was not
 	// inserted above: link it to the session and park it so the application
 	// worker never delivers it as well.
 	var existingRaw []byte
-	if err := tx.QueryRowContext(ctx, `SELECT data FROM application_agent_tasks WHERE id=? AND workspace_key=?`, anchor.ID, anchor.WorkspaceKey).Scan(&existingRaw); err != nil {
-		return session, false, err
+	var status string
+	var version int64
+	if err := tx.QueryRowContext(ctx, `SELECT data,status,version FROM application_agent_tasks WHERE id=? AND workspace_key=?`, anchor.ID, anchor.WorkspaceKey).Scan(&existingRaw, &status, &version); err != nil {
+		return false, err
 	}
 	var linked domain.AgentTask
 	if err := json.Unmarshal(existingRaw, &linked); err != nil {
-		return session, false, err
+		return false, err
 	}
-	if linked.CodingSessionID != session.ID {
+	linked.Status, linked.Version = status, version
+	terminal := status == "complete" || status == "error" || status == "canceled"
+	switch {
+	case ended != nil && (status != ended.Status || version != ended.Version):
+		return true, nil // another writer moved it since endedCodingAnchor
+	case ended != nil:
+		if err := reopenCodingAnchor(ctx, tx, &linked, session); errors.Is(err, ErrCodingVersionConflict) {
+			return true, nil
+		} else if err != nil {
+			return false, err
+		}
+	case terminal:
+		return true, nil // it ended after endedCodingAnchor read it open
+	case linked.CodingSessionID != session.ID:
 		linked.CodingSessionID = session.ID
 		if existingRaw, err = json.Marshal(linked); err != nil {
-			return session, false, err
+			return false, err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE application_agent_tasks SET data=?,next_attempt=? WHERE id=? AND workspace_key=?`, existingRaw, agentSessionNeverDue, anchor.ID, anchor.WorkspaceKey); err != nil {
-			return session, false, err
+			return false, err
 		}
 	}
 	key := sql.NullString{String: idempotencyKey, Valid: idempotencyKey != ""}
@@ -184,23 +305,47 @@ func (s *SQLiteStore) CreateCodingSession(ctx context.Context, session domain.Co
 	if session.NextReconcileAt.IsZero() {
 		next = millis(time.Now())
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO coding_sessions(id,workspace_key,agent_session_id,issue_id,environment_id,creator_id,source,source_id,idempotency_key,state,phase,phase_started_at,phase_deadline,attempts,stop_requested,error_code,next_reconcile_at,deadline_at,cost_micros,version,data,created_at,updated_at,ended_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,1,?,?,?,?)`,
-		session.ID, session.WorkspaceKey, session.AgentSessionID, session.IssueID, session.EnvironmentID, session.CreatorID, session.Source, session.SourceID, key, string(session.State), string(session.Phase), millis(session.PhaseStartedAt), codingOptionalMillis(session.PhaseDeadline), session.Attempts, boolInt(session.StopRequested), string(session.ErrorCode), next, raw, millis(session.CreatedAt), millis(session.CreatedAt), codingOptionalMillis(session.EndedAt))
-	if err == nil {
-		err = tx.Commit()
+	if _, err := tx.ExecContext(ctx, `INSERT INTO coding_sessions(id,workspace_key,agent_session_id,issue_id,environment_id,creator_id,source,source_id,idempotency_key,state,phase,phase_started_at,phase_deadline,attempts,stop_requested,error_code,next_reconcile_at,deadline_at,cost_micros,version,data,created_at,updated_at,ended_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,1,?,?,?,?)`,
+		session.ID, session.WorkspaceKey, session.AgentSessionID, session.IssueID, session.EnvironmentID, session.CreatorID, session.Source, session.SourceID, key, string(session.State), string(session.Phase), millis(session.PhaseStartedAt), codingOptionalMillis(session.PhaseDeadline), session.Attempts, boolInt(session.StopRequested), string(session.ErrorCode), next, raw, millis(session.CreatedAt), millis(session.CreatedAt), codingOptionalMillis(session.EndedAt)); err != nil {
+		return false, err
 	}
+	return false, tx.Commit()
+}
+
+// reopenCodingAnchor moves an ended anchor back to pending for session in
+// the session's transaction (version CAS), recording who reopened it, from
+// which state and for which session. Its requester, thread and team stay.
+func reopenCodingAnchor(ctx context.Context, tx *sqlTx, task *domain.AgentTask, session domain.CodingSession) error {
+	from, expected := task.Status, task.Version
+	now := time.Now().UTC()
+	task.Status, task.PendingTool, task.CodingSessionID = "pending", nil, session.ID
+	task.Version++
+	task.UpdatedAt = now
+	audit := domain.AgentActivity{
+		ID: fmt.Sprintf("%020d", task.Version), SessionID: task.ID, ActorID: task.AppUserID, Type: "action",
+		Body: "Reopened for a coding session", CreatedAt: now,
+		Metadata: map[string]any{"action": "Reopened for a coding session", "codingSessionId": session.ID, "codingKey": "reopen:" + session.ID, "reopenedFrom": from, "reopenedBy": session.CreatorID},
+	}
+	taskRaw, err := json.Marshal(task)
 	if err != nil {
-		_ = tx.Rollback()
-		if found, ok := existing(); ok {
-			return found, false, nil // a concurrent create won the unique index
-		}
-		return session, false, err
+		return err
 	}
-	if anchorTask, err := s.AgentTask(ctx, session.WorkspaceKey, anchor.ID); err == nil {
-		s.publishAgentTaskUpdate(session.WorkspaceKey, anchorTask)
+	auditRaw, err := json.Marshal(audit)
+	if err != nil {
+		return err
 	}
-	s.publishCodingSessionUpdate(session.WorkspaceKey, "coding_session.created", session)
-	return session, true, nil
+	result, err := tx.ExecContext(ctx, `UPDATE application_agent_tasks SET status=?,version=?,data=?,next_attempt=?,lease_until='',stale_at=? WHERE workspace_key=? AND id=? AND version=? AND status=?`,
+		task.Status, task.Version, taskRaw, agentSessionNeverDue, agentTaskStaleAt(*task), session.WorkspaceKey, task.ID, expected, from)
+	if err != nil {
+		return err
+	}
+	if count, err := result.RowsAffected(); err != nil {
+		return err
+	} else if count != 1 {
+		return ErrCodingVersionConflict
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO application_agent_activities(session_id,id,data,created_at) VALUES(?,?,?,?)`, task.ID, audit.ID, auditRaw, audit.CreatedAt.Format(time.RFC3339Nano))
+	return err
 }
 
 // CodingSession reads one session.
@@ -837,20 +982,33 @@ func (s *SQLiteStore) IsCodingAnchor(ctx context.Context, workspaceKey, agentSes
 	return s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM coding_sessions WHERE workspace_key=? AND agent_session_id=?`, workspaceKey, agentSessionID).Scan(&count) == nil && count > 0
 }
 
-// codingAnchorMidTurn reports whether task anchors a coding session whose turn
-// is underway (starting through publishing): its progress may reopen the
-// anchor even after another writer completed it.
-func (s *SQLiteStore) codingAnchorMidTurn(ctx context.Context, workspaceKey string, task domain.AgentTask) bool {
+// codingAnchorPhase is the phase of the coding session task anchors ("" when
+// it anchors none).
+func (s *SQLiteStore) codingAnchorPhase(ctx context.Context, workspaceKey string, task domain.AgentTask) domain.CodingSessionPhase {
 	if task.CodingSessionID == "" {
-		return false
+		return ""
 	}
 	var phase string
 	if err := s.db.QueryRowContext(ctx, `SELECT phase FROM coding_sessions WHERE workspace_key=? AND id=? AND agent_session_id=?`, workspaceKey, task.CodingSessionID, task.ID).Scan(&phase); err != nil {
-		return false
+		return ""
 	}
-	switch domain.CodingSessionPhase(phase) {
-	case domain.CodingPhaseStarting, domain.CodingPhaseSetup, domain.CodingPhaseRunning, domain.CodingPhasePublishing:
-		return true
+	return domain.CodingSessionPhase(phase)
+}
+
+// codingAnchorAccepts reports whether a coding session in phase writes an
+// activity of kind to its anchor even after another writer ended the anchor:
+// progress and decisions while the session is queued or working (not idle
+// between turns, not done), its approval or repository question while it
+// waits for one.
+func codingAnchorAccepts(phase domain.CodingSessionPhase, kind string) bool {
+	switch kind {
+	case "thought", "action":
+		switch phase {
+		case domain.CodingPhaseQueued, domain.CodingPhaseProvisioning, domain.CodingPhaseStarting, domain.CodingPhaseSetup, domain.CodingPhaseRunning, domain.CodingPhasePublishing:
+			return true
+		}
+	case "elicitation":
+		return phase == domain.CodingPhaseAwaitingApproval || phase == domain.CodingPhaseAwaitingUser
 	}
 	return false
 }

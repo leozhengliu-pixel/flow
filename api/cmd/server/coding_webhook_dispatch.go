@@ -272,9 +272,17 @@ const (
 // AgentTask anchor and notifies the team's members of approval requests.
 type codingTriggerNotifier struct{ s *server }
 
+// errCodingAnchorRefused is an anchor whose state refuses the activity (a
+// stopped or revoked thread): retrying cannot change that, so it is
+// reported at once instead of as a version conflict.
+var errCodingAnchorRefused = errors.New("coding: the session's agent task refused the activity")
+
 // appendAnchorActivity posts an activity on the anchor once: key is stored
 // in the activity metadata and an activity with the same key is not posted
-// again (notifications are retried with the trigger).
+// again (notifications are retried with the trigger). A version conflict
+// (another writer) is retried; an anchor whose state refuses the activity
+// is errCodingAnchorRefused at once, or nothing when the session is done
+// (its outcome is already on the anchor).
 func (n *codingTriggerNotifier) appendAnchorActivity(ctx context.Context, session domain.CodingSession, key string, activity domain.AgentActivity) error {
 	if session.AgentSessionID == "" {
 		return nil
@@ -299,10 +307,20 @@ func (n *codingTriggerNotifier) appendAnchorActivity(ctx context.Context, sessio
 		if activity.ActorID == "" {
 			activity.ActorID = task.AppUserID
 		}
-		if _, err = n.s.store.AppendAgentActivity(ctx, session.WorkspaceKey, task.ID, task.Version, activity); err == nil {
+		_, err = n.s.store.AppendAgentActivity(ctx, session.WorkspaceKey, task.ID, task.Version, activity)
+		if err == nil {
 			return nil
-		} else if !errors.Is(err, store.ErrIssueVersion) {
+		}
+		if !errors.Is(err, store.ErrIssueVersion) {
 			return err
+		}
+		if again, readErr := n.s.store.AgentTask(ctx, session.WorkspaceKey, task.ID); readErr == nil && again.Version == task.Version {
+			// Not a race: the anchor's state machine refused the activity.
+			if session.Phase == domain.CodingPhaseDone {
+				log.Printf("coding session %s: %s notice not posted on the ended anchor %s (%s)", session.ID, key, task.ID, task.Status)
+				return nil
+			}
+			return fmt.Errorf("%w: %s on %s (%s)", errCodingAnchorRefused, activity.Type, task.ID, task.Status)
 		}
 	}
 	return errConflict
@@ -518,6 +536,9 @@ func (s *server) handleCodingElicitationAnswer(ctx context.Context, workspace, u
 		return true, &coding.TriggerError{Code: domain.CodingErrSandboxDisabled, Message: "Coding sessions are not available."}
 	}
 	_, err := triggers.DecideApproval(ctx, workspace, sessionID, userID, codingMemberRole(role), decision)
+	if codingNotificationOnly(err) {
+		err = nil // the decision committed; only its notice is missing
+	}
 	return true, err
 }
 

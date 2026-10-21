@@ -149,16 +149,23 @@ func (s *SQLiteStore) AppendAgentActivity(ctx context.Context, workspace, id str
 		return task, ErrIssueVersion
 	}
 	terminal := task.Status == "complete" || task.Status == "error" || task.Status == "canceled"
-	if terminal && task.Status == "complete" && (activity.Type == "thought" || activity.Type == "action") && s.codingAnchorMidTurn(ctx, workspace, task) {
+	if terminal && task.Status != "canceled" && codingAnchorAccepts(s.codingAnchorPhase(ctx, workspace, task), activity.Type) {
 		// A delegation task reused as a coding anchor: the delegating agent's
-		// own reply completes it while the session's first turn is still
-		// starting, so that turn's progress reopens it instead of being dropped.
+		// own reply (or error) ends it while the session still works or waits
+		// for its approval, so the session's progress and questions reopen it
+		// instead of being dropped. A canceled anchor (a person's stop, a
+		// revocation) stays closed.
 		terminal = false
 	}
 	if terminal && activity.Type != "retry" && activity.Type != "prompt" && activity.Type != "feedback" && activity.Type != "deleted" || !terminal && activity.Type == "retry" {
 		return task, ErrIssueVersion
 	}
-	if task.Status == "awaitingInput" && activity.Type != "prompt" && activity.Type != "canceled" && activity.Type != "feedback" && activity.Type != "deleted" && (activity.Type != "thought" || task.PendingTool != nil) {
+	if task.Status == "awaitingInput" && activity.Type != "prompt" && activity.Type != "canceled" && activity.Type != "feedback" && activity.Type != "deleted" && (activity.Type != "thought" || task.PendingTool != nil) &&
+		(activity.Type != "action" || task.PendingTool != nil || !codingAnchorAccepts(s.codingAnchorPhase(ctx, workspace, task), activity.Type)) {
+		// A coding anchor's question was answered outside the thread (the
+		// session's approve route): once the session works again its
+		// decision and progress are recorded. A pending tool approval
+		// still needs its answer.
 		return task, ErrIssueVersion
 	}
 	switch activity.Type {
