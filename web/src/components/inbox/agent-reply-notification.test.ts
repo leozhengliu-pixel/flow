@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { translateToChinese } from '@/i18n/translate'
 import { viewer } from '@/test/fixtures'
 import type { Notification } from '@/types/flow'
-import { agentReplyLine, agentReplyProjectPath } from './agent-reply-notification'
+import { agentReplyLine, agentReplyProjectPath, finishedSessionTarget } from './agent-reply-notification'
 import { documentNotificationKind, documentNotificationLine, documentNotificationPath, isDocumentNotification } from './hosts/document-inbox-model'
 
 const agent = { ...viewer, id: 'app-flow', displayName: 'Flow', app: true }
@@ -32,5 +32,14 @@ describe('agent reply notifications', () => {
   it('links project thread replies to the comment on the project Activity tab', () => {
     expect(agentReplyProjectPath('ws', { slugId: 'apollo-1a2b' }, 'project_comment_1')).toBe('/ws/project/apollo-1a2b/activity#comment-project_comment_1')
     expect(agentReplyProjectPath('ws', { slugId: 'apollo-1a2b' })).toBe('/ws/project/apollo-1a2b/activity')
+  })
+
+  it('opens a finished session with a pull request on its review, otherwise the issue', () => {
+    const withSession = (agentActivity: string, payload: object = {}) => ({ ...notification(agentActivity), payload: { agentActivity, codingSessionId: 'cs_1', reviewId: 'review-1', ...payload } }) as unknown as Notification
+    const data = { reviews: [{ id: 'review-1' }] }
+    expect(finishedSessionTarget(data, withSession('finished'))).toEqual({ sessionId: 'cs_1', sessionReviewId: 'review-1' })
+    expect(finishedSessionTarget(data, withSession('response'))).toEqual({})
+    expect(finishedSessionTarget(data, withSession('finished', { reviewId: undefined }))).toEqual({})
+    expect(finishedSessionTarget({ reviews: [] }, withSession('finished'))).toEqual({})
   })
 })

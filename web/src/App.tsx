@@ -262,6 +262,7 @@ import {
   releasePipelinesPath,
   releasePipelineSettingsPath,
   reviewPath,
+  reviewAgentPath,
   reviewsPath,
   searchPath,
   routeBelongsToWorkspace,
@@ -5919,8 +5920,8 @@ function App() {
             onOpenInitiative={openInitiative}
             onCreateProjectUpdate={addProjectUpdate}
             onCreateInitiativeUpdate={addInitiativeUpdate}
-            onOpenReview={(review) =>
-              navigateTo(reviewPath(data.workspace.urlKey, review))
+            onOpenReview={(review, sessionId) =>
+              navigateTo(sessionId ? reviewAgentPath(data.workspace.urlKey, review, sessionId) : reviewPath(data.workspace.urlKey, review))
             }
             onSubscriberChange={async (issue, subscribed) => {
               await updateIssueById(issue, {

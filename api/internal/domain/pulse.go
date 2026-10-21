@@ -111,6 +111,11 @@ type NotificationPayload struct {
 	// AgentActivity is the kind of agent reply an agentReply notification
 	// announces: response, elicitation (the agent waits for input) or error.
 	AgentActivity string `json:"agentActivity,omitempty"`
+	// CodingSessionID and ReviewID locate the coding session behind an
+	// agentReply notification and the pull request it opened (the review the
+	// Inbox opens beside the agent panel).
+	CodingSessionID string `json:"codingSessionId,omitempty"`
+	ReviewID        string `json:"reviewId,omitempty"`
 }
 
 type PulseUpdateRef struct {

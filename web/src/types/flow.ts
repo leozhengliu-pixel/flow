@@ -585,6 +585,9 @@ export interface PulseSummaryPayload {
   emoji?: string;
   /** agentReply notifications: the kind of reply (response, elicitation = waiting for input, error). */
   agentActivity?: "response" | "elicitation" | "error" | string;
+  /** agentReply notifications of a coding session: the session and the review of the pull request it opened. */
+  codingSessionId?: string;
+  reviewId?: string;
   [key: string]: unknown;
 }
 export type NotificationCategory =
