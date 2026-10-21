@@ -260,7 +260,7 @@ func (s *server) discoverConnectorTools(ctx context.Context, data domain.Bootstr
 					return nil, fmt.Errorf("invalid MCP tool definition")
 				}
 				hash := sha256.Sum256([]byte(policy.ID + "\x00" + tool.Name))
-				items = append(items, connectorTool{Definition: agentProviderTool{Name: fmt.Sprintf("external_%x", hash[:16]), Description: truncateSettingsText(policy.label()+": "+tool.Description, 2000), Parameters: tool.InputSchema, Access: "write"}, Policy: policy, RemoteName: tool.Name})
+				items = append(items, connectorTool{Definition: agentProviderTool{Name: fmt.Sprintf("external_%x", hash[:16]), Description: connectorToolDescription(policy.label(), tool.Name, tool.Description, tool.InputSchema), Parameters: tool.InputSchema, Access: "write"}, Policy: policy, RemoteName: tool.Name})
 				if len(items) > maxConnectorTools {
 					return nil, fmt.Errorf("too many MCP tools (maximum %d)", maxConnectorTools)
 				}
@@ -303,15 +303,20 @@ func (s *server) executeConnectorTool(r *http.Request, data domain.Bootstrap, ca
 	if !allowed {
 		return nil, fmt.Errorf("MCP connection access was revoked")
 	}
+	var args map[string]any
+	if json.Unmarshal(call.Arguments, &args) != nil || args == nil {
+		return nil, fmt.Errorf("invalid MCP tool arguments")
+	}
+	// Arguments the tool's schema rejects (a property it does not have, a missing required one) are refused here
+	// with what the tool accepts, instead of being sent upstream.
+	if err := validateConnectorArguments(tool.RemoteName, tool.Definition.Parameters, args); err != nil {
+		return nil, err
+	}
 	client, err := s.openConnector(r.Context(), tool.Policy)
 	if err != nil {
 		return nil, err
 	}
 	defer client.close()
-	var args map[string]any
-	if json.Unmarshal(call.Arguments, &args) != nil || args == nil {
-		return nil, fmt.Errorf("invalid MCP tool arguments")
-	}
 	result, err := client.rpc(r.Context(), "tools/call", map[string]any{"name": tool.RemoteName, "arguments": args}, false)
 	if err != nil {
 		return nil, err
