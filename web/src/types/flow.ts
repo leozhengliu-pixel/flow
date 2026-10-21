@@ -1839,18 +1839,66 @@ export interface DeployPreview {
   createdAt: string;
   updatedAt: string;
 }
-/** One import of open pull/merge requests from the connected code hosts ("Sync now"). */
+/** A repository or request whose code host call failed, and when it is retried. */
+export interface ReviewImportFailure {
+  target: string;
+  message: string;
+  failures?: number;
+  backoffUntil?: string;
+}
+/** One import of open pull/merge requests from the approved repositories ("Sync now" or scheduled). */
 export interface ReviewImportResult {
+  trigger?: "manual" | "schedule";
   repositories: number;
+  scanned?: number;
   imported: number;
   updated: number;
   closed: number;
-  /** Repositories or connections that could not be read. */
+  skippedUnchanged?: number;
+  synced?: number;
+  failed?: number;
+  /** Repositories and requests skipped while backing off after a failure. */
+  backedOff?: number;
+  writes?: number;
+  /** A per-run limit stopped the run; the next run continues where it stopped. */
+  partial?: boolean;
+  /** Repositories or requests that could not be read. */
   errors: string[];
+  failures?: ReviewImportFailure[];
   /** The run stopped early for a code host's rate limit. */
   rateLimitedUntil?: string;
   startedAt: string;
   finishedAt: string;
+}
+/** An approved repository (GitLab project) of the pull/merge request import. */
+export interface ReviewImportRepository {
+  provider: "github" | "gitlab";
+  repository: string;
+}
+/** GET /api/reviews/import. */
+export interface ReviewImportStatus {
+  /** The server allows imports (FLOW_REVIEW_IMPORT=on). */
+  available: boolean;
+  /** The workspace turned the import on. */
+  enabled: boolean;
+  active: boolean;
+  /** Seconds between background runs. */
+  interval: number;
+  repositories: ReviewImportRepository[];
+  limits: {
+    repositoriesPerRun: number;
+    requestsPerRepository: number;
+    requestsPerRun: number;
+    writesPerRun: number;
+    writeDelaySeconds: number;
+    maxRepositories: number;
+  };
+  running: boolean;
+  last?: ReviewImportResult;
+  nextRunAt?: string;
+  rateLimitedUntil?: string;
+  backoffs: ReviewImportFailure[];
+  updatedAt?: string;
 }
 
 export interface CodeReview {

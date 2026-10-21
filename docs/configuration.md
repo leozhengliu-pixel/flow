@@ -658,53 +658,74 @@ not duplicate notifications.
 ### Importing pull and merge requests without webhooks
 
 When webhooks cannot reach Flow (an intranet deployment, local development, a
-broken delivery), Flow lists open pull and merge requests itself and creates or
-refreshes their reviews:
+broken delivery), Flow can list the open pull and merge requests of
+**repositories a workspace admin approved** and create or refresh their
+reviews. It is **off by default** and needs two switches:
 
-- **Sync now** on the Reviews list (`POST /api/reviews/import`) runs an import
-  at once. `GET /api/reviews/import` reports the last run and whether background
-  imports run for the workspace.
-- **Background imports** run every `FLOW_REVIEW_IMPORT_INTERVAL` for each
-  workspace that has a code host source without a working webhook.
+1. The server allows it: `FLOW_REVIEW_IMPORT=on`. With `off` (the default)
+   nothing runs, whatever a workspace configured: no background runs, no
+   **Sync now**, not even the scheduler's query.
+2. A workspace admin turns it on and approves repositories under
+   **Settings › Integrations › GitHub / GitLab › Import pull requests without
+   webhooks** (`PATCH /api/reviews/import` with `enabled` and
+   `repositories: [{provider, repository}]`, at most 100). Repositories are
+   entered as `owner/name` (a GitLab project may sit in nested groups) or by
+   URL. An empty list imports nothing: Flow never enumerates what a token can
+   see, and a connection without an `organization` does not mean "all".
 
-What is listed:
+Then the import runs every `FLOW_REVIEW_IMPORT_INTERVAL` and on **Sync now**
+(`POST /api/reviews/import`, workspace admins). `GET /api/reviews/import`
+(workspace members, read-only) reports whether it is allowed and enabled, the
+approved repositories, the limits, whether a run is in progress, the last run
+(start and end, scanned, imported, updated, unchanged, failed, backed off,
+writes, errors), the next run and the repositories and requests that are
+backing off with their last error and retry time.
 
-| Source | Repositories |
+Each run is bounded and resumable:
+
+| Limit | Value |
 | --- | --- |
-| GitHub App | Every repository of the workspace's installations (the installation's repository selection). |
-| Classic GitHub connection | The token's repositories (`/user/repos`), limited to the connection's `organization` when one is set. |
-| GitLab connection (gitlab.com or self-managed) | Projects the token is a member of with Reporter access or more, limited to the connection's `organization` (group) when one is set. |
+| Repositories read per run | 10 (in rotation; the next run continues at a cursor) |
+| Open requests listed per repository | 50 (most recently updated first) |
+| Requests examined per run | 200 |
+| Workspace writes per run | 20 (all changed requests are one write; each full sync of files and comments is one more) |
+| Pause between writes | 2 seconds |
 
-Archived repositories are skipped. For each repository, Flow lists the open
-requests (up to 1,000), creates a review for each new one, updates title,
-description, branches and draft state of the others, and reads the state of
-reviews that are open in Flow but no longer listed, so closed and merged
-requests are updated (a merge request deleted on GitLab reads as closed).
+- **Unchanged requests are skipped.** A request whose head commit, update time
+  and state are unchanged since the last import is neither written nor synced.
+  Files and comments are synced only for a new review or a new head commit.
+- **One write and one realtime event per run** for all new and changed
+  reviews (`review.imported`), plus one per review whose files and comments were
+  synced; an unchanged run writes nothing and publishes nothing.
+- **Failures back off.** A repository or request whose code host call fails
+  (for example a GitLab `merge request diffs` HTTP 500, or 429) is retried after
+  15 minutes, doubling per failure up to 6 hours; the others continue. A token
+  with fewer than 100 requests left in its rate limit window, or a rate limited
+  answer, ends the run until the reset.
+- **One run per workspace across replicas.** A run holds a lease row in
+  `review_import_state` (database migration 13; SQLite, MySQL and Postgres)
+  for at most 15 minutes, so two API replicas never import the same
+  workspace at once.
+
 Imported reviews link issues whose identifier appears in the title, description
 or branch and run the teams' Git automations (opened, draft, merged) with the
 same team and repository rules as webhooks; they do not create Inbox
-notifications. Files and comments come from the same full sync as "Sync with
-GitHub/GitLab", queued one review after the other, and only for requests that
-are new, have a new head commit or changed since their last sync.
-
-Imports and webhooks share one review per request: a review is matched by code
-host and external id (or repository and number) inside the workspace write, so
-a webhook and an import racing for the same request leave a single review.
-
-Code host requests go through the same credentials and outbound policy as the
-review sync (see [Trusted private endpoints](#trusted-private-endpoints) for
-self-hosted GitLab and GitHub Enterprise on a private network). A run stops
-when a token has fewer than 100 requests left in its rate limit window
-(`X-RateLimit-Remaining` / `RateLimit-Remaining`) or the host answers with a
-rate limit; the rest is imported after the reset.
+notifications. Imports and webhooks share one review per request: a review is
+matched by code host and external id (or repository and number) inside the
+workspace write. Reviews that are open in Flow but no longer listed are read
+once, so closed and merged requests are updated (a merge request deleted on
+GitLab reads as closed). Code host requests use the same credentials and
+outbound policy as the review sync (see
+[Trusted private endpoints](#trusted-private-endpoints)).
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `FLOW_REVIEW_IMPORT` | `auto` | `auto`: background imports for workspaces with a source whose webhook is not working (a classic connection without a webhook secret, or one that delivered no pull/merge request webhook in 7 days; a GitHub App installation with no delivery in 7 days). `always`: every workspace with a code host source. `off`: only **Sync now**. |
-| `FLOW_REVIEW_IMPORT_INTERVAL` | `10m` | Period of the background import per workspace (a Go duration, at least `1m`). `0` turns background imports off. |
+| `FLOW_REVIEW_IMPORT` | `off` | `on` lets workspace admins turn the import on for their approved repositories. `off` turns it off for every workspace, including **Sync now**. The earlier values `auto` and `always` mean `on` (still opt-in per workspace). |
+| `FLOW_REVIEW_IMPORT_INTERVAL` | `10m` | Period of the background import per workspace (a Go duration, at least `1m`). `0` turns the import off. |
 
-With Redis coordination, one instance runs the background imports (leader lock
-`review-import`).
+Before setting `FLOW_REVIEW_IMPORT=on` on a deployment, have a workspace admin
+approve the repositories to import; workspaces that never turned the import on
+are not touched.
 
 ## GitHub App
 

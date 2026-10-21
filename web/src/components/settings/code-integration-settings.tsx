@@ -38,6 +38,7 @@ import {
 import { PersonalCodeHostRow } from "./code-host-accounts";
 import { GitHubAppCard } from "./github-app-card";
 import { GitLabIntegrationSettings } from "./gitlab-integration-settings";
+import { ReviewImportSettings } from "./review-import-settings";
 import { SettingsSelect } from "./settings-primitives";
 
 import "./code-integration-settings.css";
@@ -482,6 +483,13 @@ function ProviderIntegrationSettings({
             onReload={onReload}
           />
         </>
+      )}
+      {provider === "github" && (
+        <ReviewImportSettings
+          provider="github"
+          data={data}
+          className="code-integration-section"
+        />
       )}
       <Dialog
         open={Boolean(disconnecting)}
