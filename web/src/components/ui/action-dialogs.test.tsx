@@ -31,6 +31,26 @@ describe('ActionDialogHost', () => {
     await expect(result).resolves.toBe(true)
   })
 
+  it('renders confirmations as the shared confirm card with the action focused', async () => {
+    render(<ActionDialogHost/>)
+    void confirmAction('Archive this environment?', { description: 'Archived environments can’t be used for new coding sessions.', confirmLabel: 'Archive environment' })
+    const title = await screen.findByRole('heading', { name: 'Archive this environment?' })
+    const dialog = title.closest('.action-dialog')!
+    expect(dialog).toHaveClass('action-dialog-confirm')
+    const action = screen.getByRole('button', { name: 'Archive environment' })
+    expect(action).toHaveClass('danger')
+    expect(action).toHaveFocus()
+    expect(document.querySelector('.action-dialog-confirm-overlay')).not.toBeNull()
+    completeActionDialog(false)
+  })
+
+  it('keeps prompts on the plain dialog chrome', async () => {
+    render(<ActionDialogHost/>)
+    void promptAction('Rename view', 'Draft')
+    const title = await screen.findByRole('heading', { name: 'Rename view' })
+    expect(title.closest('.action-dialog')).not.toHaveClass('action-dialog-confirm')
+  })
+
   it('trims prompt values submitted with Enter', async () => {
     const user = userEvent.setup()
     render(<ActionDialogHost/>)
