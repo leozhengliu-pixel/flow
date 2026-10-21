@@ -46,12 +46,13 @@ func normalizeParity(data *domain.Bootstrap) {
 		data.IssueSuggestions = []domain.IssueSuggestion{}
 	}
 	normalizeTriageIntelligenceSettings(&data.WorkspaceSettings.FeatureSettings.TriageIntelligence)
-	// MCP connectors are on until an admin turns them off; the mirror field older clients read follows the choice.
+	// New workspaces start with MCP connectors on (defaultWorkspaceSettings). A workspace saved before the explicit
+	// choice existed keeps the value it had: its stored "off" may be an admin's decision, which is never turned on here.
 	if data.WorkspaceSettings.MCPConnectors == nil {
-		data.WorkspaceSettings.MCPConnectorsEnabled = true
-	} else {
-		data.WorkspaceSettings.MCPConnectorsEnabled = *data.WorkspaceSettings.MCPConnectors
+		enabled := data.WorkspaceSettings.MCPConnectorsEnabled
+		data.WorkspaceSettings.MCPConnectors = &enabled
 	}
+	data.WorkspaceSettings.MCPConnectorsEnabled = *data.WorkspaceSettings.MCPConnectors
 }
 
 func normalizeTriageIntelligenceSettings(settings *domain.TriageIntelligenceSettings) {
