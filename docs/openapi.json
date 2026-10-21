@@ -34216,6 +34216,162 @@
         "x-flow-source": "main.go"
       }
     },
+    "/scim/v2/{workspace}/ResourceTypes": {
+      "get": {
+        "operationId": "get_scim_v2_workspace_ResourceTypes",
+        "tags": [
+          "scim"
+        ],
+        "summary": "GET /scim/v2/{workspace}/ResourceTypes",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "workspace",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
+    "/scim/v2/{workspace}/ResourceTypes/{id}": {
+      "get": {
+        "operationId": "get_scim_v2_workspace_ResourceTypes_id",
+        "tags": [
+          "scim"
+        ],
+        "summary": "GET /scim/v2/{workspace}/ResourceTypes/{id}",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "workspace",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
+    "/scim/v2/{workspace}/Schemas": {
+      "get": {
+        "operationId": "get_scim_v2_workspace_Schemas",
+        "tags": [
+          "scim"
+        ],
+        "summary": "GET /scim/v2/{workspace}/Schemas",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "workspace",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
+    "/scim/v2/{workspace}/Schemas/{id}": {
+      "get": {
+        "operationId": "get_scim_v2_workspace_Schemas_id",
+        "tags": [
+          "scim"
+        ],
+        "summary": "GET /scim/v2/{workspace}/Schemas/{id}",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "workspace",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
     "/scim/v2/{workspace}/ServiceProviderConfig": {
       "get": {
         "operationId": "get_scim_v2_workspace_ServiceProviderConfig",

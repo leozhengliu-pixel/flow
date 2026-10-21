@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -24,10 +25,78 @@ type SCIMToken struct {
 	RevokedAt   *time.Time `json:"revokedAt,omitempty"`
 }
 
+// ErrSCIMUniqueness reports a SCIM create or update that would duplicate
+// another member's userName, externalId or email (409 uniqueness).
+var ErrSCIMUniqueness = errors.New("a member with this userName, externalId or email already exists")
+
+// ErrSCIMNotFound reports a SCIM user that does not exist in the workspace
+// (or was deleted through SCIM).
+var ErrSCIMNotFound = errors.New("SCIM user not found")
+
+// ErrSCIMInvalid wraps a SCIM value the store rejects (400 invalidValue).
+var ErrSCIMInvalid = errors.New("invalid SCIM value")
+
+// SCIM identities removed with DELETE keep their row (and the suspended
+// account) under this provider, so the resource reads as gone while a
+// later create with the same externalId restores the same account.
+const scimDeletedProvider = "scim_deleted"
+
 type SCIMUser struct {
 	User       domain.User
 	ExternalID string
 	UserName   string
+	Name       SCIMName
+	// ExternalIDDefaulted is true when the IdP sent no externalId and the
+	// identity is keyed by userName; the resource then has no externalId.
+	ExternalIDDefaulted bool
+	Role                string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}
+
+// SCIMName is the SCIM name complex attribute, kept with the SCIM identity
+// so IdPs read back what they wrote.
+type SCIMName struct {
+	Formatted  string `json:"formatted,omitempty"`
+	GivenName  string `json:"givenName,omitempty"`
+	FamilyName string `json:"familyName,omitempty"`
+}
+
+// FullName is formatted, else givenName familyName.
+func (n SCIMName) FullName() string {
+	if strings.TrimSpace(n.Formatted) != "" {
+		return strings.TrimSpace(n.Formatted)
+	}
+	return strings.TrimSpace(strings.TrimSpace(n.GivenName) + " " + strings.TrimSpace(n.FamilyName))
+}
+
+type scimIdentityClaims struct {
+	Name                SCIMName `json:"name,omitzero"`
+	ExternalIDDefaulted bool     `json:"externalIdDefaulted,omitempty"`
+}
+
+// SCIMUserInput is a complete SCIM user write. Role is applied only when
+// RoleExplicit is set or the member has no role yet, so profile updates do
+// not reset a role an IdP assigned earlier.
+type SCIMUserInput struct {
+	ExternalID   string
+	UserName     string
+	DisplayName  string
+	Name         SCIMName
+	Email        string
+	AvatarURL    string
+	Role         string
+	RoleExplicit bool
+	Active       bool
+}
+
+// SCIMUserQuery narrows a SCIM user listing to one exact attribute value
+// (userName and email compare case-insensitively). Limit 0 counts only.
+type SCIMUserQuery struct {
+	Attribute string // "", "userName", "externalId", "id", "email", "displayName"
+	Value     string
+	Offset    int
+	Limit     int
 }
 
 // SCIMGroup is a provisioned SCIM group. Role is set when the group display
@@ -173,94 +242,234 @@ func (s *SQLiteStore) AuthenticateSCIMToken(ctx context.Context, secret string) 
 	return workspaceID, nil
 }
 
-func (s *SQLiteStore) ListSCIMUsers(ctx context.Context, workspaceID string, offset, limit int, filter string) ([]SCIMUser, int, error) {
-	if offset < 0 {
-		offset = 0
+const scimUserColumns = `i.subject,i.username,i.claims_json,u.id,u.email,u.name,u.display_name,u.avatar_url,u.email_verified_at,u.active,u.created_at,u.updated_at,m.role`
+const scimUserFrom = ` FROM auth_identities i JOIN workspace_memberships m ON m.user_id=i.user_id AND m.workspace_id=? JOIN auth_users u ON u.id=i.user_id WHERE i.provider='scim' AND i.issuer=?`
+
+type scimRowScanner interface{ Scan(...any) error }
+
+func scanSCIMUser(row scimRowScanner) (SCIMUser, error) {
+	var item SCIMUser
+	var claims string
+	var email, verified sql.NullString
+	var active int
+	var created, updated string
+	if err := row.Scan(&item.ExternalID, &item.UserName, &claims, &item.User.ID, &email, &item.User.Name, &item.User.DisplayName, &item.User.AvatarURL, &verified, &active, &created, &updated, &item.Role); err != nil {
+		return SCIMUser{}, err
 	}
-	if limit <= 0 || limit > 1000 {
-		limit = 100
+	item.User.Email = email.String
+	item.User.Active, item.User.EmailVerified = active == 1, verified.Valid
+	item.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+	item.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updated)
+	var parsed scimIdentityClaims
+	if json.Unmarshal([]byte(claims), &parsed) == nil {
+		item.Name, item.ExternalIDDefaulted = parsed.Name, parsed.ExternalIDDefaulted
 	}
-	pattern := "%"
-	if strings.TrimSpace(filter) != "" {
-		pattern = "%" + strings.ToLower(strings.TrimSpace(filter)) + "%"
+	return item, nil
+}
+
+// ListSCIMUsers pages the workspace's SCIM users ordered by userName. An
+// exact-match query uses the identity and user indexes instead of a scan.
+func (s *SQLiteStore) ListSCIMUsers(ctx context.Context, workspaceID string, query SCIMUserQuery) ([]SCIMUser, int, error) {
+	where, args := "", []any{workspaceID, workspaceID}
+	value := strings.TrimSpace(query.Value)
+	switch query.Attribute {
+	case "":
+	case "userName":
+		where, args = ` AND lower(i.username)=?`, append(args, strings.ToLower(value))
+	case "externalId":
+		where, args = ` AND i.subject=?`, append(args, value)
+	case "id":
+		where, args = ` AND u.id=?`, append(args, value)
+	case "email":
+		where, args = ` AND u.email=?`, append(args, normalizeEmail(value))
+	case "displayName":
+		where, args = ` AND lower(u.display_name)=?`, append(args, strings.ToLower(value))
+	default:
+		return nil, 0, fmt.Errorf("unsupported SCIM user query attribute %q", query.Attribute)
 	}
 	var total int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM auth_identities i JOIN workspace_memberships m ON m.user_id=i.user_id JOIN auth_users u ON u.id=i.user_id WHERE i.provider='scim' AND i.issuer=? AND m.workspace_id=? AND (lower(i.username) LIKE ? OR lower(COALESCE(u.email,'')) LIKE ? OR lower(u.display_name) LIKE ?)`, workspaceID, workspaceID, pattern, pattern, pattern).Scan(&total); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*)`+scimUserFrom+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT i.subject,i.username,u.id,u.email,u.name,u.display_name,u.avatar_url,u.email_verified_at,u.active FROM auth_identities i JOIN workspace_memberships m ON m.user_id=i.user_id JOIN auth_users u ON u.id=i.user_id WHERE i.provider='scim' AND i.issuer=? AND m.workspace_id=? AND (lower(i.username) LIKE ? OR lower(COALESCE(u.email,'')) LIKE ? OR lower(u.display_name) LIKE ?) ORDER BY lower(i.username),i.subject LIMIT ? OFFSET ?`, workspaceID, workspaceID, pattern, pattern, pattern, limit, offset)
+	result := []SCIMUser{}
+	if query.Limit <= 0 || total == 0 {
+		return result, total, nil
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT `+scimUserColumns+scimUserFrom+where+` ORDER BY lower(i.username),i.subject LIMIT ? OFFSET ?`, append(args, query.Limit, max(query.Offset, 0))...)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer rows.Close()
-	result := []SCIMUser{}
 	for rows.Next() {
-		var item SCIMUser
-		var email, verified sql.NullString
-		var active int
-		if err := rows.Scan(&item.ExternalID, &item.UserName, &item.User.ID, &email, &item.User.Name, &item.User.DisplayName, &item.User.AvatarURL, &verified, &active); err != nil {
+		item, err := scanSCIMUser(rows)
+		if err != nil {
 			return nil, 0, err
 		}
-		item.User.Email = email.String
-		item.User.Active, item.User.EmailVerified = active == 1, verified.Valid
 		result = append(result, item)
 	}
 	return result, total, rows.Err()
 }
 
-func (s *SQLiteStore) SCIMUser(ctx context.Context, workspaceID, externalID string) (SCIMUser, error) {
-	var item SCIMUser
-	var email, verified sql.NullString
-	var active int
-	err := s.db.QueryRowContext(ctx, `SELECT i.subject,i.username,u.id,u.email,u.name,u.display_name,u.avatar_url,u.email_verified_at,u.active FROM auth_identities i JOIN workspace_memberships m ON m.user_id=i.user_id JOIN auth_users u ON u.id=i.user_id WHERE i.provider='scim' AND i.issuer=? AND m.workspace_id=? AND (i.subject=? OR u.id=?)`, workspaceID, workspaceID, externalID, externalID).Scan(&item.ExternalID, &item.UserName, &item.User.ID, &email, &item.User.Name, &item.User.DisplayName, &item.User.AvatarURL, &verified, &active)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return SCIMUser{}, ErrAuthForbidden
-		}
-		return SCIMUser{}, err
+// SCIMUser finds a SCIM user by Flow user id or externalId.
+func (s *SQLiteStore) SCIMUser(ctx context.Context, workspaceID, id string) (SCIMUser, error) {
+	item, err := scanSCIMUser(s.db.QueryRowContext(ctx, `SELECT `+scimUserColumns+scimUserFrom+` AND (u.id=? OR i.subject=?) ORDER BY CASE WHEN u.id=? THEN 0 ELSE 1 END LIMIT 1`, workspaceID, workspaceID, id, id, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return SCIMUser{}, ErrSCIMNotFound
 	}
-	item.User.Email, item.User.Active, item.User.EmailVerified = email.String, active == 1, verified.Valid
-	return item, nil
+	return item, err
 }
 
+// ProvisionSCIMUser creates the user for externalID, or updates it when it
+// already exists. role is always applied.
 func (s *SQLiteStore) ProvisionSCIMUser(ctx context.Context, workspaceID, externalID, username, displayName, email, avatarURL, role string, active bool) (SCIMUser, error) {
-	externalID, username, displayName, email = strings.TrimSpace(externalID), strings.TrimSpace(username), strings.TrimSpace(displayName), normalizeEmail(email)
-	if externalID == "" {
-		externalID = username
+	input := SCIMUserInput{ExternalID: externalID, UserName: username, DisplayName: displayName, Email: email, AvatarURL: avatarURL, Role: role, RoleExplicit: true, Active: active}
+	subject := strings.TrimSpace(externalID)
+	if subject == "" {
+		subject = strings.TrimSpace(username)
 	}
-	if externalID == "" || username == "" {
-		return SCIMUser{}, errors.New("scim externalId and userName are required")
+	if existing, err := s.SCIMUser(ctx, workspaceID, subject); err == nil {
+		return s.UpdateSCIMUser(ctx, workspaceID, existing.User.ID, input)
 	}
-	if displayName == "" {
-		displayName = username
+	return s.CreateSCIMUser(ctx, workspaceID, input)
+}
+
+// CreateSCIMUser provisions a member (POST /Users). An existing account
+// with the same email is linked rather than duplicated, keeping its
+// workspace role unless the IdP sends one. A userName or externalId already
+// provisioned in the workspace is ErrSCIMUniqueness. An externalId deleted
+// through SCIM earlier restores that account.
+func (s *SQLiteStore) CreateSCIMUser(ctx context.Context, workspaceID string, input SCIMUserInput) (SCIMUser, error) {
+	input = normalizeSCIMUserInput(input)
+	if input.UserName == "" {
+		return SCIMUser{}, fmt.Errorf("%w: userName is required", ErrSCIMInvalid)
+	}
+	subject, defaulted := input.ExternalID, false
+	if subject == "" {
+		subject, defaulted = input.UserName, true
+	}
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM auth_identities WHERE provider='scim' AND issuer=? AND (subject=? OR lower(username)=?)`, workspaceID, subject, strings.ToLower(input.UserName)).Scan(&count); err != nil {
+		return SCIMUser{}, err
+	}
+	if count > 0 {
+		return SCIMUser{}, ErrSCIMUniqueness
 	}
 	now := time.Now().UTC()
+	stamp := now.Format(time.RFC3339Nano)
+	claims := scimClaimsJSON(input.Name, defaulted)
+	// The account is a SCIM user deleted earlier (restored), an existing
+	// account with the same email (linked), or new.
 	var userID string
-	err := s.db.QueryRowContext(ctx, `SELECT user_id FROM auth_identities WHERE provider='scim' AND issuer=? AND subject=?`, workspaceID, externalID).Scan(&userID)
-	if errors.Is(err, sql.ErrNoRows) {
-		userID = fmt.Sprintf("usr_%d", now.UnixNano())
-		_, err = s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, userID, nullableString(email), username, displayName, strings.TrimSpace(avatarURL), "", nullableTime(active, now), boolInt(active), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
-		if err != nil {
+	err := s.db.QueryRowContext(ctx, `SELECT user_id FROM auth_identities WHERE provider=? AND issuer=? AND subject=?`, scimDeletedProvider, workspaceID, subject).Scan(&userID)
+	restored := err == nil
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return SCIMUser{}, err
+	}
+	if !restored && input.Email != "" {
+		if err := s.db.QueryRowContext(ctx, `SELECT id FROM auth_users WHERE email=?`, input.Email).Scan(&userID); err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return SCIMUser{}, err
 		}
-		_, err = s.db.ExecContext(ctx, `INSERT INTO auth_identities(id,user_id,provider,issuer,subject,identity_key,username,claims_json,created_at,last_login_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, fmt.Sprintf("identity_%d", now.UnixNano()), userID, "scim", workspaceID, externalID, externalIdentityKey("scim", workspaceID, externalID), username, "{}", now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
-	} else if err == nil {
-		_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET email=?,name=?,display_name=?,avatar_url=?,active=?,updated_at=? WHERE id=?`, nullableString(email), username, displayName, strings.TrimSpace(avatarURL), boolInt(active), now.Format(time.RFC3339Nano), userID)
-		if err == nil {
-			_, err = s.db.ExecContext(ctx, `UPDATE auth_identities SET username=? WHERE provider='scim' AND issuer=? AND subject=?`, username, workspaceID, externalID)
+		if userID != "" {
+			if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM auth_identities WHERE provider='scim' AND issuer=? AND user_id=?`, workspaceID, userID).Scan(&count); err != nil {
+				return SCIMUser{}, err
+			}
+			if count > 0 {
+				return SCIMUser{}, ErrSCIMUniqueness
+			}
+			var role string
+			if err := s.db.QueryRowContext(ctx, `SELECT role FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID).Scan(&role); err == nil && !input.RoleExplicit {
+				input.Role = role
+			}
 		}
+	}
+	if restored && input.Email != "" {
+		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM auth_users WHERE email=? AND id<>?`, input.Email, userID).Scan(&count); err != nil {
+			return SCIMUser{}, err
+		}
+		if count > 0 {
+			return SCIMUser{}, ErrSCIMUniqueness
+		}
+	}
+	if userID == "" {
+		userID = fmt.Sprintf("usr_%d", now.UnixNano())
+		_, err = s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, userID, nullableString(input.Email), scimFullName(input), scimDisplayName(input), input.AvatarURL, "", nullableTime(input.Active && input.Email != "", now), boolInt(input.Active), stamp, stamp)
 	} else {
-		return SCIMUser{}, err
+		_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET email=?,name=?,display_name=?,active=?,updated_at=? WHERE id=?`, nullableString(input.Email), scimFullName(input), scimDisplayName(input), boolInt(input.Active), stamp, userID)
 	}
 	if err != nil {
 		return SCIMUser{}, err
+	}
+	if restored {
+		_, err = s.db.ExecContext(ctx, `UPDATE auth_identities SET provider='scim',username=?,claims_json=? WHERE provider=? AND issuer=? AND subject=?`, input.UserName, claims, scimDeletedProvider, workspaceID, subject)
+	} else {
+		_, err = s.db.ExecContext(ctx, `INSERT INTO auth_identities(id,user_id,provider,issuer,subject,identity_key,username,claims_json,created_at,last_login_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, fmt.Sprintf("identity_%d", now.UnixNano()), userID, "scim", workspaceID, subject, externalIdentityKey("scim", workspaceID, subject), input.UserName, claims, stamp, stamp)
+	}
+	if err != nil {
+		return SCIMUser{}, err
+	}
+	// A restored account keeps the role it had unless the IdP sends one.
+	input.RoleExplicit = input.RoleExplicit || !restored
+	return s.writeSCIMUser(ctx, workspaceID, userID, input, now)
+}
+
+// UpdateSCIMUser replaces a SCIM user's attributes (PUT, or the result of a
+// PATCH). Taking another member's userName or email is ErrSCIMUniqueness.
+func (s *SQLiteStore) UpdateSCIMUser(ctx context.Context, workspaceID, userID string, input SCIMUserInput) (SCIMUser, error) {
+	input = normalizeSCIMUserInput(input)
+	current, err := s.SCIMUser(ctx, workspaceID, userID)
+	if err != nil {
+		return SCIMUser{}, err
+	}
+	if input.UserName == "" {
+		return SCIMUser{}, fmt.Errorf("%w: userName is required", ErrSCIMInvalid)
+	}
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM auth_identities WHERE provider='scim' AND issuer=? AND lower(username)=? AND user_id<>?`, workspaceID, strings.ToLower(input.UserName), current.User.ID).Scan(&count); err != nil {
+		return SCIMUser{}, err
+	}
+	if count == 0 && input.Email != "" {
+		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM auth_users WHERE email=? AND id<>?`, input.Email, current.User.ID).Scan(&count); err != nil {
+			return SCIMUser{}, err
+		}
+	}
+	if count > 0 {
+		return SCIMUser{}, ErrSCIMUniqueness
+	}
+	if input.ExternalID != "" && input.ExternalID != current.ExternalID && !current.ExternalIDDefaulted {
+		return SCIMUser{}, fmt.Errorf("%w: externalId cannot be changed", ErrSCIMInvalid)
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE auth_identities SET username=?,claims_json=? WHERE provider='scim' AND issuer=? AND subject=?`, input.UserName, scimClaimsJSON(input.Name, current.ExternalIDDefaulted), workspaceID, current.ExternalID); err != nil {
+		return SCIMUser{}, err
+	}
+	now := time.Now().UTC()
+	if _, err := s.db.ExecContext(ctx, `UPDATE auth_users SET email=?,name=?,display_name=?,avatar_url=?,active=?,updated_at=? WHERE id=?`, nullableString(input.Email), scimFullName(input), scimDisplayName(input), input.AvatarURL, boolInt(input.Active), now.Format(time.RFC3339Nano), current.User.ID); err != nil {
+		return SCIMUser{}, err
+	}
+	return s.writeSCIMUser(ctx, workspaceID, current.User.ID, input, now)
+}
+
+// writeSCIMUser applies membership status and role after the account and
+// identity rows are written.
+func (s *SQLiteStore) writeSCIMUser(ctx context.Context, workspaceID, userID string, input SCIMUserInput, now time.Time) (SCIMUser, error) {
+	role := strings.ToLower(strings.TrimSpace(input.Role))
+	if !input.RoleExplicit || !validSCIMRole(role) {
+		var existing string
+		err := s.db.QueryRowContext(ctx, `SELECT role FROM scim_user_roles WHERE workspace_id=? AND user_id=?`, workspaceID, userID).Scan(&existing)
+		switch {
+		case err == nil:
+			role = existing
+		case !errors.Is(err, sql.ErrNoRows):
+			return SCIMUser{}, err
+		case !validSCIMRole(role):
+			role = "member"
+		}
 	}
 	status := "suspended"
-	if active {
+	if input.Active {
 		status = "active"
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,status=excluded.status,last_seen_at=excluded.last_seen_at`, workspaceID, userID, role, status, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
-	if err != nil {
+	stamp := now.Format(time.RFC3339Nano)
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,status=excluded.status,last_seen_at=excluded.last_seen_at`, workspaceID, userID, role, status, stamp, stamp); err != nil {
 		return SCIMUser{}, err
 	}
 	if err := s.setSCIMUserRole(ctx, workspaceID, userID, role, now); err != nil {
@@ -269,19 +478,88 @@ func (s *SQLiteStore) ProvisionSCIMUser(ctx context.Context, workspaceID, extern
 	if err := s.recomputeSCIMUserRole(ctx, workspaceID, userID); err != nil {
 		return SCIMUser{}, err
 	}
-	return s.SCIMUser(ctx, workspaceID, externalID)
+	return s.SCIMUser(ctx, workspaceID, userID)
 }
 
-func (s *SQLiteStore) DeprovisionSCIMUser(ctx context.Context, workspaceID, externalID string) error {
-	item, err := s.SCIMUser(ctx, workspaceID, externalID)
+func normalizeSCIMUserInput(input SCIMUserInput) SCIMUserInput {
+	input.ExternalID, input.UserName, input.DisplayName = strings.TrimSpace(input.ExternalID), strings.TrimSpace(input.UserName), strings.TrimSpace(input.DisplayName)
+	input.Name = SCIMName{Formatted: strings.TrimSpace(input.Name.Formatted), GivenName: strings.TrimSpace(input.Name.GivenName), FamilyName: strings.TrimSpace(input.Name.FamilyName)}
+	input.Email, input.AvatarURL = normalizeEmail(input.Email), strings.TrimSpace(input.AvatarURL)
+	if input.Email == "" && strings.Contains(input.UserName, "@") {
+		input.Email = normalizeEmail(input.UserName)
+	}
+	return input
+}
+
+// scimFullName is the account name: name.formatted, else given and family
+// name, else displayName, else userName.
+func scimFullName(input SCIMUserInput) string {
+	for _, value := range []string{input.Name.FullName(), input.DisplayName, input.UserName} {
+		if value != "" {
+			return value
+		}
+	}
+	return input.UserName
+}
+
+func scimDisplayName(input SCIMUserInput) string {
+	if input.DisplayName != "" {
+		return input.DisplayName
+	}
+	return scimFullName(input)
+}
+
+func scimClaimsJSON(name SCIMName, externalIDDefaulted bool) string {
+	raw, _ := json.Marshal(scimIdentityClaims{Name: name, ExternalIDDefaulted: externalIDDefaulted})
+	return string(raw)
+}
+
+// DeprovisionSCIMUser handles DELETE /Users/{id}: the account is suspended
+// in the workspace (never deleted, so its history stays attributed), its
+// SCIM group memberships end, and the SCIM resource reads as gone. It
+// returns the groups the user left so callers can resync linked teams.
+func (s *SQLiteStore) DeprovisionSCIMUser(ctx context.Context, workspaceID, id string) ([]string, error) {
+	item, err := s.SCIMUser(ctx, workspaceID, id)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET active=0,updated_at=? WHERE id=?`, time.Now().UTC().Format(time.RFC3339Nano), item.User.ID)
-	if err == nil {
-		_, err = s.db.ExecContext(ctx, `UPDATE workspace_memberships SET status='suspended' WHERE workspace_id=? AND user_id=?`, workspaceID, item.User.ID)
+	rows, err := s.db.QueryContext(ctx, `SELECT group_id FROM scim_group_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, item.User.ID)
+	if err != nil {
+		return nil, err
 	}
-	return err
+	groups := []string{}
+	for rows.Next() {
+		var groupID string
+		if err := rows.Scan(&groupID); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		groups = append(groups, groupID)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	stamp := time.Now().UTC().Format(time.RFC3339Nano)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	statements := []struct {
+		query string
+		args  []any
+	}{
+		{`UPDATE auth_users SET active=0,updated_at=? WHERE id=?`, []any{stamp, item.User.ID}},
+		{`UPDATE workspace_memberships SET status='suspended' WHERE workspace_id=? AND user_id=?`, []any{workspaceID, item.User.ID}},
+		{`DELETE FROM scim_group_memberships WHERE workspace_id=? AND user_id=?`, []any{workspaceID, item.User.ID}},
+		{`UPDATE auth_identities SET provider=? WHERE provider='scim' AND issuer=? AND subject=?`, []any{scimDeletedProvider, workspaceID, item.ExternalID}},
+	}
+	for _, statement := range statements {
+		if _, err := tx.ExecContext(ctx, statement.query, statement.args...); err != nil {
+			return nil, err
+		}
+	}
+	return groups, tx.Commit()
 }
 
 func nullableString(value string) any {
@@ -319,15 +597,24 @@ func validSCIMRole(role string) bool {
 	return role == "owner" || role == "admin" || role == "member" || role == "guest"
 }
 
+// ErrSCIMMemberNotFound reports a group member value that is not a SCIM
+// user of the workspace (400 invalidValue).
+var ErrSCIMMemberNotFound = errors.New("SCIM group member not found")
+
 // CreateSCIMGroup persists a group pushed by an IdP. Groups never create Flow
 // teams; role is assigned by the caller from the workspace role-group mapping.
+// A second group with the same displayName or externalId is
+// ErrSCIMUniqueness.
 func (s *SQLiteStore) CreateSCIMGroup(ctx context.Context, workspaceID, externalID, displayName, role string) (SCIMGroup, error) {
 	externalID, displayName, role = strings.TrimSpace(externalID), strings.TrimSpace(displayName), strings.ToLower(strings.TrimSpace(role))
 	if displayName == "" {
-		return SCIMGroup{}, errors.New("SCIM group displayName is required")
+		return SCIMGroup{}, fmt.Errorf("%w: SCIM group displayName is required", ErrSCIMInvalid)
 	}
 	if role != "" && !validSCIMRole(role) {
-		return SCIMGroup{}, errors.New("invalid SCIM group role")
+		return SCIMGroup{}, fmt.Errorf("%w: invalid SCIM group role", ErrSCIMInvalid)
+	}
+	if err := s.checkSCIMGroupUnique(ctx, workspaceID, "", externalID, displayName); err != nil {
+		return SCIMGroup{}, err
 	}
 	now := time.Now().UTC()
 	id := fmt.Sprintf("scimg_%d", now.UnixNano())
@@ -338,56 +625,95 @@ func (s *SQLiteStore) CreateSCIMGroup(ctx context.Context, workspaceID, external
 	return s.SCIMGroup(ctx, workspaceID, id)
 }
 
+func (s *SQLiteStore) checkSCIMGroupUnique(ctx context.Context, workspaceID, groupID, externalID, displayName string) error {
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM scim_groups WHERE workspace_id=? AND id<>? AND (lower(display_name)=? OR (external_id<>'' AND external_id=?))`, workspaceID, groupID, strings.ToLower(displayName), externalID).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return ErrSCIMUniqueness
+	}
+	return nil
+}
+
 func (s *SQLiteStore) SCIMGroup(ctx context.Context, workspaceID, id string) (SCIMGroup, error) {
 	var group SCIMGroup
 	var created, updated string
-	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,external_id,display_name,role,created_at,updated_at FROM scim_groups WHERE workspace_id=? AND (id=? OR external_id=?)`, workspaceID, id, id).Scan(&group.ID, &group.WorkspaceID, &group.ExternalID, &group.DisplayName, &group.Role, &created, &updated)
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,external_id,display_name,role,created_at,updated_at FROM scim_groups WHERE workspace_id=? AND (id=? OR external_id=?) ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END LIMIT 1`, workspaceID, id, id, id).Scan(&group.ID, &group.WorkspaceID, &group.ExternalID, &group.DisplayName, &group.Role, &created, &updated)
 	if err != nil {
 		return SCIMGroup{}, err
 	}
 	group.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
 	group.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updated)
-	rows, err := s.db.QueryContext(ctx, `SELECT m.user_id,COALESCE(i.subject,''),m.updated_at FROM scim_group_memberships m LEFT JOIN auth_identities i ON i.user_id=m.user_id AND i.provider='scim' AND i.issuer=? WHERE m.workspace_id=? AND m.group_id=? ORDER BY m.updated_at,m.user_id`, workspaceID, workspaceID, group.ID)
-	if err != nil {
-		return SCIMGroup{}, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var member SCIMGroupMember
-		var stamp string
-		if err := rows.Scan(&member.UserID, &member.ExternalID, &stamp); err != nil {
-			return SCIMGroup{}, err
-		}
-		member.UpdatedAt, _ = time.Parse(time.RFC3339Nano, stamp)
-		group.Members = append(group.Members, member)
-	}
-	return group, rows.Err()
+	members, err := s.scimGroupMembers(ctx, workspaceID, group.ID)
+	group.Members = members[group.ID]
+	return group, err
 }
 
-func (s *SQLiteStore) ListSCIMGroups(ctx context.Context, workspaceID string) ([]SCIMGroup, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,workspace_id,external_id,display_name,role,created_at,updated_at FROM scim_groups WHERE workspace_id=? ORDER BY lower(display_name),id`, workspaceID)
+// scimGroupMembers loads members of one group, or of every group in the
+// workspace when groupID is empty, keyed by group id.
+func (s *SQLiteStore) scimGroupMembers(ctx context.Context, workspaceID, groupID string) (map[string][]SCIMGroupMember, error) {
+	query := `SELECT m.group_id,m.user_id,COALESCE(i.subject,''),m.updated_at FROM scim_group_memberships m LEFT JOIN auth_identities i ON i.user_id=m.user_id AND i.provider='scim' AND i.issuer=? WHERE m.workspace_id=?`
+	args := []any{workspaceID, workspaceID}
+	if groupID != "" {
+		query += ` AND m.group_id=?`
+		args = append(args, groupID)
+	}
+	rows, err := s.db.QueryContext(ctx, query+` ORDER BY m.updated_at,m.user_id`, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+	result := map[string][]SCIMGroupMember{}
+	for rows.Next() {
+		var member SCIMGroupMember
+		var group, stamp string
+		if err := rows.Scan(&group, &member.UserID, &member.ExternalID, &stamp); err != nil {
+			return nil, err
+		}
+		member.UpdatedAt, _ = time.Parse(time.RFC3339Nano, stamp)
+		result[group] = append(result[group], member)
+	}
+	return result, rows.Err()
+}
+
+// ListSCIMGroups lists the workspace's SCIM groups by display name. Members
+// are loaded (in one query) only when withMembers is set.
+func (s *SQLiteStore) ListSCIMGroups(ctx context.Context, workspaceID string, withMembers bool) ([]SCIMGroup, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,workspace_id,external_id,display_name,role,created_at,updated_at FROM scim_groups WHERE workspace_id=? ORDER BY lower(display_name),id`, workspaceID)
+	if err != nil {
+		return nil, err
+	}
 	groups := []SCIMGroup{}
 	for rows.Next() {
 		var group SCIMGroup
 		var created, updated string
 		if err := rows.Scan(&group.ID, &group.WorkspaceID, &group.ExternalID, &group.DisplayName, &group.Role, &created, &updated); err != nil {
+			rows.Close()
 			return nil, err
 		}
 		group.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
 		group.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updated)
-		loaded, err := s.SCIMGroup(ctx, workspaceID, group.ID)
-		if err != nil {
-			return nil, err
-		}
-		groups = append(groups, loaded)
+		groups = append(groups, group)
 	}
-	return groups, rows.Err()
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if !withMembers || len(groups) == 0 {
+		return groups, nil
+	}
+	members, err := s.scimGroupMembers(ctx, workspaceID, "")
+	if err != nil {
+		return nil, err
+	}
+	for index := range groups {
+		groups[index].Members = members[groups[index].ID]
+	}
+	return groups, nil
 }
 
+// UpdateSCIMGroup sets a group's externalId (kept when empty), displayName
+// (kept when empty) and role ("" clears it), then recomputes members' roles.
 func (s *SQLiteStore) UpdateSCIMGroup(ctx context.Context, workspaceID, id, externalID, displayName, role string) (SCIMGroup, error) {
 	group, err := s.SCIMGroup(ctx, workspaceID, id)
 	if err != nil {
@@ -400,11 +726,12 @@ func (s *SQLiteStore) UpdateSCIMGroup(ctx context.Context, workspaceID, id, exte
 		group.DisplayName = strings.TrimSpace(displayName)
 	}
 	role = strings.ToLower(strings.TrimSpace(role))
-	if role != "" {
-		if !validSCIMRole(role) {
-			return SCIMGroup{}, errors.New("invalid SCIM group role")
-		}
-		group.Role = role
+	if role != "" && !validSCIMRole(role) {
+		return SCIMGroup{}, fmt.Errorf("%w: invalid SCIM group role", ErrSCIMInvalid)
+	}
+	group.Role = role
+	if err := s.checkSCIMGroupUnique(ctx, workspaceID, group.ID, group.ExternalID, group.DisplayName); err != nil {
+		return SCIMGroup{}, err
 	}
 	now := time.Now().UTC()
 	_, err = s.db.ExecContext(ctx, `UPDATE scim_groups SET external_id=?,display_name=?,role=?,updated_at=? WHERE workspace_id=? AND id=?`, group.ExternalID, group.DisplayName, group.Role, now.Format(time.RFC3339Nano), workspaceID, group.ID)
@@ -419,9 +746,29 @@ func (s *SQLiteStore) UpdateSCIMGroup(ctx context.Context, workspaceID, id, exte
 	return s.SCIMGroup(ctx, workspaceID, group.ID)
 }
 
+// DeleteSCIMGroup removes a group and its memberships, recomputes its
+// members' roles, and unlinks the team memberships it managed: they stay on
+// the team as ordinary memberships.
 func (s *SQLiteStore) DeleteSCIMGroup(ctx context.Context, workspaceID, id string) error {
 	group, err := s.SCIMGroup(ctx, workspaceID, id)
 	if err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, statement := range []string{
+		`DELETE FROM scim_group_memberships WHERE workspace_id=? AND group_id=?`,
+		`DELETE FROM scim_team_memberships WHERE workspace_id=? AND group_id=?`,
+		`DELETE FROM scim_groups WHERE workspace_id=? AND id=?`,
+	} {
+		if _, err := tx.ExecContext(ctx, statement, workspaceID, group.ID); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
 		return err
 	}
 	for _, member := range group.Members {
@@ -429,79 +776,124 @@ func (s *SQLiteStore) DeleteSCIMGroup(ctx context.Context, workspaceID, id strin
 			return err
 		}
 	}
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM scim_group_memberships WHERE workspace_id=? AND group_id=?`, workspaceID, group.ID); err != nil {
-		return err
-	}
-	result, err := s.db.ExecContext(ctx, `DELETE FROM scim_groups WHERE workspace_id=? AND id=?`, workspaceID, group.ID)
-	if err != nil {
-		return err
-	}
-	if count, _ := result.RowsAffected(); count == 0 {
-		return sql.ErrNoRows
-	}
 	return nil
 }
 
-// ReplaceSCIMGroupMembers applies one complete IdP group push and updates all
-// affected users' effective workspace roles. A single timestamp is used for
-// the push so membership precedence is deterministic. SCIM member values may
-// be either Flow user IDs or external IDs; both are normalized to the internal
-// user ID before persistence.
+// resolveSCIMMembers maps member values (Flow user ids or externalIds) to
+// user ids, dropping duplicates. Unknown values are ErrSCIMMemberNotFound
+// unless lenient.
+func (s *SQLiteStore) resolveSCIMMembers(ctx context.Context, workspaceID string, values []string, lenient bool) ([]string, error) {
+	result := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		member, err := s.SCIMUser(ctx, workspaceID, value)
+		if errors.Is(err, ErrSCIMNotFound) {
+			if lenient {
+				continue
+			}
+			return nil, fmt.Errorf("%w: %q", ErrSCIMMemberNotFound, value)
+		}
+		if err != nil {
+			return nil, err
+		}
+		if !seen[member.User.ID] {
+			seen[member.User.ID] = true
+			result = append(result, member.User.ID)
+		}
+	}
+	return result, nil
+}
+
+// ReplaceSCIMGroupMembers sets a group's complete member list (PUT, or a
+// PATCH replace of members). Members already in the group keep their
+// membership timestamp, so re-sending the same list does not change which
+// role group is the latest for anyone.
 func (s *SQLiteStore) ReplaceSCIMGroupMembers(ctx context.Context, workspaceID, id string, userIDs []string) (SCIMGroup, error) {
 	group, err := s.SCIMGroup(ctx, workspaceID, id)
 	if err != nil {
 		return SCIMGroup{}, err
 	}
-	normalized := make([]string, 0, len(userIDs))
-	seen := map[string]struct{}{}
-	for _, value := range userIDs {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		member, resolveErr := s.SCIMUser(ctx, workspaceID, value)
-		if resolveErr != nil {
-			return SCIMGroup{}, fmt.Errorf("SCIM group member %q not found", value)
-		}
-		if _, exists := seen[member.User.ID]; exists {
-			continue
-		}
-		seen[member.User.ID] = struct{}{}
-		normalized = append(normalized, member.User.ID)
+	next, err := s.resolveSCIMMembers(ctx, workspaceID, userIDs, false)
+	if err != nil {
+		return SCIMGroup{}, err
 	}
-	affected := map[string]struct{}{}
+	keep := map[string]bool{}
+	for _, userID := range next {
+		keep[userID] = true
+	}
+	remove := []string{}
 	for _, member := range group.Members {
-		affected[member.UserID] = struct{}{}
-	}
-	for _, userID := range normalized {
-		if userID != "" {
-			affected[userID] = struct{}{}
+		if !keep[member.UserID] {
+			remove = append(remove, member.UserID)
 		}
 	}
-	now := time.Now().UTC()
-	stamp := now.Format(time.RFC3339Nano)
+	return s.applySCIMGroupMembers(ctx, workspaceID, group, next, remove)
+}
+
+// PatchSCIMGroupMembers adds and removes members in one step. Adding a
+// current member or removing a non-member changes nothing; removing an
+// unknown user is ignored.
+func (s *SQLiteStore) PatchSCIMGroupMembers(ctx context.Context, workspaceID, id string, add, remove []string) (SCIMGroup, error) {
+	group, err := s.SCIMGroup(ctx, workspaceID, id)
+	if err != nil {
+		return SCIMGroup{}, err
+	}
+	added, err := s.resolveSCIMMembers(ctx, workspaceID, add, false)
+	if err != nil {
+		return SCIMGroup{}, err
+	}
+	removed, err := s.resolveSCIMMembers(ctx, workspaceID, remove, true)
+	if err != nil {
+		return SCIMGroup{}, err
+	}
+	return s.applySCIMGroupMembers(ctx, workspaceID, group, added, removed)
+}
+
+func (s *SQLiteStore) applySCIMGroupMembers(ctx context.Context, workspaceID string, group SCIMGroup, add, remove []string) (SCIMGroup, error) {
+	current := map[string]bool{}
+	for _, member := range group.Members {
+		current[member.UserID] = true
+	}
+	affected := []string{}
+	stamp := time.Now().UTC().Format(time.RFC3339Nano)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return SCIMGroup{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM scim_group_memberships WHERE workspace_id=? AND group_id=?`, workspaceID, group.ID); err != nil {
-		_ = tx.Rollback()
-		return SCIMGroup{}, err
+	defer tx.Rollback()
+	for _, userID := range remove {
+		if !current[userID] {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM scim_group_memberships WHERE workspace_id=? AND group_id=? AND user_id=?`, workspaceID, group.ID, userID); err != nil {
+			return SCIMGroup{}, err
+		}
+		delete(current, userID)
+		affected = append(affected, userID)
 	}
-	for _, userID := range normalized {
-		if _, err = tx.ExecContext(ctx, `INSERT INTO scim_group_memberships(workspace_id,group_id,user_id,updated_at) VALUES(?,?,?,?)`, workspaceID, group.ID, userID, stamp); err != nil {
-			_ = tx.Rollback()
+	for _, userID := range add {
+		if current[userID] {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO scim_group_memberships(workspace_id,group_id,user_id,updated_at) VALUES(?,?,?,?)`, workspaceID, group.ID, userID, stamp); err != nil {
+			return SCIMGroup{}, err
+		}
+		current[userID] = true
+		affected = append(affected, userID)
+	}
+	if len(affected) > 0 {
+		if _, err := tx.ExecContext(ctx, `UPDATE scim_groups SET updated_at=? WHERE workspace_id=? AND id=?`, stamp, workspaceID, group.ID); err != nil {
 			return SCIMGroup{}, err
 		}
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE scim_groups SET updated_at=? WHERE workspace_id=? AND id=?`, stamp, workspaceID, group.ID); err != nil {
-		_ = tx.Rollback()
+	if err := tx.Commit(); err != nil {
 		return SCIMGroup{}, err
 	}
-	if err = tx.Commit(); err != nil {
-		return SCIMGroup{}, err
-	}
-	for userID := range affected {
+	for _, userID := range affected {
 		if err := s.recomputeSCIMUserRole(ctx, workspaceID, userID); err != nil {
 			return SCIMGroup{}, err
 		}
