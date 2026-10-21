@@ -28,9 +28,10 @@ import { InboxPage, type InboxPageAdapter } from './inbox-page'
 import type { InboxDisplayOptions, InboxTab } from './inbox-page-shell'
 import type { InboxNotificationKind, InboxNotificationRowData, InboxSnoozePreset } from './notification-row'
 import { effectivePulseFrequency, isPulseSummaryNotification, pulseSummaryText, pulseSummaryTitle, type PulseFrequency } from './pulse-summary-model'
-import { agentReplyLine } from './agent-reply-notification'
+import { agentReplyLine, finishedSessionTarget } from './agent-reply-notification'
 import { PulseSummaryView } from './pulse-summary-view'
 import { usePagedInbox } from './use-paged-inbox'
+import { ReviewAgentPanel } from '@/components/coding-sessions/review-agent-panel'
 import { PullRequestInboxView } from '@/components/reviews/pull-request-inbox-view'
 import { markdownPlainText } from '@/lib/markdown-plain-text'
 import { DocumentInboxView } from './hosts/document-inbox-view'
@@ -66,6 +67,9 @@ interface InboxProjection extends InboxNotificationRowData {
   documentId?: string
   /** An agent's reply in a project comment thread renders the project thread host. */
   agentReplyProjectId?: string
+  /** A finished coding session with a pull request opens that review beside the session's agent panel. */
+  sessionId?: string
+  sessionReviewId?: string
 }
 
 export interface InboxAppPageProps {
@@ -75,7 +79,8 @@ export interface InboxAppPageProps {
   onOpenIssue: (issue: Issue) => void
   onOpenProject?: (project: Project) => void
   onOpenInitiative?: (initiative: Initiative) => void
-  onOpenReview?: (review: CodeReview) => void
+  /** `sessionId` opens the review with that coding session's agent panel. */
+  onOpenReview?: (review: CodeReview, sessionId?: string) => void
   onOpenSettings?: () => void
   onCreateProjectUpdate?: (projectId: string, input: { body: string; health?: Project['health'] }) => Promise<ProjectUpdate | void>
   onCreateInitiativeUpdate?: (initiativeId: string, input: { body: string; health?: Project['health'] }) => Promise<InitiativeUpdate | void>
@@ -306,7 +311,9 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
       const projection = notifications.find(item => item.id === notification.id)
       const issue = projection ? issueById.get(projection.issueId) : undefined
       const project = projection?.projectId ? data.projects.find(item => item.id === projection.projectId) : undefined
-      if (issue) onOpenIssue(issue)
+      const sessionReview = projection?.sessionReviewId ? data.reviews.find(item => item.id === projection.sessionReviewId) : undefined
+      if (projection?.sessionId && sessionReview) onOpenReview?.(sessionReview, projection.sessionId)
+      else if (issue) onOpenIssue(issue)
       else if (project) onOpenProject?.(project)
       else if (projection?.reviewId) {
         const review = data.reviews.find(item => item.id === projection.reviewId)
@@ -437,6 +444,19 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
         }
       }
 
+      const sessionReview = projection?.sessionReviewId ? data.reviews.find(item => item.id === projection.sessionReviewId) : undefined
+      if (projection?.sessionId && sessionReview) {
+        const sessionId = projection.sessionId
+        return {
+          content: <div className="review-agent-layout" key={projection.id}>
+            <div className="review-agent-layout-main" style={{ overflow: 'auto' }}>
+              <PullRequestInboxView data={data} review={sessionReview} onOpen={() => onOpenReview?.(sessionReview, sessionId)} onReload={onReload} onAccessAction={() => onOpenSettings?.()} />
+            </div>
+            <ReviewAgentPanel sessionId={sessionId} data={data} onClose={() => setSelectedId(null)} />
+          </div>,
+          fullBleed: true,
+        }
+      }
       if (projection && review && !issue) return { content: <PullRequestInboxView data={data} review={review} onOpen={() => onOpenReview?.(review)} onReload={onReload} onAccessAction={() => onOpenSettings?.()} /> }
       // Reminder fallback still uses the compact reminder card when host classification did not claim the row.
       if (projection && project && !issue) return { content: <ProjectReminderDetail overdue={project.health==='noUpdate'} project={project} onOpen={() => onOpenProject?.(project)}/> }
@@ -763,6 +783,7 @@ function projectInbox(data: BootstrapData, t: (source: string) => string): Inbox
       issuePriority: issue.priority,
       issueState: issue.state,
       issueStatusType: issue.state.name.toLowerCase() === 'triage' ? 'triage' : issue.state.name.toLowerCase() === 'duplicate' ? 'duplicate' : issue.state.type,
+      ...finishedSessionTarget(data, notification),
     }]
   })
 }

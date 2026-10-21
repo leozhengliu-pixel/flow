@@ -19,6 +19,18 @@ export function agentReplyLine(notification: Notification, t: (source: string) =
   return t(template).replace('{name}', name).replace('{text}', excerpt)
 }
 
+/**
+ * A finished coding session's pull request, when the workspace has its review: the row then opens that review beside the
+ * session's agent panel instead of the issue. Replies to comments and sessions without a pull request keep the issue.
+ */
+export function finishedSessionTarget(data: { reviews: { id: string }[] }, notification: Notification): { sessionId?: string; sessionReviewId?: string } {
+  if (notification.type !== 'agentReply' || notification.payload?.agentActivity !== 'finished') return {}
+  const sessionId = notification.payload.codingSessionId
+  const reviewId = notification.payload.reviewId
+  if (!sessionId || !reviewId || !data.reviews.some(review => review.id === reviewId)) return {}
+  return { sessionId, sessionReviewId: reviewId }
+}
+
 /** Agent replies in a project's comment thread link to the comment on the project's Activity tab. */
 export function agentReplyProjectPath(workspaceKey: string, project: Pick<Project, 'slugId'>, commentId?: string) {
   return `${projectPath(workspaceKey, project, 'activity')}${commentId ? `#comment-${encodeURIComponent(commentId)}` : ''}`

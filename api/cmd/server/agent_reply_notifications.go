@@ -103,6 +103,10 @@ func withCodingSessionAudience(thread *agentReplyThread, session *domain.CodingS
 	if session == nil {
 		return
 	}
+	thread.codingSessionID = session.ID
+	if session.LatestPullRequest != nil {
+		thread.reviewID = session.LatestPullRequest.ReviewID
+	}
 	if thread.muted == nil {
 		thread.muted = map[string]bool{}
 	}
@@ -122,6 +126,7 @@ func withCodingSessionAudience(thread *agentReplyThread, session *domain.CodingS
 type agentReplyThread struct {
 	issueID, sourceType, sourceID, projectID string
 	title, documentSlugID                    string
+	codingSessionID, reviewID                string
 	watchers                                 []string
 	muted                                    map[string]bool
 	// user resolves a recipient; canOpen reports whether they can open the
@@ -214,8 +219,18 @@ func appendAgentReplyNotifications(data *domain.Bootstrap, thread agentReplyThre
 		if !preferences.Inbox.Enabled || !categoryEnabled(preferences.Inbox, "comments") {
 			continue
 		}
+		// One row per issue: a session's completion and later replies share
+		// the issue's notification, the newest winning the title. Documents and
+		// projects group per session.
 		groupKey := recipientID + ":agent-session:" + task.ID
+		legacyKey := groupKey
+		if thread.issueID != "" {
+			groupKey = recipientID + ":agent-issue:" + thread.issueID
+		}
 		index := slices.IndexFunc(data.Notifications, func(item domain.Notification) bool { return item.GroupKey == groupKey })
+		if index < 0 && legacyKey != groupKey {
+			index = slices.IndexFunc(data.Notifications, func(item domain.Notification) bool { return item.GroupKey == legacyKey })
+		}
 		if index < 0 {
 			data.Notifications = append(data.Notifications, domain.Notification{
 				ID: "notification_agent_" + task.ID + "_" + recipientID, RecipientID: recipientID, IssueID: thread.issueID, ProjectID: thread.projectID,
@@ -224,6 +239,7 @@ func appendAgentReplyNotifications(data *domain.Bootstrap, thread agentReplyThre
 			index = len(data.Notifications) - 1
 		}
 		notification := &data.Notifications[index]
+		notification.GroupKey = groupKey
 		notification.Type = agentReplyNotificationType
 		notification.SourceType, notification.SourceID = thread.sourceType, firstNonEmpty(thread.sourceID, task.ID)
 		notification.CommentID, notification.ActivityID = task.CommentID, activity.ID
@@ -232,7 +248,7 @@ func appendAgentReplyNotifications(data *domain.Bootstrap, thread agentReplyThre
 		notification.Title = thread.title
 		kind := agentReplyKind(task, activity)
 		notification.Text = agentReplyNotificationText(agentName, kind, excerpt)
-		notification.Payload = &domain.NotificationPayload{Excerpt: excerpt, AgentActivity: kind, DocumentSlugID: thread.documentSlugID}
+		notification.Payload = &domain.NotificationPayload{Excerpt: excerpt, AgentActivity: kind, DocumentSlugID: thread.documentSlugID, CodingSessionID: thread.codingSessionID, ReviewID: thread.reviewID}
 		// Every new reply brings the thread back to the top of the Inbox, unread.
 		notification.ReadAt, notification.ArchivedAt, notification.DeletedAt, notification.SnoozedUntil = nil, nil, nil, nil
 		notification.UpdatedAt = now
