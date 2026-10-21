@@ -20,6 +20,7 @@ import {
 } from "./connector-api";
 import type { ConnectorPolicy } from "./connector-api";
 import { ConnectorDialog, ConnectorMenu } from "./connector-dialog";
+import { SettingsConfirmDialog } from "./settings-confirm-dialog";
 import { SettingsGroup } from "./settings-primitives";
 
 import "./personal-connectors.css";
@@ -397,37 +398,20 @@ function RemoveConnectorDialog({
   const t = useOptionalTranslate();
   const [busy, setBusy] = useState(false);
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open && !busy) onClose();
+    <SettingsConfirmDialog
+      title={t("Remove {name}?").replace("{name}", connectorLabel(item))}
+      description={t("This MCP connector will be removed and its tools will no longer be available to Flow Agent.")}
+      confirmLabel={t("Remove")}
+      busy={busy}
+      onCancel={onClose}
+      onConfirm={async () => {
+        setBusy(true);
+        try {
+          await onConfirm();
+        } finally {
+          setBusy(false);
+        }
       }}
-    >
-      <DialogContent className="personal-connector-dialog personal-connector-remove">
-        <DialogTitle>{t("Remove {name}?").replace("{name}", connectorLabel(item))}</DialogTitle>
-        <p>{t("This MCP connector will be removed and its tools will no longer be available to Flow Agent.")}</p>
-        <footer>
-          <button type="button" disabled={busy} onClick={onClose}>
-            {t("Cancel")}
-          </button>
-          <button
-            type="button"
-            className="danger"
-            disabled={busy}
-            autoFocus
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await onConfirm();
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            {t("Remove")}
-          </button>
-        </footer>
-      </DialogContent>
-    </Dialog>
+    />
   );
 }

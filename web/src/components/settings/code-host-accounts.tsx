@@ -1,9 +1,9 @@
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ArrowUpRight, ChevronDown, UserRound } from "lucide-react";
 import { useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 
-import { confirmAction } from "@/components/ui/action-dialog-service";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { FlowDropdownMenuContent, FlowMenuItem } from "@/components/ui/row-context-menu";
 import { useI18n } from "@/i18n/i18n";
 import { fillTemplate } from "@/lib/fill-template";
 import {
@@ -23,6 +23,7 @@ import type {
 
 import { useCodeHostAccounts, useCodeHostLinkResult } from "./code-host-accounts-hooks";
 import { IntegrationBrandIcon } from "./integration-brand-icon";
+import { SettingsConfirmDialog } from "./settings-confirm-dialog";
 import { SettingsRow } from "./settings-primitives";
 
 import "./code-host-accounts.css";
@@ -103,8 +104,8 @@ function AccountStatusMenu({
   const { t } = useI18n();
   const reconnect = account.status === "reconnect";
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
         <button
           type="button"
           className={`personal-action code-host-status${reconnect ? " reconnect" : ""}`}
@@ -112,15 +113,17 @@ function AccountStatusMenu({
           disabled={disabled}
         >
           <span className="code-host-status-dot" aria-hidden="true" />
-          {reconnect ? t("Reconnect needed") : t("Connected")}
+          <span className="code-host-status-label">{reconnect ? t("Reconnect needed") : t("Connected")}</span>
           <ChevronDown aria-hidden="true" className="code-host-status-chevron" />
         </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {reconnect && <DropdownMenuItem onSelect={onReconnect}>{t("Reconnect")}</DropdownMenuItem>}
-        <DropdownMenuItem onSelect={onDisconnect}>{t("Disconnect…")}</DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <FlowDropdownMenuContent align="end" alignOffset={6} sideOffset={5} label={t("{name} account options").replace("{name}", codeHostName)}>
+          {reconnect && <FlowMenuItem label="Reconnect" onSelect={onReconnect} />}
+          <FlowMenuItem label="Disconnect…" onSelect={onDisconnect} />
+        </FlowDropdownMenuContent>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }
 
@@ -207,13 +210,10 @@ export function CodeHostConnectionRows({
   const { busy, go } = useRedirect();
   const [removing, setRemoving] = useState("");
 
+  const [confirming, setConfirming] = useState<CodeHostAccount>();
+
   const disconnect = async (account: CodeHostAccount) => {
-    const name = account.codeHost === "github" ? "GitHub" : "GitLab";
-    const confirmed = await confirmAction(
-      t("Disconnect personal {name} account?").replace("{name}", name),
-      { confirmLabel: t("Disconnect"), danger: true },
-    );
-    if (!confirmed) return;
+    setConfirming(undefined);
     setRemoving(account.id);
     try {
       await disconnectCodeHostAccount(account.id);
@@ -235,7 +235,7 @@ export function CodeHostConnectionRows({
           description={githubDescription}
           disabled={busy || removing === github.id}
           onReconnect={() => void go(() => authorizeGitHubAccount("account"))}
-          onDisconnect={() => void disconnect(github)}
+          onDisconnect={() => setConfirming(github)}
         />
       ) : (
         <div className="settings-card" data-testid="github-account-row">
@@ -266,10 +266,18 @@ export function CodeHostConnectionRows({
               if (instance?.oauthAvailable) void go(() => authorizeGitLabAccount(instance.id, "account"));
               else document.getElementById("gitlab-token")?.focus();
             }}
-            onDisconnect={() => void disconnect(account)}
+            onDisconnect={() => setConfirming(account)}
           />
         );
       })}
+      {confirming && (
+        <SettingsConfirmDialog
+          title={t("Disconnect personal {name} account?").replace("{name}", confirming.codeHost === "github" ? "GitHub" : "GitLab")}
+          confirmLabel={t("Disconnect")}
+          onCancel={() => setConfirming(undefined)}
+          onConfirm={() => void disconnect(confirming)}
+        />
+      )}
       {data && (unlinkedGitLab.length > 0 || (data.gitlabInstances.length === 0 && gitlab.length === 0)) && (
         <div className="settings-card">
           <SettingsRow
