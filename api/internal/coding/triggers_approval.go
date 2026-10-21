@@ -4,7 +4,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
+	"errors"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -138,8 +139,10 @@ func (t *Triggers) DecideApproval(ctx context.Context, workspaceKey, sessionID, 
 		return domain.CodingSession{}, err
 	}
 	if expired {
-		if notifyErr := t.notifier().ApprovalResolved(ctx, updated, "expired", ""); notifyErr != nil {
-			return updated, fmt.Errorf("coding trigger: approval notification: %w", notifyErr)
+		// The expiry is the outcome the caller gets; a failed notice is
+		// logged (it is keyed, so posting it again is safe).
+		if err := t.notifier().ApprovalResolved(ctx, updated, "expired", ""); err != nil {
+			slog.Warn("coding approval expiry notice failed", "session", updated.ID, "error", err)
 		}
 		return updated, &TriggerError{Code: domain.CodingErrApprovalExpired, Message: "This approval request expired."}
 	}
@@ -147,10 +150,18 @@ func (t *Triggers) DecideApproval(ctx context.Context, workspaceKey, sessionID, 
 	if decision == DecisionReject {
 		resolved = ApprovalRejected
 	}
-	if err := t.notifier().ApprovalResolved(ctx, updated, resolved, userID); err != nil {
-		return updated, fmt.Errorf("coding trigger: approval notification: %w", err)
+	return updated, t.notifyResolved(ctx, updated, resolved, userID)
+}
+
+// notifyResolved records a committed decision on the anchor, as the member
+// who made it (a repeated decision re-posts the first member's notice,
+// which the notifier keys, so it is delivered once). A failure is a
+// NotificationError: the decision stands.
+func (t *Triggers) notifyResolved(ctx context.Context, session domain.CodingSession, decision, userID string) error {
+	if err := t.notifier().ApprovalResolved(ctx, session, decision, firstNonEmpty(session.ApprovedBy, userID)); err != nil {
+		return &NotificationError{Step: "approval decision", Err: err}
 	}
-	return updated, nil
+	return nil
 }
 
 // decideThroughApprover is DecideApproval on the session core: the same
@@ -161,30 +172,40 @@ func (t *Triggers) decideThroughApprover(ctx context.Context, workspaceKey, sess
 	if decision == DecisionReject {
 		want = ApprovalRejected
 	}
-	session, err := t.Sessions.CodingSession(ctx, workspaceKey, sessionID)
-	if err != nil {
-		return session, err
-	}
-	if session.Phase != domain.CodingPhaseAwaitingApproval {
+	// settled answers a session that no longer waits for approval: the same
+	// decision again is a success (and repairs its notice), anything else
+	// is refused with the reason.
+	settled := func(session domain.CodingSession) (domain.CodingSession, error) {
 		switch {
 		case session.ApprovalState == want:
-			return session, nil // already decided the same way
+			return session, t.notifyResolved(ctx, session, want, userID) // already decided the same way
 		case session.ErrorCode == domain.CodingErrApprovalExpired:
 			return session, &TriggerError{Code: domain.CodingErrApprovalExpired, Message: "This approval request expired."}
 		}
 		return session, &TriggerError{Code: domain.CodingErrPermissionDenied, Message: "This session is not waiting for approval."}
 	}
+	session, err := t.Sessions.CodingSession(ctx, workspaceKey, sessionID)
+	if err != nil {
+		return session, err
+	}
+	if session.Phase != domain.CodingPhaseAwaitingApproval {
+		return settled(session)
+	}
 	if !now.Before(t.ApprovalDeadline(session)) {
 		return session, &TriggerError{Code: domain.CodingErrApprovalExpired, Message: "This approval request expired."}
 	}
 	updated, err := t.Approver(ctx, workspaceKey, sessionID, userID, decision == DecisionReject)
+	if errors.Is(err, ErrConflict) {
+		// Another member decided first (a concurrent approval): answer
+		// with that decision instead of a conflict; it was applied once.
+		if current, readErr := t.Sessions.CodingSession(ctx, workspaceKey, sessionID); readErr == nil && current.Phase != domain.CodingPhaseAwaitingApproval {
+			return settled(current)
+		}
+	}
 	if err != nil {
 		return updated, err
 	}
-	if err := t.notifier().ApprovalResolved(ctx, updated, want, userID); err != nil {
-		return updated, fmt.Errorf("coding trigger: approval notification: %w", err)
-	}
-	return updated, nil
+	return updated, t.notifyResolved(ctx, updated, want, userID)
 }
 
 func expireApproval(session *domain.CodingSession, now time.Time) {
