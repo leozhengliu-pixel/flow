@@ -214,8 +214,9 @@ const (
 	agentTextApprovalError = "The agent asked for approval in text instead of calling the tool; nothing ran. Retry."
 )
 
-// agentTextApprovalLine is Flow's own approval phrasing, "Allow <names>?", on a line of its own.
-var agentTextApprovalLine = regexp.MustCompile(`^(?i:allow)\s+(.+?)\s*[?？]$`)
+// agentTextApprovalLine is Flow's own approval phrasing on a line of its own, in English ("Allow <names>?") or as
+// the same question in Chinese ("允许 <names> 吗？", "是否允许 <names>？").
+var agentTextApprovalLine = regexp.MustCompile(`^(?:(?i:allow)\s+(.+?)|(?:是否|请|可以|能否)?允许\s*(.+?)\s*吗?)\s*[?？]$`)
 
 // agentTextApprovalRequest reports whether a reply without tool calls asks the user to allow a tool offered in ctx,
 // in Flow's approval phrasing: a line "Allow <names>?" where a name is an offered tool ("search_code",
@@ -239,9 +240,10 @@ func (s *server) agentTextApprovalRequest(ctx context.Context, turn agentProvide
 		if match == nil {
 			continue
 		}
-		for _, name := range strings.Split(match[1], ",") {
-			name = strings.Trim(strings.TrimSpace(name), "*_`\"'")
-			connector, tool, prefixed := strings.Cut(name, ":")
+		names := match[1] + match[2]
+		for _, name := range strings.FieldsFunc(names, func(r rune) bool { return r == ',' || r == '，' || r == '、' }) {
+			name = strings.Trim(strings.TrimSpace(name), "*_`\"'“”「」")
+			connector, tool, prefixed := strings.Cut(strings.Replace(name, "：", ":", 1), ":")
 			if tools[name] || prefixed && (connectors[strings.ToLower(strings.TrimSpace(connector))] || tools[strings.TrimSpace(tool)]) {
 				slog.WarnContext(ctx, "agent asked for tool approval in text", "protocol", s.agent.Protocol, "model", s.agent.Model, "stop_reason", turn.StopReason, "text_bytes", len(turn.Text), "reasoning_bytes", len(turn.Reasoning))
 				return true
