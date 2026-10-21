@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { GroupedVirtuoso, Virtuoso } from 'react-virtuoso'
 import type { BootstrapData, Issue, IssueUpdateInput } from '@/types/flow'
 import { listIssueRecordGroups, listIssueRecords, type IssueQueryInput } from '@/lib/api'
@@ -219,6 +219,12 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
     return { id: group.value, label, state, stateType: state?.type, issues: [], totalCount: group.count, createContext: state ? { stateId: state.id } : field === 'priority' ? { priority: Number(group.value) as 0|1|2|3|4 } : field === 'project' ? { projectId: group.value } : field === 'assignee' ? { assigneeId: group.value } : field === 'team' ? { teamId: group.value } : field === 'cycle' ? { cycleId: group.value } : field === 'label' ? { labelIds: group.value ? [group.value] : [] } : undefined }
   }, [data.states, data.users, data.projects, data.teams, data.cycles, data.labels, data.customers, query.groupBy])
   const counts = groups.map(group => collapsedGroupIds?.has(group.value) ? 0 : group.loaded + (group.hasMore ? 1 : 0))
+  // The identifier column fits the longest identifier loaded for this query (like the full list), and only grows
+  // while pages load so rows do not shift as the list scrolls.
+  const identifierLength = useRef({ signature: '', length: 6 })
+  if (identifierLength.current.signature !== signature) identifierLength.current = { signature, length: 6 }
+  for (const issue of cache.records()) identifierLength.current.length = Math.max(identifierLength.current.length, [...issue.identifier].length)
+  const listStyle = { '--issue-identifier-width': `${identifierLength.current.length}ch` } as CSSProperties
   const offsets: number[] = []; let offset = 0
   for (const count of counts) { offsets.push(offset); offset += count }
   const renderList = (): ReactNode => {
@@ -250,7 +256,7 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
         {hiddenGroupIds.length > 0 && <section className={boardStyles.hiddenColumns}><strong>Hidden columns</strong>{groups.filter(group => hiddenGroupIds.includes(group.value)).map(group => <button key={group.value} onClick={() => onShowGroup?.(group.value)}><span data-i18n-ignore>{descriptor(group).label}</span><b>{group.count}</b></button>)}</section>}
       </div>
     }
-    return <GroupedVirtuoso className={styles.virtualList} role="list" aria-label="Issues" groupCounts={counts} context={revision} defaultItemHeight={44} increaseViewportBy={{ top: 176, bottom: 264 }}
+    return <GroupedVirtuoso className={styles.virtualList} role="list" aria-label="Issues" style={listStyle} groupCounts={counts} context={revision} defaultItemHeight={44} increaseViewportBy={{ top: 176, bottom: 264 }}
       groupContent={index => <MyIssuesGroupHeader group={descriptor(groups[index])} collapsed={Boolean(collapsedGroupIds?.has(groups[index].value))} createIssueLabel="Create new issue" onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/>}
       itemContent={(index, groupIndex) => {
         const group = groups[groupIndex], localIndex = index - offsets[groupIndex], pageIndex = cache.pageAt(group.value, localIndex)

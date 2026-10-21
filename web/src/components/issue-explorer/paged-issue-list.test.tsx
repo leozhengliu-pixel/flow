@@ -10,10 +10,10 @@ import { ISSUE_QUERY_INVALIDATED } from './paged-issue-invalidation'
 vi.mock('@/lib/api', () => ({ listIssueRecordGroups: vi.fn(), listIssueRecords: vi.fn() }))
 vi.mock('react-virtuoso', async () => {
   const React = await import('react')
-  return { GroupedVirtuoso: ({ groupCounts, groupContent, itemContent }: { groupCounts: number[]; groupContent: (index: number) => React.ReactNode; itemContent: (index: number, group: number) => React.ReactNode }) => {
+  return { GroupedVirtuoso: ({ groupCounts, groupContent, itemContent, style }: { groupCounts: number[]; groupContent: (index: number) => React.ReactNode; itemContent: (index: number, group: number) => React.ReactNode; style?: React.CSSProperties }) => {
     const [start, setStart] = React.useState(0)
     let offset = 0
-    return <div><button onClick={() => setStart(100)}>Next page viewport</button>{groupCounts.map((count, group) => {
+    return <div data-testid="paged-list" style={style}><button onClick={() => setStart(100)}>Next page viewport</button>{groupCounts.map((count, group) => {
       const base = offset; offset += count
       return <section key={group}>{groupContent(group)}{Array.from({ length: Math.max(0, Math.min(10, count - start)) }, (_, index) => <div key={index}>{itemContent(base + start + index, group)}</div>)}</section>
     })}</div>
@@ -40,6 +40,15 @@ describe('server-backed issue groups', () => {
     expect(listIssueRecords).toHaveBeenLastCalledWith(expect.objectContaining({ groupValue: 'state-backlog', cursor: 'page-2', limit: 100 }), expect.any(AbortSignal))
     await userEvent.click(screen.getByRole('button', { name: 'Issue 100' }))
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'issue-100' }), expect.arrayContaining(['issue-100', 'issue-101']))
+  })
+
+  it('sizes the identifier column to the longest loaded identifier', async () => {
+    vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: 'state-backlog', count: 2 }] })
+    vi.mocked(listIssueRecords).mockResolvedValue({ items: [makeIssue({ id: 'issue-a', identifier: 'AIDP-7', title: 'Short' }), makeIssue({ id: 'issue-b', identifier: 'AIDP-17795', title: 'Long' })], hasMore: false, total: -1 })
+    const data = makeBootstrap({ issues: [], favorites: [], issueCollectionPaged: true })
+    render(<I18nProvider><PagedIssueList data={data} query={{ groupBy: 'status' }} onOpenIssueRecord={vi.fn()}/></I18nProvider>)
+    await screen.findByRole('button', { name: 'Long' })
+    expect(screen.getByTestId('paged-list').style.getPropertyValue('--issue-identifier-width')).toBe('10ch')
   })
 
   it('keeps the loaded extent and revalidates only the page on screen when a refresh lands', async () => {
