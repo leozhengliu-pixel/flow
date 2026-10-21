@@ -139,6 +139,14 @@ func gitlabDiscussionComments(discussion gitlabAPIDiscussion) []remoteReviewComm
 	return result
 }
 
+// Some GitLab instances answer HTTP 500 on the merge request diffs endpoint
+// for per_page above 30, so it is read in smaller pages (the budget still
+// covers 3000 changed files). Other GitLab lists keep the default page size.
+const (
+	gitlabDiffsPageSize = 20
+	gitlabDiffsMaxPages = 150
+)
+
 // fetchGitLabReviewSnapshot reads the merge request (diff refs), its diffs
 // and its discussions.
 func fetchGitLabReviewSnapshot(ctx context.Context, remote reviewRemote, review domain.CodeReview) (reviewSnapshot, error) {
@@ -147,7 +155,11 @@ func fetchGitLabReviewSnapshot(ctx context.Context, remote reviewRemote, review 
 	if err := remote.REST(ctx, http.MethodGet, base, nil, &request); err != nil {
 		return reviewSnapshot{}, err
 	}
-	diffs, err := fetchPages[gitlabAPIDiff](ctx, remote, base+"/diffs", 30)
+	diffs, truncated, err := fetchPagesSized[gitlabAPIDiff](ctx, remote, base+"/diffs", gitlabDiffsPageSize, gitlabDiffsMaxPages)
+	if err == nil && truncated {
+		// Never mirror a partial file list as the whole merge request.
+		err = fmt.Errorf("too many changed files to sync (read %d files in %d pages of %d, more remain)", len(diffs), gitlabDiffsMaxPages, gitlabDiffsPageSize)
+	}
 	if reviewRemoteStatus(err) == http.StatusNotFound {
 		// GitLab before 15.7: the single-response changes endpoint.
 		var changes struct {
