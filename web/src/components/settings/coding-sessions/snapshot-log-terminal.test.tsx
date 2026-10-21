@@ -52,7 +52,8 @@ describe("SnapshotLogTerminal", () => {
     expect((terminal.options.theme as Record<string, string>).foreground).toBe("rgb(1, 2, 3)");
     expect(terminal.opened).toBeInstanceOf(HTMLElement);
     // ANSI colours go to xterm untouched; the screen-reader copy is plain text.
-    expect(terminal.written.join("")).toContain("\x1b[32mcloning\x1b[0m\n");
+    // The log is written once the terminal has opened, which can land a tick after it reports ready.
+    await waitFor(() => expect(terminal.written.join("")).toContain("\x1b[32mcloning\x1b[0m\n"));
     expect(screen.getByTestId("snapshot-logs").querySelector("pre")).toHaveTextContent("cloning");
     expect(screen.getByTestId("snapshot-logs").querySelector("pre")).toHaveClass("sr-only");
 
