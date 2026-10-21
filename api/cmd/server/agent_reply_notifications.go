@@ -230,8 +230,9 @@ func appendAgentReplyNotifications(data *domain.Bootstrap, thread agentReplyThre
 		notification.Actor, notification.LatestActorIDs = agent, []string{agent.ID}
 		notification.OccurrenceCount++
 		notification.Title = thread.title
-		notification.Text = agentReplyNotificationText(agentName, activity.Type, excerpt)
-		notification.Payload = &domain.NotificationPayload{Excerpt: excerpt, AgentActivity: activity.Type, DocumentSlugID: thread.documentSlugID}
+		kind := agentReplyKind(task, activity)
+		notification.Text = agentReplyNotificationText(agentName, kind, excerpt)
+		notification.Payload = &domain.NotificationPayload{Excerpt: excerpt, AgentActivity: kind, DocumentSlugID: thread.documentSlugID}
 		// Every new reply brings the thread back to the top of the Inbox, unread.
 		notification.ReadAt, notification.ArchivedAt, notification.DeletedAt, notification.SnoozedUntil = nil, nil, nil, nil
 		notification.UpdatedAt = now
@@ -239,11 +240,23 @@ func appendAgentReplyNotifications(data *domain.Bootstrap, thread agentReplyThre
 	}
 }
 
+// agentReplyKind is the notification's kind: the activity type, except that
+// the final response of a delegated coding session (started by delegating
+// the issue, not by a comment) is "finished".
+func agentReplyKind(task domain.AgentTask, activity domain.AgentActivity) string {
+	if activity.Type == "response" && task.CodingSessionID != "" && task.CommentID == "" {
+		return "finished"
+	}
+	return activity.Type
+}
+
 // agentReplyNotificationText is the notification line in English; the web
 // app localizes it from the type, payload.agentActivity and the excerpt.
 func agentReplyNotificationText(agent, kind, excerpt string) string {
 	prefix := agent + " replied"
 	switch kind {
+	case "finished":
+		prefix = agent + " finished"
 	case "elicitation":
 		prefix = agent + " is waiting for your input"
 	case "error":

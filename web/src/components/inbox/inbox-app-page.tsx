@@ -749,7 +749,7 @@ function projectInbox(data: BootstrapData, t: (source: string) => string): Inbox
       actorId: notification.actor.id,
       actor: notification.actor.displayName,
       actorAvatarUrl: notification.actor.avatarUrl,
-      kind: agentReply || comment ? 'comment' : event ? activityKind(event) : notificationKind(notification),
+      kind: agentReply && notification.payload?.agentActivity === 'finished' ? 'finished' : agentReply || comment ? 'comment' : event ? activityKind(event) : notificationKind(notification),
       identifier: issue.identifier,
       title: issue.title,
       body: agentReply ?? withOccurrence(comment ? `${notification.actor.displayName} commented: ${markdownPlainText(comment.body)}` : event ? describeActivity(event, issue, data.viewer) : describeNotification(notification, issue), notification.occurrenceCount),
@@ -877,7 +877,7 @@ function matchesInboxTab(notification: InboxProjection, tab: InboxTab) {
   const priority = notificationTypeMatchesPriorityRules(notification.notificationType, notification.kind, rules)
     || (!otherTypes.includes(notification.notificationType)
       && !notificationTypeMatchesPriorityRules(notification.notificationType, notification.kind, rules)
-      && ['assignment', 'mention', 'comment', 'project'].includes(notification.kind)
+      && ['assignment', 'mention', 'comment', 'finished', 'project'].includes(notification.kind)
       && (rules['assigned-to-you'] || rules['mentions'] || rules['replies'] || rules['project-updates']))
   return tab === 'priority' ? priority : !priority
 }

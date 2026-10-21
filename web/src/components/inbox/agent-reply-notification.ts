@@ -9,7 +9,9 @@ export function agentReplyLine(notification: Notification, t: (source: string) =
   const name = notification.actor.displayName || notification.actor.name || t('Agent')
   const kind = notification.payload?.agentActivity
   const excerpt = String(notification.payload?.excerpt ?? '').trim()
-  const template = kind === 'elicitation'
+  const template = kind === 'finished'
+    ? (excerpt ? '{name} finished: {text}' : '{name} finished')
+    : kind === 'elicitation'
     ? (excerpt ? '{name} is waiting for your input: {text}' : '{name} is waiting for your input')
     : kind === 'error'
       ? (excerpt ? '{name} ran into an error: {text}' : '{name} ran into an error')

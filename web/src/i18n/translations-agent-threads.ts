@@ -10,6 +10,8 @@ export const agentThreadsZhCN: Record<string, string> = {
   "Stale": "已停滞",
   "{name} replied: {text}": "{name} 回复了：{text}",
   "{name} replied": "{name} 回复了",
+  "{name} finished: {text}": "{name} 已完成：{text}",
+  "{name} finished": "{name} 已完成",
   "{name} is waiting for your input: {text}": "{name} 正在等待你的回复：{text}",
   "{name} is waiting for your input": "{name} 正在等待你的回复",
   "{name} ran into an error: {text}": "{name} 出错了：{text}",
