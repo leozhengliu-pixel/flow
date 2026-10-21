@@ -32,7 +32,6 @@ import { agentReplyLine, finishedSessionTarget } from './agent-reply-notificatio
 import { PulseSummaryView } from './pulse-summary-view'
 import { usePagedInbox } from './use-paged-inbox'
 import { EmbeddedReview } from '@/components/reviews/embedded-review'
-import { PullRequestInboxView } from '@/components/reviews/pull-request-inbox-view'
 import { markdownPlainText } from '@/lib/markdown-plain-text'
 import { DocumentInboxView } from './hosts/document-inbox-view'
 import { ProjectAgentReplyInboxView } from './hosts/project-agent-reply-inbox-view'
@@ -456,7 +455,15 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
           chromeless: true,
         }
       }
-      if (projection && review && !issue) return { content: <PullRequestInboxView data={data} review={review} onOpen={() => onOpenReview?.(review)} onReload={onReload} onAccessAction={() => onOpenSettings?.()} /> }
+      if (projection && review && !issue) {
+        // A review request (no coding session): the same review page, without the agent panel.
+        return {
+          content: <EmbeddedReview key={projection.id} data={data} review={review} onReload={async () => { await onReload() }}
+            onNavigate={path => onNavigate ? onNavigate(path) : onOpenReview?.(review)} />,
+          fullBleed: true,
+          chromeless: true,
+        }
+      }
       // Reminder fallback still uses the compact reminder card when host classification did not claim the row.
       if (projection && project && !issue) return { content: <ProjectReminderDetail overdue={project.health==='noUpdate'} project={project} onOpen={() => onOpenProject?.(project)}/> }
       if (!projection || !issue) return { content: <InboxMissingIssue /> }

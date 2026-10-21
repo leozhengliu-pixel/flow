@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,10 @@ type gitlabAPIDiff struct {
 	Diff        string `json:"diff"`
 	TooLarge    bool   `json:"too_large"`
 	Collapsed   bool   `json:"collapsed"`
+	// GeneratedFile: GitLab hides the hunks of generated files (lockfiles).
+	GeneratedFile bool   `json:"generated_file"`
+	AMode         string `json:"a_mode"`
+	BMode         string `json:"b_mode"`
 }
 
 type gitlabAPIMergeRequest struct {
@@ -89,8 +94,61 @@ func gitlabReviewFile(diff gitlabAPIDiff) domain.ReviewFile {
 			file.Deletions++
 		}
 	}
-	file.PatchUnavailable = diff.Diff == "" && (diff.TooLarge || diff.Collapsed)
+	file.PatchUnavailable = diff.Diff == "" && (diff.TooLarge || diff.Collapsed || diff.GeneratedFile)
 	return file
+}
+
+// gitlabPatchMissing: the diff of a content change came back empty without a
+// reason (not collapsed or too large, not a rename or mode change, not an
+// empty file added or deleted). GitLab does this while it is still computing
+// the merge request diff, so the patch is read again from the compare API.
+func gitlabPatchMissing(diff gitlabAPIDiff) bool {
+	if diff.Diff != "" || diff.TooLarge || diff.Collapsed || diff.GeneratedFile {
+		return false
+	}
+	if diff.RenamedFile || diff.NewFile || diff.DeletedFile {
+		return false
+	}
+	return diff.AMode == "" || diff.AMode == diff.BMode
+}
+
+// fillGitLabMissingPatches reads the compare of the merge request's diff refs
+// and takes its patch for every file whose merge request diff was empty. A
+// file that still has none afterwards is marked patch-unavailable so the
+// review says so instead of showing an empty diff. A failing compare leaves
+// the files as read.
+func fillGitLabMissingPatches(ctx context.Context, remote reviewRemote, baseSHA, headSHA string, diffs []gitlabAPIDiff) {
+	missing := false
+	for _, diff := range diffs {
+		missing = missing || gitlabPatchMissing(diff)
+	}
+	if !missing {
+		return
+	}
+	if baseSHA != "" && headSHA != "" {
+		var compare struct {
+			Diffs []gitlabAPIDiff `json:"diffs"`
+		}
+		query := url.Values{"from": {baseSHA}, "to": {headSHA}, "straight": {"true"}}
+		if remote.REST(ctx, http.MethodGet, "/repository/compare?"+query.Encode(), nil, &compare) == nil {
+			byPath := map[string]string{}
+			for _, item := range compare.Diffs {
+				if item.Diff != "" {
+					byPath[item.NewPath] = item.Diff
+				}
+			}
+			for index := range diffs {
+				if patch, ok := byPath[diffs[index].NewPath]; ok && gitlabPatchMissing(diffs[index]) {
+					diffs[index].Diff = patch
+				}
+			}
+		}
+	}
+	for index := range diffs {
+		if gitlabPatchMissing(diffs[index]) {
+			diffs[index].Collapsed = true
+		}
+	}
 }
 
 func cmpOr(values ...string) string {
@@ -181,8 +239,13 @@ func fetchGitLabReviewSnapshot(ctx context.Context, remote reviewRemote, review 
 	if refs := request.DiffRefs; refs != nil {
 		snapshot.HeadSHA, snapshot.BaseSHA, snapshot.StartSHA = cmpOr(refs.HeadSHA, request.SHA), refs.BaseSHA, refs.StartSHA
 	}
+	fillGitLabMissingPatches(ctx, remote, snapshot.BaseSHA, snapshot.HeadSHA, diffs)
 	for _, diff := range diffs {
 		snapshot.Files = append(snapshot.Files, gitlabReviewFile(diff))
+	}
+	// The commit count is best effort: a failing list leaves it unknown.
+	if commits, err := fetchPages[struct{}](ctx, remote, base+"/commits", 10); err == nil {
+		snapshot.Pull.Commits = len(commits)
 	}
 	for _, discussion := range discussions {
 		snapshot.Comments = append(snapshot.Comments, gitlabDiscussionComments(discussion)...)
