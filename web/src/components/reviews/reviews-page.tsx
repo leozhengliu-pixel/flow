@@ -39,7 +39,7 @@ import { PullRequestReviewActions } from "./pull-request-review-actions";
 import { reviewPrimaryAction, type ReviewDecision } from "./pull-request-review-model";
 // coding sessions (track G)
 import { ReviewCodingSessionActions } from "@/components/coding-sessions/review-coding-actions";
-import { ReviewAgentPanel, ReviewAgentToggle } from "@/components/coding-sessions/review-agent-panel";
+import { ReviewAgentPanel, ReviewAgentToggle, useReviewCodingSessionId } from "@/components/coding-sessions/review-agent-panel";
 import { resolvePreferredMergeMethod, type MergeMethod } from "./pull-request-merge-method";
 import { PullRequestReviewShortcutsProvider } from "./pull-request-review-shortcuts-context";
 import { useOptionalPullRequestReviewShortcuts } from "./pull-request-review-shortcuts";
@@ -59,7 +59,7 @@ export function ReviewsPage({
   onOpenSidebar,
   returnPath,
   agentSessionId,
-  showAgent = true,
+  showAgent,
   embedded,
 }: {
   data: BootstrapData;
@@ -72,7 +72,7 @@ export function ReviewsPage({
   returnPath?: string;
   /** A coding session of this pull request, opened in the agent panel (`?agentSessionId=…`). */
   agentSessionId?: string;
-  /** `?showAgent=false` hides the agent panel. */
+  /** `?showAgent=false` hides the agent panel and `?showAgent=true` shows it; unset follows where the session came from. */
   showAgent?: boolean;
   /**
    * The review hosted inside another page (the inbox detail pane): no list, no sidebar button, and "full window" opens the
@@ -86,8 +86,12 @@ export function ReviewsPage({
   const embeddedRoot = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
   const [picker, setPicker] = useState<"reviewers" | "issues" | null>(null);
-  // A coding session opened on the review (the agent panel) shares the page with the review.
-  const agentOpen = Boolean(review && agentSessionId && showAgent);
+  // The coding session behind this pull request: the one the URL names, else the one that opened it (found through
+  // the linked issue). A session named in the URL opens its agent panel unless `?showAgent=false`; one found through
+  // the pull request keeps the panel closed until "Show agent" (`?showAgent=true`).
+  const linkedSessionId = useReviewCodingSessionId(review, data, !agentSessionId);
+  const sessionId = agentSessionId ?? linkedSessionId;
+  const agentOpen = Boolean(review && sessionId) && (agentSessionId ? showAgent !== false : showAgent === true);
   const mutate = async (input: Parameters<typeof updateReview>[1]) => {
     if (!review) return;
     const pending = Object.entries(input).filter(([, value]) => value !== undefined);
@@ -134,8 +138,9 @@ export function ReviewsPage({
               onReload={onReload}
               onOpenPicker={setPicker}
               onOpenSidebar={onOpenSidebar}
-              agentSessionId={agentSessionId}
-              showAgent={showAgent}
+              agentSessionId={sessionId}
+              agentInURL={Boolean(agentSessionId)}
+              agentShown={agentOpen}
             />
           </section>
         ) : (
@@ -387,7 +392,8 @@ function ReviewDetail({
   onOpenPicker,
   onOpenSidebar,
   agentSessionId,
-  showAgent,
+  agentInURL,
+  agentShown,
   embedded,
 }: {
   embedded?: boolean;
@@ -405,7 +411,9 @@ function ReviewDetail({
   onOpenPicker: (value: "reviewers" | "issues") => void;
   onOpenSidebar?: () => void;
   agentSessionId?: string;
-  showAgent?: boolean;
+  /** The session came from the URL (`?agentSessionId=`) rather than from the pull request. */
+  agentInURL?: boolean;
+  agentShown: boolean;
 }) {
   const { t } = useI18n();
   const [mergeMethod, setMergeMethod] = useState<MergeMethod>(() => resolvePreferredMergeMethod(data.userSettings[data.viewer.id]?.mergeStrategy));
@@ -484,7 +492,12 @@ function ReviewDetail({
   }, [review.id, hostReview]);
 
   const shortcuts = useOptionalPullRequestReviewShortcuts();
-  const agentShown = Boolean(agentSessionId) && showAgent !== false;
+  // Where "Show agent", "Close chat" and the diff chip lead: a session named in the URL stays in it; one found through
+  // the pull request only toggles `?showAgent=true`.
+  const agentPath = (sessionId: string, options: { tab?: ReviewRouteTab; showAgent?: boolean }) =>
+    agentInURL
+      ? reviewAgentPath(data.workspace.urlKey, review, sessionId, options)
+      : `${reviewPath(data.workspace.urlKey, review, options.tab ?? "changes")}${options.showAgent === false ? "" : "?showAgent=true"}`;
   useEffect(() => {
     if (!shortcuts) return;
     return shortcuts.register({
@@ -537,12 +550,12 @@ function ReviewDetail({
         onOpenPicker={onOpenPicker}
         onOpenSidebar={onOpenSidebar}
         returnPath={backPath}
-        tabSearch={agentSessionId ? `?showAgent=${agentShown}&agentSessionId=${encodeURIComponent(agentSessionId)}` : ""}
+        tabSearch={agentSessionId && agentInURL ? `?showAgent=${agentShown}&agentSessionId=${encodeURIComponent(agentSessionId)}` : agentShown ? "?showAgent=true" : ""}
         tabActions={
           agentSessionId ? (
             <ReviewAgentToggle
               shown={agentShown}
-              onToggle={() => onNavigate(reviewAgentPath(data.workspace.urlKey, review, agentSessionId, { tab, showAgent: !agentShown }))}
+              onToggle={() => onNavigate(agentPath(agentSessionId, { tab, showAgent: !agentShown }))}
             />
           ) : undefined
         }
@@ -612,8 +625,8 @@ function ReviewDetail({
         <ReviewAgentPanel
           sessionId={agentSessionId}
           data={data}
-          onClose={() => onNavigate(reviewAgentPath(data.workspace.urlKey, review, agentSessionId, { tab, showAgent: false }))}
-          onOpenChanges={() => onNavigate(reviewAgentPath(data.workspace.urlKey, review, agentSessionId, { tab: "changes" }))}
+          onClose={() => onNavigate(agentPath(agentSessionId, { tab, showAgent: false }))}
+          onOpenChanges={() => onNavigate(agentPath(agentSessionId, { tab: "changes" }))}
         />
       )}
       </div>

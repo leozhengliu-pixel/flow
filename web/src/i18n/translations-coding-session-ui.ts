@@ -271,4 +271,5 @@ export const codingSessionUiZhCN: Record<string, string> = {
   "Could not upload file": "无法上传文件",
   "Open sidebar": "打开侧边栏",
   "Hide agent": "隐藏 Agent",
+  "1 file": "1 个文件",
 }
