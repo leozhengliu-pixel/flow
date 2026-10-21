@@ -472,26 +472,43 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
     id: 'ai',
     title: 'AI & agents',
     section: 'Features',
-    keywords: ['flow agent', 'ai', 'coding sessions', 'loops'],
+    keywords: ['flow agent', 'ai', 'coding sessions', 'agents', 'mcp'],
     groups: [
       {
-        title: 'Flow Agent',
+        title: 'AI & agents',
         items: [
-          { title: 'Flow Agent', keywords: ['assistant'] },
-          { title: 'Code Intelligence', keywords: ['code search'] },
-          { title: 'Coding Sessions', keywords: ['agents', 'coding sessions', 'harness'] },
-          { title: 'Trusted sources', keywords: ['allowlist', 'trusted sources', 'agent safety'] },
-          { title: 'Loops', keywords: ['automations'] },
-          { title: 'Triage Intelligence', keywords: ['triage', 'suggestions', 'duplicates'] },
+          { title: 'Usage', keywords: ['credits', 'spend'] },
+          { title: 'Enable usage feedback', keywords: ['improve ai', 'feedback', 'training'] },
         ],
       },
       {
+        title: 'Flow Agent',
+        items: [
+          { title: 'Flow Agent', keywords: ['assistant', 'enable flow agent'] },
+          { title: 'Enable web access', keywords: ['web search', 'public web'] },
+          { title: 'Enable MCP connectors', keywords: ['mcp', 'connectors', 'allowed mcp connectors'] },
+          { title: 'Workspace guidance', keywords: ['instructions', 'prompt'] },
+          { title: 'Initiative and project updates', keywords: ['updates', 'guidance'] },
+          { title: 'Code Intelligence', keywords: ['code search', 'repository access'] },
+          { title: 'Coding Sessions', keywords: ['agents', 'coding sessions', 'harness'] },
+          { title: 'Trusted sources', keywords: ['allowlist', 'trusted sources', 'agent safety'] },
+          { title: 'Triage Intelligence', keywords: ['triage', 'suggestions', 'duplicates', 'behavior'] },
+        ],
+      },
+      {
+        title: 'Flow Agent integrations',
+        items: [{ title: 'Available integrations', keywords: ['slack'] }],
+      },
+      {
         title: 'Installed Agents',
-        items: [{ title: 'Installed agents guidance', keywords: ['instructions'] }],
+        items: [{ title: 'Installed agents guidance', keywords: ['instructions', 'agents'] }],
       },
       {
         title: 'AI',
-        items: [{ title: 'Resolved thread summaries', keywords: ['summaries'] }],
+        items: [
+          { title: 'Resolved thread summaries', keywords: ['summaries'] },
+          { title: 'Suggest branch name in prompts', keywords: ['branch', 'copy as prompt'] },
+        ],
       },
     ],
   },

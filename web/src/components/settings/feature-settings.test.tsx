@@ -13,7 +13,7 @@ vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib
 vi.mock('@/lib/toast', () => ({ toast: { error: vi.fn() } }))
 beforeEach(() => { vi.clearAllMocks(); localStorage.setItem('flow:locale','en-US') })
 const initial = { sessionDurationDays:30, featureFlags:{'customer-requests':true,initiatives:true,pulse:true},featureSettings:{} } as unknown as WorkspaceSettings
-function page(onReload = vi.fn(), feature: 'customer-requests'|'pulse'|'initiatives'|'ai'|'asks' = 'customer-requests', onNavigateSettings = vi.fn(), overrides: Partial<BootstrapData> = {}) {
+function page(onReload = vi.fn(), feature: 'customer-requests'|'pulse'|'initiatives'|'ai'|'ai-agent'|'triage-intelligence'|'ai-summaries'|'ai-updates'|'installed-agents'|'asks' = 'customer-requests', onNavigateSettings = vi.fn(), overrides: Partial<BootstrapData> = {}) {
   return <I18nProvider><FeatureSettingsPage page={feature} data={makeBootstrap({workspaceSettings:initial,customers:[],integrationConnections:[],emailIntakeAddresses:[],viewerRole:'admin',...overrides})} onCreateReleasePipeline={vi.fn()} onOpenReleasePipeline={vi.fn()} onOpenIntegration={vi.fn()} onNavigateSettings={onNavigateSettings} onReload={onReload}/></I18nProvider>
 }
 
@@ -80,7 +80,7 @@ it('enables and configures Triage Intelligence behavior', async () => {
     },
   } as WorkspaceSettings
   vi.mocked(updateWorkspacePreferences).mockResolvedValueOnce(enabled)
-  render(page(vi.fn(), 'ai'))
+  render(page(vi.fn(), 'triage-intelligence'))
 
   await user.click(screen.getByRole('checkbox', { name: 'Enable Triage Intelligence' }))
   await waitFor(() => expect(updateWorkspacePreferences).toHaveBeenCalledWith({ featureFlags: { 'triage-intelligence': true } }, 'workspace'))
@@ -93,7 +93,7 @@ it('enables and configures Triage Intelligence behavior', async () => {
     },
   })
   await user.click(screen.getByRole('combobox', { name: 'Project is suggested' }))
-  await user.click(await screen.findByRole('menuitem', { name: 'Apply automatically' }))
+  await user.click(await screen.findByRole('menuitem', { name: 'Auto-apply' }))
   await waitFor(() => expect(updateWorkspacePreferences).toHaveBeenLastCalledWith({
     featureSettings: {
       triageIntelligence: {
@@ -272,15 +272,13 @@ it('gates Code Intelligence behind GitHub code access and shows repository polic
   })
   const { rerender } = render(
     <I18nProvider>
-      <FeatureSettingsPage page="ai" data={withoutAccess} onCreateReleasePipeline={vi.fn()} onOpenReleasePipeline={vi.fn()} onOpenIntegration={open} onReload={vi.fn()} />
+      <FeatureSettingsPage page="code-intelligence" data={withoutAccess} onCreateReleasePipeline={vi.fn()} onOpenReleasePipeline={vi.fn()} onOpenIntegration={open} onReload={vi.fn()} />
     </I18nProvider>,
   )
   expect(screen.getByRole('heading', { name: 'Code Intelligence' })).toBeVisible()
   expect(screen.getByText('Needs code access via GitHub integration')).toBeVisible()
   expect(screen.getByRole('button', { name: 'Enable code access' })).toBeVisible()
   expect(screen.queryByRole('checkbox', { name: 'Enable Code Intelligence' })).not.toBeInTheDocument()
-  // Like the reference app, signed commits are configured on the Coding sessions page, not the AI overview.
-  expect(screen.queryByText('Require signed commits')).not.toBeInTheDocument()
 
   const withAccess = makeBootstrap({
     workspaceSettings: initial,
@@ -294,7 +292,7 @@ it('gates Code Intelligence behind GitHub code access and shows repository polic
   })
   rerender(
     <I18nProvider>
-      <FeatureSettingsPage page="ai" data={withAccess} onCreateReleasePipeline={vi.fn()} onOpenReleasePipeline={vi.fn()} onOpenIntegration={open} onReload={vi.fn()} />
+      <FeatureSettingsPage page="code-intelligence" data={withAccess} onCreateReleasePipeline={vi.fn()} onOpenReleasePipeline={vi.fn()} onOpenIntegration={open} onReload={vi.fn()} />
     </I18nProvider>,
   )
   expect(screen.getByRole('checkbox', { name: 'Enable Code Intelligence' })).toBeInTheDocument()

@@ -28,6 +28,7 @@ import { githubAppZhCN } from './translations-github-app';
 import { codeHostAccountsZhCN } from './translations-code-host-accounts';
 import { mcpConnectorsZhCN } from './translations-mcp-connectors';
 import { codingSessionsZhCN } from './translations-coding-sessions';
+import { aiSettingsZhCN } from './translations-ai-settings';
 import { webhookSettingsZhCN } from './translations-webhook-settings';
 import { billingUsageSettingsZhCN } from './translations-billing-usage-settings';
 import { teamMemberOriginsZhCN } from './translations-team-member-origins';
@@ -5863,6 +5864,7 @@ for (const [key, value] of Object.entries(codeHostAccountsZhCN)) if (!(key in zh
 for (const [key, value] of Object.entries(mcpConnectorsZhCN)) if (!(key in zhCN)) zhCN[key] = value;
 // coding sessions (track F): only fills keys the shared dictionary does not already translate.
 for (const [key, value] of Object.entries(codingSessionsZhCN)) if (!(key in zhCN)) zhCN[key] = value;
+for (const [key, value] of Object.entries(aiSettingsZhCN)) if (!(key in zhCN)) zhCN[key] = value;
 Object.assign(zhCN, webhookSettingsZhCN);
 for (const [key, value] of Object.entries(billingUsageSettingsZhCN)) if (!(key in zhCN)) zhCN[key] = value;
 Object.assign(zhCN, teamMemberOriginsZhCN);

@@ -253,6 +253,12 @@ function teamSectionLabel(section: string) {
 /** Settings pages that are not in the settings search index. */
 const SETTINGS_EXTRA_TITLES: Record<string, string> = {
   loops: "Loops",
+  "ai-agent": "Flow Agent",
+  "code-intelligence": "Code Intelligence",
+  "triage-intelligence": "Triage Intelligence",
+  "ai-summaries": "Summaries",
+  "ai-updates": "Initiative and project updates",
+  "installed-agents": "Agents",
   "coding-sessions": "Coding sessions",
   "coding-environments": "Coding environments",
 };

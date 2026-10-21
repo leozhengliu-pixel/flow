@@ -1,11 +1,8 @@
-import { Children, useEffect, useMemo, useRef, useState, type ComponentProps, type ComponentType, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { canCreateReleasePipeline } from '@/lib/settings-access';
-import { ApplicationMembers } from '@/components/agent/application-members'
 import {
   ArrowUpRight,
-  Check,
   ChevronRight,
-  MessageSquare,
   Search,
   Smile,
   Sparkles,
@@ -14,28 +11,24 @@ import {
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { IntegrationBrandIcon } from './integration-brand-icon';
-import { CodeIntelligenceSettingsSection } from './code-intelligence-settings';
 import {
   integrationCategories,
   primaryIntegrations,
 } from '@/lib/integration-catalog';
 import {
   DEFAULT_REPOSITORY_ACCESS,
-  githubConnection,
   type RepositoryAccessSettings,
 } from '@/lib/code-access';
 import { countLabelsByResource } from '@/lib/resource-counts';
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/i18n/i18n";
 import { DocumentTemplateEditor, DocumentTemplateRow } from "@/components/documents/document-template-editor";
 import { TemplateListCard } from "./issue-template-settings";
 import {
   createCustomEmoji,
   updateCustomEmoji,
-  updateIntegrationConnection, updateWorkspacePreferences, getLoopConfig, updateLoopSettings,
-  updateWorkspaceAgentGuidance,
+  updateWorkspacePreferences, getLoopConfig, updateLoopSettings,
 } from "@/lib/api";
 import { loopsPath, newReleasePipelinePath, releasePipelinePath, type SettingsPageId, type IntegrationProvider } from "@/lib/app-routes";
 import { DeletedPipelineRows, PipelinesEmptyState, PipelineSettingsRows } from "@/components/releases/pipeline-settings-list";
@@ -50,19 +43,18 @@ import type {
 
 import { keepMentionMenuOpen } from "./mention-field-host";
 import "./feature-settings.css";
-import { SettingsToggle as BaseSettingsToggle } from './settings-primitives'
+import { FeatureButton, FeatureCard, FeatureRow, FeatureSection, FeatureSelect, FeatureShell, Toggle } from "./feature-primitives";
+import { AiAgentSettings, AiSettingsHub, CodeIntelligenceSettings, InstalledAgentsSettings, ResolvedSummariesSettings, TriageIntelligenceSettings, UpdateGuidanceSettings, type AiPageProps } from "./ai-settings-pages";
 import { SlackUpdates } from "./slack-updates";
 import { AsksSettingsPage } from "./asks-settings";
 import { AgentTrustedSourcesSettings } from "./agent-trusted-sources-settings";
-import { CodingSessionsAIRow, CodingSessionsSettings } from "./coding-sessions/coding-sessions-settings";
+import { CodingSessionsSettings } from "./coding-sessions/coding-sessions-settings";
 import { CustomerRequestsSettings } from "./customer-requests-settings";
-import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
-import { LoopsGlyph } from '@/components/ui/agent-glyph'
 import { LoopCodeAccessSection } from './coding-sessions/loop-code-access'
 import { withTrashRetention } from '@/lib/trash-retention'
 
-type FeaturePageId = Extract<SettingsPageId, "ai"|"loops"|"coding-sessions"|"coding-environments"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations">;
+type FeaturePageId = Extract<SettingsPageId, "ai"|"ai-agent"|"code-intelligence"|"triage-intelligence"|"ai-summaries"|"ai-updates"|"installed-agents"|"loops"|"coding-sessions"|"coding-environments"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations">;
 type Props = { page: FeaturePageId; data: BootstrapData; onCreateReleasePipeline: () => void; onOpenReleasePipeline: (pipeline:ReleasePipeline) => void; onOpenIntegration:(provider:IntegrationProvider|string)=>void; onReload: () => Promise<void>; onNavigateSettings?: (page: SettingsPageId) => void; onOpenAsksSlack?: (integrationId: string) => void; onOpenAsksEmailIntake?: (addressId?: string) => void };
 
 const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
@@ -122,7 +114,10 @@ export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpe
 
   // coding sessions (track F): the settings page, the legacy environments redirect and the environment editor.
   if (page === "coding-sessions" || page === "coding-environments") return <CodingSessionsSettings page={page} data={data} settings={settings} disabled={busy || !['admin','owner'].includes(data.viewerRole)} onToggleEnabled={value => setEnabled("coding-sessions", value)} onNavigateSettings={onNavigateSettings} onOpenIntegration={onOpenIntegration} />;
-  if (page === "ai") return <AIPage data={data} onReload={onReload} settings={settings} busy={busy || !['admin','owner'].includes(data.viewerRole)} setEnabled={setEnabled} setFeature={setFeature} onOpenIntegration={onOpenIntegration} onNavigateSettings={onNavigateSettings}/>;
+  if (AI_PAGES[page]) {
+    const Page = AI_PAGES[page];
+    return <Page data={data} settings={settings} busy={busy || !['admin','owner'].includes(data.viewerRole)} setEnabled={setEnabled} setFeature={setFeature} save={save} onReload={onReload} onOpenIntegration={onOpenIntegration} onNavigateSettings={onNavigateSettings}/>;
+  }
   if (page === "loops") return <LoopsFeatureSettings data={data} settings={settings} busy={busy || !['admin','owner'].includes(data.viewerRole)} setEnabled={setEnabled} setFeature={setFeature} onSaveWorkspace={save} onReload={onReload}/>;
   if (page === "initiatives") return <InitiativesFeatureSettings data={data} settings={settings} busy={busy} setEnabled={setEnabled} onScheduleChange={schedule => save({ featureSettings: { initiativeUpdateSchedule: initiativeScheduleValue(schedule.frequency), initiativeUpdateFrequencyWeeks: schedule.frequency, initiativeUpdateWeekday: schedule.weekday, initiativeUpdateHour: schedule.hour } })} onReload={onReload} onNavigateLabels={() => onNavigateSettings?.("initiative-labels")}/>;
   if (page === "documents") return <DocumentsPage data={data} onReload={onReload}/>;
@@ -133,6 +128,17 @@ export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpe
   if (page === "emojis") return <EmojisPage data={data} onReload={onReload}/>;
   return <IntegrationsPage data={data} onOpen={onOpenIntegration} onReload={onReload}/>;
 }
+
+/** Settings › AI & agents and its sub-pages. */
+const AI_PAGES: Partial<Record<FeaturePageId, (props: AiPageProps) => ReactNode>> = {
+  ai: AiSettingsHub,
+  "ai-agent": AiAgentSettings,
+  "code-intelligence": CodeIntelligenceSettings,
+  "triage-intelligence": TriageIntelligenceSettings,
+  "ai-summaries": ResolvedSummariesSettings,
+  "ai-updates": UpdateGuidanceSettings,
+  "installed-agents": InstalledAgentsSettings,
+};
 
 function LoopsFeatureSettings({data,settings,busy,setEnabled,setFeature,onSaveWorkspace,onReload}:{data:BootstrapData;settings:WorkspaceSettings;busy:boolean;onReload:()=>Promise<void>;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void;onSaveWorkspace:(next:Parameters<typeof updateWorkspacePreferences>[0])=>Promise<void>}) {
   const navigate = useNavigate();
@@ -179,90 +185,6 @@ function LoopsWebSearchSettings({busy}:{busy:boolean}) {
       <FeatureRow title="Web search in Flow Agent chat" description={config?.agentNativeWebSearch&&!available?"Flow Agent searches with the AI provider's built-in web search and reads pages it links to.":"Let Flow Agent search the web when answering in chat"}><Toggle checked={config?.agentWebSearch===true} disabled={busy||config===undefined} label="Web search in Flow Agent chat" onChange={value=>void setAgentWebSearch(value)}/></FeatureRow>
     </FeatureCard>
   </FeatureSection></div>;
-}
-
-function AIPage({data,onReload,settings,busy,setEnabled,setFeature,onOpenIntegration,onNavigateSettings}:{data:BootstrapData;onReload:()=>Promise<void>;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void;onOpenIntegration:(provider:IntegrationProvider|string)=>void;onNavigateSettings?: (page: SettingsPageId) => void}) {
-  const { t } = useI18n();
-  const [guidance,setGuidance]=useState(settings.agentInstructions??'');
-  const [savingGuidance,setSavingGuidance]=useState(false);
-  useEffect(()=>setGuidance(settings.agentInstructions??''),[settings.agentInstructions]);
-  const canEdit=['owner','admin'].includes(data.viewerRole)||settings.agentGuidancePermission==='members';
-  const cards = [
-    ["ai-agent", "Flow Agent", "Create issues and answer questions about your workspace", AgentCursorGlyph],
-    ["loops", "Loops", "Automated agent workflows triggered by schedules or issue updates", LoopsGlyph],
-  ] as const;
-  const repositoryAccess: RepositoryAccessSettings = {
-    ...DEFAULT_REPOSITORY_ACCESS,
-    ...(settings.featureSettings.repositoryAccess ?? {}),
-  };
-  const grantCodeAccess = async () => {
-    const connection = githubConnection(data);
-    if (!connection) { onOpenIntegration('github'); return; }
-    try {
-      await updateIntegrationConnection(connection.provider, connection.id, {
-        config: { ...(connection.config ?? {}), codeAccess: 'true' },
-      });
-      await onReload();
-      toast.success(t('Code access enabled for GitHub'));
-    } catch (error) {
-      toast.error(message(error));
-    }
-  };
-  return <FeatureShell title="AI & agents" description="Automate your product development processes and operations with AI">
-    <FeatureSection title="Flow Agent" description="Create issues and answer questions about your workspace.">
-      <FeatureCard>{cards.slice(0,1).map(([id,title,description,Icon])=><FeatureRow key={id} icon={Icon} title={title} businessTitle={id==="ai-agent"} description={description}><Toggle checked={settings.featureFlags[id]??true} disabled={busy} label={title} onChange={value=>setEnabled(id,value)}/></FeatureRow>)}
-        <CodingSessionsAIRow enabled={settings.featureFlags["coding-sessions"]??true} onOpen={()=>onNavigateSettings?.("coding-sessions")}/>
-        {cards.slice(1).map(([id,title,description,Icon])=><FeatureRow key={id} icon={Icon} title={title} description={description}><Toggle checked={settings.featureFlags[id]??true} disabled={busy} label={title} onChange={value=>setEnabled(id,value)}/></FeatureRow>)}
-        {/* Like the reference app, "Require signed commits" lives on the Coding sessions page (and Account → Code & reviews), not here. */}
-      </FeatureCard>
-    </FeatureSection>
-    <CodeIntelligenceSettingsSection
-      data={data}
-      settings={settings}
-      busy={busy}
-      setEnabled={setEnabled}
-      onOpenGitHub={() => onOpenIntegration('github')}
-      onGrantCodeAccess={() => void grantCodeAccess()}
-      repositoryAccess={repositoryAccess}
-      onRepositoryAccessChange={(next) => setFeature('repositoryAccess', next)}
-    />
-    <TriageIntelligenceFeatureSettings settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature}/>
-    <FeatureSection title="Installed Agents" description="AI agents can work alongside you as teammates."><div className="settings-agent-members"><ApplicationMembers data={data} onReload={onReload}/></div><div className="settings-agent-guidance"><label><span>{t('Installed agents guidance')}</span><textarea aria-label={t('Installed agents guidance')} maxLength={8000} disabled={!canEdit||savingGuidance} value={guidance} onChange={event=>setGuidance(event.target.value)}/></label><FeatureButton primary disabled={!canEdit||savingGuidance||guidance===(settings.agentInstructions??'')} onClick={async()=>{setSavingGuidance(true);try{await updateWorkspaceAgentGuidance(guidance);await onReload()}catch(error){toast.error(message(error))}finally{setSavingGuidance(false)}}}>Save</FeatureButton></div></FeatureSection>
-    <FeatureSection title="AI" description="Control AI assistance throughout Flow"><FeatureCard><FeatureRow icon={MessageSquare} title="Resolved thread summaries" description="Control AI summaries for resolved threads across Flow"><Toggle checked={settings.featureFlags["thread-summaries"]??true} disabled={busy} label="Resolved thread summaries" onChange={value=>setEnabled("thread-summaries",value)}/></FeatureRow></FeatureCard></FeatureSection>
-  </FeatureShell>;
-}
-
-function TriageIntelligenceFeatureSettings({settings,busy,setEnabled,setFeature}:{settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void}) {
-  const { t } = useI18n();
-  const config = settings.featureSettings.triageIntelligence;
-  const enabled = settings.featureFlags["triage-intelligence"] ?? false;
-  const [guidance,setGuidance]=useState(config.workspaceGuidance??'');
-  useEffect(()=>setGuidance(config.workspaceGuidance??''),[config.workspaceGuidance]);
-  const update = <K extends keyof typeof config>(key:K,value:typeof config[K]) => setFeature("triageIntelligence",{...config,[key]:value});
-  const actionOptions = [
-    {value:"suggest",label:"Show suggestion"},
-    {value:"auto",label:"Apply automatically"},
-    {value:"hide",label:"Hide"},
-  ];
-  const rows: Array<[keyof typeof config,string,string]> = [
-    ["assigneeAction","Assignee is suggested","Infer the owner from related work"],
-    ["projectAction","Project is suggested","Route the request into the closest project"],
-    ["labelAction","Label is suggested","Apply consistent intake categorization"],
-    ["teamAction","Team is suggested","Detect the team that owns the work"],
-    ["duplicateAction","Duplicate issue is suggested","Find the canonical existing request"],
-    ["relatedAction","Related issue is suggested","Surface adjacent implementation work"],
-  ];
-  return <FeatureSection title="Triage Intelligence" description="Use workspace context to infer teams, projects, labels, assignees, duplicates, and related work.">
-    <FeatureCard><FeatureRow icon={TriageIntelligenceGlyph} title="Enable Triage Intelligence" description="Generate suggestions when issues enter triage"><Toggle checked={enabled} disabled={busy} label="Enable Triage Intelligence" onChange={value=>setEnabled("triage-intelligence",value)}/></FeatureRow></FeatureCard>
-    <div className={`feature-subsection${enabled ? "" : " is-disabled"}`} aria-disabled={!enabled}>
-      <header><h3>{t("Behavior")}</h3><p>{t("Define whether each suggestion is shown, applied automatically, or hidden.")}</p></header>
-      <FeatureCard>{rows.map(([key,title,description])=><FeatureRow key={key} title={title} description={description}><FeatureSelect label={title} value={config[key] as string} options={actionOptions} disabled={busy||!enabled} onChange={value=>update(key,value as never)}/></FeatureRow>)}</FeatureCard>
-    </div>
-    <div className={`feature-subsection${enabled ? "" : " is-disabled"}`} aria-disabled={!enabled}>
-      <header><h3>{t("Workspace guidance")}</h3><p>{t("Optionally provide additional context and instructions for Triage Intelligence in this workspace.")}</p></header>
-      <div className="settings-agent-guidance"><label><span>{t("Triage Intelligence guidance")}</span><textarea aria-label={t("Triage Intelligence guidance")} maxLength={8000} disabled={busy||!enabled} value={guidance} onChange={event=>setGuidance(event.target.value)}/></label><FeatureButton primary disabled={busy||!enabled||guidance===(config.workspaceGuidance??'')} onClick={()=>update("workspaceGuidance",guidance.trim())}>Save</FeatureButton></div>
-    </div>
-  </FeatureSection>;
 }
 
 function InitiativesFeatureSettings({data,settings,busy,setEnabled,onScheduleChange,onReload,onNavigateLabels}:{data:BootstrapData;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;onScheduleChange:(schedule:{frequency:number;weekday:number;hour:number})=>void;onReload:()=>Promise<void>;onNavigateLabels:()=>void}) {
@@ -468,17 +390,6 @@ function IntegrationsPage({data,onOpen}:{data:BootstrapData;onOpen:(provider:Int
   </FeatureShell></div>;
 }
 
-function FeatureShell({className,title,description,children}:{className?:string;title:string;description?:ReactNode;children:ReactNode}) { const {t}=useI18n();return <div className={`feature-settings${className?` ${className}`:""}`}><header className="feature-header"><h1>{t(title)}</h1>{description&&<p>{typeof description==="string"?t(description):description}</p>}</header>{children}</div> }
-function FeatureSection({title,description,disabled,children}:{title:string;description?:string;disabled?:boolean;children:ReactNode}) { const {t}=useI18n();return <section className={`feature-section${disabled?" is-disabled":""}`} aria-disabled={disabled||undefined}><header><h2>{t(title)}</h2>{description&&<p>{t(description)}</p>}</header>{children}</section> }
-function FeatureCard({children}:{children:ReactNode}) {return <div className="feature-card">{children}</div>}
-function Toggle(props:ComponentProps<typeof BaseSettingsToggle>) {const {t}=useI18n();return <BaseSettingsToggle {...props} label={t(props.label)}/>}
-/** The Triage Intelligence tile glyph (the reference app's triage mark). */
-function TriageIntelligenceGlyph({ size = 16 }: { size?: number | string }) { return <FlowGlyph name="triage" size={Number(size) || 16} /> }
-/** A settings row icon: a lucide icon or an agent glyph. */
-type FeatureIcon = ComponentType<{ size?: number | string }>
-function FeatureRow({title,description,icon:Icon,badge,businessTitle,children}:{title:string;description?:string;icon?:FeatureIcon;badge?:string;businessTitle?:boolean;children?:ReactNode}) { const {t}=useI18n();return <div className="feature-row">{Icon&&<span className="feature-row-icon"><Icon size={18}/></span>}<div><strong data-i18n-ignore={businessTitle||undefined}>{businessTitle?title:t(title)}{badge&&<small>{t(badge)}</small>}</strong>{description&&<span>{t(description)}</span>}</div>{children&&<aside>{children}</aside>}</div> }
-function FeatureButton({children,primary,danger,...props}:React.ButtonHTMLAttributes<HTMLButtonElement>&{primary?:boolean;danger?:boolean}) {const {t}=useI18n();return <button {...props} className={`feature-button${primary?" primary":""}${danger?" danger":""}`}>{Children.map(children,child=>typeof child==="string"?t(child):child)}</button>}
-function FeatureSelect({label,value,options,onChange,disabled,overlay}:{label:string;value:string;options:{value:string;label:string;translate?:boolean}[];onChange:(value:string)=>void;disabled?:boolean;overlay?:boolean}) {const {t}=useI18n();const openedAt=useRef(0);const selected=options.find(item=>item.value===value)??{value,label:value};const text=(item:{label:string;translate?:boolean})=>item.translate===false?item.label:t(item.label);return <DropdownMenu onOpenChange={open=>{if(open)openedAt.current=performance.now()}}><DropdownMenuTrigger asChild><button type="button" role="combobox" aria-label={t(label)} disabled={disabled} className="feature-select"><span data-i18n-ignore={selected.translate===false?true:undefined}>{text(selected)}</span><FlowGlyph name="selectChevron" width={10} height={5}/></button></DropdownMenuTrigger><DropdownMenuContent align={overlay?"start":"end"} {...(overlay?{sideOffset:-35,alignOffset:-1}:{})} className={`feature-select-menu${overlay?" is-overlay":""}`} onPointerUpCapture={overlay?(event=>{ if(performance.now()-openedAt.current<350){event.stopPropagation();event.preventDefault()} }):undefined}>{options.map(item=><DropdownMenuItem key={item.value} data-i18n-ignore={item.translate===false?true:undefined} onSelect={()=>onChange(item.value)}>{text(item)}{item.value===value&&<Check size={13}/>}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>}
 function FeatureEmpty({icon:Icon,title,action}:{icon:LucideIcon;title:string;action?:ReactNode}) {const {t}=useI18n();return <div className="feature-empty"><Icon size={24}/><h3>{t(title)}</h3>{action}</div>}
 function FeatureDialog({open,onClose,title,children}:{open:boolean;onClose:()=>void;title:string;children:ReactNode}) {const {t}=useI18n();return <Dialog open={open} onOpenChange={value=>!value&&onClose()}><DialogContent className="feature-dialog" onPointerDownOutside={keepMentionMenuOpen} onInteractOutside={keepMentionMenuOpen}><DialogTitle>{t(title)}</DialogTitle>{children}</DialogContent></Dialog>}
 function FeatureDialogFooter({children}:{children:ReactNode}) {return <footer className="feature-dialog-footer">{children}</footer>}

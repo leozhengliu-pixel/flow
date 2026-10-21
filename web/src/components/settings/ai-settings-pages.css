@@ -1,0 +1,26 @@
+/* Settings > AI & agents (and its sub-pages): the reference app's header/section rhythm, stacked cards and guidance fields. */
+.feature-ai-settings .feature-header{margin-bottom:32px}
+.feature-ai-settings .feature-header p{margin-top:4px;line-height:22px}
+.feature-ai-settings .feature-section{margin-top:48px}
+.feature-ai-settings .feature-section>header{margin-bottom:16px}
+.feature-ai-settings .feature-section>header p{margin-top:2px;line-height:22px}
+.feature-ai-settings .feature-row-link{border-bottom:1px solid var(--theme-border)}
+.feature-ai-settings .feature-row-link:last-child{border-bottom:0}
+.feature-card-stack{display:flex;flex-direction:column;gap:12px}
+.feature-ai-settings>.feature-card+.feature-card{margin-top:12px}
+.feature-row-dim{opacity:.5}
+.feature-section-link{display:inline-flex;align-items:center;gap:3px;padding:0;border:0;background:transparent;color:var(--theme-text-primary);font:inherit;font-weight:450;cursor:pointer}
+.feature-section-link:hover{text-decoration:underline;text-underline-offset:2px}
+.feature-section-link.is-action{font-size:13px}
+.feature-guidance-field{box-sizing:border-box;width:100%;height:180px;display:block;padding:16px;resize:vertical;border:1px solid var(--theme-border);border-radius:10px;outline:0;background:var(--theme-surface-1);color:var(--theme-text-primary);font:13px/19.5px "Inter Variable","SF Pro Display",system-ui,sans-serif}
+.feature-guidance-field::placeholder{color:var(--theme-text-tertiary)}
+.feature-guidance-field:focus{border-color:var(--theme-border-strong)}
+.feature-guidance-field:disabled{opacity:.6}
+.feature-agent-avatar{width:24px!important;height:24px!important;flex:0 0 24px!important;border:0!important;border-radius:50%!important;background:var(--accent-primary)!important;color:var(--on-accent)!important;font-size:9px;font-weight:600}
+.feature-agents-summary{border-bottom:1px solid var(--theme-border)}
+.feature-select-icon{display:inline-flex;margin-right:6px;color:var(--theme-text-secondary)}
+.feature-select-menu .menu-item .feature-select-icon{margin:0 8px 0 0}
+.feature-select-menu .menu-item .feature-select-icon svg{margin:0}
+.feature-select-menu .menu-item .feature-select-label{flex:1}
+.feature-select .feature-select-icon svg{position:static;right:auto}
+:root[data-theme="light"] .feature-guidance-field{border-color:var(--border);background:var(--theme-surface-2);color:var(--text)}

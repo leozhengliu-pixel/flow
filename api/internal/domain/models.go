@@ -1564,6 +1564,10 @@ type FeatureSettings struct {
 	AsksSlackChannels              []AsksSlackChannelMapping  `json:"asksSlackChannels,omitempty"`
 	TriageIntelligence             TriageIntelligenceSettings `json:"triageIntelligence"`
 	RepositoryAccess               *RepositoryAccessSettings  `json:"repositoryAccess,omitempty"`
+	// InitiativeUpdateGuidance and ProjectUpdateGuidance are workspace-wide instructions for how Flow Agent writes
+	// initiative and project updates (Settings > AI & agents > Flow Agent > Updates).
+	InitiativeUpdateGuidance string `json:"initiativeUpdateGuidance,omitempty"`
+	ProjectUpdateGuidance    string `json:"projectUpdateGuidance,omitempty"`
 }
 
 // RepositoryAccessSettings gates which connected repos Code Intelligence may use (LS-0110).
