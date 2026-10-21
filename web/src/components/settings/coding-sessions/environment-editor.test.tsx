@@ -296,7 +296,11 @@ describe("environment editor: edit", () => {
     expect(screen.getByText("Create a new environment to use a different repository")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Repository" })).toBeNull();
     const save = screen.getByRole("button", { name: "Save changes" });
-    expect(save).toBeDisabled();
+    // Always enabled; with nothing changed a click sends nothing and says nothing.
+    expect(save).toBeEnabled();
+    await user.click(save);
+    expect(updateCodingEnvironment).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText("Prepare script"), { target: { value: "pnpm i" } });
     // Configure with agent works on saved settings only.
     expect(screen.getByRole("button", { name: "Configure with agent" })).toBeDisabled();
@@ -312,7 +316,7 @@ describe("environment editor: edit", () => {
     expect(updateCodingEnvironment).toHaveBeenCalledWith("env1", expect.not.objectContaining({ ownerIds: expect.anything() }));
     expect(await screen.findByTestId("secret-API_KEY")).toBeVisible();
     expect(screen.queryByLabelText("Secret value")).toBeNull();
-    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Configure with agent" })).toBeEnabled();
   });
 
