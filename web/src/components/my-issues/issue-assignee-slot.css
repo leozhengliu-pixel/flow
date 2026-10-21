@@ -1,0 +1,95 @@
+/* The assignee cell: the delegated agent's 18px avatar behind the human's, overlapping by 4.5px (reference: 14px pitch). */
+.issue-assignee-cluster {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+.issue-assignee-cluster__member {
+  position: relative;
+}
+.issue-assignee-cluster[data-delegated] > .issue-assignee-cluster__member,
+.issue-assignee-cluster[data-delegated] > .issue-assignee-cluster__empty {
+  position: relative;
+  margin-left: -4.5px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--bg-panel, var(--theme-surface-1));
+}
+.issue-assignee-cluster__empty {
+  background: var(--bg-panel, var(--theme-surface-1));
+}
+
+/* "Flow QA agent [Agent] ▸": the delegate row hung under the assignee in the picker. */
+.assignee-slot-agent-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+.assignee-slot-agent-row > i {
+  margin-left: auto;
+  color: var(--pk-faint, var(--theme-text-tertiary));
+  font-size: 7px;
+  font-style: normal;
+}
+.assignee-slot-agent-pill {
+  flex: none;
+  padding: 0 5px;
+  border: .5px solid var(--pk-border, var(--theme-border));
+  border-radius: 4px;
+  color: var(--pk-muted, var(--theme-text-secondary));
+  font: 450 11px/16px var(--font);
+}
+
+/* Hover card of an assignee with a delegated agent: "Name (handle)" over the agent on a connector. */
+html:root body .assignee-slot-hover-surface {
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: .5px solid var(--pk-border);
+  border-radius: 8px;
+  background: var(--pk-surface);
+  box-shadow: var(--pk-card-shadow);
+  color: var(--pk-text);
+}
+.assignee-slot-card {
+  display: grid;
+  gap: 6px;
+  font: 450 13px/18px var(--font);
+}
+.assignee-slot-card__person,
+.assignee-slot-card__agent {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.assignee-slot-card__agent {
+  position: relative;
+  margin-left: 16px;
+}
+.assignee-slot-card__agent > i {
+  position: absolute;
+  left: -10px;
+  top: -9px;
+  width: 8px;
+  height: 17px;
+  border-bottom-left-radius: 6px;
+  border-bottom: 1px solid var(--pk-divider, var(--theme-border));
+  border-left: 1px solid var(--pk-divider, var(--theme-border));
+}
+.assignee-slot-card__avatar {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--avatar, var(--avatar-fallback));
+  color: var(--on-accent);
+  font-size: 8px;
+}
+.assignee-slot-card em {
+  color: var(--pk-muted, var(--theme-text-secondary));
+  font-style: normal;
+}

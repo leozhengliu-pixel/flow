@@ -18,7 +18,7 @@ import { openMemberInvite, viewerCanInvite } from '@/lib/invite-navigation'
 import { avatarColor } from '@/components/issue/avatar-color'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { NestingLine } from '@/components/ui/nesting-line'
-import { confirmAction } from '@/components/ui/action-dialog-service'
+import { confirmRemoveDelegate } from './confirm-remove-delegate'
 
 /** `triage` shows the reference app's orange "Triage" status for an issue still in the team's triage queue. */
 export function StatusPicker({ value, states, onChange, hoverHistory, triage = false }: { value: WorkflowState; states: WorkflowState[]; onChange: (id: string) => void | Promise<void>; hoverHistory?: { activities: ActivityEvent[]; issueCreatedAt: string; triagedAt?: string | null }; triage?: boolean }) {
@@ -285,17 +285,8 @@ export function AssigneePicker({ value, delegate, users, onChange, onDelegate, o
 }
 
 /** The reference app's assignee menu: the delegated agent's avatar, 24px in, on a NestingLine from the assignee row above. */
-function NestedDelegateAvatar({ user }: { user: User }) {
+export function NestedDelegateAvatar({ user }: { user: User }) {
   return <span className="core-nested-delegate-icon"><NestingLine className="core-nested-delegate-line" heightAbove={9}/><PersonAvatar person={{ id: user.id, label: user.displayName, name: user.name, avatarUrl: user.avatarUrl, color: avatarColor(user.id) }}/></span>
-}
-
-/** The reference app `bB`: after unassigning, ask whether the delegated agent should go too ("Keep agent" leaves it). */
-async function confirmRemoveDelegate(delegate: User, sessionActive: boolean, translate: (source: string) => string) {
-  const name = delegate.displayName || delegate.name
-  const description = sessionActive
-    ? translate('{name} is still set to work on this issue. You can keep the agent on the issue, or remove it and archive its working session.')
-    : translate('{name} is still set to work on this issue. You can keep the agent on the issue.')
-  return confirmAction(translate('Remove {name} too?').replace('{name}', name), { description: description.replace('{name}', name), confirmLabel: translate('Remove agent'), cancelLabel: translate('Keep agent'), danger: false })
 }
 
 /**

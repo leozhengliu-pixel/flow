@@ -18,11 +18,11 @@ import { useIssueRowActions } from './use-issue-row-actions'
 import { AvatarImage, UserAvatar } from '@/components/ui/user-avatar'
 import { avatarColor } from '@/components/issue/avatar-color'
 import { AgentHover } from '@/components/agent/agent-hover-card'
+import { IssueAssigneeSlot } from './issue-assignee-slot'
 import { agentHoverProps } from '@/components/agent/agent-hover-props'
 import { ASSIGNEE_INVITE_ID, assigneeShortcut } from '@/lib/agent-members'
 import { openMemberInvite, viewerCanInvite } from '@/lib/invite-navigation'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
-import { useI18n } from '@/i18n/i18n'
 import { IssueSLAIndicator } from '@/components/issue/issue-sla-indicator'
 import { SubIssueProgressRing } from '@/components/issue/sub-issue-progress-ring'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
@@ -41,7 +41,7 @@ import { IssueWidgetAdornments } from '@/components/issues-split-view'
 export type MyIssuesStateType = 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled'
 export type MyIssuesContextAction = 'status' | 'priority' | 'assignee' | 'dueDate' | 'labels' | 'project' | 'cycle' | 'moreProperties' | 'createRelated' | 'markAs' | 'copy' | 'copyUrl' | 'copyId' | 'copyTitle' | 'convertTo' | 'move' | 'openIn' | 'runLoop' | 'favorite' | 'remind' | 'delete'
 export type MyIssuesEditableProperty = 'status' | 'priority' | 'assignee' | 'dueDate' | 'labels' | 'project' | 'cycle'
-export interface MyIssuesContextOption { id: string; teamId?: string; /** An agent member: choosing it delegates instead of assigning (hover card shows the "Agent" pill). */ agent?: boolean; /** The agent's handle (lowercase username), shown in its hover card. */ handle?: string; label: string; color?: string; description?: string; issueCount?: number; scope?: string; groupId?: string; groupLabel?: string; avatarUrl?: string; kind?: MyIssuesEditableProperty; priority?: 0 | 1 | 2 | 3 | 4; shortcut?: string; stateType?: MyIssuesStateType }
+export interface MyIssuesContextOption { id: string; teamId?: string; /** An agent member: choosing it delegates instead of assigning (hover card shows the "Agent" pill). */ agent?: boolean; /** The agent's handle (lowercase username), shown in its hover card. */ handle?: string; label: string; color?: string; description?: string; issueCount?: number; scope?: string; groupId?: string; groupLabel?: string; avatarUrl?: string; kind?: MyIssuesEditableProperty; priority?: 0 | 1 | 2 | 3 | 4; shortcut?: string; stateType?: MyIssuesStateType; /** Replaces the default icon (the delegated agent hung under the assignee). */ icon?: ReactNode; /** Replaces the label text. */ labelContent?: ReactNode }
 export interface MyIssuesRowPropertyOptions {
   status: MyIssuesContextOption[]
   priority: MyIssuesContextOption[]
@@ -380,8 +380,7 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
             /> : null}
             {displayProperties.has('sla') && issue.sla && <IssueSLAIndicator compact sla={issue.sla} ruleName={issue.sla.ruleName}/>}
             {displayProperties.has('estimate') && issue.estimate != null && <span className={styles.badge} aria-label={`Estimate ${issue.estimate}`}>{issue.estimate}</span>}
-            {displayProperties.has('assignee') && issue.delegate ? <DelegateAvatar delegate={issue.delegate}/> : null}
-            {displayProperties.has('assignee') && issue.assignee ? <RowCommandPicker propertyLabel="Assignee" label={`Assign to. Current assignee is ${issue.assignee.name}`} searchLabel="Assign to…" selectedIds={[issue.assignee.id]} options={propertyOptions.assignee} onSelect={value => change('assignee', value)} trigger={<MyIssuesAssigneeAvatar assignee={issue.assignee}/>}/> : null}
+            {displayProperties.has('assignee') ? <IssueAssigneeSlot issue={issue} options={propertyOptions.assignee} onChange={value => change('assignee', value)} avatarClassName={styles.avatar} emptyClassName={styles.noAssignee}/> : null}
             {mutationError && <button type="button" className={styles.rowError} title={mutationError} onClick={() => onRetryMutation?.(issue)}>Retry</button>}
           </span>
         </div>
@@ -441,12 +440,12 @@ function RowStatusHover({ issue }: { issue: MyIssuesRowData }) {
 
 const ASSIGNEE_INVITE_OPTION: MyIssuesContextOption = { id: ASSIGNEE_INVITE_ID, label: 'Invite and assign…', groupLabel: 'New user', kind: 'assignee' }
 
-export function RowCommandPicker({ propertyLabel, label, multi = false, onSelect, options, searchLabel, searchShortcut, selectedIds, trigger, triggerClassName, kind = 'standard', hoverContent, hoverClassName, hoverPlacement }: { propertyLabel: string; label: string; multi?: boolean; onSelect: (id: string) => void | Promise<void>; options: MyIssuesContextOption[]; searchLabel: string; searchShortcut?: string; selectedIds: string[]; trigger: ReactNode; triggerClassName?: string; kind?: PropertyMenuKind; hoverContent?: ReactNode; hoverClassName?: string; hoverPlacement?: 'left' | 'below' }) {
+export function RowCommandPicker({ propertyLabel, label, multi = false, onSelect, options, searchLabel, searchShortcut, selectedIds, trigger, triggerClassName, kind = 'standard', hoverContent, hoverClassName, hoverPlacement, open, onOpenChange }: { propertyLabel: string; label: string; multi?: boolean; onSelect: (id: string) => void | Promise<void>; options: MyIssuesContextOption[]; searchLabel: string; searchShortcut?: string; selectedIds: string[]; trigger: ReactNode; triggerClassName?: string; kind?: PropertyMenuKind; hoverContent?: ReactNode; hoverClassName?: string; hoverPlacement?: 'left' | 'below'; open?: boolean; onOpenChange?: (open: boolean) => void }) {
   const assignee = propertyLabel === 'Assignee'
   // Assignee pickers: number keys on "No assignee" (0) and the rows after it, agents without a pill but with a hover card, and an invite action under "New user".
   const rows = assignee && viewerCanInvite() ? [...options, ASSIGNEE_INVITE_OPTION] : options
-  const commandOptions = rows.map((option, index) => ({ ...option, icon: <MyIssuesOptionIcon option={option}/>, ...(option.id === ASSIGNEE_INVITE_ID ? { action: true } : option.agent ? agentHoverProps({ id: option.id, name: option.handle ?? option.label, displayName: option.label, avatarUrl: option.avatarUrl }) : {}), shortcut: option.kind === 'priority' ? option.id : option.kind === 'status' ? String(index + 1) : assignee && option.id !== ASSIGNEE_INVITE_ID ? assigneeShortcut(index) : option.shortcut }))
-  return <PropertyMenu label={propertyLabel} value={options.find(option => selectedIds.includes(option.id))?.label} multiple={multi} selectedId={selectedIds[0]} selectedIds={selectedIds} options={commandOptions} kind={kind} searchPlaceholder={searchLabel} searchShortcut={searchShortcut ?? (assignee ? 'A' : undefined)} ariaLabel={label} triggerClassName={triggerClassName ?? styles.propertyTrigger} trigger={trigger} hoverContent={hoverContent} hoverClassName={hoverClassName} hoverPlacement={hoverPlacement} onChange={id => id === ASSIGNEE_INVITE_ID ? openMemberInvite() : onSelect(id)}/>
+  const commandOptions = rows.map((option, index) => ({ ...option, icon: option.icon ?? <MyIssuesOptionIcon option={option}/>, ...(option.id === ASSIGNEE_INVITE_ID ? { action: true } : option.agent ? agentHoverProps({ id: option.id, name: option.handle ?? option.label, displayName: option.label, avatarUrl: option.avatarUrl }) : {}), shortcut: option.kind === 'priority' ? option.id : option.kind === 'status' ? String(index + 1) : assignee && option.id !== ASSIGNEE_INVITE_ID ? assigneeShortcut(index) : option.shortcut }))
+  return <PropertyMenu label={propertyLabel} value={options.find(option => selectedIds.includes(option.id))?.label} multiple={multi} selectedId={selectedIds[0]} selectedIds={selectedIds} options={commandOptions} kind={kind} searchPlaceholder={searchLabel} searchShortcut={searchShortcut ?? (assignee ? 'A' : undefined)} ariaLabel={label} triggerClassName={triggerClassName ?? styles.propertyTrigger} trigger={trigger} hoverContent={hoverContent} hoverClassName={hoverClassName} hoverPlacement={hoverPlacement} open={open} onOpenChange={onOpenChange} onChange={id => id === ASSIGNEE_INVITE_ID ? openMemberInvite() : onSelect(id)}/>
 }
 
 function IssueCheckbox({ checked, onChange }: { checked: boolean; onChange: (checked: boolean, range: boolean) => void }) {
@@ -519,13 +518,6 @@ function PropertyBadge(props:{label:NonNullable<MyIssuesRowData['labels']>[numbe
   if('label'in props){const{label}=props;return <LabelHoverPreview label={label} side="bottom" align="start"><span className={styles.badge}><i style={{backgroundColor:label.color}}/><span data-i18n-ignore>{label.name}</span></span></LabelHoverPreview>}
   return <span className={styles.badge}><i style={{backgroundColor:props.color}}/><span data-i18n-ignore>{props.children}</span></span>
 }
-/** The reference app shows the delegated agent's avatar beside the assignee. */
-export function DelegateAvatar({ delegate, className }: { delegate: NonNullable<MyIssuesRowData['delegate']>; className?: string }) {
-  const { t } = useI18n()
-  const label = t('Delegated to {name}').replace('{name}', delegate.name)
-  return <span className={className ?? styles.delegateAvatar} role="img" aria-label={label} title={label} data-i18n-ignore><UserAvatar avatarUrl={delegate.avatarUrl} className={styles.avatar} color={delegate.color ?? 'var(--avatar-fallback)'} name={delegate.name}/></span>
-}
-function MyIssuesAssigneeAvatar({ assignee }: { assignee: NonNullable<MyIssuesRowData['assignee']> }) { return <UserAvatar avatarUrl={assignee.avatarUrl} className={styles.avatar} color={assignee.color ?? 'var(--avatar-fallback)'} name={assignee.name}/> }
 
 export function MyIssuesListEmpty() { return <div className={styles.state} role="status"><span className={styles.emptyIcon}><Check size={15}/></span><strong>No issues</strong><p>No issues match this view.</p></div> }
 export function MyIssuesListError({ message, onRetry }: { message: string; onRetry?: () => void }) { return <div className={styles.state} role="alert"><strong>Could not load issues</strong><p>{message}</p>{onRetry && <button type="button" onClick={onRetry}>Try again</button>}</div> }

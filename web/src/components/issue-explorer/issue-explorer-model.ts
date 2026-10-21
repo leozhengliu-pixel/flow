@@ -372,7 +372,7 @@ function incrementCount(counts: Map<string, number>, key: string, amount = 1) {
  * then the agents that accept delegation, all in one list. Choosing an agent delegates (`assigneeUpdate`).
  */
 export function assigneeContextOptions(users: BootstrapData['users'], { teamId, allowAgents = true }: { teamId?: string; allowAgents?: boolean } = {}): MyIssuesContextOption[] {
-  return [{ id: '', label: 'No assignee', kind: 'assignee' }, ...assigneeCandidates(users, teamId, { agents: allowAgents }).map(user => ({ id: user.id, label: user.displayName, handle: user.name, avatarUrl: user.avatarUrl, kind: 'assignee' as const, ...(user.app ? { agent: true } : {}) }))]
+  return [{ id: '', label: 'No assignee', kind: 'assignee' }, ...assigneeCandidates(users, teamId, { agents: allowAgents }).map(user => ({ id: user.id, label: user.displayName, handle: user.username || user.name, avatarUrl: user.avatarUrl, kind: 'assignee' as const, ...(user.app ? { agent: true } : {}) }))]
 }
 
 export type ExplorerPropertyOptions = ReturnType<typeof explorerPropertyOptions>
