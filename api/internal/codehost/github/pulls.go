@@ -226,6 +226,15 @@ func (h *Host) UpdateChangeRequestBody(ctx context.Context, workspaceKey string,
 	return h.tokenRequest(ctx, "update_pull_request", http.MethodPatch, repoPath(owner, name)+"/pulls/"+strconv.Itoa(number), token, map[string]any{"body": body}, nil)
 }
 
+// CloseChangeRequest closes the pull request without merging it.
+func (h *Host) CloseChangeRequest(ctx context.Context, workspaceKey string, repo codehost.RepoRef, number int) error {
+	token, owner, name, err := h.repoToken(ctx, workspaceKey, repo, permissionsFlow)
+	if err != nil {
+		return err
+	}
+	return h.tokenRequest(ctx, "close_pull_request", http.MethodPatch, repoPath(owner, name)+"/pulls/"+strconv.Itoa(number), token, map[string]any{"state": "closed"}, nil)
+}
+
 // Comment adds a conversation comment to the pull request.
 func (h *Host) Comment(ctx context.Context, workspaceKey string, repo codehost.RepoRef, number int, body string) error {
 	token, owner, name, err := h.repoToken(ctx, workspaceKey, repo, permissionsFlow)

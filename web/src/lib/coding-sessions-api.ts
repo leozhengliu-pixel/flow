@@ -95,6 +95,8 @@ export const approveCodingSession = (sessionId: string, reject = false) =>
   request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/approve`, jsonRequest("POST", { reject }));
 /** Rejects a pending approval, or ends a session waiting for an answer. */
 export const dismissCodingSession = (sessionId: string) => request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/dismiss`, { method: "POST" });
+/** Archives a session (its agent left the issue, or Archive on the card): it ends and its open pull requests close. */
+export const archiveCodingSession = (sessionId: string) => request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/archive`, { method: "POST" });
 export const createCodingSessionPullRequest = (sessionId: string) =>
   request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/pull-request`, { method: "POST" });
 export const fetchCodingSandboxLogs = (sessionId: string, sandboxId: string) =>

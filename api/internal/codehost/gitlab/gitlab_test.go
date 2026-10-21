@@ -237,6 +237,9 @@ func TestCreateDraftMergeRequestIsIdempotent(t *testing.T) {
 	if refreshed, err := host.GetChangeRequest(ctx, "ws", input.Repo, 1); err != nil || refreshed.Body != "new body" {
 		t.Fatalf("get after update: %v %q", err, refreshed.Body)
 	}
+	if err := host.CloseChangeRequest(ctx, "ws", input.Repo, 1); err != nil || project.MRs[0]["state"] != "closed" {
+		t.Fatalf("close: %v %#v", err, project.MRs[0])
+	}
 	if err := host.Comment(ctx, "ws", input.Repo, 1, "Session finished"); err != nil {
 		t.Fatal(err)
 	}

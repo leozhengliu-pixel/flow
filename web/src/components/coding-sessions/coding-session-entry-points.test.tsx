@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { confirmAction } from '@/components/ui/action-dialog-service'
 import userEvent from '@testing-library/user-event'
 import type { ComponentProps } from 'react'
 import { MemoryRouter } from 'react-router-dom'
@@ -29,7 +30,7 @@ import { resetCodingAvailabilityCache } from './use-coding-sessions'
 
 vi.mock('@/lib/coding-sessions-api', () => ({
   fetchCodingStatus: vi.fn(), fetchCodingSession: vi.fn(), fetchCodingSessions: vi.fn(), stopCodingSession: vi.fn(), restartCodingSession: vi.fn(),
-  approveCodingSession: vi.fn(), dismissCodingSession: vi.fn(), createCodingSessionPullRequest: vi.fn(), promptCodingSession: vi.fn(), fetchCodingSandboxLogs: vi.fn(),
+  approveCodingSession: vi.fn(), dismissCodingSession: vi.fn(), archiveCodingSession: vi.fn(), createCodingSessionPullRequest: vi.fn(), promptCodingSession: vi.fn(), fetchCodingSandboxLogs: vi.fn(),
   fixCodingEnvironmentWithAgent: vi.fn(), startReviewCodingSession: vi.fn(), startIssueCodingSession: vi.fn(), fetchCodingEnvironments: vi.fn(),
   fetchCodingSessionArtifacts: vi.fn(async () => []),
   fetchCodingSessionDiff: vi.fn(async () => ({ source: 'none', additions: 0, deletions: 0, files: [] })), setCodingSessionSubscription: vi.fn(),
@@ -133,9 +134,9 @@ describe('Work on issue › Start coding session', () => {
   })
 })
 
-function DelegateHarness({ onUpdate }: { onUpdate: (input: object) => Promise<void> }) {
+function DelegateHarness({ onUpdate, delegate }: { onUpdate: (input: object) => Promise<void>; delegate?: User }) {
   const data = baseData()
-  const issue = makeIssue({ delegate: undefined })
+  const issue = makeIssue({ delegate })
   const coding = useDelegateCodingSession(issue, data, onUpdate)
   return <><IssueAssigneeProperty issue={issue} users={data.users} teamId="team-1" workspaceKey="workspace" allowAgents hoverContext={{ workspaceName: 'W' }} onUpdate={coding.onUpdate}/>{coding.element}</>
 }
@@ -178,6 +179,42 @@ describe('delegating to the agent', () => {
     const onUpdate = await delegateTo(/Code Agent/)
     expect(onUpdate).toHaveBeenCalledWith({ delegateId: coder.id })
     expect(api.fetchCodingEnvironments).not.toHaveBeenCalled()
+  })
+})
+
+describe('removing the agent from the issue', () => {
+  const removeAgent = async () => {
+    const user = userEvent.setup(), onUpdate = vi.fn(async () => undefined)
+    render(<I18nProvider><DelegateHarness onUpdate={onUpdate} delegate={flowAgent}/></I18nProvider>)
+    await waitFor(() => expect(api.fetchCodingStatus).toHaveBeenCalled())
+    await act(async () => { await Promise.resolve() })
+    await user.click(screen.getByRole('combobox', { name: /Change agent/ }))
+    await user.click(await screen.findByRole('option', { name: /No agent/ }))
+    return onUpdate
+  }
+
+  it('offers to archive the agent session and archives it when confirmed', async () => {
+    vi.mocked(api.fetchCodingSessions).mockResolvedValue([makeSession({ id: 'cs-1' }), makeSession({ id: 'cs-2', archivedAt: '2026-10-20T00:00:00Z' })])
+    vi.mocked(api.archiveCodingSession).mockResolvedValue(makeSession({ id: 'cs-1', archivedAt: '2026-10-20T00:00:00Z' }))
+    const onUpdate = await removeAgent()
+    expect(onUpdate).toHaveBeenCalledWith({ delegateId: '' })
+    await waitFor(() => expect(api.archiveCodingSession).toHaveBeenCalledTimes(1))
+    expect(api.archiveCodingSession).toHaveBeenCalledWith('cs-1')
+    expect(confirmAction).toHaveBeenCalledWith('Archive session with Flow?', expect.objectContaining({ confirmLabel: 'Archive session', cancelLabel: 'Skip' }))
+  })
+
+  it('keeps the session when the prompt is skipped, and does not ask without one', async () => {
+    vi.mocked(api.fetchCodingSessions).mockResolvedValue([makeSession({ id: 'cs-1' })])
+    vi.mocked(confirmAction).mockResolvedValueOnce(false)
+    await removeAgent()
+    await waitFor(() => expect(confirmAction).toHaveBeenCalled())
+    expect(api.archiveCodingSession).not.toHaveBeenCalled()
+    vi.mocked(confirmAction).mockClear()
+    vi.mocked(api.fetchCodingSessions).mockResolvedValue([])
+    cleanup()
+    await removeAgent()
+    await waitFor(() => expect(api.fetchCodingSessions).toHaveBeenCalledTimes(2))
+    expect(confirmAction).not.toHaveBeenCalled()
   })
 })
 

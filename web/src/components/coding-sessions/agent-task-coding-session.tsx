@@ -3,7 +3,7 @@ import { activityTimeLabel } from '@/components/activity/issue-activity-model'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
-import { setCodingSessionSubscription } from '@/lib/coding-sessions-api'
+import { archiveCodingSession, setCodingSessionSubscription } from '@/lib/coding-sessions-api'
 import { toast } from '@/lib/toast'
 import type { BootstrapData } from '@/types/flow'
 import type { CodingSession } from '@/types/coding-sessions'
@@ -67,6 +67,13 @@ export function CodingSessionActivityCard({ task, data, agentName }: { task: Anc
     try { await navigator.clipboard.writeText(link); toast.success(t('Link copied')) }
     catch { toast.error(t('Could not copy')) }
   }
+  // Archiving ends the session and closes its open pull requests; the card leaves the feed at once.
+  const archive = async () => {
+    const sessionId = task.codingSessionId!
+    dismiss(sessionId)
+    try { await archiveCodingSession(sessionId); notifyCodingSessionChanged({ sessionId, agentSessionId: task.id, issueId: task.issueId }) }
+    catch (cause) { toast.error(cause instanceof Error ? cause.message : t('Could not archive session')) }
+  }
   const toggleSubscription = async () => {
     if (!session) return
     try {
@@ -88,7 +95,7 @@ export function CodingSessionActivityCard({ task, data, agentName }: { task: Anc
           <DropdownMenuItem onSelect={() => void copyLink()}>{t('Copy link')}</DropdownMenuItem>
           {session && <DropdownMenuItem onSelect={() => void toggleSubscription()}>{t(subscribed ? 'Unsubscribe from chat' : 'Subscribe to chat')}</DropdownMenuItem>}
           <DropdownMenuSeparator/>
-          <DropdownMenuItem onSelect={() => dismiss(task.codingSessionId!)}>{t('Archive')}</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void archive()}>{t('Archive')}</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </header>

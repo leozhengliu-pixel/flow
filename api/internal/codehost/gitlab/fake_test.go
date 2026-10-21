@@ -392,7 +392,12 @@ func (f *fakeGitLab) serveMergeRequests(w http.ResponseWriter, r *http.Request, 
 		case len(segments) == 2 && r.Method == http.MethodGet:
 			write(w, http.StatusOK, mr)
 		case len(segments) == 2 && r.Method == http.MethodPut:
-			mr["description"] = f.body(r)["description"]
+			body := f.body(r)
+			if body["state_event"] == "close" {
+				mr["state"] = "closed"
+			} else {
+				mr["description"] = body["description"]
+			}
 			write(w, http.StatusOK, mr)
 		case len(segments) == 3 && segments[2] == "notes" && r.Method == http.MethodPost:
 			project.Notes[iid] = append(project.Notes[iid], fmt.Sprint(f.body(r)["body"]))

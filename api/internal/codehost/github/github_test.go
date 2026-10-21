@@ -587,6 +587,9 @@ func TestCreateChangeRequestIsIdempotent(t *testing.T) {
 	if err := host.UpdateChangeRequestBody(ctx, "ws", appRepo, reopened.Number, "new body"); err != nil {
 		t.Fatal(err)
 	}
+	if err := host.CloseChangeRequest(ctx, "ws", appRepo, reopened.Number); err != nil {
+		t.Fatal(err)
+	}
 	if err := host.Comment(ctx, "ws", appRepo, reopened.Number, "hi"); err != nil {
 		t.Fatal(err)
 	}

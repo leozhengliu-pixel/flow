@@ -247,6 +247,12 @@ type Host interface {
 	EgressHosts(ctx context.Context, workspaceKey string) ([]string, error)
 }
 
+// ChangeRequestCloser is implemented by hosts that can close a PR/MR without
+// merging it (archiving a session closes its open pull requests).
+type ChangeRequestCloser interface {
+	CloseChangeRequest(ctx context.Context, workspaceKey string, repo RepoRef, number int) error
+}
+
 // Secrets reads encrypted connector secrets (store.ReadConnectorSecret).
 type Secrets interface {
 	ReadConnectorSecret(ctx context.Context, id string, consume bool) ([]byte, error)

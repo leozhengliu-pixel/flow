@@ -21,6 +21,8 @@ describe('issue activity projection', () => {
     expect(describeIssueActivity(event({ delegate: '' }), context)).toBe('removed the delegate')
     expect(describeIssueActivity(event({ sessionId: 'cs-1', agentId: agent.id }, 'issue.coding_session_archived'), context)).toBe(`Session with ${agent.displayName} archived`)
     expect(describeIssueActivity(event({ sessionId: 'cs-1' }, 'issue.coding_session_archived'), context)).toBe('Session with Flow archived')
+    // A member who archived it (after removing the agent) is named by the row's actor.
+    expect(describeIssueActivity(event({ sessionId: 'cs-1', agentId: agent.id, archivedBy: viewer.id }, 'issue.coding_session_archived'), context)).toBe(`archived the session with ${agent.displayName}`)
   })
 
   it('describes recurring schedule automation', () => {

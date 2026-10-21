@@ -555,6 +555,54 @@ func TestCodingSessionEndToEnd(t *testing.T) {
 	}
 }
 
+// TestCodingSessionArchiveByMember: removing the agent and choosing to archive
+// its session archives it, closes its open pull request on the host and adds
+// "<member> archived the session with <agent>" to the issue.
+func TestCodingSessionArchiveByMember(t *testing.T) {
+	e := newCodingE2E(t)
+	ctx := context.Background()
+	e.installGitHubApp()
+	environment, err := e.s.codingStore().CreateCodingEnvironment(ctx, domain.CodingEnvironment{
+		WorkspaceKey: "test-workspace", Name: "Web", CodeHost: domain.CodeHostGitHub, HostName: "github.com", Repository: "acme/web", DefaultBranch: "main", SandboxSize: domain.CodingSizeMedium,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	issue := e.createIssue("Checkout returns 500")
+	agentUser := e.s.builtinAgentUserID(ctx, "test-workspace")
+	issue = requestJSON[domain.Issue](t, e.handler, http.MethodPatch, "/api/issue-records/"+issue.ID, map[string]any{"delegateId": agentUser}, http.StatusOK)
+	var started coding.TriggerResult
+	e.decode(e.do(http.MethodPost, "/api/issues/"+issue.ID+"/coding-session", map[string]any{"environmentId": environment.ID}, "", nil), http.StatusCreated, &started)
+	if started.Session == nil {
+		t.Fatalf("started: %+v", started)
+	}
+	sessionID := started.Session.ID
+	if err := e.s.codingStore().UpsertSessionPullRequest(ctx, "test-workspace", domain.SessionPullRequest{
+		SessionID: sessionID, CodeHost: domain.CodeHostGitHub, HostName: "github.com", Repository: "acme/web", Number: 7, URL: "https://github.com/acme/web/pull/7", State: "open", Draft: true, HeadBranch: "flow/x", BaseBranch: "main",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var archived domain.CodingSession
+	e.decode(e.do(http.MethodPost, "/api/coding/sessions/"+sessionID+"/archive", nil, "", nil), http.StatusOK, &archived)
+	if archived.ArchivedAt == nil {
+		t.Fatalf("archived: %+v", archived)
+	}
+	e.decode(e.do(http.MethodPost, "/api/coding/sessions/"+sessionID+"/archive", nil, "", nil), http.StatusOK, &archived)
+	history := requestJSON[store.IssueHistory](t, e.handler, http.MethodGet, "/api/issue-records/"+issue.ID+"/history", nil, http.StatusOK)
+	count := 0
+	for _, event := range history.Activities {
+		if event.Type == activityCodingSessionArchived && event.Metadata["sessionId"] == sessionID {
+			count++
+			if event.Metadata["archivedBy"] == "" || event.Metadata["agentId"] != agentUser {
+				t.Fatalf("archive activity: %+v", event.Metadata)
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatalf("one archive activity, got %d: %+v", count, history.Activities)
+	}
+}
+
 // TestCodingSessionGitLabFollowUpEndToEnd: a GitLab MR note mentioning
 // @flow (GitLab connection webhook → J → L → B) queues a follow-up turn on
 // the session that owns the merge request.

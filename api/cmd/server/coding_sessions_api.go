@@ -37,6 +37,7 @@ func (s *server) registerCodingSessionRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/coding/sessions/{id}/restart", s.restartCodingSession)
 	mux.HandleFunc("POST /api/coding/sessions/{id}/approve", s.approveCodingSession)
 	mux.HandleFunc("POST /api/coding/sessions/{id}/dismiss", s.dismissCodingSession)
+	mux.HandleFunc("POST /api/coding/sessions/{id}/archive", s.archiveCodingSession)
 	mux.HandleFunc("POST /api/coding/sessions/{id}/pull-request", s.createCodingSessionPullRequest)
 	mux.HandleFunc("GET /api/coding/sessions/{id}/sandboxes/{sandboxId}/logs", s.getCodingSandboxLogs)
 	mux.HandleFunc("GET /api/coding/sessions/{id}/diff", s.getCodingSessionDiff)                  // session page
