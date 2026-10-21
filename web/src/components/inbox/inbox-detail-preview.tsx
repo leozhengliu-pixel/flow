@@ -22,6 +22,7 @@ export interface InboxDetailPreviewProps {
   issues?: Issue[]
   children: ReactNode
   fullBleed?: boolean
+  chromeless?: boolean
   subscribed?: boolean
   pending?: boolean
   onBack: () => void
@@ -71,7 +72,7 @@ export function InboxDetailPreview(props: InboxDetailPreviewProps) {
 
   return (
     <article className="flow-inbox-detail" aria-label={identifier ? `${identifier} ${title}` : title} aria-busy={props.pending || undefined}>
-      <header className="flow-inbox-detail__header">
+      {props.chromeless ? null : <header className="flow-inbox-detail__header">
         <button className="flow-inbox-detail__back" type="button" aria-label="Back to Inbox" onClick={props.onBack}>
           <BackIcon />
           <span>Inbox</span><i>›</i>
@@ -92,7 +93,7 @@ export function InboxDetailPreview(props: InboxDetailPreviewProps) {
           <DetailSnoozeMenu notification={notification} onSnooze={props.onSnooze} pending={props.pending} open={snoozeOpen} onOpenChange={setSnoozeOpen} />
           <DetailIconButton data-detail-action="delete" disabled={props.pending} label="Delete notification" onClick={() => props.onDelete(notification)}><DeleteDetailIcon /></DetailIconButton>
         </div>
-      </header>
+      </header>}
       <div className={`flow-inbox-detail__body ${props.fullBleed ? 'flow-inbox-detail__body--full-bleed' : ''}`}>
         {props.fullBleed ? props.children : <div className="flow-inbox-detail__scroll">{props.children}</div>}
         {props.pending ? <div className="flow-inbox-detail__pending" role="status" aria-label="Updating notification"><GridLoader size={14} /></div> : null}

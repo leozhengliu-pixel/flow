@@ -60,6 +60,7 @@ export function ReviewsPage({
   returnPath,
   agentSessionId,
   showAgent = true,
+  embedded,
 }: {
   data: BootstrapData;
   view: "for-you" | "created";
@@ -67,15 +68,22 @@ export function ReviewsPage({
   tab?: ReviewRouteTab;
   onNavigate: (path: string) => void;
   onReload: () => Promise<void>;
-  onOpenSidebar: () => void;
+  onOpenSidebar?: () => void;
   returnPath?: string;
   /** A coding session of this pull request, opened in the agent panel (`?agentSessionId=…`). */
   agentSessionId?: string;
   /** `?showAgent=false` hides the agent panel. */
   showAgent?: boolean;
+  /**
+   * The review hosted inside another page (the inbox detail pane): no list, no sidebar button, and "full window" opens the
+   * review page instead. Navigation stays with the host, which receives every path in `onNavigate`.
+   */
+  embedded?: { onOpenFull: () => void };
 }) {
   const { t } = useI18n();
-  const [fullWindow, setFullWindow] = useState(false);
+  const [fullWindowState, setFullWindow] = useState(false);
+  const fullWindow = embedded ? false : fullWindowState;
+  const embeddedRoot = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
   const [picker, setPicker] = useState<"reviewers" | "issues" | null>(null);
   // A coding session opened on the review (the agent panel) shares the page with the review.
@@ -99,13 +107,16 @@ export function ReviewsPage({
   };
   return (
     <PullRequestReviewShortcutsProvider
+      scope={embedded ? embeddedRoot : undefined}
       handlers={{
         toggleReviewLayout: () => {
-          if (review) setFullWindow((value) => !value);
+          if (!review) return;
+          if (embedded) embedded.onOpenFull();
+          else setFullWindow((value) => !value);
         },
       }}
     >
-      <main className={`flow-framed-workspace reviews-workspace ${review ? "has-detail" : ""} ${fullWindow ? "is-full-window" : ""} ${agentOpen ? "has-agent-panel" : ""}`}>
+      <main ref={embeddedRoot} data-embedded-review={embedded ? "" : undefined} className={`${embedded ? "reviews-embedded" : "flow-framed-workspace"} reviews-workspace ${review ? "has-detail" : ""} ${fullWindow ? "is-full-window" : ""} ${agentOpen ? "has-agent-panel" : ""}`}>
         {review ? (
           <section className="reviews-detail-pane">
             <ReviewDetail
@@ -116,7 +127,8 @@ export function ReviewsPage({
               busy={busy}
               setBusy={setBusy}
               fullWindow={fullWindow}
-              onToggleFull={setFullWindow}
+              onToggleFull={embedded ? () => embedded.onOpenFull() : setFullWindow}
+              embedded={Boolean(embedded)}
               onNavigate={onNavigate}
               onMutate={mutate}
               onReload={onReload}
@@ -157,7 +169,7 @@ function ReviewList({
   view: "for-you" | "created";
   onNavigate: (path: string) => void;
   onReload: () => Promise<void>;
-  onOpenSidebar: () => void;
+  onOpenSidebar?: () => void;
 }) {
   const { t } = useI18n();
   const { filters, setFilters, display, setDisplay } = useReviewListControls(data.workspace.id, data.viewer.id, view);
@@ -376,7 +388,9 @@ function ReviewDetail({
   onOpenSidebar,
   agentSessionId,
   showAgent,
+  embedded,
 }: {
+  embedded?: boolean;
   returnPath?: string;
   data: BootstrapData;
   review: CodeReview;
@@ -389,7 +403,7 @@ function ReviewDetail({
   onMutate: (input: Parameters<typeof updateReview>[1]) => Promise<void>;
   onReload: () => Promise<void>;
   onOpenPicker: (value: "reviewers" | "issues") => void;
-  onOpenSidebar: () => void;
+  onOpenSidebar?: () => void;
   agentSessionId?: string;
   showAgent?: boolean;
 }) {
@@ -487,7 +501,8 @@ function ReviewDetail({
   });
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
+      // An embedded review leaves Escape to the page that hosts it.
+      if (embedded || event.key !== "Escape" || event.defaultPrevented) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest("input,textarea,[contenteditable=true],[role=dialog],[role=menu]")) return;
       if (fullWindow) onToggleFull(false);
@@ -495,7 +510,7 @@ function ReviewDetail({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [fullWindow, onToggleFull, onNavigate, backPath]);
+  }, [embedded, fullWindow, onToggleFull, onNavigate, backPath]);
   useEffect(() => {
     const hash = typeof window !== "undefined" ? window.location.hash : "";
     if (!hash) return;
