@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { CheckboxMark } from "@/components/ui/checkbox-mark";
 import { useI18n } from "@/i18n/i18n";
 import { toggleFavoriteFor } from "@/lib/favorites";
+import { isWorkspaceAdmin } from "@/lib/settings-access";
 import { importReviews, submitReview, syncReview, updateIntegrationConnection, updateReview, updateUserSettings } from "@/lib/api";
 import { integrationSettingsPath, reviewAgentPath, reviewPath, reviewsPath, type ReviewRouteTab } from "@/lib/app-routes";
 import type { BootstrapData, CodeReview } from "@/types/flow";
@@ -197,9 +198,10 @@ function ReviewList({
         </button>
         <h1>{t("Reviews")}</h1>
         <div>
-          <button type="button" className="review-ghost-button" aria-label={t("Sync now")} title={t("Sync now")} disabled={syncing} aria-busy={syncing} onClick={() => void syncNow()}>
+          {/* Running the import is for workspace admins; members would only get a refusal. */}
+          {isWorkspaceAdmin(data) && <button type="button" className="review-ghost-button" aria-label={t("Sync now")} title={t("Sync now")} disabled={syncing} aria-busy={syncing} onClick={() => void syncNow()}>
             <RefreshCw className={syncing ? "reviews-sync-spinning" : undefined} />
-          </button>
+          </button>}
           <ReviewFilters filters={filters} data={data} items={baseItems} onChange={setFilters} filterBarHost={filterHost} />
           <ReviewDisplayMenu display={display} view={view} onChange={setDisplay} />
         </div>
