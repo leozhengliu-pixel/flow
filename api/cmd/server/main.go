@@ -1496,6 +1496,14 @@ func (s *server) updateWorkspaceSettings(w http.ResponseWriter, r *http.Request)
 	if input == nil {
 		input = map[string]any{}
 	}
+	// This route stores the free-form settings blob only. Feature flags and the
+	// typed workspace policies live in WorkspaceSettings, saved by PATCH /api/workspace/preferences.
+	for _, key := range []string{"featureFlags", "codingAgentSettings"} {
+		if _, ok := input[key]; ok {
+			respondMutation(w, fmt.Errorf("%w: %s is not stored here; send it to PATCH /api/workspace/preferences", errInvalid, key), http.StatusOK, nil)
+			return
+		}
+	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "workspace.settings_updated", "workspace", input, func(data *domain.Bootstrap) error {
 		// Security approvals are managed through their permission-checked API.
 		input["applicationPolicies"] = data.Settings["applicationPolicies"]
