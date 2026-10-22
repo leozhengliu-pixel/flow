@@ -90,3 +90,69 @@ func TestGuidanceMakesTheIssueBackgroundToTheLatestRequest(t *testing.T) {
 		t.Fatalf("guidance:\n%s", guidance)
 	}
 }
+
+// The API decides a follow-up's write scope when it is queued and sends it
+// with the turn: an explicit scope wins over the text, otherwise the request
+// is classified (the model only for requests the parser is unsure about).
+func TestFollowUpTurnsCarryTheirScope(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	session := h.start("Add dark mode")
+	session = h.drive(session.ID, domain.CodingPhaseStarting)
+	h.simulateSandboxes()
+	token := h.tokens[session.SandboxID]
+	boot, err := h.svc.Bootstrap(ctx, token, 0)
+	if err != nil || boot.Turn == nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	if _, err := h.svc.Heartbeat(ctx, token, coding.HeartbeatRequest{Phase: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.svc.CompleteTurn(ctx, token, boot.Turn.ID, coding.TurnCompleteRequest{Status: coding.TurnSuccess}); err != nil {
+		t.Fatal(err)
+	}
+	asked := 0
+	h.svc.TurnScopeModel = coding.TurnScopeModelFunc(func(context.Context, string) (string, error) {
+		asked++
+		return coding.TurnScopeReadOnly, nil
+	})
+	var after int64
+	next := func(input coding.PromptInput) coding.Turn {
+		t.Helper()
+		input.AuthorID = "user1"
+		if _, err := h.svc.Prompt(ctx, workspace, session.ID, input); err != nil {
+			t.Fatal(err)
+		}
+		inbox, err := h.svc.Inbox(ctx, token, after, 0)
+		if err != nil || len(inbox.Items) != 1 || inbox.Items[0].Turn == nil {
+			t.Fatalf("inbox: %+v %v", inbox, err)
+		}
+		after = inbox.Items[0].Seq
+		turn := *inbox.Items[0].Turn
+		if _, err := h.svc.CompleteTurn(ctx, token, turn.ID, coding.TurnCompleteRequest{Status: coding.TurnSuccess, Scope: turn.Scope}); err != nil {
+			t.Fatal(err)
+		}
+		return turn
+	}
+	for _, c := range []struct {
+		input         coding.PromptInput
+		scope, source string
+	}{
+		{coding.PromptInput{Prompt: "修复登录 bug，不要提交到 main，改完推到分支"}, coding.TurnScopeWrite, coding.TurnScopeSourceRules},
+		{coding.PromptInput{Prompt: "Fix it, but don't push until I review."}, coding.TurnScopeNoPublish, coding.TurnScopeSourceRules},
+		{coding.PromptInput{Prompt: "Fix the login bug and push.", Scope: "readOnly"}, coding.TurnScopeReadOnly, coding.TurnScopeSourceUser},
+		{coding.PromptInput{Prompt: "Keep the repo unchanged.", Scope: "write"}, coding.TurnScopeWrite, coding.TurnScopeSourceUser},
+		{coding.PromptInput{Prompt: "Why does the build fail on CI?", Scope: "auto"}, coding.TurnScopeReadOnly, coding.TurnScopeSourceModel},
+	} {
+		turn := next(c.input)
+		if turn.Scope != c.scope || turn.ScopeSource != c.source {
+			t.Errorf("%q (%q): scope %q from %q, want %q from %q", c.input.Prompt, c.input.Scope, turn.Scope, turn.ScopeSource, c.scope, c.source)
+		}
+	}
+	if asked != 1 {
+		t.Fatalf("the model is asked only for the unsure request: %d calls", asked)
+	}
+	if _, err := h.svc.Prompt(ctx, workspace, session.ID, coding.PromptInput{Prompt: "Fix it.", AuthorID: "user1", Scope: "publishEverything"}); err == nil {
+		t.Fatal("an unknown scope is refused")
+	}
+}

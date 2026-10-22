@@ -286,7 +286,7 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
     <div className="cs-composer-area">
       <CodingPlanPill plan={session.plan} updatedAt={session.updatedAt} complete={session.state === 'complete'}/>
       {(can.prompt || request) && !session.archivedAt && <CodingComposer data={data} sessionId={session.id} generating={generating} stopPending={stopRequested(session)} canPrompt={can.prompt} busy={busy} request={request}
-        onSend={(text, files) => run(() => promptCodingSession(session.id, text, undefined, files))}
+        onSend={(text, files, scope) => run(() => scope ? promptCodingSession(session.id, text, undefined, files, scope) : promptCodingSession(session.id, text, undefined, files))}
         onStop={() => void run(() => stopCodingSession(session.id))}
         onApprove={async reject => { await run(() => approveCodingSession(session.id, reject), reject ? 'Rejected coding session' : 'Approved coding session') }}/>}
     </div>

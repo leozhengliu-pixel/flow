@@ -203,6 +203,15 @@
 .cs-option-select>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cs-option-select.is-selected{background:var(--cs-control-tertiary-hover);box-shadow:inset 0 0 0 1px var(--cs-option-border);color:var(--cs-label-base)}
 .cs-option-menu{max-width:320px}
+.cs-scope-select{display:inline-flex;align-items:center;gap:2px;height:24px;box-sizing:border-box;padding:0 6px 0 8px;border:0;border-radius:9999px;background:transparent;color:var(--cs-label-faint);font:450 12px/1 var(--font);cursor:pointer}
+.cs-scope-select:hover:not(:disabled){background:var(--cs-control-tertiary-hover);color:var(--cs-label-base)}
+.cs-scope-select.is-explicit{background:var(--cs-control-tertiary);box-shadow:inset 0 0 0 1px var(--cs-border-solid);color:var(--cs-label-base)}
+.cs-scope-select:disabled{opacity:.6;cursor:default}
+.cs-scope-menu{max-width:300px}
+.cs-scope-menu .menu-item{align-items:flex-start;gap:8px}
+.cs-scope-menu-text{display:flex;flex:1;flex-direction:column;gap:2px;min-width:0}
+.cs-scope-menu-hint{color:var(--cs-label-faint);font-size:12px;white-space:normal}
+.cs-scope-menu-check{flex:none;margin-top:2px}
 .cs-option-menu-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cs-send-label{display:inline-flex;align-items:center;gap:4px;height:24px;box-sizing:border-box;padding:0 8px;border:0;border-radius:9999px;background:var(--cs-control-tertiary);box-shadow:inset 0 0 0 1px var(--cs-border-solid);color:var(--cs-label-base);font:500 12px/1 var(--font);cursor:pointer}
 .cs-send-label.is-primary{background:var(--accent-primary);box-shadow:none;color:var(--on-accent)}

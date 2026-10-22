@@ -45,8 +45,21 @@ const NO_PUBLISH: RegExp[] = [
   /(?:不要|不得|不能|别|勿)(?:提交|推送|commit|push)/i,
 ]
 
-/** The write scope of a turn, from its kind and the user's request. */
+const SCOPES = new Set<string>(['write', 'noPublish', 'readOnly'])
+
+/**
+ * The write scope of a turn. Flow decides it when it queues the turn (the
+ * person's explicit choice, else its own classification) and the runner
+ * applies it as is; the keyword fallback below only serves turns from APIs
+ * that do not send a scope yet.
+ */
 export function turnScope(turn: Turn): TurnScope {
+  if (turn.scope && SCOPES.has(turn.scope)) return turn.scope
+  return inferTurnScope(turn)
+}
+
+/** The runner's own keyword classification (fallback for older APIs). */
+export function inferTurnScope(turn: Turn): TurnScope {
   if (WRITE_KINDS.has(turn.kind)) return 'write'
   const text = turn.prompt ?? ''
   if (READ_ONLY.some((pattern) => pattern.test(text))) return 'readOnly'

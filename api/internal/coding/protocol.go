@@ -168,6 +168,13 @@ type Turn struct {
 	Attachments []string `json:"attachments,omitempty"` // signed URLs
 	// Kind is "initial", "followUp", "prComment", "fixPr", "rebase", "lint", "test", "configureEnvironment", "fixEnvironment".
 	Kind string `json:"kind"`
+	// Scope is the turn's write scope decided by Flow when the turn was
+	// queued (ResolveTurnScope): "write", "noPublish" or "readOnly". Runners
+	// apply it as is; older turns without it are classified by the runner.
+	Scope string `json:"scope,omitempty"`
+	// ScopeSource says how Scope was decided: "user" (chosen with the
+	// request), "kind", "rules" or "model".
+	ScopeSource string `json:"scopeSource,omitempty"`
 }
 
 // SetupSecretsResponse is GET /internal/coding-runtime/setup-secrets. It is

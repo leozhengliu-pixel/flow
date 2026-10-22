@@ -16,6 +16,7 @@ import type {
   CodingSession,
   CodingSessionDiff,
   CodingSessionState,
+  CodingTurnScope,
   CodingSettings,
   CodingStatus,
   CodingTriggerResult,
@@ -81,9 +82,12 @@ export const fetchCodingSessions = (params: { issueId?: string; state?: CodingSe
 export const fetchCodingSession = (sessionId: string) => request<CodingSession>(`/api/coding/sessions/${id(sessionId)}`);
 export const createCodingSession = (input: CreateCodingSessionInput, idempotencyKey?: string) =>
   request<CodingSession>("/api/coding/sessions", { ...jsonRequest("POST", input), headers: { "Content-Type": "application/json", ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}) } });
-/** A follow-up; `files` are composer uploads (`/uploads/…`, from uploadAgentFile) the runner gets as signed URLs. */
-export const promptCodingSession = (sessionId: string, prompt: string, attachments?: string[], files?: AgentMessageAttachment[]) =>
-  request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/prompt`, jsonRequest("POST", { prompt, attachments, files: files?.length ? files : undefined }));
+/**
+ * A follow-up; `files` are composer uploads (`/uploads/…`, from uploadAgentFile) the runner gets as signed URLs.
+ * `scope` is the write scope chosen in the composer; without it Flow infers it from the prompt.
+ */
+export const promptCodingSession = (sessionId: string, prompt: string, attachments?: string[], files?: AgentMessageAttachment[], scope?: CodingTurnScope) =>
+  request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/prompt`, jsonRequest("POST", { prompt, attachments, files: files?.length ? files : undefined, scope }));
 export const fetchCodingSessionDiff = (sessionId: string, signal?: AbortSignal) => request<CodingSessionDiff>(`/api/coding/sessions/${id(sessionId)}/diff`, { signal });
 export const setCodingSessionSubscription = (sessionId: string, subscribed: boolean) =>
   request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/subscription`, jsonRequest("POST", { subscribed }));
