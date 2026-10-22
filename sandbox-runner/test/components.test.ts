@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -21,7 +20,7 @@ import type { BootstrapResponse, CredentialRequest, SnapshotCompleteRequest } fr
 import { detectInstallers, miseConfigToml, resolveHomeFile, runSetup, SetupError, SetupLog } from '../src/setup.js'
 import { EventFactory } from '../src/mapping/common.js'
 import { runSnapshot } from '../src/snapshot.js'
-import { sh, tempDir } from './helpers.js'
+import { gnuTarSkip, sh, tempDir } from './helpers.js'
 
 function bootstrap(): BootstrapResponse {
   return {
@@ -471,16 +470,6 @@ test('MCP server: browser and propose_environment tools register when enabled', 
     tmp.cleanup()
   }
 })
-
-// The runner image ships GNU tar with zstd. Other tars (macOS bsdtar rejects
-// --warning=no-file-changed) cannot run the archive code, so probe the exact
-// options the archive helpers rely on instead of checking the OS.
-const gnuTarProbe = spawnSync(
-  'tar',
-  ['--zstd', '--warning=no-file-changed', '--ignore-failed-read', '--no-same-owner', '--no-same-permissions', '--delay-directory-restore', '--transform=s,a,b,S', '-cf', '-', '--files-from=/dev/null'],
-  { stdio: 'ignore' },
-)
-const gnuTarSkip = gnuTarProbe.status === 0 ? false : 'needs GNU tar with zstd support (PATH tar rejects the runner archive options)'
 
 test('archive: tar.zst round trip and snapshot excludes', { skip: gnuTarSkip }, async () => {
   const tmp = tempDir('archive')

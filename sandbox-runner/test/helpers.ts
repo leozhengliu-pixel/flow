@@ -77,3 +77,14 @@ export function shAsync(command: string, args: string[], options: { cwd?: string
     child.stdin.end(options.input ?? '')
   })
 }
+
+// The runner image ships GNU tar with zstd. Other tars (macOS bsdtar rejects
+// --warning=no-file-changed and --delay-directory-restore) cannot run the archive
+// code, so tests that pack or unpack snapshots probe the exact options the archive
+// helpers rely on instead of checking the OS.
+const gnuTarProbe = spawnSync(
+  'tar',
+  ['--zstd', '--warning=no-file-changed', '--ignore-failed-read', '--no-same-owner', '--no-same-permissions', '--delay-directory-restore', '--transform=s,a,b,S', '-cf', '-', '--files-from=/dev/null'],
+  { stdio: 'ignore' },
+)
+export const gnuTarSkip: string | false = gnuTarProbe.status === 0 ? false : 'needs GNU tar with zstd support (PATH tar rejects the runner archive options)'
