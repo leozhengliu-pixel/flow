@@ -46,7 +46,7 @@ import { useI18n } from '@/i18n/i18n'
 import { handleBlockShortcut, handleEditorSubmit } from './editor/editor-keyboard'
 import { EmptyLineHint } from './editor/empty-line-hint'
 import { TrailingParagraph } from './editor/trailing-paragraph'
-import { CollabEditing } from '@/components/editor/collab-editing'
+import { CollabEditing, CollabSyncBeforeAppend } from '@/components/editor/collab-editing'
 import { IssueCollaborationProvider } from '@/lib/issue-collaboration'
 import type { User } from '@/types/flow'
 import { clearDescriptionRecovery, descriptionRecoveryKey, downloadDescriptionRecovery, readDescriptionRecovery, writeDescriptionRecovery } from './editor/description-recovery'
@@ -210,6 +210,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
         Collaboration.configure({ document: collaborationSession.document, field: 'prosemirror' }),
         CollaborationCaret.configure({ provider: collaborationSession.provider, user: collaboration?.viewer ? { ...collaboration.viewer, name: collaboration.viewer.displayName, color: collaborationColor(collaboration.viewer.id) } : undefined }),
         CollabEditing,
+        CollabSyncBeforeAppend,
         TrailingParagraph,
       ] : []),
     ],
