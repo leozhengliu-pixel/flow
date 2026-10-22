@@ -74,7 +74,8 @@ describe('issue sidebar assignee + delegate (the reference app IssueDetailsPaneS
     expect(within(listbox).getByRole('option', { name: /No agent/ }).querySelector('[data-flow-glyph="noAgent"]')).not.toBeNull()
     await user.click(within(listbox).getByRole('option', { name: /No agent/ }))
     expect(onUpdate).toHaveBeenCalledTimes(1)
-    expect(onUpdate).toHaveBeenCalledWith({ delegateId: '' })
+    // "No agent" on the delegate row asks the wrapper to offer archiving the agent's session.
+    expect(onUpdate).toHaveBeenCalledWith({ delegateId: '', promptArchive: true })
   })
 
   it('re-delegates to another agent from the delegate row', async () => {

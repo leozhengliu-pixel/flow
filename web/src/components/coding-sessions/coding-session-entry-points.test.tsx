@@ -193,25 +193,56 @@ describe('removing the agent from the issue', () => {
     return onUpdate
   }
 
-  it('archives the running agent session without a second question', async () => {
-    vi.mocked(api.fetchCodingSessions).mockResolvedValue([
-      makeSession({ id: 'cs-1' }),
-      makeSession({ id: 'cs-2', archivedAt: '2026-10-20T00:00:00Z' }),
-      makeSession({ id: 'cs-3', state: 'complete', phase: 'done' }),
-    ])
-    vi.mocked(api.archiveCodingSession).mockResolvedValue(makeSession({ id: 'cs-1', archivedAt: '2026-10-20T00:00:00Z' }))
+  const sessions = () => [
+    makeSession({ id: 'cs-1' }),
+    makeSession({ id: 'cs-2', archivedAt: '2026-10-20T00:00:00Z' }),
+    makeSession({ id: 'cs-3', state: 'complete', phase: 'done' }),
+  ]
+
+  it('drops the delegate, then asks to archive its unarchived sessions, running or finished', async () => {
+    vi.mocked(api.fetchCodingSessions).mockResolvedValue(sessions())
+    vi.mocked(api.archiveCodingSession).mockImplementation(async id => makeSession({ id, archivedAt: '2026-10-20T00:00:00Z' }))
     const onUpdate = await removeAgent()
     expect(onUpdate).toHaveBeenCalledWith({ delegateId: '' })
-    await waitFor(() => expect(api.archiveCodingSession).toHaveBeenCalledTimes(1))
-    expect(api.archiveCodingSession).toHaveBeenCalledWith('cs-1')
-    expect(confirmAction).not.toHaveBeenCalled()
+    await waitFor(() => expect(api.archiveCodingSession).toHaveBeenCalledTimes(2))
+    expect(vi.mocked(api.archiveCodingSession).mock.calls.map(call => call[0])).toEqual(['cs-1', 'cs-3'])
+    expect(confirmAction).toHaveBeenCalledWith('Archive session with Flow?', expect.objectContaining({
+      description: 'Flow has been removed from this issue. Do you want to archive the agent session? It can be restored at any time.',
+      confirmLabel: 'Archive session', cancelLabel: 'Skip', danger: false,
+    }))
   })
 
-  it('does nothing when no session is running', async () => {
-    vi.mocked(api.fetchCodingSessions).mockResolvedValue([makeSession({ id: 'cs-3', state: 'complete', phase: 'done' })])
+  it('keeps the sessions when the dialog is skipped', async () => {
+    vi.mocked(api.fetchCodingSessions).mockResolvedValue(sessions())
+    vi.mocked(confirmAction).mockResolvedValueOnce(false)
+    const onUpdate = await removeAgent()
+    expect(onUpdate).toHaveBeenCalledWith({ delegateId: '' })
+    await waitFor(() => expect(confirmAction).toHaveBeenCalled())
+    expect(api.archiveCodingSession).not.toHaveBeenCalled()
+  })
+
+  it('does not ask when every session is already archived', async () => {
+    vi.mocked(api.fetchCodingSessions).mockResolvedValue([makeSession({ id: 'cs-2', archivedAt: '2026-10-20T00:00:00Z' })])
     await removeAgent()
     await waitFor(() => expect(api.fetchCodingSessions).toHaveBeenCalled())
+    expect(confirmAction).not.toHaveBeenCalled()
     expect(api.archiveCodingSession).not.toHaveBeenCalled()
+  })
+
+  it('ends only the running session, without a second question, when the unassign flow removes the agent too', async () => {
+    vi.mocked(api.fetchCodingSessions).mockResolvedValue(sessions())
+    vi.mocked(api.archiveCodingSession).mockResolvedValue(makeSession({ id: 'cs-1', archivedAt: '2026-10-20T00:00:00Z' }))
+    const onUpdate = vi.fn(async () => undefined)
+    const Harness = () => {
+      const coding = useDelegateCodingSession(makeIssue({ delegate: flowAgent }), baseData(), onUpdate)
+      return <button onClick={() => void coding.onUpdate({ delegateId: '' })}>unassign flow</button>
+    }
+    render(<I18nProvider><Harness/></I18nProvider>)
+    await waitFor(() => expect(api.fetchCodingStatus).toHaveBeenCalled())
+    await act(async () => { await Promise.resolve() })
+    await userEvent.click(screen.getByRole('button', { name: 'unassign flow' }))
+    await waitFor(() => expect(api.archiveCodingSession).toHaveBeenCalledTimes(1))
+    expect(api.archiveCodingSession).toHaveBeenCalledWith('cs-1')
     expect(confirmAction).not.toHaveBeenCalled()
   })
 })

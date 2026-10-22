@@ -23,7 +23,7 @@ export function IssueAssigneeProperty({ issue, users, teamId, workspaceKey, allo
   workspaceKey: string
   allowAgents: boolean
   hoverContext: { member?: WorkspaceMember; online?: boolean; workspaceName: string; project?: ProjectSummary }
-  onUpdate: (input: { assigneeId?: string; delegateId?: string }) => void | Promise<void>
+  onUpdate: (input: { assigneeId?: string; delegateId?: string; promptArchive?: boolean }) => void | Promise<void>
 }) {
   const { t } = useI18n()
   const { assignee, delegate } = issue
@@ -36,7 +36,7 @@ export function IssueAssigneeProperty({ issue, users, teamId, workspaceKey, allo
     {delegate && <div className="issue-delegate-row" data-entering={entering || undefined}>
       <NestingLine className="issue-delegate-nesting-line" heightAbove={10}/>
       <div className="issue-assignee-property issue-delegate-property">
-        <DelegatePicker delegate={delegate} allowAgents={allowAgents} users={users} teamId={teamId} onDelegate={delegateId => onUpdate({ delegateId })}/>
+        <DelegatePicker delegate={delegate} allowAgents={allowAgents} users={users} teamId={teamId} onDelegate={delegateId => onUpdate(delegateId === '' ? { delegateId, promptArchive: true } : { delegateId })}/>
         <a className="issue-assignee-profile" href={memberProfilePath(workspaceKey, memberProfileHandle(delegate))} aria-label={t('Go to agent')}><ChevronRight size={15}/></a>
       </div>
     </div>}
