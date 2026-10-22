@@ -46,6 +46,11 @@ type mentionResolver struct {
 	teamKeys  map[string]bool
 	usernames map[string]string
 	people    []mentionPerson
+	// apps names the app users (including the built-in Flow agent) by lower-cased name.
+	// They only become mentions after enableAppMentions (see mention_apps.go).
+	apps      map[string][]domain.User
+	appNames  []string
+	appPolicy *mentionAppPolicy
 }
 
 type mentionPerson struct {
@@ -75,7 +80,11 @@ func newMentionResolver(data *domain.Bootstrap, issues []domain.Issue) *mentionR
 	}
 	seen := map[string]bool{}
 	for _, user := range data.Users {
-		if user.App || user.BuiltinAgent || suspended[user.ID] {
+		if user.App || user.BuiltinAgent {
+			resolver.addApp(user)
+			continue
+		}
+		if suspended[user.ID] {
 			continue
 		}
 		for _, name := range []string{user.DisplayName, user.Name, resolver.usernames[user.ID]} {
@@ -371,6 +380,9 @@ func (m *mentionResolver) textNodes(node map[string]any) []any {
 			if !unicode.IsSpace(previous) && previous != '(' {
 				continue
 			}
+		}
+		if m.appPolicy != nil && m.appMentionSpan(text, start, free, &spans) {
+			continue
 		}
 		for _, person := range m.people {
 			end := start + 1 + len(person.name)

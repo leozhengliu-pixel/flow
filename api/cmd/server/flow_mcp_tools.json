@@ -690,7 +690,7 @@
       "type": "object",
       "required": ["body"],
       "properties": {
-        "body": { "type": "string", "description": "Content as Markdown. Do not escape the string — use literal newlines and special characters, not escape sequences. To mention a user, use @displayName (e.g., @johndoe)" },
+        "body": { "type": "string", "description": "Content as Markdown. Do not escape the string — use literal newlines and special characters, not escape sequences. To mention a user, use @displayName (e.g., @johndoe). An installed app or agent is mentioned the same way (@App name) and starts its session when it is active, accepts mentions and has access to the team; the result then lists `agentMentions`, and `mentionNotes` explains every @name that was not turned into a mention (ambiguous name, inactive or unavailable app, no access, comments written by an app, or a body with tables, images, nested lists or HTML)." },
         "documentId": { "type": "string", "description": "Document ID or slug (provide exactly one parent)" },
         "id": { "type": "string", "description": "Comment ID. If provided, updates the existing comment" },
         "initiativeId": { "type": "string", "description": "Initiative name, ID, identifier (e.g., INIT-123), or slug (provide exactly one parent)" },

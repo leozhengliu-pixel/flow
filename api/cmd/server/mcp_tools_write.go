@@ -1080,10 +1080,13 @@ func (s *server) deleteMCPComment(ctx context.Context, actor mcpActor, id string
 }
 
 func (s *server) mutateAnyComment(ctx context.Context, actor mcpActor, data domain.Bootstrap, targetID, body string, bodyData map[string]any, operation string) (any, error) {
+	var appMentions *mentionAppPolicy
 	if bodyData == nil && operation != "delete" {
 		// Markdown-only bodies get the editor document beside them when they
-		// reference workspace resources, so the mentions are real nodes.
-		bodyData = s.mcpMentionResolver(ctx, actor, &data, body).companionDocument(body)
+		// reference workspace resources, so the mentions are real nodes. An
+		// @<app name> the author may start becomes the structured mention that
+		// starts the app's session; the others are explained in the result.
+		bodyData, appMentions = s.mcpCommentMentionDocument(ctx, actor, &data, targetID, body)
 	}
 	// The MCP write path invokes handlers directly, so the normal HTTP resource
 	// authorization middleware is not run. Validate the parent or comment
@@ -1230,7 +1233,7 @@ func (s *server) mutateAnyComment(ctx context.Context, actor mcpActor, data doma
 	if operation == "delete" {
 		return map[string]any{"deleted": true, "id": targetID}, nil
 	}
-	return result, nil
+	return s.mentionReport(ctx, data, result, appMentions), nil
 }
 
 func newMCPComment(user domain.User, body string, bodyData map[string]any, parentID *string) domain.Comment {
