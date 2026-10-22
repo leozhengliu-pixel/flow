@@ -40,6 +40,11 @@ type CoreStore interface {
 	MarkCodingInboxDelivered(ctx context.Context, sessionID string, seq int64, at time.Time) error
 	// UndeliveredCodingInbox lists items not delivered yet, oldest first.
 	UndeliveredCodingInbox(ctx context.Context, sessionID string) ([]InboxItem, error)
+	// UpdateUndeliveredCodingTurn rewrites the turn of an undelivered inbox
+	// item when mutate returns true. It is a compare-and-swap on the stored
+	// item: false (no error) when the item was delivered, removed or changed
+	// concurrently, or when mutate declined.
+	UpdateUndeliveredCodingTurn(ctx context.Context, sessionID string, seq int64, mutate func(*Turn) bool) (bool, error)
 	CodingCommits(ctx context.Context, sessionID string) ([]domain.CodingCommit, error)
 	CodingSandbox(ctx context.Context, id string) (sandbox.Record, error)
 	// TouchCodingSandboxHeartbeat records a runner heartbeat on the sandbox row.

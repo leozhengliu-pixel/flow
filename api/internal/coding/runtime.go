@@ -148,6 +148,12 @@ func (s *Service) currentOrNextTurn(ctx context.Context, session domain.CodingSe
 	}
 	for _, item := range pending {
 		if item.Kind == InboxTurn && item.Turn != nil {
+			// A turn whose scope is still pending is not delivered, and
+			// neither are the turns behind it (the inbox delivers it later).
+			item, ready, err := s.turnReady(ctx, session.ID, item)
+			if err != nil || !ready {
+				return nil, err
+			}
 			if err := s.store.MarkCodingInboxDelivered(ctx, session.ID, item.Seq, s.now().UTC()); err != nil {
 				return nil, err
 			}
@@ -314,6 +320,14 @@ func (s *Service) inboxItems(ctx context.Context, session domain.CodingSession, 
 			continue // delivered earlier (with the bootstrap or a previous poll)
 		}
 		if item.Turn == nil || !acceptTurn || session.StopRequested {
+			break
+		}
+		// A pending scope holds the turn (and the turns behind it) back.
+		item, ready, err := s.turnReady(ctx, session.ID, item)
+		if err != nil {
+			return nil, err
+		}
+		if !ready {
 			break
 		}
 		if err := s.store.MarkCodingInboxDelivered(ctx, session.ID, item.Seq, s.now().UTC()); err != nil {

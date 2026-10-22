@@ -14,11 +14,12 @@ var errTurnScopeModelOff = errors.New("flow agent model is not configured")
 
 // classifyCodingTurnScope is the coding core's TurnScopeModel: one short call
 // to the configured Flow Agent model, without tools, for follow-up requests
-// the scope parser is unsure about. coding.ResolveTurnScope bounds the input
+// the scope parser is unsure about. coding.AskTurnScopeModel bounds the input
 // and the time (coding.TurnScopeModelTimeout) and falls back to the parser on
-// any error or unusable answer.
+// any error or unusable answer; the coding core calls it in the background
+// after the turn is queued (coding/turn_scope_pending.go).
 func (s *server) classifyCodingTurnScope(ctx context.Context, request string) (string, error) {
-	if !s.agent.Enabled || strings.TrimSpace(s.agent.Model) == "" {
+	if !s.turnScopeModelConfigured() {
 		return "", errTurnScopeModelOff
 	}
 	turn, err := s.requestAgentTurnWithoutTools(ctx, []agentProviderMessage{
@@ -29,6 +30,12 @@ func (s *server) classifyCodingTurnScope(ctx context.Context, request string) (s
 		return "", err
 	}
 	return turnScopeAnswer(turn.Text)
+}
+
+// turnScopeModelConfigured reports whether Flow Agent has a model to settle
+// unsure follow-up scopes with.
+func (s *server) turnScopeModelConfigured() bool {
+	return s.agent.Enabled && strings.TrimSpace(s.agent.Model) != ""
 }
 
 // turnScopeAnswer reads the one-word answer (tolerating quotes, markdown and

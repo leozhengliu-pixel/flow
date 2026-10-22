@@ -5,12 +5,83 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"flow/api/internal/coding"
 	appconfig "flow/api/internal/config"
+	"flow/api/internal/domain"
 )
+
+// POST /api/coding/sessions/{id}/prompt answers without waiting on a slow
+// scope model; the runner's inbox holds the turn until its scope is settled
+// and then delivers it with the model's answer.
+func TestCodingTurnScopePromptDoesNotWaitOnTheModel(t *testing.T) {
+	e := newCodingE2E(t)
+	ctx := context.Background()
+	e.installGitHubApp()
+	environment, err := e.s.codingStore().CreateCodingEnvironment(ctx, domain.CodingEnvironment{
+		WorkspaceKey: "test-workspace", Name: "Web", CodeHost: domain.CodeHostGitHub, HostName: "github.com", Repository: "acme/web", DefaultBranch: "main", SandboxSize: domain.CodingSizeMedium,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	issue := e.createIssue("Checkout returns 500")
+	agentUser := e.s.builtinAgentUserID(ctx, "test-workspace")
+	issue = requestJSON[domain.Issue](t, e.handler, http.MethodPatch, "/api/issue-records/"+issue.ID, map[string]any{"delegateId": agentUser}, http.StatusOK)
+	var started coding.TriggerResult
+	e.decode(e.do(http.MethodPost, "/api/issues/"+issue.ID+"/coding-session", map[string]any{"environmentId": environment.ID}, "", nil), http.StatusCreated, &started)
+	if started.Session == nil {
+		t.Fatalf("started: %+v", started)
+	}
+	sessionID := started.Session.ID
+	session := e.drive(sessionID, domain.CodingPhaseStarting)
+	token := e.provider.token(session.SandboxID)
+	var boot coding.BootstrapResponse
+	e.decode(e.do(http.MethodGet, "/internal/coding-runtime/bootstrap", nil, token, nil), http.StatusOK, &boot)
+	if boot.Turn == nil {
+		t.Fatalf("bootstrap: %+v", boot)
+	}
+	e.decode(e.do(http.MethodPost, "/internal/coding-runtime/heartbeat", coding.HeartbeatRequest{Phase: "running"}, token, nil), http.StatusOK, nil)
+	e.decode(e.do(http.MethodPost, "/internal/coding-runtime/turns/"+url.PathEscape(boot.Turn.ID)+"/complete", coding.TurnCompleteRequest{Status: coding.TurnAwaitingInput, Summary: "Which test framework should I use?"}, token, nil), http.StatusOK, nil)
+
+	release := make(chan struct{})
+	defer close(release)
+	e.s.coding.service.TurnScopeModel = coding.TurnScopeModelFunc(func(ctx context.Context, _ string) (string, error) {
+		select {
+		case <-release:
+			return coding.TurnScopeNoPublish, nil
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+	})
+	began := time.Now()
+	e.decode(e.do(http.MethodPost, "/api/coding/sessions/"+sessionID+"/prompt", map[string]any{"prompt": "Use vitest"}, "", nil), http.StatusOK, nil)
+	if elapsed := time.Since(began); elapsed > 2*time.Second {
+		t.Fatalf("the prompt POST waited %s on the scope model", elapsed)
+	}
+	var inbox coding.InboxResponse
+	e.decode(e.do(http.MethodGet, "/internal/coding-runtime/inbox?after=0&wait=0", nil, token, nil), http.StatusOK, &inbox)
+	for _, item := range inbox.Items {
+		if item.Turn != nil && item.Turn.Prompt == "Use vitest" {
+			t.Fatalf("a turn with a pending scope was delivered: %+v", item.Turn)
+		}
+	}
+	release <- struct{}{}
+	e.decode(e.do(http.MethodGet, "/internal/coding-runtime/inbox?after=0&wait="+strconv.Itoa(10), nil, token, nil), http.StatusOK, &inbox)
+	var delivered *coding.Turn
+	for _, item := range inbox.Items {
+		if item.Turn != nil && item.Turn.Prompt == "Use vitest" {
+			delivered = item.Turn
+		}
+	}
+	if delivered == nil || delivered.Scope != coding.TurnScopeNoPublish || delivered.ScopeSource != coding.TurnScopeSourceModel || delivered.ScopePendingSince != 0 {
+		t.Fatalf("delivered after the model answered: %+v (%+v)", delivered, inbox.Items)
+	}
+}
 
 // The follow-up scope model is the configured Flow Agent model; a provider
 // failure or an unusable answer leaves the parser's decision in place.
