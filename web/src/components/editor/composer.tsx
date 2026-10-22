@@ -104,11 +104,41 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
     }
     onAttach?.()
   }
-  const submit = async () => { const json = editor?.getJSON() as Record<string, unknown> | undefined; const text = editor ? commentText(editor) : ''; const body = commentBody(text, json); if (!body || saving) return; setSaving(true); setError(''); try { await onSubmit?.(body, json); if (draftType && draftResourceId) { if (draftId.current && !draftId.current.startsWith('local:')) await deleteDraft(draftId.current).catch(() => undefined); clearComposerDraft(draftType, draftResourceId); draftId.current = '' } editor?.commands.clearContent() } catch (reason) { setError(reason instanceof Error ? reason.message : 'Comment could not be submitted') } finally { setSaving(false) } }
+  // A new comment leaves the composer the moment it is sent (the timeline shows it at once, pending); a failed send puts the
+  // draft back, mentions and attachments included. An edit keeps its text until the save finishes.
+  // An edit starts from the comment's own text; a restored draft is still a new comment.
+  const editing = Boolean(initialValue || initialData)
+  const failedSend = useRef<{ body: string; json?: Record<string, unknown> }>(undefined)
+  const sending = useRef(false)
+  const submit = async (retry = false) => {
+    if (!editor) return
+    const pending = retry ? failedSend.current : undefined
+    const json = pending ? pending.json : editor.getJSON() as Record<string, unknown>
+    const body = pending ? pending.body : commentBody(commentText(editor), json)
+    const immediate = !editing
+    if (!body || (!immediate && (saving || sending.current))) return
+    failedSend.current = undefined
+    setError('')
+    const sentDraft = draftId.current
+    if (immediate) { if (!pending) editor.commands.clearContent(); draftId.current = '' } else { sending.current = true; setSaving(true) }
+    try {
+      await onSubmit?.(body, json)
+      if (draftType && draftResourceId) { if (sentDraft && !sentDraft.startsWith('local:')) await deleteDraft(sentDraft).catch(() => undefined); clearComposerDraft(draftType, draftResourceId); if (!immediate) draftId.current = '' }
+      if (!immediate) editor.commands.clearContent()
+    } catch (reason) {
+      if (immediate) {
+        if (!draftId.current) draftId.current = sentDraft
+        if (editor.isEmpty && json?.type === 'doc') editor.commands.setContent(json, { emitUpdate: true })
+        else failedSend.current = { body, json }
+        editor.commands.focus('end')
+      }
+      setError(reason instanceof Error ? reason.message : 'Comment could not be submitted')
+    } finally { if (!immediate) { sending.current = false; setSaving(false) } }
+  }
   return <div className={`composer${compact ? ' compact' : ''}`} ref={rootRef} style={{position:'relative'}}>
     <EditorContent editor={editor}/>
     {editor && toolbarHost && <BubbleMenu editor={editor} appendTo={toolbarHost === 'body' ? () => document.body : undefined} style={{ zIndex: 690 }} options={{ strategy: toolbarHost === 'body' ? 'fixed' : 'absolute', placement: 'top', offset: 6, shift: { padding: 12 }, flip: true }} shouldShow={showsSelectionToolbar}><SelectionToolbar editor={editor} actions={selectionActions}/></BubbleMenu>}
-    {error &&<div className="composer-error" role="alert">{error}<button type="button" onClick={() => void submit()}>Retry</button></div>}
+    {error &&<div className="composer-error" role="alert">{error}<button type="button" onClick={() => void submit(Boolean(failedSend.current))}>Retry</button></div>}
     <div className="composer-toolbar"><div className="composer-tools">
       <button type="button" aria-label="Attach images, files, or videos" onClick={attachFiles}><Paperclip size={14}/></button>
     </div><div className="composer-submit">{onCancel && <Button className="composer-cancel" type="button" variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>}<Button className="composer-send" type="button" size="icon" aria-label="Submit comment" disabled={saving || empty} onClick={() => void submit()}><ArrowUp size={14}/></Button></div></div>

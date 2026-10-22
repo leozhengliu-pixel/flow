@@ -5,6 +5,7 @@ import { Composer } from './composer'
 import { I18nProvider } from '@/i18n/i18n'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { viewer } from '@/test/fixtures'
+import { setLiveApplicationIdentities } from '@/lib/actor-attribution'
 
 const originalRects=Object.getOwnPropertyDescriptor(Range.prototype,'getClientRects')
 const originalRect=Object.getOwnPropertyDescriptor(Range.prototype,'getBoundingClientRect')
@@ -33,6 +34,27 @@ describe('comment application mentions',()=>{
     await waitFor(()=>expect(submit).toHaveBeenCalledWith('@Build agent',expect.objectContaining({type:'doc'})))
     expect(JSON.stringify(submit.mock.calls[0][1])).toContain('app-fixture')
     expect(JSON.stringify(submit.mock.calls[0][1])).toContain('"type":"mention"')
+  })
+  it('shows an application agent with its current logo and an Agent label, and the built-in agent with its mark',async()=>{
+    const user=userEvent.setup()
+    const app={...viewer,id:'app-logo',name:'qa-app',displayName:'Flow QA OAuth app',app:true,appScopes:['app:mentionable'],oauthClientId:'client-1',avatarUrl:'/uploads/old-logo.png'}
+    const builtin={...viewer,id:'app-builtin',name:'flow',displayName:'Flow',app:true,appScopes:['app:mentionable'],avatarUrl:'/favicon.svg'}
+    const person={...viewer,id:'person-1',name:'sam',displayName:'Sam Person',app:false}
+    setLiveApplicationIdentities([{...app,avatarUrl:'/uploads/new-logo.png'}])
+    try{
+      render(<I18nProvider><TooltipProvider><Composer users={[person,app,builtin]} onSubmit={vi.fn()}/></TooltipProvider></I18nProvider>)
+      await user.type(await screen.findByRole('textbox',{name:'Leave a comment…'}),'@')
+      const options=await screen.findAllByRole('option')
+      expect(options.map(option=>option.querySelector('strong')?.textContent).slice(0,3)).toEqual(expect.arrayContaining(['Flow QA OAuth app','Flow','Sam Person']))
+      expect(options.at(-1)?.textContent).toContain('Sam Person')
+      const logo=screen.getByRole('option',{name:/Flow QA OAuth app/})
+      expect(logo.querySelector('.description-mention-avatar img')).toHaveAttribute('src','/uploads/new-logo.png')
+      expect(logo.querySelector('[data-agent-badge]')).toHaveTextContent('Agent')
+      const mark=options.find(option=>option.querySelector('strong')?.textContent==='Flow')!
+      expect(mark.querySelector('.description-mention-avatar')).toHaveAttribute('data-agent-avatar-slot')
+      expect(mark.querySelector('svg')).not.toBeNull()
+      expect(screen.getByRole('option',{name:/Sam Person/}).querySelector('[data-agent-badge]')).toBeNull()
+    }finally{setLiveApplicationIdentities([])}
   })
   it('does not suggest applications without mention capability',async()=>{
     const user=userEvent.setup()

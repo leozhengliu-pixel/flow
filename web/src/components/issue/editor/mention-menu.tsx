@@ -1,7 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { chipParts } from '@/components/agent/agent-entity-chip-parts'
+import { AgentBadge } from '@/components/agent/agent-badge'
 import { PersonHover } from '@/components/property/person-info'
+import { UserAvatar } from '@/components/ui/user-avatar'
+import { liveActorUser } from '@/lib/actor-attribution'
 import { type MentionOption } from '@/components/editor/mentions/mention-options'
 import { personDisplayName, personIdentifier } from '@/lib/people'
 import { useI18n } from '@/i18n/i18n'
@@ -65,10 +68,15 @@ export function MentionMenu({ options, selectedIndex, anchor, query, onSelect }:
 function MentionOptionBody({ option }: { option: MentionOption }) {
   const { t } = useI18n()
   if (option.entity.kind === 'user') {
-    const user = option.entity.user
+    // An application's agent shows its current logo (the built-in agent its mark); people their photo or initials.
+    const user = liveActorUser(option.entity.user)
     const name = personDisplayName(user) || t('Unknown user')
+    if (user.app) return <>
+      <UserAvatar avatarUrl={user.avatarUrl} className="description-mention-avatar" name={name}/>
+      <span className="description-command-copy description-mention-agent"><strong data-i18n-ignore>{name}</strong><AgentBadge/></span>
+    </>
     return <>
-      <span className="description-mention-avatar" aria-hidden="true">{initials(name)}</span>
+      <UserAvatar avatarUrl={user.avatarUrl} className="description-mention-avatar" name={name}/>
       <span className="description-command-copy"><strong data-i18n-ignore>{name}</strong>{(personIdentifier(user) || user.email) && <small data-i18n-ignore>{[...new Set([personIdentifier(user), user.email].filter(Boolean))].join(' · ')}</small>}</span>
     </>
   }
@@ -77,9 +85,4 @@ function MentionOptionBody({ option }: { option: MentionOption }) {
     <span className="description-mention-icon" aria-hidden="true">{parts.icon}</span>
     <span className="description-command-copy"><strong data-i18n-ignore>{parts.identifier ? `${parts.identifier} ${parts.label}` : parts.label}</strong>{parts.suffix && <small data-i18n-ignore>{parts.suffix}</small>}</span>
   </>
-}
-
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  return (parts.length > 1 ? `${parts[0][0]}${parts.at(-1)?.[0] ?? ''}` : name.slice(0, 2)).toUpperCase()
 }
