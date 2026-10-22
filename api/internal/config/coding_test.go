@@ -121,6 +121,46 @@ func TestCodingModelInfoValidation(t *testing.T) {
 	}
 }
 
+func TestCodingModelInfoContextWindow(t *testing.T) {
+	t.Setenv("FLOW_CODING_ENABLED", "true")
+	t.Setenv("FLOW_CODING_PROVIDER", "fake")
+	t.Setenv("FLOW_CODING_SECRET_KEY", "a2V5")
+	valid := map[string]int64{
+		`{"glm-5":{"label":"GLM-5","contextWindow":200000},"gpt-5":{"label":"GPT-5"}}`: 200000,
+		`{"glm-5":{"contextWindow":1024}}`:                                             1024,
+		`{"glm-5":{"contextWindow":10000000}}`:                                         10000000,
+		`{"glm-5":{"contextWindow":null}}`:                                             0, // null = unset
+		`{"glm-5":{"label":"GLM-5"}}`:                                                  0, // left out = unset
+	}
+	for raw, want := range valid {
+		t.Setenv("FLOW_CODING_MODEL_INFO", raw)
+		c := loadCoding("http://localhost:5173")
+		if err := c.Validate(); err != nil {
+			t.Errorf("%s: %v", raw, err)
+		}
+		if got := c.LLM.ModelInfo["glm-5"].ContextWindow; got != want {
+			t.Errorf("%s: window %d, want %d", raw, got, want)
+		}
+		if got := c.LLM.ModelInfo["gpt-5"].ContextWindow; got != 0 {
+			t.Errorf("%s: another model got window %d", raw, got)
+		}
+	}
+	for _, value := range []string{`0`, `-1`, `-200000`, `1023`, `10000001`, `200000.5`, `200000.0`, `2e5`, `"200000"`, `"200k"`, `true`, `[200000]`, `9007199254740991`, `9007199254740993`, `99999999999999999999999`} {
+		raw := `{"glm-5":{"label":"GLM-5","contextWindow":` + value + `}}`
+		t.Setenv("FLOW_CODING_MODEL_INFO", raw)
+		err := loadCoding("http://localhost:5173").Validate()
+		if err == nil || !strings.Contains(err.Error(), "FLOW_CODING_MODEL_INFO") || !strings.Contains(err.Error(), `"glm-5"`) || !strings.Contains(err.Error(), "contextWindow") {
+			t.Errorf("contextWindow %s: want a FLOW_CODING_MODEL_INFO error naming glm-5, got %v", value, err)
+		}
+	}
+	// Coding disabled: a bad value never blocks startup.
+	t.Setenv("FLOW_CODING_ENABLED", "false")
+	t.Setenv("FLOW_CODING_MODEL_INFO", `{"glm-5":{"contextWindow":-1}}`)
+	if err := loadCoding("http://localhost:5173").Validate(); err != nil {
+		t.Errorf("disabled coding: %v", err)
+	}
+}
+
 func TestOpenSandboxConfig(t *testing.T) {
 	t.Setenv("FLOW_CODING_ENABLED", "true")
 	t.Setenv("FLOW_CODING_PROVIDER", "opensandbox")

@@ -440,6 +440,7 @@ export class Session {
       guidance: runnerGuidance(this.bootstrap, this.config.paths.repo),
       mcp: mcpCommand(this.config, this.bootstrap, turn.id),
       env: this.env(),
+      logger: this.logger,
     }
     // MCP tools (track I) read the turn from FLOW_TURN_ID or this file.
     await mkdir(this.config.paths.flowDir, { recursive: true, mode: 0o700 })

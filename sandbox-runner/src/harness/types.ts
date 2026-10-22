@@ -1,4 +1,5 @@
 import type { RunnerPaths } from '../config.js'
+import type { Logger } from '../log.js'
 import type { StreamMapper, MapperOptions } from '../mapping/common.js'
 import type { BootstrapMCPServer, BootstrapResponse, HarnessName, Turn } from '../protocol.js'
 
@@ -21,6 +22,8 @@ export interface HarnessContext {
   mcp: McpServerCommand
   /** Base environment for the harness (PATH, proxies, plain env vars, FLOW_SANDBOX…). */
   env: NodeJS.ProcessEnv
+  /** For warnings while building the invocation (optional). */
+  logger?: Logger
 }
 
 export interface HarnessFile {

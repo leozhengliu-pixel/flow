@@ -1,0 +1,5 @@
+coding:
+  llm:
+    modelInfo:
+      glm-5:
+        contextWindow: 0

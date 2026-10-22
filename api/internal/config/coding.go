@@ -210,6 +210,58 @@ type ModelInfo struct {
 	Description string `json:"description,omitempty"`
 	// Tier is Auto's routing tier: small | standard | large.
 	Tier string `json:"tier,omitempty"`
+	// ContextWindow is the model's context window in tokens, written as
+	// model_context_window into the Codex sandbox's config.toml (Codex
+	// sessions only). 0 (key left out or null) writes nothing, so Codex
+	// keeps its own default. See ParseContextWindow for the accepted range.
+	ContextWindow int64 `json:"contextWindow,omitempty"`
+}
+
+// Context window bounds (tokens) for ModelInfo.ContextWindow. The maximum
+// is a sanity bound well below 2^53-1, so the value is exact in JSON and
+// JavaScript; it is not a promise that any model or gateway supports it.
+const (
+	MinContextWindow = 1024
+	MaxContextWindow = 10_000_000
+)
+
+// UnmarshalJSON reads ModelInfo with a strict contextWindow: a JSON integer
+// in [MinContextWindow, MaxContextWindow], or null / left out for unset.
+func (m *ModelInfo) UnmarshalJSON(data []byte) error {
+	type plain ModelInfo
+	var raw struct {
+		plain
+		ContextWindow json.RawMessage `json:"contextWindow"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	window, err := ParseContextWindow(raw.ContextWindow)
+	if err != nil {
+		return err
+	}
+	*m = ModelInfo(raw.plain)
+	m.ContextWindow = window
+	return nil
+}
+
+// ParseContextWindow parses a raw JSON contextWindow. Left out or null is 0
+// (unset); otherwise it must be a JSON integer literal (no string, decimal
+// point or exponent) from MinContextWindow to MaxContextWindow.
+func ParseContextWindow(raw json.RawMessage) (int64, error) {
+	text := strings.TrimSpace(string(raw))
+	if text == "" || text == "null" {
+		return 0, nil
+	}
+	invalid := fmt.Errorf("contextWindow must be an integer from %d to %d tokens (or null to unset), got %s", MinContextWindow, MaxContextWindow, text)
+	if strings.ContainsAny(text, `".eE+`) {
+		return 0, invalid
+	}
+	window, err := strconv.ParseInt(text, 10, 64)
+	if err != nil || window < MinContextWindow || window > MaxContextWindow {
+		return 0, invalid
+	}
+	return window, nil
 }
 
 // ModelPrice is USD per million tokens.
@@ -550,14 +602,24 @@ func float(raw string, fallback float64) float64 {
 	return n
 }
 
-// modelInfo reads a JSON object {"model":{"label":"…","group":"frontier","description":"…"}}.
+// modelInfo reads a JSON object
+// {"model":{"label":"…","group":"frontier","description":"…","tier":"…","contextWindow":200000}}.
+// An entry error names its model id.
 func modelInfo(raw string) (map[string]ModelInfo, error) {
 	result := map[string]ModelInfo{}
 	if strings.TrimSpace(raw) == "" {
 		return result, nil
 	}
-	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+	var entries map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
 		return map[string]ModelInfo{}, err
+	}
+	for model, entry := range entries {
+		var info ModelInfo
+		if err := json.Unmarshal(entry, &info); err != nil {
+			return map[string]ModelInfo{}, fmt.Errorf("model %q: %w", model, err)
+		}
+		result[model] = info
 	}
 	return result, nil
 }

@@ -462,6 +462,7 @@ it is enabled.
 | `FLOW_CODING_MODELS_CODEX` | `gpt-5-codex,gpt-5` | |
 | `FLOW_CODING_MODELS_OPEN_SOURCE` | empty | |
 | `FLOW_CODING_MODEL_PRICES` | empty | JSON `{"model":{"input":3,"output":15,"cacheRead":0.3,"cacheWrite":3.75}}`, USD per million tokens |
+| `FLOW_CODING_MODEL_INFO` | empty | JSON per-model metadata `{"model":{"label","group","description","tier","contextWindow"}}`; `contextWindow` (integer 1024..10000000, null or left out = unset) becomes Codex `model_context_window` (configuration.md, Codex context window) |
 | `FLOW_CODING_LLM_TIMEOUT` | `10m` | Per proxied request |
 | `FLOW_CODING_RUNTIME_PRICES` | `small=0.10,medium=0.20,large=0.40` | USD per sandbox-hour |
 | `FLOW_CODING_GITLAB_CREDENTIAL_MODE` | `project-token` | `project-token` \| `oauth` \| `connection` (§14) |
@@ -716,7 +717,7 @@ No model API key enters a sandbox. The harness talks to Flow:
 | Harness | Configuration written by the runner |
 |---|---|
 | Claude Code | `ANTHROPIC_BASE_URL={runtime}/internal/llm-proxy/anthropic`, `ANTHROPIC_AUTH_TOKEN=<sandbox token>`, `ANTHROPIC_MODEL=<model>`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `DISABLE_AUTOUPDATER=1`, `DISABLE_TELEMETRY=1` |
-| Codex | `~/.codex/config.toml`: `model_provider="flow"`, `[model_providers.flow] base_url="{runtime}/internal/llm-proxy/openai/v1" env_key="FLOW_LLM_TOKEN" wire_api="responses"`, `model=<model>`, `model_reasoning_effort=<effort>` |
+| Codex | `~/.codex/config.toml`: `model_provider="flow"`, `[model_providers.flow] base_url="{runtime}/internal/llm-proxy/openai/v1" env_key="FLOW_LLM_TOKEN" wire_api="responses"`, `model=<model>`, `model_reasoning_effort=<effort>`, and `model_context_window=<n>` only when bootstrap `harness.contextWindow` is set (`FLOW_CODING_MODEL_INFO` `contextWindow`, Codex sessions only; rewritten before every turn, resumed turns included; `model_auto_compact_token_limit` is never written) |
 | Open source (OpenCode) | `opencode.json` provider `flow` (OpenAI-compatible) pointing at `{runtime}/internal/llm-proxy/opensource/v1` with the sandbox token |
 
 The proxy (track E, `internal/llmproxy`) does the following:

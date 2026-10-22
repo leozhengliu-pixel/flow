@@ -66,6 +66,7 @@ coding:
       claude-sonnet-4-5: {input: 3, output: 15}
     modelInfo:
       gpt-5-codex: {label: GPT-5 Codex, group: frontier, description: Multi-file changes}
+      glm-5: {label: GLM-5, contextWindow: 200000}
   # The local provider is development-only and not a Helm provider. Exercise
   # its optional settings through the generic environment passthrough.
   extraEnv:

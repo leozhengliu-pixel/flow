@@ -840,7 +840,9 @@
                 "properties": {
                   "label": {"type": "string"},
                   "group": {"enum": ["", "frontier", "other"]},
-                  "description": {"type": "string"}
+                  "description": {"type": "string"},
+                  "tier": {"enum": ["", "small", "standard", "large"]},
+                  "contextWindow": {"type": ["integer", "null"], "minimum": 1024, "maximum": 10000000}
                 }
               }
             }
