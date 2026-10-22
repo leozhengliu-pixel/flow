@@ -5,6 +5,7 @@ import type { McpServerCommand } from './harness/types.js'
 import type { BootstrapResponse } from './protocol.js'
 import { runnerProxyEnv } from './proxy-env.js'
 import { envVars } from './setup.js'
+import { publishes, scopeGuidance, type TurnScope } from './turn-scope.js'
 
 // The environment every child of the runner gets (setup commands, the
 // harness and the tools it runs), the runtime.json the shims fall back to,
@@ -84,18 +85,21 @@ export function mcpCommand(config: RunnerConfig, bootstrap: BootstrapResponse, t
 }
 
 /** The runner's rules for the agent, followed by Flow's bootstrap guidance. */
-export function runnerGuidance(bootstrap: BootstrapResponse, repoDir: string): string {
+export function runnerGuidance(bootstrap: BootstrapResponse, repoDir: string, turn?: { scope: TurnScope; leftovers: string[] }): string {
   const repo = bootstrap.repo.fullName || bootstrap.repo.cloneUrl
   const cli = bootstrap.repo.codeHost === 'gitlab' ? '`glab` (e.g. `glab ci status`, `glab mr view`)' : '`gh` (e.g. `gh pr checks`, `gh pr view`)'
   const rules = [
     '## Flow coding sandbox',
     `- You are working in an isolated Flow sandbox on branch \`${bootstrap.repo.branchName}\` of ${repo}, in ${repoDir}. FLOW_SANDBOX=1 is set.`,
-    '- When your turn ends, Flow commits any uncommitted changes, pushes the branch and opens or updates the draft pull/merge request. Do not create pull or merge requests yourself, do not push other branches and do not rewrite pushed history.',
+    '- When a turn that may change the repository ends, Flow commits the changes made in that turn, pushes the branch and opens or updates the draft pull/merge request. A turn whose request asks to keep the repository or the pull request unchanged, or not to commit or push, is not committed or pushed. Do not create pull or merge requests yourself, do not push other branches and do not rewrite pushed history.',
     ...(bootstrap.git.coAuthorTrailer ? ['- Every commit in this sandbox automatically gets a `Co-Authored-By:` trailer (added by a git hook). Do not add a co-author trailer or a "Generated with" line to commit messages yourself.'] : []),
     `- ${cli} is authenticated for reading CI status, checks and review comments.`,
     '- If you cannot continue without a decision from the user, call the `ask_user` tool (Flow MCP server) and then end your turn.',
-    '- Finish with a short summary of what you changed. Its first line becomes the commit message, so make it a concise imperative sentence.',
+    turn && !publishes(turn.scope)
+      ? '- Finish with a short report of what you checked or did and what you found.'
+      : '- Finish with a short summary of what you changed. Its first line becomes the commit message, so make it a concise imperative sentence.',
   ].join('\n')
-  const extra = bootstrap.guidance?.trim()
-  return extra ? `${rules}\n\n${extra}\n` : `${rules}\n`
+  // The current turn comes last: it sets this turn's goal and write scope.
+  const parts = [rules, bootstrap.guidance?.trim(), turn ? scopeGuidance(turn.scope, turn.leftovers) : ''].filter(Boolean)
+  return `${parts.join('\n\n')}\n`
 }
