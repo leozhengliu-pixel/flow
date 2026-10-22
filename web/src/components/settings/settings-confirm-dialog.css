@@ -1,6 +1,6 @@
 /* Destructive confirmation over the settings content; colours are the shared confirm-dialog tokens in tokens.css. */
 .settings-confirm-overlay{position:fixed;z-index:1600;inset:0;background:var(--agent-discard-overlay)}
-.settings-confirm-dialog{box-sizing:border-box;position:fixed;z-index:1601;top:calc(100dvh / 3);left:calc(50% + 118px);transform:translate(-50%,-33.333333%);width:480px;max-width:calc(100vw - 32px);padding:24px;border:.5px solid var(--agent-discard-border);border-radius:12px;outline:0;background:var(--agent-discard-bg);box-shadow:var(--agent-discard-shadow);font-family:var(--font)}
+.settings-confirm-dialog{box-sizing:border-box;position:fixed;z-index:1601;top:calc(100dvh / 3);left:50%;transform:translate(-50%,-33.333333%);width:480px;max-width:calc(100vw - 32px);padding:24px;border:.5px solid var(--agent-discard-border);border-radius:12px;outline:0;background:var(--agent-discard-bg);box-shadow:var(--agent-discard-shadow);font-family:var(--font)}
 @media(max-width:900px){.settings-confirm-dialog{left:50%}}
 .settings-confirm-title{margin:0;color:var(--agent-discard-title);font-size:15px;font-weight:600;line-height:23px}
 .settings-confirm-description{margin:6px 0 0;color:var(--agent-discard-text);font-size:15px;font-weight:450;line-height:23px}

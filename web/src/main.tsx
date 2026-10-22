@@ -24,6 +24,7 @@ import { FlowMotionProvider } from './components/ui/motion'
 import './styles/motion.css'
 import './styles/light-parity.css'
 import './styles/picker-parity.css'
+import './styles/dialog-placement.css'
 
 installStaleChunkReload()
 // Fetch the current route's page chunks now, in parallel with the session/bootstrap requests, instead of after the data lands.

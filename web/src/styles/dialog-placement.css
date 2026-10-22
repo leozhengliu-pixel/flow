@@ -1,0 +1,26 @@
+/* Dialog placement, measured on the reference app.
+   Horizontal: the dialog layer is padded by the docked sidebar width on the left and 8px on the right while the
+   sidebar is expanded (no padding when it is collapsed or compact), so dialogs centre over the main content area.
+   Vertical: the panel sits at one third of the free space, top = (viewport height - panel height) / 3.
+   The overlay still covers the whole window. Command menus, the issue composer and full-screen viewers keep the
+   window-centred, top-anchored placement. */
+:root {
+  --dialog-area-shift: 0px;
+  --dialog-top: 33.333333vh;
+  --dialog-lift: -33.333333%;
+}
+:root[data-sidebar-mode="expanded"] { --dialog-area-shift: calc((var(--sidebar) - 8px) / 2); }
+/* Settings has its own docked 244px navigation (below 761px it slides away) and the same 8px right gap. */
+@media (min-width: 761px) {
+  :root:has(.settings-app) { --dialog-area-shift: 118px; }
+}
+
+[data-flow-motion="dialog"]:not(.command-dialog):not([data-dialog-placement="window"]):not(.flow-diagram-fullscreen):not(.coding-session-dialog):not(.cs-terminal-dialog):not(.pulse-composer):not(.flow-release-editor):not(.sidebar-shortcuts-dialog):not(.flow-pulse-report):not([class*="commandDialog"]):not([class*="commandMenu"]) {
+  translate: var(--dialog-area-shift) 0;
+}
+
+/* One third of the free space above the panel, for every dialog that is not window-anchored. */
+[data-flow-motion="dialog"]:not(.command-dialog):not([data-dialog-placement="window"]):not(.flow-diagram-fullscreen):not(.coding-session-dialog):not(.cs-terminal-dialog):not(.pulse-composer):not(.flow-release-editor):not(.sidebar-shortcuts-dialog):not(.flow-pulse-report):not([class*="commandDialog"]):not([class*="commandMenu"]) {
+  top: var(--dialog-top) !important;
+  transform: translate(-50%, var(--dialog-lift)) !important;
+}

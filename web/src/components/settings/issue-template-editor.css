@@ -71,7 +71,7 @@
 
 /* ---------- "Choose issue template type" ---------- */
 .tpl-dialog-overlay { position: fixed; z-index: 700; inset: 0; background: var(--tpl-dialog-overlay); }
-.tpl-type-dialog { box-sizing: border-box; width: 562px; max-width: calc(100vw - 24px); position: fixed; z-index: 701; left: calc(50% + 118px); top: 124.5px; transform: translateX(-50%); padding: 0 16px 12px; border: 0.5px solid var(--tpl-dialog-border); border-radius: 12px; outline: 0; background: var(--tpl-dialog-bg); box-shadow: var(--shadow-dialog); }
+.tpl-type-dialog { box-sizing: border-box; width: 562px; max-width: calc(100vw - 24px); position: fixed; z-index: 701; left:50%; top: 124.5px; transform: translateX(-50%); padding: 0 16px 12px; border: 0.5px solid var(--tpl-dialog-border); border-radius: 12px; outline: 0; background: var(--tpl-dialog-bg); box-shadow: var(--shadow-dialog); }
 .tpl-type-dialog > header { height: 56px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 11.5px; }
 .tpl-type-dialog h2 { margin: 0; color: var(--tpl-text); font-size: 15px; font-weight: 600; line-height: 23px; }
 .tpl-dialog-close { width: 28px; height: 28px; color: var(--tpl-button-fg); }
@@ -256,7 +256,7 @@ html:root .settings-app .settings-main .team-settings-header > div > p.tpl-team-
 .tpl-form-fields:has(.tpl-add-field-row) + .tpl-defaults.is-form { margin-top: 29.6px; }
 
 /* Template confirmation dialog (the reference app: "Discard changes?" / "Delete the template …?"). */
-.tpl-confirm-dialog { box-sizing: border-box; width: 480px; max-width: calc(100vw - 24px); position: fixed; z-index: 701; left: calc(50% + 118px); top: 184px; transform: translateX(-50%); padding: 24px; border: 0.5px solid var(--tpl-dialog-border); border-radius: 12px; outline: 0; background: var(--tpl-dialog-bg); box-shadow: var(--shadow-dialog); }
+.tpl-confirm-dialog { box-sizing: border-box; width: 480px; max-width: calc(100vw - 24px); position: fixed; z-index: 701; left:50%; top: 184px; transform: translateX(-50%); padding: 24px; border: 0.5px solid var(--tpl-dialog-border); border-radius: 12px; outline: 0; background: var(--tpl-dialog-bg); box-shadow: var(--shadow-dialog); }
 .tpl-confirm-title { margin: 0; color: var(--tpl-text); font-size: 15px; font-weight: 600; line-height: 23px; }
 .tpl-confirm-description { margin: 6px 0 0; color: var(--tpl-confirm-desc); font-size: 15px; font-weight: 450; line-height: 23px; }
 .tpl-confirm-dialog > footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
