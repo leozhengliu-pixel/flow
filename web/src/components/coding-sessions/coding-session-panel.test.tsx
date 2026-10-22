@@ -49,10 +49,11 @@ describe('coding session panel', () => {
   it.each<[CodingSessionState, string]>([
     ['pending', 'Working…'], ['active', 'Working…'], ['stopping', 'Stopping…'], ['complete', 'Finished'],
     ['awaitingInput', 'Needs input'], ['error', 'Error'], ['stale', 'Didn’t start'],
-  ])('shows the %s state as %s', (state, label) => {
+  ])('marks the %s state on the panel without a status badge above the changes (%s)', (state) => {
     renderPanel(makeSession({ state, phase: state === 'pending' ? 'provisioning' : state === 'awaitingInput' ? 'awaitingUser' : 'done' }))
-    expect(screen.getByRole('region', { name: 'Coding session' })).toHaveAttribute('data-state', state)
-    expect(screen.getAllByText(label)[0]).toBeVisible()
+    const region = screen.getByRole('region', { name: 'Coding session' })
+    expect(region).toHaveAttribute('data-state', state)
+    expect(region.querySelector('.coding-state-badge')).toBeNull()
   })
 
   it('shows plain screenshots in the conversation and keeps before/after pairs in the changes pane', async () => {
@@ -65,13 +66,14 @@ describe('coding session panel', () => {
     expect(await within(agent).findByRole('img', { name: 'Empty state' })).toBeInTheDocument()
   })
 
-  it('shows phase progress, harness and model while working, but no cost', () => {
-    renderPanel(makeSession({ state: 'pending', phase: 'starting', costMicros: 2_500_000 }))
-    const steps = within(screen.getByRole('list', { name: 'Session progress' })).getAllByRole('listitem')
-    expect(steps.find(step => step.getAttribute('aria-current') === 'step')).toHaveTextContent('Starting sandbox')
-    expect(screen.getByText('Claude Code · claude-sonnet-4-5 (Auto)')).toBeVisible()
+  it('has no status, phase, repository or model block above the changes, and no cost', async () => {
+    renderPanel(makeSession({ state: 'pending', phase: 'starting', costMicros: 2_500_000, repository: 'acme/app', branchName: 'flow/fix-login' }))
+    expect(screen.queryByRole('list', { name: 'Session progress' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Sandbox' })).toBeNull()
+    expect(screen.queryByText('Claude Code · claude-sonnet-4-5 (Auto)')).toBeNull()
     expect(screen.queryByLabelText('Cost')).toBeNull()
     expect(screen.queryByText('$2.50')).toBeNull()
+    expect(await screen.findByText('No changes yet')).toBeVisible()
   })
 
   it('stops a working session from the empty composer', async () => {
@@ -299,21 +301,13 @@ describe('coding session panel', () => {
     await waitFor(() => expect(onOpenSession).toHaveBeenCalled())
   })
 
-  it('shows sandbox info and logs', async () => {
+  it('keeps the repository and branch in the Session details menu', async () => {
     const user = userEvent.setup()
-    vi.mocked(api.fetchCodingSandboxLogs).mockResolvedValue({ logs: 'cloning…', complete: false })
-    renderPanel(makeSession({ repository: 'acme/app', branchName: 'flow/fix-login', baseRef: 'main', region: 'eu', sandboxes: [{ id: 'sb-1', kind: 'session', status: 'running', size: 'large', region: 'eu-west', createdAt: '' }] }))
-    const sandbox = screen.getByRole('region', { name: 'Sandbox' })
-    for (const text of ['acme/app', 'flow/fix-login', 'main', 'Large', 'eu-west', 'Running']) expect(within(sandbox).getByText(text)).toBeVisible()
-    await user.click(within(sandbox).getByRole('button', { name: 'View logs' }))
-    expect(await screen.findByLabelText('Sandbox logs')).toHaveTextContent('cloning…')
-    await user.click(screen.getByRole('button', { name: 'Refresh logs' }))
-    expect(api.fetchCodingSandboxLogs).toHaveBeenCalledTimes(2)
-  })
-
-  it('links external logs directly', () => {
-    renderPanel(makeSession({ sandboxes: [{ id: 'sb', kind: 'session', status: 'stopped', logsUrl: 'https://logs.example/sb', createdAt: '' }] }))
-    expect(screen.getByRole('link', { name: 'View logs' })).toHaveAttribute('href', 'https://logs.example/sb')
+    renderPanel(makeSession({ repository: 'acme/app', branchName: 'flow/fix-login', baseRef: 'main' }))
+    expect(screen.queryByText('acme/app')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Session details' }))
+    expect(await screen.findByText('acme/app')).toBeVisible()
+    expect(screen.getByText('flow/fix-login → main')).toBeVisible()
   })
 
   it('shows the plan above the composer, the diff and the summary', async () => {
@@ -344,27 +338,17 @@ describe('coding session panel', () => {
     expect(within(stream).getByText('Lint failed')).toBeVisible()
     expect(within(stream).queryByText('👍')).toBeNull()
   })
-  it('answers an awaiting-input question from the composer', async () => {
+  it('shows a choice question as plain text with bullets and answers it by typing', async () => {
     const user = userEvent.setup()
-    vi.mocked(getApplicationTask).mockResolvedValue({ session: { ...task, status: 'awaitingInput' }, activities: [activity('q', 'elicitation', 'Which repository?', { signal: 'select', signalMetadata: { options: [{ value: 'acme/app' }, { value: 'acme/api' }] } })] })
+    vi.mocked(getApplicationTask).mockResolvedValue({ session: { ...task, status: 'awaitingInput' }, activities: [activity('q', 'elicitation', 'Which repository?', { signal: 'select', signalMetadata: { options: [{ value: 'acme/app' }, { value: 'acme/api', label: 'API' }] } })] })
     vi.mocked(api.promptCodingSession).mockResolvedValue(makeSession({ state: 'pending', phase: 'queued' }))
     renderPanel(makeSession({ state: 'awaitingInput', phase: 'awaitingUser' }))
-    expect(await screen.findByText('Which repository?')).toBeVisible()
-    expect(screen.getByText('Input needed to continue')).toBeVisible()
-    await user.click(screen.getByRole('button', { name: 'acme/api' }))
-    await user.click(screen.getByRole('button', { name: 'Continue with selected option' }))
-    expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'acme/api', undefined, [])
-  })
-  it('preselects the recommended repository so Enter confirms it', async () => {
-    const user = userEvent.setup()
-    vi.mocked(getApplicationTask).mockResolvedValue({ session: { ...task, status: 'awaitingInput' }, activities: [activity('q', 'elicitation', 'Which repository should I work in?', { signal: 'select', signalMetadata: { selected: 'env-api', options: [{ value: 'env-web', label: 'Web (acme/web)' }, { value: 'env-api', label: 'API (acme/api)', recommended: true }] } })] })
-    vi.mocked(api.promptCodingSession).mockResolvedValue(makeSession({ state: 'pending', phase: 'queued' }))
-    renderPanel(makeSession({ state: 'awaitingInput', phase: 'awaitingUser' }))
-    const recommended = await screen.findByRole('button', { name: 'API (acme/api)' })
-    await waitFor(() => expect(recommended).toHaveAttribute('aria-pressed', 'true'))
-    await user.click(screen.getByRole('textbox', { name: 'Send a message to Flow' }))
-    await user.keyboard('{Enter}')
-    await waitFor(() => expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'env-api', undefined, []))
+    expect(await screen.findByText(/^Which repository\?\s+- acme\/app\s+- API$/)).toBeVisible()
+    expect(screen.queryByText('Input needed to continue')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'API' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Continue with selected option' })).toBeNull()
+    await user.type(screen.getByRole('textbox', { name: 'Send a message to Flow' }), 'acme/api{Enter}')
+    await waitFor(() => expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'acme/api', undefined, []))
   })
   it('has no End session control while waiting for an answer', async () => {
     renderPanel(makeSession({ state: 'awaitingInput', phase: 'awaitingUser' }))
@@ -396,16 +380,16 @@ describe('coding session view (live)', () => {
   it('loads the session and follows coding_session realtime events', async () => {
     vi.mocked(api.fetchCodingSession).mockResolvedValueOnce(makeSession({ state: 'pending', phase: 'queued' })).mockResolvedValue(makeSession({ state: 'complete', phase: 'idle', version: 2 }))
     render(<I18nProvider><CodingSessionView sessionId="cs-1" data={data()}/></I18nProvider>)
-    expect((await screen.findAllByText('Working…'))[0]).toBeVisible()
+    expect(await screen.findByRole('region', { name: 'Coding session' })).toHaveAttribute('data-state', 'pending')
     act(() => { dispatchCodingSessionRealtimeEvent({ type: 'coding_session.updated', aggregateId: 'cs-1', payload: { agentSessionId: 'task-1' } }) })
-    expect(await screen.findByText('Finished')).toBeVisible()
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Coding session' })).toHaveAttribute('data-state', 'complete'))
     expect(api.fetchCodingSession).toHaveBeenCalledTimes(2)
   })
 
   it('ignores events for other sessions and reports load errors', async () => {
     vi.mocked(api.fetchCodingSession).mockResolvedValue(makeSession({ state: 'complete', phase: 'idle' }))
     render(<I18nProvider><CodingSessionView sessionId="cs-1" data={data()}/></I18nProvider>)
-    await screen.findByText('Finished')
+    await screen.findByRole('region', { name: 'Coding session' })
     act(() => { window.dispatchEvent(new CustomEvent(CODING_SESSION_EVENT, { detail: { sessionId: 'other', agentSessionId: 'other-task' } })) })
     await new Promise(resolve => setTimeout(resolve, 250))
     expect(api.fetchCodingSession).toHaveBeenCalledTimes(1)

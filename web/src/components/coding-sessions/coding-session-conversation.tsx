@@ -116,6 +116,12 @@ function PromptText({ text }: { text: string }) {
   return <>{parts.map((part, index) => part.length > 2 && part.startsWith('`') && part.endsWith('`') ? <code key={index}>{part.slice(1, -1)}</code> : part)}</>
 }
 
+/** A choice question reads as plain text with its options as bullets (no answer buttons); the viewer types the answer. */
+function questionMarkdown(activity: ApplicationActivity): string {
+  const options = activity.type === 'elicitation' && activity.signal === 'select' ? activity.signalMetadata?.options ?? [] : []
+  return options.length ? `${activity.body}\n\n${options.map(option => `- ${(option.label || option.value).replace(/\n+/g, ' ')}`).join('\n')}` : activity.body
+}
+
 const AGENT_TYPES = new Set(['thought', 'action', 'response', 'elicitation', 'error'])
 
 type ConversationProps = {
@@ -201,7 +207,7 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
       case 'reasoning': return <CodingReasoning key={key} activity={item.activity}/>
       case 'thinking': return <div key={key} className="cs-action" data-loading role="status"><div className="cs-action-header"><span className="cs-action-label"><CodingShimmer>{session.state === 'pending' && CODING_PHASE_LABELS[session.phase] ? `${t(CODING_PHASE_LABELS[session.phase])}…` : t('Thinking…')}</CodingShimmer></span></div></div>
       case 'text': return <Fragment key={key}>
-        <AgentAnswerText className="coding-session-markdown cs-text" data={data} markdown={item.activity.body}/>
+        <AgentAnswerText className="coding-session-markdown cs-text" data={data} markdown={questionMarkdown(item.activity)}/>
         {item === lastResponse && pr && !allCommits.length && <CodingPullRequestCard session={session} pr={pr} reviews={data.reviews ?? []} workspace={data.workspace.urlKey}/>}
       </Fragment>
       case 'auth': return <CodingAuthLine key={key} activity={item.activity} data={data}/>

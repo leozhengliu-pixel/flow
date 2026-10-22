@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { pairedWordRanges } from '@/lib/word-diff'
 import { ChevronRight, FileCode2, Folder, GitBranch } from 'lucide-react'
 import { ReviewCode } from '@/components/reviews/review-code'
 import { useI18n } from '@/i18n/i18n'
@@ -95,6 +96,8 @@ function CodingDiffFileView({ id, file, source, collapsed, onToggle }: { id: str
   const { t } = useI18n()
   const lines = fileLines(file)
   const highlight = lines <= LARGE_FILE_LINES
+  // Changed words inside paired removed/added lines, per hunk (hunk index -> line index -> ranges).
+  const wordMarks = useMemo(() => file.hunks.map(hunk => pairedWordRanges(hunk.lines.map(line => ({ kind: line.kind === 'add' ? 'add' as const : line.kind === 'delete' ? 'remove' as const : 'context' as const })), index => hunk.lines[index].text)), [file.hunks])
   const message = file.binary ? 'Binary file not shown.'
     : file.tooLarge ? 'This diff is too large to show here.'
       : !file.hunks.length && source === 'summary' ? 'Line changes appear once the branch is pushed.'
@@ -117,7 +120,7 @@ function CodingDiffFileView({ id, file, source, collapsed, onToggle }: { id: str
             <span className="coding-diff-number" role="cell" aria-label={line.oldLine ? t('Old line {n}').replace('{n}', String(line.oldLine)) : undefined}>{line.kind === 'note' ? '' : line.oldLine ?? ''}</span>
             <span className="coding-diff-number" role="cell" aria-label={line.newLine ? t('New line {n}').replace('{n}', String(line.newLine)) : undefined}>{line.kind === 'note' ? '' : line.newLine ?? ''}</span>
             <span className="coding-diff-marker" role="cell" aria-hidden="true">{line.kind === 'add' ? '+' : line.kind === 'delete' ? '−' : ''}</span>
-            <span className="coding-diff-code" role="cell">{line.kind === 'note' || !highlight ? <code data-i18n-ignore>{line.text}</code> : <ReviewCode content={line.text} path={file.path}/>}</span>
+            <span className="coding-diff-code" role="cell">{line.kind === 'note' || !highlight ? <code data-i18n-ignore>{line.text}</code> : <ReviewCode content={line.text} path={file.path} marks={wordMarks[hunkIndex]?.get(lineIndex)}/>}</span>
           </div>)}
         </div>)}
       </div>)}

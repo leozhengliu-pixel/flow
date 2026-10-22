@@ -350,31 +350,15 @@ describe('composer', () => {
     expect(screen.queryByRole('list', { name: 'Queued messages' })).toBeNull()
   })
 
-  it('asks for input in a purple frame with option chips; the recommended one is preselected and Continue sends it', async () => {
-    const user = userEvent.setup()
-    vi.mocked(api.promptCodingSession).mockResolvedValue(makeSession({ state: 'pending', phase: 'queued' }))
-    stream(activity('elicitation', 'Which repository should I work in?', { signal: 'select', signalMetadata: { selected: 'env-api', options: [{ value: 'env-web', label: 'Web' }, { value: 'env-api', label: 'API', recommended: true }] } }))
+  it('renders a choice question as text with bulleted options, without answer buttons or a frame', async () => {
+    stream(activity('elicitation', 'Should shout() append an exclamation mark?', { signal: 'select', signalMetadata: { options: [{ value: 'Yes' }, { value: 'No', label: 'No thanks' }] } }))
     renderConversation(makeSession({ state: 'awaitingInput', phase: 'awaitingUser' }))
-    expect(await screen.findByText('Which repository should I work in?')).toBeVisible()
-    expect(screen.getByText('Input needed to continue')).toBeVisible()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'API' })).toHaveAttribute('aria-pressed', 'true'))
-    expect(screen.getByRole('button', { name: 'Web' })).toHaveAttribute('aria-pressed', 'false')
-    await user.click(screen.getByRole('button', { name: 'Continue with selected option' }))
-    expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'env-api', undefined, [])
-  })
-
-  it('uses a dropdown for many options and disables send until one is chosen', async () => {
-    const user = userEvent.setup()
-    vi.mocked(api.promptCodingSession).mockResolvedValue(makeSession({ state: 'pending', phase: 'queued' }))
-    stream(activity('elicitation', 'Which one?', { signal: 'select', signalMetadata: { options: [{ value: 'a', label: 'Alpha' }, { value: 'b', label: 'Beta' }, { value: 'c', label: 'Gamma' }] } }))
-    renderConversation(makeSession({ state: 'awaitingInput', phase: 'awaitingUser' }))
-    await screen.findByText('Which one?')
+    // The rich-text body is the markdown source in jsdom: the question, then one bullet per option.
+    expect(await screen.findByText(/^Should shout\(\) append an exclamation mark\?\s+- Yes\s+- No thanks$/)).toBeVisible()
+    expect(screen.queryByText('Input needed to continue')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Yes' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Select an option' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Submit message' })).toBeDisabled()
-    await user.click(screen.getByRole('button', { name: 'Select an option' }))
-    await user.click(await screen.findByRole('menuitem', { name: 'Beta' }))
-    await user.type(screen.getByRole('textbox', { name: 'Send a message to Flow' }), 'and hurry')
-    await user.click(screen.getByRole('button', { name: 'Continue with selected option' }))
-    expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'b\n\nand hurry', undefined, [])
   })
 
   it('asks the viewer to connect an account for an auth question', async () => {
