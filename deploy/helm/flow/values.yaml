@@ -477,7 +477,12 @@ coding:
     # USD per million tokens, e.g.
     #   claude-sonnet-4-5: {input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75}
     prices: {}
-    # Model picker metadata by model id: {label, group, description}.
+    # Model metadata by model id (FLOW_CODING_MODEL_INFO): {label, group,
+    # description, tier, contextWindow}. contextWindow (integer tokens,
+    # 1024..10000000) is written as model_context_window into the Codex
+    # sandbox config for that model only; leave it out for Codex's default.
+    # Declare what the upstream provider/gateway actually supports, e.g.
+    #   glm-5: {label: GLM-5, contextWindow: 200000}
     modelInfo: {}
   # USD per sandbox-hour by size.
   runtimePrices:

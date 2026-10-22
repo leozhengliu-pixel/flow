@@ -63,6 +63,12 @@ export interface BootstrapHarness {
   model: string
   reasoningEffort?: string
   resumeId?: string
+  /**
+   * Additive: the model's context window in tokens (FLOW_CODING_MODEL_INFO
+   * contextWindow), sent only for Codex sessions whose model has one. The
+   * Codex adapter writes it as model_context_window; absent, no line.
+   */
+  contextWindow?: number
 }
 
 export interface BootstrapLLM {

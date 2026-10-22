@@ -86,6 +86,17 @@ func ResolveModel(llm config.CodingLLMConfig, harness, selection string) (model 
 	return selection, true
 }
 
+// CodexContextWindow is the context window (tokens) a Codex session's
+// config.toml declares for model: FLOW_CODING_MODEL_INFO contextWindow, or
+// 0 (write nothing, Codex's default) when it is unset or the session runs
+// another harness. There are no built-in windows: Flow never guesses one.
+func CodexContextWindow(llm config.CodingLLMConfig, harness, model string) int64 {
+	if NormalizeHarness(harness) != domain.CodingHarnessCodex {
+		return 0
+	}
+	return llm.ModelInfo[model].ContextWindow
+}
+
 // Model tiers Auto routes between, least to most capable.
 const (
 	ModelTierSmall    = "small"

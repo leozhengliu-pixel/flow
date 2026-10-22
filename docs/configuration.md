@@ -1433,7 +1433,7 @@ Sandboxes never receive model API keys. Claude Code, Codex and the open-source h
 | `FLOW_CODING_MODELS_CLAUDE_CODE` | `claude-sonnet-4-5,claude-opus-4-1` | Claude Code model catalog. |
 | `FLOW_CODING_MODELS_CODEX` | `gpt-5-codex,gpt-5` | Codex model catalog. |
 | `FLOW_CODING_MODELS_OPEN_SOURCE` | empty | Open-source model catalog. |
-| `FLOW_CODING_MODEL_INFO` | empty | JSON display metadata for the model pickers: `{"gpt-5-codex":{"label":"GPT-5 Codex","group":"frontier","description":"Strong reasoning for multi-file changes","tier":"standard"}}`. `group` is `frontier` or `other`; `tier` (`small`, `standard` or `large`) is the tier Auto routes a task to (unknown models are `standard`); any field left out falls back to Flow's built-in labels and descriptions for well-known models, the model id, and a positional group (the first three catalog entries are Frontier, the rest Other models). Pickers list Auto, then Frontier, then Other models. |
+| `FLOW_CODING_MODEL_INFO` | empty | JSON display metadata for the model pickers: `{"gpt-5-codex":{"label":"GPT-5 Codex","group":"frontier","description":"Strong reasoning for multi-file changes","tier":"standard"}}`. `group` is `frontier` or `other`; `tier` (`small`, `standard` or `large`) is the tier Auto routes a task to (unknown models are `standard`); any field left out falls back to Flow's built-in labels and descriptions for well-known models, the model id, and a positional group (the first three catalog entries are Frontier, the rest Other models). Pickers list Auto, then Frontier, then Other models. `contextWindow` is the model's context window for Codex sessions (see [Codex context window](#codex-context-window)). Startup fails with a `FLOW_CODING_MODEL_INFO` error naming the model when an entry is invalid. |
 | `FLOW_CODING_MODEL_PRICES` | empty | JSON, USD per million tokens: `{"claude-sonnet-4-5":{"input":3,"output":15,"cacheRead":0.3,"cacheWrite":3.75}}`. Unpriced models are recorded at zero cost, with a warning log and the `flow_coding_llm_unpriced_total` metric. |
 | `FLOW_CODING_LLM_TIMEOUT` | `10m` | Upper bound for each proxied request, including streaming. |
 
@@ -1449,6 +1449,29 @@ How the proxy behaves:
   - rate: 240 requests per minute per session, with a burst of 60;
   - concurrency: 16 in-flight requests per session.
 - **Logs.** Logs carry ids, the model, the status, token counts and the cost. They never contain prompts, completions, tokens or keys.
+
+### Codex context window
+
+Codex knows the context window only of the models it ships metadata for. For any other model in `FLOW_CODING_MODELS_CODEX` (for example a GLM, DeepSeek or Qwen model behind an OpenAI-compatible gateway), declare it per model with `contextWindow` in `FLOW_CODING_MODEL_INFO` (Helm: `coding.llm.modelInfo`):
+
+```sh
+FLOW_CODING_MODELS_CODEX=glm-5,gpt-5-codex
+FLOW_CODING_MODEL_INFO='{"glm-5":{"label":"GLM-5","contextWindow":200000}}'
+```
+
+- **What it does.** Flow sends the value to the session's sandbox (bootstrap `harness.contextWindow`), and the runner writes it as `model_context_window = 200000` into `~/.codex/config.toml`. Only Codex sessions on that model get it: other Codex models, Claude Code, OpenCode, the built-in agent and the standalone agent worker are unaffected.
+- **Accepted values.** A JSON integer from 1024 to 10000000 (tokens). Strings (`"200000"`), decimals (`200000.5`, `2e5`), zero, negative numbers and anything above 10000000 (so anything beyond JavaScript's safe-integer range) are rejected at startup. The runner checks again and ignores, with a warning in its log, a value that is not such an integer.
+- **Unset.** Leave `contextWindow` out or set it to `null`: no `model_context_window` line is written and Codex keeps its own default, exactly as before. There are no built-in values; Flow never guesses a window.
+- **When it takes effect.** The API reads `FLOW_CODING_MODEL_INFO` when it starts, so restart (or roll out) the API after changing it. A sandbox fetches its bootstrap once when it starts (a new session, or a session woken or restored from a snapshot), and the runner rewrites `config.toml` from it before every turn, both the first `codex exec` and each `codex exec resume` follow-up. A sandbox that is already running keeps the value it started with until it next starts. Editing `config.toml` by hand inside the sandbox does not stick, because the next turn overwrites it.
+- **Declare the real limit.** Set the window the model actually supports through your provider or gateway. It tells Codex how much history fits; it does not raise any upstream limit, and requests over the provider's hard limit still fail there.
+
+Three different limits:
+
+| Setting | Controls | Set by Flow |
+|---|---|---|
+| `model_context_window` (`contextWindow`) | Total tokens (input plus output) the model accepts; Codex uses it for its context-usage figure and to decide when to compact | Only when configured, as above |
+| `model_auto_compact_token_limit` | The token count at which Codex compacts the conversation | Never. Codex applies its own default |
+| `FLOW_AGENT_MAX_OUTPUT_TOKENS` | Output tokens per turn of Flow's built-in agent | Not used by coding sessions |
 
 ### Secrets and commit signing
 

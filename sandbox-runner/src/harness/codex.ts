@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { CodexMapper } from '../mapping/codex.js'
 import type { MapperOptions, StreamMapper } from '../mapping/common.js'
+import type { Logger } from '../log.js'
 import { gatewayMcpServers, turnPrompt, withoutProviderKeys, type HarnessAdapter, type HarnessContext, type HarnessInvocation } from './types.js'
 
 // Codex CLI, pinned in the image (deploy/sandbox-image/Dockerfile ARGs).
@@ -22,6 +23,24 @@ function tomlInlineTable(values: Record<string, string>): string {
   return `{ ${entries.join(', ')} }`
 }
 
+// Bounds of harness.contextWindow, mirroring the API's MinContextWindow /
+// MaxContextWindow (api/internal/config/coding.go).
+export const MIN_CONTEXT_WINDOW = 1024
+export const MAX_CONTEXT_WINDOW = 10_000_000
+
+/**
+ * The bootstrap's context window when usable: an integer number within the
+ * bounds. Anything else (string, negative, fractional, out of range) is
+ * ignored with a warning (defence in depth; the API validates first), so
+ * Codex keeps its default.
+ */
+export function codexContextWindow(value: unknown, logger?: Logger): number | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= MIN_CONTEXT_WINDOW && value <= MAX_CONTEXT_WINDOW) return value
+  logger?.warn('ignoring invalid harness.contextWindow', { value: String(value).slice(0, 40), type: typeof value })
+  return undefined
+}
+
 export function codexConfig(ctx: HarnessContext): string {
   const { bootstrap } = ctx
   const lines = [
@@ -30,6 +49,10 @@ export function codexConfig(ctx: HarnessContext): string {
     'model_provider = "flow"',
   ]
   if (bootstrap.harness.reasoningEffort) lines.push(`model_reasoning_effort = ${tomlString(bootstrap.harness.reasoningEffort)}`)
+  // The model's context window, an integer TOML value. Flow never writes
+  // model_auto_compact_token_limit: Codex keeps its own threshold.
+  const contextWindow = codexContextWindow(bootstrap.harness.contextWindow, ctx.logger)
+  if (contextWindow !== undefined) lines.push(`model_context_window = ${contextWindow}`)
   lines.push(
     'approval_policy = "never"',
     'sandbox_mode = "danger-full-access"',

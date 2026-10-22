@@ -211,7 +211,7 @@ expected_values = {
     "FLOW_CODING_K8S_PROXY_POD_SELECTOR": "app.kubernetes.io/instance=flow,app.kubernetes.io/name=flow-egress",
     "FLOW_CODING_MODEL_PRICES": '{"claude-sonnet-4-5":{"input":3,"output":15}}',
     "FLOW_CODING_LLM_OPENAI_WIRE_API": "chat",
-    "FLOW_CODING_MODEL_INFO": '{"gpt-5-codex":{"description":"Multi-file changes","group":"frontier","label":"GPT-5 Codex"}}',
+    "FLOW_CODING_MODEL_INFO": '{"glm-5":{"contextWindow":200000,"label":"GLM-5"},"gpt-5-codex":{"description":"Multi-file changes","group":"frontier","label":"GPT-5 Codex"}}',
     "FLOW_CODING_LOCAL_COMMAND": "/opt/development/launcher",
     "FLOW_CODING_LOCAL_ROOT": "/tmp/development-sandboxes",
     "FLOW_CODING_EGRESS_ALLOWLIST": ".corp-mirror.example.net,pypi.internal.example.com",
