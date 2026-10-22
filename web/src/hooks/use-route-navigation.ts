@@ -1,5 +1,6 @@
 import { startTransition, useCallback, useEffect, useRef } from 'react'
 import { useLocation, useNavigate, type NavigateFunction, type NavigateOptions, type To } from 'react-router-dom'
+import { registerAppNavigator } from '@/lib/app-navigation'
 import { nextNavigationState } from '@/lib/navigation-context'
 import { clientNavigationTarget, preloadRoute } from '@/lib/route-preload'
 
@@ -59,5 +60,6 @@ export function useRouteNavigation() {
       document.removeEventListener('click', click)
     }
   }, [navigateTo])
+  useEffect(() => registerAppNavigator(path => { void navigateTo(path) }), [navigateTo])
   return navigateTo
 }

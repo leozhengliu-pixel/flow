@@ -32,17 +32,20 @@ export function TitleTooltipBridge({ delay = TOOLTIP_DELAY, skipDelay = TOOLTIP_
       if (element.hasAttribute('data-flow-title-label')) { element.removeAttribute('aria-label'); element.removeAttribute('data-flow-title-label') }
     }
     const capture = (target: EventTarget | null) => {
-      const element = target instanceof Element ? target.closest<HTMLElement>('[title]') : null
+      const element = target instanceof Element ? target.closest<HTMLElement>('[title], [data-tooltip-text]') : null
       if (!element || element === document.documentElement || element === document.body || element.closest('[data-native-title]')) return null
-      const text = element.getAttribute('title')?.trim()
+      const text = (element.getAttribute('title') ?? element.getAttribute('data-tooltip-text'))?.trim()
       return text ? { element, text } : null
     }
     const activate = (element: HTMLElement, text: string, immediate: boolean) => {
       if (active.current === element) return
       release()
       active.current = element
-      element.setAttribute('data-flow-title', element.getAttribute('title') ?? text)
-      element.removeAttribute('title')
+      // `data-tooltip-text` is read as is and never rewritten, for elements an editor owns and would redraw on an attribute change.
+      if (element.hasAttribute('title')) {
+        element.setAttribute('data-flow-title', element.getAttribute('title') ?? text)
+        element.removeAttribute('title')
+      }
       if (!element.hasAttribute('aria-label') && !element.hasAttribute('aria-labelledby') && !element.textContent?.trim()) {
         element.setAttribute('aria-label', text)
         element.setAttribute('data-flow-title-label', '')

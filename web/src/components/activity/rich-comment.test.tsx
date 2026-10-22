@@ -1,5 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { registerAppNavigator } from '@/lib/app-navigation'
 import { RichComment } from './rich-comment'
 
 const markdown = `## Heading
@@ -75,5 +77,35 @@ describe('RichComment markdown rendering', () => {
     view.rerender(<RichComment body="ignored markdown" data={richDocument} version={3}/>)
     expect(await screen.findByRole('heading', { name: 'Structured' })).toBeVisible()
     expect(screen.queryByRole('heading', { name: 'After' })).not.toBeInTheDocument()
+  })
+})
+
+describe('RichComment links', () => {
+  beforeAll(() => {
+    Range.prototype.getClientRects = () => [] as unknown as DOMRectList
+    Range.prototype.getBoundingClientRect = () => new DOMRect()
+    Document.prototype.elementFromPoint = function elementFromPoint(this: Document) { return this.body }
+  })
+  it('opens an external link in a new tab and a workspace link in-app, and blocks unsafe schemes', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    const navigate = vi.fn()
+    const unregister = registerAppNavigator(navigate)
+    try {
+      render(<RichComment body={'[outside](https://example.com/a) and [inside](/acme/issue/FLO-1/title) and [bad](javascript:alert(1))'}/>)
+      const user = userEvent.setup()
+      await user.click(await screen.findByRole('link', { name: 'outside' }))
+      expect(open).toHaveBeenCalledWith('https://example.com/a', '_blank', 'noopener,noreferrer')
+      await user.click(screen.getByRole('link', { name: 'inside' }))
+      expect(navigate).toHaveBeenCalledWith('/acme/issue/FLO-1/title')
+      expect(open).toHaveBeenCalledTimes(1)
+      expect(screen.queryByRole('link', { name: 'bad' })).toBeNull()
+      await user.keyboard('{Meta>}')
+      await user.click(screen.getByRole('link', { name: 'inside' }))
+      await user.keyboard('{/Meta}')
+      expect(open).toHaveBeenCalledTimes(2)
+    } finally {
+      unregister()
+      open.mockRestore()
+    }
   })
 })

@@ -4,6 +4,7 @@ import { Markdown } from "@tiptap/markdown";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { AgentEntityDataContext, useAgentEntityData } from "@/components/agent/agent-entity-data";
+import { LinkBehavior } from "@/components/editor/link-behavior";
 import { MentionLinksExtension } from "@/components/editor/mentions/mention-links-extension";
 import { insertMentionOption, type MentionOption } from "@/components/editor/mentions/mention-options";
 import { useMentionConversion } from "@/components/editor/mentions/use-mention-conversion";
@@ -112,6 +113,7 @@ function LoopInstructionsEditorBody({
     editable: !readOnly,
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3, 4] }, link: { openOnClick: false, autolink: true } }),
+      LinkBehavior,
       Markdown,
       LoopEntityNode,
       MentionLinksExtension.configure({ getData: () => entityDataRef.current }),

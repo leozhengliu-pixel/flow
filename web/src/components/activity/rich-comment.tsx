@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { Markdown } from '@tiptap/markdown'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import { LinkBehavior } from '@/components/editor/link-behavior'
 import { EmbedNode } from '@/components/editor/embeds/embed-extension'
 import { MentionChipNode } from '@/components/editor/mentions/mention-chip-extension'
 import { useMentionConversion } from '@/components/editor/mentions/use-mention-conversion'
@@ -18,7 +19,7 @@ export function RichComment({ body, data, version }: { body: string; data?: Reco
   const editor = useEditor({
     immediatelyRender: false,
     editable: false,
-    extensions: [StarterKit.configure({ link: { openOnClick: false, autolink: true, linkOnPaste: true } }), Markdown, MentionChipNode, EmbedNode, DescriptionImage, DescriptionFile, DescriptionVideo, ...structuredBlocks],
+    extensions: [StarterKit.configure({ link: { openOnClick: false, autolink: true, linkOnPaste: true } }), LinkBehavior, Markdown, MentionChipNode, EmbedNode, DescriptionImage, DescriptionFile, DescriptionVideo, ...structuredBlocks],
     content: initial.content,
     contentType: initial.contentType,
     editorProps: { attributes: { role: 'document', 'aria-label': t('Comment') } },
