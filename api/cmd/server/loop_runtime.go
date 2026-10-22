@@ -389,7 +389,15 @@ type loopRunRecorder struct {
 	// the run: the agent is answering a reply on the run page.
 	reply *domain.LoopRunReply
 	// skills are the replier's skills, added to the system prompt for the answer.
-	skills      []domain.PersonalAgentSkill
+	skills []domain.PersonalAgentSkill
+	// answering: the agent answers a reply, where a plain-text answer is a
+	// complete result; otherwise it runs the loop's work and ends with
+	// finish_run (see loopCompletionCheck).
+	answering bool
+	// replySummary is the finish_run report of a reply's answer.
+	replySummary *domain.LoopRunSummary
+	// ending is set when the agent stopped without finishing its work.
+	ending      *loopRunEnding
 	order       int
 	lastSave    time.Time
 	lastPublish time.Time
@@ -523,15 +531,27 @@ func (rec *loopRunRecorder) addRetries(count int) {
 func (rec *loopRunRecorder) setSummary(summary *domain.LoopRunSummary) {
 	if rec.reply == nil {
 		rec.run.Summary = summary
+	} else {
+		rec.replySummary = summary
 	}
 	rec.logEvent("summary", summary)
 }
 
 func (rec *loopRunRecorder) summary() *domain.LoopRunSummary {
 	if rec.reply != nil {
-		return nil
+		return rec.replySummary
 	}
 	return rec.run.Summary
+}
+
+// endUnfinished records that the agent stopped without finishing: the run
+// (or reply) is saved with the reason, and a run's summary says so.
+func (rec *loopRunRecorder) endUnfinished(reason, message, text string) {
+	rec.ending = &loopRunEnding{reason: reason, message: message}
+	if rec.summary() == nil {
+		rec.setSummary(&domain.LoopRunSummary{Status: "incomplete", Summary: firstNonEmpty(text, message), NotDone: []string{message}})
+	}
+	rec.logEvent("unfinished", map[string]string{"reason": reason, "message": message})
 }
 
 // setOutput records streamed text and persists it on the throttle.
@@ -572,7 +592,7 @@ func (s *server) finishLoopRun(ctx context.Context, workspace string, loop domai
 			run.CancelledBy = s.loopRunRegistry().cancelledBy(run.ID)
 		}
 	} else {
-		run.Status, run.FailureReason, run.Error = acceptLoopRun(loop, &run)
+		run.Status, run.FailureReason, run.Error = acceptLoopRun(loop, &run, rec.ending)
 	}
 	events := append(rec.events, loopRunEvent("finished", map[string]string{"status": run.Status, "reason": run.FailureReason, "error": run.Error}))
 	rec.events = nil
@@ -727,7 +747,7 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 		}
 		return nil
 	}
-	toolCalls := 0
+	toolCalls, corrections := 0, 0
 	for turnIndex := 0; ; turnIndex++ {
 		final := turnIndex >= limits.MaxTurns
 		if final {
@@ -767,10 +787,28 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 			turn.ToolCalls = nil
 		}
 		if len(turn.ToolCalls) == 0 {
-			output += turn.Text
-			rec.setOutputNow(strings.TrimSpace(output))
-			if rec.output() == "" && rec.toolCount() == 0 && rec.summary() == nil {
+			text := strings.TrimSpace(turn.Text)
+			if text == "" && strings.TrimSpace(output) == "" && rec.toolCount() == 0 && rec.summary() == nil {
+				rec.setOutputNow("")
 				return &loopRunError{reason: "empty_response", message: "Flow Agent returned an empty response"}
+			}
+			if text != "" {
+				output = strings.TrimSpace(strings.TrimSpace(output) + "\n\n" + text)
+			}
+			rec.setOutputNow(strings.TrimSpace(output))
+			if final {
+				// The tool turns ran out before the agent reported it was done.
+				rec.endUnfinished("budget_exhausted", fmt.Sprintf("The run used all %d tool turns before it finished; the summary is what it had done by then", limits.MaxTurns), text)
+				return nil
+			}
+			nudge, ending := loopCompletionCheck(rec, text, corrections)
+			if nudge != "" {
+				corrections++
+				messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, Reasoning: turn.Reasoning}, agentProviderMessage{Role: "user", Content: nudge})
+				continue
+			}
+			if ending != nil {
+				rec.endUnfinished(ending.reason, ending.message, text)
 			}
 			return nil
 		}

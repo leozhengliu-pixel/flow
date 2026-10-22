@@ -108,7 +108,7 @@ func waitForLoopRun(t *testing.T, handler http.Handler, loopID string) domain.Lo
 }
 
 func TestScheduledLoopRunsNowAndRecordsOutput(t *testing.T) {
-	provider := &fakeLoopProvider{replies: []string{"Posted the weekly summary."}}
+	provider := &fakeLoopProvider{replies: []string{`tool:finish_run {"status":"done","summary":"Posted the weekly summary."}`}}
 	_, handler := newLoopTestServer(t, provider)
 	loop := requestJSON[domain.Loop](t, handler, http.MethodPost, "/api/loops", map[string]any{"name": "Weekly summary", "instructions": "Summarize open bugs.", "status": "published"}, http.StatusCreated)
 	run := requestJSON[domain.LoopRun](t, handler, http.MethodPost, "/api/loops/"+loop.ID+"/runs", nil, http.StatusAccepted)

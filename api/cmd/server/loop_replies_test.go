@@ -24,7 +24,7 @@ func waitForLoopReply(t *testing.T, handler http.Handler, loopID, runID string, 
 }
 
 func TestLoopRunRepliesContinueTheConversation(t *testing.T) {
-	provider := &fakeLoopProvider{replies: []string{"Posted the weekly summary.", "It covered 3 bugs.", "Done."}}
+	provider := &fakeLoopProvider{replies: []string{`tool:finish_run {"status":"done","summary":"Posted the weekly summary."}`, "It covered 3 bugs.", "Done."}}
 	_, handler := newLoopTestServer(t, provider)
 	loop := requestJSON[domain.Loop](t, handler, http.MethodPost, "/api/loops", map[string]any{"name": "Weekly summary", "instructions": "Summarize open bugs.", "status": "published"}, http.StatusCreated)
 	started := requestJSON[domain.LoopRun](t, handler, http.MethodPost, "/api/loops/"+loop.ID+"/runs", nil, http.StatusAccepted)

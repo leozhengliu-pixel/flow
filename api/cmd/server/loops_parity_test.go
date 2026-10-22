@@ -117,7 +117,8 @@ func TestLoopRunTurnLimitEndsWithSummaryAndRecordsProgress(t *testing.T) {
 		t.Fatalf("trigger label = %q", run.TriggerLabel)
 	}
 	finished := waitForRun(t, handler, loop.ID, run.ID)
-	if finished.Status != "completed" || finished.Output != "Checked every team; nothing needed changes." {
+	// The tool turns ran out before finish_run: the summary is kept, the run is not completed.
+	if finished.Status != "needs_review" || finished.FailureReason != "budget_exhausted" || finished.Output != "Checked every team; nothing needed changes." {
 		t.Fatalf("finished = %#v", finished)
 	}
 	if len(finished.Steps) != 1 || finished.Steps[0].Title != "Reviewing issues" || finished.Steps[0].Message == "" || finished.Steps[0].Order != 1 {
@@ -130,7 +131,7 @@ func TestLoopRunTurnLimitEndsWithSummaryAndRecordsProgress(t *testing.T) {
 		t.Fatalf("live run = %#v", seen)
 	}
 	single := requestJSON[domain.LoopRun](t, handler, http.MethodGet, "/api/loops/"+loop.ID+"/runs/"+run.ID, nil, http.StatusOK)
-	if single.ID != run.ID || single.Status != "completed" {
+	if single.ID != run.ID || single.Status != "needs_review" {
 		t.Fatalf("single run = %#v", single)
 	}
 	provider.mu.Lock()

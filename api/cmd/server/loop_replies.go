@@ -176,7 +176,7 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		defer loopGuards.release(guardKey)
 		answer := reply
-		recorder := &loopRunRecorder{s: s, workspace: workspace, run: run, reply: &answer, skills: skills}
+		recorder := &loopRunRecorder{s: s, workspace: workspace, run: run, reply: &answer, skills: skills, answering: true}
 		s.runLoopWork(workspace, run.ID, limits, func(ctx context.Context) error {
 			return s.executeLoopRun(ctx, workspace, current, trigger, recorder, history...)
 		}, func(ctx context.Context, runErr error) {
@@ -318,12 +318,22 @@ func (s *server) finishLoopRunReply(ctx context.Context, workspace string, rec *
 	reply := *rec.reply
 	now := time.Now().UTC()
 	reply.FinishedAt = &now
-	reply.Status = "completed"
-	if runErr != nil || ctx.Err() != nil {
+	reply.Status, reply.FailureReason, reply.Error = "completed", "", ""
+	switch {
+	case runErr != nil || ctx.Err() != nil:
 		if runErr == nil {
 			runErr = ctx.Err()
 		}
 		reply.Status, reply.FailureReason, reply.Error = classifyLoopRunFailure(ctx, runErr, s.loopLimits())
+	case rec.ending != nil:
+		// The answer stopped before its work was done: not a completed reply.
+		reply.Status, reply.FailureReason, reply.Error = "failed", rec.ending.reason, rec.ending.message
+	case rec.replySummary != nil && rec.replySummary.Status == "incomplete":
+		message := "The agent reported unfinished work"
+		if len(rec.replySummary.NotDone) > 0 {
+			message += ": " + strings.Join(rec.replySummary.NotDone, "; ")
+		}
+		reply.Status, reply.FailureReason, reply.Error = "failed", "incomplete", message
 	}
 	reply.Output = strings.TrimSpace(reply.Output)
 	reply.Steps, reply.ToolCalls = slices.Clone(reply.Steps), slices.Clone(reply.ToolCalls)
