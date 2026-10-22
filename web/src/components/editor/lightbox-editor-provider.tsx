@@ -8,7 +8,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
-import { Clipboard, Download, Link2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Clipboard, Download, Link2, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { copyImage, copyText, downloadImage } from './lightbox-actions'
 
@@ -81,16 +81,26 @@ function LightboxEditorProviderInner({
   const commentHash = useCommentHashPopover(enableCommentHashPopover)
   const [comment, setComment] = useState<LightboxComment | undefined>()
   const [zoom, setZoom] = useState(100)
+  const [zoomed, setZoomed] = useState(false)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const imageRef = useRef<HTMLImageElement | null>(null)
+  const stageRef = useRef<HTMLDivElement | null>(null)
+  const flyInRef = useRef(false)
 
   const open = useCallback((items: LightboxItem[], index = 0) => {
     if (!items.length) return
     const nextIndex = Math.max(0, Math.min(index, items.length - 1))
     indexRef.current = nextIndex
+    flyInRef.current = true
+    setZoomed(false)
+    setPan({ x: 0, y: 0 })
     setSession({ items, index: nextIndex })
   }, [indexRef])
 
   const close = useCallback(() => {
     indexRef.current = undefined
+    setZoomed(false)
+    setPan({ x: 0, y: 0 })
     setSession(null)
   }, [indexRef])
 
@@ -103,6 +113,8 @@ function LightboxEditorProviderInner({
         editorInstanceRef.current = { ...(editorInstanceRef.current as object | null), lightboxIndex: clamped }
       }
       indexRef.current = clamped
+      setZoomed(false)
+      setPan({ x: 0, y: 0 })
       return { ...current, index: clamped }
     })
   }, [editorInstanceRef, indexRef])
@@ -130,11 +142,11 @@ function LightboxEditorProviderInner({
         close()
         return
       }
-      if (event.key === 'ArrowLeft') {
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
         event.preventDefault()
         setIndex(session.index - 1)
       }
-      if (event.key === 'ArrowRight') {
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
         event.preventDefault()
         setIndex(session.index + 1)
       }
@@ -153,6 +165,39 @@ function LightboxEditorProviderInner({
 
   const active = session?.items[session.index]
 
+  /** The picture grows out of the place it was clicked in, like the page it sits in. */
+  const flyIn = useCallback((image: HTMLImageElement) => {
+    if (!flyInRef.current) return
+    flyInRef.current = false
+    const source = [...document.querySelectorAll('img')].find(
+      candidate => candidate !== image && candidate.getAttribute('src') === image.getAttribute('src') && !candidate.closest('.flow-lightbox-root'),
+    )
+    if (!source || typeof image.animate !== 'function') return
+    const from = source.getBoundingClientRect()
+    const to = image.getBoundingClientRect()
+    if (!from.width || !to.width) return
+    image.animate(
+      [
+        { transform: `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${from.width / to.width}, ${from.height / to.height})` },
+        { transform: 'none' },
+      ],
+      { duration: 300, easing: 'cubic-bezier(.2,.9,.3,1)' },
+    )
+  }, [])
+
+  /** Scrolling a zoomed picture moves it around inside the stage. */
+  const panBy = useCallback((deltaX: number, deltaY: number) => {
+    const image = imageRef.current
+    const stage = stageRef.current
+    if (!image || !stage) return
+    const limitX = Math.max(0, (image.clientWidth * 2 - stage.clientWidth) / 2)
+    const limitY = Math.max(0, (image.clientHeight * 2 - stage.clientHeight) / 2)
+    setPan(current => ({
+      x: Math.max(-limitX, Math.min(limitX, current.x - deltaX)),
+      y: Math.max(-limitY, Math.min(limitY, current.y - deltaY)),
+    }))
+  }, [])
+
   return (
     <LightboxEditorContext.Provider value={value}>
       {children}
@@ -161,52 +206,40 @@ function LightboxEditorProviderInner({
           aria-label="View image"
           className="flow-lightbox-root"
           data-translucent="false"
-          onClick={close}
+          onClick={event => { if (!(event.target as HTMLElement).closest('button, img')) close() }}
           role="dialog"
           style={{
             ['--flow-lightbox-inset-left' as string]: `${insets.left}px`,
             ['--flow-lightbox-inset-right' as string]: `${insets.right}px`,
           }}
         >
-          <div className="flow-lightbox-bar" onClick={event => event.stopPropagation()}>
-            <span className="flow-lightbox-zoom">{zoom}%</span>
-            <div className="flow-lightbox-actions">
+          <div className="flow-lightbox-bar">
+            <span className="flow-lightbox-cluster start"><button className="flow-lightbox-zoom" onClick={() => setZoomed(false)} type="button">{zoom * (zoomed ? 2 : 1)}%</button></span>
+            <span className="flow-lightbox-cluster end">
               <button aria-label="Download" onClick={() => downloadImage(active)} type="button"><Download size={14}/></button>
               <button aria-label="Copy image" onClick={() => void copyImage(active)} type="button"><Clipboard size={14}/></button>
               <button aria-label="Copy link" onClick={() => void copyText(active.src)} type="button"><Link2 size={14}/></button>
+              {session.items.length > 1 && (
+                <>
+                  <span aria-hidden className="flow-lightbox-separator"/>
+                  <button aria-label="Next" disabled={session.index >= session.items.length - 1} onClick={() => setIndex(session.index + 1)} type="button"><ArrowDown size={14}/></button>
+                  <button aria-label="Previous" disabled={session.index === 0} onClick={() => setIndex(session.index - 1)} type="button"><ArrowUp size={14}/></button>
+                </>
+              )}
               <span aria-hidden className="flow-lightbox-separator"/>
               <button aria-label="Close" className="flow-lightbox-close" onClick={close} type="button"><X size={14}/></button>
-            </div>
+            </span>
           </div>
-          <div className="flow-lightbox-stage" onClick={event => event.stopPropagation()}>
-            {session.items.length > 1 && (
-              <button
-                aria-label="Previous image"
-                className="flow-lightbox-nav prev"
-                disabled={session.index === 0}
-                onClick={() => setIndex(session.index - 1)}
-                type="button"
-              >
-                ‹
-              </button>
-            )}
-            <img alt={active.alt ?? ''} onLoad={event => setZoom(zoomOf(event.currentTarget))} src={active.src} />
-            {session.items.length > 1 && (
-              <button
-                aria-label="Next image"
-                className="flow-lightbox-nav next"
-                disabled={session.index >= session.items.length - 1}
-                onClick={() => setIndex(session.index + 1)}
-                type="button"
-              >
-                ›
-              </button>
-            )}
-            {session.items.length > 1 && (
-              <span className="flow-lightbox-index">
-                {session.index + 1} / {session.items.length}
-              </span>
-            )}
+          <div className="flow-lightbox-stage" onWheel={event => { if (zoomed) panBy(event.deltaX, event.deltaY) }} ref={stageRef}>
+            <img
+              alt={active.alt ?? ''}
+              data-zoomed={zoomed}
+              onClick={event => { event.stopPropagation(); setZoomed(value => !value); setPan({ x: 0, y: 0 }) }}
+              onLoad={event => { setZoom(zoomOf(event.currentTarget)); flyIn(event.currentTarget) }}
+              ref={imageRef}
+              src={active.src}
+              style={zoomed ? { transform: `translate(${pan.x}px, ${pan.y}px) scale(2)` } : undefined}
+            />
           </div>
           {active.alt && <p className="flow-lightbox-caption" data-i18n-ignore onClick={event => event.stopPropagation()}>{active.alt}</p>}
           {comment && (

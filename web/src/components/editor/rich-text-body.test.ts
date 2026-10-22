@@ -62,7 +62,7 @@ describe('rich-text body parity styles', () => {
     expect(tokens).toContain(':root{--lightbox-bg:lch(5.52% .4 272);--lightbox-checker:lch(90.451% 1.2 272 / .08);--lightbox-caption-bg:lch(5.52% .4 272 / .8)}')
     expect(tokens).toContain(':root[data-theme="light"]{--lightbox-bg:lch(97.94% .5 282);--lightbox-checker:lch(19.588% 1.25 282 / .08);--lightbox-caption-bg:lch(97.94% .5 282 / .8)}')
     expect(lightbox).toContain('repeating-conic-gradient(var(--lightbox-checker) 0% 25%, transparent 0% 50%) 0 0 / 8px 8px')
-    expect(lightbox).toMatch(/\.flow-lightbox-zoom \{[^}]*min-width: 56px;/)
+    expect(lightbox).toMatch(/\.flow-lightbox-zoom \{[^}]*padding: 0 10px;/)
   })
 
   it('draws bullets and numbers as hanging glyphs 24px left of the text, one glyph per nesting level', () => {
@@ -278,7 +278,7 @@ describe('embedded surface parity (floating chat panel, thread cards, reactions,
   it('shows the lightbox on a solid page with a zoom label, copy / link actions and the caption', () => {
     const css = flat(read('lightbox-editor.css'))
     expect(css).toContain('background: var(--lightbox-bg)')
-    for (const selector of ['.flow-lightbox-bar', '.flow-lightbox-zoom', '.flow-lightbox-actions', '.flow-lightbox-separator', '.flow-lightbox-caption']) expect(css, selector).toContain(selector)
+    for (const selector of ['.flow-lightbox-bar', '.flow-lightbox-zoom', '.flow-lightbox-cluster', '.flow-lightbox-separator', '.flow-lightbox-caption']) expect(css, selector).toContain(selector)
     const provider = read('lightbox-editor-provider.tsx')
     for (const label of ['Download', 'Copy image', 'Copy link', 'Close']) expect(provider).toContain(`aria-label="${label}"`)
   })

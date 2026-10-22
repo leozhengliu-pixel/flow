@@ -46,10 +46,10 @@ describe('LightboxEditorProvider (LS-0382)', () => {
     await user.click(screen.getByRole('button', { name: 'Open lightbox' }))
     expect(await screen.findByRole('dialog', { name: 'View image' })).toBeVisible()
     expect(screen.getByAltText('A')).toBeVisible()
-    expect(screen.getByText('1 / 2')).toBeVisible()
-    await user.click(screen.getByRole('button', { name: 'Next image' }))
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Next' }))
     expect(screen.getByAltText('B')).toBeVisible()
-    expect(screen.getByText('2 / 2')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.queryByRole('dialog', { name: 'View image' })).toBeNull()
   })
@@ -66,6 +66,24 @@ describe('LightboxEditorProvider (LS-0382)', () => {
     expect(dialog.querySelector('.flow-lightbox-zoom')).toHaveTextContent('100%')
     for (const name of ['Download', 'Copy image', 'Copy link', 'Close']) expect(screen.getByRole('button', { name })).toBeVisible()
     expect(dialog.querySelector('.flow-lightbox-caption')).toHaveTextContent('A')
+  })
+
+  it('zooms the picture on click and closes on a click anywhere outside it', async () => {
+    const user = userEvent.setup()
+    render(
+      <LightboxEditorProvider>
+        <OpenButton />
+      </LightboxEditorProvider>,
+    )
+    await user.click(screen.getByRole('button', { name: 'Open lightbox' }))
+    const dialog = await screen.findByRole('dialog', { name: 'View image' })
+    await user.click(screen.getByAltText('A'))
+    expect(screen.getByAltText('A')).toHaveAttribute('data-zoomed', 'true')
+    expect(dialog.querySelector('.flow-lightbox-zoom')).toHaveTextContent('200%')
+    await user.click(screen.getByAltText('A'))
+    expect(screen.getByAltText('A')).toHaveAttribute('data-zoomed', 'false')
+    await user.click(dialog.querySelector('.flow-lightbox-stage') as HTMLElement)
+    expect(screen.queryByRole('dialog', { name: 'View image' })).toBeNull()
   })
 
   it('opens via lightbox-bridge openLightbox', async () => {
@@ -94,7 +112,7 @@ describe('LightboxEditorProvider (LS-0382)', () => {
     }
     render(<Host />)
     await user.click(screen.getByRole('button', { name: 'Open lightbox' }))
-    await user.click(screen.getByRole('button', { name: 'Next image' }))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
     await user.click(screen.getByRole('button', { name: 'Read ref' }))
     expect(document.body.dataset.index).toBe('1')
   })
