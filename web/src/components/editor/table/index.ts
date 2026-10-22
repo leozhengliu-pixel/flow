@@ -4,3 +4,4 @@ export { FlowTable, FlowTableCell, FlowTableHeader, flowTableKit } from './flow-
 export { FlowTableView } from './flow-table-view'
 export { insertDefaultTable, tableSlashCommands, type TableSlashCommand } from './table-commands'
 export { TablePaste } from './table-paste'
+export { TableDefaultWidths, planColumnWidths, defaultColumnWidth } from './table-widths'

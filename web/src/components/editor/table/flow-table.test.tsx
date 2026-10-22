@@ -68,7 +68,7 @@ describe('default table', () => {
     const editor = await withTable()
     expect(columnResizingPluginKey.getState(editor.state)).toBeTruthy()
     const firstCell = tableJson(editor)!.content![0].content![0]
-    expect(firstCell.attrs!.colwidth).toBeNull()
+    expect(firstCell.attrs!.colwidth).toEqual([390])
     act(() => { editor.commands.setContent('<table><tr><th colwidth="150"><p>A</p></th><th><p>B</p></th></tr><tr><td><p>1</p></td><td><p>2</p></td></tr></table>') })
     await waitFor(() => expect(document.querySelector<HTMLElement>('.flow-table colgroup > col')?.style.width).toBe('150px'))
   })

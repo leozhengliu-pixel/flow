@@ -362,7 +362,7 @@ const LINK_HTML = '<a href="https://example.com" target="_blank" rel="noopener n
 describe('clipboard payloads match the reference app', () => {
   async function load(rows: object[][]) {
     const editor = await setup('<p></p>')
-    act(() => { editor.commands.setContent({ type: 'doc', content: [{ type: 'table', content: rows.map(cells => ({ type: 'tableRow', content: cells })) }, { type: 'paragraph' }] }) })
+    act(() => { editor.commands.setContent({ type: 'doc', content: [{ type: 'table', content: rows.map(cells => ({ type: 'tableRow', content: cells })) }, { type: 'paragraph' }] }, { emitUpdate: false }) })
     return editor
   }
   const formatted = () => [
@@ -523,7 +523,7 @@ describe('header-less tables', () => {
   it('Add header keeps widths and marks of the cells', async () => {
     const editor = await setup('<p></p>')
     act(() => { editor.commands.focus('end') })
-    paste(editor, { html: '<table data-headerless=""><tbody><tr><td data-colwidth="210"><p><strong>x</strong></p></td><td><p>y</p></td></tr></tbody></table>' })
+    paste(editor, { html: '<table data-headerless=""><tbody><tr><td data-colwidth="210"><p><strong>x</strong></p></td><td data-colwidth="300"><p>y</p></td></tr></tbody></table>' })
     act(() => { addHeaderRow(editor, line(editor, 'row', 0)) })
     const cells = tableJson(editor).content![0].content! as Array<{ type: string; attrs?: { colwidth?: number[] }; content?: Json[] }>
     expect(cells.map(cell => cell.type)).toEqual(['tableHeader', 'tableHeader'])
