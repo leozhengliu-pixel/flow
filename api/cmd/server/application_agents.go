@@ -503,10 +503,9 @@ func (s *server) deliverApplicationTask(ctx context.Context, task domain.AgentTa
 	ctx = context.WithValue(ctx, workspaceKeyContextKey{}, task.WorkspaceKey)
 	ctx = context.WithValue(ctx, apiKeyContextKey{}, key)
 	ctx = store.ContextWithActor(ctx, user)
-	// Links in tool results and the reply point at the app the person uses, not the worker's internal host.
-	if base := s.loopAppURL(); base != "" {
-		ctx = context.WithValue(ctx, agentBaseURLKey{}, base)
-	}
+	// Links in tool results and the reply point at the app the person uses, not the worker's internal host
+	// (relative when no app URL is known).
+	ctx = context.WithValue(ctx, agentBaseURLKey{}, s.loopAppURL())
 	r, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://flow.internal/api/agent-tasks/"+task.ID, nil)
 	data, err := s.applicationTaskContext(r, task, false)
 	if err != nil {

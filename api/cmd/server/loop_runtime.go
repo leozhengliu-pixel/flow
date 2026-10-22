@@ -8,6 +8,7 @@ import (
 	"log"
 	"maps"
 	"net/http"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -634,9 +635,13 @@ func (s *server) finishLoopRun(ctx context.Context, workspace string, loop domai
 	}
 }
 
-// loopAppURL is the browser origin links in loop output point to: the
-// configured app URL, else the origin last seen on an agent request.
+// loopAppURL is the browser origin links in loop output point to: FLOW_APP_URL,
+// the configured allowed origin, else the origin last seen on an agent request.
+// Empty means links stay relative.
 func (s *server) loopAppURL() string {
+	if appURL := strings.TrimRight(strings.TrimSpace(os.Getenv("FLOW_APP_URL")), "/"); appURL != "" {
+		return appURL
+	}
 	if origin := strings.TrimRight(strings.TrimSpace(s.allowedOrigin), "/"); origin != "" && origin != "*" {
 		return origin
 	}

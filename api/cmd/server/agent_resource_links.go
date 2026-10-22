@@ -40,7 +40,9 @@ func agentResourceLinkGuidance(urlKey string) string {
 // agentLinkBaseURL is the origin links in tool results and answers use: the app URL a background run was given,
 // else the request's own origin.
 func agentLinkBaseURL(r *http.Request) string {
-	if base, ok := r.Context().Value(agentBaseURLKey{}).(string); ok && base != "" {
+	// A background run sets the key even when no app URL is known; an empty base then keeps links relative (they
+	// open in the app) instead of pointing at the run's synthetic host.
+	if base, ok := r.Context().Value(agentBaseURLKey{}).(string); ok {
 		return base
 	}
 	return externalBaseURL(r)
