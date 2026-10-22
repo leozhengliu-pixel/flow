@@ -188,6 +188,11 @@ func syncApplicationMentions(ctx context.Context, tx *sqlTx, workspace, resource
 		if !app.Active || teamID == "" || !slices.Contains(app.Scopes, "app:mentionable") {
 			continue
 		}
+		// An agent's own comment (written as the person it acts for) that names the agent does not start another
+		// session of it: a reply that mentions itself would otherwise answer itself.
+		if comment.BotActor != nil && app.ClientID != "" && comment.BotActor.ID == app.ClientID {
+			continue
+		}
 		taskID := fmt.Sprintf("mention_%x", sha256.Sum256([]byte(workspace+":"+comment.ID+":"+id)))
 		task := domain.AgentTask{ID: taskID, CommentID: comment.ID, WorkspaceKey: workspace, ResourceType: resourceType, ResourceID: resource, TeamID: teamID, AppUserID: id, CreatorID: comment.User.ID, Status: "pending", Prompt: comment.Body, Trigger: "mention", Version: 1, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 		if resourceType == "issue" {
