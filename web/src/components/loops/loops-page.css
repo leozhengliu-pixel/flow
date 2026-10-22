@@ -847,7 +847,18 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 .loops-run-instructions.is-collapsed .loops-expand-button { position: absolute; bottom: 12px; left: 50%; margin: 0; transform: translateX(-50%); }
 .loops-expand-button.is-small { height: 24px; padding: 0 8px; font-size: 12px; }
 .loops-run-work { margin: 4px 0 12px; }
-.loops-run-working { color: var(--theme-text-secondary); font-size: 13px; }
+.loops-run-working { margin: 0; color: var(--theme-text-secondary); font-size: 13px; }
+.loops-run-shimmer {
+  background: linear-gradient(90deg, var(--theme-text-secondary) 0%, var(--text) 50%, var(--theme-text-secondary) 100%) 0 0 / 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: loops-run-shimmer 1.4s linear infinite;
+}
+@keyframes loops-run-shimmer { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .loops-run-shimmer { animation: none; color: var(--theme-text-secondary); background: none; } }
+/* A run that is still starting: the grid loader and its label centred in the empty pane. */
+.loops-run-initializing { height: 100%; min-height: 160px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--theme-text-tertiary); font-size: 13px; }
 .loops-run-answer { color: var(--theme-text-primary); font-size: 14px; line-height: 22px; }
 .loops-run-answer p { margin: 0; }
 .loops-run-answer p + p,

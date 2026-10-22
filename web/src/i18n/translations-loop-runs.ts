@@ -23,6 +23,7 @@ export const loopRunsZhCN: Record<string, string> = {
   "The server stopped while this run was working. Run the loop again to finish the work.": "运行期间服务器停止了。请重新运行 Loop 以完成工作。",
   "Could not cancel the run": "无法取消运行",
   "Cancelling…": "正在取消…",
+  "Initializing run…": "正在初始化运行…",
   "Cancel run": "取消运行",
   "Reply cancelled": "回复已取消",
   "Reply interrupted": "回复已中断",
