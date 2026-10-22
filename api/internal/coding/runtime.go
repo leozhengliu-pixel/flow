@@ -435,7 +435,7 @@ func (s *Service) completeDecision(session domain.CodingSession, sandboxes []san
 	if summary := strings.TrimSpace(request.Summary); summary != "" {
 		ns.Summary = summary
 	}
-	if title := strings.TrimSpace(request.DisplayTitle); title != "" {
+	if title := strings.TrimSpace(request.DisplayTitle); title != "" && publishesTurn(request) {
 		ns.DisplayTitle = firstLine(title, 120)
 	}
 	if len(request.Diff) > 0 {
@@ -452,7 +452,8 @@ func (s *Service) completeDecision(session domain.CodingSession, sandboxes []san
 	switch {
 	case ns.StopRequested || ns.Phase == domain.CodingPhaseStopping:
 		// Step finishes the stop once the sandbox drained.
-	case request.Status == TurnSuccess && ns.Pushed:
+	case request.Status == TurnSuccess && ns.Pushed && publishesTurn(request):
+		// A read-only or no-commit turn leaves the pull request as it is.
 		s.step.Enter(ns, domain.CodingPhasePublishing, now)
 	case request.Status == TurnSuccess:
 		s.step.Enter(ns, domain.CodingPhaseIdle, now)

@@ -267,6 +267,8 @@ export interface TurnCompleteRequest {
   headSha?: string
   diff?: CodingDiffSummary[]
   error?: ErrorDetail
+  /** The turn's write scope: only "write" turns publish (commit, push, draft PR). */
+  scope?: 'write' | 'noPublish' | 'readOnly'
 }
 
 export interface CredentialRequest {

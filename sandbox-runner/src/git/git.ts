@@ -349,6 +349,27 @@ export class Git {
     return this.head()
   }
 
+  /**
+   * Stages and commits only these paths (git's --only mode): anything else
+   * that is staged or modified stays exactly as it is. Returns the new SHA,
+   * or "" when none of the paths has a change.
+   */
+  async commitPaths(message: string, author: BootstrapGit, paths: string[]): Promise<string> {
+    if (!paths.length) return ''
+    const list = `${paths.join('\0')}\0`
+    await this.git(['--literal-pathspecs', 'add', '-A', '--pathspec-from-file=-', '--pathspec-file-nul'], { stdin: list })
+    const staged = await this.git(['diff', '--cached', '--name-only', '-z', '--no-renames'])
+    const wanted = new Set(paths)
+    if (!staged.stdout.split('\0').some((path) => wanted.has(path))) return ''
+    const env: NodeJS.ProcessEnv = { ...this.env }
+    if (author.authorName) env.GIT_AUTHOR_NAME = author.authorName
+    if (author.authorEmail) env.GIT_AUTHOR_EMAIL = author.authorEmail
+    if (author.committerName) env.GIT_COMMITTER_NAME = author.committerName
+    if (author.committerEmail) env.GIT_COMMITTER_EMAIL = author.committerEmail
+    await this.git(['--literal-pathspecs', 'commit', '--no-verify', '--only', '-m', message, '--pathspec-from-file=-', '--pathspec-file-nul'], { env, stdin: list })
+    return this.head()
+  }
+
   /** Commits reachable from HEAD but not from `since` (oldest first). */
   async commitsSince(since: string, branch: string, turnId: string | undefined, signed: boolean): Promise<CodingCommit[]> {
     const range = since ? `${since}..HEAD` : 'HEAD'

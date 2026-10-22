@@ -35,6 +35,7 @@ import { AsyncQueue } from './queue.js'
 import { AuthError } from './runtime-client.js'
 import { sandboxSecrets } from './proxy-env.js'
 import { prepareRepository, runSetup, SetupError, SetupLog } from './setup.js'
+import { listPaths, publishes, readOnlyViolations, readWorkspaceState, requestHeader, turnScope, type TurnScope, type WorkspaceState } from './turn-scope.js'
 
 // Session mode (§16): bootstrap → prepare workspace (and setup) → turns.
 // A turn spawns the harness, streams mapped events, then commits, pushes,
@@ -69,6 +70,7 @@ export type SessionGit = Pick<
   | 'baseRevision'
   | 'head'
   | 'commitAll'
+  | 'commitPaths'
   | 'commitsSince'
   | 'push'
   | 'diffSummary'
@@ -108,6 +110,14 @@ const STDERR_TAIL_LINES = 40
 interface StopRequest {
   by: string
   reason: 'user' | 'flow' | 'signal' | 'revoked'
+}
+
+/** A turn's write scope and the workspace before its harness ran. */
+interface TurnRun {
+  scope: TurnScope
+  before: WorkspaceState
+  /** Paths with uncommitted changes before the turn (never committed by Flow). */
+  leftovers: string[]
 }
 
 export interface TurnReport extends TurnCompleteRequest {
@@ -381,9 +391,15 @@ export class Session {
     this.setPhase('running', turn.id)
     this.logger.info('turn started', { turnId: turn.id, kind: turn.kind })
     const startHead = await this.git.head()
+    // The turn's write scope comes from its own request, and the workspace
+    // as it was before the harness ran: uncommitted changes left from before
+    // this turn are never committed by Flow, discarded or overwritten.
+    const before = await readWorkspaceState((args, options) => this.git.git(args, options))
+    const run: TurnRun = { scope: turnScope(turn), before, leftovers: [...before.dirty.keys()] }
+    this.logger.info('turn scope', { turnId: turn.id, scope: run.scope, leftovers: run.leftovers.length })
     await rm(elicitationMarker(this.config.paths.flowDir, turn.id), { force: true })
 
-    let attempt = await this.runHarness(turn, this.resumeId)
+    let attempt = await this.runHarness(turn, this.resumeId, run)
     if (
       this.resumeId &&
       !this.stop &&
@@ -401,7 +417,7 @@ export class Session {
           'The previous agent session for this branch could not be resumed. Review the branch history (git log, git diff against the base) to see the work done so far, then handle this request:\n\n' +
           turn.prompt,
       }
-      attempt = await this.runHarness(fresh, undefined)
+      attempt = await this.runHarness(fresh, undefined, run)
     }
     const { outcome } = attempt
     if (outcome.harnessSessionId) this.resumeId = outcome.harnessSessionId
@@ -427,17 +443,27 @@ export class Session {
     }
     if (error && !outcome.error) this.buffer.push(this.events.error(error))
 
-    await this.publish(turn, startHead, status, error, outcome)
+    await this.publish(turn, startHead, status, error, outcome, run)
   }
 
-  private async runHarness(turn: Turn, resumeId: string | undefined): Promise<{ outcome: TurnOutcome; exitCode: number; timedOut: boolean; stderr: string }> {
+  /**
+   * The turn as the harness receives it. A follow-up (or any resumed or
+   * non-writing turn) is marked as the current request with its write scope,
+   * so neither the resumed conversation nor the issue sets this turn's goal.
+   */
+  private harnessTurn(turn: Turn, resumeId: string | undefined, run: TurnRun): Turn {
+    if (turn.kind === 'initial' && !resumeId && run.scope === 'write') return turn
+    return { ...turn, prompt: requestHeader(turn, run.scope) + turn.prompt }
+  }
+
+  private async runHarness(turn: Turn, resumeId: string | undefined, run: TurnRun): Promise<{ outcome: TurnOutcome; exitCode: number; timedOut: boolean; stderr: string }> {
     const ctx: HarnessContext = {
       bootstrap: this.bootstrap,
       token: this.deps.token(),
       paths: this.config.paths,
-      turn,
+      turn: this.harnessTurn(turn, resumeId, run),
       resumeId,
-      guidance: runnerGuidance(this.bootstrap, this.config.paths.repo),
+      guidance: runnerGuidance(this.bootstrap, this.config.paths.repo, { scope: run.scope, leftovers: run.leftovers }),
       mcp: mcpCommand(this.config, this.bootstrap, turn.id),
       env: this.env(),
       logger: this.logger,
@@ -504,7 +530,8 @@ export class Session {
     return { outcome: mapper.outcome(), exitCode, timedOut, stderr: stderr.join('\n') }
   }
 
-  private async publish(turn: Turn, startHead: string, initialStatus: TurnStatus, initialError: ErrorDetail | undefined, outcome: TurnOutcome): Promise<void> {
+  private async publish(turn: Turn, startHead: string, initialStatus: TurnStatus, initialError: ErrorDetail | undefined, outcome: TurnOutcome, run: TurnRun): Promise<void> {
+    if (!publishes(run.scope)) return this.completeWithoutPublishing(turn, startHead, initialStatus, initialError, outcome, run)
     this.setPhase('publishing', turn.id)
     let status = initialStatus
     let error = initialError
@@ -526,7 +553,17 @@ export class Session {
     }
 
     try {
-      await this.git.commitAll(message, identity)
+      if (!run.leftovers.length) {
+        await this.git.commitAll(message, identity)
+      } else {
+        // Only what changed in this turn: paths that already had uncommitted
+        // changes before it stay uncommitted (and untouched) for review.
+        const after = await readWorkspaceState((args, options) => this.git.git(args, options))
+        const own = [...after.dirty.keys()].filter((path) => !run.before.dirty.has(path))
+        await this.git.commitPaths(message, identity, own)
+        const left = run.leftovers.filter((path) => after.dirty.has(path))
+        if (left.length) this.buffer.push(this.events.thought(`Flow did not commit ${left.length} path(s) that already had uncommitted changes before this turn: ${listPaths(left)}. They are left in the workspace unchanged.`))
+      }
     } catch (commitError) {
       this.logger.error('commit failed', { error: errorMessage(commitError) })
       fail({ code: isSigningFailure(commitError) ? 'signingFailed' : 'internal', message: `Committing failed: ${errorMessage(commitError)}` })
@@ -561,8 +598,44 @@ export class Session {
       headSha: headSha || undefined,
       diff: diff.length ? diff : undefined,
       error,
+      scope: run.scope,
     }
     await this.complete(turn, request)
+  }
+
+  /**
+   * The end of a turn that must not publish (read-only or no-commit
+   * request): nothing is committed or pushed, whatever the turn's outcome.
+   * A read-only turn that changed the repository anyway fails with what it
+   * changed; nothing is reverted or deleted, so nothing is lost.
+   */
+  private async completeWithoutPublishing(turn: Turn, startHead: string, initialStatus: TurnStatus, initialError: ErrorDetail | undefined, outcome: TurnOutcome, run: TurnRun): Promise<void> {
+    let status = initialStatus
+    let error = initialError
+    const summary = outcome.finalText ?? ''
+    const after = await readWorkspaceState((args, options) => this.git.git(args, options))
+    const headNow = await this.git.head()
+    let { violations, untracked } = readOnlyViolations(run.before, after)
+    if (run.scope === 'noPublish') violations = violations.filter((line) => line.startsWith('HEAD') || line.startsWith('the checked-out branch'))
+    if (headNow !== startHead && !violations.some((line) => line.startsWith('HEAD'))) violations.unshift(`HEAD moved from ${startHead.slice(0, 12)} to ${headNow.slice(0, 12)}`)
+    if (violations.length) {
+      const what = run.scope === 'readOnly' ? 'keep the repository and the pull request unchanged' : 'not commit or push'
+      const detail: ErrorDetail = {
+        code: 'harnessFailed',
+        message: `This turn's request was to ${what}, but the agent changed the repository: ${violations.join('; ')}. Flow did not commit or push anything and did not revert anything; the changes are left in the workspace for review.`,
+      }
+      this.logger.warn('turn scope violated', { turnId: turn.id, scope: run.scope, violations })
+      this.buffer.push(this.events.error(detail))
+      if (status === 'success' || status === 'awaitingInput') {
+        status = 'error'
+        error = detail
+      }
+    }
+    if (untracked.length) this.buffer.push(this.events.thought(`Temporary files created in this turn were not committed: ${listPaths(untracked)}.`))
+    await this.harnessState.save().catch((saveError) => this.logger.warn('saving harness state failed', { error: errorMessage(saveError) }))
+    // No commits, head or diff: the session (and its pull request) keep the
+    // last published state. The title stays the session's.
+    await this.complete(turn, { status, summary: summary || undefined, harnessSessionId: this.resumeId, pushed: false, error, scope: run.scope })
   }
 
   private async pushWithRetry(branch: string, forceWithLease: boolean): Promise<void> {

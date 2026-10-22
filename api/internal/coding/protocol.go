@@ -272,6 +272,23 @@ type TurnCompleteRequest struct {
 	HeadSHA          string                     `json:"headSha,omitempty"`
 	Diff             []domain.CodingDiffSummary `json:"diff,omitempty"`
 	Error            *ErrorDetail               `json:"error,omitempty"`
+	// Scope is the turn's write scope as the runner applied it: "write"
+	// (default), "noPublish" or "readOnly". Only a write turn publishes
+	// (opens or updates the draft pull request).
+	Scope string `json:"scope,omitempty"`
+}
+
+// Turn write scopes of TurnCompleteRequest.Scope.
+const (
+	TurnScopeWrite     = "write"
+	TurnScopeNoPublish = "noPublish"
+	TurnScopeReadOnly  = "readOnly"
+)
+
+// publishesTurn reports whether a completed turn may publish: write turns
+// and runners that predate the scope field.
+func publishesTurn(request TurnCompleteRequest) bool {
+	return request.Scope == "" || request.Scope == TurnScopeWrite
 }
 
 // CredentialRequest is POST /internal/coding-runtime/credentials (git

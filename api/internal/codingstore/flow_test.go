@@ -70,6 +70,8 @@ type fakeHost struct {
 	minted    int
 	revoked   []string
 	changeReq *codehost.ChangeRequest
+	// branchHeads counts publish-stage head checks.
+	branchHeads int
 }
 
 func (f *fakeHost) Connected(context.Context, string) (bool, error) { return true, nil }
@@ -79,6 +81,7 @@ func (f *fakeHost) CheckUserAccess(context.Context, string, codehost.RepoRef, co
 func (f *fakeHost) BranchHead(context.Context, string, codehost.RepoRef, string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.branchHeads++
 	if err := f.failNext; err != nil {
 		f.failNext = nil
 		return "", err
