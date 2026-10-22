@@ -43,4 +43,26 @@ describe('description embeds', () => {
     const types = editor.getJSON().content?.map(node => node.type)
     expect(types).toEqual(expect.arrayContaining(['file', 'diagram']))
   })
+
+  it('renders the file card with name, size, type icon and a download action but no remove control', () => {
+    const host = document.createElement('div')
+    document.body.append(host)
+    editor = new Editor({
+      element: host,
+      extensions: [StarterKit, Markdown, DescriptionFile],
+      content: '::file[spec.md](/uploads/asset_1.md){size="9351" type="text/markdown"}\n\n::file[report.pdf](/uploads/asset_2.pdf){size="193" type="application/pdf"}',
+      contentType: 'markdown',
+    })
+    const cards = host.querySelectorAll('.description-file-node')
+    expect(cards).toHaveLength(2)
+    expect(cards[0].querySelector('.description-file-name')?.textContent).toBe('spec.md')
+    expect(cards[0].querySelector('.description-file-meta')?.textContent).toBe('9 KB')
+    expect(cards[1].querySelector('.description-file-meta')?.textContent).toBe('193 B')
+    expect(cards[0].querySelector('.description-file-download')?.getAttribute('aria-label')).toBe('Download')
+    expect(cards[0].querySelector('.description-file-remove')).toBeNull()
+    expect(cards[0].querySelector('a')).toBeNull()
+    expect(cards[0].querySelector('.description-file-icon path')?.getAttribute('d')).not.toBe(cards[1].querySelector('.description-file-icon path')?.getAttribute('d'))
+    expect(editor.getMarkdown()).toContain('::file[spec.md](/uploads/asset_1.md){size="9351" type="text/markdown"}')
+    host.remove()
+  })
 })
