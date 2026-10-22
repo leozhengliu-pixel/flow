@@ -164,10 +164,8 @@
 
 .description-file-node {
   position: relative;
-  display: flex;
-  align-items: center;
+  display: block;
   box-sizing: border-box;
-  gap: 6px;
   margin: 12px 0;
   padding: 6px;
   border: .5px solid var(--description-file-border);
@@ -180,6 +178,37 @@
   outline: 2px solid var(--description-file-selected-outline);
   outline-offset: 1px;
 }
+.description-file-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.description-file-node.has-preview .description-file-row { padding-bottom: 6px; }
+.description-file-preview {
+  height: 480px;
+  box-sizing: border-box;
+  overflow: hidden;
+  padding: 8px;
+  border-radius: 4px;
+  background: var(--description-file-preview-bg);
+}
+.description-file-preview-page {
+  height: 100%;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--description-file-preview-page);
+}
+/* The viewer paints a few dark pixels around the page; the frame is oversized so they fall outside the clipped box. */
+.description-file-preview-frame {
+  display: block;
+  width: calc(100% + 12px);
+  height: calc(100% + 12px);
+  margin: -6px;
+  border: 0;
+  pointer-events: none;
+}
+.description-file-preview:not([data-state="ready"]) .description-file-preview-frame { opacity: 0; }
+.description-file-preview[data-state="ready"] .description-file-preview-frame { transition: opacity 120ms ease; }
 .description-file {
   min-width: 0;
   flex: 1;

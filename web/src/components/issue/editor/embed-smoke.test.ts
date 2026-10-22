@@ -4,7 +4,7 @@ import { Markdown } from '@tiptap/markdown'
 import { afterEach, describe, expect, it } from 'vitest'
 import { DescriptionCallout } from './callout-extension'
 import { DescriptionDiagram } from './diagram-extension'
-import { DescriptionFile, DescriptionVideo } from './file-extension'
+import { DescriptionFile, DescriptionVideo, insertEmbedFiles } from './file-extension'
 import { structuredBlocks } from './structured-blocks'
 
 describe('description embeds', () => {
@@ -56,13 +56,33 @@ describe('description embeds', () => {
     const cards = host.querySelectorAll('.description-file-node')
     expect(cards).toHaveLength(2)
     expect(cards[0].querySelector('.description-file-name')?.textContent).toBe('spec.md')
-    expect(cards[0].querySelector('.description-file-meta')?.textContent).toBe('9 KB')
+    expect(cards[0].querySelector('.description-file-meta')?.textContent).toBe('9.13 KB')
     expect(cards[1].querySelector('.description-file-meta')?.textContent).toBe('193 B')
     expect(cards[0].querySelector('.description-file-download')?.getAttribute('aria-label')).toBe('Download')
     expect(cards[0].querySelector('.description-file-remove')).toBeNull()
     expect(cards[0].querySelector('a')).toBeNull()
+    expect(cards[0].querySelector('.description-file-preview')).toBeNull()
+    expect(cards[1].querySelector('.description-file-preview iframe')).not.toBeNull()
+    expect(cards[1].classList.contains('has-preview')).toBe(true)
     expect(cards[0].querySelector('.description-file-icon path')?.getAttribute('d')).not.toBe(cards[1].querySelector('.description-file-icon path')?.getAttribute('d'))
     expect(editor.getMarkdown()).toContain('::file[spec.md](/uploads/asset_1.md){size="9351" type="text/markdown"}')
+    host.remove()
+  })
+
+  it('keeps picked files in order', () => {
+    const host = document.createElement('div')
+    document.body.append(host)
+    editor = new Editor({ element: host, extensions: [StarterKit, Markdown, DescriptionFile], content: '<p>text</p>' })
+    const original = URL.createObjectURL
+    let count = 0
+    URL.createObjectURL = () => `blob:test/${count++}`
+    try {
+      insertEmbedFiles(editor.view, ['a.bin', 'b.bin', 'c.bin'].map(name => new File(['x'], name)))
+    } finally {
+      URL.createObjectURL = original
+    }
+    const names = [...host.querySelectorAll('.description-file-name')].map(node => node.textContent)
+    expect(names).toEqual(['a.bin', 'b.bin', 'c.bin'])
     host.remove()
   })
 })

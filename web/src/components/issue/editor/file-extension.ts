@@ -1,5 +1,6 @@
 import { Node, mergeAttributes } from '@tiptap/core'
 import type { EditorView } from '@tiptap/pm/view'
+import { formatFileSize } from '@/lib/format-file-size'
 
 type DescriptionImageUpload = (file: File) => Promise<string>
 
@@ -61,17 +62,31 @@ export const DescriptionFile = Node.create({
         anchor.rel = 'noreferrer'
         anchor.click()
       })
+      const row = document.createElement('div')
+      row.className = 'description-file-row'
+      row.append(link, download)
+      dom.append(row)
+      const preview = createPdfPreview()
       const apply = (attrs: Record<string, unknown>) => {
         const title = String(attrs.title || 'File')
+        const contentType = String(attrs.contentType ?? '')
         name.textContent = title
-        meta.textContent = formatBytes(Number(attrs.size) || 0)
+        meta.textContent = attrs.size == null ? '' : formatFileSize(Number(attrs.size) || 0)
         meta.hidden = !meta.textContent
-        icon.innerHTML = fileGlyph(String(attrs.contentType ?? ''), title)
+        icon.innerHTML = fileGlyph(contentType, title)
         href = String(attrs.src ?? '')
         fileName = title
+        const pdf = isPdf(contentType, title)
+        dom.classList.toggle('has-preview', pdf)
+        if (pdf) {
+          if (!preview.dom.isConnected) dom.append(preview.dom)
+          preview.show(href, Number(attrs.size) || 0)
+        } else {
+          preview.dom.remove()
+          preview.show('', 0)
+        }
       }
       apply(node.attrs)
-      dom.append(link, download)
       return {
         dom,
         update(updated) {
@@ -79,6 +94,7 @@ export const DescriptionFile = Node.create({
           apply(updated.attrs)
           return true
         },
+        destroy() { preview.destroy() },
       }
     }
   },
@@ -157,27 +173,33 @@ export function insertEmbedFiles(view: EditorView, files: File[], upload?: Descr
   const others = files.filter(file => !file.type.startsWith('video/') && !file.type.startsWith('image/'))
   let insertPos = pos
   let inserted = false
+  // Each atom goes right after the previous one, so several files keep the order they were picked in.
   for (const file of videos) {
     if (!view.state.schema.nodes.video) break
-    inserted = insertAtom(view, 'video', { src: URL.createObjectURL(file), title: file.name }, upload, file, insertPos) || inserted
-    insertPos = insertPos == null ? view.state.selection.from : insertPos + 1
+    const end = insertAtom(view, 'video', { src: URL.createObjectURL(file), title: file.name }, upload, file, insertPos)
+    if (end != null) { inserted = true; insertPos = end }
   }
   for (const file of others) {
     if (!view.state.schema.nodes.file) break
-    inserted = insertAtom(view, 'file', { src: URL.createObjectURL(file), title: file.name, size: file.size, contentType: file.type }, upload, file, insertPos) || inserted
-    insertPos = insertPos == null ? view.state.selection.from : insertPos + 1
+    const end = insertAtom(view, 'file', { src: URL.createObjectURL(file), title: file.name, size: file.size, contentType: file.type }, upload, file, insertPos)
+    if (end != null) { inserted = true; insertPos = end }
   }
   return inserted
 }
 
 function insertAtom(view: EditorView, type: 'file' | 'video', attrs: Record<string, unknown>, upload: DescriptionImageUpload | undefined, file: File, pos?: number) {
   const nodeType = view.state.schema.nodes[type]
-  if (!nodeType) return false
+  if (!nodeType) return null
   const node = nodeType.create(attrs)
-  if (pos == null) view.dispatch(view.state.tr.replaceSelectionWith(node).scrollIntoView())
-  else view.dispatch(view.state.tr.insert(pos, node).scrollIntoView())
+  const tr = pos == null ? view.state.tr.replaceSelectionWith(node) : view.state.tr.insert(pos, node)
+  view.dispatch(tr.scrollIntoView())
   void persistSrc(view, type, String(attrs.src), file, upload)
-  return true
+  let end = pos == null ? view.state.selection.to : pos + node.nodeSize
+  view.state.doc.descendants((child, childPos) => {
+    if (child.type === nodeType && child.attrs.src === attrs.src) end = childPos + child.nodeSize
+    return true
+  })
+  return end
 }
 
 function persistSrc(view: EditorView, type: string, placeholder: string, file: File, upload?: DescriptionImageUpload) {
@@ -196,11 +218,67 @@ function persistSrc(view: EditorView, type: string, placeholder: string, file: F
   return upload(file).then(url => apply(url)).catch(() => apply(null))
 }
 
-function formatBytes(size: number) {
-  if (!size) return ''
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`
-  return `${(size / 1024 / 1024).toFixed(1)} MB`
+const PDF_PREVIEW_MAX_BYTES = 20 * 1024 * 1024
+
+/**
+ * The strip under a PDF card: the first page in a clipped 480px box. There is no PDF renderer in the bundle, so the
+ * browser's own viewer is embedded. Uploads are served with a sandboxing CSP that blocks that viewer in frames, so a
+ * same-origin file is fetched and framed from a blob URL instead. The frame ignores the pointer, so a click on the
+ * strip only selects the card.
+ */
+function createPdfPreview() {
+  const dom = document.createElement('div')
+  dom.className = 'description-file-preview'
+  dom.contentEditable = 'false'
+  const frame = document.createElement('iframe')
+  frame.className = 'description-file-preview-frame'
+  frame.tabIndex = -1
+  frame.setAttribute('aria-hidden', 'true')
+  frame.setAttribute('loading', 'lazy')
+  const page = document.createElement('div')
+  page.className = 'description-file-preview-page'
+  page.append(frame)
+  dom.append(page)
+  // The viewer paints its own dark ground before the page; show the frame only once it has loaded.
+  frame.addEventListener('load', () => { if (frame.getAttribute('src')) dom.dataset.state = 'ready' })
+  let current = ''
+  let objectUrl = ''
+  let token = 0
+  const release = () => {
+    if (objectUrl) URL.revokeObjectURL(objectUrl)
+    objectUrl = ''
+  }
+  const frameFor = (url: string) => `${url}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`
+  return {
+    dom,
+    show(src: string, size: number) {
+      if (src === current) return
+      current = src
+      token += 1
+      const mine = token
+      release()
+      frame.removeAttribute('src')
+      dom.dataset.state = src ? 'loading' : 'empty'
+      if (!src || size > PDF_PREVIEW_MAX_BYTES) return
+      if (src.startsWith('blob:')) {
+        frame.src = frameFor(src)
+        return
+      }
+      if (typeof fetch !== 'function' || typeof URL.createObjectURL !== 'function') return
+      void fetch(src, { credentials: 'same-origin' })
+        .then(response => response.ok ? response.blob() : Promise.reject(new Error('preview')))
+        .then(blob => {
+          if (mine !== token) return
+          objectUrl = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }))
+          frame.src = frameFor(objectUrl)
+        })
+        .catch(() => { if (mine === token) dom.dataset.state = 'error' })
+    },
+    destroy() {
+      token += 1
+      release()
+    },
+  }
 }
 
 const FILE_PATH = 'M6.75 1V6.75C6.75 7.5297 7.34489 8.17045 8.10554 8.24313L8.25 8.25H14V13C14 14.1046 13.1046 15 12 15H4C2.89543 15 2 14.1046 2 13V3C2 1.89543 2.89543 1 4 1H6.75ZM8 1L14 7.03022H9C8.44772 7.03022 8 6.5825 8 6.03022V1Z'
