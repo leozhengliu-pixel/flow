@@ -38,6 +38,8 @@ export function translateToChinese(source: string): string {
     [/^(\d+) identity providers? configured$/, count => `已配置 ${count} 个身份提供商`],
     [/^(\d+) active$/, count => `${count} 项已启用`],
     [/^(\d+) projects?$/, count => `${count} 个项目`],
+    [/^Page (\d+) of (\d+)$/, (page, total) => `第 ${page} 页，共 ${total} 页`],
+    [/^Page (\d+)$/, page => `第 ${page} 页`],
     [/^(\d+) dependencies?$/, count => `${count} 个依赖项`],
     [/^(\d+) initiatives?$/, count => `${count} 个目标`],
     [/^(\d+) labeled (issues?|projects?|initiatives?)$/, (count, resource) => `${count} 个带此标签的${countNoun(resource)}`],

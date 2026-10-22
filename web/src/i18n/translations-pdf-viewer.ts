@@ -1,0 +1,20 @@
+/** Chinese copy for the PDF card toolbar and viewer. Merged into zhCN by translations.ts. */
+export const pdfViewerZhCN: Record<string, string> = {
+  "View PDF": "查看 PDF",
+  "Download": "下载",
+  "Copy link": "复制链接",
+  "Print": "打印",
+  "Delete": "删除",
+  "Close": "关闭",
+  "PDF actions": "PDF 操作",
+  "PDF preview": "PDF 预览",
+  "PDF URL copied to clipboard": "PDF 链接已复制到剪贴板",
+  "Could not copy to clipboard": "无法复制到剪贴板",
+  "Could not print this PDF": "无法打印此 PDF",
+  "Could not load this PDF": "无法加载此 PDF",
+  "Loading PDF…": "正在加载 PDF…",
+  "Zoom out": "缩小",
+  "Zoom in": "放大",
+  "Previous page": "上一页",
+  "Next page": "下一页",
+};

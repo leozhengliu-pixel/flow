@@ -198,17 +198,15 @@
   border-radius: 2px;
   background: var(--description-file-preview-page);
 }
-/* The viewer paints a few dark pixels around the page; the frame is oversized so they fall outside the clipped box. */
-.description-file-preview-frame {
+/* The first page is drawn at the card's width (639px in a 668px card), so the strip clips it like the reference. */
+.description-file-preview-canvas {
   display: block;
-  width: calc(100% + 12px);
-  height: calc(100% + 12px);
-  margin: -6px;
-  border: 0;
+  width: 100%;
+  height: auto;
   pointer-events: none;
 }
-.description-file-preview:not([data-state="ready"]) .description-file-preview-frame { opacity: 0; }
-.description-file-preview[data-state="ready"] .description-file-preview-frame { transition: opacity 120ms ease; }
+.description-file-preview:not([data-state="ready"]) .description-file-preview-canvas { opacity: 0; }
+.description-file-preview[data-state="ready"] .description-file-preview-canvas { transition: opacity 120ms ease; }
 .description-file {
   min-width: 0;
   flex: 1;
@@ -275,6 +273,46 @@
 .description-file-node.ProseMirror-selectednode .description-file-download,
 .description-file-node .description-file-download:focus-visible { opacity: 1; }
 .description-file-node .description-file-download:hover { background: var(--description-file-download-hover); }
+.description-file-node.is-pdf .description-file-download { display: none; }
+
+/* PDF card toolbar: a 143x30 pill (2px padding, 26px buttons with 14px glyphs) at the end of the header row. */
+.description-file-toolbar {
+  display: none;
+  flex: none;
+  align-items: center;
+  height: 30px;
+  box-sizing: border-box;
+  padding: 2px;
+  margin-right: 3px;
+  border-radius: 9999px;
+}
+.description-file-toolbar[hidden] { display: none; }
+.description-file-node:hover .description-file-toolbar:not([hidden]),
+.description-file-node.ProseMirror-selectednode .description-file-toolbar:not([hidden]),
+.description-file-node:focus-within .description-file-toolbar:not([hidden]) { display: flex; }
+.description-file-toolbar button {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 6px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--description-file-toolbar-fg);
+  cursor: default;
+}
+.description-file-toolbar svg { width: 14px; height: 14px; }
+.description-file-toolbar button:hover,
+.description-file-toolbar button:focus-visible { background: var(--description-file-toolbar-hover-bg); color: var(--description-file-toolbar-fg-hover); }
+.description-file-toolbar-separator {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--description-file-toolbar-separator);
+}
+/* Read-only renderers (comments, history) keep the view / download / link / print actions and drop Delete. */
+.ProseMirror[contenteditable="false"] .description-file-toolbar-delete { display: none; }
 
 .description-video-node { margin: 0 0 12px; width: fit-content; max-width: 100%; }
 .description-video {
