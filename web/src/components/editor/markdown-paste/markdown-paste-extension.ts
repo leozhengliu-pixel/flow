@@ -2,6 +2,7 @@ import { Extension, type Editor, type JSONContent } from '@tiptap/core'
 import { Fragment, Slice } from '@tiptap/pm/model'
 import { Plugin, PluginKey, type Selection } from '@tiptap/pm/state'
 import type { EditorView } from '@tiptap/pm/view'
+import { isFlowClipboardHtml } from '../clipboard-origin'
 import { normalizeGithubHtml, isGithubHtml } from './github-html'
 import { isPlainTextWrapperHtml, isSingleUrl, looksLikeMarkdown, normalizeNewlines } from './markdown-detect'
 import { plainTextToBlocks, tryMarkdownToDocJSON } from './markdown-to-doc'
@@ -67,7 +68,7 @@ export const MarkdownPaste = Extension.create({
       key: markdownPasteKey,
       props: {
         transformPastedHTML: html => {
-          if (!isGithubHtml(html)) return html
+          if (isFlowClipboardHtml(html) || !isGithubHtml(html)) return html
           try { return normalizeGithubHtml(html) } catch { return html }
         },
         handlePaste: (view, event) => {

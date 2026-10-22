@@ -2,6 +2,7 @@
  * Pure helpers for Settings › AI & agents › Coding sessions
  * (docs/coding-sessions-design.md §1, §18, §24 track F).
  */
+import { formatFileSize } from "@/lib/format-file-size";
 import type {
   CodeHostKind,
   CodingAgentSettings,
@@ -420,14 +421,7 @@ export function snapshotInProgress(status: CodingSnapshotStatus | undefined): bo
 
 export function formatBytes(bytes: number | undefined): string {
   if (!bytes) return "";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit++;
-  }
-  return `${value >= 10 || unit === 0 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
+  return formatFileSize(bytes);
 }
 
 export type DiffLine = { kind: "same" | "add" | "remove"; text: string };

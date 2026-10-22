@@ -2,6 +2,7 @@ import { ChevronsDownUp, Code2, Heading1, Heading2, Heading3, Heading4, Image as
 import Placeholder from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCaret from '@tiptap/extension-collaboration-caret'
+import { ClipboardOrigin } from '@/components/editor/clipboard-origin'
 import { FlowStarterKit } from '@/components/editor/flow-starter-kit'
 import { TableKit } from '@tiptap/extension-table'
 import { flowTableKit, insertDefaultTable, tableSlashCommands } from '@/components/editor/table'
@@ -97,6 +98,8 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   const { t } = useI18n()
   const placeholderRef = useRef(placeholder)
   placeholderRef.current = t(placeholder)
+  const documentIdRef = useRef<string | undefined>(undefined)
+  documentIdRef.current = collaboration?.issueId ?? collaboration?.documentId
   const hintRef = useRef('Type / for commands…')
   hintRef.current = t('Type / for commands…')
   // The editor is contenteditable, which the page translator leaves alone: its label is translated here.
@@ -190,6 +193,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       LinkBehavior,
       FlowCodeBlock,
       ...flowTableKit,
+      ClipboardOrigin.configure({ getDocumentId: () => documentIdRef.current }),
       ...structuredBlocks,
       // The editor's own placeholder only shows while the whole document is empty; later empty lines get the "Type / for commands…" hint.
       Placeholder.configure({ placeholder: ({ editor: current }) => current.isEmpty ? placeholderRef.current : '' }),
