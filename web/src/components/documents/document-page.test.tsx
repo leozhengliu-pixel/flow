@@ -226,7 +226,7 @@ describe('DocumentPage header', () => {
     expect(menuRows()).not.toContain('Delete')
   })
 
-  it('opens the access dialog from the menu and changes a role', async () => {
+  it('opens the access dialog from the menu, stages a role and applies it on Save', async () => {
     const user = userEvent.setup()
     api.listDocumentPermissions.mockResolvedValue([{ id: 'owner-grant', documentId: flowDocument.id, subjectType: 'user', subjectId: viewer.id, role: 'owner' }])
     api.replaceDocumentPermissions.mockResolvedValue([{ id: 'owner-grant', documentId: flowDocument.id, subjectType: 'user', subjectId: viewer.id, role: 'owner' }, { id: 'editor-grant', documentId: flowDocument.id, subjectType: 'user', subjectId: teammate.id, role: 'editor' }])
@@ -236,6 +236,8 @@ describe('DocumentPage header', () => {
     expect(await screen.findByRole('heading', { name: 'People with access' })).toBeVisible()
     await user.click(screen.getByRole('combobox', { name: 'Access for Teammate' }))
     await user.click(screen.getByRole('option', { name: 'Can edit' }))
+    expect(api.replaceDocumentPermissions).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(api.replaceDocumentPermissions).toHaveBeenCalledWith(flowDocument.id, [{ subjectType: 'user', subjectId: viewer.id, role: 'owner' }, { subjectType: 'user', subjectId: teammate.id, role: 'editor' }]))
   })
 

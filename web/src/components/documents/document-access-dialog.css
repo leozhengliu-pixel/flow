@@ -1,8 +1,19 @@
 /* People with access dialog. Own file: no dependence on document-page.css.
    Chrome follows the team "Add members" dialog of the reference app (560 wide, top 26vh,
-   16px header padding, 15px/600 title, 28px round close, 32px pill footer buttons);
-   rows follow its members table (50px rows, 24px avatars, 13px name over 12px secondary line). */
+   16px header padding, 15px/600 title, 28px round close, 32px pill footer buttons, panel colours from
+   the shared --dialog-* tokens); rows follow its members table (50px rows, 24px avatars, 13px name over
+   12px secondary line). Colours below were measured in both themes. */
 .dialog-content.action-dialog.document-access {
+  --da-title: var(--agent-thread-text);
+  --da-name: var(--dialog-row-name);
+  --da-secondary: var(--dialog-row-secondary);
+  --da-row-hover: var(--dialog-row-hover);
+  --da-trigger-bg: var(--dialog-control-bg);
+  --da-trigger-hover-bg: var(--dialog-control-hover-bg);
+  --da-cancel-bg: var(--dialog-control-bg);
+  --da-primary-bg: var(--dialog-primary-bg);
+  --da-primary-fg: var(--dialog-primary-fg);
+  --da-primary-shadow: var(--dialog-primary-shadow);
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -13,27 +24,28 @@
 }
 .dialog-content.action-dialog.document-access > .dialog-close {
   display: grid;
-  top: 14px;
+  top: 13.5px;
   right: 16px;
   width: 28px;
   height: 28px;
   border-radius: 9999px;
-  color: var(--theme-text-primary);
+  color: var(--da-title);
 }
-.dialog-content.action-dialog.document-access > .dialog-close:hover { background: var(--theme-surface-hover); }
-.dialog-content.action-dialog.document-access > h2 {
+.dialog-content.action-dialog.document-access > .dialog-close:hover { background: var(--da-row-hover); }
+html:root body .dialog-content.action-dialog.document-access > h2 {
   flex: none;
   margin: 0;
   padding: 16px 48px 0 16px;
+  color: var(--da-title);
   font-size: 15px;
   font-weight: 600;
   line-height: 23px;
 }
-.dialog-content.action-dialog.document-access > .document-access-description {
+html:root body .dialog-content.action-dialog.document-access > .document-access-description {
   flex: none;
   margin: 2px 0 8px;
   padding: 0 48px 0 16px;
-  color: var(--theme-text-secondary);
+  color: var(--da-secondary);
   font-size: 13px;
   line-height: 18px;
 }
@@ -51,22 +63,41 @@
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   padding: 0 8px;
   border-radius: 8px;
 }
-.document-access-row:hover { background: var(--theme-surface-hover); }
-.document-access-person { min-width: 0; display: flex; align-items: center; gap: 10px; }
+.document-access-row:hover { background: var(--da-row-hover); }
+.document-access-person { min-width: 0; flex: 1 1 auto; display: flex; align-items: center; gap: 10px; }
 .document-access-person .document-meta-avatar { flex: 0 0 24px; width: 24px; height: 24px; font-size: 11px; line-height: 24px; }
-.document-access-team-mark { width: 24px; height: 24px; display: grid; place-items: center; flex: 0 0 24px; border-radius: 6px; background: var(--theme-surface-active); color: var(--theme-text-secondary); font-size: 11px; font-weight: 600; }
+.document-access-team-mark { width: 24px; height: 24px; display: grid; place-items: center; flex: 0 0 24px; border-radius: 6px; background: var(--theme-surface-active); color: var(--da-secondary); font-size: 11px; font-weight: 600; }
 .document-access-text { min-width: 0; display: flex; flex-direction: column; }
 .document-access-text > strong,
 .document-access-text > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .document-access-text > strong { color: var(--da-name); font-size: 13px; line-height: 16px; }
-.document-access-text > span { color: var(--theme-text-secondary); font-size: 12px; line-height: 15px; }
-.dialog-content.action-dialog.document-access { --da-title: var(--agent-thread-text); --da-name: var(--agent-thread-text); }
-:root[data-theme="light"] .dialog-content.action-dialog.document-access { --da-title: var(--theme-text-primary); --da-name: var(--theme-text-primary); }
-.dialog-content.action-dialog.document-access > h2 { color: var(--da-title); }
-.document-access-row .select-control { flex: 0 0 132px; min-width: 132px; }
-.dialog-content.action-dialog.document-access > footer { flex: none; margin: 0; padding: 8px 16px 16px; }
+.document-access-text > span { color: var(--da-secondary); font-size: 12px; line-height: 15px; }
+/* Staged, not yet saved. */
+.document-access-pending { flex: 0 0 6px; width: 6px; height: 6px; border-radius: 9999px; background: var(--accent-primary); }
+.document-access-row[data-error] .document-access-pending { background: var(--semantic-danger); }
+.document-access-row[aria-busy="true"] { opacity: .6; }
+.dialog-content.action-dialog.document-access .document-access-row .select-control {
+  flex: 0 0 132px;
+  min-width: 132px;
+  border-color: transparent;
+  background: var(--da-trigger-bg);
+}
+.dialog-content.action-dialog.document-access .document-access-row .select-control:hover,
+.dialog-content.action-dialog.document-access .document-access-row .select-control[data-state="open"] { background: var(--da-trigger-hover-bg); }
+.dialog-content.action-dialog.document-access > .document-access-error { flex: none; margin: 8px 16px 0; color: var(--semantic-danger); font-size: 12px; line-height: 16px; }
+.dialog-content.action-dialog.document-access > footer { flex: none; margin: 0; padding: 12px 16px; }
+html:root body .dialog-content.action-dialog.document-access > footer button {
+  border-color: transparent;
+  background: var(--da-cancel-bg);
+  box-shadow: none;
+}
+html:root body .dialog-content.action-dialog.document-access > footer button.primary {
+  background: var(--da-primary-bg);
+  color: var(--da-primary-fg);
+  box-shadow: var(--da-primary-shadow);
+}
+html:root body .dialog-content.action-dialog.document-access > footer button:disabled { opacity: .6; }

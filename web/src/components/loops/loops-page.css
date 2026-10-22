@@ -462,7 +462,7 @@ html:root[data-theme="light"] body .dialog-content .loops-hub-composer textarea 
 .loops-template-action { display: inline-flex; align-items: center; gap: 6px; color: var(--theme-text-secondary); }
 .loops-template-trigger svg,
 .loops-template-action svg { flex: none; color: var(--theme-text-primary); }
-.loops-hub-dialog.dialog-content { top: 6vh; width: min(800px, calc(100vw - 32px)); max-height: 88vh; overflow: auto; padding: 0; border-radius: 12px; background: var(--theme-surface-2); }
+.loops-hub-dialog.dialog-content { top: 6vh; width: min(800px, calc(100vw - 32px)); max-height: 88vh; overflow: auto; padding: 0; border-radius: 12px; background: var(--dialog-bg); }
 
 /* Command-style pickers (above the "New loop" dialog they can open from) */
 .loops-picker-overlay.dialog-overlay { z-index: 709; }

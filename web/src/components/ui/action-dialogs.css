@@ -1,6 +1,9 @@
 /* The reference app PromptDialogs string chrome:
    DialogPresenter default width 480, content pad 32, radius 12, no X close */
 .dialog-overlay.action-dialog-overlay{z-index:1600}
+/* Select menus are portalled outside the dialog; lift them above it while one is open. */
+body:has(.dialog-content.action-dialog) .select-control-menu{z-index:1700}
+body:has(.dialog-content.action-dialog) [data-radix-popper-content-wrapper]:has(>.select-control-menu){z-index:1700!important}
 .dialog-content.action-dialog{
   z-index:1601;
   top:26vh;
@@ -9,9 +12,9 @@
   width:min(480px,calc(100vw - 32px));
   padding:32px;
   border-radius:12px;
-  border:.5px solid var(--theme-border-strong);
-  box-shadow:var(--shadow-dialog);
-  background:var(--theme-surface-2);
+  border:.5px solid var(--dialog-border);
+  box-shadow:var(--dialog-shadow);
+  background:var(--dialog-bg);
   color:var(--theme-text-primary);
 }
 .dialog-content.action-dialog>.dialog-close{display:none}
