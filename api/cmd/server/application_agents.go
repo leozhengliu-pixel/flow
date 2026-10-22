@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"maps"
 	"net/http"
 	"slices"
@@ -746,7 +747,7 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 	}
 	// A comment-thread agent can stop on a question with options, like chat (the reference app's select elicitation).
 	r = r.WithContext(context.WithValue(r.Context(), agentExtraToolsKey{}, []agentProviderTool{askUserToolDefinition}))
-	textApprovalRetried := false
+	textApprovalRetried, emptyTurnRetried := false, false
 	decisionRound := -1
 	for round := 0; round < maxAgentToolTurns; round++ {
 		turnCtx := r.Context()
@@ -764,6 +765,27 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 		turn, err := s.requestAgentTurn(turnCtx, messages, emit)
 		if err != nil {
 			_ = appendActivity("error", "Agent execution failed. Check the provider configuration and retry.")
+			return
+		}
+		// A turn with no visible text and no tool calls (a thinking model that spent its output budget on
+		// reasoning, an empty stream) is not an answer: one retry within the turn budget, then the run fails with
+		// the provider's finish reason. Only sizes are logged; the reasoning never reaches the thread.
+		if len(turn.ToolCalls) == 0 && strings.TrimSpace(turn.Text) == "" {
+			pending.Reset()
+			slog.WarnContext(r.Context(), "agent turn returned no visible reply", "task", task.ID, "model", s.agent.Model, "round", round, "retried", emptyTurnRetried, "stop_reason", agentStopReasonLabel(turn.StopReason), "text_bytes", len(turn.Text), "reasoning_bytes", len(turn.Reasoning))
+			if !emptyTurnRetried {
+				emptyTurnRetried = true
+				messages = append(messages, agentProviderMessage{Role: "user", Content: agentEmptyTurnNudge})
+				continue
+			}
+			if guard.codingDue() {
+				// A development request still enters Coding; the reply is the session's real state.
+				transfer("the agent replied without starting Coding", "")
+				return
+			}
+			if err := appendActivity("error", agentEmptyTurnError(turn.StopReason)); err != nil {
+				slog.ErrorContext(r.Context(), "agent run could not record its empty-reply failure", "task", task.ID, "stop_reason", agentStopReasonLabel(turn.StopReason), "error", err)
+			}
 			return
 		}
 		// Asking for approval in text instead of calling the tool is not an answer: nothing ran and there is nothing
@@ -787,7 +809,9 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 			// Links to this workspace's pages under a made-up host point at the app instead.
 			// "Done" is only said with the coding session's evidence; otherwise its real state is posted.
 			reply := s.builtinFinalReply(r.Context(), task, guard, turn.Text)
-			_ = appendActivity("response", rebaseAgentWorkspaceLinks(reply, data.Workspace.URLKey, agentLinkBaseURL(r)))
+			if err := appendActivity("response", rebaseAgentWorkspaceLinks(reply, data.Workspace.URLKey, agentLinkBaseURL(r))); err != nil {
+				slog.ErrorContext(r.Context(), "agent run could not record its reply", "task", task.ID, "reply_bytes", len(reply), "error", err)
+			}
 			return
 		}
 		if round == decisionRound && guard.codingDue() && !callsTool(turn.ToolCalls, startCodingSessionTool) && !callsTool(turn.ToolCalls, askUserTool) {
@@ -1172,4 +1196,35 @@ func builtinTaskPromptWith(task domain.AgentTask, data domain.Bootstrap, coding 
 	}
 	text.WriteString("End with a short reply in the language of the issue: what you did and what is left. Refer to the issue by its identifier only; do not repeat its title.")
 	return text.String()
+}
+
+// agentEmptyTurnNudge is the corrective message after a model turn with no visible text and no tool calls.
+const agentEmptyTurnNudge = "Your last turn produced no visible reply and no tool call, so the user saw nothing. Answer now in plain text (briefly, without long deliberation), or call the tool you need."
+
+// agentStopReasonLabel is a provider finish reason fit for an error message and the logs: lower-case letters,
+// digits and underscores only, "none" when the provider gave none.
+func agentStopReasonLabel(reason string) string {
+	label := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_':
+			return r
+		case r >= 'A' && r <= 'Z':
+			return r + ('a' - 'A')
+		}
+		return -1
+	}, reason)
+	if len(label) > 32 {
+		label = label[:32]
+	}
+	return firstNonEmpty(label, "none")
+}
+
+// agentEmptyTurnError is the error a run ends with when its retry also came back without a visible reply.
+func agentEmptyTurnError(stopReason string) string {
+	label := agentStopReasonLabel(stopReason)
+	switch label {
+	case "length", "max_tokens", "max_output_tokens":
+		return "The model used its whole output budget without writing a reply (finish reason: " + label + "), twice. Retry, or raise the Agent's output token limit."
+	}
+	return "The model returned no reply and no tool call (finish reason: " + label + "), twice. Retry the request."
 }
