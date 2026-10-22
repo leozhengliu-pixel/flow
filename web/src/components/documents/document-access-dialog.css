@@ -1,32 +1,38 @@
-/* People with access dialog. Own file: no dependence on document-page.css. */
-.dialog-content.document-access {
-  top: 13vh;
+/* People with access dialog. Own file: no dependence on document-page.css.
+   Chrome follows the team "Add members" dialog of the reference app (560 wide, top 26vh,
+   16px header padding, 15px/600 title, 28px round close, 32px pill footer buttons);
+   rows follow its members table (50px rows, 24px avatars, 13px name over 12px secondary line). */
+.dialog-content.action-dialog.document-access {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  width: min(480px, calc(100vw - 32px));
-  max-height: min(560px, calc(100dvh - 13vh - 16px));
-  padding: 24px 0 8px;
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(560px, calc(100dvh - 26vh - 16px));
+  padding: 0;
   overflow: hidden;
-  border-radius: 12px;
-  background: var(--theme-surface-2);
+}
+.dialog-content.action-dialog.document-access > .dialog-close {
+  display: grid;
+  top: 14px;
+  right: 16px;
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
   color: var(--theme-text-primary);
 }
-.document-access > .dialog-close { top: 16px; right: 16px; color: var(--theme-text-secondary); }
-.document-access > .dialog-close:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
-.dialog-content.document-access > h2 {
+.dialog-content.action-dialog.document-access > .dialog-close:hover { background: var(--theme-surface-hover); }
+.dialog-content.action-dialog.document-access > h2 {
   flex: none;
-  margin: 0 0 6px;
-  padding: 0 56px 0 24px;
-  color: var(--theme-text-primary);
+  margin: 0;
+  padding: 16px 48px 0 16px;
   font-size: 15px;
   font-weight: 600;
-  line-height: 22px;
+  line-height: 23px;
 }
-.document-access-description {
+.dialog-content.action-dialog.document-access > .document-access-description {
   flex: none;
-  margin: 0 0 12px;
-  padding: 0 24px;
+  margin: 2px 0 8px;
+  padding: 0 48px 0 16px;
   color: var(--theme-text-secondary);
   font-size: 13px;
   line-height: 18px;
@@ -36,23 +42,31 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0 12px;
+  padding: 0 8px;
   overflow-y: auto;
 }
 .document-access-row {
   flex: none;
-  min-height: 40px;
+  height: 50px;
   box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 4px 12px;
+  gap: 16px;
+  padding: 0 8px;
   border-radius: 8px;
 }
 .document-access-row:hover { background: var(--theme-surface-hover); }
 .document-access-person { min-width: 0; display: flex; align-items: center; gap: 10px; }
-.document-access-person .document-meta-avatar { flex: 0 0 20px; width: 20px; height: 20px; font-size: 10px; line-height: 20px; }
-.document-access-person strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--theme-text-primary); font-size: 13px; font-weight: 500; }
-.document-access-team-mark { width: 20px; height: 20px; display: grid; place-items: center; flex: 0 0 20px; border-radius: 6px; background: var(--theme-surface-active); color: var(--theme-text-secondary); font-size: 10px; font-weight: 600; }
+.document-access-person .document-meta-avatar { flex: 0 0 24px; width: 24px; height: 24px; font-size: 11px; line-height: 24px; }
+.document-access-team-mark { width: 24px; height: 24px; display: grid; place-items: center; flex: 0 0 24px; border-radius: 6px; background: var(--theme-surface-active); color: var(--theme-text-secondary); font-size: 11px; font-weight: 600; }
+.document-access-text { min-width: 0; display: flex; flex-direction: column; }
+.document-access-text > strong,
+.document-access-text > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.document-access-text > strong { color: var(--da-name); font-size: 13px; line-height: 16px; }
+.document-access-text > span { color: var(--theme-text-secondary); font-size: 12px; line-height: 15px; }
+.dialog-content.action-dialog.document-access { --da-title: var(--agent-thread-text); --da-name: var(--agent-thread-text); }
+:root[data-theme="light"] .dialog-content.action-dialog.document-access { --da-title: var(--theme-text-primary); --da-name: var(--theme-text-primary); }
+.dialog-content.action-dialog.document-access > h2 { color: var(--da-title); }
 .document-access-row .select-control { flex: 0 0 132px; min-width: 132px; }
+.dialog-content.action-dialog.document-access > footer { flex: none; margin: 0; padding: 8px 16px 16px; }
