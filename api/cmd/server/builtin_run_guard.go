@@ -66,17 +66,31 @@ var builtinAnalysisIntent = regexp.MustCompile(`(?i)分析|原因|为什么|为�
 
 // builtinCodingVeto matches an explicit "do not change the code" ("先不要改代码", "don't change code"): it vetoes
 // Coding wherever it appears.
-var builtinCodingVeto = regexp.MustCompile(`(?i)(不要|别|不用|无需|不需要|请勿|勿|不必|暂不|先不|不)\s*(去)?\s*(修改|改动|改|动|写|编写|提交)\s*(任何)?\s*(的)?\s*代码|只(做)?(分析|调研|评估|评审|讨论|出方案|给方案|给出方案)|` +
+var builtinCodingVeto = regexp.MustCompile(`(?i)(不要|别|不用|无需|不需要|请勿|勿|不必|暂不|先不|禁止|严禁|不允许|不得|不)\s*(去)?\s*(修改|改动|改|动|写|编写|提交)\s*(任何)?\s*(的)?\s*代码|只(做)?(分析|调研|评估|评审|讨论|出方案|给方案|给出方案)|` +
 	`\b(don'?t|do not|without|no need to|not to|never)\s+(change|changing|modify|modifying|touch|touching|write|writing|edit|editing|commit|committing)\s+(any\s+|the\s+)?code\b|\bno code changes?\b|\b(don'?t|do not)\s+(implement|fix|start coding|open (a |an )?(pr|mr))\b`)
+
+// builtinCodingProhibition matches an explicit prohibition on starting development, a Coding session or a sandbox
+// ("不要启动开发会话", "禁止开发", "别开 sandbox", "don't start a coding session"), or on calling any tool at all
+// ("不要调用工具。", "don't call any tools") — start_coding_session is a tool. It vetoes Coding like
+// builtinCodingVeto, so the development word inside it ("开发", "coding") never starts a session. A tool prohibition
+// with a qualifier ("不要调用工具查资料") limits the search, not the work, and does not match.
+var builtinCodingProhibition = regexp.MustCompile(`(?i)(不要|别|不用|无需|不需要|请勿|勿|不必|暂不|先不|禁止|严禁|不允许|不得|不准|不)\s*(去)?\s*(启动|开启|发起|创建|新建|开始|进入|打开|开|跑|运行)?\s*(任何)?\s*(的)?\s*(一个|个)?\s*(开发|编码|coding|沙盒|沙箱|sandbox)|` +
+	`(不要|别|不用|无需|不需要|请勿|勿|不必|禁止|严禁|不允许|不得|不准|不)\s*(调用|使用|用)\s*(任何)?\s*(的)?\s*(coding|沙盒|沙箱|sandbox)|` +
+	`(不要|别|不用|无需|不需要|请勿|勿|不必|禁止|严禁|不允许|不得|不准|不)\s*(调用|使用|用)\s*(任何)?\s*(的)?\s*工具\s*([，。,.;；!！、]|$)|` +
+	`\b(don'?t|do not|never|not to|without)\s+(start|starting|open|opening|launch|launching|create|creating|begin|beginning|spin up|spinning up|kick off|kicking off)\s+(a |an |any |the )?(coding|development|dev|sandbox)\b|` +
+	`\b(don'?t|do not|never|not to|without)\s+(use|using|enter|entering)\s+(a |an |any |the )?(sandbox|coding session)\b|` +
+	`\b(don'?t|do not|never|not to)\s+(start\s+)?(develop|developing|development)\b|` +
+	`\b(don'?t|do not|never|not to|without)\s+(call|calling|use|using|invoke|invoking)\s+(any\s+)?tools?\s*([,.;!]|$)|\bno tools?( calls?)?\s*([,.;!]|$)`)
 
 // builtinRequestsDevelopment reports whether request (the delegator's instructions, the mention's comment or the
 // person's latest reply) clearly asks for code changes. The issue's title and description count for a delegation:
 // without instructions the issue is the request, and instructions that neither ask for development nor for
 // analysis ("please handle this") defer to it; a mention or a reply (no issue text) decides on its own words.
 // An investigation, explanation, plan, estimate or review never counts, and an explicit "do not change the code"
-// anywhere vetoes it.
+// anywhere vetoes it, as does an explicit prohibition on starting development, Coding or a sandbox, or on calling
+// tools (builtinCodingProhibition).
 func builtinRequestsDevelopment(request, issueTitle, issueDescription string) bool {
-	if builtinCodingVeto.MatchString(request + "\n" + issueTitle + "\n" + issueDescription) {
+	if all := request + "\n" + issueTitle + "\n" + issueDescription; builtinCodingVeto.MatchString(all) || builtinCodingProhibition.MatchString(all) {
 		return false
 	}
 	development := func(text string) bool {
