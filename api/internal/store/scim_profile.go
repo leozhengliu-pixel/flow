@@ -22,6 +22,10 @@ type SCIMProfile struct {
 	PhoneNumbers []SCIMTypedItem `json:"phoneNumbers,omitempty"`
 	Addresses    []SCIMAddress   `json:"addresses,omitempty"`
 	Enterprise   SCIMEnterprise  `json:"enterprise,omitzero"`
+	// ActiveUnset is set by PATCH remove of "active" (RFC 7644 §3.5.2.2):
+	// the resource then omits the attribute. The membership keeps its
+	// state; any later write of active clears it.
+	ActiveUnset bool `json:"activeUnset,omitempty"`
 }
 
 // SCIMTypedItem is a multi-valued string attribute value (emails,

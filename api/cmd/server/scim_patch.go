@@ -91,6 +91,8 @@ func (p scimUserPayload) input(current *store.SCIMUser) (store.SCIMUserInput, er
 	}
 	if current != nil {
 		input.Active, input.Email, input.AvatarURL = current.User.Active, current.User.Email, current.User.AvatarURL
+		// A PUT that leaves active out keeps it unset.
+		input.Profile.ActiveUnset = p.Active == nil && current.Profile.ActiveUnset
 	}
 	if p.Active != nil {
 		active, err := scimBool(p.Active)
@@ -361,13 +363,18 @@ func (st *scimUserState) set(kind, rawPath string, value any) error {
 	}
 	switch path.attr {
 	case "active":
-		if !remove {
-			active, err := scimBool(value)
-			if err != nil {
-				return err
-			}
-			st.input.Active = active
+		if remove {
+			// Unset, not false: the member keeps their state (a suspended
+			// user stays suspended, an active one is not deprovisioned);
+			// the resource just stops reporting the attribute.
+			st.input.Profile.ActiveUnset = true
+			return nil
 		}
+		active, err := scimBool(value)
+		if err != nil {
+			return err
+		}
+		st.input.Active, st.input.Profile.ActiveUnset = active, false
 	case "username":
 		if remove {
 			return scimBadRequest(scimMutability, "userName is required")
