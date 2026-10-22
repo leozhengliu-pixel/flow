@@ -67,6 +67,12 @@ func (p *fakeLoopProvider) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
+	// "say:TEXT\n#tool:NAME ARGS" writes narration text before the tool call.
+	if say, rest, ok := strings.Cut(reply, "\n#"); ok && strings.HasPrefix(say, "say:") {
+		quotedSay, _ := json.Marshal(strings.TrimPrefix(say, "say:"))
+		_, _ = w.Write([]byte("event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":" + string(quotedSay) + "}\n\n"))
+		reply = rest
+	}
 	if strings.HasPrefix(reply, "tool:") {
 		name, args, _ := strings.Cut(strings.TrimPrefix(reply, "tool:"), " ")
 		quoted, _ := json.Marshal(args)
@@ -208,5 +214,19 @@ func TestLoopSourceTrust(t *testing.T) {
 	settings.TrustedSourcesMode, settings.TrustedSourcesAllowlist = "allowlist", []string{"integration:email"}
 	if !loopSourceTrusted(settings, loop, "integration:email") {
 		t.Fatal("workspace allowlist was not applied")
+	}
+}
+
+func TestLoopRunOutputDropsNarrationWrittenWithToolCalls(t *testing.T) {
+	provider := &fakeLoopProvider{replies: []string{
+		"say:I'll start by checking the open bugs.\n#tool:list_teams {}",
+		"say:Checking is done, writing the report.\n#tool:finish_run {\"status\":\"done\",\"summary\":\"Three bugs are open.\"}",
+	}}
+	_, handler := newLoopTestServer(t, provider)
+	loop := requestJSON[domain.Loop](t, handler, http.MethodPost, "/api/loops", map[string]any{"name": "Bug count", "instructions": "Report open bugs.", "status": "published"}, http.StatusCreated)
+	requestJSON[domain.LoopRun](t, handler, http.MethodPost, "/api/loops/"+loop.ID+"/runs", nil, http.StatusAccepted)
+	finished := waitForLoopRun(t, handler, loop.ID)
+	if finished.Status != "completed" || finished.Output != "Three bugs are open." {
+		t.Fatalf("output should be the finish_run report only, got %q (%s)", finished.Output, finished.Status)
 	}
 }
