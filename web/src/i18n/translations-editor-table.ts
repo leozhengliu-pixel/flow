@@ -22,6 +22,7 @@ export const editorTableZhCN: Record<string, string> = {
   "Could not copy table": "无法复制表格",
   "Row actions": "行操作",
   "Column actions": "列操作",
+  "Add table header": "添加表头",
   "Insert above": "在上方插入",
   "Insert below": "在下方插入",
   "Insert before": "在前面插入",

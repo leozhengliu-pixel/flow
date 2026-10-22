@@ -1,7 +1,7 @@
 import type { Editor } from '@tiptap/core'
 import { DOMSerializer, Fragment, type MarkType, type Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { Selection, type Transaction } from '@tiptap/pm/state'
-import { CellSelection, TableMap, addColumn, addRow, removeColumn, removeRow, rowIsHeader, selectedRect, type TableRect } from '@tiptap/pm/tables'
+import { CellSelection, TableMap, addColumn, addRow, removeColumn, removeRow, rowIsHeader, selectedRect, tableNodeTypes, type TableRect } from '@tiptap/pm/tables'
 import { tableAroundSelection, tableAt, type TableLocation } from './table-commands'
 
 /**
@@ -29,6 +29,8 @@ export function isPinnedHeader(table: TableLocation, axis: TableAxis, index: num
  * What a line's menu offers; unavailable commands are left out of the menu rather than disabled (measured on the reference
  * app). The header row only offers Insert below, Format and Copy text. A column (header cell or not) offers everything, Sort
  * included even with a single body row, and Delete is left out of a row menu when it would remove the last body row.
+ * Without a header row (a pasted header-less row) the first row is an ordinary row (Insert above, Move down, Sort, Delete
+ * when another row remains, as for any line) plus "Add header" on top, which turns it into the header row in place.
  */
 export function lineAvailability(table: TableLocation, axis: TableAxis, index: number) {
   const count = lineCount(table, axis)
@@ -37,6 +39,7 @@ export function lineAvailability(table: TableLocation, axis: TableAxis, index: n
   const moveBefore = !pinned && index > 0 && !(axis === 'row' && index === 1 && headerFirst)
   const moveAfter = !pinned && index < count - 1
   return {
+    addHeader: axis === 'row' && index === 0 && !headerFirst,
     insertBefore: !pinned,
     insertAfter: true,
     moveBefore,
@@ -235,6 +238,19 @@ export function formatLine(editor: Editor, line: TableLine, name: LineMark) {
   })
 }
 
+/** Turns the cells of a header-less first row into header cells in place (widths, content and marks stay; one undo step). */
+export function addHeaderRow(editor: Editor, line: TableLine) {
+  return dispatchLine(editor, { ...line, axis: 'row', index: 0 }, (tr, table) => {
+    if (!lineAvailability(table, 'row', 0).addHeader) return false
+    const header = tableNodeTypes(editor.schema).header_cell
+    for (const pos of lineCellPositions(table, 'row', 0)) {
+      const cell = tr.doc.nodeAt(pos)
+      if (cell) tr.setNodeMarkup(pos, header, cell.attrs, cell.marks)
+    }
+    return true
+  })
+}
+
 export function deleteLine(editor: Editor, line: TableLine) {
   return dispatchLine(editor, line, (tr, table) => {
     const count = lineCount(table, line.axis)
@@ -251,23 +267,48 @@ export function deleteLine(editor: Editor, line: TableLine) {
   })
 }
 
-/** Plain text (the non-empty cells separated by blank lines, as in the reference app) and an html table of just that line. */
+/**
+ * The plain text of a node the way the reference app writes it: a blank line between blocks, but only after text has been written
+ * since the last one. Empty cells therefore add nothing in the middle or at the start, while an empty last cell leaves the blank
+ * line of the block break before it (a column ending in an empty cell ends in "\n\n").
+ */
+export function clipboardText(node: ProseMirrorNode) {
+  let text = ''
+  let separated = true
+  node.descendants(child => {
+    if (child.isText) {
+      text += child.text ?? ''
+      separated = false
+    } else if (child.isBlock && !separated) {
+      text += '\n\n'
+      separated = true
+    }
+  })
+  return text
+}
+
+/** Plain text (see `clipboardText`) and an html table of just that line, laid out like the reference app's. */
 export function lineClipboard(editor: Editor, line: TableLine) {
   const table = currentTable(editor, line)
   if (!table) return null
-  const cellText = (cell: ProseMirrorNode) => cell.textBetween(0, cell.content.size, '\n\n', ' ')
   const cells = lineCellPositions(table, line.axis, line.index).map(pos => table.node.nodeAt(pos - table.pos - 1)!)
-  const text = cells.map(cellText).filter(value => value !== '').join('\n\n')
   const rowType = table.node.child(0).type
   const rows = line.axis === 'row' ? [rowType.create(null, cells)] : cells.map(cell => rowType.create(null, [cell]))
   const copy = table.node.type.create(table.node.attrs, rows)
+  const text = clipboardText(copy)
   const holder = document.createElement('div')
   holder.appendChild(DOMSerializer.fromSchema(editor.schema).serializeNode(copy))
   const tableElement = holder.querySelector('table')
-  // Like the reference app, the markup is the bare table: no column group, no inline min-width.
+  // Like the reference app, the markup is the bare table: no column group, no inline min-width; cells keep only `data-colwidth`.
   tableElement?.querySelector('colgroup')?.remove()
   tableElement?.removeAttribute('style')
   tableElement?.querySelectorAll('td, th').forEach(cell => cell.removeAttribute('class'))
+  // Links read href, target, rel (the reference's attribute order).
+  holder.querySelectorAll('a').forEach(anchor => {
+    const attributes = ['href', 'target', 'rel'].flatMap(name => anchor.hasAttribute(name) ? [[name, anchor.getAttribute(name) ?? '']] : [])
+    for (const [name] of attributes) anchor.removeAttribute(name)
+    for (const [name, value] of attributes) anchor.setAttribute(name, value)
+  })
   // A line without header cells must not turn into a header row when it is pasted (see TablePaste).
   if (tableElement && !cells.some(cell => cell.type.spec.tableRole === 'header_cell')) tableElement.setAttribute('data-headerless', '')
   // (Chrome keeps an empty `style=""` after the attribute was removed from an element whose style object was touched.)

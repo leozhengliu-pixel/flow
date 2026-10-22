@@ -10,12 +10,12 @@ import { useI18n } from '@/i18n/i18n'
 import { toast } from '@/lib/toast'
 import { tableAt } from './table-commands'
 import {
-  BoldIcon, CopyTextIcon, DeleteColumnIcon, DeleteRowIcon, DuplicateIcon, FormatIcon, HandleDotsIcon, InsertColumnIcon, InsertRowIcon, ItalicIcon,
+  AddHeaderIcon, BoldIcon, CopyTextIcon, DeleteColumnIcon, DeleteRowIcon, DuplicateIcon, FormatIcon, HandleDotsIcon, InsertColumnIcon, InsertRowIcon, ItalicIcon,
   MoveDownIcon, MoveLeftIcon, SortAscendingIcon, SortDescendingIcon, StrikethroughIcon, UnderlineIcon,
 } from './table-icons'
 import { setLineHighlight } from './table-line-highlight'
 import {
-  copyLineText, deleteLine, duplicateLine, formatLine, insertLine, lineAvailability, moveLine, sortColumn,
+  addHeaderRow, copyLineText, deleteLine, duplicateLine, formatLine, insertLine, lineAvailability, moveLine, sortColumn,
   type LineMark, type TableAxis, type TableLine,
 } from './table-lines'
 
@@ -58,7 +58,7 @@ const FORMATS: Array<{ mark: LineMark; label: string; icon: Glyph; shortcut: str
  * Format on the header row).
  */
 function LineMenuItems({ editor, line }: { editor: Editor; line: TableLine }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const table = tableAt(editor, line.tablePos)
   if (!table) return null
   const row = line.axis === 'row'
@@ -83,6 +83,11 @@ function LineMenuItems({ editor, line }: { editor: Editor; line: TableLine }) {
     ? { label: 'Insert below', move: 'Move down', Move: MoveDownIcon, key: '↓', moveRotate: undefined }
     : { label: 'Insert after', move: 'Move right', Move: MoveLeftIcon, key: '→', moveRotate: 180 as const }
   return <>
+    {available.addHeader ? <>
+      {/* "Add header" is a table term; the shared dictionary already maps that English text to the request-header wording, so Chinese uses its own key. */}
+      {item(AddHeaderIcon, locale === 'zh-CN' ? t('Add table header') : 'Add header', act(() => addHeaderRow(editor, line)))}
+      <DropdownMenuSeparator/>
+    </> : null}
     {available.insertBefore ? item(InsertIcon, before.label, act(() => insertLine(editor, line, 'before')), undefined, 180) : null}
     {available.insertAfter ? item(InsertIcon, after.label, act(() => insertLine(editor, line, 'after'))) : null}
     {available.moveBefore ? item(before.Move, before.move, act(() => moveLine(editor, line, 'before')), `⌘ ⌥ ⇧ ${before.key}`, before.moveRotate) : null}
