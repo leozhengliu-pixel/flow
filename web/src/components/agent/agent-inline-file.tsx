@@ -5,18 +5,9 @@ import { deleteIcon, downloadIcon, linkIcon, viewIcon } from '@/components/issue
 import { openPdfViewer } from '@/components/editor/pdf/pdf-bridge'
 import { printPdf } from '@/components/editor/pdf/pdf-file-actions'
 import { useI18n } from '@/i18n/i18n'
+import { formatFileSize } from '@/lib/format-file-size'
 import { ToolbarIcon } from './agent-inline-image'
 import styles from './agent-inline-file.module.css'
-
-/** "43 B", "1.2 KB", "12 KB", "1.2 MB". */
-function formatAgentFileSize(bytes: number) {
-  if (bytes < 1024) return `${Math.max(0, Math.round(bytes))} B`
-  const units = ['KB', 'MB', 'GB']
-  let value = bytes / 1024
-  let unit = 0
-  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++ }
-  return `${value < 10 ? value.toFixed(1).replace(/\.0$/, '') : Math.round(value)} ${units[unit]}`
-}
 
 const isPdf = (name: string, contentType: string) => contentType === 'application/pdf' || /\.pdf$/i.test(name)
 
@@ -46,7 +37,7 @@ export function AgentInlineFile({ name, src, size, contentType, editable = false
           </span>
           <span className={styles.text}>
             <span className={styles.name} data-i18n-ignore>{name}</span>
-            {!uploading && <span className={styles.size} data-i18n-ignore>{formatAgentFileSize(size)}</span>}
+            {!uploading && <span className={styles.size} data-i18n-ignore>{formatFileSize(size)}</span>}
           </span>
         </span>
         {!uploading && <span className={styles.actions}>

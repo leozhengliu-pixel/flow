@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import { canvasDensity, destroyPdfDocument, loadPdfDocument, PDF_POINT_TO_CSS, PDF_ZOOM_LEVELS } from './pdf-document'
+import { canvasDensity, destroyPdfDocument, loadPdfDocument, needsTiles, PDF_POINT_TO_CSS, PDF_ZOOM_LEVELS, planTileRegion, regionCovers, type PageRegion } from './pdf-document'
 import { copyPdfLink, downloadPdf, pdfText, printPdf } from './pdf-file-actions'
 import { CLOSE_GLYPH, NEXT_GLYPH, PREVIOUS_GLYPH, PRINT_GLYPH, ZOOM_IN_GLYPH, ZOOM_OUT_GLYPH, type GlyphPath } from './pdf-icons'
 import { downloadIcon, linkIcon } from '@/components/issue/editor/image-extension'
@@ -150,7 +150,7 @@ export function PdfViewerDialog({ src, title, insets, onClose }: { src: string; 
         <ViewerButton label={label('Copy link')} onClick={() => void copyPdfLink(src)}><ElementGlyph make={linkIcon}/></ViewerButton>
         <ViewerButton label={label('Print')} onClick={() => void printPdf(src)}><Glyph paths={PRINT_GLYPH}/></ViewerButton>
         <span aria-hidden className="pdf-viewer-separator pdf-viewer-separator-end"/>
-        <ViewerButton label={label('Close')} onClick={onClose}><Glyph paths={CLOSE_GLYPH}/></ViewerButton>
+        <ViewerButton label={label('Close')} onClick={onClose} tooltip={false}><Glyph paths={CLOSE_GLYPH}/></ViewerButton>
       </div>
     </div>
     <div aria-label={`${title}, ${label('PDF preview')}`} className="pdf-viewer-scroll" data-i18n-ignore onScroll={onScroll} ref={setScroller} role="group">
@@ -177,8 +177,9 @@ function pageLabel(current: number, count: number) {
   return pdfText(`Page ${current} of ${count}`)
 }
 
-function ViewerButton({ label, disabled, onClick, children }: { label: string; disabled?: boolean; onClick: () => void; children: ReactNode }) {
-  return <button aria-label={label} className="pdf-viewer-button" disabled={disabled} onClick={onClick} type="button">{children}</button>
+/** Every header button but Close shows the app-wide tooltip (label only, no shortcut hint), as in the reference app. */
+function ViewerButton({ label, disabled, onClick, children, tooltip = true }: { label: string; disabled?: boolean; onClick: () => void; children: ReactNode; tooltip?: boolean }) {
+  return <button aria-label={label} className="pdf-viewer-button" data-tooltip-text={tooltip ? label : undefined} disabled={disabled} onClick={onClick} type="button">{children}</button>
 }
 
 function Glyph({ paths }: { paths: GlyphPath[] }) {
@@ -196,12 +197,19 @@ function ElementGlyph({ make }: { make: () => SVGSVGElement }) {
 
 /**
  * One page. It only renders its canvas while it is near the viewport (and frees it again when far away), so a long
- * document or a high zoom never holds every page bitmap in memory.
+ * document or a high zoom never holds every page bitmap in memory. A page that is too big for one bitmap at screen
+ * density (high zoom) is drawn in tiles: only the part in view, plus a margin, is rendered, at full density, and it is
+ * redrawn as the scroller moves, so 400% stays as sharp as 100% while no canvas passes the pixel cap.
  */
 function PdfPage({ file, number, width, height, root, pageRef }: { file: PDFDocumentProxy; number: number; width: number; height: number; root: HTMLElement; pageRef: (element: HTMLDivElement | null) => void }) {
   const wrapper = useRef<HTMLDivElement | null>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const [near, setNear] = useState(number <= 2)
+  const tiled = needsTiles(width, height)
+  // The tiled region together with the page size it was planned for (a zoom change makes it stale until the tracker replans).
+  const [planned, setPlanned] = useState<{ region: PageRegion; pageWidth: number; pageHeight: number } | null>(null)
+  const fresh = !tiled || (planned != null && planned.pageWidth === width && planned.pageHeight === height)
+  const active: PageRegion = !tiled ? { x: 0, y: 0, width, height } : fresh && planned ? planned.region : { x: 0, y: 0, width, height }
 
   useEffect(() => {
     const element = wrapper.current
@@ -211,9 +219,36 @@ function PdfPage({ file, number, width, height, root, pageRef }: { file: PDFDocu
     return () => observer.disconnect()
   }, [root])
 
+  // Tiled pages follow the scroller: the region to render is whatever part of the page is in view.
+  useEffect(() => {
+    const element = wrapper.current
+    if (!tiled || !near || !element) return
+    let timer = 0
+    const update = () => {
+      const page = element.getBoundingClientRect()
+      const view = root.getBoundingClientRect()
+      const clamp = (value: number, max: number) => Math.max(0, Math.min(max, value))
+      const x0 = clamp(view.left - page.left, width)
+      const y0 = clamp(view.top - page.top, height)
+      const visible: PageRegion = { x: x0, y: y0, width: Math.max(1, clamp(view.right - page.left, width) - x0), height: Math.max(1, clamp(view.bottom - page.top, height) - y0) }
+      setPlanned(current => current && current.pageWidth === width && current.pageHeight === height && regionCovers(current.region, visible)
+        ? current
+        : { region: planTileRegion(visible, width, height), pageWidth: width, pageHeight: height })
+    }
+    const schedule = () => { window.clearTimeout(timer); timer = window.setTimeout(update, 80) }
+    update()
+    root.addEventListener('scroll', schedule, { passive: true })
+    window.addEventListener('resize', schedule)
+    return () => {
+      window.clearTimeout(timer)
+      root.removeEventListener('scroll', schedule)
+      window.removeEventListener('resize', schedule)
+    }
+  }, [tiled, near, root, width, height])
+
   useEffect(() => {
     const target = canvas.current
-    if (!target) return
+    if (!target || !fresh) return
     if (!near) {
       target.width = 0
       target.height = 0
@@ -227,18 +262,22 @@ function PdfPage({ file, number, width, height, root, pageRef }: { file: PDFDocu
         if (cancelled) return
         const natural = page.getViewport({ scale: 1 })
         const scale = (width / natural.width) || 1
-        const density = canvasDensity(width, height)
+        const density = canvasDensity(active.width, active.height)
         const viewport = page.getViewport({ scale: scale * density })
-        // Drawn on a detached canvas first, so a zoom change never shows a blank or half-painted page.
+        // Drawn on a detached canvas first, so a zoom or scroll change never shows a blank or half-painted page.
         const buffer = target.ownerDocument.createElement('canvas')
-        buffer.width = Math.floor(viewport.width)
-        buffer.height = Math.floor(viewport.height)
-        const render = page.render({ canvas: buffer, viewport })
+        buffer.width = Math.max(1, Math.floor(active.width * density))
+        buffer.height = Math.max(1, Math.floor(active.height * density))
+        const render = page.render({ canvas: buffer, viewport, transform: active.x || active.y ? [1, 0, 0, 1, -active.x * density, -active.y * density] : undefined })
         task = render
         await render.promise
         if (cancelled) return
         target.width = buffer.width
         target.height = buffer.height
+        target.style.left = `${active.x}px`
+        target.style.top = `${active.y}px`
+        target.style.width = `${active.width}px`
+        target.style.height = `${active.height}px`
         target.getContext('2d')?.drawImage(buffer, 0, 0)
       } catch {
         // A cancelled render (zoom changed, page scrolled away) is expected.
@@ -248,9 +287,9 @@ function PdfPage({ file, number, width, height, root, pageRef }: { file: PDFDocu
       cancelled = true
       task?.cancel()
     }
-  }, [file, number, near, width, height])
+  }, [file, number, near, fresh, width, height, active.x, active.y, active.width, active.height]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  return <div className="pdf-viewer-page" ref={element => { wrapper.current = element; pageRef(element) }} style={{ width, height }}>
+  return <div className="pdf-viewer-page" data-tiled={tiled ? '' : undefined} ref={element => { wrapper.current = element; pageRef(element) }} style={{ width, height }}>
     <canvas aria-label={pdfText(`Page ${number}`)} className="pdf-viewer-canvas" ref={canvas} role="img"/>
   </div>
 }

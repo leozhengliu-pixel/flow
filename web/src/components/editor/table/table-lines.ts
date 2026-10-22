@@ -2,6 +2,7 @@ import type { Editor } from '@tiptap/core'
 import { DOMSerializer, Fragment, type MarkType, type Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { Selection, type Transaction } from '@tiptap/pm/state'
 import { CellSelection, TableMap, addColumn, addRow, removeColumn, removeRow, rowIsHeader, selectedRect, tableNodeTypes, type TableRect } from '@tiptap/pm/tables'
+import { editorClipboardDocumentId, withClipboardMarker } from '../clipboard-origin'
 import { tableAroundSelection, tableAt, type TableLocation } from './table-commands'
 
 /**
@@ -318,9 +319,12 @@ export function lineClipboard(editor: Editor, line: TableLine) {
 export async function copyLineText(editor: Editor, line: TableLine) {
   const clipboard = lineClipboard(editor, line)
   if (!clipboard) return false
+  // Like a copy from the document itself, the html starts with the Flow marker span (when the editor carries one).
+  const documentId = editorClipboardDocumentId(editor)
+  const html = documentId === null ? clipboard.html : withClipboardMarker(clipboard.html, documentId)
   if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
     try {
-      await navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([clipboard.text], { type: 'text/plain' }), 'text/html': new Blob([clipboard.html], { type: 'text/html' }) })])
+      await navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([clipboard.text], { type: 'text/plain' }), 'text/html': new Blob([html], { type: 'text/html' }) })])
       return true
     } catch { /* fall back to plain text */ }
   }

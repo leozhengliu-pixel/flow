@@ -2,7 +2,8 @@
  * The PDF viewer, measured against the reference app (CSS px, both themes): a full-screen layer under the tooltip layer
  * with a 44px header (.5px bottom hairline, 6px 8px padding, 4px gaps, 28px pill buttons with 14px glyphs, 13px/450
  * labels) over a scroller (8px padding and gap) of pages that are 816px wide at 100% (612pt x 96/72), each with a
- * .5px border. Colours come from the --pdf-viewer-* tokens.
+ * .5px border. Colours come from the --pdf-viewer-* tokens. The reference viewer has no width breakpoints at all (none of
+ * its elements match a width media query), so nothing here changes on narrow screens either: the page scrolls sideways.
  */
 .pdf-viewer {
   position: fixed;
@@ -81,7 +82,8 @@
   border: .5px solid var(--pdf-viewer-page-border);
   background: var(--pdf-viewer-page-bg);
 }
-.pdf-viewer-canvas { display: block; width: 100%; height: 100%; }
+/* Positioned by the page code: the whole page, or (tiled, high zoom) the rendered part of it. */
+.pdf-viewer-canvas { position: absolute; left: 0; top: 0; display: block; width: 100%; height: 100%; }
 .pdf-viewer-status {
   position: absolute;
   inset: 0;
@@ -91,9 +93,4 @@
   color: var(--pdf-viewer-muted);
   font: 450 13px/16px var(--font);
   pointer-events: none;
-}
-@media (max-width: 600px) {
-  /* Narrow screens keep the page arrows and zoom buttons but drop the "Page n of m" text. */
-  .pdf-viewer-indicator { display: none; }
-  .pdf-viewer-scroll { padding: 4px; gap: 4px; }
 }

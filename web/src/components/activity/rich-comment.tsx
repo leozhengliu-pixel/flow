@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { Markdown } from '@tiptap/markdown'
 import { EditorContent, useEditor } from '@tiptap/react'
+import { ClipboardOrigin } from '@/components/editor/clipboard-origin'
 import { FlowStarterKit } from '@/components/editor/flow-starter-kit'
 import { LinkBehavior } from '@/components/editor/link-behavior'
 import { EmbedNode } from '@/components/editor/embeds/embed-extension'
@@ -19,7 +20,7 @@ export function RichComment({ body, data, version }: { body: string; data?: Reco
   const editor = useEditor({
     immediatelyRender: false,
     editable: false,
-    extensions: [FlowStarterKit.configure({ link: { openOnClick: false, autolink: true, linkOnPaste: true } }), LinkBehavior, Markdown, MentionChipNode, EmbedNode, DescriptionImage, DescriptionFile.configure({ preview: false }), DescriptionVideo, ...structuredBlocks],
+    extensions: [FlowStarterKit.configure({ link: { openOnClick: false, autolink: true, linkOnPaste: true } }), LinkBehavior, ClipboardOrigin, Markdown, MentionChipNode, EmbedNode, DescriptionImage, DescriptionFile.configure({ preview: false }), DescriptionVideo, ...structuredBlocks],
     content: initial.content,
     contentType: initial.contentType,
     editorProps: { attributes: { role: 'document', 'aria-label': t('Comment') } },

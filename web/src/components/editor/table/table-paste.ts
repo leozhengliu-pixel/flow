@@ -3,6 +3,7 @@ import { Fragment, Slice, type Node as ProseMirrorNode, type Schema } from '@tip
 import { Plugin, PluginKey, Selection, type EditorState } from '@tiptap/pm/state'
 import { tableNodeTypes } from '@tiptap/pm/tables'
 import type { EditorView } from '@tiptap/pm/view'
+import { isFlowClipboardHtml } from '../clipboard-origin'
 import { isPlainTextWrapperHtml, normalizeNewlines } from '../markdown-paste/markdown-detect'
 
 export const tablePasteKey = new PluginKey('flowTablePaste')
@@ -110,7 +111,8 @@ export const TablePaste = Extension.create({
       key: tablePasteKey,
       props: {
         transformPastedHTML: html => {
-          promoteHeader = /<table[\s>]/i.test(html) && !/data-pm-slice|data-headerless/i.test(html)
+          // Flow's own clipboard (marker span, slice data, header-less flag) already has exactly the header cells it had.
+          promoteHeader = /<table[\s>]/i.test(html) && !/data-pm-slice|data-headerless/i.test(html) && !isFlowClipboardHtml(html)
           return html
         },
         transformPasted: (slice, view) => {
