@@ -7,13 +7,13 @@ import { CellSelection } from '@tiptap/pm/tables'
 import { EditorContent, useEditor } from '@tiptap/react'
 import type { Editor } from '@tiptap/core'
 import { useEffect } from 'react'
-import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { MarkdownPaste } from '@/components/editor/markdown-paste'
 import { flowTableKit } from '.'
 import {
-  compareCellText, deleteLine, duplicateLine, formatLine, insertLine, lineClipboard, moveLine, moveSelectedLine, selectLine, sortColumn,
-  type TableLine,
+  compareCellText, copyLineText, deleteLine, duplicateLine, formatLine, insertLine, lineAvailability, lineClipboard, moveLine, moveSelectedLine, selectLine,
+  sortColumn, type TableLine,
 } from './table-lines'
 import { parseTabularText, tableFromRows, withHeaderRow } from './table-paste'
 
@@ -50,6 +50,7 @@ const grid = (editor: Editor) => tableJson(editor).content!.map(row => row.conte
 const cellTypes = (editor: Editor) => tableJson(editor).content!.map(row => row.content!.map(cell => cell.type === 'tableHeader' ? 'H' : 'D').join(''))
 const tablePos = (editor: Editor) => { let found = 0; editor.state.doc.descendants((node, pos) => { if (node.type.name === 'table') { found = pos; return false } return true }); return found }
 const line = (editor: Editor, axis: 'row' | 'column', index: number): TableLine => ({ tablePos: tablePos(editor), axis, index })
+const tableLocation = (editor: Editor) => { const pos = tablePos(editor); return { pos, node: editor.state.doc.nodeAt(pos)! } }
 
 /** Runs `run` and reports how many transactions the editor dispatched (a menu command must be exactly one: one undo step). */
 function countTransactions(editor: Editor, run: () => unknown) {
@@ -166,10 +167,10 @@ describe('duplicate', () => {
     expect(cellTypes(editor)[0]).toBe('HHH')
   })
 
-  it('duplicates the header row as ordinary cells', async () => {
+  it('does not duplicate the header row (its menu has no Duplicate)', async () => {
     const editor = await setup()
-    act(() => { duplicateLine(editor, line(editor, 'row', 0)) })
-    expect(cellTypes(editor)).toEqual(['HH', 'DD', 'DD', 'DD', 'DD'])
+    expect(duplicateLine(editor, line(editor, 'row', 0))).toBe(false)
+    expect(cellTypes(editor)).toEqual(['HH', 'DD', 'DD', 'DD'])
   })
 })
 
@@ -265,12 +266,70 @@ describe('copy text, select, delete', () => {
     expect(clip.html.match(/<tr/g)).toHaveLength(4)
   })
 
+  it('leaves empty cells out of the plain text (the reference puts only the filled cells on the clipboard)', async () => {
+    const editor = await setup('<table><tr><th><p>H</p></th><th><p></p></th></tr><tr><td><p>x</p></td><td><p></p></td></tr><tr><td><p></p></td><td><p></p></td></tr><tr><td><p>z</p></td><td><p>w</p></td></tr></table><p></p>')
+    expect(lineClipboard(editor, line(editor, 'column', 0))!.text).toBe('H\n\nx\n\nz')
+    expect(lineClipboard(editor, line(editor, 'row', 2))!.text).toBe('')
+    expect(lineClipboard(editor, line(editor, 'row', 3))!.text).toBe('z\n\nw')
+  })
+
+  it('copies the header row with header cells and no header-less marker', async () => {
+    const editor = await setup()
+    const clip = lineClipboard(editor, line(editor, 'row', 0))!
+    expect(clip.text).toBe('Name\n\nQty')
+    expect(clip.html).toContain('<th')
+    expect(clip.html).not.toContain('data-headerless')
+    expect(clip.html.match(/<tr/g)).toHaveLength(1)
+  })
+
+  it('puts the plain text and the html table on the clipboard in one write', async () => {
+    const editor = await setup()
+    const written: Array<Record<string, string>> = []
+    class FakeItem {
+      data: Record<string, Blob>
+      constructor(data: Record<string, Blob>) { this.data = data }
+    }
+    vi.stubGlobal('ClipboardItem', FakeItem)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { write: async (items: FakeItem[]) => { for (const item of items) written.push(Object.fromEntries(await Promise.all(Object.entries(item.data).map(async ([type, blob]) => [type, await blob.text()])))) } },
+    })
+    try {
+      await copyLineText(editor, line(editor, 'row', 1))
+    } finally { vi.unstubAllGlobals() }
+    expect(written).toHaveLength(1)
+    expect(Object.keys(written[0])).toEqual(['text/plain', 'text/html'])
+    expect(written[0]['text/plain']).toBe('banana\n\n10')
+    expect(written[0]['text/html']).toMatch(/^<table data-headerless=""><tbody><tr><td><p>banana<\/p><\/td><td><p>10<\/p><\/td><\/tr><\/tbody><\/table>$/)
+  })
+
   it('selects a whole row / column', async () => {
     const editor = await setup()
     act(() => { selectLine(editor, line(editor, 'row', 2)) })
     expect((editor.state.selection as CellSelection).isRowSelection()).toBe(true)
     act(() => { selectLine(editor, line(editor, 'column', 1)) })
     expect((editor.state.selection as CellSelection).isColSelection()).toBe(true)
+  })
+
+  it('never deletes the header row or the last body row, but a column and then the table', async () => {
+    const editor = await setup('<table><tr><th><p>H</p></th></tr><tr><td><p>solo</p></td></tr></table><p></p>')
+    expect(deleteLine(editor, line(editor, 'row', 0))).toBe(false)
+    expect(deleteLine(editor, line(editor, 'row', 1))).toBe(false)
+    expect(grid(editor)).toEqual([['H'], ['solo']])
+    expect(lineAvailability(tableLocation(editor), 'row', 1).delete).toBe(false)
+    expect(lineAvailability(tableLocation(editor), 'column', 0).delete).toBe(true)
+    act(() => { deleteLine(editor, line(editor, 'column', 0)) })
+    expect(tableCount(editor)).toBe(0)
+  })
+
+  it('offers the header row only Insert below, and the other lines everything their position allows', async () => {
+    const editor = await setup()
+    const table = tableLocation(editor)
+    expect(lineAvailability(table, 'row', 0)).toMatchObject({ insertBefore: false, insertAfter: true, moveBefore: false, moveAfter: false, duplicate: false, delete: false })
+    expect(lineAvailability(table, 'row', 1)).toMatchObject({ insertBefore: true, moveBefore: false, moveAfter: true, duplicate: true, delete: true, separateDuplicate: false })
+    expect(lineAvailability(table, 'row', 3)).toMatchObject({ moveBefore: true, moveAfter: false, separateDuplicate: true })
+    expect(lineAvailability(table, 'column', 0)).toMatchObject({ insertBefore: true, moveBefore: false, moveAfter: true, sort: true, delete: true })
+    expect(lineAvailability(table, 'column', 1)).toMatchObject({ moveBefore: true, moveAfter: false, separateDuplicate: true })
   })
 
   it('deletes a row / column, and the table when it was the last one', async () => {
@@ -290,16 +349,84 @@ describe('row and column menus', () => {
     await user.hover(screen.getByText(text, { selector: 'p' }))
     return user
   }
-  const items = async () => (await screen.findAllByRole('menuitem')).map(item => item.textContent?.replace(/[⌘⌥⇧↑↓←→]|Ctrl|Alt|Shift/g, '').trim())
+  const items = async () => (await screen.findAllByRole('menuitem')).map(item => item.textContent?.replace(/[⌘⌥⇧↑↓←→▶]|Ctrl|Alt|Shift/g, '').trim())
 
-  it('shows the row menu for the hovered row; the first body row has no Move up', async () => {
+  it('shows the row menu for the hovered row; the first body row has no Move up; opening it tints the row but keeps the selection', async () => {
     const editor = await setup()
+    const selection = JSON.stringify(editor.state.selection.toJSON())
     const user = await hoverCell('banana')
     await user.click(await screen.findByRole('button', { name: 'Row actions' }))
     expect(await items()).toEqual(['Insert above', 'Insert below', 'Move down', 'Duplicate', 'Format', 'Copy text', 'Delete'])
-    expect((editor.state.selection as CellSelection).isRowSelection()).toBe(true)
+    expect(JSON.stringify(editor.state.selection.toJSON())).toBe(selection)
+    expect(document.querySelectorAll('.flow-table-line-active')).toHaveLength(2)
     await user.click(screen.getByRole('menuitem', { name: /Move down/ }))
     expect(grid(editor).map(row => row[0])).toEqual(['Name', 'Apple', 'banana', 'cherry'])
+    await waitFor(() => expect(document.querySelectorAll('.flow-table-line-active')).toHaveLength(0))
+  })
+
+  it('the header row menu only has Insert below, Format and Copy text, with a divider only before Copy text', async () => {
+    await setup()
+    const user = await hoverCell('Name')
+    await user.click(await screen.findByRole('button', { name: 'Row actions' }))
+    expect(await items()).toEqual(['Insert below', 'Format', 'Copy text'])
+    expect(screen.getAllByRole('separator')).toHaveLength(1)
+    expect(screen.getByRole('separator').previousElementSibling?.textContent).toContain('Format')
+  })
+
+  it('the column menu of a header cell is complete, and Sort is offered with a single body row', async () => {
+    await setup('<table><tr><th><p>Name</p></th></tr><tr><td><p>solo</p></td></tr></table><p></p>')
+    const user = await hoverCell('Name')
+    await user.click(await screen.findByRole('button', { name: 'Column actions' }))
+    expect(await items()).toEqual(['Insert before', 'Insert after', 'Duplicate', 'Sort ascending', 'Sort descending', 'Format', 'Copy text', 'Delete'])
+  })
+
+  it('leaves Delete out of a row menu that would remove the last body row, and keeps it for the last column', async () => {
+    await setup('<table><tr><th><p>Name</p></th></tr><tr><td><p>solo</p></td></tr></table><p></p>')
+    const user = await hoverCell('solo')
+    await user.click(await screen.findByRole('button', { name: 'Row actions' }))
+    expect(await items()).toEqual(['Insert above', 'Insert below', 'Duplicate', 'Format', 'Copy text'])
+  })
+
+  it('draws a divider before Duplicate only when Move up / left is the only move', async () => {
+    await setup('<table><tr><th><p>H</p></th><th><p>I</p></th><th><p>J</p></th></tr><tr><td><p>a</p></td><td><p>b</p></td><td><p>c</p></td></tr><tr><td><p>d</p></td><td><p>e</p></td><td><p>f</p></td></tr></table><p></p>')
+    const dividersBeforeDuplicate = () => {
+      const duplicate = screen.getByRole('menuitem', { name: 'Duplicate' })
+      return duplicate.previousElementSibling?.getAttribute('role') === 'separator'
+    }
+    let user = await hoverCell('a')
+    await user.click(await screen.findByRole('button', { name: 'Row actions' }))
+    expect(dividersBeforeDuplicate()).toBe(false)
+    await user.keyboard('{Escape}')
+    user = await hoverCell('d')
+    await user.click(await screen.findByRole('button', { name: 'Row actions' }))
+    expect(dividersBeforeDuplicate()).toBe(true)
+    await user.keyboard('{Escape}')
+    user = await hoverCell('I')
+    await user.click(await screen.findByRole('button', { name: 'Column actions' }))
+    expect(dividersBeforeDuplicate()).toBe(false)
+    await user.keyboard('{Escape}')
+    user = await hoverCell('J')
+    await user.click(await screen.findByRole('button', { name: 'Column actions' }))
+    expect(dividersBeforeDuplicate()).toBe(true)
+  })
+
+  it('renders the reference glyphs (filled with currentColor) next to every item and a shortcut hint on moves', async () => {
+    await setup()
+    const user = await hoverCell('Apple')
+    await user.click(await screen.findByRole('button', { name: 'Row actions' }))
+    const menu = screen.getAllByRole('menuitem')
+    for (const item of menu) {
+      const svg = item.querySelector('svg')
+      expect(svg?.getAttribute('viewBox')).toBe('0 0 16 16')
+      expect(svg?.getAttribute('fill')).toBe('currentColor')
+      expect(svg?.querySelector('path')?.getAttribute('d')?.length).toBeGreaterThan(60)
+    }
+    const up = screen.getByRole('menuitem', { name: /Move up/ })
+    expect(up.querySelector('svg')?.style.transform).toBe('rotate(180deg)')
+    expect(up.querySelectorAll('kbd')).toHaveLength(4)
+    expect(screen.getByRole('menuitem', { name: /Insert above/ }).querySelector('svg')?.style.transform).toBe('rotate(180deg)')
+    expect(screen.getByRole('menuitem', { name: /Insert below/ }).querySelector('svg')?.style.transform).toBe('')
+    expect(screen.getByRole('button', { name: 'Row actions' }).querySelector('svg')?.style.transform).toBe('rotate(90deg)')
   })
 
   it('shows the column menu: first column has no Move left, the last none Move right; sort is present', async () => {

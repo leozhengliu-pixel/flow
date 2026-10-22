@@ -1,12 +1,13 @@
 import type { Editor } from '@tiptap/core'
 import {
-  ArrowDownToLine, ArrowLeftToLine, ArrowRightToLine, ArrowUpToLine, Copy, EllipsisVertical, MousePointerSquareDashed,
+  ArrowDownToLine, ArrowLeftToLine, ArrowRightToLine, ArrowUpToLine,
   PanelLeft, PanelTop, Plus, Rows3, Columns3, Trash2, Ellipsis, type LucideIcon,
 } from 'lucide-react'
-import { Fragment, useEffect, useState, type MouseEvent } from 'react'
+import { Fragment, useEffect, useRef, useState, type MouseEvent } from 'react'
 import { toast } from '@/lib/toast'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useI18n } from '@/i18n/i18n'
+import { HandleDotsIcon, TableCopyIcon, TableSelectIcon, TableTrashIcon } from './table-icons'
 import { TableLineHandles } from './table-line-menus'
 import { deleteWholeTable, runInTable, selectWholeTable, tableAt, tableToText } from './table-commands'
 
@@ -48,6 +49,15 @@ export function TableChrome({ editor, getPos }: { editor: Editor; getPos: () => 
   const { t } = useI18n()
   const editable = useEditable(editor)
   const [openMenu, setOpenMenu] = useState<'actions' | 'block' | 'lines' | null>(null)
+  const chromeRef = useRef<HTMLDivElement>(null)
+  // The table frame shows its selection outline in the accent colour while one of its menus is open.
+  useEffect(() => {
+    const frame = chromeRef.current?.closest('.flow-table')
+    if (!frame) return
+    if (openMenu) frame.setAttribute('data-menu-open', '')
+    else frame.removeAttribute('data-menu-open')
+    return () => frame.removeAttribute('data-menu-open')
+  }, [openMenu, editable])
   if (!editable) return null
 
   const addRow = () => runInTable(editor, getPos(), 'last', chain => chain.addRowAfter())
@@ -64,7 +74,7 @@ export function TableChrome({ editor, getPos }: { editor: Editor; getPos: () => 
     onOpenChange: (next: boolean) => setOpenMenu(next ? name : current => current === name ? null : current),
     modal: false,
   })
-  return <div className="flow-table__chrome" data-open={openMenu ?? undefined} contentEditable={false}>
+  return <div ref={chromeRef} className="flow-table__chrome" data-open={openMenu ?? undefined} contentEditable={false}>
     <button type="button" className="flow-table__add-row" aria-label={t('Add row')} title={t('Add row')} tabIndex={-1} onMouseDown={keepSelection} onClick={addRow}><Plus size={14} aria-hidden/></button>
     <button type="button" className="flow-table__add-column" aria-label={t('Add column')} title={t('Add column')} tabIndex={-1} onMouseDown={keepSelection} onClick={addColumn}><Plus size={14} aria-hidden/></button>
     <TableLineHandles editor={editor} getPos={getPos} onMenuChange={open => setOpenMenu(open ? 'lines' : current => current === 'lines' ? null : current)}/>
@@ -83,13 +93,13 @@ export function TableChrome({ editor, getPos }: { editor: Editor; getPos: () => 
     </DropdownMenu>
     <DropdownMenu {...menuProps('block')}>
       <DropdownMenuTrigger asChild>
-        <button type="button" className="flow-table__handle" aria-label={t('Table menu')} title={t('Table menu')} onMouseDown={keepSelection}><EllipsisVertical size={16} aria-hidden/></button>
+        <button type="button" className="flow-table__handle" aria-label={t('Table menu')} title={t('Table menu')} onMouseDown={keepSelection}><HandleDotsIcon rotate={90}/></button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="flow-table__menu" align="start" side="bottom" sideOffset={4} onCloseAutoFocus={event => event.preventDefault()}>
-        <DropdownMenuItem onSelect={copy}><Copy size={16} aria-hidden/>{t('Copy')}</DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => { selectWholeTable(editor, getPos()) }}><MousePointerSquareDashed size={16} aria-hidden/>{t('Select')}</DropdownMenuItem>
+      <DropdownMenuContent className="flow-table__block-menu" align="end" side="bottom" sideOffset={4} onCloseAutoFocus={event => event.preventDefault()}>
+        <DropdownMenuItem onSelect={copy}><TableCopyIcon/><span>{t('Copy')}</span></DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => { selectWholeTable(editor, getPos()) }}><TableSelectIcon/><span>{t('Select')}</span></DropdownMenuItem>
         <DropdownMenuSeparator/>
-        <DropdownMenuItem className="flow-table__menu-danger" onSelect={() => { deleteWholeTable(editor, getPos()) }}><Trash2 size={16} aria-hidden/>{t('Delete')}</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => { deleteWholeTable(editor, getPos()) }}><TableTrashIcon/><span>{t('Delete')}</span></DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   </div>

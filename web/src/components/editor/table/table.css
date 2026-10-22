@@ -34,14 +34,29 @@
   color: var(--bright);
   font-weight: 600;
 }
-.flow-table .tableWrapper table > tbody > tr > .selectedCell::after {
+/* Selected cells (and the cells of the row / column whose menu is open) are tinted; the selection also gets a 1px outline on its outer
+   edges: grey, or the accent colour while one of the table's menus is open. */
+.flow-table .tableWrapper table > tbody > tr > :is(td, th):is(.selectedCell, .flow-table-line-active) { background: var(--table-selection-bg); }
+.flow-table .tableWrapper table > tbody > tr > :is(td, th).selectedCell::after {
   content: '';
   position: absolute;
-  inset: 0;
+  inset: -1px;
   z-index: 1;
-  background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+  border: 0 solid var(--table-selection-edge);
+  border-radius: 2px;
   pointer-events: none;
 }
+.flow-table[data-menu-open] .tableWrapper table > tbody > tr > :is(td, th).selectedCell::after { border-color: var(--table-selection-edge-active); }
+.flow-table .tableWrapper table > tbody > tr > :is(td, th).selectedCell:not(.selectedCell + .selectedCell)::after { border-left-width: 1px; }
+.flow-table .tableWrapper table > tbody > tr > :is(td, th).selectedCell:not(:has(+ .selectedCell))::after { border-right-width: 1px; }
+.flow-table .tableWrapper table > tbody > tr:first-child > .selectedCell::after,
+.flow-table .tableWrapper table > tbody > tr:not(:has(.selectedCell)) + tr > .selectedCell::after { border-top-width: 1px; }
+.flow-table .tableWrapper table > tbody > tr:last-child > .selectedCell::after,
+.flow-table .tableWrapper table > tbody > tr:not(:has(+ tr .selectedCell)) > .selectedCell::after { border-bottom-width: 1px; }
+.flow-table .tableWrapper table > tbody > tr:first-child > .selectedCell:first-child::after { border-top-left-radius: 6px; }
+.flow-table .tableWrapper table > tbody > tr:first-child > .selectedCell:last-child::after { border-top-right-radius: 6px; }
+.flow-table .tableWrapper table > tbody > tr:last-child > .selectedCell:first-child::after { border-bottom-left-radius: 6px; }
+.flow-table .tableWrapper table > tbody > tr:last-child > .selectedCell:last-child::after { border-bottom-right-radius: 6px; }
 /* prosemirror-tables column-resize handle and cursor */
 .flow-table .column-resize-handle {
   position: absolute;
@@ -121,12 +136,23 @@
   box-shadow: 0 0 0 .5px var(--theme-border);
 }
 .flow-table__chrome .flow-table__actions svg { width: 16px; height: 16px; }
-/* Left block handle: outside the first column. */
+/* Left block handle (the table's corner menu button): 20px square outside the first column, centred on the header row. */
 .flow-table__chrome .flow-table__handle {
-  top: 4px;
-  left: -26px;
+  top: 6.5px;
+  left: -28px;
   width: 20px;
-  height: 22px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--table-corner-fg);
+}
+.flow-table__chrome .flow-table__handle:hover,
+.flow-table__chrome .flow-table__handle:focus-visible {
+  background: var(--table-corner-hover-bg);
+  color: var(--table-corner-hover-fg);
+}
+.flow-table__chrome .flow-table__handle[data-state="open"] {
+  background: var(--table-corner-open-bg);
+  color: var(--table-corner-hover-fg);
 }
 .flow-table__chrome .flow-table__handle svg { width: 16px; height: 16px; }
 .ProseMirror[contenteditable="false"] .flow-table__chrome { display: none; }
@@ -142,38 +168,175 @@
 .flow-table__menu .menu-item { height: 32px; gap: 8px; margin: 0; padding: 0 14px; border-radius: 0; white-space: nowrap; }
 .flow-table__menu .menu-item svg { flex: none; color: var(--action-menu-muted); }
 
-/* Row / column handles: small pills on the left edge and top edge of the hovered row / column. */
+/* Block (corner) menu: Copy / Select / Delete. 10px radius, 4px padding, a hover fill inset 4px from the sides. The `:not(#_)` raises the
+   specificity above the shared menu rules (including the light-theme overrides). */
+html:root body .menu-content.flow-table__block-menu:not(#_) {
+  box-sizing: content-box;
+  width: max-content;
+  min-width: 0;
+  padding: 4.5px 0 4px;
+  border: .5px solid var(--table-block-menu-border);
+  border-radius: 10px;
+  background: var(--work-menu-bg);
+  box-shadow: var(--shadow-control);
+  color: var(--work-menu-hover-text);
+  isolation: isolate;
+}
+html:root body .menu-content.flow-table__block-menu:not(#_) .menu-item {
+  position: relative;
+  height: 32px;
+  margin: 0;
+  gap: 8px;
+  padding: 0 26px 0 14px;
+  border-radius: 0;
+  background: transparent;
+  color: var(--work-menu-hover-text);
+  font-size: 13px;
+  font-weight: 450;
+  white-space: nowrap;
+}
+html:root body .menu-content.flow-table__block-menu:not(#_) .menu-item::before {
+  content: '';
+  position: absolute;
+  inset: 0 4px;
+  z-index: -1;
+  border-radius: 6px;
+}
+html:root body .menu-content.flow-table__block-menu:not(#_) .menu-item[data-highlighted]::before { background: var(--work-menu-hover-bg); }
+html:root body .menu-content.flow-table__block-menu:not(#_) .menu-item > svg { flex: none; width: 16px; height: 16px; color: var(--work-menu-muted); }
+html:root body .menu-content.flow-table__block-menu:not(#_) .menu-item[data-highlighted] > svg { color: var(--work-menu-hover-text); }
+html:root body .menu-content.flow-table__block-menu:not(#_) .menu-separator {
+  height: .5px;
+  margin: 5px 0;
+  padding: 0;
+  background: var(--table-block-menu-separator);
+}
+html:root body .menu-content.flow-table__block-menu:not(#_) .menu-separator::after { display: none; }
+
+/* Row / column handles: a 3px strip on the table border (the menu anchors to it) holding a thin pill that widens under the pointer. */
 .flow-table__lines {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
-.flow-table__chrome .flow-table__line-handle {
-  width: 12px;
-  height: 22px;
-  border-radius: 6px;
-  background: var(--theme-border-strong);
-  color: var(--bright);
+.flow-table__line-anchor {
+  position: absolute;
+  z-index: 1;
+  pointer-events: auto;
+  outline: 0;
 }
-.flow-table__chrome .flow-table__line-handle[data-axis="column"] {
-  width: 22px;
+.flow-table__line-handle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--table-handle-bg);
+  color: var(--table-handle-fg);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+.flow-table__line-anchor[data-axis="row"] .flow-table__line-handle { width: 3px; height: 20px; }
+.flow-table__line-anchor[data-axis="column"] .flow-table__line-handle { width: 20px; height: 3px; }
+.flow-table__line-anchor[data-visible] .flow-table__line-handle,
+.flow-table__line-anchor:hover .flow-table__line-handle {
+  opacity: 1;
+  pointer-events: auto;
+}
+.flow-table__line-anchor[data-axis="row"]:hover .flow-table__line-handle,
+.flow-table__line-anchor[data-axis="row"][data-state="open"] .flow-table__line-handle { width: 8px; }
+.flow-table__line-anchor[data-axis="column"]:hover .flow-table__line-handle,
+.flow-table__line-anchor[data-axis="column"][data-state="open"] .flow-table__line-handle { height: 8px; }
+.flow-table__line-anchor[data-state="open"] .flow-table__line-handle { background: var(--table-handle-active-bg); }
+.flow-table__line-handle svg { flex: none; width: 16px; height: 16px; fill: currentColor; }
+
+/* Row / column menu (and its Format submenu): 12px radius, 6px spacers above and below, 32px rows with a hover fill inset 6px. */
+html:root body .menu-content.flow-table__line-menu:not(#_) {
+  box-sizing: content-box;
+  width: max-content;
+  min-width: 0;
+  padding: 6px 0;
+  border: .5px solid var(--work-menu-border);
+  border-radius: 12px;
+  background: var(--work-menu-bg);
+  box-shadow: var(--shadow-control);
+  color: var(--work-menu-text);
+  isolation: isolate;
+}
+html:root body .menu-content.flow-table__line-submenu:not(#_) { box-shadow: var(--sidebar-submenu-shadow); }
+html:root body .menu-content.flow-table__line-menu:not(#_) .menu-item {
+  position: relative;
+  height: 32px;
+  margin: 0;
+  gap: 8px;
+  padding: 0 18px 0 14px;
+  border-radius: 0;
+  background: transparent;
+  color: var(--work-menu-text);
+  font-size: 13px;
+  font-weight: 450;
+  line-height: normal;
+  white-space: nowrap;
+}
+html:root body .menu-content.flow-table__line-menu:not(#_) .menu-item::before {
+  content: '';
+  position: absolute;
+  inset: 0 6px;
+  z-index: -1;
+  border-radius: 8px;
+}
+html:root body .menu-content.flow-table__line-menu:not(#_) .menu-item[data-highlighted],
+html:root body .menu-content.flow-table__line-menu:not(#_) .menu-item[data-state="open"] { background: transparent; color: var(--work-menu-hover-text); }
+html:root body .menu-content.flow-table__line-menu:not(#_) .menu-item[data-highlighted]::before,
+html:root body .menu-content.flow-table__line-menu:not(#_) .menu-item[data-state="open"]::before { background: var(--work-menu-hover-bg); }
+html:root body .menu-content.flow-table__line-menu:not(#_) .menu-chevron { display: none; }
+html:root body .menu-content.flow-table__line-menu:not(#_) .menu-separator {
+  position: relative;
   height: 12px;
+  margin: 0;
+  padding: 6px 0;
+  background: transparent;
 }
-.flow-table__chrome .flow-table__line-handle svg { width: 10px; height: 10px; }
-.flow-table__chrome .flow-table__line-handle:hover,
-.flow-table__chrome .flow-table__line-handle[data-state="open"],
-.flow-table__chrome .flow-table__line-handle[data-active] {
-  background: var(--accent-primary);
-  color: var(--on-accent);
+html:root body .menu-content.flow-table__line-menu:not(#_) .menu-separator::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 6px;
+  height: 0;
+  background: transparent;
+  border-bottom: .5px solid var(--work-menu-separator);
 }
+.flow-table__menu-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--work-menu-muted);
+}
+.flow-table__menu-icon svg { width: 16px; height: 16px; }
+.flow-table__line-menu .menu-item[data-highlighted] .flow-table__menu-icon,
+.flow-table__line-menu .menu-item[data-state="open"] .flow-table__menu-icon { color: var(--work-menu-hover-text); }
+.flow-table__menu-label { min-width: 0; }
 .flow-table__menu-shortcut {
-  display: inline-flex;
+  display: flex;
+  align-items: center;
   gap: 3px;
   margin-left: auto;
-  padding-left: 12px;
-  color: var(--theme-text-secondary);
-  font-size: 11px;
-  line-height: 1;
 }
-.flow-table__menu-shortcut kbd { padding: 0; border: 0; background: none; color: inherit; font: inherit; }
-.flow-table__line-menu .menu-chevron { margin-left: auto; }
+.flow-table__menu-shortcut kbd { padding: 0; border: 0; background: none; color: var(--work-menu-muted); font: 500 11px/12.1px var(--font); }
+/* The submenu arrow: a 6px solid triangle in a 16px box at the right edge. */
+.flow-table__menu-chevron {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  color: var(--table-menu-chevron);
+  font-size: 6px;
+}

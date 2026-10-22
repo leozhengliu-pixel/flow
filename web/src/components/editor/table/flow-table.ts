@@ -2,6 +2,7 @@ import { InputRule, mergeAttributes } from '@tiptap/core'
 import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table'
 import { FlowTableView } from './flow-table-view'
 import { DEFAULT_TABLE } from './table-commands'
+import { TableLineHighlight } from './table-line-highlight'
 import { moveSelectedLine } from './table-lines'
 import { TablePaste } from './table-paste'
 
@@ -49,4 +50,4 @@ export const FlowTableHeader = TableHeader.configure({ HTMLAttributes: { class: 
 export const FlowTableCell = TableCell.configure({ HTMLAttributes: { class: 'flow-table-cell' } })
 
 /** Spread this where `TableKit.configure({ table: { resizable: true } })` was used. */
-export const flowTableKit = [FlowTable.configure({ resizable: true }), TableRow, FlowTableHeader, FlowTableCell, TablePaste]
+export const flowTableKit = [FlowTable.configure({ resizable: true }), TableRow, FlowTableHeader, FlowTableCell, TablePaste, TableLineHighlight]

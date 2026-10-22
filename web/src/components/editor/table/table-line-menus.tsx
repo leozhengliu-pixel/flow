@@ -1,9 +1,4 @@
 import type { Editor } from '@tiptap/core'
-import {
-  ArrowDown, ArrowDownWideNarrow, ArrowLeft, ArrowRight, ArrowUp, ArrowUpNarrowWide, BetweenHorizontalEnd, BetweenHorizontalStart,
-  BetweenVerticalEnd, BetweenVerticalStart, Bold, Clipboard, Columns3, Copy, Ellipsis, EllipsisVertical, Italic, Rows3, Strikethrough, Type,
-  Underline, type LucideIcon,
-} from 'lucide-react'
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react'
 import { isMacPlatform } from '@/components/project-detail/project-detail-shortcuts'
 import {
@@ -15,28 +10,53 @@ import { useI18n } from '@/i18n/i18n'
 import { toast } from '@/lib/toast'
 import { tableAt } from './table-commands'
 import {
-  copyLineText, deleteLine, duplicateLine, formatLine, insertLine, lineAvailability, moveLine, selectLine, sortColumn,
+  BoldIcon, CopyTextIcon, DeleteColumnIcon, DeleteRowIcon, DuplicateIcon, FormatIcon, HandleDotsIcon, InsertColumnIcon, InsertRowIcon, ItalicIcon,
+  MoveDownIcon, MoveLeftIcon, SortAscendingIcon, SortDescendingIcon, StrikethroughIcon, UnderlineIcon,
+} from './table-icons'
+import { setLineHighlight } from './table-line-highlight'
+import {
+  copyLineText, deleteLine, duplicateLine, formatLine, insertLine, lineAvailability, moveLine, sortColumn,
   type LineMark, type TableAxis, type TableLine,
 } from './table-lines'
 
 type OpenLine = { axis: TableAxis; index: number }
 type Placement = { row?: CSSProperties; column?: CSSProperties }
+type Glyph = (props: { rotate?: 90 | 180 }) => ReactNode
+
+/** Distance (px) from the table's left / top edge within which the pointer reveals the row / column handle. */
+const EDGE_REACH = 5
 
 const keepSelection = (event: MouseEvent) => event.preventDefault()
+
+/**
+ * Like the reference app, the first item is highlighted as soon as a line menu opens (Radix only does that for keyboard opens).
+ * Radix's menu takes `onOpenAutoFocus`, but the dropdown wrapper's props leave it out, hence the spread of a loosely typed object.
+ */
+const focusFirstItem = {
+  onOpenAutoFocus: (event: Event) => {
+    event.preventDefault()
+    const content = event.target instanceof HTMLElement ? event.target : null
+    content?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true })
+  },
+} as object
 
 function Shortcut({ spec }: { spec: string }) {
   const keys = shortcutSteps(spec, isMacPlatform())[0]
   return <span className="flow-table__menu-shortcut" aria-hidden>{keys.map((key, index) => <kbd key={index}>{key}</kbd>)}</span>
 }
 
-const FORMATS: Array<{ mark: LineMark; label: string; icon: LucideIcon; shortcut: string }> = [
-  { mark: 'bold', label: 'Bold', icon: Bold, shortcut: '⌘ B' },
-  { mark: 'italic', label: 'Italic', icon: Italic, shortcut: '⌘ I' },
-  { mark: 'underline', label: 'Underline', icon: Underline, shortcut: '⌘ U' },
-  { mark: 'strike', label: 'Strikethrough', icon: Strikethrough, shortcut: '⌘ ⇧ X' },
+const FORMATS: Array<{ mark: LineMark; label: string; icon: Glyph; shortcut: string }> = [
+  { mark: 'bold', label: 'Bold', icon: BoldIcon, shortcut: '⌘ B' },
+  { mark: 'italic', label: 'Italic', icon: ItalicIcon, shortcut: '⌘ I' },
+  { mark: 'underline', label: 'Underline', icon: UnderlineIcon, shortcut: '⌘ U' },
+  { mark: 'strike', label: 'Strikethrough', icon: StrikethroughIcon, shortcut: '⌘ ⇧ X' },
 ]
 
-/** The menu of one row / column: insert, move, duplicate, (column) sort, format, copy text, delete. Unavailable items are left out. */
+/**
+ * The menu of one row / column: insert, move, duplicate, (column) sort, format, copy text, delete. Unavailable items are left out,
+ * and the dividers follow the reference app (a divider after Duplicate only when Duplicate is there, none between Insert below and
+ * Format on the header row).
+ */
 function LineMenuItems({ editor, line }: { editor: Editor; line: TableLine }) {
   const { t } = useI18n()
   const table = tableAt(editor, line.tablePos)
@@ -53,44 +73,53 @@ function LineMenuItems({ editor, line }: { editor: Editor; line: TableLine }) {
     )
     done()
   }
-  const item = (icon: LucideIcon, label: string, run: () => void, shortcut?: string): ReactNode => {
-    const Icon = icon
-    return <DropdownMenuItem onSelect={run}><Icon size={16} aria-hidden/>{t(label)}{shortcut ? <Shortcut spec={shortcut}/> : null}</DropdownMenuItem>
-  }
-  const before = row ? { label: 'Insert above', icon: BetweenHorizontalStart, move: 'Move up', moveIcon: ArrowUp, key: '↑' } : { label: 'Insert before', icon: BetweenVerticalStart, move: 'Move left', moveIcon: ArrowLeft, key: '←' }
-  const after = row ? { label: 'Insert below', icon: BetweenHorizontalEnd, move: 'Move down', moveIcon: ArrowDown, key: '↓' } : { label: 'Insert after', icon: BetweenVerticalEnd, move: 'Move right', moveIcon: ArrowRight, key: '→' }
-  const hasMoves = available.moveBefore || available.moveAfter
+  const item = (Icon: Glyph, label: string, run: () => void, shortcut?: string, rotate?: 90 | 180): ReactNode =>
+    <DropdownMenuItem onSelect={run}><span className="flow-table__menu-icon"><Icon rotate={rotate}/></span><span className="flow-table__menu-label">{t(label)}</span>{shortcut ? <Shortcut spec={shortcut}/> : null}</DropdownMenuItem>
+  const InsertIcon = row ? InsertRowIcon : InsertColumnIcon
+  const before = row
+    ? { label: 'Insert above', move: 'Move up', Move: MoveDownIcon, key: '↑', moveRotate: 180 as const }
+    : { label: 'Insert before', move: 'Move left', Move: MoveLeftIcon, key: '←', moveRotate: undefined }
+  const after = row
+    ? { label: 'Insert below', move: 'Move down', Move: MoveDownIcon, key: '↓', moveRotate: undefined }
+    : { label: 'Insert after', move: 'Move right', Move: MoveLeftIcon, key: '→', moveRotate: 180 as const }
   return <>
-    {available.insertBefore ? item(before.icon, before.label, act(() => insertLine(editor, line, 'before'))) : null}
-    {available.insertAfter ? item(after.icon, after.label, act(() => insertLine(editor, line, 'after'))) : null}
-    {available.moveBefore ? item(before.moveIcon, before.move, act(() => moveLine(editor, line, 'before')), `⌘ ⌥ ⇧ ${before.key}`) : null}
-    {available.moveAfter ? item(after.moveIcon, after.move, act(() => moveLine(editor, line, 'after')), `⌘ ⌥ ⇧ ${after.key}`) : null}
-    {!row && hasMoves ? <DropdownMenuSeparator/> : null}
-    {available.duplicate ? item(Copy, 'Duplicate', act(() => duplicateLine(editor, line))) : null}
-    <DropdownMenuSeparator/>
-    {!row && available.sort ? <>
-      {item(ArrowUpNarrowWide, 'Sort ascending', act(() => sortColumn(editor, line, 'asc')))}
-      {item(ArrowDownWideNarrow, 'Sort descending', act(() => sortColumn(editor, line, 'desc')))}
+    {available.insertBefore ? item(InsertIcon, before.label, act(() => insertLine(editor, line, 'before')), undefined, 180) : null}
+    {available.insertAfter ? item(InsertIcon, after.label, act(() => insertLine(editor, line, 'after'))) : null}
+    {available.moveBefore ? item(before.Move, before.move, act(() => moveLine(editor, line, 'before')), `⌘ ⌥ ⇧ ${before.key}`, before.moveRotate) : null}
+    {available.moveAfter ? item(after.Move, after.move, act(() => moveLine(editor, line, 'after')), `⌘ ⌥ ⇧ ${after.key}`, after.moveRotate) : null}
+    {available.separateDuplicate ? <DropdownMenuSeparator/> : null}
+    {available.duplicate ? <>
+      {item(DuplicateIcon, 'Duplicate', act(() => duplicateLine(editor, line)))}
+      <DropdownMenuSeparator/>
+    </> : null}
+    {available.sort ? <>
+      {item(SortAscendingIcon, 'Sort ascending', act(() => sortColumn(editor, line, 'asc')))}
+      {item(SortDescendingIcon, 'Sort descending', act(() => sortColumn(editor, line, 'desc')))}
       <DropdownMenuSeparator/>
     </> : null}
     <DropdownMenuSub>
-      <DropdownMenuSubTrigger><Type size={16} aria-hidden/>{t('Format')}</DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="flow-table__menu flow-table__line-menu" sideOffset={6}>
+      <DropdownMenuSubTrigger><span className="flow-table__menu-icon"><FormatIcon/></span><span className="flow-table__menu-label">{t('Format')}</span><span className="flow-table__menu-chevron" aria-hidden>▶</span></DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="flow-table__line-menu flow-table__line-submenu" sideOffset={-1.5} alignOffset={-6.5}>
         {FORMATS.map(format => <Fragment key={format.mark}>{item(format.icon, format.label, act(() => formatLine(editor, line, format.mark)), format.shortcut)}</Fragment>)}
       </DropdownMenuSubContent>
     </DropdownMenuSub>
     <DropdownMenuSeparator/>
-    {item(Clipboard, 'Copy text', copy)}
-    {item(row ? Rows3 : Columns3, 'Delete', act(() => deleteLine(editor, line)))}
+    {item(CopyTextIcon, 'Copy text', copy)}
+    {available.delete ? item(row ? DeleteRowIcon : DeleteColumnIcon, 'Delete', act(() => deleteLine(editor, line))) : null}
   </>
 }
 
-function LineHandle({ editor, getPos, axis, index, style, onOpenChange, open }: {
+/**
+ * A row (left edge) or column (top edge) handle: a thin pill on the table border that widens under the pointer. The menu anchors to
+ * the 3px strip around the border (not to the pill), like the reference app, so it does not shift when the pill widens.
+ */
+function LineHandle({ editor, getPos, axis, index, style, visible, onOpenChange, open }: {
   editor: Editor
   getPos: () => number | undefined
   axis: TableAxis
   index: number
   style: CSSProperties
+  visible: boolean
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
@@ -98,28 +127,34 @@ function LineHandle({ editor, getPos, axis, index, style, onOpenChange, open }: 
   const row = axis === 'row'
   const tablePos = getPos()
   const line: TableLine | null = tablePos === undefined ? null : { tablePos, axis, index }
+  const label = t(row ? 'Row actions' : 'Column actions')
   return <DropdownMenu open={open} modal={false} onOpenChange={next => {
-    if (next && line) selectLine(editor, line)
+    if (line) setLineHighlight(editor, next ? line : null)
     onOpenChange(next)
   }}>
     <DropdownMenuTrigger asChild>
-      <button type="button" className="flow-table__line-handle" data-axis={axis} data-active={open ? '' : undefined} style={style} aria-label={t(row ? 'Row actions' : 'Column actions')} title={t(row ? 'Row actions' : 'Column actions')} onMouseDown={keepSelection}>
-        {row ? <EllipsisVertical size={12} aria-hidden/> : <Ellipsis size={12} aria-hidden/>}
-      </button>
+      <div role="button" tabIndex={-1} className="flow-table__line-anchor" data-axis={axis} data-visible={visible || open ? '' : undefined} style={style} aria-label={label} title={label} onMouseDown={keepSelection}>
+        <span className="flow-table__line-handle"><HandleDotsIcon rotate={row ? 90 : undefined}/></span>
+      </div>
     </DropdownMenuTrigger>
-    <DropdownMenuContent className="flow-table__menu flow-table__line-menu" side={row ? 'left' : 'bottom'} align={row ? 'start' : 'center'} sideOffset={6} onCloseAutoFocus={event => event.preventDefault()}>
+    <DropdownMenuContent
+      className="flow-table__line-menu" side={row ? 'left' : 'bottom'} align={row ? 'start' : 'center'} sideOffset={4}
+      {...focusFirstItem}
+      onCloseAutoFocus={event => event.preventDefault()}
+    >
       {line ? <LineMenuItems editor={editor} line={line}/> : null}
     </DropdownMenuContent>
   </DropdownMenu>
 }
 
 /**
- * The per-row (left edge) and per-column (top edge) handles. They follow the hovered cell and stay on the line whose menu
- * is open; clicking one selects the whole line and opens its menu.
+ * The per-row (left edge) and per-column (top edge) handles. They follow the hovered cell, show once the pointer is at the table
+ * border, and stay on the line whose menu is open; opening a menu only tints its cells, the selection moves when a command runs.
  */
 export function TableLineHandles({ editor, getPos, onMenuChange }: { editor: Editor; getPos: () => number | undefined; onMenuChange: (open: boolean) => void }) {
   const rootRef = useRef<HTMLDivElement>(null)
   const [hover, setHover] = useState<{ row: number; col: number } | null>(null)
+  const [edge, setEdge] = useState({ row: false, column: false })
   const [open, setOpen] = useState<OpenLine | null>(null)
   const [placement, setPlacement] = useState<Placement>({})
   const [tick, setTick] = useState(0)
@@ -141,9 +176,15 @@ export function TableLineHandles({ editor, getPos, onMenuChange }: { editor: Edi
       const row = cell.parentElement
       if (!(row instanceof HTMLTableRowElement)) return
       setHover(current => current && current.row === row.rowIndex && current.col === cell.cellIndex ? current : { row: row.rowIndex, col: cell.cellIndex })
+      const table = element.querySelector('table')
+      if (table && event instanceof globalThis.MouseEvent) {
+        const rect = table.getBoundingClientRect()
+        const next = { row: event.clientX - rect.left <= EDGE_REACH, column: event.clientY - rect.top <= EDGE_REACH }
+        setEdge(current => current.row === next.row && current.column === next.column ? current : next)
+      }
     }
     // The menus render in a portal, so reaching one fires mouseleave here: the lines stay while a menu is open.
-    const leave = () => { if (!openRef.current) setHover(null) }
+    const leave = () => { if (!openRef.current) { setHover(null); setEdge({ row: false, column: false }) } }
     element.addEventListener('mousemove', move)
     element.addEventListener('mouseleave', leave)
     const refresh = () => { if (activeRef.current) setTick(value => value + 1) }
@@ -171,13 +212,14 @@ export function TableLineHandles({ editor, getPos, onMenuChange }: { editor: Edi
     const row = rowIndex === null ? undefined : table.rows[rowIndex]
     if (row) {
       const rect = row.getBoundingClientRect()
-      placement.row = { top: rect.top - frame.top + rect.height / 2 - 11, left: tableRect.left - frame.left - 6 }
+      placement.row = { top: rect.top - frame.top, left: tableRect.left - frame.left - 1.5, width: 3, height: rect.height }
     }
     const cell = colIndex === null ? undefined : table.rows[0]?.cells[colIndex]
     if (cell) {
       const rect = cell.getBoundingClientRect()
-      const center = Math.min(Math.max(rect.left - frame.left + rect.width / 2, scroller.left - frame.left + 14), scroller.right - frame.left - 14)
-      placement.column = { top: tableRect.top - frame.top - 6, left: center - 11 }
+      const left = Math.max(rect.left, scroller.left)
+      const right = Math.min(rect.right, scroller.right)
+      if (right >= left) placement.column = { top: tableRect.top - frame.top - 2, left: left - frame.left, width: right - left, height: 3 }
     }
     return placement
   }, [rowIndex, colIndex])
@@ -187,14 +229,14 @@ export function TableLineHandles({ editor, getPos, onMenuChange }: { editor: Edi
   const setMenu = (next: OpenLine | null) => {
     setOpen(next)
     onMenuChange(next !== null)
-    if (!next) setHover(null)
+    if (!next) { setHover(null); setEdge({ row: false, column: false }) }
   }
   return <div ref={rootRef} className="flow-table__lines">
     {rowIndex !== null && placement.row
-      ? <LineHandle editor={editor} getPos={getPos} axis="row" index={rowIndex} style={placement.row} open={open?.axis === 'row'} onOpenChange={next => setMenu(next ? { axis: 'row', index: rowIndex } : null)}/>
+      ? <LineHandle editor={editor} getPos={getPos} axis="row" index={rowIndex} style={placement.row} visible={edge.row} open={open?.axis === 'row'} onOpenChange={next => setMenu(next ? { axis: 'row', index: rowIndex } : null)}/>
       : null}
     {colIndex !== null && placement.column
-      ? <LineHandle editor={editor} getPos={getPos} axis="column" index={colIndex} style={placement.column} open={open?.axis === 'column'} onOpenChange={next => setMenu(next ? { axis: 'column', index: colIndex } : null)}/>
+      ? <LineHandle editor={editor} getPos={getPos} axis="column" index={colIndex} style={placement.column} visible={edge.column} open={open?.axis === 'column'} onOpenChange={next => setMenu(next ? { axis: 'column', index: colIndex } : null)}/>
       : null}
   </div>
 }
