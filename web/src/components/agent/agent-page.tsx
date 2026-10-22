@@ -67,7 +67,6 @@ import { deleteAgentChat, useAgentChatHotkeys } from './agent-chat-commands'
 import { AGENT_PAGE_ASK_EVENT, type AgentPageAskDetail } from './agent-ask-request'
 // coding sessions (track G)
 import { ChatCodingSessionCards } from '@/components/coding-sessions/chat-coding-session-cards'
-import { CodingSessionsList } from '@/components/coding-sessions/coding-session-card'
 
 export function AgentPage({
   chatSlug,
@@ -747,8 +746,6 @@ export function AgentPage({
           onOpen={(session) => onNavigate(agentPath(data.workspace.urlKey, session.slugId))}
           onOpenInToolbar={(session) => void updateAgentSession(session.id, { location: "toolbar" }).then(saveSession)}
         />}
-        {/* coding sessions (track G): the viewer's coding sessions next to the recent chats. */}
-        {!shown && <CodingSessionsList data={data} creatorId={data.viewer.id}/>}
         </div>
         </div>
       </section>
