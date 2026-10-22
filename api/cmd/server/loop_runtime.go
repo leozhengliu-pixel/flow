@@ -727,13 +727,21 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 	scope := s.newLoopScope(data, loop, trigger)
 	rec.timing.LoadMs = time.Since(started).Milliseconds()
 	discoveryStarted := time.Now()
-	connectorCtx, connectors, discoverErr := s.withConnectorTools(request.Context(), data, connectorRequestContext{Workspace: workspace, UserID: owner.ID})
+	// Only the loop's selected connectors, as the owner, are contacted: a loop
+	// that selects none makes no external request.
+	selection := connectorSelection{IDs: loop.ConnectorIDs, Partial: loopConnectorPolicy() != "required", Budget: loopConnectorDiscoveryBudget}
+	connectorCtx, _, problems, discoverErr := s.withSelectedConnectorTools(request.Context(), data, connectorRequestContext{Workspace: workspace, UserID: owner.ID}, selection)
 	rec.timing.DiscoveryMs = time.Since(discoveryStarted).Milliseconds()
-	request = request.WithContext(connectorCtx)
-	if discoverErr == nil {
-		connectors = slices.DeleteFunc(connectors, func(tool connectorTool) bool { return !slices.Contains(loop.ConnectorIDs, tool.Policy.ID) })
-		request = request.WithContext(context.WithValue(request.Context(), connectorToolsKey{}, connectors))
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
+	if discoverErr != nil {
+		return &loopRunError{reason: "unavailable", message: "A selected connector is unavailable: " + discoverErr.Error(), err: discoverErr}
+	}
+	for _, problem := range problems {
+		rec.addNotice(fmt.Sprintf("%s %s", loopConnectorSkippedNotice, problem.Err.Error()))
+	}
+	request = request.WithContext(connectorCtx)
 	request = request.WithContext(context.WithValue(request.Context(), agentToolFilterKey{}, scope.offers))
 	// "Team access" covers what the run can read, not only what it may change:
 	// its tools run with a key restricted to the loop's teams, so lists,

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -216,9 +217,13 @@ func offeredConnectorTool(ctx context.Context, name string) (connectorTool, bool
 	return connectorTool{}, false
 }
 
+// connectorDiscoveryBudget bounds one discovery: connecting to and listing
+// every connector it covers.
+const connectorDiscoveryBudget = 30 * time.Second
+
 // discoverConnectorTools lists the tools of the MCP connectors userID may use (at most maxConnectorTools).
 func (s *server) discoverConnectorTools(ctx context.Context, data domain.Bootstrap, userID string) ([]connectorTool, error) {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, connectorDiscoveryBudget)
 	defer cancel()
 	items := []connectorTool{}
 	if !s.agent.ToolsEnabled || !s.agent.WriteTools {
@@ -228,53 +233,173 @@ func (s *server) discoverConnectorTools(ctx context.Context, data domain.Bootstr
 		if !connectorAllowed(data.WorkspaceSettings, policy, userID) {
 			continue
 		}
-		client, err := s.openConnector(ctx, policy)
+		tools, err := s.listConnectorTools(ctx, policy)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", policy.label(), err)
+			return nil, err
 		}
-		defer client.close()
-		cursor := ""
-		for page := 0; page < 10; page++ {
-			params := map[string]string{}
-			if cursor != "" {
-				params["cursor"] = cursor
-			}
-			raw, err := client.rpc(ctx, "tools/list", params, false)
-			if err != nil {
-				return nil, err
-			}
-			var result struct {
-				Tools []struct {
-					Name        string          `json:"name"`
-					Description string          `json:"description"`
-					InputSchema json.RawMessage `json:"inputSchema"`
-				} `json:"tools"`
-				NextCursor string `json:"nextCursor"`
-			}
-			if json.Unmarshal(raw, &result) != nil {
-				return nil, fmt.Errorf("invalid MCP tool inventory")
-			}
-			for _, tool := range result.Tools {
-				var schema map[string]json.RawMessage
-				if tool.Name == "" || len(tool.Name) > 256 || len(tool.InputSchema) > 64<<10 || json.Unmarshal(tool.InputSchema, &schema) != nil || schema == nil {
-					return nil, fmt.Errorf("invalid MCP tool definition")
-				}
-				hash := sha256.Sum256([]byte(policy.ID + "\x00" + tool.Name))
-				items = append(items, connectorTool{Definition: agentProviderTool{Name: fmt.Sprintf("external_%x", hash[:16]), Description: connectorToolDescription(policy.label(), tool.Name, tool.Description, tool.InputSchema), Parameters: tool.InputSchema, Access: "write"}, Policy: policy, RemoteName: tool.Name})
-				if len(items) > maxConnectorTools {
-					return nil, fmt.Errorf("too many MCP tools (maximum %d)", maxConnectorTools)
-				}
-			}
-			if result.NextCursor == "" {
-				break
-			}
-			if result.NextCursor == cursor || page == 9 {
-				return nil, fmt.Errorf("MCP inventory pagination exceeded limit")
-			}
-			cursor = result.NextCursor
+		items = append(items, tools...)
+		if len(items) > maxConnectorTools {
+			return nil, fmt.Errorf("too many MCP tools (maximum %d)", maxConnectorTools)
 		}
 	}
 	return items, nil
+}
+
+// listConnectorTools connects to one connector and lists its tools.
+func (s *server) listConnectorTools(ctx context.Context, policy applicationPolicy) ([]connectorTool, error) {
+	client, err := s.openConnector(ctx, policy)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", policy.label(), err)
+	}
+	defer client.close()
+	items := []connectorTool{}
+	cursor := ""
+	for page := 0; page < 10; page++ {
+		params := map[string]string{}
+		if cursor != "" {
+			params["cursor"] = cursor
+		}
+		raw, err := client.rpc(ctx, "tools/list", params, false)
+		if err != nil {
+			return nil, err
+		}
+		var result struct {
+			Tools []struct {
+				Name        string          `json:"name"`
+				Description string          `json:"description"`
+				InputSchema json.RawMessage `json:"inputSchema"`
+			} `json:"tools"`
+			NextCursor string `json:"nextCursor"`
+		}
+		if json.Unmarshal(raw, &result) != nil {
+			return nil, fmt.Errorf("invalid MCP tool inventory")
+		}
+		for _, tool := range result.Tools {
+			var schema map[string]json.RawMessage
+			if tool.Name == "" || len(tool.Name) > 256 || len(tool.InputSchema) > 64<<10 || json.Unmarshal(tool.InputSchema, &schema) != nil || schema == nil {
+				return nil, fmt.Errorf("invalid MCP tool definition")
+			}
+			hash := sha256.Sum256([]byte(policy.ID + "\x00" + tool.Name))
+			items = append(items, connectorTool{Definition: agentProviderTool{Name: fmt.Sprintf("external_%x", hash[:16]), Description: connectorToolDescription(policy.label(), tool.Name, tool.Description, tool.InputSchema), Parameters: tool.InputSchema, Access: "write"}, Policy: policy, RemoteName: tool.Name})
+			if len(items) > maxConnectorTools {
+				return nil, fmt.Errorf("too many MCP tools (maximum %d)", maxConnectorTools)
+			}
+		}
+		if result.NextCursor == "" {
+			break
+		}
+		if result.NextCursor == cursor || page == 9 {
+			return nil, fmt.Errorf("MCP inventory pagination exceeded limit")
+		}
+		cursor = result.NextCursor
+	}
+	return items, nil
+}
+
+// connectorProblem is a selected connector whose tools could not be offered.
+type connectorProblem struct {
+	Policy applicationPolicy
+	Err    error
+}
+
+// connectorSelection narrows discovery to chosen connectors (a loop's
+// ConnectorIDs). Partial keeps the tools of the connectors that answered when
+// another selected one fails; otherwise any failure fails the discovery.
+type connectorSelection struct {
+	IDs     []string
+	Partial bool
+	Budget  time.Duration
+}
+
+// withSelectedConnectorTools offers the tools of the selected connectors the
+// caller may use. The set comes from the selection and request.UserID's
+// access before any network request, so an empty selection contacts no
+// server and unselected connectors (slow, unreachable or with expired
+// credentials) never delay the run. The selected connectors are discovered
+// concurrently within one budget and stop with ctx. A selected connector the
+// caller may not use, or one that fails, is returned as a problem (Partial)
+// or as the error. The returned context always carries exactly the tools
+// returned, so executeConnectorTool only runs offered tools.
+func (s *server) withSelectedConnectorTools(ctx context.Context, data domain.Bootstrap, request connectorRequestContext, selection connectorSelection) (context.Context, []connectorTool, []connectorProblem, error) {
+	ctx = context.WithValue(ctx, connectorContextKey{}, request)
+	tools := []connectorTool{}
+	problems := []connectorProblem{}
+	chosen := []applicationPolicy{}
+	if s.agent.ToolsEnabled && s.agent.WriteTools && len(selection.IDs) > 0 {
+		policies := applicationPolicies(&data)
+		for _, id := range uniqueAgentIDs(selection.IDs) {
+			index := slices.IndexFunc(policies, func(policy applicationPolicy) bool { return policy.ID == id })
+			switch {
+			case index < 0:
+				problems = append(problems, connectorProblem{Policy: applicationPolicy{ID: id, Name: id}, Err: fmt.Errorf("%s: the connection no longer exists", id)})
+			case !connectorAllowed(data.WorkspaceSettings, policies[index], request.UserID):
+				problems = append(problems, connectorProblem{Policy: policies[index], Err: fmt.Errorf("%s: the connection is not available to this user", policies[index].label())})
+			default:
+				chosen = append(chosen, policies[index])
+			}
+		}
+	}
+	if len(chosen) > 0 {
+		budget := selection.Budget
+		if budget <= 0 {
+			budget = connectorDiscoveryBudget
+		}
+		discoverCtx, cancel := context.WithTimeout(ctx, budget)
+		type outcome struct {
+			index int
+			tools []connectorTool
+			err   error
+		}
+		// Buffered: a connection that ignores the deadline finishes (and
+		// closes its client) in the background without blocking the run.
+		outcomes := make(chan outcome, len(chosen))
+		for index, policy := range chosen {
+			go func() {
+				tools, err := s.listConnectorTools(discoverCtx, policy)
+				outcomes <- outcome{index: index, tools: tools, err: err}
+			}()
+		}
+		results := make([][]connectorTool, len(chosen))
+		failures := make([]error, len(chosen))
+		finished := make([]bool, len(chosen))
+	collect:
+		for pending := len(chosen); pending > 0; pending-- {
+			select {
+			case result := <-outcomes:
+				results[result.index], failures[result.index], finished[result.index] = result.tools, result.err, true
+			case <-discoverCtx.Done():
+				break collect
+			}
+		}
+		stopped := discoverCtx.Err()
+		cancel()
+		for index := range chosen {
+			if !finished[index] {
+				failures[index] = fmt.Errorf("discovery did not finish within %s: %w", budget, stopped)
+			}
+		}
+		for index, policy := range chosen {
+			err := failures[index]
+			if err == nil && len(tools)+len(results[index]) > maxConnectorTools {
+				err = fmt.Errorf("too many MCP tools (maximum %d)", maxConnectorTools)
+			}
+			if err != nil {
+				if !strings.HasPrefix(err.Error(), policy.label()+":") {
+					err = fmt.Errorf("%s: %w", policy.label(), err)
+				}
+				problems = append(problems, connectorProblem{Policy: policy, Err: err})
+				continue
+			}
+			tools = append(tools, results[index]...)
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return ctx, nil, problems, err
+	}
+	if len(problems) > 0 && !selection.Partial {
+		return ctx, nil, problems, problems[0].Err
+	}
+	return context.WithValue(ctx, connectorToolsKey{}, tools), tools, problems, nil
 }
 
 func (s *server) executeConnectorTool(r *http.Request, data domain.Bootstrap, call domain.AgentToolCall) ([]byte, error) {
