@@ -11,3 +11,4 @@
 :root[data-theme="light"] .select-control-option[data-highlighted]:before{background:var(--theme-surface-hover)}
 :root[data-theme="light"] .select-control-option [data-radix-select-item-indicator]{color:var(--theme-text-primary)}
 :root[data-theme="light"] .select-control-group-label{color:var(--theme-text-secondary)}
+:root[data-theme="light"] body:has(.dialog-content.action-dialog) .select-control-option[data-highlighted]:before{background:var(--dialog-row-hover)}

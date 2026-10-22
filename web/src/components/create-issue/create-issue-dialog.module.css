@@ -80,10 +80,14 @@
 .iconButton:focus-visible, .moreButton:focus-visible, .attachButton:focus-visible, .submit:focus-visible, .saveDraft:focus-visible, .confirmActions button:focus-visible { outline: 2px solid lch(67.6% 34.2 283); outline-offset: 2px; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @media (max-width: 800px) {
-  .dialog, .dialog[data-expanded="true"] { top: 8px; width: calc(100vw - 16px); height: calc(100vh - 16px); max-height: none; border-radius: 14px; }
-  .document { padding-inline: 14px; }
+  /* Narrow windows keep the compact panel (12px side margins, same top) and let the property chips wrap; only the
+     expanded composer takes the whole window. */
+  .dialog { height: auto; min-height: 260px; }
+  .dialog[data-expanded="true"] { top: 8px; width: calc(100vw - 16px); height: calc(100vh - 16px); max-height: none; border-radius: 14px; }
+  .document { min-height: 111px; padding-inline: 14px; }
+  .dialog:not([data-expanded="true"]) .document { flex: 0 0 auto; }
   .header, .properties, .footer { padding-inline: 10px; }
-  .properties { overflow-x: auto; }
+  .properties { height: auto; min-height: 38px; flex: 0 0 auto; flex-wrap: wrap; row-gap: 6px; padding-bottom: 8px; overflow: visible; }
 }
 
 :global(:root[data-theme="light"]) .overlay, :global(:root[data-theme="light"]) .linkOverlay, :global(:root[data-theme="light"]) .confirmOverlay { background: var(--theme-overlay); }

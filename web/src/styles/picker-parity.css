@@ -428,7 +428,7 @@ html:root body .link-sub-issue-picker .link-sub-issue-identifier {
 
 /* ── Command menu (⌘K) ─────────────────────────────────────────────────── */
 html:root body .command-dialog {
-  width: min(716px, calc(100vw - 32px));
+  width: min(720px, calc(100vw - 32px));
   border: .5px solid var(--pk-border);
   border-radius: 12px;
   background: var(--pk-surface);
@@ -518,6 +518,15 @@ html:root body .command-dialog .command-shortcut,
 html:root body .command-dialog .command-shortcut small {
   color: var(--pk-muted);
   font-size: 11px;
+}
+/* No results: the reference collapses to the input row and shows no message (the text stays for screen readers). */
+html:root body .command-dialog [cmdk-empty] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 html:root body .command-dialog .command-input input:not(#_) {
   border: 0;
