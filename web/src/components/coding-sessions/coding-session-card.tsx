@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useInRouterContext } from 'react-router-dom'
 import { AlertTriangle, CircleSlash, GitBranch, GitPullRequest, X } from 'lucide-react'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { GridLoader } from '@/components/ui/grid-loader'
@@ -10,14 +9,12 @@ import { AppLink } from '@/components/ui/app-link'
 import { useI18n } from '@/i18n/i18n'
 import { issuePath } from '@/lib/app-routes'
 import { useCodingSessionOpener } from './use-coding-session-opener'
-import { codingSessionHref } from './coding-session-page-model'
 import type { BootstrapData } from '@/types/flow'
 import type { CodingSession } from '@/types/coding-sessions'
-import { CODING_PHASE_LABELS, codingErrorInfo, codingSessionCapabilities, codingSessionStalled, codingRunStartedAt, codingStatusLine, formatCodingElapsed, isCodingSessionTerminal, plainSummary, PULL_REQUEST_STATE_LABELS, pullRequestDisplayState, pullRequestNumberLabel, reviewForPullRequest } from './coding-session-model'
-import { CodingStateBadge } from './coding-session-parts'
+import { codingErrorInfo, codingSessionCapabilities, codingSessionStalled, codingRunStartedAt, codingStatusLine, formatCodingElapsed, isCodingSessionTerminal, plainSummary, PULL_REQUEST_STATE_LABELS, pullRequestDisplayState, pullRequestNumberLabel, reviewForPullRequest } from './coding-session-model'
 import { CodingPullRequestHover } from './coding-pr-hover-card'
 import { CodingAgentAvatar, CodingSessionView } from './coding-session-panel'
-import { useCodingSession, useCodingSessions, useDismissedCodingSessions, useNow } from './use-coding-sessions'
+import { useCodingSession, useNow } from './use-coding-sessions'
 import { stopCodingSession } from '@/lib/coding-sessions-api'
 import { toast } from '@/lib/toast'
 import { AgentStopIcon } from '@/components/agent/agent-icons'
@@ -26,20 +23,6 @@ import './coding-sessions.css'
 import './coding-session-stream.css'
 
 const sessionTitle = (session: CodingSession, data: BootstrapData) => session.displayTitle || data.issues.find(issue => issue.id === session.issueId)?.title || session.repository || 'Coding session'
-
-/** One line describing a session: state, title, repository and branch, PR state, current phase. */
-function CodingSessionSummary({ session, data }: { session: CodingSession; data: BootstrapData }) {
-  const { t } = useI18n()
-  const pr = session.latestPullRequest ?? session.pullRequests?.at(-1)
-  const phase = CODING_PHASE_LABELS[session.phase]
-  return <span className="coding-session-summary-line">
-    <CodingStateBadge state={session.state} session={session}/>
-    <span className="coding-session-card-title" data-i18n-ignore>{sessionTitle(session, data)}</span>
-    {(session.repository || session.branchName) && <span className="coding-session-card-repo" data-i18n-ignore><GitBranch size={12} aria-hidden="true"/>{[session.repository, session.branchName].filter(Boolean).join(' · ')}</span>}
-    {pr && <span className="coding-pr-state" data-state={pullRequestDisplayState(pr)}><span data-i18n-ignore>{pullRequestNumberLabel(pr)}</span> {t(PULL_REQUEST_STATE_LABELS[pullRequestDisplayState(pr)])}</span>}
-    {phase && !isCodingSessionTerminal(session) && <span className="coding-session-phase">{t(phase)}</span>}
-  </span>
-}
 
 /**
  * The session's status row, like the reference app's session card in issue activity: a status icon (a spinner while the
@@ -156,43 +139,4 @@ export function CodingSessionDialog({ sessionId, initial, data, open, onOpenChan
       <CodingSessionView key={shown.id} sessionId={shown.id} initial={shown.initial} data={data} agentHidden={agentHidden} onDismiss={onDismiss ? () => { onDismiss(); onOpenChange(false) } : undefined} onOpenSession={next => setShown({ id: next.id, initial: next })}/>
     </DialogContent>
   </Dialog>
-}
-
-/**
- * Coding sessions listed where Flow lists agent work (the Agent page, an issue): newest first, each opening the full
- * view; finished ones can be dismissed from the list.
- */
-export function CodingSessionsList({ data, issueId, creatorId, title = 'Coding sessions', limit = 20 }: { data: BootstrapData; issueId?: string; creatorId?: string; title?: string; limit?: number }) {
-  const { t, locale } = useI18n()
-  const { sessions, error } = useCodingSessions({ issueId, creatorId })
-  const { dismissed, dismiss } = useDismissedCodingSessions(data.workspace.urlKey, data.viewer.id)
-  const [open, setOpen] = useState<CodingSession>()
-  const routed = useInRouterContext()
-  const shown = sessions
-    .filter(session => !dismissed.has(session.id))
-    .sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0))
-    .slice(0, limit)
-  if (!shown.length) return error ? <p className="coding-session-error-text" role="alert">{error}</p> : null
-  const time = (value: string) => {
-    const date = new Date(value)
-    return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString(locale, { month: 'short', day: 'numeric' })
-  }
-  return <section className="coding-sessions-list" aria-label={t(title)}>
-    <h3>{t(title)}</h3>
-    <ul>
-      {shown.map(session => <li key={session.id} data-state={session.state}>
-        {routed
-          ? <AppLink className="coding-sessions-list-row" href={codingSessionHref(session, data)}>
-            <CodingSessionSummary session={session} data={data}/>
-            <time dateTime={session.updatedAt}>{time(session.updatedAt)}</time>
-          </AppLink>
-          : <button type="button" className="coding-sessions-list-row" onClick={() => setOpen(session)}>
-            <CodingSessionSummary session={session} data={data}/>
-            <time dateTime={session.updatedAt}>{time(session.updatedAt)}</time>
-          </button>}
-        {isCodingSessionTerminal(session) && <button type="button" className="coding-session-icon-button" aria-label={`${t('Dismiss')} ${sessionTitle(session, data)}`} onClick={() => dismiss(session.id)}><X size={13}/></button>}
-      </li>)}
-    </ul>
-    {open && <CodingSessionDialog sessionId={open.id} initial={open} data={data} open onOpenChange={value => { if (!value) setOpen(undefined) }} onDismiss={() => dismiss(open.id)}/>}
-  </section>
 }

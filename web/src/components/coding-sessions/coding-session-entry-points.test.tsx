@@ -20,7 +20,6 @@ import { IssueAgentTasks } from '@/components/agent/issue-agent-tasks'
 import { PullRequestCommentActions } from '@/components/reviews/pull-request-comment-actions'
 import { AgentTaskCodingSession } from './agent-task-coding-session'
 import { ChatCodingSessionCards } from './chat-coding-session-cards'
-import { CodingSessionsList } from './coding-session-card'
 import { useDelegateCodingSession } from './coding-session-start'
 import { ReviewCodingSessionActions } from './review-coding-actions'
 import { ReviewAgentPanel, ReviewAgentToggle } from './review-agent-panel'
@@ -279,24 +278,6 @@ describe('agent chat session card', () => {
   it('renders nothing for replies without a coding session', () => {
     const { container } = render(<I18nProvider><ChatCodingSessionCards message={{ parts: [] }} data={baseData()}/></I18nProvider>)
     expect(container).toBeEmptyDOMElement()
-  })
-})
-
-describe('sessions list', () => {
-  it('lists the viewer’s sessions, opens one and dismisses finished ones', async () => {
-    const user = userEvent.setup()
-    const working = makeSession({ id: 'cs-a', displayTitle: 'Working one', updatedAt: '2026-10-02T00:00:00Z' })
-    const done = makeSession({ id: 'cs-b', displayTitle: 'Done one', state: 'complete', phase: 'idle', updatedAt: '2026-10-01T00:00:00Z' })
-    vi.mocked(api.fetchCodingSessions).mockResolvedValue([done, working])
-    vi.mocked(api.fetchCodingSession).mockResolvedValue(working)
-    render(<MemoryRouter><I18nProvider><CodingSessionsList data={baseData()} creatorId="user-1"/></I18nProvider></MemoryRouter>)
-    const list = await screen.findByRole('region', { name: 'Coding sessions' })
-    expect(api.fetchCodingSessions).toHaveBeenCalledWith({ issueId: undefined, creatorId: 'user-1', state: undefined })
-    expect(within(list).getAllByRole('listitem').map(item => item.textContent)).toEqual([expect.stringContaining('Working one'), expect.stringContaining('Done one')])
-    expect(within(list).queryByRole('button', { name: 'Dismiss Working one' })).toBeNull()
-    await user.click(within(list).getByRole('button', { name: 'Dismiss Done one' }))
-    expect(within(list).queryByText('Done one')).toBeNull()
-    expect(within(list).getByRole('link', { name: /Working one/ })).toHaveAttribute('href', '/workspace/diff/cs-a')
   })
 })
 

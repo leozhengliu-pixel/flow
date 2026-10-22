@@ -19,13 +19,11 @@
 .coding-phase-progress li[data-status=done]{color:var(--theme-text-secondary)}
 .coding-phase-progress li[data-status=current]{color:var(--accent-primary);background:var(--theme-control-active)}
 
-
 .coding-session-link{display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;color:var(--theme-text-secondary);font:inherit;font-size:12px;text-decoration:none;cursor:pointer}
 .coding-session-link:hover{color:var(--theme-text-primary)}
 .coding-session-error-text{margin:0;color:var(--semantic-danger-text);font-size:12px}
 .coding-session-error-text.cs-messages-error{display:flex;align-items:center;flex-wrap:wrap;gap:8px;color:var(--theme-text-secondary)}
 .coding-session-summary{margin:0;color:var(--theme-text-secondary);white-space:pre-wrap}
-
 
 .coding-pull-requests{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none}
 .coding-pull-requests li{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}
@@ -61,17 +59,7 @@
 
 .coding-session-card-toggle svg[data-open]{transform:rotate(90deg)}
 
-
 .coding-session-chat-cards{display:flex;flex-direction:column;gap:6px}
-
-.coding-sessions-list{margin-top:24px}
-.coding-sessions-list h3{margin:0 0 6px;color:var(--theme-text-secondary);font-size:12px;font-weight:500}
-.coding-sessions-list ul{display:flex;flex-direction:column;margin:0;padding:0;list-style:none}
-.coding-sessions-list li{display:flex;align-items:center;gap:4px;min-width:0;border-radius:6px}
-.coding-sessions-list li:hover{background:var(--theme-surface-hover)}
-.coding-sessions-list-row{display:flex;align-items:center;gap:8px;flex:1;min-width:0;height:34px;padding:0 8px;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
-.coding-sessions-list-row time{margin-left:auto;flex:none;color:var(--theme-text-tertiary);font-size:12px}
-
 
 .coding-environment-picker,.coding-review-dialog{width:min(480px,calc(100vw - 32px));padding:16px}
 .coding-environment-picker h2,.coding-review-dialog h2{margin:0 0 12px;font-size:15px;font-weight:500}
@@ -169,7 +157,6 @@
 .coding-session-card-byline strong{color:var(--text-body);font-weight:500}
 .coding-session-card-byline time{margin-left:4px}
 .coding-session-card-subject{flex:1;min-width:0;overflow:hidden;color:var(--theme-text-tertiary);font-size:12px;text-overflow:ellipsis;white-space:nowrap}
-.coding-session-summary-line{display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden}
 .coding-session-card-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
 .coding-session-card-repo{display:inline-flex;align-items:center;gap:4px;min-width:0;overflow:hidden;color:var(--theme-text-tertiary);font-size:12px;text-overflow:ellipsis;white-space:nowrap}
 .coding-session-status-row{display:flex;align-items:center;gap:8px;width:100%;min-width:0;height:40px;box-sizing:border-box;padding:0 20px 0 17px;border:0;background:transparent;color:var(--cs-label-muted);font:500 13px/16px var(--font);text-align:left;cursor:pointer}
@@ -237,7 +224,7 @@ html:root .dialog-content.coding-session-dialog{top:50%;transform:translate(-50%
 .coding-session-page-body{flex:1;min-height:0}
 .coding-session-page-message{padding:16px}
 @media (max-width:800px){.coding-session-page-menu{display:grid}}
-a.coding-session-status-row,a.coding-sessions-list-row{text-decoration:none}
+a.coding-session-status-row{text-decoration:none}
 
 /* Diff viewer: file tree with +/- counts beside the unified diff of each file */
 .coding-diff{display:flex;flex-direction:column;gap:8px;min-width:0}
@@ -318,7 +305,6 @@ a.coding-session-status-row,a.coding-sessions-list-row{text-decoration:none}
 .coding-pr-hover-card-meta{display:flex;align-items:center;gap:6px;padding-left:24px;color:var(--theme-text-secondary);font:450 13px/normal var(--font);white-space:nowrap}
 .coding-pr-hover-card-meta .coding-additions{color:var(--cs-diff-add)}
 .coding-pr-hover-card-meta .coding-deletions{color:var(--cs-diff-delete)}
-
 
 /* Session details menu: "Subscribe to session" with the compact 22x14 toggle */
 .coding-session-menu-subscribe{gap:8px}
