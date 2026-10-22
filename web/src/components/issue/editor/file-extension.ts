@@ -27,46 +27,51 @@ export const DescriptionFile = Node.create({
     return ['a', mergeAttributes(HTMLAttributes, { class: 'description-file', 'data-description-file': '', href: HTMLAttributes.src, 'data-title': HTMLAttributes.title, 'data-size': HTMLAttributes.size, 'data-type': HTMLAttributes.contentType }), String(HTMLAttributes.title || 'File')]
   },
   addNodeView() {
-    return ({ node, editor, getPos }) => {
+    return ({ node }) => {
       const dom = document.createElement('div')
       dom.className = 'description-file-node'
       dom.contentEditable = 'false'
-      const link = document.createElement('a')
+      const link = document.createElement('div')
       link.className = 'description-file'
-      link.target = '_blank'
-      link.rel = 'noreferrer'
-      const icon = document.createElement('span')
+      const icon = document.createElement('div')
       icon.className = 'description-file-icon'
-      icon.innerHTML = fileGlyph()
-      const copy = document.createElement('span')
+      const copy = document.createElement('div')
       copy.className = 'description-file-copy'
-      const name = document.createElement('strong')
-      const meta = document.createElement('small')
+      const name = document.createElement('span')
+      name.className = 'description-file-name'
+      const meta = document.createElement('span')
+      meta.className = 'description-file-meta'
       copy.append(name, meta)
+      link.append(icon, copy)
+      const download = document.createElement('button')
+      download.type = 'button'
+      download.className = 'description-file-download'
+      download.setAttribute('aria-label', 'Download')
+      download.title = 'Download'
+      download.innerHTML = downloadGlyph()
+      download.addEventListener('mousedown', event => event.preventDefault())
+      let href = ''
+      let fileName = 'File'
+      download.addEventListener('click', event => {
+        event.preventDefault()
+        event.stopPropagation()
+        const anchor = document.createElement('a')
+        anchor.href = href
+        anchor.download = fileName
+        anchor.rel = 'noreferrer'
+        anchor.click()
+      })
       const apply = (attrs: Record<string, unknown>) => {
-        link.href = String(attrs.src ?? '')
-        name.textContent = String(attrs.title || 'File')
+        const title = String(attrs.title || 'File')
+        name.textContent = title
         meta.textContent = formatBytes(Number(attrs.size) || 0)
+        meta.hidden = !meta.textContent
+        icon.innerHTML = fileGlyph(String(attrs.contentType ?? ''), title)
+        href = String(attrs.src ?? '')
+        fileName = title
       }
       apply(node.attrs)
-      link.append(icon, copy)
-      link.addEventListener('click', event => event.stopPropagation())
-      const remove = document.createElement('button')
-      remove.type = 'button'
-      remove.setAttribute('aria-label', 'Delete')
-      remove.className = 'description-file-remove'
-      remove.textContent = '×'
-      remove.addEventListener('mousedown', event => event.preventDefault())
-      remove.addEventListener('click', event => {
-        event.preventDefault()
-        const pos = getPos()
-        if (typeof pos !== 'number') return
-        const current = editor.state.doc.nodeAt(pos)
-        editor.chain().focus().deleteRange({ from: pos, to: pos + (current?.nodeSize ?? 1) }).run()
-      })
-      // Read-only renders (posted comments) get no delete control.
-      dom.append(link)
-      if (editor.isEditable) dom.append(remove)
+      dom.append(link, download)
       return {
         dom,
         update(updated) {
@@ -198,6 +203,22 @@ function formatBytes(size: number) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
-function fileGlyph() {
-  return '<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M3.75 1A1.75 1.75 0 0 0 2 2.75v10.5C2 14.216 2.784 15 3.75 15h8.5A1.75 1.75 0 0 0 14 13.25V6.586a1.75 1.75 0 0 0-.513-1.238L9.652 1.513A1.75 1.75 0 0 0 8.414 1H3.75ZM8 2v3.25c0 .966.784 1.75 1.75 1.75H13v6.25a.25.25 0 0 1-.25.25h-8.5a.25.25 0 0 1-.25-.25V2.75a.25.25 0 0 1 .25-.25H8Zm1.5.56 2.94 2.94H9.75a.25.25 0 0 1-.25-.25V2.56Z"/></svg>'
+const FILE_PATH = 'M6.75 1V6.75C6.75 7.5297 7.34489 8.17045 8.10554 8.24313L8.25 8.25H14V13C14 14.1046 13.1046 15 12 15H4C2.89543 15 2 14.1046 2 13V3C2 1.89543 2.89543 1 4 1H6.75ZM8 1L14 7.03022H9C8.44772 7.03022 8 6.5825 8 6.03022V1Z'
+const PDF_PATH = 'M8.75 5.9h4.125L8.75 2.05zM3.5 1h6L14 5.2v8.4a1.5 1.4 0 0 1-1.5 1.4h-9A1.5 1.4 0 0 1 2 13.6V2.4A1.5 1.4 0 0 1 3.5 1m3.698 7.308c.307.63.697 1.148 1.147 1.505l.307.224a15 15 0 0 0-2.505.651l-.082.028.375-.728a10 10 0 0 0 .757-1.68m4.86 2.667a.66.66 0 0 0 .21-.462.53.53 0 0 0-.09-.385c-.217-.329-.78-.483-1.71-.483l-.967.049-.652-.406c-.473-.364-.9-1.001-1.2-1.792l.03-.098c.247-.931.48-2.058-.015-2.52a.638.595 0 0 0-.458-.168h-.18c-.277 0-.525.273-.592.539-.278.931-.113 1.442.165 2.289v.007c-.188.616-.428 1.33-.81 2.051l-.72 1.26-.668.343c-.9.525-1.327 1.113-1.41 1.484a.6.6 0 0 0 .038.378l.022.035.36.217.33.077c.608 0 1.298-.665 2.228-2.149l.135-.049c.772-.231 1.732-.392 3.022-.525.773.357 1.68.518 2.25.518.33 0 .555-.077.683-.21m-.308-.497.068.077c-.008.07-.03.077-.068.091h-.03l-.142.014c-.345 0-.878-.133-1.425-.357.067-.07.097-.07.172-.07 1.05 0 1.35.175 1.425.245M4.873 11.5c-.488.833-.93 1.295-1.268 1.4.038-.266.375-.728.908-1.183zm2.265-4.837c-.173-.63-.18-1.141-.053-1.435l.053-.084.112.035c.128.168.143.392.068.77l-.023.112-.12.574z'
+const DOWNLOAD_PATHS = [
+  'M7 2a1 1 0 0 1 2 0v5h2.5c.444 0 .668.568.353.9l-3.5 2.946a.482.482 0 0 1-.706 0L4.147 7.9c-.314-.332-.091-.9.354-.9H7V2Z',
+  'M1.808 8.382c.446 0 .807.342.807.763v2.546c0 .984.844 1.782 1.885 1.782h7c1.04 0 1.885-.798 1.885-1.782V9.145c0-.421.361-.763.807-.763.446 0 .808.342.808.763v2.546C15 13.518 13.433 15 11.5 15h-7C2.567 15 1 13.518 1 11.69V9.146c0-.421.362-.763.808-.763Z',
+]
+
+function isPdf(contentType: string, title: string) {
+  return contentType === 'application/pdf' || /\.pdf$/i.test(title)
+}
+
+function fileGlyph(contentType = '', title = '') {
+  const path = isPdf(contentType, title) ? PDF_PATH : FILE_PATH
+  return `<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="${path}"/></svg>`
+}
+
+function downloadGlyph() {
+  return `<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">${DOWNLOAD_PATHS.map(d => `<path d="${d}"/>`).join('')}</svg>`
 }

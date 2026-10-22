@@ -166,54 +166,86 @@
   position: relative;
   display: flex;
   align-items: center;
-  height: 40px;
+  box-sizing: border-box;
+  gap: 6px;
   margin: 12px 0;
-  padding-right: 8px;
+  padding: 6px;
   border: .5px solid var(--description-file-border);
   border-radius: 6px;
   background: var(--description-file-bg);
+  box-shadow: var(--description-file-shadow);
+  cursor: default;
+}
+.description-file-node.ProseMirror-selectednode {
+  outline: 2px solid var(--description-file-selected-outline);
+  outline-offset: 1px;
 }
 .description-file {
   min-width: 0;
   flex: 1;
-  height: 40px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 12px;
-  color: inherit;
+  gap: 6px;
+  padding: 2px 4px;
+  color: var(--description-file-name);
   text-decoration: none;
 }
 .description-file-icon {
-  width: 16px;
-  height: 16px;
+  width: 32px;
+  height: 34px;
   flex: none;
-  color: var(--action-menu-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--description-file-icon);
 }
-.description-file-copy { min-width: 0; }
-.description-file-copy strong {
+.description-file-icon svg { width: 16px; height: 16px; flex: none; }
+.description-file-copy {
+  min-width: 0;
+  flex: 1;
+  height: 38px;
+  margin-top: -4px;
+}
+.description-file-name {
   display: block;
   overflow: hidden;
-  color: var(--theme-text-primary);
-  font: 500 13px / 18px var(--font);
+  color: var(--description-file-name);
+  font-size: 15px;
+  font-weight: 450;
+  line-height: 23px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.description-file-copy small {
+.description-file-meta {
   display: block;
-  color: var(--theme-text-tertiary);
-  font: 11px / 14px var(--font);
+  margin-top: 2px;
+  color: var(--description-file-meta);
+  font-size: 11px;
+  font-weight: 450;
+  line-height: 13px;
 }
-.description-file-remove {
-  width: 24px;
-  height: 24px;
+.description-file-meta[hidden] { display: none; }
+.description-file-node .description-file-download {
+  width: 28px;
+  height: 28px;
   flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
-  border-radius: 4px;
+  border-radius: 9999px;
   background: transparent;
-  color: var(--theme-text-tertiary);
+  padding: 0;
+  color: var(--description-file-download-fg);
+  opacity: 0;
+  text-decoration: none;
+  cursor: default;
 }
-.description-file-remove:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
+.description-file-node .description-file-download svg { width: 14px; height: 14px; }
+.description-file-node:hover .description-file-download,
+.description-file-node.ProseMirror-selectednode .description-file-download,
+.description-file-node .description-file-download:focus-visible { opacity: 1; }
+.description-file-node .description-file-download:hover { background: var(--description-file-download-hover); }
 
 .description-video-node { margin: 0 0 12px; width: fit-content; max-width: 100%; }
 .description-video {
