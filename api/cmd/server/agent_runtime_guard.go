@@ -188,9 +188,19 @@ func (s *server) workerRunGuardOp(r *http.Request, run store.AgentRun, input wor
 		}
 	case "before":
 		response.Content, response.Failed, response.Handled = g.before(call)
+		if response.Handled {
+			// Not run: logged so the thread shows it was skipped, as for an in-process run.
+			if tool, ok := s.agentRunConnectorTool(ctx, run, input.Tool); ok {
+				metadata := connectorActionMetadata(tool, call)
+				metadata["result"] = connectorNotRunResult(response.Content)
+				_ = s.agentRunActivityAppender(ctx, run)(domain.AgentActivity{Type: "action", Body: tool.RemoteName, Metadata: metadata})
+			}
+		}
 	case "after":
-		// A failed call or one that found nothing is a call without progress.
-		g.after(call, input.Content, input.Failed || connectorFoundNothing([]byte(input.Content)))
+		// A failed call or one that found nothing is a call without progress. A call that ran through /mcp failed
+		// when Flow saw an error or an isError result (agent_runtime_connectors.go), whatever its text says.
+		failed := input.Failed || s.agentRunConnectorFailed(ctx, run, input.Tool, input.Arguments)
+		g.after(call, input.Content, failed || connectorFoundNothing([]byte(input.Content)))
 	case "coding":
 		task, err := s.store.AgentTask(ctx, run.WorkspaceKey, run.SessionID)
 		if err != nil {

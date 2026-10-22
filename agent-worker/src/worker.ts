@@ -22,7 +22,7 @@ import { createModel, modelSettings, ObservedModel, type ModelCallRecord, type M
 import { approvalKind, approvalPreview, isApprovalWord, type ApprovalKind } from './policy.js'
 import { FileSessionStore } from './session-store.js'
 import { QuestionStreamer } from './question-stream.js'
-import { outputText, RunGuard, type GuardApi } from './run-guard.js'
+import { outputText, RunGuard, ToolErrorFlags, type GuardApi } from './run-guard.js'
 import { initialGroups } from './tool-groups.js'
 
 // Traces would go to api.openai.com with the provider key; the worker exports its own OTel spans instead.
@@ -85,6 +85,8 @@ export type SessionOptions = {
   tools?: Tool<FlowRunContext>[]
   /** MCP servers (default: Flow's /mcp with the run token). */
   mcpServers?: MCPServer[]
+  /** The structured isError flags of connector calls, read by the run guard (default: one per session). */
+  toolErrors?: ToolErrorFlags
 }
 
 export type ActivitySink = (activity: FlowActivity) => void
@@ -112,13 +114,15 @@ export class FlowAgentSession {
   private readonly model: ObservedModel
   private readonly agent: FlowAgent
   private readonly mcp: MCPServer[]
+  private readonly toolErrors: ToolErrorFlags
   private connected?: Promise<void>
   private controller?: AbortController
 
   constructor(private readonly worker: FlowAgentWorker, readonly options: SessionOptions, baseModel: Model) {
     const config = worker.config
     this.model = new ObservedModel(baseModel)
-    this.mcp = options.mcpServers ?? [flowMcpServer(config.flowUrl, options.flowToken ?? config.flowToken)]
+    this.toolErrors = options.toolErrors ?? new ToolErrorFlags()
+    this.mcp = options.mcpServers ?? [flowMcpServer(config.flowUrl, options.flowToken ?? config.flowToken, { toolErrors: this.toolErrors })]
     this.agent = new FlowAgent({
       name: 'Flow Agent',
       instructions: options.systemPrompt,
@@ -197,7 +201,7 @@ export class FlowAgentSession {
     if (!previous) sink({ type: 'thought', at: Date.now(), body: typeof input === 'string' ? 'Working…' : 'Continuing…', ephemeral: false })
     let guard = previousGuard
     if (!guard && this.options.guard) {
-      guard = new RunGuard(this.options.guard, maxTurns)
+      guard = new RunGuard(this.options.guard, maxTurns, this.toolErrors)
       await guard.start(context)
     }
     this.model.observer = record => {

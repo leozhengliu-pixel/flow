@@ -61,6 +61,9 @@ type agentRunPrincipal struct {
 	TeamIDs []string `json:"teamIds,omitempty"`
 	// Tools is the run's tool allowlist (Flow MCP tool names); empty allows every Flow tool.
 	Tools []string `json:"tools,omitempty"`
+	// Connectors selects the MCP connectors whose tools the run is offered (agent_runtime_connectors.go): a loop
+	// run's ConnectorIDs (none when empty); for other runs, when set, it narrows every connector the user may use.
+	Connectors []string `json:"connectors,omitempty"`
 }
 
 func (p agentRunPrincipal) valid() bool {

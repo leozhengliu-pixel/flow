@@ -13,7 +13,7 @@ import { test } from 'node:test'
 import { setTracingDisabled, tool } from '@openai/agents'
 import { ScriptedModel, assistantMessage, functionCall } from '@openai/agents/testing'
 import type { WorkerConfig } from '../src/config.js'
-import { isErrorOutput, RunGuard, type GuardRequest, type GuardResponse } from '../src/run-guard.js'
+import { isErrorOutput, RunGuard, ToolErrorFlags, type GuardRequest, type GuardResponse } from '../src/run-guard.js'
 import { FlowAgentWorker } from '../src/worker.js'
 
 setTracingDisabled(true)
@@ -24,7 +24,7 @@ const placeholders: Record<string, string> = { '{{env0}}': 'cenv_api', '{{env1}}
 type Vector = {
   name: string
   maxTurns: number
-  connector: 'match' | 'error' | 'empty' | 'none'
+  connector: 'match' | 'error' | 'isError' | 'empty' | 'none'
   model: ({ call: { name: string; arguments: Record<string, unknown> } } | { text: string })[]
   expect: { connectorCalls: number; coding: boolean; replyContains?: string[]; replyOmits?: string[] }
   exchanges: { request: GuardRequest; response: GuardResponse }[]
@@ -40,7 +40,8 @@ function config(maxTurns: number): WorkerConfig {
   return { protocol: 'openai-chat', model: 'scripted', apiKey: 'test', contextWindow: 200_000, flowUrl: 'http://flow.invalid', flowToken: 'unused', stateDir: mkdtempSync(join(tmpdir(), 'run-guard-')), maxTurns }
 }
 
-function connectorTool(mode: Vector['connector'], calls: string[]) {
+/** The connector; in isError mode its result is plain text flagged isError, as Flow's /mcp passes it through. */
+function connectorTool(mode: Vector['connector'], calls: string[], flags?: ToolErrorFlags) {
   return tool<any>({
     name: 'external_sourcebot_glob',
     description: 'Sourcebot tool glob. Arguments: pattern (required), repo.',
@@ -48,6 +49,10 @@ function connectorTool(mode: Vector['connector'], calls: string[]) {
     parameters: { type: 'object', required: ['pattern'], properties: { pattern: { type: 'string' }, repo: { type: 'string' } }, additionalProperties: false },
     execute: async (input: unknown) => {
       calls.push(JSON.stringify(input))
+      if (mode === 'isError') {
+        flags?.record('external_sourcebot_glob', input, true)
+        return 'search backend unavailable'
+      }
       return mode === 'error' ? 'Error: search backend unavailable' : mode === 'empty' ? '' : 'acme/api@main api/go.mod'
     },
   })
@@ -85,9 +90,10 @@ for (const file of readdirSync(vectors).filter(name => name.endsWith('.json')).s
     }
     const model = new ScriptedModel(vector.model.map((step, index) => ('text' in step ? [assistantMessage(step.text)] : [functionCall(step.call.name, step.call.arguments, { callId: `call_${index}` })])))
     const connectorCalls: string[] = []
-    const tools = vector.connector === 'none' ? [getIssue] : [connectorTool(vector.connector, connectorCalls), getIssue]
+    const toolErrors = new ToolErrorFlags()
+    const tools = vector.connector === 'none' ? [getIssue] : [connectorTool(vector.connector, connectorCalls, toolErrors), getIssue]
     const worker = new FlowAgentWorker(config(vector.maxTurns), { model })
-    const session = worker.session({ sessionId: `guard-${file}`, systemPrompt: 'You are Flow Agent.', guard: api, tools, mcpServers: [] })
+    const session = worker.session({ sessionId: `guard-${file}`, systemPrompt: 'You are Flow Agent.', guard: api, tools, mcpServers: [], toolErrors })
     const outcome = await session.send('Delegated issue ENG-7')
 
     assert.deepEqual(pending, [], 'every request of the vector was sent')
@@ -154,6 +160,16 @@ test('the guard fails open when Flow cannot be reached', async () => {
   await guard.start({})
   assert.equal(guard.enabled, false)
   assert.deepEqual(await guard.finish('reply', 'text'), { reply: 'text', transferred: false })
+})
+
+test('the structured isError flag is read back for the same tool and arguments', () => {
+  const flags = new ToolErrorFlags()
+  flags.record('external_a', { b: 1, a: 'x' }, true)
+  flags.record('external_a', { a: 'y' }, false)
+  assert.equal(flags.take('external_a', '{"a":"x","b":1}'), true, 'key order does not matter')
+  assert.equal(flags.take('external_a', '{"a":"x","b":1}'), undefined, 'a flag is read once')
+  assert.equal(flags.take('external_a', '{"a":"y"}'), false)
+  assert.ok(!isErrorOutput('search backend unavailable'), 'plain text alone is not an error')
 })
 
 test('error outputs count as failures', () => {

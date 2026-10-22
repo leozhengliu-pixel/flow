@@ -155,11 +155,16 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 				}
 				listed = append(listed, map[string]any{"name": tool.Name, "description": tool.Description, "inputSchema": json.RawMessage(tool.InputSchema), "annotations": map[string]any{"readOnlyHint": tool.Access == "read", "destructiveHint": strings.HasPrefix(tool.Name, "delete_") || tool.Name == "merge_diff"}})
 			}
+			if actor.Run != nil {
+				// A run token is also offered its acting user's connector tools (agent_runtime_connectors.go).
+				listed = append(listed, s.agentRunListedConnectors(r, actor.Run, readonly)...)
+			}
 			writeJSON(w, http.StatusOK, mcpRPCResponse{JSONRPC: "2.0", ID: request.ID, Result: map[string]any{"tools": listed}})
 		case "tools/call":
 			var params struct {
 				Name      string         `json:"name"`
 				Arguments map[string]any `json:"arguments"`
+				Meta      map[string]any `json:"_meta"`
 			}
 			if err := json.Unmarshal(request.Params, &params); err != nil {
 				s.writeMCPError(w, request.ID, -32602, "Invalid params", nil)
@@ -167,6 +172,10 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 			}
 			if params.Arguments == nil {
 				params.Arguments = map[string]any{}
+			}
+			if actor.Run != nil && strings.HasPrefix(params.Name, "external_") {
+				s.callMCPRunConnector(w, r, request.ID, actor.Run, params.Name, params.Arguments, params.Meta, readonly)
+				return
 			}
 			index := slices.IndexFunc(tools, func(tool flowMCPTool) bool { return tool.Name == params.Name })
 			if index < 0 {

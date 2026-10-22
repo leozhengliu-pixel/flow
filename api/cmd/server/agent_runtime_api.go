@@ -348,6 +348,9 @@ func (s *server) agentRunPayload(w http.ResponseWriter, r *http.Request, _ agent
 			writeError(w, http.StatusConflict, "the run's application or requester no longer has access to the session")
 			return
 		}
+		// Connector tools are discovered for the run here (and served through /mcp); a failure is told to the model
+		// as the in-process agent tells it.
+		prompt.System += s.agentRunConnectorNote(r, &agentRunGrant{run: run, principal: principal})
 		response["context"] = prompt
 	} else if !store.IsAgentTaskMissing(err) {
 		writeError(w, http.StatusInternalServerError, "the run's session could not be read")
