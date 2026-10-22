@@ -8,7 +8,7 @@ import { harnessFor } from '../src/harness/index.js'
 import type { ExitResult, RunningProcess, SpawnOptions } from '../src/process.js'
 import type { BootstrapResponse, HarnessName, InboxItem, RunnerEvent, Turn, TurnCompleteRequest } from '../src/protocol.js'
 import { Session, type SessionApi, type SessionGit } from '../src/session.js'
-import { turnScope } from '../src/turn-scope.js'
+import { inferTurnScope, turnScope } from '../src/turn-scope.js'
 import { sh, tempDir } from './helpers.js'
 
 // A turn's write scope, end to end with a fake harness and real git: a
@@ -395,6 +395,61 @@ test('a normal development follow-up after a read-only turn still commits, pushe
     assert.equal(dev.request.scope, 'write')
     assert.equal(dev.request.headSha, head)
     assert.equal(dev.request.commits?.length, 1)
+  } finally {
+    w.cleanup()
+  }
+})
+
+test('scope from the API wins over the runner keywords; turns without one fall back to them', () => {
+  const turn = (prompt: string, scope?: Turn['scope'], kind = 'followUp'): Turn => ({ id: 't', prompt, kind, scope })
+  // A development request that mentions "不要提交" (to main) is a write turn when Flow says so.
+  assert.equal(turnScope(turn('修复登录 bug，不要提交到 main，改完推到分支', 'write')), 'write')
+  assert.equal(inferTurnScope(turn('修复登录 bug，不要提交到 main，改完推到分支')), 'noPublish', 'the old keyword fallback alone misreads it')
+  // An explicit read-only choice holds even for development wording, and for Flow's own kinds.
+  assert.equal(turnScope(turn('Fix the login bug and push.', 'readOnly')), 'readOnly')
+  assert.equal(turnScope(turn('Rebase onto main', 'noPublish', 'rebase')), 'noPublish')
+  // Old APIs (no scope) and unknown values use the keyword fallback.
+  assert.equal(turnScope(turn(VERIFY)), 'readOnly')
+  assert.equal(turnScope({ id: 't', prompt: VERIFY, kind: 'followUp', scope: 'everything' as Turn['scope'] }), 'readOnly')
+  assert.equal(turnScope(turn('Fix the failing test in theme.ts')), 'write')
+})
+
+test('a development follow-up that Flow scoped as write publishes even though it says "不要提交到 main"', async () => {
+  const prompt = '把 toggle 导出加上，不要提交到 main，改完推到分支'
+  const w = world({
+    harness: 'codex',
+    resumeId: 'thread-old',
+    turns: [{ id: 'turn_dev', prompt, kind: 'followUp', scope: 'write', scopeSource: 'rules' }],
+    plans: [{ fixture: 'codex-recorded-turn1.jsonl', act: (repo) => writeFileSync(join(repo, 'theme.ts'), 'export const theme = "dark"\nexport const toggle = true\n') }],
+  })
+  try {
+    assert.equal(await w.session.run(), 0)
+    assert.match(w.spawned[0].stdin, /Write scope: changes allowed; Flow commits and pushes/)
+    assert.deepEqual(w.calls, { commitAll: 1, commitPaths: 0, push: 1 })
+    assert.equal(w.remoteHead(), w.inRepo(['rev-parse', 'HEAD']))
+    const [complete] = w.api.completes
+    assert.equal(complete.request.scope, 'write')
+    assert.equal(complete.request.pushed, true)
+  } finally {
+    w.cleanup()
+  }
+})
+
+test('an explicit read-only follow-up with development wording: nothing is committed or pushed, the PR head stays', async () => {
+  const w = world({
+    harness: 'codex',
+    resumeId: 'thread-old',
+    turns: [{ id: 'turn_verify', prompt: 'Add the toggle export and push it.', kind: 'followUp', scope: 'readOnly', scopeSource: 'user' }],
+    plans: [{ fixture: 'codex-recorded-turn1.jsonl' }],
+  })
+  try {
+    assert.equal(await w.session.run(), 0)
+    assert.match(w.spawned[0].stdin, /Write scope: read-only/)
+    assert.deepEqual(w.calls, { commitAll: 0, commitPaths: 0, push: 0 })
+    assert.equal(w.remoteHead(), w.prHead)
+    const [complete] = w.api.completes
+    assert.equal(complete.request.scope, 'readOnly')
+    assert.equal(complete.request.pushed, false)
   } finally {
     w.cleanup()
   }

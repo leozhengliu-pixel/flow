@@ -90,6 +90,9 @@ type Service struct {
 	// BrowserGuidance is the browser-testing guidance added to the bootstrap
 	// guidance when browser testing is on (track I's text).
 	BrowserGuidance func() string
+	// TurnScopeModel classifies follow-up requests the scope parser is
+	// unsure about (turn_scope.go); nil keeps the parser's answer.
+	TurnScopeModel TurnScopeModel
 	// HostGuidance adds code-host specific guidance (track J's
 	// gitlab.AgentGuidance for GitLab environments); nil adds nothing.
 	HostGuidance func(session domain.CodingSession) string
@@ -686,6 +689,9 @@ type PromptInput struct {
 	// upload URLs); they go on the prompt activity's "attachments" metadata.
 	// Attachments carries the runner-reachable (signed) URLs of the same files.
 	Files []domain.AgentMessageAttachment
+	// Scope is the write scope the person chose for this turn ("write",
+	// "noPublish", "readOnly"); "" or "auto" lets Flow infer it from Prompt.
+	Scope string
 }
 
 // promptActivity is the anchor's prompt activity for a follow-up.
@@ -703,6 +709,9 @@ func (s *Service) Prompt(ctx context.Context, workspaceKey, id string, in Prompt
 	in.Prompt = strings.TrimSpace(in.Prompt)
 	if in.Prompt == "" || len(in.Prompt) > 64<<10 {
 		return domain.CodingSession{}, ErrInvalidInput
+	}
+	if _, err := NormalizeTurnScope(in.Scope); err != nil {
+		return domain.CodingSession{}, fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
 	session, err := s.store.CodingSession(ctx, workspaceKey, id)
 	if err != nil {
@@ -767,7 +776,10 @@ func (s *Service) Prompt(ctx context.Context, workspaceKey, id string, in Prompt
 	if kind == "" {
 		kind = TurnFollowUp
 	}
-	if _, err := s.store.EnqueueCodingInbox(ctx, workspaceKey, id, InboxItem{Kind: InboxTurn, Turn: &Turn{ID: turnID, Prompt: in.Prompt, AuthorID: in.AuthorID, Attachments: in.Attachments, Kind: kind}}); err != nil {
+	// The turn's write scope is decided once, here, and travels with the turn.
+	scope := ResolveTurnScope(ctx, kind, in.Scope, in.Prompt, s.TurnScopeModel)
+	slog.Info("coding turn scope", "session", id, "turn", turnID, "kind", kind, "scope", scope.Scope, "source", scope.Source, "rule", scope.Rule)
+	if _, err := s.store.EnqueueCodingInbox(ctx, workspaceKey, id, InboxItem{Kind: InboxTurn, Turn: &Turn{ID: turnID, Prompt: in.Prompt, AuthorID: in.AuthorID, Attachments: in.Attachments, Kind: kind, Scope: scope.Scope, ScopeSource: scope.Source}}); err != nil {
 		return session, err
 	}
 	s.inbox.notify(id)

@@ -326,6 +326,34 @@ describe('composer', () => {
     await waitFor(() => expect(screen.queryByRole('list', { name: 'Queued messages' })).toBeNull())
   })
 
+  it('sends the scope chosen in the composer with the follow-up, then returns to Auto', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.promptCodingSession).mockResolvedValue(makeSession({ state: 'complete', phase: 'idle' }))
+    renderConversation(makeSession({ state: 'complete', phase: 'idle' }))
+    const box = screen.getByRole('textbox', { name: 'Send a message to Flow' })
+    expect(screen.getByRole('button', { name: 'Scope: Auto' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Scope: Auto' }))
+    await user.click(await screen.findByRole('menuitem', { name: /Verify only/ }))
+    expect(screen.getByRole('button', { name: 'Scope: Verify only' })).toHaveClass('is-explicit')
+    await user.type(box, 'Check that the build passes{Enter}')
+    await waitFor(() => expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'Check that the build passes', undefined, [], 'readOnly'))
+    expect(screen.getByRole('button', { name: 'Scope: Auto' })).toBeInTheDocument()
+    await user.type(box, 'Now fix it{Enter}')
+    await waitFor(() => expect(api.promptCodingSession).toHaveBeenLastCalledWith('cs-1', 'Now fix it', undefined, []))
+  })
+
+  it('a queued message keeps the scope it was queued with', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.promptCodingSession).mockResolvedValue(makeSession({ state: 'pending', phase: 'queued', version: 3 }))
+    const data = makeBootstrap({ reviews: [] })
+    const view = render(<I18nProvider><CodingSessionConversation session={makeSession({ state: 'active', phase: 'running' })} data={data} onChange={vi.fn()}/></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'Scope: Auto' }))
+    await user.click(await screen.findByRole('menuitem', { name: /Don’t publish/ }))
+    await user.type(screen.getByRole('textbox', { name: 'Send a message to Flow' }), 'Try the refactor{Enter}')
+    view.rerender(<I18nProvider><CodingSessionConversation session={makeSession({ state: 'complete', phase: 'idle', version: 2 })} data={data} onChange={vi.fn()}/></I18nProvider>)
+    await waitFor(() => expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'Try the refactor', undefined, [], 'noPublish'))
+  })
+
   it('removes a queued message, or sends it right away', async () => {
     const user = userEvent.setup()
     vi.mocked(api.promptCodingSession).mockResolvedValue(makeSession({ state: 'active', phase: 'running' }))

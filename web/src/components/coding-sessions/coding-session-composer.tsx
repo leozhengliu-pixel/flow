@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react'
-import { ChevronDown, CornerDownLeft, Link2, Reply, X } from 'lucide-react'
+import { Check, ChevronDown, CornerDownLeft, Link2, Reply, X } from 'lucide-react'
 import { AgentAttachIcon, AgentStopIcon, AgentSubmitIcon } from '@/components/agent/agent-icons'
 import { AGENT_ATTACHMENT_ACCEPT, AGENT_UPLOAD_MAX_ITEMS, agentFileKind, agentUploadLimit, pastedAgentFiles, shrinkAgentImage } from '@/components/agent/agent-attachments'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { SearchableMenuItems } from '@/components/ui/searchable-menu-items'
 import { useI18n } from '@/i18n/i18n'
 import { uploadAgentFile } from '@/lib/api'
 import { type ApplicationActivity } from '@/lib/application-agents'
 import { commentShortcutMatches } from '@/lib/runtime-preferences'
 import { toast } from '@/lib/toast'
+import type { CodingTurnScope } from '@/types/coding-sessions'
 import type { AgentMessageAttachment, BootstrapData } from '@/types/flow'
 import { readQueuedMessages, selectOptionsInline, writeQueuedMessages, type QueuedMessage } from './coding-session-stream-model'
 import './coding-session-stream.css'
@@ -31,7 +32,7 @@ function useCodingMessageQueue(workspace: string, sessionId: string) {
   })
   return {
     messages,
-    add: (text: string, files: AgentMessageAttachment[]) => update(current => [...current, { id: `q-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`, text, files: files.length ? files : undefined, createdAt: new Date().toISOString() }]),
+    add: (text: string, files: AgentMessageAttachment[], scope?: CodingTurnScope) => update(current => [...current, { id: `q-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`, text, files: files.length ? files : undefined, scope, createdAt: new Date().toISOString() }]),
     remove: (id: string) => update(current => current.filter(message => message.id !== id)),
   }
 }
@@ -93,6 +94,32 @@ function OptionDropdown({ options, selected, onSelect }: { options: ComposerOpti
   </DropdownMenu>
 }
 
+/** The follow-up's write scope: Auto lets Flow infer it from the message; the others are explicit and win over it. */
+const SCOPE_OPTIONS: Array<{ value?: CodingTurnScope; label: string; hint: string }> = [
+  { label: 'Auto', hint: 'Flow decides from your message' },
+  { value: 'write', label: 'Develop', hint: 'Change code, commit, push and update the pull request' },
+  { value: 'noPublish', label: 'Don’t publish', hint: 'Change code without committing or pushing' },
+  { value: 'readOnly', label: 'Verify only', hint: 'Keep the repository and the pull request unchanged' },
+]
+
+function ScopeMenu({ scope, disabled, onChange }: { scope?: CodingTurnScope; disabled: boolean; onChange: (scope?: CodingTurnScope) => void }) {
+  const { t } = useI18n()
+  const current = SCOPE_OPTIONS.find(option => option.value === scope) ?? SCOPE_OPTIONS[0]
+  return <DropdownMenu>
+    <DropdownMenuTrigger asChild>
+      <button type="button" className={`cs-scope-select${scope ? ' is-explicit' : ''}`} aria-label={`${t('Scope')}: ${t(current.label)}`} title={t(current.hint)} disabled={disabled}>
+        <span>{t(current.label)}</span><ChevronDown size={12} aria-hidden="true"/>
+      </button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="end" className="coding-session-menu cs-scope-menu">
+      {SCOPE_OPTIONS.map(option => <DropdownMenuItem key={option.label} onSelect={() => onChange(option.value)}>
+        <span className="cs-scope-menu-text"><span>{t(option.label)}</span><span className="cs-scope-menu-hint">{t(option.hint)}</span></span>
+        {option.value === scope && <Check size={14} aria-hidden="true" className="cs-scope-menu-check"/>}
+      </DropdownMenuItem>)}
+    </DropdownMenuContent>
+  </DropdownMenu>
+}
+
 export type CodingComposerProps = {
   data: BootstrapData
   sessionId: string
@@ -104,8 +131,8 @@ export type CodingComposerProps = {
   canPrompt: boolean
   busy: boolean
   request?: ComposerRequest
-  /** Sends a message (with its files); false when it failed and should stay. */
-  onSend: (text: string, files: AgentMessageAttachment[]) => Promise<boolean>
+  /** Sends a message (with its files and, when one was chosen, its write scope); false when it failed and should stay. */
+  onSend: (text: string, files: AgentMessageAttachment[], scope?: CodingTurnScope) => Promise<boolean>
   onStop: () => void
   onApprove: (reject: boolean) => Promise<void>
 }
@@ -114,12 +141,14 @@ export type CodingComposerProps = {
  * The follow-up composer, like the reference app's: Stop (square) while the agent works and nothing is typed, Queue
  * when something is (⌘⇧Enter sends right away), the queued messages above the editor, and, when the agent needs input,
  * a purple frame with the question's options in the toolbar and "Continue" once one is chosen. Files attach with the
- * paperclip, by pasting or by dropping them, and go with the message.
+ * paperclip, by pasting or by dropping them, and go with the message. The scope menu (Auto by default) sets what the
+ * next turn may do to the repository; it returns to Auto after each message.
  */
 export function CodingComposer({ data, sessionId, generating, stopPending, canPrompt, busy, request, onSend, onStop, onApprove }: CodingComposerProps) {
   const { t } = useI18n()
   const [value, setValue] = useState('')
   const [dragging, setDragging] = useState(false)
+  const [scope, setScope] = useState<CodingTurnScope | undefined>()
   const picker = useRef<HTMLInputElement>(null)
   const queue = useCodingMessageQueue(data.workspace.urlKey, sessionId)
   const attachments = useComposerFiles()
@@ -148,11 +177,11 @@ export function CodingComposer({ data, sessionId, generating, stopPending, canPr
     if (generating || busy || !canPrompt || request || flushing.current || !queue.messages.length) return
     const [next] = queue.messages
     flushing.current = true
-    void onSend(next.text, next.files ?? []).then(sent => { if (sent) queue.remove(next.id) }).finally(() => { flushing.current = false })
+    void onSend(next.text, next.files ?? [], next.scope).then(sent => { if (sent) queue.remove(next.id) }).finally(() => { flushing.current = false })
   }, [generating, busy, canPrompt, request, queue.messages]) // eslint-disable-line react-hooks/exhaustive-deps -- flush on state changes only
 
   const sendNow = async (text: string) => {
-    if (await onSend(text, attachments.ready)) { setValue(''); attachments.clear() }
+    if (await onSend(text, attachments.ready, scope)) { setValue(''); setScope(undefined); attachments.clear() }
   }
   const submit = async (event?: FormEvent, immediate = false) => {
     event?.preventDefault()
@@ -167,8 +196,9 @@ export function CodingComposer({ data, sessionId, generating, stopPending, canPr
     }
     if (!body && !hasFiles) return
     if (generating && !immediate) {
-      queue.add(body, attachments.ready)
+      queue.add(body, attachments.ready, scope)
       setValue('')
+      setScope(undefined)
       attachments.clear()
       return
     }
@@ -192,7 +222,7 @@ export function CodingComposer({ data, sessionId, generating, stopPending, canPr
         <Reply size={16} aria-hidden="true" className="cs-queue-icon"/>
         <span className="cs-queue-text" title={message.text} data-i18n-ignore>{message.text || message.files?.map(file => file.name).join(', ')}</span>
         <span className="cs-queue-actions">
-          <button type="button" className="cs-button is-ghost is-small" title={t('Send immediately (steer)')} disabled={busy || !canPrompt} onClick={() => void onSend(message.text, message.files ?? []).then(sent => { if (sent) queue.remove(message.id) })}>{t('Send')}</button>
+          <button type="button" className="cs-button is-ghost is-small" title={t('Send immediately (steer)')} disabled={busy || !canPrompt} onClick={() => void onSend(message.text, message.files ?? [], message.scope).then(sent => { if (sent) queue.remove(message.id) })}>{t('Send')}</button>
           <button type="button" className="coding-session-icon-button" aria-label={t('Remove from queue')} title={t('Remove from queue')} onClick={() => queue.remove(message.id)}><X size={14}/></button>
         </span>
       </li>)}
@@ -230,6 +260,7 @@ export function CodingComposer({ data, sessionId, generating, stopPending, canPr
           : <OptionDropdown options={options} selected={choice} onSelect={option => setSelected(option.value)}/>}
       </div>}
       <span className="cs-composer-spacer"/>
+      {!approval && <ScopeMenu scope={scope} disabled={!canPrompt} onChange={setScope}/>}
       {/* Attach sits beside send on the right, like the reference app's composer. */}
       <button type="button" className="coding-session-composer-attach" aria-label={t('Attach images, files, or videos')} title={t('Attach images, files, or videos')} disabled={!canPrompt || attachments.files.length >= AGENT_UPLOAD_MAX_ITEMS} onClick={() => picker.current?.click()}><AgentAttachIcon size={14}/></button>
       {stopMode

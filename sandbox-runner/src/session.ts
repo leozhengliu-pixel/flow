@@ -391,12 +391,13 @@ export class Session {
     this.setPhase('running', turn.id)
     this.logger.info('turn started', { turnId: turn.id, kind: turn.kind })
     const startHead = await this.git.head()
-    // The turn's write scope comes from its own request, and the workspace
-    // as it was before the harness ran: uncommitted changes left from before
-    // this turn are never committed by Flow, discarded or overwritten.
+    // The turn's write scope comes with the turn from Flow (older APIs: from
+    // its own request), and the workspace as it was before the harness ran:
+    // uncommitted changes left from before this turn are never committed by
+    // Flow, discarded or overwritten.
     const before = await readWorkspaceState((args, options) => this.git.git(args, options))
     const run: TurnRun = { scope: turnScope(turn), before, leftovers: [...before.dirty.keys()] }
-    this.logger.info('turn scope', { turnId: turn.id, scope: run.scope, leftovers: run.leftovers.length })
+    this.logger.info('turn scope', { turnId: turn.id, scope: run.scope, source: turn.scope ? turn.scopeSource || 'api' : 'runner', leftovers: run.leftovers.length })
     await rm(elicitationMarker(this.config.paths.flowDir, turn.id), { force: true })
 
     let attempt = await this.runHarness(turn, this.resumeId, run)

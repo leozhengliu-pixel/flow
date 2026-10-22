@@ -506,6 +506,9 @@ func (s *server) promptCodingSession(w http.ResponseWriter, r *http.Request) {
 		Attachments []string `json:"attachments"`
 		// Files are composer uploads (session page); they are signed for the runner.
 		Files []domain.AgentMessageAttachment `json:"files"`
+		// Scope is the turn's write scope ("write", "noPublish", "readOnly");
+		// omitted or "auto" lets Flow infer it from the prompt.
+		Scope string `json:"scope"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 96<<10)
 	if !decodeJSON(w, r, &input) {
@@ -524,7 +527,7 @@ func (s *server) promptCodingSession(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(input.Prompt) == "" && len(files) > 0 {
 		input.Prompt = "See the attached files."
 	}
-	updated, err := s.coding.service.Prompt(r.Context(), viewer.workspace, session.ID, coding.PromptInput{Prompt: input.Prompt, AuthorID: viewer.user.ID, Attachments: input.Attachments, Files: files})
+	updated, err := s.coding.service.Prompt(r.Context(), viewer.workspace, session.ID, coding.PromptInput{Prompt: input.Prompt, AuthorID: viewer.user.ID, Attachments: input.Attachments, Files: files, Scope: input.Scope})
 	s.respondCodingSession(w, r.Context(), viewer, updated, err)
 }
 

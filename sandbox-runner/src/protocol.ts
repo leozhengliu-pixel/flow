@@ -118,6 +118,10 @@ export interface Turn {
   authorId?: string
   attachments?: string[]
   kind: string
+  /** The write scope Flow decided when it queued the turn (explicit choice, rules or model). Older APIs omit it. */
+  scope?: 'write' | 'noPublish' | 'readOnly'
+  /** How Flow decided the scope: user, kind, rules or model. */
+  scopeSource?: string
 }
 
 export interface BootstrapResponse {
