@@ -127,6 +127,30 @@ func TestMCPSaveCommentAppMentions(t *testing.T) {
 		}
 	})
 
+	t.Run("an agent's own comment naming itself starts no session", func(t *testing.T) {
+		self := f.install(t, "Selfie bot", full, true, team)
+		client := requestJSON[[]domain.ApplicationInstallation](t, f.handler, http.MethodGet, "/api/application-installations?workspace=test-workspace", nil, http.StatusOK)
+		clientID := ""
+		for _, installed := range client {
+			if installed.UserID == self.id {
+				clientID = installed.ClientID
+			}
+		}
+		if clientID == "" {
+			t.Fatal("installation not found")
+		}
+		agent := f.actor(owner, "")
+		agent.User.Via = &domain.ActorBot{ID: clientID, Type: domain.ActorBotTypeAgent, Name: "Selfie bot", OnBehalfOfID: owner.ID}
+		f.comment(t, agent, map[string]any{"issueId": f.issue.ID, "body": "Noting for @Selfie bot"})
+		if sessions, _ := f.sessions(t, self); sessions != 0 {
+			t.Fatalf("self mention started %d sessions", sessions)
+		}
+		f.comment(t, human, map[string]any{"issueId": f.issue.ID, "body": "Hey @Selfie bot"})
+		if sessions, _ := f.sessions(t, self); sessions != 1 {
+			t.Fatalf("a person's mention should still start one session, got %d", sessions)
+		}
+	})
+
 	for name, tc := range map[string]struct {
 		app  mcpMentionApp
 		body string
