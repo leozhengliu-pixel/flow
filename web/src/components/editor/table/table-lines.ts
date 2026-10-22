@@ -1,7 +1,7 @@
 import type { Editor } from '@tiptap/core'
 import { DOMSerializer, Fragment, type MarkType, type Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { Selection, type Transaction } from '@tiptap/pm/state'
-import { CellSelection, TableMap, addColumn, addRow, columnIsHeader, removeColumn, removeRow, rowIsHeader, selectedRect, type TableRect } from '@tiptap/pm/tables'
+import { CellSelection, TableMap, addColumn, addRow, removeColumn, removeRow, rowIsHeader, selectedRect, type TableRect } from '@tiptap/pm/tables'
 import { tableAroundSelection, tableAt, type TableLocation } from './table-commands'
 
 /**
@@ -19,25 +19,33 @@ export function lineCount(table: TableLocation, axis: TableAxis) {
   return axis === 'row' ? map.height : map.width
 }
 
-/** The first row / column when it is made of header cells: it stays first (not movable, nothing is inserted above it, never sorted). */
+/** The header row: the first row when it is made of header cells. It stays first; nothing is inserted above it and it is never moved, duplicated or deleted. */
 export function isPinnedHeader(table: TableLocation, axis: TableAxis, index: number) {
-  if (index !== 0) return false
-  const map = TableMap.get(table.node)
-  return axis === 'row' ? rowIsHeader(map, table.node, 0) : columnIsHeader(map, table.node, 0)
+  if (axis !== 'row' || index !== 0) return false
+  return rowIsHeader(TableMap.get(table.node), table.node, 0)
 }
 
-/** What a line's menu offers; unavailable commands are left out of the menu rather than disabled. */
+/**
+ * What a line's menu offers; unavailable commands are left out of the menu rather than disabled (measured on the reference
+ * app). The header row only offers Insert below, Format and Copy text. A column (header cell or not) offers everything, Sort
+ * included even with a single body row, and Delete is left out of a row menu when it would remove the last body row.
+ */
 export function lineAvailability(table: TableLocation, axis: TableAxis, index: number) {
   const count = lineCount(table, axis)
   const pinned = isPinnedHeader(table, axis, index)
-  const headerFirst = isPinnedHeader(table, axis, 0)
+  const headerFirst = isPinnedHeader(table, 'row', 0)
+  const moveBefore = !pinned && index > 0 && !(axis === 'row' && index === 1 && headerFirst)
+  const moveAfter = !pinned && index < count - 1
   return {
     insertBefore: !pinned,
     insertAfter: true,
-    moveBefore: !pinned && index > 0 && !(index === 1 && headerFirst),
-    moveAfter: !pinned && index < count - 1,
-    duplicate: true,
-    sort: axis === 'column' && count > 0 && TableMap.get(table.node).height - (isPinnedHeader(table, 'row', 0) ? 1 : 0) > 1,
+    moveBefore,
+    moveAfter,
+    /** The reference app draws a divider before Duplicate when only "move before" is offered (the last row / column). */
+    separateDuplicate: moveBefore && !moveAfter,
+    duplicate: !pinned,
+    sort: axis === 'column',
+    delete: !pinned && (axis === 'column' || count - (headerFirst ? 1 : 0) > 1),
   }
 }
 
@@ -145,36 +153,27 @@ export function moveLine(editor: Editor, line: TableLine, direction: MoveDirecti
   })
 }
 
-/** Copies the line right after itself and selects the copy. A pinned header line is copied as ordinary cells. */
+/** Copies the line right after itself and selects the copy. The header row cannot be duplicated (its menu has no Duplicate). */
 export function duplicateLine(editor: Editor, line: TableLine) {
   return dispatchLine(editor, line, (tr, table) => {
+    if (isPinnedHeader(table, line.axis, line.index)) return false
     const map = TableMap.get(table.node)
-    const header = isPinnedHeader(table, line.axis, line.index)
-    const plain = (cell: ProseMirrorNode) => header ? tableNodeType(cell, 'cell').create(cell.attrs, cell.content, cell.marks) : cell
     if (line.axis === 'row') {
       let end = table.pos + 1
       for (let row = 0; row <= line.index; row++) end += table.node.child(row).nodeSize
       const source = table.node.child(line.index)
-      const cells: ProseMirrorNode[] = []
-      source.forEach(cell => cells.push(plain(cell)))
-      tr.insert(end, source.type.create(source.attrs, cells, source.marks))
+      tr.insert(end, source.copy(source.content))
     } else {
       for (let row = map.height - 1; row >= 0; row--) {
         const offset = map.map[row * map.width + line.index]
         const cell = table.node.nodeAt(offset)!
-        tr.insert(table.pos + 1 + offset + cell.nodeSize, plain(cell))
+        tr.insert(table.pos + 1 + offset + cell.nodeSize, cell)
       }
     }
     const next = tableInTransaction(tr, table.pos)
     if (next) tr.setSelection(lineSelection(tr.doc, next, line.axis, line.index + 1))
     return true
   })
-}
-
-function tableNodeType(cell: ProseMirrorNode, role: 'cell' | 'header') {
-  const { nodes } = cell.type.schema
-  for (const type of Object.values(nodes)) if (type.spec.tableRole === (role === 'cell' ? 'cell' : 'header_cell')) return type
-  return cell.type
 }
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
@@ -243,6 +242,7 @@ export function deleteLine(editor: Editor, line: TableLine) {
       tr.delete(table.pos, table.pos + table.node.nodeSize)
       return true
     }
+    if (!lineAvailability(table, line.axis, line.index).delete) return false
     if (line.axis === 'row') removeRow(tr, rectOf(table), line.index)
     else removeColumn(tr, rectOf(table), line.index)
     const next = tableInTransaction(tr, table.pos)
@@ -251,22 +251,27 @@ export function deleteLine(editor: Editor, line: TableLine) {
   })
 }
 
-/** Plain text (cells separated by blank lines, as in the reference app) and an html table of just that line. */
+/** Plain text (the non-empty cells separated by blank lines, as in the reference app) and an html table of just that line. */
 export function lineClipboard(editor: Editor, line: TableLine) {
   const table = currentTable(editor, line)
   if (!table) return null
   const cellText = (cell: ProseMirrorNode) => cell.textBetween(0, cell.content.size, '\n\n', ' ')
   const cells = lineCellPositions(table, line.axis, line.index).map(pos => table.node.nodeAt(pos - table.pos - 1)!)
-  const text = cells.map(cellText).join('\n\n')
+  const text = cells.map(cellText).filter(value => value !== '').join('\n\n')
   const rowType = table.node.child(0).type
   const rows = line.axis === 'row' ? [rowType.create(null, cells)] : cells.map(cell => rowType.create(null, [cell]))
   const copy = table.node.type.create(table.node.attrs, rows)
   const holder = document.createElement('div')
   holder.appendChild(DOMSerializer.fromSchema(editor.schema).serializeNode(copy))
   const tableElement = holder.querySelector('table')
+  // Like the reference app, the markup is the bare table: no column group, no inline min-width.
+  tableElement?.querySelector('colgroup')?.remove()
+  tableElement?.removeAttribute('style')
+  tableElement?.querySelectorAll('td, th').forEach(cell => cell.removeAttribute('class'))
   // A line without header cells must not turn into a header row when it is pasted (see TablePaste).
   if (tableElement && !cells.some(cell => cell.type.spec.tableRole === 'header_cell')) tableElement.setAttribute('data-headerless', '')
-  return { text, html: holder.innerHTML }
+  // (Chrome keeps an empty `style=""` after the attribute was removed from an element whose style object was touched.)
+  return { text, html: holder.innerHTML.replace(/ style=""/g, '') }
 }
 
 export async function copyLineText(editor: Editor, line: TableLine) {

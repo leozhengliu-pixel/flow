@@ -987,3 +987,7 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 /* Add-connector dialog: inline URL error (settings/connector-dialog.css). */
 :root{--connector-dialog-error:#ff8683}
 :root[data-theme="light"]{--connector-dialog-error:#e2253b}
+
+/* Rich-text table chrome: row / column handle pills, selected cells, corner menu button and block menu (components/editor/table/table.css). */
+:root{--table-handle-bg:lch(36.975% 1.2 272);--table-handle-fg:lch(100% 5 288.421);--table-handle-active-bg:lch(47.918% 59.303 288.421);--table-selection-bg:color(srgb .0852201 .087997 .110752);--table-selection-edge:var(--table-handle-bg);--table-selection-edge-active:var(--table-handle-active-bg);--table-corner-fg:var(--issue-header-fg);--table-corner-hover-bg:lch(7.32% .85 272);--table-corner-hover-fg:var(--issue-header-icon-hover);--table-corner-open-bg:var(--issue-header-hover-bg);--table-block-menu-border:lch(34.32% 1.93 272);--table-block-menu-separator:var(--work-menu-border);--table-menu-chevron:var(--work-menu-muted)}
+:root[data-theme="light"]{--table-handle-bg:lch(64.64% 1.25 282);--table-handle-fg:lch(100% 5 286.91);--table-handle-active-bg:lch(53% 52.26 286.91);--table-selection-bg:color(srgb .945655 .948089 .972142);--table-corner-hover-bg:lch(92.44% .5 282);--table-block-menu-border:lch(86.5% 0 282);--table-menu-chevron:lch(66% 1 282)}
