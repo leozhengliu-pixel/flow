@@ -397,7 +397,18 @@ type loopRunRecorder struct {
 	// replySummary is the finish_run report of a reply's answer.
 	replySummary *domain.LoopRunSummary
 	// ending is set when the agent stopped without finishing its work.
-	ending      *loopRunEnding
+	ending *loopRunEnding
+	// contextPrompt is added to the system prompt: a reply's saved run
+	// context and how to answer it (see loopReplyContextPrompt).
+	contextPrompt string
+	// noTools: the answer comes from the saved result alone (a status
+	// question), so the model is offered no tools.
+	noTools bool
+	// completedWrites are the writes that already succeeded on the run and
+	// its replies, by loopWriteFingerprint; a continuation never repeats them.
+	completedWrites map[string]string
+	// timing splits the work's wall time into setup, model wait and tools.
+	timing      loopRunTiming
 	order       int
 	lastSave    time.Time
 	lastPublish time.Time
@@ -594,7 +605,7 @@ func (s *server) finishLoopRun(ctx context.Context, workspace string, loop domai
 	} else {
 		run.Status, run.FailureReason, run.Error = acceptLoopRun(loop, &run, rec.ending)
 	}
-	events := append(rec.events, loopRunEvent("finished", map[string]string{"status": run.Status, "reason": run.FailureReason, "error": run.Error}))
+	events := append(rec.events, rec.timingEvent(), loopRunEvent("finished", map[string]string{"status": run.Status, "reason": run.FailureReason, "error": run.Error}))
 	rec.events = nil
 	stored, err := s.store.UpdateLoopRun(context.Background(), workspace, run.ID, events, func(current *domain.LoopRun) error {
 		if current.Status != "running" {
@@ -681,6 +692,8 @@ func (s *server) loopRunTools(ctx context.Context) ([]string, map[string]bool) {
 // run's answer and the replies that followed it.
 func (s *server) executeLoopRun(ctx context.Context, workspace string, loop domain.Loop, trigger loopTrigger, rec *loopRunRecorder, history ...agentProviderMessage) error {
 	limits := s.loopLimits()
+	started := time.Now()
+	defer func() { rec.timing.TotalMs = time.Since(started).Milliseconds() }()
 	directory, ok := s.store.WorkspaceMetadataFields(workspace, "users")
 	if !ok {
 		return errNotFound
@@ -712,7 +725,10 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 		return err
 	}
 	scope := s.newLoopScope(data, loop, trigger)
+	rec.timing.LoadMs = time.Since(started).Milliseconds()
+	discoveryStarted := time.Now()
 	connectorCtx, connectors, discoverErr := s.withConnectorTools(request.Context(), data, connectorRequestContext{Workspace: workspace, UserID: owner.ID})
+	rec.timing.DiscoveryMs = time.Since(discoveryStarted).Milliseconds()
 	request = request.WithContext(connectorCtx)
 	if discoverErr == nil {
 		connectors = slices.DeleteFunc(connectors, func(tool connectorTool) bool { return !slices.Contains(loop.ConnectorIDs, tool.Policy.ID) })
@@ -723,7 +739,8 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 	// its tools run with a key restricted to the loop's teams, so lists,
 	// searches and reads outside them come back empty or not found.
 	request = request.WithContext(context.WithValue(request.Context(), apiKeyContextKey{}, scope.toolKey()))
-	request = request.WithContext(context.WithValue(request.Context(), agentExtraToolsKey{}, []agentProviderTool{loopFinishToolDefinition}))
+	request = request.WithContext(context.WithValue(request.Context(), agentExtraToolsKey{}, append([]agentProviderTool{loopFinishToolDefinition}, loopGrantedTools()...)))
+	request = request.WithContext(withAgentGrantedTools(request.Context(), loopGrantedToolNames))
 	request = request.WithContext(withCodingLoopRun(request.Context(), loop, rec.run.ID, trigger, scope.codeAccess)) // coding sessions (track L)
 	if loop.WebSearch && s.webSearchAvailable() {
 		request = request.WithContext(withAgentWebTools(request.Context()))
@@ -734,7 +751,7 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 
 	entity := s.loopEntityContext(ctx, workspace, data, trigger)
 	messages := []agentProviderMessage{
-		{Role: "system", Content: loopSystemPrompt(data, loop, trigger, entity, scope, s.webSearchAvailable(), s.loopInstructionReferences(ctx, workspace, data, loop), plan) + loopReplySkillsPrompt(rec.skills)},
+		{Role: "system", Content: loopSystemPrompt(data, loop, trigger, entity, scope, s.webSearchAvailable(), s.loopInstructionReferences(ctx, workspace, data, loop), plan) + loopReplySkillsPrompt(rec.skills) + rec.contextPrompt},
 		{Role: "user", Content: "Run this loop now and follow its instructions."},
 	}
 	messages = append(messages, history...)
@@ -758,17 +775,23 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 			return loopBudgetError("The run's conversation reached %d KB, over its %d KB context budget. Narrow the instructions or the tool queries (filters, smaller limits).", size>>10, limits.MaxContextBytes>>10)
 		}
 		var turn agentProviderTurn
+		modelStarted := time.Now()
 		retries, err := loopRetry(ctx, limits, func() error {
 			turnText.Reset()
 			var callErr error
-			if final {
+			if final || rec.noTools {
 				turn, callErr = s.requestAgentTurnWithoutTools(request.Context(), messages)
 			} else {
 				turn, callErr = s.requestAgentTurn(request.Context(), messages, emit)
 			}
 			return callErr
 		})
+		rec.timing.ModelMs += time.Since(modelStarted).Milliseconds()
+		rec.timing.ModelTurns++
 		rec.addRetries(retries)
+		if rec.noTools {
+			turn.ToolCalls = nil
+		}
 		if err != nil {
 			rec.setOutputNow(strings.TrimSpace(output))
 			if ctx.Err() != nil {
@@ -856,7 +879,13 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 			index := rec.startTool(call)
 			status := "completed"
 			var result []byte
+			toolStarted := time.Now()
 			callErr := scope.check(ctx, call)
+			if callErr == nil && !readOnly[strings.TrimPrefix(call.Name, "mcp__flow.")] {
+				if label, done := rec.completedWrites[loopWriteFingerprint(call.Name, loopToolArgs(call))]; done {
+					callErr = fmt.Errorf("This change already succeeded earlier in this run (%s); it was not repeated. Continue with the steps that are not done yet", label)
+				}
+			}
 			if callErr != nil {
 				status = "blocked"
 			} else {
@@ -875,8 +904,12 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 					status = "error"
 				}
 			}
+			rec.timing.ToolMs += time.Since(toolStarted).Milliseconds()
 			write := !readOnly[strings.TrimPrefix(call.Name, "mcp__flow.")] && !strings.HasPrefix(call.Name, "external_")
 			rec.finishTool(index, status, callErr, write, loopToolArgs(call))
+			if fingerprint := loopWriteFingerprint(call.Name, loopToolArgs(call)); write && status == "completed" && rec.completedWrites != nil && fingerprint != "" {
+				rec.completedWrites[fingerprint] = loopToolLabel(call.Name, loopToolArgs(call))
+			}
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
@@ -899,7 +932,7 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 // TestLoopRunVocabularyTranslated keeps them in sync).
 var loopToolLabels = map[string]string{
 	webSearchToolName: "Searched the web", fetchURLToolName: "Read web page",
-	"get_issue": "Read issue", "list_issues": "Listed issues", "search_issues": "Searched issues",
+	"get_issue": "Read issue", "list_issues": "Listed issues", "count_issues": "Counted issues", "search_issues": "Searched issues",
 	"list_comments": "Read comments", "triage_issue": "Triaged issue", "get_project": "Read project",
 	"list_projects": "Listed projects", "list_users": "Listed members", "get_user": "Looked up member",
 	"list_teams": "Listed teams", "get_team": "Read team", "list_issue_labels": "Listed labels",

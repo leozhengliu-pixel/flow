@@ -1079,6 +1079,10 @@ func (s *server) executeAgentTool(r *http.Request, data domain.Bootstrap, call d
 		access := agentChangeToolAccess()[strings.TrimPrefix(call.Name, "mcp__flow.")]
 		allowed = access == "read" || access == "write" && s.agent.WriteTools
 	}
+	if !allowed && agentToolGranted(r.Context(), call.Name) {
+		// MCP-only tools a runner grants itself (loop runs: count_issues).
+		allowed = true
+	}
 	if !allowed {
 		return nil, fmt.Errorf("Agent tool is not enabled: %s", call.Name)
 	}
