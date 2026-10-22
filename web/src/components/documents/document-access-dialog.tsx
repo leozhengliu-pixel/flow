@@ -1,4 +1,5 @@
 /** "People with access" (Flow-only): per-subject roles on a document. */
+import './document-access-dialog.css'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { SelectControl } from '@/components/ui/select-control'
 import { UserAvatar } from '@/components/ui/user-avatar'
