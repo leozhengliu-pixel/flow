@@ -1,9 +1,11 @@
 import {
   Agent,
+  MaxTurnsExceededError,
   RunState,
   run,
   setTracingDisabled,
   type AgentInputItem,
+  type MCPServer,
   type Model,
   type RunContext,
   type RunStreamEvent,
@@ -20,6 +22,7 @@ import { createModel, modelSettings, ObservedModel, type ModelCallRecord, type M
 import { approvalKind, approvalPreview, isApprovalWord, type ApprovalKind } from './policy.js'
 import { FileSessionStore } from './session-store.js'
 import { QuestionStreamer } from './question-stream.js'
+import { outputText, RunGuard, type GuardApi } from './run-guard.js'
 import { initialGroups } from './tool-groups.js'
 
 // Traces would go to api.openai.com with the provider key; the worker exports its own OTel spans instead.
@@ -31,6 +34,14 @@ setTracingDisabled(true)
  * (ObservedModel records the turn's calls first), and again after a RunState is restored.
  */
 class FlowAgent extends Agent<FlowRunContext> {
+  /** The delegated-run guard of the run in progress (run-guard.ts), if the run has one. */
+  guard?: RunGuard
+
+  override async getAllTools(runContext: RunContext<FlowRunContext>, tracingParent?: any): Promise<Tool<FlowRunContext>[]> {
+    const tools = await super.getAllTools(runContext, tracingParent)
+    return this.guard ? ((await this.guard.tools(tools)) as Tool<FlowRunContext>[]) : tools
+  }
+
   override async getMcpTools(runContext: RunContext<FlowRunContext>, tracingParent?: any): Promise<Tool<FlowRunContext>[]> {
     const tools = await super.getMcpTools(runContext, tracingParent)
     for (const tool of tools) {
@@ -65,6 +76,15 @@ export type SessionOptions = {
   /** Run-token tool allowlist. */
   allowlist?: string[]
   maxTurns?: number
+  /**
+   * Flow's run guard for this session's run (POST /internal/agent-runtime/runs/{id}/guard); a thread run gets the
+   * in-process agent's preparation budgets and Coding transfer through it (run-guard.ts).
+   */
+  guard?: GuardApi
+  /** Tools served by the worker besides ask_user and load_tools. */
+  tools?: Tool<FlowRunContext>[]
+  /** MCP servers (default: Flow's /mcp with the run token). */
+  mcpServers?: MCPServer[]
 }
 
 export type ActivitySink = (activity: FlowActivity) => void
@@ -78,9 +98,9 @@ export class FlowAgentWorker {
   readonly store: FileSessionStore
   private readonly baseModel: Model
 
-  constructor(readonly config: WorkerConfig, options: ModelFactoryOptions = {}) {
+  constructor(readonly config: WorkerConfig, options: ModelFactoryOptions & { model?: Model } = {}) {
     this.store = new FileSessionStore(`${config.stateDir}/sessions`)
-    this.baseModel = createModel(config, options)
+    this.baseModel = options.model ?? createModel(config, options)
   }
 
   session(options: SessionOptions): FlowAgentSession {
@@ -91,21 +111,21 @@ export class FlowAgentWorker {
 export class FlowAgentSession {
   private readonly model: ObservedModel
   private readonly agent: FlowAgent
-  private readonly mcp: ReturnType<typeof flowMcpServer>
+  private readonly mcp: MCPServer[]
   private connected?: Promise<void>
   private controller?: AbortController
 
   constructor(private readonly worker: FlowAgentWorker, readonly options: SessionOptions, baseModel: Model) {
     const config = worker.config
     this.model = new ObservedModel(baseModel)
-    this.mcp = flowMcpServer(config.flowUrl, options.flowToken ?? config.flowToken)
+    this.mcp = options.mcpServers ?? [flowMcpServer(config.flowUrl, options.flowToken ?? config.flowToken)]
     this.agent = new FlowAgent({
       name: 'Flow Agent',
       instructions: options.systemPrompt,
       model: this.model,
       modelSettings: modelSettings(config, options.sessionId),
-      tools: [askUserTool, loadToolsTool],
-      mcpServers: [this.mcp],
+      tools: [askUserTool, loadToolsTool, ...(options.tools ?? [])],
+      mcpServers: this.mcp,
       mcpConfig: { convertSchemasToStrict: false },
     })
   }
@@ -156,16 +176,17 @@ export class FlowAgentSession {
   }
 
   private connect() {
-    this.connected ??= this.mcp.connect()
+    this.connected ??= Promise.all(this.mcp.map(server => server.connect())).then(() => undefined)
     return this.connected
   }
 
   async close() {
-    if (this.connected) await this.mcp.close().catch(() => {})
+    if (this.connected) await Promise.all(this.mcp.map(server => server.close().catch(() => {})))
   }
 
-  private async execute(input: string | RunState<FlowRunContext, FlowAgent>, context: FlowRunContext, sink: ActivitySink, retries = 1, previous?: TurnOutcome): Promise<TurnOutcome> {
+  private async execute(input: string | RunState<FlowRunContext, FlowAgent>, context: FlowRunContext, sink: ActivitySink, retries = 1, previous?: TurnOutcome, previousGuard?: RunGuard): Promise<TurnOutcome> {
     const session = this.worker.store.session(this.sessionId)
+    const maxTurns = this.options.maxTurns ?? this.worker.config.maxTurns
     const outcome: TurnOutcome = { status: 'error', body: '', startedAt: previous?.startedAt ?? Date.now(), endedAt: 0, usage: summarizeUsage([]), modelCalls: [...(previous?.modelCalls ?? [])], toolCalls: [] }
     const emit = (activity: FlowActivity) => {
       outcome.firstActivityAt ??= activity.at
@@ -174,10 +195,18 @@ export class FlowAgentSession {
     // Ack before any network work (AIG: first activity within 10 s; UI shows "Working…"). Not counted as the
     // first model-driven activity in the metrics.
     if (!previous) sink({ type: 'thought', at: Date.now(), body: typeof input === 'string' ? 'Working…' : 'Continuing…', ephemeral: false })
+    let guard = previousGuard
+    if (!guard && this.options.guard) {
+      guard = new RunGuard(this.options.guard, maxTurns)
+      await guard.start(context)
+    }
     this.model.observer = record => {
       outcome.modelCalls.push(record)
       if (record.functionCalls.length) context.turns.push(record.functionCalls)
+      if (guard) guard.round++
     }
+    this.model.rewrite = guard?.enabled ? <T extends { type?: string }>(items: T[]) => guard.output(items) : undefined
+    this.agent.guard = guard?.enabled ? guard : undefined
     const controller = new AbortController()
     this.controller = controller
     let text = ''
@@ -191,8 +220,11 @@ export class FlowAgentSession {
         context,
         session,
         signal: controller.signal,
-        maxTurns: this.options.maxTurns ?? this.worker.config.maxTurns,
-        callModelInputFilter: ({ modelData }) => ({ ...modelData, input: compactHistory(modelData.input, defaultCompaction(this.worker.config.contextWindow)).input }),
+        maxTurns,
+        callModelInputFilter: ({ modelData }) => {
+          const input = compactHistory(modelData.input, defaultCompaction(this.worker.config.contextWindow)).input
+          return { ...modelData, input: guard?.enabled ? guard.input(input) : input }
+        },
       })
       for await (const event of result) {
         if (event.type === 'run_item_stream_event' && ['tool_called', 'tool_output', 'message_output_created'].includes(event.name)) produced.push((event.item as any).rawItem)
@@ -215,7 +247,13 @@ export class FlowAgentSession {
         emit({ type: 'elicitation', at: Date.now(), elicitation })
         return this.finish(outcome, 'awaiting', elicitation.body, elicitation)
       }
-      const body = typeof result.finalOutput === 'string' ? result.finalOutput : text
+      let body = typeof result.finalOutput === 'string' ? result.finalOutput : text
+      if (guard?.enabled) {
+        // The run's last word goes through Flow: Coding when the run must enter it, a "done" claim replaced by the
+        // session's real state.
+        const last = await guard.finish(guard.decisionCut ? 'decision' : 'reply', guard.decisionCut ? '' : body)
+        body = last.reply
+      }
       outcome.usage = summarizeUsage(outcome.modelCalls)
       emit({ type: 'response', at: Date.now(), body, usage: outcome.usage })
       return this.finish(outcome, 'response', body)
@@ -230,16 +268,32 @@ export class FlowAgentSession {
         if (last?.type === 'message' && last.role === 'user') await session.popItem()
         context.turns = []
         sink({ type: 'thought', at: Date.now(), body: 'Connection to the model was lost; retrying…', ephemeral: true })
-        return this.execute(input, context, sink, retries - 1, outcome)
+        if (guard) guard.round = 0
+        return this.execute(input, context, sink, retries - 1, outcome, guard)
       }
       // Keep what already happened in history (a follow-up must not deny writes that ran), then report the error.
       await session.addMissing(produced)
       await session.closeDanglingCalls('The run failed before a result came back; the call may or may not have completed.')
+      if (guard?.enabled && error instanceof MaxTurnsExceededError) {
+        // At the turn limit a run that must enter Coding is moved into it, and one that started Coding reports the
+        // session's state rather than a failed run.
+        const last = await guard.finish('turnLimit', '')
+        if (last.reply) {
+          emit({ type: 'response', at: Date.now(), body: last.reply, usage: summarizeUsage(outcome.modelCalls) })
+          return this.finish(outcome, 'response', last.reply)
+        }
+        if (last.error) {
+          emit({ type: 'error', at: Date.now(), body: last.error, usage: summarizeUsage(outcome.modelCalls) })
+          return this.finish(outcome, 'error', last.error)
+        }
+      }
       const body = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
       emit({ type: 'error', at: Date.now(), body, usage: summarizeUsage(outcome.modelCalls) })
       return this.finish(outcome, 'error', body)
     } finally {
       this.model.observer = undefined
+      this.model.rewrite = undefined
+      this.agent.guard = undefined
       if (this.controller === controller) this.controller = undefined
     }
   }
@@ -334,14 +388,6 @@ function isWriteTool(name: string) {
 function isTransient(error: unknown) {
   const text = `${(error as Error)?.name ?? ''} ${(error as Error)?.message ?? error} ${String((error as any)?.cause ?? '')}`
   return /terminated|ECONNRESET|ECONNREFUSED|ETIMEDOUT|socket hang up|fetch failed|other side closed|premature close|ModelTimeoutError|timed out/i.test(text)
-}
-
-/** MCP results arrive as a content item ({type:'text', text}) or a list of them. */
-function outputText(output: unknown): string {
-  if (typeof output === 'string') return output
-  const items = Array.isArray(output) ? output : [output]
-  if (items.every(item => (item as any)?.type === 'text')) return items.map(item => (item as any).text).join('\n')
-  return JSON.stringify(output)
 }
 
 function previousTools(history: AgentInputItem[]): string[] {

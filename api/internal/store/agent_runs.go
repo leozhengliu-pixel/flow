@@ -835,6 +835,20 @@ func (s *SQLiteStore) SaveAgentRunKey(ctx context.Context, run AgentRun, key str
 	return err
 }
 
+// ReplaceAgentRunKey stores a value of a run under key, replacing what was
+// stored before (run-scoped state that changes during the run, such as the
+// delegated-run guard of a worker run).
+func (s *SQLiteStore) ReplaceAgentRunKey(ctx context.Context, run AgentRun, key string, result []byte) error {
+	if key == "" || len(key) > 191 {
+		return ErrAgentRunInput
+	}
+	if result == nil {
+		result = []byte{}
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO agent_run_keys(run_id,idem_key,workspace_key,result,created_at) VALUES(?,?,?,?,?) ON CONFLICT(run_id,idem_key) DO UPDATE SET result=excluded.result`, run.ID, key, run.WorkspaceKey, result, millis(time.Now()))
+	return err
+}
+
 // ---------------------------------------------------------------- session state
 
 // SaveAgentSessionState stores (replaces) a session's serialized harness state.

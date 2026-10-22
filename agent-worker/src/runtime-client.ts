@@ -3,6 +3,8 @@
  * row leases, heartbeat, watch for stops (long poll), mint run tokens for /mcp, read the payload, keep suspended
  * state, finish the run. Authenticated with the worker secret; the worker names itself in Flow-Worker-Id.
  */
+import type { GuardRequest, GuardResponse } from './run-guard.js'
+
 export type AgentRun = {
   id: string
   workspaceKey: string
@@ -58,6 +60,11 @@ export class FlowRuntimeClient {
 
   payload(runId: string) {
     return this.call<{ run: AgentRun; principal: { mode: string; userId: string; tools?: string[] }; context?: { system: string; latestPrompt: string } }>('GET', `/runs/${encodeURIComponent(runId)}/payload`)
+  }
+
+  /** One operation of the run's delegated-run guard (run-guard.ts, api/cmd/server/agent_runtime_guard.go). */
+  guard(runId: string, request: GuardRequest) {
+    return this.call<GuardResponse>('POST', `/runs/${encodeURIComponent(runId)}/guard`, request)
   }
 
   complete(runId: string, status: RunStatus, extra: { error?: string; usage?: unknown } = {}) {
