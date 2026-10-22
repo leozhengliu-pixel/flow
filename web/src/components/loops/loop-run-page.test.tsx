@@ -228,6 +228,33 @@ describe('LoopRunPage', () => {
     expect(screen.getAllByLabelText('Cancelled').length).toBeGreaterThan(0)
   })
 
+  it('shows a running run as running in the list, the header and the composer', async () => {
+    const user = userEvent.setup()
+    const bare: LoopRun = { ...running, steps: [], toolCalls: [] }
+    api.listLoopRuns.mockResolvedValue([bare, completed])
+    api.getLoopRun.mockResolvedValue(bare)
+    api.cancelLoopRun.mockResolvedValue({ ...bare, status: 'cancelled', failureReason: 'cancelled', error: 'Cancelled', finishedAt: new Date().toISOString() })
+    renderPage('run-3')
+    // Live text with the thinking shimmer, a running glyph on the row (no duration or date), and a stop button in the composer.
+    expect(await screen.findByText('Thinking…')).toHaveClass('loops-run-shimmer')
+    const row = document.querySelector('.loops-run-row.is-active') as HTMLElement
+    expect(row.querySelector('.loops-run-status.is-running')).not.toBeNull()
+    expect(row.querySelector('.loops-run-row-meta')).toBeNull()
+    expect(document.querySelector('.loops-run-row:not(.is-active) .loops-run-row-meta')).not.toBeNull()
+    expect(screen.queryByRole('button', { name: 'Send message' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Stop responding' }))
+    expect(api.cancelLoopRun).toHaveBeenCalledWith('loop-1', 'run-3')
+    expect(await screen.findByText('Run cancelled')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeInTheDocument()
+  })
+
+  it('says the run is initializing while a run opened by link is still loading', async () => {
+    api.listLoopRuns.mockReturnValue(new Promise(() => undefined))
+    api.getLoopRun.mockReturnValue(new Promise(() => undefined))
+    renderPage('run-3')
+    expect(await screen.findByRole('status')).toHaveTextContent('Initializing run…')
+  })
+
   it('keeps the run when cancelling fails', async () => {
     const user = userEvent.setup()
     api.listLoopRuns.mockResolvedValue([running])

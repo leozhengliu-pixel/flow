@@ -12,7 +12,7 @@ import { DisplayIcon, FilterIcon } from "@/components/ui/view-action-icons";
 import { AgentWorkGroup } from "@/components/agent/agent-work-group";
 import { AgentAnswerText } from "@/components/agent/agent-answer";
 import { AGENT_ATTACHMENT_ACCEPT, agentFileAttachment, attachAgentFiles, pastedAgentFiles } from "@/components/agent/agent-attachments";
-import { AgentAttachIcon } from "@/components/agent/agent-icons";
+import { AgentAttachIcon, AgentStopIcon } from "@/components/agent/agent-icons";
 import { AgentSkillsPicker } from "@/components/agent/agent-skills-picker";
 import { AttachmentRemoveButton } from "@/components/ui/attachment-remove-button";
 import { toast } from "@/lib/toast";
@@ -395,10 +395,12 @@ export function LoopRunPage({
                       {runTriggerText(run, t)}
                     </span>
                     <RunStatusIcon status={run.status} />
-                    {showDuration && <span className="loops-run-row-meta">{runDuration(run.startedAt, run.finishedAt)}</span>}
-                    <time className="loops-run-row-meta" dateTime={run.startedAt} title={new Date(run.startedAt).toLocaleString()}>
-                      {t(dayLabel(run.startedAt))}
-                    </time>
+                    {run.status !== "running" && showDuration && <span className="loops-run-row-meta">{runDuration(run.startedAt, run.finishedAt)}</span>}
+                    {run.status !== "running" && (
+                      <time className="loops-run-row-meta" dateTime={run.startedAt} title={new Date(run.startedAt).toLocaleString()}>
+                        {t(dayLabel(run.startedAt))}
+                      </time>
+                    )}
                   </button>
                 </li>
               ))}
@@ -409,7 +411,15 @@ export function LoopRunPage({
         <section className="loops-run-detail" aria-label={t("Run")}>
           <div className="loops-run-scroll" ref={scroller}>
           {!selected ? (
-            runs !== undefined && <p className="loops-run-list-empty">{t(runs.length ? "Select a run" : "This loop has not run yet.")}</p>
+            activeId && selectFailures === 0 ? (
+              // A run opened straight from "Run now" (or a link) shows it is starting instead of an empty pane.
+              <div className="loops-run-initializing" role="status">
+                <GridLoader variant="agent" size={14} className="loops-run-status is-running" />
+                <span>{t("Initializing run…")}</span>
+              </div>
+            ) : (
+              runs !== undefined && <p className="loops-run-list-empty">{t(runs.length ? "Select a run" : "This loop has not run yet.")}</p>
+            )
           ) : (
             <div className="loops-run-body">
               <header className="loops-run-header">
@@ -473,7 +483,11 @@ export function LoopRunPage({
                   onToolApproval={ignoreApproval}
                 />
               )}
-              {selected.status === "running" && parts.length === 0 && !selected.output && <p className="loops-run-working">{t("Working…")}</p>}
+              {selected.status === "running" && parts.length === 0 && !selected.output && (
+                <p className="loops-run-working" role="status">
+                  <span className="loops-run-shimmer">{t("Thinking…")}</span>
+                </p>
+              )}
               {selected.output && <AgentAnswerText className="loops-run-answer" data={data} markdown={selected.output} />}
               <RunOutcome data={data} run={selected} />
               {selected.status !== "running" && (
@@ -492,7 +506,7 @@ export function LoopRunPage({
             </div>
           )}
           </div>
-          {selected && <RunReplyComposer key={selected.id} data={data} loopId={loopId} run={selected} busy={selected.status === "running" || replying} onNavigate={onNavigate} onReplied={applyRun} />}
+          {selected && <RunReplyComposer key={selected.id} data={data} loopId={loopId} run={selected} busy={selected.status === "running" || replying} stopping={cancelling} onStop={() => void cancel()} onNavigate={onNavigate} onReplied={applyRun} />}
         </section>
       </div>
     </main>
@@ -529,7 +543,11 @@ function RunReply({ data, reply }: { data: BootstrapData; reply: LoopRunReply })
           onToolApproval={ignoreApproval}
         />
       )}
-      {reply.status === "running" && parts.length === 0 && !reply.output && <p className="loops-run-working">{t("Working…")}</p>}
+      {reply.status === "running" && parts.length === 0 && !reply.output && (
+        <p className="loops-run-working" role="status">
+          <span className="loops-run-shimmer">{t("Thinking…")}</span>
+        </p>
+      )}
       {reply.output && <AgentAnswerText className="loops-run-answer" data={data} markdown={reply.output} />}
       {reply.status === "failed" && (
         <div className="loops-run-error" role="alert">
@@ -558,6 +576,8 @@ function RunReplyComposer({
   loopId,
   run,
   busy,
+  stopping,
+  onStop,
   onNavigate,
   onReplied,
 }: {
@@ -565,6 +585,8 @@ function RunReplyComposer({
   loopId: string;
   run: LoopRun;
   busy: boolean;
+  stopping: boolean;
+  onStop: () => void;
   onNavigate: (path: string) => void;
   onReplied: (run: LoopRun) => void;
 }) {
@@ -648,9 +670,16 @@ function RunReplyComposer({
             event.target.value = "";
           }}
         />
-        <button type="submit" className="loops-run-send" aria-label={t("Send message")} title={t("Send message")} disabled={!canSend}>
-          {sending ? <GridLoader variant="agent" size={14} className="loops-run-status is-running" /> : <ArrowUp size={14} />}
-        </button>
+        {busy ? (
+          // While the run (or a reply) works the send button becomes a stop button, like the Agent page.
+          <button type="button" className="loops-run-send" aria-label={t("Stop responding")} title={t("Stop responding")} disabled={stopping} onClick={onStop}>
+            <AgentStopIcon size={14} />
+          </button>
+        ) : (
+          <button type="submit" className="loops-run-send" aria-label={t("Send message")} title={t("Send message")} disabled={!canSend}>
+            {sending ? <GridLoader variant="agent" size={14} className="loops-run-status is-running" /> : <ArrowUp size={14} />}
+          </button>
+        )}
       </div>
     </form>
   );
