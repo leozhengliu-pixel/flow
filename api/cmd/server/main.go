@@ -1806,6 +1806,7 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 	if data, ok := s.store.WorkspaceSettingsMetadata(workspaceKey); ok {
 		persistedTeamMembers, _ = s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
 	}
+	var developmentCreatorID string
 	now := time.Now().UTC()
 	team := domain.Team{ID: fmt.Sprintf("team_%d", now.UnixNano()), Name: input.Name, Key: input.Key, Color: input.Color, Icon: input.Icon, Private: input.Private, CreatedAt: &now, UpdatedAt: &now}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey, "team.created", team.ID, input, func(data *domain.Bootstrap) error {
@@ -1878,6 +1879,7 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if s.authDisabled {
+			developmentCreatorID = data.Viewer.ID
 			materializeDevelopmentMembers(data)
 			if !slices.ContainsFunc(data.TeamMembers, func(member domain.TeamMember) bool {
 				return member.TeamID == team.ID && member.UserID == data.Viewer.ID
@@ -1888,10 +1890,16 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 		}
 		return nil
 	})
-	if err == nil && !s.authDisabled {
+	if err == nil {
+		// Without auth the development viewer is the creator; the in-memory row added above
+		// is not the persisted team_memberships row that issue visibility reads.
 		data, _ := s.store.WorkspaceSettingsMetadata(workspaceKey)
+		creatorID := authUser(r).ID
+		if s.authDisabled {
+			creatorID = developmentCreatorID
+		}
 		var created store.TeamMembershipChangeResult
-		created, err = s.store.ChangeTeamMembership(r.Context(), store.TeamMembershipChangeRequest{WorkspaceID: data.Workspace.ID, TeamID: team.ID, UserID: authUser(r).ID, Member: true, Role: "owner", Origin: defaultTeamMemberOrigin(r)})
+		created, err = s.store.ChangeTeamMembership(r.Context(), store.TeamMembershipChangeRequest{WorkspaceID: data.Workspace.ID, TeamID: team.ID, UserID: creatorID, Member: true, Role: "owner", Origin: defaultTeamMemberOrigin(r)})
 		if err == nil {
 			s.recordTeamMemberAudit(r.Context(), workspaceKey, requestTeamMemberActor(r, ""), teamMemberReasonTeamCreated, created.Changes, nil)
 		}
