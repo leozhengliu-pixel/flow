@@ -173,10 +173,17 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 	}
 	trigger := loopTrigger{Kind: run.Trigger, EventType: run.EventType, EntityType: run.EntityType, EntityID: run.EntityID, Label: run.TriggerLabel, Reason: loopTriggerReason{Code: run.TriggerReason, Value: run.TriggerValue}}
 	current := *loop
+	// A status question is answered from the saved record without tools; a
+	// continuation runs the remaining work under the finish_run contract and
+	// never repeats a write that already succeeded.
+	intent := loopReplyIntent(body)
+	contextPrompt := loopReplyContextPrompt(run, reply.ID, intent)
+	completedWrites := loopCompletedWrites(run)
 	go func() {
 		defer loopGuards.release(guardKey)
 		answer := reply
-		recorder := &loopRunRecorder{s: s, workspace: workspace, run: run, reply: &answer, skills: skills, answering: true}
+		recorder := &loopRunRecorder{s: s, workspace: workspace, run: run, reply: &answer, skills: skills, answering: intent != loopReplyContinue, noTools: intent == loopReplyStatus, contextPrompt: contextPrompt, completedWrites: completedWrites}
+		recorder.logEvent("reply_intent", map[string]string{"replyId": reply.ID, "intent": intent})
 		s.runLoopWork(workspace, run.ID, limits, func(ctx context.Context) error {
 			return s.executeLoopRun(ctx, workspace, current, trigger, recorder, history...)
 		}, func(ctx context.Context, runErr error) {
@@ -186,13 +193,23 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, presentLoopRun(run, userID))
 }
 
+// loopEndingNote says how a run or reply that did not complete ended, after
+// whatever answer it gave (an answer never hides the failure).
+func loopEndingNote(status, reason, message string) string {
+	if status == "completed" || status == "" || message == "" {
+		return ""
+	}
+	if reason != "" {
+		return fmt.Sprintf("[The run ended %s (%s): %s]", status, reason, message)
+	}
+	return fmt.Sprintf("[The run ended %s: %s]", status, message)
+}
+
 // loopReplyHistory is the conversation after the run's opening prompt: the
 // run's answer, then each earlier reply and its answer, then the new reply.
+// An answer that did not complete keeps its status and error beside its text.
 func loopReplyHistory(run domain.LoopRun, replyID string) []agentProviderMessage {
-	answer := strings.TrimSpace(run.Output)
-	if answer == "" && run.Error != "" {
-		answer = "The run stopped with an error: " + run.Error
-	}
+	answer := strings.TrimSpace(strings.TrimSpace(run.Output) + "\n\n" + loopEndingNote(run.Status, run.FailureReason, run.Error))
 	if answer == "" {
 		answer = "The run finished without a summary."
 	}
@@ -211,10 +228,12 @@ func loopReplyHistory(run domain.LoopRun, replyID string) []agentProviderMessage
 		if reply.ID == replyID {
 			break
 		}
-		if text := strings.TrimSpace(reply.Output); text != "" {
+		note := ""
+		if reply.Error != "" && reply.Status != "completed" {
+			note = fmt.Sprintf("[This answer ended %s: %s]", firstNonEmpty(reply.FailureReason, reply.Status), reply.Error)
+		}
+		if text := strings.TrimSpace(strings.TrimSpace(reply.Output) + "\n\n" + note); text != "" {
 			history = append(history, agentProviderMessage{Role: "assistant", Content: text})
-		} else if reply.Error != "" {
-			history = append(history, agentProviderMessage{Role: "assistant", Content: "I could not answer: " + reply.Error})
 		}
 	}
 	return history
@@ -338,7 +357,7 @@ func (s *server) finishLoopRunReply(ctx context.Context, workspace string, rec *
 	reply.Output = strings.TrimSpace(reply.Output)
 	reply.Steps, reply.ToolCalls = slices.Clone(reply.Steps), slices.Clone(reply.ToolCalls)
 	closeRunningToolCalls(reply.ToolCalls)
-	events := append(rec.events, loopRunEvent("reply_finished", map[string]string{"replyId": reply.ID, "status": reply.Status, "reason": reply.FailureReason}))
+	events := append(rec.events, rec.timingEvent(), loopRunEvent("reply_finished", map[string]string{"replyId": reply.ID, "status": reply.Status, "reason": reply.FailureReason}))
 	rec.events = nil
 	run, err := s.store.UpdateLoopRun(context.Background(), workspace, rec.run.ID, events, func(run *domain.LoopRun) error {
 		stored := loopRunReplyByID(run, reply.ID)

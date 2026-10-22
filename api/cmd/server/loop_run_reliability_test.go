@@ -157,11 +157,11 @@ func TestLoopRunProgressSkipsWorkspaceMutations(t *testing.T) {
 	for _, event := range log {
 		kinds = append(kinds, event.Kind)
 	}
-	if got := strings.Join(kinds, ","); got != "step,tool_started,tool_finished,tool_started,tool_finished,summary,finished" {
+	if got := strings.Join(kinds, ","); got != "step,tool_started,tool_finished,tool_started,tool_finished,summary,timing,finished" {
 		t.Fatalf("event log = %s", got)
 	}
 	api := requestJSON[[]store.LoopRunEvent](t, handler, http.MethodGet, "/api/loops/"+loop.ID+"/runs/"+run.ID+"/events?after=5", nil, http.StatusOK)
-	if len(api) != 2 || api[0].Kind != "summary" {
+	if len(api) != 3 || api[0].Kind != "summary" || api[1].Kind != "timing" {
 		t.Fatalf("events after 5 = %+v", api)
 	}
 	time.Sleep(50 * time.Millisecond)
