@@ -70,7 +70,7 @@ export function FlowMenuContent({ label, children, className = '', onCloseAutoFo
   const onKeyDown = useShortcutKeys(registry)
   useQueuedShortcut(registry)
   return <RegistryContext.Provider value={registry}>
-    <ContextMenu.Content data-flow-motion="floating" aria-label={label} className={`flow-menu ${className}`} collisionPadding={8} onCloseAutoFocus={onCloseAutoFocus} onKeyDown={onKeyDown}>
+    <ContextMenu.Content data-flow-motion="floating" aria-label={label} className={`flow-menu ${className}`} collisionPadding={12} onCloseAutoFocus={onCloseAutoFocus} onKeyDown={onKeyDown}>
       {children}
     </ContextMenu.Content>
   </RegistryContext.Provider>
@@ -83,7 +83,7 @@ export function FlowDropdownMenuContent({ label, children, className = '', onClo
   useQueuedShortcut(registry)
   return <KitContext.Provider value={DROPDOWN_KIT}>
     <RegistryContext.Provider value={registry}>
-      <DropdownMenu.Content data-flow-motion="floating" aria-label={label} align={align} alignOffset={alignOffset} sideOffset={sideOffset} className={`flow-menu ${className}`} collisionPadding={8} onCloseAutoFocus={onCloseAutoFocus} onKeyDown={onKeyDown}>
+      <DropdownMenu.Content data-flow-motion="floating" aria-label={label} align={align} alignOffset={alignOffset} sideOffset={sideOffset} className={`flow-menu ${className}`} collisionPadding={12} onCloseAutoFocus={onCloseAutoFocus} onKeyDown={onKeyDown}>
         {children}
       </DropdownMenu.Content>
     </RegistryContext.Provider>
@@ -161,7 +161,7 @@ export function FlowSubmenu({ icon, label, detail, shortcut, children, className
     </Kit.SubTrigger>
     <Kit.Portal>
       <RegistryContext.Provider value={registry}>
-        <Kit.SubContent ref={setContainer} data-flow-motion="floating" aria-label={text} className={`flow-menu flow-menu--sub${search ? ' has-search' : ''} ${className}`} data-menu={label} sideOffset={-2} alignOffset={search ? -42.3 : -6.5} collisionPadding={8}
+        <Kit.SubContent ref={setContainer} data-flow-motion="floating" aria-label={text} className={`flow-menu flow-menu--sub${search ? ' has-search' : ''} ${className}`} data-menu={label} sideOffset={-2} alignOffset={search ? -42.3 : -6.5} collisionPadding={12}
           onFocusOutside={event => {
             // Radix briefly focuses the parent menu while the pointer crosses into the submenu.
             const target = event.target
