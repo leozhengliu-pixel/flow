@@ -3,7 +3,7 @@
  * inline code comment composer for one file of DiffView.
  */
 import { ArrowUp, ArrowUpToLine, MessageSquarePlus, Minus, X } from "lucide-react";
-import { Fragment, type ReactNode, useMemo } from "react";
+import { type CSSProperties, Fragment, type ReactNode, type UIEvent, useMemo } from "react";
 
 import { ReviewCode } from "@/components/reviews/review-code";
 import type { DiffHunk, DiffLine } from "@/lib/diff-computer";
@@ -54,8 +54,13 @@ export function DiffLineCell({
   dirty,
   onEdit,
   marks,
+  part,
+  style,
 }: {
   line?: DiffLine;
+  /** Only the line number (with its comment button) or only the code: a split side keeps its gutter fixed while the code scrolls. */
+  part?: "gutter" | "code";
+  style?: CSSProperties;
   side: "old" | "new" | "unified";
   /** Changed-word ranges of this line (see pairedWordRanges). */
   marks?: TextRange[];
@@ -72,8 +77,14 @@ export function DiffLineCell({
   const canEdit = Boolean(editable && line && side !== "old" && line.kind !== "remove");
 
   return (
-    <div className={`review-diff-cell is-${line?.kind ?? "empty"}${dirty ? " is-dirty" : ""}`} data-line-old={line?.oldNumber} data-line-new={line?.newNumber}>
-      <span className="review-diff-number">
+    <div
+      className={`review-diff-cell is-${line?.kind ?? "empty"}${dirty ? " is-dirty" : ""}${part ? ` review-diff-part is-${part}` : ""}`}
+      data-line-old={line?.oldNumber}
+      data-line-new={line?.newNumber}
+      data-side={part ? side : undefined}
+      style={style}
+    >
+      {part === "code" ? null : <span className="review-diff-number">
         {side === "unified" && line?.kind === "remove" ? <Minus className="review-diff-removed-mark" aria-label={`${t("Removed line")} ${line.oldNumber ?? ""}`} /> : (lineNumber ?? "")}
         {anchor && onComment ? (
           <button
@@ -85,8 +96,8 @@ export function DiffLineCell({
             <MessageSquarePlus />
           </button>
         ) : null}
-      </span>
-      {canEdit && line ? (
+      </span>}
+      {part === "gutter" ? null : canEdit && line ? (
         <code
           className="review-diff-editable"
           contentEditable
@@ -242,16 +253,65 @@ export function DiffContentRows({
         {after(line)}
       </Fragment>
     ));
-  const splitRowsFor = (rows: Array<{ left?: DiffLine; right?: DiffLine }>) =>
-    rows.map((row, index) => (
-      <Fragment key={`${row.left?.oldNumber ?? ""}-${row.right?.newNumber ?? ""}-${index}`}>
-        <div className="review-diff-row">
-          <DiffLineCell line={row.left} side="old" path={path} onComment={onComment} marks={row.left ? wordMarks.get(row.left) : undefined} />
-          <DiffLineCell line={row.right} side="new" path={path} onComment={onComment} editable={editable} dirty={dirtyLines?.has(dirtyKey(row.right))} onEdit={onEdit} marks={row.right ? wordMarks.get(row.right) : undefined} />
+  // Split: per run of rows, a grid of fixed gutters and two code columns that each scroll sideways on their own
+  // (the rows share the grid's tracks, so a row stays as tall as its taller side). Threads break a run.
+  const splitSegment = (rows: Array<{ left?: DiffLine; right?: DiffLine }>, key: string) => (
+    <div className="review-diff-split" key={key}>
+      {rows.map((row, index) => (
+        <Fragment key={`gutter-${index}`}>
+          <DiffLineCell part="gutter" line={row.left} side="old" path={path} onComment={onComment} style={{ gridColumn: 1, gridRow: index + 1 }} />
+          <DiffLineCell part="gutter" line={row.right} side="new" path={path} onComment={onComment} dirty={dirtyLines?.has(dirtyKey(row.right))} style={{ gridColumn: 3, gridRow: index + 1 }} />
+        </Fragment>
+      ))}
+      {(["old", "new"] as const).map((side) => (
+        <div key={side} className="review-diff-split-code" data-side={side} style={{ gridColumn: side === "old" ? 2 : 4, gridRow: `1 / span ${rows.length}` }}>
+          {rows.map((row, index) => {
+            const line = side === "old" ? row.left : row.right;
+            return (
+              <DiffLineCell
+                key={index}
+                part="code"
+                line={line}
+                side={side}
+                path={path}
+                editable={side === "new" ? editable : undefined}
+                dirty={side === "new" ? dirtyLines?.has(dirtyKey(line)) : undefined}
+                onEdit={side === "new" ? onEdit : undefined}
+                marks={line ? wordMarks.get(line) : undefined}
+                style={{ gridRow: index + 1 }}
+              />
+            );
+          })}
         </div>
-        {afterSplit(row)}
-      </Fragment>
-    ));
+      ))}
+    </div>
+  );
+  const splitRowsFor = (rows: Array<{ left?: DiffLine; right?: DiffLine }>) => {
+    const output: ReactNode[] = [];
+    let run: Array<{ left?: DiffLine; right?: DiffLine }> = [];
+    const flush = (key: string) => {
+      if (run.length) output.push(splitSegment(run, key));
+      run = [];
+    };
+    rows.forEach((row, index) => {
+      run.push(row);
+      const annotation = afterSplit(row);
+      if (annotation) {
+        flush(`rows-${index}`);
+        output.push(<Fragment key={`annotation-${index}`}>{annotation}</Fragment>);
+      }
+    });
+    flush("rows-end");
+    return output;
+  };
+  // The code columns of one file scroll together (a thread or hunk header splits the grid into runs).
+  const syncScroll = (event: UIEvent<HTMLDivElement>) => {
+    const source = event.target as HTMLElement;
+    if (!source.classList?.contains("review-diff-split-code")) return;
+    for (const other of event.currentTarget.querySelectorAll<HTMLElement>(`.review-diff-split-code[data-side="${source.dataset.side}"]`)) {
+      if (other !== source && other.scrollLeft !== source.scrollLeft) other.scrollLeft = source.scrollLeft;
+    }
+  };
   const pair = (rows: DiffLine[]) => {
     const output: Array<{ left?: DiffLine; right?: DiffLine }> = [];
     let removed: DiffLine[] = [];
@@ -274,7 +334,7 @@ export function DiffContentRows({
   };
 
   return (
-    <div className={`review-diff-table is-${mode}`}>
+    <div className={`review-diff-table is-${mode}`} onScrollCapture={mode === "split" ? syncScroll : undefined}>
       {hunks?.length
         ? hunks.map((hunk, index) => (
             <div key={`${hunk.header}-${index}`} className="review-diff-hunk">

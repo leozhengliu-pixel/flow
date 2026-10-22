@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { translateToChinese } from '@/i18n/translate'
 import { viewer } from '@/test/fixtures'
 import type { Notification } from '@/types/flow'
-import { agentReplyLine, agentReplyProjectPath, finishedSessionTarget } from './agent-reply-notification'
+import { agentReplyLine, agentReplyProjectPath, finishedSessionTarget, pointsAtSessionCard } from './agent-reply-notification'
 import { documentNotificationKind, documentNotificationLine, documentNotificationPath, isDocumentNotification } from './hosts/document-inbox-model'
 
 const agent = { ...viewer, id: 'app-flow', displayName: 'Flow', app: true }
@@ -18,6 +18,11 @@ describe('agent reply notifications', () => {
     expect(agentReplyLine(notification('finished'), source => source)).toBe('Flow finished: Two fields changed.')
     expect(agentReplyLine(notification('finished', ''), source => source)).toBe('Flow finished')
     expect(agentReplyLine(notification('finished'), zh)).toBe('Flow 已完成：Two fields changed.')
+  })
+
+  it('anchors a delegated session without a pull request on its card, but a reply to a comment on the comment', () => {
+    expect(pointsAtSessionCard({ ...notification('finished'), commentId: '' } as Notification)).toBe(true)
+    expect(pointsAtSessionCard(notification('finished'))).toBe(false)
   })
 
   it('words document thread replies like issue thread replies and links to the comment', () => {

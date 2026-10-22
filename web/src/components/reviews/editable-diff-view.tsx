@@ -23,12 +23,14 @@ export function EditableDiffView({
   onReload,
   onChangesChange,
   onExit,
+  splitDisabled,
 }: {
   review: CodeReview;
   onReload: () => Promise<void>;
   onChangesChange?: (changes: EditableDiffChange[]) => void;
   /** Leaves edit mode (the "Edit diff" display option). */
   onExit?: () => void;
+  splitDisabled?: boolean;
 }) {
   const { t } = useI18n();
   const [edits, setEdits] = useState<Map<string, EditableDiffChange>>(() => new Map());
@@ -93,6 +95,7 @@ export function EditableDiffView({
         onEditableChange={onExit ? (value) => !value && onExit() : undefined}
         dirtyLines={dirtyLines}
         onEditLine={onEditLine}
+        splitDisabled={splitDisabled}
       />
     </div>
   );

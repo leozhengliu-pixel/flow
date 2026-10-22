@@ -31,6 +31,14 @@ export function finishedSessionTarget(data: { reviews: { id: string }[] }, notif
   return { sessionId, sessionReviewId: reviewId }
 }
 
+/**
+ * An agent reply about a session that no comment started (a delegation, e.g. one that finished without a pull request):
+ * the issue opens at `#comment-<session>` with the session's card outlined.
+ */
+export function pointsAtSessionCard(notification: Notification) {
+  return notification.type === 'agentReply' && notification.sourceType === 'agentSession' && !notification.commentId && Boolean(notification.sourceId)
+}
+
 /** Agent replies in a project's comment thread link to the comment on the project's Activity tab. */
 export function agentReplyProjectPath(workspaceKey: string, project: Pick<Project, 'slugId'>, commentId?: string) {
   return `${projectPath(workspaceKey, project, 'activity')}${commentId ? `#comment-${encodeURIComponent(commentId)}` : ''}`

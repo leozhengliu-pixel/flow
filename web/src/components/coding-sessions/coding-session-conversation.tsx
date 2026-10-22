@@ -200,9 +200,12 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
     const user = data.users.find(candidate => candidate.id === id) ?? (id === data.viewer.id ? data.viewer : undefined)
     return user?.displayName || user?.name || t('User')
   }
+  // A choice question is a narration line of the work log: 12px muted text under the rail's indent, its options as bullets.
+  const renderQuestion = (activity: ApplicationActivity) => <div className="cs-question"><AgentAnswerText className="coding-session-markdown" data={data} markdown={questionMarkdown(activity)}/></div>
   const renderItem = (item: StreamItem, key: string): ReactNode => {
     switch (item.kind) {
-      case 'group': return <CodingActivityGroup key={key} group={item}/>
+      case 'group': return <CodingActivityGroup key={key} group={item} renderQuestion={renderQuestion} defaultOpen={Boolean(elicitation) && item.children.some(child => child.kind === 'question' && child.activity.id === elicitation!.id)}/>
+      case 'question': return <Fragment key={key}>{renderQuestion(item.activity)}</Fragment>
       case 'action': return <CodingActionRow key={key} action={item}/>
       case 'reasoning': return <CodingReasoning key={key} activity={item.activity}/>
       case 'thinking': return <div key={key} className="cs-action" data-loading role="status"><div className="cs-action-header"><span className="cs-action-label"><CodingShimmer>{session.state === 'pending' && CODING_PHASE_LABELS[session.phase] ? `${t(CODING_PHASE_LABELS[session.phase])}…` : t('Thinking…')}</CodingShimmer></span></div></div>
