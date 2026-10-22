@@ -57,6 +57,41 @@ offload settings.
 
 Run a restore drill before every production upgrade and at least quarterly.
 
+## Re-adding a lost document version
+
+A document keeps its pre-edit body as its oldest version when it is first
+edited. Documents edited before that existed may have lost the body they had
+before their first edit. If a copy of that body survives (an export, a backup
+file), a workspace admin can add it back to the document's history as a
+restorable version. The document's current title, body, version and project,
+team and issue links stay as they are. The request needs an admin session or an
+API key with the `admin` scope.
+
+```bash
+DOC=document_1792043252194518676
+# The document's createdAt (or the updatedAt it had before the edit) dates the version.
+CREATED_AT=$(curl -fsS -H "Authorization: Bearer $FLOW_ADMIN_KEY" \
+  "$FLOW_URL/api/documents/$DOC" | jq -r .createdAt)
+jq -n --rawfile content backup.md --arg createdAt "$CREATED_AT" --arg title "Original title" \
+  '{title: $title, content: $content, createdAt: $createdAt}' |
+curl -fsS -X POST -H "Authorization: Bearer $FLOW_ADMIN_KEY" -H 'Content-Type: application/json' \
+  --data @- "$FLOW_URL/api/workspace/documents/$DOC/revisions/import"
+```
+
+- `content` is the Markdown body; add `contentData` (the editor's JSON) when
+  the backup has it. Without it the editor reads the Markdown when the version
+  is restored.
+- `title` defaults to the current title. `authorId` defaults to the document's
+  creator.
+- `createdAt` must be older than the document's current state, so the version
+  sorts below the current one.
+- The call answers 201 with `imported: true`. Sending the same title, body and
+  time again answers 200 with `imported: false` and adds nothing.
+- Each import is recorded in the audit log as `document.revision_imported`.
+
+Then check `GET /api/documents/$DOC/history` (or the document's version
+history) and restore the version from there if the body should come back.
+
 ## Upgrade procedure
 
 1. Read `CHANGELOG.md` and back up SQL plus attachments.

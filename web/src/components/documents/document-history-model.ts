@@ -3,8 +3,9 @@
  *
  * The live document is always the first, "Current" entry (author = the last editor, time = `updatedAt`). Stored revisions
  * follow it, newest first. The server may keep the PRE-update state as a revision (so revisions[0] is the previous
- * state) or a snapshot AFTER the edit (so revisions[0] equals the current document); both work: a revision identical to
- * the live document (same title and content) is dropped so no two rows look "current".
+ * state) or a snapshot AFTER the edit (so revisions[0] equals the current document); both work: a newest revision
+ * identical to the live document (same title and content) is dropped so no two rows look "current". The oldest revision
+ * may be the pre-edit baseline the server keeps on a document's first edit (no `startedAt`); it is always listed.
  */
 import type { ActorBot, DocumentRevision, FlowDocument, User } from '@/types/flow'
 import { diffDocuments, type HistoryDiffResult, type PMNode } from './document-history-diff'
@@ -39,8 +40,10 @@ export function buildHistoryEntries(document: Pick<FlowDocument, 'title' | 'cont
     botActor: revisions.length ? revisions[0].botActor : document.botActor,
     createdAt: document.updatedAt,
   }
+  // Only the newest revision can be the snapshot of the live document. An older revision with the same text is a real
+  // earlier version (the pre-edit baseline after it was restored, or a revert) and stays listed.
   const previous = revisions
-    .filter(revision => !(revision.title === document.title && (revision.content ?? '') === (document.content ?? '')))
+    .filter((revision, index) => !(index === 0 && revision.title === document.title && (revision.content ?? '') === (document.content ?? '')))
     .map((revision: DocumentRevision): HistoryEntry => ({
       id: revision.id,
       current: false,

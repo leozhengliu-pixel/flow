@@ -26,6 +26,14 @@ describe('buildHistoryEntries', () => {
     expect(entries.map(entry => entry.id)).toEqual(['current', 'a'])
   })
 
+  it('shows the pre-edit baseline after the first edit, and keeps it listed once it is restored', () => {
+    const baseline = rev('baseline', 'Original text', '2026-10-02T09:00:00')
+    const edited = buildHistoryEntries({ ...base, content: 'Updated text', revisions: [rev('edit', 'Updated text', '2026-10-09T10:00:00'), baseline] })
+    expect(edited.map(entry => [entry.id, entry.content])).toEqual([['current', 'Updated text'], ['baseline', 'Original text']])
+    const restored = buildHistoryEntries({ ...base, content: 'Original text', revisions: [rev('restore', 'Original text', '2026-10-09T11:00:00'), rev('edit', 'Updated text', '2026-10-09T10:00:00'), baseline] })
+    expect(restored.map(entry => entry.id)).toEqual(['current', 'edit', 'baseline'])
+  })
+
   it('keeps a revision with the same content but another title', () => {
     expect(buildHistoryEntries({ ...base, revisions: [rev('a', 'now', '2026-10-09T09:00:00', { title: 'Old title' })] })).toHaveLength(2)
   })

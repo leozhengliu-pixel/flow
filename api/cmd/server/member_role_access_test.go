@@ -69,6 +69,7 @@ func TestMemberRoleMatchesReference(t *testing.T) {
 			{http.MethodGet, "/api/workspace/audit-log-stream"},
 			{http.MethodGet, "/api/workspace/preferences"},
 			{http.MethodPatch, "/api/workspace/preferences"},
+			{http.MethodPost, "/api/workspace/documents/any-document/revisions/import"},
 			{http.MethodGet, "/api/webhooks"},
 			{http.MethodPost, "/api/webhooks"},
 			{http.MethodGet, "/api/oauth-applications"},

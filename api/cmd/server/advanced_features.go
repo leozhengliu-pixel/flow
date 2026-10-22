@@ -580,6 +580,9 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 		document.UpdatedAt = now
 		document.Version++
 		contentChanged := document.Title != before.Title || document.Content != before.Content || input.ContentData != nil && !jsonEqual(before.ContentData, document.ContentData)
+		if contentChanged {
+			keepDocumentBaseline(document, before)
+		}
 		if contentChanged && recordDocumentRevision(document, data.Viewer, now, false) {
 			// One "edited" notice per editing burst (debounced per editor).
 			appendDocumentNotifications(s, data, *document, documentNotice{directory: directory, kind: notificationDocumentChanges, recipients: documentSubscribers(data, *document)}, now)
