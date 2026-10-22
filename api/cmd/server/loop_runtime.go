@@ -848,10 +848,8 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 			}
 			return nil
 		}
-		// Narration between tool calls stays in the output so the run reads like a log.
-		if text := strings.TrimSpace(turn.Text); text != "" {
-			output += text + "\n\n"
-		}
+		// Narration written alongside tool calls ("I'll start by checking...") is not the
+		// answer; the output is the finish_run report or the final reply only.
 		rec.setOutput(strings.TrimSpace(output))
 		messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, ToolCalls: turn.ToolCalls, Reasoning: turn.Reasoning})
 		var finished *domain.LoopRunSummary
