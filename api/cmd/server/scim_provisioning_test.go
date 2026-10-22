@@ -464,7 +464,6 @@ func TestSCIMAttributesReadBackAsWritten(t *testing.T) {
 	if resources := scimResources(t, search); search["totalResults"] != float64(1) || len(resources[0]) != 3 {
 		t.Fatalf("search = %v", search)
 	}
-	requireSCIMError(t, f.call(t, http.MethodPost, "/scim/v2/test-workspace/.search", `{}`, http.StatusNotImplemented), "501", "")
 	requireSCIMError(t, f.call(t, http.MethodGet, "/scim/v2/test-workspace/Nope", nil, http.StatusNotFound), "404", "")
 	requireSCIMError(t, f.call(t, http.MethodPost, "/scim/v2/test-workspace/ServiceProviderConfig", `{}`, http.StatusMethodNotAllowed), "405", "")
 }

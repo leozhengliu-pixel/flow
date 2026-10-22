@@ -8,10 +8,13 @@ import (
 )
 
 // POST /Users/.search and /Groups/.search (RFC 7644 §3.4.3) run the list
-// query of a SearchRequest body. Searching several resource types at once
-// (POST /.search) is not implemented (501).
+// query of a SearchRequest body. POST /.search searches Users and Groups
+// together: the result lists Users first, then Groups, unless sortBy
+// orders them across both types (ties keep Users first), so paging is
+// stable.
 func (s *server) scimSearch(w http.ResponseWriter, r *http.Request) {
-	if _, _, ok := s.authenticateSCIMRequest(w, r); !ok {
+	workspaceKey, workspaceID, ok := s.authenticateSCIMRequest(w, r)
+	if !ok {
 		return
 	}
 	var request struct {
@@ -28,10 +31,7 @@ func (s *server) scimSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	resource := strings.TrimSuffix(r.URL.Path, "/.search")
 	resource = resource[strings.LastIndex(resource, "/")+1:]
-	if resource != "Users" && resource != "Groups" {
-		writeSCIMError(w, http.StatusNotImplemented, "", "searching several resource types at once is not supported; use /Users/.search or /Groups/.search")
-		return
-	}
+	root := resource != "Users" && resource != "Groups"
 	query := url.Values{}
 	for key, value := range map[string]string{"attributes": strings.Join(request.Attributes, ","), "excludedAttributes": strings.Join(request.ExcludedAttributes, ","), "filter": request.Filter, "sortBy": request.SortBy, "sortOrder": request.SortOrder} {
 		if value != "" {
@@ -47,11 +47,59 @@ func (s *server) scimSearch(w http.ResponseWriter, r *http.Request) {
 	list := r.Clone(r.Context())
 	list.Method, list.Body = http.MethodGet, http.NoBody
 	list.URL.RawQuery = query.Encode()
-	if resource == "Users" {
+	switch {
+	case root:
+		s.scimRootSearch(w, list, workspaceKey, workspaceID)
+	case resource == "Users":
 		s.scimUsers(w, list)
-	} else {
+	default:
 		s.scimGroups(w, list)
 	}
+}
+
+// scimRootSearch answers POST /.search (RFC 7644 §3.4.3): the filter,
+// sorting, projection and paging of the list endpoints over Users and Groups
+// together. Each type contributes its first startIndex+count-1 matches in
+// the requested order; the merged, ordered list is then paged.
+func (s *server) scimRootSearch(w http.ResponseWriter, r *http.Request, workspaceKey, workspaceID string) {
+	base := scimBaseURL(r, workspaceKey)
+	rawFilter := r.URL.Query().Get("filter")
+	filter, err := parseSCIMFilter(rawFilter)
+	if err != nil {
+		writeSCIMRequestError(w, err)
+		return
+	}
+	params, projection := readSCIMListParams(r), readSCIMProjection(r)
+	window := params.startIndex - 1 + params.count
+	if window > scimFilterScanLimit {
+		writeSCIMRequestError(w, &scimRequestError{status: http.StatusBadRequest, scimType: scimTooMany, detail: "startIndex is too large for a search across resource types"})
+		return
+	}
+	// totalResults is the number of Users plus Groups that match, so the
+	// user query always runs (a count of 0 only returns the total).
+	userParams := params
+	userParams.startIndex, userParams.count = 1, window
+	users, userTotal, err := s.listSCIMUserResources(r.Context(), workspaceID, base, filter, userParams)
+	if err != nil {
+		writeSCIMRequestError(w, err)
+		return
+	}
+	groups, err := s.listSCIMGroupResources(r.Context(), workspaceKey, workspaceID, base, filter, rawFilter, projection)
+	if err != nil {
+		writeSCIMRequestError(w, err)
+		return
+	}
+	if len(params.sortPath) == 0 {
+		// Users come ordered by userName; order Groups by displayName.
+		sortSCIMResources(groups, scimListParams{sortPath: []string{"displayname"}})
+	}
+	merged := append(users, groups...)
+	sortSCIMResources(merged, params)
+	resources := scimPage(merged, params)
+	for index := range resources {
+		resources[index] = projection.apply(resources[index])
+	}
+	writeSCIM(w, http.StatusOK, scimListResponse(userTotal+len(groups), params, resources))
 }
 
 // scimUnknown answers the paths and methods the SCIM service does not have

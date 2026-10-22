@@ -516,8 +516,11 @@ Flow implements SCIM 2.0 (RFC 7643/7644) for user and group provisioning.
 - **Endpoints:** `ServiceProviderConfig`, `ResourceTypes` (+ `/{id}`),
   `Schemas` (+ `/{id}`), `Users` (list, create, get, `PUT`, `PATCH`, `DELETE`,
   `POST /Users/.search`), `Groups` (the same, with `POST /Groups/.search`) and
-  `POST /Bulk`. Searching several resource types at once (`POST /.search`)
-  answers 501, and password changes are not supported. Responses use
+  `POST /Bulk`. `POST /.search` searches Users and Groups together (same
+  `filter`, `attributes`/`excludedAttributes`, `sortBy`/`sortOrder`,
+  `startIndex`/`count` as the list endpoints; Users come first by `userName`,
+  then Groups by `displayName`, unless `sortBy` orders them across both).
+  Password changes are not supported. Responses use
   `application/scim+json`; errors, including unknown paths (404) and methods
   (405), are SCIM error bodies with `status` as a string and `scimType`
   (`invalidFilter`, `invalidValue`, `invalidSyntax`, `invalidPath`,
@@ -626,7 +629,11 @@ Flow implements SCIM 2.0 (RFC 7643/7644) for user and group provisioning.
   (`urn:…:enterprise:2.0:User:manager` with an id, an object, or
   `{"value": ""}` to clear it), `members` and `members[value eq "<id>"]`
   work. `remove` of `externalId`, `displayName`, `name` or a profile attribute
-  clears it; `active` cannot be removed (send `false`). Group member adds and removes are applied in order, are idempotent,
+  clears it. `remove` of `active` unsets it without changing the member: an
+  active user is not deprovisioned and a suspended user is not restored (the
+  resource just stops reporting `active` until it is written again, so
+  `active eq true` filters do not match it); the audit entry lists `active`
+  in `changedFields` with `activeUnset: true`. To suspend, send `false`. Group member adds and removes are applied in order, are idempotent,
   and an unknown user in an add is 400 `invalidValue`.
 
 Setup notes: in **Okta**, use a SCIM 2.0 app with HTTP Header (bearer)

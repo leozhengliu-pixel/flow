@@ -166,8 +166,10 @@ func scimUserResource(base string, item store.SCIMUser) map[string]any {
 		"schemas":  []string{scimSchemaUser},
 		"id":       item.User.ID,
 		"userName": item.UserName,
-		"active":   item.Active(),
 		"meta":     meta,
+	}
+	if !item.Profile.ActiveUnset {
+		resource["active"] = item.Active()
 	}
 	if len(name) > 0 {
 		resource["name"] = name
@@ -440,8 +442,18 @@ func (s *server) scimUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	entries := []scimAuditEntry{}
-	if changed := scimChangedAttributes(scimUserResource(base, current), scimUserResource(base, item)); len(changed) > 0 {
-		entries = append(entries, scimUserAudit("updated", item, map[string]any{"changedFields": changed}))
+	changed := scimChangedAttributes(scimUserResource(base, current), scimUserResource(base, item))
+	extra := map[string]any{}
+	if item.Profile.ActiveUnset != current.Profile.ActiveUnset {
+		// "active" is audited through suspend/restore; unsetting it changes
+		// no membership state, so it is recorded here.
+		changed = append(changed, "active")
+		slices.Sort(changed)
+		extra["activeUnset"], extra["active"] = item.Profile.ActiveUnset, item.Active()
+	}
+	if len(changed) > 0 {
+		extra["changedFields"] = changed
+		entries = append(entries, scimUserAudit("updated", item, extra))
 	}
 	switch {
 	case current.Active() && !item.Active():
@@ -617,17 +629,32 @@ func (s *server) scimGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	params, projection := readSCIMListParams(r), readSCIMProjection(r)
-	withMembers := projection.wants("members") || strings.Contains(strings.ToLower(r.URL.Query().Get("filter")), "members")
-	groups, err := s.store.ListSCIMGroups(r.Context(), workspaceID, withMembers)
+	matched, err := s.listSCIMGroupResources(r.Context(), workspaceKey, workspaceID, base, filter, r.URL.Query().Get("filter"), projection)
 	if err != nil {
 		writeSCIMRequestError(w, err)
 		return
 	}
+	sortSCIMResources(matched, params)
+	resources := scimPage(matched, params)
+	for index := range resources {
+		resources[index] = projection.apply(resources[index])
+	}
+	writeSCIM(w, http.StatusOK, scimListResponse(len(matched), params, resources))
+}
+
+// listSCIMGroupResources returns every group resource (SCIM groups and
+// unlinked teams) that matches filter, unsorted. Members are loaded only
+// when the projection or the raw filter needs them.
+func (s *server) listSCIMGroupResources(ctx context.Context, workspaceKey, workspaceID, base string, filter scimFilter, rawFilter string, projection scimProjection) ([]map[string]any, error) {
+	withMembers := projection.wants("members") || strings.Contains(strings.ToLower(rawFilter), "members")
+	groups, err := s.store.ListSCIMGroups(ctx, workspaceID, withMembers)
+	if err != nil {
+		return nil, err
+	}
 	var teamMembers []domain.TeamMember
 	if withMembers {
-		if teamMembers, err = s.store.ListTeamMembers(r.Context(), workspaceID); err != nil {
-			writeSCIMRequestError(w, err)
-			return
+		if teamMembers, err = s.store.ListTeamMembers(ctx, workspaceID); err != nil {
+			return nil, err
 		}
 	}
 	all := make([]map[string]any, 0, len(groups))
@@ -643,12 +670,7 @@ func (s *server) scimGroups(w http.ResponseWriter, r *http.Request) {
 			matched = append(matched, resource)
 		}
 	}
-	sortSCIMResources(matched, params)
-	resources := scimPage(matched, params)
-	for index := range resources {
-		resources[index] = projection.apply(resources[index])
-	}
-	writeSCIM(w, http.StatusOK, scimListResponse(len(matched), params, resources))
+	return matched, nil
 }
 
 func (s *server) syncSCIMGroupTeamIfLinked(r *http.Request, workspaceKey, workspaceID string, group store.SCIMGroup) error {
