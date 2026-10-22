@@ -7,6 +7,7 @@ import { Fragment, useEffect, useState, type MouseEvent } from 'react'
 import { toast } from '@/lib/toast'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useI18n } from '@/i18n/i18n'
+import { TableLineHandles } from './table-line-menus'
 import { deleteWholeTable, runInTable, selectWholeTable, tableAt, tableToText } from './table-commands'
 
 type Chain = ReturnType<Editor['chain']>
@@ -46,7 +47,7 @@ const keepSelection = (event: MouseEvent) => event.preventDefault()
 export function TableChrome({ editor, getPos }: { editor: Editor; getPos: () => number | undefined }) {
   const { t } = useI18n()
   const editable = useEditable(editor)
-  const [openMenu, setOpenMenu] = useState<'actions' | 'block' | null>(null)
+  const [openMenu, setOpenMenu] = useState<'actions' | 'block' | 'lines' | null>(null)
   if (!editable) return null
 
   const addRow = () => runInTable(editor, getPos(), 'last', chain => chain.addRowAfter())
@@ -66,6 +67,7 @@ export function TableChrome({ editor, getPos }: { editor: Editor; getPos: () => 
   return <div className="flow-table__chrome" data-open={openMenu ?? undefined} contentEditable={false}>
     <button type="button" className="flow-table__add-row" aria-label={t('Add row')} title={t('Add row')} tabIndex={-1} onMouseDown={keepSelection} onClick={addRow}><Plus size={14} aria-hidden/></button>
     <button type="button" className="flow-table__add-column" aria-label={t('Add column')} title={t('Add column')} tabIndex={-1} onMouseDown={keepSelection} onClick={addColumn}><Plus size={14} aria-hidden/></button>
+    <TableLineHandles editor={editor} getPos={getPos} onMenuChange={open => setOpenMenu(open ? 'lines' : current => current === 'lines' ? null : current)}/>
     <DropdownMenu {...menuProps('actions')}>
       <DropdownMenuTrigger asChild>
         <button type="button" className="flow-table__actions" aria-label={t('Table actions')} title={t('Table actions')} onMouseDown={keepSelection}><Ellipsis size={16} aria-hidden/></button>
