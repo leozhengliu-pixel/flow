@@ -227,7 +227,7 @@ func classifyWebhookEvent(eventType string) (string, string) {
 		if after, ok := strings.CutPrefix(verb, "comment_"); ok {
 			return "comments", normal(after)
 		}
-		if strings.HasPrefix(verb, "permission") || strings.HasPrefix(verb, "subscriber") || strings.HasPrefix(verb, "attachment") || verb == "restored" || verb == "revision_restored" {
+		if strings.HasPrefix(verb, "permission") || strings.HasPrefix(verb, "subscriber") || strings.HasPrefix(verb, "attachment") || verb == "restored" || verb == "revision_restored" || verb == "revision_imported" {
 			return "documents", "update"
 		}
 		return "documents", normal(verb)

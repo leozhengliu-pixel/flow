@@ -726,6 +726,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/documents/{id}/drafts/{draftId}", s.deleteDocumentDraft)
 	mux.HandleFunc("POST /api/documents/{id}/drafts/{draftId}/publish", s.publishDocumentDraft)
 	mux.HandleFunc("GET /api/documents/{id}/history", s.documentContentHistory)
+	mux.HandleFunc("POST /api/workspace/documents/{id}/revisions/import", s.importDocumentRevision)
 	mux.HandleFunc("GET /api/customer-taxonomy", s.listCustomerTaxonomy)
 	mux.HandleFunc("POST /api/customer-statuses", s.createCustomerTaxonomy)
 	mux.HandleFunc("PATCH /api/customer-statuses/{id}", s.updateCustomerTaxonomy)

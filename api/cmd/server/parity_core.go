@@ -374,6 +374,7 @@ func (s *server) publishDocumentDraft(w http.ResponseWriter, r *http.Request) {
 		draft := data.DocumentContentDrafts[index]
 		now := time.Now().UTC()
 		workspace = data.Workspace.URLKey
+		keepDocumentBaseline(document, *document)
 		// Publishing replaces the body like restoring a version: editors on
 		// the previous collaboration generation reload.
 		replacedCollaborationID = startCollaborationGeneration(document)

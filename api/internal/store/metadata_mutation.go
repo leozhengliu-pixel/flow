@@ -111,7 +111,7 @@ func metadataOnlyMutation(event string, payload any) bool {
 		return true
 	case "cycle.updated", "cycle.capacity_updated", "cycle.resource_created", "cycle.resource_deleted", "cycle.calendar_token_requested":
 		return true
-	case "document.deleted", "document.revision_restored", "document.permissions_updated", "document.permission_updated", "document.permission_deleted",
+	case "document.deleted", "document.revision_restored", "document.revision_imported", "document.permissions_updated", "document.permission_updated", "document.permission_deleted",
 		"document.draft_created", "document.draft_updated", "document.draft_deleted", "document.draft_published",
 		"document_template.created", "document_template.updated", "document_template.deleted":
 		return true

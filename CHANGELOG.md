@@ -20,6 +20,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   out of office from their calendar's out-of-office events) and Notion (link
   previews of issues and projects) connections, configured with
   `FLOW_GOOGLE_OAUTH_CLIENT_ID` / `_SECRET` and `FLOW_NOTION_CONNECTION_URL`.
+- `POST /api/workspace/documents/{id}/revisions/import` (workspace admins):
+  adds a preserved earlier body of a document to its version history without
+  changing the document. See [Operations](docs/operations.md#re-adding-a-lost-document-version).
+
+### Fixed
+
+- The first edit of a document that had a body but no version history (created
+  with content through the API, MCP or a template, or written by an earlier
+  release) no longer loses the body it replaced: the pre-edit state is kept as
+  the oldest version, and the version history lists it.
 
 ## [0.1.0] - 2026-10-17
 

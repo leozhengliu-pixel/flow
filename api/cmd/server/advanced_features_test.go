@@ -112,8 +112,8 @@ func TestDocumentHistoryProjectAssociationAndTrashRestore(t *testing.T) {
 		"title": "Renamed document", "content": "Second version", "projectIds": []string{},
 	}, http.StatusOK)
 	// History stores post-update snapshots: the newest version is the
-	// current state.
-	if len(document.Revisions) != 1 || document.Revisions[0].Content != "Second version" || document.Revisions[0].Title != "Renamed document" {
+	// current state; the first edit also keeps the body it replaced.
+	if len(document.Revisions) != 2 || document.Revisions[0].Content != "Second version" || document.Revisions[0].Title != "Renamed document" || document.Revisions[1].Content != "First version" || document.Revisions[1].Title != "Advanced document" {
 		t.Fatalf("document revision was not recorded: %#v", document.Revisions)
 	}
 	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)

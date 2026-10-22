@@ -688,6 +688,7 @@ var InternalRoutes = []string{
 	"PATCH /api/workspace/loop-settings",
 	"PATCH /api/workspace/preferences",
 	"POST /api/workspace/audit-log-stream",
+	"POST /api/workspace/documents/{id}/revisions/import",
 	"POST /api/workspace/welcome-message/test",
 	"PUT /api/workspace/project-display-default",
 	"PUT /api/workspace/settings",

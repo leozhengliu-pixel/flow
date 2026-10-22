@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -95,6 +96,44 @@ func revisionBotActor(author domain.User) *domain.ActorBot {
 	}
 	copy := *author.Via
 	return &copy
+}
+
+// documentHasBody reports whether a document holds a body worth keeping as a
+// version (an empty editor document does not).
+func documentHasBody(document domain.Document) bool {
+	if strings.TrimSpace(document.Content) != "" {
+		return true
+	}
+	content, _ := document.ContentData["content"].([]any)
+	return len(content) > 0
+}
+
+// keepDocumentBaseline stores the pre-edit state of a document that has a
+// body but no versions yet (created with a body, imported, or written before
+// versions were kept) as its oldest version, before the first edit replaces
+// it. Versions are post-edit snapshots, so without this the original body
+// would be lost. The baseline keeps the state's own time and the creator (the
+// only known editor) and has no StartedAt, so it is never merged into an
+// editing burst. Call it before recordDocumentRevision with the state from
+// before the write.
+func keepDocumentBaseline(document *domain.Document, before domain.Document) {
+	if len(document.Revisions) > 0 || !documentHasBody(before) {
+		return
+	}
+	at := before.UpdatedAt
+	if at.IsZero() {
+		at = before.CreatedAt
+	}
+	var botActor *domain.ActorBot
+	if before.BotActor != nil {
+		copy := *before.BotActor
+		botActor = &copy
+	}
+	authorIDs := []string{}
+	if before.Creator.ID != "" {
+		authorIDs = append(authorIDs, before.Creator.ID)
+	}
+	document.Revisions = []domain.DocumentRevision{{ID: fmt.Sprintf("revision_%d", at.UnixNano()), DocumentID: document.ID, Title: before.Title, Content: before.Content, ContentState: before.ContentState, ContentData: before.ContentData, Author: before.Creator, BotActor: botActor, AuthorIDs: authorIDs, CreatedAt: at}}
 }
 
 func recordDocumentRevision(document *domain.Document, author domain.User, now time.Time, force bool) bool {
@@ -494,4 +533,96 @@ func startCollaborationGeneration(document *domain.Document) string {
 	document.ContentVersion++
 	document.CollaborationID = fmt.Sprintf("%s_v%d", document.ID, document.ContentVersion)
 	return previous
+}
+
+// ---------------------------------------------------------------- version import
+
+type documentRevisionImportInput struct {
+	Title        *string        `json:"title"`
+	Content      *string        `json:"content"`
+	ContentState string         `json:"contentState"`
+	ContentData  map[string]any `json:"contentData"`
+	CreatedAt    *time.Time     `json:"createdAt"`
+	AuthorID     string         `json:"authorId"`
+}
+
+// importDocumentRevision (POST /api/workspace/documents/{id}/revisions/import,
+// workspace admins) adds a preserved earlier state of a document, such as a
+// backup of a body an edit replaced, to its history as a restorable version.
+// The document itself (title, body, version, links) is not changed. The
+// version is placed by its createdAt, which must be older than the
+// document's current state; importing the same title, body and time again
+// returns the version already stored (200 instead of 201).
+func (s *server) importDocumentRevision(w http.ResponseWriter, r *http.Request) {
+	var input documentRevisionImportInput
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if input.Content == nil || input.CreatedAt == nil || input.CreatedAt.IsZero() {
+		writeError(w, http.StatusBadRequest, "content and createdAt are required")
+		return
+	}
+	id := r.PathValue("id")
+	at := input.CreatedAt.UTC()
+	var result domain.DocumentRevision
+	imported := false
+	err := s.store.MutateWorkspace(documentMutationScope(r.Context(), id), workspaceKey(r), "document.revision_imported", id, map[string]any{"createdAt": at, "authorId": input.AuthorID}, func(data *domain.Bootstrap) error {
+		if !s.authDisabled && !workspaceAdminRole(data.ViewerRole) {
+			return store.ErrAuthForbidden
+		}
+		document, err := documentByID(data, id)
+		if err != nil {
+			return err
+		}
+		title := document.Title
+		if input.Title != nil {
+			title = strings.TrimSpace(*input.Title)
+		}
+		sum := sha256.Sum256([]byte(at.Format(time.RFC3339Nano) + "\x00" + title + "\x00" + *input.Content))
+		revisionID := "revision_imported_" + hex.EncodeToString(sum[:12])
+		if index := slices.IndexFunc(document.Revisions, func(item domain.DocumentRevision) bool { return item.ID == revisionID }); index >= 0 {
+			result = document.Revisions[index]
+			return nil
+		}
+		newest := document.UpdatedAt
+		if len(document.Revisions) > 0 && document.Revisions[0].CreatedAt.Before(newest) {
+			newest = document.Revisions[0].CreatedAt
+		}
+		if !at.Before(newest) {
+			return fmt.Errorf("%w: createdAt must be older than the document's current state (%s)", errInvalid, newest.Format(time.RFC3339))
+		}
+		author := document.Creator
+		if input.AuthorID != "" {
+			user := userByID(data, input.AuthorID)
+			if user == nil {
+				return fmt.Errorf("%w: authorId is not a workspace user", errInvalid)
+			}
+			author = *user
+		}
+		// Versions are newest first.
+		position := slices.IndexFunc(document.Revisions, func(item domain.DocumentRevision) bool { return item.CreatedAt.Before(at) })
+		if position < 0 {
+			position = len(document.Revisions)
+		}
+		if position >= maxDocumentRevisions {
+			return fmt.Errorf("%w: the document's history is full and this version is older than all of it", errConflict)
+		}
+		authorIDs := []string{}
+		if author.ID != "" {
+			authorIDs = append(authorIDs, author.ID)
+		}
+		result = domain.DocumentRevision{ID: revisionID, DocumentID: document.ID, Title: title, Content: *input.Content, ContentState: input.ContentState, ContentData: input.ContentData, Author: author, AuthorIDs: authorIDs, CreatedAt: at}
+		document.Revisions = slices.Insert(document.Revisions, position, result)
+		if len(document.Revisions) > maxDocumentRevisions {
+			document.Revisions = document.Revisions[:maxDocumentRevisions]
+		}
+		appendAudit(data, "revision_imported", "document", document.ID, map[string]any{"revisionId": revisionID, "createdAt": at, "authorId": author.ID, "title": title})
+		imported = true
+		return nil
+	})
+	status := http.StatusOK
+	if imported {
+		status = http.StatusCreated
+	}
+	respondMutation(w, err, status, map[string]any{"imported": imported, "revision": result})
 }

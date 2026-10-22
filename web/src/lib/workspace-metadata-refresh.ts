@@ -13,7 +13,7 @@ const METADATA_EVENT = new RegExp('^(?:' + [
   'project\\.(?:updated|milestone_(?:created|updated|deleted)|milestones_reordered|resource_(?:created|updated|deleted)|commented|comment_(?:updated|resolved|unresolved|deleted|reaction_toggled|thread_subscription|attachment_created)|update_(?:created|updated|deleted|commented|reaction_toggled|attachment_created|attachment_deleted)|relation_(?:created|updated|deleted))',
   'initiative\\.(?:created|updated|deleted|commented|comment_(?:updated|deleted|reaction_toggled)|update_(?:created|updated|deleted|commented|reaction_toggled|attachment_created|attachment_deleted)|relation_(?:created|updated|deleted)|resource_(?:created|updated|deleted))',
   'cycle\\.(?:updated|capacity_updated|resource_(?:created|deleted)|calendar_token_requested)',
-  'document\\.(?:created|updated|deleted|revision_restored|permissions_updated|permission_(?:updated|deleted)|draft_(?:created|updated|deleted|published))',
+  'document\\.(?:created|updated|deleted|revision_(?:restored|imported)|permissions_updated|permission_(?:updated|deleted)|draft_(?:created|updated|deleted|published))',
   'document_template\\.[a-z_]+', 'issue_template\\.[a-z_]+', 'project_status\\.[a-z_]+', 'project_template\\.deleted', 'project_update_settings\\.updated',
   'release\\.(?:created|updated|deleted|reordered|ci_event|note_(?:created|updated|deleted)|timestamps_updated)', 'release_pipeline\\.[a-z_]+',
   'customer\\.[a-z_]+', 'customer_taxonomy\\.[a-z_]+', 'customer_need\\.archive_toggled', 'customer_request\\.(?:created|updated|deleted|attachment_(?:created|deleted))',
