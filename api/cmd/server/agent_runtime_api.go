@@ -64,6 +64,7 @@ func (s *server) registerAgentRuntimeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /internal/agent-runtime/runs/{id}/activities", s.agentRuntimeRun(true, s.postAgentRunActivity))
 	mux.HandleFunc("POST /internal/agent-runtime/runs/{id}/guard", s.agentRuntimeRun(true, s.agentRunGuard))
 	mux.HandleFunc("GET /internal/agent-runtime/runs/{id}/changes", s.agentRuntimeRun(true, s.listAgentRunChanges))
+	mux.HandleFunc("GET /internal/agent-runtime/runs/{id}/elicitations", s.agentRuntimeRun(true, s.watchAgentRunElicitations))
 	mux.HandleFunc("GET /internal/agent-runtime/runs/{id}/state", s.agentRuntimeRun(true, s.getAgentSessionState))
 	mux.HandleFunc("PUT /internal/agent-runtime/runs/{id}/state", s.agentRuntimeRun(true, s.putAgentSessionState))
 	mux.HandleFunc("DELETE /internal/agent-runtime/runs/{id}/state", s.agentRuntimeRun(true, s.deleteAgentSessionState))
@@ -284,6 +285,9 @@ func (s *server) completeAgentRun(w http.ResponseWriter, r *http.Request, caller
 		return
 	}
 	run, err := s.store.FinishAgentRun(r.Context(), run.ID, caller.worker, store.AgentRunResult{Status: input.Status, Error: input.Error, Usage: input.Usage}, time.Now())
+	if err == nil {
+		agentRunElicitationLogs.Delete(run.ID)
+	}
 	if err == nil && (input.Status == "done" || input.Status == "failed") {
 		// A finished run that should have entered Coding and did not is moved into it (or reports the blocker).
 		s.ensureWorkerRunCoding(r, run)
@@ -339,6 +343,13 @@ func (s *server) agentRunPayload(w http.ResponseWriter, r *http.Request, _ agent
 		return
 	}
 	response := map[string]any{"run": run, "principal": map[string]any{"mode": principal.Mode, "userId": principal.UserID, "appUserId": principal.AppUserID, "tools": principal.Tools}}
+	// Connector tools are discovered for the run here (once per run; /mcp serves them), so what discovery noticed
+	// (a selected connector that was skipped) comes with the payload, as an in-process loop run records it up front.
+	grant := &agentRunGrant{run: run, principal: principal}
+	_, discoveryErr := s.agentRunConnectorTools(r.Context(), grant)
+	if notices := s.agentRunNotices(r.Context(), run.ID); len(notices) > 0 {
+		response["notices"] = notices
+	}
 	task, err := s.store.AgentTask(r.Context(), run.WorkspaceKey, run.SessionID)
 	if err == nil {
 		task.DeriveTimedState(time.Now())
@@ -348,9 +359,8 @@ func (s *server) agentRunPayload(w http.ResponseWriter, r *http.Request, _ agent
 			writeError(w, http.StatusConflict, "the run's application or requester no longer has access to the session")
 			return
 		}
-		// Connector tools are discovered for the run here (and served through /mcp); a failure is told to the model
-		// as the in-process agent tells it.
-		prompt.System += s.agentRunConnectorNote(r, &agentRunGrant{run: run, principal: principal})
+		// A connector discovery failure is told to the model as the in-process agent tells it.
+		prompt.System += agentRunConnectorNote(grant, discoveryErr)
 		response["context"] = prompt
 	} else if !store.IsAgentTaskMissing(err) {
 		writeError(w, http.StatusInternalServerError, "the run's session could not be read")

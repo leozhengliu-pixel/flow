@@ -9,7 +9,28 @@ export type Elicitation =
   | { kind: 'select'; callId: string; body: string; options: { label: string; value: string }[]; allowFreeText: boolean }
   | { kind: 'approval'; approval: 'connector'; callIds: string[]; body: string; options: { label: string; value: string }[] }
 
+/**
+ * A question a connector asks the person in the middle of a call (MCP elicitation). Flow holds it while the call
+ * waits (api/cmd/server/agent_runtime_elicitations.go); the person answers at `answerPath` (the chat's elicitation
+ * route, `{ action: 'accept' | 'decline' | 'cancel', content? }`), and the answer goes to the connector only.
+ * The activity is sent again when the question is answered (`completed`) or cancelled or timed out (`error`).
+ */
+export type ConnectorElicitation = {
+  id: string
+  sessionId: string
+  connectorName: string
+  connectorUrl: string
+  mode: string
+  message: string
+  schema?: unknown
+  url?: string
+  action?: string
+  status: 'pending' | 'completed' | 'error'
+  answerPath: string
+}
+
 export type FlowActivity =
+  | { type: 'connector.elicitation'; at: number; elicitation: ConnectorElicitation }
   | { type: 'thought'; at: number; body: string; ephemeral: boolean }
   | { type: 'text.delta'; at: number; delta: string; ephemeral: true }
   | { type: 'action'; at: number; activityId: string; action: string; parameter: unknown }
@@ -59,6 +80,10 @@ export function formatActivity(activity: FlowActivity, t0: number): string {
     case 'response': {
       const u = activity.usage
       return `${at} response ${clip(activity.body, 300)} | calls=${u.modelCalls} in=${u.inputTokens} cached=${u.cachedTokens} out=${u.outputTokens} tools/call=${u.toolsOfferedMean}`
+    }
+    case 'connector.elicitation': {
+      const e = activity.elicitation
+      return `${at} connector.elicitation[${e.mode}] ${e.status}${e.action ? ` (${e.action})` : ''} ${e.connectorName}: ${clip(e.message)}`
     }
     case 'question.delta': return `${at} question (running) ${clip(activity.body, 80)}`
     case 'error': return `${at} error ${clip(activity.body, 300)}`

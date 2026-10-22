@@ -9,8 +9,24 @@ export const approvedMeta = 'flow/approved'
 /** A run-token allowlist entry that admits the run's connector tools. */
 export const connectorAllowlist = 'external_*'
 
-/** A Flow connector call may take up to 6 minutes (connectorCallTimeout); Flow bounds every call itself. */
-export const flowToolTimeoutMs = 390_000
+/** Flow's own tools answer well within a minute. */
+export const flowToolTimeoutMs = 60_000
+/**
+ * A connector (external_*) call may take up to 6 minutes on Flow (connectorCallTimeout, which covers a 5-minute
+ * question to the person); Flow bounds every call itself.
+ */
+export const connectorToolTimeoutMs = 390_000
+
+export type FlowMcpOptions = {
+  name?: string
+  /** Time limit of a Flow tool call (default flowToolTimeoutMs). */
+  timeoutMs?: number
+  /** Time limit of a connector tool call (default connectorToolTimeoutMs). */
+  connectorTimeoutMs?: number
+  toolErrors?: ToolErrorFlags
+  /** Called when a connector call starts; the returned function is called when it ends. */
+  onConnectorCall?: () => () => unknown
+}
 
 /** Whether a run-token allowlist admits a tool (connector tools through `external_*` or by name). */
 export function allowlisted(allowlist: string[] | undefined, tool: string) {
@@ -18,19 +34,44 @@ export function allowlisted(allowlist: string[] | undefined, tool: string) {
   return allowlist.includes(tool) || (isConnectorTool(tool) && allowlist.includes(connectorAllowlist))
 }
 
+type CallArgs = Parameters<MCPServerStreamableHttp['callToolResult']>
+
 /**
- * Flow's /mcp with a run token: records each connector call's structured `isError` for the run guard (the SDK
- * hands tool guardrails only the result content).
+ * Flow's /mcp with a run token. The SDK applies one request timeout to every call, so the server is created with
+ * the longest limit and each call is cut at its own here: 60 s for Flow's tools, 390 s for connector tools. A connector call's structured `isError`
+ * is recorded for the run guard (the SDK hands tool guardrails only the result content), and `onConnectorCall`
+ * learns when connector calls are in flight (the worker then watches for the connector's questions).
  */
 class FlowMcpServer extends MCPServerStreamableHttp {
-  constructor(options: ConstructorParameters<typeof MCPServerStreamableHttp>[0], private readonly toolErrors?: ToolErrorFlags) {
+  constructor(options: ConstructorParameters<typeof MCPServerStreamableHttp>[0], private readonly flow: { timeoutMs: number; connectorTimeoutMs: number; toolErrors?: ToolErrorFlags; onConnectorCall?: () => () => unknown }) {
     super(options)
   }
 
-  override async callToolResult(...args: Parameters<MCPServerStreamableHttp['callToolResult']>) {
-    const result = await super.callToolResult(...args)
-    if (isConnectorTool(args[0])) this.toolErrors?.record(args[0], args[1] ?? {}, Boolean(result.isError))
-    return result
+  override async callToolResult(...args: CallArgs) {
+    const [name, input] = args
+    if (!isConnectorTool(name)) return this.callWithin(this.flow.timeoutMs, args)
+    const ended = this.flow.onConnectorCall?.()
+    try {
+      const result = await this.callWithin(this.flow.connectorTimeoutMs, args)
+      this.flow.toolErrors?.record(name, input ?? {}, Boolean(result.isError))
+      return result
+    } finally {
+      await ended?.()
+    }
+  }
+
+  private async callWithin(timeoutMs: number, [name, input, meta, options]: CallArgs) {
+    const timer = new AbortController()
+    const handle = setTimeout(() => timer.abort(), timeoutMs)
+    const signal = options?.signal ? AbortSignal.any([options.signal, timer.signal]) : timer.signal
+    try {
+      return await super.callToolResult(name, input, meta, { ...options, signal })
+    } catch (error) {
+      if (timer.signal.aborted && !options?.signal?.aborted) throw new Error(`Request timed out after ${Math.round(timeoutMs / 1000)} s`)
+      throw error
+    } finally {
+      clearTimeout(handle)
+    }
   }
 }
 
@@ -44,10 +85,12 @@ class FlowMcpServer extends MCPServerStreamableHttp {
  *   connector is set to always ask carries `_meta["flow/approval"] = "always"`: the filter adds it to
  *   `context.alwaysAskTools`, so the call is held for approval (policy.ts), and the approved call is sent with
  *   `_meta["flow/approved"] = true` (Flow refuses it otherwise). Flow records their action activities itself.
+ *   A connector may ask the person mid-call (MCP elicitation, answered on Flow): `onConnectorCall` lets the
+ *   session watch for those questions while a connector call is in flight (connector-elicitation.ts).
  * - `customDataExtractor` keeps `isError` and Flow's change-set card (`structuredContent.change`) on the tool output
  *   item, for the action activity.
  */
-export function flowMcpServer(flowUrl: string, token: string, options: { name?: string; timeoutMs?: number; toolErrors?: ToolErrorFlags } = {}) {
+export function flowMcpServer(flowUrl: string, token: string, options: FlowMcpOptions = {}) {
   const toolFilter: MCPToolFilterCallable<FlowRunContext> = async ({ runContext }, tool) => {
     const context = runContext.context
     if (!allowlisted(context.allowlist, tool.name)) return false
@@ -57,11 +100,13 @@ export function flowMcpServer(flowUrl: string, token: string, options: { name?: 
     }
     return toolOffered(tool.name, context.loadedGroups)
   }
+  const limits = { timeoutMs: options.timeoutMs ?? flowToolTimeoutMs, connectorTimeoutMs: options.connectorTimeoutMs ?? connectorToolTimeoutMs }
   return new FlowMcpServer({
     url: `${flowUrl.replace(/\/$/, '')}/mcp`,
     name: options.name ?? 'flow',
     cacheToolsList: true,
-    timeout: options.timeoutMs ?? flowToolTimeoutMs,
+    // The SDK's one request limit is the longest; each call is cut at its own limit (FlowMcpServer).
+    timeout: Math.max(limits.timeoutMs, limits.connectorTimeoutMs),
     clientSessionTimeoutSeconds: 60,
     requestInit: { headers: { Authorization: `Bearer ${token}` } },
     fetch: strictMcpFetch,
@@ -75,7 +120,7 @@ export function flowMcpServer(flowUrl: string, token: string, options: { name?: 
       const change = (structuredContent as Record<string, unknown> | undefined)?.change
       return { isError: Boolean(isError), ...(change ? { change } : {}) }
     },
-  }, options.toolErrors)
+  }, { ...limits, toolErrors: options.toolErrors, onConnectorCall: options.onConnectorCall })
 }
 
 /**

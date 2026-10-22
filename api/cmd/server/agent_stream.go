@@ -801,7 +801,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			}
 			content := string(result)
 			if callErr != nil {
-				content = callErr.Error()
+				content = agentToolFailureText(result, callErr)
 			}
 			messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: content, IsError: callErr != nil}})
 			executed = append(executed, call)

@@ -35,10 +35,14 @@ const statusOf: Record<TurnStatus, RunStatus> = { response: 'done', awaiting: 'a
 async function execute(run: AgentRun) {
   const payload = (run.payload ?? {}) as { prompt?: string; systemPrompt?: string }
   const { token } = await client.token(run.id)
+  // Reading the payload discovers the run's connector tools; a skipped selected connector comes back as a notice.
+  const details = await client.payload(run.id).catch(error => { log(`${run.id} payload failed: ${(error as Error).message}`); return undefined })
+  for (const notice of details?.notices ?? []) log(`${run.id} notice: ${notice}`)
   const session = worker.session({
     sessionId: run.sessionId,
     flowToken: token,
     guard: request => client.guard(run.id, request),
+    elicitations: (after, waitMs, signal) => client.elicitations(run.id, after, waitMs, signal),
     systemPrompt: payload.systemPrompt ?? flowSystemPrompt({ workspace: run.workspaceKey, userName: 'the requester', today: new Date().toISOString().slice(0, 10) }),
   })
   sessions.set(run.id, session)

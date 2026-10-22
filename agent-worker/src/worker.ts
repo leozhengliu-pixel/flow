@@ -15,6 +15,7 @@ import {
 import { formatActivity, summarizeUsage, type Elicitation, type FlowActivity, type TurnUsage } from './activities.js'
 import type { WorkerConfig } from './config.js'
 import { newRunContext, type FlowRunContext } from './context.js'
+import { ConnectorElicitationWatcher, type ElicitationApi } from './connector-elicitation.js'
 import { flowMcpServer } from './flow-mcp.js'
 import { askUserTool, loadToolsTool, parseAskUser } from './host-tools.js'
 import { compactHistory, defaultCompaction } from './history.js'
@@ -87,6 +88,12 @@ export type SessionOptions = {
   mcpServers?: MCPServer[]
   /** The structured isError flags of connector calls, read by the run guard (default: one per session). */
   toolErrors?: ToolErrorFlags
+  /**
+   * The run's connector questions (GET /internal/agent-runtime/runs/{id}/elicitations): watched while a connector
+   * call is in flight and sent to the sink as `connector.elicitation` activities (a chat run's person answers them
+   * on Flow; other runs have none).
+   */
+  elicitations?: ElicitationApi
 }
 
 export type ActivitySink = (activity: FlowActivity) => void
@@ -115,14 +122,21 @@ export class FlowAgentSession {
   private readonly agent: FlowAgent
   private readonly mcp: MCPServer[]
   private readonly toolErrors: ToolErrorFlags
+  private readonly elicitations?: ConnectorElicitationWatcher
   private connected?: Promise<void>
   private controller?: AbortController
+  /** The sink of the turn in progress (connector questions arrive while a tool call runs). */
+  private sink?: ActivitySink
 
   constructor(private readonly worker: FlowAgentWorker, readonly options: SessionOptions, baseModel: Model) {
     const config = worker.config
     this.model = new ObservedModel(baseModel)
     this.toolErrors = options.toolErrors ?? new ToolErrorFlags()
-    this.mcp = options.mcpServers ?? [flowMcpServer(config.flowUrl, options.flowToken ?? config.flowToken, { toolErrors: this.toolErrors })]
+    if (options.elicitations) {
+      this.elicitations = new ConnectorElicitationWatcher(options.elicitations, elicitation => this.sink?.({ type: 'connector.elicitation', at: Date.now(), elicitation }))
+    }
+    const watcher = this.elicitations
+    this.mcp = options.mcpServers ?? [flowMcpServer(config.flowUrl, options.flowToken ?? config.flowToken, { toolErrors: this.toolErrors, onConnectorCall: watcher ? () => watcher.begin() : undefined })]
     this.agent = new FlowAgent({
       name: 'Flow Agent',
       instructions: options.systemPrompt,
@@ -196,6 +210,7 @@ export class FlowAgentSession {
       outcome.firstActivityAt ??= activity.at
       sink(activity)
     }
+    this.sink = emit
     // Ack before any network work (AIG: first activity within 10 s; UI shows "Working…"). Not counted as the
     // first model-driven activity in the metrics.
     if (!previous) sink({ type: 'thought', at: Date.now(), body: typeof input === 'string' ? 'Working…' : 'Continuing…', ephemeral: false })
@@ -299,6 +314,7 @@ export class FlowAgentSession {
       this.model.rewrite = undefined
       this.agent.guard = undefined
       if (this.controller === controller) this.controller = undefined
+      if (this.sink === emit) this.sink = undefined
     }
   }
 

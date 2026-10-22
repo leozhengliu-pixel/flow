@@ -926,7 +926,7 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 			}
 			content := string(result)
 			if callErr != nil {
-				content = callErr.Error()
+				content = agentToolFailureText(result, callErr)
 			}
 			reply(truncateLoopToolOutput(content, limits.MaxToolOutputBytes), callErr != nil)
 		}
