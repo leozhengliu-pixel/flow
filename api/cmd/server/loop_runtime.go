@@ -709,7 +709,8 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 		request = request.WithContext(withAgentWebTools(request.Context()))
 	}
 	toolNames, readOnly := s.loopRunTools(request.Context())
-	plan := loopRunPlan{Tools: toolNames, Limits: limits, Outputs: effectiveLoopOutputs(loop)}
+	expectation := loopOutputExpectations(loop)
+	plan := loopRunPlan{Tools: toolNames, Limits: limits, Outputs: expectation.Outputs, ReadOnly: expectation.ReadOnly}
 
 	entity := s.loopEntityContext(ctx, workspace, data, trigger)
 	messages := []agentProviderMessage{
@@ -1241,6 +1242,8 @@ type loopRunPlan struct {
 	Tools   []string
 	Limits  loopRunLimits
 	Outputs []string
+	// ReadOnly: the loop reads and reports; it is not asked to publish.
+	ReadOnly bool
 }
 
 var loopOutputPrompts = map[string]string{
@@ -1253,7 +1256,11 @@ var loopOutputPrompts = map[string]string{
 
 func loopSystemPrompt(data domain.Bootstrap, loop domain.Loop, trigger loopTrigger, entity string, scope *loopScope, webSearch bool, references string, plan loopRunPlan) string {
 	var prompt strings.Builder
-	fmt.Fprintf(&prompt, "You are running the Flow automation loop %q in the %s workspace. Work autonomously: there is no user to answer questions. Use the Flow tools to act; the run is judged by the changes it makes, not by what it says.\n", loop.Name, data.Workspace.Name)
+	if plan.ReadOnly {
+		fmt.Fprintf(&prompt, "You are running the Flow automation loop %q in the %s workspace. Work autonomously: there is no user to answer questions. Use the Flow tools to read what the instructions need; this loop reads and reports, so the run is judged by a complete, accurate answer.\n", loop.Name, data.Workspace.Name)
+	} else {
+		fmt.Fprintf(&prompt, "You are running the Flow automation loop %q in the %s workspace. Work autonomously: there is no user to answer questions. Use the Flow tools to act; the run is judged by the changes it makes, not by what it says.\n", loop.Name, data.Workspace.Name)
+	}
 	prompt.WriteString("\nHow to work:\n")
 	prompt.WriteString("1. Plan: call report_progress with a short title for each distinct step (in the same turn as that step's tool calls).\n")
 	prompt.WriteString("2. Gather: read only what the step needs. Use filters, a limit and the cursor on list tools; never try to read a whole workspace.\n")
@@ -1266,6 +1273,8 @@ func loopSystemPrompt(data domain.Bootstrap, loop domain.Loop, trigger loopTrigg
 			wanted = append(wanted, loopOutputPrompts[kind])
 		}
 		fmt.Fprintf(&prompt, "\nThis loop is expected to produce output: %s. A run that ends without it is flagged for review, so only report nothing_to_do when the instructions truly do not apply.\n", strings.Join(wanted, "; "))
+	} else if plan.ReadOnly {
+		prompt.WriteString("\nThis loop reads and reports: its instructions mention status updates, issues, comments or documents only as things to check, read or summarize. Do not post status updates or create issues, comments or documents, and do not look for a place to publish. Put the complete report in finish_run's summary (status done, or nothing_to_do when there is nothing new, worded the way the instructions ask).\n")
 	}
 	fmt.Fprintf(&prompt, "\nLimits: at most %d tool turns and %d tool calls; tool results over %d KB are cut off; the run stops after %s.\n", plan.Limits.MaxTurns, plan.Limits.MaxToolCalls, max(plan.Limits.MaxToolOutputBytes>>10, 1), plan.Limits.Timeout.Round(time.Second))
 	if len(plan.Tools) > 0 {
