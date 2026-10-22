@@ -12,7 +12,7 @@ import { I18nProvider } from '@/i18n/i18n'
 import { MarkdownPaste } from '@/components/editor/markdown-paste'
 import { flowTableKit } from '.'
 import {
-  compareCellText, copyLineText, deleteLine, duplicateLine, formatLine, insertLine, lineAvailability, lineClipboard, moveLine, moveSelectedLine, selectLine,
+  compareCellText, addHeaderRow, copyLineText, deleteLine, duplicateLine, formatLine, insertLine, lineAvailability, lineClipboard, moveLine, moveSelectedLine, selectLine,
   sortColumn, type TableLine,
 } from './table-lines'
 import { parseTabularText, tableFromRows, withHeaderRow } from './table-paste'
@@ -266,11 +266,16 @@ describe('copy text, select, delete', () => {
     expect(clip.html.match(/<tr/g)).toHaveLength(4)
   })
 
-  it('leaves empty cells out of the plain text (the reference puts only the filled cells on the clipboard)', async () => {
+  it('writes a blank line only after text, like the reference: empty cells add nothing at the start or in the middle, an empty last cell leaves the trailing blank line', async () => {
     const editor = await setup('<table><tr><th><p>H</p></th><th><p></p></th></tr><tr><td><p>x</p></td><td><p></p></td></tr><tr><td><p></p></td><td><p></p></td></tr><tr><td><p>z</p></td><td><p>w</p></td></tr></table><p></p>')
     expect(lineClipboard(editor, line(editor, 'column', 0))!.text).toBe('H\n\nx\n\nz')
+    expect(lineClipboard(editor, line(editor, 'column', 1))!.text).toBe('w')
     expect(lineClipboard(editor, line(editor, 'row', 2))!.text).toBe('')
     expect(lineClipboard(editor, line(editor, 'row', 3))!.text).toBe('z\n\nw')
+    // Reference measurements: a row [empty, "two"] is "two"; a column [header, text, empty] is "Name\n\ntext\n\n"; [text, empty, text] has one blank line.
+    const mixed = await setup('<table><tr><th><p>Name</p></th><th><p>Val</p></th></tr><tr><td><p>text</p></td><td><p>one</p></td></tr><tr><td><p></p></td><td><p>two</p></td></tr></table><p></p>')
+    expect(lineClipboard(mixed, line(mixed, 'row', 2))!.text).toBe('two')
+    expect(lineClipboard(mixed, line(mixed, 'column', 0))!.text).toBe('Name\n\ntext\n\n')
   })
 
   it('copies the header row with header cells and no header-less marker', async () => {
@@ -340,6 +345,203 @@ describe('copy text, select, delete', () => {
     expect(grid(editor)).toEqual([['Qty'], ['10'], ['100']])
     act(() => { deleteLine(editor, line(editor, 'column', 0)) })
     expect(tableCount(editor)).toBe(0)
+  })
+})
+
+/** The clipboard html of the reference app minus its cosmetic wrappers (see REFERENCE_HTML below for a full capture). */
+const mark = (type: string, attrs?: Record<string, string>) => ({ type, attrs })
+const textNode = (text: string, marks: Array<ReturnType<typeof mark>> = []) => ({ type: 'text', text, ...(marks.length ? { marks } : {}) })
+const cellNode = (kind: 'tableCell' | 'tableHeader', content: Array<ReturnType<typeof textNode>>, colwidth?: number) =>
+  ({ type: kind, ...(colwidth ? { attrs: { colwidth: [colwidth] } } : {}), content: [{ type: 'paragraph', ...(content.length ? { content } : {}) }] })
+const FORMATTED = [
+  textNode('bold', [mark('bold')]), textNode(' '), textNode('ital', [mark('italic')]), textNode(' '), textNode('code', [mark('code')]), textNode(' '),
+  textNode('https://example.com', [mark('link', { href: 'https://example.com' })]), textNode(' '),
+]
+const LINK_HTML = '<a href="https://example.com" target="_blank" rel="noopener noreferrer nofollow">https://example.com</a>'
+
+describe('clipboard payloads match the reference app', () => {
+  async function load(rows: object[][]) {
+    const editor = await setup('<p></p>')
+    act(() => { editor.commands.setContent({ type: 'doc', content: [{ type: 'table', content: rows.map(cells => ({ type: 'tableRow', content: cells })) }, { type: 'paragraph' }] }) })
+    return editor
+  }
+  const formatted = () => [
+    [cellNode('tableHeader', [textNode('Name')], 290), cellNode('tableHeader', [textNode('Val')], 390)],
+    [cellNode('tableCell', FORMATTED, 290), cellNode('tableCell', [textNode('one')], 390)],
+    [cellNode('tableCell', [], 290), cellNode('tableCell', [textNode('two')], 390)],
+  ]
+
+  it('a body row: header-less marker, data-colwidth per cell, marks and links as the reference writes them', async () => {
+    const editor = await load(formatted())
+    const clip = lineClipboard(editor, line(editor, 'row', 1))!
+    expect(clip.html).toBe(`<table data-headerless=""><tbody><tr><td data-colwidth="290"><p><strong>bold</strong> <em>ital</em> <code>code</code> ${LINK_HTML} </p></td><td data-colwidth="390"><p>one</p></td></tr></tbody></table>`)
+    expect(clip.text).toBe('bold ital code https://example.com \n\none')
+  })
+
+  it('a header-row copy: header cells, no marker, widths kept', async () => {
+    const editor = await load(formatted())
+    const clip = lineClipboard(editor, line(editor, 'row', 0))!
+    expect(clip.html).toBe('<table><tbody><tr><th data-colwidth="290"><p>Name</p></th><th data-colwidth="390"><p>Val</p></th></tr></tbody></table>')
+    expect(clip.text).toBe('Name\n\nVal')
+  })
+
+  it('a column with a header and an empty cell: one row per cell, an empty paragraph, a trailing blank line in the text', async () => {
+    const editor = await load(formatted())
+    const clip = lineClipboard(editor, line(editor, 'column', 0))!
+    expect(clip.html).toBe(`<table><tbody><tr><th data-colwidth="290"><p>Name</p></th></tr><tr><td data-colwidth="290"><p><strong>bold</strong> <em>ital</em> <code>code</code> ${LINK_HTML} </p></td></tr><tr><td data-colwidth="290"><p></p></td></tr></tbody></table>`)
+    expect(clip.text).toBe('Name\n\nbold ital code https://example.com \n\n')
+  })
+
+  it('a row whose first cell is empty has no leading blank line; a cell without a width has no data-colwidth', async () => {
+    const editor = await load([[cellNode('tableCell', []), cellNode('tableCell', [textNode('two')])]])
+    const clip = lineClipboard(editor, line(editor, 'row', 0))!
+    expect(clip.text).toBe('two')
+    expect(clip.html).toBe('<table data-headerless=""><tbody><tr><td><p></p></td><td><p>two</p></td></tr></tbody></table>')
+  })
+
+  it('a column of a header-less table keeps the marker and every row', async () => {
+    const editor = await load([[cellNode('tableCell', [textNode('a')], 390)], [cellNode('tableCell', [textNode('b')], 390)], [cellNode('tableCell', [textNode('c')], 390)]])
+    const clip = lineClipboard(editor, line(editor, 'column', 0))!
+    expect(clip.html).toBe('<table data-headerless=""><tbody><tr><td data-colwidth="390"><p>a</p></td></tr><tr><td data-colwidth="390"><p>b</p></td></tr><tr><td data-colwidth="390"><p>c</p></td></tr></tbody></table>')
+    expect(clip.text).toBe('a\n\nb\n\nc')
+  })
+
+  it('underline and strikethrough are u and s elements', async () => {
+    const editor = await load([[cellNode('tableCell', [textNode('under', [mark('underline')]), textNode(' '), textNode('strike', [mark('strike')])])]])
+    expect(lineClipboard(editor, line(editor, 'row', 0))!.html).toBe('<table data-headerless=""><tbody><tr><td><p><u>under</u> <s>strike</s></p></td></tr></tbody></table>')
+  })
+
+  it('round-trips through paste: a copied body row comes back header-less with its widths and marks, a copied header row keeps header cells', async () => {
+    const editor = await load(formatted())
+    const body = lineClipboard(editor, line(editor, 'row', 1))!
+    const header = lineClipboard(editor, line(editor, 'row', 0))!
+    const target = await setup('<p></p>')
+    act(() => { target.commands.focus('end') })
+    paste(target, { html: body.html, text: body.text })
+    expect(cellTypes(target)).toEqual(['DD'])
+    const row = tableJson(target).content![0].content! as Array<{ attrs?: { colwidth?: number[] }; content?: Json[] }>
+    expect(row.map(cell => cell.attrs?.colwidth)).toEqual([[290], [390]])
+    const marks = (row[0].content![0].content as Json[]).map(node => node.marks?.map(entry => entry.type).join('+') ?? '')
+    expect(marks.filter(Boolean)).toEqual(['bold', 'italic', 'code', 'link'])
+    const next = await setup('<p></p>')
+    act(() => { next.commands.focus('end') })
+    paste(next, { html: header.html, text: header.text })
+    expect(cellTypes(next)).toEqual(['HH'])
+    expect((tableJson(next).content![0].content! as Array<{ attrs?: { colwidth?: number[] } }>).map(cell => cell.attrs?.colwidth)).toEqual([[290], [390]])
+  })
+
+  // The reference app's own clipboard (a body row, abbreviated): a leading doc-id span, text-node paragraphs and authorship spans.
+  const REFERENCE_HTML = '<span data-doc-id="03fbeff7-8d8e-4647-8828-f41f9e01d47f"></span><table data-headerless=""><tbody><tr><td data-colwidth="290"><p class="text-node"><strong><span class="attr" data-user-id="2b168382">bold</span></strong><span class="attr" data-user-id="2b168382"> </span><em><span class="attr" data-user-id="2b168382">ital</span></em><span class="attr" data-user-id="2b168382"> </span><code spellcheck="false" class="inline"><span class="attr" data-user-id="2b168382">code</span></code><span class="attr" data-user-id="2b168382"> </span><a href="https://example.com" target="_blank" rel="noopener noreferrer nofollow"><span class="attr" data-user-id="2b168382">https://example.com</span></a></p></td><td data-colwidth="390"><p class="text-node"><span class="attr" data-user-id="2b168382">one</span></p></td></tr></tbody></table>'
+
+  it('pasting the reference app clipboard gives the same table: header-less, widths, marks, no stray paragraph', async () => {
+    const editor = await setup('<p></p>')
+    act(() => { editor.commands.focus('end') })
+    paste(editor, { html: REFERENCE_HTML, text: 'bold ital code https://example.com\n\none' })
+    expect(cellTypes(editor)).toEqual(['DD'])
+    const row = tableJson(editor).content![0].content! as Array<{ attrs?: { colwidth?: number[] } }>
+    expect(row.map(cell => cell.attrs?.colwidth)).toEqual([[290], [390]])
+    expect(textOf(tableJson(editor))).toBe('bold ital code https://example.comone')
+    expect(editor.getHTML()).toContain('data-colwidth="290"')
+    const top = (editor.getJSON().content as Json[]).map(node => node.type)
+    expect(top.filter(type => type === 'table')).toHaveLength(1)
+    expect(top.filter(type => type === 'paragraph').length).toBeLessThanOrEqual(2)
+  })
+
+  it('pasting reference html without the header-less marker promotes the first row, with widths (as the reference does)', async () => {
+    const editor = await setup('<p></p>')
+    act(() => { editor.commands.focus('end') })
+    paste(editor, { html: '<table><tbody><tr><td data-colwidth="200"><p>x</p></td><td data-colwidth="300"><p>y</p></td></tr></tbody></table>', text: 'x\ty' })
+    expect(cellTypes(editor)).toEqual(['HH'])
+    expect((tableJson(editor).content![0].content! as Array<{ attrs?: { colwidth?: number[] } }>).map(cell => cell.attrs?.colwidth)).toEqual([[200], [300]])
+  })
+
+  it('still reads the older colwidth attribute', async () => {
+    const editor = await setup('<table><tr><th colwidth="250"><p>A</p></th></tr></table><p></p>')
+    expect((tableJson(editor).content![0].content! as Array<{ attrs?: { colwidth?: number[] } }>)[0].attrs?.colwidth).toEqual([250])
+  })
+})
+
+describe('header-less tables', () => {
+  const ROWS = [['c', '3'], ['a', '1'], ['b', '2']]
+  const loadHeaderless = async (rows: number) => {
+    const editor = await setup('<p></p>')
+    act(() => { editor.commands.focus('end') })
+    const body = ROWS.slice(0, rows).map(cells => `<tr>${cells.map(text => `<td><p>${text}</p></td>`).join('')}</tr>`).join('')
+    paste(editor, { html: `<table data-headerless=""><tbody>${body}</tbody></table>` })
+    return editor
+  }
+  const items = async () => (await screen.findAllByRole('menuitem')).map(item => item.textContent?.replace(/[⌘⌥⇧↑↓←→▶]|Ctrl|Alt|Shift/g, '').trim())
+
+  it('offers the first row Add header, Insert above and Move down, and the rest as any row (measured on the reference)', async () => {
+    const editor = await loadHeaderless(3)
+    expect(cellTypes(editor)).toEqual(['DD', 'DD', 'DD'])
+    const table = tableLocation(editor)
+    expect(lineAvailability(table, 'row', 0)).toMatchObject({ addHeader: true, insertBefore: true, insertAfter: true, moveBefore: false, moveAfter: true, duplicate: true, delete: true })
+    expect(lineAvailability(table, 'row', 1)).toMatchObject({ addHeader: false, moveBefore: true, moveAfter: true, delete: true, separateDuplicate: false })
+    expect(lineAvailability(table, 'row', 2)).toMatchObject({ addHeader: false, moveBefore: true, moveAfter: false, separateDuplicate: true })
+    expect(lineAvailability(table, 'column', 0)).toMatchObject({ addHeader: false, sort: true, delete: true })
+  })
+
+  it('a single header-less row has Add header, Insert, Duplicate, Format and Copy text but no Delete; two rows get Delete', async () => {
+    const one = await loadHeaderless(1)
+    expect(lineAvailability(tableLocation(one), 'row', 0)).toMatchObject({ addHeader: true, insertBefore: true, duplicate: true, delete: false, moveBefore: false, moveAfter: false })
+    expect(lineAvailability(tableLocation(one), 'column', 0)).toMatchObject({ sort: true, delete: true })
+    const two = await loadHeaderless(2)
+    expect(lineAvailability(tableLocation(two), 'row', 0).delete).toBe(true)
+    expect(lineAvailability(tableLocation(two), 'row', 1).delete).toBe(true)
+    act(() => { deleteLine(two, line(two, 'row', 0)) })
+    expect(grid(two)).toEqual([['a', '1']])
+    expect(lineAvailability(tableLocation(two), 'row', 0).delete).toBe(false)
+  })
+
+  it('renders the menus in the reference order: Add header and a divider on top, a divider after Duplicate', async () => {
+    await loadHeaderless(2)
+    const user = userEvent.setup()
+    await user.hover(screen.getByText('c', { selector: 'p' }))
+    await user.click(await screen.findByRole('button', { name: 'Row actions' }))
+    expect(await items()).toEqual(['Add header', 'Insert above', 'Insert below', 'Move down', 'Duplicate', 'Format', 'Copy text', 'Delete'])
+    expect(screen.getByRole('menuitem', { name: 'Add header' }).nextElementSibling?.getAttribute('role')).toBe('separator')
+    await user.keyboard('{Escape}')
+    await user.hover(screen.getByText('a', { selector: 'p' }))
+    await user.click(await screen.findByRole('button', { name: 'Row actions' }))
+    expect(await items()).toEqual(['Insert above', 'Insert below', 'Move up', 'Duplicate', 'Format', 'Copy text', 'Delete'])
+  })
+
+  it('Add header turns the first row into header cells in place, in one undo step, and then offers the header row menu', async () => {
+    const editor = await loadHeaderless(3)
+    // History groups edits closer than its newGroupDelay: let the paste settle so undo only reverts Add header.
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 650)) })
+    expect(countTransactions(editor, () => addHeaderRow(editor, line(editor, 'row', 0))).count).toBe(1)
+    expect(cellTypes(editor)).toEqual(['HH', 'DD', 'DD'])
+    expect(grid(editor)).toEqual([['c', '3'], ['a', '1'], ['b', '2']])
+    expect(addHeaderRow(editor, line(editor, 'row', 0))).toBe(false)
+    expect(lineAvailability(tableLocation(editor), 'row', 0)).toMatchObject({ addHeader: false, insertBefore: false, delete: false })
+    act(() => { editor.commands.undo() })
+    expect(cellTypes(editor)).toEqual(['DD', 'DD', 'DD'])
+  })
+
+  it('Add header keeps widths and marks of the cells', async () => {
+    const editor = await setup('<p></p>')
+    act(() => { editor.commands.focus('end') })
+    paste(editor, { html: '<table data-headerless=""><tbody><tr><td data-colwidth="210"><p><strong>x</strong></p></td><td><p>y</p></td></tr></tbody></table>' })
+    act(() => { addHeaderRow(editor, line(editor, 'row', 0)) })
+    const cells = tableJson(editor).content![0].content! as Array<{ type: string; attrs?: { colwidth?: number[] }; content?: Json[] }>
+    expect(cells.map(cell => cell.type)).toEqual(['tableHeader', 'tableHeader'])
+    expect(cells[0].attrs?.colwidth).toEqual([210])
+    expect(cells[0].content![0].content![0].marks![0].type).toBe('bold')
+  })
+
+  it('sorts every row of a header-less table (the first row included), moves the first row down and inserts above it', async () => {
+    const editor = await loadHeaderless(3)
+    act(() => { sortColumn(editor, line(editor, 'column', 0), 'asc') })
+    expect(grid(editor).map(row => row[0])).toEqual(['a', 'b', 'c'])
+    act(() => { moveLine(editor, line(editor, 'row', 0), 'after') })
+    expect(grid(editor).map(row => row[0])).toEqual(['b', 'a', 'c'])
+    act(() => { moveLine(editor, line(editor, 'row', 1), 'before') })
+    expect(grid(editor).map(row => row[0])).toEqual(['a', 'b', 'c'])
+    act(() => { insertLine(editor, line(editor, 'row', 0), 'before') })
+    expect(grid(editor).map(row => row[0])).toEqual(['', 'a', 'b', 'c'])
+    expect(cellTypes(editor)[0]).toBe('DD')
   })
 })
 

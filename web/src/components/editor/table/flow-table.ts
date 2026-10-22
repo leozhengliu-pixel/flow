@@ -46,8 +46,29 @@ export const FlowTable = Table.extend({
   },
 })
 
-export const FlowTableHeader = TableHeader.configure({ HTMLAttributes: { class: 'flow-table-header' } })
-export const FlowTableCell = TableCell.configure({ HTMLAttributes: { class: 'flow-table-cell' } })
+/**
+ * Column widths travel as `data-colwidth` on the cells, like the reference app writes them (Tiptap's own `colwidth` attribute is
+ * still read, so older clipboard html and stored content keep their widths). One value per spanned column, comma separated.
+ */
+const colwidthAttribute = {
+  default: null,
+  parseHTML: (element: HTMLElement) => {
+    const raw = element.getAttribute('data-colwidth') ?? element.getAttribute('colwidth')
+    const widths = raw ? raw.split(',').map(Number) : []
+    return widths.length && widths.every(width => Number.isFinite(width) && width >= 0) && widths.some(width => width > 0) ? widths : null
+  },
+  renderHTML: (attributes: Record<string, unknown>) => {
+    const widths = attributes.colwidth
+    return Array.isArray(widths) && widths.length ? { 'data-colwidth': widths.join(',') } : {}
+  },
+}
+
+export const FlowTableHeader = TableHeader.extend({
+  addAttributes() { return { ...this.parent?.(), colwidth: colwidthAttribute } },
+}).configure({ HTMLAttributes: { class: 'flow-table-header' } })
+export const FlowTableCell = TableCell.extend({
+  addAttributes() { return { ...this.parent?.(), colwidth: colwidthAttribute } },
+}).configure({ HTMLAttributes: { class: 'flow-table-cell' } })
 
 /** Spread this where `TableKit.configure({ table: { resizable: true } })` was used. */
 export const flowTableKit = [FlowTable.configure({ resizable: true }), TableRow, FlowTableHeader, FlowTableCell, TablePaste, TableLineHighlight]
