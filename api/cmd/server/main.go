@@ -1496,12 +1496,14 @@ func (s *server) updateWorkspaceSettings(w http.ResponseWriter, r *http.Request)
 	if input == nil {
 		input = map[string]any{}
 	}
-	// This route stores the free-form settings blob only. Feature flags and the
-	// typed workspace policies live in WorkspaceSettings, saved by PATCH /api/workspace/preferences.
+	// This route stores the free-form settings blob only. Feature flags and the typed workspace policies live in
+	// WorkspaceSettings, saved by PATCH /api/workspace/preferences. Clients send the blob back whole, and blobs
+	// saved by older versions may still carry these keys, so they are dropped (never stored here) rather than
+	// refused; the response header says so.
 	for _, key := range []string{"featureFlags", "codingAgentSettings"} {
 		if _, ok := input[key]; ok {
-			respondMutation(w, fmt.Errorf("%w: %s is not stored here; send it to PATCH /api/workspace/preferences", errInvalid, key), http.StatusOK, nil)
-			return
+			delete(input, key)
+			w.Header().Add("X-Flow-Ignored-Settings", key)
 		}
 	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "workspace.settings_updated", "workspace", input, func(data *domain.Bootstrap) error {
