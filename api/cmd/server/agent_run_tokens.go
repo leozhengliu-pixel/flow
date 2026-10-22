@@ -173,10 +173,8 @@ func (s *server) agentRunRequest(r *http.Request, grant *agentRunGrant) (*http.R
 	data := domain.Bootstrap{Workspace: metadata.Workspace, WorkspaceSettings: metadata.WorkspaceSettings}
 	ctx = context.WithValue(ctx, workspaceKeyContextKey{}, grant.run.WorkspaceKey)
 	ctx = withAgentRun(ctx, grant.run)
-	// Links in tool results open in the app, not on the worker's loopback host.
-	if base := s.loopAppURL(); base != "" {
-		ctx = context.WithValue(ctx, agentBaseURLKey{}, base)
-	}
+	// Links in tool results open in the app, not on the worker's loopback host (relative when no app URL is known).
+	ctx = context.WithValue(ctx, agentBaseURLKey{}, s.loopAppURL())
 	switch principal.Mode {
 	case agentRunModeUser:
 		scopes := principal.Scopes
