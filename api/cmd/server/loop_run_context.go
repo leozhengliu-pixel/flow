@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log"
 	"maps"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
@@ -40,6 +42,32 @@ func (rec *loopRunRecorder) timingEvent() store.LoopRunEvent {
 	timing := rec.timing
 	log.Printf("Loop %s timing workspace=%s run=%s total_ms=%d load_ms=%d discovery_ms=%d model_ms=%d model_turns=%d tool_ms=%d", kind, rec.workspace, rec.run.ID, timing.TotalMs, timing.LoadMs, timing.DiscoveryMs, timing.ModelMs, timing.ModelTurns, timing.ToolMs)
 	return loopRunEvent("timing", timing)
+}
+
+// loopConnectorSkippedNotice starts the run notice for a selected connector
+// whose tools were not offered (followed by the connector and the reason).
+const loopConnectorSkippedNotice = "A selected connector was skipped and its tools were not offered:"
+
+// loopConnectorDiscoveryBudget bounds a run's connector discovery.
+var loopConnectorDiscoveryBudget = 20 * time.Second
+
+// loopConnectorPolicy is what a run does when a selected connector fails
+// discovery (FLOW_LOOP_CONNECTOR_POLICY): "partial" (default) runs with the
+// other connectors' tools and records a notice naming the failed one;
+// "required" fails the run as unavailable before the model is called.
+func loopConnectorPolicy() string {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("FLOW_LOOP_CONNECTOR_POLICY")), "required") {
+		return "required"
+	}
+	return "partial"
+}
+
+// addNotice records a notice on the run (a reply logs it).
+func (rec *loopRunRecorder) addNotice(notice string) {
+	if rec.reply == nil && !slices.Contains(rec.run.Notices, notice) {
+		rec.run.Notices = append(rec.run.Notices, notice)
+	}
+	rec.logEvent("notice", map[string]string{"notice": notice})
 }
 
 // loopGrantedToolNames are MCP-only Flow tools loop runs are offered besides
