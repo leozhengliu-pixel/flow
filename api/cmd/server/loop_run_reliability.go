@@ -813,6 +813,11 @@ func inferLoopOutputIntent(text string) loopOutputExpectation {
 			ordered = append(ordered, kind)
 		}
 	}
+	if len(ordered) == 0 && !readOnly && !loopWriteVerbs.MatchString(text) && loopReadVerbs.MatchString(text) {
+		// Only reading verbs and no object to write ("count open issues per
+		// team and summarise"): the report is the output, not a new document.
+		readOnly = true
+	}
 	return loopOutputExpectation{Outputs: ordered, ReadOnly: readOnly && len(ordered) == 0}
 }
 

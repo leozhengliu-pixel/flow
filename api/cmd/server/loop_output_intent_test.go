@@ -160,3 +160,19 @@ func TestExplicitLoopOutputsTakePrecedence(t *testing.T) {
 		t.Fatalf("loop expecting nothing got a publish instruction:\n%s", prompt)
 	}
 }
+
+func TestPlainReportingLoopsAreReadOnly(t *testing.T) {
+	for _, text := range []string{
+		"统计每个团队的未完成事项数量并汇总",
+		"Count open issues per team and summarize.",
+	} {
+		if got := inferLoopOutputIntent(text); !got.ReadOnly || len(got.Outputs) != 0 {
+			t.Errorf("inferLoopOutputIntent(%q) = %+v, want read-only", text, got)
+		}
+	}
+	for _, text := range []string{"统计未完成事项并发布状态更新", "Triage new issues: set priority", "Count open issues and create a document"} {
+		if got := inferLoopOutputIntent(text); got.ReadOnly {
+			t.Errorf("inferLoopOutputIntent(%q) must not be read-only", text)
+		}
+	}
+}
