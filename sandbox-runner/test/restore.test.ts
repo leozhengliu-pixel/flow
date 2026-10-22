@@ -7,12 +7,12 @@ import { createTarZst, extractTarZst, fromArchiveLayout, prefixTransforms, tarZs
 import { silentLogger } from '../src/log.js'
 import { RESTORE_FAILED_EXIT, restoreSnapshot, restoreTarget, snapshotIdFromArchiveUrl } from '../src/restore.js'
 import { RuntimeClient } from '../src/runtime-client.js'
-import { json, MAIN_TS, sh, startServer, tempDir, TSX_BIN } from './helpers.js'
+import { gnuTarSkip, json, MAIN_TS, sh, startServer, tempDir, TSX_BIN } from './helpers.js'
 
 // Restore mode: FLOW_ARCHIVE_URL (track A) or the snapshot archive route,
 // and exit code 86 when the archive cannot be restored.
 
-test('restoreSnapshot downloads from FLOW_ARCHIVE_URL with the sandbox token and unpacks it', async () => {
+test('restoreSnapshot downloads from FLOW_ARCHIVE_URL with the sandbox token and unpacks it', { skip: gnuTarSkip }, async () => {
   const tmp = tempDir('restore')
   try {
     const src = join(tmp.path, 'src')
@@ -82,7 +82,7 @@ test('restoreTarget takes the snapshot id from FLOW_ARCHIVE_URL, never a placeho
 
 // The restore step against a server that behaves like Flow's archive route:
 // only the granted snapshot id is served, any other id is 403.
-test('flow-runner restore restores the granted snapshot (HEAD matches) and reports a refused one', async () => {
+test('flow-runner restore restores the granted snapshot (HEAD matches) and reports a refused one', { skip: gnuTarSkip }, async () => {
   const tmp = tempDir('restore-grant')
   try {
     const repoSrc = join(tmp.path, 'src', 'workspace', 'repo')
@@ -175,7 +175,7 @@ test('flow-runner debug writes the ready marker once it starts', async () => {
   }
 })
 
-test('snapshot archives keep the container layout when the runner paths differ (local provider)', async () => {
+test('snapshot archives keep the container layout when the runner paths differ (local provider)', { skip: gnuTarSkip }, async () => {
   const tmp = tempDir('layout')
   try {
     // Snapshot sandbox: workspace and home live at host paths, relative to cwd.
