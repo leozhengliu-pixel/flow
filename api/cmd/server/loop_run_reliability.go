@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -695,45 +696,124 @@ var loopOutputLabels = map[string]string{
 	"change":       "a change in Flow",
 }
 
-// effectiveLoopOutputs are the outputs a run of the loop must produce: the
-// loop's explicit expectedOutputs, else what its name and instructions imply.
+// loopOutputExpectation is what a loop's runs are expected to produce:
+// Outputs must exist for the run to complete; ReadOnly marks a loop whose
+// text names outputs only as things to read, check or summarise (or forbids
+// writing), so its runs report rather than publish.
+type loopOutputExpectation struct {
+	Outputs  []string
+	ReadOnly bool
+}
+
+// effectiveLoopOutputs are the outputs a run of the loop must produce.
 func effectiveLoopOutputs(loop domain.Loop) []string {
+	return loopOutputExpectations(loop).Outputs
+}
+
+// loopOutputExpectations are the loop's explicit expectedOutputs (["none"]:
+// no output required), else what its name and instructions ask for.
+func loopOutputExpectations(loop domain.Loop) loopOutputExpectation {
 	explicit := []string{}
 	for _, item := range loop.ExpectedOutputs {
 		if item == "none" {
-			return nil
+			return loopOutputExpectation{}
 		}
 		if slices.Contains(loopOutputKinds, item) && !slices.Contains(explicit, item) {
 			explicit = append(explicit, item)
 		}
 	}
 	if len(explicit) > 0 {
-		return explicit
+		return loopOutputExpectation{Outputs: explicit}
 	}
-	return inferLoopOutputs(loop.Name + "\n" + loop.Instructions)
+	return inferLoopOutputIntent(loop.Name + "\n" + loop.Instructions)
 }
 
-// inferLoopOutputs reads side effects off the loop's text. It only infers
-// what the text clearly asks for; anything else needs no particular output.
+// inferLoopOutputs reads the outputs a loop's text asks for.
 func inferLoopOutputs(text string) []string {
+	return inferLoopOutputIntent(text).Outputs
+}
+
+// loopOutputMarkers name each output kind in loop text. A marker alone does
+// not ask for the output: "check for new status updates" reads them. Nouns
+// name the output; actions are verb phrases ("comment on", "留言") that ask
+// for it unless their clause reads or refuses.
+var loopOutputMarkers = []struct {
+	kind    string
+	nouns   []string
+	actions []string
+}{
+	{"statusUpdate", []string{"status update", "project update", "initiative update", "weekly update", "周更新", "项目更新", "状态更新", "进展更新", "周报"}, []string{"post an update", "post updates", "发布更新"}},
+	{"issue", nil, []string{"create an issue", "create issues", "create a new issue", "create new issues", "file an issue", "file issues", "open an issue", "创建 issue", "创建issue", "新建 issue", "新建issue", "创建问题", "创建任务"}},
+	{"comment", nil, []string{"comment on", "leave a comment", "add a comment", "post a comment", "reply with a comment", "评论", "留言"}},
+	{"document", nil, []string{"create a document", "write a document", "创建文档", "撰写文档"}},
+}
+
+var (
+	// loopWriteVerbs ask for something to be made or published.
+	loopWriteVerbs = regexp.MustCompile(`\b(post|posts|posting|publish|publishes|publishing|create|creates|creating|write|writes|writing|add|adds|adding|leave|leaves|leaving|submit|submits|send|sends|share|shares|file an|open an)\b|发布|发表|发送|发一|创建|新建|撰写|编写|写一|写入|提交|添加|留下|回复`)
+	// loopReadVerbs ask for something to be read, checked or summarised.
+	loopReadVerbs = regexp.MustCompile(`\b(check|checks|checking|whether|review|reviews|reviewing|read|reads|reading|look|looks|find|finds|see|summarize|summarise|summarizes|summarises|summary|summaries|list|lists|count|counts|monitor|monitors|track|tracks|watch|watches|collect|collects|gather|gathers)\b|检查|查看|看看|是否|有没有|有无|汇总|总结|统计|读取|阅读|列出|查询|监控|关注|回顾|获取|整理|现有|已有`)
+	// loopNegatedWrite refuses a write in the same clause ("do not post the update").
+	loopNegatedWrite = regexp.MustCompile(`\b(do not|don't|dont|never|without|must not|should not|shouldn't|no need to)\b[^.;:!?\n]*\b(post|posting|publish|publishing|create|creating|write|writing|add|adding|leave|submit|send|change|modify|update)\b|(不要|不用|无需|不需要|不必|别|勿|禁止|不得|不)\s*(发布|发表|发送|创建|新建|撰写|编写|写|提交|添加|修改|更改|留言|评论)`)
+	// loopNoWrites forbids writing anything ("read-only", "make no changes").
+	loopNoWrites      = regexp.MustCompile(`\bread[- ]only\b|\b(do not|don't|never)\s+(post|publish|write|create|change|modify|make)\s+(anything|any changes|any)\b|\bmake no changes\b|只读|仅读取|不要(发布|写入|创建|修改|更改)任何|不(做|作)任何(修改|更改)|不要做任何(修改|更改)|不写入|无需(发布|写入)任何`)
+	loopClauseBreak   = regexp.MustCompile(`[。；;！!？?\n，,、：:]|\.\s`)
+	loopSentenceBreak = regexp.MustCompile(`[。；;！!？?\n]|\.\s`)
+)
+
+// inferLoopOutputIntent reads side effects off the loop's text. A marker
+// counts as an expected output when its clause asks for a write ("post a
+// status update", "为每个 bug 留言"), or names it without any verb (a title
+// such as "Weekly update"); it does not when its clause (or, for a noun in a
+// clause with no verb, its sentence) only reads, checks or summarises, or
+// refuses the write.
+func inferLoopOutputIntent(text string) loopOutputExpectation {
 	text = strings.ToLower(text)
-	has := func(markers ...string) bool {
-		return slices.ContainsFunc(markers, func(marker string) bool { return strings.Contains(text, marker) })
+	if loopNoWrites.MatchString(text) {
+		return loopOutputExpectation{ReadOnly: true}
 	}
-	outputs := []string{}
-	if has("status update", "project update", "initiative update", "post an update", "post a weekly update", "post the weekly update", "weekly update", "post updates", "post an update", "周更新", "项目更新", "状态更新", "发布更新", "进展更新", "周报") {
-		outputs = append(outputs, "statusUpdate")
+	contains := func(clause string, markers []string) bool {
+		return slices.ContainsFunc(markers, func(marker string) bool { return strings.Contains(clause, marker) })
 	}
-	if has("create an issue", "create issues", "create a new issue", "create new issues", "file an issue", "file issues", "open an issue", "创建 issue", "创建issue", "新建 issue", "新建issue", "创建问题", "创建任务") {
-		outputs = append(outputs, "issue")
+	outputs, readOnly := []string{}, false
+	for _, sentence := range loopSentenceBreak.Split(text, -1) {
+		for _, clause := range loopClauseBreak.Split(sentence, -1) {
+			for _, group := range loopOutputMarkers {
+				action := contains(clause, group.actions)
+				if slices.Contains(outputs, group.kind) || !action && !contains(clause, group.nouns) {
+					continue
+				}
+				write := false
+				switch {
+				case loopNegatedWrite.MatchString(clause):
+				case loopWriteVerbs.MatchString(clause):
+					write = true
+				case loopReadVerbs.MatchString(clause):
+				case action:
+					write = true
+				case loopNegatedWrite.MatchString(sentence):
+				case loopWriteVerbs.MatchString(sentence):
+					write = true
+				case loopReadVerbs.MatchString(sentence):
+				default:
+					write = true
+				}
+				if write {
+					outputs = append(outputs, group.kind)
+				} else {
+					readOnly = true
+				}
+			}
+		}
 	}
-	if has("comment on", "leave a comment", "add a comment", "post a comment", "reply with a comment", "评论", "留言") {
-		outputs = append(outputs, "comment")
+	// Keep the kinds in their usual order.
+	ordered := []string{}
+	for _, kind := range loopOutputKinds {
+		if slices.Contains(outputs, kind) {
+			ordered = append(ordered, kind)
+		}
 	}
-	if has("create a document", "write a document", "创建文档", "撰写文档") {
-		outputs = append(outputs, "document")
-	}
-	return outputs
+	return loopOutputExpectation{Outputs: ordered, ReadOnly: readOnly && len(ordered) == 0}
 }
 
 // loopOutputKind is the kind of output a successful write tool call made.
