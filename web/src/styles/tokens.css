@@ -999,3 +999,4 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 /* Rows and controls inside member-style dialogs (measured on the reference app). */
 :root{--dialog-row-name:var(--release-text);--dialog-row-secondary:var(--release-secondary-fg);--dialog-row-hover:lch(20.82% 1.3 272);--dialog-control-bg:var(--release-bar-button-bg);--dialog-control-hover-bg:var(--release-bar-button-hover-bg);--dialog-primary-bg:var(--release-primary-bg);--dialog-primary-fg:var(--release-primary-fg);--dialog-primary-shadow:var(--release-button-shadow)}
 :root[data-theme="light"]{--dialog-row-name:lch(19.588% 1.25 282);--dialog-row-hover:lch(94.44% .5 282);--dialog-control-bg:var(--release-popover-bg);--dialog-control-hover-bg:lch(95.886% 0 282)}
+:root{--dialog-area-shift:0px;--dialog-top:33.333333vh;--dialog-lift:-33.333333%}
