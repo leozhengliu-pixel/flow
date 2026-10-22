@@ -1,0 +1,16 @@
+{
+  "name": "an explicit \"do not start a development session\" outranks the development words: the acknowledgement is posted and nothing starts",
+  "repositories": ["acme/api"],
+  "issue": {"title": "实现 multiply 接口", "description": "请直接回复确认收到。不要调用工具，不要启动开发会话。\nenvironmentId: {{env0}}"},
+  "maxTurns": 24,
+  "connector": "match",
+  "model": [
+    {"text": "收到。"}
+  ],
+  "expect": {"connectorCalls": 0, "coding": false, "replyContains": ["收到。"], "replyOmits": ["Coding 会话"]},
+  "exchanges": [
+    {"request": {"op":"start"}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"turn","round":0,"maxTurns":24,"connectors":true}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"finish","phase":"reply","text":"收到。"}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true,"reply":"收到。"}}
+  ]
+}
