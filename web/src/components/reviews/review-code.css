@@ -1,4 +1,4 @@
-.review-code{font-size:var(--review-code-size,12px)!important;line-height:20px!important;font-family:var(--font-monospace);color:var(--code-light-fg)}
+.review-code{font-size:var(--review-code-size,12px)!important;line-height:20px!important;font-family:var(--font-code);color:var(--code-light-fg)}
 .review-code[data-code-theme$="dark"]{color:var(--code-dark-fg)}
 .review-code .hljs-keyword,.review-code .hljs-selector-tag{color:var(--code-light-keyword)}
 .review-code .hljs-string,.review-code .hljs-attr{color:var(--code-light-string)}

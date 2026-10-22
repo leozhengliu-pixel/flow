@@ -243,7 +243,7 @@ article>header .review-diff-counts{margin-left:auto;margin-right:4px}
 .review-reviewed-toggle input{width:12px;height:12px;margin:0;accent-color:var(--accent-primary)}
 .review-file-actions{width:24px;height:24px;flex-basis:24px}
 .review-diff-empty{margin:8px;padding:28px 12px;border:1px dashed var(--review-card-border);border-radius:8px;color:var(--review-fg-muted);font-size:12px;text-align:center}
-.review-diff-table{overflow-x:auto;border-radius:0 0 8px 8px;font:12px/20px var(--font-monospace)}
+.review-diff-table{overflow-x:auto;border-radius:0 0 8px 8px;font:12px/20px var(--font-code)}
 .review-diff-row{display:grid;grid-template-columns:minmax(0,1fr);min-width:0}
 .review-diff-table.is-split .review-diff-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 .review-diff-cell{position:relative;display:grid;grid-template-columns:50px minmax(0,1fr);align-items:stretch;min-height:20px;white-space:pre;color:var(--review-fg)}
@@ -256,6 +256,9 @@ article>header .review-diff-counts{margin-left:auto;margin-right:4px}
 .review-diff-cell.is-add .review-diff-number{border-left-color:var(--review-diff-added-gutter);color:var(--review-diff-added-gutter)}
 .review-diff-cell.is-remove .review-diff-number{border-left-color:var(--review-diff-removed-gutter);color:var(--review-diff-removed-gutter)}
 .review-diff-cell>code{min-width:0;padding:0 10px;overflow:hidden;text-overflow:ellipsis}
+.review-diff-cell.is-add .review-word-mark{background:var(--review-diff-added-mark-bg)}
+.review-diff-cell.is-remove .review-word-mark{background:var(--review-diff-removed-mark-bg)}
+.review-word-mark{border-radius:4px;padding:2px 0}
 .review-diff-comment-button{position:absolute;top:0;left:3px;width:40px;height:20px;display:grid;place-items:center;padding:0;border:0;border-radius:9999px;background:var(--ui-pill-active-bg);color:var(--review-fg);opacity:0}
 .review-diff-cell:hover .review-diff-comment-button,.review-diff-comment-button:focus-visible{opacity:1}
 .review-diff-comment-button svg{width:14px;height:14px}

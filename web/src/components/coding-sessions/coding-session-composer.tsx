@@ -6,7 +6,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/compon
 import { SearchableMenuItems } from '@/components/ui/searchable-menu-items'
 import { useI18n } from '@/i18n/i18n'
 import { uploadAgentFile } from '@/lib/api'
-import { recommendedChoiceValue, type ApplicationActivity } from '@/lib/application-agents'
+import { type ApplicationActivity } from '@/lib/application-agents'
 import { commentShortcutMatches } from '@/lib/runtime-preferences'
 import { toast } from '@/lib/toast'
 import type { AgentMessageAttachment, BootstrapData } from '@/types/flow'
@@ -130,12 +130,11 @@ export function CodingComposer({ data, sessionId, generating, stopPending, canPr
   const approval = request?.kind === 'approval'
   const options: ComposerOption[] = approval
     ? [{ label: t('Approve'), value: 'approve' }, { label: t('Reject'), value: 'reject' }]
-    : elicitation?.signal === 'select' ? (elicitation.signalMetadata?.options ?? []).map(option => ({ label: option.label || option.value, value: option.value })) : []
+    : []
   const requestKey = approval ? 'approval' : elicitation?.id ?? ''
-  const recommended = elicitation?.signal === 'select' ? recommendedChoiceValue(elicitation.signalMetadata) : undefined
-  const [selected, setSelected] = useState<string | undefined>(recommended)
-  // A new question (or none) resets the choice to its recommendation.
-  useEffect(() => { setSelected(recommended) }, [requestKey, recommended])
+  const [selected, setSelected] = useState<string | undefined>()
+  // A new request (or none) clears the choice.
+  useEffect(() => { setSelected(undefined) }, [requestKey])
   const choice = options.find(option => option.value === selected)
   const agentName = t('Flow')
   const auth = elicitation?.signal === 'auth' ? elicitation : undefined
@@ -243,7 +242,8 @@ export function CodingComposer({ data, sessionId, generating, stopPending, canPr
           : <button type="submit" className="coding-session-composer-send" aria-label={t('Submit message')} disabled={busy || attachments.uploading || selectPending || !typed || !canPrompt}><AgentSubmitIcon size={14}/></button>}
     </div>
   </form>
-  if (!request) return editor
+  // A choice question is plain text in the stream, answered in the normal composer; only approvals and account links frame it.
+  if (!request || (elicitation && !auth)) return editor
   return <div className="cs-input-frame">
     <div className="cs-input-frame-header">
       {auth

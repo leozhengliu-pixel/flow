@@ -3,10 +3,11 @@
  * inline code comment composer for one file of DiffView.
  */
 import { ArrowUp, ArrowUpToLine, MessageSquarePlus, Minus, X } from "lucide-react";
-import { Fragment, type ReactNode } from "react";
+import { Fragment, type ReactNode, useMemo } from "react";
 
 import { ReviewCode } from "@/components/reviews/review-code";
 import type { DiffHunk, DiffLine } from "@/lib/diff-computer";
+import { pairedWordRanges, type TextRange } from "@/lib/word-diff";
 import { useI18n } from "@/i18n/i18n";
 import type { ReviewCommentSide } from "@/types/flow";
 
@@ -52,9 +53,12 @@ export function DiffLineCell({
   editable,
   dirty,
   onEdit,
+  marks,
 }: {
   line?: DiffLine;
   side: "old" | "new" | "unified";
+  /** Changed-word ranges of this line (see pairedWordRanges). */
+  marks?: TextRange[];
   path: string;
   onComment?: (value: DiffCommentTarget) => void;
   editable?: boolean;
@@ -103,7 +107,7 @@ export function DiffLineCell({
           {line.content}
         </code>
       ) : (
-        <ReviewCode content={line?.content ?? ""} path={path} />
+        <ReviewCode content={line?.content ?? ""} path={path} marks={marks} />
       )}
     </div>
   );
@@ -194,6 +198,13 @@ export function DiffContentRows({
   /** Threads and the inline composer, rendered under the row for a line number on one side of the diff. */
   renderAfterLine?: (line: number, side: ReviewCommentSide) => ReactNode;
 }) {
+  // Changed words inside paired removed/added lines, keyed by line object.
+  const wordMarks = useMemo(() => {
+    const result = new Map<DiffLine, TextRange[]>();
+    const source = hunks?.length ? hunks.flatMap((hunk) => hunk.lines) : lines;
+    for (const [index, ranges] of pairedWordRanges(source, (i) => source[i].content)) result.set(source[index], ranges);
+    return result;
+  }, [hunks, lines]);
   const dirtyKey = (line?: DiffLine) => (line ? `${path}:${line.newNumber ?? line.oldNumber}:${line.kind}` : "");
   const render = (anchors: Array<{ line: number; side: ReviewCommentSide }>) => {
     if (!renderAfterLine) return null;
@@ -226,7 +237,7 @@ export function DiffContentRows({
     rows.map((line, index) => (
       <Fragment key={`${line.oldNumber ?? ""}-${line.newNumber ?? ""}-${index}`}>
         <div className="review-diff-row">
-          <DiffLineCell line={line} side="unified" path={path} onComment={onComment} editable={editable} dirty={dirtyLines?.has(dirtyKey(line))} onEdit={onEdit} />
+          <DiffLineCell line={line} side="unified" path={path} onComment={onComment} editable={editable} dirty={dirtyLines?.has(dirtyKey(line))} onEdit={onEdit} marks={wordMarks.get(line)} />
         </div>
         {after(line)}
       </Fragment>
@@ -235,8 +246,8 @@ export function DiffContentRows({
     rows.map((row, index) => (
       <Fragment key={`${row.left?.oldNumber ?? ""}-${row.right?.newNumber ?? ""}-${index}`}>
         <div className="review-diff-row">
-          <DiffLineCell line={row.left} side="old" path={path} onComment={onComment} />
-          <DiffLineCell line={row.right} side="new" path={path} onComment={onComment} editable={editable} dirty={dirtyLines?.has(dirtyKey(row.right))} onEdit={onEdit} />
+          <DiffLineCell line={row.left} side="old" path={path} onComment={onComment} marks={row.left ? wordMarks.get(row.left) : undefined} />
+          <DiffLineCell line={row.right} side="new" path={path} onComment={onComment} editable={editable} dirty={dirtyLines?.has(dirtyKey(row.right))} onEdit={onEdit} marks={row.right ? wordMarks.get(row.right) : undefined} />
         </div>
         {afterSplit(row)}
       </Fragment>

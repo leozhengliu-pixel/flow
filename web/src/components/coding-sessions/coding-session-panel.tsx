@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { RotateCcw } from 'lucide-react'
+import { GitBranch, RotateCcw } from 'lucide-react'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { restartCodingSession, setCodingSessionSubscription, startReviewCodingSession, stopCodingSession } from '@/lib/coding-sessions-api'
@@ -11,8 +11,8 @@ import type { BootstrapData } from '@/types/flow'
 import type { CodingSession } from '@/types/coding-sessions'
 import { CodingSessionConversation } from './coding-session-conversation'
 import { notifyCodingSessionChanged } from './coding-session-events'
-import { CODING_PHASE_LABELS, codingModelLabel, codingSessionCapabilities, codingSessionStalled } from './coding-session-model'
-import { CodingChanges, CodingPhaseProgress, CodingPullRequests, CodingSandboxInfo, CodingStateBadge } from './coding-session-parts'
+import { codingModelLabel, codingSessionCapabilities, codingSessionStalled } from './coding-session-model'
+import { CodingChanges, CodingPullRequests } from './coding-session-parts'
 import { useCodingModelLabel, useCodingSession } from './use-coding-sessions'
 import { CodingSessionArtifacts } from './artifacts/coding-session-artifacts'
 import { CodingDiffViewer } from './coding-session-diff'
@@ -55,8 +55,6 @@ export function CodingSessionPanel({ session, data, onChange, onDismiss, onOpenS
   const busyRef = useRef(false)
   const [error, setError] = useState('')
   const changes = useRef<HTMLDivElement>(null)
-  const model = codingModelLabel(session)
-  const phase = CODING_PHASE_LABELS[session.phase]
   /** Runs a session action; false when it failed (the error shows under the panel). */
   const run = async (action: () => Promise<CodingSession | void>, done?: string) => {
     if (busyRef.current) return false
@@ -79,19 +77,8 @@ export function CodingSessionPanel({ session, data, onChange, onDismiss, onOpenS
 
   return <section className={`coding-session-panel${agentHidden ? ' is-agent-hidden' : ''}${className ? ` ${className}` : ''}`} data-state={session.state} data-phase={session.phase} aria-label={t('Coding session')}>
     <div className="coding-session-changes" ref={changes}>
-      <div className="coding-session-overview">
-        <CodingStateBadge state={session.state} session={session}/>
-        {phase && session.state !== 'error' && <span className="coding-session-phase">{t(phase)}</span>}
-        {/* No cost here: spend is reported in Settings › Usage, not on the session. */}
-        <span className="coding-session-meta">
-          <span className="coding-session-model" data-i18n-ignore>{model.harness} · {model.model}</span>
-        </span>
-      </div>
-      <CodingPhaseProgress session={session}/>
       {session.state === 'stale' && session.stoppedBy && <p className="coding-session-muted">{t('Stopped by {name}').replace('{name}', data.users.find(user => user.id === session.stoppedBy)?.displayName || t('a member'))}</p>}
-      {session.summary && session.state === 'complete' && <p className="coding-session-summary" data-i18n-ignore>{session.summary}</p>}
       <CodingPullRequests session={session} reviews={data.reviews ?? []} busy={busy} onFixChecks={(_, review) => void startOther(() => startReviewCodingSession(review.id, { kind: 'fix' }), 'Started a session to fix failing checks')}/>
-      <CodingSandboxInfo session={session}/>
       <CodingChanges session={session} commitsOnly/>
       {/* Plain screenshots show in the conversation, under the turn that took them; pairs and recordings stay here. */}
       <CodingSessionArtifacts sessionId={session.id} artifacts={session.artifacts} refreshKey={session.updatedAt} withScreenshots={false}/>
@@ -185,6 +172,13 @@ export function CodingSessionMenu({ session, data, busy, items, onArchive, onSta
           <span className="coding-session-menu-model-reason" data-i18n-ignore>{session.modelReason || model.harness}</span>
         </span>
       </DropdownMenuItem>
+      {(session.repository || session.branchName) && <DropdownMenuItem disabled className="coding-session-menu-detail">
+        <GitBranch size={16} aria-hidden="true"/>
+        <span className="coding-session-menu-model-text">
+          {session.repository && <span data-i18n-ignore>{session.repository}</span>}
+          {session.branchName && <span className="coding-session-menu-model-reason" data-i18n-ignore>{session.branchName}{session.baseRef ? ` → ${session.baseRef}` : ''}</span>}
+        </span>
+      </DropdownMenuItem>}
       <DropdownMenuSeparator/>
       <DropdownMenuItem role="menuitemcheckbox" aria-checked={subscribed} disabled={subscribing} className="coding-session-menu-subscribe" onSelect={event => { event.preventDefault(); void toggleSubscription() }}>
         <span className="coding-session-menu-grow">{t('Subscribe to session')}</span>

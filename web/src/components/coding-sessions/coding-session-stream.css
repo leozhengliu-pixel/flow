@@ -69,6 +69,11 @@
 .cs-text a{color:var(--cs-link-text);text-decoration:none}
 .cs-text a:hover{text-decoration:underline}
 .cs-text a code{color:inherit}
+/* Bulleted options of a choice question (the reference app's narration list: 24px indent, bullet 18px left of the text). */
+.cs-text ul{margin:6px 0;padding:0 0 0 24px;list-style:none}
+.cs-text li{position:relative;margin:0}
+.cs-text li::before{content:"•";position:absolute;left:-18px;color:var(--cs-label-muted)}
+.cs-text li>p{margin:0}
 .cs-reasoning.is-promoted{margin-top:12px}
 
 /* The label swap: the new text slides up from below, the old one out above, both with a short blur. */
