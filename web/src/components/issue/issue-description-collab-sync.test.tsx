@@ -138,3 +138,94 @@ describe('collaborative description: rewrites appended to a local text edit', ()
     expect(errors).toEqual([])
   })
 })
+
+type TableJson = { type?: string; text?: string; content?: TableJson[] }
+const tableRows = (editor: Editor) => {
+  const table = (editor.getJSON().content as TableJson[]).find(node => node.type === 'table')
+  const text = (node: TableJson): string => node.text ?? (node.content ?? []).map(text).join('')
+  return table?.content?.map(row => (row.content ?? []).map(text)) ?? []
+}
+const firstTablePos = (editor: Editor) => {
+  let found = -1
+  editor.state.doc.descendants((node, pos) => { if (found < 0 && node.type.name === 'table') found = pos; return found < 0 })
+  return found
+}
+
+describe('collaborative description: table commands', () => {
+  let errors: unknown[][]
+  beforeEach(() => {
+    sessionStorage.clear()
+    Socket.instances = []
+    Socket.queue = []
+    vi.stubGlobal('WebSocket', Socket)
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} })
+    Range.prototype.getClientRects = () => [] as unknown as DOMRectList
+    Range.prototype.getBoundingClientRect = () => new DOMRect()
+    errors = []
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { errors.push(args) })
+  })
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
+
+  it('typing "|--" in a new empty paragraph inserts the default table in both editors without tripping the appended-transaction sync', async () => {
+    const [first, second] = await mountPair('Intro text')
+    act(() => { first.commands.focus('end'); first.commands.splitBlock() })
+    act(() => { typeText(first, '|--') })
+    expect(errors).toEqual([])
+    expect(tableRows(first)).toEqual([['', ''], ['', ''], ['', '']])
+    const inserted = first.getJSON().content?.[1] as TableJson
+    const rowTypes = inserted.content?.map(row => row.content?.map(cell => cell.type))
+    expect(rowTypes).toEqual([['tableHeader', 'tableHeader'], ['tableCell', 'tableCell'], ['tableCell', 'tableCell']])
+    act(() => { Socket.deliver() })
+    expect(second.getJSON()).toEqual(first.getJSON())
+    // Typing into the first cell right after the rule keeps both editors in step.
+    act(() => { typeText(first, 'Name') })
+    act(() => { Socket.deliver() })
+    expect(tableRows(second)[0][0]).toBe('Name')
+    expect(errors).toEqual([])
+  })
+
+  it('a pasted spreadsheet (tab separated text) becomes a table that the other editor receives', async () => {
+    const [first, second] = await mountPair('Intro text')
+    act(() => { first.commands.focus('end'); first.commands.splitBlock() })
+    const event = new Event('paste', { bubbles: true, cancelable: true })
+    const values: Record<string, string> = { 'text/plain': 'a\tb\n1\t2', 'text/html': '' }
+    Object.defineProperty(event, 'clipboardData', { value: { types: ['text/plain'], files: [], items: [], getData: (type: string) => values[type] ?? '' } })
+    act(() => { first.view.dom.dispatchEvent(event) })
+    expect(errors).toEqual([])
+    expect(tableRows(first)).toEqual([['a', 'b'], ['1', '2']])
+    act(() => { Socket.deliver() })
+    expect(second.getJSON()).toEqual(first.getJSON())
+  })
+
+  it('sorting, moving and duplicating from the table menus converge in the other editor and undo in one step', async () => {
+    const { sortColumn, moveLine, duplicateLine } = await import('@/components/editor/table/table-lines')
+    const [first, second] = await mountPair('Intro text')
+    act(() => { first.commands.focus('end'); first.commands.splitBlock() })
+    act(() => {
+      first.commands.insertContent('<table><tr><th><p>Name</p></th><th><p>Qty</p></th></tr><tr><td><p>banana</p></td><td><p>10</p></td></tr><tr><td><p>Apple</p></td><td><p>9</p></td></tr><tr><td><p>cherry</p></td><td><p>100</p></td></tr></table>')
+    })
+    act(() => { Socket.deliver() })
+    expect(tableRows(second)).toEqual(tableRows(first))
+    const before = tableRows(first)
+    act(() => { sortColumn(first, { tablePos: firstTablePos(first), axis: 'column', index: 1 }, 'asc') })
+    expect(tableRows(first).map(row => row[1])).toEqual(['Qty', '9', '10', '100'])
+    act(() => { Socket.deliver() })
+    expect(tableRows(second)).toEqual(tableRows(first))
+    act(() => { moveLine(second, { tablePos: firstTablePos(second), axis: 'column', index: 0 }, 'after') })
+    act(() => { Socket.deliver() })
+    expect(tableRows(first)[0]).toEqual(['Qty', 'Name'])
+    expect(tableRows(second)).toEqual(tableRows(first))
+    // Yjs groups edits made within its capture window into one undo step; let the earlier edits close their group.
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 650)) })
+    act(() => { duplicateLine(first,{ tablePos: firstTablePos(first), axis: 'row', index: 1 }) })
+    act(() => { Socket.deliver() })
+    expect(tableRows(second)).toHaveLength(5)
+    expect(tableRows(second)).toEqual(tableRows(first))
+    act(() => { first.commands.undo() })
+    act(() => { Socket.deliver() })
+    expect(tableRows(first)).toHaveLength(4)
+    expect(tableRows(second)).toEqual(tableRows(first))
+    expect(before).toHaveLength(4)
+    expect(errors).toEqual([])
+  })
+})

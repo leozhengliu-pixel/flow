@@ -141,3 +141,39 @@
 }
 .flow-table__menu .menu-item { height: 32px; gap: 8px; margin: 0; padding: 0 14px; border-radius: 0; white-space: nowrap; }
 .flow-table__menu .menu-item svg { flex: none; color: var(--action-menu-muted); }
+
+/* Row / column handles: small pills on the left edge and top edge of the hovered row / column. */
+.flow-table__lines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.flow-table__chrome .flow-table__line-handle {
+  width: 12px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--theme-border-strong);
+  color: var(--bright);
+}
+.flow-table__chrome .flow-table__line-handle[data-axis="column"] {
+  width: 22px;
+  height: 12px;
+}
+.flow-table__chrome .flow-table__line-handle svg { width: 10px; height: 10px; }
+.flow-table__chrome .flow-table__line-handle:hover,
+.flow-table__chrome .flow-table__line-handle[data-state="open"],
+.flow-table__chrome .flow-table__line-handle[data-active] {
+  background: var(--accent-primary);
+  color: var(--on-accent);
+}
+.flow-table__menu-shortcut {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: auto;
+  padding-left: 12px;
+  color: var(--theme-text-secondary);
+  font-size: 11px;
+  line-height: 1;
+}
+.flow-table__menu-shortcut kbd { padding: 0; border: 0; background: none; color: inherit; font: inherit; }
+.flow-table__line-menu .menu-chevron { margin-left: auto; }
