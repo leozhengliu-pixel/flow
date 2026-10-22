@@ -33,7 +33,7 @@ import {
   copyDocumentMarkdown, copyDocumentTitle, copyDocumentUrl, DOCUMENT_TEMPLATE_APPLIED_EVENT, documentOwner, renameDocument, toggleDocumentFavorite,
   type DocumentActionContext, type DocumentTemplateAppliedDetail, type DocumentUiAction,
 } from './document-actions'
-import { DocumentAccessDialog } from './document-access-dialog'
+import { DocumentAccessDialog, type DocumentAccessChange } from './document-access-dialog'
 import { DocumentAuthorLabels } from './document-author-labels'
 import { DocumentBreadcrumb, type DocumentOrigin } from './document-breadcrumb'
 import { DeletedDocumentMenuItems } from './document-deleted-menu'
@@ -203,16 +203,13 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
     catch (error) { toast.error(error instanceof Error ? error.message : t('Could not load document access')) }
     finally { setAccessBusy(false) }
   }
-  const updateAccess = async (subjectType: string, subjectId: string, role: string) => {
-    if (accessBusy) return
-    setAccessBusy(true)
-    try {
-      const next = permissions.filter(item => !(item.subjectType === subjectType && item.subjectId === subjectId))
-      if (role !== 'none') next.push({ subjectType, subjectId, role } as DocumentPermission)
-      setPermissions(await replaceDocumentPermissions(document.id, next.map(item => ({ subjectType: item.subjectType, subjectId: item.subjectId, role: item.role }))))
-      await onReload()
-    } catch (error) { toast.error(error instanceof Error ? error.message : t('Could not update document access')) }
-    finally { setAccessBusy(false) }
+  /** Applies every staged change in one replace request (atomic: all changes land or none). Rejects so the dialog stays open. */
+  const saveAccess = async (changes: DocumentAccessChange[]) => {
+    const touched = new Set(changes.map(change => `${change.subjectType}:${change.subjectId}`))
+    const next = permissions.filter(item => !touched.has(`${item.subjectType}:${item.subjectId}`))
+    for (const change of changes) if (change.role !== 'none') next.push({ subjectType: change.subjectType, subjectId: change.subjectId, role: change.role } as DocumentPermission)
+    setPermissions(await replaceDocumentPermissions(document.id, next.map(item => ({ subjectType: item.subjectType, subjectId: item.subjectId, role: item.role }))))
+    try { await onReload() } catch { /* the permissions are already saved; a failed refresh must not read as a failed save */ }
   }
 
   const openOwnerPicker = () => { setEditedOpen(true); setOwnerOpen(true) }
@@ -307,7 +304,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
     </article>
     {resolvedOpen && !deleted && <ResolvedCommentsPanel data={data} document={document} comments={comments} editor={liveEditor} canComment={canComment} canEdit={canEdit} onReload={onReload} onClose={closeResolved}/>}
     {!deleted && <DocumentHistoryDialog document={document} onOpenChange={setHistoryOpen} onRestore={restoreRevision} open={historyOpen}/>}
-    {!deleted && <DocumentAccessDialog busy={accessBusy} data={data} document={document} onChangeRole={(type, id, role) => void updateAccess(type, id, role)} onOpenChange={setAccessOpen} open={accessOpen} permissions={permissions}/>}
+    {!deleted && <DocumentAccessDialog data={data} document={document} onOpenChange={setAccessOpen} onSave={saveAccess} open={accessOpen} permissions={permissions}/>}
     <DocumentCustomReminderDialog onOpenChange={reminder.setCustomOpen} onRemind={reminder.remind} open={reminder.customOpen}/>
   </main></IssueAgentTasksProvider></SelectionIssueProvider>
 }

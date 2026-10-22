@@ -4,6 +4,7 @@
  */
 export const documentsPageZhCN: Record<string, string> = {
   'Could not save': '无法保存',
+  'Unsaved change': '未保存的更改',
   '{name} is editing': '{name} 正在编辑',
   'Open chat': '打开聊天',
   'Document breadcrumb': '文档面包屑导航',
