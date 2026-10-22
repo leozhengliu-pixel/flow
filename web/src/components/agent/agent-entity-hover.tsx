@@ -12,6 +12,7 @@ import { LabelHoverPreviewContent } from '@/components/property/label-hover-prev
 import { InitiativeStatusIcon } from '@/components/initiatives/initiative-shared'
 import { ReleaseStatusIcon } from '@/components/releases/release-icons'
 import { UserAvatar } from '@/components/ui/user-avatar'
+import { liveActorUser } from '@/lib/actor-attribution'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { useI18n } from '@/i18n/i18n'
 import { markdownPlainText } from '@/lib/markdown-plain-text'
@@ -197,7 +198,7 @@ export function AgentEntityCardBody({ data, entity }: { data: BootstrapData; ent
     case 'document': return <DocumentCard data={data} document={entity.document}/>
     case 'view': return <ViewCard data={data} view={entity.view}/>
     case 'user': {
-      const { user } = entity
+      const user = liveActorUser(entity.user)
       const name = user.displayName || user.name
       const teamIds = new Set((data.teamMembers ?? []).filter(member => member.userId === user.id).map(member => member.teamId))
       const teams = (data.teams ?? []).filter(team => teamIds.has(team.id))
