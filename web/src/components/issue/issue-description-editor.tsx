@@ -6,6 +6,7 @@ import StarterKit from '@tiptap/starter-kit'
 import { TableKit } from '@tiptap/extension-table'
 import { flowTableKit, insertDefaultTable, tableSlashCommands } from '@/components/editor/table'
 import { FlowCodeBlock, FlowCodeBlockSchema } from '@/components/editor/code-block/code-block-extension'
+import { LinkBehavior } from '@/components/editor/link-behavior'
 import { MarkdownPaste } from '@/components/editor/markdown-paste'
 import { OutlineMinimap } from '@/components/editor/outline/outline-minimap'
 import { Markdown } from '@tiptap/markdown'
@@ -186,6 +187,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       // TrailingNode appends a random-client paragraph even on selection-only
       // transactions. In a CRDT that would accumulate one paragraph per reader.
       StarterKit.configure({ heading: { levels: [1, 2, 3, 4] }, codeBlock: false, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: collaborationSession ? false : undefined, trailingNode: collaborationSession ? false : undefined }),
+      LinkBehavior,
       FlowCodeBlock,
       ...flowTableKit,
       ...structuredBlocks,

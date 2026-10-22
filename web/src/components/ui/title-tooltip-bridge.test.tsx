@@ -27,6 +27,19 @@ describe('TitleTooltipBridge', () => {
     expect(screen.queryByRole('tooltip')).toBeNull()
   })
 
+  it('shows data-tooltip-text without rewriting the element', () => {
+    vi.useFakeTimers()
+    render(<><TitleTooltipBridge/><a href="https://example.com" data-tooltip-text="example.com">site</a></>)
+    const link = screen.getByRole('link')
+    fireEvent.pointerOver(link, { pointerType: 'mouse' })
+    expect(link.getAttributeNames().sort()).toEqual(['data-tooltip-text', 'href'])
+    act(() => vi.advanceTimersByTime(450))
+    expect(screen.getByRole('tooltip')).toHaveTextContent('example.com')
+    fireEvent.pointerOut(link, { relatedTarget: document.body })
+    expect(link.getAttributeNames().sort()).toEqual(['data-tooltip-text', 'href'])
+    expect(screen.queryByRole('tooltip')).toBeNull()
+  })
+
   it('uses the lighter palette for titles over elevated and raised surfaces', () => {
     vi.useFakeTimers()
     render(<><TitleTooltipBridge/><div data-tooltip-elevated><button type="button" title="Attach"><svg/></button></div><div data-tooltip-raised><button type="button" title="Close"><svg/></button></div></>)

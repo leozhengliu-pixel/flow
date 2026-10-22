@@ -58,8 +58,13 @@ export function clientNavigationTarget(anchor: HTMLAnchorElement, current: URL):
   let url: URL
   try { url = new URL(href, current) } catch { return }
   if (url.origin !== current.origin) return
-  if (/^\/(?:api|oauth|login|signup|register|forgot-password|reset-password|verify-email|invite)(?:\/|$)/.test(url.pathname)) return
   if (url.pathname === current.pathname && url.search === current.search && url.hash) return
+  return appRoutePath(url)
+}
+
+/** The in-app path of a same-origin URL that names a client route (not an API, auth or unknown path). */
+export function appRoutePath(url: URL): string | undefined {
+  if (/^\/(?:api|oauth|login|signup|register|forgot-password|reset-password|verify-email|invite)(?:\/|$)/.test(url.pathname)) return
   const route = parseAppRoute(url.pathname, url.search)
   if (route.kind === 'not-found' || route.kind === 'root') return
   return url.pathname + url.search + url.hash

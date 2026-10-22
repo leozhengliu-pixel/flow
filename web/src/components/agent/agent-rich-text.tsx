@@ -3,6 +3,7 @@ import { Markdown } from '@tiptap/markdown'
 import { EditorContent, useEditor } from '@tiptap/react'
 import { TableKit } from '@tiptap/extension-table'
 import StarterKit from '@tiptap/starter-kit'
+import { LinkBehavior } from '@/components/editor/link-behavior'
 import { FlowCodeBlock } from '@/components/editor/code-block/code-block-extension'
 import { structuredBlocks } from '@/components/issue/editor/structured-blocks'
 import { AgentEntityNode } from './agent-entity-node'
@@ -16,7 +17,7 @@ export function AgentRichText({ ariaLabel = 'AI message', className = 'agent-ric
     immediatelyRender: false,
     editable: false,
     // Code blocks use the editor's node view: line numbers, hover header (language, settings, copy) and syntax highlighting.
-    extensions: [StarterKit.configure({ codeBlock: false }), FlowCodeBlock, Markdown, ...structuredBlocks, TableKit.configure({ table: { resizable: false } }), AgentEntityNode],
+    extensions: [StarterKit.configure({ codeBlock: false, link: { openOnClick: false } }), LinkBehavior, FlowCodeBlock, Markdown, ...structuredBlocks, TableKit.configure({ table: { resizable: false } }), AgentEntityNode],
     content: content || ' ',
     contentType: 'markdown',
     editorProps: { attributes: { class: `${className} ${styles.richText}`, role: 'document', 'aria-label': ariaLabel } },
