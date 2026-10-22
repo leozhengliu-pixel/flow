@@ -1,5 +1,6 @@
 import { createElement, useCallback, useRef, useState, type ReactNode } from 'react'
 import { useI18n } from '@/i18n/i18n'
+import { confirmAction } from '@/components/ui/action-dialog-service'
 import { ApiError } from '@/lib/api-client'
 import { archiveCodingSession, fetchCodingEnvironments, fetchCodingSessions, startIssueCodingSession } from '@/lib/coding-sessions-api'
 import { toast } from '@/lib/toast'
@@ -79,20 +80,26 @@ export function useIssueCodingSessionStarter(issue: StartIssue, data: BootstrapD
 
 /**
  * Delegating an issue to the built-in Flow agent starts a coding session for it when coding sessions are on and an
- * environment exists. Removing that agent from the issue archives its running session (archiving ends the session
- * and closes its open pull requests); the unassign flow's "Remove <agent> too?" dialog is the only question. Wraps the delegate picker's `onUpdate`;
- * other updates pass straight through.
+ * environment exists. Removing that agent from the issue's delegate row ("No agent", `promptArchive`) drops the
+ * delegate at once and then asks "Archive session with <agent>?" for its unarchived sessions, running or finished:
+ * "Skip" leaves them (a running session keeps going), "Archive session" archives them (which ends a running session
+ * and closes its open pull requests). Removing it through the unassign flow's "Remove <agent> too?" dialog, which
+ * already said it would archive the working session, archives the running ones without a second question.
+ * Wraps the delegate picker's `onUpdate`; other updates pass straight through.
  */
 export function useDelegateCodingSession(issue: StartIssue, data: BootstrapData, onUpdate: (input: IssueUpdateInput) => void | Promise<void>) {
   const { t } = useI18n()
   const starter = useIssueCodingSessionStarter(issue, data)
   const { available, start } = starter
   const previousDelegate = issue.delegate
-  const update = useCallback(async (input: { assigneeId?: string; delegateId?: string }) => {
+  const update = useCallback(async (request: { assigneeId?: string; delegateId?: string; promptArchive?: boolean }) => {
+    const { promptArchive, ...input } = request
     await onUpdate(input)
     if (!available || input.delegateId === undefined) return
     if (input.delegateId === '') {
-      if (previousDelegate?.builtinAgent) await archiveWorkingSessions(issue, t)
+      if (!previousDelegate?.builtinAgent) return
+      if (promptArchive) await offerArchive(issue, previousDelegate.displayName || previousDelegate.name, t)
+      else await archiveWorkingSessions(issue, t)
       return
     }
     const delegate = data.users.find(user => user.id === input.delegateId)
@@ -110,10 +117,27 @@ async function archiveWorkingSessions(issue: StartIssue, t: Translate) {
   let sessions: CodingSession[]
   try { sessions = (await fetchCodingSessions({ issueId: issue.id })).filter(session => !session.archivedAt && !isCodingSessionTerminal(session)) }
   catch { return }
+  await archiveSessions(issue, sessions, t)
+}
+
+async function archiveSessions(issue: StartIssue, sessions: CodingSession[], t: Translate) {
   for (const session of sessions) {
     try {
       const archived = await archiveCodingSession(session.id)
       notifyCodingSessionChanged({ sessionId: archived.id, agentSessionId: archived.agentSessionId, issueId: issue.id })
     } catch (error) { toast.error(error instanceof Error ? error.message : t('Could not archive session')) }
   }
+}
+
+/** The reference app's dialog after "No agent" on the delegate row: archive the agent's unarchived sessions, or skip. */
+async function offerArchive(issue: StartIssue, agentName: string, t: Translate) {
+  let sessions: CodingSession[]
+  try { sessions = (await fetchCodingSessions({ issueId: issue.id })).filter(session => !session.archivedAt) }
+  catch { return }
+  if (!sessions.length) return
+  const confirmed = await confirmAction(t('Archive session with {name}?').replace('{name}', agentName), {
+    description: t('{name} has been removed from this issue. Do you want to archive the agent session? It can be restored at any time.').replace('{name}', agentName),
+    confirmLabel: t('Archive session'), cancelLabel: t('Skip'), danger: false,
+  })
+  if (confirmed) await archiveSessions(issue, sessions, t)
 }
