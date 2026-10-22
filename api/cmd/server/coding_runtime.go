@@ -109,8 +109,11 @@ func (s *server) initCodingCore(services *codingServices) {
 	// testing is on) and the screenshots section of the PR/MR body.
 	services.service.BrowserGuidance = func() string { return coding.BrowserGuidance }
 	// Follow-up write scope: the Flow Agent model settles requests the
-	// scope parser is unsure about (coding_turn_scope.go).
-	services.service.TurnScopeModel = coding.TurnScopeModelFunc(s.classifyCodingTurnScope)
+	// scope parser is unsure about (coding_turn_scope.go). Without a model
+	// the parser's answer is final and the turn is never held pending.
+	if s.turnScopeModelConfigured() {
+		services.service.TurnScopeModel = coding.TurnScopeModelFunc(s.classifyCodingTurnScope)
+	}
 	services.service.DecoratePullRequestBody = func(ctx context.Context, session domain.CodingSession, body string) string {
 		section, err := s.CodingArtifactMarkdown(ctx, session.WorkspaceKey, session.ID, "")
 		if err != nil {

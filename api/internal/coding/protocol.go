@@ -175,6 +175,12 @@ type Turn struct {
 	// ScopeSource says how Scope was decided: "user" (chosen with the
 	// request), "kind", "rules" or "model".
 	ScopeSource string `json:"scopeSource,omitempty"`
+	// ScopePendingSince (unix ms) marks a queued turn whose scope the model
+	// is still settling (Scope holds the parser's answer meanwhile). Such a
+	// turn is never delivered to a runner; a pending mark older than
+	// TurnScopePendingStale falls back to Scope at dispatch. Always 0 on a
+	// delivered turn.
+	ScopePendingSince int64 `json:"scopePendingSince,omitempty"`
 }
 
 // SetupSecretsResponse is GET /internal/coding-runtime/setup-secrets. It is

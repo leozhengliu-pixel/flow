@@ -130,6 +130,20 @@ func (s Store) UndeliveredCodingInbox(ctx context.Context, sessionID string) ([]
 	return inboxItems(s.SQLiteStore.UndeliveredCodingInbox(ctx, sessionID))
 }
 
+func (s Store) UpdateUndeliveredCodingTurn(ctx context.Context, sessionID string, seq int64, mutate func(*coding.Turn) bool) (bool, error) {
+	updated, err := s.SQLiteStore.UpdateUndeliveredCodingInbox(ctx, sessionID, seq, func(raw []byte) ([]byte, error) {
+		var payload inboxPayload
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			return nil, err
+		}
+		if payload.Turn == nil || !mutate(payload.Turn) {
+			return nil, nil
+		}
+		return json.Marshal(payload)
+	})
+	return updated, mapErr(err)
+}
+
 // SandboxRecord converts a coding_sandboxes row.
 func SandboxRecord(row store.CodingSandbox) sandbox.Record {
 	return sandbox.Record{

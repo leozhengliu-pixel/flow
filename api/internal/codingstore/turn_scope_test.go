@@ -2,8 +2,11 @@ package codingstore
 
 import (
 	"context"
+	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"flow/api/internal/coding"
 	"flow/api/internal/domain"
@@ -111,9 +114,9 @@ func TestFollowUpTurnsCarryTheirScope(t *testing.T) {
 	if _, err := h.svc.CompleteTurn(ctx, token, boot.Turn.ID, coding.TurnCompleteRequest{Status: coding.TurnSuccess}); err != nil {
 		t.Fatal(err)
 	}
-	asked := 0
+	var asked atomic.Int32 // the model is asked in the background
 	h.svc.TurnScopeModel = coding.TurnScopeModelFunc(func(context.Context, string) (string, error) {
-		asked++
+		asked.Add(1)
 		return coding.TurnScopeReadOnly, nil
 	})
 	var after int64
@@ -123,7 +126,9 @@ func TestFollowUpTurnsCarryTheirScope(t *testing.T) {
 		if _, err := h.svc.Prompt(ctx, workspace, session.ID, input); err != nil {
 			t.Fatal(err)
 		}
-		inbox, err := h.svc.Inbox(ctx, token, after, 0)
+		// An unsure request is settled in the background: the long poll
+		// returns it once the model answered.
+		inbox, err := h.svc.Inbox(ctx, token, after, 10*time.Second)
 		if err != nil || len(inbox.Items) != 1 || inbox.Items[0].Turn == nil {
 			t.Fatalf("inbox: %+v %v", inbox, err)
 		}
@@ -149,10 +154,209 @@ func TestFollowUpTurnsCarryTheirScope(t *testing.T) {
 			t.Errorf("%q (%q): scope %q from %q, want %q from %q", c.input.Prompt, c.input.Scope, turn.Scope, turn.ScopeSource, c.scope, c.source)
 		}
 	}
-	if asked != 1 {
-		t.Fatalf("the model is asked only for the unsure request: %d calls", asked)
+	if asked.Load() != 1 {
+		t.Fatalf("the model is asked only for the unsure request: %d calls", asked.Load())
 	}
 	if _, err := h.svc.Prompt(ctx, workspace, session.ID, coding.PromptInput{Prompt: "Fix it.", AuthorID: "user1", Scope: "publishEverything"}); err == nil {
 		t.Fatal("an unknown scope is refused")
+	}
+}
+
+// followUpSession runs a session's first turn and returns it with its
+// sandbox token, ready for follow-ups.
+func followUpSession(t *testing.T, h *harness) (domain.CodingSession, string) {
+	t.Helper()
+	ctx := context.Background()
+	session := h.start("Add dark mode")
+	session = h.drive(session.ID, domain.CodingPhaseStarting)
+	h.simulateSandboxes()
+	token := h.tokens[session.SandboxID]
+	boot, err := h.svc.Bootstrap(ctx, token, 0)
+	if err != nil || boot.Turn == nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	if _, err := h.svc.Heartbeat(ctx, token, coding.HeartbeatRequest{Phase: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.svc.CompleteTurn(ctx, token, boot.Turn.ID, coding.TurnCompleteRequest{Status: coding.TurnSuccess}); err != nil {
+		t.Fatal(err)
+	}
+	return session, token
+}
+
+// inboxTurns are the turn items of an inbox answer.
+func inboxTurns(inbox coding.InboxResponse) []coding.InboxItem {
+	var turns []coding.InboxItem
+	for _, item := range inbox.Items {
+		if item.Kind == coding.InboxTurn && item.Turn != nil {
+			turns = append(turns, item)
+		}
+	}
+	return turns
+}
+
+// storedTurn is the queued item of a turn as stored.
+func storedTurn(t *testing.T, h *harness, sessionID, turnID string) coding.InboxItem {
+	t.Helper()
+	items, err := h.store.CodingInbox(context.Background(), sessionID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range items {
+		if item.Turn != nil && item.Turn.ID == turnID {
+			return item
+		}
+	}
+	t.Fatalf("turn %s is not queued: %+v", turnID, items)
+	return coding.InboxItem{}
+}
+
+// Sending a follow-up the parser is unsure about never waits on the model:
+// the turn is queued at once, held back (with the turns behind it) while
+// its scope is pending, and delivered with the model's answer.
+func TestUnsureFollowUpIsQueuedAtOnceAndWaitsForItsScope(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	session, token := followUpSession(t, h)
+	calls, release := make(chan context.Context, 1), make(chan string)
+	h.svc.TurnScopeModel = coding.TurnScopeModelFunc(func(ctx context.Context, _ string) (string, error) {
+		calls <- ctx
+		select {
+		case answer := <-release:
+			return answer, nil
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+	})
+
+	request, cancel := context.WithCancel(ctx)
+	began := time.Now()
+	if _, err := h.svc.Prompt(request, workspace, session.ID, coding.PromptInput{Prompt: "Why does the build fail on CI?", AuthorID: "user1", TurnID: "turn_unsure"}); err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(began); elapsed > time.Second {
+		t.Fatalf("Prompt waited %s for the model", elapsed)
+	}
+	cancel() // the request ends; the classification carries on
+	if _, err := h.svc.Prompt(ctx, workspace, session.ID, coding.PromptInput{Prompt: "Fix the login bug and push.", AuthorID: "user1", TurnID: "turn_sure"}); err != nil {
+		t.Fatal(err)
+	}
+	var modelCtx context.Context
+	select {
+	case modelCtx = <-calls:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the model was not asked")
+	}
+	if deadline, ok := modelCtx.Deadline(); !ok || time.Until(deadline) > coding.TurnScopeModelTimeout {
+		t.Fatalf("the model call is bounded by the timeout: %v %v", deadline, ok)
+	}
+	if queued := storedTurn(t, h, session.ID, "turn_unsure").Turn; queued.ScopePendingSince == 0 || queued.Scope != coding.TurnScopeWrite || queued.ScopeSource != coding.TurnScopeSourceRules {
+		t.Fatalf("queued with the parser's answer, pending: %+v", queued)
+	}
+
+	// Pending: neither the turn nor the one behind it is delivered.
+	inbox, err := h.svc.Inbox(ctx, token, 0, 300*time.Millisecond)
+	if err != nil || len(inboxTurns(inbox)) != 0 {
+		t.Fatalf("a pending turn was delivered: %+v %v", inbox, err)
+	}
+	if modelCtx.Err() != nil {
+		t.Fatalf("the classification was cancelled with the request: %v", modelCtx.Err())
+	}
+
+	release <- coding.TurnScopeReadOnly
+	inbox, err = h.svc.Inbox(ctx, token, 0, 10*time.Second)
+	turns := inboxTurns(inbox)
+	if err != nil || len(turns) != 1 || turns[0].Turn.ID != "turn_unsure" {
+		t.Fatalf("the settled turn is delivered first: %+v %v", inbox, err)
+	}
+	if turn := turns[0].Turn; turn.Scope != coding.TurnScopeReadOnly || turn.ScopeSource != coding.TurnScopeSourceModel || turn.ScopePendingSince != 0 {
+		t.Fatalf("delivered with the model's scope: %+v", turn)
+	}
+	if _, err := h.svc.CompleteTurn(ctx, token, "turn_unsure", coding.TurnCompleteRequest{Status: coding.TurnSuccess, Scope: coding.TurnScopeReadOnly}); err != nil {
+		t.Fatal(err)
+	}
+	inbox, err = h.svc.Inbox(ctx, token, turns[0].Seq, 5*time.Second)
+	if turns = inboxTurns(inbox); err != nil || len(turns) != 1 || turns[0].Turn.ID != "turn_sure" || turns[0].Turn.Scope != coding.TurnScopeWrite {
+		t.Fatalf("the next turn follows: %+v %v", inbox, err)
+	}
+}
+
+// A model error or timeout settles the pending scope with the parser's
+// answer.
+func TestPendingScopeFallsBackToTheParserOnModelFailure(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	session, token := followUpSession(t, h)
+	h.svc.TurnScopeModel = coding.TurnScopeModelFunc(func(ctx context.Context, request string) (string, error) {
+		if strings.Contains(request, "README") {
+			return "", errors.New("overloaded")
+		}
+		<-ctx.Done() // never answers: the timeout ends the call
+		return "", ctx.Err()
+	})
+	var after int64
+	for _, c := range []struct{ turn, prompt, scope string }{
+		{"turn_error", "Just check the README and fix the typos.", coding.TurnScopeNoPublish},
+		{"turn_timeout", "Why does the build fail on CI?", coding.TurnScopeWrite},
+	} {
+		if _, err := h.svc.Prompt(ctx, workspace, session.ID, coding.PromptInput{Prompt: c.prompt, AuthorID: "user1", TurnID: c.turn}); err != nil {
+			t.Fatal(err)
+		}
+		inbox, err := h.svc.Inbox(ctx, token, after, coding.TurnScopeModelTimeout+5*time.Second)
+		turns := inboxTurns(inbox)
+		if err != nil || len(turns) != 1 || turns[0].Turn.ID != c.turn {
+			t.Fatalf("%s: %+v %v", c.turn, inbox, err)
+		}
+		if turn := turns[0].Turn; turn.Scope != c.scope || turn.ScopeSource != coding.TurnScopeSourceRules || turn.ScopePendingSince != 0 {
+			t.Fatalf("%s falls back to the parser: %+v", c.turn, turn)
+		}
+		after = turns[0].Seq
+		if _, err := h.svc.CompleteTurn(ctx, token, c.turn, coding.TurnCompleteRequest{Status: coding.TurnSuccess, Scope: c.scope}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// A pending scope whose settling was lost (the API restarted during the
+// model call) does not hold the turn forever: once stale, dispatch falls
+// back to the parser's answer.
+func TestStalePendingScopeFallsBackAtDispatch(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	session, token := followUpSession(t, h)
+	// No model and no settler: what is left after a restart.
+	turn := coding.Turn{ID: "turn_orphan", Prompt: "Just check the README and fix the typos.", AuthorID: "user1", Kind: coding.TurnFollowUp, Scope: coding.TurnScopeNoPublish, ScopeSource: coding.TurnScopeSourceRules, ScopePendingSince: time.Now().UnixMilli()}
+	seq, err := h.store.EnqueueCodingInbox(ctx, workspace, session.ID, coding.InboxItem{Kind: coding.InboxTurn, Turn: &turn})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inbox, err := h.svc.Inbox(ctx, token, 0, 0); err != nil || len(inboxTurns(inbox)) != 0 {
+		t.Fatalf("a fresh pending scope holds the turn: %+v %v", inbox, err)
+	}
+	if queued := storedTurn(t, h, session.ID, "turn_orphan").Turn; queued.ScopePendingSince == 0 {
+		t.Fatalf("still pending: %+v", queued)
+	}
+	// Time passes beyond TurnScopePendingStale.
+	stale := time.Now().Add(-coding.TurnScopePendingStale - time.Second).UnixMilli()
+	if ok, err := h.store.UpdateUndeliveredCodingTurn(ctx, session.ID, seq, func(turn *coding.Turn) bool {
+		turn.ScopePendingSince = stale
+		return true
+	}); err != nil || !ok {
+		t.Fatalf("age the mark: %v %v", ok, err)
+	}
+	inbox, err := h.svc.Inbox(ctx, token, 0, 0)
+	turns := inboxTurns(inbox)
+	if err != nil || len(turns) != 1 || turns[0].Turn.ID != "turn_orphan" {
+		t.Fatalf("the stale turn is delivered: %+v %v", inbox, err)
+	}
+	if got := turns[0].Turn; got.Scope != coding.TurnScopeNoPublish || got.ScopeSource != coding.TurnScopeSourceRules || got.ScopePendingSince != 0 {
+		t.Fatalf("delivered with the parser's answer: %+v", got)
+	}
+	// The fallback is stored, and a late settle cannot rewrite the turn.
+	if ok, err := h.store.UpdateUndeliveredCodingTurn(ctx, session.ID, seq, func(*coding.Turn) bool { return true }); err != nil || ok {
+		t.Fatalf("a delivered turn is not rewritten: %v %v", ok, err)
+	}
+	if stored := storedTurn(t, h, session.ID, "turn_orphan").Turn; stored.ScopePendingSince != 0 {
+		t.Fatalf("stored: %+v", stored)
 	}
 }

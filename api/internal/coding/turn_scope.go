@@ -28,6 +28,9 @@ import (
 //  4. When the parser is not sure (no signal at all, or signals that
 //     contradict each other) and a model is configured, one short bounded
 //     classification call decides; any failure keeps the parser's answer.
+//     The turn is queued at once with the parser's answer, marked pending,
+//     and the model's answer is settled in the background; a runner never
+//     receives a turn whose scope is still pending (turn_scope_pending.go).
 //
 // The decision is stored on the queued turn, so redeliveries and restarts of
 // the runner reuse it (one classification per turn).
@@ -96,15 +99,36 @@ type TurnScopeDecision struct {
 // model consulted only when the rules are unsure. A model error, timeout or
 // unusable answer keeps the rules' answer.
 func ResolveTurnScope(ctx context.Context, kind, explicit, request string, model TurnScopeModel) TurnScopeDecision {
+	decision, ask := PlanTurnScope(kind, explicit, request, model)
+	if !ask {
+		return decision
+	}
+	return AskTurnScopeModel(ctx, model, request, decision)
+}
+
+// PlanTurnScope is ResolveTurnScope without the model call: the decision of
+// the explicit scope, the turn kind or the parser, and whether the model
+// should still be asked (the parser is unsure and a model is configured).
+// Prompt queues the turn with this decision right away and settles the
+// model's answer in the background (turn_scope_pending.go).
+func PlanTurnScope(kind, explicit, request string, model TurnScopeModel) (TurnScopeDecision, bool) {
 	if scope, err := NormalizeTurnScope(explicit); err == nil && scope != "" {
-		return TurnScopeDecision{Scope: scope, Source: TurnScopeSourceUser}
+		return TurnScopeDecision{Scope: scope, Source: TurnScopeSourceUser}, false
 	}
 	if writeTurnKinds[kind] {
-		return TurnScopeDecision{Scope: TurnScopeWrite, Source: TurnScopeSourceKind}
+		return TurnScopeDecision{Scope: TurnScopeWrite, Source: TurnScopeSourceKind}, false
 	}
 	parsed := ParseTurnScope(request)
 	decision := TurnScopeDecision{Scope: parsed.Scope, Source: TurnScopeSourceRules, Rule: parsed.Rule, Match: parsed.Match}
-	if parsed.Sure || model == nil {
+	return decision, !parsed.Sure && model != nil
+}
+
+// AskTurnScopeModel asks the model about a request (bounded input, at most
+// TurnScopeModelTimeout); an error, timeout or unusable answer returns
+// fallback.
+func AskTurnScopeModel(ctx context.Context, model TurnScopeModel, request string, fallback TurnScopeDecision) TurnScopeDecision {
+	decision := fallback
+	if model == nil {
 		return decision
 	}
 	text := strings.TrimSpace(request)

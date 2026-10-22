@@ -776,11 +776,21 @@ func (s *Service) Prompt(ctx context.Context, workspaceKey, id string, in Prompt
 	if kind == "" {
 		kind = TurnFollowUp
 	}
-	// The turn's write scope is decided once, here, and travels with the turn.
-	scope := ResolveTurnScope(ctx, kind, in.Scope, in.Prompt, s.TurnScopeModel)
-	slog.Info("coding turn scope", "session", id, "turn", turnID, "kind", kind, "scope", scope.Scope, "source", scope.Source, "rule", scope.Rule)
-	if _, err := s.store.EnqueueCodingInbox(ctx, workspaceKey, id, InboxItem{Kind: InboxTurn, Turn: &Turn{ID: turnID, Prompt: in.Prompt, AuthorID: in.AuthorID, Attachments: in.Attachments, Kind: kind, Scope: scope.Scope, ScopeSource: scope.Source}}); err != nil {
+	// The turn's write scope is decided once, here, and travels with the
+	// turn. When the parser is unsure, the model's answer is settled in the
+	// background and the turn waits for it (turn_scope_pending.go).
+	scope, ask := PlanTurnScope(kind, in.Scope, in.Prompt, s.TurnScopeModel)
+	slog.Info("coding turn scope", "session", id, "turn", turnID, "kind", kind, "scope", scope.Scope, "source", scope.Source, "rule", scope.Rule, "pending", ask)
+	turn := &Turn{ID: turnID, Prompt: in.Prompt, AuthorID: in.AuthorID, Attachments: in.Attachments, Kind: kind, Scope: scope.Scope, ScopeSource: scope.Source}
+	if ask {
+		turn.ScopePendingSince = s.now().UTC().UnixMilli()
+	}
+	seq, err := s.store.EnqueueCodingInbox(ctx, workspaceKey, id, InboxItem{Kind: InboxTurn, Turn: turn})
+	if err != nil {
 		return session, err
+	}
+	if ask {
+		s.settleTurnScope(ctx, id, seq, turnID, in.Prompt, scope)
 	}
 	s.inbox.notify(id)
 	recorded := s.commitsRecorded(ctx, id)

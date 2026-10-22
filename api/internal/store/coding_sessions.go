@@ -706,6 +706,31 @@ func (s *SQLiteStore) UndeliveredCodingInbox(ctx context.Context, sessionID stri
 	return s.readCodingInbox(ctx, `SELECT seq,kind,payload FROM coding_session_inbox WHERE session_id=? AND delivered_at=0 ORDER BY seq LIMIT 200`, sessionID)
 }
 
+// UpdateUndeliveredCodingInbox rewrites the payload of an undelivered item
+// with mutate (nil from mutate leaves it as is). The write is a
+// compare-and-swap on the payload that was read, so it reports false when
+// the item was delivered or changed in between.
+func (s *SQLiteStore) UpdateUndeliveredCodingInbox(ctx context.Context, sessionID string, seq int64, mutate func(payload []byte) ([]byte, error)) (bool, error) {
+	var payload []byte
+	err := s.db.QueryRowContext(ctx, `SELECT payload FROM coding_session_inbox WHERE session_id=? AND seq=? AND delivered_at=0`, sessionID, seq).Scan(&payload)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	next, err := mutate(payload)
+	if err != nil || next == nil {
+		return false, err
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE coding_session_inbox SET payload=? WHERE session_id=? AND seq=? AND delivered_at=0 AND payload=?`, next, sessionID, seq, payload)
+	if err != nil {
+		return false, err
+	}
+	count, err := result.RowsAffected()
+	return count == 1, err
+}
+
 // PendingCodingTurns counts undelivered turns.
 func (s *SQLiteStore) PendingCodingTurns(ctx context.Context, sessionID string) (int, error) {
 	var count int
