@@ -1,6 +1,6 @@
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import Placeholder from '@tiptap/extension-placeholder'
-import StarterKit from '@tiptap/starter-kit'
+import { FlowStarterKit } from '@/components/editor/flow-starter-kit'
 import { useEffect, useRef } from 'react'
 import { useI18n } from '@/i18n/i18n'
 import { handleEditorSubmit } from './editor/editor-keyboard'
@@ -26,7 +26,7 @@ export function IssueTitleEditor({ value, onChange, onBlur, onEnter, onSubmit, a
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit.configure({
+      FlowStarterKit.configure({
         blockquote: false,
         bulletList: false,
         code: false,

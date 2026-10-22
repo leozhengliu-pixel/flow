@@ -1,6 +1,6 @@
 import { ArrowUp, Paperclip } from 'lucide-react'
 import Placeholder from '@tiptap/extension-placeholder'
-import StarterKit from '@tiptap/starter-kit'
+import { FlowStarterKit } from '@/components/editor/flow-starter-kit'
 import { EditorContent, useEditor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import { SelectionToolbar } from '@/components/issue/editor/selection-toolbar'
@@ -65,7 +65,7 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
   const editor = useEditor({
     immediatelyRender: false,
     // Headings, collapsible sections and checklists back the selection toolbar's text-style, collapse and list menus.
-    extensions: [StarterKit.configure({ heading: { levels: [1, 2, 3, 4] }, link: { openOnClick: false, autolink: true, linkOnPaste: true } }), LinkBehavior, ...structuredBlocks, EmbedPasteNode, MentionChipNode, MentionLinksExtension.configure({ getData: () => entityDataRef.current }), DescriptionImage, DescriptionFile, DescriptionVideo, Placeholder.configure({ placeholder: t(placeholder) })],
+    extensions: [FlowStarterKit.configure({ heading: { levels: [1, 2, 3, 4] }, link: { openOnClick: false, autolink: true, linkOnPaste: true } }), LinkBehavior, ...structuredBlocks, EmbedPasteNode, MentionChipNode, MentionLinksExtension.configure({ getData: () => entityDataRef.current }), DescriptionImage, DescriptionFile, DescriptionVideo, Placeholder.configure({ placeholder: t(placeholder) })],
     content: initialDocument?.type === 'doc' ? initialDocument : initialBody || { type: 'doc', content: [{ type: 'paragraph' }] },
     editorProps: { handleTextInput: handleEmoticonInput, attributes: { class: 'comment-prosemirror', role: 'textbox', 'aria-label': t(placeholder), 'aria-multiline': 'true' }, handleKeyDown: (_view, event) => { const current=mentionRef.current;if(current&&!event.isComposing){const options=optionsRef.current;if(event.key==='Escape'){setMention(undefined);mentionRef.current=undefined;return true}if(options.length&&(event.key==='ArrowDown'||event.key==='ArrowUp')){const next={...current,index:(current.index+(event.key==='ArrowDown'?1:-1)+options.length)%options.length};mentionRef.current=next;setMention(next);event.preventDefault();return true}if(options.length&&(event.key==='Enter'||event.key==='Tab')&&editor){event.preventDefault();insertMention(editor,options[current.index]??options[0]);return true}} if (!event.isComposing && commentShortcutMatches(event)) { event.preventDefault(); void submit(); return true } if (handleSelectionShortcut(event, _view.state.selection, _view.state.doc, selectionActionsRef.current, editorRef.current)) return true; if (event.key === 'Escape' && onCancel) { event.preventDefault(); onCancel(); return true } return false } },
     onUpdate: ({editor}) => { const json = editor.getJSON() as Record<string, unknown>; draftDocument.current = json; const text = commentText(editor); setEmpty(!commentSendable(text, json)); setDraftBody(text);updateMention(editor) },

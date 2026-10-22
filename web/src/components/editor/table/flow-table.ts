@@ -5,6 +5,7 @@ import { DEFAULT_TABLE } from './table-commands'
 import { TableLineHighlight } from './table-line-highlight'
 import { moveSelectedLine } from './table-lines'
 import { TablePaste } from './table-paste'
+import { TableDefaultWidths } from './table-widths'
 
 /**
  * Table with the Flow hover chrome (add row / add column, table actions, row and column menus, block handle). Column
@@ -71,4 +72,4 @@ export const FlowTableCell = TableCell.extend({
 }).configure({ HTMLAttributes: { class: 'flow-table-cell' } })
 
 /** Spread this where `TableKit.configure({ table: { resizable: true } })` was used. */
-export const flowTableKit = [FlowTable.configure({ resizable: true }), TableRow, FlowTableHeader, FlowTableCell, TablePaste, TableLineHighlight]
+export const flowTableKit = [FlowTable.configure({ resizable: true }), TableRow, FlowTableHeader, FlowTableCell, TablePaste, TableLineHighlight, TableDefaultWidths]

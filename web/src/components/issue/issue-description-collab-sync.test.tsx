@@ -228,4 +228,41 @@ describe('collaborative description: table commands', () => {
     expect(before).toHaveLength(4)
     expect(errors).toEqual([])
   })
+
+  const columnWidths = (editor: Editor) => {
+    const table = (editor.getJSON().content as Array<{ type?: string; content?: Array<{ content?: Array<{ attrs?: { colwidth?: number[] | null } }> }> }>).find(node => node.type === 'table')
+    return table?.content?.map(row => row.content?.map(cell => cell.attrs?.colwidth?.[0] ?? null)) ?? []
+  }
+
+  it('default column widths: a new table, an inserted column and a duplicated column reach the other editor, and concurrent inserts converge', async () => {
+    const { duplicateLine } = await import('@/components/editor/table/table-lines')
+    const [first, second] = await mountPair('Intro text')
+    act(() => { first.commands.focus('end'); first.commands.splitBlock() })
+    act(() => { typeText(first, '|--') })
+    expect(columnWidths(first)).toEqual([[390, 390], [390, 390], [390, 390]])
+    act(() => { Socket.deliver() })
+    expect(columnWidths(second)).toEqual(columnWidths(first))
+    act(() => { first.commands.addColumnAfter() })
+    expect(columnWidths(first)).toEqual([[260, 260, 260], [260, 260, 260], [260, 260, 260]])
+    act(() => { Socket.deliver() })
+    expect(second.getJSON()).toEqual(first.getJSON())
+    act(() => { duplicateLine(second, { tablePos: firstTablePos(second), axis: 'column', index: 0 }) })
+    act(() => { Socket.deliver() })
+    expect(columnWidths(first)[0]).toEqual([260, 260, 260, 260])
+    // Both editors insert a column at the same time: the widths both computed are identical, so nothing diverges.
+    act(() => { first.commands.addColumnAfter(); second.commands.addColumnAfter(); Socket.deliver() })
+    act(() => { Socket.deliver() })
+    expect(second.getJSON()).toEqual(first.getJSON())
+    expect(columnWidths(first).every(row => row?.every(width => typeof width === 'number'))).toBe(true)
+    expect(errors).toEqual([])
+  })
+
+  it('bold italic text keeps the same nesting in both editors', async () => {
+    const [first, second] = await mountPair('Intro text')
+    act(() => { first.commands.focus('end'); first.commands.insertContent('<p><strong><em>both</em></strong></p>') })
+    act(() => { Socket.deliver() })
+    expect(second.getJSON()).toEqual(first.getJSON())
+    expect(first.getHTML()).toContain('<em><strong>both</strong></em>')
+    expect(second.getHTML()).toContain('<em><strong>both</strong></em>')
+  })
 })

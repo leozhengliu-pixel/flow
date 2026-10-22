@@ -2,7 +2,7 @@ import { ChevronsDownUp, Code2, Heading1, Heading2, Heading3, Heading4, Image as
 import Placeholder from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCaret from '@tiptap/extension-collaboration-caret'
-import StarterKit from '@tiptap/starter-kit'
+import { FlowStarterKit } from '@/components/editor/flow-starter-kit'
 import { TableKit } from '@tiptap/extension-table'
 import { flowTableKit, insertDefaultTable, tableSlashCommands } from '@/components/editor/table'
 import { FlowCodeBlock, FlowCodeBlockSchema } from '@/components/editor/code-block/code-block-extension'
@@ -186,7 +186,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     extensions: [
       // TrailingNode appends a random-client paragraph even on selection-only
       // transactions. In a CRDT that would accumulate one paragraph per reader.
-      StarterKit.configure({ heading: { levels: [1, 2, 3, 4] }, codeBlock: false, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: collaborationSession ? false : undefined, trailingNode: collaborationSession ? false : undefined }),
+      FlowStarterKit.configure({ heading: { levels: [1, 2, 3, 4] }, codeBlock: false, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: collaborationSession ? false : undefined, trailingNode: collaborationSession ? false : undefined }),
       LinkBehavior,
       FlowCodeBlock,
       ...flowTableKit,
@@ -558,7 +558,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
 
 function schemaExtensions() {
   return [
-    StarterKit.configure({ heading: { levels: [1, 2, 3, 4] }, codeBlock: false, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: false, trailingNode: false }),
+    FlowStarterKit.configure({ heading: { levels: [1, 2, 3, 4] }, codeBlock: false, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: false, trailingNode: false }),
     FlowCodeBlockSchema,
     TableKit.configure({ table: { resizable: true } }),
     ...structuredBlocks,

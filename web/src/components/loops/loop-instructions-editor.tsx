@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Markdown } from "@tiptap/markdown";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
+import { FlowStarterKit } from '@/components/editor/flow-starter-kit'
 import { AgentEntityDataContext, useAgentEntityData } from "@/components/agent/agent-entity-data";
 import { LinkBehavior } from "@/components/editor/link-behavior";
 import { MentionLinksExtension } from "@/components/editor/mentions/mention-links-extension";
@@ -112,7 +112,7 @@ function LoopInstructionsEditorBody({
     immediatelyRender: false,
     editable: !readOnly,
     extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3, 4] }, link: { openOnClick: false, autolink: true } }),
+      FlowStarterKit.configure({ heading: { levels: [1, 2, 3, 4] }, link: { openOnClick: false, autolink: true } }),
       LinkBehavior,
       Markdown,
       LoopEntityNode,
