@@ -406,7 +406,7 @@ func TestLoopRunFailureReasonsAndRetries(t *testing.T) {
 	srv, handler := newReliableLoopServer(t, provider)
 
 	// Transient provider failures are retried with backoff.
-	provider.replies = []string{"status:503", "status:502", "All done."}
+	provider.replies = []string{"status:503", "status:502", `tool:finish_run {"status":"done","summary":"All done."}`}
 	loop, started := startTestRun(t, handler, "Digest", "Summarize open bugs.", nil)
 	run := waitForRun(t, handler, loop.ID, started.ID)
 	if run.Status != "completed" || run.Retries != 2 || run.Output != "All done." {

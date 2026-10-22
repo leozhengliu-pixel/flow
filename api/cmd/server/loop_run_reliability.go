@@ -835,8 +835,11 @@ func loopOutputKind(name string, args map[string]any) string {
 
 // acceptLoopRun decides how a run that ended without an error finishes: a
 // run whose loop implies side effects completes only when it produced them.
-func acceptLoopRun(loop domain.Loop, run *domain.LoopRun) (string, string, string) {
+func acceptLoopRun(loop domain.Loop, run *domain.LoopRun, ending *loopRunEnding) (string, string, string) {
 	run.ExpectedOutputs = effectiveLoopOutputs(loop)
+	if ending != nil {
+		return "needs_review", ending.reason, ending.message
+	}
 	if run.Summary != nil && run.Summary.Status == "incomplete" {
 		message := "The agent reported unfinished work"
 		if len(run.Summary.NotDone) > 0 {
@@ -864,6 +867,79 @@ func acceptLoopRun(loop domain.Loop, run *domain.LoopRun) (string, string, strin
 		message += " (the agent reported there was nothing to do)"
 	}
 	return "needs_review", "no_output", message
+}
+
+// loopRunEnding is how the agent ended a run or reply it did not finish:
+// the failure reason and an accurate message.
+type loopRunEnding struct {
+	reason  string
+	message string
+}
+
+// loopMaxCorrections caps the continuation prompts a run or reply gets when
+// a turn ends without finishing; each one also counts as a model turn.
+const loopMaxCorrections = 2
+
+const (
+	loopContinuePrompt = "You ended your turn after saying what you would do next, without doing it. Do the remaining steps now with the tools. Do not repeat changes that already succeeded."
+	loopFinishPrompt   = "You ended the run with plain text and without finish_run. If everything the instructions ask for is done, call finish_run now with your report (status done, or nothing_to_do). If anything remains, do it with the tools first. Do not repeat changes that already succeeded."
+	loopStoppedMessage = "The agent stopped after saying it would continue, without doing the remaining work"
+)
+
+// loopPromisePattern matches a message that announces the next step rather
+// than reporting a result ("I will check the remaining items now.").
+var loopPromisePattern = regexp.MustCompile(`(?i)^((ok|okay|sure|alright)[,.!]?\s*)?(i will|i'll|i am going to|i'm going to|let me|let's|next,? i|now,? i|i need to|first,? i|i am now|i'm now|going to)\b|^((好的|好|嗯)[，,。!！]?\s*)?(我将|我会|我先|我来|让我|接下来|下面我|现在我|现在开始|我需要|我要|稍后|马上|正在)`)
+
+// loopTextPromisesMoreWork reports whether a turn's text only announces work
+// still to come. A long answer is an answer even when it starts with "I will".
+func loopTextPromisesMoreWork(text string) bool {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return true
+	}
+	length := len([]rune(text))
+	if strings.HasSuffix(text, ":") || strings.HasSuffix(text, "：") || strings.HasSuffix(text, "…") || strings.HasSuffix(text, "...") {
+		return length < 600
+	}
+	return length <= 280 && loopPromisePattern.MatchString(text)
+}
+
+// loopCompletionCheck decides what follows a turn that ended without tool
+// calls: a continuation prompt (bounded by loopMaxCorrections), the end of the
+// work, or the end with an unfinished reason. A run must end with finish_run
+// (its structured report): a plain-text ending gets one prompt to report or
+// continue, after which a final answer is accepted and a promise is saved as
+// unfinished. A reply's plain-text answer is complete unless it only promises
+// work, or ends without reporting a tool call that failed.
+func loopCompletionCheck(rec *loopRunRecorder, text string, corrections int) (string, *loopRunEnding) {
+	pending := loopTextPromisesMoreWork(text)
+	var failed *domain.LoopRunToolCall
+	if _, calls, _ := rec.parts(); len(*calls) > 0 {
+		if last := (*calls)[len(*calls)-1]; last.Status == "error" || last.Status == "blocked" {
+			failed = &last
+		}
+	}
+	failedNote := func() string {
+		if failed == nil {
+			return ""
+		}
+		return fmt.Sprintf(" Your last tool call (%s) failed: %s. Retry it if it can succeed, or report it as not done.", firstNonEmpty(failed.Label, failed.Name), failed.Error)
+	}
+	switch {
+	case pending && corrections < loopMaxCorrections:
+		prompt := loopContinuePrompt
+		if !rec.answering {
+			prompt += " When everything is done, call finish_run with your report."
+		}
+		return prompt + failedNote(), nil
+	case pending:
+		return "", &loopRunEnding{reason: "incomplete", message: loopStoppedMessage}
+	case !rec.answering && corrections == 0:
+		return loopFinishPrompt + failedNote(), nil
+	case failed != nil && !rec.answering:
+		return "", &loopRunEnding{reason: "tool_error", message: fmt.Sprintf("The agent ended without reporting that %s failed: %s", firstNonEmpty(failed.Label, failed.Name), failed.Error)}
+	}
+	return "", nil
 }
 
 // loopWriteToolName reports whether a recorded tool call could change data.
