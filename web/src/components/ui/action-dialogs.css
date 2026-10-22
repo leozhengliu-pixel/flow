@@ -6,9 +6,9 @@ body:has(.dialog-content.action-dialog) .select-control-menu{z-index:1700}
 body:has(.dialog-content.action-dialog) [data-radix-popper-content-wrapper]:has(>.select-control-menu){z-index:1700!important}
 .dialog-content.action-dialog{
   z-index:1601;
-  top:26vh;
+  top:var(--dialog-top);
   left:50%;
-  transform:translateX(-50%);
+  transform:translate(-50%,var(--dialog-lift));
   width:min(480px,calc(100vw - 32px));
   padding:32px;
   border-radius:12px;

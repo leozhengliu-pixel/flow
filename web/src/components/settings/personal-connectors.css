@@ -26,7 +26,7 @@
 .personal-connector-tool-list li{overflow:hidden;padding:3px 0;color:var(--pk-text);font:400 13px/19.5px var(--font);text-overflow:ellipsis;white-space:nowrap}
 
 /* Rename dialog, centered over the settings content */
-.dialog-content.personal-connector-dialog{left:calc(50% + 118px);top:calc(100dvh / 3);transform:translate(-50%,-33.333333%);box-sizing:border-box;max-width:calc(100vw - 32px);border:.5px solid var(--theme-border);border-radius:12px;background:var(--theme-surface-1);color:var(--theme-text-primary);box-shadow:var(--shadow-dialog)}
+.dialog-content.personal-connector-dialog{left:50%;top:calc(100dvh / 3);transform:translate(-50%,-33.333333%);box-sizing:border-box;max-width:calc(100vw - 32px);border:.5px solid var(--theme-border);border-radius:12px;background:var(--theme-surface-1);color:var(--theme-text-primary);box-shadow:var(--shadow-dialog)}
 @media(max-width:900px){.dialog-content.personal-connector-dialog{left:50%}}
 .personal-connector-dialog h2{margin:0;color:var(--theme-text-primary);font-size:15px;font-weight:600;line-height:23px}
 .personal-connector-dialog footer{display:flex;justify-content:flex-end;gap:8px}

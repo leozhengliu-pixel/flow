@@ -1,5 +1,5 @@
 /* People with access dialog. Own file: no dependence on document-page.css.
-   Chrome follows the team "Add members" dialog of the reference app (560 wide, top 26vh,
+   Chrome follows the team "Add members" dialog of the reference app (560 wide, one third of the free space above,
    16px header padding, 15px/600 title, 28px round close, 32px pill footer buttons, panel colours from
    the shared --dialog-* tokens); rows follow its members table (50px rows, 24px avatars, 13px name over
    12px secondary line). Colours below were measured in both themes. */

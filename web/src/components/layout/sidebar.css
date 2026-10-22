@@ -419,7 +419,7 @@
 
 .sidebar-customize-dialog.dialog-content {
   top: 50%;
-  left: calc(50% + 118px);
+  left:50%;
   box-sizing: border-box;
   width: 480px;
   height: 670px;
