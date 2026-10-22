@@ -38,6 +38,7 @@ async function execute(run: AgentRun) {
   const session = worker.session({
     sessionId: run.sessionId,
     flowToken: token,
+    guard: request => client.guard(run.id, request),
     systemPrompt: payload.systemPrompt ?? flowSystemPrompt({ workspace: run.workspaceKey, userName: 'the requester', today: new Date().toISOString().slice(0, 10) }),
   })
   sessions.set(run.id, session)

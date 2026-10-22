@@ -62,6 +62,7 @@ func (s *server) registerAgentRuntimeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /internal/agent-runtime/runs/{id}/complete", s.agentRuntimeRun(false, s.completeAgentRun))
 	mux.HandleFunc("POST /internal/agent-runtime/runs/{id}/token", s.agentRuntimeRun(false, s.createAgentRunToken))
 	mux.HandleFunc("POST /internal/agent-runtime/runs/{id}/activities", s.agentRuntimeRun(true, s.postAgentRunActivity))
+	mux.HandleFunc("POST /internal/agent-runtime/runs/{id}/guard", s.agentRuntimeRun(true, s.agentRunGuard))
 	mux.HandleFunc("GET /internal/agent-runtime/runs/{id}/changes", s.agentRuntimeRun(true, s.listAgentRunChanges))
 	mux.HandleFunc("GET /internal/agent-runtime/runs/{id}/state", s.agentRuntimeRun(true, s.getAgentSessionState))
 	mux.HandleFunc("PUT /internal/agent-runtime/runs/{id}/state", s.agentRuntimeRun(true, s.putAgentSessionState))
@@ -408,15 +409,15 @@ func (s *server) builtinRunRequest(r *http.Request, task domain.AgentTask) (*htt
 	return request, data, appUser, key, nil
 }
 
-// ensureWorkerRunCoding gives a worker run the in-process agent's Coding guarantee. The worker runs its own model
-// loop (agent-worker), so Flow cannot bound its connector reads or step in at its forced-decision turn; it checks
-// when the run finishes instead: a delegation whose request clearly asks for code changes, with Coding available
+// ensureWorkerRunCoding is the completion-time fallback of the in-process agent's Coding guarantee for a worker
+// run that did not have its last word through the run guard (agent_runtime_guard.go; an older worker, or one
+// that lost the guard): a delegation whose request clearly asks for code changes, with Coding available
 // and no coding session yet, is moved into Coding through the same tool path (or ends with the environment
 // blocker), and the thread gets the action and the session's state. Mentions and replies are left to the worker:
 // they share the delegation's session (issueCodingIdempotencyKey) only when the issue is delegated.
 func (s *server) ensureWorkerRunCoding(r *http.Request, run store.AgentRun) {
 	task, err := s.store.AgentTask(r.Context(), run.WorkspaceKey, run.SessionID)
-	if err != nil || task.Trigger != "delegation" || task.CodingSessionID != "" {
+	if err != nil || task.Trigger != "delegation" || task.CodingSessionID != "" || s.workerRunGuardFinished(r.Context(), run) {
 		return
 	}
 	request, data, _, _, err := s.builtinRunRequest(r, task)

@@ -1,0 +1,20 @@
+{
+  "name": "a development run that reaches the worker's own turn cap without Coding is moved into it",
+  "repositories": ["acme/api"],
+  "issue": {"title": "Add the multiply endpoint", "description": "Implement the multiply endpoint, add unit tests and open a draft MR."},
+  "maxTurns": 3,
+  "connector": "none",
+  "model": [
+    {"call": {"name": "get_issue", "arguments": {"id": "{{issue}}"}}},
+    {"call": {"name": "get_issue", "arguments": {"id": "{{issue}}"}}},
+    {"call": {"name": "get_issue", "arguments": {"id": "{{issue}}"}}}
+  ],
+  "expect": {"connectorCalls": 0, "coding": true, "environment": "{{env0}}", "replyContains": ["Started a coding session for {{issue}}"]},
+  "exchanges": [
+    {"request": {"op":"start"}, "response": {"codingDue":true,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"turn","round":0,"maxTurns":3,"connectors":false}, "response": {"codingDue":true,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"turn","round":1,"maxTurns":3,"connectors":false}, "response": {"codingDue":true,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"turn","round":2,"maxTurns":3,"connectors":false}, "response": {"codingDue":true,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"finish","phase":"turnLimit","text":""}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true,"reply":"Started a coding session for {{issue}}; it is running. The code changes, test results and the draft MR will appear in the session when it finishes — nothing is delivered yet.","transferred":true}}
+  ]
+}

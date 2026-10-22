@@ -265,7 +265,12 @@ func (g *builtinRunGuard) exhausted() bool {
 
 // mustDecide reports whether turn round (0-based) runs without connector tools.
 func (g *builtinRunGuard) mustDecide(round int) bool {
-	return g.exhausted() || round >= maxAgentToolTurns-builtinDecisionTurns
+	return g.mustDecideWithin(round, maxAgentToolTurns)
+}
+
+// mustDecideWithin is mustDecide for a run whose turn cap is maxTurns (the worker runtime keeps its own cap).
+func (g *builtinRunGuard) mustDecideWithin(round, maxTurns int) bool {
+	return g.exhausted() || round >= maxTurns-builtinDecisionTurns
 }
 
 // canonicalToolCallKey is a call's tool and arguments with object keys sorted, so the same search spelled with

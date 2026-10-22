@@ -725,6 +725,7 @@ var InternalRoutes = []string{
 	"POST /internal/agent-runtime/claim",
 	"POST /internal/agent-runtime/runs/{id}/activities",
 	"POST /internal/agent-runtime/runs/{id}/complete",
+	"POST /internal/agent-runtime/runs/{id}/guard",
 	"POST /internal/agent-runtime/runs/{id}/heartbeat",
 	"POST /internal/agent-runtime/runs/{id}/token",
 	"PUT /internal/agent-runtime/runs/{id}/state",

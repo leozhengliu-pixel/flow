@@ -1,0 +1,16 @@
+{
+  "name": "a done claim instead of Coding: Flow starts it in the environment of the repository the issue names",
+  "repositories": ["acme/api", "acme/web"],
+  "issue": {"title": "Add the multiply endpoint", "description": "Implement the multiply endpoint in acme/web, add unit tests and open a draft MR."},
+  "maxTurns": 24,
+  "connector": "match",
+  "model": [
+    {"text": "I have implemented the endpoint and opened a draft MR."}
+  ],
+  "expect": {"connectorCalls": 0, "coding": true, "environment": "{{env1}}", "replyContains": ["Started a coding session for {{issue}}"], "replyOmits": ["I have implemented"]},
+  "exchanges": [
+    {"request": {"op":"start"}, "response": {"codingDue":true,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"turn","round":0,"maxTurns":24,"connectors":true}, "response": {"codingDue":true,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"finish","phase":"reply","text":"I have implemented the endpoint and opened a draft MR."}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true,"reply":"Started a coding session for {{issue}}; it is running. The code changes, test results and the draft MR will appear in the session when it finishes — nothing is delivered yet.","transferred":true}}
+  ]
+}

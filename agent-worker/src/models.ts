@@ -106,12 +106,15 @@ export type ModelObserver = (record: ModelCallRecord) => void
  */
 export class ObservedModel implements Model {
   observer?: ModelObserver
+  /** Rewrites a finished model turn's output before the runner acts on it (the run guard's forced decision). */
+  rewrite?: <T extends { type?: string }>(output: T[]) => T[]
   constructor(private readonly inner: Model) {}
 
   async getResponse(request: ModelRequest): Promise<ModelResponse> {
     const startedAt = Date.now()
     try {
       const response = await this.inner.getResponse(request)
+      if (this.rewrite) response.output = this.rewrite(response.output)
       this.emit(startedAt, request, response.output, response.usage, startedAt)
       return response
     } catch (error) {
@@ -126,6 +129,7 @@ export class ObservedModel implements Model {
     try {
       for await (const event of this.inner.getStreamedResponse(request)) {
         firstEventAt ??= Date.now()
+        if (event.type === 'response_done' && this.rewrite) event.response.output = this.rewrite(event.response.output)
         if (event.type === 'response_done') this.emit(startedAt, request, event.response.output, event.response.usage, firstEventAt)
         yield event
       }

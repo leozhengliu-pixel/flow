@@ -1,0 +1,36 @@
+{
+  "name": "an analysis request never starts Coding and keeps the normal connector budget",
+  "repositories": ["acme/api"],
+  "issue": {"title": "登录接口偶发 500", "description": "分析一下这个问题的原因\nenvironmentId: {{env0}}"},
+  "maxTurns": 24,
+  "connector": "match",
+  "model": [
+    {"call": {"name": "external_sourcebot_glob", "arguments": {"pattern": "**/*a.go"}}},
+    {"call": {"name": "external_sourcebot_glob", "arguments": {"pattern": "**/*b.go"}}},
+    {"call": {"name": "external_sourcebot_glob", "arguments": {"pattern": "**/*c.go"}}},
+    {"call": {"name": "external_sourcebot_glob", "arguments": {"pattern": "**/*d.go"}}},
+    {"call": {"name": "external_sourcebot_glob", "arguments": {"pattern": "**/*e.go"}}},
+    {"text": "分析如下：问题出在超时配置。建议的做法是调整重试。"}
+  ],
+  "expect": {"connectorCalls": 5, "coding": false, "replyContains": ["分析如下：问题出在超时配置。建议的做法是调整重试。"]},
+  "exchanges": [
+    {"request": {"op":"start"}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"turn","round":0,"maxTurns":24,"connectors":true}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"before","tool":"external_sourcebot_glob","arguments":"{\"pattern\":\"**/*a.go\"}"}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"after","tool":"external_sourcebot_glob","arguments":"{\"pattern\":\"**/*a.go\"}","content":"acme/api@main api/go.mod","failed":false}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"turn","round":1,"maxTurns":24,"connectors":true}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"before","tool":"external_sourcebot_glob","arguments":"{\"pattern\":\"**/*b.go\"}"}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"after","tool":"external_sourcebot_glob","arguments":"{\"pattern\":\"**/*b.go\"}","content":"acme/api@main api/go.mod","failed":false}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"turn","round":2,"maxTurns":24,"connectors":true}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"before","tool":"external_sourcebot_glob","arguments":"{\"pattern\":\"**/*c.go\"}"}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"after","tool":"external_sourcebot_glob","arguments":"{\"pattern\":\"**/*c.go\"}","content":"acme/api@main api/go.mod","failed":false}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"turn","round":3,"maxTurns":24,"connectors":true}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"before","tool":"external_sourcebot_glob","arguments":"{\"pattern\":\"**/*d.go\"}"}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"after","tool":"external_sourcebot_glob","arguments":"{\"pattern\":\"**/*d.go\"}","content":"acme/api@main api/go.mod","failed":false}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"turn","round":4,"maxTurns":24,"connectors":true}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"before","tool":"external_sourcebot_glob","arguments":"{\"pattern\":\"**/*e.go\"}"}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"after","tool":"external_sourcebot_glob","arguments":"{\"pattern\":\"**/*e.go\"}","content":"acme/api@main api/go.mod","failed":false}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"turn","round":5,"maxTurns":24,"connectors":true}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"finish","phase":"reply","text":"分析如下：问题出在超时配置。建议的做法是调整重试。"}, "response": {"codingDue":false,"decisionRound":-1,"enabled":true,"reply":"分析如下：问题出在超时配置。建议的做法是调整重试。"}}
+  ]
+}

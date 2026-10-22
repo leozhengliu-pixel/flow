@@ -1,0 +1,24 @@
+{
+  "name": "failing retrieval stops counting as progress, connector tools are withdrawn and the run ends in Coding",
+  "repositories": ["acme/api"],
+  "issue": {"title": "新增 multiply 接口", "description": "请实现 multiply 接口，补充单元测试并运行测试，创建草稿 MR。"},
+  "maxTurns": 24,
+  "connector": "error",
+  "model": [
+    {"call": {"name": "external_sourcebot_glob", "arguments": {"pattern": "**/*a.go"}}},
+    {"call": {"name": "external_sourcebot_glob", "arguments": {"pattern": "**/*b.go"}}},
+    {"call": {"name": "external_sourcebot_glob", "arguments": {"pattern": "**/*c.go"}}}
+  ],
+  "expect": {"connectorCalls": 2, "coding": true, "environment": "{{env0}}", "replyContains": ["Coding 会话"]},
+  "exchanges": [
+    {"request": {"op":"start"}, "response": {"codingDue":true,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"turn","round":0,"maxTurns":24,"connectors":true}, "response": {"codingDue":true,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"before","tool":"external_sourcebot_glob","arguments":"{\"pattern\":\"**/*a.go\"}"}, "response": {"codingDue":true,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"after","tool":"external_sourcebot_glob","arguments":"{\"pattern\":\"**/*a.go\"}","content":"Error: search backend unavailable","failed":true}, "response": {"codingDue":true,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"turn","round":1,"maxTurns":24,"connectors":true}, "response": {"codingDue":true,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"before","tool":"external_sourcebot_glob","arguments":"{\"pattern\":\"**/*b.go\"}"}, "response": {"codingDue":true,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"after","tool":"external_sourcebot_glob","arguments":"{\"pattern\":\"**/*b.go\"}","content":"Error: search backend unavailable","failed":true}, "response": {"codingDue":true,"decisionRound":-1,"enabled":true}},
+    {"request": {"op":"turn","round":2,"maxTurns":24,"connectors":true}, "response": {"codingDue":true,"decisionRound":2,"enabled":true,"mustDecide":true,"nudge":"\n\n[Flow] Connector tools are no longer offered in this session. Stop searching and decide now: call start_coding_session (issueId {{issue}}, environmentId {{env0}}) with a prompt that states the change, the tests to run and that a draft MR is wanted — the coding agent reads the repository itself. If something blocks it, reply with the blocker instead."}},
+    {"request": {"op":"finish","phase":"decision","text":""}, "response": {"codingDue":false,"decisionRound":2,"enabled":true,"reply":"已为 {{issue}} 启动 Coding 会话，正在运行。代码修改、测试结果和草稿 MR 完成后会显示在会话中；目前尚未交付。","transferred":true}}
+  ]
+}
