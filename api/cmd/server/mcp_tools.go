@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -133,10 +132,7 @@ func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, a
 		if err != nil {
 			return nil, err
 		}
-		items := slices.Clone(data.States)
-		items = slices.DeleteFunc(items, func(item domain.WorkflowState) bool { return item.TeamID != "" && item.TeamID != team.ID })
-		sort.SliceStable(items, func(i, j int) bool { return items[i].Position < items[j].Position })
-		return items, nil
+		return statesForTeam(&data, team.ID), nil
 	case "get_issue_status":
 		team, err := mcpFindTeam(data, stringArg(args, "team"))
 		if err != nil {
@@ -149,8 +145,8 @@ func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, a
 		if id != "" && nameArg != "" {
 			return nil, fmt.Errorf("provide either id or name, not both")
 		}
-		for _, state := range data.States {
-			if (state.TeamID == "" || state.TeamID == team.ID) && (equalFoldAny(id, state.ID) || equalFoldAny(nameArg, state.Name)) {
+		for _, state := range statesForTeam(&data, team.ID) {
+			if equalFoldAny(id, state.ID) || equalFoldAny(nameArg, state.Name) {
 				return state, nil
 			}
 		}

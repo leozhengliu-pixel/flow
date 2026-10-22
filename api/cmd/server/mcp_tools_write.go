@@ -351,6 +351,9 @@ func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.B
 		if stateID != "" {
 			input.StateID = &stateID
 		}
+		if team.ID != current.Team.ID {
+			input.TeamID = &team.ID
+		}
 		if hasNumberArg(args, "priority") {
 			value := intArg(args, "priority", 0)
 			input.Priority = &value
@@ -1581,16 +1584,24 @@ func hasAnyArg(args map[string]any, keys ...string) bool {
 	return slices.ContainsFunc(keys, func(key string) bool { _, ok := args[key]; return ok })
 }
 
+// resolveStateID resolves an ID, name or type to a state of the team's effective workflow: the one the store
+// validates against (own states replace the workspace defaults, inherited teams use their parent's). Anything else,
+// including a same-named state of another team, is rejected instead of falling back to a default.
 func resolveStateID(data domain.Bootstrap, teamID, query string) (string, error) {
 	if query == "" {
 		return "", nil
 	}
-	for _, item := range data.States {
-		if (item.TeamID == "" || item.TeamID == teamID) && equalFoldAny(query, item.ID, item.Name, item.Type) {
-			return item.ID, nil
+	states := statesForTeam(&data, teamID)
+	for _, match := range []func(domain.WorkflowState) bool{
+		func(item domain.WorkflowState) bool { return strings.EqualFold(query, item.ID) },
+		func(item domain.WorkflowState) bool { return strings.EqualFold(query, item.Name) },
+		func(item domain.WorkflowState) bool { return !item.Reserved && strings.EqualFold(query, item.Type) },
+	} {
+		if index := slices.IndexFunc(states, match); index >= 0 {
+			return states[index].ID, nil
 		}
 	}
-	return "", fmt.Errorf("issue state not found")
+	return "", fmt.Errorf("issue state %q not found in this team's workflow", query)
 }
 func resolveNullableUserID(data domain.Bootstrap, args map[string]any, key string) (*string, error) {
 	value, present := nullableStringArg(args, key)

@@ -920,18 +920,7 @@ func (s *server) triageMCPIssue(ctx context.Context, actor mcpActor, data domain
 	if issue.State.Type != "backlog" || issue.TriagedAt != nil || issue.ArchivedAt != nil {
 		return nil, fmt.Errorf("issue %s is not in triage", issue.Identifier)
 	}
-	teamStates := slices.DeleteFunc(slices.Clone(data.States), func(state domain.WorkflowState) bool {
-		return state.TeamID != "" && state.TeamID != issue.Team.ID
-	})
-	slices.SortStableFunc(teamStates, func(a, b domain.WorkflowState) int {
-		switch {
-		case a.Position < b.Position:
-			return -1
-		case a.Position > b.Position:
-			return 1
-		}
-		return 0
-	})
+	teamStates := statesForTeam(&data, issue.Team.ID)
 	canceled := func(duplicate bool) *domain.WorkflowState {
 		var fallback *domain.WorkflowState
 		for index := range teamStates {
