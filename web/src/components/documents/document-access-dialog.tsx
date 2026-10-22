@@ -1,6 +1,7 @@
 /** "People with access" (Flow-only): per-subject roles on a document. */
 import './document-access-dialog.css'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { Description as DialogDescription } from '@radix-ui/react-dialog'
+import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { SelectControl } from '@/components/ui/select-control'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
@@ -20,19 +21,19 @@ export function DocumentAccessDialog({ open, onOpenChange, data, document, permi
   const subjects = [
     { type: 'workspace', id: data.workspace.id, label: t('Everyone in workspace'), entity: false },
     ...data.teams.map(team => ({ type: 'team', id: team.id, label: team.name, entity: true })),
-    ...members.map(member => ({ type: 'user', id: member.user.id, label: member.user.displayName, entity: true })),
+    ...members.map(member => ({ type: 'user', id: member.user.id, label: member.user.displayName, entity: true, email: member.user.email as string | undefined })),
   ]
   return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="document-access">
+    <DialogContent className="action-dialog document-access" overlayClassName="action-dialog-overlay">
       <DialogTitle>{t('People with access')}</DialogTitle>
-      <p className="document-access-description">{t('Choose who can view, comment on, or edit this document.')}</p>
+      <DialogDescription className="document-access-description">{t('Choose who can view, comment on, or edit this document.')}</DialogDescription>
       <div className="document-access-list">
         {subjects.map(subject => {
           const role = permissions.find(item => item.subjectType === subject.type && item.subjectId === subject.id)?.role ?? (subject.type === 'user' && subject.id === document.creator.id ? 'owner' : 'none')
           return <div className="document-access-row" key={`${subject.type}:${subject.id}`}>
             <span className="document-access-person">
               {subject.type === 'user' ? <UserAvatar className="document-meta-avatar" name={subject.label}/> : <span className="document-access-team-mark">{subject.type === 'team' ? subject.label.slice(0, 1).toUpperCase() : '@'}</span>}
-              <strong data-i18n-ignore={!subject.entity || undefined}>{subject.label}</strong>
+              <span className="document-access-text"><strong data-i18n-ignore={!subject.entity || undefined}>{subject.label}</strong>{(subject as { email?: string }).email ? <span data-i18n-ignore>{(subject as { email?: string }).email}</span> : null}</span>
             </span>
             <SelectControl
               disabled={(subject.type === 'user' && subject.id === document.creator.id) || busy}
@@ -44,6 +45,7 @@ export function DocumentAccessDialog({ open, onOpenChange, data, document, permi
           </div>
         })}
       </div>
+      <footer><DialogClose asChild><button type="button">{t('Done')}</button></DialogClose></footer>
     </DialogContent>
   </Dialog>
 }
