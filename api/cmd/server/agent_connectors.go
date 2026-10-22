@@ -453,9 +453,36 @@ func (s *server) executeConnectorTool(r *http.Request, data domain.Bootstrap, ca
 		return nil, fmt.Errorf("invalid MCP tool result")
 	}
 	if outcome.IsError {
-		return result, fmt.Errorf("MCP tool reported a failure")
+		return result, errConnectorReportedFailure
 	}
 	return result, nil
+}
+
+// errConnectorReportedFailure is the error of a connector call whose result is flagged isError: the call failed,
+// and the result returned with it is the connector's own account of why.
+var errConnectorReportedFailure = errors.New("MCP tool reported a failure")
+
+// connectorFailureText is what the model reads for a call the connector reported as failed (isError): the
+// connector's own result text, as a worker run's model reads it through /mcp. ok is false for other errors and
+// for a flagged result without text (the model then reads the error).
+func connectorFailureText(result []byte, err error) (string, bool) {
+	var parsed struct {
+		Content []json.RawMessage `json:"content"`
+	}
+	if !errors.Is(err, errConnectorReportedFailure) || json.Unmarshal(result, &parsed) != nil || len(parsed.Content) == 0 {
+		return "", false
+	}
+	text := connectorResultText(result, len(result))
+	return text, strings.TrimSpace(text) != ""
+}
+
+// agentToolFailureText is a failed tool call's result for the model: the connector's own text when a connector
+// reported the failure, the error otherwise.
+func agentToolFailureText(result []byte, err error) string {
+	if text, ok := connectorFailureText(result, err); ok {
+		return text
+	}
+	return err.Error()
 }
 
 // connectorActionMetadata is the action activity of a connector call (connector, tool and arguments), shared by the

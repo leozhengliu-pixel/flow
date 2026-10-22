@@ -37,7 +37,13 @@ import (
 //     in-process call (connector, arguments, ≤2 KB result), the workspace audit log records the call (no
 //     arguments or results), and the outcome is kept for the run guard (a structured isError counts as failed).
 //
-// The connector's own result passes through (an isError result keeps its text and isError: true).
+//   - a selected connector that discovery skipped is recorded as a run notice (the payload's `notices`, and a loop
+//     run record's notices), as an in-process loop run records it;
+//   - a chat run's connector may ask its person for input mid-call (MCP elicitation, agent_runtime_elicitations.go);
+//     other runs offer no elicitation, as in-process threads and loops do not.
+//
+// The connector's own result passes through (an isError result keeps its text and isError: true); the in-process
+// agent gives its model the same text (agentToolFailureText).
 
 // agentRunConnectorAllowlist in a run's tool allowlist (agentRunPrincipal.Tools) admits its connector tools.
 const agentRunConnectorAllowlist = "external_*"
@@ -125,13 +131,82 @@ func (s *server) discoverAgentRunConnectors(ctx context.Context, grant *agentRun
 		// Only the selected connectors are contacted, as for an in-process loop run.
 		selection := connectorSelection{IDs: grant.principal.Connectors, Partial: loopConnectorPolicy() != "required", Budget: loopConnectorDiscoveryBudget}
 		_, tools, problems, err := s.withSelectedConnectorTools(ctx, data, request, selection)
-		for _, problem := range problems {
-			log.Printf("agent run %s: %s %v", grant.run.ID, loopConnectorSkippedNotice, problem.Err)
+		if err == nil && len(problems) > 0 {
+			// As an in-process loop run records it: a notice on the run per skipped connector.
+			notices := make([]string, 0, len(problems))
+			for _, problem := range problems {
+				notices = append(notices, fmt.Sprintf("%s %s", loopConnectorSkippedNotice, problem.Err.Error()))
+			}
+			s.addAgentRunNotices(ctx, grant.run, notices)
 		}
 		return tools, err
 	}
 	_, tools, err := s.withConnectorTools(ctx, data, request)
 	return tools, err
+}
+
+// agentRunNoticesKey keeps a run's notices (a selected connector that was skipped), returned with its payload.
+const agentRunNoticesKey = "run:notices"
+
+// agentRunNotices are the notices recorded on a run so far.
+func (s *server) agentRunNotices(ctx context.Context, runID string) []string {
+	raw, found, err := s.store.AgentRunKey(ctx, runID, agentRunNoticesKey)
+	if err != nil || !found {
+		return nil
+	}
+	var notices []string
+	_ = json.Unmarshal(raw, &notices)
+	return notices
+}
+
+// addAgentRunNotices records notices on a worker run as the in-process loop run records them (loopRunRecorder.addNotice):
+// on the run (its payload lists them) and, for a loop run whose session is a running loop run record, on that
+// record with a "notice" event, so the run page shows them.
+func (s *server) addAgentRunNotices(ctx context.Context, run store.AgentRun, notices []string) {
+	ctx = context.WithoutCancel(ctx)
+	current := s.agentRunNotices(ctx, run.ID)
+	added := []string{}
+	for _, notice := range notices {
+		if !slices.Contains(current, notice) && !slices.Contains(added, notice) {
+			added = append(added, notice)
+		}
+	}
+	if len(added) == 0 {
+		return
+	}
+	raw, _ := json.Marshal(append(current, added...))
+	if err := s.store.ReplaceAgentRunKey(ctx, run, agentRunNoticesKey, raw); err != nil {
+		log.Printf("agent run %s: notices not recorded: %v", run.ID, err)
+	}
+	for _, notice := range added {
+		log.Printf("agent run %s: %s", run.ID, notice)
+	}
+	if run.Kind != store.AgentRunKindLoop {
+		return
+	}
+	events := make([]store.LoopRunEvent, 0, len(added))
+	for _, notice := range added {
+		events = append(events, loopRunEvent("notice", map[string]string{"notice": notice}))
+	}
+	changed := false
+	updated, err := s.store.UpdateLoopRun(ctx, run.WorkspaceKey, run.SessionID, events, func(record *domain.LoopRun) error {
+		if record.Status != "running" {
+			return store.ErrNoMutation
+		}
+		for _, notice := range added {
+			if !slices.Contains(record.Notices, notice) {
+				record.Notices = append(record.Notices, notice)
+				changed = true
+			}
+		}
+		if !changed {
+			return store.ErrNoMutation
+		}
+		return nil
+	})
+	if err == nil && changed {
+		s.publishLoopRunEvent(run.WorkspaceKey, "loop_run.progress", updated)
+	}
 }
 
 // agentRunListedConnectors is the tools/list entries of a run's connector tools; nil when the run has none or
@@ -159,16 +234,13 @@ func (s *server) agentRunListedConnectors(r *http.Request, grant *agentRunGrant,
 	return listed
 }
 
-// agentRunConnectorNote is the system-prompt note of a run whose connector tools cannot be discovered (as the
-// in-process thread agent adds it).
-func (s *server) agentRunConnectorNote(r *http.Request, grant *agentRunGrant) string {
-	if !grant.allowsConnectors() {
+// agentRunConnectorNote is the system-prompt note of a run whose connector tools could not be discovered (err, as
+// agentRunConnectorTools returned it; the in-process thread agent adds the same note).
+func agentRunConnectorNote(grant *agentRunGrant, err error) string {
+	if err == nil || !grant.allowsConnectors() {
 		return ""
 	}
-	if _, err := s.agentRunConnectorTools(r.Context(), grant); err != nil {
-		return "\nThe workspace's connected MCP tools are unavailable in this session (" + truncateSettingsText(err.Error(), 300) + "). If the request needs them, say so.\n"
-	}
-	return ""
+	return "\nThe workspace's connected MCP tools are unavailable in this session (" + truncateSettingsText(err.Error(), 300) + "). If the request needs them, say so.\n"
 }
 
 // callMCPRunConnector answers tools/call of a connector tool for a run token.
@@ -226,7 +298,9 @@ func (s *server) callMCPRunConnector(w http.ResponseWriter, r *http.Request, id 
 		fail(err)
 		return
 	}
-	ctx := context.WithValue(request.Context(), connectorContextKey{}, connectorRequestContext{Workspace: grant.run.WorkspaceKey, UserID: grant.principal.UserID})
+	// A chat run's connector may ask its person mid-call (agent_runtime_elicitations.go); other runs' may not.
+	connectorContext := connectorRequestContext{Workspace: grant.run.WorkspaceKey, UserID: grant.principal.UserID, Elicit: s.agentRunElicit(grant)}
+	ctx := context.WithValue(request.Context(), connectorContextKey{}, connectorContext)
 	ctx = context.WithValue(ctx, connectorToolsKey{}, tools)
 	started := time.Now()
 	result, callErr := s.executeAgentTool(request.WithContext(ctx), data, call)

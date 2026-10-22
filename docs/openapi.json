@@ -32697,6 +32697,41 @@
         "x-flow-source": "agent_runtime_api.go"
       }
     },
+    "/internal/agent-runtime/runs/{id}/elicitations": {
+      "get": {
+        "operationId": "get_internal_agent_runtime_runs_id_elicitations",
+        "tags": [
+          "internal"
+        ],
+        "summary": "GET /internal/agent-runtime/runs/{id}/elicitations",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "agent_runtime_api.go"
+      }
+    },
     "/internal/agent-runtime/runs/{id}/guard": {
       "post": {
         "operationId": "post_internal_agent_runtime_runs_id_guard",

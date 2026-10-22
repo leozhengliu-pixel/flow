@@ -3,6 +3,7 @@
  * row leases, heartbeat, watch for stops (long poll), mint run tokens for /mcp, read the payload, keep suspended
  * state, finish the run. Authenticated with the worker secret; the worker names itself in Flow-Worker-Id.
  */
+import type { ConnectorElicitation } from './activities.js'
 import type { GuardRequest, GuardResponse } from './run-guard.js'
 
 export type AgentRun = {
@@ -58,8 +59,17 @@ export class FlowRuntimeClient {
     return this.call<{ token: string; expiresAt: number; mcpPath: string }>('POST', `/runs/${encodeURIComponent(runId)}/token`, {})
   }
 
+  /**
+   * The run's payload. Reading it discovers the run's connector tools; `notices` are what discovery noticed (a
+   * selected connector that was skipped), as an in-process loop run records them.
+   */
   payload(runId: string) {
-    return this.call<{ run: AgentRun; principal: { mode: string; userId: string; tools?: string[] }; context?: { system: string; latestPrompt: string } }>('GET', `/runs/${encodeURIComponent(runId)}/payload`)
+    return this.call<{ run: AgentRun; principal: { mode: string; userId: string; tools?: string[] }; context?: { system: string; latestPrompt: string }; notices?: string[] }>('GET', `/runs/${encodeURIComponent(runId)}/payload`)
+  }
+
+  /** Long-polls up to `waitMs` (≤ 20 s) until the run's connector questions move past `after` (connector-elicitation.ts). */
+  elicitations(runId: string, after: number, waitMs: number, signal?: AbortSignal) {
+    return this.call<{ supported: boolean; version: number; items: ConnectorElicitation[] }>('GET', `/runs/${encodeURIComponent(runId)}/elicitations?after=${after}&waitMs=${waitMs}`, undefined, signal)
   }
 
   /** One operation of the run's delegated-run guard (run-guard.ts, api/cmd/server/agent_runtime_guard.go). */

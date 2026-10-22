@@ -719,6 +719,7 @@ var InternalRoutes = []string{
 	// /internal (agent workers; authenticated by the worker secret or a run token)
 	"DELETE /internal/agent-runtime/runs/{id}/state",
 	"GET /internal/agent-runtime/runs/{id}/changes",
+	"GET /internal/agent-runtime/runs/{id}/elicitations",
 	"GET /internal/agent-runtime/runs/{id}/payload",
 	"GET /internal/agent-runtime/runs/{id}/state",
 	"POST /internal/agent-runtime/cancels",

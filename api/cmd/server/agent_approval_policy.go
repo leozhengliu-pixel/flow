@@ -387,7 +387,7 @@ func (s *server) resumeAgentApproval(r *http.Request, data domain.Bootstrap, ses
 		content := string(result)
 		if callErr != nil {
 			call.Status, call.Error = "error", callErr.Error()
-			content = callErr.Error()
+			content = agentToolFailureText(result, callErr)
 			result, _ = json.Marshal(map[string]string{"error": callErr.Error()})
 		}
 		call.Result = json.RawMessage(result)

@@ -655,7 +655,10 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 		}
 		result, err := execute(call)
 		content, logged := string(result), connectorActionResult(result, err)
-		if err != nil {
+		if text, reported := connectorFailureText(result, err); reported {
+			// The connector said why it failed: the model reads its own text (still a failed call).
+			content = text
+		} else if err != nil {
 			content = agentToolErrorContent(err)
 		}
 		// A failed call or one that found nothing is a call without progress.
