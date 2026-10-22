@@ -1,0 +1,99 @@
+/*
+ * The PDF viewer, measured against the reference app (CSS px, both themes): a full-screen layer under the tooltip layer
+ * with a 44px header (.5px bottom hairline, 6px 8px padding, 4px gaps, 28px pill buttons with 14px glyphs, 13px/450
+ * labels) over a scroller (8px padding and gap) of pages that are 816px wide at 100% (612pt x 96/72), each with a
+ * .5px border. Colours come from the --pdf-viewer-* tokens.
+ */
+.pdf-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 1090;
+  display: flex;
+  flex-direction: column;
+  background: var(--pdf-viewer-bg);
+  color: var(--pdf-viewer-fg);
+  font-family: var(--font);
+  outline: 0;
+}
+.pdf-viewer-header {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  height: 44px;
+  padding: 6px 8px 0;
+  padding-left: calc(8px + var(--flow-lightbox-inset-left, 0px));
+  padding-right: calc(8px + var(--flow-lightbox-inset-right, 0px));
+  border-bottom: .5px solid var(--pdf-viewer-border);
+}
+.pdf-viewer-group { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.pdf-viewer-button {
+  position: relative;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 0 2px;
+  border: .5px solid transparent;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--pdf-viewer-fg);
+  cursor: default;
+}
+.pdf-viewer-button:hover:not(:disabled),
+.pdf-viewer-button:focus-visible { background: var(--pdf-viewer-hover); }
+.pdf-viewer-button:focus-visible { outline: 2px solid var(--description-selected-outline); outline-offset: -2px; }
+.pdf-viewer-button:disabled { opacity: .4; }
+.pdf-viewer-button svg { width: 14px; height: 14px; }
+.pdf-viewer-glyph { display: grid; place-items: center; }
+.pdf-viewer-label { color: var(--pdf-viewer-muted); font: 450 13px/16px var(--font); white-space: nowrap; }
+.pdf-viewer-zoom { box-sizing: border-box; min-width: 46px; padding: 4px; text-align: center; line-height: 16px; }
+.pdf-viewer-separator { width: 1px; height: 16px; flex: none; background: var(--pdf-viewer-separator); }
+/* Zoom and page controls sit flush against their labels; the hairline between them has 6px on each side. */
+.pdf-viewer-group-start { gap: 0; }
+.pdf-viewer-separator-start { margin: 0 6px; }
+.pdf-viewer-separator-end { background: var(--pdf-viewer-separator-end); }
+.pdf-viewer-scroll {
+  position: relative;
+  box-sizing: border-box;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+/* Wider than the window at high zoom: pages start at the left edge (and scroll) instead of being cut off on both sides. */
+.pdf-viewer-page {
+  position: relative;
+  box-sizing: border-box;
+  flex: none;
+  margin-inline: auto;
+  overflow: hidden;
+  border: .5px solid var(--pdf-viewer-page-border);
+  background: var(--pdf-viewer-page-bg);
+}
+.pdf-viewer-canvas { display: block; width: 100%; height: 100%; }
+.pdf-viewer-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--pdf-viewer-muted);
+  font: 450 13px/16px var(--font);
+  pointer-events: none;
+}
+@media (max-width: 600px) {
+  /* Narrow screens keep the page arrows and zoom buttons but drop the "Page n of m" text. */
+  .pdf-viewer-indicator { display: none; }
+  .pdf-viewer-scroll { padding: 4px; gap: 4px; }
+}

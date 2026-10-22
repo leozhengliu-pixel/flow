@@ -696,6 +696,9 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 /* Image toolbar hairline (between the image actions and comment / delete). */
 :root{--description-toolbar-separator:lch(27.12% 1.48 272)}
 :root[data-theme="light"]{--description-toolbar-separator:#b5b5b5}
+/* PDF card toolbar and viewer, measured against the reference app in both themes. */
+:root{--description-file-toolbar-fg:lch(63.304% 1.425 272);--description-file-toolbar-fg-hover:lch(90.826% 1.425 272);--description-file-toolbar-hover-bg:lch(11.933% 1.75 272);--description-file-toolbar-separator:lch(30.833% 1.93 272);--pdf-viewer-bg:lch(5.52% .4 272);--pdf-viewer-border:lch(18.48% 1.48 272);--pdf-viewer-fg:lch(90.826% 1.425 272);--pdf-viewer-muted:lch(63.304% 1.425 272);--pdf-viewer-hover:lch(11.933% 1.75 272);--pdf-viewer-separator:lch(17.873% 1.93 272);--pdf-viewer-separator-end:lch(14.16% 1.48 272);--pdf-viewer-page-bg:lch(9.232% .85 272);--pdf-viewer-page-border:lch(16.793% 1.93 272)}
+:root[data-theme="light"]{--description-file-toolbar-fg:lch(40% 1 282);--description-file-toolbar-fg-hover:lch(20% 1 282);--description-file-toolbar-hover-bg:lch(0 0 0/.147);--description-file-toolbar-separator:lch(88% 0 282);--pdf-viewer-bg:lch(97.94% .5 282);--pdf-viewer-border:lch(89.84% 0 282);--pdf-viewer-fg:lch(40% 1 282);--pdf-viewer-muted:lch(40% 1 282);--pdf-viewer-hover:lch(0 0 0/.147);--pdf-viewer-separator:lch(90.55% 0 282);--pdf-viewer-separator-end:lch(88.49% 0 282);--pdf-viewer-page-bg:lch(100% 0 282);--pdf-viewer-page-border:lch(91.9% 0 282)}
 /* Image lightbox: a solid page and a faint checkerboard behind transparent pictures. */
 :root{--lightbox-bg:lch(5.52% .4 272);--lightbox-checker:lch(90.451% 1.2 272 / .08);--lightbox-caption-bg:lch(5.52% .4 272 / .8)}
 :root[data-theme="light"]{--lightbox-bg:lch(97.94% .5 282);--lightbox-checker:lch(19.588% 1.25 282 / .08);--lightbox-caption-bg:lch(97.94% .5 282 / .8)}

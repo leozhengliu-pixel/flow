@@ -14,6 +14,7 @@ import { copyImage, copyText, downloadImage } from './lightbox-actions'
 
 import { CommentPopover, type LightboxComment } from './comment-popover'
 import { registerLightboxOpener, type LightboxItem } from './lightbox-bridge'
+import { PdfViewerHost } from './pdf/pdf-viewer-host'
 import { LightboxEditorContext, type LightboxEditorContextValue } from './lightbox-editor-context'
 import { WindowControlsAwareLightboxProvider } from './window-controls-aware-lightbox-provider'
 import { useWindowControlsInsets } from './window-controls-insets-context'
@@ -216,6 +217,7 @@ function LightboxEditorProviderInner({
         </div>,
         document.body,
       )}
+      <PdfViewerHost insets={insets}/>
       {!session && comment && createPortal(
         <div className="flow-lightbox-comment-slot" style={{ position: 'fixed', left: 24, bottom: 24, zIndex: 1300 }}>
           <CommentPopover comment={comment} onClose={commentHash.clear} />

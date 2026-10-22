@@ -19,7 +19,7 @@ export function RichComment({ body, data, version }: { body: string; data?: Reco
   const editor = useEditor({
     immediatelyRender: false,
     editable: false,
-    extensions: [FlowStarterKit.configure({ link: { openOnClick: false, autolink: true, linkOnPaste: true } }), LinkBehavior, Markdown, MentionChipNode, EmbedNode, DescriptionImage, DescriptionFile, DescriptionVideo, ...structuredBlocks],
+    extensions: [FlowStarterKit.configure({ link: { openOnClick: false, autolink: true, linkOnPaste: true } }), LinkBehavior, Markdown, MentionChipNode, EmbedNode, DescriptionImage, DescriptionFile.configure({ preview: false }), DescriptionVideo, ...structuredBlocks],
     content: initial.content,
     contentType: initial.contentType,
     editorProps: { attributes: { role: 'document', 'aria-label': t('Comment') } },

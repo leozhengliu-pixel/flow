@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import { Printer } from 'lucide-react'
 import { copyText, downloadImage } from '@/components/editor/lightbox-actions'
 import { deleteIcon, downloadIcon, linkIcon, viewIcon } from '@/components/issue/editor/image-extension'
+import { openPdfViewer } from '@/components/editor/pdf/pdf-bridge'
+import { printPdf } from '@/components/editor/pdf/pdf-file-actions'
 import { useI18n } from '@/i18n/i18n'
 import { ToolbarIcon } from './agent-inline-image'
 import styles from './agent-inline-file.module.css'
@@ -48,12 +50,12 @@ export function AgentInlineFile({ name, src, size, contentType, editable = false
           </span>
         </span>
         {!uploading && <span className={styles.actions}>
-          {pdf && button('View PDF', <ToolbarIcon make={viewIcon}/>, () => window.open(src, '_blank', 'noopener'))}
+          {pdf && button('View PDF', <ToolbarIcon make={viewIcon}/>, () => openPdfViewer({ src, title: name }))}
           {button('Download', <ToolbarIcon make={downloadIcon}/>, () => downloadImage({ src, alt: name }))}
           {button('Copy link', <ToolbarIcon make={linkIcon}/>, () => void copyText(new URL(src, window.location.origin).href))}
           {editable
             ? <><span aria-hidden className={styles.separator}/>{button('Delete', <ToolbarIcon make={deleteIcon}/>, () => onRemove?.())}</>
-            : printable && button('Print', <Printer aria-hidden size={14} strokeWidth={1.75}/>, () => printFile(src))}
+            : printable && button('Print', <Printer aria-hidden size={14} strokeWidth={1.75}/>, () => { if (pdf) void printPdf(src); else printFile(src) })}
         </span>}
       </div>
     </div>
