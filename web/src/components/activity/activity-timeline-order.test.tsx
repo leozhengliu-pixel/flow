@@ -25,6 +25,14 @@ describe('activity timeline order', () => {
     </StandaloneSessions.Provider></I18nProvider>)
     expect([...container.querySelectorAll('.timeline-item')].map(node => node.id || node.querySelector('[data-session]')?.getAttribute('data-session'))).toEqual(['comment-before', 'task-1', 'comment-after'])
   })
+  it('outlines the session card a notification points at (#comment-<session>)', () => {
+    const { container } = render(<I18nProvider><StandaloneSessions.Provider value={[{ id: 'task-1', createdAt: '2026-10-12T11:00:00Z' }]}>
+      <ActivityTimeline {...props} comments={[comment('before', '2026-10-12T10:00:00Z')]} highlightTarget={{ kind: 'comment', id: 'task-1', key: 'n1' }} renderAgentSession={id => <p data-session={id}>Session {id}</p>}/>
+    </StandaloneSessions.Provider></I18nProvider>)
+    const card = container.querySelector('.timeline-item.agent-session')
+    expect(card).toHaveAttribute('data-activity-anchor', 'comment-task-1')
+    expect(card).toHaveAttribute('data-activity-highlight', 'enter')
+  })
   it('drops the delegation row once its session shows as a card and keeps the agent status move', () => {
     const agent = { ...viewer, id: 'app-agent', name: 'Flow', displayName: 'Flow', app: true }
     const at = '2026-10-12T11:00:00Z'

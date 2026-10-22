@@ -135,7 +135,7 @@ export function ActivityTimeline({
   const targetIndex = items.findIndex(
     (item) =>
       item.id === (targetComment?.parentId && commentIds.has(targetComment.parentId) ? targetComment.parentId : target?.id) &&
-      item.kind === (target?.kind === 'comment' ? 'comment' : 'event'),
+      (item.kind === (target?.kind === 'comment' ? 'comment' : 'event') || (target?.kind === 'comment' && item.kind === 'agentSession')),
   )
   const start = expanded ? 0 : Math.min(Math.max(0, items.length - 8), targetIndex < 0 ? items.length : targetIndex)
   const visible = items.slice(start)
@@ -169,7 +169,7 @@ export function ActivityTimeline({
           </button>
         )}
         {visible.map((item) => item.kind === 'agentSession' ? (
-          <div className="timeline-item agent-session" key={`agent-session-${item.id}`}>{renderAgentSession?.(item.id)}</div>
+          <div className="timeline-item agent-session" data-activity-anchor={`comment-${item.id}`} key={`agent-session-${item.id}`}>{renderAgentSession?.(item.id)}</div>
         ) : (
           <div
             className={`timeline-item ${item.kind}`}

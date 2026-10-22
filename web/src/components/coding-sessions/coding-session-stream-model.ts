@@ -12,9 +12,11 @@ const SHOWN_TYPES = new Set(['prompt', 'thought', 'action', 'response', 'elicita
 /** One action row; `loading` while it is the live step of a generating session. */
 export type StreamAction = { kind: 'action'; activity: ApplicationActivity; loading: boolean }
 export type StreamReasoning = { kind: 'reasoning'; activity: ApplicationActivity }
+/** A choice question the agent asks mid-run: a narration line (with its options) inside the work log, not a message. */
+export type StreamQuestion = { kind: 'question'; activity: ApplicationActivity }
 /** "Used N tools": a run of consecutive actions folded inside a long group. */
 export type StreamTools = { kind: 'tools'; id: string; actions: StreamAction[] }
-export type GroupChild = StreamAction | StreamReasoning | StreamTools
+export type GroupChild = StreamAction | StreamReasoning | StreamQuestion | StreamTools
 
 export type StreamItem =
   | { kind: 'prompt'; activity: ApplicationActivity; stop: boolean }
@@ -23,6 +25,7 @@ export type StreamItem =
   | { kind: 'error'; activity: ApplicationActivity }
   | StreamAction
   | StreamReasoning
+  | StreamQuestion
   | { kind: 'group'; id: string; children: GroupChild[]; loading: boolean; startedAt?: string; endedAt?: string; /** The live action's label while loading. */ live?: ApplicationActivity; /** The latest thought, shown under a live group. */ promoted?: string }
   | { kind: 'thinking' }
 
@@ -73,10 +76,13 @@ function foldTools(children: GroupChild[]): GroupChild[] {
  * more, when one is still loading, or for a lone thought right before a text. While the session generates the trailing
  * step is loading, and a "Thinking…" row stands in until the first step arrives.
  */
+/** An agent's multiple-choice question: it reads as a narration line of the work log. */
+export const isChoiceQuestion = (activity: ApplicationActivity) => activity.type === 'elicitation' && activity.signal === 'select' && (activity.signalMetadata?.options ?? []).length > 0
+
 export function buildStreamItems(activities: readonly ApplicationActivity[], generating: boolean): StreamItem[] {
   const shown = visibleActivities(activities)
   const items: StreamItem[] = []
-  let run: (StreamAction | StreamReasoning)[] = []
+  let run: (StreamAction | StreamReasoning | StreamQuestion)[] = []
   const last = shown.at(-1)
   const flush = (nextIsText: boolean) => {
     if (!run.length) return
@@ -97,6 +103,7 @@ export function buildStreamItems(activities: readonly ApplicationActivity[], gen
   for (const activity of shown) {
     if (activity.type === 'thought') { run.push({ kind: 'reasoning', activity }); continue }
     if (activity.type === 'action') { run.push({ kind: 'action', activity, loading: generating && activity === last }); continue }
+    if (isChoiceQuestion(activity)) { run.push({ kind: 'question', activity }); continue }
     const isText = activity.type === 'response' || (activity.type === 'elicitation' && activity.signal !== 'auth')
     flush(isText)
     if (activity.type === 'prompt') items.push({ kind: 'prompt', activity, stop: activity.signal === 'stop' })
@@ -117,7 +124,7 @@ export function buildStreamTurns(items: readonly StreamItem[]): StreamTurn[] {
   const turns: StreamTurn[] = []
   for (const item of items) {
     if (item.kind === 'prompt' || !turns.length) {
-      const at = item.kind === 'prompt' || item.kind === 'text' || item.kind === 'error' || item.kind === 'auth' || item.kind === 'action' || item.kind === 'reasoning' ? item.activity.createdAt : item.kind === 'group' ? item.startedAt : undefined
+      const at = item.kind === 'prompt' || item.kind === 'text' || item.kind === 'error' || item.kind === 'auth' || item.kind === 'action' || item.kind === 'reasoning' || item.kind === 'question' ? item.activity.createdAt : item.kind === 'group' ? item.startedAt : undefined
       turns.push({ id: item.kind === 'prompt' ? item.activity.id : 'start', prompt: item.kind === 'prompt' ? item : undefined, items: item.kind === 'prompt' ? [] : [item], at: at || undefined, showTime: false })
     } else turns.at(-1)!.items.push(item)
   }

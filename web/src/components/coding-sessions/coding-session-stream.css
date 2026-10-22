@@ -75,6 +75,14 @@
 .cs-text li::before{content:"•";position:absolute;left:-18px;color:var(--cs-label-muted)}
 .cs-text li>p{margin:0}
 .cs-reasoning.is-promoted{margin-top:12px}
+/* A choice question inside the work log (reference: 12px/19.2px muted narration at the rail's text indent, no rail; options are bullets 24px in, 6px apart). */
+.cs-question{padding-left:24px;color:var(--cs-label-muted);font:450 12px/1.6 var(--font);overflow-wrap:anywhere}
+.cs-question p{margin:0}
+.cs-question ul{margin:6px 0 0;padding:0 0 0 24px;list-style:none}
+.cs-question li{position:relative;margin:0}
+.cs-question li+li{margin-top:6px}
+.cs-question li::before{content:"•";position:absolute;left:-18px}
+.cs-question code{padding:.5px .25em;border-radius:.2em;background:var(--cs-code-bg);box-shadow:inset 0 0 0 .5px var(--cs-code-ring);color:inherit;font-family:var(--cs-terminal-font);font-size:.9375em}
 
 /* The label swap: the new text slides up from below, the old one out above, both with a short blur. */
 .cs-slide-label{position:relative;display:inline-flex;align-items:center;gap:6px;min-width:0;height:16px;overflow:hidden}

@@ -57,6 +57,7 @@ export function DiffView({
   onEditLine,
   mode: controlledMode,
   onModeChange,
+  splitDisabled = false,
   viewer,
 }: {
   review: CodeReview;
@@ -69,10 +70,12 @@ export function DiffView({
   onEditLine?: (value: { path: string; lineNumber: number; content: string }) => void;
   mode?: DiffViewMode;
   onModeChange?: (mode: DiffViewMode) => void;
+  /** The Reviews list beside the detail leaves too little width for two columns: Split stays visible but disabled, and the diff reads unified. */
+  splitDisabled?: boolean;
 }) {
   const { t } = useI18n();
   const [preferences, setPreferences] = useState(readPreferences);
-  const mode = controlledMode ?? preferences.mode;
+  const mode = splitDisabled ? "unified" : (controlledMode ?? preferences.mode);
   const updatePreferences = (next: Partial<typeof preferences>) =>
     setPreferences((current) => {
       const value = { ...current, ...next };
@@ -214,7 +217,17 @@ export function DiffView({
               <div className="review-list-options__section">
                 <div className="review-diff-mode" role="group" aria-label={t("Diff view")}>
                   {(["split", "unified"] as const).map((value) => (
-                    <button aria-pressed={mode === value} key={value} onClick={() => setMode(value)} type="button">
+                    <button
+                      aria-pressed={mode === value}
+                      aria-disabled={value === "split" && splitDisabled ? true : undefined}
+                      className={value === "split" && splitDisabled ? "is-disabled" : undefined}
+                      key={value}
+                      onClick={() => {
+                        if (value === "split" && splitDisabled) return;
+                        setMode(value);
+                      }}
+                      type="button"
+                    >
                       {value === "split" ? <Columns2 /> : <Rows2 />}
                       {t(value === "split" ? "Split" : "Unified")}
                     </button>

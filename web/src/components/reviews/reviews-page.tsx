@@ -616,9 +616,9 @@ function ReviewDetail({
         ) : tab === "review" ? (
           <ReviewGuide review={review} />
         ) : editableDiff ? (
-          <EditableDiffView review={review} onReload={onReload} onExit={() => setEditableDiff(false)} />
+          <EditableDiffView review={review} onReload={onReload} onExit={() => setEditableDiff(false)} splitDisabled={!embedded && !fullWindow} />
         ) : (
-          <DiffView review={review} onReload={onReload} onEditableChange={setEditableDiff} viewer={data.viewer} />
+          <DiffView review={review} onReload={onReload} onEditableChange={setEditableDiff} viewer={data.viewer} splitDisabled={!embedded && !fullWindow} />
         )}
       </div>
       {agentSessionId && agentShown && (

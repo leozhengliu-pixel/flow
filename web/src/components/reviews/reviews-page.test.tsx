@@ -229,8 +229,11 @@ it("renders split and unified diff rows and posts an inline comment", async () =
   // Unified is the default layout; Split lives in the diff display options.
   await user.click(screen.getByRole("button", { name: "Display options" }));
   expect(screen.getByRole("button", { name: "Unified" })).toHaveAttribute("aria-pressed", "true");
+  // Beside the review list there is no room for two columns: Split is disabled and the diff stays unified.
+  expect(screen.getByRole("button", { name: "Split" })).toHaveAttribute("aria-disabled", "true");
   await user.click(screen.getByRole("button", { name: "Split" }));
-  expect(screen.getByRole("button", { name: "Split" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Split" })).toHaveAttribute("aria-pressed", "false");
+  expect(screen.getByRole("button", { name: "Unified" })).toHaveAttribute("aria-pressed", "true");
   await waitFor(() =>
     expect(
       screen.getByText(

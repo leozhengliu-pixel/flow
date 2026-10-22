@@ -292,3 +292,5 @@
 .issue-activity-timeline .comment-thread .comment-reply strong { display: inline; font-size: 13px; line-height: 20px; }
 .issue-activity-timeline .comment-thread .comment-reply > header > .avatar { align-self: center; margin-top: 0; }
 :root[data-theme="light"] .issue-activity-timeline .comment-thread .comment-card > header > .avatar { color: var(--on-accent); }
+.issue-activity-timeline .timeline-item.agent-session { border-radius: 8px; }
+.issue-activity-timeline .timeline-item.agent-session[data-activity-highlight] { --activity-highlight-inset: ; }

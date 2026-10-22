@@ -28,7 +28,7 @@ import { InboxPage, type InboxPageAdapter } from './inbox-page'
 import type { InboxDisplayOptions, InboxTab } from './inbox-page-shell'
 import type { InboxNotificationKind, InboxNotificationRowData, InboxSnoozePreset } from './notification-row'
 import { effectivePulseFrequency, isPulseSummaryNotification, pulseSummaryText, pulseSummaryTitle, type PulseFrequency } from './pulse-summary-model'
-import { agentReplyLine, finishedSessionTarget } from './agent-reply-notification'
+import { agentReplyLine, finishedSessionTarget, pointsAtSessionCard } from './agent-reply-notification'
 import { PulseSummaryView } from './pulse-summary-view'
 import { usePagedInbox } from './use-paged-inbox'
 import { EmbeddedReview } from '@/components/reviews/embedded-review'
@@ -764,7 +764,9 @@ function projectInbox(data: BootstrapData, t: (source: string) => string): Inbox
     const agentReply = notification.type === 'agentReply' ? agentReplyLine(notification, t) : undefined
     const comment = !agentReply && notification.commentId ? (data.comments[issue.id] ?? []).find(item => item.id === notification.commentId) : undefined
     const event = notification.activityId ? (data.activities[issue.id] ?? []).find(item => item.id === notification.activityId) : undefined
-    const sourceType = notification.commentId || notification.sourceType === 'comment' ? 'comment' : 'activity'
+    // A delegated session's own row on the issue (no source comment) is anchored like a comment, so opening it scrolls to the session card and outlines it.
+    const sessionCard = pointsAtSessionCard(notification)
+    const sourceType = notification.commentId || notification.sourceType === 'comment' || sessionCard ? 'comment' : 'activity'
     const sourceId = sourceType === 'comment' ? notification.commentId ?? notification.sourceId : notification.activityId ?? notification.sourceId
     return [{
       id: notification.id,

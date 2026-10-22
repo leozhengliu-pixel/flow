@@ -53,8 +53,8 @@ const plainText = (text: string) => text.replace(/`/g, '')
 /** Disclosure state kept per activity / group id for the page's lifetime (re-renders and refetches keep it). */
 const openState = new Map<string, boolean>()
 function useRememberedOpen(id: string, initial = false): [boolean, (open: boolean) => void] {
-  const [open, setOpen] = useState(() => openState.get(id) ?? initial)
-  return [open, value => { openState.set(id, value); setOpen(value) }]
+  const [stored, setStored] = useState(() => openState.get(id))
+  return [stored ?? initial, value => { openState.set(id, value); setStored(value) }]
 }
 
 /** The 16px disclosure triangle (right when closed, rotated down when open). */
@@ -89,11 +89,12 @@ export function CodingReasoning({ activity }: { activity: ApplicationActivity })
   return <div className="cs-reasoning"><p data-i18n-ignore><InlineCode text={activity.body}/></p></div>
 }
 
-function GroupChildView({ child }: { child: GroupChild }) {
+function GroupChildView({ child, renderQuestion }: { child: GroupChild; renderQuestion?: (activity: ApplicationActivity) => ReactNode }) {
   const { t } = useI18n()
   const [open, setOpen] = useRememberedOpen(child.kind === 'tools' ? child.id : '')
   if (child.kind === 'reasoning') return <CodingReasoning activity={child.activity}/>
   if (child.kind === 'action') return <CodingActionRow action={child}/>
+  if (child.kind === 'question') return <>{renderQuestion?.(child.activity)}</>
   return <div className="cs-tools">
     <button type="button" className="cs-group-header is-sub" aria-expanded={open} onClick={() => setOpen(!open)}>
       <span>{t('Used {count} tools').replace('{count}', String(child.actions.length))}</span><DisclosureTriangle open={open}/>
@@ -103,9 +104,9 @@ function GroupChildView({ child }: { child: GroupChild }) {
 }
 
 /** Adjacent thoughts and actions: the live step (shimmering) while running, "Worked for …" once done; folded by default. */
-export function CodingActivityGroup({ group }: { group: Extract<StreamItem, { kind: 'group' }> }) {
+export function CodingActivityGroup({ group, renderQuestion, defaultOpen = false }: { group: Extract<StreamItem, { kind: 'group' }>; renderQuestion?: (activity: ApplicationActivity) => ReactNode; /** Open until the reader toggles it (a group holding the question awaiting an answer). */ defaultOpen?: boolean }) {
   const { t } = useI18n()
-  const [open, setOpen] = useRememberedOpen(group.id)
+  const [open, setOpen] = useRememberedOpen(group.id, defaultOpen)
   const live = group.live
   const label = group.loading ? (live ? actionLabel(live) : t('Working…')) : workedForLabel(group.startedAt, group.endedAt, t)
   const detail = group.loading ? live?.metadata?.parameter : undefined
@@ -117,7 +118,7 @@ export function CodingActivityGroup({ group }: { group: Extract<StreamItem, { ki
       </SlideLabel>
       <DisclosureTriangle open={open}/>
     </button>
-    {open && <div className="cs-group-children">{group.children.map(child => <GroupChildView key={child.kind === 'tools' ? child.id : child.activity.id} child={child}/>)}</div>}
+    {open && <div className="cs-group-children">{group.children.map(child => <GroupChildView key={child.kind === 'tools' ? child.id : child.activity.id} child={child} renderQuestion={renderQuestion}/>)}</div>}
     {!open && group.promoted && <div className="cs-reasoning is-promoted"><p data-i18n-ignore><InlineCode text={group.promoted}/></p></div>}
   </div>
 }

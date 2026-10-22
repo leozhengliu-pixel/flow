@@ -378,6 +378,19 @@ describe('composer', () => {
     expect(screen.queryByRole('list', { name: 'Queued messages' })).toBeNull()
   })
 
+  it('puts a choice question inside the work log as a narration line, open while it awaits the answer', async () => {
+    stream(
+      activity('thought', 'I will confirm the punctuation first.'),
+      activity('elicitation', 'Should shout() append an exclamation mark?', { signal: 'select', signalMetadata: { options: [{ value: 'Yes' }, { value: 'No' }] } }),
+      activity('action', 'Ran pwd', { metadata: { action: 'Bash pwd' } }),
+    )
+    const { container } = renderConversation(makeSession({ state: 'awaitingInput', phase: 'awaitingUser' }))
+    const question = await screen.findByText(/^Should shout\(\) append an exclamation mark\?/)
+    expect(question.closest('.cs-group-children')).not.toBeNull()
+    expect(question.closest('.cs-question')).not.toBeNull()
+    expect(container.querySelector('.cs-turn-items > .cs-text')).toBeNull()
+  })
+
   it('renders a choice question as text with bulleted options, without answer buttons or a frame', async () => {
     stream(activity('elicitation', 'Should shout() append an exclamation mark?', { signal: 'select', signalMetadata: { options: [{ value: 'Yes' }, { value: 'No', label: 'No thanks' }] } }))
     renderConversation(makeSession({ state: 'awaitingInput', phase: 'awaitingUser' }))
