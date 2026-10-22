@@ -458,6 +458,35 @@ func (s *server) executeConnectorTool(r *http.Request, data domain.Bootstrap, ca
 	return result, nil
 }
 
+// connectorActionMetadata is the action activity of a connector call (connector, tool and arguments), shared by the
+// in-process agent and worker runs; the result is added once the call ran (connectorActionResult).
+func connectorActionMetadata(tool connectorTool, call domain.AgentToolCall) map[string]any {
+	parameter := tool.Policy.Name
+	if args := strings.TrimSpace(string(call.Arguments)); args != "" && args != "{}" {
+		parameter += " " + truncateSettingsText(args, 500)
+	}
+	return map[string]any{"action": tool.RemoteName, "parameter": parameter, "connector": tool.Policy.Name}
+}
+
+// connectorActionResult is a connector call's result for its action activity: the text content (at most 2 KB),
+// or the error with the connector's own text.
+func connectorActionResult(result []byte, err error) string {
+	if err == nil {
+		return connectorResultText(result, 2000)
+	}
+	logged := "Error: " + err.Error()
+	if detail := connectorResultText(result, 2000); detail != "" {
+		logged += "\n" + detail
+	}
+	return logged
+}
+
+// connectorNotRunResult is the action activity result of a connector call the run guard answered without running
+// it (an identical repeat or a call over budget).
+func connectorNotRunResult(content string) string {
+	return "Not run: " + truncateSettingsText(strings.SplitN(content, "\n", 2)[0], 300)
+}
+
 // connectorResultText is a connector tool result's text content for the activity log, at most limit bytes.
 func connectorResultText(result []byte, limit int) string {
 	var parsed struct {

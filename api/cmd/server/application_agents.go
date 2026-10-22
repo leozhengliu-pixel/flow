@@ -641,14 +641,10 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 			}
 			return content, failed, true
 		}
-		parameter := connector.Policy.Name
-		if args := strings.TrimSpace(string(call.Arguments)); args != "" && args != "{}" {
-			parameter += " " + truncateSettingsText(args, 500)
-		}
-		metadata := map[string]any{"action": connector.RemoteName, "parameter": parameter, "connector": connector.Policy.Name}
+		metadata := connectorActionMetadata(connector, call)
 		if content, failed, handled := guard.before(call); handled {
 			// Not run: an identical repeat or a call over budget, logged so the thread shows it was skipped.
-			metadata["result"] = "Not run: " + truncateSettingsText(strings.SplitN(content, "\n", 2)[0], 300)
+			metadata["result"] = connectorNotRunResult(content)
 			if appendAgentActivity(domain.AgentActivity{Type: "action", Body: connector.RemoteName, Metadata: metadata}) != nil {
 				return "", false, false
 			}
@@ -658,12 +654,9 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 			return "", false, false
 		}
 		result, err := execute(call)
-		content, logged := string(result), connectorResultText(result, 2000)
+		content, logged := string(result), connectorActionResult(result, err)
 		if err != nil {
-			content, logged = agentToolErrorContent(err), "Error: "+err.Error()
-			if detail := connectorResultText(result, 2000); detail != "" {
-				logged += "\n" + detail
-			}
+			content = agentToolErrorContent(err)
 		}
 		// A failed call or one that found nothing is a call without progress.
 		guard.after(call, content, err != nil || connectorFoundNothing(result))

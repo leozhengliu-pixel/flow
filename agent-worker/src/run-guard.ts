@@ -69,6 +69,51 @@ export function isErrorOutput(text: string) {
   }
 }
 
+/**
+ * The structured `isError` flag of the run's tool results. The SDK hands tool guardrails only the result content,
+ * so the MCP client records each call's flag here (flow-mcp.ts) and the guard's `after` reads it back for the same
+ * tool and arguments: an `isError` result with plain text counts as failed.
+ */
+export class ToolErrorFlags {
+  private readonly flags = new Map<string, boolean[]>()
+
+  record(tool: string, args: unknown, isError: boolean) {
+    const key = flagKey(tool, args)
+    const list = this.flags.get(key) ?? []
+    list.push(isError)
+    this.flags.set(key, list.slice(-8))
+  }
+
+  /** The flag of the earliest unread call of tool with these arguments (a JSON string or an object). */
+  take(tool: string, args: unknown): boolean | undefined {
+    const key = flagKey(tool, args)
+    const list = this.flags.get(key)
+    const flag = list?.shift()
+    if (list && list.length === 0) this.flags.delete(key)
+    return flag
+  }
+}
+
+function flagKey(tool: string, args: unknown) {
+  let value = args
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value || '{}')
+    } catch {
+      return `${tool}\0${value}`
+    }
+  }
+  return `${tool}\0${stableJson(value ?? {})}`
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson((value as Record<string, unknown>)[key])}`).join(',')}}`
+  }
+  return JSON.stringify(value)
+}
+
 /** MCP results arrive as a content item ({type:'text', text}) or a list of them. */
 export function outputText(output: unknown): string {
   if (typeof output === 'string') return output
@@ -95,7 +140,10 @@ const afterGuardrail = defineToolOutputGuardrail({
     const guard = guards.get(context.context as object)
     if (guard?.enabled) {
       const content = outputText(output)
-      await guard.call({ op: 'after', tool: toolCall.name, arguments: toolCall.arguments ?? '', content, failed: isErrorOutput(content) }).catch(() => undefined)
+      // The structured isError flag first; error text (the SDK's and Flow's error shapes) otherwise.
+      const flagged = guard.toolErrors?.take(toolCall.name, toolCall.arguments ?? '')
+      const failed = flagged === true || isErrorOutput(content)
+      await guard.call({ op: 'after', tool: toolCall.name, arguments: toolCall.arguments ?? '', content, failed }).catch(() => undefined)
     }
     return ToolGuardrailFunctionOutputFactory.allow()
   },
@@ -130,7 +178,7 @@ export class RunGuard {
   private withdraw = false
   private nudge?: string
 
-  constructor(private readonly api: GuardApi, readonly maxTurns: number) {}
+  constructor(private readonly api: GuardApi, readonly maxTurns: number, readonly toolErrors?: ToolErrorFlags) {}
 
   get enabled() {
     return this.view.enabled
