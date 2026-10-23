@@ -45,6 +45,7 @@ import { AgentSkillsPicker } from './agent-skills-picker'
 import { applyAgentStreamEvent, markAgentSessionFailed, markAgentSessionStopped } from './agent-stream-state'
 import { isBlankStoppedReply, settleStoppedAgentReply } from './agent-stopped-reply'
 import { clearLiveAgentSession, liveAgentSession, setLiveAgentSession, useLiveAgentSessionsVersion } from './agent-live-sessions'
+import { agentReplyInProgress, agentReplySignature } from './agent-reply-progress'
 import { AgentElicitation } from './agent-elicitation';
 import {
   asPersistedConversation,
@@ -177,9 +178,10 @@ export function AgentPage({
   }, [currentSummary]);
   const hydratedCurrent = useDeferredHydratedConversation(deferredConversation) ?? undefined;
   const current = live ?? hydratedCurrent;
-  // The last message is still waiting for its reply on the server (the page
-  // that asked was closed or reloaded): poll just this chat until it lands.
-  const awaitingReply = Boolean(!busy && !live && current && current.messages.at(-1)?.role === "user" && Date.now() - Date.parse(current.messages.at(-1)?.createdAt ?? "") < 10 * 60_000);
+  // The reply is still running on the server while this page does not stream it (the page that asked was reloaded or
+  // closed, or this is another tab): show its saved progress, approvals and questions included, and poll just this
+  // chat until it finishes (realtime pushes the same updates sooner).
+  const awaitingReply = Boolean(!busy && !live && agentReplyInProgress(current));
   const currentId = current?.id;
   // Latest callback for the poller, so a new function identity does not restart the polling interval.
   const onSessionChangeRef = useRef(onSessionChange);
@@ -190,9 +192,13 @@ export function AgentPage({
     if (!awaitingReply || !currentId) return;
     const id = currentId;
     let active = true;
+    let seen = "";
     const timer = window.setInterval(() => {
       void getAgentSession(id).then((latest) => {
         if (!active || latest.messages.at(-1)?.role !== "assistant") return;
+        const signature = agentReplySignature(latest);
+        if (signature === seen) return;
+        seen = signature;
         setSessions((list) => list.map((item) => (item.id === latest.id ? latest : item)));
         onSessionChangeRef.current(latest.id, latest);
       }).catch(() => undefined);
@@ -365,12 +371,18 @@ export function AgentPage({
     setError(undefined);
     try {
       await resolveAgentApproval(current.id, call.approvalId, decision);
+      // The buttons stay off until the reply shows the approval resolved (streamed here, or saved when the reply runs
+      // without this page), so a second click never answers it twice.
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t("Flow Agent is unavailable"));
-    } finally {
       setApprovalBusy(undefined);
     }
   };
+  useEffect(() => {
+    if (!approvalBusy) return;
+    const waiting = shown?.messages.some((message) => message.parts?.some((part) => part.toolCall?.approvalId === approvalBusy && part.toolCall.status === "pending"));
+    if (!waiting) setApprovalBusy(undefined);
+  }, [approvalBusy, shown]);
   const historyOptions = useMemo(
     () => [
       { id: "__new__", label: t("New chat") },

@@ -171,6 +171,11 @@ type AgentMessage struct {
 	// Feedback is the owner's rating of an assistant reply (thumbs up / down with an optional note).
 	Feedback  *AgentFeedback `json:"feedback,omitempty"`
 	CreatedAt time.Time      `json:"createdAt"`
+	// Status is "streaming" while the reply is still being written (its parts are what it has done so far, including
+	// approvals and questions waiting for the owner); empty once it finished, failed or was stopped.
+	Status string `json:"status,omitempty"`
+	// UpdatedAt is when a streaming reply was last saved; the running server refreshes it while the reply waits.
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
 	// Offloaded names fields stored outside the workspace record and not
 	// loaded yet (see OffloadedContent).
 	Offloaded OffloadedContent `json:"_offloaded,omitempty"`

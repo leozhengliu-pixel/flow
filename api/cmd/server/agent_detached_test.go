@@ -87,7 +87,7 @@ func TestAgentReplySurvivesDisconnectAndStops(t *testing.T) {
 		deadline := time.Now().Add(5 * time.Second)
 		for time.Now().Before(deadline) {
 			session := apiCall[domain.AgentSession](t, api.URL, http.MethodGet, "/api/agent/sessions/"+id, http.StatusOK)
-			if last := session.Messages[len(session.Messages)-1]; last.Role == "assistant" {
+			if last := session.Messages[len(session.Messages)-1]; last.Role == "assistant" && last.Status == "" {
 				return last, true
 			}
 			time.Sleep(20 * time.Millisecond)

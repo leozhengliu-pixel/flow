@@ -100,6 +100,9 @@ type server struct {
 	loopReconcilerStarted atomic.Bool
 	// agentRunReconcilerStarted guards the agent runtime's lease reconciler (agent_runtime_api.go).
 	agentRunReconcilerStarted atomic.Bool
+	// agentLiveReplies holds the replies this process is writing, by message id (agent_live_reply.go).
+	agentLiveReplies      sync.Map
+	agentLiveSweepStarted atomic.Bool
 	// Public API request/complexity budgets (api_rate_limit.go).
 	apiRateLimiter     *apiRateLimiter
 	apiRateLimiterOnce sync.Once
@@ -285,6 +288,7 @@ func newHandler(s *server) http.Handler {
 	s.startDeliveryScheduler()
 	s.startLoopRunReconciler()
 	s.startAgentRunReconciler()
+	s.startAgentLiveReplySweeper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]string{"status": "ok", "redis": "disabled", "version": version, "commit": commit}

@@ -3025,6 +3025,10 @@ export interface AgentMessage extends AgentChatMessage {
   /** The question part a user message answered by picking an option (shown on the question, not as a bubble). */
   answerTo?: UUID;
   createdAt: string;
+  /** "streaming" while the reply is still being written on the server (its parts so far, waiting approvals included). */
+  status?: "streaming";
+  /** When a streaming reply was last saved. */
+  updatedAt?: string;
 }
 /** A rating and/or note about agent output (the reference app's "This was helpful" / "Leave feedback…"). */
 export interface AgentFeedback {

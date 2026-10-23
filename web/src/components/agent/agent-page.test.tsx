@@ -7,7 +7,7 @@ import type { AgentSession } from '@/types/flow'
 
 const api = vi.hoisted(() => ({
   createAgentSession: vi.fn(), createAgentSessionMessage: vi.fn(), deleteAgentSession: vi.fn(),
-  fetchAgentStatus: vi.fn(), getAgentSession: vi.fn(), markAgentSessionRead: vi.fn(), stopAgentSession: vi.fn(), updateAgentSession: vi.fn(), updateAgentSessionMessage: vi.fn(),
+  fetchAgentStatus: vi.fn(), getAgentSession: vi.fn(), markAgentSessionRead: vi.fn(), stopAgentSession: vi.fn(), updateAgentSession: vi.fn(), updateAgentSessionMessage: vi.fn(), resolveAgentApproval: vi.fn(),
 }))
 const streams = vi.hoisted(() => ({ streamNewAgentSession: vi.fn(), streamAgentSessionMessage: vi.fn(), streamAgentSessionMessageEdit: vi.fn() }))
 vi.mock('@/lib/api', () => api)
@@ -209,6 +209,34 @@ describe('agent page composer', () => {
     api.getAgentSession.mockResolvedValue({ ...waiting, messages: [asked, { id: 'a', role: 'assistant', content: 'No blockers.', createdAt: new Date().toISOString() }] })
     await waitFor(() => expect(screen.getByText('No blockers.')).toBeVisible(), { timeout: 4000 })
     expect(onSessionChange).toHaveBeenCalledWith('session-wait', expect.objectContaining({ id: 'session-wait' }))
+  })
+
+  it('shows a reply still running on the server after a reload, with its partial text and an answerable approval', async () => {
+    const user = userEvent.setup()
+    api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
+    const asked = { id: 'q', role: 'user' as const, content: 'Delete the branch', createdAt: '2026-08-31T00:00:00Z' }
+    const call = { id: 'call', name: 'external_code__delete_branch', title: 'Delete branch', arguments: {}, status: 'pending' as const, approvalId: 'approval-1' }
+    const streaming = { id: 'a', role: 'assistant' as const, content: 'Checking the branch first.', status: 'streaming' as const, createdAt: '2026-08-31T00:00:01Z', updatedAt: '2026-08-31T00:00:02Z', parts: [
+      { id: 'text', type: 'text' as const, text: 'Checking the branch first.', status: 'running' as const },
+      { id: 'tool', type: 'toolCall' as const, status: 'pending' as const, toolCall: call },
+    ] }
+    const running: AgentSession = { id: 'session-live', slugId: 'live', userId: 'user-1', title: 'Branch', favorite: false, location: 'page', issueIds: [], skillIds: [], messages: [asked, streaming], createdAt: asked.createdAt, updatedAt: asked.createdAt }
+    api.getAgentSession.mockResolvedValue(running)
+    api.resolveAgentApproval.mockResolvedValue({ approvalId: 'approval-1', decision: 'approved' })
+    render(<I18nProvider><AgentPage chatSlug="live" data={makeBootstrap({ agentSessions: [running], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
+    expect(await screen.findByText('Checking the branch first.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Stop responding' })).toBeVisible()
+    const approve = await screen.findByRole('button', { name: 'Approve tool' })
+    await user.click(approve)
+    expect(api.resolveAgentApproval).toHaveBeenCalledWith('session-live', 'approval-1', 'approve')
+    // Answered: the card stays off until the saved reply shows the approval resolved.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Approve tool' })).toBeDisabled())
+    api.getAgentSession.mockResolvedValue({ ...running, messages: [asked, { id: 'a', role: 'assistant', content: 'Deleted the branch.', createdAt: '2026-08-31T00:00:05Z', parts: [
+      { id: 'tool', type: 'toolCall', status: 'completed', toolCall: { ...call, status: 'completed', result: { ok: true } } },
+      { id: 'text', type: 'text', text: 'Deleted the branch.', status: 'completed' },
+    ] }] })
+    await waitFor(() => expect(screen.getByText('Deleted the branch.')).toBeVisible(), { timeout: 4000 })
+    expect(screen.queryByRole('button', { name: 'Approve tool' })).not.toBeInTheDocument()
   })
 
   it('renders persisted reasoning, tool, text, and error parts', async () => {

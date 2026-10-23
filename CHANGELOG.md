@@ -38,6 +38,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   `FLOW_DATABASE_MIGRATION_LOCK_TIMEOUT` (default `10m`) bounds the wait. With
   several replicas, scheduled workflow runs and retries run once instead of on
   each replica, and storage maintenance runs on one replica.
+- Agent chat: a reply still running when the page is reloaded, or when the
+  chat is open in another tab, shows its progress (text so far, tool calls,
+  and approval and connector question cards you can answer) instead of only
+  "Thinking…" until it ends; answering in one tab updates the others. The
+  in-progress reply is saved with the chat (message `status: "streaming"`), a
+  reply cut off by a server restart is marked interrupted with Retry, and
+  with Redis coordination an answer or Stop that reaches another API server is
+  forwarded to the server running the reply.
 - Coding session pushes (`coding_session.*` on `/api/realtime/events`) reach
   only the people who may open the session; before, every workspace member's
   stream carried each session's issue, phase and state, including another
