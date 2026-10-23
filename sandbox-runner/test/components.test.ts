@@ -290,6 +290,9 @@ test('git helpers: commit subject, numstat parsing, branch policy', () => {
   assert.equal(summaryTitle('## Use local dates in formatDate\n\nDetails'), 'Use local dates in formatDate')
   assert.equal(summaryTitle('x'.repeat(100)), undefined)
   assert.equal(summaryTitle(''), undefined)
+  // A lead-in line to a list keeps its words, not its colon.
+  assert.equal(summaryTitle('Fixed `stats.average` per QA-17:\n\n- **`stats.py`**: divides by len(values)'), 'Fixed `stats.average` per QA-17')
+  assert.equal(commitMessage('Fixed the parser:\n- one'), 'Fixed the parser\n')
   assert.deepEqual(parseNumstat('3\t1\tsrc/a.ts\n-\t-\tlogo.png\n0\t9\told.ts\n', 'M\tsrc/a.ts\nA\tlogo.png\nD\told.ts\n'), [
     { path: 'src/a.ts', additions: 3, deletions: 1, status: 'modified' },
     { path: 'logo.png', additions: 0, deletions: 0, status: 'added' },

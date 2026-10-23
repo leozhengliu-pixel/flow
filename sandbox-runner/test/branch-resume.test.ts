@@ -95,6 +95,24 @@ test('resume: stopped right after the clone, workspace lost: the branch is creat
   }
 })
 
+test('a new session branch has no upstream, so the agent\'s own bare `git push` publishes it under its name', async () => {
+  const f = fixture()
+  try {
+    const git = await f.clone('repo')
+    await git.checkoutSessionBranch(f.repo)
+    assert.throws(() => f.in(git.repoDir, ['rev-parse', '--abbrev-ref', '@{upstream}']), 'not tracking origin/main')
+    writeFileSync(join(git.repoDir, 'fix.txt'), 'fix\n')
+    f.in(git.repoDir, ['add', '.'])
+    f.in(git.repoDir, ['commit', '-q', '-m', 'fix'])
+    f.in(git.repoDir, ['push', '-q'])
+    assert.equal(remoteHas(f, 'flow/x'), true)
+    assert.notEqual(f.in(f.origin, ['rev-parse', 'main']), await git.head(), 'main is untouched')
+    assert.equal(f.in(git.repoDir, ['rev-parse', '--abbrev-ref', '@{upstream}']), 'origin/flow/x')
+  } finally {
+    f.cleanup()
+  }
+})
+
 test('resume: a baseline origin does not have falls back to the base ref and says so', async () => {
   const f = fixture()
   try {
