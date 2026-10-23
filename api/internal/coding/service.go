@@ -461,7 +461,7 @@ func (s *Service) enrich(ctx context.Context, session domain.CodingSession) doma
 	return session
 }
 
-// SandboxView is a sandbox row as the session JSON shows it (Linear sandboxes[]).
+// SandboxView is a sandbox row as the session JSON shows it (the reference sandboxes[]).
 func SandboxView(session domain.CodingSession, record sandbox.Record) domain.CodingSandboxRecord {
 	status := "requested"
 	switch record.Phase {

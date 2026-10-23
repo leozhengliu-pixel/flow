@@ -3,7 +3,7 @@ import type { MapperOptions, StreamMapper } from '../mapping/common.js'
 import { OpenCodeMapper } from '../mapping/opencode.js'
 import { gatewayMcpServers, turnPrompt, withoutProviderKeys, type HarnessAdapter, type HarnessContext, type HarnessInvocation } from './types.js'
 
-// OpenCode for Linear's "Open source" option, pinned in the image.
+// OpenCode for the "Open source" harness option, pinned in the image.
 // First turn:  opencode run --format json --auto --thinking -m flow/<m> [--variant <e>]
 //              (prompt on stdin; opencode reads stdin when it is not a TTY)
 // Follow-up:   the same plus --session <sessionID>.

@@ -33,7 +33,7 @@ var (
 	ErrCodingAnchorRevoked = errors.New("coding: the session's agent task was revoked")
 )
 
-// CodingSessionState is the user-facing state, matching Linear's
+// CodingSessionState is the user-facing state, matching the reference
 // AgentSession states. UI labels: pending=Starting, active=Working,
 // stopping=Stopping…, complete=Finished, awaitingInput=Needs input,
 // error=Errored, stale=Stopped.
@@ -69,7 +69,7 @@ const (
 )
 
 // CodingErrorCode is an explicit, stable error reason. The first group are
-// Linear's codes; the rest are Flow's sandbox and runtime codes.
+// the reference codes; the rest are Flow's sandbox and runtime codes.
 type CodingErrorCode string
 
 const (
@@ -113,7 +113,7 @@ const (
 	CodeHostGitLab = "gitlab"
 )
 
-// Harnesses (Linear: Codex default, Claude Code, Open source).
+// Harnesses (reference: Codex default, Claude Code, Open source).
 const (
 	CodingHarnessCodex      = "codex"
 	CodingHarnessClaudeCode = "claudeCode"
@@ -270,7 +270,7 @@ const (
 	CodingSourceExternal         = "external"         // an external source (trusted sources gate)
 )
 
-// CodingSandboxRecord is one sandbox of a session (Linear sandboxes[]).
+// CodingSandboxRecord is one sandbox of a session (the reference sandboxes[]).
 type CodingSandboxRecord struct {
 	ID         string          `json:"id"`
 	SessionID  string          `json:"sessionId,omitempty"`

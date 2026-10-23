@@ -8,7 +8,7 @@ export interface CodingPlanStep { content: string; status: "pending" | "inProgre
 /** Same shape as the agent session external URL (ApplicationExternalUrl). */
 export interface CodingExternalURL { label: string; url: string }
 
-/** Linear AgentSession states. Labels: Starting, Working, Stopping…, Finished, Needs input, Errored, Stopped. */
+/** AgentSession states. Labels: Starting, Working, Stopping…, Finished, Needs input, Errored, Stopped. */
 export type CodingSessionState = "pending" | "active" | "stopping" | "complete" | "awaitingInput" | "error" | "stale";
 /** What a follow-up turn may do to the repository: develop (commit, push, update the PR), change without publishing, or verify only. */
 export type CodingTurnScope = "write" | "noPublish" | "readOnly";

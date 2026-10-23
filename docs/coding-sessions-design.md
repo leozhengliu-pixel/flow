@@ -4,13 +4,13 @@ Status: design and skeleton landed on `feat/coding-sessions`. Every item in this
 and is owned by an implementation track (§24). §23 describes the order in which tracks integrate. It does not defer
 any scope.
 
-Linear's coding sessions let the Linear Agent write code in a cloud sandbox and open a draft PR. Flow does the same on
+The reference product's coding sessions let its agent write code in a cloud sandbox and open a draft PR. Flow does the same on
 the operator's own infrastructure: Kubernetes Pods (or Docker for development and CI), using GitHub (through a GitHub
 App) or GitLab (through the existing GitLab connection). The agent is Claude Code, Codex or an open-source harness.
 
 Contents
 
-1. Goals and Linear parity
+1. Goals and reference parity
 2. Architecture
 3. Components
 4. Session state machine
@@ -38,9 +38,9 @@ Contents
 
 ---
 
-## 1. Goals and Linear parity
+## 1. Goals and reference parity
 
-| Linear | Flow |
+| Reference | Flow |
 |---|---|
 | Settings › AI & agents › Coding sessions (`/settings/ai/coding-sessions`) with Enable, Agent, Model, Require signed commits, Pin sandbox region, Environments (inline), Trusted external sources, Repository access for Loops | The same page (`settings/coding-sessions`). The separate `coding-environments` page is removed and redirects to it. The enable toggle stays the `coding-sessions` feature flag; policy fields extend `WorkspaceSettings.CodingAgentSettings` |
 | Agent: Codex (default) / Claude Code / Open source | `harness`: `codex` (default) / `claudeCode` / `openSource`. Legacy values `auto`→`codex` and `claude`→`claudeCode` are normalized on read |
@@ -52,7 +52,7 @@ Contents
 | Snapshots with status, logs, refresh and cancel | §10 |
 | AgentSession states and fields, sandboxes[], PRs, commitsByTurnActivityId | `domain.CodingSession` anchored to an `AgentTask` (§4, §6) |
 | Activities thought/action/response/elicitation/error/prompt; signals stop/continue/auth/select | Reuses the AgentTask/AgentActivity protocol (§16). In issue activity a delegated session is a session card ("Flow started by …", the status row "Setting up owner/repo…" / "Finished" with the PR number, and Copy link, Unsubscribe from chat and Archive); its conversation shows in the session view |
-| Error reason codes | `domain.CodingErrorCode`. Linear's codes are kept verbatim; Flow adds sandbox codes (§4.4) |
+| Error reason codes | `domain.CodingErrorCode`. The reference codes are kept verbatim; Flow adds sandbox codes (§4.4) |
 | Triggers: delegate, chat or comment, Loops "Start a coding session", PR follow-ups, "fix this PR" | §15 |
 | Billing: AI credits, sandbox runtime by time, spend limits | LLM proxy metering plus runtime metering, enforced against the existing `SpendLimitSettings` (§20) |
 
@@ -132,7 +132,7 @@ Data flow of one session (issue → draft PR):
 
 ### 4.1 States and phases
 
-The user-facing **state** follows Linear's: `pending, active, stopping, complete, awaitingInput, error, stale` (UI:
+The user-facing **state** follows the reference: `pending, active, stopping, complete, awaitingInput, error, stale` (UI:
 Starting, Working, Stopping…, Finished, Needs input, Errored, Stopped). The reconciler works on a finer **phase**. Each
 phase maps to one state and has a timeout, a retry cap and an exhaustion error code. These come from
 `coding.PhasePolicies` (skeleton, with tests). The timeouts below are the defaults.
@@ -178,7 +178,7 @@ done ─continue / restart / follow-up─► queued
   `idle` it is delivered to the warm runner (long-poll). In `done` or after the TTL the session is re-queued. While
   `running`, the turn waits until the current turn ends (FIFO, per session).
 - **Restart** (`POST /restart`): from `done`, re-queues with the same prompt history. `{useDefaultModel:true}` is
-  Linear's "Restart with default model": it sets `modelSelection=auto` (used after `modelUnavailable` or harness
+  The reference "Restart with default model": it sets `modelSelection=auto` (used after `modelUnavailable` or harness
   failures on a pinned model).
 - **Approve** (`POST /approve`): moves `awaitingApproval` to `queued`, or `{reject:true}` ends it (state stale).
 - **Answer** (an elicitation response on the anchor): an inbox turn of kind `followUp`; the phase goes back to
@@ -278,7 +278,7 @@ in `data`, and the indexed columns are copies.
 | `coding_environment_snapshots` | `id`, `environment_id`, `status`, `strategy`, `config_hash`, `storage_ref`, `logs_key`, `cancel_requested`, lease, `expires_at` | `config_hash` = SHA-256 of image + mise + prepare script + dependency mode + secret names + base ref |
 | `coding_sessions` | `id`, `agent_session_id` (unique), `issue_id`, `environment_id`, `creator_id`, `source`, `idempotency_key` (unique), `state`, `phase`, `phase_started_at`, `phase_deadline`, `attempts`, `stop_requested`, `error_code`, lease, `next_reconcile_at`, `deadline_at`, `cost_micros`, `version`, `data` | `data` = `domain.CodingSession` (plan, summary, diffs, harness resume id, model resolution) |
 | `coding_session_inbox` | PK `(session_id, seq)`, `kind`, `payload`, `delivered_at` | Turns and signals for the runner |
-| `coding_sandboxes` | `id`, `session_id`, `snapshot_id`, `kind`, `provider`, `provider_ref`, `desired`, `phase`, `reason`, `size`, `region`, lease, `heartbeat_at`, `deadline_at`, `billed_seconds`, `logs_key`, `data` | Linear `sandboxes[]`. `data` = `sandbox.Record` extras (workspace source, env) |
+| `coding_sandboxes` | `id`, `session_id`, `snapshot_id`, `kind`, `provider`, `provider_ref`, `desired`, `phase`, `reason`, `size`, `region`, lease, `heartbeat_at`, `deadline_at`, `billed_seconds`, `logs_key`, `data` | Reference `sandboxes[]`. `data` = `sandbox.Record` extras (workspace source, env) |
 | `coding_sandbox_tokens` | `token_hash` (SHA-256), `sandbox_id`, `session_id`, `setup_secrets_used`, `expires_at`, `revoked_at` | Prefix `fcs_`. TTL = sandbox deadline + `FLOW_CODING_TOKEN_GRACE` |
 | `coding_session_pull_requests` | PK `(session_id, code_host, host_name, number)`, `repository`, `state`, `data` | `agentSessionToPullRequests`. The index on `(code_host, host_name, repository, number)` routes webhooks |
 | `coding_session_commits` | PK `(session_id, sha)`, `turn_activity_id` | `commitsByTurnActivityId` |
@@ -671,7 +671,7 @@ on success, trigger a background snapshot build.
 2. Restore: the `restore` init container GETs the archive with the sandbox token and unpacks it into the fresh
    emptyDir or PVC. A failed or corrupt download fails the init container, which maps to `snapshotFailed`; the
    reconciler retries once and then falls back to inline setup.
-3. Secrets: an archive contains whatever the prepare script wrote to disk. The editor warns about this (as Linear
+3. Secrets: an archive contains whatever the prepare script wrote to disk. The editor warns about this (as the reference
    does), and the runner unsets secret env vars before archiving.
 
 **volumesnapshot** (requires CSI snapshot support and the `snapshot.storage.k8s.io/v1` CRDs):
@@ -884,13 +884,13 @@ Harness?, Model?, CreatorID, LoopID?})` (track B). Track L owns the trigger glue
 
 - **Delegate an issue** to the built-in Flow agent: the existing delegation creates the AgentTask. The Flow agent
   (chat runtime) gets a `start_coding_session` tool (L adds it to the agent tool groups and to `flow_mcp_tools.json`).
-  It decides, as Linear's agent does, when code changes are needed, and calls the tool. The tool reuses the existing
+  It decides, as the reference agent does, when code changes are needed, and calls the tool. The tool reuses the existing
   task as the anchor. The UI also offers an explicit "Start coding session" (`POST /api/issues/{id}/coding-session`).
 - **Agent chat**: the same tool from chat. Without an issue, the anchor is an AgentTask with `ResourceType="agentChat"`.
 - **Comment**: `@Flow` in an issue comment prompts the agent, which then decides like a delegation.
 - **Repository selection**: an explicit environment wins. Otherwise: the single active environment; or the issue's
   linked PRs' repos; or the team's last-used environment. If it is still ambiguous, the session goes to
-  `awaitingUser` with a `select` elicitation listing environments (Linear's `select` signal).
+  `awaitingUser` with a `select` elicitation listing environments (the reference `select` signal).
 - **Loops**: the "Autofix bugs" template's "Start a coding session" action calls the same tool from a loop run.
   Allowed only when `loopRepositoryAccess` is `all`, or `selected` and the environment is in `loopRepositories`
   (otherwise `repoNotInPolicy`). Spend is charged to `loopLimit` and `loopOverrides`.
@@ -1397,7 +1397,7 @@ Rules for all tracks:
    fallbacks are weaker, documented and visible in the UI.
 4. **CLI flag drift** (claude, codex, opencode). The versions are pinned in the image and the adapters are tested
    against recorded JSONL fixtures. Upgrades go through a fixture refresh.
-5. **Open-source harness = OpenCode.** This is an interpretation of Linear's "Open source" option (an open-source
+5. **Open-source harness = OpenCode.** This is an interpretation of the reference "Open source" option (an open-source
    agent plus any OpenAI-compatible model). The harness interface makes swapping it a contained change in C.
 6. **Signed commits.** Flow signs on the user's behalf with their uploaded key, which keeps the key out of the sandbox
    but gives Flow custody of the private key (encrypted at rest). Existing uploaded keys have no stored material, so

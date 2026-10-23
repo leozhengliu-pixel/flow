@@ -9,7 +9,7 @@ import (
 )
 
 // Repository selection for triggers (docs/coding-sessions-design.md §15,
-// track L). It is Flow's version of Linear's issueRepositorySuggestions: an
+// track L). It is Flow's version of the reference issueRepositorySuggestions: an
 // explicit environment wins; otherwise the active environments are ranked by
 // the issue's linked PRs, the repositories and environments the text names,
 // the issue labels, the team, and the team's recently used environments. A

@@ -30,7 +30,7 @@ func TestClassifyCodingIntentRules(t *testing.T) {
 		want    CodingIntent
 		rule    string
 	}{
-		// Linear: these start coding immediately.
+		// Reference: these start coding immediately.
 		{"Fix this bug", IntentCode, "codeVerb"},
 		{"Can you fix the login redirect?", IntentCode, "codeVerb"},
 		{"Open a PR that bumps the timeout to 30s", IntentCode, "codeVerb"},
@@ -47,7 +47,7 @@ func TestClassifyCodingIntentRules(t *testing.T) {
 		{"修复这个问题", IntentCode, "codeVerb"},
 		{"排查并修复登录问题", IntentCode, "codeVerb"},
 		{"帮我提个PR", IntentCode, "codeVerb"},
-		// Linear: these do not.
+		// Reference: these do not.
 		{"Investigate why the export is slow", IntentNoCode, "investigateVerb"},
 		{"Look into the crash reports", IntentNoCode, "investigateVerb"},
 		{"Plan the fix for the login bug", IntentNoCode, "investigateVerb"},
