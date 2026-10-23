@@ -68,6 +68,11 @@ func (s *server) receiveRemoteEvent(envelope coordination.EventEnvelope) {
 	if domain.RoutineCredentialEvent(envelope.Event.Type) {
 		return
 	}
+	if envelope.Event.Type == agentAnswerEventType {
+		// An answer for a chat reply running here; never shown to browsers (agent_live_answer.go).
+		go s.receiveForwardedAgentAnswer(envelope.Workspace, envelope.Event)
+		return
+	}
 	if s.receiveCollaborationEvent(envelope.Workspace, envelope.Event) {
 		return
 	}

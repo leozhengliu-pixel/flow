@@ -32,39 +32,73 @@ func (s *server) resolveAgentElicitation(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	data := s.workspaceData(r)
-	if _, err := ownedAgentSession(&data, r.PathValue("id")); err != nil {
+	session, err := ownedAgentSession(&data, r.PathValue("id"))
+	if err != nil {
 		writeError(w, 404, "Elicitation not found")
 		return
 	}
-	s.agentApprovalsMu.Lock()
-	defer s.agentApprovalsMu.Unlock()
 	id := r.PathValue("elicitationId")
-	pending := s.agentElicitations[id]
-	if pending == nil || pending.Workspace != workspaceKey(r) || pending.SessionID != r.PathValue("id") || pending.UserID != data.Viewer.ID {
-		writeError(w, 404, "Elicitation expired or not found")
+	found, message := s.answerAgentElicitation(workspaceKey(r), session.ID, data.Viewer.ID, id, input)
+	if found {
+		if message != "" {
+			writeError(w, 400, message)
+			return
+		}
+		writeJSON(w, 200, map[string]string{"action": input.Action})
 		return
 	}
-	if input.Action == "accept" && pending.Mode == "form" {
-		var schema jsonschema.Schema
-		if json.Unmarshal(pending.Schema, &schema) != nil {
-			writeError(w, 400, "Invalid form schema")
+	// The reply may be running on another server: its saved copy shows the question waiting (agent_live_answer.go).
+	if part, waiting := s.storedAgentLivePart(r, *session, id); waiting && part.Elicitation != nil && s.coordinator != nil {
+		if message := validAgentElicitationAnswer(part.Elicitation.Mode, part.Elicitation.Schema, &input); message != "" {
+			writeError(w, 400, message)
 			return
 		}
-		resolved, err := schema.Resolve(nil)
-		if err != nil {
-			writeError(w, 400, "Invalid form schema")
+		if s.forwardAgentAnswer(r, agentForwardedAnswer{Kind: "elicitation", ID: id, SessionID: session.ID, UserID: data.Viewer.ID, Elicitation: &input}) {
+			writeJSON(w, http.StatusAccepted, map[string]string{"action": input.Action})
 			return
 		}
-		if err = resolved.Validate(input.Content); err != nil {
-			writeError(w, 400, "Response does not satisfy the requested form")
-			return
-		}
-	} else {
-		input.Content = nil
+		writeError(w, http.StatusConflict, agentAnswerElsewhereError)
+		return
+	}
+	writeError(w, 404, "Elicitation expired or not found")
+}
+
+// answerAgentElicitation hands input to the run in this process waiting on elicitation id. found is false when none
+// is; message is the validation error that kept the answer from it.
+func (s *server) answerAgentElicitation(workspace, sessionID, userID, id string, input mcp.ElicitResult) (found bool, message string) {
+	s.agentApprovalsMu.Lock()
+	defer s.agentApprovalsMu.Unlock()
+	pending := s.agentElicitations[id]
+	if pending == nil || pending.Workspace != workspace || pending.SessionID != sessionID || pending.UserID != userID {
+		return false, ""
+	}
+	if message := validAgentElicitationAnswer(pending.Mode, pending.Schema, &input); message != "" {
+		return true, message
 	}
 	delete(s.agentElicitations, id)
 	pending.Decision <- input
-	writeJSON(w, 200, map[string]string{"action": input.Action})
+	return true, ""
+}
+
+// validAgentElicitationAnswer checks an accepted form answer against its schema (and drops content from any other
+// answer); it returns the error to show, or "".
+func validAgentElicitationAnswer(mode string, schemaJSON json.RawMessage, input *mcp.ElicitResult) string {
+	if input.Action != "accept" || mode != "form" {
+		input.Content = nil
+		return ""
+	}
+	var schema jsonschema.Schema
+	if json.Unmarshal(schemaJSON, &schema) != nil {
+		return "Invalid form schema"
+	}
+	resolved, err := schema.Resolve(nil)
+	if err != nil {
+		return "Invalid form schema"
+	}
+	if err = resolved.Validate(input.Content); err != nil {
+		return "Response does not satisfy the requested form"
+	}
+	return ""
 }
 
 func (s *server) requestAgentElicitation(ctx context.Context, workspace, sessionID, userID string, item applicationPolicy, params *mcp.ElicitParams, emit func(domain.AgentMessagePart, string) error) (*mcp.ElicitResult, error) {

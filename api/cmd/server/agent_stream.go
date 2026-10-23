@@ -91,21 +91,39 @@ func (s *server) resolveAgentApproval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := s.workspaceData(r)
-	if _, err := ownedAgentSession(&data, sessionID); err != nil {
+	session, err := ownedAgentSession(&data, sessionID)
+	if err != nil {
 		writeError(w, http.StatusNotFound, "agent approval not found")
 		return
 	}
+	if s.answerAgentApproval(workspaceKey(r), session.ID, data.Viewer.ID, approvalID, decision) {
+		writeJSON(w, http.StatusOK, map[string]string{"approvalId": approvalID, "decision": decision})
+		return
+	}
+	// The reply may be running on another server: its saved copy shows the approval waiting (agent_live_answer.go).
+	if _, waiting := s.storedAgentLivePart(r, *session, approvalID); waiting && s.coordinator != nil {
+		if s.forwardAgentAnswer(r, agentForwardedAnswer{Kind: "approval", ID: approvalID, SessionID: session.ID, UserID: data.Viewer.ID, Decision: decision}) {
+			writeJSON(w, http.StatusAccepted, map[string]string{"approvalId": approvalID, "decision": decision})
+			return
+		}
+		writeError(w, http.StatusConflict, agentAnswerElsewhereError)
+		return
+	}
+	writeError(w, http.StatusNotFound, "agent approval not found")
+}
+
+// answerAgentApproval hands decision to the run in this process waiting on approvalID; false when none is.
+func (s *server) answerAgentApproval(workspace, sessionID, userID, approvalID, decision string) bool {
 	s.agentApprovalsMu.Lock()
 	approval := s.agentApprovals[approvalID]
-	if approval == nil || approval.SessionID != sessionID || approval.WorkspaceKey != workspaceKey(r) || approval.UserID != data.Viewer.ID {
+	if approval == nil || approval.SessionID != sessionID || approval.WorkspaceKey != workspace || approval.UserID != userID {
 		s.agentApprovalsMu.Unlock()
-		writeError(w, http.StatusNotFound, "agent approval not found")
-		return
+		return false
 	}
 	delete(s.agentApprovals, approvalID)
 	s.agentApprovalsMu.Unlock()
 	approval.Decision <- decision
-	writeJSON(w, http.StatusOK, map[string]string{"approvalId": approvalID, "decision": decision})
+	return true
 }
 
 func (s *server) waitForAgentApproval(ctx context.Context, approvalID string, approval *agentApproval) string {
@@ -261,7 +279,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	// only an explicit stop (POST …/stop) ends it early.
 	runCtx, cancelRun := context.WithCancel(context.WithoutCancel(r.Context()))
 	defer cancelRun()
-	release := s.registerAgentRun(session.ID, cancelRun)
+	release := s.registerAgentRun(workspaceKey(r), session.ID, cancelRun)
 	defer release()
 	r = r.WithContext(runCtx)
 	if writer != nil {
@@ -306,6 +324,13 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	partIndex := map[string]int{}
 	partText := map[string]*strings.Builder{}
 	streamBytes := 0
+	// While it runs, the reply is saved to the conversation so a reloaded page or another tab sees it (agent_live_reply.go).
+	var live *agentLiveReply
+	defer func() { live.release() }()
+	send := func(event agentStreamEvent) error {
+		live.observe(parts, agentLiveEventForcesSave(event.Type))
+		return writer.send(event)
+	}
 	var elicitMu sync.Mutex
 	connectorContext := connectorRequestContext{Workspace: workspaceKey(r), UserID: data.Viewer.ID}
 	if writer != nil {
@@ -320,7 +345,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 					partIndex[part.ID] = len(parts)
 					parts = append(parts, part)
 				}
-				return writer.send(agentStreamEvent{Type: kind, MessageID: messageID, Part: &part})
+				return send(agentStreamEvent{Type: kind, MessageID: messageID, Part: &part})
 			})
 		}
 	}
@@ -331,8 +356,9 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	}
 	r = r.WithContext(context.WithValue(r.Context(), agentExtraToolsKey{}, extraTools))
 	if writer != nil {
+		live = s.startAgentLiveReply(r, session.ID, messageID, started)
 		snapshot := s.withAgentBodies(r, *session)
-		if err := writer.send(agentStreamEvent{Type: "session.started", Session: &snapshot, MessageID: messageID}); err != nil {
+		if err := send(agentStreamEvent{Type: "session.started", Session: &snapshot, MessageID: messageID}); err != nil {
 			return domain.AgentSession{}, err
 		}
 	}
@@ -379,7 +405,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				if call.Status == "completed" {
 					kind = "tool.completed"
 				}
-				return writer.send(agentStreamEvent{Type: kind, MessageID: messageID, Part: &part})
+				return send(agentStreamEvent{Type: kind, MessageID: messageID, Part: &part})
 			}
 		case "text.delta":
 			partType := "text"
@@ -401,7 +427,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				if event.Type == "text.delta" {
 					part.Text = ""
 				}
-				return writer.send(agentStreamEvent{Type: event.Type, MessageID: messageID, Delta: event.Delta, Part: &part})
+				return send(agentStreamEvent{Type: event.Type, MessageID: messageID, Delta: event.Delta, Part: &part})
 			}
 		case "tool.started", "tool.delta":
 			// load_tools is bookkeeping, not work the user needs to see. A streamed call whose name has not arrived
@@ -429,7 +455,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 					part.Text = partialJSONStringField(event.ToolCall.Arguments, "question")
 					part.Question = &domain.AgentQuestion{Options: []domain.AgentQuestionOption{}}
 				}
-				return writer.send(agentStreamEvent{Type: event.Type, MessageID: messageID, Delta: event.Delta, Part: &part})
+				return send(agentStreamEvent{Type: event.Type, MessageID: messageID, Delta: event.Delta, Part: &part})
 			}
 		}
 		return nil
@@ -525,7 +551,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				}
 			}
 			if writer != nil {
-				if err := writer.send(agentStreamEvent{Type: "text.replaced", MessageID: messageID, Delta: finalText}); err != nil {
+				if err := send(agentStreamEvent{Type: "text.replaced", MessageID: messageID, Delta: finalText}); err != nil {
 					return domain.AgentSession{}, err
 				}
 			}
@@ -544,7 +570,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				}
 			}
 			if writer != nil {
-				if err := writer.send(agentStreamEvent{Type: "text.replaced", MessageID: messageID, Delta: finalText}); err != nil {
+				if err := send(agentStreamEvent{Type: "text.replaced", MessageID: messageID, Delta: finalText}); err != nil {
 					return domain.AgentSession{}, err
 				}
 			}
@@ -583,7 +609,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			}
 			partIndex[phaseKey] = at
 			if writer != nil {
-				if err := writer.send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &step, BeforePartID: before}); err != nil {
+				if err := send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &step, BeforePartID: before}); err != nil {
 					return domain.AgentSession{}, err
 				}
 			}
@@ -614,7 +640,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				}
 				if writer != nil {
 					part := parts[index]
-					if err := writer.send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part}); err != nil {
+					if err := send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part}); err != nil {
 						return domain.AgentSession{}, err
 					}
 				}
@@ -649,7 +675,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				}
 				asked = question
 				if writer != nil {
-					if err := writer.send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part}); err != nil {
+					if err := send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part}); err != nil {
 						return domain.AgentSession{}, err
 					}
 				}
@@ -676,7 +702,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 					}
 					if writer != nil {
 						part := parts[index]
-						if err := writer.send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part}); err != nil {
+						if err := send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part}); err != nil {
 							return domain.AgentSession{}, err
 						}
 					}
@@ -711,7 +737,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 					if writer == nil {
 						return nil
 					}
-					return writer.send(agentStreamEvent{Type: kind, MessageID: messageID, Part: &part})
+					return send(agentStreamEvent{Type: kind, MessageID: messageID, Part: &part})
 				})
 				if placeholder, ok := partIndex["tool:"+call.ID]; ok && parts[placeholder].Type == "toolCall" {
 					parts = removeAgentPart(parts, partIndex, placeholder)
@@ -738,7 +764,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				s.registerAgentApproval(approvalID, approval)
 				if writer != nil {
 					part := parts[index]
-					if err := writer.send(agentStreamEvent{Type: "tool.approval_required", MessageID: messageID, ApprovalID: approvalID, Part: &part}); err != nil {
+					if err := send(agentStreamEvent{Type: "tool.approval_required", MessageID: messageID, ApprovalID: approvalID, Part: &part}); err != nil {
 						return domain.AgentSession{}, err
 					}
 				}
@@ -751,7 +777,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 					parts[index].ToolCall = cloneToolCall(&call)
 					if writer != nil {
 						part := parts[index]
-						if err := writer.send(agentStreamEvent{Type: "tool.approval_resolved", MessageID: messageID, ApprovalID: approvalID, Decision: "rejected", Part: &part}); err != nil {
+						if err := send(agentStreamEvent{Type: "tool.approval_resolved", MessageID: messageID, ApprovalID: approvalID, Decision: "rejected", Part: &part}); err != nil {
 							return domain.AgentSession{}, err
 						}
 					}
@@ -763,7 +789,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				parts[index].ToolCall = cloneToolCall(&call)
 				if writer != nil {
 					part := parts[index]
-					if err := writer.send(agentStreamEvent{Type: "tool.approval_resolved", MessageID: messageID, ApprovalID: approvalID, Decision: "approved", Part: &part}); err != nil {
+					if err := send(agentStreamEvent{Type: "tool.approval_resolved", MessageID: messageID, ApprovalID: approvalID, Decision: "approved", Part: &part}); err != nil {
 						return domain.AgentSession{}, err
 					}
 				}
@@ -798,7 +824,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			}
 			if writer != nil {
 				part := parts[partIndex[key]]
-				if err := writer.send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part}); err != nil {
+				if err := send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part}); err != nil {
 					return domain.AgentSession{}, err
 				}
 			}
@@ -815,7 +841,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				parts[index].Title = title
 				if writer != nil {
 					part := parts[index]
-					if err := writer.send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part}); err != nil {
+					if err := send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part}); err != nil {
 						return domain.AgentSession{}, err
 					}
 				}
@@ -854,7 +880,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			}
 		}
 		if textIndex, ok := partIndex["text"]; ok && writer != nil && textIndex < len(parts) {
-			if err := writer.send(agentStreamEvent{Type: "text.replaced", MessageID: messageID, Delta: parts[textIndex].Text}); err != nil {
+			if err := send(agentStreamEvent{Type: "text.replaced", MessageID: messageID, Delta: parts[textIndex].Text}); err != nil {
 				return domain.AgentSession{}, err
 			}
 		}
@@ -1179,6 +1205,10 @@ func agentProviderHistory(session domain.AgentSession, system string, issueTitle
 		}
 	}
 	for offset, message := range session.Messages[start:] {
+		if message.Status == agentMessageStreaming {
+			// A reply still being written (another run of this chat) is not part of the conversation yet.
+			continue
+		}
 		content := message.Content
 		if message.Role == "user" {
 			// Chips reach the model as copyable references (DEV-42 ("Title")), never as glued chip text.
@@ -1230,13 +1260,19 @@ func agentIssueTitles(issues []domain.Issue) func(string) string {
 
 func (s *server) persistAgentCompletion(r *http.Request, session domain.AgentSession, message domain.AgentMessage) (domain.AgentSession, error) {
 	var completed domain.AgentSession
+	// The reply saved while it was written (status "streaming") is replaced by its final form.
+	s.finishAgentLiveReply(message.ID)
 	// A stopped run still saves what it produced.
 	err := s.store.MutateWorkspace(context.WithoutCancel(r.Context()), workspaceKey(r), "agent.message_completed", session.ID, nil, func(data *domain.Bootstrap) error {
 		current, err := ownedAgentSession(data, session.ID)
 		if err != nil {
 			return err
 		}
-		current.Messages = append(current.Messages, message)
+		if index := slices.IndexFunc(current.Messages, func(item domain.AgentMessage) bool { return item.ID == message.ID }); index >= 0 {
+			current.Messages[index] = message
+		} else {
+			current.Messages = append(current.Messages, message)
+		}
 		data.AgentActivities = append(data.AgentActivities, domain.AgentActivity{ID: fmt.Sprintf("agent_activity_%d", message.CreatedAt.UnixNano()), SessionID: session.ID, Type: "response", Status: "completed", Body: message.Content, Metadata: map[string]any{"durationMs": message.DurationMS, "partCount": len(message.Parts)}, CreatedAt: message.CreatedAt, UpdatedAt: message.CreatedAt})
 		current.UpdatedAt = message.CreatedAt
 		completed = *current
@@ -1338,9 +1374,9 @@ func (s *server) agentWriteAccessNote() string {
 
 // registerAgentRun records a running reply so it can be stopped explicitly;
 // the returned func unregisters it.
-func (s *server) registerAgentRun(sessionID string, cancel context.CancelFunc) func() {
+func (s *server) registerAgentRun(workspace, sessionID string, cancel context.CancelFunc) func() {
 	token := new(int)
-	s.agentRuns.Store(sessionID, agentRun{cancel: cancel, token: token})
+	s.agentRuns.Store(sessionID, agentRun{cancel: cancel, token: token, workspace: workspace})
 	return func() {
 		if current, ok := s.agentRuns.Load(sessionID); ok && current.(agentRun).token == token {
 			s.agentRuns.Delete(sessionID)
@@ -1349,8 +1385,19 @@ func (s *server) registerAgentRun(sessionID string, cancel context.CancelFunc) f
 }
 
 type agentRun struct {
-	cancel context.CancelFunc
-	token  *int
+	cancel    context.CancelFunc
+	token     *int
+	workspace string
+}
+
+// stopAgentRun cancels the reply this process runs for the session, if any.
+func (s *server) stopAgentRun(workspace, sessionID string) bool {
+	run, ok := s.agentRuns.Load(sessionID)
+	if !ok || run.(agentRun).workspace != workspace {
+		return false
+	}
+	run.(agentRun).cancel()
+	return true
 }
 
 // stopAgentSession ends the reply running for the viewer's chat, if any.
@@ -1361,8 +1408,10 @@ func (s *server) stopAgentSession(w http.ResponseWriter, r *http.Request) {
 		respondMutation(w, err, http.StatusNoContent, nil)
 		return
 	}
-	if run, ok := s.agentRuns.Load(id); ok {
-		run.(agentRun).cancel()
+	session, _ := ownedAgentSession(&data, id)
+	if !s.stopAgentRun(workspaceKey(r), session.ID) && slices.ContainsFunc(session.Messages, func(message domain.AgentMessage) bool { return message.Status == agentMessageStreaming }) {
+		// The reply may be running on another server.
+		s.forwardAgentAnswer(r, agentForwardedAnswer{Kind: "stop", SessionID: session.ID, UserID: data.Viewer.ID})
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
