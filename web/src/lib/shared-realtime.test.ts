@@ -18,7 +18,10 @@ class FakeStream implements StreamLike {
   closed = false
   readonly url: string
   constructor(url: string) { this.url = url; FakeStream.all.push(this) }
+  private keepaliveListener?: () => void
   close() { this.closed = true }
+  addEventListener(type: 'keepalive', listener: () => void) { if (type === 'keepalive') this.keepaliveListener = listener }
+  sendKeepalive() { this.keepaliveListener?.() }
   open() { this.onopen?.({}) }
   fail() { this.onerror?.({}) }
   emit(id: string, event: Record<string, unknown>) {
@@ -276,6 +279,36 @@ describe('shared realtime stream', () => {
     await settle(100)
     expect(types(follower)).toEqual([])
     follower.dispose()
+  })
+
+  it('a quiet stream is reconnected once for all tabs, and the resync the server answers with reaches every tab', async () => {
+    const tabs = Array.from({ length: 3 }, () => openTab())
+    await settle()
+    const first = FakeStream.live()[0]
+    first.open()
+    first.emit('evt_1', { type: 'issue.updated', aggregateId: 'i1' })
+    first.sendKeepalive()
+    await settle()
+    // The server went away behind a proxy that keeps the connection: no error, no keepalives.
+    await settle(STALE_STREAM_MS + 5_000)
+    expect(first.closed).toBe(true)
+    for (const tab of tabs) expect(tab.status.at(-1)).toBe(false)
+    await settle(1_000)
+    // Only the leader opened a new stream, once, from the shared cursor; followers hold no timer of their own.
+    expect(FakeStream.all).toHaveLength(2)
+    const second = FakeStream.live()[0]
+    expect(second.url).toContain('since=evt_1')
+    second.open()
+    // The restarted server no longer has the cursor in its replay window.
+    second.emit('resync_1', { type: 'workspace.resync_required' })
+    await settle(2 * STALE_STREAM_MS)
+    for (const tab of tabs) {
+      expect(tab.status.at(-1)).toBe(true)
+      expect(types(tab).filter(type => type === 'workspace.resync_required')).toHaveLength(1)
+    }
+    // A new stream that never sent a keepalive is not timed out.
+    expect(FakeStream.all).toHaveLength(2)
+    tabs.forEach(tab => tab.dispose())
   })
 
   it('a leader reconnects itself with the latest cursor and backs off', async () => {
