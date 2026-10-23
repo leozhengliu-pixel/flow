@@ -21,6 +21,7 @@ export function defaultSnapshotExcludes(paths: RunnerPaths): string[] {
     `${home}/.claude/projects`,
     `${home}/.codex/sessions`,
     `${home}/.local/share/opencode`,
+    `${home}/.pi/agent/sessions`,
   ]
 }
 

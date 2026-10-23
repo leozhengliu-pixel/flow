@@ -39,7 +39,7 @@ func NormalizeAgentSettings(settings domain.CodingAgentSettings) domain.CodingAg
 // ValidateAgentSettings checks a policy an admin saves.
 func ValidateAgentSettings(settings domain.CodingAgentSettings, c config.CodingConfig) error {
 	if !ValidHarness(settings.Harness) {
-		return fmt.Errorf("%w: harness must be codex, claudeCode or openSource", ErrInvalidInput)
+		return fmt.Errorf("%w: harness must be codex, claudeCode, openSource or pi", ErrInvalidInput)
 	}
 	if !ValidEffort(settings.ReasoningEffort) {
 		return fmt.Errorf("%w: reasoningEffort must be low, medium or high", ErrInvalidInput)

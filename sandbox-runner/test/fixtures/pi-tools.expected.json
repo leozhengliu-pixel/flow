@@ -1,0 +1,161 @@
+{
+  "events": [
+    {
+      "id": "e1",
+      "type": "thought",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "Look for the date helper first.",
+      "ephemeral": true
+    },
+    {
+      "id": "e2",
+      "type": "thought",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "Searching for the helper."
+    },
+    {
+      "id": "e3",
+      "type": "action",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "action": {
+        "action": "Searched",
+        "parameter": "toLocalDate",
+        "tool": "grep"
+      },
+      "ephemeral": true
+    },
+    {
+      "id": "e4",
+      "type": "action",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "action": {
+        "action": "Searched",
+        "parameter": "**/*.test.ts",
+        "tool": "find"
+      },
+      "ephemeral": true
+    },
+    {
+      "id": "e5",
+      "type": "action",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "action": {
+        "action": "Read",
+        "parameter": "src",
+        "tool": "ls"
+      },
+      "ephemeral": true
+    },
+    {
+      "id": "e6",
+      "type": "action",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "action": {
+        "action": "Edit failed",
+        "parameter": "src/date.ts",
+        "result": "Could not find the exact text in src/date.ts.",
+        "tool": "edit"
+      }
+    },
+    {
+      "id": "e7",
+      "type": "action",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "action": {
+        "action": "Edited",
+        "parameter": "src/date.local.test.ts",
+        "tool": "write"
+      }
+    },
+    {
+      "id": "e8",
+      "type": "diff",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "diff": [
+        {
+          "path": "src/date.local.test.ts",
+          "additions": 3,
+          "deletions": 0,
+          "status": "modified"
+        }
+      ]
+    },
+    {
+      "id": "e9",
+      "type": "action",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "action": {
+        "action": "Ran command",
+        "parameter": "npm test",
+        "result": "1 failing\n\nCommand exited with code 2",
+        "tool": "bash",
+        "exitCode": 2
+      }
+    },
+    {
+      "id": "e10",
+      "type": "action",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "action": {
+        "action": "sourcebot.search_code",
+        "parameter": "{\"query\":\"toLocalDate\"}",
+        "result": "acme/web src/date.ts:3",
+        "tool": "search_code"
+      }
+    },
+    {
+      "id": "e11",
+      "type": "action",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "action": {
+        "action": "codemode",
+        "parameter": "{\"code\":\"return 1\"}",
+        "result": "1",
+        "tool": "codemode"
+      }
+    },
+    {
+      "id": "e12",
+      "type": "response",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "body": "Fixed the conversion and added a UTC test. One test still fails (see above)."
+    },
+    {
+      "id": "e13",
+      "type": "usage",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "usage": {
+        "model": "glm-5",
+        "inputTokens": 8500,
+        "outputTokens": 510,
+        "costUsd": 0.0082
+      }
+    }
+  ],
+  "outcome": {
+    "elicited": false,
+    "completed": true,
+    "model": "glm-5",
+    "harnessSessionId": "01a16690-0000-7000-8000-000000000001",
+    "finalText": "Fixed the conversion and added a UTC test. One test still fails (see above).",
+    "usage": {
+      "model": "glm-5",
+      "inputTokens": 8500,
+      "outputTokens": 510,
+      "costUsd": 0.0082
+    }
+  }
+}

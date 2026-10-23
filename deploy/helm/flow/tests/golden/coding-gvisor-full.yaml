@@ -481,6 +481,7 @@ data:
   FLOW_CODING_MODELS_CLAUDE_CODE: "claude-sonnet-4-5,claude-opus-4-1"
   FLOW_CODING_MODELS_CODEX: "gpt-5-codex,gpt-5"
   FLOW_CODING_MODELS_OPEN_SOURCE: "qwen3-coder"
+  FLOW_CODING_MODELS_PI: ""
   FLOW_CODING_MODEL_PRICES: "{\"claude-sonnet-4-5\":{\"input\":3,\"output\":15}}"
   FLOW_CODING_MODEL_INFO: "{\"glm-5\":{\"contextWindow\":200000,\"label\":\"GLM-5\"},\"gpt-5-codex\":{\"description\":\"Multi-file changes\",\"group\":\"frontier\",\"label\":\"GPT-5 Codex\"}}"
   FLOW_CODING_LLM_TIMEOUT: "5m"

@@ -474,6 +474,8 @@ coding:
       claudeCode: [claude-sonnet-4-5, claude-opus-4-1]
       codex: [gpt-5-codex, gpt-5]
       openSource: []
+      # Pi harness (OpenAI-compatible upstream, like openSource)
+      pi: []
     # USD per million tokens, e.g.
     #   claude-sonnet-4-5: {input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75}
     prices: {}

@@ -23,9 +23,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - `POST /api/workspace/documents/{id}/revisions/import` (workspace admins):
   adds a preserved earlier body of a document to its version history without
   changing the document. See [Operations](docs/operations.md#re-adding-a-lost-document-version).
+- Coding sessions: Pi as a fourth agent (harness `pi`, pinned 1.4.0 in the
+  sandbox image), using the OpenAI-compatible upstream with its own model list
+  `FLOW_CODING_MODELS_PI` (Helm `coding.llm.models.pi`, empty by default) and
+  `contextWindow` from `FLOW_CODING_MODEL_INFO`.
 
 ### Fixed
 
+- The sandbox runner reads agent output lines on LF only, so a JSON record
+  holding U+2028 or U+2029 is no longer split and dropped.
 - The first edit of a document that had a body but no version history (created
   with content through the API, MCP or a template, or written by an earlier
   release) no longer loses the body it replaced: the pre-edit state is kept as

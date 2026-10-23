@@ -6,13 +6,13 @@ import (
 )
 
 // HarnessUpstream is the only upstream a harness may call: Claude Code talks
-// Anthropic Messages, Codex OpenAI, and the open-source harness the
+// Anthropic Messages, Codex OpenAI, and the open-source and Pi harnesses the
 // OpenAI-compatible upstream.
 func HarnessUpstream(harness string) string {
 	switch harness {
 	case "claudeCode", "claude":
 		return UpstreamAnthropic
-	case "openSource":
+	case "openSource", "pi":
 		return UpstreamOpenSource
 	default:
 		return UpstreamOpenAI

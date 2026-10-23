@@ -13,11 +13,15 @@ import { unwrapShell } from '../src/mapping/codex.js'
 // fake of Flow's LLM proxy; codex-chatwire-* were captured from codex 0.160.0
 // against a real Chat Completions-only upstream (DeepSeek) through the
 // proxy's Responses→Chat translation (FLOW_CODING_LLM_OPENAI_WIRE_API=chat);
+// pi-recorded-* were captured from pi 1.4.0 (--mode json) running the
+// runner's generated config against an OpenAI-compatible upstream
+// (deepseek-v4.1-flash) with Flow's stdio MCP server and a gateway-style HTTP
+// MCP server, local paths replaced by /workspace/repo;
 // the others follow the CLIs' documented formats.
 // Refresh after a CLI upgrade with UPDATE_FIXTURES=1 npm test, then review the diff.
 
 const dir = join(import.meta.dirname, 'fixtures')
-const harnessOf: Record<string, string> = { claude: 'claudeCode', codex: 'codex', opencode: 'openSource' }
+const harnessOf: Record<string, string> = { claude: 'claudeCode', codex: 'codex', opencode: 'openSource', pi: 'pi' }
 
 function mapFixture(file: string) {
   const prefix = file.split('-')[0]
@@ -85,6 +89,69 @@ test('errors are classified for the UI', () => {
   assert.equal(mapFixture('codex-failed.jsonl').events.filter((event) => event.type === 'error').length, 1, 'error and turn.failed are deduplicated')
   assert.equal(mapFixture('opencode-error.jsonl').outcome.error?.code, 'quotaExceeded')
   assert.equal(classifyError('segfault'), 'harnessFailed')
+})
+
+test('pi: recorded turns, resume id, MCP tools, guidance and usage', () => {
+  const turn1 = mapFixture('pi-recorded-turn1.jsonl')
+  assert.equal(turn1.outcome.completed, true)
+  assert.equal(turn1.outcome.elicited, true, 'mcp__flow__ask_user is an elicitation')
+  assert.match(turn1.outcome.harnessSessionId ?? '', /^[0-9a-f-]{36}$/)
+  assert.match(turn1.outcome.finalText ?? '', /FLOW-GUIDANCE-OK$/, 'APPEND_SYSTEM.md guidance reached the model')
+  assert.ok(turn1.events.some((event) => event.type === 'elicitation' && event.body?.includes('unit tests')))
+  assert.ok(turn1.events.some((event) => event.action?.action === 'tickets.lookup_ticket' && event.action.result?.includes('Login button')), 'deferred gateway tool')
+  assert.ok(turn1.events.some((event) => event.action?.action === 'Searched tools' && event.ephemeral))
+  assert.deepEqual(
+    turn1.events.filter((event) => event.type === 'diff').flatMap((event) => event.diff ?? []),
+    [{ path: 'calc.py', additions: 1, deletions: 1, status: 'modified' }],
+  )
+  assert.ok(turn1.events.some((event) => event.type === 'thought' && event.ephemeral), 'thinking blocks are ephemeral thoughts')
+  assert.equal(turn1.outcome.usage?.model, 'deepseek-v4.1-flash')
+  assert.ok((turn1.outcome.usage?.inputTokens ?? 0) > 0 && (turn1.outcome.usage?.outputTokens ?? 0) > 0)
+  assert.equal(turn1.events.at(-1)?.type, 'usage')
+  assert.equal(turn1.events.at(-2)?.type, 'response')
+
+  const turn2 = mapFixture('pi-recorded-turn2.jsonl')
+  assert.equal(turn2.outcome.harnessSessionId, turn1.outcome.harnessSessionId, 'resume keeps the session id')
+  assert.equal(turn2.outcome.completed, true)
+  assert.equal(turn2.outcome.elicited, false)
+  const ran = turn2.events.find((event) => event.action?.action === 'Ran command')
+  assert.match(ran?.action?.parameter ?? '', /unittest/)
+  assert.equal(ran?.action?.exitCode, 0)
+  assert.ok(turn2.events.some((event) => event.type === 'diff' && event.diff?.[0]?.path === 'test_calc.py'))
+})
+
+test('pi: a failed model call is the turn error, after automatic retries', () => {
+  const { events, outcome } = mapFixture('pi-recorded-error.jsonl')
+  assert.equal(outcome.error?.code, 'modelUnavailable')
+  assert.equal(outcome.completed, false)
+  assert.equal(events.filter((event) => event.type === 'error').length, 1, 'one error for all retries')
+  assert.ok(outcome.harnessSessionId)
+})
+
+test('pi: tools, a retried call that recovers, compaction usage', () => {
+  const { events, outcome } = mapFixture('pi-tools.jsonl')
+  assert.equal(outcome.error, undefined, 'the retry succeeded')
+  assert.equal(outcome.completed, true)
+  assert.equal(outcome.finalText, 'Fixed the conversion and added a UTC test. One test still fails (see above).')
+  const actions = events.filter((event) => event.type === 'action').map((event) => [event.action?.action, event.action?.parameter, event.ephemeral ?? false])
+  assert.deepEqual(actions, [
+    ['Searched', 'toLocalDate', true],
+    ['Searched', '**/*.test.ts', true],
+    ['Read', 'src', true],
+    ['Edit failed', 'src/date.ts', false],
+    ['Edited', 'src/date.local.test.ts', false],
+    ['Ran command', 'npm test', false],
+    ['sourcebot.search_code', '{"query":"toLocalDate"}', false],
+    ['codemode', '{"code":"return 1"}', false],
+  ])
+  assert.equal(events.find((event) => event.action?.action === 'Ran command')?.action?.exitCode, 2)
+  assert.deepEqual(
+    events.filter((event) => event.type === 'diff').flatMap((event) => event.diff ?? []),
+    [{ path: 'src/date.local.test.ts', additions: 3, deletions: 0, status: 'modified' }],
+  )
+  assert.equal(events.find((event) => event.type === 'thought' && !event.ephemeral)?.body, 'Searching for the helper.')
+  // Model calls plus the compaction summary call.
+  assert.deepEqual(outcome.usage, { model: 'glm-5', inputTokens: 900 + 100 + 200 + 1000 + 5000 + 100 + 1200, outputTokens: 60 + 120 + 300 + 30, costUsd: 0.0012 + 0.0007 + 0.006 + 0.0003 })
 })
 
 test('subagent output does not surface; plans map statuses', () => {

@@ -827,6 +827,12 @@
                   "items": {
                     "type": "string"
                   }
+                },
+                "pi": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 }
               }
             },

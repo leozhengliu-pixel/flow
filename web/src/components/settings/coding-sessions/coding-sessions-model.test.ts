@@ -165,12 +165,14 @@ describe("settings helpers", () => {
     expect(normalizeHarness("auto")).toBe("codex");
     expect(normalizeHarness("claude")).toBe("claudeCode");
     expect(normalizeHarness("openSource")).toBe("openSource");
+    expect(normalizeHarness("pi")).toBe("pi");
     expect(normalizeHarness(undefined)).toBe("codex");
     expect(legacyCodingSettings({ harness: "claude", commitSigningEnabled: true }, true)).toMatchObject({ harness: "claudeCode", model: "auto", requireSignedCommits: true, loopRepositoryAccess: "none" });
   });
   it("lists Auto first and filters by harness", () => {
     expect(modelOptions(models, "codex").map((option) => option.value)).toEqual(["auto", "gpt-5-codex", "gpt-5"]);
     expect(modelOptions(models, "openSource")).toEqual([{ value: "auto", label: "Auto", detail: "Uses adaptive routing to pick the best model" }]);
+    expect(modelOptions([...models, { id: "qwen3-coder", label: "qwen3-coder", harness: "pi" }], "pi").map((option) => option.value)).toEqual(["auto", "qwen3-coder"]);
     // A server without groups gets a flat list (no section headers).
     expect(modelOptions(models, "codex").some((option) => option.group)).toBe(false);
   });

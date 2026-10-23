@@ -56,7 +56,7 @@ export const CODING_PHASE_LABELS: Record<CodingSessionPhase, string> = {
 /** Ordered progress steps shown while a session starts (the phases a user waits through). */
 export const CODING_PROGRESS_STEPS: CodingSessionPhase[] = ['queued', 'provisioning', 'starting', 'setup', 'running', 'publishing']
 
-export const CODING_HARNESS_LABELS: Record<CodingHarness, string> = { codex: 'Codex', claudeCode: 'Claude Code', openSource: 'Open source' }
+export const CODING_HARNESS_LABELS: Record<CodingHarness, string> = { codex: 'Codex', claudeCode: 'Claude Code', openSource: 'Open source', pi: 'Pi' }
 
 export const isCodingSessionTerminal = (session: Pick<CodingSession, 'state'>) => session.state === 'complete' || session.state === 'error' || session.state === 'stale'
 /** States in which the reconciler still changes the session on its own (a fallback poll runs only then). */

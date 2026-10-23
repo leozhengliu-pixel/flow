@@ -181,6 +181,9 @@ type CodingLLMConfig struct {
 	ClaudeCodeModels []string
 	CodexModels      []string
 	OpenSourceModels []string
+	// PiModels is the Pi harness's list; Pi talks to the OpenAI-compatible
+	// (open source) upstream like the open-source harness.
+	PiModels []string
 	// Prices maps a model to USD per million tokens.
 	Prices map[string]ModelPrice
 	// ModelInfo is optional display metadata (label, picker group, one-line
@@ -425,6 +428,7 @@ func loadCoding(appURL string) CodingConfig {
 			ClaudeCodeModels:  csvRaw(value("FLOW_CODING_MODELS_CLAUDE_CODE", "claude-sonnet-4-5,claude-opus-4-1")),
 			CodexModels:       csvRaw(value("FLOW_CODING_MODELS_CODEX", "gpt-5-codex,gpt-5")),
 			OpenSourceModels:  csvRaw(value("FLOW_CODING_MODELS_OPEN_SOURCE", "")),
+			PiModels:          csvRaw(value("FLOW_CODING_MODELS_PI", "")),
 			Prices:            modelPrices(value("FLOW_CODING_MODEL_PRICES", "")),
 			Timeout:           duration("FLOW_CODING_LLM_TIMEOUT", 10*time.Minute),
 		},
@@ -541,6 +545,8 @@ func (c CodingLLMConfig) ModelsFor(harness string) []string {
 		return c.ClaudeCodeModels
 	case "openSource":
 		return c.OpenSourceModels
+	case "pi":
+		return c.PiModels
 	default:
 		return c.CodexModels
 	}

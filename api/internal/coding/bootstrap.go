@@ -42,7 +42,7 @@ func (s *Service) buildBootstrap(ctx context.Context, grant SandboxGrant, sessio
 	response := BootstrapResponse{
 		SandboxID: grant.SandboxID, SessionID: session.ID, SnapshotID: session.SnapshotID, Mode: ModeSession,
 		Repo:        BootstrapRepo{CodeHost: session.CodeHost, HostName: session.HostName, FullName: session.Repository, CloneURL: CloneURL(session.HostName, session.Repository), BaseRef: session.BaseRef, BranchName: session.BranchName, ExistingBranch: session.ExistingBranch, BranchPrefix: sessionBranchPrefix(session, fallback(s.cfg.BranchPrefix, "flow/"))},
-		Harness:     BootstrapHarness{Name: session.Harness, Model: session.Model, ReasoningEffort: session.ReasoningEffort, ResumeID: session.HarnessResumeID, ContextWindow: CodexContextWindow(s.cfg.LLM, session.Harness, session.Model)},
+		Harness:     BootstrapHarness{Name: session.Harness, Model: session.Model, ReasoningEffort: session.ReasoningEffort, ResumeID: session.HarnessResumeID, ContextWindow: HarnessContextWindow(s.cfg.LLM, session.Harness, session.Model)},
 		LLM:         BootstrapLLM{AnthropicBaseURL: runtime + "/internal/llm-proxy/anthropic", OpenAIBaseURL: runtime + "/internal/llm-proxy/openai/v1", OpenSourceBaseURL: runtime + "/internal/llm-proxy/opensource/v1"},
 		Environment: BootstrapEnv{EnvironmentID: env.ID, Mise: env.Mise, PrepareScript: env.PrepareScript, DependencyManagement: dependencies, HasSecrets: len(env.Secrets) > 0},
 		Git:         s.sessionGitIdentity(ctx, session, s.signingIdentity(ctx, session, user, policy.CommitSigningEnabled), policy.CommitSigningEnabled),

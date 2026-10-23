@@ -12,10 +12,12 @@ import { claudeHarness } from '../src/harness/claude.js'
 import { codexConfig, codexHarness } from '../src/harness/codex.js'
 import { opencodeConfig, opencodeHarness } from '../src/harness/opencode.js'
 import { harnessFor } from '../src/harness/index.js'
-import type { HarnessContext } from '../src/harness/types.js'
+import { piHarness, piMcpConfig, piModelsConfig, piSettings } from '../src/harness/pi.js'
+import { resumeFailed, type HarnessContext } from '../src/harness/types.js'
 import { McpServer } from '../src/mcp/server.js'
 import { elicitationMarker } from '../src/mcp/tools/ask-user.js'
 import { registerBuiltinTools } from '../src/mcp/tools/index.js'
+import { spawnProcess } from '../src/process.js'
 import type { BootstrapResponse, CredentialRequest, SnapshotCompleteRequest } from '../src/protocol.js'
 import { detectInstallers, miseConfigToml, resolveHomeFile, runSetup, SetupError, SetupLog } from '../src/setup.js'
 import { EventFactory } from '../src/mapping/common.js'
@@ -177,6 +179,71 @@ test('opencode invocation: OpenAI-compatible provider at the proxy, --session on
   }
 })
 
+test('pi invocation: agent dir in $HOME, Flow provider at the proxy, no project config, --session on follow-ups', () => {
+  const tmp = tempDir('pi')
+  try {
+    const boot = bootstrap()
+    boot.harness = { name: 'pi', model: 'org/qwen3-coder:32b', reasoningEffort: 'high', contextWindow: 262144 }
+    const ctx = harnessContext(tmp.path, boot)
+    const first = piHarness.invocation({ ...ctx, env: { ...ctx.env, PI_CODING_AGENT_SESSION_DIR: '/repo/sessions' } })
+    assert.equal(first.command, 'pi')
+    assert.deepEqual(first.args, ['--mode', 'json', '--no-approve', '--provider', 'flow', '--model', 'org/qwen3-coder:32b', '--thinking', 'high'])
+    assert.equal(first.stdin, '--help me\n\nAttachments:\n- https://flow/files/a.png')
+    assert.equal(first.cwd, ctx.paths.repo)
+    const agentDir = join(ctx.paths.home, '.pi', 'agent')
+    assert.equal(first.env.PI_CODING_AGENT_DIR, agentDir)
+    assert.equal(first.env.PI_CODING_AGENT_SESSION_DIR, undefined, 'sessions stay in the agent dir (harness state)')
+    assert.equal(first.env.FLOW_LLM_TOKEN, 'fcs_tok')
+    assert.equal(first.env.PI_OFFLINE, '1')
+    assert.equal(first.env.OPENAI_API_KEY, undefined)
+    assert.equal(first.env.ANTHROPIC_API_KEY, undefined)
+    assert.deepEqual(
+      first.files.map((file) => [file.path, file.mode]),
+      ['models.json', 'mcp.json', 'settings.json', 'APPEND_SYSTEM.md'].map((name) => [join(agentDir, name), 0o600]),
+    )
+    for (const file of first.files) assert.ok(!file.content.includes('fcs_tok'), `${file.path} must not hold the token`)
+    const models = JSON.parse(piModelsConfig(ctx))
+    assert.deepEqual(models.providers.flow, {
+      name: 'Flow',
+      baseUrl: 'http://flow:8090/internal/llm-proxy/opensource/v1',
+      api: 'openai-completions',
+      apiKey: '$FLOW_LLM_TOKEN',
+      compat: { supportsStore: false, supportsDeveloperRole: false, maxTokensField: 'max_tokens' },
+      models: [{ id: 'org/qwen3-coder:32b', name: 'org/qwen3-coder:32b', reasoning: true, contextWindow: 262144 }],
+    })
+    const settings = JSON.parse(piSettings())
+    assert.equal(settings.defaultProjectTrust, 'never')
+    assert.equal(first.files[3].content, 'G')
+    const mcp = JSON.parse(piMcpConfig(ctx))
+    assert.deepEqual(mcp.mcpServers.flow, { command: '/opt/flow/bin/flow-runner', args: ['mcp'], env: ctx.mcp.env, exposure: 'direct' })
+
+    // Follow-up: resume the session; no effort → no --thinking and no reasoning model.
+    boot.harness = { name: 'pi', model: 'qwen3-coder' }
+    const next = piHarness.invocation({ ...harnessContext(tmp.path, boot), resumeId: '01a16681-e3e6-7608-a274-95f3d3a14992' })
+    assert.deepEqual(next.args, ['--mode', 'json', '--no-approve', '--provider', 'flow', '--model', 'qwen3-coder', '--session', '01a16681-e3e6-7608-a274-95f3d3a14992'])
+    const plain = JSON.parse(next.files[0].content).providers.flow.models[0]
+    assert.deepEqual(plain, { id: 'qwen3-coder', name: 'qwen3-coder', reasoning: false })
+    assert.equal(harnessFor('pi'), piHarness)
+    assert.deepEqual(piHarness.stateDirs(), ['.pi/agent/sessions'])
+    // pi 1.4.0 prints this (exit 1, no session record) when --session names a lost session.
+    assert.ok(resumeFailed("No session found matching '01a16681-e3e6-7608-a274-95f3d3a14992'"))
+  } finally {
+    tmp.cleanup()
+  }
+})
+
+test('harness stdout: JSONL lines split on LF only, U+2028 stays inside a record', async () => {
+  const lines: string[] = []
+  const script = 'process.stdout.write(\'{"a":"x\\u2028y"}\\r\\n{"b":\' + "1}\\n" + \'{"c":"\' + "z".repeat(200000) + \'"}\')'
+  const proc = spawnProcess(process.execPath, ['-e', script], { onStdoutLine: (line) => lines.push(line) })
+  const exit = await proc.exited
+  assert.equal(exit.code, 0)
+  assert.equal(lines.length, 3)
+  assert.deepEqual(JSON.parse(lines[0]), { a: 'x y' })
+  assert.deepEqual(JSON.parse(lines[1]), { b: 1 })
+  assert.equal(JSON.parse(lines[2]).c.length, 200000, 'an unterminated long last line is kept whole')
+})
+
 test('workspace MCP servers: every harness gets the gateway servers, never another origin or name', () => {
   const tmp = tempDir('mcp-gateway')
   try {
@@ -199,6 +266,15 @@ test('workspace MCP servers: every harness gets the gateway servers, never anoth
     assert.deepEqual(Object.keys(opencode.mcp), ['flow', 'sourcebot'])
     assert.equal(opencode.mcp.sourcebot.type, 'remote')
     assert.equal(opencode.mcp.sourcebot.headers.Authorization, 'Bearer {env:FLOW_LLM_TOKEN}')
+    const pi = JSON.parse(piMcpConfig(ctx))
+    assert.deepEqual(Object.keys(pi.mcpServers), ['flow', 'sourcebot'])
+    assert.deepEqual(pi.mcpServers.sourcebot, {
+      url: 'http://flow:8090/internal/coding-runtime/mcp/mcp-sourcebot-production',
+      headers: { Authorization: 'Bearer ${FLOW_LLM_TOKEN}' },
+      exposure: 'deferred',
+      description: 'Sourcebot',
+      timeout: 360,
+    })
     // Without servers the configs are unchanged.
     assert.deepEqual(Object.keys(JSON.parse(claudeHarness.invocation(harnessContext(tmp.path)).files[0].content).mcpServers), ['flow'])
   } finally {

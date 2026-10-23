@@ -23,7 +23,7 @@ Related documents:
 | Optional: a RuntimeClass | gVisor (`runsc`) or Kata Containers. Recommended, not required. Without one, sandboxes use runc and the [runc risks](coding-sessions-security.md#limits-of-plain-runc) apply. |
 | Not required: user namespaces | `hostUsers: false` is optional (`sandboxes.hostUsers=false`, Kubernetes 1.33+ with a runtime that supports idmapped mounts). |
 | Not required: VolumeSnapshot | Use the default `archive` strategy. `volumesnapshot` needs a CSI driver with snapshot support and the `snapshot.storage.k8s.io/v1` CRDs. |
-| Model provider keys | Anthropic for Claude Code, OpenAI for Codex, or any OpenAI-compatible endpoint for OpenCode. Keys stay in Flow; sandboxes reach models only through Flow's LLM proxy. |
+| Model provider keys | Anthropic for Claude Code, OpenAI for Codex, or any OpenAI-compatible endpoint for OpenCode and Pi. Keys stay in Flow; sandboxes reach models only through Flow's LLM proxy. |
 | A GitHub App and/or a GitLab connection | See [GitHub App setup](#github-app-setup) and [GitLab setup](#gitlab-setup). |
 
 The images:
@@ -230,7 +230,7 @@ To give the sandbox agent extra MCP servers, for example an intranet code-search
 2. A workspace admin adds the connector as a workspace connector and approves it (Settings › Security, or `PUT /api/application-policies` with `{"id":"mcp-sourcebot-production","name":"Sourcebot","kind":"mcp","url":"https://hsb.haier.net/api/mcp","shared":true,"status":"approved"}`).
 3. The admin clicks **Enable for coding sessions** on it (`"codingSessions": true`), or the operator lists it for every workspace with `coding.mcpServers: [mcp-sourcebot-production]` (`FLOW_CODING_MCP_SERVERS`).
 
-New sessions then get a `sourcebot` MCP server in Claude Code, Codex and OpenCode. The harness talks to `{runtime}/internal/coding-runtime/mcp/mcp-sourcebot-production` with its sandbox token; Flow adds the server's credential, checks the approval on every call, audits each tool call and stops answering when the session ends. See [MCP servers](coding-sessions-security.md#mcp-servers) in the security model and [configuration](configuration.md#mcp-servers-in-coding-sessions).
+New sessions then get a `sourcebot` MCP server in Claude Code, Codex, OpenCode and Pi (Pi loads its tools on demand with `tool_search`). The harness talks to `{runtime}/internal/coding-runtime/mcp/mcp-sourcebot-production` with its sandbox token; Flow adds the server's credential, checks the approval on every call, audits each tool call and stops answering when the session ends. See [MCP servers](coding-sessions-security.md#mcp-servers) in the security model and [configuration](configuration.md#mcp-servers-in-coding-sessions).
 
 ## GitHub App setup
 

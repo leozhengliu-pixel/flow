@@ -1,0 +1,41 @@
+{
+  "events": [
+    {
+      "id": "e1",
+      "type": "error",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "error": {
+        "code": "modelUnavailable",
+        "message": "400: {\"type\":\"server_error\",\"message\":\"Upstream request failed: Model is unavailable.\"}"
+      },
+      "body": "400: {\"type\":\"server_error\",\"message\":\"Upstream request failed: Model is unavailable.\"}"
+    },
+    {
+      "id": "e2",
+      "type": "usage",
+      "createdAt": "2026-10-18T00:00:00.000Z",
+      "turnId": "turn_1",
+      "usage": {
+        "model": "no-such-model",
+        "inputTokens": 0,
+        "outputTokens": 0
+      }
+    }
+  ],
+  "outcome": {
+    "elicited": false,
+    "completed": false,
+    "model": "no-such-model",
+    "harnessSessionId": "01a16684-67d0-7671-89e8-f4070c637c7b",
+    "error": {
+      "code": "modelUnavailable",
+      "message": "400: {\"type\":\"server_error\",\"message\":\"Upstream request failed: Model is unavailable.\"}"
+    },
+    "usage": {
+      "model": "no-such-model",
+      "inputTokens": 0,
+      "outputTokens": 0
+    }
+  }
+}

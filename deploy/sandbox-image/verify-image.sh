@@ -33,6 +33,7 @@ check mise --version
 check claude --version
 check codex --version
 check opencode --version
+check pi --version
 check rg --version
 check zstd --version
 check tar --zstd --version
