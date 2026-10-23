@@ -244,8 +244,8 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		}
 		keys := scopedResourceKeys(scope.Resources, loaded)
 		nextIssueNumber := current.NextIssueNumber
-		if scope.CreateIssues {
-			// Number new issues from the durable sequence, as issue creation does.
+		if scope.CreateIssues || issueRenumbering(ctx) {
+			// Number new (or renumbered) issues from the durable sequence, as issue creation does.
 			if err := writeIssueNumber(ctx, tx, workspaceKey, 0); err != nil {
 				return err
 			}
@@ -326,6 +326,11 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		written, err := s.persistScopedRecords(ctx, tx, workspaceKey, next, loaded, payloads, scope.CreateIssues, keys, loadedDeliveries)
 		if err != nil {
 			return err
+		}
+		if issueRenumbering(ctx) {
+			if err := advanceIssueNumberSequence(ctx, tx, workspaceKey, next.Issues); err != nil {
+				return err
+			}
 		}
 		changedIssues = written
 		traceMark(ctx, "records")

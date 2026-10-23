@@ -25,6 +25,14 @@ describe('issue activity projection', () => {
     expect(describeIssueActivity(event({ sessionId: 'cs-1', agentId: agent.id, archivedBy: viewer.id }, 'issue.coding_session_archived'), context)).toBe(`archived the session with ${agent.displayName}`)
   })
 
+  it('describes a team move without repeating a status that kept its name', () => {
+    const moved = { team: 'team-2', teamName: 'Design', teamBefore: 'team-1', teamBeforeName: 'Engineering', identifier: 'DES-9', identifierBefore: 'ENG-4', stateBefore: 'In Progress', stateBeforeId: 's-1', state: 'In Progress', stateId: 's-2', cycle: '', cycleBefore: 'cycle-1' }
+    expect(describeIssueActivity(event(moved))).toBe('moved the issue from Engineering to Design and removed the issue from its cycle')
+    const { cycle: _cycle, cycleBefore: _cycleBefore, ...withoutCycle } = moved
+    expect(describeIssueActivity(event({ ...withoutCycle, state: 'Doing' }))).toBe('moved the issue from Engineering to Design and moved from In Progress to Doing')
+    expect(describeIssueActivity(event({ team: 'team-2' }))).toBe('moved the issue to another team')
+  })
+
   it('describes recurring schedule automation', () => {
     expect(describeIssueActivity(event({ automation: 'recurring', recurringFrom: 'DEV-12', state: 'Todo' }, 'issue.created'))).toBe('created the issue from the recurring schedule of DEV-12')
     expect(describeIssueActivity(event({ recurrence: '', automation: 'recurring', recurringNext: 'DEV-13' }))).toBe('moved the recurring schedule to DEV-13')

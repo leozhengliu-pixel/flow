@@ -67,7 +67,9 @@ export function describeIssueActivityParts(event: ActivityEvent, context?: Activ
   }
   if (event.type === 'issue.updated') {
     const changes: ActivityPart[][] = []
-    if (m.state) changes.push(m.stateBefore ? phrase('moved from {from} to {to}', { from: t(m.stateBefore), to: t(m.state) }) : phrase('moved to {state}', { state: t(m.state) }))
+    // A team move: "moved the issue from Engineering to Design". Its status maps to the same-named one, which needs no sentence.
+    if (m.team) changes.push(m.teamBeforeName && m.teamName ? phrase('moved the issue from {from} to {to}', { from: m.teamBeforeName, to: m.teamName }) : text(t('moved the issue to another team')))
+    if (m.state && !(m.team && m.stateBefore === m.state)) changes.push(m.stateBefore ? phrase('moved from {from} to {to}', { from: t(m.stateBefore), to: t(m.state) }) : phrase('moved to {state}', { state: t(m.state) }))
     if (m.title) changes.push(phrase('changed the title to {title}', { title: m.title }))
     if (m.priority) changes.push(phrase('set priority to {priority}', { priority: t(m.priority) }))
     // Flow's agent acts as the person it works for: "assigned the issue to Dev User", never "to themselves".

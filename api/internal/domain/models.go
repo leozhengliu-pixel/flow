@@ -600,6 +600,7 @@ type Issue struct {
 	Version                int64            `json:"version"`
 	Identifier             string           `json:"identifier"`
 	Number                 int              `json:"number"`
+	PreviousIdentifiers    []string         `json:"previousIdentifiers,omitempty"` // identifiers the issue had before it moved to other teams, oldest first; they still resolve
 	Title                  string           `json:"title"`
 	Icon                   string           `json:"icon,omitempty"` // recurring issue icon (issue template icon format)
 	Description            string           `json:"description"`
@@ -2900,7 +2901,7 @@ type IssueUpdateInput struct {
 	ContentState            *string        `json:"contentState,omitempty"`
 	ExpectedDocumentVersion *int64         `json:"expectedDocumentVersion,omitempty"`
 	DocumentUpdateIDs       []string       `json:"documentUpdateIds,omitempty"`
-	TeamID                  *string        `json:"teamId,omitempty"`
+	TeamID                  *string        `json:"teamId,omitempty"` // moves the issue to another team: a new identifier (the old one keeps resolving), the equivalent status; it leaves its cycle and the labels that team cannot use
 	StateID                 *string        `json:"stateId,omitempty"`
 	Priority                *int           `json:"priority,omitempty"`
 	Estimate                *float64       `json:"estimate,omitempty"`

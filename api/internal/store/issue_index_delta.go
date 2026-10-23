@@ -26,6 +26,7 @@ func syncIssueIndexes(ctx context.Context, tx *sqlTx, workspace string, issues [
 		{"issue_label_records", []string{"issue_id", "label_id"}, 2, nil},
 		{"issue_subscriber_records", []string{"issue_id", "user_id"}, 2, nil},
 		{"issue_permission_records", []string{"issue_id", "subject_type", "subject_id", "role"}, 3, nil},
+		{"issue_identifier_aliases", []string{"issue_id", "identifier"}, 2, nil},
 	}
 	for _, issue := range issues {
 		for _, label := range issue.Labels {
@@ -37,6 +38,11 @@ func syncIssueIndexes(ctx context.Context, tx *sqlTx, workspace string, issues [
 		for _, p := range issue.Permissions {
 			if p.Role != "" && !strings.EqualFold(p.Role, "none") {
 				specs[2].rows = append(specs[2].rows, []string{issue.ID, p.SubjectType, p.SubjectID, p.Role})
+			}
+		}
+		for _, identifier := range issue.PreviousIdentifiers {
+			if identifier = strings.ToUpper(strings.TrimSpace(identifier)); identifier != "" && identifier != strings.ToUpper(issue.Identifier) {
+				specs[3].rows = append(specs[3].rows, []string{issue.ID, identifier})
 			}
 		}
 	}

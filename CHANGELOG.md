@@ -44,6 +44,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   the editor turns read-only, keeping unsaved changes downloadable, or
   editable again without a reload. Read-only API keys can no longer edit
   standalone documents on the socket either.
+- Moving an issue to another team (`PATCH /api/issues/{id}` with `teamId`, the
+  SDK, MCP `save_issue` with `team`, the team picker) returned success but left
+  the issue in its team and published no event. The move now gives the issue
+  the target team's key and a new number (`previousIdentifiers` keeps the old
+  ones, which still open, read and update it), the target team's status of the
+  same name and type, takes it out of its cycle, maps team labels by name, and
+  records the move in the history and the `issue.updated` event, which also
+  closes the description for members who cannot see the new team. Batch updates
+  and accepted team suggestions move issues the same way. Moving needs access to
+  the target team (guests cannot move issues), and update requests with fields
+  the endpoint does not support are rejected with 400 instead of ignored.
 - Several API servers starting at the same moment on one PostgreSQL or MySQL
   database no longer crash with errors such as `tuple concurrently updated`
   or a duplicate `schema_migrations` key. They take turns through a database

@@ -991,6 +991,10 @@ func (s *SQLiteStore) IssueRecord(ctx context.Context, workspace, id string) (do
 	if errors.Is(err, sql.ErrNoRows) {
 		err = s.db.QueryRowContext(ctx, `SELECT data FROM issue_records WHERE workspace_key=? AND identifier=?`, workspace, id).Scan(&raw)
 	}
+	if errors.Is(err, sql.ErrNoRows) {
+		// An identifier the issue had before it moved to another team.
+		err = s.db.QueryRowContext(ctx, `SELECT i.data FROM issue_identifier_aliases a JOIN issue_records i ON i.workspace_key=a.workspace_key AND i.id=a.issue_id WHERE a.workspace_key=? AND a.identifier=? LIMIT 1`, workspace, strings.ToUpper(id)).Scan(&raw)
+	}
 	if err != nil {
 		return domain.Issue{}, err
 	}

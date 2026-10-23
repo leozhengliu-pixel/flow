@@ -1035,7 +1035,12 @@ function App() {
     route.kind === "issue"
       ? data?.issues.find(
           (i) => i.identifier.toUpperCase() === route.identifier.toUpperCase(),
-        ) || null
+        ) ||
+        // A link to an identifier the issue had before it moved to another team.
+        data?.issues.find((i) =>
+          i.previousIdentifiers?.some((identifier) => identifier.toUpperCase() === route.identifier.toUpperCase()),
+        ) ||
+        null
       : null;
   const [issueContextLoading, setIssueContextLoading] = useState(false);
   const [initialIssue, setInitialIssue] = useState<{key:string;viewerId:string;issue:Issue} | null>(null);

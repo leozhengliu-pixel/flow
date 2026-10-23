@@ -60,6 +60,15 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			return err
 		}
 		defer tx.Rollback()
+		if issueRenumbering(ctx) {
+			// Lock the sequence before any issue row, in the order issue
+			// creation takes them.
+			next, err := s.lockedNextIssueNumber(ctx, tx, workspace)
+			if err != nil {
+				return err
+			}
+			metadata.NextIssueNumber = max(metadata.NextIssueNumber, next)
+		}
 		lock := ""
 		if s.dialect != "sqlite" {
 			lock = " FOR UPDATE"
@@ -216,6 +225,11 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 				if err := s.writeIssueRecord(ctx, tx, workspace, issue, metadata); err != nil {
 					return err
 				}
+			}
+		}
+		if issueRenumbering(ctx) {
+			if err := advanceIssueNumberSequence(ctx, tx, workspace, metadata.Issues); err != nil {
+				return err
 			}
 		}
 		for resource, items := range metadata.Activities {

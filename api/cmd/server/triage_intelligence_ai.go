@@ -288,6 +288,9 @@ func (s *server) runTriageIntelligence(ctx context.Context, actor mcpActor, issu
 	}
 	var updated domain.Issue
 	var stored []domain.IssueSuggestion
+	if triageTeamAutoMove(settings) {
+		ctx = store.WithIssueRenumbering(ctx)
+	}
 	err = s.store.MutateWorkspace(store.WithIssueRecordMutations(ctx, scope...), actor.WorkspaceKey, options.eventType, issueID, nil, func(data *domain.Bootstrap) error {
 		target, err := issueByID(data, issueID)
 		if err != nil {

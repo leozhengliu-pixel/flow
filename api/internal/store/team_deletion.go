@@ -427,7 +427,7 @@ func deleteTeamOwnedIssueRecords(ctx context.Context, tx *sqlTx, workspace, team
 	if err := writeIssueStats(ctx, tx, workspace, deltas); err != nil {
 		return 0, err
 	}
-	for _, table := range []string{"issue_label_records", "issue_permission_records", "issue_subscriber_records", "issue_actor_records", "issue_attribute_records", "issue_attachment_records", "issue_search_documents"} {
+	for _, table := range []string{"issue_label_records", "issue_permission_records", "issue_subscriber_records", "issue_actor_records", "issue_attribute_records", "issue_attachment_records", "issue_search_documents", "issue_identifier_aliases"} {
 		if err := deleteRowsByIDs(ctx, tx, table, "issue_id", workspace, ids); err != nil {
 			return 0, err
 		}

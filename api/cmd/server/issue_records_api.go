@@ -321,7 +321,7 @@ func (s *server) getIssueRecord(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 	var input domain.IssueUpdateInput
-	if !decodeJSON(w, r, &input) {
+	if !decodeStrictJSON(w, r, &input) {
 		return
 	}
 	if legacy, _ := r.Context().Value(legacyIssueWriteContext{}).(bool); legacy {
@@ -346,6 +346,18 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		issueRecordsError(w, err)
 		return
+	}
+	if len(page.Items) == 0 {
+		// The path may name the issue by its identifier, or by one it had
+		// before it moved to another team.
+		if resolved, resolveErr := s.store.AuthorizedIssueRecordID(r.Context(), query, id); resolveErr == nil && resolved != id {
+			id = resolved
+			query.Filter = store.IssueFilter{Field: "id", Values: []string{id}}
+			if page, err = s.store.QueryIssueRecords(r.Context(), query); err != nil {
+				issueRecordsError(w, err)
+				return
+			}
+		}
 	}
 	if len(page.Items) == 0 {
 		writeError(w, 404, "issue not found")
@@ -388,6 +400,16 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 403, "Assignee is outside this workspace")
 		return
 	}
+	ctx := r.Context()
+	if input.TeamID != nil && *input.TeamID != page.Items[0].Team.ID {
+		// A team move needs access to the target team too (and a new number
+		// from the workspace sequence).
+		if message := issueTeamMoveForbidden(s, metadata, *input.TeamID); message != "" {
+			writeError(w, http.StatusForbidden, message)
+			return
+		}
+		ctx = store.WithIssueRenumbering(ctx)
+	}
 	extra := []string{}
 	if input.ParentID != nil && *input.ParentID != "" {
 		parentQuery := query
@@ -400,8 +422,12 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		extra = append(extra, *input.ParentID)
 	}
 	if input.StateID != nil {
+		stateTeamID := page.Items[0].Team.ID
+		if input.TeamID != nil && *input.TeamID != "" {
+			stateTeamID = *input.TeamID
+		}
 		for _, direction := range []string{"asc", "desc"} {
-			boundary, err := s.store.QueryIssueRecords(r.Context(), store.IssueRecordQuery{Workspace: query.Workspace, TeamIDs: []string{page.Items[0].Team.ID}, StateIDs: []string{*input.StateID}, Sort: "sortOrder", Direction: direction, Archived: "all", Limit: 1})
+			boundary, err := s.store.QueryIssueRecords(r.Context(), store.IssueRecordQuery{Workspace: query.Workspace, TeamIDs: []string{stateTeamID}, StateIDs: []string{*input.StateID}, Sort: "sortOrder", Direction: direction, Archived: "all", Limit: 1})
 			if err != nil {
 				issueRecordsError(w, err)
 				return
@@ -416,7 +442,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		mutationScope.NewParentID = *input.ParentID
 	}
 	previousDocumentID := ""
-	updated, err := s.store.UpdateIssueRecord(r.Context(), query.Workspace, id, input.ExpectedVersion, mutationScope, func(data *domain.Bootstrap, issue *domain.Issue) error {
+	updated, err := s.store.UpdateIssueRecord(ctx, query.Workspace, id, input.ExpectedVersion, mutationScope, func(data *domain.Bootstrap, issue *domain.Issue) error {
 		accessData := metadata
 		accessData.Issues = data.Issues
 		if issuePermissionRank(issueRole(s, accessData, *issue)) < issuePermissionRank("editor") {
@@ -637,6 +663,9 @@ func issueUpdateIsNoop(issue domain.Issue, input domain.IssueUpdateInput) bool {
 		return false
 	}
 	if input.Title != nil && strings.TrimSpace(*input.Title) != issue.Title {
+		return false
+	}
+	if input.TeamID != nil && *input.TeamID != issue.Team.ID {
 		return false
 	}
 	if input.StateID != nil && *input.StateID != issue.State.ID {

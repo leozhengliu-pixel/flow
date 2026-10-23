@@ -355,6 +355,8 @@ export interface Issue {
   id: UUID;
   version: number;
   identifier: string;
+  /** Identifiers the issue had before it moved to other teams; links to them still open it. */
+  previousIdentifiers?: string[];
   number: number;
   title: string;
   description: string;

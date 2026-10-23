@@ -15802,6 +15802,7 @@
         "x-flow-source": "main.go"
       },
       "patch": {
+        "description": "The path takes the issue's id, identifier, or an identifier it had before it moved to another team. Fields not listed in the request schema are rejected with 400. teamId moves the issue to another team; the caller needs access to that team (guests cannot move issues). The issue gets the target team's key and a new number (previousIdentifiers keeps the old identifiers, which still resolve), the target team's status of the same name and type (else the first of that type, else its default), leaves its cycle, replaces team-scoped labels by the target team's labels of the same name (dropping the others), and loses its estimate when the target team does not use estimates. Sub-issues stay in their teams.",
         "operationId": "patch_issues_id",
         "parameters": [
           {
@@ -41603,6 +41604,13 @@
             },
             "type": "array"
           },
+          "previousIdentifiers": {
+            "description": "identifiers the issue had before it moved to other teams, oldest first; they still resolve",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "priority": {
             "type": "integer"
           },
@@ -42410,6 +42418,13 @@
             },
             "type": "array"
           },
+          "previousIdentifiers": {
+            "description": "identifiers the issue had before it moved to other teams, oldest first; they still resolve",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "priority": {
             "type": "integer"
           },
@@ -43122,6 +43137,7 @@
             ]
           },
           "teamId": {
+            "description": "moves the issue to another team: a new identifier (the old one keeps resolving), the equivalent status; it leaves its cycle and the labels that team cannot use",
             "type": [
               "string",
               "null"
