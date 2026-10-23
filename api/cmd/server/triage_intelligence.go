@@ -246,6 +246,9 @@ func (s *server) generateTriageIntelligenceForIssues(ctx context.Context, worksp
 		}
 		candidateSets[issueID] = candidates
 	}
+	if triageTeamAutoMove(metadata.WorkspaceSettings.FeatureSettings.TriageIntelligence) {
+		ctx = store.WithIssueRenumbering(ctx)
+	}
 	err = s.store.MutateWorkspace(store.WithIssueRecordMutations(ctx, issueIDs...), workspace, "issue.suggestions_generated", "issue_suggestions_batch", nil, func(data *domain.Bootstrap) error {
 		for _, issueID := range issueIDs {
 			issue, err := issueByID(data, issueID)
@@ -770,6 +773,15 @@ func inferTeam(data *domain.Bootstrap, issue *domain.Issue, candidates []triageS
 	return bestID, minFloat(1, bestScore), uniqueStrings(reasons[bestID])
 }
 
+// triageTeamAutoMove reports whether generated team suggestions may be
+// applied at once, moving the issue (and renumbering it, see moveIssueToTeam).
+func triageTeamAutoMove(settings domain.TriageIntelligenceSettings) bool {
+	if action, _ := triageSuggestionAction(settings, "team"); action == "auto" {
+		return true
+	}
+	return slices.ContainsFunc(settings.ValueRules, func(rule domain.TriageValueRule) bool { return rule.Kind == "team" && rule.Action == "auto" })
+}
+
 func applyTriageSuggestionAction(data *domain.Bootstrap, issue *domain.Issue, suggestion *domain.IssueSuggestion, now time.Time) bool {
 	action, exists := triageActionForTarget(data.WorkspaceSettings.FeatureSettings.TriageIntelligence, suggestion.Type, triageSuggestionTarget(suggestion))
 	if !exists || action != "auto" {
@@ -806,16 +818,13 @@ func applyIssueSuggestion(data *domain.Bootstrap, issue *domain.Issue, suggestio
 		}
 	case "team":
 		team := teamByID(data, suggestion.SuggestedTeamID)
-		if team == nil {
+		if team == nil || team.ArchivedAt != nil || team.RetiredAt != nil {
 			return errInvalid
 		}
-		previousTeamID := issue.Team.ID
-		if previousTeamID == team.ID {
+		if issue.Team.ID == team.ID {
 			return nil
 		}
-		issue.Team = *team
-		issue.CycleID = nil
-		issue.AddedToCycle = ""
+		// A triage issue lands in the new team's default (triage) status.
 		settings := teamSettings(data, team.ID)
 		nextState := stateForTeam(data, team.ID, settings.DefaultStateID)
 		if nextState == nil {
@@ -825,7 +834,9 @@ func applyIssueSuggestion(data *domain.Bootstrap, issue *domain.Issue, suggestio
 			}
 			nextState = &states[0]
 		}
-		issue.State = *nextState
+		changes := map[string]string{}
+		moveIssueToTeam(data, issue, *team, nextState, changes)
+		appendActivity(data, issue.ID, "issue.updated", data.Viewer, changes)
 	case "similarIssue":
 		target := issueByIDValue(data, suggestion.SuggestedIssueID)
 		if target == nil {
@@ -1183,6 +1194,7 @@ func (s *server) updateIssueSuggestionState(w http.ResponseWriter, r *http.Reque
 		eventType = "issue.suggestion_accepted"
 	}
 	var updated domain.IssueSuggestion
+	ctx := r.Context()
 	metadata, ok := s.store.WorkspaceMetadata(workspaceKey(r))
 	if !ok {
 		respondMutation(w, store.ErrAuthForbidden, http.StatusOK, updated)
@@ -1226,13 +1238,21 @@ func (s *server) updateIssueSuggestionState(w http.ResponseWriter, r *http.Reque
 			respondMutation(w, store.ErrAuthForbidden, http.StatusOK, updated)
 			return
 		}
+		if accept && item.Type == "team" && item.SuggestedTeamID != "" {
+			// Accepting a team suggestion moves the issue like the team picker.
+			if message := issueTeamMoveForbidden(s, visible, item.SuggestedTeamID); message != "" {
+				writeError(w, http.StatusForbidden, message)
+				return
+			}
+			ctx = store.WithIssueRenumbering(ctx)
+		}
 		break
 	}
 	scope := []string{issueID}
 	if targetID != "" {
 		scope = append(scope, targetID)
 	}
-	err := s.store.MutateWorkspace(store.WithIssueRecordMutations(r.Context(), scope...), workspaceKey(r), eventType, suggestionID, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(store.WithIssueRecordMutations(ctx, scope...), workspaceKey(r), eventType, suggestionID, nil, func(data *domain.Bootstrap) error {
 		index := -1
 		for itemIndex := range data.IssueSuggestions {
 			item := &data.IssueSuggestions[itemIndex]

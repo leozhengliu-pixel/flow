@@ -2862,6 +2862,8 @@ export const zhCN: Record<string, string> = {
   "added to milestone {name}": "添加到了里程碑 {name}",
   "changed the milestone": "更改了里程碑",
   "removed the issue from its cycle": "将事项移出了周期",
+  "moved the issue from {from} to {to}": "将事项从 {from} 移到了 {to}",
+  "moved the issue to another team": "将事项移到了另一个团队",
   "added to cycle {name}": "添加到了周期 {name}",
   "changed the cycle": "更改了周期",
   "removed all labels": "移除了所有标签",

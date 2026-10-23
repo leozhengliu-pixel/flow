@@ -1026,7 +1026,7 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 	issueAllowed := func(issueID string) bool {
 		if isIssueRecordsRequest(r) {
 			return slices.ContainsFunc(data.Issues, func(item domain.Issue) bool {
-				return item.ID == issueID && (teamAllowed(item.Team.ID) || issueRole(s, data, item) != "none")
+				return issueAnswersTo(item, issueID) && (teamAllowed(item.Team.ID) || issueRole(s, data, item) != "none")
 			})
 		}
 		return s.pagedIssueVisible(r, issueID)
@@ -1257,7 +1257,7 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		if !issueAllowed(parts[2]) {
 			return false
 		}
-		issueIndex := slices.IndexFunc(data.Issues, func(item domain.Issue) bool { return item.ID == parts[2] })
+		issueIndex := slices.IndexFunc(data.Issues, func(item domain.Issue) bool { return issueAnswersTo(item, parts[2]) })
 		if issueIndex < 0 {
 			return false
 		}
@@ -1328,7 +1328,7 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 			return roleRank >= issuePermissionRank("editor")
 		}
 		if r.Method == http.MethodPatch {
-			if issueIndex := slices.IndexFunc(data.Issues, func(item domain.Issue) bool { return item.ID == parts[2] }); issueIndex >= 0 && issuePermissionRank(issueRole(s, data, data.Issues[issueIndex])) < issuePermissionRank("editor") {
+			if issueIndex := slices.IndexFunc(data.Issues, func(item domain.Issue) bool { return issueAnswersTo(item, parts[2]) }); issueIndex >= 0 && issuePermissionRank(issueRole(s, data, data.Issues[issueIndex])) < issuePermissionRank("editor") {
 				return false
 			}
 			var input domain.IssueUpdateInput

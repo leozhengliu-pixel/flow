@@ -136,7 +136,9 @@ func collaborationAccessScope(event domain.RealtimeEvent) (socketAccessScope, bo
 		kind == "user.updated", strings.HasPrefix(kind, "account."), strings.HasPrefix(kind, "api_key."), strings.HasPrefix(kind, "oauth"),
 		strings.HasPrefix(kind, "application."):
 		return socketAccessScope{all: true}, true
-	case kind == "issue.batch_updated", kind == "issues.deleted":
+	case kind == "issue.batch_updated", kind == "issues.deleted", kind == "issue.suggestion_accepted":
+		// Batch updates and accepted team suggestions can move issues to
+		// other teams without naming them in the aggregate.
 		return socketAccessScope{issues: map[string]string{"*": ""}}, true
 	case kind == "issue.updated":
 		if event.AggregateID == "" {

@@ -18,7 +18,7 @@ func isDuplicateIndex(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "duplicate key name")
 }
 
-var workspaceRecordTables = []string{"issue_records", "issue_label_records", "issue_subscriber_records", "issue_actor_records", "issue_permission_records", "issue_attribute_records", "issue_attribute_migrations", "issue_collection_counts", "issue_records_migrations", "issue_scope_counts", "issue_stats_migrations", "issue_number_sequences", "workspace_content_records", "workspace_metadata_records", "issue_attachment_records", "issue_attachment_migrations", "issue_list_migrations", "issue_search_documents", "issue_search_migrations", "customer_filter_records", "customer_request_filter_records", "customer_filter_migrations", "team_default_favorites", "team_default_favorite_overrides", "recurrence_instance_migrations", "webhook_deliveries", "webhook_signing_secrets", "agent_runs", "agent_run_tokens", "agent_run_changes", "agent_run_keys", "agent_session_states"}
+var workspaceRecordTables = []string{"issue_records", "issue_label_records", "issue_identifier_aliases", "issue_subscriber_records", "issue_actor_records", "issue_permission_records", "issue_attribute_records", "issue_attribute_migrations", "issue_collection_counts", "issue_records_migrations", "issue_scope_counts", "issue_stats_migrations", "issue_number_sequences", "workspace_content_records", "workspace_metadata_records", "issue_attachment_records", "issue_attachment_migrations", "issue_list_migrations", "issue_search_documents", "issue_search_migrations", "customer_filter_records", "customer_request_filter_records", "customer_filter_migrations", "team_default_favorites", "team_default_favorite_overrides", "recurrence_instance_migrations", "webhook_deliveries", "webhook_signing_secrets", "agent_runs", "agent_run_tokens", "agent_run_changes", "agent_run_keys", "agent_session_states"}
 
 func (s *SQLiteStore) migrateIssueCollections(ctx context.Context) error {
 	for key, data := range s.workspaces {
@@ -124,7 +124,7 @@ func (s *SQLiteStore) replaceIssueRecords(ctx context.Context, tx *sqlTx, worksp
 		}
 	}
 	for id := range previous {
-		for _, table := range []string{"issue_subscriber_records", "issue_actor_records", "issue_attribute_records", "issue_attachment_records", "issue_search_documents"} {
+		for _, table := range []string{"issue_subscriber_records", "issue_actor_records", "issue_attribute_records", "issue_attachment_records", "issue_search_documents", "issue_identifier_aliases"} {
 			if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE workspace_key=? AND issue_id=?", workspace, id); err != nil {
 				return err
 			}
@@ -188,6 +188,8 @@ func (s *SQLiteStore) ensureIssueRecords(ctx context.Context) error {
 		`CREATE TABLE IF NOT EXISTS issue_subscriber_records (workspace_key VARCHAR(191) NOT NULL, issue_id VARCHAR(191) NOT NULL, user_id VARCHAR(191) NOT NULL, PRIMARY KEY(workspace_key,issue_id,user_id))`,
 		`CREATE TABLE IF NOT EXISTS issue_actor_records (workspace_key VARCHAR(191) NOT NULL, issue_id VARCHAR(191) NOT NULL, user_id VARCHAR(191) NOT NULL, last_at VARCHAR(40) NOT NULL, PRIMARY KEY(workspace_key,issue_id,user_id))`,
 		`CREATE TABLE IF NOT EXISTS issue_permission_records (workspace_key VARCHAR(191) NOT NULL, issue_id VARCHAR(191) NOT NULL, subject_type VARCHAR(32) NOT NULL, subject_id VARCHAR(191) NOT NULL, role VARCHAR(32) NOT NULL, PRIMARY KEY(workspace_key,issue_id,subject_type,subject_id))`,
+		// The identifiers an issue had before it moved to other teams.
+		`CREATE TABLE IF NOT EXISTS issue_identifier_aliases (workspace_key VARCHAR(191) NOT NULL, issue_id VARCHAR(191) NOT NULL, identifier VARCHAR(191) NOT NULL, PRIMARY KEY(workspace_key,issue_id,identifier))`,
 		`CREATE TABLE IF NOT EXISTS issue_records_migrations (workspace_key VARCHAR(191) PRIMARY KEY, migrated_at VARCHAR(40) NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS issue_collection_counts (workspace_key VARCHAR(191) PRIMARY KEY, total BIGINT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS issue_number_sequences (workspace_key VARCHAR(191) PRIMARY KEY, last_number BIGINT NOT NULL)`,
@@ -220,6 +222,7 @@ func (s *SQLiteStore) ensureIssueRecords(ctx context.Context) error {
 		"issue_subscribers_user_idx ON issue_subscriber_records(workspace_key,user_id,issue_id)",
 		"issue_actors_user_idx ON issue_actor_records(workspace_key,user_id,issue_id)",
 		"issue_permissions_subject_idx ON issue_permission_records(workspace_key,subject_type,subject_id,issue_id)",
+		"issue_identifier_aliases_lookup_idx ON issue_identifier_aliases(workspace_key,identifier,issue_id)",
 	}
 	for _, index := range indexes {
 		statement := "CREATE INDEX IF NOT EXISTS " + index

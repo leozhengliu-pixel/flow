@@ -1292,6 +1292,8 @@ export interface Issue {
   number: number
   parentId?: string | null
   permissions?: IssuePermission[]
+  /** identifiers the issue had before it moved to other teams, oldest first; they still resolve */
+  previousIdentifiers?: string[]
   priority: number
   priorityLabel: string
   project?: ProjectSummary | null
@@ -1485,6 +1487,8 @@ export interface IssuePartial {
   number?: number
   parentId?: string | null
   permissions?: IssuePermissionPartial[]
+  /** identifiers the issue had before it moved to other teams, oldest first; they still resolve */
+  previousIdentifiers?: string[]
   priority?: number
   priorityLabel?: string
   project?: ProjectSummaryPartial | null
@@ -1669,6 +1673,7 @@ export interface IssueUpdateInput {
   sortOrder?: number | null
   stateId?: string | null
   subscriberIds?: string[] | null
+  /** moves the issue to another team: a new identifier (the old one keeps resolving), the equivalent status; it leaves its cycle and the labels that team cannot use */
   teamId?: string | null
   title?: string | null
 }

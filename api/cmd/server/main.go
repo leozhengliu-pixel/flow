@@ -4665,7 +4665,7 @@ func (s *server) toggleProjectUpdateReaction(w http.ResponseWriter, r *http.Requ
 
 func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 	var input domain.IssueUpdateInput
-	if !decodeJSON(w, r, &input) {
+	if !decodeStrictJSON(w, r, &input) {
 		return
 	}
 	if len(input.DocumentUpdateIDs) > 10_000 || slices.ContainsFunc(input.DocumentUpdateIDs, func(id string) bool { return len(id) > 191 }) {
@@ -4684,7 +4684,11 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 		Changes domain.IssueUpdateInput `json:"changes"`
 		Issue   domain.Issue            `json:"issue"`
 	}{Changes: input}
-	err := s.store.MutateWorkspace(r.Context(), workspace, "issue.updated", id, &payload, func(data *domain.Bootstrap) error {
+	ctx := r.Context()
+	if input.TeamID != nil {
+		ctx = store.WithIssueRenumbering(ctx)
+	}
+	err := s.store.MutateWorkspace(ctx, workspace, "issue.updated", id, &payload, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, id)
 		if err != nil {
 			return err
@@ -4821,7 +4825,10 @@ func (s *server) deleteIssue(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 	var input domain.BatchIssueUpdateInput
-	if !decodeJSON(w, r, &input) || len(input.IssueIDs) == 0 {
+	if !decodeStrictJSON(w, r, &input) {
+		return
+	}
+	if len(input.IssueIDs) == 0 {
 		writeError(w, http.StatusBadRequest, "issueIds are required")
 		return
 	}
@@ -4838,7 +4845,23 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 		return false
 	})
 	var updated []domain.Issue
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.batch_updated", fmt.Sprintf("issue_batch_%d", time.Now().UnixNano()), input, func(data *domain.Bootstrap) error {
+	ctx := r.Context()
+	if input.Update.TeamID != nil {
+		if !s.authDisabled {
+			metadata, err := s.store.PagedWorkspaceMetadata(ctx, workspaceKey(r), authUser(r).ID)
+			if err != nil {
+				issueRecordsError(w, err)
+				return
+			}
+			filterBootstrapForAPIKey(&metadata, r)
+			if message := issueTeamMoveForbidden(s, metadata, *input.Update.TeamID); message != "" {
+				writeError(w, http.StatusForbidden, message)
+				return
+			}
+		}
+		ctx = store.WithIssueRenumbering(ctx)
+	}
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "issue.batch_updated", fmt.Sprintf("issue_batch_%d", time.Now().UnixNano()), input, func(data *domain.Bootstrap) error {
 		changed := false
 		for _, id := range input.IssueIDs {
 			issue, err := issueByID(data, id)
@@ -5612,20 +5635,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		if nextTeam.RetiredAt != nil {
 			return nil, fmt.Errorf("%w: team is retired", errInvalid)
 		}
-		changes["teamBefore"] = issue.Team.ID
-		changes["team"] = nextTeam.ID
-		issue.Team = nextTeam
-		if mapped := stateForTeamByType(data, nextTeam.ID, issue.State.Type); mapped != nil && mapped.ID != issue.State.ID {
-			changes["stateBefore"] = issue.State.Name
-			changes["stateBeforeId"] = issue.State.ID
-			changes["state"] = mapped.Name
-			changes["stateId"] = mapped.ID
-			issue.State = *mapped
-		}
-		if issue.CycleID != nil {
-			issue.CycleID = nil
-			changes["cycle"] = ""
-		}
+		moveIssueToTeam(data, issue, nextTeam, nil, changes)
 	}
 	if input.Title != nil && strings.TrimSpace(*input.Title) != issue.Title {
 		changes["title"] = *input.Title
@@ -6839,6 +6849,24 @@ func priorityLabel(priority int) string {
 func decodeJSON(w http.ResponseWriter, r *http.Request, target any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, maxJSONRequestBytes)
 	if err := json.NewDecoder(r.Body).Decode(target); err != nil {
+		requestDecodeError(w, err)
+		return false
+	}
+	return true
+}
+
+// decodeStrictJSON is decodeJSON for update inputs: a field the endpoint does
+// not support is rejected with 400 instead of being silently ignored, so a
+// client never sees success for a change that was not made.
+func decodeStrictJSON(w http.ResponseWriter, r *http.Request, target any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONRequestBytes)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		if field, ok := strings.CutPrefix(err.Error(), "json: unknown field "); ok {
+			writeError(w, http.StatusBadRequest, "Unsupported field "+field)
+			return false
+		}
 		requestDecodeError(w, err)
 		return false
 	}

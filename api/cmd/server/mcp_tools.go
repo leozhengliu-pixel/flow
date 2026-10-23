@@ -89,7 +89,7 @@ func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, a
 				continue
 			}
 			for _, issue := range data.Issues {
-				if equalFoldAny(query, issue.ID, issue.Identifier) && issuePermissionRank(issueRole(s, authorized, issue)) < rank {
+				if issueAnswersTo(issue, query) && issuePermissionRank(issueRole(s, authorized, issue)) < rank {
 					return nil, fmt.Errorf("requester cannot modify this issue")
 				}
 			}
@@ -1165,14 +1165,27 @@ func mcpFindIssue(data domain.Bootstrap, query string) (domain.Issue, error) {
 		}
 	}
 	// Chip text or a link copied from the conversation ("DEV-42 Fix login", "[DEV-42](…/issue/DEV-42)").
-	if key := agentIssueReferenceKey(query); key != "" {
+	key := agentIssueReferenceKey(query)
+	if key != "" {
 		for _, item := range data.Issues {
 			if equalFoldAny(key, item.ID, item.Identifier) {
 				return item, nil
 			}
 		}
 	}
+	// An identifier the issue had before it moved to another team.
+	for _, item := range data.Issues {
+		if issueAnswersTo(item, query) || key != "" && issueAnswersTo(item, key) {
+			return item, nil
+		}
+	}
 	return domain.Issue{}, fmt.Errorf("issue %q not found", query)
+}
+
+// issueAnswersTo reports whether query names the issue: its id, identifier,
+// or an identifier it had before it moved to another team.
+func issueAnswersTo(issue domain.Issue, query string) bool {
+	return equalFoldAny(query, issue.ID, issue.Identifier) || slices.ContainsFunc(issue.PreviousIdentifiers, func(identifier string) bool { return strings.EqualFold(identifier, query) })
 }
 
 func mcpFindTeam(data domain.Bootstrap, query string) (domain.Team, error) {

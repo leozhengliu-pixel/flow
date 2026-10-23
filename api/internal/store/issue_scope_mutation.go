@@ -87,6 +87,13 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 			return err
 		}
 		defer tx.Rollback()
+		if issueRenumbering(ctx) {
+			next, err := s.lockedNextIssueNumber(ctx, tx, workspace)
+			if err != nil {
+				return err
+			}
+			data.NextIssueNumber = max(data.NextIssueNumber, next)
+		}
 		lock := ""
 		if s.dialect != "sqlite" {
 			lock = " FOR UPDATE"
@@ -248,6 +255,11 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		if _, err := s.writeIssueRecordBatch(ctx, tx, workspace, data.Issues, data, stored); err != nil {
 			return err
 		}
+		if issueRenumbering(ctx) {
+			if err := advanceIssueNumberSequence(ctx, tx, workspace, data.Issues); err != nil {
+				return err
+			}
+		}
 		removed := 0
 		for id, issue := range loaded {
 			if remaining[id] {
@@ -259,7 +271,7 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 			if err := writeIssueStats(ctx, tx, workspace, deltas); err != nil {
 				return err
 			}
-			for _, table := range []string{"issue_label_records", "issue_permission_records", "issue_subscriber_records", "issue_actor_records", "issue_attribute_records", "issue_attachment_records", "issue_search_documents"} {
+			for _, table := range []string{"issue_label_records", "issue_permission_records", "issue_subscriber_records", "issue_actor_records", "issue_attribute_records", "issue_attachment_records", "issue_search_documents", "issue_identifier_aliases"} {
 				if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE workspace_key=? AND issue_id=?", workspace, id); err != nil {
 					return err
 				}

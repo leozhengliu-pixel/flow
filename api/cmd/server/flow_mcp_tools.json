@@ -616,7 +616,7 @@
   {
     "name": "mcp__flow.save_issue",
     "access": "write",
-    "description": "Create or update a Flow issue. If `id` is provided, updates the existing issue; otherwise creates a new one. When creating, `title` and `team` are required; a sub-issue created with `parentId` and no `team` goes to its parent's team. Note: use `assignee` (not `assigneeId`) to set the assignee — it accepts a user ID, name, email, or \"me\". To hand work to an AI agent, set `delegate` (with optional `delegateInstructions`). Pass `archived` to archive or restore an existing issue.",
+    "description": "Create or update a Flow issue. If `id` is provided, updates the existing issue; otherwise creates a new one. When creating, `title` and `team` are required; a sub-issue created with `parentId` and no `team` goes to its parent's team. Note: use `assignee` (not `assigneeId`) to set the assignee — it accepts a user ID, name, email, or \"me\". To hand work to an AI agent, set `delegate` (with optional `delegateInstructions`). Pass `archived` to archive or restore an existing issue. Passing another `team` for an existing issue moves it there: it gets that team's key and a new number (the old identifier keeps working), the team's status of the same type unless `state` names one, and leaves its cycle and the labels that team cannot use.",
     "input_schema": {
       "type": "object",
       "required": [],
@@ -652,7 +652,7 @@
         "slaBreachesAt": { "type": ["string", "null"] },
         "slaType": { "type": ["string", "null"], "enum": ["all", "onlyBusinessDays", null] },
         "state": { "type": "string" },
-        "team": { "type": "string" },
+        "team": { "type": "string", "description": "Team name, key or ID. On an existing issue, moves it to that team." },
         "title": { "type": "string" }
       }
     }

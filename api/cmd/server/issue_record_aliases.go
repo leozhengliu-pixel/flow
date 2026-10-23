@@ -45,6 +45,13 @@ func (s *server) issueRecordAuthorizationData(r *http.Request) (domain.Bootstrap
 	if len(parts) > 2 {
 		if parts[2] != "batch" {
 			ids = append(ids, parts[2])
+			if issueIdentifierPattern.MatchString(parts[2]) {
+				// The path names the issue by an identifier: its current one or
+				// one it had before it moved to another team.
+				if id, err := s.store.AuthorizedIssueRecordID(r.Context(), query, parts[2]); err == nil {
+					ids = append(ids, id)
+				}
+			}
 		}
 	}
 	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
