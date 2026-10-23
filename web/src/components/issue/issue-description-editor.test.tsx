@@ -259,4 +259,64 @@ describe('real Tiptap description collaboration', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('another session'))
     expect(secondPersist.mock.calls[0][2]).toBe(3)
   })
+
+  async function mountEditorPair(secondPersist: (...args: unknown[]) => Promise<void>) {
+    const firstPersist = vi.fn().mockResolvedValue(undefined)
+    const editors: Array<Editor | null> = [null, null]
+    const pair = (second = collab as typeof collab & { contentState?: string }) => <>
+      <IssueDescriptionEditor value="Shared body" editorRef={editor => { editors[0] = editor }} collaboration={{ ...collab, onPersist: firstPersist }}/>
+      <IssueDescriptionEditor value="Shared body" editorRef={editor => { editors[1] = editor }} collaboration={{ ...second, onPersist: secondPersist }}/>
+    </>
+    const view = render(pair())
+    await waitFor(() => expect(editors.every(Boolean)).toBe(true))
+    await waitFor(() => expect(Socket.instances).toHaveLength(2))
+    act(() => { Socket.instances[0].sync(); Socket.instances[1].sync() })
+    act(() => { editors[0]!.commands.insertContent('First edit ') })
+    act(() => { editors[1]!.commands.insertContent('Second edit ') })
+    // The first editor saves before the second one's frames reached it, as when two people type at once.
+    fireEvent.blur(screen.getAllByRole('textbox')[0])
+    await waitFor(() => expect(firstPersist).toHaveBeenCalledTimes(1))
+    return { editors, firstPersist, firstSnapshot: firstPersist.mock.calls[0][0] as { contentState: string }, rerender: (second: typeof collab & { contentState?: string }) => view.rerender(pair(second)) }
+  }
+
+  it('a save that lost the race to another editor of the same document merges its snapshot and saves again', async () => {
+    let firstState = ''
+    const secondPersist = vi.fn(async () => {
+      if (secondPersist.mock.calls.length === 1) throw Object.assign(new Error('This item changed in another session'), { status: 409, current: { documentContent: { id: 'document-1', version: 4, contentState: firstState } } })
+    })
+    const { firstSnapshot } = await mountEditorPair(secondPersist)
+    firstState = firstSnapshot.contentState
+    fireEvent.blur(screen.getAllByRole('textbox')[1])
+    await waitFor(() => expect(secondPersist).toHaveBeenCalledTimes(2))
+    const retried = secondPersist.mock.calls[1] as unknown as [{ markdown: string }, string[], number]
+    expect(retried[2]).toBe(4)
+    expect(retried[0].markdown).toContain('First edit')
+    expect(retried[0].markdown).toContain('Second edit')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('follows a collaborator\'s saved version while it has unsaved edits, so its own save does not conflict', async () => {
+    const secondPersist = vi.fn().mockResolvedValue(undefined)
+    const { firstSnapshot, rerender } = await mountEditorPair(secondPersist)
+    // The workspace stream delivers the first editor's save to the second while the second's edit is unsaved.
+    rerender({ ...collab, documentVersion: 4, contentState: firstSnapshot.contentState })
+    fireEvent.blur(screen.getAllByRole('textbox')[1])
+    await waitFor(() => expect(secondPersist).toHaveBeenCalledTimes(1))
+    expect(secondPersist.mock.calls[0][2]).toBe(4)
+    expect(secondPersist.mock.calls[0][0].markdown).toContain('First edit')
+    expect(secondPersist.mock.calls[0][0].markdown).toContain('Second edit')
+  })
+
+  it('clears the local backup after a save even when a collaborator\'s edit arrived after the last local one', async () => {
+    const persist = vi.fn().mockResolvedValue(undefined)
+    const { editors } = await mountEditorPair(persist)
+    const key = descriptionRecoveryKey('test', 'issue-1', viewer.id)
+    expect(readDescriptionRecovery(key)?.snapshot.markdown).toContain('Second edit')
+    const frames = Socket.instances[0].sent.filter((value): value is Uint8Array => value instanceof Uint8Array && value[0] === 1)
+    act(() => { for (const frame of frames) Socket.instances[1].onmessage?.({ data: frame.buffer }) })
+    expect(editors[1]!.getText()).toContain('First edit')
+    fireEvent.blur(screen.getAllByRole('textbox')[1])
+    await waitFor(() => expect(persist).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(readDescriptionRecovery(key)).toBeUndefined())
+  })
 })

@@ -87,6 +87,7 @@ interface DescriptionEditorProps {
 const closedSlash: SlashCommandState = { active: false, query: '', range: null }
 type MentionState = { active: boolean; query: string; range: { from: number; to: number } | null }
 const closedMention: MentionState = { active: false, query: '', range: null }
+const oversizedEditMessage = 'This change is too large to save. Download your local changes, then reload the page to keep editing.'
 
 export function IssueDescriptionEditor(props: DescriptionEditorProps) {
   if (props.loading) return <div className="issue-description-skeleton" aria-label="Loading issue description"/>
@@ -122,6 +123,9 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   const revisionRef = useRef(0)
   const savedRevisionRef = useRef(0)
   const versionRef = useRef(collaboration?.documentVersion ?? 0)
+  const conflictRetriesRef = useRef(0)
+  /** The Yjs state of this editor's latest local backup (see clearDescriptionRecovery). */
+  const backupStateRef = useRef<string | undefined>(undefined)
   const blockedRef = useRef(false)
   const recoveryKey = collaboration ? descriptionRecoveryKey(collaboration.workspaceKey, collaboration.issueId ?? collaboration.documentId, collaboration.viewer.id) : ''
   const [recovery] = useState(() => recoveryKey ? readDescriptionRecovery(recoveryKey) : undefined)
@@ -300,6 +304,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       onChange?.(snapshot)
       if (collaborationSession && collaboration) {
         revisionRef.current++
+        backupStateRef.current = snapshot.contentState
         if (!writeDescriptionRecovery(recoveryKey, { documentId: collaboration.documentId, version: versionRef.current, snapshot })) setSaveError('Local backup is unavailable. Keep this page open or download your changes.')
         scheduleCollaborativePersist()
       }
@@ -338,21 +343,37 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     const run = async () => {
       if (blockedRef.current || revisionRef.current === savedRevisionRef.current || editor.isDestroyed) return
       if (!collaborationSession.provider.isSynced()) {
-        setSaveError('Description could not be saved. Your local changes are preserved. Retry when connected.')
+        setSaveError(collaborationSession.provider.isOversized() ? oversizedEditMessage : 'Description could not be saved. Your local changes are preserved. Retry when connected.')
         return
       }
       const revision = revisionRef.current
+      const backupState = backupStateRef.current
       const snapshot = serializeDescription(editor, collaborationSession.document)
       const updateIds = collaborationSession.provider.updateIds()
+      const expectedVersion = versionRef.current
       try {
-        await collaboration.onPersist(snapshot, updateIds, versionRef.current)
+        await collaboration.onPersist(snapshot, updateIds, expectedVersion)
         collaborationSession.provider.acknowledgeSnapshot(updateIds)
         savedRevisionRef.current = revision
-        versionRef.current++
-        clearDescriptionRecovery(recoveryKey, snapshot)
+        versionRef.current = Math.max(versionRef.current, expectedVersion + 1)
+        conflictRetriesRef.current = 0
+        clearDescriptionRecovery(recoveryKey, snapshot, revisionRef.current === revision ? backupState : undefined)
         setSaveError(undefined)
       } catch (error) {
         const conflict = typeof error === 'object' && error !== null && 'status' in error && error.status === 409
+        // Another editor of this same collaborative document saved first. Its snapshot is a Yjs state: merge it, take
+        // its version and save again. Only a new document generation (a restored version, a Markdown replacement) is
+        // a real conflict.
+        const current = conflict ? (error as { current?: { documentContent?: { id?: string; version?: number; contentState?: string } } }).current?.documentContent : undefined
+        if (current?.id === collaboration.documentId && typeof current.version === 'number' && conflictRetriesRef.current < 3) {
+          conflictRetriesRef.current++
+          try {
+            if (current.contentState) applyUpdate(collaborationSession.document, base64ToBytes(current.contentState), collaborationSession.provider)
+            versionRef.current = current.version
+            void persistRef.current()
+            return
+          } catch { /* an unreadable state is handled as a conflict below */ }
+        }
         blockedRef.current = conflict
         if (conflict) collaborationSession.provider.stop()
         setSaveError(conflict ? 'The description changed in another session. Your local changes are preserved. Download them before reloading the latest version.' : 'Description could not be saved. Your local changes are preserved. Retry when connected.')
@@ -416,10 +437,12 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     editor.commands.setContent(next.content, { emitUpdate: false, contentType: next.contentType })
   }, [collaborationSession, editor, state, value])
   useEffect(() => {
-    if (!collaborationSession || !collaboration?.contentState || revisionRef.current !== savedRevisionRef.current || blockedRef.current) return
+    // Another editor's saved snapshot merges into this Yjs document even while this one has unsaved edits (merging
+    // a CRDT state never drops them), and the next save then builds on its version instead of conflicting with it.
+    if (!collaborationSession || !collaboration?.contentState || blockedRef.current) return
     try {
       applyUpdate(collaborationSession.document, base64ToBytes(collaboration.contentState), collaborationSession.provider)
-      versionRef.current = collaboration.documentVersion ?? versionRef.current
+      versionRef.current = Math.max(versionRef.current, collaboration.documentVersion ?? 0)
     } catch {
       setSaveError('The latest description could not be loaded. Keep this page open or download your changes.')
     }
@@ -434,6 +457,11 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     }
     collaborationSession.provider.awareness.on('change', syncPresence)
     const onStatus = ({ status }: { status: string }) => {
+      if (status === 'oversized') {
+        window.clearTimeout(persistTimerRef.current)
+        setSaveError(oversizedEditMessage)
+        return
+      }
       if (status === 'connected' && !blockedRef.current && revisionRef.current !== savedRevisionRef.current) {
         void persistRef.current()
       }

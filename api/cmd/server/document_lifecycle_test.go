@@ -266,6 +266,47 @@ func TestCollaborationSocketEnforcesDocumentRoles(t *testing.T) {
 	}
 }
 
+// A member without access to a document can neither join it nor send it updates, and a member whose access is
+// removed while the document is open stops receiving its edits.
+func TestCollaborationSocketRefusesMembersWithoutAccess(t *testing.T) {
+	server, owner, _, alice, bob, document := documentNotificationFixture(t)
+	editor := dialAuthenticatedCollaborationSocket(t, alice.client, server.URL, "alice")
+	defer editor.CloseNow()
+	reader := dialAuthenticatedCollaborationSocket(t, bob.client, server.URL, "bob")
+	defer reader.CloseNow()
+	joinStandaloneDocument(t, editor, document.ID)
+	joinStandaloneDocument(t, reader, document.ID)
+
+	authRequest[[]domain.DocumentPermission](t, owner, http.MethodPut, server.URL+"/api/documents/"+document.ID+"/permissions", map[string]any{"permissions": []map[string]string{
+		{"subjectType": "user", "subjectId": alice.user.ID, "role": "editor"},
+	}}, "test-workspace", http.StatusOK)
+	writeSocket(t, editor, websocket.MessageBinary, encodeCollaborationFrame(collaborationUpdateFrame, document.ID, "collab_after_revoke", []byte{5}))
+	assertUpdateFrame(t, editor, document.ID, "collab_after_revoke", []byte{5})
+	// The removed member is told the document is gone instead of receiving the edit.
+	if messageType, message := readSocketMessage(t, reader); messageType != websocket.MessageText || !strings.Contains(string(message), `"document.revoked"`) {
+		t.Fatalf("removed member received %v %s", messageType, message)
+	}
+
+	outsider := dialAuthenticatedCollaborationSocket(t, bob.client, server.URL, "bob-2")
+	defer outsider.CloseNow()
+	writeSocket(t, outsider, websocket.MessageBinary, encodeCollaborationFrame(collaborationUpdateFrame, document.ID, "collab_unjoined", []byte{6}))
+	if _, message := readSocketMessage(t, outsider); !strings.Contains(string(message), "join document before sending updates") {
+		t.Fatalf("unjoined update response = %s", message)
+	}
+	raw, _ := json.Marshal(map[string]string{"type": "document.join", "documentId": document.ID})
+	writeSocket(t, outsider, websocket.MessageText, raw)
+	if _, message := readSocketMessage(t, outsider); !strings.Contains(string(message), `"type":"error"`) || strings.Contains(string(message), "document.sync") {
+		t.Fatalf("outsider join response = %s", message)
+	}
+	writeSocket(t, outsider, websocket.MessageBinary, encodeCollaborationFrame(collaborationUpdateFrame, document.ID, "collab_outsider", []byte{7}))
+	if _, message := readSocketMessage(t, outsider); !strings.Contains(string(message), "join document before sending updates") {
+		t.Fatalf("outsider update response = %s", message)
+	}
+	// Nothing the outsider sent reached the editor: its next message is its own update.
+	writeSocket(t, editor, websocket.MessageBinary, encodeCollaborationFrame(collaborationUpdateFrame, document.ID, "collab_last", []byte{8}))
+	assertUpdateFrame(t, editor, document.ID, "collab_last", []byte{8})
+}
+
 func TestUntitledDocumentsPinAndLinkAsResources(t *testing.T) {
 	_, handler := newDocumentLifecycleServer(t)
 	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)

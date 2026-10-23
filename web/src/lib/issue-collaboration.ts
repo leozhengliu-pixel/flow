@@ -7,8 +7,11 @@ import type { User } from '@/types/flow'
 const hiddenSuspendMs = 20_000
 const updateFrame = 1
 const awarenessFrame = 2
+/** The server closes a socket that sends a larger frame (maxCollaborationFrameSize). */
+export const MAX_COLLABORATION_FRAME_BYTES = 2 << 20
 
-type Status = 'connecting' | 'connected' | 'disconnected' | 'conflict'
+/** `oversized`: a local edit is too large to sync; it stays local until it is undone or made smaller. */
+type Status = 'connecting' | 'connected' | 'disconnected' | 'conflict' | 'oversized'
 type Listener = (event: { status: Status }) => void
 
 interface SyncMessage {
@@ -33,6 +36,7 @@ export class IssueCollaborationProvider {
   private readonly serverClocks = new Map<number, number>()
   private pendingBytes = 0
   private deferredUpdate = false
+  private oversized = false
   private receivedServerState = false
   private seedQueued = false
   private readonly listeners = new Set<Listener>()
@@ -138,7 +142,12 @@ export class IssueCollaborationProvider {
   }
 
   isSynced() {
-    return this.synced && !this.conflicted
+    return this.synced && !this.conflicted && !this.oversized
+  }
+
+  /** A local edit is too large for the server to accept (see MAX_COLLABORATION_FRAME_BYTES). */
+  isOversized() {
+    return this.oversized
   }
 
   acknowledgeSnapshot(updateIds: string[]) {
@@ -330,8 +339,27 @@ export class IssueCollaborationProvider {
     for (const [updateId, update] of this.pendingUpdates) {
       if (this.sentUpdates.has(updateId)) continue
       if ((this.socket.bufferedAmount ?? 0) > 2 * 1024 * 1024) return
-      this.socket.send(encodeFrame(updateFrame, this.documentId, updateId, update))
+      const frame = encodeFrame(updateFrame, this.documentId, updateId, update)
+      if (frame.byteLength > MAX_COLLABORATION_FRAME_BYTES) {
+        // Sending it would only get the socket closed, reconnect and send it again, forever. Keep the edit in the
+        // document and derive the delta again on the next local edit, in case it fits by then (deleted content
+        // stays in it while the undo history holds it). Resending already sent updates in that delta is safe.
+        this.pendingUpdates.clear()
+        this.pendingBytes = 0
+        this.sentUpdates.clear()
+        this.deferredUpdate = true
+        if (!this.oversized) {
+          this.oversized = true
+          this.emit('oversized')
+        }
+        return
+      }
+      this.socket.send(frame)
       this.sentUpdates.add(updateId)
+    }
+    if (this.oversized) {
+      this.oversized = false
+      this.emit('connected')
     }
   }
 

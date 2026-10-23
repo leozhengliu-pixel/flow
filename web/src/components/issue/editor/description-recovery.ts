@@ -22,9 +22,15 @@ export function writeDescriptionRecovery(key: string, recovery: DescriptionRecov
   catch { return false }
 }
 
-export function clearDescriptionRecovery(key: string, snapshot: DescriptionSnapshot) {
+/**
+ * Drops the backup once a save holds it. `coveredBackup` is the state of the editor's own last backup when the saved
+ * snapshot includes it (no local edit since): the backup is covered even though collaborators' edits merged in
+ * afterwards made the saved state differ from it.
+ */
+export function clearDescriptionRecovery(key: string, snapshot: DescriptionSnapshot, coveredBackup?: string) {
   // A response to an earlier save must not erase newer local edits.
-  if (readDescriptionRecovery(key)?.snapshot.contentState !== snapshot.contentState) return
+  const stored = readDescriptionRecovery(key)?.snapshot.contentState
+  if (stored !== snapshot.contentState && (coveredBackup === undefined || stored !== coveredBackup)) return
   try { sessionStorage.removeItem(key) }
   catch { /* The live editor still owns its document. */ }
 }

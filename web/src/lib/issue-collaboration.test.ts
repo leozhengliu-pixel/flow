@@ -115,6 +115,46 @@ describe('issue collaboration provider', () => {
     document.destroy()
   })
 
+  it('keeps an edit too large for the server local instead of reconnecting forever, and syncs once it fits', async () => {
+    const { IssueCollaborationProvider, MAX_COLLABORATION_FRAME_BYTES } = await import('./issue-collaboration')
+    const document = new Doc()
+    const provider = new IssueCollaborationProvider({ document, workspaceKey: 'workspace', issueId: 'issue-1', documentId: 'document-1', viewer, seededWithoutServerState: false })
+    const statuses: string[] = []
+    provider.on('status', event => statuses.push(event.status))
+    provider.start()
+    const socket = MockWebSocket.instances[0]
+    socket.open()
+    socket.message(JSON.stringify({ type: 'document.sync', documentId: 'document-1', updates: [] }))
+    const updateFrames = () => socket.sent.filter((value): value is Uint8Array => value instanceof Uint8Array && value[0] === 1)
+    const content = document.getText('content')
+    content.insert(0, 'x'.repeat(MAX_COLLABORATION_FRAME_BYTES + 10))
+    expect(updateFrames()).toHaveLength(0)
+    expect(statuses.at(-1)).toBe('oversized')
+    expect(provider.isOversized()).toBe(true)
+    expect(provider.isSynced()).toBe(false)
+    content.insert(0, 'more ')
+    expect(updateFrames()).toHaveLength(0)
+    expect(statuses.filter(status => status === 'oversized')).toHaveLength(1)
+    // Nothing closed the socket, so nothing reconnects.
+    vi.advanceTimersByTime(30_000)
+    expect(MockWebSocket.instances).toHaveLength(1)
+    // Deleted (and garbage collected) content no longer has to be sent: the edit syncs.
+    content.delete(5, content.length - 5)
+    expect(statuses.at(-1)).toBe('connected')
+    expect(provider.isSynced()).toBe(true)
+    const frames = updateFrames()
+    expect(frames).toHaveLength(1)
+    expect(frames[0].byteLength).toBeLessThan(1024)
+    const remote = new Doc()
+    const view = new DataView(frames[0].buffer, frames[0].byteOffset, frames[0].byteLength)
+    const updateOffset = 3 + view.getUint16(1)
+    applyUpdate(remote, frames[0].subarray(updateOffset + 2 + view.getUint16(updateOffset)))
+    expect(remote.getText('content').toString()).toBe('more ')
+    provider.destroy()
+    document.destroy()
+    remote.destroy()
+  })
+
   it('coalesces a long offline edit backlog without losing edits or remote changes', async () => {
     let sequence = 0
     vi.spyOn(crypto, 'randomUUID').mockImplementation(() => `00000000-0000-4000-8000-${String(++sequence).padStart(12, '0')}`)
