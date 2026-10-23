@@ -91,10 +91,15 @@ export function gitEnv(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 /** Longest commit subject; longer summary lines are cut with an ellipsis. */
 export const MAX_SUBJECT = 72
 
+/**
+ * The summary's first non-empty line without Markdown heading, quote or list
+ * markers, and without the colon of a lead-in ("Fixed the parser:" followed
+ * by a list of changes), which reads badly as a commit subject or title.
+ */
 function summaryLine(summary: string): string | undefined {
   return summary
     .split('\n')
-    .map((line) => line.replace(/^[#>*\-\s]+/, '').trim())
+    .map((line) => line.replace(/^[#>*\-\s]+/, '').replace(/:\s*$/, '').trim())
     .find((line) => line.length > 0)
 }
 
@@ -206,10 +211,13 @@ export class Git {
    * git relay (`pushUrl`): the helper gets only a placeholder for it and
    * Flow adds the member's token server side. Fetches keep using the clone
    * URL. Without a push URL any earlier one (a restored workspace) is removed.
+   * A bare `git push` by the agent publishes the session branch under its own
+   * name (push.autoSetupRemote), like the runner's own push.
    */
   async configureCredentials(pushUrl?: string): Promise<void> {
     await this.git(['config', '--local', '--replace-all', 'credential.helper', this.credentialHelper])
     await this.git(['config', '--local', 'credential.useHttpPath', 'true'])
+    await this.git(['config', '--local', 'push.autoSetupRemote', 'true'])
     if (pushUrl) await this.git(['remote', 'set-url', '--push', 'origin', pushUrl])
     else await this.git(['config', '--local', '--unset-all', 'remote.origin.pushurl'], { check: false })
   }
@@ -302,7 +310,9 @@ export class Git {
       throw new BranchNotFoundError(branch)
     } else {
       const { base, note } = await this.branchBase(repo)
-      await this.git(['checkout', '-b', branch, base])
+      // No upstream: tracking origin/<base> would make the agent's own `git push` refuse ("the upstream branch of
+      // your current branch does not match") or target the base branch.
+      await this.git(['checkout', '--no-track', '-b', branch, base])
       checkout = { source: 'created', base, note }
       // origin definitely has no such branch (remoteBranchHead throws on every other outcome) and nothing proves it
       // was ever published: start it again; origin is never touched.

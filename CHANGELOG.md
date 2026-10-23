@@ -32,6 +32,18 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - The sandbox runner reads agent output lines on LF only, so a JSON record
   holding U+2028 or U+2029 is no longer split and dropped.
+- Coding sessions with the docker provider start on Docker Desktop and other
+  daemons that use the containerd image store: the sandbox token is written
+  through a short-lived helper container, because the archive API refuses
+  copies into the read-only sandbox container ("container rootfs is marked
+  read-only").
+- Starting a coding session from an issue answers with the reason (for
+  example `agentUnavailable` when the built-in Flow agent is off, or an
+  invalid model) instead of an internal error.
+- A new coding-session branch no longer tracks the base branch, and a bare
+  `git push` by the agent publishes it under its own name; a summary line that
+  ends with a colon no longer leaves the colon in the commit subject and pull
+  request title.
 - The first edit of a document that had a body but no version history (created
   with content through the API, MCP or a template, or written by an earlier
   release) no longer loses the body it replaced: the pre-edit state is kept as
