@@ -17,7 +17,7 @@ html:root body .project-label-submenu {
 /* Single-select pickers size to their content like the reference. */
 html:root body .property-command-surface:not(.property-command-labels):not(.property-command-project):not(.property-command-milestone):not(.property-command-project-labels) {
   width: max-content;
-  min-width: 206px;
+  min-width: 207px;
   max-width: min(360px, calc(100vw - 20px));
 }
 

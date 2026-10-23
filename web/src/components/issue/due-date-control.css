@@ -1,5 +1,92 @@
-.due-date-custom .date-time-control{min-width:0;flex:1;height:30px;padding:0;border:0;background:transparent}
-:root[data-theme="light"] .due-date-command{border-color:var(--popover-border);background:var(--theme-surface-2);box-shadow:var(--shadow-control);color:var(--theme-text-primary);border-radius:12px}
-:root[data-theme="light"] .due-date-search,:root[data-theme="light"] .due-date-options button:not(.due-date-remove){color:var(--theme-text-primary)}
-:root[data-theme="light"] .due-date-options button{height:32px;padding:0 18px 0 14px}
-:root[data-theme="light"] .due-date-custom input,:root[data-theme="light"] .flow-date input,:root[data-theme="light"] .due-property input,:root[data-theme="light"] .mini-date input,:root[data-theme="light"] .issue-action-dialog .date-time-control{color:var(--theme-text-primary);color-scheme:light}
+/* Due-date picker: the searchable list the reference app opens from the property, the "Due date" submenu and the
+   composer. 207 wide at the least, a 36px field row, 32px rows with a 16px icon and the date on the right. */
+html:root .due-date-command {
+  box-sizing: border-box;
+  z-index: 650;
+  width: max-content;
+  min-width: 207px;
+  max-width: min(360px, calc(100vw - 20px));
+  overflow: hidden;
+  border: .5px solid var(--pk-border);
+  border-radius: 12px;
+  background: var(--pk-surface);
+  box-shadow: var(--pk-shadow);
+  color: var(--pk-text);
+}
+html:root .due-date-head {
+  box-sizing: content-box;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 0 14px;
+  border-bottom: .5px solid var(--pk-divider);
+}
+html:root .due-date-search {
+  box-sizing: border-box;
+  width: 0;
+  min-width: 0;
+  flex: 1 1 0;
+  height: 36px;
+  padding: 10px 0 9px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--pk-text);
+  font: 400 13px / normal var(--font);
+}
+html:root .due-date-search::placeholder { color: var(--theme-text-secondary); opacity: 1; }
+.due-date-shortcut { display: flex; align-items: center; gap: 3px; }
+.due-date-shortcut kbd {
+  box-sizing: border-box;
+  min-width: 18px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  padding: 2px 4px;
+  border: .5px solid var(--pk-divider);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--pk-muted);
+  font: 400 11px / 12px var(--font);
+}
+html:root .due-date-options { padding: 6px 0; }
+html:root .due-date-options button {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 18px 0 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--pk-text);
+  font: 450 13px / normal var(--font);
+  text-align: left;
+}
+.due-date-options button::before {
+  content: "";
+  position: absolute;
+  inset: 0 6px;
+  border-radius: 8px;
+  background: var(--action-menu-active-bg);
+  opacity: 0;
+}
+.due-date-options button > * { position: relative; }
+.due-date-options button:hover::before,
+.due-date-options button:focus-visible::before { opacity: 1; }
+html:root .due-date-options button:hover,
+html:root .due-date-options button:focus-visible { outline: 0; background: transparent; color: var(--pk-text-strong); }
+.due-date-options svg { width: 16px; height: 16px; color: var(--pk-muted); }
+.due-date-options button:hover svg,
+.due-date-options button:focus-visible svg { color: var(--pk-text-strong); }
+html:root .due-date-options button small { color: var(--pk-muted); font: 450 13px / normal var(--font); }
+html:root .due-date-options .due-date-remove { grid-template-columns: 16px minmax(0, 1fr) auto; color: var(--pk-text); }
+html:root .due-date-options .due-date-remove small { color: var(--pk-faint); }
+.due-date-options button:disabled { opacity: .5; }
+html:root .due-date-popover,
+html:root .issue-options-date-dialog { width: max-content; overflow: visible; }

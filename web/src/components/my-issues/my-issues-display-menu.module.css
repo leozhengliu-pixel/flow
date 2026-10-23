@@ -60,3 +60,12 @@
 .popover[data-list-display]:not(#_) .selectTrigger{min-width:0}
 .popover[data-list-display]:not(#_) .sectionLabel{padding:8px 0 12px;line-height:14px}
 .popover[data-list-display]:not(#_) .propertyGrid{padding-bottom:4px}
+/* Select menu: the raised surface, 12px / 35px item padding and the 14px check of the reference app. */
+.selectMenu:not(#_){border:0;background:var(--select-menu-bg);box-shadow:0 0 0 .5px var(--select-menu-ring),var(--pk-shadow)}
+.selectItem:not(#_){padding:0 35px 0 12px;font-weight:400}
+.selectItem[data-state=checked]:not(#_):not([data-highlighted]){background:transparent}
+.selectIndicator:not(#_){position:absolute;top:5px;right:13.5px;margin:0}
+.selectIndicator:not(#_) svg{width:14px;height:14px}
+/* Layout tabs sit 2px inside the field, 129 wide with 6px between them; chips and rows are 5px apart. */
+.layoutTabs:not(#_){padding:0 2px}
+.propertyGrid:not(#_){gap:5px}

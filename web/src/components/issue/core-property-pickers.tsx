@@ -42,13 +42,13 @@ export function StatusPicker({ value, states, onChange, hoverHistory, triage = f
 
 export function PriorityPicker({ value, onChange }: { value: number; onChange: (value: number) => void | Promise<void> }) {
   const labels = ['No priority', 'Urgent', 'High', 'Medium', 'Low']
-  const options = labels.map((label, priority) => ({ id: String(priority), label, icon: <PriorityIcon priority={priority}/>, shortcut: String(priority) }))
+  const options = labels.map((label, priority) => ({ id: String(priority), label, icon: <PriorityIcon priority={priority} size={16}/>, shortcut: String(priority) }))
   return <div className="core-property-picker"><PropertyMenu
     label="Priority"
     value={value ? labels[value] : 'Priority'}
     selectedId={String(value)}
     options={options}
-    searchPlaceholder="Change priority…"
+    searchPlaceholder={value ? 'Change priority…' : 'Set priority to…'}
     searchShortcut="P"
     ariaLabel={`Change priority. ${value ? `${labels[value]} is selected` : 'No priority is selected'}`}
     triggerClassName={`core-property-trigger${value === 0 ? ' muted' : ''}`}

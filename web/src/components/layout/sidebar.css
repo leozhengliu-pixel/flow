@@ -462,24 +462,26 @@
 /* The reference app draws every sidebar count the same way: a plain muted number 10px from the edge. */
 .nav-unread,.nav-count{margin-left:auto;margin-right:2px;color:var(--sidebar-count-fg);font-size:12px;font-weight:450;font-variant-numeric:tabular-nums}
 .nav-unread[data-badge-style="dot"]{width:8px;height:8px;overflow:hidden;color:transparent;font-size:0;border-radius:50%;background:var(--sidebar-badge-dot)}
-.dialog-content.sidebar-shortcuts-dialog{box-sizing:border-box;left:auto;right:12px;top:8px;bottom:8px;transform:none;width:min(326px,calc(100vw - 24px));height:auto;display:flex;flex-direction:column;overflow:hidden;padding:0;border-radius:12px;background:var(--theme-surface-2);color:var(--theme-text-primary)}
-.sidebar-shortcuts-dialog h2{height:50px;flex:0 0 50px;display:flex;align-items:center;margin:0;padding:0 16px;font-size:14px;font-weight:600;line-height:20px}
-.sidebar-shortcuts-dialog>.dialog-close{top:11px;right:12px;width:28px;height:28px;border-radius:6px}
-.sidebar-shortcuts-search{height:34px;flex:0 0 34px;display:flex;align-items:center;gap:8px;margin:0 12px 8px;padding:0 9px;border:1px solid var(--theme-border-strong);border-radius:6px;background:var(--theme-surface-1);color:var(--theme-text-secondary)}
-.sidebar-shortcuts-search:focus-within{border-color:var(--focus-ring)}
-.sidebar-shortcuts-search input{width:100%;min-width:0;height:100%;padding:0;border:0;outline:0;background:transparent;color:var(--theme-text-primary);font:12px var(--font)}
-.sidebar-shortcuts-search input::placeholder{color:var(--theme-text-tertiary)}
-.sidebar-shortcuts-scroll{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 12px 14px;scrollbar-width:thin}
-.sidebar-shortcuts-scroll section+section{margin-top:12px}
-.sidebar-shortcuts-scroll h3{height:27px;display:flex;align-items:center;margin:0;padding:0 5px;color:var(--theme-text-secondary);font-size:11px;font-weight:600;line-height:16px}
-.sidebar-shortcuts-scroll dl{margin:0}
-.sidebar-shortcuts-scroll dl>div{min-height:32px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 5px;border-radius:5px;font-size:12px;line-height:17px}
-.sidebar-shortcuts-scroll dt{min-width:0;flex:1}
+/* Keyboard shortcuts panel: 360 wide, 12px from the right, top and bottom of the window at every width. */
+.dialog-content.sidebar-shortcuts-dialog{box-sizing:border-box;left:auto;right:12px;top:12px;bottom:12px;transform:none;width:min(360px,calc(100vw - 24px));height:auto;display:flex;flex-direction:column;overflow:hidden;padding:0;border:1px solid var(--sub-editor-border);border-radius:12px;background:var(--theme-surface-1);box-shadow:var(--shadow-control);color:var(--theme-text-primary)}
+.sidebar-shortcuts-dialog h2{flex:none;margin:0;padding:20px 20px 15px;color:var(--release-title-fg);font-size:15px;font-weight:600;line-height:23px}
+.sidebar-shortcuts-dialog>.dialog-close{top:20px;right:20px;width:24px;height:24px;border-radius:9999px;color:var(--theme-text-primary)}
+.sidebar-shortcuts-search{position:relative;flex:none;height:44px;margin:0 20px 25px;color:var(--theme-text-secondary)}
+.sidebar-shortcuts-search svg{position:absolute;left:14px;top:50%;width:15px;height:15px;transform:translateY(-50%);pointer-events:none}
+.sidebar-shortcuts-search input{box-sizing:border-box;width:100%;height:100%;padding:12px 25px 12px 36px;border:.5px solid var(--agent-inline-code-ring);border-radius:10px;outline:0;background:transparent;color:var(--release-title-fg);font:500 13px var(--font)}
+.sidebar-shortcuts-search input:focus{border-color:var(--focus-ring)}
+.sidebar-shortcuts-search input::placeholder{color:var(--theme-text-secondary)}
+.sidebar-shortcuts-scroll{min-height:0;flex:1;overflow-y:auto;overscroll-behavior:contain;padding:0 20px 20px;scrollbar-width:thin}
+.sidebar-shortcuts-scroll section{display:flex;flex-direction:column;gap:12px}
+.sidebar-shortcuts-scroll section+section{margin-top:32px}
+.sidebar-shortcuts-scroll h3{margin:0;color:var(--release-title-fg);font-size:13px;font-weight:500;line-height:normal}
+.sidebar-shortcuts-scroll dl{display:flex;flex-direction:column;gap:12px;margin:0}
+.sidebar-shortcuts-scroll dl>div{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;font-weight:500;line-height:normal}
+.sidebar-shortcuts-scroll dt{min-width:0;flex:1;color:var(--theme-text-secondary)}
 .sidebar-shortcuts-scroll dd{display:flex;align-items:center;justify-content:flex-end;gap:3px;flex:none;margin:0;color:var(--theme-text-secondary)}
-.sidebar-shortcuts-scroll kbd{min-width:18px;height:18px;box-sizing:border-box;display:grid;place-items:center;padding:0 4px;border:.5px solid var(--theme-border-strong);border-radius:4px;background:var(--theme-surface-1);color:var(--theme-text-secondary);font:10px/1 var(--font)}
-.sidebar-shortcuts-scroll small{padding:0 2px;color:var(--theme-text-tertiary);font-size:10px}
-.sidebar-shortcuts-empty{margin:28px 4px;color:var(--theme-text-secondary);font-size:12px;text-align:center}
-@media(max-width:480px){.dialog-content.sidebar-shortcuts-dialog{right:8px;top:8px;bottom:8px;width:min(326px,calc(100vw - 16px))}}
+.sidebar-shortcuts-scroll kbd{min-width:20px;box-sizing:border-box;display:grid;place-items:center;padding:4px;border:.5px solid var(--agent-code-border);border-radius:3px;background:transparent;color:var(--theme-text-secondary);font:450 11px/12.1px var(--font)}
+.sidebar-shortcuts-scroll small{padding:0;color:var(--theme-text-secondary);font-size:11px;font-weight:450;line-height:12.1px}
+.sidebar-shortcuts-empty{margin:28px 4px;color:var(--theme-text-secondary);font-size:13px;text-align:center}
 .sidebar-customize-group { display: flex; flex-direction: column; gap: 8px; margin: 0; }
 .sidebar-customize-group h3 { height: 16px; display: flex; align-items: center; margin: 0; color: var(--theme-text-primary); font-size: 13px; font-weight: 500; line-height: 16px; }
 .sidebar-customize-group > div { padding: 6px 12px; background: var(--theme-surface-1); border: 1px solid var(--theme-border-strong); border-radius: 6px; }

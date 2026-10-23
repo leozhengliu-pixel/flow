@@ -9,7 +9,7 @@ it('shows supported shortcuts in a searchable Help panel', async () => {
   const user = userEvent.setup()
   render(<I18nProvider><KeyboardShortcutsDialog open onOpenChange={vi.fn()}/></I18nProvider>)
 
-  expect(screen.getByRole('heading', { name: 'Keyboard shortcuts' })).toBeVisible()
+  expect(screen.getByRole('heading', { name: 'Keyboard Shortcuts' })).toBeVisible()
   expect(screen.getByText('Go to settings')).toBeVisible()
   expect(screen.getByText('New project')).toBeVisible()
   expect(screen.queryByText('Customize in Settings')).toBeNull()
