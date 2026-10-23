@@ -314,6 +314,7 @@ export const zhCN: Record<string, string> = {
   "This change is too large to save. Download your local changes, then reload the page to keep editing.": "这次修改过大，无法保存。请下载你的本地修改，然后重新加载页面继续编辑。",
   "You no longer have access to this issue. Unsaved changes can still be downloaded.": "你已无权访问此事项。未保存的修改仍可下载。",
   "You no longer have access to this document. Unsaved changes can still be downloaded.": "你已无权访问此文档。未保存的修改仍可下载。",
+  "You can no longer edit this. Unsaved changes can still be downloaded.": "你已无法编辑此内容。未保存的修改仍可下载。",
   "The latest description could not be loaded. Keep this page open or download your changes.": "无法加载最新正文，请保留此页面或下载你的修改。",
   "Download local changes": "下载本地修改",
   "Reload latest version": "重新加载最新版本",

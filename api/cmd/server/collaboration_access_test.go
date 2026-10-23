@@ -26,6 +26,8 @@ type issueAccessFixture struct {
 	issue      domain.Issue
 	documentID string
 	socket     *websocket.Conn
+	// sync is the member's join answer (ReadOnly: viewers and commenters).
+	sync collaborationSyncMessage
 }
 
 type issueAccessSetup struct {
@@ -35,6 +37,8 @@ type issueAccessSetup struct {
 	// sharedOnly: the member is in another team and sees the issue through
 	// an issue permission.
 	sharedOnly bool
+	// shareRole: the sharedOnly permission's role (default viewer).
+	shareRole string
 }
 
 // newIssueAccessFixture signs the member in on socketURL (where its socket
@@ -57,7 +61,11 @@ func newIssueAccessFixture(t *testing.T, socketURL, adminURL string, setup issue
 	invitations := authRequest[[]domain.Invitation](t, admin, http.MethodPost, adminURL+"/api/workspaces/test-workspace/invitations", invite, "", http.StatusCreated)
 	authRequest[domain.WorkspaceMembership](t, member, http.MethodPost, socketURL+"/api/invitations/accept", map[string]string{"token": invitations[0].Token}, "", http.StatusOK)
 	if setup.sharedOnly {
-		authRequest[[]domain.IssuePermission](t, admin, http.MethodPut, adminURL+"/api/issues/"+issue.ID+"/permissions", map[string]any{"permissions": []map[string]string{{"subjectType": "user", "subjectId": user.ID, "role": "viewer"}}}, "test-workspace", http.StatusOK)
+		role := setup.shareRole
+		if role == "" {
+			role = "viewer"
+		}
+		authRequest[[]domain.IssuePermission](t, admin, http.MethodPut, adminURL+"/api/issues/"+issue.ID+"/permissions", map[string]any{"permissions": []map[string]string{{"subjectType": "user", "subjectId": user.ID, "role": role}}}, "test-workspace", http.StatusOK)
 	}
 	authRequest[domain.Bootstrap](t, member, http.MethodGet, socketURL+"/api/bootstrap", nil, "test-workspace", http.StatusOK)
 	documentID := "document_content_" + issue.ID
@@ -66,8 +74,8 @@ func newIssueAccessFixture(t *testing.T, socketURL, adminURL string, setup issue
 	}
 	socket := dialAuthenticatedCollaborationSocket(t, member, socketURL, "member-"+suffix)
 	t.Cleanup(func() { socket.CloseNow() })
-	joinDocument(t, socket, issue.ID, documentID)
-	return issueAccessFixture{admin: admin, member: member, memberUser: user, team: team, issue: issue, documentID: documentID, socket: socket}
+	sync := joinIssueDescription(t, socket, issue.ID, documentID)
+	return issueAccessFixture{admin: admin, member: member, memberUser: user, team: team, issue: issue, documentID: documentID, socket: socket, sync: sync}
 }
 
 func teamKeyFor(name string) string {

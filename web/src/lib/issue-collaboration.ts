@@ -16,6 +16,8 @@ export const MAX_COLLABORATION_FRAME_BYTES = 2 << 20
  */
 type Status = 'connecting' | 'connected' | 'disconnected' | 'conflict' | 'oversized' | 'revoked'
 type Listener = (event: { status: Status }) => void
+/** `readOnly`: the server refuses this viewer's edits (a viewer or commenter); remote edits and cursors still arrive. */
+type AccessListener = (event: { readOnly: boolean }) => void
 
 interface SyncMessage {
   type: 'document.sync'
@@ -23,6 +25,8 @@ interface SyncMessage {
   contentState?: string
   updates: Array<{ id: string; data: string }>
   more?: boolean
+  /** Viewers and commenters join read-only. */
+  readOnly?: boolean
 }
 
 export class IssueCollaborationProvider {
@@ -43,6 +47,9 @@ export class IssueCollaborationProvider {
   private receivedServerState = false
   private seedQueued = false
   private readonly listeners = new Set<Listener>()
+  private readonly accessListeners = new Set<AccessListener>()
+  /** The server refuses this viewer's edits; unsent local edits wait until it may edit again. */
+  private readOnly = false
   private socket?: WebSocket
   private reconnectTimer?: number
   private heartbeatTimer?: number
@@ -115,12 +122,23 @@ export class IssueCollaborationProvider {
     this.emit('disconnected')
   }
 
-  on(event: 'status', listener: Listener) {
-    if (event === 'status') this.listeners.add(listener)
+  on(event: 'status', listener: Listener): void
+  on(event: 'access', listener: AccessListener): void
+  on(event: 'status' | 'access', listener: Listener | AccessListener) {
+    if (event === 'status') this.listeners.add(listener as Listener)
+    else this.accessListeners.add(listener as AccessListener)
   }
 
-  off(event: 'status', listener: Listener) {
-    if (event === 'status') this.listeners.delete(listener)
+  off(event: 'status', listener: Listener): void
+  off(event: 'access', listener: AccessListener): void
+  off(event: 'status' | 'access', listener: Listener | AccessListener) {
+    if (event === 'status') this.listeners.delete(listener as Listener)
+    else this.accessListeners.delete(listener as AccessListener)
+  }
+
+  /** The server refuses this viewer's edits (see the `access` event). */
+  isReadOnly() {
+    return this.readOnly
   }
 
   destroy() {
@@ -220,8 +238,8 @@ export class IssueCollaborationProvider {
 
   private suspendWhenHidden = () => {
     if (this.destroyed || !this.started || this.suspended || document.visibilityState !== 'hidden') return
-    // Unsent edits keep the socket until they are flushed.
-    if (this.pendingUpdates.size > 0 || this.deferredUpdate) {
+    // Unsent edits keep the socket until they are flushed (a read-only viewer's cannot be).
+    if (!this.readOnly && (this.pendingUpdates.size > 0 || this.deferredUpdate)) {
       this.hiddenTimer = window.setTimeout(this.suspendWhenHidden, 5_000)
       return
     }
@@ -263,8 +281,16 @@ export class IssueCollaborationProvider {
       this.emit('revoked')
       return
     }
+    if ((message.type === 'document.access' || message.type === 'document.readonly') && 'documentId' in message && message.documentId === this.documentId) {
+      // The viewer's role changed while the document is open (document.access), or the server refused an edit
+      // (document.readonly). Refused edits stay in the document and pending, and are sent if editing is allowed again.
+      this.setReadOnly(message.type === 'document.readonly' || (message as { readOnly?: boolean }).readOnly === true)
+      return
+    }
     if (message.type !== 'document.sync' || !('documentId' in message) || message.documentId !== this.documentId) return
     const sync = message as SyncMessage
+    // Every join answers with the viewer's current access.
+    this.setReadOnly(sync.readOnly === true)
     this.receivedServerState ||= Boolean(sync.contentState) || sync.updates.length > 0
     if (sync.contentState) this.applyServerUpdate(base64ToBytes(sync.contentState))
     sync.updates.forEach(update => {
@@ -348,8 +374,17 @@ export class IssueCollaborationProvider {
     }
   }
 
+  private setReadOnly(readOnly: boolean) {
+    if (this.readOnly === readOnly) return
+    this.readOnly = readOnly
+    // Edits the server refused were never acknowledged: send them again once editing is allowed.
+    if (!readOnly) this.sentUpdates.clear()
+    this.accessListeners.forEach(listener => listener({ readOnly }))
+    if (!readOnly) this.flushPendingUpdates()
+  }
+
   private flushPendingUpdates() {
-    if (!this.synced || this.socket?.readyState !== WebSocket.OPEN) return
+    if (!this.synced || this.readOnly || this.socket?.readyState !== WebSocket.OPEN) return
     if ((this.socket.bufferedAmount ?? 0) > 2 * 1024 * 1024) return
     if (this.deferredUpdate && this.pendingUpdates.size === 0) {
       const update = encodeStateAsUpdate(this.document, encodeStateVector(this.serverClocks))

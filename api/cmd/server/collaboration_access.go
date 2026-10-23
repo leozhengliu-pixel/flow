@@ -39,7 +39,10 @@ const (
 
 // issueSocketAccess is a joined issue description's last access check.
 type issueSocketAccess struct {
-	teamID    string
+	teamID string
+	// canEdit: the member may change the description (an editor); viewers
+	// and commenters follow it read-only.
+	canEdit   bool
 	checkedAt time.Time
 }
 
@@ -153,7 +156,11 @@ func collaborationAccessScope(event domain.RealtimeEvent) (socketAccessScope, bo
 			team = payload.Entity.Team.ID
 		}
 		return socketAccessScope{issues: map[string]string{event.AggregateID: team}}, true
-	case kind == "issue.deleted", kind == "issue.archived", kind == "issue.unshared", strings.HasPrefix(kind, "issue.permission"):
+	case strings.HasPrefix(kind, "issue.permission"):
+		// Sub-issues inherit their parents' permissions: a grant changed on
+		// one issue can change who may read or edit its descendants.
+		return socketAccessScope{issues: map[string]string{"*": ""}}, true
+	case kind == "issue.deleted", kind == "issue.archived", kind == "issue.unshared":
 		if event.AggregateID == "" {
 			return socketAccessScope{issues: map[string]string{"*": ""}}, true
 		}
@@ -313,7 +320,7 @@ func (s *server) recheckIssueDocument(client *realtimeSocketClient, documentID, 
 	if client.checkIssue == nil {
 		return true, nil
 	}
-	issue, visible, err := client.checkIssue(issueID)
+	issue, visible, canEdit, err := client.checkIssue(issueID)
 	if err != nil && !errors.Is(err, store.ErrAuthForbidden) {
 		return false, err
 	}
@@ -326,7 +333,43 @@ func (s *server) recheckIssueDocument(client *realtimeSocketClient, documentID, 
 		access.teamID, access.checkedAt = issue.Team.ID, time.Now()
 	}
 	s.realtime.mu.Unlock()
+	s.realtime.setEditAccess(client, documentID, canEdit)
 	return true, nil
+}
+
+// issueDocumentEditable reports whether a joined issue description accepts
+// the socket's edits.
+func (s *server) issueDocumentEditable(client *realtimeSocketClient, documentID string) bool {
+	s.realtime.mu.Lock()
+	defer s.realtime.mu.Unlock()
+	access := client.issueAccess[documentID]
+	return access != nil && access.canEdit
+}
+
+// setEditAccess records whether a socket may edit a joined document (an issue
+// description or a standalone document) and, when that changed, tells its
+// client (document.access) so its editor turns read-only, or editable again,
+// without reconnecting.
+func (h *realtimeHub) setEditAccess(client *realtimeSocketClient, documentID string, canEdit bool) {
+	h.mu.Lock()
+	changed, issueID := false, client.issueDocuments[documentID]
+	if access := client.issueAccess[documentID]; access != nil && issueID != "" {
+		changed = access.canEdit != canEdit
+		access.canEdit = canEdit
+	} else if access := client.documentAccess[documentID]; access != nil {
+		changed = access.canEdit != canEdit
+		access.canEdit, access.checkedAt = canEdit, time.Now()
+	}
+	_, joined := client.documents[documentID]
+	h.mu.Unlock()
+	if !changed || !joined {
+		return
+	}
+	message := map[string]any{"type": "document.access", "documentId": documentID, "readOnly": !canEdit}
+	if issueID != "" {
+		message["issueId"] = issueID
+	}
+	sendSocketJSON(client, message)
 }
 
 // recheckStandaloneDocument re-reads the socket user's role on a joined
@@ -336,7 +379,12 @@ func (h *realtimeHub) recheckStandaloneDocument(client *realtimeSocketClient, co
 		return
 	}
 	role, conflict, err := client.checkDocument(collaborationID)
-	if err != nil && !errors.Is(err, errNotFound) && !errors.Is(err, store.ErrAuthForbidden) || conflict || err == nil && role != "none" {
+	if err != nil && !errors.Is(err, errNotFound) && !errors.Is(err, store.ErrAuthForbidden) || conflict {
+		return
+	}
+	if err == nil && role != "none" {
+		// Still a reader: follow an upgrade or a downgrade of the role.
+		h.setEditAccess(client, collaborationID, canEditDocument(role))
 		return
 	}
 	h.revokeDocument(client, collaborationID, "")

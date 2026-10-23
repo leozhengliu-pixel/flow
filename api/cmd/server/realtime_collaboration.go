@@ -44,9 +44,10 @@ type realtimeSocketClient struct {
 	// issueAccess caches each joined issue description's last access check
 	// (see collaboration_access.go).
 	issueAccess map[string]*issueSocketAccess
-	// checkIssue re-reads whether the socket user may open an issue;
-	// checkCredential whether its session or API key is still valid.
-	checkIssue      func(issueID string) (domain.Issue, bool, error)
+	// checkIssue re-reads whether the socket user may open an issue (and
+	// edit its description); checkCredential whether its session or API key
+	// is still valid.
+	checkIssue      func(issueID string) (issue domain.Issue, visible, canEdit bool, err error)
 	checkCredential func() bool
 	// credentialRevoked: the session or key was revoked; it joins nothing.
 	credentialRevoked bool
@@ -229,8 +230,8 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	// Access checks run on other goroutines (access changes, the sweep);
 	// each reads through its own copy of the request.
-	client.checkIssue = func(issueID string) (domain.Issue, bool, error) {
-		return s.socketIssue(r.WithContext(r.Context()), issueID)
+	client.checkIssue = func(issueID string) (domain.Issue, bool, bool, error) {
+		return s.socketIssue(r, issueID)
 	}
 	client.checkCredential = func() bool { return s.socketCredentialValid(r) }
 	s.realtime.mu.Unlock()
@@ -306,7 +307,7 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 	var contentState string
 	readOnly := false
 	if command.IssueID != "" {
-		issue, visible, err := s.socketIssue(r.WithContext(r.Context()), command.IssueID)
+		issue, visible, canEdit, err := s.socketIssue(r, command.IssueID)
 		if err != nil && !errors.Is(err, store.ErrAuthForbidden) {
 			return err
 		}
@@ -325,9 +326,12 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 			sendSocketJSON(client, map[string]any{"type": "document.conflict", "documentId": command.DocumentID})
 			return nil
 		}
+		// Viewers and commenters follow the description live but cannot
+		// change it (the same rule as saving it through the issue API).
+		readOnly = !canEdit
 		s.realtime.mu.Lock()
 		client.issueDocuments[command.DocumentID] = issue.ID
-		client.issueAccess[command.DocumentID] = &issueSocketAccess{teamID: issue.Team.ID, checkedAt: time.Now()}
+		client.issueAccess[command.DocumentID] = &issueSocketAccess{teamID: issue.Team.ID, canEdit: canEdit, checkedAt: time.Now()}
 		s.realtime.mu.Unlock()
 	} else {
 		data, err := s.socketWorkspaceMetadata(r, client.workspace)
@@ -346,7 +350,7 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 			return nil
 		}
 		contentState = document.ContentState
-		readOnly = !canEditDocument(documentRole(s, data, document))
+		readOnly = !canEditDocument(documentRole(s, data, document)) || !socketCredentialMayWrite(r, "/api/documents/"+document.ID)
 		s.realtime.mu.Lock()
 		client.documentAccess[command.DocumentID] = &documentSocketAccess{documentID: document.ID, canEdit: !readOnly, checkedAt: time.Now()}
 		s.realtime.mu.Unlock()
@@ -426,8 +430,13 @@ func (s *server) handleCollaborationFrame(r *http.Request, client *realtimeSocke
 				return err
 			}
 		}
+		if kind == collaborationUpdateFrame && !s.issueDocumentEditable(client, documentID) {
+			// Not applied, stored or relayed; the client turns read-only.
+			sendSocketJSON(client, map[string]any{"type": "document.readonly", "documentId": documentID, "issueId": issueID})
+			return nil
+		}
 	}
-	if kind == collaborationUpdateFrame {
+	if kind == collaborationUpdateFrame && issueID == "" {
 		allowed, conflict, err := s.documentSocketCanEdit(r, client, documentID)
 		if err != nil {
 			return err
@@ -494,7 +503,7 @@ func collaborationDocument(data domain.Bootstrap, collaborationID string) (domai
 
 // documentSocketCanEdit authorizes an update frame on a standalone document,
 // re-reading the viewer's role once the cached decision is stale. Issue
-// description documents are authorized by their issue on join.
+// description documents are authorized by their issue (issueDocumentEditable).
 func (s *server) documentSocketCanEdit(r *http.Request, client *realtimeSocketClient, collaborationID string) (bool, bool, error) {
 	s.realtime.mu.Lock()
 	access := client.documentAccess[collaborationID]
@@ -509,14 +518,13 @@ func (s *server) documentSocketCanEdit(r *http.Request, client *realtimeSocketCl
 		return false, false, err
 	}
 	allowed := err == nil && !conflict && canEditDocument(role)
-	s.realtime.mu.Lock()
-	access.canEdit, access.checkedAt = allowed, time.Now()
-	s.realtime.mu.Unlock()
+	s.realtime.setEditAccess(client, collaborationID, allowed)
 	return allowed, conflict || errors.Is(err, errNotFound), nil
 }
 
 // socketDocumentRole is the socket user's role on the standalone document a
-// collaboration id names (errNotFound when it is gone).
+// collaboration id names (errNotFound when it is gone). A credential that may
+// not change documents through the API (a read-only API key) only reads it.
 func (s *server) socketDocumentRole(r *http.Request, workspace, collaborationID string) (string, bool, error) {
 	data, err := s.socketWorkspaceMetadata(r, workspace)
 	if err != nil {
@@ -526,7 +534,11 @@ func (s *server) socketDocumentRole(r *http.Request, workspace, collaborationID 
 	if err != nil {
 		return "", false, err
 	}
-	return documentRole(s, data, document), conflict, nil
+	role := documentRole(s, data, document)
+	if canEditDocument(role) && !socketCredentialMayWrite(r, "/api/documents/"+document.ID) {
+		role = "viewer"
+	}
+	return role, conflict, nil
 }
 
 // socketWorkspaceMetadata is the socket user's projection of the workspace.
@@ -547,24 +559,47 @@ func (s *server) socketWorkspaceMetadata(r *http.Request, workspace string) (dom
 }
 
 // socketIssue reads an issue as the socket user may see it (visible false:
-// gone, or outside the user's access).
-func (s *server) socketIssue(r *http.Request, issueID string) (domain.Issue, bool, error) {
-	_, query, err := s.issueRecordsQuery(r)
+// gone, or outside the user's access) and whether the user may edit its
+// description. canEdit is the rule that authorizes saving the description
+// through PATCH /api/issues/{id}: the same authorization data (the viewer's
+// projection with the issue and its ancestors), an editor or owner issue role
+// (issueRole: team membership, issue permissions inherited from parents,
+// workspace admin, creator) and a credential allowed to write issues.
+// Access checks run on other goroutines, so each reads through its own copy
+// of the socket's request.
+func (s *server) socketIssue(r *http.Request, issueID string) (domain.Issue, bool, bool, error) {
+	// The socket lives on; never reuse an access evaluation cached on its
+	// request (requestIssueQueryAccess caches per request for other paths).
+	request := r.Clone(context.WithValue(r.Context(), issueRequestAccessKey{}, struct{}{}))
+	path := *r.URL
+	path.Path, path.RawPath = "/api/issue-records/"+issueID, ""
+	request.URL = &path
+	data, err := s.issueRecordAuthorizationData(request)
 	if err != nil {
-		return domain.Issue{}, false, err
+		return domain.Issue{}, false, false, err
 	}
-	query.Filter = store.IssueFilter{Field: "id", Values: []string{issueID}}
-	query.Archived = "all"
-	query.Limit = 1
-	page, err := s.store.QueryIssueRecords(r.Context(), query)
-	if err != nil {
-		return domain.Issue{}, false, err
-	}
-	index := slices.IndexFunc(page.Items, func(issue domain.Issue) bool { return issue.ID == issueID })
+	index := slices.IndexFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == issueID })
 	if index < 0 {
-		return domain.Issue{}, false, nil
+		return domain.Issue{}, false, false, nil
 	}
-	return page.Items[index], true, nil
+	issue := data.Issues[index]
+	canEdit := s.authDisabled || issuePermissionRank(issueRole(s, data, issue)) >= issuePermissionRank("editor") && socketCredentialMayWrite(r, path.Path)
+	return issue, true, canEdit, nil
+}
+
+// socketCredentialMayWrite reports whether the socket's credential may make
+// a PATCH to path through the API: sessions always may; an API key needs a
+// scope that allows it (apiKeyAllowsRequest).
+func socketCredentialMayWrite(r *http.Request, path string) bool {
+	key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
+	if !ok {
+		return true
+	}
+	request := r.Clone(r.Context())
+	target := *r.URL
+	target.Path, target.RawPath, target.RawQuery = path, "", ""
+	request.URL, request.Method = &target, http.MethodPatch
+	return apiKeyAllowsRequest(request, key)
 }
 
 func (s *server) publishCollaborationEvent(workspace, eventType string, payload collaborationEventPayload) {

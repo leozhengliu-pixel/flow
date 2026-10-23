@@ -30,6 +30,20 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Security: a member who may only view or comment on an issue (a viewer or
+  commenter permission or share, a guest's read-only share, a workspace member
+  outside a public team, or a read-only API key) could change its description
+  through the realtime collaboration socket, which stored and relayed the
+  edits although saving the description is refused to them. The socket now
+  applies the same rule as saving the description (editor or owner access and
+  a credential allowed to write issues): read-only members join read-only,
+  still see others' edits and cursors live, and their edits are refused
+  (`document.readonly`) without being stored or relayed. Raising or lowering a
+  member's issue or document permission, role, team membership or a parent
+  issue's permission reaches open editors on every server (`document.access`):
+  the editor turns read-only, keeping unsaved changes downloadable, or
+  editable again without a reload. Read-only API keys can no longer edit
+  standalone documents on the socket either.
 - Several API servers starting at the same moment on one PostgreSQL or MySQL
   database no longer crash with errors such as `tuple concurrently updated`
   or a duplicate `schema_migrations` key. They take turns through a database
