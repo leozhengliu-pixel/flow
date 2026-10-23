@@ -21,7 +21,8 @@ const (
 // they keep their own channels and never carry or advance a cursor.
 func ephemeralRealtimeEvent(eventType string) bool {
 	return eventType == "connected" || eventType == "presence.updated" || eventType == "workspace.resync_required" ||
-		strings.HasPrefix(eventType, "agent_task.") && eventType != "agent_task.replied" || strings.HasPrefix(eventType, "loop_run.") || eventType == "notification.created"
+		strings.HasPrefix(eventType, "agent_task.") && eventType != "agent_task.replied" || strings.HasPrefix(eventType, "loop_run.") || eventType == "notification.created" ||
+		strings.HasPrefix(eventType, "coding_session.")
 }
 
 // stampChangeCursor attaches the persisted event's cursor, so SSE, socket and
@@ -119,7 +120,7 @@ const maxReplayPages = 20
 func (s *server) replayChanges(w http.ResponseWriter, r *http.Request, workspaceID string, since int64, flusher http.Flusher) (int64, bool) {
 	cursor := since
 	resync := func() (int64, bool) {
-		ok := writeSSE(w, domain.RealtimeEvent{ID: "resync_" + strconv.FormatInt(time.Now().UnixNano(), 10), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()})
+		ok := writeSSE(w, domain.RealtimeEvent{ID: "resync_" + strconv.FormatInt(time.Now().UnixNano(), 10), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}, s.realtime.node)
 		flusher.Flush()
 		return cursor, ok
 	}
@@ -141,7 +142,7 @@ func (s *server) replayChanges(w http.ResponseWriter, r *http.Request, workspace
 			}
 			if visible {
 				projected.Seq = record.Seq
-				if !writeSSE(w, projected) {
+				if !writeSSE(w, projected, s.realtime.node) {
 					return cursor, false
 				}
 			}

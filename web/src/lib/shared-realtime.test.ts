@@ -301,12 +301,13 @@ describe('shared realtime stream', () => {
     second.open()
     // The restarted server no longer has the cursor in its replay window.
     second.emit('resync_1', { type: 'workspace.resync_required' })
-    await settle(2 * STALE_STREAM_MS)
+    // A healthy stream keeps sending keepalives and stays open. (One that goes
+    // quiet before its first is reconnected too: see the keepalive tests below.)
+    for (let i = 0; i < 6; i++) { await settle(15_000); second.sendKeepalive() }
     for (const tab of tabs) {
       expect(tab.status.at(-1)).toBe(true)
       expect(types(tab).filter(type => type === 'workspace.resync_required')).toHaveLength(1)
     }
-    // A new stream that never sent a keepalive is not timed out.
     expect(FakeStream.all).toHaveLength(2)
     tabs.forEach(tab => tab.dispose())
   })
@@ -417,6 +418,15 @@ describe('shared realtime stream', () => {
     const live = FakeStream.live()
     expect(live).toHaveLength(1)
     expect(live[0].url).toBe('/api/realtime/events?workspace=acme&since=evt_1')
+    // The reconnected stream goes quiet before its first keepalive (the API
+    // went away again behind a proxy that kept the connection): still reopened.
+    const second = live[0] as KeepaliveStream
+    second.open()
+    second.emit('evt_2', { type: 'issue.updated' })
+    await vi.advanceTimersByTimeAsync(STALE_STREAM_MS + 6_000)
+    expect(second.closed).toBe(true)
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(FakeStream.live().map(stream => stream.url)).toEqual(['/api/realtime/events?workspace=acme&since=evt_2'])
     dispose()
   })
 

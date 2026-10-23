@@ -294,13 +294,22 @@ func (r *Redis) Publish(ctx context.Context, workspace string, event domain.Real
 	return r.client.Publish(ctx, r.key("events", "global"), raw).Err()
 }
 
-func (r *Redis) Listen(ctx context.Context, handle func(EventEnvelope)) error {
+// Listen delivers other instances' events to handle until ctx ends or the
+// subscription fails. subscribed (optional) runs once the subscription is
+// confirmed, with resubscribed false, and again with true each time the client
+// has reconnected it by itself after a dropped connection: Redis pub/sub does
+// not keep messages, so everything published while it was down is lost and
+// the caller must treat its copy of every workspace as stale.
+func (r *Redis) Listen(ctx context.Context, handle func(EventEnvelope), subscribed func(resubscribed bool)) error {
 	pubsub := r.client.Subscribe(ctx, r.key("events", "global"))
 	defer pubsub.Close()
 	if _, err := pubsub.Receive(ctx); err != nil {
 		return err
 	}
-	messages := pubsub.Channel()
+	if subscribed != nil {
+		subscribed(false)
+	}
+	messages := pubsub.ChannelWithSubscriptions()
 	for {
 		select {
 		case <-ctx.Done():
@@ -309,9 +318,16 @@ func (r *Redis) Listen(ctx context.Context, handle func(EventEnvelope)) error {
 			if !ok {
 				return errors.New("Redis event subscription closed")
 			}
-			var envelope EventEnvelope
-			if json.Unmarshal([]byte(message.Payload), &envelope) == nil && envelope.Source != r.instanceID && envelope.Workspace != "" {
-				handle(envelope)
+			switch message := message.(type) {
+			case *redis.Subscription:
+				if message.Kind == "subscribe" && subscribed != nil {
+					subscribed(true)
+				}
+			case *redis.Message:
+				var envelope EventEnvelope
+				if json.Unmarshal([]byte(message.Payload), &envelope) == nil && envelope.Source != r.instanceID && envelope.Workspace != "" {
+					handle(envelope)
+				}
 			}
 		}
 	}

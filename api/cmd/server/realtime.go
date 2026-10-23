@@ -28,7 +28,31 @@ type realtimeHub struct {
 	historyTotal int
 	presence     map[string]map[string]domain.Presence
 	sockets      map[string]map[uint64]*realtimeSocketClient
+	// node tags this instance's stream ids when several instances share
+	// events (Redis coordination). Each instance has its own replay window, in
+	// its own arrival order, so a cursor from another instance cannot be
+	// resumed here: its ids are unknown and the client resyncs.
+	node string
+	// ordered delivers change-log events (Seq > 0) in Seq order. Several
+	// instances commit to one workspace and a peer's event reaches this one
+	// later than its own: without ordering a subscriber here could apply a
+	// newer change first and keep the older state.
+	ordered bool
+	order   map[string]*realtimeSeqOrder
 }
+
+// realtimeSeqOrder is one workspace's delivery position in the change log.
+type realtimeSeqOrder struct {
+	last    int64
+	pending map[int64]domain.RealtimeEvent
+	timer   *time.Timer
+}
+
+// realtimeReorderWait bounds how long a change waits for an earlier one still
+// on its way from a peer. A change that never comes (logged but not pushed)
+// delays the next push by at most this; one that comes after a later change
+// was delivered is replaced by a resync.
+const realtimeReorderWait = 200 * time.Millisecond
 
 func newRealtimeHub() *realtimeHub {
 	return &realtimeHub{subscribers: map[string]map[uint64]chan domain.RealtimeEvent{}, history: map[string][]domain.RealtimeEvent{}, presence: map[string]map[string]domain.Presence{}, sockets: map[string]map[uint64]*realtimeSocketClient{}}
@@ -69,35 +93,34 @@ func (h *realtimeHub) subscribeSince(workspace, sinceID string) (<-chan domain.R
 	if h.subscribers[workspace] == nil {
 		h.subscribers[workspace] = map[uint64]chan domain.RealtimeEvent{}
 	}
-	channel := make(chan domain.RealtimeEvent, 64)
-	h.subscribers[workspace][id] = channel
+	history := h.history[workspace]
+	index := -1
 	if sinceID != "" {
-		history := h.history[workspace]
 		// A numeric cursor is a change-log seq (RealtimeEvent.Seq); anything
 		// else is the event id older clients remember.
 		seq, _ := strconv.ParseInt(sinceID, 10, 64)
-		index := slices.IndexFunc(history, func(event domain.RealtimeEvent) bool {
+		index = slices.IndexFunc(history, func(event domain.RealtimeEvent) bool {
 			if seq > 0 {
 				return event.Seq == seq
 			}
 			return event.ID == sinceID
 		})
-		if index < 0 {
-			channel <- domain.RealtimeEvent{ID: fmt.Sprintf("resync_%d", time.Now().UnixNano()), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}
-		} else {
-			for _, event := range history[index+1:] {
-				if domain.RoutineCredentialEvent(event.Type) {
-					continue
-				}
-				select {
-				case channel <- event:
-				default:
-					for len(channel) > 0 {
-						<-channel
-					}
-					channel <- domain.RealtimeEvent{ID: fmt.Sprintf("resync_%d", time.Now().UnixNano()), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}
-				}
-			}
+	}
+	var replay []domain.RealtimeEvent
+	if index >= 0 {
+		replay = history[index+1:]
+	}
+	// Room for the whole replay plus the live headroom: the stream drains the
+	// channel only after this returns, so a buffer smaller than the replay
+	// window would turn every longer replay into a resync.
+	channel := make(chan domain.RealtimeEvent, 64+len(replay))
+	h.subscribers[workspace][id] = channel
+	if sinceID != "" && index < 0 {
+		channel <- domain.RealtimeEvent{ID: fmt.Sprintf("resync_%d", time.Now().UnixNano()), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}
+	}
+	for _, event := range replay {
+		if !domain.RoutineCredentialEvent(event.Type) {
+			channel <- event
 		}
 	}
 	return channel, func() {
@@ -118,6 +141,125 @@ func (h *realtimeHub) publish(workspace string, event domain.RealtimeEvent) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.ordered && event.Seq > 0 {
+		h.publishInOrderLocked(workspace, event)
+		return
+	}
+	h.deliverLocked(workspace, event)
+}
+
+// publishInOrderLocked delivers a change-log event after every earlier one.
+// Seqs are gap-free per workspace, so a gap means an earlier change is still
+// on its way from a peer (or is logged but never pushed): later changes wait
+// for it up to realtimeReorderWait. A change that arrives after a later one
+// was delivered cannot be put back in order, so subscribers resync instead.
+func (h *realtimeHub) publishInOrderLocked(workspace string, event domain.RealtimeEvent) {
+	if h.order == nil {
+		h.order = map[string]*realtimeSeqOrder{}
+	}
+	order := h.order[workspace]
+	if order == nil {
+		order = &realtimeSeqOrder{pending: map[int64]domain.RealtimeEvent{}}
+		h.order[workspace] = order
+	}
+	switch {
+	case order.last == 0 || event.Seq == order.last+1:
+		order.last = event.Seq
+		h.deliverLocked(workspace, event)
+		h.releaseInOrderLocked(workspace, order, false)
+	case event.Seq <= order.last:
+		h.deliverLocked(workspace, domain.RealtimeEvent{ID: fmt.Sprintf("resync_%d", time.Now().UnixNano()), Type: "workspace.resync_required", CreatedAt: event.CreatedAt})
+	default:
+		order.pending[event.Seq] = event
+		if order.timer == nil {
+			h.awaitGapLocked(workspace, order)
+		}
+	}
+}
+
+// awaitGapLocked gives the oldest gap realtimeReorderWait to fill before the
+// events behind it go out without it.
+func (h *realtimeHub) awaitGapLocked(workspace string, order *realtimeSeqOrder) {
+	// The callback takes h.mu, held here, so timer is set before it reads it.
+	var timer *time.Timer
+	timer = time.AfterFunc(realtimeReorderWait, func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		if order.timer != timer {
+			return // stopped after it fired: the gap was filled
+		}
+		order.timer = nil
+		h.releaseInOrderLocked(workspace, order, true)
+	})
+	order.timer = timer
+}
+
+// releaseInOrderLocked delivers the waiting events that are next in line;
+// skipGap first gives up on the oldest gap. A gap still open behind them gets
+// a full wait of its own.
+func (h *realtimeHub) releaseInOrderLocked(workspace string, order *realtimeSeqOrder, skipGap bool) {
+	progressed := false
+	for len(order.pending) > 0 {
+		next, ok := order.pending[order.last+1]
+		if !ok {
+			if !skipGap {
+				break
+			}
+			skipGap = false
+			lowest := int64(0)
+			for seq := range order.pending {
+				if lowest == 0 || seq < lowest {
+					lowest = seq
+				}
+			}
+			next = order.pending[lowest]
+		}
+		delete(order.pending, next.Seq)
+		order.last = next.Seq
+		h.deliverLocked(workspace, next)
+		progressed = true
+	}
+	if order.timer != nil && (progressed || len(order.pending) == 0) {
+		order.timer.Stop()
+		order.timer = nil
+	}
+	if len(order.pending) > 0 && order.timer == nil {
+		h.awaitGapLocked(workspace, order)
+	}
+}
+
+// resyncAll tells every workspace's subscribers, and every client resuming
+// from before now, to reload: events were lost (this instance missed peer
+// events while its Redis subscription was down). Waiting events go out first
+// and delivery order starts over, since the missed seqs never arrive.
+func (h *realtimeHub) resyncAll() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	workspaces := map[string]bool{}
+	for workspace := range h.history {
+		workspaces[workspace] = true
+	}
+	for workspace := range h.subscribers {
+		workspaces[workspace] = true
+	}
+	for workspace, order := range h.order {
+		for len(order.pending) > 0 {
+			h.releaseInOrderLocked(workspace, order, true)
+		}
+		if order.timer != nil {
+			order.timer.Stop()
+			order.timer = nil
+		}
+		delete(h.order, workspace)
+	}
+	now := time.Now().UTC()
+	for workspace := range workspaces {
+		h.deliverLocked(workspace, domain.RealtimeEvent{ID: fmt.Sprintf("resync_%d", now.UnixNano()), Type: "workspace.resync_required", CreatedAt: now})
+	}
+}
+
+// deliverLocked appends an event to the replay window and fans it out.
+func (h *realtimeHub) deliverLocked(workspace string, event domain.RealtimeEvent) {
 	if len(event.Payload) > 256<<10 {
 		event = domain.RealtimeEvent{ID: event.ID, Type: "workspace.resync_required", ClientID: event.ClientID, ActorID: event.ActorID, CreatedAt: event.CreatedAt}
 	}
@@ -258,6 +400,7 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(since, "connected_") {
 		since = ""
 	}
+	since = s.realtime.localCursor(since)
 	// Read the head before subscribing: events committed in between are then
 	// delivered live too, so a client never skips one.
 	head, _ := s.store.WorkspaceChangeHead(r.Context(), workspace)
@@ -283,7 +426,7 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 	// cursor is the workspace's change-log head when the stream opened. A
 	// client advances its own cursor only from event.seq of events it applied.
 	initial, _ := json.Marshal(map[string]any{"presence": presence, "cursor": head})
-	if !writeSSE(w, domain.RealtimeEvent{ID: fmt.Sprintf("connected_%d", time.Now().UnixNano()), Type: "connected", Payload: initial, CreatedAt: time.Now().UTC()}) {
+	if !writeSSE(w, domain.RealtimeEvent{ID: fmt.Sprintf("connected_%d", time.Now().UnixNano()), Type: "connected", Payload: initial, CreatedAt: time.Now().UTC()}, "") {
 		return
 	}
 	flusher.Flush()
@@ -309,7 +452,7 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if visible {
-				if !writeSSE(w, projected) {
+				if !writeSSE(w, projected, s.realtime.node) {
 					return
 				}
 				flusher.Flush()
@@ -451,13 +594,32 @@ func realtimeEntityVisible(data domain.Bootstrap, event domain.RealtimeEvent) bo
 	return slices.ContainsFunc(teamIDs, func(id string) bool { return teamContentVisible(data, id) })
 }
 
-func writeSSE(w http.ResponseWriter, event domain.RealtimeEvent) bool {
+// writeSSE writes one event. With a node tag (several instances), the stream
+// id is "<event id>~<node>": clients resume with it, and only this instance
+// can resume it (see realtimeHub.node).
+func writeSSE(w http.ResponseWriter, event domain.RealtimeEvent, node string) bool {
 	raw, err := json.Marshal(event)
 	if err != nil {
 		return false
 	}
-	_, err = fmt.Fprintf(w, "id: %s\ndata: %s\n\n", event.ID, raw)
+	id := event.ID
+	if node != "" && !strings.HasPrefix(id, "connected_") {
+		id += "~" + node
+	}
+	_, err = fmt.Fprintf(w, "id: %s\ndata: %s\n\n", id, raw)
 	return err == nil
+}
+
+// localCursor returns the event id of a stream cursor this instance wrote. A
+// cursor tagged by another instance, or by any instance when this one does
+// not tag, is returned unchanged: no event has that id, so the stream answers
+// with a resync.
+func (h *realtimeHub) localCursor(since string) string {
+	id, node, tagged := strings.Cut(since, "~")
+	if tagged && h.node != "" && node == h.node {
+		return id
+	}
+	return since
 }
 
 func (s *server) updatePresence(w http.ResponseWriter, r *http.Request) {

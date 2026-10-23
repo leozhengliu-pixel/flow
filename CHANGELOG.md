@@ -40,6 +40,20 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   stream quiet for 45 seconds reconnects from its cursor. After a resync, open
   coding session views and agent task threads reload too, instead of waiting
   for their next push.
+- Resuming the workspace event stream replays the whole 256-event window; a
+  client that missed more than 64 events used to get a resync (a full reload)
+  instead.
+- A reconnected event stream that went quiet before its first keepalive (the
+  API went away again behind a proxy that kept the connection) is reconnected
+  too; it used to stay dead until the page was reloaded.
+- With several API replicas (Redis coordination): subscribers receive changes
+  in `seq` order, so a change made on another replica no longer arrives after
+  a newer one and leaves the older value on screen; a stream resumed on another
+  replica resyncs instead of replaying a different order (skipping or repeating
+  events); events published while a replica's Redis subscription was
+  reconnecting no longer vanish (subscribers resync); and a burst of changes
+  from another replica shares one workspace reload, so it reaches subscribers
+  in tens of milliseconds instead of building a backlog of half a second.
 - The sandbox runner reads agent output lines on LF only, so a JSON record
   holding U+2028 or U+2029 is no longer split and dropped.
 - Coding sessions with the docker provider start on Docker Desktop and other

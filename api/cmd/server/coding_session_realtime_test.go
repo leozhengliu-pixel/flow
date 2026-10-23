@@ -24,9 +24,10 @@ func TestCodingSessionPushesFollowSessionAccess(t *testing.T) {
 	issue := requestJSON[domain.Issue](t, f.handler, http.MethodPost, "/api/issues", map[string]any{"title": "Flaky test", "teamId": f.workspace.Teams[0].ID}, http.StatusCreated)
 	shared := f.start(coding.StartInput{Source: domain.CodingSourceIssue, IssueID: issue.ID, CreatorID: "usr_admin"})
 	f.s.authDisabled = false
-	defer func() { f.s.authDisabled = true }()
+	// Cleanups run last-in first-out: the streams close before the server, and
+	// the server before auth is switched back (its handlers read the flag).
+	t.Cleanup(func() { f.s.authDisabled = true })
 	host := httptest.NewServer(f.handler)
-	// Cleanups run last-in first-out: the streams close before the server.
 	t.Cleanup(host.Close)
 
 	open := func(user string) <-chan string {
