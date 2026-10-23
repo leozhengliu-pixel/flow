@@ -33,6 +33,16 @@ settings use the standard [OpenTelemetry environment variables](https://opentele
 `FLOW_DATABASE_DRIVER` accepts `sqlite`, `postgres`, or `mysql`. Migrations run
 automatically at startup for all three drivers.
 
+Servers that start at the same time on one database take turns with the
+startup work (schema migrations, index backfills, seed rows, built-in
+applications). PostgreSQL uses a session advisory lock, MySQL a `GET_LOCK`
+named after the database, and SQLite a `flock` on `<database>.startup-lock`
+next to the file. Each lock is held on its own connection. A server that
+waited reads `schema_migrations` again once it holds the lock and skips the
+work the first server did. While it waits it logs which server holds the lock
+(PostgreSQL: backend pid and `flow <host> pid <pid>`; MySQL: connection id and
+client host).
+
 | Variable | Default | Description |
 | --- | --- | --- |
 | `FLOW_DATABASE_DRIVER` | `sqlite` | SQL dialect and driver. |
@@ -41,6 +51,7 @@ automatically at startup for all three drivers.
 | `FLOW_DATABASE_MAX_OPEN_CONNS` | driver default | `1` for SQLite, `20` otherwise. |
 | `FLOW_DATABASE_MAX_IDLE_CONNS` | driver default | `1` for SQLite, `5` otherwise. |
 | `FLOW_DATABASE_CONN_MAX_LIFETIME` | `30m` | Go duration for pooled connections. |
+| `FLOW_DATABASE_MIGRATION_LOCK_TIMEOUT` | `10m` | How long a starting server waits for another one that holds the startup lock before it exits with an error naming the holder. Each waiting server spends this budget on its own, and servers after the first wait for each other in turn, so raise it when many replicas start at once on a large database. |
 | `FLOW_WORKSPACE_STATE_MAX_BYTES` | `67108864` | Maximum serialized workspace state size. Mutations fail before exceeding this limit. |
 | `FLOW_DATABASE_MAX_TRANSACTION_BYTES` | `33554432` | Cumulative SQL write text and parameter bytes per transaction. Exceeding the budget rolls back the transaction, even if a caller ignores the first error. Minimum 1 MiB. This is not a measurement of physical binlog bytes. |
 

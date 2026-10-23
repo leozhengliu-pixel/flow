@@ -511,6 +511,17 @@ func (s *server) retryWorkflowRun(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) executeWorkflow(ctx context.Context, key, id, trigger, resourceType, resourceID string) (domain.WorkflowRun, error) {
+	return s.runWorkflow(ctx, key, id, trigger, resourceType, resourceID, false)
+}
+
+// errWorkflowNotDue: the scheduler found a definition or retry due in its
+// snapshot, but another replica already ran it.
+var errWorkflowNotDue = errors.New("workflow is no longer due")
+
+// runWorkflow runs a workflow definition. dueOnly (the scheduler) re-checks
+// inside the serialized workspace write that the scheduled run or retry is
+// still due, so replicas polling the same workspace run it once.
+func (s *server) runWorkflow(ctx context.Context, key, id, trigger, resourceType, resourceID string, dueOnly bool) (domain.WorkflowRun, error) {
 	var run domain.WorkflowRun
 	err := s.store.MutateWorkspace(ctx, key, "workflow_run.executed", id, map[string]string{"trigger": trigger}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.WorkflowDefinitions, func(item domain.WorkflowDefinition) bool { return item.ID == id })
@@ -522,9 +533,15 @@ func (s *server) executeWorkflow(ctx context.Context, key, id, trigger, resource
 			return errInvalid
 		}
 		now := time.Now().UTC()
+		if dueOnly && trigger == "schedule" && (definition.NextRunAt == nil || definition.NextRunAt.After(now)) {
+			return errWorkflowNotDue
+		}
 		attempt := 1
 		for i := len(data.WorkflowRuns) - 1; i >= 0; i-- {
 			if data.WorkflowRuns[i].WorkflowID == id {
+				if dueOnly && trigger == "retry" && (data.WorkflowRuns[i].Status != "failed" || data.WorkflowRuns[i].NextRetryAt == nil || data.WorkflowRuns[i].NextRetryAt.After(now)) {
+					return errWorkflowNotDue
+				}
 				attempt = data.WorkflowRuns[i].Attempt + 1
 				if trigger == "retry" && data.WorkflowRuns[i].Status == "failed" && data.WorkflowRuns[i].NextRetryAt != nil {
 					data.WorkflowRuns[i].NextRetryAt = nil
@@ -802,12 +819,12 @@ func (s *server) startWorkflowScheduler() {
 				}
 				for _, definition := range data.WorkflowDefinitions {
 					if definition.Enabled && definition.Trigger == "schedule" && definition.NextRunAt != nil && !definition.NextRunAt.After(now) {
-						_, _ = s.executeWorkflow(ctx, key, definition.ID, "schedule", "", "")
+						_, _ = s.runWorkflow(ctx, key, definition.ID, "schedule", "", "", true)
 					}
 				}
 				for _, run := range data.WorkflowRuns {
 					if run.Status == "failed" && run.NextRetryAt != nil && !run.NextRetryAt.After(now) {
-						_, _ = s.executeWorkflow(ctx, key, run.WorkflowID, "retry", run.ResourceType, run.ResourceID)
+						_, _ = s.runWorkflow(ctx, key, run.WorkflowID, "retry", run.ResourceType, run.ResourceID, true)
 					}
 				}
 			}

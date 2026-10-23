@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"net/http"
 	"path/filepath"
 	"testing"
@@ -60,6 +61,40 @@ func TestWorkflowExecutionHistoryAndRetry(t *testing.T) {
 	if len(runs) != 1 || runs[0].ID != run.ID {
 		t.Fatalf("workflow history missing: %#v", runs)
 	}
+}
+
+// Replicas poll the same workspace: the scheduler's snapshot says a run is
+// due on each of them, but the due check inside the serialized write lets
+// only the first one run it.
+func TestScheduledWorkflowRunsOnceAcrossReplicas(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	s := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true}
+	handler := newHandler(s)
+	created := requestJSON[domain.WorkflowDefinition](t, handler, http.MethodPost, "/api/workflows", map[string]any{"name": "Daily reminder", "trigger": "schedule", "schedule": "0 9 * * *", "actions": []map[string]any{{"type": "notify", "config": map[string]string{}}}, "maxAttempts": 3}, http.StatusCreated)
+	key := repository.Bootstrap().Workspace.URLKey
+	past := time.Now().UTC().Add(-time.Minute)
+	if err := repository.MutateWorkspace(t.Context(), key, "test.workflow_due", created.ID, nil, func(data *domain.Bootstrap) error {
+		data.WorkflowDefinitions[0].NextRunAt = &past
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.runWorkflow(t.Context(), key, created.ID, "schedule", "", "", true); err != nil {
+		t.Fatalf("first replica: %v", err)
+	}
+	if _, err := s.runWorkflow(t.Context(), key, created.ID, "schedule", "", "", true); !errors.Is(err, errWorkflowNotDue) {
+		t.Fatalf("second replica: err = %v, want errWorkflowNotDue", err)
+	}
+	runs := requestJSON[[]domain.WorkflowRun](t, handler, http.MethodGet, "/api/workflow-runs?workflowId="+created.ID, nil, http.StatusOK)
+	if len(runs) != 1 || runs[0].Trigger != "schedule" {
+		t.Fatalf("runs = %#v, want one scheduled run", runs)
+	}
+	// A manual run is never refused by the due check.
+	requestJSON[domain.WorkflowRun](t, handler, http.MethodPost, "/api/workflows/"+created.ID+"/run", nil, http.StatusAccepted)
 }
 
 func TestEmailIntakeVerificationRotationAndIdempotency(t *testing.T) {

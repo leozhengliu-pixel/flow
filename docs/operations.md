@@ -100,3 +100,32 @@ history) and restore the version from there if the body should come back.
 4. Verify migrations and a representative workspace before replacing remaining
    instances.
 5. Retain the old image and backup until the validation window ends.
+
+### Several servers starting at once
+
+Every server runs the migrations when it starts. There is no separate
+migration job. Servers that start together on the same database (replicas of
+a fresh install, a scale-up, a rolling update) take turns through a database
+lock. The first one migrates and the others wait, then find the schema current.
+The [Database](configuration.md#database) section describes the lock. A waiting
+server logs this:
+
+```text
+another server holds the startup lock; waiting lock="database schema" holder="backend pid 433 (flow api-7d9c pid 1) from 10.0.3.17"
+acquired startup lock lock="database schema" waited_ms=1758
+```
+
+- A waiting server answers no requests yet. The Helm chart's startup probe
+  allows 10 minutes, the same as the default
+  `FLOW_DATABASE_MIGRATION_LOCK_TIMEOUT`. If you raise one, raise the other.
+- After the timeout the server exits with
+  `timed out waiting for the database startup lock` and the holder's identity.
+  If no other server is starting, the holder is a stale session: end it with
+  `SELECT pg_terminate_backend(<pid>)` on PostgreSQL or `KILL <id>` on MySQL.
+  The lock goes away with the session.
+- A long migration (an index build on a large MySQL database) holds the lock
+  for its whole duration, so servers behind it start in turn after it. To keep
+  serving traffic from the old version while the schema changes, run one
+  instance of the new version first (step 3 above), for example as a one-off
+  Pod or a Helm `pre-upgrade` hook Job with the same configuration. Then roll
+  the remaining replicas, which find the schema current.

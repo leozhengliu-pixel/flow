@@ -47,6 +47,10 @@ type DatabaseConfig struct {
 	// SearchIndexMaxChars caps the text indexed for full-text search per
 	// issue and per document (default 20,000; 0 indexes everything).
 	SearchIndexMaxChars int
+	// MigrationLockTimeout bounds how long startup waits for another server
+	// that is running the schema work on the same database (default
+	// DefaultStartupLockTimeout).
+	MigrationLockTimeout time.Duration
 }
 
 type sqlDatabase struct {
@@ -126,7 +130,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 	if driver == "postgresql" {
 		driver = "postgres"
 	}
-	var sqlDriver, dsn string
+	var sqlDriver, dsn, sqlitePath string
 	switch driver {
 	case "sqlite":
 		path := strings.TrimSpace(config.Path)
@@ -136,7 +140,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return nil, err
 		}
-		sqlDriver, dsn = "sqlite", sqliteDSN(path)
+		sqlDriver, dsn, sqlitePath = "sqlite", sqliteDSN(path), path
 	case "postgres":
 		if strings.TrimSpace(config.URL) == "" {
 			return nil, fmt.Errorf("database URL is required for postgres")
@@ -154,6 +158,28 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		sqlDriver = "mysql"
 	default:
 		return nil, fmt.Errorf("unsupported database driver %q (expected sqlite, postgres, or mysql)", driver)
+	}
+	// Startup creates or rewrites schema and seed rows, so servers starting
+	// on the same database at once (several replicas of a fresh install, a
+	// rolling upgrade) take turns. A server that waited reads the
+	// schema_migrations rows the first one wrote, and each idempotent stage
+	// finds its tables, indexes and backfills in place. SQLite takes the lock
+	// before even switching the journal mode, which itself needs the file.
+	openStartupLock := func(ctx context.Context) (startupLockBackend, error) {
+		return openStartupLockBackend(ctx, driver, sqlDriver, dsn, sqlitePath)
+	}
+	lockCtx, cancelLock := context.WithTimeout(context.Background(), 30*time.Second)
+	lockBackend, err := openStartupLock(lockCtx)
+	cancelLock()
+	if err != nil {
+		return nil, fmt.Errorf("connect to %s database: %w", driver, err)
+	}
+	var startup *startupLock
+	if lockBackend != nil {
+		if startup, err = acquireStartupLock(context.Background(), lockBackend, startupLockOptions{name: "database schema", timeout: config.MigrationLockTimeout}); err != nil {
+			return nil, err
+		}
+		defer startup.release()
 	}
 	db, err := sql.Open(sqlDriver, dsn)
 	if err != nil {
@@ -269,11 +295,13 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"dataMigrations", s.runDataMigrations},
 		{"backfillAllProjectProgress", s.backfillAllProjectProgress},
 	}
+	s.startupLock, s.startupLockTimeout = openStartupLock, config.MigrationLockTimeout
 	opened := time.Now()
 	timings := make([]string, 0, len(stages))
 	for _, stage := range stages {
 		began := time.Now()
 		if err := stage.run(context.Background()); err != nil {
+			s.stopLifecycle()
 			db.Close()
 			return nil, err
 		}
@@ -285,6 +313,21 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		slog.Info("workspace store opened", "driver", driver, "total_ms", total.Milliseconds(), "stages", strings.Join(timings, " "))
 	}
 	return s, nil
+}
+
+// WithStartupLock runs action while no other server on this database runs
+// startup schema or seed work. It is for one-off startup tasks that write
+// shared rows (for example installing built-in applications); waiting
+// servers then see the result instead of racing to create the same rows.
+func (s *SQLiteStore) WithStartupLock(ctx context.Context, name string, action func(context.Context) error) error {
+	if s.startupLock == nil {
+		return action(ctx)
+	}
+	backend, err := s.startupLock(ctx)
+	if err != nil {
+		return fmt.Errorf("%s startup lock: %w", name, err)
+	}
+	return withStartupLock(ctx, backend, startupLockOptions{name: name, timeout: s.startupLockTimeout}, func() error { return action(ctx) })
 }
 
 func configureSQLite(db *sql.DB, dsn string) error {

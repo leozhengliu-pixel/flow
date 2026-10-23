@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"slices"
 	"strings"
@@ -58,6 +59,10 @@ type SQLiteStore struct {
 	// data migration rewrote. The store opens before its coordinator is
 	// attached, so their shared (Redis) metadata cache is dropped then.
 	startupCacheDrops []string
+	// startupLock opens the cross-process startup lock for this database
+	// (nil backend: none needed); see WithStartupLock.
+	startupLock        func(context.Context) (startupLockBackend, error)
+	startupLockTimeout time.Duration
 }
 
 // lockWorkspaceWrites serializes the caller with other writers and excludes
@@ -366,7 +371,15 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		// Versions from 1000 up are data migrations (runDataMigrations),
 		// which run after the workspaces are loaded.
 	}
+	ran := []string{}
+	defer func() {
+		if len(ran) > 0 {
+			slog.Info("applied database migrations", "driver", s.dialect, "migrations", strings.Join(ran, ", "))
+		}
+	}()
 	for _, migration := range migrations {
+		// applied was read under the startup lock, so a server that waited
+		// for another one skips what that server already applied.
 		if applied[migration.version] {
 			continue
 		}
@@ -376,6 +389,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		if _, err := s.db.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?)`, migration.version, migration.name, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 			return fmt.Errorf("record database migration %d: %w", migration.version, err)
 		}
+		ran = append(ran, fmt.Sprintf("%d (%s)", migration.version, migration.name))
 	}
 	return nil
 }

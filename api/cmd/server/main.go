@@ -204,9 +204,17 @@ func main() {
 		log.Fatalf("coding runtime listener: %v", err)
 	}
 	httpServer.Handler = s.codingMainHandler(httpServer.Handler)
-	s.ensureBuiltinApplications(shutdownSignal)
-	if err := s.store.SyncAllApplicationIdentities(shutdownSignal); err != nil {
-		log.Printf("sync application identities: %v", err)
+	// Replicas starting together would otherwise race to install the same
+	// built-in application rows; the database startup lock makes them take
+	// turns, and later ones find the rows current.
+	if err := s.store.WithStartupLock(shutdownSignal, "built-in applications", func(ctx context.Context) error {
+		s.ensureBuiltinApplications(ctx)
+		if err := s.store.SyncAllApplicationIdentities(ctx); err != nil {
+			log.Printf("sync application identities: %v", err)
+		}
+		return nil
+	}); err != nil {
+		log.Fatal(err)
 	}
 	go s.runCoding(shutdownSignal)
 	go s.runApplicationAgentWorker(shutdownSignal)
