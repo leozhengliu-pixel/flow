@@ -446,6 +446,8 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	asked := ""
 	seenNarration := map[string]bool{}
 	textApprovalRetried := false
+	// The answer stopped at the provider's output limit instead of ending.
+	truncated := false
 	for turnIndex := 0; turnIndex < maxAgentToolTurns; turnIndex++ {
 		turnStart := len(parts)
 		// The loop builder's intro and later replies are separate paragraphs.
@@ -555,6 +557,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		}
 		finalText += turn.Text
 		if len(turn.ToolCalls) == 0 {
+			truncated = agentTurnTruncated(turn.StopReason)
 			break
 		}
 		messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, ToolCalls: turn.ToolCalls, Reasoning: turn.Reasoning})
@@ -856,6 +859,11 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			}
 		}
 	}
+	// A reply cut off mid-sentence says so instead of reading as a finished answer (like a stopped reply, the text
+	// stays and the error row offers Retry).
+	if truncated {
+		parts = append(parts, domain.AgentMessagePart{ID: messageID + "_error", Type: "error", Text: agentOutputLimitError, Status: "error"})
+	}
 	// Give the parallel title request a moment so the completed session usually carries it.
 	if titleDone != nil {
 		// The page also picks up a late title, so a fast reply does not wait long for it.
@@ -890,6 +898,20 @@ func mergeAgentDocuments(current, extra []domain.Document) []domain.Document {
 		}
 	}
 	return current
+}
+
+// agentOutputLimitError ends a reply the provider cut off at its output limit (FLOW_AGENT_MAX_OUTPUT_TOKENS; a
+// reasoning model's thinking counts toward it).
+const agentOutputLimitError = "The reply reached the output limit and is incomplete."
+
+// agentTurnTruncated reports a provider stop reason that means the output limit ended the turn: "length" (Chat
+// Completions), "max_tokens" (Anthropic Messages) or "incomplete" (Responses).
+func agentTurnTruncated(stopReason string) bool {
+	switch strings.ToLower(strings.TrimSpace(stopReason)) {
+	case "length", "max_tokens", "incomplete":
+		return true
+	}
+	return false
 }
 
 // agentChatRetryDelay is the pause before a chat turn that failed transiently is asked again.

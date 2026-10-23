@@ -1964,6 +1964,7 @@ export const zhCN: Record<string, string> = {
   "Stop generating": "停止生成",
   Reasoning: "推理过程",
   "Generation stopped": "生成已停止",
+  "The reply reached the output limit and is incomplete.": "回复已达到输出上限，内容不完整。",
   "Looking at issues…": "正在查看事项…",
   "Looked at issues": "已查看事项",
   "Looking at projects…": "正在查看项目…",
