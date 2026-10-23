@@ -1,6 +1,8 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useWorkspaceRealtime } from './use-workspace-realtime'
+import { AGENT_TASK_ACTIVITY_EVENT } from '@/lib/application-agents'
+import { CODING_SESSION_EVENT } from '@/components/coding-sessions/coding-session-events'
 
 vi.mock('@/lib/api', () => ({
   realtimeClientId: () => 'tab-self',
@@ -72,6 +74,36 @@ describe('useWorkspaceRealtime', () => {
     expect(FakeEventSource.all[1].url).toBe('/api/realtime/events?workspace=globex')
     unmount()
     expect(FakeEventSource.all[1].closed).toBe(true)
+  })
+
+  it('refreshes agent task panels and coding session views on a resync, not only the workspace', async () => {
+    const onRemoteSync = vi.fn(async () => undefined)
+    const tasks: unknown[] = []
+    const sessions: unknown[] = []
+    const onTask = (event: Event) => tasks.push((event as CustomEvent).detail)
+    const onSession = (event: Event) => sessions.push((event as CustomEvent).detail)
+    window.addEventListener(AGENT_TASK_ACTIVITY_EVENT, onTask)
+    window.addEventListener(CODING_SESSION_EVENT, onSession)
+    try {
+      const { unmount } = renderHook(() => useWorkspaceRealtime({ workspaceKey: 'acme', viewerId: 'u1', route: '/acme', onRemoteSync }))
+      const stream = FakeEventSource.all[0]
+      act(() => {
+        stream.emit('agent_t1_3', { type: 'agent_task.updated', aggregateId: 'i1', payload: { taskId: 't1' } })
+        stream.emit('coding_s1_2_1', { type: 'coding_session.updated', aggregateId: 's1', payload: { agentSessionId: 't1', issueId: 'i1' } })
+      })
+      expect(tasks).toEqual(['i1'])
+      expect(sessions).toEqual([{ sessionId: 's1', agentSessionId: 't1', issueId: 'i1' }])
+      // Pushes missed while disconnected: the server cannot replay them.
+      act(() => { stream.emit('resync_1', { type: 'workspace.resync_required' }) })
+      expect(tasks).toEqual(['i1', ''])
+      expect(sessions).toEqual([{ sessionId: 's1', agentSessionId: 't1', issueId: 'i1' }, { sessionId: '' }])
+      await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+      expect(onRemoteSync).toHaveBeenCalledWith(expect.objectContaining({ type: 'workspace.resync_required' }))
+      unmount()
+    } finally {
+      window.removeEventListener(AGENT_TASK_ACTIVITY_EVENT, onTask)
+      window.removeEventListener(CODING_SESSION_EVENT, onSession)
+    }
   })
 
   it('applies a burst of self-contained issue patches in one task, but yields around events that fetch', async () => {

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   connectSharedRealtime,
   SHARED_REPLAY_WINDOW_MS,
+  STALE_STREAM_MS,
   type ChannelLike,
   type LocksLike,
   type RealtimeMessage,
@@ -355,6 +356,49 @@ describe('shared realtime stream', () => {
     expect(events).toHaveLength(1)
     dispose()
     expect(FakeStream.live()).toHaveLength(0)
+  })
+
+  it('reconnects with its cursor when a stream that sent keepalives goes quiet', async () => {
+    class KeepaliveStream extends FakeStream {
+      keepalive?: () => void
+      addEventListener(type: 'keepalive', listener: () => void) { if (type === 'keepalive') this.keepalive = listener }
+    }
+    const status: boolean[] = []
+    const dispose = connectSharedRealtime({
+      workspaceKey: 'acme', userId: 'u',
+      url: cursor => `/api/realtime/events?workspace=acme${cursor ? `&since=${cursor}` : ''}`,
+      onMessage: () => undefined, onStatus: connected => status.push(connected),
+      env: { locks: undefined, createChannel: () => undefined, createStream: url => new KeepaliveStream(url) },
+    })
+    const first = FakeStream.live()[0] as KeepaliveStream
+    first.open()
+    first.emit('evt_1', { type: 'issue.updated' })
+    // Keepalives every 15 seconds keep it open.
+    for (let i = 0; i < 6; i++) { await vi.advanceTimersByTimeAsync(15_000); first.keepalive?.() }
+    expect(first.closed).toBe(false)
+    // Then silence: closed after STALE_STREAM_MS and reopened from the cursor.
+    await vi.advanceTimersByTimeAsync(STALE_STREAM_MS + 6_000)
+    expect(first.closed).toBe(true)
+    expect(status.at(-1)).toBe(false)
+    await vi.advanceTimersByTimeAsync(1_000)
+    const live = FakeStream.live()
+    expect(live).toHaveLength(1)
+    expect(live[0].url).toBe('/api/realtime/events?workspace=acme&since=evt_1')
+    dispose()
+  })
+
+  it('never times out a quiet stream from a server that sends no keepalive events', async () => {
+    const dispose = connectSharedRealtime({
+      workspaceKey: 'acme', userId: 'u',
+      url: () => '/api/realtime/events?workspace=acme',
+      onMessage: () => undefined, onStatus: () => undefined,
+      env: { locks: undefined, createChannel: () => undefined, createStream: url => new FakeStream(url) },
+    })
+    FakeStream.live()[0].open()
+    await vi.advanceTimersByTimeAsync(10 * STALE_STREAM_MS)
+    expect(FakeStream.all).toHaveLength(1)
+    expect(FakeStream.all[0].closed).toBe(false)
+    dispose()
   })
 
   describe('heartbeat election (no Web Locks)', () => {

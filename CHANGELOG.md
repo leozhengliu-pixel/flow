@@ -30,6 +30,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Coding session pushes (`coding_session.*` on `/api/realtime/events`) reach
+  only the people who may open the session; before, every workspace member's
+  stream carried each session's issue, phase and state, including another
+  member's private chat session.
+- The workspace event stream recovers from a connection that died silently
+  (for example behind a proxy that kept it open after the API restarted): the
+  server's keepalive is now a `keepalive` event the web app watches, and a
+  stream quiet for 45 seconds reconnects from its cursor. After a resync, open
+  coding session views and agent task threads reload too, instead of waiting
+  for their next push.
 - The sandbox runner reads agent output lines on LF only, so a JSON record
   holding U+2028 or U+2029 is no longer split and dropped.
 - Coding sessions with the docker provider start on Docker Desktop and other

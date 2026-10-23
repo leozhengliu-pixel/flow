@@ -323,7 +323,11 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 			} else {
 				s.realtime.cleanupPresence(workspace)
 			}
-			if _, err := fmt.Fprint(w, ": keepalive\n\n"); err != nil {
+			// A named event (not a comment): browsers expose it to the page,
+			// which reconnects a stream that stops sending it (a proxy can keep
+			// a dead upstream's connection open). It has no id, so it never
+			// moves the resume cursor, and onmessage ignores it.
+			if _, err := fmt.Fprint(w, "event: keepalive\ndata: {}\n\n"); err != nil {
 				return
 			}
 			flusher.Flush()

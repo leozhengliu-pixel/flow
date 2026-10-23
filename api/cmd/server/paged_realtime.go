@@ -65,6 +65,11 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 		}
 		return event, s.agentTaskRealtimeVisible(r, payload.TaskID), nil
 	}
+	if strings.HasPrefix(event.Type, "coding_session.") {
+		// The payload names the session's issue, phase and state: only viewers
+		// who may open the session (GET /api/coding/sessions/{id}) get it.
+		return event, s.codingSessionRealtimeVisible(r, event.AggregateID), nil
+	}
 	if event.Type == "workspace_preferences.updated" {
 		metadata, ok := s.store.WorkspaceSettingsMetadata(workspaceKey(r))
 		if !ok {
@@ -305,6 +310,26 @@ func (s *server) agentTaskRealtimeVisible(r *http.Request, taskID string) bool {
 	}
 	_, _, err = s.authorizedAgentTask(r, taskID, false)
 	return err == nil
+}
+
+// codingSessionRealtimeVisible applies the read rule of a coding session
+// (codingSessionAccess) to a coding_session.* push: a guest sees only their
+// own sessions, everyone else the sessions whose anchor task they can see.
+func (s *server) codingSessionRealtimeVisible(r *http.Request, sessionID string) bool {
+	if sessionID == "" {
+		return false
+	}
+	workspace := workspaceKey(r)
+	if workspace == "" {
+		if metadata, ok := s.store.WorkspaceMetadata(""); ok {
+			workspace = metadata.Workspace.URLKey
+		}
+	}
+	session, err := s.store.CodingSession(r.Context(), workspace, sessionID)
+	if err != nil {
+		return false
+	}
+	return s.codingSessionAnchorAccess(r, session, false) == nil
 }
 
 // maxBatchProjection caps how many projected issues a batch event carries;

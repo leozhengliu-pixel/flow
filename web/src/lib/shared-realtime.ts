@@ -29,6 +29,8 @@ export interface StreamLike {
   onopen: ((event: unknown) => void) | null
   onerror: ((event: unknown) => void) | null
   onmessage: ((event: { data: string; lastEventId: string }) => void) | null
+  /** Named events; only `keepalive` is listened to. */
+  addEventListener?(type: 'keepalive', listener: () => void): void
   close(): void
 }
 
@@ -84,6 +86,14 @@ const beatIntervalMs = 700
 const leaderTimeoutMs = 1_800
 const reconnectBaseMs = 1_000
 const reconnectMaxMs = 15_000
+/**
+ * The server sends a `keepalive` event every 15 seconds. A stream that has sent
+ * them and then goes quiet this long is dead without an error (a proxy that
+ * kept the connection after the API restarted, a dropped NAT mapping, a laptop
+ * that slept): it is reconnected like a failed one.
+ */
+export const STALE_STREAM_MS = 45_000
+const staleCheckMs = 5_000
 // The server marshals `id` then `type` first; only these two carry the roster.
 const presenceMessage = /^\{"id":"[^"]*","type":"(?:connected|presence\.updated)"/
 
@@ -120,6 +130,7 @@ class SharedRealtime {
   private releaseLock?: () => void
   private lockAbort?: AbortController
   private reconnectTimer?: ReturnType<typeof setTimeout>
+  private staleTimer?: ReturnType<typeof setInterval>
   private retry = 0
   private cursor?: string
   private initialSince?: string
@@ -251,13 +262,18 @@ class SharedRealtime {
     if (this.disposed || this.role !== 'leader') return
     const stream = this.env.createStream(this.options.url(this.cursor ?? this.initialSince))
     this.stream = stream
+    // Stale-stream watchdog, armed by the first keepalive (a server without
+    // them is never timed out).
+    let lastSeen = Date.now()
+    let keepalives = false
     stream.onopen = () => {
       if (this.stream !== stream) return
+      lastSeen = Date.now()
       this.retry = 0
       this.options.onStatus(true)
       this.post({ k: 'status', from: this.tabId, connected: true })
     }
-    stream.onerror = () => {
+    const fail = () => {
       if (this.stream !== stream) return
       // Reconnect ourselves instead of relying on EventSource's automatic
       // retry: it resends a `connected_*` marker as Last-Event-ID (no replay)
@@ -268,13 +284,25 @@ class SharedRealtime {
       const delay = Math.min(reconnectMaxMs, reconnectBaseMs * 2 ** this.retry++)
       this.reconnectTimer = setTimeout(() => this.connect(), delay)
     }
+    stream.onerror = fail
     stream.onmessage = event => {
       if (this.stream !== stream) return
+      lastSeen = Date.now()
       this.accept({ data: event.data, lastEventId: event.lastEventId }, true)
     }
+    stream.addEventListener?.('keepalive', () => {
+      keepalives = true
+      lastSeen = Date.now()
+    })
+    clearInterval(this.staleTimer)
+    this.staleTimer = setInterval(() => {
+      if (keepalives && Date.now() - lastSeen > STALE_STREAM_MS) fail()
+    }, staleCheckMs)
   }
 
   private closeStream() {
+    clearInterval(this.staleTimer)
+    this.staleTimer = undefined
     const stream = this.stream
     this.stream = undefined
     if (!stream) return
