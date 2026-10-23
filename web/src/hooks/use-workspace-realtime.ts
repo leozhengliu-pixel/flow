@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { realtimeClientId, updatePresence } from '@/lib/api'
 import { AGENT_TASK_ACTIVITY_EVENT } from '@/lib/application-agents'
 // coding sessions (track G)
-import { dispatchCodingSessionRealtimeEvent } from '@/components/coding-sessions/coding-session-events'
+import { dispatchCodingSessionRealtimeEvent, notifyCodingSessionChanged } from '@/components/coding-sessions/coding-session-events'
 import { INBOX_ACTIVITY_EVENT, inboxUnread } from '@/lib/inbox-unread'
 import { loadRealtimeCursor, saveRealtimeCursor } from '@/lib/realtime-cache'
 import { canApplyRealtimePatch } from '@/store/apply-realtime-patch'
@@ -108,6 +108,13 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, o
       }
       // coding sessions (track G): coding_session.* pushes refresh open session views without a workspace sync.
       if (dispatchCodingSessionRealtimeEvent(event)) return
+      // A resync means pushes were missed (cursor outside the server's replay window, a restart, a new leader that
+      // saw no resumable id). Task panels and coding session views refetch only on their own pushes, so tell them
+      // all to reload as well (an empty id matches every listener); the workspace sync below reloads the rest.
+      if (event.type === 'resync' || event.type === 'workspace.resync_required') {
+        window.dispatchEvent(new CustomEvent(AGENT_TASK_ACTIVITY_EVENT, { detail: '' }))
+        notifyCodingSessionChanged({ sessionId: '' })
+      }
       if (event.payload?.presence) setPresence(event.payload.presence)
       if (event.type === 'connected') {
         return
