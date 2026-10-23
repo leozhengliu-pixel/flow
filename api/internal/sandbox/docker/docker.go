@@ -41,7 +41,10 @@ const (
 	labelRestore = "flow.dev/restore"
 	// labelVolumeID records the workspace volume a container mounts.
 	labelVolumeID = "flow.dev/volume-id"
-	tmpfsOptions  = "rw,nosuid,nodev,size=4g"
+	// labelTokenWriter marks the short-lived helper that writes the token.
+	labelTokenWriter = "flow.dev/token-writer"
+	tmpfsOptions     = "rw,nosuid,nodev,size=4g"
+	tokenDir         = "/var/run/flow"
 )
 
 // ContainerName, WorkspaceVolume, HomeVolume and TokenVolume are the
@@ -50,6 +53,9 @@ func ContainerName(sandboxID string) string  { return sandbox.ObjectName("cs", s
 func WorkspaceVolume(volumeID string) string { return sandbox.ObjectName("ws", volumeID) }
 func HomeVolume(sandboxID string) string     { return sandbox.ObjectName("home", sandboxID) }
 func TokenVolume(sandboxID string) string    { return ContainerName(sandboxID) + "-token" }
+
+// TokenWriterName is the helper container that writes the token volume.
+func TokenWriterName(sandboxID string) string { return ContainerName(sandboxID) + "-token-writer" }
 func containerVolumeID(spec sandbox.SandboxSpec) string {
 	if spec.Workspace.VolumeID != "" {
 		return spec.Workspace.VolumeID
@@ -251,7 +257,7 @@ func (p *Provider) StartSandbox(ctx context.Context, spec sandbox.SandboxSpec) (
 		// A previous attempt crashed between create and start; the token
 		// is rewritten so it matches the freshly minted one.
 		if spec.Token != "" {
-			if err := p.writeToken(ctx, name, spec.Token); err != nil {
+			if err := p.writeToken(ctx, spec.ID, sandbox.CompleteSpec(p.coding, spec).Image, spec.Token); err != nil {
 				return sandbox.SandboxStatus{}, err
 			}
 		}
@@ -299,7 +305,7 @@ func (p *Provider) StartSandbox(ctx context.Context, spec sandbox.SandboxSpec) (
 			return sandbox.SandboxStatus{}, wrap("create container", err)
 		}
 	}
-	if err := p.writeToken(ctx, name, spec.Token); err != nil {
+	if err := p.writeToken(ctx, spec.ID, config.Image, spec.Token); err != nil {
 		return sandbox.SandboxStatus{}, err
 	}
 	if err := p.client.ContainerStart(ctx, name); err != nil {
@@ -308,12 +314,44 @@ func (p *Provider) StartSandbox(ctx context.Context, spec sandbox.SandboxSpec) (
 	return p.Status(ctx, spec.ID)
 }
 
-func (p *Provider) writeToken(ctx context.Context, container, token string) error {
+// writeToken writes the token into the sandbox's token volume through a
+// helper container that mounts only that volume. The sandbox container
+// itself cannot be the target: with the containerd image store (Docker
+// Desktop, new Docker Engine installs) the archive API refuses every copy
+// into a container whose root filesystem is read-only, even to a path on a
+// volume ("container rootfs is marked read-only"). The helper uses the
+// sandbox image (already present), is created but never started, has no
+// network, and is removed right after the copy.
+func (p *Provider) writeToken(ctx context.Context, sandboxID, image, token string) error {
 	archive, err := tokenArchive(token, p.now())
 	if err != nil {
 		return err
 	}
-	if err := p.client.CopyToContainer(ctx, container, "/var/run/flow", archive); err != nil {
+	name := TokenWriterName(sandboxID)
+	labels := sandbox.ManagedLabels(p.coding, map[string]string{sandbox.LabelSandboxID: sandboxID, labelTokenWriter: "1"})
+	config := ContainerConfig{
+		Image:      image,
+		User:       strconv.Itoa(sandbox.RunnerUID) + ":" + strconv.Itoa(sandbox.RunnerUID),
+		Entrypoint: []string{"true"},
+		Labels:     labels,
+		HostConfig: HostConfig{
+			CapDrop:     []string{"ALL"},
+			SecurityOpt: []string{"no-new-privileges:true"},
+			NetworkMode: "none",
+			Mounts:      []Mount{{Type: "volume", Source: TokenVolume(sandboxID), Target: tokenDir}},
+		},
+	}
+	// A helper left by a crashed attempt is replaced.
+	if err := p.client.ContainerRemove(ctx, name); err != nil && !IsNotFound(err) {
+		return wrap("remove token writer", err)
+	}
+	if _, err := p.client.ContainerCreate(ctx, name, config); err != nil {
+		return wrap("create token writer", err)
+	}
+	// A failed removal is cleaned up by StopSandbox, or by orphan GC once the
+	// sandbox is gone (the helper carries its sandbox id).
+	defer func() { _ = p.client.ContainerRemove(context.WithoutCancel(ctx), name) }()
+	if err := p.client.CopyToContainer(ctx, name, tokenDir, archive); err != nil {
 		return wrap("write token", err)
 	}
 	return nil
@@ -419,6 +457,10 @@ func (p *Provider) StopSandbox(ctx context.Context, sandboxID string, options sa
 		if err := p.client.ContainerRemove(ctx, name); err != nil && !IsNotFound(err) && !IsConflict(err) {
 			return wrap("remove container", err)
 		}
+	}
+	// A token writer left by a failed start would keep the token volume in use.
+	if err := p.client.ContainerRemove(ctx, TokenWriterName(sandboxID)); err != nil && !IsNotFound(err) && !IsConflict(err) {
+		return wrap("remove token writer", err)
 	}
 	volumes := []string{HomeVolume(sandboxID), TokenVolume(sandboxID)}
 	if !options.KeepVolume && volumeID == sandboxID {

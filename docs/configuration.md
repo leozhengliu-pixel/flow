@@ -1099,8 +1099,10 @@ in §8). The Helm chart (`deploy/helm/flow`) maps every variable below to a
 value.
 
 Everything is off until `FLOW_CODING_ENABLED=true`; validation is strict only
-then. Workspaces also need the `coding-sessions` feature flag. Secrets accept
-`_FILE` variants. Durations are Go durations (`90s`, `15m`, `4h`).
+then. Workspaces also need the `coding-sessions` feature flag, and the built-in
+Flow agent must be on (`FLOW_AGENT_ENABLED=true`): it is the session's actor on
+the issue, and starting a session without it fails with `agentUnavailable`.
+Secrets accept `_FILE` variants. Durations are Go durations (`90s`, `15m`, `4h`).
 
 ### Runtime and listener
 
@@ -1177,7 +1179,10 @@ Coding sessions run in sandboxes created by `FLOW_CODING_PROVIDER`:
   `FLOW_CODING_DOCKER_HOST` (`unix://`, `tcp://`, `http(s)://`), on the internal
   network `FLOW_CODING_DOCKER_NETWORK`, with `FLOW_CODING_DOCKER_RUNTIME` as
   `--runtime`. The token is written into a per-sandbox volume through the archive
-  API, so remote daemons work. `volumesnapshot` is not supported.
+  API of a short-lived helper container that mounts only that volume (the
+  read-only sandbox container itself refuses archive copies on daemons with the
+  containerd image store, such as Docker Desktop), so remote daemons work.
+  `volumesnapshot` is not supported.
 - `opensandbox`: one [OpenSandbox](https://github.com/alibaba/OpenSandbox)
   sandbox per Flow sandbox, created through the lifecycle server at
   `FLOW_CODING_OPENSANDBOX_URL` (API specs of release `1.1.0`). Flow finds its

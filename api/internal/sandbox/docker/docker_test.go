@@ -37,6 +37,10 @@ type fakeDaemon struct {
 	internal   bool
 	execExit   int
 	resizes    []string
+	// volumeFiles/volumeData hold what the archive API wrote into a volume
+	// (path relative to the mount), keyed by volume name.
+	volumeFiles map[string]map[string]*tar.Header
+	volumeData  map[string]map[string]string
 }
 
 type fakeContainer struct {
@@ -47,7 +51,8 @@ type fakeContainer struct {
 }
 
 func newDaemon() *fakeDaemon {
-	return &fakeDaemon{containers: map[string]*fakeContainer{}, volumes: map[string]Volume{}, images: map[string]bool{}, runtimes: map[string]map[string]any{"runc": {}}, internal: true}
+	return &fakeDaemon{containers: map[string]*fakeContainer{}, volumes: map[string]Volume{}, images: map[string]bool{}, runtimes: map[string]map[string]any{"runc": {}}, internal: true,
+		volumeFiles: map[string]map[string]*tar.Header{}, volumeData: map[string]map[string]string{}}
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
@@ -159,6 +164,19 @@ func (d *fakeDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			container.state = ContainerState{Status: "exited", ExitCode: 143, FinishedAt: "2026-10-18T11:10:00Z"}
 			w.WriteHeader(204)
 		case action == "archive":
+			if container.config.HostConfig.ReadonlyRootfs {
+				// The containerd image store refuses copies into a read-only
+				// container even when the path is on a volume.
+				writeJSON(w, 400, map[string]string{"message": "container rootfs is marked read-only"})
+				return
+			}
+			target := r.URL.Query().Get("path")
+			volume := ""
+			for _, mount := range container.config.HostConfig.Mounts {
+				if mount.Target == target {
+					volume = mount.Source
+				}
+			}
 			reader := tar.NewReader(r.Body)
 			for {
 				header, err := reader.Next()
@@ -166,8 +184,15 @@ func (d *fakeDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					break
 				}
 				data, _ := io.ReadAll(reader)
-				container.files[r.URL.Query().Get("path")+"/"+header.Name] = header
-				container.data[r.URL.Query().Get("path")+"/"+header.Name] = string(data)
+				if volume != "" {
+					if d.volumeFiles[volume] == nil {
+						d.volumeFiles[volume], d.volumeData[volume] = map[string]*tar.Header{}, map[string]string{}
+					}
+					d.volumeFiles[volume][header.Name], d.volumeData[volume][header.Name] = header, string(data)
+					continue
+				}
+				container.files[target+"/"+header.Name] = header
+				container.data[target+"/"+header.Name] = string(data)
 			}
 			w.WriteHeader(200)
 		case action == "logs":
@@ -341,17 +366,24 @@ func TestDockerLifecycle(t *testing.T) {
 	if len(daemon.pulls) != 1 {
 		t.Fatalf("a missing image is pulled once: %v", daemon.pulls)
 	}
-	container := daemon.containers["flow-cs-s1"]
-	header := container.files["/var/run/flow/token"]
-	if header == nil || header.Uid != 1000 || header.Mode != 0o400 || container.data["/var/run/flow/token"] != "fcs_secret" {
+	// The token lands in the token volume through a helper container (the
+	// read-only sandbox container refuses archive copies), which is removed.
+	header := daemon.volumeFiles["flow-cs-s1-token"]["token"]
+	if header == nil || header.Uid != 1000 || header.Mode != 0o400 || daemon.volumeData["flow-cs-s1-token"]["token"] != "fcs_secret" {
 		t.Fatalf("token file = %+v", header)
+	}
+	if _, ok := daemon.containers["flow-cs-s1-token-writer"]; ok {
+		t.Fatal("the token writer must be removed after the copy")
+	}
+	if daemon.creates != 2 {
+		t.Fatalf("one sandbox container and one token writer: creates=%d", daemon.creates)
 	}
 	for _, volume := range []string{"flow-ws-s1", "flow-home-s1", "flow-cs-s1-token"} {
 		if _, ok := daemon.volumes[volume]; !ok {
 			t.Fatalf("volume %s missing", volume)
 		}
 	}
-	if _, err := provider.StartSandbox(ctx, spec("s1")); err != nil || daemon.creates != 1 {
+	if _, err := provider.StartSandbox(ctx, spec("s1")); err != nil || daemon.creates != 2 {
 		t.Fatalf("restart must adopt: %v creates=%d", err, daemon.creates)
 	}
 

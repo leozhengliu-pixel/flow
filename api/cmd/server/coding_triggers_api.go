@@ -63,6 +63,13 @@ func writeCodingTriggerError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "The session changed while starting; try again.", "code": "conflict"})
 		return
 	}
+	if status, code := codingErrorStatus(err); status != http.StatusInternalServerError {
+		// Service errors with a known meaning (no built-in agent, invalid
+		// input, quota, code host access…) answer like the sessions API.
+		writeJSON(w, status, map[string]any{"error": strings.TrimPrefix(err.Error(), "coding: "), "code": code})
+		return
+	}
+	log.Printf("coding trigger failed: %v", err)
 	writeError(w, http.StatusInternalServerError, "Coding session could not be started")
 }
 
