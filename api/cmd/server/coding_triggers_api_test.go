@@ -536,3 +536,26 @@ func TestDelegatedIssueStartIsIdempotentPerAnchor(t *testing.T) {
 		t.Fatalf("undelegated key = %q", key)
 	}
 }
+
+// TestCodingTriggerErrorStatus: a trigger that fails with a known service
+// error (here: the built-in Flow agent is not enabled) answers like the
+// sessions API with its code, not a bare 500.
+func TestCodingTriggerErrorStatus(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	writeCodingTriggerError(recorder, coding.ErrNoAgent)
+	var body map[string]any
+	_ = json.Unmarshal(recorder.Body.Bytes(), &body)
+	if recorder.Code != http.StatusConflict || body["code"] != "agentUnavailable" || !strings.Contains(fmt.Sprint(body["error"]), "built-in Flow agent") {
+		t.Fatalf("no agent: %d %s", recorder.Code, recorder.Body.String())
+	}
+	recorder = httptest.NewRecorder()
+	writeCodingTriggerError(recorder, fmt.Errorf("%w: model %q is not in the pi catalog", coding.ErrInvalidInput, "x"))
+	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "not in the pi catalog") {
+		t.Fatalf("invalid input: %d %s", recorder.Code, recorder.Body.String())
+	}
+	recorder = httptest.NewRecorder()
+	writeCodingTriggerError(recorder, fmt.Errorf("database is locked"))
+	if recorder.Code != http.StatusInternalServerError || strings.Contains(recorder.Body.String(), "database") {
+		t.Fatalf("an unknown error stays an opaque 500: %d %s", recorder.Code, recorder.Body.String())
+	}
+}
