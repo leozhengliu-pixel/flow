@@ -20,8 +20,15 @@ func (s *server) publishRealtime(workspace string, event domain.RealtimeEvent) {
 	}
 	s.stampChangeCursor(&event)
 	s.realtime.publish(workspace, event)
+	s.queueSocketAccessCheck(workspace, event)
 	if s.coordinator == nil {
 		return
+	}
+	if !remoteEventKeepsState(event.Type) && !ephemeralRealtimeEvent(event.Type) {
+		// Before the event (and the writer's response): a request on another
+		// server then reloads the workspace instead of using its old copy.
+		// Signals (agent streaming, notifications) change no workspace state.
+		s.bumpWorkspaceVersion(workspace)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -34,10 +41,14 @@ func (s *server) startCoordination() {
 	if s.coordinator == nil || !s.coordinationStarted.CompareAndSwap(false, true) {
 		return
 	}
+	listenCtx := s.coordinationContext
+	if listenCtx == nil {
+		listenCtx = context.Background()
+	}
 	go func() {
 		subscribedBefore := false
-		for {
-			err := s.coordinator.Listen(context.Background(), s.receiveRemoteEvent, func(resubscribed bool) {
+		for listenCtx.Err() == nil {
+			err := s.coordinator.Listen(listenCtx, s.receiveRemoteEvent, func(resubscribed bool) {
 				// The first subscription loads every workspace; after any
 				// reconnect, events published while this instance was not
 				// subscribed are gone, so reload and resync instead.
@@ -52,6 +63,8 @@ func (s *server) startCoordination() {
 				if missed {
 					log.Printf("Redis event subscription restored; resyncing realtime subscribers")
 					s.realtime.resyncAll()
+					// Access changes may be among the lost events.
+					s.queueAllSocketAccessChecks()
 				}
 			})
 			if err != nil && !errors.Is(err, context.Canceled) {
@@ -134,12 +147,24 @@ func (s *server) applyRemoteEvents(workspace string) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		var err error
+		// Read before reloading: the reload includes every change it counts.
+		version, versionErr := int64(0), error(nil)
+		if all || one {
+			version, versionErr = s.sharedWorkspaceVersion(ctx, workspace)
+		}
+		if one && !all && versionErr == nil && version > 0 && s.workspaceVersions.current(workspace) >= version && s.store.HasWorkspace(workspace) {
+			// A request already reloaded past these changes (ensureCurrentWorkspace).
+			one = false
+		}
 		if all {
 			err = s.store.ReloadAllWorkspaces(ctx)
 		} else if one {
 			err = s.store.ReloadWorkspace(ctx, workspace)
 		}
 		cancel()
+		if err == nil && versionErr == nil && version > 0 {
+			s.workspaceVersions.record(workspace, version)
+		}
 		if err != nil {
 			// Publishing would let subscribers here fetch the stale copy as if
 			// it had the change; the next applied batch reloads it, and the
@@ -150,6 +175,8 @@ func (s *server) applyRemoteEvents(workspace string) {
 		}
 		for _, event := range batch {
 			s.realtime.publish(workspace, event)
+			// After the reload: the check reads the changed access.
+			s.queueSocketAccessCheck(workspace, event)
 		}
 	}
 }

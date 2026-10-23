@@ -428,7 +428,12 @@ func (s *SQLiteStore) Session(ctx context.Context, token string) (domain.AuthSes
 }
 
 func (s *SQLiteStore) Logout(ctx context.Context, token string) error {
+	var userID string
+	_ = s.db.QueryRowContext(ctx, `SELECT user_id FROM auth_sessions WHERE token_hash=?`, tokenHash(token)).Scan(&userID)
 	_, err := s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE token_hash=?`, tokenHash(token))
+	if err == nil {
+		s.accountAccessChanged(userID)
+	}
 	return err
 }
 
@@ -501,6 +506,9 @@ func (s *SQLiteStore) ListSessions(ctx context.Context, userID, currentToken str
 
 func (s *SQLiteStore) RevokeOtherSessions(ctx context.Context, userID, currentToken string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE user_id=? AND token_hash<>?`, userID, tokenHash(currentToken))
+	if err == nil {
+		s.accountAccessChanged(userID)
+	}
 	return err
 }
 
@@ -517,6 +525,7 @@ func (s *SQLiteStore) RevokeSession(ctx context.Context, userID, sessionID, curr
 	if count, _ := result.RowsAffected(); count != 1 {
 		return sql.ErrNoRows
 	}
+	s.accountAccessChanged(userID)
 	return nil
 }
 
@@ -618,6 +627,7 @@ func (s *SQLiteStore) ResetPassword(ctx context.Context, token, password string)
 	_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET password_hash=?,updated_at=? WHERE id=?`, string(hash), time.Now().UTC().Format(time.RFC3339Nano), userID)
 	if err == nil {
 		_, _ = s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE user_id=?`, userID)
+		s.accountAccessChanged(userID)
 	}
 	return err
 }
@@ -659,6 +669,7 @@ func (s *SQLiteStore) LoginWithAuthToken(ctx context.Context, email, token strin
 	}
 	if forceReauth {
 		_, _ = s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE user_id=?`, user.ID)
+		s.accountAccessChanged(user.ID)
 	}
 	return s.createSession(ctx, user)
 }
@@ -1065,7 +1076,9 @@ func (s *SQLiteStore) AcceptInvitationWithChanges(ctx context.Context, token, us
 	// Read immutable workspace metadata before opening the SQL transaction.
 	// Mutations take the store lock before acquiring a database connection, so
 	// doing this in the reverse order can deadlock with background schedulers.
-	metadata, _, ok := s.workspaceByID(workspaceID)
+	// The workspace (or the teams the invitation names) may have been created
+	// on another server moments ago, so read it from the database.
+	metadata, _, ok := s.currentWorkspaceByID(ctx, workspaceID)
 	if !ok {
 		return InvitationAcceptance{}, ErrAuthForbidden
 	}
@@ -1161,6 +1174,8 @@ func (s *SQLiteStore) UpdateMemberRole(ctx context.Context, workspaceID, userID,
 	if count, _ := result.RowsAffected(); count == 0 {
 		return ErrAuthForbidden
 	}
+	// A member who becomes a guest may lose teams' issues.
+	s.accountAccessChanged(userID)
 	return nil
 }
 
@@ -1175,6 +1190,7 @@ func (s *SQLiteStore) SuspendMember(ctx context.Context, workspaceID, userID str
 	if count, _ := result.RowsAffected(); count == 0 {
 		return ErrAuthForbidden
 	}
+	s.accountAccessChanged(userID)
 	return nil
 }
 
@@ -1226,6 +1242,10 @@ func (s *SQLiteStore) InvitationPreview(ctx context.Context, token string) (doma
 		return item, domain.Workspace{}, ErrAuthExpired
 	}
 	data, _, ok := s.workspaceByID(item.WorkspaceID)
+	if !ok {
+		// Created on another server and not loaded here yet.
+		data, _, ok = s.currentWorkspaceByID(ctx, item.WorkspaceID)
+	}
 	if !ok {
 		return item, domain.Workspace{}, ErrAuthExpired
 	}

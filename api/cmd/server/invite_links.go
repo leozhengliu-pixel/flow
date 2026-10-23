@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 	"slices"
 	"strings"
@@ -86,6 +87,9 @@ func (s *server) inviteLinkPreview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "This invite link is invalid or has expired")
 		return
 	}
+	if err := s.store.LoadMissingWorkspaces(r.Context()); err != nil {
+		log.Printf("load workspaces created on other servers: %v", err)
+	}
 	for _, key := range s.store.WorkspaceKeys() {
 		data, ok := s.store.BootstrapFor(key)
 		if !ok || data.WorkspaceInviteLink == nil {
@@ -140,6 +144,10 @@ func (s *server) joinOrganization(w http.ResponseWriter, r *http.Request) {
 	if user.ID == "" && !s.authDisabled {
 		writeError(w, http.StatusUnauthorized, "Authentication required")
 		return
+	}
+	// A workspace created on another server a moment ago holds the link too.
+	if err := s.store.LoadMissingWorkspaces(r.Context()); err != nil {
+		log.Printf("load workspaces created on other servers: %v", err)
 	}
 	for _, key := range s.store.WorkspaceKeys() {
 		var membership domain.WorkspaceMembership

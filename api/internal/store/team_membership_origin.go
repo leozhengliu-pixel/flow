@@ -350,6 +350,7 @@ func (s *SQLiteStore) RemoveMemberWithChanges(ctx context.Context, workspaceID, 
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	s.accountAccessChanged(userID)
 	return changes, nil
 }
 

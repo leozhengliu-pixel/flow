@@ -1451,6 +1451,13 @@ function App() {
           })
         : current,
     );
+  // The viewer lost access to an open issue: drop it, like a 403/404 issue record read does.
+  const dropInaccessibleIssue = (issueId: string) =>
+    setData((current) =>
+      current && current.workspace.id===data?.workspace.id && current.viewer.id===data?.viewer.id
+        ? deriveResourceCounts({ ...current, issues: current.issues.filter((issue) => issue.id !== issueId) })
+        : current,
+    );
   const updateIssueComments = (
     issueId: string,
     updater: (comments: Comment[]) => Comment[],
@@ -3903,6 +3910,7 @@ function App() {
           await updateIssueById(issue, input);
         }}
         onIssueUpdated={replaceIssue}
+        onIssueAccessLost={dropInaccessibleIssue}
         onDelete={async () => {
           await run(() => deleteIssue(issue.id), "Could not delete issue");
           setData((current) =>
@@ -4934,6 +4942,7 @@ function App() {
               onNavigateIssue={(issue, options) => openIssue(issue, undefined, options?.sibling)}
               onUpdate={updateSelected}
               onIssueUpdated={replaceIssue}
+              onIssueAccessLost={dropInaccessibleIssue}
               onDelete={removeSelected}
               onCreateSubIssue={addSubIssue}
               onCreateProject={addIssueProject}

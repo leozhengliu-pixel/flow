@@ -81,6 +81,8 @@ interface DescriptionEditorProps {
     viewer: User
     onPersist: (snapshot: DescriptionSnapshot, updateIds: string[], expectedVersion: number) => Promise<void>
     onPresence?: (users: User[]) => void
+    /** The viewer lost access while the document was open: reload the issue or document to show its access state. */
+    onRevoked?: () => void
   }
 }
 
@@ -88,6 +90,8 @@ const closedSlash: SlashCommandState = { active: false, query: '', range: null }
 type MentionState = { active: boolean; query: string; range: { from: number; to: number } | null }
 const closedMention: MentionState = { active: false, query: '', range: null }
 const oversizedEditMessage = 'This change is too large to save. Download your local changes, then reload the page to keep editing.'
+const revokedIssueMessage = 'You no longer have access to this issue. Unsaved changes can still be downloaded.'
+const revokedDocumentMessage = 'You no longer have access to this document. Unsaved changes can still be downloaded.'
 
 export function IssueDescriptionEditor(props: DescriptionEditorProps) {
   if (props.loading) return <div className="issue-description-skeleton" aria-label="Loading issue description"/>
@@ -131,6 +135,12 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   const [recovery] = useState(() => recoveryKey ? readDescriptionRecovery(recoveryKey) : undefined)
   const [saveError, setSaveError] = useState<string | undefined>(recovery ? 'Unsaved local changes are available to download.' : undefined)
   const presenceRef = useRef(collaboration?.onPresence)
+  const revokedRef = useRef(collaboration?.onRevoked)
+  revokedRef.current = collaboration?.onRevoked
+  const revokedMessageRef = useRef(revokedDocumentMessage)
+  revokedMessageRef.current = collaboration?.issueId ? revokedIssueMessage : revokedDocumentMessage
+  /** The server removed this viewer from the document: the editor turns read-only. */
+  const [revoked, setRevoked] = useState(false)
   submitRef.current = onSubmit
   const selectionActionsRef = useRef(selectionActions)
   selectionActionsRef.current = selectionActions
@@ -465,6 +475,16 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       if (status === 'connected' && !blockedRef.current && revisionRef.current !== savedRevisionRef.current) {
         void persistRef.current()
       }
+      if (status === 'revoked') {
+        // Stop syncing and saving (the server refuses both now), keep the local backup for download, and let the
+        // page reload the issue to show what this viewer may still see.
+        blockedRef.current = true
+        window.clearTimeout(persistTimerRef.current)
+        setRevoked(true)
+        setSaveError(revokedMessageRef.current)
+        revokedRef.current?.()
+        return
+      }
       if (status !== 'conflict') return
       blockedRef.current = true
       window.clearTimeout(persistTimerRef.current)
@@ -493,8 +513,9 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   }, [editor, editorRef])
   // Access can change while the document is open (e.g. a grant is removed).
   useEffect(() => {
-    if (editor && !editor.isDestroyed && editor.isEditable === readOnly) editor.setEditable(!readOnly)
-  }, [editor, readOnly])
+    const editable = !readOnly && !revoked
+    if (editor && !editor.isDestroyed && editor.isEditable !== editable) editor.setEditable(editable)
+  }, [editor, readOnly, revoked])
   // Markdown / older JSON content: its references show as mentions (display only; collaborative documents keep their stored nodes).
   useMentionConversion(editor, `${value}\n${state ?? ''}`, !collaborationSession, !state)
   useEffect(() => {

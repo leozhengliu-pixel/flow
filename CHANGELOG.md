@@ -46,6 +46,21 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   reply cut off by a server restart is marked interrupted with Retry, and
   with Redis coordination an answer or Stop that reaches another API server is
   forwarded to the server running the reply.
+- Issue descriptions open for collaborative editing follow access changes: a
+  member removed from the issue's team, losing a private team or a shared
+  issue, suspended or removed from the workspace, or whose session was signed
+  out or revoked leaves the description at once on every API server (with
+  Redis coordination), stops receiving its edits and can no longer send any.
+  The editor turns read-only, says the member no longer has access, keeps
+  unsaved changes downloadable and reloads the issue. Standalone documents
+  now follow permission changes made on another server too.
+- With several API servers, a request right after a change on another server
+  no longer sees the old state: accepting an invitation to a workspace created
+  a moment ago, using a new team, API key or member, or a just-granted role
+  returned 403 or 404 until the server applied the peer's change (about 1.5
+  seconds). Each change now bumps a per-workspace version in Redis, and a
+  server that is behind (or does not have the workspace yet) reloads it from
+  the database before authorizing the request.
 - Coding session pushes (`coding_session.*` on `/api/realtime/events`) reach
   only the people who may open the session; before, every workspace member's
   stream carried each session's issue, phase and state, including another

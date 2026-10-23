@@ -461,6 +461,7 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		if r.URL.Path == "/api/oauth/authorization-request" {
 			return true
 		}
+		s.ensureCurrentWorkspace(r.Context(), workspaceKey(r))
 		_, ok := s.oauthWorkspaceForRequest(w, r, workspaceKey(r), user)
 		return ok
 	}
@@ -491,6 +492,9 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 			return false
 		}
 	}
+	// The workspace may have changed (or been created) on another server a
+	// moment ago; authorize against, and serve, the committed state.
+	s.ensureCurrentWorkspace(r.Context(), key)
 	if key == "" || r.URL.Path == "/api/account/bootstrap" || r.URL.Path == "/api/invitations/accept" || (r.Method == http.MethodPost && r.URL.Path == "/api/workspaces") {
 		return true
 	}

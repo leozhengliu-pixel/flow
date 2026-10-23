@@ -38,8 +38,18 @@ type realtimeSocketClient struct {
 	id             uint64
 	clientID       string
 	workspace      string
+	userID         string
 	documents      map[string]struct{}
 	issueDocuments map[string]string
+	// issueAccess caches each joined issue description's last access check
+	// (see collaboration_access.go).
+	issueAccess map[string]*issueSocketAccess
+	// checkIssue re-reads whether the socket user may open an issue;
+	// checkCredential whether its session or API key is still valid.
+	checkIssue      func(issueID string) (domain.Issue, bool, error)
+	checkCredential func() bool
+	// credentialRevoked: the session or key was revoked; it joins nothing.
+	credentialRevoked bool
 	// documentAccess caches what this socket may do on each joined
 	// standalone document; it is re-checked on updates once stale.
 	documentAccess map[string]*documentSocketAccess
@@ -110,7 +120,7 @@ func (h *realtimeHub) addSocket(workspace, clientID string, cancel context.Cance
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.nextID++
-	client := &realtimeSocketClient{id: h.nextID, clientID: clientID, workspace: workspace, documents: map[string]struct{}{}, issueDocuments: map[string]string{}, documentAccess: map[string]*documentSocketAccess{}, send: make(chan realtimeSocketMessage, 256), cancel: cancel}
+	client := &realtimeSocketClient{id: h.nextID, clientID: clientID, workspace: workspace, documents: map[string]struct{}{}, issueDocuments: map[string]string{}, issueAccess: map[string]*issueSocketAccess{}, documentAccess: map[string]*documentSocketAccess{}, send: make(chan realtimeSocketMessage, 256), cancel: cancel}
 	if h.sockets[workspace] == nil {
 		h.sockets[workspace] = map[uint64]*realtimeSocketClient{}
 	}
@@ -166,18 +176,7 @@ func (h *realtimeHub) invalidateDocumentAccess(workspace, documentID string) {
 	}
 	h.mu.Unlock()
 	for _, item := range affected {
-		role, conflict, err := item.client.checkDocument(item.collaborationID)
-		if err != nil && !errors.Is(err, errNotFound) || conflict || err == nil && role != "none" {
-			continue
-		}
-		h.mu.Lock()
-		_, wasJoined := item.client.documents[item.collaborationID]
-		delete(item.client.documents, item.collaborationID)
-		delete(item.client.documentAccess, item.collaborationID)
-		h.mu.Unlock()
-		if wasJoined {
-			sendSocketJSON(item.client, map[string]any{"type": "document.revoked", "documentId": item.collaborationID})
-		}
+		h.recheckStandaloneDocument(item.client, item.collaborationID)
 	}
 }
 
@@ -224,9 +223,16 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(context.Background())
 	client := s.realtime.addSocket(workspace, clientID, cancel)
 	s.realtime.mu.Lock()
+	client.userID = authUser(r).ID
 	client.checkDocument = func(collaborationID string) (string, bool, error) {
 		return s.socketDocumentRole(r, workspace, collaborationID)
 	}
+	// Access checks run on other goroutines (access changes, the sweep);
+	// each reads through its own copy of the request.
+	client.checkIssue = func(issueID string) (domain.Issue, bool, error) {
+		return s.socketIssue(r.WithContext(r.Context()), issueID)
+	}
+	client.checkCredential = func() bool { return s.socketCredentialValid(r) }
 	s.realtime.mu.Unlock()
 	defer func() {
 		cancel()
@@ -290,40 +296,26 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 	if err := json.Unmarshal(raw, &command); err != nil || command.Type != "document.join" {
 		return errors.New("unsupported collaboration command")
 	}
-	data, query, err := s.issueRecordsQuery(r)
-	if err != nil {
-		return err
-	}
-	if s.authDisabled && command.IssueID == "" {
-		var ok bool
-		data, ok = s.store.WorkspaceMetadata(query.Workspace)
-		if !ok {
-			return store.ErrAuthForbidden
-		}
-	}
-	if !s.authDisabled {
-		data, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
-		if err != nil {
-			return err
-		}
-		filterBootstrapForAPIKey(&data, r)
+	s.realtime.mu.Lock()
+	revoked := client.credentialRevoked
+	s.realtime.mu.Unlock()
+	if revoked || client.checkCredential != nil && !client.checkCredential() {
+		sendSocketJSON(client, map[string]any{"type": "document.revoked", "documentId": command.DocumentID, "issueId": command.IssueID})
+		return nil
 	}
 	var contentState string
 	readOnly := false
 	if command.IssueID != "" {
-		query.Filter = store.IssueFilter{Field: "id", Values: []string{command.IssueID}}
-		query.Archived = "all"
-		query.Limit = 1
-		page, err := s.store.QueryIssueRecords(r.Context(), query)
-		if err != nil {
+		issue, visible, err := s.socketIssue(r.WithContext(r.Context()), command.IssueID)
+		if err != nil && !errors.Is(err, store.ErrAuthForbidden) {
 			return err
 		}
-		data.Issues = page.Items
-		issueIndex := slices.IndexFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == command.IssueID })
-		if issueIndex < 0 {
-			return errors.New("issue is outside your teams")
+		if !visible {
+			// The issue is gone or no longer visible to this member: the
+			// editor shows its no-access state instead of retrying the join.
+			sendSocketJSON(client, map[string]any{"type": "document.revoked", "documentId": command.DocumentID, "issueId": command.IssueID})
+			return nil
 		}
-		issue := data.Issues[issueIndex]
 		expectedDocumentID := "document_content_" + issue.ID
 		if issue.DocumentContent != nil && issue.DocumentContent.ID != "" {
 			expectedDocumentID = issue.DocumentContent.ID
@@ -335,8 +327,13 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 		}
 		s.realtime.mu.Lock()
 		client.issueDocuments[command.DocumentID] = issue.ID
+		client.issueAccess[command.DocumentID] = &issueSocketAccess{teamID: issue.Team.ID, checkedAt: time.Now()}
 		s.realtime.mu.Unlock()
 	} else {
+		data, err := s.socketWorkspaceMetadata(r, client.workspace)
+		if err != nil {
+			return err
+		}
 		// Standalone workspace documents use the same collaboration protocol as
 		// issue descriptions, but are authorized by the document's role:
 		// viewers and commenters join read-only.
@@ -381,7 +378,7 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 			return r.Context().Err()
 		}
 	}
-	err = s.store.WalkDocumentUpdates(r.Context(), client.workspace, command.DocumentID, func(update store.DocumentCollaborationUpdate) error {
+	err := s.store.WalkDocumentUpdates(r.Context(), client.workspace, command.DocumentID, func(update store.DocumentCollaborationUpdate) error {
 		if len(message.Updates) > 0 && (bytes+len(update.Data)*4/3 > 1<<20 || len(message.Updates) >= 128) {
 			if err := flush(true); err != nil {
 				return err
@@ -421,6 +418,13 @@ func (s *server) handleCollaborationFrame(r *http.Request, client *realtimeSocke
 		if documentID != currentDocumentID {
 			sendSocketJSON(client, map[string]any{"type": "document.conflict", "documentId": documentID})
 			return nil
+		}
+		// Access changes re-check joined sockets as they happen; this bounds
+		// how long a missed one lets the member keep editing.
+		if !s.issueDocumentAccessFresh(client, documentID) {
+			if allowed, err := s.recheckIssueDocument(client, documentID, issueID); err != nil || !allowed {
+				return err
+			}
 		}
 	}
 	if kind == collaborationUpdateFrame {
@@ -514,24 +518,53 @@ func (s *server) documentSocketCanEdit(r *http.Request, client *realtimeSocketCl
 // socketDocumentRole is the socket user's role on the standalone document a
 // collaboration id names (errNotFound when it is gone).
 func (s *server) socketDocumentRole(r *http.Request, workspace, collaborationID string) (string, bool, error) {
-	var data domain.Bootstrap
-	if s.authDisabled {
-		var ok bool
-		if data, ok = s.store.WorkspaceMetadata(workspace); !ok {
-			return "", false, store.ErrAuthForbidden
-		}
-	} else {
-		var err error
-		if data, err = s.store.PagedWorkspaceMetadata(r.Context(), workspace, authUser(r).ID); err != nil {
-			return "", false, err
-		}
-		filterBootstrapForAPIKey(&data, r)
+	data, err := s.socketWorkspaceMetadata(r, workspace)
+	if err != nil {
+		return "", false, err
 	}
 	document, conflict, err := collaborationDocument(data, collaborationID)
 	if err != nil {
 		return "", false, err
 	}
 	return documentRole(s, data, document), conflict, nil
+}
+
+// socketWorkspaceMetadata is the socket user's projection of the workspace.
+func (s *server) socketWorkspaceMetadata(r *http.Request, workspace string) (domain.Bootstrap, error) {
+	if s.authDisabled {
+		data, ok := s.store.WorkspaceMetadata(workspace)
+		if !ok {
+			return data, store.ErrAuthForbidden
+		}
+		return data, nil
+	}
+	data, err := s.store.PagedWorkspaceMetadata(r.Context(), workspace, authUser(r).ID)
+	if err != nil {
+		return data, err
+	}
+	filterBootstrapForAPIKey(&data, r)
+	return data, nil
+}
+
+// socketIssue reads an issue as the socket user may see it (visible false:
+// gone, or outside the user's access).
+func (s *server) socketIssue(r *http.Request, issueID string) (domain.Issue, bool, error) {
+	_, query, err := s.issueRecordsQuery(r)
+	if err != nil {
+		return domain.Issue{}, false, err
+	}
+	query.Filter = store.IssueFilter{Field: "id", Values: []string{issueID}}
+	query.Archived = "all"
+	query.Limit = 1
+	page, err := s.store.QueryIssueRecords(r.Context(), query)
+	if err != nil {
+		return domain.Issue{}, false, err
+	}
+	index := slices.IndexFunc(page.Items, func(issue domain.Issue) bool { return issue.ID == issueID })
+	if index < 0 {
+		return domain.Issue{}, false, nil
+	}
+	return page.Items[index], true, nil
 }
 
 func (s *server) publishCollaborationEvent(workspace, eventType string, payload collaborationEventPayload) {
@@ -548,6 +581,15 @@ func (s *server) publishCollaborationEvent(workspace, eventType string, payload 
 }
 
 func (s *server) receiveCollaborationEvent(workspace string, event domain.RealtimeEvent) bool {
+	if event.Type == accountAccessSignal {
+		if workspace == accountAccessWorkspace {
+			s.receiveAccountAccessSignal(event)
+		}
+		return true
+	}
+	if workspace == accountAccessWorkspace {
+		return true
+	}
 	if event.Type != "document.update" && event.Type != "document.awareness" {
 		return false
 	}
