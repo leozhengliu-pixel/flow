@@ -1,0 +1,134 @@
+/* "Set due date" dialog, measured on the reference app: 562 wide (16px from each window edge below that), one third of
+   the free height above it, a field and two month grids; below 641px wide the grids are dropped. */
+.dialog-overlay.flow-due-dialog-overlay { background: var(--release-dialog-overlay); }
+.dialog-content.flow-due-dialog {
+  box-sizing: border-box;
+  left: 50%;
+  top: var(--dialog-top);
+  width: min(562px, calc(100vw - 32px));
+  max-width: none;
+  padding: 0 16px 15.5px;
+  transform: translate(-50%, var(--dialog-lift));
+  border: .5px solid var(--release-dialog-border);
+  border-radius: 12px;
+  background: var(--theme-surface-1);
+  box-shadow: var(--release-dialog-shadow);
+  color: var(--theme-text-primary);
+  font: 500 13px / normal var(--font);
+}
+.flow-due-dialog h2 {
+  margin: 0 0 35.5px;
+  padding-top: 20.5px;
+  color: var(--theme-text-primary);
+  font: 500 13px / normal var(--font);
+}
+.flow-due-dialog h2 span { color: var(--theme-text-secondary); }
+.flow-due-dialog h2 strong { font-weight: 500; }
+.flow-due-dialog>.dialog-close {
+  top: 13.5px;
+  right: 16px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0 2px;
+  border: .5px solid transparent;
+  border-radius: 9999px;
+  color: var(--theme-text-secondary);
+}
+.flow-due-dialog>.dialog-close:hover { background: var(--release-dialog-ghost-hover-bg); color: var(--release-dialog-close-hover-fg); }
+.flow-due-dialog>.dialog-close svg { width: 14px; height: 14px; }
+.flow-due-dialog__field { display: block; }
+.flow-due-dialog__label { color: var(--theme-text-primary); font: 500 13px / normal var(--font); }
+.flow-due-dialog__hint { margin-left: 4px; color: var(--theme-text-secondary); font: 450 12px / 15px var(--font); }
+.flow-due-dialog__hint::before { content: "-"; display: inline-block; width: 6.9px; margin-right: 4px; color: var(--agent-action-icon); font: 450 15px / 15px var(--font); text-align: center; }
+.flow-due-dialog__field input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  display: block;
+  margin-top: 11px;
+  padding: 6px 12px;
+  border: .5px solid var(--release-input-border);
+  border-radius: 8px;
+  outline: 0;
+  background: var(--theme-surface-1);
+  color: var(--release-title-fg);
+  font: 400 12px / normal var(--font);
+}
+.flow-due-dialog__field input:focus { border-color: var(--focus-ring); }
+.flow-due-dialog__months { display: flex; gap: 49px; margin: 16px -6px 0; }
+.flow-due-dialog__month { position: relative; width: 246px; flex: none; }
+/* The weekend columns sit on one continuous band behind the weekday header and the days. */
+.flow-due-dialog__month::before,
+.flow-due-dialog__month::after {
+  content: "";
+  position: absolute;
+  top: 44px;
+  bottom: 8px;
+  width: 26px;
+  border-radius: 8px;
+  background: var(--sub-editor-border);
+}
+.flow-due-dialog__month::before { left: 8px; }
+.flow-due-dialog__month::after { right: 8px; }
+.flow-due-dialog__month-head {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  color: var(--theme-text-primary);
+  font: 400 12px / 18px var(--font);
+}
+.flow-due-dialog__nav { display: flex; gap: 4px; }
+.flow-due-dialog__nav button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0 2px;
+  border: .5px solid transparent;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--agent-action-icon);
+  font: 500 12px / normal var(--font);
+}
+.flow-due-dialog__nav button:hover { background: var(--release-dialog-ghost-hover-bg); color: var(--theme-text-primary); }
+.flow-due-dialog table { position: relative; z-index: 1; width: 246px; table-layout: fixed; border-collapse: separate; border-spacing: 8px; font: 400 12px / 18px var(--font); }
+.flow-due-dialog th { height: 35.5px; padding: 8px 0 0; color: var(--theme-text-secondary); font: 400 13px / 19.5px var(--font); text-align: center; vertical-align: top; }
+.flow-due-dialog td { width: 26px; height: 26px; padding: 0; text-align: center; }
+.flow-due-dialog tr[data-empty] td { height: 4px; }
+.flow-due-dialog td button {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--theme-text-primary);
+  font: 400 13px / 20px var(--font);
+}
+.flow-due-dialog td:first-child button,
+.flow-due-dialog td:last-child button { color: var(--theme-text-secondary); }
+.flow-due-dialog td button[data-today] { border: 1px solid var(--agent-action-icon); background: var(--relation-chip-border); color: var(--release-title-fg); font-weight: 500; }
+.flow-due-dialog td button:hover { background: var(--release-primary-bg); color: var(--release-primary-fg); }
+.flow-due-dialog footer { display: flex; justify-content: flex-end; gap: 6px; margin-top: 15.5px; }
+.flow-due-dialog footer button {
+  height: 24px;
+  padding: 0 8px;
+  border: .5px solid transparent;
+  border-radius: 9999px;
+  font: 500 12px / normal var(--font);
+}
+.flow-due-dialog__cancel { background: var(--chip-bg); color: var(--theme-text-primary); }
+.flow-due-dialog__save { background: var(--release-primary-bg); box-shadow: var(--release-button-shadow); color: var(--release-primary-fg); }
+.flow-due-dialog__save:hover:not(:disabled) { background: var(--release-primary-hover-bg); }
+@media (max-width: 640px) {
+  .flow-due-dialog__hint { display: block; margin: 8px 0 0; line-height: 16.8px; }
+  .flow-due-dialog__hint::before { display: none; }
+  .flow-due-dialog__field input { margin-top: 16px; }
+  .flow-due-dialog__month { display: none; }
+}

@@ -2621,6 +2621,7 @@ export const zhCN: Record<string, string> = {
   "Default badge style": "默认徽标样式",
   Docs: "文档",
   "Keyboard shortcuts": "键盘快捷键",
+  "Keyboard Shortcuts": "键盘快捷键",
   "Download apps": "下载应用",
   "Flow status": "Flow 状态",
   "Full changelog": "完整更新日志",
@@ -2656,6 +2657,9 @@ export const zhCN: Record<string, string> = {
   "You can finish this issue later from your drafts.":
     "你可以稍后从草稿中继续完成此事项。",
   "Set due date": "设置截止日期",
+  "Set": "设置",
+  "Issue needs to be completed by this date": "问题需要在此日期前完成",
+  "Save due date": "保存截止日期",
   "Set team": "设置团队",
   "Back to actions": "返回操作",
   "Issue view summary": "事项视图摘要",

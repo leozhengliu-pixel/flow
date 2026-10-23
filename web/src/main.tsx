@@ -16,6 +16,7 @@ import { registerServiceWorker } from './lib/service-worker'
 import { renderMermaidPreview } from './components/issue/editor/mermaid-preview'
 import { ThemedToaster } from './components/ui/themed-toaster'
 import { ActionDialogHost } from './components/ui/action-dialogs'
+import { DueDateDialogHost } from './components/issue/due-date-dialog'
 import { LightboxEditorProvider } from './components/editor/lightbox-editor-provider'
 import { TooltipProvider } from './components/ui/tooltip'
 import { TitleTooltipBridge } from './components/ui/title-tooltip-bridge'
@@ -45,6 +46,7 @@ void prepareInitialLocale().then(() => createRoot(document.getElementById('root'
           <TitleTooltipBridge />
           <ThemedToaster />
           <ActionDialogHost />
+          <DueDateDialogHost />
         </LightboxEditorProvider>
       </BrowserRouter>
     </I18nProvider></FlowMotionProvider>
