@@ -43,9 +43,12 @@ type realtimeSocketClient struct {
 	// documentAccess caches what this socket may do on each joined
 	// standalone document; it is re-checked on updates once stale.
 	documentAccess map[string]*documentSocketAccess
-	send           chan realtimeSocketMessage
-	queuedBytes    atomic.Int64
-	cancel         context.CancelFunc
+	// checkDocument re-reads the socket user's role on a standalone
+	// document (by collaboration id) when its access changes.
+	checkDocument func(collaborationID string) (role string, conflict bool, err error)
+	send          chan realtimeSocketMessage
+	queuedBytes   atomic.Int64
+	cancel        context.CancelFunc
 }
 
 const maxSocketQueueBytes = 8 << 20
@@ -138,18 +141,42 @@ func (h *realtimeHub) joinedDocument(client *realtimeSocketClient, documentID st
 }
 
 // invalidateDocumentAccess makes every socket re-check its access to a
-// document (by id or collaboration id) before its next update.
+// document (by id or collaboration id) before its next update. A socket whose
+// user can no longer open the document leaves it at once, so it stops
+// receiving the document's edits, and is told with document.revoked.
 func (h *realtimeHub) invalidateDocumentAccess(workspace, documentID string) {
 	if h == nil {
 		return
 	}
+	type joined struct {
+		client          *realtimeSocketClient
+		collaborationID string
+	}
+	var affected []joined
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	for _, client := range h.sockets[workspace] {
 		for collaborationID, access := range client.documentAccess {
 			if access.documentID == documentID || collaborationID == documentID {
 				access.checkedAt = time.Time{}
+				if client.checkDocument != nil {
+					affected = append(affected, joined{client, collaborationID})
+				}
 			}
+		}
+	}
+	h.mu.Unlock()
+	for _, item := range affected {
+		role, conflict, err := item.client.checkDocument(item.collaborationID)
+		if err != nil && !errors.Is(err, errNotFound) || conflict || err == nil && role != "none" {
+			continue
+		}
+		h.mu.Lock()
+		_, wasJoined := item.client.documents[item.collaborationID]
+		delete(item.client.documents, item.collaborationID)
+		delete(item.client.documentAccess, item.collaborationID)
+		h.mu.Unlock()
+		if wasJoined {
+			sendSocketJSON(item.client, map[string]any{"type": "document.revoked", "documentId": item.collaborationID})
 		}
 	}
 }
@@ -196,6 +223,11 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 	connection.SetReadLimit(maxCollaborationFrameSize)
 	ctx, cancel := context.WithCancel(context.Background())
 	client := s.realtime.addSocket(workspace, clientID, cancel)
+	s.realtime.mu.Lock()
+	client.checkDocument = func(collaborationID string) (string, bool, error) {
+		return s.socketDocumentRole(r, workspace, collaborationID)
+	}
+	s.realtime.mu.Unlock()
 	defer func() {
 		cancel()
 		s.realtime.removeSocket(client)
@@ -468,25 +500,38 @@ func (s *server) documentSocketCanEdit(r *http.Request, client *realtimeSocketCl
 	if access == nil || fresh {
 		return access == nil || canEdit, false, nil
 	}
-	var data domain.Bootstrap
-	if s.authDisabled {
-		var ok bool
-		if data, ok = s.store.WorkspaceMetadata(client.workspace); !ok {
-			return false, false, store.ErrAuthForbidden
-		}
-	} else {
-		var err error
-		if data, err = s.store.PagedWorkspaceMetadata(r.Context(), client.workspace, authUser(r).ID); err != nil {
-			return false, false, err
-		}
-		filterBootstrapForAPIKey(&data, r)
+	role, conflict, err := s.socketDocumentRole(r, client.workspace, collaborationID)
+	if err != nil && !errors.Is(err, errNotFound) {
+		return false, false, err
 	}
-	document, conflict, err := collaborationDocument(data, collaborationID)
-	allowed := err == nil && !conflict && canEditDocument(documentRole(s, data, document))
+	allowed := err == nil && !conflict && canEditDocument(role)
 	s.realtime.mu.Lock()
 	access.canEdit, access.checkedAt = allowed, time.Now()
 	s.realtime.mu.Unlock()
 	return allowed, conflict || errors.Is(err, errNotFound), nil
+}
+
+// socketDocumentRole is the socket user's role on the standalone document a
+// collaboration id names (errNotFound when it is gone).
+func (s *server) socketDocumentRole(r *http.Request, workspace, collaborationID string) (string, bool, error) {
+	var data domain.Bootstrap
+	if s.authDisabled {
+		var ok bool
+		if data, ok = s.store.WorkspaceMetadata(workspace); !ok {
+			return "", false, store.ErrAuthForbidden
+		}
+	} else {
+		var err error
+		if data, err = s.store.PagedWorkspaceMetadata(r.Context(), workspace, authUser(r).ID); err != nil {
+			return "", false, err
+		}
+		filterBootstrapForAPIKey(&data, r)
+	}
+	document, conflict, err := collaborationDocument(data, collaborationID)
+	if err != nil {
+		return "", false, err
+	}
+	return documentRole(s, data, document), conflict, nil
 }
 
 func (s *server) publishCollaborationEvent(workspace, eventType string, payload collaborationEventPayload) {

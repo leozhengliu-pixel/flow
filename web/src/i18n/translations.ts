@@ -311,6 +311,7 @@ export const zhCN: Record<string, string> = {
   "Local backup is unavailable. Keep this page open or download your changes.": "本地备份不可用，请保留此页面或下载你的修改。",
   "The description changed in another session. Your local changes are preserved. Download them before reloading the latest version.": "其他会话已修改正文。你的本地修改已保留，请先下载，再重新加载最新版本。",
   "Description could not be saved. Your local changes are preserved. Retry when connected.": "正文保存失败，你的本地修改已保留。请在连接恢复后重试。",
+  "This change is too large to save. Download your local changes, then reload the page to keep editing.": "这次修改过大，无法保存。请下载你的本地修改，然后重新加载页面继续编辑。",
   "The latest description could not be loaded. Keep this page open or download your changes.": "无法加载最新正文，请保留此页面或下载你的修改。",
   "Download local changes": "下载本地修改",
   "Reload latest version": "重新加载最新版本",
