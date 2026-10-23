@@ -281,7 +281,7 @@
 .team-links .nav-item { gap: 6px; padding-left: 6px; }
 .team-links .nav-icon,
 .team-links .nav-icon svg { width: 14px; height: 14px; flex-basis: 14px; }
-.team-cycle-links{position:relative;display:grid;gap:1px;margin-left:-19px;padding-left:19px}.team-cycle-links>.team-sub-link{width:calc(100% - 20px);margin-left:20px;padding:0}.team-cycle-links>i{position:absolute;left:31.5px;top:1px;width:1px;height:calc(100% - 2px);border-radius:.5px;background:lch(13.395% 1.48 272);pointer-events:none}
+.team-cycle-links{position:relative;display:grid;gap:1px;margin-left:-19px;padding-left:19px}.team-cycle-links>.team-sub-link,.team-cycle-links>.sidebar-item-menu-trigger>.team-sub-link{width:calc(100% - 20px);margin-left:20px;padding:0}.team-cycle-links>i{position:absolute;left:31.5px;top:1px;width:1px;height:calc(100% - 2px);border-radius:.5px;background:lch(13.395% 1.48 272);pointer-events:none}
 
 .try-item { position: relative; height: 30px; }
 .try-item > a,
