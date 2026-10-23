@@ -106,6 +106,35 @@ describe('useWorkspaceRealtime', () => {
     }
   })
 
+  it('resumes a dropped stream from the instance-tagged id and hands the server resync to the workspace sync', async () => {
+    const onRemoteSync = vi.fn(async () => undefined)
+    const { unmount } = renderHook(() => useWorkspaceRealtime({ workspaceKey: 'acme', viewerId: 'u1', route: '/acme', onRemoteSync }))
+    const first = FakeEventSource.all[0]
+    act(() => {
+      first.onopen?.()
+      // With several API instances the server tags stream ids with its instance.
+      first.emit('connected_1', { type: 'connected', payload: { presence: [], cursor: 41 } })
+      first.emit('evt_41~3f2a9c01d4e5', { type: 'issue.updated', seq: 41, aggregateId: 'i1', clientId: 'other' })
+    })
+    await act(async () => { await vi.advanceTimersByTimeAsync(100) })
+    expect(onRemoteSync).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'issue.updated', aggregateId: 'i1' }))
+    // The connection drops; more than the server's replay window changes meanwhile.
+    act(() => { first.onerror?.() })
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000) })
+    expect(FakeEventSource.all).toHaveLength(2)
+    const second = FakeEventSource.all[1]
+    expect(new URL(second.url, 'http://flow.test').searchParams.get('since')).toBe('evt_41~3f2a9c01d4e5')
+    // What the server answers for a cursor outside its window (or another instance's).
+    act(() => {
+      second.onopen?.()
+      second.emit('connected_2', { type: 'connected', payload: { presence: [], cursor: 340 } })
+      second.emit('resync_1~3f2a9c01d4e5', { type: 'workspace.resync_required' })
+    })
+    await act(async () => { await vi.advanceTimersByTimeAsync(100) })
+    expect(onRemoteSync).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'workspace.resync_required' }))
+    unmount()
+  })
+
   it('applies a burst of self-contained issue patches in one task, but yields around events that fetch', async () => {
     const order: string[] = []
     const onRemoteSync = vi.fn(async (event: { id: string }) => { order.push(event.id) })

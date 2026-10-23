@@ -73,7 +73,9 @@ Flow keeps history it no longer serves out of the database, or bounded:
   `entity` envelope; entities the viewer may read are re-projected, and events
   that SSE turns into `workspace.resync_required` do so here too. Presence,
   agent task and session state (`agent_task.updated` and streaming; refetch
-  agent sessions after a resume, `agent_task.replied` is logged), document collaboration
+  agent sessions after a resume, `agent_task.replied` is logged), coding session
+  state (`coding_session.*`: a numeric `since` does not replay it, so refetch open
+  coding sessions after resuming that way), document collaboration
   updates, `loop_run.*`, `notification.created` and recurring-issue signals are
   not persisted and keep their own channels (no `seq`). Pruning runs hourly in
   batches of 1,000 rows and keeps events newer than the retention window and
@@ -234,6 +236,17 @@ failures never fail the request: the store falls back to SQL.
 A replica reloads the latest workspace metadata from Redis (and SQL on miss)
 inside the distributed lock before applying a mutation, preventing one process
 from overwriting another process's update.
+
+Realtime events reach every replica's `/api/realtime/events` subscribers with
+the same ids and `seq`. Each replica delivers persisted changes in `seq` order:
+a change waits up to 200 ms for an earlier one still on its way from another
+replica, and one that arrives later than that is replaced by
+`workspace.resync_required`. Each replica keeps its own replay window, so with
+Redis enabled the stream's `id:` is `<event id>~<replica tag>` and resuming it
+on another replica answers `workspace.resync_required`; sticky sessions keep
+reconnects cheap. Redis pub/sub does not keep messages: after a replica's
+subscription is restored it reloads every workspace and sends
+`workspace.resync_required` to its subscribers.
 
 Redis does not replace the primary database. Multi-instance mode requires
 PostgreSQL or MySQL; startup rejects Redis with SQLite because a local SQLite

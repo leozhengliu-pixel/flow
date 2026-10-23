@@ -132,6 +132,8 @@ class SharedRealtime {
   private reconnectTimer?: ReturnType<typeof setTimeout>
   private staleTimer?: ReturnType<typeof setInterval>
   private retry = 0
+  /** The server sends keepalive events (see STALE_STREAM_MS). */
+  private keepalives = false
   private cursor?: string
   private initialSince?: string
   private sawStream = false
@@ -262,10 +264,11 @@ class SharedRealtime {
     if (this.disposed || this.role !== 'leader') return
     const stream = this.env.createStream(this.options.url(this.cursor ?? this.initialSince))
     this.stream = stream
-    // Stale-stream watchdog, armed by the first keepalive (a server without
-    // them is never timed out).
+    // Stale-stream watchdog, armed by the first keepalive any stream of this
+    // tab received (a server without them is never timed out). A reconnected
+    // stream is watched from the start: one that dies before its first
+    // keepalive (a proxy kept it open while the API went away) is no better.
     let lastSeen = Date.now()
-    let keepalives = false
     stream.onopen = () => {
       if (this.stream !== stream) return
       lastSeen = Date.now()
@@ -291,12 +294,12 @@ class SharedRealtime {
       this.accept({ data: event.data, lastEventId: event.lastEventId }, true)
     }
     stream.addEventListener?.('keepalive', () => {
-      keepalives = true
+      this.keepalives = true
       lastSeen = Date.now()
     })
     clearInterval(this.staleTimer)
     this.staleTimer = setInterval(() => {
-      if (keepalives && Date.now() - lastSeen > STALE_STREAM_MS) fail()
+      if (this.keepalives && Date.now() - lastSeen > STALE_STREAM_MS) fail()
     }, staleCheckMs)
   }
 

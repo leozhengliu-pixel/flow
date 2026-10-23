@@ -59,7 +59,7 @@ func TestRedisSharedRateLimitPresenceAndEvents(t *testing.T) {
 	listenCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	listenErr := make(chan error, 1)
-	go func() { listenErr <- second.Listen(listenCtx, func(event EventEnvelope) { received <- event }) }()
+	go func() { listenErr <- second.Listen(listenCtx, func(event EventEnvelope) { received <- event }, nil) }()
 	time.Sleep(20 * time.Millisecond)
 	want := domain.RealtimeEvent{ID: "event_1", Type: "issue.updated", AggregateID: "issue_1", CreatedAt: now}
 	if err := first.Publish(ctx, "workspace", want); err != nil {
@@ -74,6 +74,38 @@ func TestRedisSharedRateLimitPresenceAndEvents(t *testing.T) {
 		t.Fatalf("listener stopped: %v", err)
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for Redis event")
+	}
+}
+
+// A dropped subscription is restored by the client, but what was published
+// meanwhile is gone: Listen reports the resubscription so the caller resyncs.
+func TestRedisListenReportsResubscription(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	client := openTestRedis(t, redisServer.Addr())
+	defer client.Close()
+	subscribed := make(chan bool, 4)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	go func() { _ = client.Listen(ctx, func(EventEnvelope) {}, func(again bool) { subscribed <- again }) }()
+	select {
+	case again := <-subscribed:
+		if again {
+			t.Fatal("the first subscription was reported as a resubscription")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("the subscription was not reported")
+	}
+	redisServer.Close()
+	if err := redisServer.Restart(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case again := <-subscribed:
+		if !again {
+			t.Fatal("the restored subscription was not reported as a resubscription")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the restored subscription was not reported")
 	}
 }
 

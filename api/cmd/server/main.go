@@ -57,6 +57,7 @@ type server struct {
 	realtime                       *realtimeHub
 	coordinator                    *coordination.Redis
 	coordinationStarted            atomic.Bool
+	remoteEvents                   remoteEventQueue    // peer events waiting to be applied (redis_coordination.go)
 	reviewImportLimits             *reviewImportLimits // per-run bounds of the pull/merge request import (nil: defaults; review_import.go)
 	workflowSchedulerStarted       atomic.Bool
 	deliverySchedulerStarted       atomic.Bool
@@ -262,6 +263,11 @@ func newHandler(s *server) http.Handler {
 	}
 	if s.realtime == nil {
 		s.realtime = newRealtimeHub()
+	}
+	if s.coordinator != nil {
+		s.realtime.mu.Lock()
+		s.realtime.ordered, s.realtime.node = true, realtimeNodeTag(s.coordinator.InstanceID())
+		s.realtime.mu.Unlock()
 	}
 	s.store.SetRealtimeSink(s.publishRealtime)
 	s.store.SetWebhookSink(s.dispatchDomainEvent)

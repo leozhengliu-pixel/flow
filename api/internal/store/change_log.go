@@ -20,7 +20,8 @@ import (
 // are already serialized by the coordinator's workspace lock).
 //
 // Not in the log (they keep their own channels): presence, agent task and
-// session streaming (agent_task.*), document collaboration updates, loop run
+// session streaming (agent_task.*), coding session state (coding_session.*),
+// document collaboration updates, loop run
 // progress (loop_run.*), notification.created signals and recurring-issue
 // signals. Agent session and task state (agent_task.updated) is written
 // outside the workspace transaction and is bursty, so it is not logged: after
