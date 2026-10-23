@@ -30,6 +30,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Several API servers starting at the same moment on one PostgreSQL or MySQL
+  database no longer crash with errors such as `tuple concurrently updated`
+  or a duplicate `schema_migrations` key. They take turns through a database
+  lock (a PostgreSQL advisory lock, MySQL `GET_LOCK`, or a lock file next to a
+  SQLite database), and a server that waited skips the work already done.
+  `FLOW_DATABASE_MIGRATION_LOCK_TIMEOUT` (default `10m`) bounds the wait. With
+  several replicas, scheduled workflow runs and retries run once instead of on
+  each replica, and storage maintenance runs on one replica.
 - Coding session pushes (`coding_session.*` on `/api/realtime/events`) reach
   only the people who may open the session; before, every workspace member's
   stream carried each session's issue, phase and state, including another

@@ -207,17 +207,18 @@ func Load() (Config, error) {
 		WorkspaceDefaultRegion:         strings.ToLower(value("FLOW_WORKSPACE_DEFAULT_REGION", "us")),
 		WorkspaceTutorial:              !switchedOff("FLOW_WORKSPACE_TUTORIAL"),
 		Database: store.DatabaseConfig{
-			Driver:              value("FLOW_DATABASE_DRIVER", "sqlite"),
-			URL:                 secret("FLOW_DATABASE_URL"),
-			Path:                value("FLOW_DATABASE_PATH", value("FLOW_DB_PATH", "data/flow.db")),
-			MaxOpenConns:        integer("FLOW_DATABASE_MAX_OPEN_CONNS", 0),
-			MaxIdleConns:        integer("FLOW_DATABASE_MAX_IDLE_CONNS", 0),
-			ConnMaxLifetime:     duration("FLOW_DATABASE_CONN_MAX_LIFETIME", 30*time.Minute),
-			MaxStateBytes:       integer("FLOW_WORKSPACE_STATE_MAX_BYTES", 64<<20),
-			MaxTransactionBytes: integer("FLOW_DATABASE_MAX_TRANSACTION_BYTES", 32<<20),
-			AgentOffloadBytes:   integer("FLOW_AGENT_TRANSCRIPT_OFFLOAD_BYTES", 8<<10),
-			ContentCacheBytes:   integer("FLOW_CONTENT_CACHE_BYTES", 128<<20),
-			SearchIndexMaxChars: integer("FLOW_SEARCH_INDEX_MAX_CHARS", 20000),
+			Driver:               value("FLOW_DATABASE_DRIVER", "sqlite"),
+			URL:                  secret("FLOW_DATABASE_URL"),
+			Path:                 value("FLOW_DATABASE_PATH", value("FLOW_DB_PATH", "data/flow.db")),
+			MaxOpenConns:         integer("FLOW_DATABASE_MAX_OPEN_CONNS", 0),
+			MaxIdleConns:         integer("FLOW_DATABASE_MAX_IDLE_CONNS", 0),
+			ConnMaxLifetime:      duration("FLOW_DATABASE_CONN_MAX_LIFETIME", 30*time.Minute),
+			MaxStateBytes:        integer("FLOW_WORKSPACE_STATE_MAX_BYTES", 64<<20),
+			MaxTransactionBytes:  integer("FLOW_DATABASE_MAX_TRANSACTION_BYTES", 32<<20),
+			AgentOffloadBytes:    integer("FLOW_AGENT_TRANSCRIPT_OFFLOAD_BYTES", 8<<10),
+			ContentCacheBytes:    integer("FLOW_CONTENT_CACHE_BYTES", 128<<20),
+			SearchIndexMaxChars:  integer("FLOW_SEARCH_INDEX_MAX_CHARS", 20000),
+			MigrationLockTimeout: duration("FLOW_DATABASE_MIGRATION_LOCK_TIMEOUT", store.DefaultStartupLockTimeout),
 		},
 		Retention: RetentionConfig{
 			DomainEvents:     time.Duration(integer("FLOW_DOMAIN_EVENT_RETENTION_DAYS", 90)) * 24 * time.Hour,
@@ -346,6 +347,9 @@ func (c Config) Validate() error {
 	}
 	if c.Database.ContentCacheBytes < 0 {
 		return fmt.Errorf("FLOW_CONTENT_CACHE_BYTES must not be negative")
+	}
+	if c.Database.MigrationLockTimeout <= 0 {
+		return fmt.Errorf("FLOW_DATABASE_MIGRATION_LOCK_TIMEOUT must be a positive Go duration such as 10m")
 	}
 	if c.Database.SearchIndexMaxChars != 0 && c.Database.SearchIndexMaxChars < 1000 {
 		return fmt.Errorf("FLOW_SEARCH_INDEX_MAX_CHARS must be 0 (no limit) or at least 1000")

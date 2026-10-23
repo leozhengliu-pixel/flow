@@ -56,8 +56,20 @@ func (s *server) runStorageMaintenance(ctx context.Context, eventRetention time.
 		case <-timer.C:
 		}
 		now := time.Now().UTC()
-		s.maintainStorage(ctx, now, eventRetention, now.Sub(lastSweep) >= offloadSweepInterval)
-		if now.Sub(lastSweep) >= offloadSweepInterval {
+		sweep := now.Sub(lastSweep) >= offloadSweepInterval
+		// With Redis coordination one replica runs the pass; the others
+		// would only repeat the same deletes in parallel.
+		ran := true
+		run := func() error { s.maintainStorage(ctx, now, eventRetention, sweep); return nil }
+		if s.coordinator == nil {
+			_ = run()
+		} else if elected, err := s.coordinator.WithLeaderLock(ctx, "storage-maintenance", run); err != nil || !elected {
+			ran = elected
+			if err != nil && ctx.Err() == nil {
+				log.Printf("Storage maintenance: %v", err)
+			}
+		}
+		if ran && sweep {
 			lastSweep = now
 		}
 		timer.Reset(storageMaintenanceInterval)
