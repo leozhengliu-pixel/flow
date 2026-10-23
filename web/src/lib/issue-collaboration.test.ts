@@ -115,6 +115,34 @@ describe('issue collaboration provider', () => {
     document.destroy()
   })
 
+  it('stops syncing for good when the server removes the viewer from the document', async () => {
+    const { IssueCollaborationProvider } = await import('./issue-collaboration')
+    const document = new Doc()
+    const provider = new IssueCollaborationProvider({ document, workspaceKey: 'workspace', issueId: 'issue-1', documentId: 'document-1', viewer, seededWithoutServerState: false })
+    const statuses: string[] = []
+    provider.on('status', event => statuses.push(event.status))
+    provider.start()
+    const socket = MockWebSocket.instances[0]
+    socket.open()
+    socket.message(JSON.stringify({ type: 'document.sync', documentId: 'document-1', updates: [] }))
+    // A notice for another document changes nothing.
+    socket.message(JSON.stringify({ type: 'document.revoked', documentId: 'document-2' }))
+    expect(provider.isRevoked()).toBe(false)
+    socket.message(JSON.stringify({ type: 'document.revoked', documentId: 'document-1', issueId: 'issue-1' }))
+    expect(statuses.at(-1)).toBe('revoked')
+    expect(provider.isRevoked()).toBe(true)
+    expect(provider.isSynced()).toBe(false)
+    expect(socket.readyState).toBe(MockWebSocket.CLOSED)
+    // Local edits are kept but never sent, and nothing reconnects.
+    document.getText('content').insert(0, 'Unsent edit')
+    vi.advanceTimersByTime(30_000)
+    provider.start()
+    expect(MockWebSocket.instances).toHaveLength(1)
+    expect(document.getText('content').toString()).toBe('Unsent edit')
+    provider.destroy()
+    document.destroy()
+  })
+
   it('keeps an edit too large for the server local instead of reconnecting forever, and syncs once it fits', async () => {
     const { IssueCollaborationProvider, MAX_COLLABORATION_FRAME_BYTES } = await import('./issue-collaboration')
     const document = new Doc()

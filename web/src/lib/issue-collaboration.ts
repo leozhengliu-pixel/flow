@@ -10,8 +10,11 @@ const awarenessFrame = 2
 /** The server closes a socket that sends a larger frame (maxCollaborationFrameSize). */
 export const MAX_COLLABORATION_FRAME_BYTES = 2 << 20
 
-/** `oversized`: a local edit is too large to sync; it stays local until it is undone or made smaller. */
-type Status = 'connecting' | 'connected' | 'disconnected' | 'conflict' | 'oversized'
+/**
+ * `oversized`: a local edit is too large to sync; it stays local until it is undone or made smaller.
+ * `revoked`: the viewer lost access to the document (or the issue); the provider stops for good.
+ */
+type Status = 'connecting' | 'connected' | 'disconnected' | 'conflict' | 'oversized' | 'revoked'
 type Listener = (event: { status: Status }) => void
 
 interface SyncMessage {
@@ -48,6 +51,7 @@ export class IssueCollaborationProvider {
   private started = false
   private synced = false
   private conflicted = false
+  private revoked = false
   // A hidden tab drops its socket after a grace period and reconnects when it
   // is shown again, so background tabs do not hold connections open.
   private suspended = false
@@ -78,7 +82,7 @@ export class IssueCollaborationProvider {
   }
 
   start() {
-    if (this.destroyed || this.started || this.conflicted) return
+    if (this.destroyed || this.started || this.conflicted || this.revoked) return
     this.started = true
     if (!this.awareness.getLocalState()) this.awareness.setLocalStateField('user', this.localUser)
     document.addEventListener('visibilitychange', this.onVisibilityChange)
@@ -142,7 +146,12 @@ export class IssueCollaborationProvider {
   }
 
   isSynced() {
-    return this.synced && !this.conflicted && !this.oversized
+    return this.synced && !this.conflicted && !this.oversized && !this.revoked
+  }
+
+  /** The server removed the viewer from the document (see the `revoked` status). */
+  isRevoked() {
+    return this.revoked
   }
 
   /** A local edit is too large for the server to accept (see MAX_COLLABORATION_FRAME_BYTES). */
@@ -240,6 +249,18 @@ export class IssueCollaborationProvider {
       this.conflicted = true
       this.stop()
       this.emit('conflict')
+      return
+    }
+    if (message.type === 'document.revoked' && 'documentId' in message && message.documentId === this.documentId) {
+      // Access was removed: nothing more is sent or received. Local edits stay in the document for download; the
+      // server would refuse them, so no reconnect resends them.
+      this.revoked = true
+      this.pendingUpdates.clear()
+      this.pendingBytes = 0
+      this.deferredUpdate = false
+      this.stop()
+      removeAwarenessStates(this.awareness, [...this.awareness.getStates().keys()].filter(id => id !== this.document.clientID), this)
+      this.emit('revoked')
       return
     }
     if (message.type !== 'document.sync' || !('documentId' in message) || message.documentId !== this.documentId) return

@@ -37,6 +37,7 @@ type SQLiteStore struct {
 	// read from queueing behind a writer holding mu.
 	realtimeSink     atomic.Pointer[func(string, domain.RealtimeEvent)]
 	webhookSink      atomic.Pointer[func(string, domain.DomainEvent)]
+	accountSink      atomic.Pointer[func(string)]       // see SetAccountAccessSink
 	agentReplies     atomic.Pointer[AgentReplyListener] // see SetAgentReplyListener
 	agentRunWake     agentRunWaker                      // see AgentRunWake
 	agentRunCancel   agentRunWaker                      // see AgentRunCancelWake

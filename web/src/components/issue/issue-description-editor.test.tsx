@@ -319,4 +319,30 @@ describe('real Tiptap description collaboration', () => {
     await waitFor(() => expect(persist).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(readDescriptionRecovery(key)).toBeUndefined())
   })
+
+  it('turns read-only, stops syncing and saving, and reloads the issue when the server revokes access', async () => {
+    const persist = vi.fn().mockResolvedValue(undefined)
+    const onRevoked = vi.fn()
+    let editor: Editor | null = null
+    render(<IssueDescriptionEditor value="Shared body" editorRef={value => { editor = value }} collaboration={{ ...collab, onPersist: persist, onRevoked }}/>)
+    await waitFor(() => expect(editor).not.toBeNull())
+    await waitFor(() => expect(Socket.instances).toHaveLength(1))
+    const socket = Socket.instances[0]
+    act(() => { socket.sync() })
+    act(() => { editor!.commands.insertContent('Unsaved edit ') })
+    act(() => { socket.onmessage?.({ data: JSON.stringify({ type: 'document.revoked', documentId: 'document-1', issueId: 'issue-1' }) }) })
+
+    expect(onRevoked).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('You no longer have access to this issue.'))
+    expect(screen.getByRole('button', { name: 'Download local changes' })).toBeVisible()
+    await waitFor(() => expect(editor!.isEditable).toBe(false))
+    expect(socket.readyState).toBe(3)
+    // No save and no reconnect: the server would refuse both.
+    fireEvent.blur(screen.getByRole('textbox'))
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(persist).not.toHaveBeenCalled()
+    expect(Socket.instances).toHaveLength(1)
+    // The local edit is still there to download.
+    expect(editor!.getText()).toContain('Unsaved edit')
+  })
 })

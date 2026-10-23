@@ -595,6 +595,9 @@ func (s *SQLiteStore) writeSCIMUser(ctx context.Context, workspaceID, userID str
 	if err := s.recomputeSCIMUserRole(ctx, workspaceID, userID); err != nil {
 		return SCIMUser{}, err
 	}
+	if !input.Active {
+		s.accountAccessChanged(userID)
+	}
 	return s.SCIMUser(ctx, workspaceID, userID)
 }
 
@@ -680,7 +683,11 @@ func (s *SQLiteStore) DeprovisionSCIMUser(ctx context.Context, workspaceID, id s
 			return nil, err
 		}
 	}
-	return groups, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	s.accountAccessChanged(item.User.ID)
+	return groups, nil
 }
 
 func nullableString(value string) any {

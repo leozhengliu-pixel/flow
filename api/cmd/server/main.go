@@ -57,7 +57,11 @@ type server struct {
 	realtime                       *realtimeHub
 	coordinator                    *coordination.Redis
 	coordinationStarted            atomic.Bool
-	remoteEvents                   remoteEventQueue    // peer events waiting to be applied (redis_coordination.go)
+	remoteEvents                   remoteEventQueue  // peer events waiting to be applied (redis_coordination.go)
+	coordinationContext            context.Context   // ends the peer event subscription (nil: never; tests)
+	workspaceVersions              workspaceVersions // peer change versions this instance has applied (workspace_freshness.go)
+	socketAccess                   socketAccessQueue // pending collaboration access re-checks (collaboration_access.go)
+	socketAccessSweepStarted       atomic.Bool
 	reviewImportLimits             *reviewImportLimits // per-run bounds of the pull/merge request import (nil: defaults; review_import.go)
 	workflowSchedulerStarted       atomic.Bool
 	deliverySchedulerStarted       atomic.Bool
@@ -283,7 +287,9 @@ func newHandler(s *server) http.Handler {
 	s.store.SetRealtimeSink(s.publishRealtime)
 	s.store.SetWebhookSink(s.dispatchDomainEvent)
 	s.store.SetAgentReplyListener(s.notifyAgentReply)
+	s.store.SetAccountAccessSink(s.accountAccessChanged)
 	s.startCoordination()
+	s.startSocketAccessSweep()
 	s.startWorkflowScheduler()
 	s.startDeliveryScheduler()
 	s.startLoopRunReconciler()
