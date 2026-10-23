@@ -12,7 +12,7 @@ import { sandboxSecrets } from './proxy-env.js'
 import { prepareRepository, runSetup, SetupError, SetupLog } from './setup.js'
 
 // Snapshot mode (§10, §16 step 7): clone at the base revision, run the full
-// setup with FLOW_SNAPSHOT=1 / LINEAR_SNAPSHOT=1, then (archive strategy)
+// setup with FLOW_SNAPSHOT=1, then (archive strategy)
 // stream `tar --zstd` of /workspace and $HOME to Flow, and report the result.
 // Secrets only ever lived in the prepare script's environment, so nothing is
 // left to unset before archiving. With the volumesnapshot strategy Flow

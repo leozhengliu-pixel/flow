@@ -187,7 +187,7 @@ func (l ProviderLauncher) Launch(ctx context.Context, request LaunchRequest) err
 	env[sandbox.EnvRuntimeURL] = l.Config.RuntimeURL
 	env[sandbox.EnvTokenFile] = sandbox.TokenMountPath
 	env[sandbox.EnvSandboxID] = request.ID
-	env[sandbox.EnvFlowSandbox], env[sandbox.EnvLinearCompat] = "1", "1"
+	env[sandbox.EnvFlowSandbox] = "1"
 	labels := map[string]string{sandbox.LabelInstance: l.Config.InstanceID, sandbox.LabelSize: size}
 	if request.SnapshotID != "" {
 		labels[sandbox.LabelSnapshotID] = request.SnapshotID

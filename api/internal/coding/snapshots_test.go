@@ -171,7 +171,7 @@ func TestSnapshotReconcilerSuccess(t *testing.T) {
 		t.Fatalf("building: %+v", job)
 	}
 	spec, ok := h.provider.Spec(job.Snapshot.SandboxID)
-	if !ok || spec.Kind != sandbox.KindSnapshot || spec.Env[sandbox.EnvMode] != coding.ModeSnapshot || spec.Env[sandbox.EnvFlowSnapshot] != "1" || spec.Env[sandbox.EnvSnapshotting] != "1" || spec.SnapshotID != snapshot.ID || spec.Image != "flow-sandbox:test" || h.minted != 1 {
+	if !ok || spec.Kind != sandbox.KindSnapshot || spec.Env[sandbox.EnvMode] != coding.ModeSnapshot || spec.Env[sandbox.EnvFlowSnapshot] != "1" || spec.SnapshotID != snapshot.ID || spec.Image != "flow-sandbox:test" || h.minted != 1 {
 		t.Fatalf("sandbox spec: %+v", spec)
 	}
 	h.tick(r) // still running, nothing reported

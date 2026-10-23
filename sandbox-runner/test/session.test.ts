@@ -255,7 +255,6 @@ test('runs the first turn, commits, pushes, completes, then resumes for a follow
     assert.equal(first.options.env?.ANTHROPIC_AUTH_TOKEN, 'fcs_secret_token')
     assert.equal(first.options.env?.ANTHROPIC_BASE_URL, 'http://flow/internal/llm-proxy/anthropic')
     assert.equal(first.options.env?.FLOW_SANDBOX, '1')
-    assert.equal(first.options.env?.LINEAR_SANDBOX, '1')
     assert.equal(first.options.env?.FLOW_SNAPSHOT, undefined)
     assert.equal(first.options.stdin, 'Create hello.txt')
     // Follow-up resumes the Claude session from system/init.

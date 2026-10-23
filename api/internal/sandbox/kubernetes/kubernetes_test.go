@@ -191,7 +191,7 @@ func TestPodSatisfiesRestrictedPodSecurity(t *testing.T) {
 	if env["FLOW_TOKEN_FILE"] != sandbox.TokenMountPath || env["HOME"] != sandbox.HomePath {
 		t.Fatalf("platform env must win over environment variables: %v", env)
 	}
-	if env["NODE_ENV"] != "test" || env["FLOW_SANDBOX"] != "1" || env["LINEAR_SANDBOX"] != "1" || env["FLOW_RUNNER_MODE"] != "session" {
+	if env["NODE_ENV"] != "test" || env["FLOW_SANDBOX"] != "1" || env["FLOW_RUNNER_MODE"] != "session" {
 		t.Fatalf("runner env = %v", env)
 	}
 	if env["HTTPS_PROXY"] != spec.ProxyURL || !strings.Contains(env["NO_PROXY"], "flow.flow.svc") {

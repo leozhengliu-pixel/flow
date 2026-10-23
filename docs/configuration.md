@@ -1348,8 +1348,8 @@ variables on the sandbox container; operators don't set them on the Flow server.
 | `FLOW_TOKEN_FILE` | `/var/run/flow/token` | File holding the per-sandbox token (`fcs_…`, mounted 0440 for gid 1000), re-read on every call |
 | `FLOW_SANDBOX_ID` | from bootstrap | Sandbox id, used in logs |
 | `FLOW_RUNNER_MODE` | `session` | `session`, `snapshot`, `debug`, `warm` or `restore` (the container command argument wins) |
-| `FLOW_SANDBOX`, `LINEAR_SANDBOX` | `1` | Always set for setup scripts and the agent, so repository scripts can detect the sandbox |
-| `FLOW_SNAPSHOT`, `LINEAR_SNAPSHOT` | unset | `1` while a snapshot is being built (setup and prepare script only) |
+| `FLOW_SANDBOX` | `1` | Always set for setup scripts and the agent, so repository scripts can detect the sandbox |
+| `FLOW_SNAPSHOT` | unset | `1` while a snapshot is being built (setup and prepare script only) |
 | `FLOW_CODING_BRANCH_PREFIX` | `flow/` | Fallback push prefix when the bootstrap carries no `repo.branchPrefix` (the server setting is described under [Triggers](#triggers)) |
 | `FLOW_PIDS_LIMIT` | unset | `ulimit -u` applied to the agent process tree (the sandbox size's PID limit) |
 | `FLOW_SNAPSHOT_ID` | from bootstrap | Snapshot to unpack in `restore` mode |

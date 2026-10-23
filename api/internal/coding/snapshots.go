@@ -247,7 +247,7 @@ func (r *SnapshotReconciler) stepQueued(ctx context.Context, job SnapshotJob) (S
 		ID: job.Snapshot.SandboxID, WorkspaceKey: job.WorkspaceKey, Kind: sandbox.KindSnapshot, SnapshotID: job.Snapshot.ID,
 		EnvironmentID: environment.ID, UserID: job.Snapshot.RequestedBy, Size: environment.SandboxSize,
 		Workspace: plan.Workspace, Deadline: r.Config.Snapshot.Timeout,
-		Env: map[string]string{sandbox.EnvMode: ModeSnapshot, sandbox.EnvFlowSnapshot: "1", sandbox.EnvSnapshotting: "1"},
+		Env: map[string]string{sandbox.EnvMode: ModeSnapshot, sandbox.EnvFlowSnapshot: "1"},
 	}
 	if err := r.Launcher.Launch(ctx, request); err != nil {
 		return r.startFailure(job, err, now)
