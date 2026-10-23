@@ -465,10 +465,11 @@ test('events buffered while Flow is unreachable are delivered before turn-comple
   }
 })
 
-test('codex and opencode turns use their resume flags on follow-ups', async () => {
+test('codex, opencode and pi turns use their resume flags on follow-ups', async () => {
   for (const [name, fixture, flag] of [
     ['codex', 'codex-recorded-turn1.jsonl', 'resume'],
     ['openSource', 'opencode-recorded-turn1.jsonl', '--session'],
+    ['pi', 'pi-recorded-turn1.jsonl', '--session'],
   ] as const) {
     const boot = bootstrap({ harness: { name, model: 'm1', reasoningEffort: 'high' } })
     const t = setup({ bootstrap: boot, script: () => ({ fixture }) })

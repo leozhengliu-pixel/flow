@@ -1443,7 +1443,7 @@ type TeamAgentConnector struct {
 type CodingAgentSettings struct {
 	// CommitSigningEnabled is "Require signed commits".
 	CommitSigningEnabled bool `json:"commitSigningEnabled"`
-	// Harness is codex (default) | claudeCode | openSource; the legacy values
+	// Harness is codex (default) | claudeCode | openSource | pi; the legacy values
 	// auto and claude are read as codex and claudeCode.
 	Harness string `json:"harness,omitempty"`
 	// Model is auto (default) or a model id from the coding model catalog.

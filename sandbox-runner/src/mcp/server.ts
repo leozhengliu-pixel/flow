@@ -3,7 +3,7 @@ import type { Readable, Writable } from 'node:stream'
 import type { RuntimeClient } from '../runtime-client.js'
 
 // The runner-local MCP server "flow" (stdio, newline-delimited JSON-RPC 2.0).
-// Claude Code, Codex and OpenCode start it as `flow-runner mcp` from the
+// Claude Code, Codex, OpenCode and Pi start it as `flow-runner mcp` from the
 // configs the runner writes. Tools register through registerTool(); each
 // tool lives in its own file under src/mcp/tools/ and is wired in
 // src/mcp/tools/index.ts (tracks I and K add their tools there).

@@ -30,15 +30,17 @@ func NormalizeHarness(harness string) string {
 		return domain.CodingHarnessClaudeCode
 	case domain.CodingHarnessOpenSource:
 		return domain.CodingHarnessOpenSource
+	case domain.CodingHarnessPi:
+		return domain.CodingHarnessPi
 	default:
 		return domain.CodingHarnessCodex
 	}
 }
 
-// ValidHarness reports whether harness is one of the three harnesses (or a legacy alias).
+// ValidHarness reports whether harness is one of the four harnesses (or a legacy alias).
 func ValidHarness(harness string) bool {
 	switch harness {
-	case "", "auto", "claude", domain.CodingHarnessCodex, domain.CodingHarnessClaudeCode, domain.CodingHarnessOpenSource:
+	case "", "auto", "claude", domain.CodingHarnessCodex, domain.CodingHarnessClaudeCode, domain.CodingHarnessOpenSource, domain.CodingHarnessPi:
 		return true
 	}
 	return false
@@ -63,6 +65,8 @@ func ModelCatalog(llm config.CodingLLMConfig, harness string) []string {
 		return llm.ClaudeCodeModels
 	case domain.CodingHarnessOpenSource:
 		return llm.OpenSourceModels
+	case domain.CodingHarnessPi:
+		return llm.PiModels
 	default:
 		return llm.CodexModels
 	}
@@ -86,15 +90,17 @@ func ResolveModel(llm config.CodingLLMConfig, harness, selection string) (model 
 	return selection, true
 }
 
-// CodexContextWindow is the context window (tokens) a Codex session's
-// config.toml declares for model: FLOW_CODING_MODEL_INFO contextWindow, or
-// 0 (write nothing, Codex's default) when it is unset or the session runs
-// another harness. There are no built-in windows: Flow never guesses one.
-func CodexContextWindow(llm config.CodingLLMConfig, harness, model string) int64 {
-	if NormalizeHarness(harness) != domain.CodingHarnessCodex {
-		return 0
+// HarnessContextWindow is the context window (tokens) a Codex session's
+// config.toml or a Pi session's models.json declares for model:
+// FLOW_CODING_MODEL_INFO contextWindow, or 0 (write nothing, the harness's
+// default) when it is unset or the session runs another harness. There are
+// no built-in windows: Flow never guesses one.
+func HarnessContextWindow(llm config.CodingLLMConfig, harness, model string) int64 {
+	switch NormalizeHarness(harness) {
+	case domain.CodingHarnessCodex, domain.CodingHarnessPi:
+		return llm.ModelInfo[model].ContextWindow
 	}
-	return llm.ModelInfo[model].ContextWindow
+	return 0
 }
 
 // Model tiers Auto routes between, least to most capable.
@@ -295,7 +301,7 @@ type ModelOption struct {
 func ModelOptions(llm config.CodingLLMConfig) []ModelOption {
 	efforts := []string{EffortDefault, EffortLow, EffortMedium, EffortHigh}
 	options := []ModelOption{}
-	for _, harness := range []string{domain.CodingHarnessCodex, domain.CodingHarnessClaudeCode, domain.CodingHarnessOpenSource} {
+	for _, harness := range []string{domain.CodingHarnessCodex, domain.CodingHarnessClaudeCode, domain.CodingHarnessOpenSource, domain.CodingHarnessPi} {
 		catalog := ModelCatalog(llm, harness)
 		if len(catalog) == 0 {
 			continue

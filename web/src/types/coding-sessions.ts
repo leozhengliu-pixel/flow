@@ -27,7 +27,7 @@ export type CodingErrorCode =
   | "internal";
 
 export type CodeHostKind = "github" | "gitlab";
-export type CodingHarness = "codex" | "claudeCode" | "openSource";
+export type CodingHarness = "codex" | "claudeCode" | "openSource" | "pi";
 export type CodingSandboxSize = "small" | "medium" | "large";
 export type CodingNetworkMode = "default" | "extended" | "open" | "none";
 export type CodingDependencyManagement = "custom-only" | "custom-and-generated";

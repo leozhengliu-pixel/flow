@@ -15,12 +15,13 @@ func contextWindowLLM() config.CodingLLMConfig {
 		CodexModels:      []string{"glm-5", "gpt-5-codex"},
 		ClaudeCodeModels: []string{"glm-5"},
 		OpenSourceModels: []string{"glm-5"},
+		PiModels:         []string{"glm-5"},
 		ModelInfo:        map[string]config.ModelInfo{"glm-5": {Label: "GLM-5", ContextWindow: 200000}},
 	}
 }
 
-// Only a Codex session on a model with a configured window gets one.
-func TestCodexContextWindowPerModelAndHarness(t *testing.T) {
+// Only a Codex or Pi session on a model with a configured window gets one.
+func TestHarnessContextWindowPerModelAndHarness(t *testing.T) {
 	llm := contextWindowLLM()
 	for _, tc := range []struct {
 		harness, model string
@@ -32,18 +33,20 @@ func TestCodexContextWindowPerModelAndHarness(t *testing.T) {
 		{domain.CodingHarnessCodex, "unknown", 0},
 		{domain.CodingHarnessClaudeCode, "glm-5", 0},
 		{domain.CodingHarnessOpenSource, "glm-5", 0},
+		{domain.CodingHarnessPi, "glm-5", 200000},
+		{domain.CodingHarnessPi, "unknown", 0},
 	} {
-		if got := CodexContextWindow(llm, tc.harness, tc.model); got != tc.want {
+		if got := HarnessContextWindow(llm, tc.harness, tc.model); got != tc.want {
 			t.Errorf("%s/%s: %d, want %d", tc.harness, tc.model, got, tc.want)
 		}
 	}
-	if got := CodexContextWindow(config.CodingLLMConfig{}, domain.CodingHarnessCodex, "glm-5"); got != 0 {
+	if got := HarnessContextWindow(config.CodingLLMConfig{}, domain.CodingHarnessCodex, "glm-5"); got != 0 {
 		t.Errorf("no model info: %d", got)
 	}
 }
 
 // The bootstrap carries harness.contextWindow only when it is set, so the
-// runner writes model_context_window for GLM-5 and nothing for the others.
+// runner writes the window for GLM-5 on Codex and Pi and nothing for the others.
 func TestBootstrapContextWindow(t *testing.T) {
 	service, _, _ := memberFixture(domain.CodingPhaseRunning)
 	service.workspaces = staticWorkspaces{}
@@ -58,6 +61,7 @@ func TestBootstrapContextWindow(t *testing.T) {
 		{domain.CodingHarnessCodex, "gpt-5-codex", "", 0},
 		{domain.CodingHarnessClaudeCode, "glm-5", "", 0},
 		{domain.CodingHarnessOpenSource, "glm-5", "", 0},
+		{domain.CodingHarnessPi, "glm-5", "", 200000},
 	} {
 		session := base
 		session.Harness, session.Model, session.HarnessResumeID = tc.harness, tc.model, tc.resume

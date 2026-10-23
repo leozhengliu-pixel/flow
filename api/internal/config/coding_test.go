@@ -23,6 +23,9 @@ func TestCodingDefaults(t *testing.T) {
 	if c.LLM.OpenAIWireAPI != OpenAIWireAPIResponses {
 		t.Fatalf("openai wire api: %q", c.LLM.OpenAIWireAPI)
 	}
+	if len(c.LLM.PiModels) != 0 || len(c.LLM.ModelsFor("pi")) != 0 {
+		t.Fatalf("pi models must be empty by default: %v", c.LLM.PiModels)
+	}
 	if c.GitHubApp.APIURL != "https://api.github.com" || c.GitLab.CredentialMode != "project-token" {
 		t.Fatalf("code hosts: %+v %+v", c.GitHubApp, c.GitLab)
 	}
@@ -44,9 +47,13 @@ func TestCodingParsing(t *testing.T) {
 	t.Setenv("FLOW_CODING_MODEL_INFO", `{"gpt-5-codex":{"label":"GPT-5 Codex","group":"frontier","description":"Fast"}}`)
 	t.Setenv("FLOW_GITHUB_APP_HOST", "github.acme.dev")
 	t.Setenv("FLOW_CODING_LLM_OPENAI_WIRE_API", " Chat ")
+	t.Setenv("FLOW_CODING_MODELS_PI", "qwen3-coder, glm-5")
 	c := loadCoding("http://localhost:5173")
 	if c.LLM.OpenAIWireAPI != OpenAIWireAPIChat {
 		t.Fatalf("openai wire api: %q", c.LLM.OpenAIWireAPI)
+	}
+	if models := c.LLM.ModelsFor("pi"); len(models) != 2 || models[0] != "qwen3-coder" || models[1] != "glm-5" {
+		t.Fatalf("pi models: %v", models)
 	}
 	if c.Kubernetes.NodeSelector["flow.dev/pool"] != "sandbox" || c.Kubernetes.NodeSelector["kubernetes.io/arch"] != "amd64" {
 		t.Fatalf("node selector: %v", c.Kubernetes.NodeSelector)

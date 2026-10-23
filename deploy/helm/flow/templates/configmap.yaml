@@ -204,6 +204,7 @@ data:
   FLOW_CODING_MODELS_CLAUDE_CODE: {{ join "," $c.llm.models.claudeCode | quote }}
   FLOW_CODING_MODELS_CODEX: {{ join "," $c.llm.models.codex | quote }}
   FLOW_CODING_MODELS_OPEN_SOURCE: {{ join "," $c.llm.models.openSource | quote }}
+  FLOW_CODING_MODELS_PI: {{ join "," $c.llm.models.pi | quote }}
   FLOW_CODING_MODEL_PRICES: {{ if $c.llm.prices }}{{ $c.llm.prices | toJson | quote }}{{ else }}""{{ end }}
   FLOW_CODING_MODEL_INFO: {{ if $c.llm.modelInfo }}{{ $c.llm.modelInfo | toJson | quote }}{{ else }}""{{ end }}
   FLOW_CODING_LLM_TIMEOUT: {{ $c.llm.timeout | quote }}

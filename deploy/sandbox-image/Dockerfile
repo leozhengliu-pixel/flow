@@ -39,6 +39,7 @@ ARG GLAB_SHA256_ARM64=70987a8bab6970d0d042d73d0f06b9d56ecb9abb88c7137c742f1c11b1
 ARG CLAUDE_CODE_VERSION=2.1.289
 ARG CODEX_VERSION=0.160.0
 ARG OPENCODE_VERSION=1.18.34
+ARG PI_VERSION=1.4.0
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -81,9 +82,10 @@ RUN case "${TARGETARCH}" in \
 RUN npm install --global --no-audit --no-fund --omit=dev \
       "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
       "@openai/codex@${CODEX_VERSION}" \
-      "opencode-ai@${OPENCODE_VERSION}" && \
+      "opencode-ai@${OPENCODE_VERSION}" \
+      "@earendil-works/pi-coding-agent@${PI_VERSION}" && \
     npm cache clean --force && \
-    claude --version && codex --version && opencode --version
+    claude --version && codex --version && opencode --version && pi --version
 
 # git defaults for every user; credentials and signing are configured per
 # repository by the runner at runtime.

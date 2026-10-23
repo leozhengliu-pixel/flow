@@ -286,6 +286,20 @@ func TestModelRouting(t *testing.T) {
 	if NormalizeHarness("auto") != domain.CodingHarnessCodex || NormalizeHarness("claude") != domain.CodingHarnessClaudeCode {
 		t.Fatal("legacy harness values")
 	}
+	if NormalizeHarness("pi") != domain.CodingHarnessPi || !ValidHarness("pi") || ValidHarness("pi-agent") {
+		t.Fatal("pi harness")
+	}
+	if _, ok := ResolveModel(llm, "pi", "auto"); ok {
+		t.Fatal("pi has no models by default")
+	}
+	piLLM := llm
+	piLLM.PiModels = []string{"qwen3-coder"}
+	if model, ok := ResolveModel(piLLM, "pi", "auto"); !ok || model != "qwen3-coder" {
+		t.Fatalf("pi auto: %s", model)
+	}
+	if _, ok := ResolveModel(piLLM, "pi", "gpt-5-codex"); ok {
+		t.Fatal("pi must not take another harness's model")
+	}
 	options := ModelOptions(llm)
 	if len(options) != 6 || !options[0].Auto || options[0].Harness != domain.CodingHarnessCodex {
 		t.Fatalf("options: %+v", options)

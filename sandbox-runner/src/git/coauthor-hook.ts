@@ -4,7 +4,7 @@ import { shellQuote } from '../cli-env.js'
 import type { Git } from './git.js'
 
 // Co-author trailer for commits the agent makes itself (Claude Code, Codex,
-// opencode running `git commit` during a turn). A Flow-owned hooks directory
+// opencode or Pi running `git commit` during a turn). A Flow-owned hooks directory
 // inside the git dir is set as core.hooksPath in the session repo's LOCAL
 // config. Its prepare-commit-msg appends the trailer; every hook git supports
 // has a script there that runs the repository's original hook (husky,

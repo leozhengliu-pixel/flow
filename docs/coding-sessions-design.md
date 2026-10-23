@@ -43,7 +43,7 @@ Contents
 | Reference | Flow |
 |---|---|
 | Settings › AI & agents › Coding sessions (`/settings/ai/coding-sessions`) with Enable, Agent, Model, Require signed commits, Pin sandbox region, Environments (inline), Trusted external sources, Repository access for Loops | The same page (`settings/coding-sessions`). The separate `coding-environments` page is removed and redirects to it. The enable toggle stays the `coding-sessions` feature flag; policy fields extend `WorkspaceSettings.CodingAgentSettings` |
-| Agent: Codex (default) / Claude Code / Open source | `harness`: `codex` (default) / `claudeCode` / `openSource`. Legacy values `auto`→`codex` and `claude`→`claudeCode` are normalized on read |
+| Agent: Codex (default) / Claude Code / Open source | `harness`: `codex` (default) / `claudeCode` / `openSource`, plus `pi` (Pi, an addition). Legacy values `auto`→`codex` and `claude`→`claudeCode` are normalized on read |
 | Model: Auto + specific | `model`: `auto` (default) or a catalog id (`FLOW_CODING_MODELS_*`). The first entry of each catalog is Auto's pick, and Auto falls back to the next entry |
 | CodingEnvironment fields | `domain.CodingEnvironment` (§6). It adds `codeHost` (github or gitlab) and `hostName` (GHE or self-managed GitLab) |
 | Secrets: encrypted, masked, immutable, setup-only | `coding_environment_secrets` (AES-GCM). There is no read API and no update. Secrets are served once per sandbox, during setup only |
@@ -123,7 +123,7 @@ Data flow of one session (issue → draft PR):
 | HTTP | `api/cmd/server/coding_*.go`, `github_app.go` | Route files per track. `coding_runtime.go` is the single wiring point |
 | Store | `api/internal/store/coding_schema.go` (+ `coding_*.go` per track) | Tables and indexes for all three databases, and store methods |
 | Runner | `sandbox-runner/` (new, TypeScript, Node 22) | In-sandbox supervisor: harness adapters, event mapping, git, credential and sign shims, browser MCP tools |
-| Sandbox image | `deploy/sandbox-image/` | Debian-based image: mise, git, gh, glab, claude, codex, opencode, Playwright Chromium, common toolchains |
+| Sandbox image | `deploy/sandbox-image/` | Debian-based image: mise, git, gh, glab, claude, codex, opencode, pi, Playwright Chromium, common toolchains |
 | Egress proxy | `deploy/egress-proxy/` | Squid config, allowlist, ACL helper (`flow-api egress-acl` subcommand) |
 | Helm chart | `deploy/helm/flow/` | Flow, sandbox namespace, RBAC, NetworkPolicies, ResourceQuota/LimitRange, egress proxy, optional RuntimeClass |
 | Web | `web/src/components/settings/coding-sessions/`, `web/src/components/coding-sessions/`, `web/src/types/coding-sessions.ts`, `web/src/lib/coding-sessions-api.ts` | Settings and environments, session UI, triggers |
@@ -360,7 +360,7 @@ These paths are exempt from browser auth in `publicAuthPath` (done in the skelet
 | `POST /internal/coding-runtime/egress-check` | H | Squid ACL helper. Authenticated with `FLOW_CODING_EGRESS_ACL_SECRET`, not a sandbox token |
 | `POST /internal/llm-proxy/anthropic/v1/messages[/count_tokens]` | E | Claude Code |
 | `POST /internal/llm-proxy/openai/v1/responses`, `…/chat/completions`, `GET …/models` | E | Codex |
-| `POST /internal/llm-proxy/opensource/v1/chat/completions`, `…/responses`, `GET …/models` | E | Open source |
+| `POST /internal/llm-proxy/opensource/v1/chat/completions`, `…/responses`, `GET …/models` | E | Open source, Pi |
 
 The LLM proxy accepts the sandbox token as `Authorization: Bearer` (OpenAI, and Claude Code with
 `ANTHROPIC_AUTH_TOKEN`) or as `x-api-key`. A token is valid only while its sandbox is running and the session is not
@@ -461,8 +461,9 @@ it is enabled.
 | `FLOW_CODING_MODELS_CLAUDE_CODE` | `claude-sonnet-4-5,claude-opus-4-1` | The first entry is Auto |
 | `FLOW_CODING_MODELS_CODEX` | `gpt-5-codex,gpt-5` | |
 | `FLOW_CODING_MODELS_OPEN_SOURCE` | empty | |
+| `FLOW_CODING_MODELS_PI` | empty | Pi; served by the open-source upstream |
 | `FLOW_CODING_MODEL_PRICES` | empty | JSON `{"model":{"input":3,"output":15,"cacheRead":0.3,"cacheWrite":3.75}}`, USD per million tokens |
-| `FLOW_CODING_MODEL_INFO` | empty | JSON per-model metadata `{"model":{"label","group","description","tier","contextWindow"}}`; `contextWindow` (integer 1024..10000000, null or left out = unset) becomes Codex `model_context_window` (configuration.md, Codex context window) |
+| `FLOW_CODING_MODEL_INFO` | empty | JSON per-model metadata `{"model":{"label","group","description","tier","contextWindow"}}`; `contextWindow` (integer 1024..10000000, null or left out = unset) becomes Codex `model_context_window` and the Pi model's `contextWindow` (configuration.md, Codex context window) |
 | `FLOW_CODING_LLM_TIMEOUT` | `10m` | Per proxied request |
 | `FLOW_CODING_RUNTIME_PRICES` | `small=0.10,medium=0.20,large=0.40` | USD per sandbox-hour |
 | `FLOW_CODING_GITLAB_CREDENTIAL_MODE` | `project-token` | `project-token` \| `oauth` \| `connection` (§14) |
@@ -719,6 +720,7 @@ No model API key enters a sandbox. The harness talks to Flow:
 | Claude Code | `ANTHROPIC_BASE_URL={runtime}/internal/llm-proxy/anthropic`, `ANTHROPIC_AUTH_TOKEN=<sandbox token>`, `ANTHROPIC_MODEL=<model>`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `DISABLE_AUTOUPDATER=1`, `DISABLE_TELEMETRY=1` |
 | Codex | `~/.codex/config.toml`: `model_provider="flow"`, `[model_providers.flow] base_url="{runtime}/internal/llm-proxy/openai/v1" env_key="FLOW_LLM_TOKEN" wire_api="responses"`, `model=<model>`, `model_reasoning_effort=<effort>`, and `model_context_window=<n>` only when bootstrap `harness.contextWindow` is set (`FLOW_CODING_MODEL_INFO` `contextWindow`, Codex sessions only; rewritten before every turn, resumed turns included; `model_auto_compact_token_limit` is never written) |
 | Open source (OpenCode) | `opencode.json` provider `flow` (OpenAI-compatible) pointing at `{runtime}/internal/llm-proxy/opensource/v1` with the sandbox token |
+| Pi | `PI_CODING_AGENT_DIR=~/.pi/agent`: `models.json` provider `flow` (`api: openai-completions`, `baseUrl` `{runtime}/internal/llm-proxy/opensource/v1`, `apiKey: "$FLOW_LLM_TOKEN"`, compat `supportsStore:false`, `supportsDeveloperRole:false`, `maxTokensField:"max_tokens"`; the model gets `reasoning:true` only with a reasoning effort and `contextWindow` from bootstrap `harness.contextWindow`), `mcp.json`, `settings.json` (`defaultProjectTrust:"never"`) and `APPEND_SYSTEM.md` (guidance). `PI_OFFLINE=1`, `PI_SKIP_VERSION_CHECK=1`, `PI_TELEMETRY=0` |
 
 The proxy (track E, `internal/llmproxy`) does the following:
 
@@ -747,7 +749,8 @@ X"). A pinned model fails with `modelUnavailable` instead, and the UI offers "Re
 
 **Reasoning effort** (workspace setting, environment override): Codex `model_reasoning_effort` low, medium or high.
 Claude Code `MAX_THINKING_TOKENS` 4k, 16k or 32k. Open source sends `reasoning_effort` when the model catalog marks it
-as supported.
+as supported. Pi gets `--thinking low|medium|high` (sent upstream as `reasoning_effort`); with no effort the model is
+declared without reasoning and Pi sends no reasoning field.
 
 ## 13. GitHub App
 
@@ -953,6 +956,7 @@ pinned in the image; track C verifies them in its tests):
 | Claude Code | `claude -p "<prompt>" --output-format stream-json --verbose --model <m> --permission-mode bypassPermissions --append-system-prompt "<guidance>" --mcp-config ~/.flow/mcp.json` | add `--resume <session_id>` (from the `system/init` event) |
 | Codex | `codex exec --json --model <m> -c model_reasoning_effort=<e> --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -C /workspace/repo "<prompt>"` (guidance in `AGENTS.override.md` written to `~/.codex`) | `codex exec resume <thread_id> --json "<prompt>"` |
 | Open source | `opencode run --format json -m flow/<m> "<prompt>"` | `opencode run --session <id> …` |
+| Pi | `pi --mode json --no-approve --provider flow --model <m> [--thinking <e>]` (prompt on stdin; guidance in `~/.pi/agent/APPEND_SYSTEM.md`) | add `--session <id>` (from the `session` header record) |
 
 Both "bypass" flags are safe here because the Pod is the sandbox. Claude Code refuses `bypassPermissions` as root,
 and the runner is uid 1000.
@@ -986,6 +990,10 @@ through the existing agent activity store, so realtime and `issue-agent-tasks.ts
 | Codex `turn.completed` | `usage` | none |
 | Codex `turn.failed` / `error` | `error` | error |
 | OpenCode `text` / `tool_use` / `step_finish` / `error` | thought or response / action / usage / error | as above |
+| Pi `session` | none (stores the session `id`) | none |
+| Pi `message_end` assistant: `thinking` / `text` (not final) / last `text` | `thought` (ephemeral) / `thought` / `response`; its `usage` (input + cacheRead + cacheWrite, output) summed into `usage` | as above |
+| Pi `tool_execution_end` bash, edit/write, read/ls, grep/find, `mcp__flow__ask_user`, `mcp__flow__*`, `mcp__<server>__<tool>`, `tool_search` | `action` "Ran command" (exit code) / "Edited" plus `diff` / "Read" / "Searched" / `elicitation` / Flow tool action / `server.tool` / "Searched tools" (ephemeral) | as above |
+| Pi `message_end` with `stopReason:"error"` left after the automatic retries (`auto_retry_end success:false`) | `error` | error |
 | Runner phases (clone, setup, push, PR) | `status` / `action` ("Cloned repo", "Installed tools", "Pushed branch") | action |
 | Flow follow-up turn | none (Flow writes a `prompt` activity when the inbox item is created) | prompt |
 
@@ -995,7 +1003,13 @@ auth elicitation.
 
 **Runner-local MCP server** `flow` (stdio, registered in the Claude and Codex configs): `ask_user` (C),
 `attach_screenshot` and `browser_*` (I), `propose_environment` (K). Each tool lives in its own file under
-`sandbox-runner/src/mcp/tools/`.
+`sandbox-runner/src/mcp/tools/`. Pi reads MCP servers only from `~/.pi/agent/mcp.json` (`--no-approve`: a
+repository's `.pi/mcp.json` never adds or changes servers). The `flow` server has `exposure: "direct"`, so its tools
+are declared like built-in tools (Pi's default `codemode` exposure would hide them behind scripts). Workspace servers
+behind the MCP gateway use `exposure: "deferred"` with their title as description and
+`Authorization: Bearer ${FLOW_LLM_TOKEN}`: they are listed in the system prompt and the model loads their tools with
+`tool_search`, which keeps large connector tool lists out of every request and does not hold the first prompt for
+gateway connections.
 
 **Base image** (`deploy/sandbox-image/`, track C; the browser layer is track I's):
 
@@ -1003,7 +1017,7 @@ auth elicitation.
 - Packages: git, git-lfs, openssh-client (ssh-keygen for verification), ca-certificates, curl, jq, ripgrep, fd, make,
   build-essential, python3, zstd, tar, unzip, procps, tini.
 - Toolchains: mise (system-wide); default tools node 22, python 3.12, go and java via mise, with pre-warmed caches.
-- Agent CLIs: claude, codex and opencode at pinned versions. gh and glab from their release packages. Node 22 for the
+- Agent CLIs: claude, codex, opencode and pi at pinned versions. gh and glab from their release packages. Node 22 for the
   runner.
 - Browser: Playwright plus Chromium with fonts, preinstalled to `/opt/ms-playwright` (`install-browser.sh`, track I).
 - `ENTRYPOINT ["tini","--","flow-runner"]`. No credentials or config are baked in. It is built and pushed by
@@ -1265,7 +1279,7 @@ Rules for all tracks:
 - **Owns:** `sandbox-runner/**` (new TS package with its own `package.json`, tests run in CI as an additive job):
   `src/protocol.ts` (mirror of `coding/protocol.go`), `src/runtime-client.ts`, `src/session.ts`,
   `src/snapshot.ts`, `src/restore.ts`, `src/warm.ts`, `src/git/*` (clone, commit, push, credential helper, sign
-  shim), `src/harness/{claude,codex,opencode}.ts`, `src/mapping/*` (event → RunnerEvent, with fixture-driven
+  shim), `src/harness/{claude,codex,opencode,pi}.ts`, `src/mapping/*` (event → RunnerEvent, with fixture-driven
   tests), `src/mcp/server.ts`, `src/mcp/tools/ask-user.ts`, `src/cli-env.ts` (gh/glab).
   `deploy/sandbox-image/**` except `install-browser.sh`.
 - **Additive:** `.github/workflows/ci.yml` (runner job), `.github/workflows/container.yml` (image build).
@@ -1395,7 +1409,7 @@ Rules for all tracks:
    tries to reach 169.254.169.254 and an outside host directly; it should fail.
 3. **GitLab project access tokens** need Maintainer rights and, on gitlab.com, Premium. The `oauth` and `connection`
    fallbacks are weaker, documented and visible in the UI.
-4. **CLI flag drift** (claude, codex, opencode). The versions are pinned in the image and the adapters are tested
+4. **CLI flag drift** (claude, codex, opencode, pi). The versions are pinned in the image and the adapters are tested
    against recorded JSONL fixtures. Upgrades go through a fixture refresh.
 5. **Open-source harness = OpenCode.** This is an interpretation of the reference "Open source" option (an open-source
    agent plus any OpenAI-compatible model). The harness interface makes swapping it a contained change in C.

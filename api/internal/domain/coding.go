@@ -113,11 +113,12 @@ const (
 	CodeHostGitLab = "gitlab"
 )
 
-// Harnesses (reference: Codex default, Claude Code, Open source).
+// Harnesses (reference: Codex default, Claude Code, Open source; plus Pi).
 const (
 	CodingHarnessCodex      = "codex"
 	CodingHarnessClaudeCode = "claudeCode"
 	CodingHarnessOpenSource = "openSource"
+	CodingHarnessPi         = "pi"
 )
 
 // CodingModelAuto lets Flow route the model per harness (FLOW_CODING_MODELS_*).

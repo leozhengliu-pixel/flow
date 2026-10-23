@@ -93,15 +93,17 @@ type BootstrapRepo struct {
 
 // BootstrapHarness selects the agent CLI.
 type BootstrapHarness struct {
-	Name            string `json:"name"` // codex | claudeCode | openSource
+	Name            string `json:"name"` // codex | claudeCode | openSource | pi
 	Model           string `json:"model"`
 	ReasoningEffort string `json:"reasoningEffort,omitempty"`
 	// ResumeID is the harness's own session/thread id from the previous turn.
 	ResumeID string `json:"resumeId,omitempty"`
 	// ContextWindow is the model's context window in tokens, set only for
-	// Codex sessions whose model has FLOW_CODING_MODEL_INFO contextWindow.
-	// The runner writes it as model_context_window in ~/.codex/config.toml;
-	// left out (0), no line is written. Additive: older runners ignore it.
+	// Codex and Pi sessions whose model has FLOW_CODING_MODEL_INFO
+	// contextWindow. The runner writes it as model_context_window in
+	// ~/.codex/config.toml or as the model's contextWindow in Pi's
+	// models.json; left out (0), nothing is written. Additive: older runners
+	// ignore it.
 	ContextWindow int64 `json:"contextWindow,omitempty"`
 }
 

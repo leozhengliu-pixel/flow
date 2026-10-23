@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createInterface } from 'node:readline'
+import { StringDecoder } from 'node:string_decoder'
 
 // Child process helpers. Harnesses run in their own process group so a stop
 // (SIGINT, then SIGKILL after the grace period) reaches every descendant.
@@ -60,8 +61,11 @@ export function spawnProcess(command: string, args: string[], options: SpawnOpti
     })
   })
   if (child.stdout) {
-    const lines = createInterface({ input: child.stdout, crlfDelay: Infinity })
-    lines.on('line', (line) => options.onStdoutLine?.(line))
+    // JSONL from the harnesses: split on LF only. readline also breaks on
+    // U+2028/U+2029, which JSON allows unescaped inside strings.
+    const onLine = options.onStdoutLine
+    if (onLine) splitLines(child.stdout, onLine)
+    else child.stdout.resume()
   }
   if (child.stderr) {
     const lines = createInterface({ input: child.stderr, crlfDelay: Infinity })
@@ -107,6 +111,39 @@ export function spawnProcess(command: string, args: string[], options: SpawnOpti
   }
 
   return { pid: child.pid, exited, interrupt, kill: () => signalGroup('SIGKILL') }
+}
+
+/**
+ * Calls onLine for every LF-terminated line of a stream (a trailing CR is
+ * dropped) and for an unterminated last line at the end. Unlike readline,
+ * U+2028 and U+2029 stay inside the line.
+ */
+export function splitLines(stream: NodeJS.ReadableStream, onLine: (line: string) => void): void {
+  const decoder = new StringDecoder('utf8')
+  let buffer = ''
+  const emit = (line: string) => onLine(line.endsWith('\r') ? line.slice(0, -1) : line)
+  stream.on('data', (chunk: Buffer | string) => {
+    const text = typeof chunk === 'string' ? chunk : decoder.write(chunk)
+    // Only the new text can hold a newline (long records arrive in many chunks).
+    let index = text.indexOf('\n')
+    if (index === -1) {
+      buffer += text
+      return
+    }
+    let start = 0
+    while (index !== -1) {
+      emit(buffer + text.slice(start, index))
+      buffer = ''
+      start = index + 1
+      index = text.indexOf('\n', start)
+    }
+    buffer = text.slice(start)
+  })
+  stream.on('end', () => {
+    buffer += decoder.end()
+    if (buffer) emit(buffer)
+    buffer = ''
+  })
 }
 
 export interface RunResult {

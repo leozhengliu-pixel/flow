@@ -2,12 +2,14 @@ import type { HarnessName } from '../protocol.js'
 import { claudeHarness } from './claude.js'
 import { codexHarness } from './codex.js'
 import { opencodeHarness } from './opencode.js'
+import { piHarness } from './pi.js'
 import type { HarnessAdapter } from './types.js'
 
 const adapters: Record<HarnessName, HarnessAdapter> = {
   claudeCode: claudeHarness,
   codex: codexHarness,
   openSource: opencodeHarness,
+  pi: piHarness,
 }
 
 export function harnessFor(name: string): HarnessAdapter {

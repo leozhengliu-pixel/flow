@@ -11,13 +11,14 @@ func TestModelOptionsGroupsAndDescriptions(t *testing.T) {
 		CodexModels:      []string{"gpt-5-codex", "gpt-5", "acme-small", "acme-legacy", "gpt-4.1"},
 		ClaudeCodeModels: []string{"claude-sonnet-4-5", "claude-opus-4-1"},
 		OpenSourceModels: []string{"glm-4.6"},
+		PiModels:         []string{"qwen3-coder"},
 		ModelInfo: map[string]config.ModelInfo{
 			"acme-small":  {Label: "Acme Small", Group: config.ModelGroupOther},
 			"acme-legacy": {Group: config.ModelGroupFrontier, Description: "Pinned for old repos"},
 		},
 	}
 	type row struct{ id, label, group, description string }
-	var codex, open []row
+	var codex, open, pi []row
 	for _, option := range ModelOptions(llm) {
 		r := row{option.ID, option.Label, option.Group, option.Description}
 		switch option.Harness {
@@ -25,7 +26,12 @@ func TestModelOptionsGroupsAndDescriptions(t *testing.T) {
 			codex = append(codex, r)
 		case "openSource":
 			open = append(open, r)
+		case "pi":
+			pi = append(pi, r)
 		}
+	}
+	if len(pi) != 2 || pi[0] != (row{"auto", "Auto (qwen3-coder)", ModelGroupAuto, AutoModelDescription}) || pi[1].id != "qwen3-coder" {
+		t.Fatalf("pi options: %+v", pi)
 	}
 	want := []row{
 		{"auto", "Auto (gpt-5-codex)", ModelGroupAuto, AutoModelDescription},

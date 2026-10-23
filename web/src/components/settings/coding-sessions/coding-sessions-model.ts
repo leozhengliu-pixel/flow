@@ -26,6 +26,7 @@ export const HARNESS_OPTIONS: { value: CodingHarness; label: string }[] = [
   { value: "codex", label: "Codex" },
   { value: "claudeCode", label: "Claude Code" },
   { value: "openSource", label: "Open source" },
+  { value: "pi", label: "Pi" },
 ];
 
 export const SANDBOX_SIZES: CodingSandboxSize[] = ["small", "medium", "large"];
@@ -68,6 +69,7 @@ export function trustedSourceLabel(value: string): string {
 export function normalizeHarness(value: string | undefined): CodingHarness {
   if (value === "claudeCode" || value === "claude") return "claudeCode";
   if (value === "openSource") return "openSource";
+  if (value === "pi") return "pi";
   return "codex";
 }
 

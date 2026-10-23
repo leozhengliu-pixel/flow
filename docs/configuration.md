@@ -1089,7 +1089,7 @@ OAuth applications) whose redirect URI is the one Notion gives you.
 
 ## Coding sessions
 
-Coding sessions run an agent (Claude Code, Codex or OpenCode) in a sandbox Pod
+Coding sessions run an agent (Claude Code, Codex, OpenCode or Pi) in a sandbox Pod
 or container and open a draft pull or merge request. The operator guide is
 [docs/coding-sessions.md](coding-sessions.md); the security model is in
 [docs/coding-sessions-security.md](coding-sessions-security.md) and the runbook
@@ -1359,8 +1359,9 @@ variables on the sandbox container; operators don't set them on the Flow server.
 | `FLOW_WORKSPACE_DIR`, `FLOW_REPO_DIR`, `FLOW_BIN_DIR` | `/workspace`, `/workspace/repo`, `/opt/flow/bin` | Path overrides, for tests |
 
 The runner never receives model provider keys. It points Claude Code (`ANTHROPIC_BASE_URL` plus `ANTHROPIC_AUTH_TOKEN`),
-Codex (`~/.codex/config.toml` provider `flow`, key in `FLOW_LLM_TOKEN`) and OpenCode (`OPENCODE_CONFIG` with an
-OpenAI-compatible provider) at Flow's LLM proxy, using the sandbox token. git, `gh` and `glab` get short-lived
+Codex (`~/.codex/config.toml` provider `flow`, key in `FLOW_LLM_TOKEN`), OpenCode (`OPENCODE_CONFIG` with an
+OpenAI-compatible provider) and Pi (`~/.pi/agent/models.json` provider `flow`, key in `FLOW_LLM_TOKEN`) at Flow's
+LLM proxy, using the sandbox token. git, `gh` and `glab` get short-lived
 credentials from Flow at runtime (`flow-git-credential`; `~/.flow/cli-env`, which sets `GH_TOKEN`/`GH_HOST` or
 `GITLAB_TOKEN`/`GITLAB_HOST`/`GITLAB_API_PROTOCOL`/`GLAB_CONFIG_DIR`/`NO_PROMPT=1`), and signed commits go through
 `flow-sign`, which calls Flow's `/sign`. The image pins the CLI versions as Dockerfile build arguments.
@@ -1429,11 +1430,12 @@ Sandboxes never receive model API keys. Claude Code, Codex and the open-source h
 | `FLOW_CODING_LLM_ANTHROPIC_BASE_URL` / `FLOW_CODING_LLM_ANTHROPIC_API_KEY` | `https://api.anthropic.com` / empty | Anthropic Messages upstream for Claude Code. Without a key the route answers 503. |
 | `FLOW_CODING_LLM_OPENAI_BASE_URL` / `FLOW_CODING_LLM_OPENAI_API_KEY` | `https://api.openai.com/v1` / empty | OpenAI Responses and Chat Completions upstream for Codex. The base includes `/v1`. |
 | `FLOW_CODING_LLM_OPENAI_WIRE_API` | `responses` | What the OpenAI upstream speaks: `responses`, or `chat` for providers that only offer Chat Completions (DeepSeek, vLLM, …). With `chat`, the LLM proxy translates Codex's Responses requests to Chat Completions and the answers (streamed or not, tool calls, reasoning, usage) back. Hosted tools such as web search are not available then, and `previous_response_id` is refused. |
-| `FLOW_CODING_LLM_OPENSOURCE_BASE_URL` / `FLOW_CODING_LLM_OPENSOURCE_API_KEY` | empty | OpenAI-compatible upstream for OpenCode (vLLM, Ollama, OpenRouter). The key is optional. |
+| `FLOW_CODING_LLM_OPENSOURCE_BASE_URL` / `FLOW_CODING_LLM_OPENSOURCE_API_KEY` | empty | OpenAI-compatible upstream for OpenCode and Pi (vLLM, Ollama, OpenRouter). The key is optional. |
 | `FLOW_CODING_MODELS_CLAUDE_CODE` | `claude-sonnet-4-5,claude-opus-4-1` | Claude Code model catalog. |
 | `FLOW_CODING_MODELS_CODEX` | `gpt-5-codex,gpt-5` | Codex model catalog. |
 | `FLOW_CODING_MODELS_OPEN_SOURCE` | empty | Open-source model catalog. |
-| `FLOW_CODING_MODEL_INFO` | empty | JSON display metadata for the model pickers: `{"gpt-5-codex":{"label":"GPT-5 Codex","group":"frontier","description":"Strong reasoning for multi-file changes","tier":"standard"}}`. `group` is `frontier` or `other`; `tier` (`small`, `standard` or `large`) is the tier Auto routes a task to (unknown models are `standard`); any field left out falls back to Flow's built-in labels and descriptions for well-known models, the model id, and a positional group (the first three catalog entries are Frontier, the rest Other models). Pickers list Auto, then Frontier, then Other models. `contextWindow` is the model's context window for Codex sessions (see [Codex context window](#codex-context-window)). Startup fails with a `FLOW_CODING_MODEL_INFO` error naming the model when an entry is invalid. |
+| `FLOW_CODING_MODELS_PI` | empty | Pi model catalog (Helm: `coding.llm.models.pi`). Pi uses the OpenAI-compatible upstream above. Like the open-source catalog it is empty by default, so a Pi session needs a model listed here (Auto has nothing to pick otherwise). |
+| `FLOW_CODING_MODEL_INFO` | empty | JSON display metadata for the model pickers: `{"gpt-5-codex":{"label":"GPT-5 Codex","group":"frontier","description":"Strong reasoning for multi-file changes","tier":"standard"}}`. `group` is `frontier` or `other`; `tier` (`small`, `standard` or `large`) is the tier Auto routes a task to (unknown models are `standard`); any field left out falls back to Flow's built-in labels and descriptions for well-known models, the model id, and a positional group (the first three catalog entries are Frontier, the rest Other models). Pickers list Auto, then Frontier, then Other models. `contextWindow` is the model's context window for Codex and Pi sessions (see [Codex context window](#codex-context-window)). Startup fails with a `FLOW_CODING_MODEL_INFO` error naming the model when an entry is invalid. |
 | `FLOW_CODING_MODEL_PRICES` | empty | JSON, USD per million tokens: `{"claude-sonnet-4-5":{"input":3,"output":15,"cacheRead":0.3,"cacheWrite":3.75}}`. Unpriced models are recorded at zero cost, with a warning log and the `flow_coding_llm_unpriced_total` metric. |
 | `FLOW_CODING_LLM_TIMEOUT` | `10m` | Upper bound for each proxied request, including streaming. |
 
@@ -1460,6 +1462,7 @@ FLOW_CODING_MODEL_INFO='{"glm-5":{"label":"GLM-5","contextWindow":200000}}'
 ```
 
 - **What it does.** Flow sends the value to the session's sandbox (bootstrap `harness.contextWindow`), and the runner writes it as `model_context_window = 200000` into `~/.codex/config.toml`. Only Codex sessions on that model get it: other Codex models, Claude Code, OpenCode, the built-in agent and the standalone agent worker are unaffected.
+- **Pi.** A model in `FLOW_CODING_MODELS_PI` with a `contextWindow` gets it the same way, written as the model's `contextWindow` in `~/.pi/agent/models.json`; Pi compacts the conversation from it. Without one, Pi assumes 128000 tokens.
 - **Accepted values.** A JSON integer from 1024 to 10000000 (tokens). Strings (`"200000"`), decimals (`200000.5`, `2e5`), zero, negative numbers and anything above 10000000 (so anything beyond JavaScript's safe-integer range) are rejected at startup. The runner checks again and ignores, with a warning in its log, a value that is not such an integer.
 - **Unset.** Leave `contextWindow` out or set it to `null`: no `model_context_window` line is written and Codex keeps its own default, exactly as before. There are no built-in values; Flow never guesses a window.
 - **When it takes effect.** The API reads `FLOW_CODING_MODEL_INFO` when it starts, so restart (or roll out) the API after changing it. A sandbox fetches its bootstrap once when it starts (a new session, or a session woken or restored from a snapshot), and the runner rewrites `config.toml` from it before every turn, both the first `codex exec` and each `codex exec resume` follow-up. A sandbox that is already running keeps the value it started with until it next starts. Editing `config.toml` by hand inside the sandbox does not stick, because the next turn overwrites it.
@@ -1487,7 +1490,7 @@ keys unreadable; they must be added or uploaded again.
 
 ### MCP servers in coding sessions
 
-Coding-session agents (Claude Code, Codex, OpenCode) can use the workspace's
+Coding-session agents (Claude Code, Codex, OpenCode, Pi) can use the workspace's
 approved MCP connectors, for example an intranet code-search server. The
 sandbox never gets the connector's credential or a network route to it:
 Flow's MCP gateway (`/internal/coding-runtime/mcp/{id}`) relays the calls,

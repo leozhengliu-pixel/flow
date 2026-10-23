@@ -441,6 +441,35 @@ func TestOpenSourceNonStreamedUsageAndModels(t *testing.T) {
 	}
 }
 
+// The Pi harness calls the OpenAI-compatible (open source) upstream with
+// its own model list, and nothing else.
+func TestPiHarnessUsesOpenSourceUpstream(t *testing.T) {
+	upstream := newUpstream(t, func(w http.ResponseWriter, r *http.Request, call upstreamCall) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"id":"c3","object":"chat.completion","model":"glm-5","choices":[{"index":0,"message":{"role":"assistant","content":"ok"}}],"usage":{"prompt_tokens":4,"completion_tokens":1}}`)
+	})
+	cfg := baseConfig()
+	cfg.OpenSourceBaseURL = upstream.URL + "/v1"
+	cfg.PiModels = []string{"glm-5"}
+	caller := Caller{WorkspaceKey: "ws", SessionID: "sess-pi", Harness: "pi", AutoModel: true}
+	h := newHarness(t, cfg, map[string]Caller{sandboxTokenValue: caller}, Limits{})
+
+	response := h.do(t, http.MethodPost, "/internal/llm-proxy/opensource/v1/chat/completions", map[string]any{"model": "glm-5", "messages": []any{}}, bearer())
+	if body := readAll(t, response); response.StatusCode != http.StatusOK {
+		t.Fatalf("status %d: %s", response.StatusCode, body)
+	}
+	if call := upstream.recorded()[0]; call.Body["model"] != "glm-5" || call.Authorization != "Bearer "+openSourceKey {
+		t.Fatalf("upstream call: %+v", call)
+	}
+	response = h.do(t, http.MethodPost, "/internal/llm-proxy/openai/v1/chat/completions", map[string]any{"model": "glm-5", "messages": []any{}}, bearer())
+	if body := readAll(t, response); response.StatusCode == http.StatusOK {
+		t.Fatalf("pi must not reach the OpenAI upstream: %s", body)
+	}
+	if len(upstream.recorded()) != 1 {
+		t.Fatal("only the open source upstream may be called")
+	}
+}
+
 func TestAuthFailures(t *testing.T) {
 	upstream := newUpstream(t, func(w http.ResponseWriter, r *http.Request, call upstreamCall) {
 		t.Error("upstream must not be called")

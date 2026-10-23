@@ -191,12 +191,12 @@ func NormalizeEnvironment(environment *domain.CodingEnvironment) error {
 	switch strings.TrimSpace(environment.Harness) {
 	case "", "auto":
 		environment.Harness = ""
-	case domain.CodingHarnessCodex, domain.CodingHarnessClaudeCode, domain.CodingHarnessOpenSource:
+	case domain.CodingHarnessCodex, domain.CodingHarnessClaudeCode, domain.CodingHarnessOpenSource, domain.CodingHarnessPi:
 		environment.Harness = strings.TrimSpace(environment.Harness)
 	case "claude":
 		environment.Harness = domain.CodingHarnessClaudeCode
 	default:
-		return Invalid("harness", "must be codex, claudeCode or openSource")
+		return Invalid("harness", "must be codex, claudeCode, openSource or pi")
 	}
 	environment.Model = strings.TrimSpace(environment.Model)
 	if len(environment.Model) > 191 || strings.ContainsAny(environment.Model, " \t\n") {
