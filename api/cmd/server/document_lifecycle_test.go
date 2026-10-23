@@ -260,6 +260,10 @@ func TestCollaborationSocketEnforcesDocumentRoles(t *testing.T) {
 		{"subjectType": "user", "subjectId": alice.user.ID, "role": "viewer"},
 		{"subjectType": "user", "subjectId": bob.user.ID, "role": "commenter"},
 	}}, "test-workspace", http.StatusOK)
+	// The open editor is told at once, before it sends anything.
+	if _, message := readSocketMessage(t, editor); !strings.Contains(string(message), `"document.access"`) || !strings.Contains(string(message), `"readOnly":true`) {
+		t.Fatalf("downgraded editor notice = %s", message)
+	}
 	writeSocket(t, editor, websocket.MessageBinary, encodeCollaborationFrame(collaborationUpdateFrame, document.ID, "collab_alice_2", []byte{9}))
 	if _, message := readSocketMessage(t, editor); !strings.Contains(string(message), `"document.readonly"`) {
 		t.Fatalf("downgraded editor update response = %s", message)

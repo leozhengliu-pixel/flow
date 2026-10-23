@@ -345,4 +345,64 @@ describe('real Tiptap description collaboration', () => {
     // The local edit is still there to download.
     expect(editor!.getText()).toContain('Unsaved edit')
   })
+
+  it('opens read-only for a viewer the server joins read-only, still showing collaborators\' edits, and never saves', async () => {
+    const persist = vi.fn().mockResolvedValue(undefined)
+    let editor: Editor | null = null
+    render(<IssueDescriptionEditor value="Shared body" editorRef={value => { editor = value }} collaboration={{ ...collab, onPersist: persist }}/>)
+    await waitFor(() => expect(editor).not.toBeNull())
+    await waitFor(() => expect(Socket.instances).toHaveLength(1))
+    const socket = Socket.instances[0]
+    act(() => {
+      socket.readyState = 1
+      socket.onopen?.()
+      socket.onmessage?.({ data: JSON.stringify({ type: 'document.sync', documentId: 'document-1', updates: [], readOnly: true }) })
+    })
+    await waitFor(() => expect(editor!.isEditable).toBe(false))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    fireEvent.blur(screen.getByRole('textbox'))
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(persist).not.toHaveBeenCalled()
+    expect(socket.sent.some(value => value instanceof Uint8Array && value[0] === 1)).toBe(false)
+    // An editor upgrade arrives on the open socket: the editor becomes editable without reconnecting.
+    act(() => { socket.onmessage?.({ data: JSON.stringify({ type: 'document.access', documentId: 'document-1', issueId: 'issue-1', readOnly: false }) }) })
+    await waitFor(() => expect(editor!.isEditable).toBe(true))
+    expect(Socket.instances).toHaveLength(1)
+  })
+
+  it('turns read-only when the viewer is downgraded, keeps unsaved edits downloadable, and saves them after an upgrade', async () => {
+    const persist = vi.fn().mockResolvedValue(undefined)
+    let editor: Editor | null = null
+    render(<IssueDescriptionEditor value="Shared body" editorRef={value => { editor = value }} collaboration={{ ...collab, onPersist: persist }}/>)
+    await waitFor(() => expect(editor).not.toBeNull())
+    await waitFor(() => expect(Socket.instances).toHaveLength(1))
+    const socket = Socket.instances[0]
+    act(() => { socket.sync() })
+    act(() => { socket.onmessage?.({ data: JSON.stringify({ type: 'document.access', documentId: 'document-1', issueId: 'issue-1', readOnly: true }) }) })
+    await waitFor(() => expect(editor!.isEditable).toBe(false))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    // An edit made before the downgrade reached this tab is refused by the server.
+    act(() => { socket.onmessage?.({ data: JSON.stringify({ type: 'document.access', documentId: 'document-1', readOnly: false }) }) })
+    await waitFor(() => expect(editor!.isEditable).toBe(true))
+    await new Promise(resolve => setTimeout(resolve, 20))
+    persist.mockClear()
+    act(() => { editor!.commands.insertContent('Late edit ') })
+    act(() => { socket.onmessage?.({ data: JSON.stringify({ type: 'document.readonly', documentId: 'document-1', issueId: 'issue-1' }) }) })
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('You can no longer edit this.'))
+    expect(screen.getByRole('button', { name: 'Download local changes' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Retry save' })).not.toBeInTheDocument()
+    expect(editor!.isEditable).toBe(false)
+    fireEvent.blur(screen.getByRole('textbox'))
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(persist).not.toHaveBeenCalled()
+
+    const framesBefore = socket.sent.filter(value => value instanceof Uint8Array && value[0] === 1).length
+    act(() => { socket.onmessage?.({ data: JSON.stringify({ type: 'document.access', documentId: 'document-1', readOnly: false }) }) })
+    await waitFor(() => expect(persist).toHaveBeenCalledTimes(1))
+    expect(persist.mock.calls[0][0].markdown).toContain('Late edit')
+    // The refused edit is sent again.
+    expect(socket.sent.filter(value => value instanceof Uint8Array && value[0] === 1).length).toBeGreaterThan(framesBefore)
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  })
 })

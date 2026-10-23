@@ -92,6 +92,7 @@ const closedMention: MentionState = { active: false, query: '', range: null }
 const oversizedEditMessage = 'This change is too large to save. Download your local changes, then reload the page to keep editing.'
 const revokedIssueMessage = 'You no longer have access to this issue. Unsaved changes can still be downloaded.'
 const revokedDocumentMessage = 'You no longer have access to this document. Unsaved changes can still be downloaded.'
+const readOnlyEditsMessage = 'You can no longer edit this. Unsaved changes can still be downloaded.'
 
 export function IssueDescriptionEditor(props: DescriptionEditorProps) {
   if (props.loading) return <div className="issue-description-skeleton" aria-label="Loading issue description"/>
@@ -141,6 +142,9 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   revokedMessageRef.current = collaboration?.issueId ? revokedIssueMessage : revokedDocumentMessage
   /** The server removed this viewer from the document: the editor turns read-only. */
   const [revoked, setRevoked] = useState(false)
+  /** The server refuses this viewer's edits (a viewer or commenter): the editor follows the document read-only. */
+  const [serverReadOnly, setServerReadOnly] = useState(false)
+  const serverReadOnlyRef = useRef(false)
   submitRef.current = onSubmit
   const selectionActionsRef = useRef(selectionActions)
   selectionActionsRef.current = selectionActions
@@ -187,7 +191,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   }, [collaboration?.documentId, collaboration?.issueId, collaboration?.workspaceKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const scheduleCollaborativePersist = () => {
-    if (!collaborationSession || !collaboration || blockedRef.current) return
+    if (!collaborationSession || !collaboration || blockedRef.current || serverReadOnlyRef.current) return
     window.clearTimeout(persistTimerRef.current)
     persistTimerRef.current = window.setTimeout(() => void persistRef.current(), 1_500)
   }
@@ -348,10 +352,11 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   }, [editor, collaboration?.issueId])
 
   persistRef.current = async () => {
-    if (!editor || !collaborationSession || !collaboration || blockedRef.current || revisionRef.current === savedRevisionRef.current) return
+    // A read-only viewer's save would be refused too: its changes stay downloadable instead.
+    if (!editor || !collaborationSession || !collaboration || blockedRef.current || serverReadOnlyRef.current || revisionRef.current === savedRevisionRef.current) return
     window.clearTimeout(persistTimerRef.current)
     const run = async () => {
-      if (blockedRef.current || revisionRef.current === savedRevisionRef.current || editor.isDestroyed) return
+      if (blockedRef.current || serverReadOnlyRef.current || revisionRef.current === savedRevisionRef.current || editor.isDestroyed) return
       if (!collaborationSession.provider.isSynced()) {
         setSaveError(collaborationSession.provider.isOversized() ? oversizedEditMessage : 'Description could not be saved. Your local changes are preserved. Retry when connected.')
         return
@@ -490,7 +495,21 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       window.clearTimeout(persistTimerRef.current)
       setSaveError('The description changed in another session. Your local changes are preserved. Download them before reloading the latest version.')
     }
+    const onAccess = ({ readOnly: refused }: { readOnly: boolean }) => {
+      serverReadOnlyRef.current = refused
+      setServerReadOnly(refused)
+      const unsaved = revisionRef.current !== savedRevisionRef.current
+      if (refused) {
+        window.clearTimeout(persistTimerRef.current)
+        if (unsaved) setSaveError(readOnlyEditsMessage)
+        return
+      }
+      // Editing is allowed again (the provider resends the refused edits): save what is unsaved.
+      setSaveError(current => current === readOnlyEditsMessage ? undefined : current)
+      if (unsaved && !blockedRef.current) void persistRef.current()
+    }
     collaborationSession.provider.on('status', onStatus)
+    collaborationSession.provider.on('access', onAccess)
     syncPresence()
     window.clearTimeout(destroyTimerRef.current)
     startTimerRef.current = window.setTimeout(() => collaborationSession.provider.start(), 0)
@@ -500,6 +519,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       collaborationSession.provider.stop()
       collaborationSession.provider.awareness.off('change', syncPresence)
       collaborationSession.provider.off('status', onStatus)
+      collaborationSession.provider.off('access', onAccess)
       presenceRef.current?.([])
       destroyTimerRef.current = window.setTimeout(() => {
         collaborationSession.provider.destroy()
@@ -511,11 +531,11 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     editorRef?.(editor)
     return () => editorRef?.(null)
   }, [editor, editorRef])
-  // Access can change while the document is open (e.g. a grant is removed).
+  // Access can change while the document is open (e.g. a grant is removed or lowered to viewer).
   useEffect(() => {
-    const editable = !readOnly && !revoked
+    const editable = !readOnly && !revoked && !serverReadOnly
     if (editor && !editor.isDestroyed && editor.isEditable !== editable) editor.setEditable(editable)
-  }, [editor, readOnly, revoked])
+  }, [editor, readOnly, revoked, serverReadOnly])
   // Markdown / older JSON content: its references show as mentions (display only; collaborative documents keep their stored nodes).
   useMentionConversion(editor, `${value}\n${state ?? ''}`, !collaborationSession, !state)
   useEffect(() => {
@@ -590,7 +610,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     {saveError && <div role="alert" className="issue-description-save-error">
       <span>{t(saveError)}</span>
       <button type="button" onClick={() => downloadDescriptionRecovery(revisionRef.current > savedRevisionRef.current ? serializeDescription(editor, collaborationSession?.document) : recovery?.snapshot ?? serializeDescription(editor, collaborationSession?.document))}>{t('Download local changes')}</button>
-      {!blockedRef.current && revisionRef.current > savedRevisionRef.current && <button type="button" onClick={() => void persistRef.current()}>{t('Retry save')}</button>}
+      {!blockedRef.current && !serverReadOnly && revisionRef.current > savedRevisionRef.current && <button type="button" onClick={() => void persistRef.current()}>{t('Retry save')}</button>}
       {blockedRef.current && <button type="button" onClick={() => window.location.reload()}>{t('Reload latest version')}</button>}
     </div>}
     <EditorContent editor={editor}/>

@@ -143,6 +143,48 @@ describe('issue collaboration provider', () => {
     document.destroy()
   })
 
+  it('follows the server\'s edit access: sends nothing while read-only, still receives edits, and resends refused edits once it may edit', async () => {
+    const { IssueCollaborationProvider } = await import('./issue-collaboration')
+    const document = new Doc()
+    const provider = new IssueCollaborationProvider({ document, workspaceKey: 'workspace', issueId: 'issue-1', documentId: 'document-1', viewer, seededWithoutServerState: false })
+    const access: boolean[] = []
+    provider.on('access', event => access.push(event.readOnly))
+    provider.start()
+    const socket = MockWebSocket.instances[0]
+    socket.open()
+    socket.message(JSON.stringify({ type: 'document.sync', documentId: 'document-1', updates: [], readOnly: true }))
+    expect(provider.isReadOnly()).toBe(true)
+    expect(access).toEqual([true])
+    const updateFrames = () => socket.sent.filter(value => value instanceof Uint8Array && value[0] === 1)
+
+    // Remote edits still apply.
+    const remote = new Doc()
+    remote.getText('content').insert(0, 'Remote ')
+    socket.message(JSON.stringify({ type: 'document.sync', documentId: 'document-1', updates: [{ id: 'collab_remote', data: btoa(String.fromCharCode(...encodeStateAsUpdate(remote))) }], readOnly: true }))
+    expect(document.getText('content').toString()).toBe('Remote ')
+    expect(access).toEqual([true])
+
+    // A local edit is kept, not sent.
+    document.getText('content').insert(7, 'local')
+    expect(updateFrames()).toHaveLength(0)
+    // A notice for another document changes nothing.
+    socket.message(JSON.stringify({ type: 'document.access', documentId: 'document-2', readOnly: false }))
+    expect(provider.isReadOnly()).toBe(true)
+
+    socket.message(JSON.stringify({ type: 'document.access', documentId: 'document-1', readOnly: false }))
+    expect(access).toEqual([true, false])
+    expect(updateFrames()).toHaveLength(1)
+
+    // A refused edit (sent before a downgrade reached this tab) is sent again after the next upgrade.
+    socket.message(JSON.stringify({ type: 'document.readonly', documentId: 'document-1' }))
+    expect(provider.isReadOnly()).toBe(true)
+    socket.message(JSON.stringify({ type: 'document.access', documentId: 'document-1', readOnly: false }))
+    expect(updateFrames()).toHaveLength(2)
+    expect(MockWebSocket.instances).toHaveLength(1)
+    provider.destroy()
+    document.destroy()
+  })
+
   it('keeps an edit too large for the server local instead of reconnecting forever, and syncs once it fits', async () => {
     const { IssueCollaborationProvider, MAX_COLLABORATION_FRAME_BYTES } = await import('./issue-collaboration')
     const document = new Doc()
