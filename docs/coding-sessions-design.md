@@ -47,7 +47,7 @@ Contents
 | Model: Auto + specific | `model`: `auto` (default) or a catalog id (`FLOW_CODING_MODELS_*`). The first entry of each catalog is Auto's pick, and Auto falls back to the next entry |
 | CodingEnvironment fields | `domain.CodingEnvironment` (§6). It adds `codeHost` (github or gitlab) and `hostName` (GHE or self-managed GitLab) |
 | Secrets: encrypted, masked, immutable, setup-only | `coding_environment_secrets` (AES-GCM). There is no read API and no update. Secrets are served once per sandbox, during setup only |
-| `LINEAR_SANDBOX=1`, `LINEAR_SNAPSHOT=1` | Both set for parity, plus `FLOW_SANDBOX=1` and `FLOW_SNAPSHOT=1` |
+| Sandbox detection variables | `FLOW_SANDBOX=1` always, `FLOW_SNAPSHOT=1` while building a snapshot |
 | Debug terminal (temporary sandbox, 20 min), import .env, archive, Configure/Fix with agent | §18 |
 | Snapshots with status, logs, refresh and cancel | §10 |
 | AgentSession states and fields, sandboxes[], PRs, commitsByTurnActivityId | `domain.CodingSession` anchored to an `AgentTask` (§4, §6) |
@@ -538,7 +538,7 @@ spec:
     command: [flow-runner, session]          # snapshot | debug | warm
     env:
       FLOW_RUNTIME_URL, FLOW_TOKEN_FILE=/var/run/flow/token, FLOW_SANDBOX_ID, FLOW_RUNNER_MODE,
-      FLOW_SANDBOX=1, LINEAR_SANDBOX=1, (FLOW_SNAPSHOT=1, LINEAR_SNAPSHOT=1 while snapshotting),
+      FLOW_SANDBOX=1, (FLOW_SNAPSHOT=1 while snapshotting),
       HTTP_PROXY/HTTPS_PROXY/http_proxy/https_proxy=<FLOW_CODING_EGRESS_PROXY_URL>, NO_PROXY=<flow host,…>,
       HOME=/home/flow
     resources: {limits: {cpu, memory, ephemeral-storage}, requests: limits × ratio}

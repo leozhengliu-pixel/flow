@@ -116,7 +116,6 @@ RUN chmod 0755 /opt/flow/bin/* /opt/flow/image/*.sh && \
 ENV HOME=/home/flow \
     PATH=/opt/flow/bin:/home/flow/.local/share/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     FLOW_SANDBOX=1 \
-    LINEAR_SANDBOX=1 \
     FLOW_TOKEN_FILE=/var/run/flow/token \
     DISABLE_AUTOUPDATER=1 \
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \

@@ -85,7 +85,6 @@ func RunnerEnv(c config.CodingConfig, spec SandboxSpec, mode string) []EnvVar {
 		EnvVar{EnvSandboxID, spec.ID},
 		EnvVar{EnvMode, mode},
 		EnvVar{EnvFlowSandbox, "1"},
-		EnvVar{EnvLinearCompat, "1"},
 		EnvVar{"HOME", HomePath},
 	)
 	if spec.Resources.Size != "" {
@@ -95,7 +94,7 @@ func RunnerEnv(c config.CodingConfig, spec SandboxSpec, mode string) []EnvVar {
 		env = append(env, EnvVar{EnvPIDsLimit, strconv.FormatInt(spec.Resources.PIDs, 10)})
 	}
 	if spec.Kind == KindSnapshot {
-		env = append(env, EnvVar{EnvFlowSnapshot, "1"}, EnvVar{EnvSnapshotting, "1"})
+		env = append(env, EnvVar{EnvFlowSnapshot, "1"})
 	}
 	if spec.Workspace.ArchiveURL != "" {
 		env = append(env, EnvVar{EnvArchiveURL, spec.Workspace.ArchiveURL})

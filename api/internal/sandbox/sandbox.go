@@ -42,8 +42,6 @@ const (
 	// sandbox (sessions carry it on the session row instead).
 	EnvEnvironmentID = "FLOW_ENVIRONMENT_ID"
 	EnvMode          = "FLOW_RUNNER_MODE"    // session | snapshot | debug | warm | restore
-	EnvLinearCompat  = "LINEAR_SANDBOX"      // "1" in every sandbox (reference parity)
-	EnvSnapshotting  = "LINEAR_SNAPSHOT"     // "1" while building a snapshot
 	EnvFlowSandbox   = "FLOW_SANDBOX"        // "1" in every sandbox
 	EnvFlowSnapshot  = "FLOW_SNAPSHOT"       // "1" while building a snapshot
 	TokenMountPath   = "/var/run/flow/token" // projected token file

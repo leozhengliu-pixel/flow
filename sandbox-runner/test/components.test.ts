@@ -75,11 +75,10 @@ test('config: required runtime URL, modes and defaults', () => {
   assert.equal(cfg.pidsLimit, 8192)
 })
 
-test('environment: FLOW_SANDBOX/LINEAR_SANDBOX always, FLOW_SNAPSHOT only while snapshotting', () => {
+test('environment: FLOW_SANDBOX always, FLOW_SNAPSHOT only while snapshotting', () => {
   const cfg = config('/r')
   const env = baseEnv(cfg, bootstrap(), {}, { PATH: '/usr/bin:/opt/flow/bin', FLOW_SNAPSHOT: '1', FLOW_RUNNER_MODE: 'session', HTTPS_PROXY: 'http://proxy:3128' })
   assert.equal(env.FLOW_SANDBOX, '1')
-  assert.equal(env.LINEAR_SANDBOX, '1')
   assert.equal(env.FLOW_SNAPSHOT, undefined)
   assert.equal(env.FLOW_RUNNER_MODE, undefined)
   assert.equal(env.HTTPS_PROXY, 'http://proxy:3128')
@@ -89,7 +88,6 @@ test('environment: FLOW_SANDBOX/LINEAR_SANDBOX always, FLOW_SNAPSHOT only while 
   assert.equal(env.GIT_COMMITTER_NAME, 'bot')
   const snap = baseEnv(cfg, bootstrap(), { snapshot: true }, { PATH: '/usr/bin' })
   assert.equal(snap.FLOW_SNAPSHOT, '1')
-  assert.equal(snap.LINEAR_SNAPSHOT, '1')
   const mcp = mcpCommand(cfg, bootstrap(), 'turn_7')
   assert.deepEqual([mcp.command, mcp.args], ['/opt/flow/bin/flow-runner', ['mcp']])
   assert.equal(mcp.env.FLOW_TURN_ID, 'turn_7')
@@ -520,7 +518,7 @@ test('snapshot mode: clone at base, setup with FLOW_SNAPSHOT=1, upload, report r
       mode: 'snapshot',
       snapshot: { id: 'snap1', strategy: 'archive' },
       repo: { ...bootstrap().repo, cloneUrl: origin, baseSha: base, branchName: '' },
-      environment: { mise: {}, prepareScript: 'test "$FLOW_SNAPSHOT" = 1 && test "$LINEAR_SNAPSHOT" = 1 && echo prepared > prepared.txt', dependencyManagement: 'custom-only', hasSecrets: false },
+      environment: { mise: {}, prepareScript: 'test "$FLOW_SNAPSHOT" = 1 && echo prepared > prepared.txt', dependencyManagement: 'custom-only', hasSecrets: false },
     }
     const logs: string[] = []
     const completes: SnapshotCompleteRequest[] = []

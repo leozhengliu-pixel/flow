@@ -43,7 +43,6 @@ export function baseEnv(config: RunnerConfig, bootstrap: BootstrapResponse | und
     HOME: config.paths.home,
     PATH: [config.paths.binDir, miseShims, ...path].join(':'),
     FLOW_SANDBOX: '1',
-    LINEAR_SANDBOX: '1',
     FLOW_RUNTIME_URL: config.runtimeUrl,
     FLOW_TOKEN_FILE: config.tokenFile,
     FLOW_SANDBOX_ID: config.sandboxId,
@@ -52,10 +51,8 @@ export function baseEnv(config: RunnerConfig, bootstrap: BootstrapResponse | und
   })
   if (options.snapshot) {
     env.FLOW_SNAPSHOT = '1'
-    env.LINEAR_SNAPSHOT = '1'
   } else {
     delete env.FLOW_SNAPSHOT
-    delete env.LINEAR_SNAPSHOT
   }
   if (bootstrap?.git.committerName) env.GIT_COMMITTER_NAME = bootstrap.git.committerName
   if (bootstrap?.git.committerEmail) env.GIT_COMMITTER_EMAIL = bootstrap.git.committerEmail

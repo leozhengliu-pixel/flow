@@ -31,6 +31,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   release) no longer loses the body it replaced: the pre-edit state is kept as
   the oldest version, and the version history lists it.
 
+### Removed
+
+- Coding sandboxes no longer set `LINEAR_SANDBOX` and `LINEAR_SNAPSHOT`.
+  Setup and prepare scripts detect the sandbox with `FLOW_SANDBOX=1` and a
+  snapshot build with `FLOW_SNAPSHOT=1`, which were already set alongside.
+
 ## [0.1.0] - 2026-10-17
 
 The release series has been reset to v0.1.0 using the current main branch.

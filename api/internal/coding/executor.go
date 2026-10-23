@@ -180,7 +180,7 @@ func (s *Service) provision(ctx context.Context, session domain.CodingSession, s
 	record := sandbox.Record{
 		ID: NewID(), WorkspaceKey: session.WorkspaceKey, SessionID: session.ID, SnapshotID: snapshotID, Kind: sandbox.KindSession,
 		Desired: sandbox.DesiredRunning, Phase: sandbox.PhasePending, Image: s.cfg.Image, Size: size, Region: region, Workspace: workspace,
-		Env:       map[string]string{sandbox.EnvMode: ModeSession, sandbox.EnvFlowSandbox: "1", sandbox.EnvLinearCompat: "1", sandbox.EnvRuntimeURL: s.cfg.RuntimeURL},
+		Env:       map[string]string{sandbox.EnvMode: ModeSession, sandbox.EnvFlowSandbox: "1", sandbox.EnvRuntimeURL: s.cfg.RuntimeURL},
 		CreatedAt: now,
 	}
 	if volumeRef != "" {
