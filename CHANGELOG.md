@@ -33,9 +33,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Removed
 
-- Coding sandboxes no longer set `LINEAR_SANDBOX` and `LINEAR_SNAPSHOT`.
-  Setup and prepare scripts detect the sandbox with `FLOW_SANDBOX=1` and a
-  snapshot build with `FLOW_SNAPSHOT=1`, which were already set alongside.
+- Coding sandboxes no longer set the older duplicate sandbox and snapshot
+  variables. Setup and prepare scripts detect the sandbox with
+  `FLOW_SANDBOX=1` and a snapshot build with `FLOW_SNAPSHOT=1`.
 
 ## [0.1.0] - 2026-10-17
 
