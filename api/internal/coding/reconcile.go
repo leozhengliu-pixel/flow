@@ -164,7 +164,7 @@ func withoutAction(actions []Action, kind ActionKind) []Action {
 	return result
 }
 
-// askForEnvironment posts the repository selection elicitation (Linear's select signal).
+// askForEnvironment posts the repository selection elicitation (the reference select signal).
 func (s *Service) askForEnvironment(ctx context.Context, session domain.CodingSession, envs []domain.CodingEnvironment) {
 	options := []map[string]any{}
 	metadata := map[string]any{}

@@ -12,7 +12,7 @@ import (
 // The start_coding_session tool (docs/coding-sessions-design.md §15, track
 // L). The Flow agent calls it from chat, from a delegated or mentioned issue,
 // and from a Loop run ("Autofix bugs" → "Start a coding session"). It follows
-// Linear's rule: a request to fix, implement or open a PR starts a session
+// the reference rule: a request to fix, implement or open a PR starts a session
 // right away; a request to investigate, plan or create tasks does not (the
 // tool re-checks the user's words and refuses with guidance).
 

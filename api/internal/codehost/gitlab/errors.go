@@ -75,7 +75,7 @@ func classify(status int) error {
 	}
 }
 
-// ErrorCode maps a GitLab host error to the session error code (Linear's
+// ErrorCode maps a GitLab host error to the session error code (the reference
 // codes plus Flow's). It refines codehost.ErrorCode for GitLab-only cases.
 func ErrorCode(err error) domain.CodingErrorCode {
 	switch {

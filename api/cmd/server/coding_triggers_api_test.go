@@ -357,7 +357,7 @@ func TestStartCodingSessionTool(t *testing.T) {
 		_ = json.Unmarshal(raw, &out)
 		return out
 	}
-	// Linear's rule: an investigation does not start coding.
+	// The reference rule: an investigation does not start coding.
 	out := call(context.Background(), map[string]any{"prompt": "Investigate the slow export", "userRequest": "investigate why export is slow", "issueId": f.issue.Identifier})
 	if out["started"] != false || out["intent"] != "noCode" || len(f.fake.sessions) != 0 {
 		t.Fatalf("investigate: %+v", out)

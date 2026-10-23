@@ -47,7 +47,7 @@ export const DEPENDENCY_OPTIONS: { value: CodingDependencyManagement; label: str
   { value: "custom-and-generated", label: "Custom and generated", description: "Also run detected installers such as npm ci or go mod download" },
 ];
 
-/** Linear's external sources whose issues need a member's approval unless trusted (§15). */
+/** The reference external sources whose issues need a member's approval unless trusted (§15). */
 export const TRUSTED_SOURCE_OPTIONS: { value: string; label: string }[] = [
   { value: "slack", label: "Slack" },
   { value: "intercom", label: "Intercom" },

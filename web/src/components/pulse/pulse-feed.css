@@ -139,7 +139,7 @@
   .pulse-feed{gap:36px;padding-top:20px}
 }
 
-/* Linear parity (measured against the reference Pulse at 1272x620, light theme). */
+/* Reference parity (measured against the reference Pulse at 1272x620, light theme). */
 .flow-framed-workspace.pulse-page .pulse-header-top{height:44px}
 .flow-framed-workspace.pulse-page .pulse-icon-button{color:var(--text-body)}
 .flow-framed-workspace.pulse-page .pulse-add-view{color:var(--ui-pill-fg)}

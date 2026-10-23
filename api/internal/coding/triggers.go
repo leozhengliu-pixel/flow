@@ -232,7 +232,7 @@ type IssueTrigger struct {
 	Request string
 	// Prompt is the full task prompt for the harness.
 	Prompt string
-	// CheckIntent applies Linear's rule (chat and comment triggers).
+	// CheckIntent applies the reference rule (chat and comment triggers).
 	CheckIntent bool
 	// RecentEnvironmentIDs are the team's recently used environments.
 	RecentEnvironmentIDs []string

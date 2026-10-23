@@ -2,7 +2,7 @@
 
 The brand marks in `logos.ts` identify well-known OAuth / MCP clients on the consent screen and in the
 application lists (nominative use only). Each path is copied unchanged from the source below. None of them is
-taken from Linear's assets.
+taken from the reference app's assets.
 
 Brand colours inside `logos.ts` are the documented exception to the "no raw colour literals" rule, the same as the
 GitHub / GitLab / Jira marks in `components/settings/integration-brand-icon.tsx`. Marks whose brand colour is black or

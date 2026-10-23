@@ -215,7 +215,7 @@ func gitHubAppSetupURL() string { return appBaseURL() + "/api/integrations/githu
 
 // startGitHubAppAuthorization — POST /api/integrations/github-app/authorize:
 // returns the user-to-server OAuth URL that links the viewer's GitHub account
-// (Linear's personal access check, requiresGithubConnection). The App's
+// (the personal access check, requiresGithubConnection). The App's
 // callback URL must be the setup URL.
 func (s *server) startGitHubAppAuthorization(w http.ResponseWriter, r *http.Request) {
 	host := s.gitHubAppHost()

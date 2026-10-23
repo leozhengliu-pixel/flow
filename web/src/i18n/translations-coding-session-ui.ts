@@ -4,7 +4,7 @@
  * (fills gaps only).
  */
 export const codingSessionUiZhCN: Record<string, string> = {
-  // States (Linear's labels) and phases
+  // States (reference labels) and phases
   "Starting": "启动中",
   "Working": "工作中",
   "Stopping…": "正在停止…",

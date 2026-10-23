@@ -49,7 +49,7 @@ export function CodingRow({ title, description, icon, figure, children, disabled
   );
 }
 
-export function CodingLinkRow({ title, description, icon, figure, detail, onClick }: { title: string; description?: string; icon?: ReactNode; /** Linear's 32px filled icon tile instead of the bordered 30px one. */ figure?: boolean; detail?: ReactNode; onClick: () => void }) {
+export function CodingLinkRow({ title, description, icon, figure, detail, onClick }: { title: string; description?: string; icon?: ReactNode; /** The reference 32px filled icon tile instead of the bordered 30px one. */ figure?: boolean; detail?: ReactNode; onClick: () => void }) {
   const { t } = useI18n();
   return (
     <button type="button" className={`feature-row feature-row-link cs-row${figure ? " cs-link-row" : ""}`} onClick={onClick}>

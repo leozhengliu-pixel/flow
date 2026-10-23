@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// Coding intent (docs/coding-sessions-design.md §15, track L). Linear's
+// Coding intent (docs/coding-sessions-design.md §15, track L). The reference
 // agent starts a coding session immediately when it is asked to change code
 // ("fix this bug", "open a PR") and does not when it is asked to investigate,
 // plan or create tasks. Flow applies the same rule in two places: the
@@ -115,7 +115,7 @@ func firstIntentMatch(patterns []*regexp.Regexp, text string) string {
 	return ""
 }
 
-// ClassifyCodingIntent applies Linear's rule to a user request: explicit
+// ClassifyCodingIntent applies the reference rule to a user request: explicit
 // no-code phrases win, then explicit code verbs, then investigation verbs;
 // anything else goes to the model (when given) and is otherwise unclear. A
 // model error never blocks: the result is unclear.

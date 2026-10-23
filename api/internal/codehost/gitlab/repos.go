@@ -164,7 +164,7 @@ func (h *Host) CheckCredentialMode(ctx context.Context, workspaceKey string, rep
 }
 
 // CheckUserAccess verifies the requesting user is at least Developer on the
-// project (Linear's personal access check).
+// project (the personal access check).
 func (h *Host) CheckUserAccess(ctx context.Context, workspaceKey string, repo codehost.RepoRef, user codehost.UserIdentity) error {
 	login := strings.TrimPrefix(strings.TrimSpace(user.Login), "@")
 	if login == "" {

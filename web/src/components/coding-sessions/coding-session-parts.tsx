@@ -18,7 +18,7 @@ import {
   reviewForPullRequest,
 } from './coding-session-model'
 
-/** The state pill with Linear's labels; `data-state` drives its colour. */
+/** The state pill with the reference labels; `data-state` drives its colour. */
 export function CodingStateBadge({ state, session }: { state: CodingSessionState; /** Names a stale session's reason (stopped, never started, stopped responding). */ session?: Pick<CodingSession, 'state' | 'stoppedBy' | 'startedAt'> }) {
   const { t } = useI18n()
   const Icon = state === 'complete' ? CheckCircle2 : state === 'error' ? XCircle : state === 'awaitingInput' ? CircleDot : state === 'stale' ? CircleDashed : Loader2

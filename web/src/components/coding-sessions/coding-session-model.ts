@@ -1,5 +1,5 @@
 /**
- * Pure helpers for the coding session view (docs/coding-sessions-design.md §4, §15, §24 track G): Linear's state labels,
+ * Pure helpers for the coding session view (docs/coding-sessions-design.md §4, §15, §24 track G): the reference state labels,
  * phase descriptions, the error code → copy + next action map, PR/MR and CI status, cost, and repository suggestion
  * for picking an environment. No React here so every rule is unit-tested on its own.
  */

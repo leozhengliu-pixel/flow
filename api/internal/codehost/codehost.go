@@ -247,7 +247,7 @@ type Host interface {
 	ListRepositories(ctx context.Context, workspaceKey string, options ListOptions) (RepositoryPage, error)
 	ResolveRepository(ctx context.Context, workspaceKey string, repo RepoRef) (Repository, error)
 	// CheckUserAccess verifies the requesting user may push to the repo
-	// (Linear's personal access check); ErrUserNoAccess when not.
+	// (the personal access check); ErrUserNoAccess when not.
 	CheckUserAccess(ctx context.Context, workspaceKey string, repo RepoRef, user UserIdentity) error
 	MintCredential(ctx context.Context, request CredentialRequest) (Credential, error)
 	RevokeCredential(ctx context.Context, workspaceKey string, credential Credential) error

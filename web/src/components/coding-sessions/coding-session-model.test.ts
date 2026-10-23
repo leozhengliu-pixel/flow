@@ -23,7 +23,7 @@ import { makeSession } from './coding-session-test-fixtures'
 const env = (id: string, repository: string, extra: Partial<CodingEnvironment> = {}): CodingEnvironment => ({ id, name: id, codeHost: 'github', hostName: 'github.com', repository, mise: {}, version: 1, createdAt: '', updatedAt: '', ...extra })
 
 describe('coding session model', () => {
-  it('uses Linear labels for every state', () => {
+  it('uses the reference labels for every state', () => {
     expect(CODING_STATE_LABELS).toEqual({ pending: 'Working…', active: 'Working…', stopping: 'Stopping…', complete: 'Finished', awaitingInput: 'Needs input', error: 'Error', stale: 'Stopped responding' })
   })
 
