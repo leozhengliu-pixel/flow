@@ -2533,7 +2533,7 @@ func (s *server) getSharedView(w http.ResponseWriter, r *http.Request) {
 	}
 	data, ok := s.store.BootstrapFor(workspace)
 	if !ok {
-		writeError(w, http.StatusNotFound, "workspace not found")
+		writeSharedResourceNotFound(w)
 		return
 	}
 	token := r.PathValue("token")
@@ -2555,7 +2555,7 @@ func (s *server) getSharedView(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	writeError(w, http.StatusNotFound, "shared view not found")
+	writeSharedResourceNotFound(w)
 }
 
 // deleteTeamCycles permanently removes a team's historical cycles. Cycles must

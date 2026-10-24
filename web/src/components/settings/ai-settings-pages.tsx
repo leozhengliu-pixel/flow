@@ -5,6 +5,7 @@ import { ArrowRight, ArrowUpRight, Box, ChevronRight, Copy, Eye, EyeOff, Check, 
 import { ApplicationMembers } from "@/components/agent/application-members";
 import { AgentCursorGlyph, CodeIntelligenceGlyph } from "@/components/ui/agent-glyph";
 import { FlowGlyph } from "@/components/ui/menu-glyphs";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { useI18n } from "@/i18n/i18n";
 import { listApplications, type ApplicationInstallation } from "@/lib/application-agents";
 import { agentWebAccessEnabled } from "@/lib/agent-web-access";
@@ -106,7 +107,7 @@ export function AiSettingsHub({ data, settings, busy, setEnabled, onNavigateSett
           {applications.map((item) => (
             <FeatureCard key={item.id}>
               <button type="button" className="feature-row feature-row-link feature-agent-row" onClick={() => navigate(`${settingsPath(workspace, "applications")}/${encodeURIComponent(item.clientId)}`)}>
-                <span className="feature-row-icon feature-agent-avatar" aria-hidden="true" data-i18n-ignore>{initials(item.name)}</span>
+                <UserAvatar className="feature-row-icon feature-agent-avatar" name={item.name} avatarUrl={item.avatarUrl}/>
                 <div>
                   <strong data-i18n-ignore>{item.name}</strong>
                   <span>{item.allPublicTeams ? t("Access to all public teams") : t("Access to {count} teams").replace("{count}", String(item.teamIds.length))}</span>
@@ -135,7 +136,6 @@ export function AiSettingsHub({ data, settings, busy, setEnabled, onNavigateSett
   );
 }
 
-const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
 const TriageGlyph: FeatureIcon = ({ size = 16 }) => <FlowGlyph name="triage" size={Number(size) || 16} />;
 
 /** "just now" / "34 minutes ago" in the active language. */
@@ -375,7 +375,7 @@ export function InstalledAgentsSettings({ data, settings, busy, onReload, onNavi
   const open = (item: ApplicationInstallation) => navigate(`${settingsPath(workspace, "applications")}/${encodeURIComponent(item.clientId)}`);
   const rows: ReactNode = applications.map((item) => (
     <button key={item.id} type="button" className="feature-row feature-row-link feature-agent-row" onClick={() => open(item)}>
-      <span className="feature-row-icon feature-agent-avatar" aria-hidden="true" data-i18n-ignore>{initials(item.name)}</span>
+      <UserAvatar className="feature-row-icon feature-agent-avatar" name={item.name} avatarUrl={item.avatarUrl}/>
       <div>
         <strong data-i18n-ignore>{item.name}</strong>
         <span>{item.allPublicTeams ? t("Access to all public teams") : t("Access to {count} teams").replace("{count}", String(item.teamIds.length))}</span>

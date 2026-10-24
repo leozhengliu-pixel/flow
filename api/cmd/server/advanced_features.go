@@ -384,6 +384,33 @@ func syncDocumentProjectResources(data *domain.Bootstrap, document domain.Docume
 	}
 }
 
+// documentTeamIDs keeps a document's access scope aligned with the resources
+// it is attached to. A document linked from an issue or project must remain
+// readable to the same team-scoped application principals that can read the
+// parent resource. The explicit team selection is retained and inherited
+// teams are added without widening a workspace-only document.
+func documentTeamIDs(data *domain.Bootstrap, explicit []string, issueID string, projectIDs []string) []string {
+	teamIDs := normalizedStrings(explicit)
+	add := func(teamID string) {
+		if teamID != "" && !slices.Contains(teamIDs, teamID) {
+			teamIDs = append(teamIDs, teamID)
+		}
+	}
+	if issueID != "" {
+		if issue, err := issueByID(data, issueID); err == nil {
+			add(issue.Team.ID)
+		}
+	}
+	for _, projectID := range projectIDs {
+		if project, err := fullProjectByID(data, projectID); err == nil {
+			for _, teamID := range project.TeamIDs {
+				add(teamID)
+			}
+		}
+	}
+	return teamIDs
+}
+
 func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 	var input documentInput
 	if !decodeJSON(w, r, &input) {
@@ -427,6 +454,7 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 				return "", errInvalid
 			}
 		}
+		teams = documentTeamIDs(data, teams, issueID, projects)
 		created = domain.Document{ID: fmt.Sprintf("document_%d", now.UnixNano()), SlugID: documentSlugID(title, newDocumentSlugSuffix()), Title: title, Color: "#8b8b90", Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), ProjectIDs: projects, TeamIDs: teams, IssueID: issueID, SubscriberIDs: []string{data.Viewer.ID}, ContentData: map[string]any{"type": "doc", "content": []any{}}, CreatedAt: now, UpdatedAt: now, Revisions: []domain.DocumentRevision{}, Permissions: []domain.DocumentPermission{{ID: fmt.Sprintf("document_permission_%d", now.UnixNano()), DocumentID: "", SubjectType: "user", SubjectID: data.Viewer.ID, Role: "owner", CreatedAt: now, UpdatedAt: now}}}
 		created.Permissions[0].DocumentID = created.ID
 		created.Permissions = append(created.Permissions, defaultDocumentGrants(created, now)...)
@@ -559,6 +587,11 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 				return errInvalid
 			}
 			document.IssueID = value
+		}
+		inheritedTeams := documentTeamIDs(data, document.TeamIDs, document.IssueID, document.ProjectIDs)
+		if !slices.Equal(inheritedTeams, document.TeamIDs) {
+			document.TeamIDs = inheritedTeams
+			moveDocumentTeamGrants(document, before.TeamIDs, now)
 		}
 		if input.SubscriberIDs != nil {
 			if !validateResourceIDs(data, "user", *input.SubscriberIDs) {

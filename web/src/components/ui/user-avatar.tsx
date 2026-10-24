@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { AgentAvatarMark } from '@/components/ui/agent-glyph'
 import { isBuiltinAgentAvatarUrl } from '@/components/ui/agent-avatar-url'
 
@@ -16,5 +16,8 @@ export function UserAvatar({ avatarUrl, className, color, name, title }: { avata
   const script = /[㐀-鿿豈-﫿]/.test(initials) ? 'cjk' : 'latin'
   const style = color ? ({ '--avatar': color } as CSSProperties) : undefined
   const agent = isBuiltinAgentAvatarUrl(avatarUrl)
-  return <span aria-label={name} className={className} data-agent-avatar-slot={agent ? '' : undefined} data-script={script} data-i18n-ignore style={style} title={title}>{agent ? <AgentAvatarMark/> : avatarUrl ? <img alt="" src={avatarUrl}/> : initials}</span>
+  const [imageFailed, setImageFailed] = useState(false)
+  useEffect(() => setImageFailed(false), [avatarUrl])
+  const showImage = Boolean(avatarUrl) && !imageFailed
+  return <span aria-label={name} className={className} data-agent-avatar-slot={agent ? '' : undefined} data-avatar-fallback={imageFailed ? '' : undefined} data-script={script} data-i18n-ignore style={style} title={title}>{agent ? <AgentAvatarMark/> : showImage ? <img alt="" src={avatarUrl} onError={() => setImageFailed(true)}/> : initials}</span>
 }

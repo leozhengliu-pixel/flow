@@ -484,7 +484,7 @@ func (s *server) shareDashboard(w http.ResponseWriter, r *http.Request) {
 func (s *server) getSharedDashboard(w http.ResponseWriter, r *http.Request) {
 	data, ok := s.store.BootstrapFor(workspaceKey(r))
 	if !ok {
-		writeError(w, http.StatusNotFound, "workspace not found")
+		writeSharedResourceNotFound(w)
 		return
 	}
 	items := settingCollection[domain.Dashboard](data, dashboardsSettingsKey)
@@ -492,7 +492,7 @@ func (s *server) getSharedDashboard(w http.ResponseWriter, r *http.Request) {
 		return item.ShareToken != "" && item.ShareToken == r.PathValue("token")
 	})
 	if index < 0 {
-		writeError(w, http.StatusNotFound, "dashboard not found")
+		writeSharedResourceNotFound(w)
 		return
 	}
 	// Shared links are unauthenticated. Evaluate them against a public

@@ -11,6 +11,15 @@ import (
 	"flow/api/internal/domain"
 )
 
+const sharedResourceNotFoundMessage = "shared resource not found"
+
+// Shared links must not reveal whether the workspace, token, or backing
+// resource exists. All public share handlers use the same 404 response so an
+// unauthenticated caller cannot enumerate workspace keys through error text.
+func writeSharedResourceNotFound(w http.ResponseWriter) {
+	writeError(w, http.StatusNotFound, sharedResourceNotFoundMessage)
+}
+
 func (s *server) shareIssue(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var issue domain.Issue
@@ -72,7 +81,7 @@ func (s *server) getSharedIssue(w http.ResponseWriter, r *http.Request) {
 	}
 	data, ok := s.store.BootstrapFor(workspace)
 	if !ok {
-		writeError(w, http.StatusNotFound, "workspace not found")
+		writeSharedResourceNotFound(w)
 		return
 	}
 	token := r.PathValue("token")
@@ -98,5 +107,5 @@ func (s *server) getSharedIssue(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"issue": item, "comments": comments, "workspace": data.Workspace})
 		return
 	}
-	writeError(w, http.StatusNotFound, "shared issue not found")
+	writeSharedResourceNotFound(w)
 }
