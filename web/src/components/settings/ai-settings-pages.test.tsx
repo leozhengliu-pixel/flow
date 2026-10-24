@@ -13,7 +13,7 @@ import { FeatureSettingsPage } from './feature-settings'
 vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), updateWorkspacePreferences: vi.fn(), updateWorkspaceAgentGuidance: vi.fn() }))
 vi.mock('@/lib/application-agents', async original => ({
   ...await original<typeof import('@/lib/application-agents')>(),
-  listApplications: vi.fn().mockResolvedValue([{ id: 'app0', clientId: 'flow-builtin', name: 'Flow', active: true, allPublicTeams: true, teamIds: [], builtin: true, scopes: [] }, { id: 'app1', clientId: 'client1', name: 'Flow QA OAuth app', active: true, allPublicTeams: true, teamIds: [], builtin: false, scopes: [] }]),
+  listApplications: vi.fn().mockResolvedValue([{ id: 'app0', clientId: 'flow-builtin', name: 'Flow', active: true, allPublicTeams: true, teamIds: [], builtin: true, scopes: [] }, { id: 'app1', clientId: 'client1', name: 'Flow QA OAuth app', avatarUrl: 'https://example.test/flow-qa.png', active: true, allPublicTeams: true, teamIds: [], builtin: false, scopes: [] }]),
 }))
 vi.mock('@/lib/ai-credits-api', () => ({ fetchAICredits: vi.fn() }))
 vi.mock('@/lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
@@ -50,6 +50,8 @@ describe('AI & agents hub', () => {
     expect(screen.getByRole('checkbox', { name: 'Suggest branch name in prompts' })).toBeChecked()
     expect(await screen.findByText('Flow QA OAuth app')).toBeVisible()
     expect(screen.getByText('Access to all public teams')).toBeVisible()
+    const installedAgentRow = screen.getByText('Flow QA OAuth app').closest('button')
+    expect(installedAgentRow?.querySelector('.feature-agent-avatar img')).toHaveAttribute('src', 'https://example.test/flow-qa.png')
     // The built-in Flow agent has its own page; it is not an installed agent with a detail page.
     expect(screen.queryByText('Flow', { selector: 'strong' })).toBeNull()
 

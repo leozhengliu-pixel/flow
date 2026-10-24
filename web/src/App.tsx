@@ -334,6 +334,7 @@ import { TeamPagesLayout } from '@/components/team/team-pages-layout'
 import { isTeamPagesRoute } from '@/components/team/team-pages-routes'
 import { searchResultLink } from '@/lib/search-result-link'
 import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck } from '@/lib/issue-detail-cache'
+import { canReuseWorkspaceForIssueDetail } from '@/lib/bootstrap-navigation'
 import { triageState } from '@/components/triage/triage-model'
 import type { WorkspaceSecondaryKind } from '@/components/workspace/workspace-secondary-page'
 import { applyLabelUpdate, archiveProjectUpdateReminders, mergeRefreshedIssues, mergeScopedIssues, mergeWorkspaceMetadata, metadataOnlyRealtimeEvent, newlyReleasedIssueIds, syncIssueProjectSummaries, teamIssueScope, type IssueRefreshScope } from '@/lib/workspace-metadata-refresh'
@@ -808,6 +809,12 @@ function App() {
       return;
     }
     const requestKey = `${account.viewer.id}:${requestedWorkspaceKey}:${bootstrapProjection ?? 'full'}`;
+    if (canReuseWorkspaceForIssueDetail({
+      current: dataRef.current,
+      requestedWorkspaceKey,
+      viewerId: account.viewer.id,
+      projection: bootstrapProjection,
+    })) return;
     if (workspaceBootstrapPhase(loadedWorkspaceKey, requestedWorkspaceKey, bootstrapRequest.current?.key, requestKey) === 'skip' && loadedBootstrapRequestKey.current === requestKey) return;
     let cancelled = false;
     if (loadedWorkspaceKey !== requestedWorkspaceKey || loadedBootstrapRequestKey.current && loadedBootstrapRequestKey.current !== requestKey) {

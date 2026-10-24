@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react'
+import { fireEvent, render } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { describe, expect, it } from 'vitest'
 
@@ -88,5 +88,13 @@ describe('built-in agent avatar', () => {
     expect(person.container.querySelectorAll('svg[data-agent-avatar]')).toHaveLength(0)
     expect(person.container.querySelectorAll('img')).toHaveLength(2)
     expect(person.container.querySelector('[data-agent-avatar-slot]')).toBeNull()
+  })
+
+  it('falls back to initials when a remote avatar cannot be loaded', () => {
+    const view = render(<UserAvatar name="Flow QA" avatarUrl="https://example.test/missing.png" />)
+    const image = view.container.querySelector('img')!
+    fireEvent.error(image)
+    expect(view.container.querySelector('img')).toBeNull()
+    expect(view.container.querySelector('[data-avatar-fallback]')).toHaveTextContent('FQ')
   })
 })
