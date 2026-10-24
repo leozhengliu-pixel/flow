@@ -4,7 +4,7 @@ import type { BootstrapData, Issue, IssueUpdateInput } from '@/types/flow'
 import { listIssueRecordGroups, listIssueRecords, type IssueQueryInput } from '@/lib/api'
 import { MyIssuesGroupHeader, MyIssuesRow, type MyIssuesGroupData, type MyIssuesListProps } from '@/components/my-issues/my-issues-list'
 import { issueToExplorerRow } from './issue-explorer-model'
-import { PagedIssueCache } from './paged-issue-cache'
+import { issueListState, type IssueListGroup } from './paged-issue-list-cache'
 import { ISSUE_QUERY_INVALIDATED, issueMayMatchQuery, queryUsesLabels, type IssueQueryInvalidation } from './paged-issue-invalidation'
 import styles from '@/components/my-issues/my-issues-list.module.css'
 import boardStyles from './issue-board.module.css'
@@ -14,7 +14,7 @@ import { LoadingContainer, LoadingListFooter } from '@/components/ui/loading-car
 const UNKNOWN_CUSTOMER_GROUP = '__unknown__'
 
 const PAGE_SIZE = 100
-type Group = { value: string; count: number; loaded: number; hasMore: boolean }
+type Group = IssueListGroup
 
 export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapsedChange, onCreateIssue, onOpenIssueRecord, onTotalChange, onLoadedIssuesChange, layout = 'list', onMoveIssueRecord, hiddenGroupIds = [], onHideGroup, onShowGroup, ...rowProps }: Omit<MyIssuesListProps, 'groups' | 'onOpenIssue'> & {
   data: BootstrapData
@@ -36,11 +36,20 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
     refreshTimer.current = setTimeout(() => setRetry(value => value + 1), 80)
   }, [])
   useEffect(() => () => clearTimeout(refreshTimer.current), [signature])
-  const cache = useMemo(() => new PagedIssueCache(40, 16 * 1024 * 1024, signature), [signature])
-  const [groups, setGroups] = useState<Group[]>([])
+  const cachedState = useMemo(() => issueListState(signature), [signature])
+  const cache = cachedState.cache
+  const [groups, setGroups] = useState<Group[]>(() => cachedState.groups)
   const [revision, setRevision] = useState(0)
   const [error, setError] = useState<string>()
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => cachedState.groups.length === 0)
+  const updateGroups = useCallback((next: Group[] | ((current: Group[]) => Group[])) => {
+    setGroups(current => {
+      const value = typeof next === 'function' ? next(current) : next
+      const state = issueListState(signature)
+      state.groups = value
+      return value
+    })
+  }, [signature])
   const [dragging, setDragging] = useState<{ issue: Issue; group: string }>()
   const lastContent = useRef<ReactNode>(null)
   const active = useRef<{ signature: string; abort: AbortController; pending: Set<string>; ready: boolean } | undefined>(undefined)
@@ -73,7 +82,7 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
     active.current = request
     const changed = renderedSignature.current !== signature
     renderedSignature.current = signature
-    if (changed || !cache.retainedEntities) { recordsRef.current?.([]); setGroups([]); setLoading(true) }
+    if (changed || !cache.retainedEntities) { recordsRef.current?.([]); updateGroups([]); setLoading(true) }
     setError(undefined)
     const initialQuery = queryRef.current
     // A refresh of a list that is already showing rows keeps them (and the scroll position): see `revalidate`.
@@ -109,7 +118,7 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
         staleKeys.current = new Set(cache.pageKeys())
         request.ready = true
         recordsRef.current?.(cache.records())
-        setGroups(groups)
+        updateGroups(groups)
         setRevision(value => value + 1)
         totalRef.current?.(groups.reduce((total, group) => total + group.count, 0))
         return
@@ -126,12 +135,12 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
       if (first && page) { cache.put(first.value, 0, page); first.loaded = page.items.length; first.hasMore = page.hasMore }
       request.ready = true
       recordsRef.current?.(cache.records())
-      setGroups(groups)
+      updateGroups(groups)
       totalRef.current?.(groups.reduce((total, group) => total + group.count, 0))
     }).catch(error => { if (!request.abort.signal.aborted) setError(String(error.message ?? error)) })
       .finally(() => { if (!request.abort.signal.aborted) setLoading(false) })
     return () => request.abort.abort()
-  }, [signature, retry, cache])
+  }, [signature, retry, cache, updateGroups])
   const collectionRevision = useRef(data.issueCollectionRevision)
   useEffect(() => {
     if (collectionRevision.current === data.issueCollectionRevision) return
@@ -150,13 +159,13 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
         return
       }
       // A forced (permission) invalidation must not keep showing rows the viewer may have lost.
-      if (detail.force) { cache.clear(); lastContent.current = null; recordsRef.current?.([]); setGroups([]); setLoading(true) }
+      if (detail.force) { cache.clear(); lastContent.current = null; recordsRef.current?.([]); updateGroups([]); setLoading(true) }
       if (detail.force) { clearTimeout(refreshTimer.current); setRetry(value => value + 1) }
       else if (!detail.issue || cache.contains(detail.issue.id) || issueMayMatchQuery(detail.issue, queryRef.current, dataRef.current)) requestRefresh()
     }
     window.addEventListener(ISSUE_QUERY_INVALIDATED, invalidate)
     return () => window.removeEventListener(ISSUE_QUERY_INVALIDATED, invalidate)
-  }, [cache, requestRefresh])
+  }, [cache, requestRefresh, updateGroups])
   const observedIssues = useRef(data.issues)
   useEffect(() => {
     if (observedIssues.current === data.issues) return
@@ -186,11 +195,11 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
       cache.put(group, pageIndex, page, cursor)
       recordsRef.current?.(cache.records())
       const end = cache.start(group, pageIndex) + page.items.length
-      setGroups(current => current.map(item => item.value === group ? { ...item, loaded: Math.max(item.loaded, end), hasMore: end >= item.loaded ? page.hasMore : item.hasMore } : item))
+      updateGroups(current => current.map(item => item.value === group ? { ...item, loaded: Math.max(item.loaded, end), hasMore: end >= item.loaded ? page.hasMore : item.hasMore } : item))
       setRevision(value => value + 1)
     }).catch(error => { if (!request.abort.signal.aborted) setError(String(error.message ?? error)) })
       .finally(() => request.pending.delete(key))
-  }, [cache, signature])
+  }, [cache, signature, updateGroups])
   /** Re-fetches a stale page in place (same cursor). Its rows stay on screen meanwhile, so nothing flashes or moves. */
   const revalidate = useCallback((group: string, pageIndex: number) => {
     const request = active.current, key = cache.key(group, pageIndex)
@@ -207,11 +216,11 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
       if (resized) cache.truncateAfter(group, pageIndex)
       const end = cache.start(group, pageIndex) + page.items.length
       recordsRef.current?.(cache.records())
-      setGroups(current => current.map(item => item.value === group ? { ...item, loaded: resized ? end : item.loaded, hasMore: resized || end >= item.loaded ? page.hasMore : item.hasMore } : item))
+      updateGroups(current => current.map(item => item.value === group ? { ...item, loaded: resized ? end : item.loaded, hasMore: resized || end >= item.loaded ? page.hasMore : item.hasMore } : item))
       setRevision(value => value + 1)
     }).catch(() => undefined)
       .finally(() => request.pending.delete(key))
-  }, [cache, signature])
+  }, [cache, signature, updateGroups])
   const descriptor = useCallback((group: Group): MyIssuesGroupData => {
     const field = query.groupBy ?? 'status'
     const state = field === 'status' ? data.states.find(state => state.id === group.value) : undefined

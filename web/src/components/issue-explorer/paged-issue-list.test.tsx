@@ -1,10 +1,11 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, makeIssue } from '@/test/fixtures'
 import { listIssueRecordGroups, listIssueRecords } from '@/lib/api'
 import { PagedIssueList } from './paged-issue-list'
+import { clearPagedIssueListCache } from './paged-issue-list-cache'
 import { ISSUE_QUERY_INVALIDATED } from './paged-issue-invalidation'
 
 vi.mock('@/lib/api', () => ({ listIssueRecordGroups: vi.fn(), listIssueRecords: vi.fn() }))
@@ -23,6 +24,8 @@ vi.mock('@/components/my-issues/my-issues-list', async importOriginal => {
   const actual = await importOriginal<typeof import('@/components/my-issues/my-issues-list')>()
   return { ...actual, MyIssuesRow: ({ issue, onOpen }: { issue: { id: string; title: string }; onOpen: (issue: { id: string }) => void }) => <button onClick={() => onOpen(issue)}>{issue.title}</button> }
 })
+
+afterEach(() => clearPagedIssueListCache())
 
 describe('server-backed issue groups', () => {
   beforeEach(() => vi.clearAllMocks())
