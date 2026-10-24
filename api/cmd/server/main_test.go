@@ -12,6 +12,7 @@ import (
 	"net/textproto"
 	"net/url"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -1639,6 +1640,39 @@ func TestSavedViewShareLifecycle(t *testing.T) {
 	}
 	requestJSON[any](t, handler, http.MethodDelete, "/api/views/"+view.ID+"/share", nil, http.StatusNoContent)
 	requestJSON[any](t, handler, http.MethodGet, "/api/shared/views/"+url.PathEscape(token)+"?workspace=test-workspace", nil, http.StatusNotFound)
+}
+
+func TestSharedLinksDoNotDiscloseWorkspaceExistence(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir()})
+
+	request := func(path string) (int, string) {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		return recorder.Code, recorder.Body.String()
+	}
+	knownViewStatus, knownViewBody := request("/api/shared/views/invalid?workspace=test-workspace")
+	unknownWorkspaceStatus, unknownWorkspaceBody := request("/api/shared/views/invalid?workspace=does-not-exist")
+	issueStatus, issueBody := request("/api/shared/issues/invalid?workspace=test-workspace")
+	dashboardStatus, dashboardBody := request("/api/shared/dashboards/invalid?workspace=test-workspace")
+	if knownViewStatus != http.StatusNotFound || unknownWorkspaceStatus != http.StatusNotFound || issueStatus != http.StatusNotFound || dashboardStatus != http.StatusNotFound {
+		t.Fatalf("shared link statuses = %d, %d, %d, %d", knownViewStatus, unknownWorkspaceStatus, issueStatus, dashboardStatus)
+	}
+	errorShape := func(body string) map[string]any {
+		var result map[string]any
+		if err := json.Unmarshal([]byte(body), &result); err != nil {
+			t.Fatalf("shared link error was not JSON: %v", err)
+		}
+		delete(result, "requestId")
+		return result
+	}
+	if !reflect.DeepEqual(errorShape(knownViewBody), errorShape(unknownWorkspaceBody)) || !reflect.DeepEqual(errorShape(knownViewBody), errorShape(issueBody)) || !reflect.DeepEqual(errorShape(knownViewBody), errorShape(dashboardBody)) {
+		t.Fatalf("shared link errors disclose resource type or workspace: view=%q unknown=%q issue=%q dashboard=%q", knownViewBody, unknownWorkspaceBody, issueBody, dashboardBody)
+	}
 }
 
 func TestInboxNotificationLifecycle(t *testing.T) {
