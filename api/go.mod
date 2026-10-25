@@ -30,7 +30,7 @@ require (
 	golang.org/x/net v0.60.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/text v0.43.0
-	golang.org/x/time v0.15.0
+	golang.org/x/time v0.16.0
 	k8s.io/api v0.37.1
 	k8s.io/apimachinery v0.37.1
 	k8s.io/client-go v0.37.1
