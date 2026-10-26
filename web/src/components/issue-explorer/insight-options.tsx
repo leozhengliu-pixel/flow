@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { StatusIcon, WorkflowStatusGlyph } from '@/components/issue/issue-icons'
 import type { BootstrapData, WorkflowState } from '@/types/flow'
+import { statusGroupId, statusGroupIndex } from './insight-status-groups'
 import styles from './insights-panel.module.css'
 
 /** The reference app: Ctrl ⇧ F toggles the Insights fullscreen view. */
@@ -24,15 +25,21 @@ function statusKind(state: Pick<WorkflowState, 'id' | 'name' | 'type'>): StatusK
 export function timeInStatusTree(data: BootstrapData): StatusNode[] {
   const nodes: StatusNode[] = []
   const states = [...data.states].sort((left, right) => left.position - right.position)
+  const groups = statusGroupIndex(data)
   for (const kind of STATUS_KINDS) {
     const members = states.filter(state => statusKind(state) === kind)
     if (!members.length) continue
     const typeIcon = <WorkflowStatusGlyph state={{ id: `type-${kind}`, name: kind, type: kind === 'triage' || kind === 'duplicate' ? 'canceled' : kind, color: kind === 'triage' ? members[0].color : 'var(--pk-muted)' }} size={14}/>
     if (kind === 'triage' || kind === 'duplicate') { nodes.push({ key: kind, label: STATUS_KIND_LABELS[kind], values: members.map(state => state.id), icon: typeIcon, depth: 0 }); continue }
     nodes.push({ key: kind, label: STATUS_KIND_LABELS[kind], values: [`type:${kind}`], icon: typeIcon, depth: 0 })
-    const byName = new Map<string, WorkflowState[]>()
-    for (const state of members) byName.set(state.name, [...byName.get(state.name) ?? [], state])
-    for (const [name, group] of byName) nodes.push({ key: `${kind}:${name}`, label: name, values: group.map(state => state.id), icon: <StatusIcon state={group[0]} size={14}/>, depth: 1 })
+    // The same status in several team workflows is one row, named and coloured like the Status dimension's merged group.
+    const byGroup = new Map<string, WorkflowState[]>()
+    for (const state of members) { const id = statusGroupId(state); byGroup.set(id, [...byGroup.get(id) ?? [], state]) }
+    for (const [id, group] of byGroup) {
+      const ids = group.map(state => state.id).sort(groups.compare)
+      const representative = group.find(state => state.id === ids[0])!
+      nodes.push({ key: `${kind}:${id}`, label: representative.name, values: ids, icon: <StatusIcon state={representative} size={14}/>, depth: 1 })
+    }
   }
   return nodes
 }

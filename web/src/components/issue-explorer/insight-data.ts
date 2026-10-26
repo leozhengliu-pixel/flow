@@ -2,8 +2,10 @@ import type { BootstrapData } from '@/types/flow'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import { emptyDimensionLabel, type SavedViewInsightsConfig, type SavedViewInsightDimension, type SavedViewInsightMeasure } from './insight-config'
 import { aggregateInsightValues, insightAggregations, type InsightSample, type InsightAggregation } from './insight-interaction'
+import { statusGroupIndex, type StatusGroupIndex } from './insight-status-groups'
 
-export type InsightValue = { id: string; label: string; color?: string }
+/** `stateIds`: on Status and Status type values, the underlying status IDs (best representative first). */
+export type InsightValue = { id: string; label: string; color?: string; stateIds?: string[] }
 export type InsightRow = InsightValue & { total: number; segments: Record<string, number>; values: number[]; aggregations: Partial<Record<InsightAggregation, number>> }
 
 export type InsightData = { rows: InsightRow[]; segments: Array<InsightValue & { count: number }>; samples: InsightSample<MyIssuesRowData>[] }
@@ -15,11 +17,16 @@ export function buildInsightData(rows: MyIssuesRowData[], config: SavedViewInsig
   const now = Date.now()
   const hideSlice = Boolean(config.hideEmptySlice && emptyDimensionLabel(config.slice))
   const hideSegment = Boolean(config.hideEmptySegment && emptyDimensionLabel(config.segment))
+  // Status values merge across team workflows (see statusGroupId); `statuses` keeps each seen status to name and colour its group.
+  const groups = statusGroupIndex(data)
+  const statuses = new Map<string, MyIssuesRowData['state']>()
+  const timeInStatusGroups = new Set(config.timeInStatusIds.flatMap(id => groups.groupOf(id) ?? []))
   for (const row of rows) {
-    const metric = metricValue(row, config, now)
+    const metric = metricValue(row, config, now, groups, timeInStatusGroups)
     if (metric == null || !Number.isFinite(metric)) continue
-    let slices = dimensionValues(row, config.slice, data)
-    let segments = config.segment === 'none' ? [{ id: 'all', label: 'No value' }] : dimensionValues(row, config.segment, data)
+    statuses.set(row.state.id, row.state)
+    let slices = dimensionValues(row, config.slice, data, groups)
+    let segments = config.segment === 'none' ? [{ id: 'all', label: 'No value' }] : dimensionValues(row, config.segment, data, groups)
     // "Hide <No value>": the empty value leaves the chart, the table and the counts.
     if (hideSegment) segments = segments.filter(value => !isEmptyInsightValue(config.segment as SavedViewInsightDimension, value.id))
     if (hideSlice) slices = slices.filter(value => !isEmptyInsightValue(config.slice, value.id))
@@ -32,10 +39,11 @@ export function buildInsightData(rows: MyIssuesRowData[], config: SavedViewInsig
     samples.push({ item: row, value: metric, slices: slices.map(value => value.id), segments: config.segment === 'none' ? [] : segments.map(value => value.id) })
     for (const segmentValue of segments) {
       const current = segmentMap.get(segmentValue.id)
-      segmentMap.set(segmentValue.id, { ...segmentValue, count: (current?.count ?? 0) + 1 })
+      segmentMap.set(segmentValue.id, { ...segmentValue, stateIds: mergeStateIds(current?.stateIds, segmentValue.stateIds), count: (current?.count ?? 0) + 1 })
     }
     for (const sliceValue of slices) {
-      const current = rowMap.get(sliceValue.id) ?? { ...sliceValue, total: 0, segments: Object.create(null) as Record<string, number>, values: [], aggregations: {} }
+      const current = rowMap.get(sliceValue.id) ?? { ...sliceValue, stateIds: undefined, total: 0, segments: Object.create(null) as Record<string, number>, values: [], aggregations: {} }
+      current.stateIds = mergeStateIds(current.stateIds, sliceValue.stateIds)
       current.total += metric
       current.values.push(metric)
       for (const segmentValue of segments) current.segments[segmentValue.id] = (current.segments[segmentValue.id] ?? 0) + metric
@@ -48,16 +56,35 @@ export function buildInsightData(rows: MyIssuesRowData[], config: SavedViewInsig
       row.total = row.aggregations.average ?? 0
     }
   }
-  const statusOrder = new Map([...data.states].sort((a, b) => a.position - b.position).map((state, index) => [state.id, index]))
+  // A merged status reads as its representative: the shallowest team's status, whatever order the issues came in.
+  const represent = (value: InsightValue, dimension: SavedViewInsightDimension | 'none') => {
+    if (!value.stateIds || (dimension !== 'status' && dimension !== 'statusType')) return
+    value.stateIds.sort(groups.compare)
+    const state = statuses.get(value.stateIds[0])
+    if (!state) return
+    if (dimension === 'status') value.label = state.name
+    value.color = state.color
+  }
+  for (const row of rowMap.values()) represent(row, config.slice)
+  for (const segment of segmentMap.values()) represent(segment, config.segment)
+  const statusOrder = (value: InsightValue) => { const state = value.stateIds && statuses.get(value.stateIds[0]); return state ? groups.order(state) : [999, 0] }
+  const byStatus = (left: InsightValue, right: InsightValue) => { const a = statusOrder(left), b = statusOrder(right); return a[0] - b[0] || a[1] - b[1] || left.label.localeCompare(right.label) }
   return {
-    rows: [...rowMap.values()].sort((left, right) => config.slice === 'status' ? (statusOrder.get(left.id) ?? 999) - (statusOrder.get(right.id) ?? 999) : config.slice === 'priority' ? Number(left.id) - Number(right.id) : config.slice.endsWith('Date') || config.slice === 'burnUp' ? left.id.localeCompare(right.id) : config.slice === 'customer' ? Number(left.id === 'none') - Number(right.id === 'none') || left.label.localeCompare(right.label) : right.total - left.total || left.label.localeCompare(right.label)),
+    rows: [...rowMap.values()].sort((left, right) => config.slice === 'status' ? byStatus(left, right) : config.slice === 'priority' ? Number(left.id) - Number(right.id) : config.slice.endsWith('Date') || config.slice === 'burnUp' ? left.id.localeCompare(right.id) : config.slice === 'customer' ? Number(left.id === 'none') - Number(right.id === 'none') || left.label.localeCompare(right.label) : right.total - left.total || left.label.localeCompare(right.label)),
     // Priority and status segments keep their natural order (the reference app: No priority, Urgent … Low); others rank by size.
-    segments: [...segmentMap.values()].sort((left, right) => config.segment === 'priority' ? Number(left.id) - Number(right.id) : config.segment === 'status' ? (statusOrder.get(left.id) ?? 999) - (statusOrder.get(right.id) ?? 999) : right.count - left.count || left.label.localeCompare(right.label)),
+    segments: [...segmentMap.values()].sort((left, right) => config.segment === 'priority' ? Number(left.id) - Number(right.id) : config.segment === 'status' ? byStatus(left, right) : right.count - left.count || left.label.localeCompare(right.label)),
     samples,
   }
 }
 
-function dimensionValues(row: MyIssuesRowData, dimension: SavedViewInsightDimension, data: BootstrapData): InsightValue[] {
+function mergeStateIds(current: string[] | undefined, next: string[] | undefined) {
+  if (!next) return current
+  if (!current) return [...next]
+  for (const id of next) if (!current.includes(id)) current.push(id)
+  return current
+}
+
+function dimensionValues(row: MyIssuesRowData, dimension: SavedViewInsightDimension, data: BootstrapData, groups: StatusGroupIndex): InsightValue[] {
   if (dimension === 'label') return row.labels?.length ? row.labels.map(label => ({ id: label.id, label: label.name, color: label.color })) : [noValue('label')]
   if (dimension.startsWith('labelGroup:')) {
     const groupId = dimension.slice('labelGroup:'.length)
@@ -70,8 +97,8 @@ function dimensionValues(row: MyIssuesRowData, dimension: SavedViewInsightDimens
     if (row.hasUnknownCustomer) values.push({ id: UNKNOWN_CUSTOMER_ID, label: 'Unknown customer' })
     return values.length ? values : [noValue('customer')]
   }
-  if (dimension === 'status') return [{ id: row.state.id, label: row.state.name, color: row.state.color }]
-  if (dimension === 'statusType') return [{ id: row.state.type, label: titleCase(row.state.type), color: row.state.color }]
+  if (dimension === 'status') return [{ id: groups.groupOf(row.state) ?? row.state.id, label: row.state.name, color: row.state.color, stateIds: [row.state.id] }]
+  if (dimension === 'statusType') return [{ id: row.state.type, label: titleCase(row.state.type), color: row.state.color, stateIds: [row.state.id] }]
   if (dimension === 'priority') return [{ id: String(row.priority), label: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][row.priority], color: ['var(--status-neutral)', 'var(--priority-urgent)', 'var(--priority-high)', 'var(--priority-medium)', 'var(--priority-low)'][row.priority] }]
   if (dimension === 'project') return [{ id: row.project?.id ?? 'none', label: row.project?.name ?? 'No project', color: row.project?.color }]
   if (dimension === 'assignee') return [{ id: row.assignee?.id ?? 'none', label: row.assignee?.name ?? 'No assignee', color: row.assignee?.color }]
@@ -93,14 +120,15 @@ function dimensionValues(row: MyIssuesRowData, dimension: SavedViewInsightDimens
   return [noValue('value')]
 }
 
-function metricValue(row: MyIssuesRowData, config: SavedViewInsightsConfig, now: number) {
+function metricValue(row: MyIssuesRowData, config: SavedViewInsightsConfig, now: number, groups: StatusGroupIndex, selectedGroups: Set<string>) {
   if (config.measure === 'issueCount') return 1
   const created = dateMs(row.createdAt)
   if (config.measure === 'cycleTime') return elapsed(row.startedAt, row.completedAt)
   if (config.measure === 'leadTime') return elapsed(row.createdAt, row.completedAt)
   if (config.measure === 'issueAge') return row.completedAt || row.canceledAt ? null : Math.max(0, now - created)
   const selected = config.timeInStatusIds
-  const intervals = row.statusIntervals?.filter(interval => !selected.length || selected.includes(interval.stateId) || Boolean(interval.stateType && selected.includes(`type:${interval.stateType}`))) ?? []
+  // A stored status ID stands for its merged group, so the same status in a sub-team's own workflow counts too.
+  const intervals = row.statusIntervals?.filter(interval => !selected.length || selected.includes(interval.stateId) || Boolean(interval.stateType && selected.includes(`type:${interval.stateType}`)) || selectedGroups.has(groups.groupOf(interval.stateId) ?? '')) ?? []
   if (!intervals.length) return null
   return intervals.reduce((total, interval) => total + Math.max(0, (interval.exitedAt ? dateMs(interval.exitedAt) : now) - dateMs(interval.enteredAt)), 0)
 }
