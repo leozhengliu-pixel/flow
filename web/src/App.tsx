@@ -165,7 +165,6 @@ import {
   clearNavigationCache,
   hydrateWorkspaceNavigation,
   readNavigationCache,
-  workspaceBootstrapPhase,
   writeNavigationCacheWhenIdle,
   rememberWorkspace,
 } from "@/lib/navigation-cache";
@@ -334,7 +333,7 @@ import { TeamPagesLayout } from '@/components/team/team-pages-layout'
 import { isTeamPagesRoute } from '@/components/team/team-pages-routes'
 import { searchResultLink } from '@/lib/search-result-link'
 import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck } from '@/lib/issue-detail-cache'
-import { canReuseWorkspaceForIssueDetail } from '@/lib/bootstrap-navigation'
+import { bootstrapNavigationDecision, bootstrapRefreshProjection, bootstrapRequestKey } from '@/lib/bootstrap-navigation'
 import { triageState } from '@/components/triage/triage-model'
 import type { WorkspaceSecondaryKind } from '@/components/workspace/workspace-secondary-page'
 import { applyLabelUpdate, archiveProjectUpdateReminders, mergeRefreshedIssues, mergeScopedIssues, mergeWorkspaceMetadata, metadataOnlyRealtimeEvent, newlyReleasedIssueIds, syncIssueProjectSummaries, teamIssueScope, type IssueRefreshScope } from '@/lib/workspace-metadata-refresh'
@@ -804,18 +803,22 @@ function App() {
         (item) => item.workspace.urlKey === requestedWorkspaceKey,
       )
     ) {
+      // The viewer no longer belongs to (or never had) this workspace: nothing cached for it may be shown again.
+      clearNavigationCache(account.viewer.id, requestedWorkspaceKey);
       setData(null);
       setError(true);
       return;
     }
-    const requestKey = `${account.viewer.id}:${requestedWorkspaceKey}:${bootstrapProjection ?? 'full'}`;
-    if (canReuseWorkspaceForIssueDetail({
+    const requestKey = bootstrapRequestKey(account.viewer.id, requestedWorkspaceKey, bootstrapProjection);
+    // 'reuse' leaves loadedBootstrapRequestKey on the page the snapshot was loaded for, so going back there is a 'skip'.
+    if (bootstrapNavigationDecision({
       current: dataRef.current,
       requestedWorkspaceKey,
       viewerId: account.viewer.id,
       projection: bootstrapProjection,
-    })) return;
-    if (workspaceBootstrapPhase(loadedWorkspaceKey, requestedWorkspaceKey, bootstrapRequest.current?.key, requestKey) === 'skip' && loadedBootstrapRequestKey.current === requestKey) return;
+      loadedRequestKey: loadedBootstrapRequestKey.current,
+      inFlightKey: bootstrapRequest.current?.key,
+    }) !== 'fetch') return;
     let cancelled = false;
     if (loadedWorkspaceKey !== requestedWorkspaceKey || loadedBootstrapRequestKey.current && loadedBootstrapRequestKey.current !== requestKey) {
       const cachedNavigation = readNavigationCache(account.viewer.id, requestedWorkspaceKey);
@@ -1416,7 +1419,7 @@ function App() {
       if(checkVisibility && /resync|member|permission|shared|unshared/.test(event.type))setDetailAccessPending(workspace);
       let next:BootstrapData, visibility:{ids:string[]}|undefined;
       try {
-        [next,visibility]=await Promise.all([slim ? fetchPagedBootstrap(workspace) : fetchBootstrap(workspace,bootstrapProjection),checkVisibility ? fetchVisibleIssueIds(workspace,checkedIds) : Promise.resolve(undefined)]);
+        [next,visibility]=await Promise.all([slim ? fetchPagedBootstrap(workspace) : fetchBootstrap(workspace,bootstrapRefreshProjection({routeProjection:bootstrapProjection,loadedRequestKey:loadedBootstrapRequestKey.current,viewerId,workspaceKey:workspace})),checkVisibility ? fetchVisibleIssueIds(workspace,checkedIds) : Promise.resolve(undefined)]);
       } catch(error) {
         if(checkVisibility && sessionViewerRef.current===viewerId)setDetailAccessPending(workspace);
         throw error;
@@ -4544,6 +4547,9 @@ function App() {
   if (authenticationPolicy && !authPath) return withStore(<AuthenticationPolicyPage code={authenticationPolicy}/>);
   if (!authReady) return withStore(<AppStartup />);
   const handleAuthenticated = async (authenticated: AuthSession, returnTo?: string) => {
+    // Signing in as someone else without a logout in between: the previous viewer's cached rows go.
+    const previousViewerId = sessionViewerRef.current;
+    if (previousViewerId && previousViewerId !== authenticated.user.id) clearNavigationCache(previousViewerId);
     setSession(authenticated);
     const nextAccount = await fetchAccountBootstrap();
     setAccount(nextAccount);
