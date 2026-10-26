@@ -581,7 +581,7 @@ export function ProjectIssues({
         <MyIssuesBulkActionBar
           selectedIssues={selectedRows}
           destructiveActions={["archive", "delete"]}
-          actionOptions={(action) => explorerBulkOptions(action, explorerPropertyOptions(issueData, projectIssues))}
+          actionOptions={(action) => explorerBulkOptions(action, explorerPropertyOptions(issueData, projectIssues), { data: issueData, teamIds: selectedRows.map((row) => rowIssues.get(row.id)?.team.id) })}
           onAction={(action, _issues, value) => {
             void executeExplorerBulkAction({
               action,
