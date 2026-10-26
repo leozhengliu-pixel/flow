@@ -126,6 +126,8 @@ describe('ProjectTeamsPicker', () => {
     const onChange = vi.fn()
     render(<Harness initial={['alpha', 'beta']} onChange={onChange}/>)
     await user.click(screen.getByRole('combobox', { name: 'Change project teams' }))
+    // The search takes focus on the next frame; keys typed before that reach the trigger.
+    await waitFor(() => expect(screen.getByPlaceholderText('Change teams…')).toHaveFocus())
     // The lead row is highlighted first: ArrowRight opens its submenu and focuses the search.
     await user.keyboard('{ArrowRight}')
     const search = await screen.findByPlaceholderText('Change lead team…')
