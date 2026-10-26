@@ -87,10 +87,12 @@ func TestDocumentHistoryProjectAssociationAndTrashRestore(t *testing.T) {
 	if document.IssueID != issue.ID || document.Icon != "Page" || document.Color != "#8b8b90" {
 		t.Fatalf("document issue association = %q, want %q", document.IssueID, issue.ID)
 	}
-	if !slices.Contains(document.TeamIDs, issue.Team.ID) || !slices.ContainsFunc(document.Permissions, func(permission domain.DocumentPermission) bool {
-		return permission.SubjectType == "team" && permission.SubjectID == issue.Team.ID && permission.Role == "editor"
+	// The issue's team is inherited as scope; the document's own teams and
+	// its default workspace grant are left as they are.
+	if !slices.Contains(document.InheritedTeamIDs, issue.Team.ID) || len(document.TeamIDs) != 0 || !slices.ContainsFunc(document.Permissions, func(permission domain.DocumentPermission) bool {
+		return permission.SubjectType == "workspace" && permission.Role == "editor"
 	}) {
-		t.Fatalf("issue-linked document did not inherit the issue team scope: teams=%v permissions=%#v", document.TeamIDs, document.Permissions)
+		t.Fatalf("issue-linked document scope: teams=%v inherited=%v permissions=%#v", document.TeamIDs, document.InheritedTeamIDs, document.Permissions)
 	}
 	requestJSON[any](t, handler, http.MethodDelete, "/api/subscriptions/document/"+document.ID, nil, http.StatusNoContent)
 	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
