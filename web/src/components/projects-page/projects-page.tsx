@@ -734,8 +734,9 @@ export function ProjectsPage({
       onClose={() => setCreateOpen(false)}
       onCreate={create}
       open={createOpen}
-      teamLabel={teams[0]?.name ?? 'Team'}
-      workspaceName={teams[0]?.name ?? workspaceKey}
+      defaultTeamId={scopeTeamId}
+      teamLabel={(teams.find(team => team.id === scopeTeamId) ?? teams[0])?.name ?? 'Team'}
+      workspaceName={(teams.find(team => team.id === scopeTeamId) ?? teams[0])?.name ?? workspaceKey}
       teams={teams.map(team => ({ id: team.id, label: team.name, color: team.color, icon: <ViewGlyph color={team.color} icon={team.icon || 'Team'} /> }))}
     />
     <ProjectsBulkActionBar

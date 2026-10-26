@@ -21,6 +21,25 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals() })
 
 describe('NewProjectDialog', () => {
+  it('starts a new project in the team it is created from, not the first team', async () => {
+    const user = userEvent.setup()
+    const onCreate = vi.fn().mockResolvedValue(undefined)
+    render(
+      <I18nProvider>
+        <NewProjectDialog
+          open
+          defaultTeamId="team-design"
+          onClose={vi.fn()}
+          onCreate={onCreate}
+          statuses={[{ id: 'Planned', label: 'Planned' }]}
+          teams={[{ id: 'team-eng', label: 'Engineering' }, { id: 'team-design', label: 'Design' }]}
+        />
+      </I18nProvider>,
+    )
+    await user.type(screen.getByRole('textbox', { name: 'Project name' }), 'Design project')
+    await user.click(screen.getByRole('button', { name: 'Create project' }))
+    await waitFor(() => expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ teamIds: ['team-design'] })))
+  })
   it('uses the provided project status dictionary without English fallback states', async () => {
     const user = userEvent.setup()
     const onCreate = vi.fn()
