@@ -363,8 +363,15 @@ func applyAPIKeyProjection(data *domain.Bootstrap, key domain.APIKey) {
 		data.Releases[index].ProjectIDs = slices.DeleteFunc(data.Releases[index].ProjectIDs, func(id string) bool { return !visibleProjects[id] })
 		data.Releases[index].IssueIDs = slices.DeleteFunc(data.Releases[index].IssueIDs, func(id string) bool { return !visibleIssues[id] })
 	}
+	// A document scoped by a private team of its issue or project follows the
+	// key's teams like its own teams do.
+	linkScope := store.NewDocumentLinkScope(data.Teams, data.TeamSettings)
 	data.Documents = slices.DeleteFunc(data.Documents, func(document domain.Document) bool {
-		return len(document.TeamIDs) > 0 && !slices.ContainsFunc(document.TeamIDs, func(id string) bool { return allowed[id] })
+		if len(document.TeamIDs) > 0 && !slices.ContainsFunc(document.TeamIDs, func(id string) bool { return allowed[id] }) {
+			return true
+		}
+		closed := linkScope.ClosedTeams(document)
+		return len(closed) > 0 && !slices.ContainsFunc(closed, func(id string) bool { return allowed[id] })
 	})
 	data.SavedViews = slices.DeleteFunc(data.SavedViews, func(view domain.SavedView) bool {
 		return view.Scope == "team" && !allowed[view.TeamID] || view.ProjectID != "" && !visibleProjects[view.ProjectID]

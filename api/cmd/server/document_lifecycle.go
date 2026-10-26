@@ -171,9 +171,23 @@ func recordDocumentRevision(document *domain.Document, author domain.User, now t
 // the issues the write names), so document writes can notify subscribers
 // without loading the workspace's issues or content records.
 func documentMutationScope(ctx context.Context, id string, issueIDs ...*string) context.Context {
+	return documentScope(ctx, id, false, issueIDs...)
+}
+
+// documentLinkMutationScope also loads the issue the document is attached
+// to, so a write that changes its links can read that issue's team.
+func documentLinkMutationScope(ctx context.Context, id string, issueIDs ...*string) context.Context {
+	return documentScope(ctx, id, true, issueIDs...)
+}
+
+func documentScope(ctx context.Context, id string, linkedIssue bool, issueIDs ...*string) context.Context {
 	return store.WithMutationScope(ctx, store.MutationScope{IssueIDs: scopeIDs(issueIDs...), Resolve: func(data domain.Bootstrap) store.MutationScope {
 		if document, err := documentByID(&data, id); err == nil {
-			return store.MutationScope{Resources: []string{document.ID}}
+			scope := store.MutationScope{Resources: []string{document.ID}}
+			if linkedIssue && document.IssueID != "" {
+				scope.IssueIDs = []string{document.IssueID}
+			}
+			return scope
 		}
 		return store.MutationScope{Resources: []string{id}}
 	}})

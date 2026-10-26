@@ -39509,7 +39509,18 @@
           "id": {
             "type": "string"
           },
+          "inheritedTeamIds": {
+            "description": "InheritedTeamIDs are the teams of the issue and projects the document is attached to. Read-only: Flow updates them when the document is attached or detached, the issue moves to another team, or a project's teams change. When one of them is private, workspace-wide access to the document is limited to people who can read that team; people and teams the document is shared with directly keep their access. Public teams do not limit access.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "issueId": {
+            "type": "string"
+          },
+          "issueTeamId": {
+            "description": "IssueTeamID is the team of the issue the document is attached to. Read-only.",
             "type": "string"
           },
           "permissions": {
@@ -39844,7 +39855,18 @@
           "id": {
             "type": "string"
           },
+          "inheritedTeamIds": {
+            "description": "InheritedTeamIDs are the teams of the issue and projects the document is attached to. Read-only: Flow updates them when the document is attached or detached, the issue moves to another team, or a project's teams change. When one of them is private, workspace-wide access to the document is limited to people who can read that team; people and teams the document is shared with directly keep their access. Public teams do not limit access.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "issueId": {
+            "type": "string"
+          },
+          "issueTeamId": {
+            "description": "IssueTeamID is the team of the issue the document is attached to. Read-only.",
             "type": "string"
           },
           "permissions": {

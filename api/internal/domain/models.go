@@ -506,19 +506,30 @@ type DocumentContent struct {
 }
 
 type Document struct {
-	ID            string               `json:"id"`
-	SlugID        string               `json:"slugId"`
-	Title         string               `json:"title"`
-	Icon          string               `json:"icon,omitempty"`
-	Color         string               `json:"color,omitempty"`
-	Content       string               `json:"content"`
-	ContentState  string               `json:"contentState,omitempty"`
-	ContentData   map[string]any       `json:"contentData,omitempty"`
-	Creator       User                 `json:"creator"`
-	BotActor      *ActorBot            `json:"botActor,omitempty"`
-	ProjectIDs    []string             `json:"projectIds"`
-	TeamIDs       []string             `json:"teamIds"`
-	IssueID       string               `json:"issueId,omitempty"`
+	ID           string         `json:"id"`
+	SlugID       string         `json:"slugId"`
+	Title        string         `json:"title"`
+	Icon         string         `json:"icon,omitempty"`
+	Color        string         `json:"color,omitempty"`
+	Content      string         `json:"content"`
+	ContentState string         `json:"contentState,omitempty"`
+	ContentData  map[string]any `json:"contentData,omitempty"`
+	Creator      User           `json:"creator"`
+	BotActor     *ActorBot      `json:"botActor,omitempty"`
+	ProjectIDs   []string       `json:"projectIds"`
+	TeamIDs      []string       `json:"teamIds"`
+	IssueID      string         `json:"issueId,omitempty"`
+	// InheritedTeamIDs are the teams of the issue and projects the document
+	// is attached to. Read-only: Flow updates them when the document is
+	// attached or detached, the issue moves to another team, or a project's
+	// teams change. When one of them is private, workspace-wide access to
+	// the document is limited to people who can read that team; people and
+	// teams the document is shared with directly keep their access. Public
+	// teams do not limit access.
+	InheritedTeamIDs []string `json:"inheritedTeamIds,omitempty"`
+	// IssueTeamID is the team of the issue the document is attached to.
+	// Read-only.
+	IssueTeamID   string               `json:"issueTeamId,omitempty"`
 	SubscriberIDs []string             `json:"subscriberIds"`
 	Favorite      bool                 `json:"favorite"`
 	ArchivedAt    *time.Time           `json:"archivedAt,omitempty"`
@@ -2562,11 +2573,15 @@ type Bootstrap struct {
 	ResourceDetailsOmitted bool          `json:"resourceDetailsOmitted,omitempty"`
 	ProviderJobs           []ProviderJob `json:"providerJobs,omitempty"`
 	NextIssueNumber        int           `json:"-"`
-	IssueCollectionPaged   bool          `json:"issueCollectionPaged,omitempty"`
-	Workspace              Workspace     `json:"workspace"`
-	Viewer                 User          `json:"viewer"`
-	Users                  []User        `json:"users"`
-	Teams                  []Team        `json:"teams"`
+	// ViewerTeamIDs are the acting viewer's teams read from the membership
+	// records while a mutation's authorization callback runs; the stored
+	// snapshot's TeamMembers can lag those records. Not serialized.
+	ViewerTeamIDs        []string  `json:"-"`
+	IssueCollectionPaged bool      `json:"issueCollectionPaged,omitempty"`
+	Workspace            Workspace `json:"workspace"`
+	Viewer               User      `json:"viewer"`
+	Users                []User    `json:"users"`
+	Teams                []Team    `json:"teams"`
 	// TeamByID/TeamByKey/TeamChildren/LabelIndex are in-memory lookup tables
 	// rebuilt on load. They are not serialized.
 	TeamByID          map[string]int           `json:"-"`

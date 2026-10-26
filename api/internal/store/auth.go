@@ -942,6 +942,28 @@ func (s *SQLiteStore) ListMembers(ctx context.Context, workspaceID string) ([]do
 	return result, nil
 }
 
+// actorTeamIDs lists the teams a user belongs to from the membership records
+// (one indexed read), for a mutation's authorization callback. A failed read
+// gives no teams, so team-based access fails closed.
+func (s *SQLiteStore) actorTeamIDs(ctx context.Context, workspaceID, userID string) []string {
+	rows, err := s.db.QueryContext(ctx, `SELECT team_id FROM team_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	teams := []string{}
+	for rows.Next() {
+		var id string
+		if rows.Scan(&id) == nil {
+			teams = append(teams, id)
+		}
+	}
+	if rows.Err() != nil {
+		return nil
+	}
+	return teams
+}
+
 func (s *SQLiteStore) ListTeamMembers(ctx context.Context, workspaceID string) ([]domain.TeamMember, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT m.team_id,m.user_id,m.role,m.joined_at,
 		CASE WHEN EXISTS (SELECT 1 FROM scim_team_memberships sm WHERE sm.workspace_id=m.workspace_id AND sm.team_id=m.team_id AND sm.user_id=m.user_id AND sm.managed=1) THEN 1 ELSE 0 END,
@@ -1635,24 +1657,33 @@ func filterBootstrapTeams(data *domain.Bootstrap, scope bootstrapTeamScope, gues
 	// Keep unscoped documents workspace-visible, while preventing a member from
 	// discovering the title or content of a team document they cannot access.
 	// Admins read every document except those only in private teams closed to them.
+	//
+	// A document attached to an issue or project of a private team is scoped
+	// to that team (see DocumentLinkScope): its workspace grant, and the
+	// legacy workspace visibility, reach only people who can read the team;
+	// user and team grants still share it outside.
 	admin := isWorkspaceAdminRole(data.ViewerRole)
-	if !admin || len(scope.AdminClosed) > 0 {
-		data.Documents = slices.DeleteFunc(data.Documents, func(document domain.Document) bool {
-			if admin && !slices.ContainsFunc(document.TeamIDs, func(teamID string) bool { return scope.AdminClosed[teamID] }) {
-				return false
+	readable := func(teamID string) bool { return allowed[teamID] }
+	linkScope := NewDocumentLinkScope(data.Teams, data.TeamSettings)
+	data.Documents = slices.DeleteFunc(data.Documents, func(document domain.Document) bool {
+		linkOpen := linkScope.Open(document, readable)
+		if admin && !slices.ContainsFunc(document.TeamIDs, func(teamID string) bool { return scope.AdminClosed[teamID] }) {
+			return !linkOpen && !documentGrantAllows(data, document, allowed, false)
+		}
+		if len(document.TeamIDs) == 0 {
+			// An unscoped document is workspace-visible until explicit
+			// document permissions are configured. Once configured, only a
+			// matching grant (or the canonical owner) may discover it.
+			if len(document.Permissions) == 0 {
+				return !linkOpen
 			}
-			if len(document.TeamIDs) == 0 {
-				// An unscoped document is workspace-visible until explicit
-				// document permissions are configured. Once configured, only a
-				// matching grant (or the canonical owner) may discover it.
-				return len(document.Permissions) > 0 && !documentPermissionAllows(data, document, allowed)
-			}
-			if slices.ContainsFunc(document.TeamIDs, func(teamID string) bool { return allowed[teamID] }) {
-				return false
-			}
-			return !documentPermissionAllows(data, document, allowed)
-		})
-	}
+			return !documentGrantAllows(data, document, allowed, linkOpen)
+		}
+		if slices.ContainsFunc(document.TeamIDs, func(teamID string) bool { return allowed[teamID] }) {
+			return false
+		}
+		return !documentGrantAllows(data, document, allowed, linkOpen)
+	})
 	data.Cycles = slices.DeleteFunc(data.Cycles, func(cycle domain.Cycle) bool { return !allowed[cycle.TeamID] })
 	data.Labels = slices.DeleteFunc(data.Labels, func(label domain.IssueLabel) bool {
 		scope := strings.ToLower(strings.TrimSpace(label.Scope))
@@ -2032,6 +2063,13 @@ func issuePermissionAllows(data domain.Bootstrap, issue domain.Issue, allowed, a
 }
 
 func documentPermissionAllows(data *domain.Bootstrap, document domain.Document, allowed map[string]bool) bool {
+	return documentGrantAllows(data, document, allowed, true)
+}
+
+// documentGrantAllows reports whether one of the document's grants reaches
+// the viewer; workspace grants count only when workspace is true (the
+// viewer passes the document's inherited team scope).
+func documentGrantAllows(data *domain.Bootstrap, document domain.Document, allowed map[string]bool, workspace bool) bool {
 	for _, permission := range document.Permissions {
 		if permission.Role == "" || permission.Role == "none" {
 			continue
@@ -2042,7 +2080,7 @@ func documentPermissionAllows(data *domain.Bootstrap, document domain.Document, 
 				return true
 			}
 		case "workspace":
-			if permission.SubjectID == "" || permission.SubjectID == data.Workspace.ID || permission.SubjectID == data.Workspace.URLKey {
+			if workspace && (permission.SubjectID == "" || permission.SubjectID == data.Workspace.ID || permission.SubjectID == data.Workspace.URLKey) {
 				return true
 			}
 		case "team":
