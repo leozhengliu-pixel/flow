@@ -61,6 +61,12 @@ type IssueRecordQuery struct {
 	// Cursors fills IssueRecordPage.StartCursor, EndCursor and HasPrevious
 	// (connection responses). Legacy responses leave them out.
 	Cursors bool `json:",omitempty"`
+	// Nested lists sub-issues under their parent ("Nested sub-issues"): a row
+	// whose parent also matches the query (GroupValue aside) is not a row of
+	// its own; pages carry the matching descendants of their rows instead
+	// (IssueRecordPage.Descendants) and group counts include them under the
+	// group of their top-level row.
+	Nested bool `json:",omitempty"`
 }
 
 type IssueRecordAccess struct {
@@ -299,6 +305,12 @@ type IssueRecordPage struct {
 	StartCursor string `json:"startCursor,omitempty"`
 	EndCursor   string `json:"endCursor,omitempty"`
 	HasPrevious bool   `json:"hasPrevious,omitempty"`
+	// Descendants are the sub-issues (all levels) of the page's items that
+	// match the query, in the page's order; set only for nested queries.
+	// DescendantsTruncated reports that more than 1000 matched (only the
+	// first 1000 are returned).
+	Descendants          []domain.Issue `json:"descendants,omitempty"`
+	DescendantsTruncated bool           `json:"descendantsTruncated,omitempty"`
 }
 
 type IssueRecordGroup struct {
@@ -708,6 +720,9 @@ func (s *SQLiteStore) QueryIssueRecords(ctx context.Context, query IssueRecordQu
 		if err := s.resolveIssueReferences(ctx, query.Workspace, cached.Items); err != nil {
 			return cached, err
 		}
+		if err := s.resolveIssueReferences(ctx, query.Workspace, cached.Descendants); err != nil {
+			return cached, err
+		}
 		return cached, nil
 	}
 	page, err := s.queryIssueRecordsSQL(ctx, query)
@@ -718,6 +733,9 @@ func (s *SQLiteStore) QueryIssueRecords(ctx context.Context, query IssueRecordQu
 		return page, err
 	}
 	if err := s.resolveIssueReferences(ctx, query.Workspace, page.Items); err != nil {
+		return page, err
+	}
+	if err := s.resolveIssueReferences(ctx, query.Workspace, page.Descendants); err != nil {
 		return page, err
 	}
 	return page, nil
@@ -732,6 +750,14 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 	if query.SearchText != "" {
 		selection, values := s.issueTextSelection(query.Workspace, query.SearchText)
 		where += " AND i.id IN (" + selection + ")"
+		args = append(args, values...)
+	}
+	if query.Nested {
+		root, values, err := s.issueNestedRootClause(query)
+		if err != nil {
+			return page, err
+		}
+		where += " AND " + root
 		args = append(args, values...)
 	}
 	prefix, prefixArgs := issueAccessCTE(query)
@@ -864,6 +890,12 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 		return page, err
 	}
 	rows.Close()
+	if query.Nested && len(page.Items) > 0 {
+		page.Descendants, page.DescendantsTruncated, err = s.issueNestedDescendants(ctx, query, page.Items, expression+" "+direction+",i.id "+direction, payload, descriptionColumn)
+		if err != nil {
+			return page, err
+		}
+	}
 	encode := func(index int) string {
 		raw, _ := json.Marshal(issueRecordCursor{Version: 1, Scope: hash, Value: sortValues[index], ID: page.Items[index].ID})
 		return base64.RawURLEncoding.EncodeToString(raw)
@@ -901,6 +933,13 @@ func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQue
 	}
 	if _, _, err := issueRecordWhere(query); err != nil {
 		return nil, err
+	}
+	if query.Nested {
+		groups, err := s.nestedIssueGroups(ctx, query)
+		if err == nil {
+			s.cacheSetIssueGroups(ctx, query, groups)
+		}
+		return groups, err
 	}
 	if groups, handled, err := s.issueGroupsFromStats(ctx, query); handled {
 		if err == nil {

@@ -2,10 +2,10 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
-import { makeBootstrap, makeIssue } from '@/test/fixtures'
+import { backlog, completed, makeBootstrap, makeIssue, started } from '@/test/fixtures'
 import { listIssueRecordGroups, listIssueRecords } from '@/lib/api'
 import { PagedIssueList } from './paged-issue-list'
-import { PagedIssueCache, nestedGroupRows } from './paged-issue-cache'
+import { PagedIssueCache, nestedIssuePage, nestedPageLines } from './paged-issue-cache'
 import { clearNavigationCache } from '@/lib/navigation-cache'
 import { clearPagedIssueListCache } from './paged-issue-list-cache'
 import { ISSUE_QUERY_INVALIDATED } from './paged-issue-invalidation'
@@ -13,7 +13,7 @@ import { ISSUE_QUERY_INVALIDATED } from './paged-issue-invalidation'
 vi.mock('@/lib/api', () => ({ listIssueRecordGroups: vi.fn(), listIssueRecords: vi.fn() }))
 vi.mock('react-virtuoso', async () => {
   const React = await import('react')
-  return { GroupedVirtuoso: ({ groupCounts, groupContent, itemContent, style }: { groupCounts: number[]; groupContent: (index: number) => React.ReactNode; itemContent: (index: number, group: number) => React.ReactNode; style?: React.CSSProperties }) => {
+  return { Virtuoso: () => null, GroupedVirtuoso: ({ groupCounts, groupContent, itemContent, style }: { groupCounts: number[]; groupContent: (index: number) => React.ReactNode; itemContent: (index: number, group: number) => React.ReactNode; style?: React.CSSProperties }) => {
     const [start, setStart] = React.useState(0)
     let offset = 0
     return <div data-testid="paged-list" style={style}><button onClick={() => setStart(100)}>Next page viewport</button>{groupCounts.map((count, group) => {
@@ -243,42 +243,81 @@ describe('nested sub-issues in server-backed lists', () => {
     makeIssue({ id: 'grandchild', title: 'Grandchild', parentId: 'child-b' }),
   ]
   const rows = () => screen.getAllByRole('button').filter(button => button.hasAttribute('data-depth')).map(button => `${button.textContent}:${button.getAttribute('data-depth')}`)
+  const groupHeader = (name: string) => screen.getByText(name).closest('header')
 
-  it('shows each loaded sub-issue under its parent with nesting guides', async () => {
-    vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: 'state-backlog', count: 5 }] })
-    vi.mocked(listIssueRecords).mockResolvedValue({ items: hierarchy(), hasMore: false, total: -1 })
+  it('asks the server for nested groups and shows each sub-issue under its parent, whatever its own status', async () => {
+    // The server leaves Child A (In progress) out of its own group and returns it with its parent's page.
+    vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: 'state-backlog', count: 5 }, { value: 'state-started', count: 1 }] })
+    vi.mocked(listIssueRecords).mockImplementation(async query => query?.groupValue === 'state-started'
+      ? { items: [makeIssue({ id: 'orphan', title: 'Orphan', parentId: 'filtered-out' })], hasMore: false, total: -1 }
+      : { items: [makeIssue({ id: 'other', title: 'Other', state: backlog }), makeIssue({ id: 'parent', title: 'Parent', state: backlog })], descendants: [hierarchy()[0], hierarchy()[3], hierarchy()[4]], hasMore: false, total: -1 })
     const data = makeBootstrap({ issues: [], issueCollectionPaged: true })
     render(<I18nProvider><PagedIssueList data={data} query={{ groupBy: 'status' }} nestedSubIssues onOpenIssueRecord={vi.fn()}/></I18nProvider>)
     await screen.findByRole('button', { name: 'Grandchild' })
-    expect(rows()).toEqual(['Other:0', 'Parent:0', 'Child A:1', 'Child B:1', 'Grandchild:2'])
+    expect(listIssueRecordGroups).toHaveBeenCalledWith(expect.objectContaining({ nested: true }), expect.any(AbortSignal))
+    expect(listIssueRecords).toHaveBeenCalledWith(expect.objectContaining({ nested: true, groupValue: 'state-backlog' }), expect.any(AbortSignal))
+    await screen.findByRole('button', { name: 'Orphan' })
+    // A sub-issue whose parent is not in the list stays a top-level row of its own group.
+    expect(rows()).toEqual(['Other:0', 'Parent:0', 'Child A:1', 'Child B:1', 'Grandchild:2', 'Orphan:0'])
+    // Group headers count the nested rows under their parent's group, like the full list.
+    expect(groupHeader('Backlog')).toHaveTextContent('5')
+    expect(groupHeader('In progress')).toHaveTextContent('1')
     // Nested rows show the hierarchy itself instead of the sub-issue progress chip.
     expect(screen.getByRole('button', { name: 'Parent' })).toHaveAttribute('data-progress', 'false')
   })
 
-  it('keeps the server order and no guides when nesting is off', async () => {
+  it('shows a parent on a later page with its sub-issues, even one that sorts first in another status', async () => {
+    const fillers = Array.from({ length: 100 }, (_, index) => makeIssue({ id: `filler-${index}`, title: `Filler ${index}`, state: backlog }))
+    vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: 'state-backlog', count: 103 }] })
+    vi.mocked(listIssueRecords).mockImplementation(async query => query?.cursor
+      ? { items: [makeIssue({ id: 'late-parent', title: 'Late parent', state: backlog })], descendants: [makeIssue({ id: 'late-child', title: 'Late child', parentId: 'late-parent', state: started }), makeIssue({ id: 'late-grandchild', title: 'Late grandchild', parentId: 'late-child', state: completed })], hasMore: false, total: -1 }
+      : { items: fillers, hasMore: true, nextCursor: 'page-2', total: -1 })
+    const onOpen = vi.fn()
+    render(<I18nProvider><PagedIssueList data={makeBootstrap({ issues: [], issueCollectionPaged: true })} query={{ groupBy: 'status' }} nestedSubIssues onOpenIssueRecord={onOpen}/></I18nProvider>)
+    await screen.findByRole('button', { name: 'Filler 0' })
+    await userEvent.click(screen.getByRole('button', { name: 'Next page viewport' }))
+    await screen.findByRole('button', { name: 'Late grandchild' })
+    expect(listIssueRecords).toHaveBeenLastCalledWith(expect.objectContaining({ nested: true, cursor: 'page-2' }), expect.any(AbortSignal))
+    expect(rows()).toEqual(['Late parent:0', 'Late child:1', 'Late grandchild:2'])
+    // Opening a nested row keeps the list order for previous / next.
+    await userEvent.click(screen.getByRole('button', { name: 'Late child' }))
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'late-child' }), expect.arrayContaining(['late-parent', 'late-child', 'late-grandchild']))
+  })
+
+  it('re-queries when a loaded sub-issue moves to another parent', async () => {
+    vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: 'state-backlog', count: 2 }] })
+    vi.mocked(listIssueRecords).mockResolvedValue({ items: [makeIssue({ id: 'parent', title: 'Parent', state: backlog })], descendants: [hierarchy()[0]], hasMore: false, total: -1 })
+    const data = makeBootstrap({ issues: [], issueCollectionPaged: true })
+    const { rerender } = render(<I18nProvider><PagedIssueList data={data} query={{ groupBy: 'status' }} nestedSubIssues onOpenIssueRecord={vi.fn()}/></I18nProvider>)
+    await screen.findByRole('button', { name: 'Child A' })
+    rerender(<I18nProvider><PagedIssueList data={{ ...data, issues: [{ ...hierarchy()[0], parentId: 'another-parent' }] }} query={{ groupBy: 'status' }} nestedSubIssues onOpenIssueRecord={vi.fn()}/></I18nProvider>)
+    await waitFor(() => expect(listIssueRecordGroups).toHaveBeenCalledTimes(2))
+  })
+
+  it('keeps the server order and no guides when nesting is off, and the board never nests', async () => {
     vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: 'state-backlog', count: 5 }] })
     vi.mocked(listIssueRecords).mockResolvedValue({ items: hierarchy(), hasMore: false, total: -1 })
     const data = makeBootstrap({ issues: [], issueCollectionPaged: true })
-    render(<I18nProvider><PagedIssueList data={data} query={{ groupBy: 'status' }} onOpenIssueRecord={vi.fn()}/></I18nProvider>)
+    const { unmount } = render(<I18nProvider><PagedIssueList data={data} query={{ groupBy: 'status' }} onOpenIssueRecord={vi.fn()}/></I18nProvider>)
     await screen.findByRole('button', { name: 'Grandchild' })
     expect(rows()).toEqual(['Child A:0', 'Other:0', 'Parent:0', 'Child B:0', 'Grandchild:0'])
     expect(screen.getByRole('button', { name: 'Parent' })).toHaveAttribute('data-progress', 'true')
+    expect(vi.mocked(listIssueRecords).mock.calls.every(([query]) => !query?.nested)).toBe(true)
+    unmount()
+    render(<I18nProvider><PagedIssueList data={data} query={{ groupBy: 'status' }} layout="board" nestedSubIssues onOpenIssueRecord={vi.fn()}/></I18nProvider>)
+    await waitFor(() => expect(listIssueRecordGroups).toHaveBeenCalledTimes(2))
+    expect(vi.mocked(listIssueRecordGroups).mock.calls.every(([query]) => !query?.nested)).toBe(true)
   })
 })
 
-describe('nestedGroupRows', () => {
-  it('nests rows across loaded pages and stops at the first page that is not cached', () => {
+describe('nestedIssuePage', () => {
+  it('puts every descendant right after its parent, in the page order, once', () => {
+    const page = nestedIssuePage({ items: [makeIssue({ id: 'a' }), makeIssue({ id: 'b' })], descendants: [makeIssue({ id: 'b2', parentId: 'b' }), makeIssue({ id: 'a1', parentId: 'a' }), makeIssue({ id: 'b1', parentId: 'b' }), makeIssue({ id: 'b21', parentId: 'b2' }), makeIssue({ id: 'a1', parentId: 'a' })], hasMore: false })
+    expect(page.items.map(issue => issue.id)).toEqual(['a', 'a1', 'b', 'b2', 'b21', 'b1'])
+    expect(nestedPageLines(page.items).get('b21')).toEqual([false, true])
+    expect(nestedPageLines(page.items).get('b1')).toEqual([true])
     const cache = new PagedIssueCache()
-    cache.put('g', 0, { items: [makeIssue({ id: 'parent', title: 'Parent' }), makeIssue({ id: 'a', title: 'A' })], hasMore: true, nextCursor: 'c1' })
-    cache.put('g', 1, { items: [makeIssue({ id: 'child', title: 'Child', parentId: 'parent' })], hasMore: true, nextCursor: 'c2' })
-    const full = nestedGroupRows(cache, { value: 'g', loaded: 3 })
-    expect(full.rows.map(row => [row.id, row.pageIndex])).toEqual([['parent', 0], ['child', 1], ['a', 0]])
-    expect(full.lines.get('child')).toEqual([true])
-    expect(full.missingPage).toBeUndefined()
-    const evicted = new PagedIssueCache()
-    evicted.put('g', 0, { items: [makeIssue({ id: 'parent', title: 'Parent' })], hasMore: true, nextCursor: 'c1' })
-    const partial = nestedGroupRows(evicted, { value: 'g', loaded: 3 })
-    expect(partial.rows.map(row => row.id)).toEqual(['parent'])
-    expect(partial.missingPage).toBe(1)
+    cache.put('g', 0, page)
+    expect(cache.start('g', 1)).toBe(6)
   })
 })

@@ -435,6 +435,8 @@ export type IssueQueryInput = {
   groupValue?: string;
   includeTotal?: boolean;
   includeStatusHistory?: boolean;
+  /** Nested sub-issues: sub-issues whose parent matches come with the parent's page (`descendants`), not as rows of their own. */
+  nested?: boolean;
 };
 
 export function listIssueRecords(filters: IssueQueryInput = {}, signal?: AbortSignal, workspaceKey?: string): Promise<IssueQueryPage> {
