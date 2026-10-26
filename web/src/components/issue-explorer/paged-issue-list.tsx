@@ -4,7 +4,7 @@ import type { BootstrapData, Issue, IssueUpdateInput } from '@/types/flow'
 import { listIssueRecordGroups, listIssueRecords, type IssueQueryInput } from '@/lib/api'
 import { MyIssuesGroupHeader, MyIssuesRow, type MyIssuesGroupData, type MyIssuesListProps } from '@/components/my-issues/my-issues-list'
 import { issueToExplorerRow } from './issue-explorer-model'
-import { issueListState, type IssueListGroup } from './paged-issue-list-cache'
+import { issueListState, pagedIssueListSignature, retainIssueList, trimPagedIssueListCache, type IssueListGroup } from './paged-issue-list-cache'
 import { ISSUE_QUERY_INVALIDATED, issueMayMatchQuery, queryUsesLabels, type IssueQueryInvalidation } from './paged-issue-invalidation'
 import styles from '@/components/my-issues/my-issues-list.module.css'
 import boardStyles from './issue-board.module.css'
@@ -28,7 +28,8 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
   onShowGroup?: (id: string) => void
   onMoveIssueRecord?: (issue: Issue, input: IssueUpdateInput) => Promise<unknown>
 }) {
-  const signature = JSON.stringify([data.workspace.id, query])
+  const viewerId = data.viewer.id, workspaceKey = data.workspace.urlKey
+  const signature = pagedIssueListSignature(viewerId, data.workspace.id, query)
   const [retry, setRetry] = useState(0)
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const requestRefresh = useCallback(() => {
@@ -36,20 +37,23 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
     refreshTimer.current = setTimeout(() => setRetry(value => value + 1), 80)
   }, [])
   useEffect(() => () => clearTimeout(refreshTimer.current), [signature])
-  const cachedState = useMemo(() => issueListState(signature), [signature])
+  const cachedState = useMemo(() => issueListState(signature, { viewerId, workspaceKey }), [signature, viewerId, workspaceKey])
   const cache = cachedState.cache
+  useEffect(() => retainIssueList(cachedState), [cachedState])
   const [groups, setGroups] = useState<Group[]>(() => cachedState.groups)
   const [revision, setRevision] = useState(0)
+  // Pages arrive after the entry was created: keep the lists together under the shared byte budget.
+  useEffect(() => { trimPagedIssueListCache() }, [revision, groups])
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(() => cachedState.groups.length === 0)
   const updateGroups = useCallback((next: Group[] | ((current: Group[]) => Group[])) => {
     setGroups(current => {
       const value = typeof next === 'function' ? next(current) : next
-      const state = issueListState(signature)
-      state.groups = value
+      // Written to the state this list renders, so a cache entry dropped behind its back is not resurrected half-filled.
+      cachedState.groups = value
       return value
     })
-  }, [signature])
+  }, [cachedState])
   const [dragging, setDragging] = useState<{ issue: Issue; group: string }>()
   const lastContent = useRef<ReactNode>(null)
   const active = useRef<{ signature: string; abort: AbortController; pending: Set<string>; ready: boolean } | undefined>(undefined)
