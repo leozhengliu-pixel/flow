@@ -7,11 +7,16 @@ import type { BootstrapData } from '@/types/flow'
 import { formatMetric, insightColor, type InsightData, type InsightRow } from './insight-data'
 import { acrossAllLabel, percentileLabel, selectedAggregations, type SavedViewInsightDimension, type SavedViewInsightsConfig } from './insight-config'
 import { aggregateInsightValues, durationAxis, insightAxis, insightHighlight, sameInsightTarget, type InsightTarget, type InsightAggregation } from './insight-interaction'
+import { statusGroupIndex } from './insight-status-groups'
 import styles from './insight-explorer.module.css'
 
 /** Status / priority glyphs where the reference app shows them; a colour mark for every other value. */
 export function InsightValueIcon({ dimension, id, color, data, size = 14 }: { dimension: SavedViewInsightDimension | 'none'; id: string; color?: string; data: BootstrapData; size?: number }) {
-  if (dimension === 'status') { const state = data.states.find(item => item.id === id); if (state) return <StatusIcon state={state} size={size}/> }
+  if (dimension === 'status') {
+    // A merged status group (or a status ID) draws its representative's glyph in the group's colour.
+    const state = data.states.find(item => item.id === id) ?? statusGroupIndex(data).representative(id)
+    if (state) return <StatusIcon state={color ? { ...state, color } : state} size={size}/>
+  }
   if (dimension === 'priority') return <PriorityIcon priority={Number(id)} size={size}/>
   return <i className={styles.mark} style={{ background: color ?? 'var(--data-vis-neutral)' }}/>
 }

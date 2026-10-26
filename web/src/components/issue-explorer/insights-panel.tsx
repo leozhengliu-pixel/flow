@@ -109,7 +109,8 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
   const selectMeasure = (measure: SavedViewInsightMeasure) => setConfig(current => current.measure === measure ? current : { ...current, measure, timeInStatusIds: [] })
   const toggleStatuses = (values: string[]) => setConfig(current => {
     const selected = current.measure === 'timeInStatus' ? current.timeInStatusIds : []
-    const all = values.every(value => selected.includes(value))
+    // A row stands for every team's copy of a status: one stored ID (an older selection) already ticks it, and unticking clears them all.
+    const all = values.some(value => selected.includes(value))
     return { ...current, measure: 'timeInStatus', timeInStatusIds: all ? selected.filter(value => !values.includes(value)) : [...new Set([...selected, ...values])] }
   })
   const selectedSlice = insight.rows.find(item => item.id === target?.slice)
@@ -389,7 +390,7 @@ function InsightPickerOption({ first, onChange, option, submenu, value }: { firs
 /** The reference app's Measure trigger: "Time in status", a single status or type with its icon, or "N statuses" / "N status types". */
 function measureDisplay(config: SavedViewInsightsConfig, data: BootstrapData, t: (source: string) => string): { label: string; icon?: ReactNode } {
   if (config.measure !== 'timeInStatus') return { label: MEASURE_OPTIONS.find(option => option.id === config.measure)?.label ?? config.measure }
-  const nodes = timeInStatusTree(data).filter(node => node.values.length && node.values.every(value => config.timeInStatusIds.includes(value)))
+  const nodes = timeInStatusTree(data).filter(node => node.values.some(value => config.timeInStatusIds.includes(value)))
   if (!nodes.length) return { label: 'Time in status' }
   if (nodes.length > 1) return { label: t(nodes.every(node => node.depth === 0) ? '{count} status types' : '{count} statuses').replace('{count}', String(nodes.length)) }
   return { label: nodes[0].label, icon: nodes[0].icon }
@@ -418,7 +419,7 @@ function TimeInStatusMenu({ config, data, onToggle }: { config: SavedViewInsight
     }}/></div>
     <TooltipProvider delayDuration={450}><div ref={list} className={styles.subList}>
       {visible.map(node => {
-        const checked = node.values.every(value => selected.includes(value))
+        const checked = node.values.some(value => selected.includes(value))
         return <DropdownMenu.CheckboxItem className={`${styles.menuItem} ${styles.treeItem}`} data-depth={node.depth} key={node.key} checked={checked} onSelect={event => event.preventDefault()} onCheckedChange={() => onToggle(node.values)}>
           <MenuCheckbox/>
           <span className={styles.treeLabel}>

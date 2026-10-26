@@ -45,12 +45,13 @@ describe('insight graph and table interaction', () => {
     expect(result.rows[0].total).toBe(2 * 86400000)
     expect(result.rows[0].aggregations.max).toBe(3 * 86400000)
   })
-  it('keeps identical names separate and orders statuses by workflow position', () => {
+  it('keeps identical names of different types separate and orders statuses by workflow position', () => {
     const states = [started, { ...completed, name: started.name }]
     const issues = [makeIssue({ id: 'a', state: states[1] }), makeIssue({ id: 'b', state: states[0] })]
     const data = makeBootstrap({ issues, states })
     const result = buildInsightData(issues.map(issue => issueToExplorerRow(issue, 'workspace', issues, data)), config, data)
-    expect(result.rows.map(row => row.id)).toEqual(states.map(state => state.id))
+    expect(result.rows.map(row => row.stateIds)).toEqual(states.map(state => [state.id]))
+    expect(new Set(result.rows.map(row => row.id)).size).toBe(2)
     expect(result.samples).toHaveLength(2)
   })
   it('aggregates ten thousand records without expanding multi-label samples', () => {
