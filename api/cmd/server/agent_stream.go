@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -17,8 +18,6 @@ import (
 	"flow/api/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
-
-const maxAgentToolTurns = 8
 
 type agentStreamEvent struct {
 	Type       string                   `json:"type"`
@@ -474,7 +473,33 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	textApprovalRetried := false
 	// The answer stopped at the provider's output limit instead of ending.
 	truncated := false
-	for turnIndex := 0; turnIndex < maxAgentToolTurns; turnIndex++ {
+	// The reply's tool budget (agent_tool_budget.go). Once it is spent (stopped names why), one more turn without
+	// tools gives the reply's last word: what was done, what is left, and how to continue.
+	maxTurns, maxCalls := s.agentMaxToolTurns(), s.agentMaxToolCalls()
+	budget := newAgentToolBudget(maxCalls)
+	stopped := ""
+	// failCall ends a call that is not run (an ungrounded target, a spent budget, a repeat of a failed call) with
+	// message as its error result.
+	failCall := func(call domain.AgentToolCall, message string) error {
+		call.Status, call.Error = "error", message
+		call.Result, _ = json.Marshal(map[string]string{"error": message})
+		key := "tool:" + call.ID
+		index, found := partIndex[key]
+		if found {
+			parts[index].Status, parts[index].ToolCall = call.Status, cloneToolCall(&call)
+		} else {
+			index = len(parts)
+			partIndex[key] = index
+			parts = append(parts, domain.AgentMessagePart{ID: fmt.Sprintf("%s_tool_%d", messageID, index), Type: "toolCall", Status: call.Status, ToolCall: cloneToolCall(&call)})
+		}
+		messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: message, IsError: true}})
+		if writer != nil {
+			part := parts[index]
+			return send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part})
+		}
+		return nil
+	}
+	for turnIndex := 0; turnIndex <= maxTurns; turnIndex++ {
 		turnStart := len(parts)
 		// The loop builder's intro and later replies are separate paragraphs.
 		if len(session.LoopIDs) > 0 && strings.TrimSpace(finalText) != "" && !strings.HasSuffix(finalText, "\n\n") {
@@ -482,13 +507,38 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				finalText += "\n\n"
 			}
 		}
-		turn, err := s.requestAgentChatTurn(r.Context(), messages, emit)
+		wrapUp := stopped != ""
+		turnCtx := r.Context()
+		if wrapUp {
+			nudge := agentToolBudgetNudge(stopped, maxTurns, maxCalls)
+			if last := len(messages) - 1; last >= 0 && messages[last].ToolResult != nil {
+				messages[last].ToolResult.Content += "\n\n" + nudge
+			} else {
+				messages = append(messages, agentProviderMessage{Role: "user", Content: nudge})
+			}
+			turnCtx = withAgentToolsWithheld(turnCtx)
+		}
+		turn, err := s.requestAgentChatTurn(turnCtx, messages, emit)
+		if err != nil && wrapUp && r.Context().Err() == nil {
+			// The summary turn failed: the reply still ends with what was done (agentToolBudgetFallback below).
+			slog.WarnContext(r.Context(), "agent budget summary turn failed", "session", session.ID, "reason", stopped, "error", err)
+			break
+		}
 		if err != nil {
 			failureRequest := r
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				failureRequest = r.Clone(context.WithoutCancel(r.Context()))
 			}
 			return s.persistAgentFailure(failureRequest, *session, messageID, finalText, parts, started, err)
+		}
+		if wrapUp && len(turn.ToolCalls) > 0 {
+			// The last word calls no tools, even when the provider ignored tool_choice: its streamed rows go.
+			for _, call := range turn.ToolCalls {
+				if index, ok := partIndex["tool:"+call.ID]; ok && parts[index].Type == "toolCall" {
+					parts = removeAgentPart(parts, partIndex, index)
+				}
+			}
+			turn.ToolCalls = nil
 		}
 		// Some gateways let the model print report_progress as JSON text instead of a call; turn it back into steps.
 		if leaked, rest := leakedProgressSteps(turn.Text); len(leaked) > 0 {
@@ -558,7 +608,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		}
 		// Asking for approval in text instead of calling the tool is not an answer (nothing ran, nothing to approve):
 		// the text leaves the reply, the model is told to call the tool once, and a second such turn fails the reply.
-		if s.agentTextApprovalRequest(r.Context(), turn) {
+		if !wrapUp && s.agentTextApprovalRequest(r.Context(), turn) {
 			if textIndex, ok := partIndex["text"]; ok {
 				cleaned := &strings.Builder{}
 				cleaned.WriteString(finalText)
@@ -626,25 +676,9 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		for _, toolCall := range turn.ToolCalls {
 			call := toolCall
 			if ref, ok := ungrounded[call.ID]; ok {
-				message := agentUngroundedIssueMessage(ref)
-				call.Status, call.Error = "error", message
-				call.Result, _ = json.Marshal(map[string]string{"error": message})
-				key := "tool:" + call.ID
-				index, found := partIndex[key]
-				if found {
-					parts[index].Status, parts[index].ToolCall = call.Status, cloneToolCall(&call)
-				} else {
-					index = len(parts)
-					partIndex[key] = index
-					parts = append(parts, domain.AgentMessagePart{ID: fmt.Sprintf("%s_tool_%d", messageID, index), Type: "toolCall", Status: call.Status, ToolCall: cloneToolCall(&call)})
+				if err := failCall(call, agentUngroundedIssueMessage(ref)); err != nil {
+					return domain.AgentSession{}, err
 				}
-				if writer != nil {
-					part := parts[index]
-					if err := send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part}); err != nil {
-						return domain.AgentSession{}, err
-					}
-				}
-				messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: message, IsError: true}})
 				continue
 			}
 			if call.Name == askUserTool {
@@ -746,6 +780,12 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: content, IsError: isError}})
 				continue
 			}
+			if message, run := budget.before(call); !run {
+				if err := failCall(call, message); err != nil {
+					return domain.AgentSession{}, err
+				}
+				continue
+			}
 			if agentToolNeedsApproval(r.Context(), call.Name) && !sessionLoopTool(*session, call) {
 				approvalID := fmt.Sprintf("agent_approval_%d", time.Now().UnixNano())
 				call.ApprovalID = approvalID
@@ -832,9 +872,11 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			if callErr != nil {
 				content = agentToolFailureText(result, callErr)
 			}
+			budget.after(call, content, callErr != nil)
 			messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: content, IsError: callErr != nil}})
 			executed = append(executed, call)
 		}
+		budget.endTurn()
 		// Results can name what the arguments only referenced by id ("issue_16" → DEV-16).
 		if index, ok := partIndex[phaseKey]; ok && phaseKey != "" && len(executed) == len(agentPhaseCalls(turn.ToolCalls)) {
 			if title := agentPhaseTitle(executed); title != "" && title != parts[index].Title {
@@ -851,9 +893,29 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		if asked != "" {
 			break
 		}
-		if turnIndex == maxAgentToolTurns-1 {
-			return s.persistAgentFailure(r, *session, messageID, finalText, parts, started, fmt.Errorf("Flow Agent exceeded the tool turn limit"))
+		if budget.stop != "" {
+			stopped = budget.stop
+		} else if turnIndex >= maxTurns-1 {
+			stopped = agentBudgetTurns
 		}
+	}
+	if stopped != "" {
+		// A reply the budget stopped says so under its answer; without a summary from the model, Flow writes one.
+		chinese := containsHan(agentLatestUserMessage(*session))
+		if strings.TrimSpace(finalText) == "" {
+			changes := 0
+			for _, part := range parts {
+				if part.ToolCall != nil && part.ToolCall.Change != nil {
+					changes++
+				}
+			}
+			fallback := agentToolBudgetFallback(stopped, maxTurns, maxCalls, chinese, changes, true)
+			if err := emit(agentProviderEvent{Type: "text.delta", Delta: fallback}); err != nil {
+				return domain.AgentSession{}, err
+			}
+			finalText += fallback
+		}
+		parts = append(parts, domain.AgentMessagePart{ID: messageID + "_budget", Type: "event", Text: agentToolBudgetNotice(stopped, maxTurns, maxCalls, chinese), Status: "completed"})
 	}
 	for index := range parts {
 		if parts[index].Status == "running" {

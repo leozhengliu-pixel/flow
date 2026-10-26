@@ -11,12 +11,13 @@ import (
 	"unicode"
 
 	"flow/api/internal/coding"
+	appconfig "flow/api/internal/config"
 	"flow/api/internal/domain"
 )
 
 // A built-in agent thread run (a delegated issue, a mention) can read code through connector (MCP) tools before it
 // acts. Reading is preparation, not the work: without a bound a model asked to implement something kept searching
-// the same files until the run hit maxAgentToolTurns and never started Coding. These budgets bound that preparation;
+// the same files until the run hit its turn cap and never started Coding. These budgets bound that preparation;
 // once one is spent (or only builtinDecisionTurns turns are left) connector tools are no longer offered and the model
 // is told to decide: start the coding session, or reply with what it found and the blocker.
 const (
@@ -241,6 +242,9 @@ type builtinRunGuard struct {
 	// hadSession is set when the session already had a coding session when the run began (an earlier run
 	// started Coding): the run never starts another one by itself.
 	hadSession bool
+	// maxTurns is the run's turn cap (the server's FLOW_AGENT_MAX_TOOL_TURNS); its last builtinDecisionTurns turns
+	// are decision turns.
+	maxTurns int
 }
 
 // codingDue reports whether this run must still enter Coding: the request clearly asks for code changes, Coding is
@@ -262,7 +266,7 @@ func (g *builtinRunGuard) transferCall(issueTitle string) domain.AgentToolCall {
 }
 
 func newBuiltinRunGuard(coding builtinCodingContext) *builtinRunGuard {
-	return &builtinRunGuard{coding: coding, results: map[string]string{}}
+	return &builtinRunGuard{coding: coding, results: map[string]string{}, maxTurns: appconfig.DefaultAgentMaxToolTurns}
 }
 
 func (g *builtinRunGuard) maxCalls() int {
@@ -277,9 +281,9 @@ func (g *builtinRunGuard) exhausted() bool {
 	return g.calls >= g.maxCalls() || g.bytes >= builtinPrepMaxBytes || g.noProgress >= builtinMaxNoProgress
 }
 
-// mustDecide reports whether turn round (0-based) runs without connector tools.
+// mustDecide reports whether turn round (0-based) of a run with the guard's turn cap runs without connector tools.
 func (g *builtinRunGuard) mustDecide(round int) bool {
-	return g.mustDecideWithin(round, maxAgentToolTurns)
+	return g.mustDecideWithin(round, g.maxTurns)
 }
 
 // mustDecideWithin is mustDecide for a run whose turn cap is maxTurns (the worker runtime keeps its own cap).

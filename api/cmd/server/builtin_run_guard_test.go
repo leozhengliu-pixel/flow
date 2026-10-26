@@ -230,8 +230,12 @@ func TestBuiltinRunGuardConverges(t *testing.T) {
 	if !coding.mustDecide(0) || !strings.Contains(coding.decisionText(), "call start_coding_session (issueId ENG-1, environmentId env_1)") {
 		t.Fatalf("a development run decides after %d searches: %s", builtinCodingPrepMaxCalls, coding.decisionText())
 	}
-	if fresh := newBuiltinRunGuard(builtinCodingContext{}); !fresh.mustDecide(maxAgentToolTurns-builtinDecisionTurns) || fresh.mustDecide(maxAgentToolTurns-builtinDecisionTurns-1) {
-		t.Fatal("the last turns of a run are decision turns")
+	for _, turns := range []int{appconfig.DefaultAgentMaxToolTurns, 8, 120} {
+		fresh := newBuiltinRunGuard(builtinCodingContext{})
+		fresh.maxTurns = turns
+		if !fresh.mustDecide(turns-builtinDecisionTurns) || fresh.mustDecide(turns-builtinDecisionTurns-1) {
+			t.Fatalf("the last turns of a run with %d turns are decision turns", turns)
+		}
 	}
 	big := newBuiltinRunGuard(builtinCodingContext{})
 	big.after(a, strings.Repeat("x", builtinPrepMaxBytes), false)

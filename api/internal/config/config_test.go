@@ -346,3 +346,27 @@ func TestResolveAgentMediaKeyReuse(t *testing.T) {
 		})
 	}
 }
+
+func TestAgentToolBudgetSettings(t *testing.T) {
+	t.Setenv("FLOW_AGENT_MAX_TOOL_TURNS", "")
+	t.Setenv("FLOW_AGENT_MAX_TOOL_CALLS", "")
+	loaded, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Agent.MaxToolTurns != DefaultAgentMaxToolTurns || loaded.Agent.MaxToolCalls != DefaultAgentMaxToolCalls {
+		t.Fatalf("defaults: %d turns, %d calls", loaded.Agent.MaxToolTurns, loaded.Agent.MaxToolCalls)
+	}
+	t.Setenv("FLOW_AGENT_MAX_TOOL_TURNS", "60")
+	t.Setenv("FLOW_AGENT_MAX_TOOL_CALLS", "300")
+	if loaded, err = Load(); err != nil || loaded.Agent.MaxToolTurns != 60 || loaded.Agent.MaxToolCalls != 300 {
+		t.Fatalf("configured budget: %+v %v", loaded.Agent, err)
+	}
+	for _, budget := range [][2]string{{"3", "150"}, {"201", "300"}, {"40", "39"}, {"40", "2001"}} {
+		t.Setenv("FLOW_AGENT_MAX_TOOL_TURNS", budget[0])
+		t.Setenv("FLOW_AGENT_MAX_TOOL_CALLS", budget[1])
+		if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_AGENT_MAX_TOOL_") {
+			t.Fatalf("%s turns, %s calls must be rejected: %v", budget[0], budget[1], err)
+		}
+	}
+}

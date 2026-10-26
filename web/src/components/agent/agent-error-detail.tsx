@@ -15,7 +15,7 @@ export const AGENT_ERROR_MESSAGES: Record<AgentErrorKind, string> = {
   timeout: 'The model provider took too long to respond. Try again.',
   unavailable: 'The model provider is unavailable right now. Try again later.',
   empty: 'The model returned an empty response. Try again.',
-  turn_limit: 'The agent used too many steps and stopped. Try a narrower request.',
+  turn_limit: 'The agent reached its step limit for one reply. Say "Continue" to pick up where it stopped.',
   context: 'The conversation is too long for the model. Start a new chat or shorten the request.',
   not_configured: 'Flow Agent is not configured on this server.',
   generic: 'The agent ran into an error.',
