@@ -116,15 +116,25 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
   }, [project.id, props.issueData?.issueCollectionPaged, props.issueData?.issueCollectionRevision, issues]);
   const displayedProject = { ...project, labelIds: labelSelection.selectedIds, ...(issueSummary ? { issueCount: issueSummary.total, progress: issueSummary.total ? issueSummary.completed / issueSummary.total * 100 : 0 } : {}) };
   const issueStateKey = `flow:project:${project.id}:issues`;
-  const [issueFilters, setIssueFilters] = useState<ProjectIssueFilters>(() =>
+  // The Issues tab keeps its own filters and display (remembered per project); a saved view
+  // shows its own, which never leak into the Issues tab.
+  const [tabIssueFilters, setTabIssueFilters] = useState<ProjectIssueFilters>(() =>
     readIssueFilters(issueStateKey),
   );
-  const [issueDisplay, setIssueDisplay] = useState(() =>
+  const [tabIssueDisplay, setTabIssueDisplay] = useState(() =>
     readIssueDisplay(issueStateKey),
   );
   const [activeSavedViewId, setActiveSavedViewId] = useState<
     string | undefined
   >(savedView?.id);
+  const [viewIssueFilters, setViewIssueFilters] = useState<ProjectIssueFilters>(() =>
+    savedView ? filtersFromSavedView(savedView.filters, labelsForResource(labels, "issue", labelGroups)) : [],
+  );
+  const [viewIssueDisplay, setViewIssueDisplay] = useState(() =>
+    savedView ? displayFromSavedView(savedView.display) : tabIssueDisplay,
+  );
+  const issueFilters = activeSavedViewId ? viewIssueFilters : tabIssueFilters;
+  const issueDisplay = activeSavedViewId ? viewIssueDisplay : tabIssueDisplay;
   const [milestoneScopeId, setMilestoneScopeId] = useState<string>(
     () => new URLSearchParams(location.search).get("projectMilestoneId") ?? "",
   );
@@ -168,21 +178,37 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
     savedView ??
     projectSavedViews.find((view) => view.id === activeSavedViewId);
   const favorited = Boolean(props.favorite);
-  const changeIssueFilters = (next: ProjectIssueFilters) => {
-    setIssueFilters(next);
+  const changeTabIssueFilters = (next: ProjectIssueFilters) => {
+    setTabIssueFilters(next);
     localStorage.setItem(`${issueStateKey}:filters`, JSON.stringify(next));
   };
+  const changeIssueFilters = (next: ProjectIssueFilters) => {
+    if (activeSavedViewId) setViewIssueFilters(next);
+    else changeTabIssueFilters(next);
+  };
   const changeIssueDisplay = (next: typeof issueDisplay) => {
-    setIssueDisplay(next);
+    if (activeSavedViewId) {
+      setViewIssueDisplay(next);
+      return;
+    }
+    setTabIssueDisplay(next);
     localStorage.setItem(
       `${issueStateKey}:display`,
       JSON.stringify({ ...next, properties: [...next.properties] }),
     );
   };
-  const openSavedView = (view: (typeof projectSavedViews)[number]) => {
+  const showSavedView = (view: (typeof projectSavedViews)[number]) => {
     setActiveSavedViewId(view.id);
-    changeIssueFilters(filtersFromSavedView(view.filters, issueLabels));
-    changeIssueDisplay(displayFromSavedView(view.display));
+    setViewIssueFilters(filtersFromSavedView(view.filters, issueLabels));
+    setViewIssueDisplay(displayFromSavedView(view.display));
+  };
+  // Tabs other than a saved view leave the view: the Issues tab shows its own filters again.
+  const changeTab: typeof onTabChange = (next) => {
+    setActiveSavedViewId(undefined);
+    onTabChange(next);
+  };
+  const openSavedView = (view: (typeof projectSavedViews)[number]) => {
+    showSavedView(view);
     if (props.onOpenSavedView) props.onOpenSavedView(view);
     else onTabChange("issues");
   };
@@ -193,7 +219,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
   ) => {
     setMilestoneScopeId("");
     setActiveSavedViewId(undefined);
-    changeIssueFilters([
+    changeTabIssueFilters([
       {
         id: `progress-${field}-${value || "none"}`,
         field,
@@ -329,7 +355,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
         PROJECT_TAB_SHORTCUTS[event.key]
       ) {
         event.preventDefault();
-        onTabChange(PROJECT_TAB_SHORTCUTS[event.key]);
+        changeTab(PROJECT_TAB_SHORTCUTS[event.key]);
         return;
       }
       if (event.altKey && event.key.toLowerCase() === "f") {
@@ -345,11 +371,19 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
     return () => window.removeEventListener("keydown", toggle);
   });
 
+  const routedSavedViewId = useRef(savedView?.id);
   useEffect(() => {
-    if (!savedView || savedView.projectId !== project.id) return;
+    const previous = routedSavedViewId.current;
+    routedSavedViewId.current = savedView?.id;
+    // Leaving a saved view's route (e.g. for the Issues tab) leaves the view.
+    if (!savedView) {
+      if (previous) setActiveSavedViewId(undefined);
+      return;
+    }
+    if (savedView.projectId !== project.id) return;
     setActiveSavedViewId(savedView.id);
-    setIssueFilters(filtersFromSavedView(savedView.filters, issueLabels));
-    setIssueDisplay(displayFromSavedView(savedView.display));
+    setViewIssueFilters(filtersFromSavedView(savedView.filters, issueLabels));
+    setViewIssueDisplay(displayFromSavedView(savedView.display));
   }, [issueLabels, project.id, savedView]);
 
   const save = async (input: Parameters<ProjectDetailProps["onUpdate"]>[1]) => {
@@ -512,9 +546,9 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
             </ProjectTab>
           )}
           <ProjectTab
-            active={tab === "issues"}
+            active={tab === "issues" && !activeSavedViewId}
             id="issues"
-            onChange={onTabChange}
+            onChange={changeTab}
             shortcut="3"
             tooltip="View Issues"
           >
