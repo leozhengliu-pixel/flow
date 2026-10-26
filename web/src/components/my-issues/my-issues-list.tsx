@@ -39,6 +39,7 @@ import { PersonHover } from '@/components/property/person-info'
 import { isPeopleProperty } from '@/lib/people'
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { IssueWidgetAdornments } from '@/components/issues-split-view'
+import { nestedLinesByIssue } from '@/components/issue-explorer/issue-grouping'
 
 export type MyIssuesStateType = 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled'
 export type MyIssuesContextAction = 'status' | 'priority' | 'assignee' | 'dueDate' | 'labels' | 'project' | 'cycle' | 'moreProperties' | 'createRelated' | 'markAs' | 'copy' | 'copyUrl' | 'copyId' | 'copyTitle' | 'convertTo' | 'move' | 'openIn' | 'runLoop' | 'favorite' | 'remind' | 'delete'
@@ -404,13 +405,6 @@ export const MyIssuesRow = memo(MyIssuesRowView)
 
 const EMPTY_LINES:readonly boolean[]=[]
 const EMPTY_LINE_MAP=new Map<string,readonly boolean[]>()
-function nestedLinesByIssue(issues:MyIssuesRowData[]){
-  const byId=new Map(issues.map(item=>[item.id,item])),children=new Map<string,MyIssuesRowData[]>()
-  for(const item of issues){if(!item.parentId||!byId.has(item.parentId))continue;const siblings=children.get(item.parentId)??[];siblings.push(item);children.set(item.parentId,siblings)}
-  const result=new Map<string,readonly boolean[]>()
-  for(const issue of issues){const path:MyIssuesRowData[]=[];let child=issue;while(child.parentId){const parent=byId.get(child.parentId);if(!parent)break;path.unshift(child);child=parent}result.set(issue.id,path.map(item=>children.get(item.parentId!)?.at(-1)?.id===item.id))}
-  return result
-}
 function NestedIssueGuide({lines}:{lines:readonly boolean[]}){return <span aria-hidden="true" className={styles.nestingGuide}>{lines.map((last,level)=>{const current=level===lines.length-1;if(!current&&last)return null;return <span className={`${styles.nestingSegment}${current?` ${styles.nestingCurrent}`:''}${current&&last?` ${styles.nestingLast}`:''}`} key={level} style={{'--nest-level':level} as CSSProperties}>{current&&<svg className={styles.nestingBranch} viewBox="0 0 10 9"><path d="M0 0h1v1c0 2.5 2.212 3.546 2.212 3.546L9.737 8.06c.568.306.094 1.186-.474.88l-6.48-3.488S0 4 0 1V0Z"/></svg>}</span>})}</span>}
 
 export function IssueParentTrail({ancestors,board=false}:{ancestors:NonNullable<MyIssuesRowData['ancestors']>;board?:boolean}){if(!ancestors.length)return null;const shown=board?ancestors:ancestors.slice(0,1);return <span className={`${styles.parentTrail}${board?` ${styles.boardParentTrail}`:''}`} data-i18n-ignore>{shown.map(parent=><span key={parent.id}><b>›</b>{parent.title}</span>)}</span>}

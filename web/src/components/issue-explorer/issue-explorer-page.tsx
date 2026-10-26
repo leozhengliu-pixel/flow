@@ -610,6 +610,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
         emptyState={emptyState ?? (effectiveFilters.length ? <NoMatchingIssues/> : undefined)}
         collapsedGroupIds={collapsedGroups}
         displayProperties={split || (detailsOpen && previewIssueId) ? splitProperties : display.properties}
+        nestedSubIssues={display.nestedSubIssues}
         propertyOptions={rowOptions}
         selectedIds={selection.selectedIds}
         activeIssueId={split ? previewIssueId : undefined}
