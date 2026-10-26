@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const document_ = vi.hoisted(() => {
   const page = {
     getViewport: ({ scale }: { scale: number }) => ({ width: 612 * scale, height: 792 * scale }),
-    render: vi.fn((_: { canvas: HTMLCanvasElement }) => ({ promise: Promise.resolve(), cancel: vi.fn() })),
+    render: vi.fn<(options: { canvas: HTMLCanvasElement }) => { promise: Promise<void>; cancel: () => void }>(() => ({ promise: Promise.resolve(), cancel: vi.fn() })),
   }
   return { numPages: 3, getPage: vi.fn(async () => page), loadingTask: { destroy: vi.fn(async () => undefined) } }
 })
