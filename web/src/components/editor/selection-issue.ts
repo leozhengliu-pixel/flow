@@ -10,6 +10,7 @@
 import type { Editor } from '@tiptap/core'
 import { createContext, useContext, useMemo } from 'react'
 import { createIssue } from '@/lib/api'
+import { teamDefaultState, teamSubIssueState } from '@/lib/team-workflow'
 import { toast } from '@/lib/toast'
 import { useI18n } from '@/i18n/i18n'
 import { useAgentEntityData } from '@/components/agent/agent-entity-data'
@@ -67,19 +68,12 @@ export function replaceSelectionWithIssue(editor: Editor | undefined, selection:
 
 /** The status a new issue of the team starts in, as in the New issue dialog: the team's default, else its first unstarted one. */
 export function teamDefaultStateId(data: BootstrapData | undefined, teamId: string) {
-  if (!data) return undefined
-  const specific = data.states.some(state => state.teamId === teamId)
-  const states = data.states.filter(state => specific ? state.teamId === teamId : !state.teamId).sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-  const configured = data.teamSettings?.[teamId]?.defaultStateId
-  return (states.find(state => state.id === configured) ?? states.find(state => state.default) ?? states.find(state => state.type === 'unstarted') ?? states[0])?.id
+  return data ? teamDefaultState(data, teamId)?.id : undefined
 }
 
 /** The status a new sub-issue starts in, as in the reference app (and the sub-issue composer): the team's first unstarted one. */
 export function teamSubIssueStateId(data: BootstrapData | undefined, teamId: string) {
-  if (!data) return undefined
-  const specific = data.states.some(state => state.teamId === teamId)
-  const states = data.states.filter(state => specific ? state.teamId === teamId : !state.teamId).sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-  return states.find(state => state.type === 'unstarted')?.id ?? teamDefaultStateId(data, teamId)
+  return data ? teamSubIssueState(data, teamId)?.id : undefined
 }
 
 /**

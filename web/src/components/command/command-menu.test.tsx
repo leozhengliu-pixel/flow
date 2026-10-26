@@ -99,6 +99,38 @@ describe('context-aware command menu', () => {
     expect(onUpdateIssues).toHaveBeenCalledWith(['issue-1', 'issue-2'], { priority: 1 })
   })
 
+  describe('status page across team workflows', () => {
+    const team = (id: string) => ({ id, key: id.toUpperCase(), name: id, color: '#5e6ad2' })
+    const ready = { id: 'custom-ready', name: 'Ready', color: '#888', type: 'unstarted', position: 0, teamId: 'custom' }
+    const doing = { id: 'custom-doing', name: 'In progress', color: '#888', type: 'started', position: 1, teamId: 'custom' }
+    const customIssue = makeIssue({ id: 'issue-c', identifier: 'CUS-1', title: 'Custom issue', team: team('custom') as never, state: ready as never })
+    const childIssue = makeIssue({ id: 'issue-k', identifier: 'CHD-1', title: 'Child issue', team: team('child') as never, state: ready as never })
+    const workflows = makeBootstrap({
+      issues: [first, customIssue, childIssue], teams: [first.team, team('custom'), team('child')] as never,
+      states: [...data.states, ready, doing] as never,
+      teamSettings: { child: { inheritWorkflowStatuses: true, parentTeamId: 'custom' } } as never,
+    })
+    const labels = () => screen.getAllByRole('option').map(option => option.querySelector('.command-option-label')?.textContent)
+
+    it("offers a sub-team inheriting its parent's workflow the parent's statuses, shared with the parent", async () => {
+      const { user, onUpdateIssues } = setup({ kind: 'issues', source: 'selection', issues: [customIssue, childIssue] }, {}, workflows)
+      await user.click(screen.getByRole('option', { name: /Change status…/ }))
+      expect(labels()).toEqual(['Ready', 'In progress'])
+      await user.click(screen.getByRole('option', { name: /In progress/ }))
+      await waitFor(() => expect(onUpdateIssues).toHaveBeenCalledWith(['issue-c', 'issue-k'], { stateId: 'custom-doing' }))
+    })
+
+    it('sends each team of a mixed selection its own equivalent status', async () => {
+      const { user, onUpdateIssues } = setup({ kind: 'issues', source: 'selection', issues: [first, customIssue] }, {}, workflows)
+      await user.click(screen.getByRole('option', { name: /Change status…/ }))
+      expect(labels()).toEqual(['Backlog', 'In progress', 'Done'])
+      await user.click(screen.getByRole('option', { name: /In progress/ }))
+      await waitFor(() => expect(onUpdateIssues).toHaveBeenCalledTimes(2))
+      expect(onUpdateIssues).toHaveBeenCalledWith([first.id], { stateId: 'state-started' })
+      expect(onUpdateIssues).toHaveBeenCalledWith(['issue-c'], { stateId: 'custom-doing' })
+    })
+  })
+
   it('toggles a label on every selected issue and keeps the multi-select page open', async () => {
     const { user, onUpdateIssue, onOpenChange } = setup({ kind: 'issues', source: 'selection', issues: [first, second] })
     await user.click(screen.getByRole('option', { name: /Add labels…/ }))

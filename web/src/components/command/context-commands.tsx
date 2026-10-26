@@ -33,6 +33,7 @@ import { estimatePickerOptions } from '@/lib/estimates'
 import { configuredIssueBranch, copyIssueForWork } from '@/lib/issue-work-actions'
 import { labelTeamScopeIds, labelsForResource, setGroupedLabelSelected } from '@/lib/labels'
 import { resolvedTeamSettings } from '@/lib/team-hierarchy'
+import { statesForTeams, teamStateChanges } from '@/lib/team-workflow'
 import type { BootstrapData, Issue, IssueRelationType, IssueUpdateInput, WorkflowState } from '@/types/flow'
 import type { CommandContext, CommandIssueRef, IssueCommandContext } from './command-context'
 import { useI18n } from '@/i18n/i18n'
@@ -195,6 +196,13 @@ function issueCommands({ context, data, page, query, handlers, close, t, refs, i
     if (handlers.onUpdateIssues) return guard(handlers.onUpdateIssues(ids, input))
     return Promise.resolve()
   }
+  /** A status change for issues of several teams sends each team its own equivalent status. */
+  const applyStatus = (stateId: string) => {
+    const onUpdateIssues = handlers.onUpdateIssues
+    if (single || teamIds.length < 2 || !onUpdateIssues) return apply({ stateId })
+    const teamOf = new Map(issues.map(issue => [issue.id, issue.team.id]))
+    return Promise.all(teamStateChanges(data, ids.map(id => ({ id, teamId: teamOf.get(id) })), stateId).map(change => guard(onUpdateIssues(change.ids, { stateId: change.stateId }))))
+  }
   /** Per-issue changes (labels, subscribers) that depend on each issue's current value. */
   const applyEach = (build: (issue: Issue) => IssueUpdateInput | undefined) => Promise.all(issues.map(issue => {
     const input = build(issue)
@@ -273,7 +281,7 @@ function issueCommands({ context, data, page, query, handlers, close, t, refs, i
     if (page.id === 'issueRelease' || page.id === 'issueReleaseRemove') return releaseCommands.options
     if (page.id === 'status') {
       const current = same(issue => issue.state.id)
-      return statesFor(data, oneTeam).map(state => ({ id: state.id, label: state.name, icon: <StatusIcon state={state}/>, current: current === state.id, select: choose(() => apply({ stateId: state.id })) }))
+      return statesFor(data, teamIds).map(state => ({ id: state.id, label: state.name, icon: <StatusIcon state={state}/>, current: current === state.id, select: choose(() => applyStatus(state.id)) }))
     }
     if (page.id === 'priority') {
       const current = same(issue => issue.priority)
@@ -380,11 +388,12 @@ export function datePageOptions(query: string, current: string | undefined, hasV
   return options
 }
 
-function statesFor(data: BootstrapData, teamId: string | undefined): WorkflowState[] {
-  const resolve = (id: string, seen = new Set<string>()): string => { const settings = data.teamSettings?.[id]; return settings?.inheritWorkflowStatuses && settings.parentTeamId && !seen.has(id) ? resolve(settings.parentTeamId, seen.add(id)) : id }
-  const scope = teamId ? resolve(teamId) : undefined
-  const scoped = scope && data.states.some(state => state.teamId === scope) ? data.states.filter(state => state.teamId === scope) : data.states.filter(state => !state.teamId)
-  return (scoped.length ? scoped : data.states).slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+/** The statuses the issues' teams can use (shared by all of them, else the first team's), else the workspace ones. */
+function statesFor(data: BootstrapData, teamIds: string[]): WorkflowState[] {
+  const scoped = statesForTeams(data, teamIds)
+  if (scoped.length) return scoped
+  const workspace = data.states.filter(state => !state.teamId)
+  return (workspace.length ? workspace : data.states).slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
 }
 
 function labelsFor(data: BootstrapData, teamIds: string[]) {

@@ -19,6 +19,7 @@ import {
 import { markdownPlainText } from "@/lib/markdown-plain-text";
 import { labelTeamScopeIds, labelsForResource, toggleGroupedLabelIds } from "@/lib/labels";
 import { issueTemplateCreateUrl, relativeTemplateTime, workspaceIssueTemplates } from "@/lib/issue-templates";
+import { teamDefaultState, teamWorkflowStates } from "@/lib/team-workflow";
 import { useI18n } from "@/i18n/i18n";
 import { Avatar } from "@/components/issue/issue-row";
 import { MentionTextField } from "@/components/editor/mention-text-field";
@@ -444,16 +445,9 @@ function initialEditorState(base: IssueTemplate | undefined, copy: boolean, temp
   };
 }
 
-function teamStates(data: BootstrapData, teamId: string) {
-  const specific = data.states.some((state) => state.teamId === teamId);
-  return data.states.filter((state) => (specific ? state.teamId === teamId : !state.teamId)).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-}
-
 /** The status a new issue in the team starts in (the team's configured default, else its default/first unstarted state). */
 function defaultTeamStateId(data: BootstrapData, teamId: string) {
-  const states = teamStates(data, teamId);
-  const configured = data.teamSettings?.[teamId]?.defaultStateId;
-  return (states.find((state) => state.id === configured) ?? states.find((state) => state.default) ?? states.find((state) => state.type === "unstarted") ?? states[0])?.id ?? "";
+  return teamDefaultState(data, teamId)?.id ?? "";
 }
 
 export function IssueTemplateEditor({
@@ -791,7 +785,7 @@ export function TemplatePropertyPills({
 }) {
   const { t } = useI18n();
   const team = data.teams.find((item) => item.id === teamId);
-  const states = teamId ? teamStates(data, teamId) : [];
+  const states = teamId ? teamWorkflowStates(data, teamId) : [];
   const state = states.find((item) => item.id === stateId);
   // A triage team's backlog intake reads as "Triage", as in the composer and the reference app's template editor.
   const shownState = state && data.teamSettings?.[teamId]?.triageEnabled && state.type === "backlog" ? TRIAGE_STATUS : state;

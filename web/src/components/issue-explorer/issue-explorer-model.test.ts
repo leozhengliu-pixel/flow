@@ -8,6 +8,7 @@ import {
   buildExplorerIssueGroups,
   createExplorerRowCache,
   explorerBoardGroupUpdate,
+  explorerBulkOptions,
   executeExplorerBulkAction,
   explorerFilterOptions,
   explorerPropertyOptions,
@@ -167,6 +168,38 @@ describe('issue explorer workflow model', () => {
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     await executeExplorerBulkAction({ action: 'copyId', ids: [issue.id], data, issuesById, onUpdateIssue, onUpdateIssues })
     expect(writeText).toHaveBeenCalledWith(issue.identifier)
+  })
+
+  describe('status changes across team workflows', () => {
+    const team = (id: string) => ({ id, key: id.toUpperCase(), name: id, color: '#5e6ad2' })
+    const ready = { id: 'custom-ready', name: 'Ready', color: '#888', type: 'unstarted', position: 0, teamId: 'custom' }
+    const shipping = { id: 'custom-progress', name: 'In progress', color: '#888', type: 'started', position: 1, teamId: 'custom' }
+    const data = makeBootstrap({
+      teams: [team('team-1'), team('custom'), team('child')] as never,
+      states: [backlog, started, completed, ready, shipping] as never,
+      teamSettings: { child: { inheritWorkflowStatuses: true, parentTeamId: 'custom' } } as never,
+    })
+    const plainIssue = makeIssue()
+    const customIssue = makeIssue({ id: 'issue-c', identifier: 'C-1', team: team('custom') as never, state: ready as never })
+    const childIssue = makeIssue({ id: 'issue-k', identifier: 'K-1', team: team('child') as never, state: ready as never })
+
+    it("moves a card dropped on another team's status column to its own team's equivalent", () => {
+      const row = issueToExplorerRow(customIssue, 'workspace', [customIssue], data)
+      expect(explorerBoardGroupUpdate(row, 'status', started.id, data)).toEqual({ stateId: 'custom-progress' })
+      const child = issueToExplorerRow(childIssue, 'workspace', [childIssue], data)
+      expect(explorerBoardGroupUpdate(child, 'status', 'custom-progress', data)).toEqual({ stateId: 'custom-progress' })
+      expect(explorerBoardGroupUpdate(child, 'status', backlog.id, data)).toEqual({})
+    })
+
+    it('sends each team of a bulk status change its own status and offers the shared ones', async () => {
+      const issuesById = new Map<string, Issue>([plainIssue, customIssue, childIssue].map(issue => [issue.id, issue]))
+      const onUpdateIssues = vi.fn(async (ids: string[]) => ids.map(id => issuesById.get(id)!))
+      await executeExplorerBulkAction({ action: 'status', ids: [plainIssue.id, customIssue.id, childIssue.id], value: started.id, data, issuesById, onUpdateIssue: vi.fn(), onUpdateIssues })
+      expect(onUpdateIssues.mock.calls).toEqual([[[plainIssue.id], { stateId: started.id }], [[customIssue.id, childIssue.id], { stateId: 'custom-progress' }]])
+      const options = explorerPropertyOptions(data, [plainIssue, customIssue])
+      expect(explorerBulkOptions('status', options, { data, teamIds: ['custom', 'child'] })?.map(option => option.id)).toEqual(['custom-ready', 'custom-progress'])
+      expect(explorerBulkOptions('status', options)?.map(option => option.id)).toHaveLength(5)
+    })
   })
 
   it('updates immutable map state helpers', () => {

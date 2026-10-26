@@ -173,9 +173,9 @@ describe('TriagePage', () => {
 
   it('files created issues in the team triage status', () => {
     const teamBacklog = { ...backlog, id: 'team-backlog', teamId: 'team-1' } as WorkflowState
-    expect(triageState([started, teamBacklog], 'team-1')?.id).toBe('team-backlog')
-    expect(triageState([started, backlog, teamBacklog], 'team-1', 'team-backlog')?.id).toBe('team-backlog')
-    expect(triageState([started], 'team-1')).toBeUndefined()
+    expect(triageState({ states: [started, teamBacklog] }, 'team-1')?.id).toBe('team-backlog')
+    expect(triageState({ states: [started, backlog, teamBacklog] }, 'team-1', 'team-backlog')?.id).toBe('team-backlog')
+    expect(triageState({ states: [started] }, 'team-1')).toBeUndefined()
   })
 
   it('shows the triage-disabled state instead of listing backlog issues', async () => {

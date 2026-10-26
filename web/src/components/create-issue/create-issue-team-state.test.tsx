@@ -261,6 +261,69 @@ describe('new issue: templates, drafts and loading', () => {
     expect(onCreate.mock.calls[0][0]).toMatchObject({ teamId: 'team-custom', stateId: 'cus-review' })
   })
 
+  // The workspace statuses are in, the custom team's own statuses arrive later.
+  const withoutCustom = (over: Partial<BootstrapData> = {}) => workspace({ states: [...workspaceStates, ...otherStates, ...childCopies], ...over })
+
+  it('restores a requested status once the team statuses arrive after the workspace ones', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    const { onCreate, rerender } = mount({ initialTeamId: 'team-custom', initialStateId: 'cus-review' }, withoutCustom())
+    await settle()
+    // Until then the team looks like it uses the workspace workflow.
+    expect(statusTrigger()).toHaveAccessibleName(/Current value is Todo$/)
+    rerender(workspace())
+    await waitFor(() => expect(statusTrigger()).toHaveAccessibleName(/Current value is Review$/))
+    await submit(user)
+    await waitFor(() => expect(onCreate).toHaveBeenCalled())
+    expect(onCreate.mock.calls[0][0]).toMatchObject({ teamId: 'team-custom', stateId: 'cus-review' })
+  })
+
+  it('restores a template status once the team statuses arrive', async () => {
+    const late = template({ id: 'late', name: 'Late template', title: 'Late', scope: 'team', teamId: 'team-custom', stateId: 'cus-shipped' })
+    const { rerender } = mount({ initialTeamId: 'team-custom', initialTemplateId: 'late' }, withoutCustom({ issueTemplates: [late] }))
+    await settle()
+    expect(statusTrigger()).toHaveAccessibleName(/Current value is Todo$/)
+    rerender(workspace({ issueTemplates: [late] }))
+    await waitFor(() => expect(statusTrigger()).toHaveAccessibleName(/Current value is Shipped$/))
+  })
+
+  it('restores a draft status once the team statuses arrive', async () => {
+    localStorage.setItem('flow:create-issue-draft:team-custom', JSON.stringify({ title: 'Saved', teamId: 'team-custom', description: null, stateId: 'cus-review', priority: 0, estimate: 0, assigneeId: viewer.id, projectId: '', projectMilestoneId: '', cycleId: '', dueDate: '', labelIds: [] }))
+    const { rerender } = mount({ draftId: 'local:team-custom', initialTeamId: 'team-custom' }, withoutCustom())
+    await settle()
+    expect(statusTrigger()).toHaveAccessibleName(/Current value is Todo$/)
+    rerender(workspace())
+    await waitFor(() => expect(statusTrigger()).toHaveAccessibleName(/Current value is Review$/))
+  })
+
+  it('never replaces a status the user picked with the earlier request', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    const { onCreate, rerender } = mount({ initialTeamId: 'team-custom', initialStateId: 'cus-review' }, withoutCustom())
+    await settle()
+    // Picked before the team statuses arrive: that workspace status is then invalid, so the team default wins, not the request.
+    await chooseStatus(user, 'Done')
+    rerender(workspace())
+    await waitFor(() => expect(statusTrigger()).toHaveAccessibleName(/Current value is Ready$/))
+    // Picked once they are in: later data refreshes keep it.
+    await chooseStatus(user, 'Shipped')
+    rerender(workspace({ states: [...workspaceStates, ...customStates, state('cus-extra', 'Extra', 'started', 4, { teamId: 'team-custom' }), ...otherStates] }))
+    await act(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())))
+    expect(statusTrigger()).toHaveAccessibleName(/Current value is Shipped$/)
+    await submit(user)
+    await waitFor(() => expect(onCreate).toHaveBeenCalled())
+    expect(onCreate.mock.calls[0][0]).toMatchObject({ teamId: 'team-custom', stateId: 'cus-shipped' })
+  })
+
+  it('keeps the team default when the request is still invalid after the team statuses arrive', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    const { onCreate, rerender } = mount({ initialTeamId: 'team-custom', initialStateId: 'oth-doing' }, withoutCustom())
+    await settle()
+    rerender(workspace())
+    await waitFor(() => expect(statusTrigger()).toHaveAccessibleName(/Current value is Ready$/))
+    await submit(user)
+    await waitFor(() => expect(onCreate).toHaveBeenCalled())
+    expect(onCreate.mock.calls[0][0]).toMatchObject({ teamId: 'team-custom', stateId: 'cus-ready' })
+  })
+
   it('does not submit for a team that has no usable status', async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 })
     // Only team workflows exist, so a team without its own has nothing to use.

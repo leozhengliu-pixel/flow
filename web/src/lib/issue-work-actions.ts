@@ -1,5 +1,6 @@
 import { renderCodingPrompt, type CodingPromptIssue } from '@/lib/coding-tools'
 import type { BootstrapData,Issue,IssueUpdateInput,WorkflowState } from '@/types/flow'
+import { teamWorkflowStates } from '@/lib/team-workflow'
 
 export function configuredIssueBranch(issue:Issue,data?:BootstrapData) {
   const person=issue.assignee??issue.creator
@@ -32,8 +33,7 @@ export async function copyIssueForWork(text:string,kind:'branch'|'prompt',issue:
   await navigator.clipboard.writeText(text)
   const preferences=data?.userSettings?.[data.viewer.id]
   if (options.skipMove||!(kind==='branch'?preferences?.gitBranchMoveStarted:preferences?.codingToolMoveStarted)||!data||['started','completed','canceled'].includes(issue.state.type))return undefined
-  const scoped=data.states.some(state=>state.teamId===issue.team.id)
-  const started=data.states.filter(state=>state.type==='started'&&(scoped?state.teamId===issue.team.id:!state.teamId)).sort((a,b)=>(a.position??0)-(b.position??0))[0]
+  const started=teamWorkflowStates(data,issue.team.id).find(state=>state.type==='started')
   if(!started)return undefined
   try{await onUpdate({stateId:started.id})}catch{throw new Error('Copied, but the issue status could not be updated')}
   return started

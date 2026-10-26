@@ -3,6 +3,7 @@
  */
 import type { BootstrapData, Issue } from '@/types/flow'
 import type { SubIssueInput } from './sub-issue-editor'
+import { teamSubIssueState } from '@/lib/team-workflow'
 
 export interface FastIssueDraftSeed {
   title?: string
@@ -20,13 +21,7 @@ export function createSubIssueInputFromDraft(
   data: BootstrapData,
   draft: FastIssueDraftSeed = {},
 ): SubIssueInput {
-  const teamStates = data.states.filter(state =>
-    data.states.some(item => item.teamId === parent.team.id)
-      ? state.teamId === parent.team.id
-      : !state.teamId,
-  )
-  const defaultState =
-    teamStates.find(state => state.type === 'unstarted') ?? teamStates[0] ?? parent.state
+  const defaultState = teamSubIssueState(data, parent.team.id) ?? parent.state
 
   return {
     title: draft.title ?? '',

@@ -12,8 +12,9 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { DateTimeControl } from '@/components/ui/date-time-control'
 import { FlowTooltip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n/i18n'
+import { teamWorkflowStates } from '@/lib/team-workflow'
 import type { BootstrapData, Issue, IssueRelationType, Team } from '@/types/flow'
-import { canceledState, duplicateState, formatSnoozeDate, isSnoozed, parseSnoozeInput, resolveAcceptState, snoozePresets, teamStates, TRIAGE_SHORTCUTS, type TriageActionKind } from './triage-model'
+import { canceledState, duplicateState, formatSnoozeDate, isSnoozed, parseSnoozeInput, resolveAcceptState, snoozePresets, TRIAGE_SHORTCUTS, type TriageActionKind } from './triage-model'
 import { useTriageShortcuts } from './use-triage-shortcuts'
 import './triage.css'
 import { GridLoader } from '@/components/ui/grid-loader'
@@ -21,8 +22,8 @@ import { GridLoader } from '@/components/ui/grid-loader'
 /** Decline / Mark as duplicate / Snooze work shared by the triage list, the issue header and the context menu. */
 function useTriageWork(issue: Issue, data: BootstrapData, team: Pick<Team, 'id'>, onDone: (issue: Issue) => void, onSettled: () => void) {
   const { t } = useI18n()
-  const canceled = useMemo(() => canceledState(data.states, team.id), [data.states, team.id])
-  const duplicate = useMemo(() => duplicateState(data.states, team.id) ?? canceled, [canceled, data.states, team.id])
+  const canceled = useMemo(() => canceledState(data, team.id), [data, team.id])
+  const duplicate = useMemo(() => duplicateState(data, team.id) ?? canceled, [canceled, data, team.id])
   const [busy, setBusy] = useState(false)
   const run = async (work: () => Promise<Issue>, message: string, comment = '') => {
     setBusy(true)
@@ -116,7 +117,7 @@ function IssueChip({ issue }: { issue: Issue }) {
 function AcceptDialog({ issue, data, team, onOpenChange, onDone }: { issue: Issue; data: BootstrapData; team: Pick<Team, 'id'>; onOpenChange: (open: boolean) => void; onDone: (issue: Issue) => void }) {
   const { t } = useI18n()
   const teamSettings = data.teamSettings?.[team.id]
-  const states = useMemo(() => teamStates(data.states, team.id), [data.states, team.id])
+  const states = useMemo(() => teamWorkflowStates(data, team.id), [data, team.id])
   const target = useMemo(() => resolveAcceptState(states, teamSettings?.defaultStateId), [states, teamSettings?.defaultStateId])
   const [stateId, setStateId] = useState(target?.id)
   const [priority, setPriority] = useState(issue.priority)

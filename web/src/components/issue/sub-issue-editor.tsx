@@ -15,6 +15,7 @@ import type { DescriptionSnapshot } from '@/components/issue/editor/editor-conte
 import { DueDateCommand } from '@/components/issue/due-date-picker'
 import { labelTeamScopeIds, labelsForResource, toggleGroupedLabelIds } from '@/lib/labels'
 import { resolvedTeamSettings } from '@/lib/team-hierarchy'
+import { teamSubIssueState, teamWorkflowStates } from '@/lib/team-workflow'
 import { ExistingDraftDiscardDialog } from '@/components/create-issue/create-issue-dialog'
 
 export interface SubIssueInput {
@@ -32,11 +33,8 @@ export interface SubIssueInput {
 }
 
 export function SubIssueEditor({ parent, data, onCancel, onCreate }: { parent: Issue; data: BootstrapData; onCancel: () => void; onCreate: (input: SubIssueInput) => Promise<void> }) {
-  const teamStates = useMemo(() => {
-    const specific = data.states.some(state => state.teamId === parent.team.id)
-    return data.states.filter(state => specific ? state.teamId === parent.team.id : !state.teamId).sort((a, b) => (a.position??0) - (b.position??0))
-  }, [data.states, parent.team.id])
-  const defaultState = teamStates.find(state => state.type === 'unstarted') ?? teamStates[0] ?? parent.state
+  const teamStates = useMemo(() => teamWorkflowStates(data, parent.team.id), [data, parent.team.id])
+  const defaultState = teamSubIssueState(data, parent.team.id, teamStates) ?? parent.state
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState<DescriptionSnapshot | null>(null)
   const [saving, setSaving] = useState(false)

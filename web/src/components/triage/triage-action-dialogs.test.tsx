@@ -63,3 +63,29 @@ describe.each([
     expect(saved).toContain('[Project one](/workspace/project/project-one/overview)')
   })
 })
+
+describe('Accept dialog status', () => {
+  it('accepts a sub-team issue into the parent workflow it inherits and offers only those statuses', async () => {
+    const user = userEvent.setup()
+    const intake = { id: 'parent-intake', name: 'Intake', color: '#999', type: 'backlog', position: 0, teamId: 'team-parent' }
+    const doing = { id: 'parent-doing', name: 'Doing', color: '#999', type: 'started', position: 1, teamId: 'team-parent' }
+    const shipped = { id: 'parent-shipped', name: 'Shipped', color: '#999', type: 'completed', position: 2, teamId: 'team-parent' }
+    const issue = makeIssue({ state: intake as never, triagedAt: undefined })
+    const data = mentionFixture({
+      issues: [issue], states: [backlog, started, canceled, intake, doing, shipped] as never,
+      teamSettings: { 'team-1': { triageEnabled: true, inheritWorkflowStatuses: true, parentTeamId: 'team-parent' }, 'team-parent': {} } as never,
+    })
+    render(<MentionShell data={data}><TooltipProvider><TriageHeaderActions issue={issue} data={data} onDone={vi.fn()}/></TooltipProvider></MentionShell>)
+    await user.click(screen.getByRole('button', { name: 'Accept issue from triage' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Accept issue…' })
+    const picker = within(dialog).getByLabelText('Change status. Current status is Doing')
+    await user.click(picker)
+    const names = (await screen.findAllByRole('option', { hidden: true })).map(option => option.textContent ?? '')
+    expect(names.some(name => name.includes('Doing'))).toBe(true)
+    expect(names.some(name => name.includes('Shipped'))).toBe(true)
+    expect(names.some(name => name.includes('In progress'))).toBe(false)
+    await user.keyboard('{Escape}')
+    await user.click(within(dialog).getByRole('button', { name: 'Accept' }))
+    await waitFor(() => expect(api.updateIssue).toHaveBeenCalledWith(issue.id, expect.objectContaining({ stateId: 'parent-doing' })))
+  })
+})
