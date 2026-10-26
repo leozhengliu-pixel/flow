@@ -30,7 +30,8 @@ import {
   type RecurrenceFrequency,
 } from "@/lib/recurrence";
 import { canManageTeamSettings } from "@/lib/settings-permissions";
-import type { BootstrapData, Issue, Team, TemplateSubIssue, WorkflowState } from "@/types/flow";
+import { teamDefaultState, teamWorkflowStates } from "@/lib/team-workflow";
+import type { BootstrapData, Issue, Team, TemplateSubIssue } from "@/types/flow";
 
 import { SubIssueTemplateComposer, SubIssueTemplateRow } from "./issue-template-settings";
 import { SettingsRow, SettingsSection, TeamSettingsCrumb, SettingsCrumb } from "./settings-primitives";
@@ -244,16 +245,6 @@ function RecurringIssuesList({ data, team, onBack, onNavigateSubPath }: Props) {
   );
 }
 
-/** Workflow states for the team (inheriting a parent team's statuses when configured). */
-function teamStates(data: BootstrapData, teamId: string, seen = new Set<string>()): WorkflowState[] {
-  if (seen.has(teamId)) return [];
-  seen.add(teamId);
-  const settings = data.teamSettings?.[teamId];
-  if (settings?.inheritWorkflowStatuses && settings.parentTeamId) return teamStates(data, settings.parentTeamId, seen);
-  const specific = data.states.some((state) => state.teamId === teamId);
-  return data.states.filter((state) => (specific ? state.teamId === teamId : !state.teamId)).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-}
-
 const PRIORITY_NAMES = ["No priority", "Urgent", "High", "Medium", "Low"];
 
 /** The reference app's "New recurring issue" page: the first instance, its schedule and first due date. */
@@ -262,9 +253,9 @@ function NewRecurringIssuePage({ data, team, sourceId, onNavigateSubPath, onRelo
   const navigate = useNavigate();
   const settings = data.teamSettings?.[team.id];
   const triage = Boolean(settings?.triageEnabled);
-  const states = useMemo(() => teamStates(data, team.id), [data, team.id]);
+  const states = useMemo(() => teamWorkflowStates(data, team.id), [data, team.id]);
   const backlog = states.find((state) => state.type === "backlog");
-  const defaultState = states.find((state) => state.id === settings?.defaultStateId) ?? states.find((state) => state.default) ?? states.find((state) => state.type === "unstarted") ?? states[0];
+  const defaultState = teamDefaultState(data, team.id, states);
   const [source, setSource] = useState<Issue | undefined>(() => data.issues.find((issue) => issue.id === sourceId && !issue.isSummary));
   const [sourceError, setSourceError] = useState("");
   const [title, setTitle] = useState("");

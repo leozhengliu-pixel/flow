@@ -200,7 +200,7 @@ import { AGENT_PAGE_ASK_EVENT } from "@/components/agent/agent-ask-request";
 import { documentsRedirectPath } from "@/lib/documents-redirect";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
 import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-list";
-import { createIssueShortcutContext } from "@/lib/create-issue-shortcut";
+import { createIssueShortcutContext, projectCreateIssueContext } from "@/lib/create-issue-shortcut";
 import { useLocation } from "react-router-dom";
 import { useRouteNavigation } from "@/hooks/use-route-navigation";
 import { usePrefilledIssueRoute } from "@/hooks/use-prefilled-issue-route";
@@ -334,7 +334,7 @@ import { isTeamPagesRoute } from '@/components/team/team-pages-routes'
 import { searchResultLink } from '@/lib/search-result-link'
 import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck } from '@/lib/issue-detail-cache'
 import { bootstrapNavigationDecision, bootstrapRefreshProjection, bootstrapRequestKey } from '@/lib/bootstrap-navigation'
-import { triageState } from '@/components/triage/triage-model'
+import { teamWorkflowStateOfType } from '@/lib/team-workflow'
 import type { WorkspaceSecondaryKind } from '@/components/workspace/workspace-secondary-page'
 import { applyLabelUpdate, archiveProjectUpdateReminders, mergeRefreshedIssues, mergeScopedIssues, mergeWorkspaceMetadata, metadataOnlyRealtimeEvent, newlyReleasedIssueIds, syncIssueProjectSummaries, teamIssueScope, type IssueRefreshScope } from '@/lib/workspace-metadata-refresh'
 import { ISSUE_QUERY_INVALIDATED } from '@/components/issue-explorer/paged-issue-invalidation'
@@ -536,8 +536,8 @@ function App() {
       const context: MyIssuesCreateContext = typeof contextOrState === "string"
         ? { stateId: contextOrState }
         : contextOrState ?? {};
-      const next =
-        context.stateId || data?.states.find((state) => state.type === "unstarted")?.id;
+      // No status preset: the dialog starts in the selected team's default status.
+      const next = context.stateId || undefined;
       createStateRef.current = next;
       setCreateContext({ ...context, stateId: next });
       setCreateDraftId(undefined);
@@ -547,7 +547,7 @@ function App() {
       setCreateProjectMilestoneId(context.projectMilestoneId);
       setCreateOpen(true);
     },
-    [data],
+    [],
   );
   usePrefilledIssueRoute({ route, data, location, navigateTo, openCreateIssue });
   useEffect(() => {
@@ -5294,7 +5294,7 @@ function App() {
             onCreateIssue={() => {
               const triageTeam = triagePageTeam;
               // "Create triage issue" files the issue in this team's triage status.
-              const stateId = triageTeam ? triageState(data.states, triageTeam.id, data.teamSettings?.[triageTeam.id]?.defaultStateId)?.id : undefined;
+              const stateId = triageTeam ? teamWorkflowStateOfType(data, triageTeam.id, "backlog")?.id : undefined;
               openCreateIssue(triageTeam ? { teamId: triageTeam.id, stateId } : undefined);
             }}
           />
@@ -6863,10 +6863,9 @@ function App() {
               onUpdateIssue={updateIssueFromPage}
               onDeleteIssues={deleteIssuesFromPage}
               onCreateIssue={(projectId, projectMilestoneId, context) => {
-                const projectTeamId = data.projects.find((item) => item.id === projectId)?.teamIds[0];
                 setCreateProjectId(projectId);
                 setCreateProjectMilestoneId(projectMilestoneId);
-                openCreateIssue({ ...context, projectId, projectMilestoneId, teamId: context?.teamId ?? projectTeamId });
+                openCreateIssue(projectCreateIssueContext(data, projectId, projectMilestoneId, context));
               }}
               onOpenSidebar={() => setMobileSidebarOpen(true)}
             />

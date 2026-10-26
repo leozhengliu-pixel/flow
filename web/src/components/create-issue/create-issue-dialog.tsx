@@ -28,6 +28,7 @@ import { useI18n } from '@/i18n/i18n'
 import { defaultRecurrenceFirstDue, recurrenceDate, recurrencePresetOptions, toDateInput } from '@/lib/recurrence'
 import { AiBurstGlyph } from '@/components/ui/agent-glyph'
 import { teamContentAccessible } from '@/lib/team-access'
+import { teamDefaultState, teamForWorkflowState, teamHasWorkflowState, teamStateIdFor, teamWorkflowStates } from '@/lib/team-workflow'
 
 export interface CreateIssueInput {
   title: string
@@ -104,30 +105,15 @@ interface StoredIssueDraft {
 export function CreateIssueDialog({ data, draftId, initialContext, initialProjectId, initialProjectMilestoneId, initialTeamId, initialStateId, initialTemplateId, onCreate, onCreateLabel, onDraftDeleted, onDraftSaved, onOpenChange, onUpload, open }: CreateIssueDialogProps) {
   const requestedTeamId = initialContext?.teamId ?? initialTeamId
   const requestedStateId = initialContext?.stateId ?? initialStateId
-  const fallbackTeamId = defaultIssueTeamId(data)
+  // A status preset without a team (a status group's "+") opens in a team whose workflow has that status.
+  const fallbackTeamId = teamForWorkflowState(data, issueTeams(data).map(item => item.id), requestedStateId) ?? defaultIssueTeamId(data)
   const [teamId, setTeamId] = useState(requestedTeamId || fallbackTeamId)
-  const availableStates = useMemo(() => {
-    const specific = data.states.some(state => state.teamId === teamId)
-    const states = data.states.filter(state => specific ? state.teamId === teamId : !state.teamId)
-    // A grouped create action may target a workspace state that is not in the
-    // team's custom state set. Keep that state available so the preset is both
-    // visible in the picker and sent with the create request.
-    if (requestedStateId && !states.some(state => state.id === requestedStateId)) {
-      const requested = data.states.find(state => state.id === requestedStateId)
-      if (requested) return [...states, requested].sort((left, right) => (left.position??0) - (right.position??0))
-    }
-    return [...states].sort((left, right) => (left.position??0) - (right.position??0))
-  }, [data.states, requestedStateId, teamId])
-  const defaultState = useMemo(() => {
-    const configured = data.teamSettings?.[teamId]?.defaultStateId
-    return availableStates.find(state => state.id === configured)
-      ?? availableStates.find(state => state.default)
-      ?? [...availableStates].sort((a, b) => (a.position??0) - (b.position??0)).find(state => state.type === 'unstarted')
-      ?? availableStates[0]
-  }, [availableStates, data.teamSettings, teamId])
+  // Only the team's effective workflow is offered or sent; the API rejects any other status.
+  const availableStates = useMemo(() => teamWorkflowStates({ states: data.states, teamSettings: data.teamSettings }, teamId), [data.states, data.teamSettings, teamId])
+  const defaultState = useMemo(() => teamDefaultState({ states: data.states, teamSettings: data.teamSettings }, teamId, availableStates), [availableStates, data.states, data.teamSettings, teamId])
   const [title, setTitle] = useState(initialContext?.title ?? '')
   const [description, setDescription] = useState<DescriptionSnapshot | null>(null)
-  const [stateId, setStateId] = useState(requestedStateId ?? defaultState.id)
+  const [stateId, setStateId] = useState(() => teamStateIdFor(data, requestedTeamId || fallbackTeamId, requestedStateId))
   const [priority, setPriority] = useState<number>(initialContext?.priority ?? 0)
   const [estimate, setEstimate] = useState(NO_ESTIMATE)
   const [assigneeId, setAssigneeId] = useState(initialContext?.assigneeId ?? data.viewer.id)
@@ -159,7 +145,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   const initializationKey = [open, draftId ?? '', initialProjectId ?? '', initialProjectMilestoneId ?? '', requestedStateId ?? '', requestedTeamId ?? '', JSON.stringify(initialContext ?? {})].join('\u001f')
   const initializedKeyRef = useRef('')
   const draftKey = `${draftStoragePrefix}${teamId || data.teams[0]?.key || 'default'}`
-  useEffect(()=>{if(!open||!initialTemplateId)return;const template=data.issueTemplates.find(item=>item.id===initialTemplateId);if(!template)return;setTemplateId(template.id);setTitle(current=>current||template.title||template.name);setStateId(template.stateId||defaultState.id);setPriority(template.priority);setAssigneeId(template.assigneeId??data.viewer.id);setProjectId(template.projectId??'');setLabelIds(template.labelIds);const templateBody=template.body;if(templateBody)requestAnimationFrame(()=>descriptionEditorRef.current?.commands.setContent(templateBody,{contentType:'markdown'}))},[data.issueTemplates,data.viewer.id,defaultState.id,initialTemplateId,open])
+  useEffect(()=>{if(!open||!initialTemplateId)return;const template=data.issueTemplates.find(item=>item.id===initialTemplateId);if(!template)return;setTemplateId(template.id);setTitle(current=>current||template.title||template.name);setStateId(template.stateId||defaultState?.id||'');setPriority(template.priority);setAssigneeId(template.assigneeId??data.viewer.id);setProjectId(template.projectId??'');setLabelIds(template.labelIds);const templateBody=template.body;if(templateBody)requestAnimationFrame(()=>descriptionEditorRef.current?.commands.setContent(templateBody,{contentType:'markdown'}))},[data.issueTemplates,data.viewer.id,defaultState?.id,initialTemplateId,open])
   const hasDraftContent = Boolean(title.trim() || description?.markdown.trim() || files.length)
 
   useEffect(() => {
@@ -187,12 +173,14 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     const remote = remoteDraft?.metadata as Partial<StoredIssueDraft> | undefined
     const requestedProject = initialProjectId ? data.projects.find(project => project.id === initialProjectId) : undefined
     const requestedMilestone = requestedProject?.milestones.find(milestone => milestone.id === initialProjectMilestoneId)
+    const workflow = { states: data.states, teamSettings: data.teamSettings }
     if (draft || remote) {
       const restored = draft ?? remote as StoredIssueDraft
-      setTeamId(restored.teamId || (remoteDraft?.metadata?.teamId as string | undefined) || fallbackTeamId)
+      const restoredTeamId = restored.teamId || (remoteDraft?.metadata?.teamId as string | undefined) || fallbackTeamId
+      setTeamId(restoredTeamId)
       setTitle(restored.title ?? remoteDraft?.title ?? '')
       setDescription(restored.description ?? null)
-      setStateId(restored.stateId || requestedStateId || defaultState.id)
+      setStateId(teamStateIdFor(workflow, restoredTeamId, restored.stateId, requestedStateId))
       setPriority(restored.priority ?? initialContext?.priority ?? 0)
       setEstimate(restored.estimate ?? NO_ESTIMATE)
       setAssigneeId(restored.assigneeId ?? initialContext?.assigneeId ?? data.viewer.id)
@@ -206,10 +194,9 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
       setServerDraftId(remoteDraft?.id ?? '')
     } else {
       setTitle(initialContext?.title ?? ''); setDescription(initialContext?.description ? {markdown:initialContext.description,document:{type:'doc',content:[{type:'paragraph',content:[{type:'text',text:initialContext.description}]}]},documentJSON:JSON.stringify({type:'doc',content:[{type:'paragraph',content:[{type:'text',text:initialContext.description}]}]}),contentState:''} : null); setFiles([]); setError(undefined); setServerDraftId(''); setTeamId(requestedTeamId || fallbackTeamId)
-      setStateId(requestedStateId || defaultState.id); setPriority(initialContext?.priority ?? 0); setEstimate(initialContext?.estimate ?? NO_ESTIMATE); setAssigneeId(initialContext?.assigneeId ?? data.viewer.id); setProjectId(initialContext?.projectId ?? ''); setProjectMilestoneId(initialContext?.projectMilestoneId ?? ''); setCycleId(initialContext?.cycleId ?? ''); setDueDate(initialContext?.dueDate ?? ''); setLabelIds(initialContext?.labelIds ?? []); setTemplateId(initialContext?.templateId ?? ''); setTemplateId(''); setRecurrence(''); setCreateMore(false); setExpanded(false)
+      setStateId(teamStateIdFor(workflow, requestedTeamId || fallbackTeamId, requestedStateId)); setPriority(initialContext?.priority ?? 0); setEstimate(initialContext?.estimate ?? NO_ESTIMATE); setAssigneeId(initialContext?.assigneeId ?? data.viewer.id); setProjectId(initialContext?.projectId ?? ''); setProjectMilestoneId(initialContext?.projectMilestoneId ?? ''); setCycleId(initialContext?.cycleId ?? ''); setDueDate(initialContext?.dueDate ?? ''); setLabelIds(initialContext?.labelIds ?? []); setTemplateId(initialContext?.templateId ?? ''); setTemplateId(''); setRecurrence(''); setCreateMore(false); setExpanded(false)
       const textDocument = (text: string) => ({type:'doc',content:[{type:'paragraph',...(text ? {content:[{type:'text',text}]} : {})}]})
       titleEditorRef.current?.commands.setContent(textDocument(initialContext?.title ?? '')); descriptionEditorRef.current?.commands.setContent(textDocument(initialContext?.description ?? ''))
-      if (requestedStateId && availableStates.some(state => state.id === requestedStateId)) setStateId(requestedStateId)
     }
     if (requestedProject) {
       setProjectId(requestedProject.id)
@@ -217,9 +204,11 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     }
     const frame = requestAnimationFrame(() => requestAnimationFrame(() => titleEditorRef.current?.commands.focus('end')))
     return () => cancelAnimationFrame(frame)
-  }, [availableStates, data.drafts, data.projects, data.teams, data.viewer.id, defaultState.id, draftId, draftKey, fallbackTeamId, initialContext, initialProjectId, initialProjectMilestoneId, initializationKey, open, requestedStateId, requestedTeamId, teamId])
+  }, [data.drafts, data.projects, data.states, data.teamSettings, data.teams, data.viewer.id, draftId, draftKey, fallbackTeamId, initialContext, initialProjectId, initialProjectMilestoneId, initializationKey, open, requestedStateId, requestedTeamId, teamId])
 
-  useEffect(() => { if (open && !availableStates.some(state => state.id === stateId)) setStateId(defaultState.id) }, [availableStates, defaultState.id, open, stateId])
+  // Every status change (team switch, template, draft, data refresh) settles on a status of
+  // the team's workflow: a status it still has is kept, any other becomes the team default.
+  useEffect(() => { if (open && availableStates.length && !availableStates.some(state => state.id === stateId)) setStateId(defaultState?.id ?? '') }, [availableStates, defaultState?.id, open, stateId])
 
   useEffect(() => {
     const query = title.trim()
@@ -247,11 +236,6 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
       window.clearTimeout(timer)
     }
   }, [data.workspaceSettings.featureFlags, description?.markdown, open, teamId, title])
-
-  useEffect(() => {
-    if (!open || draftId || initialTemplateId || !requestedStateId) return
-    if (availableStates.some(state => state.id === requestedStateId)) setStateId(requestedStateId)
-  }, [availableStates, draftId, initialTemplateId, open, requestedStateId])
 
   const state = availableStates.find(item => item.id === stateId) ?? defaultState
   // A backlog status of a triage team files the issue into Triage, which the reference app shows as the Triage status.
@@ -292,8 +276,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     if (nextTeamId !== teamId) { setTeamId(nextTeamId); setCycleId('') }
     const nextTitle = template.title ?? ''
     setTitle(current => !current.trim() || current === previous.title ? nextTitle : current)
-    const states = data.states.filter(state => state.teamId === nextTeamId)
-    setStateId(template.stateId && (states.length ? states : data.states).some(state => state.id === template.stateId) ? template.stateId : defaultState.id)
+    setStateId(teamStateIdFor(data, nextTeamId, template.stateId))
     setPriority(template.priority)
     setAssigneeId(template.assigneeId ?? data.viewer.id)
     setProjectId(template.projectId ?? '')
@@ -351,7 +334,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   const resetDraft = () => {
     resetBody(false)
     setServerDraftId('')
-    setStateId(defaultState.id)
+    setStateId(defaultState?.id ?? '')
     setPriority(0)
     setEstimate(0)
     setAssigneeId(data.viewer.id)
@@ -405,6 +388,12 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
       if (missing.length) { setError('Fill in the required fields'); return }
     }
     if (!cleanTitle || saving) return
+    // Never send a team/status pair the API would reject.
+    if (!teamHasWorkflowState(data, teamId, stateId)) {
+      const teamName = data.teams.find(item => item.id === teamId)?.name ?? 'This team'
+      setError(!data.states.length ? 'Statuses are still loading. Try again in a moment.' : availableStates.length ? `Choose a status from the ${teamName} workflow` : `${teamName} has no status for new issues`)
+      return
+    }
     setSaving(true)
     setError(undefined)
     try {
@@ -445,7 +434,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     } finally {
       setSaving(false)
     }
-  }, [assigneeId, availableLabelIds, createMore, initialContext?.parentId, initialContext?.related, cycleId, description, draftKey, dueDate, estimate, files, formTemplate, formValues, labelIds, onCreate, onDraftDeleted, onOpenChange, onUpload, priority, projectId, projectMilestoneId, recurrence, saving, serverDraftId, stateId, teamId, templateId, title])
+  }, [assigneeId, availableLabelIds, availableStates.length, createMore, data, initialContext?.parentId, initialContext?.related, cycleId, description, draftKey, dueDate, estimate, files, formTemplate, formValues, labelIds, onCreate, onDraftDeleted, onOpenChange, onUpload, priority, projectId, projectMilestoneId, recurrence, saving, serverDraftId, stateId, teamId, templateId, title])
 
   const changeOpen = (next: boolean) => {
     if (!next && serverDraftId && hasDraftContent) {
@@ -488,7 +477,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
           </div>
 
           <div className={styles.properties}>
-            <MiniProperty label="Status" value={inTriage ? TRIAGE_STATUS.name : state.name} selectedId={stateId} icon={<StatusIcon state={inTriage ? TRIAGE_STATUS : state}/>} options={[...availableStates].sort((a,b) => (a.position??0)-(b.position??0)).map((item,index) => ({ id:item.id,label:item.name,color:item.color,icon:<StatusIcon state={item}/>,shortcut:index < 5 ? String(index+1) : undefined }))} onChange={setStateId}/>
+            <MiniProperty label="Status" value={inTriage ? TRIAGE_STATUS.name : state?.name ?? 'Status'} selectedId={stateId} icon={inTriage || state ? <StatusIcon state={inTriage || !state ? TRIAGE_STATUS : state}/> : <CircleDashed aria-hidden="true"/>} options={[...availableStates].sort((a,b) => (a.position??0)-(b.position??0)).map((item,index) => ({ id:item.id,label:item.name,color:item.color,icon:<StatusIcon state={item}/>,shortcut:index < 5 ? String(index+1) : undefined }))} onChange={setStateId}/>
             <MiniProperty label="Priority" value={priority ? priorityNames[priority] : 'Priority'} selectedId={String(priority)} icon={<PriorityIcon priority={priority}/>} options={[0,1,2,3,4].map(item => ({ id:String(item),label:priorityNames[item],icon:<PriorityIcon priority={item}/>,shortcut:String(item) }))} onChange={value => setPriority(Number(value))}/>
             {estimateType!=='notUsed'&&<MiniProperty label="Estimate" value={estimate >= 0 ? estimateLabel(estimate, estimateType) : 'Estimate'} selectedId={String(estimate)} icon={<EstimateGlyph value={Math.max(estimate, 0)}/>} options={estimateOptions.map(option=>({id:option.id,label:option.label,icon:<EstimateGlyph value={Math.max(option.value, 0)}/>}))} onChange={value=>setEstimate(Number(value))}/>}
             <MiniProperty label="Assignee" value={assignee?.displayName ?? 'Assignee'} selectedId={assigneeId} icon={assignee ? <Avatar name={assignee.displayName}/> : <NoAssigneeIcon/>} options={assigneeMenuOptions(data.users.filter(user => user.active), { teamId, allowAgents: agentsAvailable(data) })} searchPlaceholder="Assign to…" onChange={setAssigneeId}/>
