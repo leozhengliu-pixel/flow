@@ -1178,3 +1178,62 @@ html:root body .sub-issue-title-editor:not(#_),
 html:root body .sub-issue-title-editor:not(#_) .ProseMirror { color: var(--pk-text-strong); font-weight: 600; }
 /* "Away" after a person's name in assignee menus (an active out-of-office, e.g. synced from their calendar). */
 .property-command-away { margin-left: 6px; color: var(--theme-text-secondary); font-size: 12px; font-weight: 400; }
+
+/* ── Project teams picker (new-project dialog, project sidebar and header) ──
+   252px menu: selected teams first (lead team first), "Your teams" for the rest.
+   Rows are checkbox / 14px team icon / name + key; the lead team (with 2+ teams) shows a
+   "Lead" badge, a locked checkbox and opens the "Change lead team…" submenu on hover. */
+:root { --pk-check-locked: lch(33% 1.4 272); }
+:root[data-theme="light"] { --pk-check-locked: lch(80% 0 282); }
+html:root body .property-command-surface.project-teams-menu:not(#_),
+html:root body .property-command-surface.property-command-option-submenu:not(#_) {
+  box-sizing: border-box;
+  width: 252px;
+  min-width: 252px;
+  max-width: min(360px, calc(100vw - 20px));
+}
+html:root body .property-command-surface.property-command-option-submenu:not(#_) { z-index: 1001; }
+html:root body .property-command-surface:is(.project-teams-menu, .property-command-option-submenu):not(#_) .property-command-options [role=option] {
+  display: grid;
+  grid-template-columns: 16px 16px minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 0 18px 0 14px;
+}
+html:root body .property-command-surface.property-command-option-submenu:not(#_) .property-command-options [role=option] {
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+}
+html:root body .property-command-surface:is(.project-teams-menu, .property-command-option-submenu):not(#_) .property-command-checkbox { justify-self: center; }
+html:root body .property-command-surface:is(.project-teams-menu, .property-command-option-submenu):not(#_) .property-command-icon {
+  width: 16px;
+  height: 16px;
+  justify-items: start;
+}
+html:root body .property-command-surface:is(.project-teams-menu, .property-command-option-submenu):not(#_) .property-command-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.project-teams-menu__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-teams-menu__key { flex: none; color: var(--pk-faint); font: 450 13px/normal var(--font); }
+.project-teams-menu__badge {
+  box-sizing: border-box;
+  height: 18px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border: .5px solid var(--pk-pill-border);
+  border-radius: 6px;
+  color: var(--pk-muted);
+  font: 450 11px/normal var(--font);
+}
+/* The lead team cannot be unchecked: its checkbox stays checked in a neutral colour. */
+html:root body .property-command-surface .property-command-options [role=option] .property-command-checkbox.is-locked,
+html:root body .property-command-surface .property-command-options [role=option][aria-checked=true] .property-command-checkbox.is-locked {
+  border-color: var(--pk-check-locked);
+  background: var(--pk-check-locked);
+  opacity: 1;
+}
+html:root body .property-command-surface .property-command-options [role=option].has-submenu[aria-expanded=true] .property-command-option-background { background: var(--pk-hover); }
+html:root body .property-command-surface .property-command-options [role=option].has-submenu .property-command-group-chevron { grid-column: 4; justify-self: end; color: var(--pk-muted); }
+html:root body .property-command-surface.project-teams-menu:not(#_) .property-command-search-shortcut > span { font: 450 10px/11px var(--font); }

@@ -15,12 +15,14 @@ export interface PropertyCommandOption {
   searchOnly?: boolean
 }
 
-export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus = true, closeOnSelect = true, keepSelectedVisible = false, pinnedIds, onOpenChange, onSelect, open, options, resetKey, selectedIds = [], personOptions = false }: {
+export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus = true, closeOnSelect = true, keepSelectedVisible = false, pinnedIds, intercept, onOpenChange, onSelect, open, options, resetKey, selectedIds = [], personOptions = false }: {
   autoFocus?: boolean
   closeOnSelect?: boolean
   keepSelectedVisible?: boolean
   /** Options that stay listed whatever the search says (a "Custom…" row); they are highlighted when nothing else matches. */
   pinnedIds?: string[]
+  /** Return true to handle a chosen option yourself (no selection, the menu stays as is). */
+  intercept?: (option: T) => boolean
   onOpenChange: (open: boolean) => void
   onSelect: (option: T) => void | Promise<void>
   open: boolean
@@ -68,6 +70,7 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
 
   const choose = (option: T) => {
     if (option.disabled) return
+    if (intercept?.(option)) return
     if (closeOnSelect) onOpenChange(false)
     void onSelect(option)
   }
