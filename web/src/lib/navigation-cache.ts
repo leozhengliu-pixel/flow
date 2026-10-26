@@ -1,5 +1,6 @@
 import type { BootstrapData, Issue } from '@/types/flow'
 import { mergeIssueRecords } from '@/lib/issue-detail-cache'
+import { clearSessionCaches } from '@/lib/session-cache-registry'
 
 export interface NavigationCacheRecord {
   viewerId: string
@@ -161,6 +162,7 @@ export function rememberWorkspace(viewerId: string, workspaceKey: string): void 
 }
 
 export function clearNavigationCache(viewerId?: string, workspaceKey?: string): void {
+  clearSessionCaches(viewerId, workspaceKey)
   cancelPendingWrites(viewerId && workspaceKey ? storageKey(viewerId, workspaceKey) : viewerId ? `${storagePrefix}${viewerId}:` : storagePrefix)
   if (!viewerId) { try { localStorage.removeItem(lastWorkspaceKey) } catch { /* ignore */ } }
   if (viewerId && workspaceKey) {

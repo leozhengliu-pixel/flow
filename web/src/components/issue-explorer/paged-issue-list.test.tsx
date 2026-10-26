@@ -5,6 +5,7 @@ import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, makeIssue } from '@/test/fixtures'
 import { listIssueRecordGroups, listIssueRecords } from '@/lib/api'
 import { PagedIssueList } from './paged-issue-list'
+import { clearNavigationCache } from '@/lib/navigation-cache'
 import { clearPagedIssueListCache } from './paged-issue-list-cache'
 import { ISSUE_QUERY_INVALIDATED } from './paged-issue-invalidation'
 
@@ -187,5 +188,46 @@ describe('server-backed issue list loading states', () => {
     expect(caret).toHaveStyle({ animationDelay: '350ms' })
     expect(screen.queryByRole('button', { name: /Load issues/ })).not.toBeInTheDocument()
     expect(listIssueRecords).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: 'page-2' }), expect.any(AbortSignal))
+  })
+
+  it('shows another viewer none of the rows cached for the previous one, and none after logout', async () => {
+    vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: 'state-backlog', count: 1 }] })
+    vi.mocked(listIssueRecords).mockResolvedValue({ items: [makeIssue({ id: 'private', title: 'Viewer A private row' })], hasMore: false, total: -1 })
+    const viewerA = makeBootstrap({ issues: [], issueCollectionPaged: true })
+    const viewerB = { ...viewerA, viewer: { ...viewerA.viewer, id: 'viewer-b' } }
+    const view = (data: typeof viewerA) => <I18nProvider><PagedIssueList data={data} query={{ groupBy: 'status' }} onOpenIssueRecord={vi.fn()}/></I18nProvider>
+    const first = render(view(viewerA))
+    await screen.findByText('Viewer A private row')
+    first.unmount()
+    // The same viewer coming back sees the warm rows at once.
+    const again = render(view(viewerA))
+    expect(screen.getByText('Viewer A private row')).toBeInTheDocument()
+    again.unmount()
+    // Another viewer in the same tab starts empty and loads its own rows.
+    vi.mocked(listIssueRecords).mockResolvedValue({ items: [makeIssue({ id: 'shared', title: 'Viewer B row' })], hasMore: false, total: -1 })
+    const second = render(view(viewerB))
+    expect(screen.queryByText('Viewer A private row')).not.toBeInTheDocument()
+    await screen.findByText('Viewer B row')
+    second.unmount()
+    // Logout clears the cache: the viewer who comes back has to ask the server again.
+    clearNavigationCache()
+    vi.mocked(listIssueRecords).mockResolvedValue({ items: [makeIssue({ id: 'fresh', title: 'Fresh row' })], hasMore: false, total: -1 })
+    render(view(viewerA))
+    expect(screen.queryByText('Viewer A private row')).not.toBeInTheDocument()
+    await screen.findByText('Fresh row')
+  })
+
+  it('drops cached lists nobody is showing when permissions force an invalidation', async () => {
+    vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: 'state-backlog', count: 1 }] })
+    vi.mocked(listIssueRecords).mockResolvedValue({ items: [makeIssue({ id: 'lost', title: 'Row the viewer may lose' })], hasMore: false, total: -1 })
+    const data = makeBootstrap({ issues: [], issueCollectionPaged: true })
+    const first = render(<I18nProvider><PagedIssueList data={data} query={{ groupBy: 'status' }} onOpenIssueRecord={vi.fn()}/></I18nProvider>)
+    await screen.findByText('Row the viewer may lose')
+    first.unmount()
+    act(() => { window.dispatchEvent(new CustomEvent(ISSUE_QUERY_INVALIDATED, { detail: { workspaceKey: data.workspace.urlKey, force: true } })) })
+    vi.mocked(listIssueRecords).mockResolvedValue({ items: [], hasMore: false, total: -1 })
+    vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [] })
+    render(<I18nProvider><PagedIssueList data={data} query={{ groupBy: 'status' }} onOpenIssueRecord={vi.fn()}/></I18nProvider>)
+    expect(screen.queryByText('Row the viewer may lose')).not.toBeInTheDocument()
   })
 })
