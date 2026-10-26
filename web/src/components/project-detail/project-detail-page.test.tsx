@@ -14,7 +14,7 @@ vi.mock('./project-insights', () => ({ ProjectInsights: () => <aside>insights pa
 vi.mock('./project-issues', () => ({
   ProjectIssueFilterMenu: () => <button type="button">Filter</button>,
   ProjectIssueDisplayMenu: () => <button type="button">Display options</button>,
-  ProjectIssues: () => <div>issues body</div>,
+  ProjectIssues: ({ filters }: { filters?: unknown[] }) => <div data-filter-count={filters?.length ?? 0}>issues body</div>,
   ProjectNewView: () => <div>new view</div>,
 }))
 
@@ -221,5 +221,22 @@ describe('project detail header and tabs', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('project saved views and the Issues tab', () => {
+  it('shows a saved view\'s filters only inside the view; the Issues tab keeps its own', async () => {
+    const user = userEvent.setup()
+    const view = { id: 'view-1', name: 'Urgent', resource: 'issues', projectId: project.id, filters: [{ field: 'priority', operator: 'is', values: [{ value: '1', valueLabel: 'Urgent' }] }], display: {}, scope: 'personal' }
+    let tab = 'issues'
+    const onTabChange = vi.fn((next: string) => { tab = next })
+    const { rerender, props } = renderPage({ tab: 'issues', savedViews: [view] as unknown as Props['savedViews'], onTabChange: onTabChange as unknown as Props['onTabChange'] })
+    expect(screen.getByText('issues body')).toHaveAttribute('data-filter-count', '0')
+    await user.click(screen.getByRole('button', { name: /Urgent/ }))
+    expect(screen.getByText('issues body')).not.toHaveAttribute('data-filter-count', '0')
+    await user.click(screen.getByRole('link', { name: /^Issues/ }))
+    rerender(<I18nProvider><TooltipProvider delayDuration={0}><ProjectDetailPage {...props} tab={tab as Props['tab']}/></TooltipProvider></I18nProvider>)
+    expect(screen.getByText('issues body')).toHaveAttribute('data-filter-count', '0')
+    expect(localStorage.getItem(`flow:project:${project.id}:issues:filters`)).toBeNull()
   })
 })
