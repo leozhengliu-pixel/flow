@@ -13,7 +13,7 @@ COPY web/ ./
 COPY docs/media/*.gif /src/docs/media/
 RUN npm run build
 
-FROM --platform=$BUILDPLATFORM golang:1.27.2-alpine AS api-build
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine AS api-build
 ARG TARGETOS
 ARG TARGETARCH
 ARG TARGETVARIANT
