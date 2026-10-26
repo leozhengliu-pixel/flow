@@ -19,6 +19,27 @@ func uploadedOAuthAppIcon(value string) bool {
 	return uploadedOAuthAppIconPattern.MatchString(strings.TrimSpace(value))
 }
 
+// maxApplicationIconURL bounds an application icon URL (it is shown as the
+// application member's avatar in every workspace that installs it).
+const maxApplicationIconURL = 2048
+
+var uploadedFilePathPattern = regexp.MustCompile(`^/uploads/[A-Za-z0-9_-][A-Za-z0-9._-]*$`)
+
+// validApplicationIconURL reports whether an application icon (logo) URL is
+// safe to show as an avatar: an absolute HTTPS URL without credentials,
+// fragment, spaces or control characters, or, when uploads is true, a file
+// Flow serves itself under /uploads/. Other schemes (javascript:, data:,
+// http:) and relative paths are rejected.
+func validApplicationIconURL(raw string, uploads bool) bool {
+	if len(raw) > maxApplicationIconURL || strings.TrimSpace(raw) != raw || strings.ContainsFunc(raw, func(r rune) bool { return r <= ' ' || r == 0x7f }) {
+		return false
+	}
+	if uploads && uploadedFilePathPattern.MatchString(raw) && !strings.Contains(raw, "..") {
+		return true
+	}
+	return validOAuthMetadataURI(raw)
+}
+
 // POST /api/oauth-applications/icon stores an application icon picked on the
 // create/edit page (the reference app's "Application icon · At least 256x256px") and
 // returns its URL for the manifest's display.iconUrl. PNG, JPEG, WebP or a
