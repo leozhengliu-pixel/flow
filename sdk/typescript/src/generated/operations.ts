@@ -535,6 +535,8 @@ export interface GetIssueRecordsLegacyQuery {
   archived?: "false" | "true" | "all"
   /** Count all matching issues: `total` in the legacy page, `totalCount` in a connection. */
   includeTotal?: boolean
+  /** Nested sub-issues: an issue whose parent also matches is not an item of its own; each page returns the matching sub-issues (all levels) of its items in `descendants` (at most 1000, `descendantsTruncated` when more match), and `total` counts the top-level items. */
+  nested?: boolean
 }
 
 /** Arguments of `getIssueRecordsLegacy`. */

@@ -1561,6 +1561,9 @@ export interface IssuePermissionPartial {
 }
 
 export interface IssueRecordPage {
+  /** Descendants are the sub-issues (all levels) of the page's items that match the query, in the page's order; set only for nested queries. DescendantsTruncated reports that more than 1000 matched (only the first 1000 are returned). */
+  descendants?: Issue[]
+  descendantsTruncated?: boolean
   endCursor?: string
   hasMore: boolean
   hasPrevious?: boolean

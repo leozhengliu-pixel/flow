@@ -13811,6 +13811,15 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "description": "Nested sub-issues: an issue whose parent also matches is not an item of its own; each page returns the matching sub-issues (all levels) of its items in `descendants` (at most 1000, `descendantsTruncated` when more match), and `total` counts the top-level items.",
+            "in": "query",
+            "name": "nested",
+            "schema": {
+              "type": "boolean"
+            },
+            "x-flow-form": "legacy"
           }
         ],
         "responses": {
@@ -42714,6 +42723,16 @@
       },
       "IssueRecordPage": {
         "properties": {
+          "descendants": {
+            "description": "Descendants are the sub-issues (all levels) of the page's items that match the query, in the page's order; set only for nested queries. DescendantsTruncated reports that more than 1000 matched (only the first 1000 are returned).",
+            "items": {
+              "$ref": "#/components/schemas/Issue"
+            },
+            "type": "array"
+          },
+          "descendantsTruncated": {
+            "type": "boolean"
+          },
           "endCursor": {
             "type": "string"
           },

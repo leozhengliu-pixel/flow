@@ -2869,6 +2869,9 @@ export interface CursorPage<T> {
 /** A server-backed page of issues. Filters are encoded as a JSON query AST. */
 export interface IssueQueryPage extends CursorPage<Issue> {
   statusIntervals?: Record<string, { stateId: string; stateType?: string; enteredAt: string; exitedAt?: string }[]>
+  /** Nested queries: the matching sub-issues (all levels) of the page's items, in the page's order. */
+  descendants?: Issue[]
+  descendantsTruncated?: boolean
 }
 export interface SemanticSearchFacet {
   key: string;

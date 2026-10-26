@@ -99,6 +99,7 @@ func (s *server) listIssueRecords(w http.ResponseWriter, r *http.Request) {
 		issueRecordsError(w, err)
 		return
 	}
+	query.Nested = r.URL.Query().Get("nested") == "true"
 	page, err := s.store.QueryIssueRecords(r.Context(), query)
 	if err != nil {
 		issueRecordsError(w, err)
@@ -108,6 +109,12 @@ func (s *server) listIssueRecords(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		issueRecordsError(w, err)
 		return
+	}
+	if len(page.Descendants) > 0 {
+		if page.Descendants, err = s.projectIssueRecordReferences(r, metadata, query, page.Descendants); err != nil {
+			issueRecordsError(w, err)
+			return
+		}
 	}
 	if r.URL.Query().Get("includeStatusHistory") == "true" {
 		intervals, err := s.store.IssueInsightIntervals(r.Context(), query.Workspace, page.Items, metadata.States)
@@ -264,6 +271,7 @@ func (s *server) listIssueRecordGroups(w http.ResponseWriter, r *http.Request) {
 		issueRecordsError(w, err)
 		return
 	}
+	query.Nested = r.URL.Query().Get("nested") == "true"
 	groups, err := s.store.QueryIssueGroups(r.Context(), query)
 	if err != nil {
 		issueRecordsError(w, err)

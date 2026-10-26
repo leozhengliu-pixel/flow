@@ -110,23 +110,23 @@ export class PagedIssueCache {
   }
 }
 
-export type NestedIssueRow = { id: string; parentId?: string; issue: Issue; pageIndex: number }
-
 /**
- * A group's loaded rows in parent-before-children order (nested sub-issues), with their guide lines. Rows stop at
- * the first page that is not cached (`missingPage`); the positions after it show that page's loading row.
+ * A nested query's page as list rows: each top-level item followed by its sub-issues (`descendants`, all levels),
+ * parent before children in the page's order. Every page holds whole subtrees, so pages stay independent.
  */
-export function nestedGroupRows(cache: PagedIssueCache, group: { value: string; loaded: number }): { rows: NestedIssueRow[]; lines: Map<string, readonly boolean[]>; missingPage?: number } {
-  const loaded: NestedIssueRow[] = []
-  let missingPage: number | undefined
-  for (let pageIndex = 0; loaded.length < group.loaded; pageIndex++) {
-    const page = cache.peek(group.value, pageIndex)
-    if (!page) { missingPage = pageIndex; break }
-    for (const issue of page.items) loaded.push({ id: issue.id, parentId: issue.parentId, issue, pageIndex })
-    if (!page.items.length) break
-  }
-  const rows = nestIssueRows(loaded).rows
-  return { rows, lines: nestedLinesByIssue(rows), missingPage }
+export function nestedIssuePage<T extends { items: Issue[]; descendants?: Issue[] }>(page: T): T {
+  if (!page.descendants?.length) return page
+  const seen = new Set<string>()
+  const rows = [...page.items, ...page.descendants].filter(issue => !seen.has(issue.id) && Boolean(seen.add(issue.id)))
+  return { ...page, items: nestIssueRows(rows).rows, descendants: undefined }
+}
+
+const pageLines = new WeakMap<readonly Issue[], Map<string, readonly boolean[]>>()
+/** The nesting guides of a nested page's rows (see `nestedIssuePage`). */
+export function nestedPageLines(items: readonly Issue[]) {
+  let lines = pageLines.get(items)
+  if (!lines) { lines = nestedLinesByIssue(items); pageLines.set(items, lines) }
+  return lines
 }
 
 function listIssue(issue: Issue): Issue {
