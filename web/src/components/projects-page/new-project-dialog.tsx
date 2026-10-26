@@ -81,6 +81,8 @@ export type NewProjectDialogProps = {
   open: boolean
   initialTemplateId?: string
   teamLabel?: string
+  /** The team a new project starts in (the team whose page or issue it is created from); the first team otherwise. */
+  defaultTeamId?: string
   defaultStatus?: string
   teams?: NewProjectChoice[]
   leads?: NewProjectChoice[]
@@ -105,6 +107,7 @@ export function NewProjectDialog({
   open,
   initialTemplateId,
   teamLabel = 'Team',
+  defaultTeamId: requestedTeamId,
   defaultStatus,
   teams = DEFAULT_TEAMS,
   leads = EMPTY_CHOICES,
@@ -123,7 +126,7 @@ export function NewProjectDialog({
   const resolvedDefaultStatus = defaultStatus ?? statuses[0]?.id ?? ''
   const panelRef = useRef<HTMLFormElement>(null)
   const nameRef = useRef<HTMLInputElement>(null)
-  const defaultTeamId = teams[0]?.id
+  const defaultTeamId = requestedTeamId && teams.some(team => team.id === requestedTeamId) ? requestedTeamId : teams[0]?.id
   const templateSignature = templates
     .map(template => [template.id, template.name, template.icon, template.color].join(':'))
     .join('|')
