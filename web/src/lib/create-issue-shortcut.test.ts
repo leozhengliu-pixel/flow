@@ -19,3 +19,10 @@ it('keeps the plain create flow outside project pages or for unknown projects', 
   expect(createIssueShortcutContext({ kind: 'project', workspaceSlug: 'acme', projectSlugId: 'missing', tab: 'overview' }, data)).toBeUndefined()
   expect(createIssueShortcutContext({ kind: 'project', workspaceSlug: 'acme', projectSlugId: 'project-one', tab: 'overview' }, null)).toBeUndefined()
 })
+
+it('opens the dialog in the team whose pages are showing', () => {
+  for (const path of ['/acme/team/TST/all', '/acme/team/tst/board', '/acme/team/TST/cycles']) {
+    expect(createIssueShortcutContext(parseAppRoute(path), data)).toEqual({ teamId: 'team-1' })
+  }
+  expect(createIssueShortcutContext(parseAppRoute('/acme/team/NOPE/all'), data)).toBeUndefined()
+})

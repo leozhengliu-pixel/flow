@@ -6,13 +6,18 @@ import { teamForWorkflowState } from '@/lib/team-workflow'
 
 /**
  * Context for the global "C" create-issue shortcut. Like the reference app, pressing C on a
- * project page (any tab or saved project view) prefills that project.
+ * project page (any tab or saved project view) prefills that project, and on a team's pages
+ * (issues, board, cycles, views…) it opens the dialog in that team.
  */
-export function createIssueShortcutContext(route: AppRoute, data: Pick<BootstrapData, 'projects' | 'resourceDetailsOmitted'> | null | undefined): MyIssuesCreateContext | undefined {
+export function createIssueShortcutContext(route: AppRoute, data: Pick<BootstrapData, 'projects' | 'resourceDetailsOmitted' | 'teams'> | null | undefined): MyIssuesCreateContext | undefined {
   if (!data || data.resourceDetailsOmitted) return undefined
-  if (route.kind !== 'project' && route.kind !== 'project-saved-view') return undefined
-  const project = findBySlugRef(data.projects, route.projectSlugId)
-  return project ? { projectId: project.id, teamId: project.teamIds[0] } : undefined
+  if (route.kind === 'project' || route.kind === 'project-saved-view') {
+    const project = findBySlugRef(data.projects, route.projectSlugId)
+    return project ? { projectId: project.id, teamId: project.teamIds[0] } : undefined
+  }
+  const teamKey = 'teamKey' in route && typeof route.teamKey === 'string' ? route.teamKey.toUpperCase() : undefined
+  const team = teamKey ? data.teams.find(candidate => candidate.key.toUpperCase() === teamKey && !candidate.retiredAt) : undefined
+  return team ? { teamId: team.id } : undefined
 }
 
 /**
