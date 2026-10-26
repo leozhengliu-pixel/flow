@@ -1,12 +1,15 @@
 import type { Issue, WorkflowState } from '@/types/flow'
+import { teamWorkflowStates, type WorkflowData } from '@/lib/team-workflow'
 
-export function canceledState(states: WorkflowState[], teamId: string) {
-  const scoped = states.filter(state => !state.teamId || state.teamId === teamId)
+/** The team's status a declined issue moves to: its canceled status that is not a Duplicate one, else any canceled status. */
+export function canceledState(data: WorkflowData, teamId: string) {
+  const scoped = teamWorkflowStates(data, teamId)
   return scoped.find(state => state.type === 'canceled' && !/duplicate/i.test(state.name)) ?? scoped.find(state => state.type === 'canceled')
 }
 
-export function duplicateState(states: WorkflowState[], teamId: string) {
-  return states.find(state => (!state.teamId || state.teamId === teamId) && state.type === 'canceled' && /duplicate/i.test(state.name))
+/** The team's Duplicate status, when its workflow has one. */
+export function duplicateState(data: WorkflowData, teamId: string) {
+  return teamWorkflowStates(data, teamId).find(state => state.type === 'canceled' && /duplicate/i.test(state.name))
 }
 
 const SNOOZE_HOUR = 9
@@ -129,14 +132,9 @@ export const TRIAGE_STATUS = { id: 'triage', name: 'Triage', color: 'var(--inbox
 export const TRIAGE_SHORTCUTS = { accept: '1', decline: '2', duplicate: '3', snooze: 'H' } as const
 export type TriageActionKind = keyof typeof TRIAGE_SHORTCUTS
 
-/** Team statuses ordered by position (team-scoped plus workspace-wide). */
-export function teamStates(states: WorkflowState[], teamId: string) {
-  return states.filter(state => state.teamId === teamId || !state.teamId).sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-}
-
 /** The team's triage status: its backlog-type default status, else the first backlog status. */
-export function triageState(states: WorkflowState[], teamId: string, defaultStateId?: string) {
-  const scoped = teamStates(states, teamId)
+export function triageState(data: WorkflowData, teamId: string, defaultStateId?: string) {
+  const scoped = teamWorkflowStates(data, teamId)
   return scoped.find(state => state.id === defaultStateId && state.type === 'backlog') ?? scoped.find(state => state.type === 'backlog')
 }
 

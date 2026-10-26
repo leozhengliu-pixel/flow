@@ -1,4 +1,5 @@
 import type { BootstrapData, Customer, CustomerRequest, FeatureSettings, Issue, Project } from '@/types/flow'
+import { teamWorkflowStates, type WorkflowData } from '@/lib/team-workflow'
 
 /**
  * The reference app's customer page request list (CustomerPage.Un + CustomerNeedListProvider, type "customer"):
@@ -266,10 +267,9 @@ export function customerRequestIssueTeam(data: Pick<BootstrapData, 'teams' | 'wo
 }
 
 /** The team's triage / backlog state (Flow keeps triage as the backlog type before triage). */
-export function customerRequestIssueState(data: Pick<BootstrapData, 'states'>, teamId: string | undefined) {
-  return [...data.states]
-    .filter(state => state.type === 'backlog' && (!state.teamId || state.teamId === teamId))
-    .sort((a, b) => Number(Boolean(b.teamId)) - Number(Boolean(a.teamId)) || a.position - b.position)[0]
+export function customerRequestIssueState(data: WorkflowData, teamId: string | undefined) {
+  const states = teamId ? teamWorkflowStates(data, teamId) : data.states.filter(state => !state.teamId).sort((a, b) => a.position - b.position)
+  return states.find(state => state.type === 'backlog')
 }
 
 /** The reference app's customer notification types (Notification.customerNotificationTypes). */

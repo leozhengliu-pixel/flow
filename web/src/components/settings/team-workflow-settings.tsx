@@ -26,6 +26,7 @@ import { ParentTeamPicker } from '@/components/property/parent-team-picker';
 import { RetireTeamForm } from '@/components/team/retire-team-form';
 import { DELETE_TEAM_DESCRIPTION } from '@/lib/team-deletion';
 import { teamHierarchy } from '@/lib/team-hierarchy';
+import { teamWorkflowStates } from '@/lib/team-workflow';
 
 import {
   DropdownMenu,
@@ -1272,7 +1273,7 @@ function WorkflowSettings({
   const gitConnected = data.integrationConnections.some(
     (item) => (item.provider === "github" || item.provider === "gitlab") && item.status === "connected",
   );
-  const states = statesForTeam(data, team.id);
+  const states = teamWorkflowStates(data, team.id);
   const stateOptions = ["", ...states.map((item) => item.id)];
   const stateLabels: Record<string, string> = {
     "": "No action",
@@ -2436,7 +2437,7 @@ function StatusesSettings({
   const teamSettings = data.teamSettings?.[team.id];
   const inherited = Boolean(teamSettings?.inheritWorkflowStatuses && teamSettings.parentTeamId);
   const [states, setStates] = useState<WorkflowState[]>(
-    statesForTeam(data, team.id),
+    teamWorkflowStates(data, team.id),
   );
   const [createType, setCreateType] = useState<WorkflowStateType | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -2452,7 +2453,7 @@ function StatusesSettings({
     setLoading(true);
     setLoadError(undefined);
     if (inherited) {
-      setStates(statesForTeam(data, team.id));
+      setStates(teamWorkflowStates(data, team.id));
       setCounts({});
       setLoading(false);
       return () => controller.abort();
@@ -2465,7 +2466,7 @@ function StatusesSettings({
   }, [data, inherited, team.id, loadRetry]);
   const reload = async () => {
     if (inherited) {
-      setStates(statesForTeam(data, team.id));
+      setStates(teamWorkflowStates(data, team.id));
       setCounts({});
       await onReload();
       return;
@@ -3324,18 +3325,6 @@ function TeamEmpty({
       <p>{t(description)}</p>
     </div>
   );
-}
-function statesForTeam(data: BootstrapData, teamId: string, seen = new Set<string>()): WorkflowState[] {
-  if (seen.has(teamId)) return [];
-  seen.add(teamId);
-  const settings = data.teamSettings?.[teamId];
-  if (settings?.inheritWorkflowStatuses && settings.parentTeamId) {
-    return statesForTeam(data, settings.parentTeamId, seen);
-  }
-  const specific = data.states.some((state) => state.teamId === teamId);
-  return data.states
-    .filter((state) => (specific ? state.teamId === teamId : !state.teamId))
-    .sort((a, b) => a.position - b.position);
 }
 function defaultTeamSettings(
   teamId: string,

@@ -1,6 +1,7 @@
 import type { BootstrapData, IssueUpdateInput } from '@/types/flow'
 import type { MyIssuesGroupData, MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import type { MyIssuesDisplayOptions, MyIssuesGrouping, MyIssuesOrdering } from '@/components/my-issues/my-issues-surface'
+import { teamEquivalentState } from '@/lib/team-workflow'
 
 /**
  * Single grouping / ordering engine for every issue surface (the reference app `ViewPreferences` + list grouping).
@@ -16,7 +17,7 @@ const DAY = 86_400_000
 
 export interface IssueGroupingContext {
   /** Workspace data when available; grouping degrades to row-only information without it. */
-  data?: Pick<BootstrapData, 'states' | 'cycles' | 'projects' | 'users' | 'teams' | 'releases'> & Partial<Pick<BootstrapData, 'customers' | 'labels'>>
+  data?: Pick<BootstrapData, 'states' | 'cycles' | 'projects' | 'users' | 'teams' | 'releases'> & Partial<Pick<BootstrapData, 'customers' | 'labels' | 'teamSettings'>>
   /** Parent label for the `labelGroup` grouping. */
   labelGroupId?: string
   /** States a status grouping should always show (for empty groups / board columns). */
@@ -335,7 +336,14 @@ export function nestIssueRows(rows: MyIssuesRowData[]) {
 export function groupMoveUpdate(row: MyIssuesRowData, grouping: MyIssuesGrouping, targetGroupId: string, context: IssueGroupingContext = {}): IssueUpdateInput | undefined {
   const id = targetGroupId.includes('::') ? targetGroupId.split('::')[0] : targetGroupId
   switch (grouping) {
-    case 'status': return (context.states ?? context.data?.states ?? []).some(state => state.id === id) || !context.data ? { stateId: id } : undefined
+    case 'status': {
+      if (!context.data) return { stateId: id }
+      const target = (context.states ?? context.data.states).find(state => state.id === id)
+      if (!target) return undefined
+      // A column of another team's workflow moves the issue to its own team's equivalent status.
+      const next = row.teamId && context.data.states.length ? teamEquivalentState(context.data, row.teamId, target) : target
+      return next ? { stateId: next.id } : undefined
+    }
     case 'priority': return id.startsWith('priority-') ? { priority: Number(id.slice(9)) } : undefined
     case 'assignee': return id.startsWith('assignee-') ? { assigneeId: id === 'assignee-none' ? '' : id.slice(9) } : undefined
     case 'agent': return id.startsWith('agent-') ? { delegateId: id === 'agent-none' ? '' : id.slice(6) } : undefined

@@ -10,6 +10,7 @@ import { SelectControl } from "@/components/ui/select-control";
 import { useI18n } from "@/i18n/i18n";
 import { batchUpdateIssues, updateTeam } from "@/lib/api";
 import { teamHierarchy } from "@/lib/team-hierarchy";
+import { teamWorkflowStates } from "@/lib/team-workflow";
 import type { BootstrapData, Team, WorkflowState } from "@/types/flow";
 
 import "./retire-team-form.css";
@@ -31,16 +32,7 @@ function canceledStateForTeam(
   data: BootstrapData,
   teamId: string,
 ): WorkflowState | undefined {
-  const states = data.states.filter(
-    (state) =>
-      state.type === "canceled" &&
-      !state.reserved &&
-      (state.teamId === teamId || !state.teamId),
-  );
-  return (
-    states.find((state) => state.teamId === teamId) ??
-    states.find((state) => !state.teamId)
-  );
+  return teamWorkflowStates(data, teamId).find((state) => state.type === "canceled" && !state.reserved);
 }
 
 function message(error: unknown) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Issue, WorkflowState } from '@/types/flow'
-import { canceledState, DEFAULT_TRIAGE_DISPLAY, isSnoozed, parseSnoozeInput, readTriageDisplay, snoozePresets, sortTriageIssues, writeTriageDisplay } from './triage-model'
+import { canceledState, DEFAULT_TRIAGE_DISPLAY, duplicateState, isSnoozed, parseSnoozeInput, readTriageDisplay, snoozePresets, sortTriageIssues, writeTriageDisplay } from './triage-model'
 
 const state = (id: string, name: string, type: WorkflowState['type'], teamId = 'team'): WorkflowState => ({ id, name, type, teamId, color: '#999', position: 0 } as WorkflowState)
 const issue = (id: string, fields: Partial<Issue>) => ({ id, createdAt: '2026-09-01T00:00:00Z', priority: 0, ...fields } as Issue)
@@ -8,7 +8,16 @@ const issue = (id: string, fields: Partial<Issue>) => ({ id, createdAt: '2026-09
 describe('triage model', () => {
   it('declines into the team canceled state, not a Duplicate state', () => {
     const states = [state('dup', 'Duplicate', 'canceled'), state('can', 'Canceled', 'canceled'), state('other', 'Canceled', 'canceled', 'other-team')]
-    expect(canceledState(states, 'team')?.id).toBe('can')
+    expect(canceledState({ states }, 'team')?.id).toBe('can')
+  })
+
+  it('declines into the effective workflow: the parent one for an inheriting sub-team, never a workspace status for a custom team', () => {
+    const states = [state('ws-can', 'Canceled', 'canceled', ''), state('can', 'Canceled', 'canceled'), state('dup', 'Duplicate', 'canceled'), state('child-can', 'Child canceled', 'canceled', 'child')]
+    const teamSettings = { child: { inheritWorkflowStatuses: true, parentTeamId: 'team' } } as never
+    expect(canceledState({ states, teamSettings }, 'child')?.id).toBe('can')
+    expect(duplicateState({ states, teamSettings }, 'child')?.id).toBe('dup')
+    expect(canceledState({ states: [state('ws-can', 'Canceled', 'canceled', ''), state('done', 'Done', 'completed')] }, 'team')).toBeUndefined()
+    expect(canceledState({ states }, 'plain')?.id).toBe('ws-can')
   })
 
   it("offers the reference app's snooze presets and detects active snoozes", () => {

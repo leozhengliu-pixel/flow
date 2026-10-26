@@ -15,6 +15,7 @@ import {
   type JiraRemoteStatus,
 } from "@/lib/api";
 import type { BootstrapData, Team, WorkflowState } from "@/types/flow";
+import { teamWorkflowStates } from "@/lib/team-workflow";
 
 import "./feature-settings.css";
 import "./jira-settings.css";
@@ -67,12 +68,10 @@ export function JiraSyncPage({ data, mode, jiraProjectId, onBack, onReload }: Pr
 
   const teams = data.teams;
   const selectedTeam = teams.find((team) => team.id === teamId);
+  // Synced issues land in the team, so only its effective workflow can be mapped to.
   const teamStates = useMemo(
-    () =>
-      data.states.filter(
-        (state) => !selectedTeam || state.teamId === selectedTeam.id || !state.teamId,
-      ),
-    [data.states, selectedTeam],
+    () => (selectedTeam ? teamWorkflowStates(data, selectedTeam.id) : data.states),
+    [data, selectedTeam],
   );
 
   useEffect(() => {

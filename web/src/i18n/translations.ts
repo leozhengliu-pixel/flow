@@ -63,6 +63,7 @@ import { agentChangesZhCN } from './translations-agent-changes';
 import { agentRuntimeZhCN } from './translations-agent-runtime';
 import { workspaceMembersZhCN } from './translations-workspace-members';
 import { pdfViewerZhCN } from './translations-pdf-viewer';
+import { createIssueZhCN } from './translations-create-issue';
 
 export const zhCN: Record<string, string> = {
   "Allow installation in other workspaces": "允许安装到其他工作区",
@@ -5938,3 +5939,5 @@ for (const [source, translation] of Object.entries(codingSessionUiZhCN)) zhCN[so
 for (const [source, translation] of Object.entries(codingSessionStatesZhCN)) zhCN[source] ??= translation;
 // PDF card toolbar and viewer (fills gaps only).
 for (const [source, translation] of Object.entries(pdfViewerZhCN)) zhCN[source] ??= translation;
+// New issue dialog (status checks, upload results, quick suggestions) fills gaps only.
+for (const [source, translation] of Object.entries(createIssueZhCN)) zhCN[source] ??= translation;

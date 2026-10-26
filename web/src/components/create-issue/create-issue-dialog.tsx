@@ -102,7 +102,12 @@ interface StoredIssueDraft {
   updatedAt?: string
 }
 
+/** The statuses an automatic status asked for, in order, or a status the user picked (which is never replaced by a request). */
+type StatusRequest = { candidates: (string | undefined)[]; picked: boolean }
+function statusRequest(...candidates: (string | undefined)[]): StatusRequest { return { candidates, picked: false } }
+
 export function CreateIssueDialog({ data, draftId, initialContext, initialProjectId, initialProjectMilestoneId, initialTeamId, initialStateId, initialTemplateId, onCreate, onCreateLabel, onDraftDeleted, onDraftSaved, onOpenChange, onUpload, open }: CreateIssueDialogProps) {
+  const { t } = useI18n()
   const requestedTeamId = initialContext?.teamId ?? initialTeamId
   const requestedStateId = initialContext?.stateId ?? initialStateId
   // A status preset without a team (a status group's "+") opens in a team whose workflow has that status.
@@ -114,6 +119,10 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   const [title, setTitle] = useState(initialContext?.title ?? '')
   const [description, setDescription] = useState<DescriptionSnapshot | null>(null)
   const [stateId, setStateId] = useState(() => teamStateIdFor(data, requestedTeamId || fallbackTeamId, requestedStateId))
+  // Where the status came from: a status the user picked is theirs; an automatic one (the explicit, preset,
+  // template or draft request, else the team default) is re-applied once the team's statuses can take it.
+  const statusRequestRef = useRef<StatusRequest>(statusRequest(requestedStateId))
+  const pickStatus = (id: string) => { statusRequestRef.current = { candidates: [], picked: true }; setStateId(id) }
   const [priority, setPriority] = useState<number>(initialContext?.priority ?? 0)
   const [estimate, setEstimate] = useState(NO_ESTIMATE)
   const [assigneeId, setAssigneeId] = useState(initialContext?.assigneeId ?? data.viewer.id)
@@ -145,7 +154,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   const initializationKey = [open, draftId ?? '', initialProjectId ?? '', initialProjectMilestoneId ?? '', requestedStateId ?? '', requestedTeamId ?? '', JSON.stringify(initialContext ?? {})].join('\u001f')
   const initializedKeyRef = useRef('')
   const draftKey = `${draftStoragePrefix}${teamId || data.teams[0]?.key || 'default'}`
-  useEffect(()=>{if(!open||!initialTemplateId)return;const template=data.issueTemplates.find(item=>item.id===initialTemplateId);if(!template)return;setTemplateId(template.id);setTitle(current=>current||template.title||template.name);setStateId(template.stateId||defaultState?.id||'');setPriority(template.priority);setAssigneeId(template.assigneeId??data.viewer.id);setProjectId(template.projectId??'');setLabelIds(template.labelIds);const templateBody=template.body;if(templateBody)requestAnimationFrame(()=>descriptionEditorRef.current?.commands.setContent(templateBody,{contentType:'markdown'}))},[data.issueTemplates,data.viewer.id,defaultState?.id,initialTemplateId,open])
+  useEffect(()=>{if(!open||!initialTemplateId)return;const template=data.issueTemplates.find(item=>item.id===initialTemplateId);if(!template)return;setTemplateId(template.id);setTitle(current=>current||template.title||template.name);statusRequestRef.current=statusRequest(template.stateId);setStateId(template.stateId||defaultState?.id||'');setPriority(template.priority);setAssigneeId(template.assigneeId??data.viewer.id);setProjectId(template.projectId??'');setLabelIds(template.labelIds);const templateBody=template.body;if(templateBody)requestAnimationFrame(()=>descriptionEditorRef.current?.commands.setContent(templateBody,{contentType:'markdown'}))},[data.issueTemplates,data.viewer.id,defaultState?.id,initialTemplateId,open])
   const hasDraftContent = Boolean(title.trim() || description?.markdown.trim() || files.length)
 
   useEffect(() => {
@@ -180,6 +189,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
       setTeamId(restoredTeamId)
       setTitle(restored.title ?? remoteDraft?.title ?? '')
       setDescription(restored.description ?? null)
+      statusRequestRef.current = statusRequest(restored.stateId, requestedStateId)
       setStateId(teamStateIdFor(workflow, restoredTeamId, restored.stateId, requestedStateId))
       setPriority(restored.priority ?? initialContext?.priority ?? 0)
       setEstimate(restored.estimate ?? NO_ESTIMATE)
@@ -194,6 +204,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
       setServerDraftId(remoteDraft?.id ?? '')
     } else {
       setTitle(initialContext?.title ?? ''); setDescription(initialContext?.description ? {markdown:initialContext.description,document:{type:'doc',content:[{type:'paragraph',content:[{type:'text',text:initialContext.description}]}]},documentJSON:JSON.stringify({type:'doc',content:[{type:'paragraph',content:[{type:'text',text:initialContext.description}]}]}),contentState:''} : null); setFiles([]); setError(undefined); setServerDraftId(''); setTeamId(requestedTeamId || fallbackTeamId)
+      statusRequestRef.current = statusRequest(requestedStateId)
       setStateId(teamStateIdFor(workflow, requestedTeamId || fallbackTeamId, requestedStateId)); setPriority(initialContext?.priority ?? 0); setEstimate(initialContext?.estimate ?? NO_ESTIMATE); setAssigneeId(initialContext?.assigneeId ?? data.viewer.id); setProjectId(initialContext?.projectId ?? ''); setProjectMilestoneId(initialContext?.projectMilestoneId ?? ''); setCycleId(initialContext?.cycleId ?? ''); setDueDate(initialContext?.dueDate ?? ''); setLabelIds(initialContext?.labelIds ?? []); setTemplateId(initialContext?.templateId ?? ''); setTemplateId(''); setRecurrence(''); setCreateMore(false); setExpanded(false)
       const textDocument = (text: string) => ({type:'doc',content:[{type:'paragraph',...(text ? {content:[{type:'text',text}]} : {})}]})
       titleEditorRef.current?.commands.setContent(textDocument(initialContext?.title ?? '')); descriptionEditorRef.current?.commands.setContent(textDocument(initialContext?.description ?? ''))
@@ -208,7 +219,15 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
 
   // Every status change (team switch, template, draft, data refresh) settles on a status of
   // the team's workflow: a status it still has is kept, any other becomes the team default.
-  useEffect(() => { if (open && availableStates.length && !availableStates.some(state => state.id === stateId)) setStateId(defaultState?.id ?? '') }, [availableStates, defaultState?.id, open, stateId])
+  // Until the user picks one, a requested status the team could not take yet (its own
+  // statuses loaded after the workspace ones) is restored as soon as the workflow has it.
+  useEffect(() => {
+    if (!open || !availableStates.length) return
+    const request = statusRequestRef.current
+    const requested = request.picked ? undefined : request.candidates.find(id => id && availableStates.some(state => state.id === id))
+    if (requested && requested !== stateId) setStateId(requested)
+    else if (!requested && !availableStates.some(state => state.id === stateId)) setStateId(defaultState?.id ?? '')
+  }, [availableStates, defaultState?.id, open, stateId])
 
   useEffect(() => {
     const query = title.trim()
@@ -276,6 +295,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     if (nextTeamId !== teamId) { setTeamId(nextTeamId); setCycleId('') }
     const nextTitle = template.title ?? ''
     setTitle(current => !current.trim() || current === previous.title ? nextTitle : current)
+    statusRequestRef.current = statusRequest(template.stateId)
     setStateId(teamStateIdFor(data, nextTeamId, template.stateId))
     setPriority(template.priority)
     setAssigneeId(template.assigneeId ?? data.viewer.id)
@@ -334,6 +354,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   const resetDraft = () => {
     resetBody(false)
     setServerDraftId('')
+    statusRequestRef.current = statusRequest()
     setStateId(defaultState?.id ?? '')
     setPriority(0)
     setEstimate(0)
@@ -363,7 +384,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
       setConfirmOpen(false)
       onOpenChange(false)
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Could not save draft')
+      setError(failure instanceof Error ? failure.message : t('Could not save draft'))
     } finally {
       setSaving(false)
     }
@@ -385,13 +406,16 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     if (formTemplate) {
       const missing = missingRequiredFields(formTemplate.formFields ?? [], formValues, { title, priority, dueDate })
       setInvalidFields(new Set(missing))
-      if (missing.length) { setError('Fill in the required fields'); return }
+      if (missing.length) { setError(t('Fill in the required fields')); return }
     }
     if (!cleanTitle || saving) return
     // Never send a team/status pair the API would reject.
     if (!teamHasWorkflowState(data, teamId, stateId)) {
-      const teamName = data.teams.find(item => item.id === teamId)?.name ?? 'This team'
-      setError(!data.states.length ? 'Statuses are still loading. Try again in a moment.' : availableStates.length ? `Choose a status from the ${teamName} workflow` : `${teamName} has no status for new issues`)
+      const teamName = data.teams.find(item => item.id === teamId)?.name
+      setError(!data.states.length
+        ? t('Statuses are still loading. Try again in a moment.')
+        : !teamName ? t(availableStates.length ? 'Choose a status from the team workflow' : 'This team has no status for new issues')
+        : t(availableStates.length ? 'Choose a status from the {team} workflow' : '{team} has no status for new issues').replace('{team}', teamName))
       return
     }
     setSaving(true)
@@ -427,14 +451,14 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
         await onDraftDeleted?.(serverDraftId)
       }
       resetBody()
-      if (failedUploads) setError(`Issue created, but ${failedUploads} attachment${failedUploads === 1 ? '' : 's'} failed to upload`)
+      if (failedUploads) setError(t(failedUploads === 1 ? 'Issue created, but 1 attachment failed to upload' : 'Issue created, but {count} attachments failed to upload').replace('{count}', String(failedUploads)))
       if (!createMore) onOpenChange(false)
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Could not create issue')
+      setError(failure instanceof Error ? failure.message : t('Could not create issue'))
     } finally {
       setSaving(false)
     }
-  }, [assigneeId, availableLabelIds, availableStates.length, createMore, data, initialContext?.parentId, initialContext?.related, cycleId, description, draftKey, dueDate, estimate, files, formTemplate, formValues, labelIds, onCreate, onDraftDeleted, onOpenChange, onUpload, priority, projectId, projectMilestoneId, recurrence, saving, serverDraftId, stateId, teamId, templateId, title])
+  }, [assigneeId, availableLabelIds, availableStates.length, createMore, data, t, initialContext?.parentId, initialContext?.related, cycleId, description, draftKey, dueDate, estimate, files, formTemplate, formValues, labelIds, onCreate, onDraftDeleted, onOpenChange, onUpload, priority, projectId, projectMilestoneId, recurrence, saving, serverDraftId, stateId, teamId, templateId, title])
 
   const changeOpen = (next: boolean) => {
     if (!next && serverDraftId && hasDraftContent) {
@@ -477,7 +501,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
           </div>
 
           <div className={styles.properties}>
-            <MiniProperty label="Status" value={inTriage ? TRIAGE_STATUS.name : state?.name ?? 'Status'} selectedId={stateId} icon={inTriage || state ? <StatusIcon state={inTriage || !state ? TRIAGE_STATUS : state}/> : <CircleDashed aria-hidden="true"/>} options={[...availableStates].sort((a,b) => (a.position??0)-(b.position??0)).map((item,index) => ({ id:item.id,label:item.name,color:item.color,icon:<StatusIcon state={item}/>,shortcut:index < 5 ? String(index+1) : undefined }))} onChange={setStateId}/>
+            <MiniProperty label="Status" value={inTriage ? TRIAGE_STATUS.name : state?.name ?? 'Status'} selectedId={stateId} icon={inTriage || state ? <StatusIcon state={inTriage || !state ? TRIAGE_STATUS : state}/> : <CircleDashed aria-hidden="true"/>} options={[...availableStates].sort((a,b) => (a.position??0)-(b.position??0)).map((item,index) => ({ id:item.id,label:item.name,color:item.color,icon:<StatusIcon state={item}/>,shortcut:index < 5 ? String(index+1) : undefined }))} onChange={pickStatus}/>
             <MiniProperty label="Priority" value={priority ? priorityNames[priority] : 'Priority'} selectedId={String(priority)} icon={<PriorityIcon priority={priority}/>} options={[0,1,2,3,4].map(item => ({ id:String(item),label:priorityNames[item],icon:<PriorityIcon priority={item}/>,shortcut:String(item) }))} onChange={value => setPriority(Number(value))}/>
             {estimateType!=='notUsed'&&<MiniProperty label="Estimate" value={estimate >= 0 ? estimateLabel(estimate, estimateType) : 'Estimate'} selectedId={String(estimate)} icon={<EstimateGlyph value={Math.max(estimate, 0)}/>} options={estimateOptions.map(option=>({id:option.id,label:option.label,icon:<EstimateGlyph value={Math.max(option.value, 0)}/>}))} onChange={value=>setEstimate(Number(value))}/>}
             <MiniProperty label="Assignee" value={assignee?.displayName ?? 'Assignee'} selectedId={assigneeId} icon={assignee ? <Avatar name={assignee.displayName}/> : <NoAssigneeIcon/>} options={assigneeMenuOptions(data.users.filter(user => user.active), { teamId, allowAgents: agentsAvailable(data) })} searchPlaceholder="Assign to…" onChange={setAssigneeId}/>
@@ -489,25 +513,25 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
           </div>
 
           {(quickSuggestionsLoading || quickSuggestions.length > 0) && <div className={styles.quickSuggestions}>
-            <span className={styles.quickSuggestionsLabel}><AiBurstGlyph size={14}/>{quickSuggestionsLoading && !quickSuggestions.length ? 'Analyzing…' : 'Quick suggestions'}</span>
+            <span className={styles.quickSuggestionsLabel}><AiBurstGlyph size={14}/>{t(quickSuggestionsLoading && !quickSuggestions.length ? 'Analyzing…' : 'Quick suggestions')}</span>
             <div>
-              {quickSuggestions.length > 1 && <button className={styles.applyAllSuggestions} type="button" onClick={() => quickSuggestions.forEach(applyQuickSuggestion)}>Apply all</button>}
+              {quickSuggestions.length > 1 && <button className={styles.applyAllSuggestions} type="button" onClick={() => quickSuggestions.forEach(applyQuickSuggestion)}>{t('Apply all')}</button>}
               {quickSuggestions.map(suggestion => {
                 if (suggestion.type === 'assignee') {
                   const user = data.users.find(item => item.id === suggestion.id)
-                  return user ? <button key={`${suggestion.type}-${suggestion.id}`} type="button" onClick={() => applyQuickSuggestion(suggestion)}><Avatar name={user.displayName}/><span>Assign {user.displayName}</span></button> : null
+                  return user ? <button key={`${suggestion.type}-${suggestion.id}`} type="button" onClick={() => applyQuickSuggestion(suggestion)}><Avatar name={user.displayName}/><span data-i18n-ignore>{t('Assign {name}').replace('{name}', user.displayName)}</span></button> : null
                 }
                 if (suggestion.type === 'project') {
                   const item = data.projects.find(project => project.id === suggestion.id)
-                  return item ? <button key={`${suggestion.type}-${suggestion.id}`} type="button" onClick={() => applyQuickSuggestion(suggestion)}><ProjectGlyph project={item}/><span>Add to {item.name}</span></button> : null
+                  return item ? <button key={`${suggestion.type}-${suggestion.id}`} type="button" onClick={() => applyQuickSuggestion(suggestion)}><ProjectGlyph project={item}/><span data-i18n-ignore>{t('Add to {name}').replace('{name}', item.name)}</span></button> : null
                 }
                 if (suggestion.type === 'label') {
                   const item = availableLabels.find(label => label.id === suggestion.id)
-                  return item ? <button key={`${suggestion.type}-${suggestion.id}`} type="button" onClick={() => applyQuickSuggestion(suggestion)}><LabelIcon/><span>Add {item.name}</span></button> : null
+                  return item ? <button key={`${suggestion.type}-${suggestion.id}`} type="button" onClick={() => applyQuickSuggestion(suggestion)}><LabelIcon/><span data-i18n-ignore>{t('Add {name}').replace('{name}', item.name)}</span></button> : null
                 }
                 if (suggestion.type === 'team') {
                   const item = data.teams.find(team => team.id === suggestion.id)
-                  return item ? <button key={`${suggestion.type}-${suggestion.id}`} type="button" onClick={() => applyQuickSuggestion(suggestion)}><TeamIcon team={item}/><span>Move to {item.name}</span></button> : null
+                  return item ? <button key={`${suggestion.type}-${suggestion.id}`} type="button" onClick={() => applyQuickSuggestion(suggestion)}><TeamIcon team={item}/><span data-i18n-ignore>{t('Move to {name}').replace('{name}', item.name)}</span></button> : null
                 }
                 return null
               })}
@@ -598,6 +622,8 @@ function MoreActions({ active, dueDate, recurrence, onDueDateChange, onRecurrenc
 }
 
 function AddLinkDialog({ issueLabel, onAdd, onOpenChange, open }: { issueLabel: string; onAdd: (url: string, label: string) => void; onOpenChange: (open: boolean) => void; open: boolean }) {
+  const { t } = useI18n()
+  const title = t('Add link to {name}').replace('{name}', t(issueLabel))
   const [url, setUrl] = useState('')
   const [label, setLabel] = useState('')
   const submitLink = () => {
@@ -611,8 +637,8 @@ function AddLinkDialog({ issueLabel, onAdd, onOpenChange, open }: { issueLabel: 
   return <Dialog.Root open={open} onOpenChange={onOpenChange}>
     <Dialog.Portal>
       <Dialog.Overlay data-flow-motion="backdrop" className={styles.linkOverlay}/>
-      <Dialog.Content data-flow-motion="dialog" className={styles.linkDialog} aria-label={`Add link to ${issueLabel}`}>
-        <Dialog.Title><ExternalLink/><span>Add link to {issueLabel}</span></Dialog.Title>
+      <Dialog.Content data-flow-motion="dialog" className={styles.linkDialog} aria-label={title}>
+        <Dialog.Title><ExternalLink/><span data-i18n-ignore>{title}</span></Dialog.Title>
         <label><span>URL</span><input autoFocus aria-label="URL" placeholder="https://…" value={url} onChange={event => setUrl(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submitLink() } }}/></label>
         <label><span>Title <small>(optional)</small></span><input aria-label="Title (optional)" value={label} onChange={event => setLabel(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submitLink() } }}/></label>
         <div><Dialog.Close asChild><button type="button">Cancel</button></Dialog.Close><button type="button" className={styles.addLink} disabled={!url.trim()} onClick={submitLink}>Add link</button></div>

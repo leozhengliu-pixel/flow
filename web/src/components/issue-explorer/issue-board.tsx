@@ -9,6 +9,7 @@ import { IssueReleaseChip } from '@/components/issue/issue-release-chip'
 import { Virtuoso } from 'react-virtuoso'
 import { toast } from '@/lib/toast'
 import { IssueAssigneeSlot } from '@/components/my-issues/issue-assignee-slot'
+import { useTeamStatusOptions } from '@/components/my-issues/use-team-status-options'
 import { IssueContextMenu, IssueParentTrail, RowCommandPicker, SubIssueProgress, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData, type MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
 import type { MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
 import { CalendarIcon, CycleIcon, PriorityIcon, StatusIcon } from '@/components/issue/issue-icons'
@@ -245,7 +246,8 @@ export function IssueBoardCard({ issue, properties, propertyOptions, selected, d
     event.preventDefault(); onOpen()
   }
   const change = (property: MyIssuesEditableProperty, value: string | string[]) => onPropertyChange(property, value)
-  const scopedOptions = { ...propertyOptions, status: propertyOptions.status.filter(option => !option.teamId || !issue.teamId || option.teamId === issue.teamId) }
+  const statusOptions = useTeamStatusOptions(propertyOptions.status, issue.teamId)
+  const scopedOptions = { ...propertyOptions, status: statusOptions }
   return <ContextMenu.Root><ContextMenu.Trigger asChild><a href={issue.href} className={styles.card} tabIndex={0} draggable aria-grabbed={dragging} data-selected={selected} data-dragging={dragging} data-drop-before={dropBefore} aria-label={`${issue.identifier} ${issue.title}`} onClick={click} onPointerDownCapture={event => { pointerOnControl.current = Boolean((event.target as Element).closest(controls)); }} onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { if (!event.shiftKey && (event.metaKey || event.ctrlKey || event.altKey)) return; event.preventDefault(); if (event.shiftKey) onSelect(!selected, true); else onOpen() } }} onDragStart={event => { if (pointerOnControl.current) { event.preventDefault(); return } dragged.current = true; event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', issue.id); onDragStart() }} onDragEnd={() => { onDragEnd(); requestAnimationFrame(() => { dragged.current = false }) }} onDragOver={event => { event.dataTransfer.dropEffect = 'move'; onDragOver(event) }} onDrop={onDrop}>
     {(properties.has('id') || Boolean(issue.ancestors?.length)) && <div className={styles.cardTop}>
       {properties.has('id') && <span data-i18n-ignore>{issue.identifier}</span>}

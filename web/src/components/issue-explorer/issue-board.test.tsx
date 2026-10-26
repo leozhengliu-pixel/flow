@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import type { MyIssuesRowData, MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
+import { ApplicationStoreContext, type ApplicationStoreValue } from '@/store/application-store-contexts'
 import { IssueBoard } from './issue-board'
 
 const row: MyIssuesRowData = {
@@ -65,6 +66,20 @@ describe('issue board cards', () => {
     await waitFor(() => expect(actions.onPropertyChange).toHaveBeenCalledWith(row, 'status', 'backlog'))
     expect(actions.onOpenIssue).not.toHaveBeenCalled()
     expect(actions.onSelectIssue).not.toHaveBeenCalled()
+  })
+
+  it("offers a sub-team inheriting its parent's workflow the parent's statuses, not its own copies", async () => {
+    const user = userEvent.setup()
+    const state = (id: string, name: string, type: string, teamId: string) => ({ id, name, type, teamId, color: '#888888', position: 0 })
+    const data = {
+      states: [state('started', 'In progress', 'started', 'team-1'), state('backlog', 'Backlog', 'backlog', 'team-1'), state('foreign', 'Other team status', 'started', 'team-2')],
+      teamSettings: { 'team-1': { inheritWorkflowStatuses: true, parentTeamId: 'team-2' } },
+    }
+    const store = { data, session: null, account: null, userSettings: undefined, workspaceSettings: undefined } as unknown as ApplicationStoreValue
+    render(<ApplicationStoreContext.Provider value={store}><I18nProvider><IssueBoard onOpenIssue={vi.fn()} onSelectIssue={vi.fn()} onMove={vi.fn()} onPropertyChange={vi.fn()} groups={[{ id: 'started', label: 'In progress', issues: [row] }]} selectedIds={new Set()} properties={new Set(['status'])} propertyOptions={options}/></I18nProvider></ApplicationStoreContext.Provider>)
+    await user.click(screen.getByRole('combobox', { name: 'Change status. Current status is In progress' }))
+    expect(screen.getByRole('option', { name: /Other team status/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Backlog/ })).not.toBeInTheDocument()
   })
 
   it('uses Shift-click for multiselection and ordinary clicks for navigation', () => {

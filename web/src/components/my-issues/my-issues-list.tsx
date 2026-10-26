@@ -15,6 +15,8 @@ import styles from './my-issues-list.module.css'
 import { ContextMenuIcon } from './context-menu-icon'
 import { IssueRowActionGroups, IssueRowEstimateItem, IssueRowMoreProperties } from './issue-row-actions'
 import { useIssueRowActions } from './use-issue-row-actions'
+import { useTeamStatusOptions } from './use-team-status-options'
+import { teamWorkflowStates } from '@/lib/team-workflow'
 import { AvatarImage, UserAvatar } from '@/components/ui/user-avatar'
 import { avatarColor } from '@/components/issue/avatar-color'
 import { AgentHover } from '@/components/agent/agent-hover-card'
@@ -323,6 +325,7 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
   }
   const columns = ['8px', '18px', displayProperties.has('priority') && '16px', displayProperties.has('id') && 'var(--issue-identifier-width, 52px)', displayProperties.has('status') && '22px', 'minmax(80px,1fr)', displayProperties.has('created') && '60px', displayProperties.has('updated') && '60px', displayProperties.has('myActivity') && '60px', displayProperties.has('timeInStatus') && '72px', displayProperties.has('links') && '52px', '18px'].filter(Boolean).join(' ')
   const change = (property: MyIssuesEditableProperty, value: string | string[]) => onPropertyChange?.(issue, property, value)
+  const statusOptions = useTeamStatusOptions(propertyOptions.status, issue.teamId)
   return <ContextMenu.Root>
     <ContextMenu.Trigger asChild>
       <a className={styles.row} style={{'--row-columns':columns,'--nested-depth':nestedDepth} as CSSProperties} data-issue-row-id={issue.id} data-selected={selected} data-active={active || undefined} aria-current={active || undefined} data-nested={nestedDepth>0} href={issue.href} aria-label={rowAriaLabel(issue)} onClick={click} onKeyDown={keydown}>
@@ -344,7 +347,7 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
           searchLabel="Change status..."
           searchShortcut="S"
           selectedIds={[issue.state.id]}
-          options={propertyOptions.status}
+          options={statusOptions}
           hoverContent={<RowStatusHover issue={issue}/>}
           hoverClassName="property-rich-hover"
           hoverPlacement="below"
@@ -434,7 +437,7 @@ function RowStatusHover({ issue }: { issue: MyIssuesRowData }) {
       .catch(() => { if (!controller.signal.aborted) setActivities([]) })
     return () => controller.abort()
   }, [fresh, issue.id, issue.state.id])
-  const states = app?.data?.states.filter(state => !issue.teamId || !state.teamId || state.teamId === issue.teamId)
+  const states = app?.data && issue.teamId ? teamWorkflowStates(app.data, issue.teamId) : app?.data?.states
   return <StatusHoverPreview state={issue.state} activities={activities ?? []} loading={!activities} issueCreatedAt={issue.createdAt} states={states} triagedAt={issue.triagedAt} inTriage={issue.state.id === 'triage'}/>
 }
 
@@ -455,8 +458,9 @@ function IssueCheckbox({ checked, onChange }: { checked: boolean; onChange: (che
 
 export function IssueContextMenu({ editable, issue, options, onPropertyChange, onAction }: { editable:boolean;issue:MyIssuesRowData;options: MyIssuesRowPropertyOptions; onPropertyChange: (property: MyIssuesEditableProperty, value: string | string[]) => void | Promise<void>; onAction?: (action: MyIssuesContextAction) => void }) {
   const rowActions = useIssueRowActions()
+  const statusOptions = useTeamStatusOptions(options.status, issue.teamId)
   return <ContextMenu.Content data-flow-motion="floating" className={styles.contextMenu} collisionPadding={10}>
-    {editable&&<><ContextPropertySub label="Status" shortcut="S" options={options.status} selectedIds={[issue.state.id]} onSelect={id => onPropertyChange('status', id)}/>
+    {editable&&<><ContextPropertySub label="Status" shortcut="S" options={statusOptions} selectedIds={[issue.state.id]} onSelect={id => onPropertyChange('status', id)}/>
     <ContextPropertySub label="Priority" shortcut="P" options={options.priority} selectedIds={[String(issue.priority)]} onSelect={id => onPropertyChange('priority', id)}/>
     <ContextPropertySub label="Assignee" shortcut="A" options={options.assignee} selectedIds={[issue.assignee?.id ?? '']} onSelect={id => onPropertyChange('assignee', id)}/>
     <ContextPropertySub label="Due date" shortcut="⇧ D" options={options.dueDate} selectedIds={[issue.dueDate ?? '']} onSelect={id => onPropertyChange('dueDate', id)}/>

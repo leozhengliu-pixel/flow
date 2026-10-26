@@ -4,6 +4,7 @@ import type { BootstrapData, Issue, IssueUpdateInput } from '@/types/flow'
 import { listIssueRecordGroups, listIssueRecords, type IssueQueryInput } from '@/lib/api'
 import { MyIssuesGroupHeader, MyIssuesRow, type MyIssuesGroupData, type MyIssuesListProps } from '@/components/my-issues/my-issues-list'
 import { issueToExplorerRow } from './issue-explorer-model'
+import { teamEquivalentState } from '@/lib/team-workflow'
 import { issueListState, pagedIssueListSignature, retainIssueList, trimPagedIssueListCache, type IssueListGroup } from './paged-issue-list-cache'
 import { ISSUE_QUERY_INVALIDATED, issueMayMatchQuery, queryUsesLabels, type IssueQueryInvalidation } from './paged-issue-invalidation'
 import styles from '@/components/my-issues/my-issues-list.module.css'
@@ -250,6 +251,13 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
         const property = query.groupBy === 'status' ? 'stateId' : query.groupBy === 'priority' ? 'priority' : query.groupBy === 'assignee' ? 'assigneeId' : query.groupBy === 'project' ? 'projectId' : query.groupBy === 'cycle' ? 'cycleId' : undefined
         if (!property) return
         const input: IssueUpdateInput = { [property]: property === 'priority' ? Number(group.value) : group.value }
+        // A status column of another team's workflow moves the issue to its own team's equivalent status.
+        if (property === 'stateId') {
+          const target = data.states.find(state => state.id === group.value)
+          const next = target ? teamEquivalentState(data, dragging.issue.team.id, target) : undefined
+          if (target && !next) { setDragging(undefined); return }
+          if (next) input.stateId = next.id
+        }
         if (before) input.sortOrder = (before.sortOrder ?? 0) - .5
         const issue = dragging.issue; setDragging(undefined)
         void onMoveIssueRecord(issue, input).then(() => setRetry(value => value + 1)).catch(error => setError(String(error.message ?? error)))

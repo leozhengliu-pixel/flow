@@ -10,6 +10,7 @@ import { defaultDateOperator, filterValues, isComparableDateValue, type Advanced
 import { compareDateFilter, DATE_FILTER_FIELDS, dateFilterMenu, parseDateFilterValue, releasedDateFilterCategory } from './issue-date-filter'
 import { advancedFilterTree, conditionAsFilter, isAdvancedGroup } from './advanced-filter'
 import { labelsForResource, setGroupedLabelSelected, toggleGroupedLabelIds } from '@/lib/labels'
+import { teamStateChanges, teamWorkflowStates, workflowStatusOptions } from '@/lib/team-workflow'
 import { milestoneIssueProgress } from '@/components/issue/milestone-progress'
 import { buildIssueGroups, groupMoveUpdate, nestIssueRows } from './issue-grouping'
 import { confirmAction } from '@/components/ui/action-dialog-service'
@@ -302,7 +303,9 @@ export function explorerPropertyOptions(data: BootstrapData, issues = data.issue
   const issueLabels = labelsForResource(data.labels, 'issue', data.labelGroups)
   const labelGroupNames = new Map(data.labelGroups.filter(group => group.resourceType === 'issue').map(group => [group.id, group.name]))
   const issueTeamIds = [...new Set(issues.map(issue => issue.team.id))]
-  const scopedStates = issueTeamIds.length === 1 && data.states.some(state => state.teamId === issueTeamIds[0]) ? data.states.filter(state => state.teamId === issueTeamIds[0]) : data.states
+  // One team's issues offer its effective workflow; issues of several teams can be in any of their statuses.
+  const teamStates = issueTeamIds.length === 1 ? teamWorkflowStates(data, issueTeamIds[0]) : []
+  const scopedStates = teamStates.length ? teamStates : data.states
   const projectsById = new Map(data.projects.map(project => [project.id, project]))
   const statusCounts = new Map<string, number>(), priorityCounts = new Map<string, number>(), assigneeCounts = new Map<string, number>(), creatorCounts = new Map<string, number>(), agentCounts = new Map<string, number>(), labelCounts = new Map<string, number>(), projectCounts = new Map<string, number>(), initiativeCounts = new Map<string, number>(), cycleCounts = new Map<string, number>(), addedToCycleCounts = new Map<string, number>(), subscriberCounts = new Map<string, number>(), externalSourceCounts = new Map<string, number>(), templateCounts = new Map<string, number>(), suggestedLabelCounts = new Map<string, number>()
   const agentSessionStateCounts = new Map<string, number>(), triageCounts = emptyTriageCounts()
@@ -384,8 +387,9 @@ export function explorerFilterOptions(field: MyIssuesFilterKey, options: Explore
   if (field === 'status'||field==='agent'||field==='agentSession'||field==='creator'||field==='priority'||field==='relations'||field==='triageIntelligence'||field==='suggestedLabel'||field==='dates'||field==='projectMilestone'||field==='project'||field==='projectProperties'||field==='initiative'||field==='cycle'||field==='addedToCycle'||field==='releases'||field==='customers'||field==='subscribers'||field==='externalSource'||field==='autoClosed'||field==='content'||field==='links'||field==='template') return options[field]
 }
 
-export function explorerBulkOptions(action: MyIssuesBulkAction, options: ExplorerPropertyOptions): MyIssuesBulkActionOption[] | undefined {
-  if (action === 'status') return options.status
+/** Bulk action choices; with the selection's teams, the status choices are the ones their workflows can use. */
+export function explorerBulkOptions(action: MyIssuesBulkAction, options: ExplorerPropertyOptions, selection?: { data: BootstrapData; teamIds: (string | undefined)[] }): MyIssuesBulkActionOption[] | undefined {
+  if (action === 'status') return selection ? workflowStatusOptions(selection.data, selection.teamIds, options.status) : options.status
   if (action === 'priority') return options.priority
   if (action === 'assign') return options.assignee
   if (action === 'project') return options.project
@@ -417,6 +421,11 @@ export async function executeExplorerBulkAction({ action, ids, value, data, issu
   if (action === 'subscribers' && value != null) return Promise.all(ids.map(id => { const issue = issuesById.get(id)!; return onUpdateIssue(id, { subscriberIds: issue.subscriberIds.includes(value) ? issue.subscriberIds : [...issue.subscriberIds, value] }) }))
   if (action === 'removeSubscribers') return Promise.all(ids.map(id => onUpdateIssue(id, { subscriberIds: [] })))
   if (action === 'unassignMe') return onUpdateIssues(ids, { assigneeId: '' })
+  // Issues of several teams each get their team's equivalent status.
+  if (action === 'status' && value) {
+    const changes = teamStateChanges(data, ids.map(id => ({ id, teamId: issuesById.get(id)?.team.id })), value)
+    return (await Promise.all(changes.map(change => onUpdateIssues(change.ids, { stateId: change.stateId })))).flat()
+  }
   const update = explorerUpdateForAction(action, value)
   if (update) return onUpdateIssues(ids, update)
 }
