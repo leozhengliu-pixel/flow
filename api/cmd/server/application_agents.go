@@ -25,6 +25,13 @@ func (s *server) listApplicationInstallations(w http.ResponseWriter, r *http.Req
 		respondMutation(w, err, 200, nil)
 		return
 	}
+	// The avatar comes from the third-party registration: an avatar stored
+	// before icon URLs were validated is left out (the initials show).
+	for index := range items {
+		if !items[index].Builtin && items[index].AvatarURL != "" && !validApplicationIconURL(items[index].AvatarURL, true) {
+			items[index].AvatarURL = ""
+		}
+	}
 	writeJSON(w, 200, items)
 }
 
@@ -87,7 +94,12 @@ func (s *server) configureApplicationInstallation(w http.ResponseWriter, r *http
 			}
 		}
 		input.Name = client.ClientName
-		input.AvatarURL = client.LogoURI
+		// The registration's logo becomes the member's avatar. Logos stored
+		// before icon URLs were validated are dropped (the initials show).
+		input.AvatarURL = ""
+		if validApplicationIconURL(client.LogoURI, true) {
+			input.AvatarURL = client.LogoURI
+		}
 		if client.HomeWorkspaceKey != "" && client.HomeWorkspaceKey != data.Workspace.URLKey && !client.PublicEnabled {
 			writeError(w, 403, "This application is private to its home workspace")
 			return
