@@ -1443,6 +1443,7 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 				// Populate it only while authorization-aware callbacks execute,
 				// then restore the snapshot value before persistence.
 				next.ViewerRole = role
+				next.ViewerTeamIDs = s.actorTeamIDs(ctx, next.Workspace.ID, actor.ID)
 			}
 			if fieldScoped && !slices.Contains(fields, "users") {
 				// Users are not part of this mutation's snapshot.
@@ -1453,7 +1454,7 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 			}
 		}
 		aggregateID, err := mutate(&next)
-		next.ViewerRole = originalViewerRole
+		next.ViewerRole, next.ViewerTeamIDs = originalViewerRole, nil
 		traceMark(ctx, "mutate")
 		if err != nil {
 			return err

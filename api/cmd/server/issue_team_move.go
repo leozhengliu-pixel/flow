@@ -57,6 +57,8 @@ func moveIssueToTeam(data *domain.Bootstrap, issue *domain.Issue, team domain.Te
 	issue.Identifier = fmt.Sprintf("%s-%d", team.Key, number)
 	changes["identifier"] = issue.Identifier
 	issue.Team = team
+	// Documents attached to the issue follow it into the new team's scope.
+	moveIssueDocuments(data, issue.ID, team.ID)
 
 	if state == nil {
 		state = teamMoveState(data, issue.State, team.ID)

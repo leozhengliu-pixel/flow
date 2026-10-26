@@ -260,6 +260,25 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		if progressMetadata, err = s.persistIssueProjectProgress(ctx, tx, workspace, loadedIssues, metadata.Issues); err != nil {
 			return err
 		}
+		// ... and the scope documents attached to an issue inherit from its
+		// team (domain.Document.InheritedTeamIDs) when it moved team.
+		if original.Team.ID != result.Team.ID {
+			base := progressMetadata
+			if base == nil {
+				if stored, ok := s.workspaces[workspace]; ok {
+					base = &stored
+				}
+			}
+			if base != nil {
+				scoped, err := s.persistDocumentScopes(ctx, tx, workspace, *base, metadata.Documents)
+				if err != nil {
+					return err
+				}
+				if scoped != nil {
+					progressMetadata = scoped
+				}
+			}
+		}
 		oldRaw, _ := json.Marshal(original)
 		newRaw, _ := json.Marshal(result)
 		var oldFields, newFields map[string]json.RawMessage

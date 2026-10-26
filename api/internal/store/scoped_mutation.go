@@ -199,9 +199,11 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		// pools can hold a single connection.
 		actor, hasActor := actorFromContext(ctx)
 		actorRole := ""
+		var actorTeams []string
 		if hasActor {
 			if role, status, roleErr := s.WorkspaceRole(ctx, current.Workspace.ID, actor.ID); roleErr == nil && status == "active" {
 				actorRole = role
+				actorTeams = s.actorTeamIDs(ctx, current.Workspace.ID, actor.ID)
 			}
 		}
 		tx, err := s.db.BeginTx(ctx, nil)
@@ -296,6 +298,7 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 			if actorRole != "" {
 				next.ViewerRole = actorRole
 			}
+			next.ViewerTeamIDs = actorTeams
 			if index := slices.IndexFunc(next.Users, func(user domain.User) bool { return user.ID == actor.ID }); index >= 0 {
 				next.Users[index] = actor
 			} else {
@@ -308,7 +311,7 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		}
 		traceMark(ctx, "load")
 		aggregateID, err := mutate(&next)
-		next.ViewerRole = originalViewerRole
+		next.ViewerRole, next.ViewerTeamIDs = originalViewerRole, nil
 		traceMark(ctx, "mutate")
 		if err != nil {
 			return err

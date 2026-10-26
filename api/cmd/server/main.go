@@ -1387,7 +1387,16 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, allowed)
 	})
 	data.DocumentTemplates = slices.DeleteFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.TeamID != "" && !allowed(item.TeamID) })
-	data.Documents = slices.DeleteFunc(data.Documents, func(item domain.Document) bool { return !slices.ContainsFunc(item.TeamIDs, allowed) })
+	data.Documents = slices.DeleteFunc(data.Documents, func(item domain.Document) bool {
+		if slices.ContainsFunc(item.TeamIDs, allowed) {
+			return false
+		}
+		// An application reads the documents attached to the issues and
+		// projects of its teams (the parent resources it can read), when the
+		// document has no teams of its own; the viewer projection has already
+		// applied the document's grants.
+		return key.Actor != "app" || len(item.TeamIDs) > 0 || !slices.ContainsFunc(item.InheritedTeamIDs, allowed)
+	})
 	for id := range data.Comments {
 		if !visibleIssue(id) && !visibleProject(id) && !slices.ContainsFunc(data.Documents, func(item domain.Document) bool { return item.ID == id || item.SlugID == id }) {
 			delete(data.Comments, id)
@@ -6455,6 +6464,8 @@ func applyProjectUpdate(data *domain.Bootstrap, project *domain.Project, input d
 			}
 		}
 		project.TeamIDs = slices.Clone(input.TeamIDs)
+		// Documents attached to the project follow its teams' scope.
+		refreshProjectDocuments(data, project.ID)
 	}
 	if input.DependencyIDs != nil || input.DependencyRelations != nil {
 		if err := applyProjectDependencyUpdate(data, project, input.DependencyIDs, input.DependencyRelations); err != nil {

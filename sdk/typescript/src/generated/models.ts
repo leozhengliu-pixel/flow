@@ -753,7 +753,11 @@ export interface Document {
   favorite: boolean
   icon?: string
   id: string
+  /** InheritedTeamIDs are the teams of the issue and projects the document is attached to. Read-only: Flow updates them when the document is attached or detached, the issue moves to another team, or a project's teams change. When one of them is private, workspace-wide access to the document is limited to people who can read that team; people and teams the document is shared with directly keep their access. Public teams do not limit access. */
+  inheritedTeamIds?: string[]
   issueId?: string
+  /** IssueTeamID is the team of the issue the document is attached to. Read-only. */
+  issueTeamId?: string
   permissions?: DocumentPermission[]
   /** PreviousSlugIDs keeps the slugs a renamed document used before, so old links keep resolving (and the web app redirects to slugId). */
   previousSlugIds?: string[]
@@ -837,7 +841,11 @@ export interface DocumentPartial {
   favorite?: boolean
   icon?: string
   id: string
+  /** InheritedTeamIDs are the teams of the issue and projects the document is attached to. Read-only: Flow updates them when the document is attached or detached, the issue moves to another team, or a project's teams change. When one of them is private, workspace-wide access to the document is limited to people who can read that team; people and teams the document is shared with directly keep their access. Public teams do not limit access. */
+  inheritedTeamIds?: string[]
   issueId?: string
+  /** IssueTeamID is the team of the issue the document is attached to. Read-only. */
+  issueTeamId?: string
   permissions?: DocumentPermissionPartial[]
   /** PreviousSlugIDs keeps the slugs a renamed document used before, so old links keep resolving (and the web app redirects to slugId). */
   previousSlugIds?: string[]

@@ -61,19 +61,22 @@ func documentRole(s *server, data domain.Bootstrap, document domain.Document) st
 		return "owner"
 	}
 	best := "none"
+	// A document attached to an issue or project of a private team is scoped
+	// to that team: the workspace grant (and legacy workspace visibility)
+	// reaches only people who can read the team. User and team grants, and
+	// the document's own teams, still share it outside.
+	linkOpen := documentLinkScopeOpen(data, document)
 	// A non-empty permissions list is an explicit ACL, including the
 	// canonical owner entry added by the permissions endpoint. Documents with
 	// no permissions retain their legacy workspace-visible behavior.
 	hasExplicit := len(document.Permissions) > 0
 	for _, permission := range document.Permissions {
 		matched := permission.SubjectType == "user" && permission.SubjectID == data.Viewer.ID
-		if !matched && permission.SubjectType == "workspace" {
+		if !matched && permission.SubjectType == "workspace" && linkOpen {
 			matched = permission.SubjectID == "" || permission.SubjectID == data.Workspace.ID || permission.SubjectID == data.Workspace.URLKey
 		}
 		if !matched && permission.SubjectType == "team" {
-			matched = slices.ContainsFunc(data.TeamMembers, func(member domain.TeamMember) bool {
-				return member.UserID == data.Viewer.ID && member.TeamID == permission.SubjectID
-			})
+			matched = viewerOnTeam(data, permission.SubjectID)
 			matched = matched || data.Viewer.App && slices.Contains(data.Viewer.AppTeamIDs, permission.SubjectID)
 		}
 		if matched && documentRoleRank(permission.Role) > documentRoleRank(best) {
@@ -87,9 +90,7 @@ func documentRole(s *server, data domain.Bootstrap, document domain.Document) st
 		// A team document is listed for its teams' members (the bootstrap
 		// projection shows it), so they can always read it; editing and
 		// commenting follow the document's grants.
-		if slices.ContainsFunc(document.TeamIDs, func(teamID string) bool {
-			return slices.ContainsFunc(data.TeamMembers, func(member domain.TeamMember) bool { return member.UserID == data.Viewer.ID && member.TeamID == teamID })
-		}) {
+		if slices.ContainsFunc(document.TeamIDs, func(teamID string) bool { return viewerOnTeam(data, teamID) }) {
 			return "viewer"
 		}
 		return "none"
@@ -97,15 +98,46 @@ func documentRole(s *server, data domain.Bootstrap, document domain.Document) st
 	if data.Viewer.App && slices.ContainsFunc(document.TeamIDs, func(id string) bool { return slices.Contains(data.Viewer.AppTeamIDs, id) }) {
 		return "viewer"
 	}
-	if len(document.TeamIDs) == 0 {
+	if len(document.TeamIDs) == 0 && linkOpen {
 		return "viewer"
 	}
-	if slices.ContainsFunc(document.TeamIDs, func(teamID string) bool {
-		return slices.ContainsFunc(data.TeamMembers, func(member domain.TeamMember) bool { return member.UserID == data.Viewer.ID && member.TeamID == teamID })
-	}) {
+	if slices.ContainsFunc(document.TeamIDs, func(teamID string) bool { return viewerOnTeam(data, teamID) }) {
 		return "viewer"
 	}
 	return "none"
+}
+
+// viewerOnTeam reports whether the viewer is a member of the team. Inside a
+// mutation the snapshot's TeamMembers can lag the membership records, so the
+// actor's teams read for the callback (ViewerTeamIDs) count too.
+func viewerOnTeam(data domain.Bootstrap, teamID string) bool {
+	return slices.Contains(data.ViewerTeamIDs, teamID) || slices.ContainsFunc(data.TeamMembers, func(member domain.TeamMember) bool {
+		return member.UserID == data.Viewer.ID && member.TeamID == teamID
+	})
+}
+
+// documentLinkScopeOpen reports whether the viewer passes the scope the
+// document inherits from the private teams of its issue and projects (see
+// store.DocumentLinkScope): a member of one of those teams (or of a private
+// team above it), or an application installed in one, passes.
+func documentLinkScopeOpen(data domain.Bootstrap, document domain.Document) bool {
+	if len(document.InheritedTeamIDs) == 0 {
+		return true
+	}
+	return store.NewDocumentLinkScope(data.Teams, data.TeamSettings).Open(document, func(teamID string) bool {
+		if data.Viewer.App {
+			return data.Viewer.Active && slices.Contains(data.Viewer.AppTeamIDs, teamID)
+		}
+		if viewerOnTeam(data, teamID) {
+			return true
+		}
+		// Members of a private parent team read its sub-teams.
+		view := data
+		for _, id := range data.ViewerTeamIDs {
+			view.TeamMembers = append(slices.Clip(view.TeamMembers), domain.TeamMember{TeamID: id, UserID: data.Viewer.ID, Role: "member"})
+		}
+		return store.TeamContentVisible(view, teamID, data.Viewer.ID, data.ViewerRole)
+	})
 }
 
 func documentRoleRank(role string) int {
@@ -384,31 +416,60 @@ func syncDocumentProjectResources(data *domain.Bootstrap, document domain.Docume
 	}
 }
 
-// documentTeamIDs keeps a document's access scope aligned with the resources
-// it is attached to. A document linked from an issue or project must remain
-// readable to the same team-scoped application principals that can read the
-// parent resource. The explicit team selection is retained and inherited
-// teams are added without widening a workspace-only document.
-func documentTeamIDs(data *domain.Bootstrap, explicit []string, issueID string, projectIDs []string) []string {
-	teamIDs := normalizedStrings(explicit)
+// inheritDocumentTeams records the teams a document inherits from the issue
+// and projects it is attached to (domain.Document.InheritedTeamIDs; their
+// private teams scope it, see documentLinkScopeOpen). The document's own
+// teams and its grants are left as they are, so attaching a document when it
+// is created or later gives the same access, and the user's team choice is
+// never rewritten. The issue's team is read when the issue is loaded, else
+// the recorded IssueTeamID is kept. It reports whether the inherited teams
+// changed.
+func inheritDocumentTeams(data *domain.Bootstrap, document *domain.Document) bool {
+	before := document.InheritedTeamIDs
+	if document.IssueID == "" {
+		document.IssueTeamID = ""
+	} else if issue, err := issueByID(data, document.IssueID); err == nil {
+		document.IssueTeamID = issue.Team.ID
+	}
+	var teams []string
 	add := func(teamID string) {
-		if teamID != "" && !slices.Contains(teamIDs, teamID) {
-			teamIDs = append(teamIDs, teamID)
+		// A deleted team is no longer in the workspace and scopes nothing.
+		if teamID != "" && !slices.Contains(teams, teamID) && slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) {
+			teams = append(teams, teamID)
 		}
 	}
-	if issueID != "" {
-		if issue, err := issueByID(data, issueID); err == nil {
-			add(issue.Team.ID)
-		}
-	}
-	for _, projectID := range projectIDs {
+	add(document.IssueTeamID)
+	for _, projectID := range document.ProjectIDs {
 		if project, err := fullProjectByID(data, projectID); err == nil {
 			for _, teamID := range project.TeamIDs {
 				add(teamID)
 			}
 		}
 	}
-	return teamIDs
+	document.InheritedTeamIDs = teams
+	return !slices.Equal(before, teams)
+}
+
+// moveIssueDocuments keeps the documents attached to an issue scoped to the
+// team the issue moved to. Only the derived scope changes, so the documents'
+// version (and an open editor's expectedVersion) stays valid.
+func moveIssueDocuments(data *domain.Bootstrap, issueID, teamID string) {
+	for index := range data.Documents {
+		if document := &data.Documents[index]; document.IssueID == issueID {
+			document.IssueTeamID = teamID
+			inheritDocumentTeams(data, document)
+		}
+	}
+}
+
+// refreshProjectDocuments re-derives the inherited teams of the documents
+// attached to a project whose teams changed.
+func refreshProjectDocuments(data *domain.Bootstrap, projectID string) {
+	for index := range data.Documents {
+		if document := &data.Documents[index]; slices.Contains(document.ProjectIDs, projectID) {
+			inheritDocumentTeams(data, document)
+		}
+	}
 }
 
 func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
@@ -454,10 +515,10 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 				return "", errInvalid
 			}
 		}
-		teams = documentTeamIDs(data, teams, issueID, projects)
 		created = domain.Document{ID: fmt.Sprintf("document_%d", now.UnixNano()), SlugID: documentSlugID(title, newDocumentSlugSuffix()), Title: title, Color: "#8b8b90", Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), ProjectIDs: projects, TeamIDs: teams, IssueID: issueID, SubscriberIDs: []string{data.Viewer.ID}, ContentData: map[string]any{"type": "doc", "content": []any{}}, CreatedAt: now, UpdatedAt: now, Revisions: []domain.DocumentRevision{}, Permissions: []domain.DocumentPermission{{ID: fmt.Sprintf("document_permission_%d", now.UnixNano()), DocumentID: "", SubjectType: "user", SubjectID: data.Viewer.ID, Role: "owner", CreatedAt: now, UpdatedAt: now}}}
 		created.Permissions[0].DocumentID = created.ID
 		created.Permissions = append(created.Permissions, defaultDocumentGrants(created, now)...)
+		inheritDocumentTeams(data, &created)
 		if template != nil {
 			created.Icon, created.Content, created.ContentState = template.Icon, template.Content, template.ContentState
 			if template.Color != "" {
@@ -510,7 +571,12 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 	var compactCollaborationID, replacedCollaborationID string
 	workspace := workspaceKey(r)
 	directory := s.documentMemberDirectory(r)
-	err := s.store.MutateWorkspace(documentMutationScope(r.Context(), id, input.IssueID), workspaceKey(r), favoriteMutationEvent("document.updated", input), id, input, func(data *domain.Bootstrap) error {
+	scope := documentMutationScope(r.Context(), id, input.IssueID)
+	if input.ProjectIDs != nil && input.IssueID == nil {
+		// Re-deriving the inherited scope reads the attached issue's team.
+		scope = documentLinkMutationScope(r.Context(), id)
+	}
+	err := s.store.MutateWorkspace(scope, workspaceKey(r), favoriteMutationEvent("document.updated", input), id, input, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
 			return err
@@ -588,10 +654,11 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 			}
 			document.IssueID = value
 		}
-		inheritedTeams := documentTeamIDs(data, document.TeamIDs, document.IssueID, document.ProjectIDs)
-		if !slices.Equal(inheritedTeams, document.TeamIDs) {
-			document.TeamIDs = inheritedTeams
-			moveDocumentTeamGrants(document, before.TeamIDs, now)
+		// Only a change of the document's links re-derives the scope it
+		// inherits, so an unrelated edit never changes who can open it.
+		linksChanged := input.IssueID != nil || input.ProjectIDs != nil
+		if linksChanged {
+			inheritDocumentTeams(data, document)
 		}
 		if input.SubscriberIDs != nil {
 			if !validateResourceIDs(data, "user", *input.SubscriberIDs) {
@@ -657,7 +724,7 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 				log.Printf("clear replaced collaboration document=%s: %v", replacedCollaborationID, deleteErr)
 			}
 		}
-		if input.TeamIDs != nil || input.ProjectIDs != nil {
+		if input.TeamIDs != nil || input.ProjectIDs != nil || input.IssueID != nil {
 			s.realtime.invalidateDocumentAccess(workspace, updated.ID)
 		}
 		s.dispatchNotificationEmails(r.Context(), workspace)

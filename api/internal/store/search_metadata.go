@@ -27,7 +27,7 @@ type searchMetadataKind struct {
 
 var searchMetadataKinds = []searchMetadataKind{
 	{"project", "projects", []string{"name", "summary", "description", "icon", "color", "status", "lead", "teamIds"}, []string{"name", "summary", "description"}},
-	{"document", "documents", []string{"title", "content", "icon", "color", "creator", "teamIds", "projectIds", "permissions"}, []string{"title", "content"}},
+	{"document", "documents", []string{"title", "content", "icon", "color", "creator", "teamIds", "projectIds", "permissions", "inheritedTeamIds"}, []string{"title", "content"}},
 	{"initiative", "initiatives", []string{"name", "summary", "description", "icon", "color", "status", "health", "creator", "owner", "leadTeamId", "contributingTeamIds", "projectIds"}, []string{"name", "summary", "description"}},
 	{"member", "users", []string{"name", "displayName", "email", "active"}, []string{"name", "displayName", "email"}},
 	{"customer", "customers", []string{"name", "domains", "ownerId", "status", "tier"}, []string{"name", "domains", "status", "tier"}},
@@ -46,6 +46,7 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 			result.Teams = append(result.Teams, team)
 		}
 	}
+	linkScope := NewDocumentLinkScope(policy.Teams, policy.TeamSettings)
 	limit := q.Limit
 	if limit < 1 || limit > 500 {
 		limit = 100
@@ -199,7 +200,7 @@ func (s *SQLiteStore) SearchMetadata(ctx context.Context, policy domain.Bootstra
 				return result, err
 			}
 			for _, raw := range batch {
-				ok, err := s.appendSearchMetadata(ctx, &result, policy, q.Scope, allowed, kind.kind, raw)
+				ok, err := s.appendSearchMetadata(ctx, &result, policy, q.Scope, allowed, linkScope, kind.kind, raw)
 				if err != nil {
 					return result, err
 				}
@@ -285,7 +286,7 @@ func notCJK(r rune) bool {
 }
 
 func searchMetadataJSONField(field, kind string) bool {
-	return slices.Contains([]string{"teamIds", "projectIds", "issueIds", "contributingTeamIds", "permissions", "domains", "creator", "lead", "owner", "active"}, field) || field == "status" && kind == "project"
+	return slices.Contains([]string{"teamIds", "projectIds", "issueIds", "contributingTeamIds", "inheritedTeamIds", "permissions", "domains", "creator", "lead", "owner", "active"}, field) || field == "status" && kind == "project"
 }
 
 func (s *SQLiteStore) searchJSONArrayMember(column, field string) string {
@@ -402,7 +403,7 @@ func (s *SQLiteStore) searchMetadataFilter(kind string, node IssueFilter, depth 
 	return "(" + strings.Join(clauses, " AND ") + ")", args, nil
 }
 
-func (s *SQLiteStore) appendSearchMetadata(ctx context.Context, result *domain.Bootstrap, policy domain.Bootstrap, q IssueRecordQuery, allowed map[string]bool, kind string, raw []byte) (bool, error) {
+func (s *SQLiteStore) appendSearchMetadata(ctx context.Context, result *domain.Bootstrap, policy domain.Bootstrap, q IssueRecordQuery, allowed map[string]bool, linkScope *DocumentLinkScope, kind string, raw []byte) (bool, error) {
 	if !json.Valid(raw) {
 		return false, nil
 	}
@@ -441,8 +442,11 @@ func (s *SQLiteStore) appendSearchMetadata(ctx context.Context, result *domain.B
 		}
 		// A workspace admin reads every document except those only in private
 		// teams they have not joined.
-		readable := admin || q.Access.WorkspaceAdmin && (len(item.TeamIDs) == 0 || slices.ContainsFunc(item.TeamIDs, func(id string) bool { return slices.Contains(q.Access.VisibleTeamIDs, id) }))
-		if !readable && item.Creator.ID != policy.Viewer.ID && !(len(item.Permissions) == 0 && (len(item.TeamIDs) == 0 || slices.ContainsFunc(item.TeamIDs, func(id string) bool { return memberTeams[id] })) || documentPermissionAllows(&policy, item, memberTeams)) {
+		// A document attached to a private team's issue or project is scoped
+		// to that team (see DocumentLinkScope).
+		linkOpen := admin || linkScope.Open(item, func(id string) bool { return allowed[id] })
+		readable := admin || q.Access.WorkspaceAdmin && linkOpen && (len(item.TeamIDs) == 0 || slices.ContainsFunc(item.TeamIDs, func(id string) bool { return slices.Contains(q.Access.VisibleTeamIDs, id) }))
+		if !readable && item.Creator.ID != policy.Viewer.ID && !(len(item.Permissions) == 0 && (len(item.TeamIDs) == 0 && linkOpen || slices.ContainsFunc(item.TeamIDs, func(id string) bool { return memberTeams[id] })) || documentGrantAllows(&policy, item, memberTeams, linkOpen)) {
 			return false, nil
 		}
 		if q.AllowedTeamIDs != nil && len(item.TeamIDs) > 0 && !teamAllowed(item.TeamIDs) {
