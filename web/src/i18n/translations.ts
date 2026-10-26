@@ -857,6 +857,8 @@ export const zhCN: Record<string, string> = {
   "Contributing team": "参与团队",
   "No contributing team": "无参与团队",
   "Change lead team": "更改主导团队",
+  "Change lead team…": "更改主导团队…",
+  "Project teams": "项目团队",
   "Change contributing teams": "更改参与团队",
   "Comments and changes to initiative description": "评论和目标描述变更",
   "New initiative update is posted": "发布新的目标更新",

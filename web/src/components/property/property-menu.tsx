@@ -46,6 +46,16 @@ export interface PropertyOption {
   action?: boolean
   hoverContent?: ReactNode
   hoverClassName?: string
+  /** A row that opens a single-select submenu to its right (e.g. a project's lead team). Choosing the row itself opens the submenu. */
+  submenu?: PropertyOptionSubmenu
+}
+
+export interface PropertyOptionSubmenu {
+  placeholder: string
+  heading: string
+  options: PropertyOption[]
+  selectedId: string
+  onChoose: (id: string) => void
 }
 
 export type PropertyMenuKind = 'standard' | 'labels' | 'project-labels' | 'project' | 'milestone'
@@ -106,6 +116,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   const [activeTrigger, setActiveTrigger] = useState<string>()
   const [hoverOpen, setHoverOpen] = useState(false)
   const [openLabelGroupId, setOpenLabelGroupId] = useState<string>()
+  const [openSubmenuId, setOpenSubmenuId] = useState<string>()
   const listboxId = useId()
   const selected = multiple || selectedIds.length ? selectedIds : [selectedId ?? options.find(option => option.label === value)?.id ?? '']
   const selectionKey = JSON.stringify(selected)
@@ -125,6 +136,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
     options: orderedOptions,
     selectedIds: selected,
     onOpenChange: setOpen,
+    intercept: option => { if (!option.submenu) return false; setOpenSubmenuId(option.id); return true },
     onSelect: option => { void onChange?.(option.id) },
   })
   const labelMenu = groupLabelOptions(command.filteredOptions, selectedSet)
@@ -150,6 +162,10 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
     if (event.key === 'Enter' && canCreateLabel && !command.filteredOptions.length) { event.preventDefault(); createLabel(); return }
     if (event.key === 'Enter' && canCreateMilestone && !command.filteredOptions.length) { event.preventDefault(); createMilestone(); return }
     if (event.key === 'Enter' && canCreateStandard && !command.filteredOptions.length) { event.preventDefault(); createStandard(); return }
+    if (event.key === 'ArrowRight' && !command.query) {
+      const submenuOption = command.filteredOptions.find(option => option.id === command.activeId && option.submenu)
+      if (submenuOption) { event.preventDefault(); setOpenSubmenuId(submenuOption.id); return }
+    }
     command.onKeyDown(event)
   }
   const placeholder = searchPlaceholder ?? (kind === 'labels' ? 'Change or add labels…' : kind === 'project' ? 'Add to project…' : `Change ${label.toLowerCase()}…`)
@@ -171,13 +187,13 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
             {kind === 'labels' && <>{labelMenu.selectedOptions.length > 0 && <>{showGroupHeadings && <div className="property-command-group">{t('Frequently used')}</div>}{labelMenu.selectedOptions.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked labelHover listboxId={listboxId} icon={iconFor(label)} multi showGroupLabel onChoose={() => command.choose(option)} onActive={() => { setOpenLabelGroupId(undefined); command.setActiveId(option.id) }}/>)}</>}{showGroupHeadings && (labelMenu.options.length > 0 || labelMenu.groups.length > 0) && <div className="property-command-group">{t('Labels')}</div>}{labelMenu.groups.map(group => <LabelGroupOption key={group.id} group={group} open={openLabelGroupId === group.id} selectedIds={selectedSet} listboxId={listboxId} onOpenChange={next => setOpenLabelGroupId(next ? group.id : undefined)} onChoose={option => command.choose(option)} onCreate={onCreate ? name => { setOpen(false); void onCreate(name, group.id) } : undefined}/>)}{labelMenu.options.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={false} labelHover listboxId={listboxId} icon={iconFor(label)} multi onChoose={() => command.choose(option)} onActive={() => { setOpenLabelGroupId(undefined); command.setActiveId(option.id) }}/>) }{canCreateLabel && <button data-i18n-ignore type="button" className="property-command-create" role="option" aria-label={`${createLabelText}: ${createName}`} onClick={createLabel}><Plus size={15}/><span data-i18n-ignore>{createLabelText}: <strong data-i18n-ignore>"{createName}"</strong></span></button>}{showLabelCreateHint && <div aria-disabled="true" className="property-command-create-hint" data-i18n-ignore role="option"><Plus size={16}/><span>{emptyLabel}</span></div>}</>}
             {kind === 'project' && <>{noProject.map(option => <CommandOption key="none" option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }{selectedProjects.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>)}{otherProjects.length > 0 && <div className="property-command-group">{teamName ? t('Projects in {team} team').replace('{team}', teamName) : t('Projects')}</div>}{otherProjects.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={false} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }{onCreate&&<><div className="property-command-group">{t('New project')}</div><button type="button" className="property-command-create" role="option" aria-label={t('Create new project…')} onClick={()=>{setOpen(false);void onCreate('')}}><Plus size={15}/><span>{t('Create new project…')}</span></button></>}</>}
             {kind === 'milestone' && <>{command.filteredOptions.map(option => <CommandOption key={option.id || 'none'} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>)}{canCreateMilestone&&<><div className="property-command-group">{t('New project milestone')}</div><button type="button" className="property-command-create" role="option" aria-label={t('Create new milestone…')} onClick={createMilestone}><Plus size={15}/><span>{t('Create new milestone…')}</span></button></>}</>}
-            {kind === 'standard' && standardSections.map(section => <div className="property-command-section" key={section.id}>{section.label && <div className="property-command-group">{t(section.label)}</div>}{section.options.map(option => <CommandOption key={option.id || 'none'} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} multi={multiple} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>)}</div>) }
+            {kind === 'standard' && standardSections.map(section => <div className="property-command-section" key={section.id}>{section.label && <div className="property-command-group">{t(section.label)}</div>}{section.options.map(option => <CommandOption key={option.id || 'none'} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} multi={multiple} submenuOpen={openSubmenuId === option.id} onSubmenuOpenChange={next => setOpenSubmenuId(next ? option.id : undefined)} onSubmenuChosen={() => setOpen(false)} onChoose={() => command.choose(option)} onActive={() => { if (openSubmenuId && openSubmenuId !== option.id) setOpenSubmenuId(undefined); command.setActiveId(option.id) }}/>)}</div>) }
             {canCreateStandard && createOptionLabel && <button type="button" className="property-command-create" role="option" aria-label={createOptionLabel(createName)} onClick={createStandard}><Plus size={16}/><span data-i18n-ignore>{createOptionLabel(createName)}</span></button>}
             {!command.filteredOptions.length && !canCreateLabel && !canCreateMilestone && !canCreateStandard && !showLabelCreateHint && <div className="core-property-empty">{t(emptyLabel ?? 'No results')}</div>}
           </div>}
         </div>
   if (embedded) return <Tooltip.Provider delayDuration={450} skipDelayDuration={400}>{content}</Tooltip.Provider>
-  return <Tooltip.Provider delayDuration={450} skipDelayDuration={400}><Tooltip.Root open={Boolean(tooltipContent) && !open && hoverOpen} onOpenChange={setHoverOpen}><Popover.Root open={open} onOpenChange={next => { setOpen(next); if (next) setHoverOpen(false); else { setActiveTrigger(undefined); setOpenLabelGroupId(undefined) } }}>
+  return <Tooltip.Provider delayDuration={450} skipDelayDuration={400}><Tooltip.Root open={Boolean(tooltipContent) && !open && hoverOpen} onOpenChange={setHoverOpen}><Popover.Root open={open} onOpenChange={next => { setOpen(next); if (next) setHoverOpen(false); else { setActiveTrigger(undefined); setOpenLabelGroupId(undefined); setOpenSubmenuId(undefined) } }}>
     {menuTrigger}
     <Popover.Portal>
       <Popover.Content data-flow-motion="floating" className={`property-command-surface property-command-${kind}${labelGroupId ? ' is-label-group' : ''}${surfaceClassName ? ` ${surfaceClassName}` : ''}`} role="dialog" aria-label={`Change ${label}`} align={align} alignOffset={alignOffset} side={side} sideOffset={4} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()}>
@@ -261,13 +277,71 @@ function LabelGroupOption({ group, open, selectedIds, listboxId, onOpenChange, o
   </button></Popover.Anchor><Popover.Portal><Popover.Content data-flow-motion="floating" className="property-command-label-submenu" side="right" align="start" alignOffset={-6} sideOffset={-2} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()}><div onKeyDown={onKeyDown}><div className="property-command-search"><input ref={inputRef} value={query} onChange={event=>{setQuery(event.target.value);const normalized=event.target.value.trim().toLocaleLowerCase();setActiveId(group.options.find(option=>option.label.toLocaleLowerCase().includes(normalized))?.id)}} aria-label={group.label} placeholder={group.label} autoComplete="off" spellCheck={false}/></div><div className="property-command-options" role="listbox" aria-label={group.label}>{filtered.map(option => <CommandOption key={option.id} option={option} active={option.id === activeId} checked={selectedIds.has(option.id)} listboxId={`${listboxId}-${group.id}`} icon={<LabelIcon size={14}/>} onChoose={() => choose(option)} onActive={() => setActiveId(option.id)}/>)}{canCreate&&<button type="button" className="property-command-create" role="option" aria-label={`${t('Create label in group')} "${group.label}": "${createName}"`} onClick={() => onCreate?.(createName)}><Plus size={15}/><span data-i18n-ignore>{t('Create label in group')} "{group.label}": <strong data-i18n-ignore>"{createName}"</strong></span></button>}{!filtered.length&&!canCreate&&<div className="core-property-empty">{t('No results')}</div>}</div></div></Popover.Content></Popover.Portal></Popover.Root>
 }
 
-function CommandOption({ option, active, checked, icon, labelHover = false, listboxId, multi = false, showGroupLabel = false, onChoose, onActive }: { option: PropertyOption; active: boolean; checked: boolean; icon: ReactNode; labelHover?: boolean; listboxId: string; multi?: boolean; showGroupLabel?: boolean; onChoose: () => void; onActive: () => void }) {
+function CommandOption({ option, active, checked, icon, labelHover = false, listboxId, multi = false, showGroupLabel = false, submenuOpen = false, onSubmenuOpenChange, onSubmenuChosen, onChoose, onActive }: { option: PropertyOption; active: boolean; checked: boolean; icon: ReactNode; labelHover?: boolean; listboxId: string; multi?: boolean; showGroupLabel?: boolean; submenuOpen?: boolean; onSubmenuOpenChange?: (open: boolean) => void; onSubmenuChosen?: () => void; onChoose: () => void; onActive: () => void }) {
   const { t } = useI18n()
+  if (option.submenu) return <OptionSubmenuRow option={option} submenu={option.submenu} active={active} checked={checked} listboxId={listboxId} multi={multi} open={submenuOpen} onOpenChange={next => onSubmenuOpenChange?.(next)} onChosen={onSubmenuChosen} onActive={onActive}/>
   const row = <button aria-disabled={option.disabled || undefined} className={showGroupLabel && option.groupLabel ? 'is-grouped-label' : undefined} disabled={option.disabled} id={`${listboxId}-${option.id || 'none'}`} role="option" type="button" aria-selected={active} aria-checked={checked} onPointerMove={onActive} onFocus={onActive} onClick={onChoose}>
     <span className="property-command-option-background"/>{multi && !option.action && <span className="property-command-checkbox">{checked && <CheckboxMark/>}</span>}<span className="property-command-icon">{option.icon ?? (option.color ? <i className="option-dot" style={{ background: option.color }}/> : icon)}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.labelContent ?? (option.i18nIgnore ? option.label : t(option.label))}</span>{showGroupLabel && option.groupLabel && <span className="property-command-option-group" data-i18n-ignore>{option.groupLabel}</span>}{!multi && checked && <span className="property-command-check"><FlowGlyph name="check" width={16} height={16}/></span>}{option.end && <span className="property-command-option-end">{t(option.end)}</span>}{option.shortcut && <kbd>{option.shortcut}</kbd>}
   </button>
   if (option.hoverContent) return <OptionHover className={option.hoverClassName} content={option.hoverContent}>{row}</OptionHover>
   return labelHover && option.color ? <LabelHoverPreview label={{ name: option.label, color: option.color, description: option.description, issueCount: option.issueCount, scope: option.scope, resourceType: option.resourceType }}>{row}</LabelHoverPreview> : row
+}
+
+/** A row that opens a single-select submenu to its right on hover, click or ArrowRight. */
+function OptionSubmenuRow({ option, submenu, active, checked, listboxId, multi, open, onOpenChange, onChosen, onActive }: { option: PropertyOption; submenu: PropertyOptionSubmenu; active: boolean; checked: boolean; listboxId: string; multi: boolean; open: boolean; onOpenChange: (open: boolean) => void; onChosen?: () => void; onActive: () => void }) {
+  const { t } = useI18n()
+  const [query, setQuery] = useState('')
+  const [activeId, setActiveId] = useState<string>()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const openTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const normalized = query.trim().toLocaleLowerCase()
+  const filtered = normalized ? submenu.options.filter(item => `${item.label} ${item.keywords ?? ''}`.toLocaleLowerCase().includes(normalized)) : submenu.options
+  useEffect(() => () => { if (openTimer.current) clearTimeout(openTimer.current) }, [])
+  useEffect(() => {
+    if (!open) return
+    setQuery('')
+    setActiveId(submenu.selectedId || submenu.options[0]?.id)
+    requestAnimationFrame(() => inputRef.current?.focus())
+    // Opening resets the search and highlights the current choice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+  const choose = (item: PropertyOption) => { onOpenChange(false); onChosen?.(); submenu.onChoose(item.id) }
+  const openFromHover = () => {
+    onActive()
+    if (open || openTimer.current) return
+    openTimer.current = setTimeout(() => { openTimer.current = undefined; onOpenChange(true) }, 300)
+  }
+  const cancelHoverOpen = () => { if (openTimer.current) { clearTimeout(openTimer.current); openTimer.current = undefined } }
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape' || (event.key === 'ArrowLeft' && !query)) { event.preventDefault(); event.stopPropagation(); onOpenChange(false); return }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      const current = filtered.findIndex(item => item.id === activeId)
+      const offset = event.key === 'ArrowDown' ? 1 : -1
+      const next = current < 0 ? (offset > 0 ? 0 : filtered.length - 1) : (current + offset + filtered.length) % filtered.length
+      if (filtered[next]) setActiveId(filtered[next].id)
+      return
+    }
+    if (event.key === 'Enter') {
+      const item = filtered.find(candidate => candidate.id === activeId) ?? filtered[0]
+      if (item) { event.preventDefault(); choose(item) }
+    }
+  }
+  return <Popover.Root open={open} onOpenChange={onOpenChange}>
+    <Popover.Anchor asChild><button aria-checked={checked} aria-expanded={open} aria-haspopup="listbox" aria-selected={active} className="has-submenu" id={`${listboxId}-${option.id}`} role="option" type="button" onClick={() => onOpenChange(true)} onFocus={onActive} onPointerEnter={openFromHover} onPointerLeave={cancelHoverOpen} onPointerMove={onActive}>
+      <span className="property-command-option-background"/>{multi && <span className="property-command-checkbox is-locked">{checked && <CheckboxMark/>}</span>}<span className="property-command-icon">{option.icon}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.labelContent ?? (option.i18nIgnore ? option.label : t(option.label))}</span><ChevronRight className="property-command-group-chevron" size={13}/>
+    </button></Popover.Anchor>
+    <Popover.Portal><Popover.Content data-flow-motion="floating" className="property-command-surface property-command-option-submenu" side="right" align="start" alignOffset={-6} sideOffset={-2} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()} role="dialog" aria-label={submenu.placeholder}>
+      <div onKeyDown={onKeyDown}>
+        <div className="property-command-search"><input ref={inputRef} value={query} onChange={event => { setQuery(event.target.value); const next = event.target.value.trim().toLocaleLowerCase(); setActiveId(submenu.options.find(item => `${item.label} ${item.keywords ?? ''}`.toLocaleLowerCase().includes(next))?.id) }} aria-label={submenu.placeholder} placeholder={submenu.placeholder} autoComplete="off" spellCheck={false}/></div>
+        <div className="property-command-options" role="listbox" aria-label={submenu.heading}>
+          {filtered.length > 0 && <div className="property-command-group">{t(submenu.heading)}</div>}
+          {filtered.map(item => <CommandOption key={item.id} option={item} active={item.id === activeId} checked={item.id === submenu.selectedId} listboxId={`${listboxId}-submenu`} icon={null} onChoose={() => choose(item)} onActive={() => setActiveId(item.id)}/>)}
+          {!filtered.length && <div className="core-property-empty">{t('No results')}</div>}
+        </div>
+      </div>
+    </Popover.Content></Popover.Portal>
+  </Popover.Root>
 }
 
 function OptionHover({ children, className, content }: { children: ReactNode; className?: string; content: ReactNode }) {

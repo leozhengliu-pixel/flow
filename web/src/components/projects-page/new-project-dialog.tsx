@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type Keyboard
 import { CalendarPlus, Flag, LayoutTemplate, X } from 'lucide-react'
 import { PlusIcon } from './projects-page-icons'
 import { PropertyMenu, type PropertyOption } from '@/components/property/property-menu'
+import { ProjectTeamsPicker } from './project-teams-picker'
 import { ViewGlyph, ViewIconPicker } from '@/components/views/view-icon-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { CalendarIcon, LabelIcon, MembersIcon, PriorityIcon } from '@/components/issue/issue-icons'
@@ -56,7 +57,7 @@ export type NewProjectMilestoneDraft = {
   templateMilestoneId?: string
 }
 
-export type NewProjectChoice = { id: string, label: string, color?: string, email?: string, name?: string, avatarUrl?: string, active?: boolean, online?: boolean, invited?: boolean, disabled?: boolean, end?: string, groupId?: string, groupLabel?: string, groupColor?: string, scope?: string, group?: 'your' | 'other', icon?: ReactNode, initials?: string, hoverContent?: ReactNode, hoverClassName?: string, previewData?: ProjectDependencyPreviewData }
+export type NewProjectChoice = { id: string, label: string, color?: string, teamKey?: string, teamIcon?: string, email?: string, name?: string, avatarUrl?: string, active?: boolean, online?: boolean, invited?: boolean, disabled?: boolean, end?: string, groupId?: string, groupLabel?: string, groupColor?: string, scope?: string, group?: 'your' | 'other', icon?: ReactNode, initials?: string, hoverContent?: ReactNode, hoverClassName?: string, previewData?: ProjectDependencyPreviewData }
 export type NewProjectTemplateChoice = {
   id: string
   label: string
@@ -217,7 +218,7 @@ export function NewProjectDialog({
     <div ref={createMotionRef} data-flow-motion="create" data-state={open ? 'open' : 'closed'} aria-hidden={discardOpen || undefined} className="lp-new-project__panel" inert={discardOpen || undefined}>
     <form className="lp-new-project__form" onSubmit={submit} ref={panelRef}>
       <header className="lp-new-project__header">
-        {teams.length<2?<button aria-label="Change project teams" className="lp-new-project__team" disabled type="button">{teams[0]?.icon ?? <ViewIconPickerGlyph color={teams[0]?.color} icon="Team"/>}<span>{teamLabel}</span></button>:<PropertyMenu compact multiple label="Teams" value={draft.teamIds.length===1?teams.find(team=>team.id===draft.teamIds[0])?.label??teamLabel:`${draft.teamIds.length} teams`} selectedIds={draft.teamIds} options={teams.map(team=>({id:team.id,label:team.label,color:team.color,icon:team.icon,i18nIgnore:true}))} trigger={<>{teams.find(team=>draft.teamIds.includes(team.id))?.icon ?? <ViewIconPickerGlyph color={teams[0]?.color} icon="Team"/>}<span data-i18n-ignore>{draft.teamIds.length===1?teams.find(team=>team.id===draft.teamIds[0])?.label??teamLabel:`${draft.teamIds.length} teams`}</span></>} triggerClassName="lp-new-project__team" ariaLabel="Change project teams" onChange={id=>{if(draft.teamIds.includes(id)&&draft.teamIds.length===1)return;set('teamIds',draft.teamIds.includes(id)?draft.teamIds.filter(value=>value!==id):[...draft.teamIds,id])}}/>}
+        {teams.length<2?<button aria-label="Change project teams" className="lp-new-project__team" disabled type="button">{teams[0]?.icon ?? <ViewIconPickerGlyph color={teams[0]?.color} icon="Team"/>}<span>{teamLabel}</span></button>:<ProjectTeamsPicker ariaLabel="Change project teams" fallbackLabel={teamLabel} onChange={teamIds=>set('teamIds',teamIds)} teamIds={draft.teamIds} teams={teams.map(team=>({id:team.id,name:team.label,key:team.teamKey,color:team.color,icon:team.teamIcon}))} triggerClassName="lp-new-project__team" alignOffset={1} searchShortcut="P, then T"/>}
         <span>›</span><span>New project</span>
         {!agentOpen && <button aria-expanded={agentOpen} aria-label={t('Create with Agent')} className="lp-new-project__agent-toggle" onClick={() => setAgentOpen(true)} type="button"><AgentPointerIcon size={14}/><span>{t('Create with Agent')}</span></button>}
         <button aria-label="Discard project" className="lp-new-project__discard" disabled={submitting} onClick={requestClose} type="button"><X size={16}/></button>

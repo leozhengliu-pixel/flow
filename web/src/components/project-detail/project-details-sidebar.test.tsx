@@ -408,4 +408,52 @@ describe('project sidebar parity', () => {
     renderSidebar({}, { pickerRequest: { kind: 'targetDate', id: 2 } })
     expect(await screen.findByRole('button', { name: 'Change project target date' })).toHaveAttribute('aria-expanded', 'true')
   })
+  it('edits project teams as a multi-select whose first team is the lead team', async () => {
+    const user = userEvent.setup()
+    const data = makeBootstrap()
+    const teams = [{ ...data.teams[0], id: 'team-a', name: 'Alpha', key: 'ALP' }, { ...data.teams[0], id: 'team-b', name: 'Beta', key: 'BET' }, { ...data.teams[0], id: 'team-c', name: 'Gamma', key: 'GAM' }]
+    const current = { ...project, id: 'project-teams', slugId: 'teams', name: 'Teams project', teamIds: ['team-a'], dependencyIds: [], createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z' }
+    const onUpdate = vi.fn().mockResolvedValue(undefined)
+    render(<I18nProvider><ProjectDetailsSidebar
+      availableIssueLabels={[]}
+      featureFlags={{}}
+      initiatives={[]}
+      integrationConnections={[]}
+      issueSummary={undefined}
+      labelGroups={[]}
+      labels={[]}
+      onConvertMilestone={vi.fn()}
+      onCreateMilestone={vi.fn()}
+      onDeleteMilestone={vi.fn()}
+      onMoveMilestone={vi.fn()}
+      onOpenIssueFilter={vi.fn()}
+      onOpenMilestoneIssues={vi.fn()}
+      onReorderMilestones={vi.fn()}
+      onTabChange={vi.fn()}
+      onUpdate={onUpdate}
+      onUpdateProject={vi.fn().mockResolvedValue(current)}
+      onUpdateMilestone={vi.fn()}
+      project={current}
+      projectIssues={[]}
+      projectRelations={[]}
+      projects={[current]}
+      projectStatuses={[current.status]}
+      projectUpdates={[]}
+      teams={teams}
+      users={data.users}
+      viewer={data.viewer}
+    /></I18nProvider>)
+
+    const trigger = screen.getByRole('combobox', { name: 'Change project teams' })
+    expect(trigger).toHaveTextContent('Alpha')
+    await user.click(trigger)
+    await user.click(screen.getByRole('option', { name: /Gamma/ }))
+    expect(onUpdate).toHaveBeenLastCalledWith({ teamIds: ['team-a', 'team-c'] })
+    await waitFor(() => expect(screen.queryByRole('listbox', { name: 'Teams' })).not.toBeInTheDocument())
+    // The only team stays checked: choosing it again changes nothing.
+    onUpdate.mockClear()
+    await user.click(trigger)
+    await user.click(screen.getByRole('option', { name: /Alpha/ }))
+    expect(onUpdate).not.toHaveBeenCalled()
+  })
 })

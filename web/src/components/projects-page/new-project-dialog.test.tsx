@@ -418,4 +418,44 @@ describe('NewProjectDialog', () => {
       milestones: [],
     }))
   })
+  it('picks several teams in the header pill: lead team first, closes on select, keeps the last team', async () => {
+    const user = userEvent.setup()
+    const onCreate = vi.fn().mockResolvedValue(undefined)
+    render(
+      <I18nProvider>
+        <NewProjectDialog
+          open
+          defaultTeamId="team-eng"
+          onClose={vi.fn()}
+          onCreate={onCreate}
+          statuses={[{ id: 'Planned', label: 'Planned' }]}
+          teams={[{ id: 'team-eng', label: 'Engineering', teamKey: 'ENG' }, { id: 'team-design', label: 'Design', teamKey: 'DES' }, { id: 'team-ops', label: 'Operations', teamKey: 'OPS' }]}
+        />
+      </I18nProvider>,
+    )
+    const pill = screen.getByRole('combobox', { name: 'Change project teams' })
+    expect(pill).toHaveTextContent('Engineering')
+    await user.click(pill)
+    await user.click(screen.getByRole('option', { name: /Design/ }))
+    await waitFor(() => expect(screen.queryByRole('listbox', { name: 'Teams' })).not.toBeInTheDocument())
+    expect(pill).toHaveTextContent('Engineering, DES')
+    await user.click(pill)
+    await user.click(screen.getByRole('option', { name: /Operations/ }))
+    expect(pill).toHaveTextContent('Engineering, DES, OPS')
+    await user.click(pill)
+    await user.click(screen.getByRole('option', { name: /Design/ }))
+    expect(pill).toHaveTextContent('Engineering, OPS')
+    await user.type(screen.getByRole('textbox', { name: 'Project name' }), 'Cross-team')
+    await user.click(screen.getByRole('button', { name: 'Create project' }))
+    await waitFor(() => expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ teamIds: ['team-eng', 'team-ops'] })))
+  })
+
+  it('shows a disabled team pill when the workspace has one team', () => {
+    render(
+      <I18nProvider>
+        <NewProjectDialog open onClose={vi.fn()} onCreate={vi.fn()} statuses={[{ id: 'Planned', label: 'Planned' }]} teams={[{ id: 'team-1', label: 'Team', color: '#5e6ad2' }]} />
+      </I18nProvider>,
+    )
+    expect(screen.getByRole('button', { name: 'Change project teams' })).toBeDisabled()
+  })
 })

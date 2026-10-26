@@ -737,7 +737,7 @@ export function ProjectsPage({
       defaultTeamId={scopeTeamId}
       teamLabel={(teams.find(team => team.id === scopeTeamId) ?? teams[0])?.name ?? 'Team'}
       workspaceName={(teams.find(team => team.id === scopeTeamId) ?? teams[0])?.name ?? workspaceKey}
-      teams={teams.map(team => ({ id: team.id, label: team.name, color: team.color, icon: <ViewGlyph color={team.color} icon={team.icon || 'Team'} /> }))}
+      teams={teams.map(team => ({ id: team.id, label: team.name, color: team.color, teamKey: team.key, teamIcon: team.icon || 'Team', icon: <ViewGlyph color={team.color} icon={team.icon || 'Team'} /> }))}
     />
     <ProjectsBulkActionBar
       onAction={(action, value) => { void runBulkAction(action, value).catch(() => undefined) }}
