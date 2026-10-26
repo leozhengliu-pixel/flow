@@ -512,7 +512,7 @@ export function ProjectIssues({
         data={issueData} query={pagedQuery} layout={display.layout === 'board' ? 'board' : 'list'}
         onLoadedIssuesChange={setLoadedIssues} onOpenIssueRecord={onOpenIssue}
         onMoveIssueRecord={(issue, input) => onUpdateIssue(issue.id, input)}
-        collapsedGroupIds={collapsed} displayProperties={display.properties}
+        collapsedGroupIds={collapsed} displayProperties={display.properties} nestedSubIssues={display.nestedSubIssues}
         propertyOptions={propertyOptions} selectedIds={selected}
         onContextAction={contextAction} onPropertyChange={changeProperty} onSelectIssue={select}
         onCreateIssue={group => onCreateIssue(project.id, milestoneScope?.id, group.createContext)}

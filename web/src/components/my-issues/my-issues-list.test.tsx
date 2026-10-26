@@ -15,6 +15,19 @@ describe('MyIssuesList virtualization', () => {
       expect(errors.mock.calls.flat().join(' ')).not.toContain('same key')
     } finally { errors.mockRestore() }
   })
+  it('nests sub-issues under their parent when nested sub-issues are on', async () => {
+    const state = { id: 'started', name: 'In progress', type: 'started' as const, color: '#f2c94c' }
+    const row = (id: string, parentId?: string): MyIssuesGroupData['issues'][number] => ({ id, identifier: `FLOW-${id}`, title: id, href: `#${id}`, priority: 0, state, parentId, createdAt: '2026-09-07T00:00:00.000Z', updatedAt: '2026-09-07T00:00:00.000Z' })
+    const groups: MyIssuesGroupData[] = [{ id: 'started', label: 'In progress', issues: [row('parent'), row('child-1', 'parent'), row('child-2', 'parent'), row('other')] }]
+    const view = (nestedSubIssues: boolean) => <I18nProvider><VirtuosoMockContext.Provider value={{ viewportHeight: 440, itemHeight: 44 }}><MyIssuesList groups={groups} nestedSubIssues={nestedSubIssues}/></VirtuosoMockContext.Provider></I18nProvider>
+    const { container, rerender } = render(view(true))
+    await waitFor(() => expect(container.querySelectorAll('a[data-issue-row-id]').length).toBe(4))
+    const nested = () => [...container.querySelectorAll('a[data-issue-row-id]')].map(link => `${link.getAttribute('data-issue-row-id')}:${link.getAttribute('data-nested')}`)
+    expect(nested()).toEqual(['parent:false', 'child-1:true', 'child-2:true', 'other:false'])
+    rerender(view(false))
+    await waitFor(() => expect(nested()).toEqual(['parent:false', 'child-1:false', 'child-2:false', 'other:false']))
+  })
+
   it('keeps large lists bounded to the visible viewport', async () => {
     const groups: MyIssuesGroupData[] = [{
       id: 'started',

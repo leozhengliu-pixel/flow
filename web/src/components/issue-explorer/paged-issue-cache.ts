@@ -1,5 +1,6 @@
 import type { Issue } from '@/types/flow'
 import { boundedIssueSequence } from '@/lib/navigation-context'
+import { nestIssueRows, nestedLinesByIssue } from './issue-grouping'
 
 export type IssuePageBlock = { items: Issue[]; nextCursor?: string; hasMore: boolean }
 
@@ -33,6 +34,8 @@ export class PagedIssueCache {
     if (value) { this.pages.delete(key); this.pages.set(key, value) }
     return value
   }
+  /** A cached page without marking it as recently used. */
+  peek(group: string, page: number) { return this.pages.get(this.key(group, page)) }
   put(group: string, page: number, value: IssuePageBlock, cursor?: string) {
     const key = this.key(group, page)
     const starts = this.starts.get(group) ?? [0]
@@ -105,6 +108,25 @@ export class PagedIssueCache {
     while (end + 1 < pages.length && pages[end].key[1] + 1 === pages[end + 1].key[1]) end++
     return boundedIssueSequence(pages.slice(start, end + 1).flatMap(page => page.block.items.map(issue => issue.id)), selected)
   }
+}
+
+export type NestedIssueRow = { id: string; parentId?: string; issue: Issue; pageIndex: number }
+
+/**
+ * A group's loaded rows in parent-before-children order (nested sub-issues), with their guide lines. Rows stop at
+ * the first page that is not cached (`missingPage`); the positions after it show that page's loading row.
+ */
+export function nestedGroupRows(cache: PagedIssueCache, group: { value: string; loaded: number }): { rows: NestedIssueRow[]; lines: Map<string, readonly boolean[]>; missingPage?: number } {
+  const loaded: NestedIssueRow[] = []
+  let missingPage: number | undefined
+  for (let pageIndex = 0; loaded.length < group.loaded; pageIndex++) {
+    const page = cache.peek(group.value, pageIndex)
+    if (!page) { missingPage = pageIndex; break }
+    for (const issue of page.items) loaded.push({ id: issue.id, parentId: issue.parentId, issue, pageIndex })
+    if (!page.items.length) break
+  }
+  const rows = nestIssueRows(loaded).rows
+  return { rows, lines: nestedLinesByIssue(rows), missingPage }
 }
 
 function listIssue(issue: Issue): Issue {

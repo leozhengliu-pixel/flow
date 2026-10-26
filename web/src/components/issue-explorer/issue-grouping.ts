@@ -305,19 +305,19 @@ function toGroup(descriptor: GroupDescriptor, issues: MyIssuesRowData[]): MyIssu
 }
 
 /** Parent-before-children projection used by nested sub-issues. */
-export function nestIssueRows(rows: MyIssuesRowData[]) {
+export function nestIssueRows<T extends { id: string; parentId?: string }>(rows: readonly T[]) {
   const byId = new Map(rows.map(row => [row.id, row]))
-  const children = new Map<string, MyIssuesRowData[]>()
+  const children = new Map<string, T[]>()
   for (const row of rows) {
     if (!row.parentId || !byId.has(row.parentId)) continue
     const siblings = children.get(row.parentId) ?? []
     siblings.push(row)
     children.set(row.parentId, siblings)
   }
-  const ordered: MyIssuesRowData[] = []
-  const roots = new Map<string, MyIssuesRowData>()
+  const ordered: T[] = []
+  const roots = new Map<string, T>()
   const seen = new Set<string>()
-  const visit = (row: MyIssuesRowData, root: MyIssuesRowData) => {
+  const visit = (row: T, root: T) => {
     if (seen.has(row.id)) return
     seen.add(row.id)
     ordered.push(row)
@@ -327,6 +327,15 @@ export function nestIssueRows(rows: MyIssuesRowData[]) {
   for (const row of rows) if (!row.parentId || !byId.has(row.parentId)) visit(row, row)
   for (const row of rows) visit(row, roots.get(row.id) ?? row)
   return { rows: ordered, roots }
+}
+
+/** Nesting guides of a parent-before-children list: one entry per level, true where that level's row is its parent's last child. */
+export function nestedLinesByIssue<T extends { id: string; parentId?: string }>(issues: readonly T[]) {
+  const byId = new Map(issues.map(item => [item.id, item])), children = new Map<string, T[]>()
+  for (const item of issues) { if (!item.parentId || !byId.has(item.parentId)) continue; const siblings = children.get(item.parentId) ?? []; siblings.push(item); children.set(item.parentId, siblings) }
+  const result = new Map<string, readonly boolean[]>()
+  for (const issue of issues) { const path: T[] = []; let child = issue; while (child.parentId) { const parent = byId.get(child.parentId); if (!parent) break; path.unshift(child); child = parent } result.set(issue.id, path.map(item => children.get(item.parentId!)?.at(-1)?.id === item.id)) }
+  return result
 }
 
 /**

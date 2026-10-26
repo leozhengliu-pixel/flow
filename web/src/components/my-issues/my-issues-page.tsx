@@ -262,6 +262,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         query={myIssuesPagedQuery}
         collapsedGroupIds={collapsedGroups}
         displayProperties={split || (controller.detailsOpen && previewIssueId) ? splitProperties : controller.display.properties}
+        nestedSubIssues={controller.display.nestedSubIssues}
         propertyOptions={rowOptions}
         selectedIds={controller.selectedIds}
         activeIssueId={split ? previewIssueId : undefined}

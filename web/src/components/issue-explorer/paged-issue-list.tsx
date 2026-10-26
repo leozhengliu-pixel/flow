@@ -4,6 +4,7 @@ import type { BootstrapData, Issue, IssueUpdateInput } from '@/types/flow'
 import { listIssueRecordGroups, listIssueRecords, type IssueQueryInput } from '@/lib/api'
 import { MyIssuesGroupHeader, MyIssuesRow, type MyIssuesGroupData, type MyIssuesListProps } from '@/components/my-issues/my-issues-list'
 import { issueToExplorerRow } from './issue-explorer-model'
+import { nestedGroupRows } from './paged-issue-cache'
 import { teamEquivalentState } from '@/lib/team-workflow'
 import { issueListState, pagedIssueListSignature, retainIssueList, trimPagedIssueListCache, type IssueListGroup } from './paged-issue-list-cache'
 import { ISSUE_QUERY_INVALIDATED, issueMayMatchQuery, queryUsesLabels, type IssueQueryInvalidation } from './paged-issue-invalidation'
@@ -17,7 +18,7 @@ const UNKNOWN_CUSTOMER_GROUP = '__unknown__'
 const PAGE_SIZE = 100
 type Group = IssueListGroup
 
-export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapsedChange, onCreateIssue, onOpenIssueRecord, onTotalChange, onLoadedIssuesChange, layout = 'list', onMoveIssueRecord, hiddenGroupIds = [], onHideGroup, onShowGroup, ...rowProps }: Omit<MyIssuesListProps, 'groups' | 'onOpenIssue'> & {
+export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapsedChange, onCreateIssue, onOpenIssueRecord, onTotalChange, onLoadedIssuesChange, layout = 'list', onMoveIssueRecord, hiddenGroupIds = [], onHideGroup, onShowGroup, nestedSubIssues = false, ...rowProps }: Omit<MyIssuesListProps, 'groups' | 'onOpenIssue'> & {
   data: BootstrapData
   query: IssueQueryInput
   onOpenIssueRecord: (issue: Issue, sequence?: string[]) => void
@@ -241,6 +242,10 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
   const listStyle = { '--issue-identifier-width': `${identifierLength.current.length}ch` } as CSSProperties
   const offsets: number[] = []; let offset = 0
   for (const count of counts) { offsets.push(offset); offset += count }
+  // Nested sub-issues: each group's loaded rows with children right after their parent when both are loaded in that group.
+  const nested = layout === 'list' && nestedSubIssues
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `revision` changes whenever the cached pages do
+  const nestedGroups = useMemo(() => nested ? new Map(groups.map(group => [group.value, nestedGroupRows(cache, group)])) : undefined, [nested, groups, cache, revision])
   const renderList = (): ReactNode => {
     if (error && !cache.retainedEntities) return <div className={styles.state} role="alert"><p>{error}</p><button onClick={() => { active.current?.abort.abort(); setRetry(value => value + 1) }}>Retry</button></div>
     if (rowProps.emptyState && groups.every(group => !group.count)) return rowProps.emptyState
@@ -280,12 +285,15 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
     return <GroupedVirtuoso className={styles.virtualList} role="list" aria-label="Issues" style={listStyle} groupCounts={counts} context={revision} defaultItemHeight={44} increaseViewportBy={{ top: 176, bottom: 264 }}
       groupContent={index => <MyIssuesGroupHeader group={descriptor(groups[index])} collapsed={Boolean(collapsedGroupIds?.has(groups[index].value))} createIssueLabel="Create new issue" onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/>}
       itemContent={(index, groupIndex) => {
-        const group = groups[groupIndex], localIndex = index - offsets[groupIndex], pageIndex = cache.pageAt(group.value, localIndex)
-        const page = cache.get(group.value, pageIndex), issue = page?.items[localIndex - cache.start(group.value, pageIndex)]
+        const group = groups[groupIndex], localIndex = index - offsets[groupIndex]
+        const nestedRows = nestedGroups?.get(group.value), entry = nestedRows?.rows[localIndex]
+        const pageIndex = entry?.pageIndex ?? nestedRows?.missingPage ?? cache.pageAt(group.value, localIndex)
+        const page = cache.get(group.value, pageIndex)
+        const issue = nestedRows ? (page && entry ? entry.issue : undefined) : page?.items[localIndex - cache.start(group.value, pageIndex)]
         if (!issue) return <IssuePagePlaceholder load={() => load(group.value, pageIndex)}/>
         const row = rowFor(issue, page!.items)
         openTargets.current.set(issue.id, { issue, group: group.value })
-        return <><StalePageProbe stale={staleKeys.current.has(cache.key(group.value, pageIndex))} revision={revision} run={() => revalidate(group.value, pageIndex)}/><MyIssuesRow issue={row} selected={rowProps.selectedIds?.has(issue.id)} displayProperties={rowProps.displayProperties} propertyOptions={rowProps.propertyOptions} mutationError={rowProps.mutationErrors?.get(issue.id)} onOpen={openRow} onPropertyChange={rowProps.onPropertyChange} onSelect={rowProps.onSelectIssue} onContextAction={rowProps.onContextAction} onRetryMutation={rowProps.onRetryMutation}/></>
+        return <><StalePageProbe stale={staleKeys.current.has(cache.key(group.value, pageIndex))} revision={revision} run={() => revalidate(group.value, pageIndex)}/><MyIssuesRow issue={row} selected={rowProps.selectedIds?.has(issue.id)} displayProperties={rowProps.displayProperties} nestedLines={nestedRows?.lines.get(issue.id)} showSubIssueProgress={!nestedRows} propertyOptions={rowProps.propertyOptions} mutationError={rowProps.mutationErrors?.get(issue.id)} onOpen={openRow} onPropertyChange={rowProps.onPropertyChange} onSelect={rowProps.onSelectIssue} onContextAction={rowProps.onContextAction} onRetryMutation={rowProps.onRetryMutation}/></>
       }}/>
   }
   // While a query loads, the previous result stays (inert) and fades out after 500ms;
