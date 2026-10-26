@@ -103,7 +103,7 @@ func (s *server) registerOAuthClient(w http.ResponseWriter, r *http.Request) {
 	} else {
 		input.ClientName = suppliedName
 	}
-	if len(input.ClientName) > 200 || (input.ClientURI != "" && !validOAuthMetadataURI(input.ClientURI)) || (input.LogoURI != "" && !validOAuthMetadataURI(input.LogoURI)) {
+	if len(input.ClientName) > 200 || (input.ClientURI != "" && !validOAuthMetadataURI(input.ClientURI)) || (input.LogoURI != "" && !validApplicationIconURL(input.LogoURI, false)) {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_client_metadata", "Client metadata contains an invalid name or URL")
 		return
 	}

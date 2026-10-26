@@ -146,7 +146,7 @@ func validateOAuthAppManifestContent(m *oauthAppManifest, webhookURL func(string
 		}
 		// An icon uploaded on the settings page is served by Flow itself
 		// (/uploads/oauth_app_icon_…); any other icon must be HTTPS.
-		if m.Display.IconURL != "" && !absoluteHTTPURL(m.Display.IconURL, true) && !uploadedOAuthAppIcon(m.Display.IconURL) {
+		if icon := strings.TrimSpace(m.Display.IconURL); icon != "" && !uploadedOAuthAppIcon(icon) && !validApplicationIconURL(icon, false) {
 			add("display.iconUrl", "iconUrl must be an absolute HTTPS URL")
 		}
 	}

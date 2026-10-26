@@ -18,8 +18,12 @@ func validateOAuthInput(input *oauthInput) error {
 	if input.Name != nil && (strings.TrimSpace(*input.Name) == "" || len(*input.Name) > 200) {
 		return fmt.Errorf("application name must contain 1 to 200 characters")
 	}
-	if input.LogoURL != nil && *input.LogoURL != "" && !validOAuthMetadataURI(*input.LogoURL) && !strings.HasPrefix(*input.LogoURL, "/uploads/") {
-		return fmt.Errorf("invalid application logo URL")
+	if input.LogoURL != nil {
+		logo := strings.TrimSpace(*input.LogoURL)
+		if logo != "" && !validApplicationIconURL(logo, true) {
+			return fmt.Errorf("invalid application logo URL")
+		}
+		input.LogoURL = &logo
 	}
 	if input.DeveloperName != nil && len([]rune(strings.TrimSpace(*input.DeveloperName))) > 80 {
 		return fmt.Errorf("developer name must be at most 80 characters")
