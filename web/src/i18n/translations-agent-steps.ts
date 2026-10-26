@@ -335,7 +335,7 @@ export const agentStepsZhCN: Record<string, string> = {
   "The model provider took too long to respond. Try again.": "模型服务商响应超时。请重试。",
   "The model provider is unavailable right now. Try again later.": "模型服务商暂时不可用。请稍后再试。",
   "The model returned an empty response. Try again.": "模型返回了空响应。请重试。",
-  "The agent used too many steps and stopped. Try a narrower request.": "Agent 执行的步骤过多，已停止。请尝试缩小请求范围。",
+  "The agent reached its step limit for one reply. Say \"Continue\" to pick up where it stopped.": "Agent 已达到单次回复的步骤上限。回复“继续”即可从停下的地方接着做。",
   "The conversation is too long for the model. Start a new chat or shorten the request.": "对话超出了模型的长度上限。请开始新对话或缩短请求。",
   "Flow Agent is not configured on this server.": "此服务器尚未配置 Flow Agent。",
   "The agent ran into an error.": "Agent 遇到了错误。",

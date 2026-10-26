@@ -177,7 +177,7 @@ func (s *server) workerRunGuardOp(r *http.Request, run store.AgentRun, input wor
 	case "turn":
 		maxTurns := input.MaxTurns
 		if maxTurns <= 0 {
-			maxTurns = maxAgentToolTurns
+			maxTurns = s.agentMaxToolTurns()
 		}
 		if input.Connectors && g.mustDecideWithin(input.Round, maxTurns) {
 			response.MustDecide = true

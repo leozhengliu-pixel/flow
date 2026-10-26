@@ -293,13 +293,11 @@ func (h *delegationHarness) delegate(t *testing.T, title, description string, sc
 
 // The reported loop, as the user's diagnostic reproduced it: Coding on, start_coding_session offered with the
 // "start now" instruction, and a model that sends the SAME connector call (same arguments) every turn. Before the
-// fix Flow ran it eight times and ended with "Agent reached its tool execution limit". Now the call reaches the
-// connector once, the repeats are answered from the first result, and the run ends in Coding — started by Flow,
-// since the model never calls it — without a tool-limit error and without a higher turn cap.
+// fix Flow ran it until the turn cap and ended with "Agent reached its tool execution limit". Now the call reaches
+// the connector once, the repeats are answered from the first result, and the run ends in Coding — started by Flow,
+// since the model never calls it — without a tool-limit error. The run converges through the guard's own budgets,
+// within a few turns whatever the turn cap (FLOW_AGENT_MAX_TOOL_TURNS) is, so the cap is not what ends it.
 func TestBuiltinRegressionRepeatedConnectorCallEndsInCoding(t *testing.T) {
-	if maxAgentToolTurns != 8 {
-		t.Fatalf("the turn cap is not raised to make this pass: maxAgentToolTurns = %d", maxAgentToolTurns)
-	}
 	h := newDelegationHarness(t, "acme/api")
 	environment := h.environments[0]
 	description := "请实现 multiply 接口，补充单元测试并运行测试，创建草稿 MR。environmentId：" + environment.ID + "。"
@@ -322,8 +320,9 @@ func TestBuiltinRegressionRepeatedConnectorCallEndsInCoding(t *testing.T) {
 			t.Fatalf("repeat %d is short-circuited with the earlier result: %s", index+1, content)
 		}
 	}
-	if len(run.requests) >= maxAgentToolTurns {
-		t.Fatalf("the run converges before the turn cap: %d model turns", len(run.requests))
+	// The first call, builtinMaxNoProgress answered repeats, then the forced decision: far below any turn cap.
+	if limit := builtinMaxNoProgress + 3; len(run.requests) > limit {
+		t.Fatalf("the run converges through the guard within %d model turns, not the turn cap: %d", limit, len(run.requests))
 	}
 	if errors := run.errors(); len(errors) > 0 {
 		t.Fatalf("no tool-limit error: %v", errors)

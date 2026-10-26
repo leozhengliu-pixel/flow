@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/mail"
 	"net/url"
 	"slices"
 	"strconv"
@@ -115,40 +116,26 @@ func (s *server) saveMCPTeam(ctx context.Context, actor mcpActor, data domain.Bo
 			return nil, fmt.Errorf("a team-restricted API key cannot create teams")
 		}
 	}
-	// Resolve every reference before the first write so a typo cannot leave a
-	// half-configured team behind.
-	members := []string{}
-	for _, query := range stringsArg(args, "members") {
-		user, err := mcpFindUser(data, query)
-		if err != nil {
-			return nil, err
+	// People are resolved before the first write, all of them: a person who is not in the workspace, or a name
+	// several people share, is reported in the receipt (`unresolved`) instead of failing the whole call, so a
+	// team of 40 is created with everyone who was found and the model learns about the rest in one result.
+	unresolved := []map[string]any{}
+	resolve := func(field string) []string {
+		users, missing := mcpResolveUsers(data, stringsArg(args, field))
+		ids := make([]string, 0, len(users))
+		for _, user := range users {
+			ids = append(ids, user.ID)
 		}
-		members = append(members, user.ID)
-	}
-	removeMembers := []string{}
-	for _, query := range stringsArg(args, "removeMembers") {
-		user, err := mcpFindUser(data, query)
-		if err != nil {
-			return nil, err
+		for _, match := range missing {
+			item := map[string]any{"field": field, "query": match.Query, "status": match.Status}
+			if len(match.Candidates) > 0 {
+				item["candidates"] = match.Candidates
+			}
+			unresolved = append(unresolved, item)
 		}
-		removeMembers = append(removeMembers, user.ID)
+		return ids
 	}
-	owners := []string{}
-	for _, query := range stringsArg(args, "owners") {
-		user, err := mcpFindUser(data, query)
-		if err != nil {
-			return nil, err
-		}
-		owners = append(owners, user.ID)
-	}
-	removeOwners := []string{}
-	for _, query := range stringsArg(args, "removeOwners") {
-		user, err := mcpFindUser(data, query)
-		if err != nil {
-			return nil, err
-		}
-		removeOwners = append(removeOwners, user.ID)
-	}
+	members, removeMembers, owners, removeOwners := resolve("members"), resolve("removeMembers"), resolve("owners"), resolve("removeOwners")
 	var states []mcpTeamState
 	if raw, ok := args["states"]; ok {
 		if err := jsonClone(raw, &states); err != nil {
@@ -326,7 +313,30 @@ func (s *server) saveMCPTeam(ctx context.Context, actor mcpActor, data domain.Bo
 		}
 		createdLabels = append(createdLabels, result)
 	}
+	invited, alreadyInvited, inviteErrors := s.inviteMCPTeamPeople(ctx, actor, data, args, team.ID, unresolved)
 	receipt := map[string]any{"id": team.ID, "key": team.Key, "name": team.Name, "created": creating, "url": mcpWorkspaceURL(ws, args, "team", team.Key, "all")}
+	// People on the team now (apps such as Flow Agent, which join teams on their own, are not counted).
+	people := 0
+	for userID := range roles {
+		if !slices.ContainsFunc(data.Users, func(user domain.User) bool { return user.ID == userID && user.App }) {
+			people++
+		}
+	}
+	receipt["memberCount"] = people
+	if len(unresolved) > 0 {
+		receipt["unresolved"] = unresolved
+		receipt["unresolvedNote"] = "These people were not added. not_found: no workspace member matches (an email can be invited with inviteMissing: true). ambiguous: several members match; pass one candidate's id or email."
+	}
+	if len(invited) > 0 {
+		receipt["invited"] = invited
+		receipt["invitedNote"] = "Invited to the workspace; they join this team when they accept."
+	}
+	if len(alreadyInvited) > 0 {
+		receipt["alreadyInvited"] = alreadyInvited
+	}
+	if len(inviteErrors) > 0 {
+		receipt["inviteErrors"] = inviteErrors
+	}
 	if len(settings) > 0 {
 		receipt["settings"] = settings
 	}
@@ -349,6 +359,54 @@ func (s *server) saveMCPTeam(ctx context.Context, actor mcpActor, data domain.Bo
 		receipt["labels"] = createdLabels
 	}
 	return receipt, nil
+}
+
+// inviteMCPTeamPeople invites the members and owners save_team could not find when the call asks for it
+// (inviteMissing) and they were named by email: one workspace invitation each, through the same route and checks
+// as inviting from Settings (the workspace's invite permission, approved email domains), naming the team so they
+// join it when they accept. Owners join as members; making them owners waits until they have joined.
+func (s *server) inviteMCPTeamPeople(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any, teamID string, unresolved []map[string]any) (invited, alreadyInvited []string, failures []map[string]string) {
+	if !boolArg(args, "inviteMissing") {
+		return nil, nil, nil
+	}
+	ws := actor.WorkspaceKey
+	seen := map[string]bool{}
+	for _, item := range unresolved {
+		field, _ := item["field"].(string)
+		status, _ := item["status"].(string)
+		query, _ := item["query"].(string)
+		if field != "members" && field != "owners" || status != mcpUserNotFound {
+			continue
+		}
+		email := mcpInviteEmail(query)
+		if email == "" || seen[email] {
+			continue
+		}
+		seen[email] = true
+		if slices.ContainsFunc(data.Invitations, func(invitation domain.Invitation) bool {
+			return invitation.Status == "pending" && strings.EqualFold(invitation.Email, email)
+		}) {
+			alreadyInvited = append(alreadyInvited, email)
+			continue
+		}
+		input := map[string]any{"emails": []string{email}, "role": "member", "teamIds": []string{teamID}}
+		if _, err := s.invokeMCPRoute(ctx, actor, http.MethodPost, "/api/workspaces/"+pathID(ws)+"/invitations", map[string]string{"workspaceKey": ws}, input, s.createInvitation); err != nil {
+			failures = append(failures, map[string]string{"email": email, "error": err.Error()})
+			continue
+		}
+		invited = append(invited, email)
+	}
+	return invited, alreadyInvited, failures
+}
+
+// mcpInviteEmail is the email address a person reference names ("ana@example.com", "Ana <ana@example.com>"), or
+// "" when it names none.
+func mcpInviteEmail(query string) string {
+	address, err := mail.ParseAddress(strings.TrimSpace(query))
+	if err != nil || !strings.Contains(address.Address, "@") {
+		return ""
+	}
+	return strings.ToLower(address.Address)
 }
 
 // ---------------------------------------------------------------- labels

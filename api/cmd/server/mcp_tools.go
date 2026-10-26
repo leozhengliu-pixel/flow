@@ -124,8 +124,33 @@ func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, a
 		items = slices.DeleteFunc(items, func(item domain.User) bool {
 			return query != "" && !containsFold(item.Name+" "+item.DisplayName+" "+item.Email, query)
 		})
+		if stringArg(args, "orderBy") == "createdAt" {
+			// Members in the order they joined the workspace ("the first 40 members").
+			joined := map[string]time.Time{}
+			for _, member := range data.Members {
+				joined[member.User.ID] = member.JoinedAt
+			}
+			slices.SortStableFunc(items, func(left, right domain.User) int { return joined[left.ID].Compare(joined[right.ID]) })
+		}
 		return paginate(items, args), nil
 	case "get_user":
+		if queries := stringsArg(args, "queries"); len(queries) > 0 {
+			// Bulk lookup: every reference's outcome in one result.
+			if len(queries) > mcpMaxUserQueries {
+				return nil, fmt.Errorf("queries accepts at most %d people per call", mcpMaxUserQueries)
+			}
+			results := make([]mcpUserMatch, 0, len(queries))
+			counts := map[string]int{}
+			for _, query := range queries {
+				match := mcpResolveUser(data, query)
+				counts[match.Status]++
+				results = append(results, match)
+			}
+			return map[string]any{"results": results, "found": counts[mcpUserFound], "notFound": counts[mcpUserNotFound], "ambiguous": counts[mcpUserAmbiguous]}, nil
+		}
+		if stringArg(args, "query") == "" {
+			return nil, fmt.Errorf("provide query, or queries to look up several people")
+		}
 		return mcpFindUser(data, stringArg(args, "query"))
 	case "list_issue_statuses":
 		team, err := mcpFindTeam(data, stringArg(args, "team"))
@@ -1207,6 +1232,106 @@ func mcpFindUser(data domain.Bootstrap, query string) (domain.User, error) {
 		}
 	}
 	return domain.User{}, fmt.Errorf("user %q not found", query)
+}
+
+// mcpUserMatch is what one person reference in a bulk request (save_team members, get_user queries) resolved to.
+// Bulk requests resolve every reference and report each outcome instead of failing on the first one they cannot
+// resolve, so a model adding 40 people learns in one result who was found, who is not in the workspace, and which
+// names fit several people.
+type mcpUserMatch struct {
+	Query  string `json:"query"`
+	Status string `json:"status"` // found, not_found or ambiguous
+	// User is the person found; Candidates are the people an ambiguous name fits.
+	User       map[string]any   `json:"user,omitempty"`
+	Candidates []map[string]any `json:"candidates,omitempty"`
+	found      domain.User
+}
+
+const (
+	mcpUserFound     = "found"
+	mcpUserNotFound  = "not_found"
+	mcpUserAmbiguous = "ambiguous"
+	// mcpMaxUserQueries bounds one bulk lookup.
+	mcpMaxUserQueries = 250
+)
+
+// mcpResolveUser resolves one person reference: "me", a user ID, an email ("Name <email>" too), a name or display
+// name (in either order, "Zhang Wei" for Wei Zhang), or an email's local part. A name several people share is
+// ambiguous rather than the first match.
+func mcpResolveUser(data domain.Bootstrap, query string) mcpUserMatch {
+	match := mcpUserMatch{Query: query, Status: mcpUserNotFound}
+	ref := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(query), "@"))
+	if lt, gt := strings.LastIndex(ref, "<"), strings.LastIndex(ref, ">"); lt >= 0 && gt > lt && strings.Contains(ref[lt:gt], "@") {
+		ref = strings.TrimSpace(ref[lt+1 : gt])
+	}
+	ref = strings.Join(strings.Fields(ref), " ")
+	found := func(user domain.User) mcpUserMatch {
+		match.Status, match.found, match.User = mcpUserFound, user, mcpUserRef(&user)
+		return match
+	}
+	if ref == "" {
+		return match
+	}
+	if strings.EqualFold(ref, "me") {
+		return found(data.Viewer)
+	}
+	for _, user := range data.Users {
+		if user.ID == ref || strings.Contains(ref, "@") && strings.EqualFold(user.Email, ref) {
+			return found(user)
+		}
+	}
+	if strings.Contains(ref, "@") {
+		return match
+	}
+	pick := func(matches func(domain.User) bool) bool {
+		hits := []domain.User{}
+		for _, user := range data.Users {
+			if matches(user) && !slices.ContainsFunc(hits, func(hit domain.User) bool { return hit.ID == user.ID }) {
+				hits = append(hits, user)
+			}
+		}
+		switch {
+		case len(hits) == 1:
+			match = found(hits[0])
+		case len(hits) > 1:
+			match.Status = mcpUserAmbiguous
+			for index := range hits {
+				match.Candidates = append(match.Candidates, mcpUserRef(&hits[index]))
+			}
+		}
+		return len(hits) > 0
+	}
+	sameName := func(name string) func(domain.User) bool {
+		return func(user domain.User) bool {
+			return strings.EqualFold(strings.Join(strings.Fields(user.Name), " "), name) || strings.EqualFold(strings.Join(strings.Fields(user.DisplayName), " "), name)
+		}
+	}
+	if pick(sameName(ref)) {
+		return match
+	}
+	if words := strings.Fields(ref); len(words) == 2 && pick(sameName(words[1]+" "+words[0])) {
+		return match
+	}
+	pick(func(user domain.User) bool {
+		local, _, ok := strings.Cut(user.Email, "@")
+		return ok && strings.EqualFold(local, ref)
+	})
+	return match
+}
+
+// mcpResolveUsers resolves bulk person references in order; the same person named twice is listed once.
+func mcpResolveUsers(data domain.Bootstrap, queries []string) (found []domain.User, unresolved []mcpUserMatch) {
+	for _, query := range queries {
+		match := mcpResolveUser(data, query)
+		if match.Status != mcpUserFound {
+			unresolved = append(unresolved, match)
+			continue
+		}
+		if !slices.ContainsFunc(found, func(user domain.User) bool { return user.ID == match.found.ID }) {
+			found = append(found, match.found)
+		}
+	}
+	return found, unresolved
 }
 
 func mcpFindProject(data domain.Bootstrap, query string) (domain.Project, error) {

@@ -718,8 +718,8 @@
   {
     "name": "mcp__flow.get_user",
     "access": "read",
-    "description": "Retrieve details of a specific Flow user",
-    "input_schema": { "type": "object", "required": ["query"], "properties": { "query": { "type": "string", "description": "User ID, name, email, or \"me\"" } } }
+    "description": "Retrieve details of a specific Flow user, or look up many people at once with `queries`: one call returns, for each reference, whether it was found (with the user), not_found (not a workspace member), or ambiguous (with the candidates).",
+    "input_schema": { "type": "object", "required": [], "properties": { "query": { "type": "string", "description": "User ID, name, email, or \"me\"" }, "queries": { "type": "array", "items": { "type": "string" }, "maxItems": 250, "description": "Several people to look up in one call (IDs, names, emails, or \"me\"), up to 250. Use this instead of one get_user call per person." } } }
   },
   {
     "name": "mcp__flow.get_document",
@@ -1166,7 +1166,8 @@
         "triageEnabled": {"type": "boolean", "description": "Turn the team's triage inbox on or off"},
         "cyclesEnabled": {"type": "boolean", "description": "Turn cycles on or off"},
         "cycleDurationWeeks": {"type": "integer", "minimum": 1, "maximum": 8, "description": "Cycle length in weeks"},
-        "members": {"type": "array", "items": {"type": "string"}, "description": "Users to add as team members (name, email, ID, or \"me\"). People already on the team, including owners, are left unchanged."},
+        "members": {"type": "array", "items": {"type": "string"}, "description": "Users to add as team members (name, email, ID, or \"me\"); pass everyone in one call, there is no need to look them up first. People already on the team, including owners, are left unchanged. People who are not workspace members, or names several members share, are not added and are listed in the result's `unresolved` (with candidates for ambiguous names) while everyone else is added."},
+        "inviteMissing": {"type": "boolean", "description": "Only when the user asked to invite people who are not in the workspace yet: members and owners given by email who are not workspace members get a workspace invitation (an email is sent) that adds them to this team when they accept. Needs the viewer's permission to invite."},
         "removeMembers": {"type": "array", "items": {"type": "string"}, "description": "Users to remove from the team (update only)"},
         "owners": {"type": "array", "items": {"type": "string"}, "description": "Users to make team owners (added to the team if needed)"},
         "removeOwners": {"type": "array", "items": {"type": "string"}, "description": "Owners to change back to regular members (update only). The team must keep at least one owner."},

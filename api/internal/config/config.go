@@ -99,7 +99,18 @@ type AgentConfig struct {
 	WorkspaceRunConcurrency int
 	// Media configures the transcribe_media chat tool for audio and video attachments.
 	Media AgentMediaConfig
+	// MaxToolTurns is how many model turns with tool calls one chat reply or built-in thread run may take
+	// (FLOW_AGENT_MAX_TOOL_TURNS); MaxToolCalls caps the tool calls it runs across those turns
+	// (FLOW_AGENT_MAX_TOOL_CALLS), so a model sending many calls per turn cannot run away.
+	MaxToolTurns int
+	MaxToolCalls int
 }
+
+// Defaults for AgentConfig.MaxToolTurns and AgentConfig.MaxToolCalls.
+const (
+	DefaultAgentMaxToolTurns = 40
+	DefaultAgentMaxToolCalls = 150
+)
 
 // AgentMediaConfig points transcribe_media at an OpenAI-compatible API. BaseURL defaults to the Agent provider's;
 // the Agent key is reused only when BaseURL is the Agent base URL, so it is never sent to another host.
@@ -261,6 +272,8 @@ func Load() (Config, error) {
 			ReasoningEffort: strings.ToLower(value("FLOW_AGENT_REASONING_EFFORT", "")), NativeWebSearch: boolean("FLOW_AGENT_NATIVE_WEB_SEARCH", true),
 			Runtime: strings.ToLower(value("FLOW_AGENT_RUNTIME", AgentRuntimeInProcess)), WorkerSecret: secret("FLOW_AGENT_WORKER_SECRET"),
 			WorkspaceRunConcurrency: integer("FLOW_AGENT_WORKSPACE_CONCURRENCY", 4),
+			MaxToolTurns:            integer("FLOW_AGENT_MAX_TOOL_TURNS", DefaultAgentMaxToolTurns),
+			MaxToolCalls:            integer("FLOW_AGENT_MAX_TOOL_CALLS", DefaultAgentMaxToolCalls),
 			Media: AgentMediaConfig{
 				BaseURL: value("FLOW_AGENT_MEDIA_BASE_URL", ""), APIKey: secret("FLOW_AGENT_MEDIA_API_KEY"),
 				TranscribeModel: value("FLOW_AGENT_MEDIA_TRANSCRIBE_MODEL", ""), VideoModel: value("FLOW_AGENT_MEDIA_VIDEO_MODEL", ""),
@@ -425,6 +438,12 @@ func (c Config) Validate() error {
 	}
 	if c.Agent.MaxOutputTokens < 1 || c.Agent.MaxOutputTokens > 131072 {
 		return fmt.Errorf("FLOW_AGENT_MAX_OUTPUT_TOKENS must be between 1 and 131072")
+	}
+	if c.Agent.MaxToolTurns < 4 || c.Agent.MaxToolTurns > 200 {
+		return fmt.Errorf("FLOW_AGENT_MAX_TOOL_TURNS must be between 4 and 200")
+	}
+	if c.Agent.MaxToolCalls < c.Agent.MaxToolTurns || c.Agent.MaxToolCalls > 2000 {
+		return fmt.Errorf("FLOW_AGENT_MAX_TOOL_CALLS must be at least FLOW_AGENT_MAX_TOOL_TURNS and at most 2000")
 	}
 	if err := c.Agent.validateRuntime(); err != nil {
 		return err

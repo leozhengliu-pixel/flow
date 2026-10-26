@@ -622,6 +622,10 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 	// earlier result, so a run asked to implement something decides instead of searching until the turn limit.
 	guard := newBuiltinRunGuard(s.builtinCodingContextFor(r.Context(), task, data))
 	guard.hadSession = task.CodingSessionID != ""
+	maxTurns, maxCalls := s.agentMaxToolTurns(), s.agentMaxToolCalls()
+	guard.maxTurns = maxTurns
+	// budget bounds the run's tool calls like a chat reply's (agent_tool_budget.go).
+	budget := newAgentToolBudget(maxCalls)
 	issueTitle := ""
 	if len(data.Issues) == 1 {
 		issueTitle = data.Issues[0].Title
@@ -756,7 +760,7 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 	r = r.WithContext(context.WithValue(r.Context(), agentExtraToolsKey{}, []agentProviderTool{askUserToolDefinition}))
 	textApprovalRetried, emptyTurnRetried := false, false
 	decisionRound := -1
-	for round := 0; round < maxAgentToolTurns; round++ {
+	for round := 0; round < maxTurns && budget.stop == ""; round++ {
 		turnCtx := r.Context()
 		if offered, _ := turnCtx.Value(connectorToolsKey{}).([]connectorTool); len(offered) > 0 && guard.mustDecide(round) {
 			// The preparation budget is spent or the run is near its turn limit: the model decides without
@@ -867,12 +871,26 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 			if slices.ContainsFunc(approval.Calls, func(item domain.AgentToolCall) bool { return item.ID == call.ID }) {
 				continue
 			}
+			// Connector calls keep the run guard's own repeat handling (it answers repeats from the earlier result).
+			_, external := offeredConnectorTool(r.Context(), call.Name)
+			check := func() (string, bool) { return budget.before(call) }
+			if external {
+				check = budget.count
+			}
+			if message, run := check(); !run {
+				messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: message, IsError: true}})
+				continue
+			}
 			content, failed, ok := runTool(call)
 			if !ok {
 				return
 			}
+			if !external {
+				budget.after(call, content, failed)
+			}
 			messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: content, IsError: failed}})
 		}
+		budget.endTurn()
 		if len(approval.Calls) > 0 {
 			// One approval for everything held, with Approve / Reject options.
 			pendingCall := agentApprovalBatchCall(*approval)
@@ -903,7 +921,32 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 		_ = appendActivity("response", codingDeliveryReply(guard.started.delivery, guard.started.blocker, guard.coding))
 		return
 	}
-	_ = appendActivity("error", "Agent reached its tool execution limit without starting Coding or reporting a blocker.")
+	// The budget is spent: one turn without tools gives the run's last word (what was done, what is left), like a
+	// chat reply; without one, Flow posts the summary itself.
+	stopped := budget.stop
+	if stopped == "" {
+		stopped = agentBudgetTurns
+	}
+	nudge := agentToolBudgetNudge(stopped, maxTurns, maxCalls)
+	if last := len(messages) - 1; last >= 0 && messages[last].ToolResult != nil {
+		messages[last].ToolResult.Content += "\n\n" + nudge
+	} else {
+		messages = append(messages, agentProviderMessage{Role: "user", Content: nudge})
+	}
+	pending.Reset()
+	reply := ""
+	if turn, err := s.requestAgentTurn(withAgentToolsWithheld(r.Context()), messages, nil); err == nil && len(turn.ToolCalls) == 0 {
+		reply = strings.TrimSpace(turn.Text)
+	} else if r.Context().Err() != nil {
+		return
+	}
+	if reply == "" {
+		reply = agentToolBudgetFallback(stopped, maxTurns, maxCalls, guard.coding.Chinese, -1, false)
+	}
+	reply = s.builtinFinalReply(r.Context(), task, guard, reply)
+	if err := appendActivity("response", rebaseAgentWorkspaceLinks(reply, data.Workspace.URLKey, agentLinkBaseURL(r))); err != nil {
+		slog.ErrorContext(r.Context(), "agent run could not record its budget summary", "task", task.ID, "reason", stopped, "error", err)
+	}
 }
 
 // builtinThreadMessages is the conversation a built-in thread run starts from: the system prompt (rules, workspace,

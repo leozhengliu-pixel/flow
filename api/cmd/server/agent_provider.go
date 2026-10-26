@@ -131,6 +131,20 @@ func (s *server) agentTurnTools(ctx context.Context) []agentProviderTool {
 // agentPromptCacheKey names the prompt cache a Responses request should use (see requestOpenAIResponses).
 type agentPromptCacheKey struct{}
 
+// agentToolsWithheldKey marks a turn that must answer without calling tools (tool_choice none): the reply's last
+// word once its tool budget is spent. The tools stay in the request because the conversation already holds calls
+// to them, which some providers refuse without their definitions.
+type agentToolsWithheldKey struct{}
+
+func withAgentToolsWithheld(ctx context.Context) context.Context {
+	return context.WithValue(ctx, agentToolsWithheldKey{}, true)
+}
+
+func agentToolsWithheld(ctx context.Context) bool {
+	withheld, _ := ctx.Value(agentToolsWithheldKey{}).(bool)
+	return withheld
+}
+
 type agentMaxOutputTokensKey struct{}
 
 // withAgentMaxOutputTokens raises the output budget for one call. Reasoning
@@ -233,6 +247,9 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 	cacheKey, _ := ctx.Value(agentPromptCacheKey{}).(string)
 	if cacheKey != "" && !s.agentPromptCacheOff.Load() {
 		payload["prompt_cache_key"] = cacheKey
+	}
+	if len(tools) > 0 && agentToolsWithheld(ctx) {
+		payload["tool_choice"] = "none"
 	}
 	response, err := s.agentProviderRequest(ctx, "/responses", payload, false)
 	var providerErr *agentProviderError
@@ -387,6 +404,9 @@ func (s *server) requestChatCompletions(ctx context.Context, messages []agentPro
 		payload["tools"] = mapTools(tools, func(tool agentProviderTool, parameters any) any {
 			return map[string]any{"type": "function", "function": map[string]any{"name": tool.Name, "description": tool.Description, "parameters": parameters}}
 		})
+		if agentToolsWithheld(ctx) {
+			payload["tool_choice"] = "none"
+		}
 	}
 	response, err := s.agentProviderRequest(ctx, "/chat/completions", payload, false)
 	if !replay && agentReasoningReplayRequired(err) {
@@ -521,6 +541,9 @@ func (s *server) requestAnthropicMessages(ctx context.Context, messages []agentP
 	native := len(tools) > 0 && agentWebToolsEnabled(ctx) && s.agentNativeWebSearch()
 	if native {
 		payload["tools"] = append(payload["tools"].([]any), map[string]any{"type": "web_search_20250305", "name": webSearchToolName, "max_uses": 5})
+	}
+	if len(tools) > 0 && agentToolsWithheld(ctx) {
+		payload["tool_choice"] = map[string]any{"type": "none"}
 	}
 	response, err := s.agentProviderRequest(ctx, "/messages", payload, true)
 	var providerErr *agentProviderError
