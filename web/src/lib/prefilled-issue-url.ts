@@ -4,7 +4,8 @@ import { estimateValues } from '@/lib/estimates'
 import { issueTemplatesForTeam } from '@/lib/issue-templates'
 import { labelsForIssueTeam, labelTeamScopeIds } from '@/lib/labels'
 import { resolvedTeamSettings } from '@/lib/team-hierarchy'
-import type { BootstrapData, Issue, IssueTemplate, Team, User, WorkflowState } from '@/types/flow'
+import { teamWorkflowStates } from '@/lib/team-workflow'
+import type { BootstrapData, Issue, IssueTemplate, Team, User } from '@/types/flow'
 
 /**
  * Prefilled "new issue" links: `/:workspace/new?…` and `/:workspace/team/:KEY/new?…`.
@@ -92,11 +93,6 @@ function findTeam(teams: Team[], value: string | undefined) {
     ?? live.find(team => norm(team.name) === text)
 }
 
-function teamStates(states: WorkflowState[], teamId: string) {
-  const specific = states.filter(state => state.teamId === teamId)
-  return specific.length ? specific : states.filter(state => !state.teamId)
-}
-
 function findAssignee(data: PrefillData, value: string | undefined) {
   const text = norm(value)
   if (!text) return undefined
@@ -169,7 +165,7 @@ export function resolvePrefilledIssue(params: PrefilledIssueParams, data: Prefil
   const effectiveTeam = team ?? defaultTeam
   if (team) context.teamId = team.id
   const teamId = effectiveTeam?.id ?? ''
-  const states = teamId ? teamStates(data.states, teamId) : []
+  const states = teamId ? teamWorkflowStates(data, teamId) : []
 
   // Template values first; explicit parameters then override them.
   if (template) {
