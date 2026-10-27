@@ -277,14 +277,8 @@ export const codingSessionUiZhCN: Record<string, string> = {
   "Send a message to {agent}": "向 {agent} 发送消息",
   "Copy session URL": "复制会话链接",
   "Stopped. Send another prompt when you’re ready.": "已停止。准备好后再发送一条指令。",
-  // Follow-up write scope (composer)
-  "Scope": "范围",
-  "Auto": "自动",
-  "Flow decides from your message": "由 Flow 根据消息判断",
-  "Develop": "开发",
-  "Change code, commit, push and update the pull request": "修改代码，提交、推送并更新拉取请求",
-  "Don’t publish": "不发布",
-  "Change code without committing or pushing": "修改代码，但不提交也不推送",
-  "Verify only": "仅验证",
-  "Keep the repository and the pull request unchanged": "保持仓库和拉取请求不变",
+  // Earlier uncommitted changes Flow left out of a turn's commit
+  "Earlier uncommitted changes in {count} path(s) were not committed.": "{count} 个路径中先前未提交的改动没有被提交。",
+  "Commit earlier changes": "提交之前的改动",
+  "Commit the earlier uncommitted changes too.": "把之前未提交的改动也提交。",
 }

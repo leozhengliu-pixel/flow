@@ -84,10 +84,11 @@ export const createCodingSession = (input: CreateCodingSessionInput, idempotency
   request<CodingSession>("/api/coding/sessions", { ...jsonRequest("POST", input), headers: { "Content-Type": "application/json", ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}) } });
 /**
  * A follow-up; `files` are composer uploads (`/uploads/…`, from uploadAgentFile) the runner gets as signed URLs.
- * `scope` is the write scope chosen in the composer; without it Flow infers it from the prompt.
+ * Flow infers the turn's write scope from the prompt unless `turn.scope` sets it; `turn.includeLeftovers` also commits
+ * the uncommitted changes that were in the workspace before the turn ("Commit earlier changes").
  */
-export const promptCodingSession = (sessionId: string, prompt: string, attachments?: string[], files?: AgentMessageAttachment[], scope?: CodingTurnScope) =>
-  request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/prompt`, jsonRequest("POST", { prompt, attachments, files: files?.length ? files : undefined, scope }));
+export const promptCodingSession = (sessionId: string, prompt: string, attachments?: string[], files?: AgentMessageAttachment[], turn?: { scope?: CodingTurnScope; includeLeftovers?: boolean }) =>
+  request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/prompt`, jsonRequest("POST", { prompt, attachments, files: files?.length ? files : undefined, scope: turn?.scope, includeLeftovers: turn?.includeLeftovers || undefined }));
 export const fetchCodingSessionDiff = (sessionId: string, signal?: AbortSignal) => request<CodingSessionDiff>(`/api/coding/sessions/${id(sessionId)}/diff`, { signal });
 export const setCodingSessionSubscription = (sessionId: string, subscribed: boolean) =>
   request<CodingSession>(`/api/coding/sessions/${id(sessionId)}/subscription`, jsonRequest("POST", { subscribed }));

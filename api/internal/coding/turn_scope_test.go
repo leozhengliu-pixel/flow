@@ -146,3 +146,57 @@ func TestNormalizeTurnScope(t *testing.T) {
 		t.Fatalf("invalid scope accepted: %v", err)
 	}
 }
+
+func TestParseIncludeLeftovers(t *testing.T) {
+	cases := []struct {
+		request string
+		want    bool
+	}{
+		// Explicit requests to commit the earlier uncommitted changes too.
+		{"把之前未提交的改动也提交", true},
+		{"把之前未提交的改动也提交了吧", true},
+		{"修复登录 bug，然后把之前没提交的修改一起提交", true},
+		{"之前未提交的改动，也一起提交", true},
+		{"提交时包括之前未提交的改动", true},
+		{"把遗留的改动也提交上去", true},
+		{"全部提交", true},
+		{"所有改动都提交", true},
+		{"提交所有改动", true},
+		{"不要修改测试，把之前未提交的改动也提交", true},
+		{"Include the earlier uncommitted changes.", true},
+		{"Fix the typo and include the earlier uncommitted changes in the commit.", true},
+		{"Please commit the leftover changes too.", true},
+		{"Commit the previous uncommitted edits as well", true},
+		{"Commit everything.", true},
+		{"Fix the lint errors and commit everything", true},
+		{"commit all the changes", true},
+		{"Don't forget to commit the earlier uncommitted changes.", true},
+		{"别忘了把之前未提交的改动也提交", true},
+		// Negations keep them out.
+		{"不要提交之前的改动", false},
+		{"不要提交之前未提交的改动", false},
+		{"之前未提交的改动不要提交", false},
+		{"修复 bug，但不要提交之前的改动", false},
+		{"别把之前的改动提交了", false},
+		{"Don't commit the earlier uncommitted changes.", false},
+		{"Fix it but do not include the earlier uncommitted changes.", false},
+		{"Never commit everything at once.", false},
+		{"Keep the earlier uncommitted changes out of the commit.", false},
+		{"Commit everything except the .env file.", false},
+		// No request about them at all.
+		{"", false},
+		{"Fix the login bug and push.", false},
+		{"修复登录 bug，改完推到分支", false},
+		{"提交之前先跑一下测试", false},
+		{"所有测试通过后提交", false},
+		{"提交所有测试文件", false},
+		{"Add tests for the previous changes.", false},
+		{"Revert the earlier changes to the theme.", false},
+		{"Why are there uncommitted changes in the workspace?", false},
+	}
+	for _, c := range cases {
+		if got := ParseIncludeLeftovers(c.request); got != c.want {
+			t.Errorf("%q: got %t, want %t", c.request, got, c.want)
+		}
+	}
+}

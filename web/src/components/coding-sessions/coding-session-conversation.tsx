@@ -21,7 +21,7 @@ import { CODING_PHASE_LABELS, CODING_STOPPED_MESSAGE, codingModelLabel, codingSe
 import { CodingPlanPill } from './coding-session-plan'
 import { CodingCommitBadge, CodingPullRequestCard, CodingUncommittedChanges, type CodingCommitStats } from './coding-session-pr-card'
 import { CodingActionRow, CodingActivityGroup, CodingAuthLine, CodingErrorCard, CodingLatestButton, CodingReasoning, CodingShimmer, CodingStaleCard, CodingTimeMarker } from './coding-session-stream'
-import { buildStreamItems, buildStreamTurns, commitsByTurn, isCodingSessionGenerating, pendingElicitation, stopRequested, type StreamItem } from './coding-session-stream-model'
+import { buildStreamItems, buildStreamTurns, commitsByTurn, isCodingSessionGenerating, leftoverPathCount, pendingElicitation, stopRequested, type StreamItem } from './coding-session-stream-model'
 import { useCodingSessionArtifacts } from './artifacts/use-coding-session-artifacts'
 import { artifactSrc, screenshotsByTurn } from './artifacts/coding-artifacts-model'
 import { openLightbox } from '@/components/editor/lightbox-bridge'
@@ -168,6 +168,10 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
     } finally { busyRef.current = false; setBusy(false) }
   }
   const retry = () => void run(() => restartCodingSession(session.id), 'Restarted coding session')
+  // The latest turn left earlier uncommitted changes out of its commit: "Commit earlier changes" queues a development
+  // turn that commits them too (read-only and no-publish turns never commit).
+  const leftovers = !generating && can.prompt && !session.archivedAt && session.phase !== 'awaitingApproval' ? leftoverPathCount(turns.at(-1)?.items ?? []) : 0
+  const commitLeftovers = () => void run(() => promptCodingSession(session.id, t('Commit the earlier uncommitted changes too.'), undefined, undefined, { scope: 'write', includeLeftovers: true }))
 
   const elicitation = session.phase === 'awaitingUser' ? pendingElicitation(activities) : undefined
   const request: ComposerRequest | undefined = session.phase === 'awaitingApproval' ? { kind: 'approval' } : elicitation ? { kind: 'elicitation', activity: elicitation } : undefined
@@ -261,6 +265,10 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
             {shots.get(turn.id)?.length ? <CodingTurnScreenshots shots={shots.get(turn.id)!} all={[...shots.values()].flat()} onExpired={artifactExpired}/> : null}
             {last && stopReply && <p className="cs-text cs-stop-reply">{t(CODING_STOPPED_MESSAGE)}</p>}
             {turnCommits?.length ? <CodingCommitBadge commits={turnCommits} stats={commitStats} onOpenChanges={onOpenChanges} pr={pr ?? (session.repository ? { codeHost: session.codeHost ?? 'github', hostName: session.hostName ?? '', repository: session.repository } : undefined)}/> : null}
+            {last && leftovers > 0 && <div className="cs-leftovers" role="group" aria-label={t('Commit earlier changes')}>
+              <span>{t('Earlier uncommitted changes in {count} path(s) were not committed.').replace('{count}', String(leftovers))}</span>
+              <button type="button" className="cs-button is-small" disabled={busy} onClick={commitLeftovers}>{t('Commit earlier changes')}</button>
+            </div>}
           </div>}
         </section>
       })}
@@ -289,7 +297,7 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
     <div className="cs-composer-area">
       <CodingPlanPill plan={session.plan} updatedAt={session.updatedAt} complete={session.state === 'complete'}/>
       {(can.prompt || request) && !session.archivedAt && <CodingComposer data={data} sessionId={session.id} generating={generating} stopPending={stopRequested(session)} canPrompt={can.prompt} busy={busy} request={request}
-        onSend={(text, files, scope) => run(() => scope ? promptCodingSession(session.id, text, undefined, files, scope) : promptCodingSession(session.id, text, undefined, files))}
+        onSend={(text, files) => run(() => promptCodingSession(session.id, text, undefined, files))}
         onStop={() => void run(() => stopCodingSession(session.id))}
         onApprove={async reject => { await run(() => approveCodingSession(session.id, reject), reject ? 'Rejected coding session' : 'Approved coding session') }}/>}
     </div>

@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto'
+import { createReadStream } from 'node:fs'
+import { lstat, readlink } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { RunResult } from './process.js'
 import type { Turn } from './protocol.js'
 
@@ -117,6 +120,39 @@ export function parseStatus(output: string): Map<string, string> {
   return dirty
 }
 
+/**
+ * The content of each path in the working tree, as a short fingerprint: file content and executable bit, a
+ * symlink's target, "missing" for a deleted path. Comparing the fingerprints of the paths that were already dirty
+ * before a turn with the same paths at its end tells which of them the turn changed (a path-level check cannot:
+ * the path was dirty before and after).
+ */
+export async function fingerprintPaths(repoDir: string, paths: Iterable<string>): Promise<Map<string, string>> {
+  const prints = new Map<string, string>()
+  await Promise.all([...paths].map(async (path) => prints.set(path, await fingerprint(join(repoDir, path)))))
+  return prints
+}
+
+async function fingerprint(file: string): Promise<string> {
+  try {
+    const stat = await lstat(file)
+    if (stat.isSymbolicLink()) return `link:${hash(await readlink(file))}`
+    if (stat.isDirectory()) return 'dir'
+    if (!stat.isFile()) return 'other'
+    const digest = createHash('sha256')
+    for await (const chunk of createReadStream(file)) digest.update(chunk as Buffer)
+    return `${stat.mode & 0o111 ? 'x' : 'f'}:${digest.digest('hex')}`
+  } catch {
+    return 'missing'
+  }
+}
+
+/**
+ * The leftover paths (dirty before the turn) whose content the turn changed: they count as the turn's own changes.
+ */
+export function touchedLeftovers(leftovers: Iterable<string>, before: Map<string, string>, after: Map<string, string>): string[] {
+  return [...leftovers].filter((path) => before.get(path) !== after.get(path))
+}
+
 /** Tracked paths (not "??") among the dirty ones. */
 function tracked(dirty: Map<string, string>): string[] {
   return [...dirty].filter(([, xy]) => xy !== '??').map(([path]) => path)
@@ -153,7 +189,7 @@ function short(sha: string): string {
 // ── harness input ─────────────────────────────────────────────────────────
 
 /** The guidance for the turn's scope (system level: the runner's rules). */
-export function scopeGuidance(scope: TurnScope, leftovers: string[]): string {
+export function scopeGuidance(scope: TurnScope, leftovers: string[], includeLeftovers = false): string {
   const lines = ['## Current turn', '- The latest user message is the goal of this turn. The issue and earlier turns are background: do not continue earlier work unless the latest message asks for it. Its scope never overrides the sandbox, security or repository rules.']
   if (scope === 'readOnly') {
     lines.push(
@@ -167,7 +203,17 @@ export function scopeGuidance(scope: TurnScope, leftovers: string[]): string {
     lines.push('- Write scope: you may change the repository for this request. Flow commits the changes made in this turn, pushes the branch and updates the draft pull/merge request when the turn ends.')
   }
   if (leftovers.length) {
-    lines.push(`- The working tree already had uncommitted changes before this turn (${listPaths(leftovers)}). They are not part of this turn: Flow does not commit them, and you must not commit, discard, stash or overwrite them unless the latest message asks you to.`)
+    const paths = listPaths(leftovers)
+    if (!publishes(scope)) {
+      lines.push(`- The working tree already had uncommitted changes before this turn (${paths}). Leave them as they are: do not commit, discard, stash or overwrite them.`)
+    } else if (includeLeftovers) {
+      lines.push(`- The working tree already had uncommitted changes before this turn (${paths}). The latest message asks to include them: Flow commits them together with this turn's changes. Do not discard, stash or revert them.`)
+    } else {
+      lines.push(
+        `- The working tree already had uncommitted changes before this turn (${paths}). They are not part of this turn: Flow does not commit them, and you must not commit, discard, stash or overwrite them unless the latest message asks you to.`,
+        '- A file among them that you change in this turn counts as this turn\'s change: Flow commits it whole, including its earlier uncommitted changes. Leave the others untouched.',
+      )
+    }
   }
   return lines.join('\n')
 }

@@ -509,6 +509,9 @@ func (s *server) promptCodingSession(w http.ResponseWriter, r *http.Request) {
 		// Scope is the turn's write scope ("write", "noPublish", "readOnly");
 		// omitted or "auto" lets Flow infer it from the prompt.
 		Scope string `json:"scope"`
+		// IncludeLeftovers also commits the uncommitted changes that were in
+		// the working tree before the turn (write turns only).
+		IncludeLeftovers bool `json:"includeLeftovers"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 96<<10)
 	if !decodeJSON(w, r, &input) {
@@ -527,7 +530,7 @@ func (s *server) promptCodingSession(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(input.Prompt) == "" && len(files) > 0 {
 		input.Prompt = "See the attached files."
 	}
-	updated, err := s.coding.service.Prompt(r.Context(), viewer.workspace, session.ID, coding.PromptInput{Prompt: input.Prompt, AuthorID: viewer.user.ID, Attachments: input.Attachments, Files: files, Scope: input.Scope})
+	updated, err := s.coding.service.Prompt(r.Context(), viewer.workspace, session.ID, coding.PromptInput{Prompt: input.Prompt, AuthorID: viewer.user.ID, Attachments: input.Attachments, Files: files, Scope: input.Scope, IncludeLeftovers: input.IncludeLeftovers})
 	s.respondCodingSession(w, r.Context(), viewer, updated, err)
 }
 

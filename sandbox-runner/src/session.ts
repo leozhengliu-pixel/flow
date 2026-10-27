@@ -35,7 +35,7 @@ import { AsyncQueue } from './queue.js'
 import { AuthError } from './runtime-client.js'
 import { sandboxSecrets } from './proxy-env.js'
 import { prepareRepository, runSetup, SetupError, SetupLog } from './setup.js'
-import { listPaths, publishes, readOnlyViolations, readWorkspaceState, requestHeader, turnScope, type TurnScope, type WorkspaceState } from './turn-scope.js'
+import { fingerprintPaths, listPaths, publishes, readOnlyViolations, readWorkspaceState, requestHeader, touchedLeftovers, turnScope, type TurnScope, type WorkspaceState } from './turn-scope.js'
 
 // Session mode (§16): bootstrap → prepare workspace (and setup) → turns.
 // A turn spawns the harness, streams mapped events, then commits, pushes,
@@ -116,8 +116,15 @@ interface StopRequest {
 interface TurnRun {
   scope: TurnScope
   before: WorkspaceState
-  /** Paths with uncommitted changes before the turn (never committed by Flow). */
+  /**
+   * Paths with uncommitted changes before the turn. Flow commits one only when the turn changed its content, or
+   * all of them when the request asked to include them.
+   */
   leftovers: string[]
+  /** The leftovers' content before the turn (fingerprintPaths). */
+  leftoverPrints: Map<string, string>
+  /** The request asked to commit the leftovers too (Turn.includeLeftovers). */
+  includeLeftovers: boolean
 }
 
 export interface TurnReport extends TurnCompleteRequest {
@@ -393,11 +400,14 @@ export class Session {
     const startHead = await this.git.head()
     // The turn's write scope comes with the turn from Flow (older APIs: from
     // its own request), and the workspace as it was before the harness ran:
-    // uncommitted changes left from before this turn are never committed by
-    // Flow, discarded or overwritten.
+    // uncommitted changes left from before this turn are never discarded or
+    // overwritten by Flow, and committed only when this turn changes them or
+    // its request asks to include them.
     const before = await readWorkspaceState((args, options) => this.git.git(args, options))
-    const run: TurnRun = { scope: turnScope(turn), before, leftovers: [...before.dirty.keys()] }
-    this.logger.info('turn scope', { turnId: turn.id, scope: run.scope, source: turn.scope ? turn.scopeSource || 'api' : 'runner', leftovers: run.leftovers.length })
+    const leftovers = [...before.dirty.keys()]
+    const leftoverPrints = await fingerprintPaths(this.config.paths.repo, leftovers)
+    const run: TurnRun = { scope: turnScope(turn), before, leftovers, leftoverPrints, includeLeftovers: turn.includeLeftovers === true }
+    this.logger.info('turn scope', { turnId: turn.id, scope: run.scope, source: turn.scope ? turn.scopeSource || 'api' : 'runner', leftovers: run.leftovers.length, includeLeftovers: run.includeLeftovers })
     await rm(elicitationMarker(this.config.paths.flowDir, turn.id), { force: true })
 
     let attempt = await this.runHarness(turn, this.resumeId, run)
@@ -464,7 +474,7 @@ export class Session {
       paths: this.config.paths,
       turn: this.harnessTurn(turn, resumeId, run),
       resumeId,
-      guidance: runnerGuidance(this.bootstrap, this.config.paths.repo, { scope: run.scope, leftovers: run.leftovers }),
+      guidance: runnerGuidance(this.bootstrap, this.config.paths.repo, { scope: run.scope, leftovers: run.leftovers, includeLeftovers: run.includeLeftovers }),
       mcp: mcpCommand(this.config, this.bootstrap, turn.id),
       env: this.env(),
       logger: this.logger,
@@ -556,13 +566,24 @@ export class Session {
     try {
       if (!run.leftovers.length) {
         await this.git.commitAll(message, identity)
-      } else {
-        // Only what changed in this turn: paths that already had uncommitted
-        // changes before it stay uncommitted (and untouched) for review.
+      } else if (run.includeLeftovers) {
+        // The request asked to include the earlier uncommitted changes.
         const after = await readWorkspaceState((args, options) => this.git.git(args, options))
-        const own = [...after.dirty.keys()].filter((path) => !run.before.dirty.has(path))
+        const earlier = run.leftovers.filter((path) => after.dirty.has(path))
+        await this.git.commitAll(message, identity)
+        if (earlier.length) this.buffer.push(this.events.thought(`Flow committed ${earlier.length} path(s) that already had uncommitted changes before this turn, as requested: ${listPaths(earlier)}.`))
+      } else {
+        // What changed in this turn: new dirty paths, and earlier dirty
+        // paths whose content this turn changed (committed whole). The other
+        // earlier changes stay uncommitted (and untouched) for review.
+        const after = await readWorkspaceState((args, options) => this.git.git(args, options))
+        const leftoverPrintsNow = await fingerprintPaths(this.config.paths.repo, run.leftovers)
+        const touched = new Set(touchedLeftovers(run.leftovers, run.leftoverPrints, leftoverPrintsNow))
+        const own = [...after.dirty.keys()].filter((path) => !run.before.dirty.has(path) || touched.has(path))
         await this.git.commitPaths(message, identity, own)
-        const left = run.leftovers.filter((path) => after.dirty.has(path))
+        const left = run.leftovers.filter((path) => after.dirty.has(path) && !touched.has(path))
+        const changed = run.leftovers.filter((path) => after.dirty.has(path) && touched.has(path))
+        if (changed.length) this.buffer.push(this.events.thought(`Flow committed ${changed.length} path(s) that had uncommitted changes before this turn because this turn changed them: ${listPaths(changed)}.`))
         if (left.length) this.buffer.push(this.events.thought(`Flow did not commit ${left.length} path(s) that already had uncommitted changes before this turn: ${listPaths(left)}. They are left in the workspace unchanged.`))
       }
     } catch (commitError) {

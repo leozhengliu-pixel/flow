@@ -281,6 +281,46 @@ func TestUnsureFollowUpIsQueuedAtOnceAndWaitsForItsScope(t *testing.T) {
 	}
 }
 
+// A follow-up that asks to commit the earlier uncommitted changes (in words
+// or with the explicit flag) reaches the runner with includeLeftovers; other
+// follow-ups and the turns Flow starts itself do not, and a model-settled
+// scope keeps the flag.
+func TestFollowUpTurnsCarryIncludeLeftovers(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	session, token := followUpSession(t, h)
+	h.svc.TurnScopeModel = coding.TurnScopeModelFunc(func(context.Context, string) (string, error) { return coding.TurnScopeWrite, nil })
+	var after int64
+	for _, c := range []struct {
+		input coding.PromptInput
+		want  bool
+	}{
+		{coding.PromptInput{Prompt: "把之前未提交的改动也提交"}, true},
+		{coding.PromptInput{Prompt: "Commit the earlier uncommitted changes.", Scope: "write", IncludeLeftovers: true}, true},
+		{coding.PromptInput{Prompt: "不要提交之前的改动，修复登录 bug"}, false},
+		{coding.PromptInput{Prompt: "Fix the login bug and push."}, false},
+		{coding.PromptInput{Prompt: "Commit everything.", Kind: coding.TurnKindFixPR}, false},
+	} {
+		c.input.AuthorID = "user1"
+		if _, err := h.svc.Prompt(ctx, workspace, session.ID, c.input); err != nil {
+			t.Fatal(err)
+		}
+		inbox, err := h.svc.Inbox(ctx, token, after, 10*time.Second)
+		turns := inboxTurns(inbox)
+		if err != nil || len(turns) != 1 {
+			t.Fatalf("%q: inbox %+v %v", c.input.Prompt, inbox, err)
+		}
+		after = turns[0].Seq
+		turn := turns[0].Turn
+		if turn.IncludeLeftovers != c.want {
+			t.Errorf("%q: includeLeftovers %t, want %t", c.input.Prompt, turn.IncludeLeftovers, c.want)
+		}
+		if _, err := h.svc.CompleteTurn(ctx, token, turn.ID, coding.TurnCompleteRequest{Status: coding.TurnSuccess, Scope: turn.Scope}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // A model error or timeout settles the pending scope with the parser's
 // answer.
 func TestPendingScopeFallsBackToTheParserOnModelFailure(t *testing.T) {

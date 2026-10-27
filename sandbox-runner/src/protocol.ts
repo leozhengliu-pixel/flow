@@ -123,6 +123,11 @@ export interface Turn {
   scope?: 'write' | 'noPublish' | 'readOnly'
   /** How Flow decided the scope: user, kind, rules or model. */
   scopeSource?: string
+  /**
+   * Commit the uncommitted changes that were already in the working tree before the turn too (the request asked
+   * for it). Without it those paths are committed only when the turn changes them. Only write turns commit.
+   */
+  includeLeftovers?: boolean
 }
 
 export interface BootstrapResponse {

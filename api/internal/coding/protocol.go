@@ -183,6 +183,13 @@ type Turn struct {
 	// TurnScopePendingStale falls back to Scope at dispatch. Always 0 on a
 	// delivered turn.
 	ScopePendingSince int64 `json:"scopePendingSince,omitempty"`
+	// IncludeLeftovers asks the runner to commit, with the turn's own
+	// changes, the uncommitted changes that were already in the working tree
+	// before the turn. Without it those paths are committed only when the
+	// turn changes them. Set when the request asks for it
+	// (ParseIncludeLeftovers) or explicitly ("Commit earlier changes");
+	// only write turns ever commit.
+	IncludeLeftovers bool `json:"includeLeftovers,omitempty"`
 }
 
 // SetupSecretsResponse is GET /internal/coding-runtime/setup-secrets. It is
