@@ -36,6 +36,10 @@ it('lists only working integrations as cards grouped by category and opens them'
   expect(open).toHaveBeenLastCalledWith('github')
   await user.click(screen.getByRole('button', { name: /Jira/ }))
   expect(open).toHaveBeenLastCalledWith('jira')
+  await user.click(screen.getByRole('button', { name: /Feishu/ }))
+  expect(open).toHaveBeenLastCalledWith('feishu')
+  await user.click(screen.getByRole('button', { name: /Lark/ }))
+  expect(open).toHaveBeenLastCalledWith('lark')
 
   await user.type(screen.getByRole('textbox', { name: 'Search integrations' }), 'gitlab')
   expect(screen.getByRole('button', { name: /GitLab/ })).toBeInTheDocument()

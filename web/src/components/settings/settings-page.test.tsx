@@ -17,6 +17,7 @@ vi.hoisted(() => {
 import { MemoryRouter } from "react-router-dom";
 import { I18nProvider } from "@/i18n/i18n";
 import { makeBootstrap } from "@/test/fixtures";
+import * as chatIntegrationsApi from "@/lib/chat-integrations-api";
 import { preloadSettingsPage, SettingsPage } from "./settings-page";
 
 function props(): ComponentProps<typeof SettingsPage> {
@@ -300,6 +301,51 @@ it('lists Integrations as its own section, "All integrations" and enabled integr
   render(<I18nProvider><SettingsPage {...{ ...input, data: { ...input.data, viewerRole: 'member' } }}/></I18nProvider>);
   expect(section('Integrations')?.querySelector('button')?.textContent?.trim()).toBe('Integrations');
   expect(section('Features')?.textContent).not.toContain('Integrations');
+});
+
+it('keeps Feishu workspace configuration read-only for members without personal account actions', async () => {
+  localStorage.setItem('flow:locale', 'en');
+  const fetch = vi.spyOn(chatIntegrationsApi, 'fetchChatIntegration').mockResolvedValue({
+    connection: { id: 'chat-connection', provider: 'feishu', status: 'connected' } as never,
+    identity: null, bindings: [], credentialsConfigured: true, webhookURL: '', canManage: false,
+  });
+  const input = props();
+  input.page = 'integrations';
+  input.integrationSlug = 'feishu';
+  input.data = { ...input.data, viewerRole: 'member', integrationConnections: [] };
+  const view = render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  try {
+    expect(await screen.findByRole('region', { name: 'Connection' })).toBeInTheDocument();
+    expect(document.querySelector('fieldset.settings-read-only-fields')).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Link account' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'App ID' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add group' })).not.toBeInTheDocument();
+  } finally {
+    view.unmount();
+    fetch.mockRestore();
+  }
+});
+
+it('lets members connect chat identities from Connected accounts without workspace configuration controls', async () => {
+  localStorage.setItem('flow:locale', 'en');
+  const fetch = vi.spyOn(chatIntegrationsApi, 'fetchChatIntegration').mockResolvedValue({
+    connection: { id: 'chat-connection', provider: 'feishu', status: 'connected' } as never,
+    identity: null, bindings: [], credentialsConfigured: true, webhookURL: '', canManage: false,
+  });
+  const input = props();
+  input.page = 'connections';
+  input.data = { ...input.data, viewerRole: 'member', integrationConnections: [{ id: 'chat-connection', provider: 'feishu', name: 'Feishu', status: 'connected' } as never] };
+  const view = render(<MemoryRouter><I18nProvider><SettingsPage {...input}/></I18nProvider></MemoryRouter>);
+  try {
+    const row = await screen.findByRole('region', { name: 'Feishu account' });
+    expect(screen.queryByRole('region', { name: 'Lark account' })).not.toBeInTheDocument();
+    expect(await within(row).findByRole('button', { name: 'Connect' })).toBeEnabled();
+    expect(screen.queryByRole('textbox', { name: 'App ID' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add group' })).not.toBeInTheDocument();
+  } finally {
+    view.unmount();
+    fetch.mockRestore();
+  }
 });
 
 it('draws the Projects › Statuses nav item with the reference app\'s hexagon glyph', () => {

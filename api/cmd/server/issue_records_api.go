@@ -425,7 +425,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		issueRecordsError(w, store.ErrAuthForbidden)
 		return
 	}
-	if issueUpdateIsNoop(page.Items[0], input) {
+	if issueUpdateIsNoop(page.Items[0], input) && store.ChatMutationKey(r.Context()) == "" {
 		projected, projectionErr := s.projectIssueRecordReferences(r, metadata, query, []domain.Issue{page.Items[0]})
 		if projectionErr != nil {
 			issueRecordsError(w, projectionErr)

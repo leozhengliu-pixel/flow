@@ -6,6 +6,9 @@ selected backend with missing required values causes a clear startup error.
 Secrets may be supplied as `VARIABLE_FILE=/run/secrets/name`; the file value
 takes precedence over `VARIABLE`.
 
+For application bot setup, permissions, account linking, and group bindings,
+see [Feishu and Lark integrations](feishu-lark.md).
+
 ## Logging
 
 The API writes startup, request, integration, and error logs to stdout so

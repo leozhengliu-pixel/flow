@@ -64,6 +64,7 @@ import { agentRuntimeZhCN } from './translations-agent-runtime';
 import { workspaceMembersZhCN } from './translations-workspace-members';
 import { pdfViewerZhCN } from './translations-pdf-viewer';
 import { createIssueZhCN } from './translations-create-issue';
+import { chatIntegrationsZhCN } from './translations-chat-integrations';
 
 export const zhCN: Record<string, string> = {
   "Allow installation in other workspaces": "允许安装到其他工作区",
@@ -5948,3 +5949,4 @@ for (const [source, translation] of Object.entries(codingSessionStatesZhCN)) zhC
 for (const [source, translation] of Object.entries(pdfViewerZhCN)) zhCN[source] ??= translation;
 // New issue dialog (status checks, upload results, quick suggestions) fills gaps only.
 for (const [source, translation] of Object.entries(createIssueZhCN)) zhCN[source] ??= translation;
+for (const [source, translation] of Object.entries(chatIntegrationsZhCN)) zhCN[source] ??= translation;

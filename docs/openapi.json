@@ -12531,6 +12531,49 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/integrations/{provider}/{id}/chat/webhook": {
+      "post": {
+        "operationId": "post_integrations_provider_id_chat_webhook",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "POST /api/integrations/{provider}/{id}/chat/webhook",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/integrations/{provider}/{id}/oauth/refresh": {
       "post": {
         "operationId": "post_integrations_provider_id_oauth_refresh",
@@ -12658,6 +12701,360 @@
         },
         "x-flow-internal": true,
         "x-flow-source": "main.go"
+      }
+    },
+    "/api/integrations/{provider}/chat": {
+      "delete": {
+        "operationId": "delete_integrations_provider_chat",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "DELETE /api/integrations/{provider}/chat",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_integrations.go"
+      },
+      "get": {
+        "operationId": "get_integrations_provider_chat",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "GET /api/integrations/{provider}/chat",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_integrations.go"
+      },
+      "put": {
+        "operationId": "put_integrations_provider_chat",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "PUT /api/integrations/{provider}/chat",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_integrations.go"
+      }
+    },
+    "/api/integrations/{provider}/chat/bindings": {
+      "post": {
+        "operationId": "post_integrations_provider_chat_bindings",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "POST /api/integrations/{provider}/chat/bindings",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_integrations.go"
+      }
+    },
+    "/api/integrations/{provider}/chat/bindings/{id}": {
+      "delete": {
+        "operationId": "delete_integrations_provider_chat_bindings_id",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "DELETE /api/integrations/{provider}/chat/bindings/{id}",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_integrations.go"
+      }
+    },
+    "/api/integrations/{provider}/chat/chats": {
+      "get": {
+        "operationId": "get_integrations_provider_chat_chats",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "GET /api/integrations/{provider}/chat/chats",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_integrations.go"
+      }
+    },
+    "/api/integrations/{provider}/chat/identity": {
+      "delete": {
+        "operationId": "delete_integrations_provider_chat_identity",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "DELETE /api/integrations/{provider}/chat/identity",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_integrations.go"
+      }
+    },
+    "/api/integrations/{provider}/chat/identity/oauth/callback": {
+      "get": {
+        "operationId": "get_integrations_provider_chat_identity_oauth_callback",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "GET /api/integrations/{provider}/chat/identity/oauth/callback",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_integrations.go"
+      }
+    },
+    "/api/integrations/{provider}/chat/identity/start": {
+      "post": {
+        "operationId": "post_integrations_provider_chat_identity_start",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "POST /api/integrations/{provider}/chat/identity/start",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_integrations.go"
+      }
+    },
+    "/api/integrations/{provider}/chat/test": {
+      "post": {
+        "operationId": "post_integrations_provider_chat_test",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "POST /api/integrations/{provider}/chat/test",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_integrations.go"
       }
     },
     "/api/integrations/{provider}/oauth/callback": {

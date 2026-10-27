@@ -168,7 +168,7 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 	var event domain.DomainEvent
 	var realtimePayload json.RawMessage
 	var changedIssues []string
-	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(workspaceKey)
+	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(ctx, workspaceKey)
 	traceStart(ctx, "scoped")
 	apply := func() error {
 		// The callback works on a clone; readers keep the committed snapshot

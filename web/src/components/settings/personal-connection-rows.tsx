@@ -68,7 +68,7 @@ function usePersonalConnectionResult() {
 }
 
 /** "● Connected ⌄" pill whose menu reconnects or disconnects. */
-function ConnectionStatusMenu({
+export function ConnectionStatusMenu({
   name,
   reconnect,
   connectedLabel,

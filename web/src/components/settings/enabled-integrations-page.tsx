@@ -8,14 +8,22 @@ import { Plug } from "lucide-react";
 import { IntegrationBrandIcon } from "@/components/settings/integration-brand-icon";
 import { useI18n } from "@/i18n/i18n";
 import { disconnectIntegration } from "@/lib/api";
+import { disconnectChatIntegration } from "@/lib/chat-integrations-api";
+import { isWorkspaceAdmin } from "@/lib/settings-access";
 import {
+  chatProviderName,
   getIntegrationCatalogEntry,
+  isChatProvider,
+  isInstalledIntegrationConnection,
   primaryIntegrations,
 } from "@/lib/integration-catalog";
+import type { ChatProvider } from "@/lib/integration-catalog";
 import type { BootstrapData } from "@/types/flow";
 import { toast } from "@/lib/toast";
 // The page's own layout (feature-* classes): without it, opening this route first renders unstyled.
 import "./feature-settings.css";
+
+const CHAT_STATUS_LABELS: Record<string, string> = { connected: "Connected", pending_authorization: "Configured", error: "Connection failed" };
 
 type Props = {
   data: BootstrapData;
@@ -26,13 +34,12 @@ type Props = {
 
 export function EnabledIntegrationsSettingsPage({ data, onBack, onOpenSlug, onReload }: Props) {
   const { t, formatDate } = useI18n();
-  const connections = data.integrationConnections.filter(
-    (item) => item.status === "connected" || item.status === "configured",
-  );
+  const connections = data.integrationConnections.filter(isInstalledIntegrationConnection);
 
   const revokeConnection = async (provider: string) => {
     try {
-      await disconnectIntegration(provider);
+      if (isChatProvider(provider)) await disconnectChatIntegration(provider);
+      else await disconnectIntegration(provider);
       await onReload();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("Could not revoke access"));
@@ -62,9 +69,10 @@ export function EnabledIntegrationsSettingsPage({ data, onBack, onOpenSlug, onRe
                   getIntegrationCatalogEntry(item.provider) ??
                   primaryIntegrations().find((entry) => entry.connectProvider === item.provider);
                 const slug = catalog?.slug ?? item.provider;
+                const chat = isChatProvider(item.provider) ? item.provider : null;
                 const brand =
-                  item.provider === "github" || item.provider === "gitlab" || item.provider === "slack"
-                    ? (item.provider as "github" | "gitlab" | "slack")
+                  item.provider === "github" || item.provider === "gitlab" || item.provider === "slack" || chat
+                    ? (item.provider as "github" | "gitlab" | "slack" | ChatProvider)
                     : null;
                 return (
                   <div key={item.id} className="feature-row">
@@ -74,27 +82,27 @@ export function EnabledIntegrationsSettingsPage({ data, onBack, onOpenSlug, onRe
                     <div>
                       <strong data-i18n-ignore>
                         <button type="button" className="feature-text-link" onClick={() => onOpenSlug(slug)}>
-                          {item.name}
+                          {chat ? chatProviderName(chat, t) : item.name}
                         </button>
                       </strong>
                       <span>
                         {t("Enabled")}
                         {item.createdAt ? ` · ${formatDate(item.createdAt)}` : ""}
                         {" · "}
-                        {t(item.status)}
+                        {t(chat ? CHAT_STATUS_LABELS[item.status] ?? item.status : item.status)}
                       </span>
                     </div>
                     <aside>
                       <button type="button" className="feature-button" onClick={() => onOpenSlug(slug)}>
                         {t("Manage")}
                       </button>
-                      <button
+                      {(!chat || isWorkspaceAdmin(data)) && <button
                         type="button"
                         className="feature-button danger"
                         onClick={() => void revokeConnection(item.provider)}
                       >
                         {t("Revoke access")}
-                      </button>
+                      </button>}
                     </aside>
                   </div>
                 );

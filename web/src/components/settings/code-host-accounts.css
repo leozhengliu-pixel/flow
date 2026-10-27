@@ -22,3 +22,8 @@
 .code-host-account-row>.settings-row-copy{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px}
 .code-host-account-row>.settings-row-copy>strong{font-size:13px;font-weight:500;line-height:16px;color:var(--theme-text-primary)}
 .code-host-account-row>.settings-row-copy>span{font-size:12px;line-height:15px}
+.chat-account-error{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 16px 12px;color:var(--semantic-danger);font-size:12px;line-height:18px}
+.chat-account-error>span{min-width:0;overflow-wrap:anywhere}
+.chat-account-error .personal-action{display:inline-flex;align-items:center;gap:5px;flex-shrink:0}
+.chat-account-setup-link{margin:0 16px 14px;font-size:12px}
+.chat-account-setup-link a{color:var(--theme-text-secondary);text-decoration:underline;text-underline-offset:2px}

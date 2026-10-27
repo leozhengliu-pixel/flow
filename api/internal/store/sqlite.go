@@ -35,25 +35,28 @@ type SQLiteStore struct {
 	viewer           domain.User
 	// The sinks are read after every committed write; atomics keep that
 	// read from queueing behind a writer holding mu.
-	realtimeSink     atomic.Pointer[func(string, domain.RealtimeEvent)]
-	webhookSink      atomic.Pointer[func(string, domain.DomainEvent)]
-	accountSink      atomic.Pointer[func(string)]       // see SetAccountAccessSink
-	agentReplies     atomic.Pointer[AgentReplyListener] // see SetAgentReplyListener
-	agentRunWake     agentRunWaker                      // see AgentRunWake
-	agentRunCancel   agentRunWaker                      // see AgentRunCancelWake
-	coordinator      WorkspaceCoordinator
-	fixtureProfile   string
-	fixturePassword  string
-	maxStateBytes    int
-	lifecycle        context.Context
-	stopLifecycle    context.CancelFunc
-	apiKeyUseOnce    sync.Once
-	apiKeyUseMu      sync.Mutex
-	apiKeyUseTimes   map[string]time.Time
-	apiKeyUseQueue   chan apiKeyUse
-	apiKeyUseWorkers sync.WaitGroup
-	apiKeyUseClosed  bool
-	teamMembershipMu sync.Mutex
+	realtimeSink atomic.Pointer[func(string, domain.RealtimeEvent)]
+	webhookSink  atomic.Pointer[func(string, domain.DomainEvent)]
+	// chatSnapshotFlags caches, per workspace key, whether a connected chat
+	// application needs event diffs (see chatSnapshotFlag).
+	chatSnapshotFlags sync.Map
+	accountSink       atomic.Pointer[func(string)]       // see SetAccountAccessSink
+	agentReplies      atomic.Pointer[AgentReplyListener] // see SetAgentReplyListener
+	agentRunWake      agentRunWaker                      // see AgentRunWake
+	agentRunCancel    agentRunWaker                      // see AgentRunCancelWake
+	coordinator       WorkspaceCoordinator
+	fixtureProfile    string
+	fixturePassword   string
+	maxStateBytes     int
+	lifecycle         context.Context
+	stopLifecycle     context.CancelFunc
+	apiKeyUseOnce     sync.Once
+	apiKeyUseMu       sync.Mutex
+	apiKeyUseTimes    map[string]time.Time
+	apiKeyUseQueue    chan apiKeyUse
+	apiKeyUseWorkers  sync.WaitGroup
+	apiKeyUseClosed   bool
+	teamMembershipMu  sync.Mutex
 	// changeLogMinRows: see SetChangeLogMinRows.
 	changeLogMinRows atomic.Int64
 	// startupCacheDrops lists workspaces whose metadata records a startup
@@ -184,25 +187,39 @@ func (s *SQLiteStore) webhookConfigured() bool {
 	return s.webhookSink.Load() != nil
 }
 
-func (s *SQLiteStore) webhookNeeded(workspaceKey string) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	data, ok := s.workspaces[workspaceKey]
-	if !ok {
+func (s *SQLiteStore) webhookNeeded(ctx context.Context, workspaceKey string) bool {
+	needed := func() bool {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		data, ok := s.workspaces[workspaceKey]
+		if !ok {
+			return false
+		}
+		for _, webhook := range data.Webhooks {
+			if webhook.Enabled && strings.TrimSpace(webhook.URL) != "" {
+				return true
+			}
+		}
+		// Event loops and chat subscriptions need the changed fields too.
+		for _, loop := range data.Loops {
+			if loop.Enabled && loop.Status != "draft" && loop.TriggerType != "" && loop.TriggerType != "schedule" {
+				return true
+			}
+		}
+		for _, connection := range data.IntegrationConnections {
+			if (connection.Provider == "feishu" || connection.Provider == "lark") && connection.Status == "connected" {
+				return true
+			}
+		}
 		return false
+	}()
+	if needed {
+		return true
 	}
-	for _, webhook := range data.Webhooks {
-		if webhook.Enabled && strings.TrimSpace(webhook.URL) != "" {
-			return true
-		}
-	}
-	// Event loops match on what an update changed, which needs previous values too.
-	for _, loop := range data.Loops {
-		if loop.Enabled && loop.Status != "draft" && loop.TriggerType != "" && loop.TriggerType != "schedule" {
-			return true
-		}
-	}
-	return false
+	// A setup interrupted before display metadata sync must not lose diffs,
+	// so the authoritative application records are consulted too, through a
+	// flag kept current by the chat integration writes.
+	return s.chatSnapshotFlag(ctx, workspaceKey)
 }
 
 func (s *SQLiteStore) webhook() func(string, domain.DomainEvent) {
@@ -369,6 +386,15 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		{version: 12, name: "code host account refresh lease", apply: s.addCodeHostAccountRefreshLease},
 		{version: 13, name: "review import state", apply: s.createReviewImportSchema},
 		{version: 14, name: "members' personal connections", apply: s.createPersonalConnectionsSchema},
+		{version: 15, name: "chat integrations and notification cursors", apply: func(ctx context.Context) error {
+			if err := s.EnsureChatIntegrationsSchema(ctx); err != nil {
+				return err
+			}
+			if err := s.createChatDomainCursorSchema(ctx); err != nil {
+				return err
+			}
+			return s.createChatMutationReceiptsSchema(ctx)
+		}},
 		// Versions from 1000 up are data migrations (runDataMigrations),
 		// which run after the workspaces are loaded.
 	}
@@ -1374,7 +1400,7 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 	}
 	var event domain.DomainEvent
 	var realtimePayload json.RawMessage
-	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(workspaceKey)
+	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(ctx, workspaceKey)
 	apply := func() error {
 		// Every callback works on a copy of the snapshot (cloneBootstrap or
 		// a field snapshot), so only writers are serialized while the
@@ -1963,6 +1989,9 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 	raw, _ := json.Marshal(data)
 	now := time.Now().UTC()
 	if workspace.URLKey != workspaceKey {
+		if err := renameChatWorkspace(ctx, tx, workspaceKey, workspace.URLKey); err != nil {
+			return domain.Bootstrap{}, err
+		}
 		for _, table := range workspaceRecordTables {
 			if _, err := tx.ExecContext(ctx, "UPDATE "+table+" SET workspace_key=? WHERE workspace_key=?", workspace.URLKey, workspaceKey); err != nil {
 				return domain.Bootstrap{}, err
@@ -1990,6 +2019,7 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 	}
 	if workspace.URLKey != workspaceKey {
 		_, _ = s.db.ExecContext(ctx, `UPDATE auth_account_state SET last_workspace_key=?,updated_at=? WHERE last_workspace_key=?`, workspace.URLKey, time.Now().UTC().Format(time.RFC3339Nano), workspaceKey)
+		s.forgetChatSnapshotFlag(workspaceKey, workspace.URLKey)
 	}
 	delete(s.workspaces, workspaceKey)
 	domain.RebuildTeamDirectory(&data)
@@ -2081,6 +2111,9 @@ func (s *SQLiteStore) deleteWorkspace(ctx context.Context, workspaceKey string) 
 		return err
 	}
 	defer tx.Rollback()
+	if err := deleteChatWorkspace(ctx, tx, workspaceKey); err != nil {
+		return err
+	}
 	for _, table := range workspaceRecordTables {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE workspace_key=?", workspaceKey); err != nil {
 			return err
@@ -2115,6 +2148,7 @@ func (s *SQLiteStore) deleteWorkspace(ctx context.Context, workspaceKey string) 
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	s.forgetChatSnapshotFlag(workspaceKey)
 	s.workspaces = remaining
 	s.lastWorkspaceKey = nextWorkspaceKey
 	return nil

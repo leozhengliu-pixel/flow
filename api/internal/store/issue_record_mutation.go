@@ -29,7 +29,16 @@ type IssueMutationScope struct {
 // the target, its immediate family, and the supplied related IDs. Large graph
 // changes must be scheduled as batches rather than materialized in a request.
 func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id string, expected *int64, scope IssueMutationScope, mutate func(*domain.Bootstrap, *domain.Issue) error) (domain.Issue, error) {
-	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(workspace)
+	mutationKey := ChatMutationKey(ctx)
+	mutationActor := ""
+	if mutationKey != "" {
+		actor, ok := actorFromContext(ctx)
+		if !ok || actor.App || !validChatKey(workspace, actor.ID, mutationKey) {
+			return domain.Issue{}, ErrAuthForbidden
+		}
+		mutationActor = actor.ID
+	}
+	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(ctx, workspace)
 	metadata, ok := s.WorkspaceMetadata(workspace)
 	if !ok {
 		return domain.Issue{}, sql.ErrNoRows
@@ -39,9 +48,12 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 	}
 	if actor, ok := actorFromContext(ctx); ok {
 		metadata.Viewer = actor
-		role, _, err := s.WorkspaceRole(ctx, metadata.Workspace.ID, actor.ID)
+		role, status, err := s.WorkspaceRole(ctx, metadata.Workspace.ID, actor.ID)
 		if err != nil {
 			return domain.Issue{}, err
+		}
+		if mutationKey != "" && status != "active" {
+			return domain.Issue{}, ErrAuthForbidden
 		}
 		metadata.ViewerRole = role
 	}
@@ -83,6 +95,18 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		}
 		normalizeIssueRecord(&original)
 		result = original
+		if mutationKey != "" {
+			appliedID, found, err := readChatMutationReceipt(ctx, tx, workspace, mutationActor, mutationKey)
+			if err != nil {
+				return err
+			}
+			if found {
+				if appliedID != id {
+					return ErrIssueQuery
+				}
+				return ErrNoMutation
+			}
+		}
 		if expected != nil && original.Version != *expected {
 			return ErrIssueVersion
 		}
@@ -213,6 +237,14 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		if err := mutate(&metadata, target); err != nil {
 			if errors.Is(err, ErrNoMutation) {
 				result = original
+				if mutationKey != "" {
+					if receiptErr := writeChatMutationReceipt(ctx, tx, workspace, mutationActor, mutationKey, id); receiptErr != nil {
+						return receiptErr
+					}
+					if commitErr := tx.Commit(); commitErr != nil {
+						return commitErr
+					}
+				}
 				return err
 			}
 			return err
@@ -313,6 +345,11 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			return err
 		}
 		realtime = enrichRealtimePayload(payload, result, event.Type)
+		if mutationKey != "" {
+			if err := writeChatMutationReceipt(ctx, tx, workspace, mutationActor, mutationKey, id); err != nil {
+				return err
+			}
+		}
 		if err := tx.Commit(); err != nil {
 			return err
 		}
