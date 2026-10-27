@@ -423,3 +423,80 @@ func TestAgentSessionArchiveStopsItsCodingSession(t *testing.T) {
 		t.Fatal("another coding session was stopped")
 	}
 }
+
+// Deleting a plain comment, deleting one agent message and archiving a whole
+// session are three different scopes on the same issue: the first removes
+// only that comment, the second hides only that reply (the session stays
+// listed), the third hides the session with every message in it (the
+// person's reply too) while its log, the other session and the comments stay.
+func TestAgentSessionArchiveTellsACommentAMessageAndASessionApart(t *testing.T) {
+	f := newArchiveFixture(t)
+	ctx := t.Context()
+	issue := authRequest[domain.Issue](t, f.initiator, http.MethodPost, f.url("/api/issues"), map[string]any{"title": "Three scopes", "teamId": f.team}, archiveWorkspace, http.StatusCreated)
+	session := f.delegate(issue.ID)
+	firstAnswer := paddedVersion(f.appActivity(session, "response", "First answer").Version)
+	replied := authRequest[domain.AgentTask](t, f.initiator, http.MethodPost, f.url("/api/agent-tasks/"+session+"/activities"), map[string]any{"expectedVersion": f.task(session).Version, "type": "prompt", "body": "Use the other branch"}, archiveWorkspace, http.StatusOK)
+	reply := paddedVersion(replied.Version)
+	f.appActivity(session, "response", "Second answer")
+	kept := authRequest[domain.Comment](t, f.other, http.MethodPost, f.url("/api/issues/"+issue.ID+"/comments"), map[string]any{"body": "A note that stays"}, archiveWorkspace, http.StatusCreated)
+	plain := authRequest[domain.Comment](t, f.other, http.MethodPost, f.url("/api/issues/"+issue.ID+"/comments"), map[string]any{"body": "A note to delete"}, archiveWorkspace, http.StatusCreated)
+	type sessionRead struct {
+		Session    domain.AgentTask       `json:"session"`
+		Activities []domain.AgentActivity `json:"activities"`
+	}
+	readSession := func() sessionRead {
+		return authRequest[sessionRead](t, f.other, http.MethodGet, f.url("/api/agent-tasks/"+session), nil, archiveWorkspace, http.StatusOK)
+	}
+	commentIDs := func() []string {
+		comments, _, err := f.s.store.IssueContent(ctx, archiveWorkspace, issue.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids := []string{}
+		for _, comment := range comments {
+			ids = append(ids, comment.ID)
+		}
+		return ids
+	}
+	logLength := len(readSession().Activities)
+
+	// 1. A plain comment: only it goes; the session and its messages are untouched.
+	authRequest[any](t, f.other, http.MethodDelete, f.url("/api/issue-records/"+issue.ID+"/comments/"+plain.ID), nil, archiveWorkspace, http.StatusNoContent)
+	if ids := commentIDs(); slices.Contains(ids, plain.ID) || !slices.Contains(ids, kept.ID) {
+		t.Fatalf("comments after deleting one: %v", ids)
+	}
+	if got := sessionIDs(f.sessions(f.other, issue.ID, false)); !slices.Equal(got, []string{session}) || len(readSession().Activities) != logLength {
+		t.Fatalf("deleting a comment changed the session: %v", got)
+	}
+
+	// 2. One agent message: a "deleted" activity hides that reply; the session stays listed with its other messages.
+	authRequest[domain.AgentTask](t, f.initiator, http.MethodPost, f.url("/api/agent-tasks/"+session+"/activities"), map[string]any{"expectedVersion": f.task(session).Version, "type": "deleted", "activityId": firstAnswer}, archiveWorkspace, http.StatusOK)
+	read := readSession()
+	hidden := slices.ContainsFunc(read.Activities, func(item domain.AgentActivity) bool {
+		return item.Type == "deleted" && item.Metadata["activityId"] == firstAnswer
+	})
+	if !hidden || read.Session.ArchivedAt != nil || !slices.ContainsFunc(read.Activities, func(item domain.AgentActivity) bool { return item.ID == reply && item.Body == "Use the other branch" }) {
+		t.Fatalf("deleting one agent message: hidden=%v archived=%v", hidden, read.Session.ArchivedAt)
+	}
+	if got := sessionIDs(f.sessions(f.other, issue.ID, false)); !slices.Equal(got, []string{session}) {
+		t.Fatalf("deleting one message hid the session: %v", got)
+	}
+
+	// 3. The whole session: hidden with the person's reply for everyone, its log and the comments kept.
+	other := f.delegate(issue.ID)
+	f.archive(f.initiator, session, http.StatusOK)
+	for _, client := range []*http.Client{f.initiator, f.other, f.admin} {
+		if got := sessionIDs(f.sessions(client, issue.ID, false)); !slices.Equal(got, []string{other}) {
+			t.Fatalf("sessions after archiving: %v, want only %s", got, other)
+		}
+	}
+	read = readSession()
+	if read.Session.ArchivedAt == nil || !slices.ContainsFunc(read.Activities, func(item domain.AgentActivity) bool { return item.ID == reply }) || !slices.ContainsFunc(read.Activities, func(item domain.AgentActivity) bool { return item.ID == firstAnswer }) {
+		t.Fatalf("the archived session's log lost messages: %+v", read.Activities)
+	}
+	if ids := commentIDs(); !slices.Contains(ids, kept.ID) {
+		t.Fatalf("archiving the session removed a comment: %v", ids)
+	}
+	// A person's reply to the archived session is refused, so it cannot reappear.
+	authRequest[any](t, f.initiator, http.MethodPost, f.url("/api/agent-tasks/"+session+"/activities"), map[string]any{"expectedVersion": read.Session.Version, "type": "prompt", "body": "Are you there?"}, archiveWorkspace, http.StatusConflict)
+}
