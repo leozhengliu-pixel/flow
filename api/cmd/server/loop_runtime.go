@@ -47,6 +47,11 @@ type loopTrigger struct {
 	Label      string
 	// Reason is why an event fired the trigger (event triggers only).
 	Reason loopTriggerReason
+	// ScheduledAt is the occurrence a schedule trigger starts (its scheduled
+	// time, which may be earlier than now).
+	ScheduledAt time.Time
+	// Occurrence is the run's occurrence (LoopRun.Occurrence).
+	Occurrence string
 }
 
 var errLoopUnavailable = errors.New("loop cannot run")
@@ -324,6 +329,8 @@ func (s *server) startLoopRun(workspace, loopID string, trigger loopTrigger, act
 	}
 	run.TriggerLabel = loopTriggerLabel(trigger, run.EntityIdentifier)
 	run.TriggerReason, run.TriggerValue = trigger.Reason.Code, trigger.Reason.Value
+	run.Occurrence = loopRunOccurrence(*loop, trigger, now)
+	trigger.Occurrence = run.Occurrence
 	if loop.WebSearch && !s.webSearchAvailable() {
 		run.Notices = append(run.Notices, loopWebSearchUnavailable)
 	}
@@ -961,6 +968,9 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 				} else if document != nil {
 					s.verifyLoopDocumentWrite(workspace, document, result)
 				}
+				if document != nil {
+					s.settleLoopDocumentClaim(workspace, document, callErr)
+				}
 			}
 			rec.timing.ToolMs += time.Since(toolStarted).Milliseconds()
 			write := !readOnly[strings.TrimPrefix(call.Name, "mcp__flow.")] && !strings.HasPrefix(call.Name, "external_")
@@ -1536,7 +1546,10 @@ func loopSystemPrompt(data domain.Bootstrap, loop domain.Loop, trigger loopTrigg
 			break
 		}
 	}
-	fmt.Fprintf(&prompt, "\nToday: %s\n", time.Now().UTC().Format("Monday, 2006-01-02"))
+	fmt.Fprintf(&prompt, "\nToday: %s\n", loopToday(loop, time.Now()))
+	if trigger.Occurrence != "" && !plan.ReadOnly && !slices.Contains(plan.Expectation.Prohibited, "document") {
+		fmt.Fprintf(&prompt, "This run is for the %s occurrence of the loop's schedule. A loop appends to a document once per occurrence: when this loop already appended to a document for %s, save_document refuses another append to it.\n", trigger.Occurrence, trigger.Occurrence)
+	}
 	return prompt.String()
 }
 
@@ -1560,7 +1573,7 @@ func (s *server) runDueLoops(workspace string, now time.Time) {
 			continue
 		}
 		s.setLoopNextRun(workspace, loop.ID, nextLoopRun(loop.TriggerConfig, loop.CreatedAt, now))
-		if _, err := s.startLoopRun(workspace, loop.ID, loopTrigger{Kind: "schedule"}, ""); err != nil && !errors.Is(err, errConflict) {
+		if _, err := s.startLoopRun(workspace, loop.ID, loopTrigger{Kind: "schedule", ScheduledAt: *next}, ""); err != nil && !errors.Is(err, errConflict) {
 			log.Printf("Scheduled loop workspace=%s loop=%s: %v", workspace, loop.ID, err)
 		}
 	}
@@ -1600,12 +1613,7 @@ func parseLoopClock(value string) (int, int, bool) {
 // daily and weekly schedules to those days.
 func nextLoopRun(config map[string]any, created, after time.Time) time.Time {
 	config = normalizeLoopTriggerConfig("schedule", config)
-	location := time.UTC
-	if name, ok := config["timezone"].(string); ok {
-		if loaded, err := time.LoadLocation(name); err == nil {
-			location = loaded
-		}
-	}
+	location := loopScheduleLocation(config)
 	hour, minute := 10, 0
 	if value, ok := config["time"].(string); ok {
 		if h, m, ok := parseLoopClock(value); ok {

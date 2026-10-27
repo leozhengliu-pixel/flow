@@ -778,7 +778,7 @@ func acceptLoopRun(loop domain.Loop, run *domain.LoopRun, ending *loopRunEnding)
 	}
 	for index := len(run.ToolCalls) - 1; index >= 0; index-- {
 		call := run.ToolCalls[index]
-		if (call.Status == "error" || call.Status == "blocked") && loopWriteToolName(call.Name) {
+		if (call.Status == "error" || call.Status == "blocked") && loopWriteToolName(call.Name) && (call.Document == nil || call.Document.ExistingRunID == "") {
 			return "needs_review", "tool_error", fmt.Sprintf("No output produced: expected %s, but %s failed: %s", strings.Join(missing, " and "), firstNonEmpty(call.Label, call.Name), call.Error)
 		}
 	}
@@ -841,7 +841,9 @@ func loopCompletionCheck(rec *loopRunRecorder, text string, corrections int) (st
 	pending := loopTextPromisesMoreWork(text)
 	var failed *domain.LoopRunToolCall
 	if _, calls, _ := rec.parts(); len(*calls) > 0 {
-		if last := (*calls)[len(*calls)-1]; last.Status == "error" || last.Status == "blocked" {
+		// An append refused because the occurrence's section exists did
+		// not fail: the output is there.
+		if last := (*calls)[len(*calls)-1]; (last.Status == "error" || last.Status == "blocked") && (last.Document == nil || last.Document.ExistingRunID == "") {
 			failed = &last
 		}
 	}

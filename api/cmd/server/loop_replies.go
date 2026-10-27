@@ -171,7 +171,7 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 		history[last].Content += attachments.notes
 		history[last].Images = attachments.images
 	}
-	trigger := loopTrigger{Kind: run.Trigger, EventType: run.EventType, EntityType: run.EntityType, EntityID: run.EntityID, Label: run.TriggerLabel, Reason: loopTriggerReason{Code: run.TriggerReason, Value: run.TriggerValue}}
+	trigger := loopTrigger{Kind: run.Trigger, EventType: run.EventType, EntityType: run.EntityType, EntityID: run.EntityID, Label: run.TriggerLabel, Reason: loopTriggerReason{Code: run.TriggerReason, Value: run.TriggerValue}, Occurrence: run.Occurrence}
 	current := *loop
 	// A status question is answered from the saved record without tools; a
 	// continuation runs the remaining work under the finish_run contract and
