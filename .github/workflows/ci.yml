@@ -10,10 +10,11 @@ permissions:
   contents: read
 
 concurrency:
-  # A newer push to the same ref supersedes the older run, which keeps the
-  # hosted-runner concurrency limit free for the run that matters.
+  # A newer push to a pull request or feature branch cancels its older run. On
+  # main (and tags) a running run finishes; GitHub keeps only the newest pending
+  # run per group, so the queue stays bounded without starving main of results.
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   # The three vitest coverage gates run the same suite against different coverage
