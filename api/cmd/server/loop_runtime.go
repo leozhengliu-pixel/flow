@@ -512,11 +512,11 @@ func (rec *loopRunRecorder) startTool(call domain.AgentToolCall) int {
 
 // finishTool records a tool call's outcome; a successful change counts
 // toward the run's produced outputs.
-func (rec *loopRunRecorder) finishTool(index int, status string, callErr error, write bool, args map[string]any) {
+func (rec *loopRunRecorder) finishTool(index int, status string, callErr error, write bool, args map[string]any, document *domain.LoopRunDocumentWrite) {
 	now := time.Now().UTC()
 	_, calls, _ := rec.parts()
 	record := &(*calls)[index]
-	record.Status, record.FinishedAt = status, &now
+	record.Status, record.FinishedAt, record.Document = status, &now, document
 	if callErr != nil {
 		record.Error = callErr.Error()
 	}
@@ -525,7 +525,8 @@ func (rec *loopRunRecorder) finishTool(index int, status string, callErr error, 
 			rec.run.Produced = map[string]int{}
 		}
 		rec.run.Produced["change"]++
-		if kind := loopOutputKind(record.Name, args); kind != "" {
+		// A document write counts once the stored document shows it.
+		if kind := loopOutputKind(record.Name, args); kind != "" && (kind != "document" || document != nil && document.Changed) {
 			rec.run.Produced[kind]++
 		}
 	}
@@ -760,7 +761,7 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 	}
 	toolNames, readOnly := s.loopRunTools(request.Context())
 	expectation := loopOutputExpectations(loop)
-	plan := loopRunPlan{Tools: toolNames, Limits: limits, Outputs: expectation.Outputs, ReadOnly: expectation.ReadOnly}
+	plan := loopRunPlan{Tools: toolNames, Limits: limits, Outputs: expectation.Outputs, ReadOnly: expectation.ReadOnly, Expectation: expectation}
 
 	entity := s.loopEntityContext(ctx, workspace, data, trigger)
 	messages := []agentProviderMessage{
@@ -897,8 +898,19 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 					callErr = fmt.Errorf("This change already succeeded earlier in this run (%s); it was not repeated. Continue with the steps that are not done yet", label)
 				}
 			}
+			if kind := loopOutputKind(call.Name, loopToolArgs(call)); callErr == nil && !rec.answering && slices.Contains(expectation.Prohibited, kind) {
+				// The loop's own work follows its instructions' refusals; a
+				// person replying on the run page may still ask for it.
+				callErr = fmt.Errorf("This loop's instructions say not to %s; the call was not made", loopProhibitedLabels[kind])
+			}
+			var document *loopDocumentWrite
+			if callErr == nil && strings.TrimPrefix(call.Name, "mcp__flow.") == "save_document" {
+				document, callErr = s.prepareLoopDocumentWrite(rec, expectation, call)
+			}
 			if callErr != nil {
 				status = "blocked"
+			} else if document != nil && document.applied != "" {
+				result = document.appliedResult()
 			} else {
 				execute := func() error {
 					result, callErr = s.executeAgentTool(request, data, call)
@@ -913,11 +925,19 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 				}
 				if callErr != nil {
 					status = "error"
+				} else if document != nil {
+					s.verifyLoopDocumentWrite(workspace, document, result)
 				}
 			}
 			rec.timing.ToolMs += time.Since(toolStarted).Milliseconds()
 			write := !readOnly[strings.TrimPrefix(call.Name, "mcp__flow.")] && !strings.HasPrefix(call.Name, "external_")
-			rec.finishTool(index, status, callErr, write, loopToolArgs(call))
+			var record *domain.LoopRunDocumentWrite
+			if document != nil {
+				record = document.record
+				// A write that was not repeated changes nothing now.
+				write = write && (document.applied == "" || record.Changed)
+			}
+			rec.finishTool(index, status, callErr, write, loopToolArgs(call), record)
 			if fingerprint := loopWriteFingerprint(call.Name, loopToolArgs(call)); write && status == "completed" && rec.completedWrites != nil && fingerprint != "" {
 				rec.completedWrites[fingerprint] = loopToolLabel(call.Name, loopToolArgs(call))
 			}
@@ -1195,6 +1215,13 @@ func (scope *loopScope) check(ctx context.Context, call domain.AgentToolCall) er
 	if teamID := loopStringArg(args, "teamId", "team"); teamID != "" && !scope.teams[teamID] && !scope.teamKeyAllowed(teamID) {
 		return fmt.Errorf("This loop cannot access that team")
 	}
+	if ref := loopStringArg(args, "id"); ref != "" && loopDocumentTool(name) {
+		// A team document is the team's: a loop outside its team access
+		// cannot change it (its tools cannot read it either).
+		if document, found := scope.s.loopFindDocument(scope.workspace, ref); found && len(document.TeamIDs) > 0 && !slices.ContainsFunc(document.TeamIDs, func(id string) bool { return scope.teams[id] }) {
+			return fmt.Errorf("This loop cannot access that document: it belongs to a team outside the loop's team access")
+		}
+	}
 	target := loopStringArg(args, "issueId", "issue", "id")
 	if slices.Contains([]string{"save_issue", "save_comment", "create_attachment", "delete_attachment", "delete_comment", "triage_issue"}, name) && target != "" {
 		issue, err := scope.s.store.IssueRecord(ctx, scope.workspace, target)
@@ -1327,6 +1354,8 @@ type loopRunPlan struct {
 	Outputs []string
 	// ReadOnly: the loop reads and reports; it is not asked to publish.
 	ReadOnly bool
+	// Expectation is what the instructions ask for on each output kind.
+	Expectation loopOutputExpectation
 }
 
 var loopOutputPrompts = map[string]string{
@@ -1335,6 +1364,60 @@ var loopOutputPrompts = map[string]string{
 	"comment":      "post the comment(s) the instructions ask for with save_comment",
 	"document":     "create or update the document(s) the instructions ask for with save_document",
 	"change":       "make the change(s) in Flow the instructions ask for",
+}
+
+// loopDocumentPrompts ask for the document write the instructions name.
+var loopDocumentPrompts = map[string]string{
+	loopOpAppend: `append to the existing document the instructions name: find it (search_documents, list_documents or get_document), then call save_document once with its id and patch [{"op":"append","text":"..."}]. Never pass content (it replaces the whole body) and do not create a new document; the existing content must stay as it is`,
+	loopOpUpdate: "update the existing document the instructions name: find it, then call save_document with its id (patch to change part of it); do not create a new document instead",
+	loopOpCreate: "create the document(s) the instructions ask for with save_document (title and content, no id)",
+}
+
+// loopProhibitedLabels name the writes a loop's instructions forbid.
+var loopProhibitedLabels = map[string]string{
+	"statusUpdate": "post status updates",
+	"issue":        "create issues",
+	"comment":      "post comments",
+	"document":     "create or change documents",
+}
+
+// loopOutputPlanPrompt tells the model what the instructions ask for and
+// forbid, when nothing changed counts, and when a run may skip.
+func loopOutputPlanPrompt(prompt *strings.Builder, plan loopRunPlan) {
+	expectation := plan.Expectation
+	if len(plan.Outputs) > 0 {
+		wanted := []string{}
+		for _, kind := range plan.Outputs {
+			text := loopOutputPrompts[kind]
+			if kind == "document" && !expectation.Explicit {
+				text = firstNonEmpty(loopDocumentPrompts[expectation.Operations[kind]], text)
+			}
+			wanted = append(wanted, text)
+		}
+		fmt.Fprintf(prompt, "\nThis loop is expected to produce output: %s. A run that ends without it is flagged for review, so only report nothing_to_do when the instructions truly do not apply.\n", strings.Join(wanted, "; "))
+		for _, group := range expectation.Alternatives {
+			labels := []string{}
+			for _, kind := range group {
+				labels = append(labels, loopOutputLabels[kind])
+			}
+			fmt.Fprintf(prompt, "The instructions offer a choice: one of %s is enough.\n", strings.Join(labels, " or "))
+		}
+		if expectation.Always {
+			prompt.WriteString("The output is required even when nothing changed: write it anyway (saying there were no changes) instead of reporting nothing_to_do.\n")
+		}
+	} else if plan.ReadOnly {
+		prompt.WriteString("\nThis loop reads and reports: its instructions mention status updates, issues, comments or documents only as things to check, read or summarize. Do not post status updates or create issues, comments or documents, and do not look for a place to publish. Put the complete report in finish_run's summary (status done, or nothing_to_do when there is nothing new, worded the way the instructions ask).\n")
+	}
+	if !expectation.Explicit && len(expectation.Prohibited) > 0 && !plan.ReadOnly {
+		refused := []string{}
+		for _, kind := range expectation.Prohibited {
+			refused = append(refused, loopProhibitedLabels[kind])
+		}
+		fmt.Fprintf(prompt, "Do not %s: the instructions forbid it, and such calls are refused.\n", strings.Join(refused, " or "))
+	}
+	if len(expectation.Skips) > 0 {
+		fmt.Fprintf(prompt, "The instructions say when a run is skipped: %s. When such a condition applies today, change nothing and call finish_run with status skipped, skipReason naming the condition, and a summary saying why. Do not skip for any other reason.\n", strings.Join(expectation.Skips, " / "))
+	}
 }
 
 func loopSystemPrompt(data domain.Bootstrap, loop domain.Loop, trigger loopTrigger, entity string, scope *loopScope, webSearch bool, references string, plan loopRunPlan) string {
@@ -1350,15 +1433,7 @@ func loopSystemPrompt(data domain.Bootstrap, loop domain.Loop, trigger loopTrigg
 	prompt.WriteString("3. Act: make each change the instructions ask for. After each change, check the tool result: a change only happened when the result has no error. Note the identifier and url it returned.\n")
 	prompt.WriteString("4. Self-check before finishing: re-read the instructions and confirm every required output exists (one per item the instructions name), retry or explain any failed change, and list what you could not do.\n")
 	fmt.Fprintf(&prompt, "5. Finish: call %s exactly once as your last action with status (done, incomplete or nothing_to_do), summary (under about 150 words; refer to issues by identifier and link them with the url the tools return), done (each change) and notDone (each thing not done and why). Do not end the run with plain text instead.\n", loopFinishToolName)
-	if len(plan.Outputs) > 0 {
-		wanted := []string{}
-		for _, kind := range plan.Outputs {
-			wanted = append(wanted, loopOutputPrompts[kind])
-		}
-		fmt.Fprintf(&prompt, "\nThis loop is expected to produce output: %s. A run that ends without it is flagged for review, so only report nothing_to_do when the instructions truly do not apply.\n", strings.Join(wanted, "; "))
-	} else if plan.ReadOnly {
-		prompt.WriteString("\nThis loop reads and reports: its instructions mention status updates, issues, comments or documents only as things to check, read or summarize. Do not post status updates or create issues, comments or documents, and do not look for a place to publish. Put the complete report in finish_run's summary (status done, or nothing_to_do when there is nothing new, worded the way the instructions ask).\n")
-	}
+	loopOutputPlanPrompt(&prompt, plan)
 	fmt.Fprintf(&prompt, "\nLimits: at most %d tool turns and %d tool calls; tool results over %d KB are cut off; the run stops after %s.\n", plan.Limits.MaxTurns, plan.Limits.MaxToolCalls, max(plan.Limits.MaxToolOutputBytes>>10, 1), plan.Limits.Timeout.Round(time.Second))
 	if len(plan.Tools) > 0 {
 		fmt.Fprintf(&prompt, "Available tools: %s.\n", strings.Join(plan.Tools, ", "))

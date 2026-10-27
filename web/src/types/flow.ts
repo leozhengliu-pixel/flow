@@ -1219,7 +1219,7 @@ export interface LoopRun {
   replies?: LoopRunReply[];
   failureReason?: LoopRunFailureReason;
   /** The agent's structured final report (finish_run). */
-  summary?: { status: "done" | "incomplete" | "nothing_to_do"; summary: string; done?: string[]; notDone?: string[] };
+  summary?: { status: "done" | "incomplete" | "nothing_to_do" | "skipped"; summary: string; done?: string[]; notDone?: string[]; skipReason?: string };
   /** Outputs the run was checked for, and the successful changes it made by kind. */
   expectedOutputs?: string[];
   produced?: Record<string, number>;
