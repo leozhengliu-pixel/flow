@@ -841,6 +841,13 @@ func applyReleaseCIIssues(data *domain.Bootstrap, release *domain.Release, input
 				return &data.Issues[index]
 			}
 		}
+		// A commit can name an issue by an identifier it had before it moved
+		// to another team.
+		for index := range data.Issues {
+			if data.Issues[index].ArchivedAt == nil && slices.ContainsFunc(data.Issues[index].PreviousIdentifiers, func(previous string) bool { return strings.EqualFold(previous, identifier) }) {
+				return &data.Issues[index]
+			}
+		}
 		return nil
 	}
 	frozen := releaseStageFrozen(data, *release)

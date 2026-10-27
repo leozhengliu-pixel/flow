@@ -34,35 +34,7 @@ func issueRole(s *server, data domain.Bootstrap, issue domain.Issue) string {
 	if inheritedTeamOwner(data, issue.Team.ID, data.Viewer.ID) {
 		return "owner"
 	}
-	best := ""
-	seen := map[string]bool{}
-	for current := &issue; current != nil && !seen[current.ID]; {
-		seen[current.ID] = true
-		for _, permission := range current.Permissions {
-			matched := permission.SubjectType == "user" && permission.SubjectID == data.Viewer.ID
-			if !matched && permission.SubjectType == "workspace" {
-				matched = permission.SubjectID == "" || permission.SubjectID == data.Workspace.ID || permission.SubjectID == data.Workspace.URLKey
-			}
-			if !matched && permission.SubjectType == "team" {
-				matched = slices.ContainsFunc(data.TeamMembers, func(member domain.TeamMember) bool {
-					return member.TeamID == permission.SubjectID && member.UserID == data.Viewer.ID
-				})
-				matched = matched || data.Viewer.App && slices.Contains(data.Viewer.AppTeamIDs, permission.SubjectID)
-			}
-			if matched && issuePermissionRank(permission.Role) > issuePermissionRank(best) {
-				best = strings.ToLower(strings.TrimSpace(permission.Role))
-			}
-		}
-		if current.ParentID == nil || *current.ParentID == "" {
-			break
-		}
-		parent := slices.IndexFunc(data.Issues, func(candidate domain.Issue) bool { return candidate.ID == *current.ParentID })
-		if parent < 0 || parent == slices.IndexFunc(data.Issues, func(candidate domain.Issue) bool { return candidate.ID == current.ID }) {
-			break
-		}
-		current = &data.Issues[parent]
-	}
-	if best != "" {
+	if best := issueGrantedRole(data, issue); best != "" {
 		return best
 	}
 	if data.Viewer.App && data.Viewer.Active && slices.Contains(data.Viewer.AppTeamIDs, issue.Team.ID) {
@@ -196,6 +168,10 @@ func (s *server) replaceIssuePermissions(w http.ResponseWriter, r *http.Request)
 		updated = slices.Clone(permissions)
 		return nil
 	})
+	if err == nil {
+		// In force before the response, like document permission changes.
+		s.applyIssueAccessChange(workspaceKey(r))
+	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
@@ -230,6 +206,10 @@ func (s *server) updateIssuePermission(w http.ResponseWriter, r *http.Request) {
 		updated = next.Issues[index].Permissions[permissionIndex]
 		return nil
 	})
+	if err == nil {
+		// In force before the response, like document permission changes.
+		s.applyIssueAccessChange(workspaceKey(r))
+	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
@@ -255,5 +235,43 @@ func (s *server) deleteIssuePermission(w http.ResponseWriter, r *http.Request) {
 		next.Issues[index].Permissions = slices.Delete(next.Issues[index].Permissions, permissionIndex, permissionIndex+1)
 		return nil
 	})
+	if err == nil {
+		// In force before the response, like document permission changes.
+		s.applyIssueAccessChange(workspaceKey(r))
+	}
 	respondMutation(w, err, http.StatusNoContent, nil)
+}
+
+// issueGrantedRole is the strongest grant data.Viewer has on issue or one of
+// its ancestors (sub-issues inherit their parents' grants), "" without one.
+func issueGrantedRole(data domain.Bootstrap, issue domain.Issue) string {
+	best := ""
+	seen := map[string]bool{}
+	for current := &issue; current != nil && !seen[current.ID]; {
+		seen[current.ID] = true
+		for _, permission := range current.Permissions {
+			matched := permission.SubjectType == "user" && permission.SubjectID == data.Viewer.ID
+			if !matched && permission.SubjectType == "workspace" {
+				matched = permission.SubjectID == "" || permission.SubjectID == data.Workspace.ID || permission.SubjectID == data.Workspace.URLKey
+			}
+			if !matched && permission.SubjectType == "team" {
+				matched = slices.ContainsFunc(data.TeamMembers, func(member domain.TeamMember) bool {
+					return member.TeamID == permission.SubjectID && member.UserID == data.Viewer.ID
+				})
+				matched = matched || data.Viewer.App && slices.Contains(data.Viewer.AppTeamIDs, permission.SubjectID)
+			}
+			if matched && issuePermissionRank(permission.Role) > issuePermissionRank(best) {
+				best = strings.ToLower(strings.TrimSpace(permission.Role))
+			}
+		}
+		if current.ParentID == nil || *current.ParentID == "" {
+			break
+		}
+		parent := slices.IndexFunc(data.Issues, func(candidate domain.Issue) bool { return candidate.ID == *current.ParentID })
+		if parent < 0 || parent == slices.IndexFunc(data.Issues, func(candidate domain.Issue) bool { return candidate.ID == current.ID }) {
+			break
+		}
+		current = &data.Issues[parent]
+	}
+	return best
 }

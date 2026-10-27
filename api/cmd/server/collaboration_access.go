@@ -44,6 +44,9 @@ type issueSocketAccess struct {
 	// and commenters follow it read-only.
 	canEdit   bool
 	checkedAt time.Time
+	// generation counts invalidations: a check that started before the
+	// latest one may have read the old access and leaves the entry stale.
+	generation uint64
 }
 
 // socketAccessScope says which joined sockets a re-check covers.
@@ -157,7 +160,24 @@ func collaborationAccessScope(event domain.RealtimeEvent) (socketAccessScope, bo
 		if json.Unmarshal(event.Payload, &payload) == nil && payload.Entity != nil {
 			team = payload.Entity.Team.ID
 		}
+		if issueUpdateChangedParent(event.Payload) {
+			// Sub-issues inherit their parents' grants: re-parenting can
+			// change who may read or edit the issue and its descendants.
+			return socketAccessScope{issues: map[string]string{"*": ""}}, true
+		}
 		return socketAccessScope{issues: map[string]string{event.AggregateID: team}}, true
+	case kind == "issue.relation_removed":
+		// Removing a parent relation detaches the sub-issue from its parent's grants.
+		return socketAccessScope{issues: map[string]string{"*": ""}}, true
+	case kind == "issue.relation_added":
+		var payload struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(event.Payload, &payload) == nil && payload.Type != "parent_of" && payload.Type != "sub_issue_of" {
+			return socketAccessScope{}, false
+		}
+		// A parent relation re-parents an issue.
+		return socketAccessScope{issues: map[string]string{"*": ""}}, true
 	case strings.HasPrefix(kind, "issue.permission"):
 		// Sub-issues inherit their parents' permissions: a grant changed on
 		// one issue can change who may read or edit its descendants.
@@ -179,15 +199,52 @@ func collaborationAccessScope(event domain.RealtimeEvent) (socketAccessScope, bo
 	return socketAccessScope{}, false
 }
 
+// issueUpdateChangedParent reports whether an issue.updated payload changes
+// the issue's parent: the update input names parentId (at the top level, as
+// the records path stores it, or under changes/input).
+func issueUpdateChangedParent(payload json.RawMessage) bool {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(payload, &fields) != nil {
+		return false
+	}
+	if _, ok := fields["parentId"]; ok {
+		return true
+	}
+	for _, key := range []string{"changes", "input"} {
+		var nested map[string]json.RawMessage
+		if json.Unmarshal(fields[key], &nested) == nil {
+			if _, ok := nested["parentId"]; ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // queueSocketAccessCheck re-checks the joined sockets an applied change may
-// affect (this server's own change, or a peer's once reloaded).
+// affect (this server's own change, or a peer's once reloaded). The access
+// they cached is invalidated first, before this returns: until the queued
+// check has run, their next update frame is re-checked before it is applied.
 func (s *server) queueSocketAccessCheck(workspace string, event domain.RealtimeEvent) {
 	if s.realtime == nil || !s.realtime.hasSockets(workspace) {
 		return
 	}
 	if scope, ok := collaborationAccessScope(event); ok {
+		s.realtime.socketAccessWork(workspace, scope)
 		s.socketAccess.push(workspace, scope, s.runSocketAccessChecks)
 	}
+}
+
+// applyIssueAccessChange re-checks every joined issue description on this
+// server now (issue grants are inherited by sub-issues), so a permission
+// change is in force when its request returns: a downgraded member is
+// read-only, or out, before the response. Peers apply it as the change's
+// event reaches them (queueSocketAccessCheck).
+func (s *server) applyIssueAccessChange(workspace string) {
+	if s.realtime == nil || !s.realtime.hasSockets(workspace) {
+		return
+	}
+	s.checkSocketAccess(workspace, socketAccessScope{issues: map[string]string{"*": ""}})
 }
 
 // queueAllSocketAccessChecks re-checks every joined socket on this server.
@@ -264,8 +321,29 @@ type socketAccessWork struct {
 
 func (s *server) checkSocketAccess(workspace string, scope socketAccessScope) {
 	hub := s.realtime
+	for _, item := range hub.socketAccessWork(workspace, scope) {
+		if item.credential && item.client.checkCredential != nil && !item.client.checkCredential() {
+			hub.revokeSocketCredential(item.client)
+			continue
+		}
+		for _, target := range item.targets {
+			if target.issueID != "" {
+				_, _ = s.recheckIssueDocument(item.client, target.documentID, target.issueID)
+			} else {
+				hub.recheckStandaloneDocument(item.client, target.documentID)
+			}
+		}
+	}
+}
+
+// socketAccessWork lists the joined documents (and credentials) scope covers
+// and marks their cached access stale, so an update frame on one of them is
+// re-checked before it is applied until a check has read the new access.
+func (h *realtimeHub) socketAccessWork(workspace string, scope socketAccessScope) []socketAccessWork {
+	hub := h
 	var work []socketAccessWork
 	hub.mu.Lock()
+	defer hub.mu.Unlock()
 	for _, client := range hub.sockets[workspace] {
 		user := scope.users[client.userID]
 		item := socketAccessWork{client: client, credential: scope.all || user}
@@ -277,6 +355,10 @@ func (s *server) checkSocketAccess(workspace string, scope socketAccessScope) {
 			_, every := scope.issues["*"]
 			access := client.issueAccess[documentID]
 			if scope.all || user || every || listed && (team == "" || access == nil || access.teamID != team) {
+				if access != nil {
+					access.checkedAt = time.Time{}
+					access.generation++
+				}
 				item.targets = append(item.targets, socketAccessTarget{documentID: documentID, issueID: issueID})
 			}
 		}
@@ -290,20 +372,7 @@ func (s *server) checkSocketAccess(workspace string, scope socketAccessScope) {
 			work = append(work, item)
 		}
 	}
-	hub.mu.Unlock()
-	for _, item := range work {
-		if item.credential && item.client.checkCredential != nil && !item.client.checkCredential() {
-			hub.revokeSocketCredential(item.client)
-			continue
-		}
-		for _, target := range item.targets {
-			if target.issueID != "" {
-				_, _ = s.recheckIssueDocument(item.client, target.documentID, target.issueID)
-			} else {
-				hub.recheckStandaloneDocument(item.client, target.documentID)
-			}
-		}
-	}
+	return work
 }
 
 // issueDocumentAccessFresh reports whether a joined issue description was
@@ -322,6 +391,12 @@ func (s *server) recheckIssueDocument(client *realtimeSocketClient, documentID, 
 	if client.checkIssue == nil {
 		return true, nil
 	}
+	s.realtime.mu.Lock()
+	var generation uint64
+	if access := client.issueAccess[documentID]; access != nil {
+		generation = access.generation
+	}
+	s.realtime.mu.Unlock()
 	issue, visible, canEdit, err := client.checkIssue(issueID)
 	if err != nil && !errors.Is(err, store.ErrAuthForbidden) {
 		return false, err
@@ -332,7 +407,12 @@ func (s *server) recheckIssueDocument(client *realtimeSocketClient, documentID, 
 	}
 	s.realtime.mu.Lock()
 	if access := client.issueAccess[documentID]; access != nil {
-		access.teamID, access.checkedAt = issue.Team.ID, time.Now()
+		access.teamID = issue.Team.ID
+		// Invalidated while this check ran: it may have read the access
+		// before that change, so the next update frame checks again.
+		if access.generation == generation {
+			access.checkedAt = time.Now()
+		}
 	}
 	s.realtime.mu.Unlock()
 	s.realtime.setEditAccess(client, documentID, canEdit)

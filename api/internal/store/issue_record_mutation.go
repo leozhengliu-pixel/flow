@@ -61,6 +61,8 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 	var event domain.DomainEvent
 	var realtime json.RawMessage
 	var progressMetadata *domain.Bootstrap
+	// written: the issues this write changed (the target and its family).
+	var written []string
 	err := func() error {
 		// The callback edits a metadata clone and progress refreshes copy
 		// the projects they change, so readers keep the committed snapshot
@@ -257,6 +259,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 				if err := s.writeIssueRecord(ctx, tx, workspace, issue, metadata); err != nil {
 					return err
 				}
+				written = append(written, issue.ID)
 			}
 		}
 		if issueRenumbering(ctx) {
@@ -365,6 +368,9 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 	if err != nil {
 		return result, err
 	}
+	// Servers sharing the hot cache must not serve the records or query pages
+	// from before this write (a re-parented issue's old parent, say).
+	s.invalidateIssueRecords(ctx, workspace, written)
 	if sink := s.webhook(); sink != nil {
 		sink(workspace, webhookEvent(ctx, event, realtime))
 	}

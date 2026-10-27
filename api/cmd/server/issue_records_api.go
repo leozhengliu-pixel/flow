@@ -25,6 +25,27 @@ func isIssueRecordsRequest(r *http.Request) bool {
 	return r.URL.Path == "/api/issue-records" || strings.HasPrefix(r.URL.Path, "/api/issue-records/")
 }
 
+// issueRecordAccess is the issue access of the request's viewer (data and
+// access from requestIssueQueryAccess) and the teams its API key is limited
+// to (nil: not limited).
+func (s *server) issueRecordAccess(r *http.Request, data domain.Bootstrap, access store.IssueRecordAccess) (*store.IssueRecordAccess, []string) {
+	if s.authDisabled {
+		// Development mode has no viewer, but deleted teams still stay hidden.
+		if archived := store.ArchivedTeamIDs(data); len(archived) > 0 {
+			return &store.IssueRecordAccess{Admin: true, ArchivedTeamIDs: archived}, nil
+		}
+		return nil, nil
+	}
+	var allowed []string
+	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) {
+		allowed = slices.Clone(key.TeamIDs)
+		if allowed == nil {
+			allowed = []string{}
+		}
+	}
+	return &access, allowed
+}
+
 func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.IssueRecordQuery, error) {
 	key := workspaceKey(r)
 	query := store.IssueRecordQuery{Workspace: key, Archived: r.URL.Query().Get("archived"), Sort: r.URL.Query().Get("sort"), Direction: r.URL.Query().Get("direction"), Cursor: r.URL.Query().Get("cursor"), Text: r.URL.Query().Get("q"), IncludeTotal: r.URL.Query().Get("includeTotal") == "true", GroupBy: r.URL.Query().Get("groupBy")}
@@ -39,20 +60,7 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 		data, _ = s.store.WorkspaceMetadata(query.Workspace)
 		data.ViewerRole = "admin"
 	}
-	if s.authDisabled {
-		// Development mode has no viewer, but deleted teams still stay hidden.
-		if archived := store.ArchivedTeamIDs(data); len(archived) > 0 {
-			query.Access = &store.IssueRecordAccess{Admin: true, ArchivedTeamIDs: archived}
-		}
-	} else {
-		query.Access = &access
-		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) {
-			query.AllowedTeamIDs = slices.Clone(key.TeamIDs)
-			if query.AllowedTeamIDs == nil {
-				query.AllowedTeamIDs = []string{}
-			}
-		}
-	}
+	query.Access, query.AllowedTeamIDs = s.issueRecordAccess(r, data, access)
 	query.TeamIDs = splitQueryValues(r.URL.Query().Get("teamId"))
 	if len(query.TeamIDs) > 0 && r.URL.Query().Get("includeSubTeams") == "true" {
 		query.TeamIDs = domain.TeamSubtreeIDs(&data, query.TeamIDs)

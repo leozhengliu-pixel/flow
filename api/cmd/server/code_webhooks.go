@@ -324,15 +324,53 @@ func absInt64(value int64) int64 {
 	return value
 }
 
+// inferredReviewIssueIDs lists the issues a pull/merge request names in its
+// title, description or branch (magic words included): by their identifier,
+// or by one they had before they moved to another team.
 func inferredReviewIssueIDs(data *domain.Bootstrap, review domain.CodeReview) []string {
-	haystack := strings.ToUpper(strings.Join([]string{review.Title, review.Description, review.HeadBranch}, " "))
+	return issueIDsNamedIn(data.Issues, strings.Join([]string{review.Title, review.Description, review.HeadBranch}, " "))
+}
+
+// issueIDsNamedIn lists the issues whose identifier appears in text (ENG-1
+// does not match ENG-12). An identifier an issue had before it moved to
+// another team still names it, unless another issue has it now.
+func issueIDsNamedIn(issues []domain.Issue, text string) []string {
+	haystack := strings.ToUpper(text)
 	ids := make([]string, 0)
-	for _, issue := range data.Issues {
-		if strings.Contains(haystack, strings.ToUpper(issue.Identifier)) {
+	current := make(map[string]bool, len(issues))
+	for _, issue := range issues {
+		current[strings.ToUpper(issue.Identifier)] = true
+	}
+	for _, issue := range issues {
+		named := issue.Identifier != "" && identifierNamedIn(haystack, strings.ToUpper(issue.Identifier))
+		for _, previous := range issue.PreviousIdentifiers {
+			if named {
+				break
+			}
+			previous = strings.ToUpper(previous)
+			named = previous != "" && !current[previous] && identifierNamedIn(haystack, previous)
+		}
+		if named {
 			ids = append(ids, issue.ID)
 		}
 	}
 	return ids
+}
+
+// identifierNamedIn reports whether identifier occurs in haystack (both upper
+// case) not followed by another digit.
+func identifierNamedIn(haystack, identifier string) bool {
+	for offset := 0; ; {
+		index := strings.Index(haystack[offset:], identifier)
+		if index < 0 {
+			return false
+		}
+		end := offset + index + len(identifier)
+		if end == len(haystack) || haystack[end] < '0' || haystack[end] > '9' {
+			return true
+		}
+		offset += index + 1
+	}
 }
 
 // testIntegrationConnection performs a real provider handshake when a GitLab

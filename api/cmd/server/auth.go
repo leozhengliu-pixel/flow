@@ -488,6 +488,9 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	// The workspace may have changed (or been created) on another server a
 	// moment ago; authorize against, and serve, the committed state.
 	s.ensureCurrentWorkspace(r.Context(), key)
+	// Issue routes accept identifiers, old ones included; authorization and
+	// handlers below see the issue's id.
+	s.resolveIssuePathReference(r)
 	if key == "" || r.URL.Path == "/api/account/bootstrap" || r.URL.Path == "/api/invitations/accept" || (r.Method == http.MethodPost && r.URL.Path == "/api/workspaces") {
 		return true
 	}
