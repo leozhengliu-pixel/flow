@@ -1,14 +1,16 @@
 import * as Select from "@radix-ui/react-select";
+import { Info } from "lucide-react";
 import { useEffect, useId, useMemo, useState } from "react";
 import { toast } from "@/lib/toast";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { SelectControl } from "@/components/ui/select-control";
 import { TeamIcon } from "@/components/issue/issue-icons";
+import { PropertyMenu, type PropertyOption } from "@/components/property/property-menu";
+import { orderTeamTree, teamGlyph } from "@/components/projects-page/project-teams";
 import { WorkspaceAvatar } from "@/components/workspace/workspace-menu";
 import { useI18n } from "@/i18n/i18n";
 import { inviteMembers } from "@/lib/api";
-import type { Invitation, Team, Workspace } from "@/types/flow";
+import type { Invitation, Team, TeamSettings, Workspace } from "@/types/flow";
 
 import "./invite-members-dialog.css";
 
@@ -34,8 +36,10 @@ function parseInviteEmails(value: string) {
 
 export interface InviteMembersDialogProps {
   workspace: Workspace;
-  /** Teams a guest can be scoped to. Guests require at least one team. */
+  /** Teams the invitees can be added to. Guests require at least one team; Members and Admins may have none. */
   teams: Team[];
+  /** Only the parent of each team is read: sub-teams are listed under their parent. */
+  teamSettings?: Record<string, Pick<TeamSettings, "parentTeamId">>;
   open: boolean;
   onClose: () => void;
   /** Runs after the invitations were created (e.g. to reload the member list). */
@@ -43,7 +47,7 @@ export interface InviteMembersDialogProps {
   defaultRole?: InviteRole;
 }
 
-export function InviteMembersDialog({ workspace, teams, open, onClose, onInvited, defaultRole = "member" }: InviteMembersDialogProps) {
+export function InviteMembersDialog({ workspace, teams, teamSettings, open, onClose, onInvited, defaultRole = "member" }: InviteMembersDialogProps) {
   const { t } = useI18n();
   const emailId = useId();
   const roleId = useId();
@@ -51,7 +55,7 @@ export function InviteMembersDialog({ workspace, teams, open, onClose, onInvited
   const [error, setError] = useState("");
   const [role, setRole] = useState<InviteRole>(defaultRole);
   const activeTeams = useMemo(() => teams.filter((team) => !team.retiredAt), [teams]);
-  const [teamId, setTeamId] = useState("");
+  const [teamIds, setTeamIds] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
   const parsed = useMemo(() => parseInviteEmails(emails), [emails]);
   const canSend = parsed.valid.length > 0 && !sending;
@@ -60,6 +64,7 @@ export function InviteMembersDialog({ workspace, teams, open, onClose, onInvited
     if (open) return;
     setError("");
     setRole(defaultRole);
+    setTeamIds([]);
   }, [defaultRole, open]);
 
   const send = async () => {
@@ -68,8 +73,7 @@ export function InviteMembersDialog({ workspace, teams, open, onClose, onInvited
       setError(`${parsed.invalid[0]} ${t("is not a valid email address")}`);
       return;
     }
-    const guestTeamId = teamId || activeTeams[0]?.id || "";
-    if (role === "guest" && !guestTeamId) {
+    if (role === "guest" && !teamIds.length) {
       setError(t("Select a team for guest access"));
       return;
     }
@@ -78,13 +82,14 @@ export function InviteMembersDialog({ workspace, teams, open, onClose, onInvited
       const invitations = await inviteMembers(workspace.urlKey, {
         emails: parsed.valid,
         role,
-        teamIds: role === "guest" ? [guestTeamId] : [],
+        teamIds,
       });
       const token = invitations.find((item) => item.token)?.token;
       if (token) await navigator.clipboard?.writeText(`${location.origin}/invite/${token}`).catch(() => undefined);
       await onInvited?.(invitations);
       toast.success(`${parsed.valid.length} invitation${parsed.valid.length === 1 ? "" : "s"} sent`);
       setEmails("");
+      setTeamIds([]);
       onClose();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("Could not send invitations"));
@@ -133,18 +138,19 @@ export function InviteMembersDialog({ workspace, teams, open, onClose, onInvited
           <label id={roleId}>{t("Role")}</label>
           <InviteRoleSelect labelledBy={roleId} value={role} onChange={setRole} />
         </div>
-        {role === "guest" && (
-          <div className="invite-members-dialog__field is-team">
-            <label>{t("Team")}
-              <SelectControl
-                label="Team"
-                value={teamId || activeTeams[0]?.id || ""}
-                onChange={setTeamId}
-                options={activeTeams.map((team) => ({ value: team.id, label: team.name, entityName: true, icon: <TeamIcon team={team} size={14} /> }))}
-              />
-            </label>
-          </div>
-        )}
+        <div className="invite-members-dialog__field is-team">
+          <label>
+            {t("Add to team")}
+            {role !== "guest" && <span className="invite-members-dialog__optional">{t("(optional)")}</span>}
+          </label>
+          <InviteTeamSelect teams={activeTeams} teamSettings={teamSettings} value={teamIds} onChange={(next) => { setTeamIds(next); setError(""); }} />
+          {role === "guest" && (
+            <p className="invite-members-dialog__hint">
+              <Info aria-hidden="true" size={11} />
+              <span>{t("Guests only have access to the selected teams.")}</span>
+            </p>
+          )}
+        </div>
         <footer className="invite-members-dialog__footer">
           <button type="button" className="invite-members-dialog__send" disabled={!canSend} onClick={() => void send()}>
             {sending ? t("Sending…") : t("Send invites")}
@@ -152,6 +158,62 @@ export function InviteMembersDialog({ workspace, teams, open, onClose, onInvited
         </footer>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * The reference app's "Add to team" picker: a searchable multi-select whose popover lists the chosen teams first
+ * (a checked row each), then the rest with sub-teams under their parent. Picking a row toggles it and closes the
+ * popover; the trigger shows the first chosen team's icon and the chosen team keys.
+ */
+function InviteTeamSelect({ teams, teamSettings, value, onChange }: {
+  teams: Team[];
+  teamSettings?: Record<string, Pick<TeamSettings, "parentTeamId">>;
+  value: string[];
+  onChange: (teamIds: string[]) => void;
+}) {
+  const { t } = useI18n();
+  const parentOf = (id: string) => teamSettings?.[id]?.parentTeamId || undefined;
+  const chosen = value.map((id) => teams.find((team) => team.id === id)).filter((team): team is Team => Boolean(team));
+  const toOption = (team: Team, depth: number, extra: Partial<PropertyOption> = {}): PropertyOption => ({
+    id: team.id,
+    label: team.name,
+    labelContent: <><span className="invite-members-team-menu__name" data-i18n-ignore>{team.name}</span><span className="invite-members-team-menu__key" data-i18n-ignore>{team.key}</span></>,
+    icon: <TeamIcon team={teamGlyph(team)} size={14} />,
+    i18nIgnore: true,
+    keywords: team.key,
+    indent: depth,
+    ...extra,
+  });
+  const options: PropertyOption[] = [
+    ...orderTeamTree(chosen, parentOf).map(({ team, depth }) => toOption(team, depth)),
+    ...orderTeamTree(teams.filter((team) => !value.includes(team.id)), parentOf).map(({ team, depth }) => toOption(team, depth, { groupId: "other-teams" })),
+  ];
+  const keys = chosen.map((team) => team.key).join(", ");
+  return (
+    <PropertyMenu
+      compact
+      multiple
+      closeOnSelect
+      label="Team"
+      ariaLabel={t("Add to team")}
+      value={keys}
+      selectedIds={chosen.map((team) => team.id)}
+      options={options}
+      searchPlaceholder="Search teams…"
+      triggerClassName="invite-members-role-trigger invite-members-team-trigger"
+      surfaceClassName="project-teams-menu invite-members-team-menu"
+      onChange={(id) => onChange(value.includes(id) ? value.filter((item) => item !== id) : [...value, id])}
+      trigger={
+        <>
+          {chosen.length > 0 && <TeamIcon team={teamGlyph(chosen[0])} size={14} />}
+          <span data-i18n-ignore={chosen.length > 0 || undefined} className={chosen.length ? undefined : "is-placeholder"}>{chosen.length ? keys : t("Select teams…")}</span>
+          <span className="invite-members-role-trigger__chevron" aria-hidden="true">
+            <svg viewBox="0 0 10 5" fill="currentColor"><path d="M.2.2a.7.7 0 0 1 1 0L5 3.4 8.8.2a.7.7 0 1 1 .9 1.1L5.5 4.8a.7.7 0 0 1-1 0L.3 1.3A.7.7 0 0 1 .2.2Z" /></svg>
+          </span>
+        </>
+      }
+    />
   );
 }
 

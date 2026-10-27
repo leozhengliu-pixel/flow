@@ -9,6 +9,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- The workspace Invite dialog (Settings → Administration → Members → Invite)
+  has an **Add to team** field for every role. Pick one or more teams (a
+  searchable multi-select; optional for Members and Admins, required for
+  Guests) and the invitee joins them when they accept. The invitation API
+  refuses teams the inviter could not add people to directly (a private team
+  they are not on, or one whose member management is closed to them) with 403;
+  workspace admins may use any team.
 - Security response headers on every response (pages, static files, API,
   health, errors, redirects, downloads, streams): `X-Content-Type-Options`,
   `Referrer-Policy`, a `Permissions-Policy` that keeps only what the web app
@@ -123,7 +130,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   instead of failing on the first. It does not send workspace invitations:
   for people who are not members its result carries `inviteHint`, which the
   reply passes on (Settings → Administration → Members → Invite, the emails
-  to paste, then the team to add them to); `get_user` takes `queries` to
+  to paste, the team to select, Send invites); `get_user` takes `queries` to
   look up many people at once;
   `list_users` honours `orderBy: createdAt`; and team requests get `save_team`
   without a `load_tools` step. A chat reply or agent thread run may now take

@@ -174,6 +174,7 @@ export function WorkspaceDirectoryPage({
         open={inviteOpen}
         workspace={data.workspace}
         teams={data.teams}
+        teamSettings={data.teamSettings}
         onClose={() => setInviteOpen(false)}
         onInvited={() => onReload()}
       />}

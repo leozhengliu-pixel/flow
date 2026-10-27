@@ -61,12 +61,15 @@
 .invite-members-dialog__field.is-email {
   margin-top: 35.5px;
 }
-.invite-members-dialog__field.is-role {
-  gap: 8px;
-}
 .invite-members-dialog__field.is-role,
 .invite-members-dialog__field.is-team {
+  gap: 9px;
+}
+.invite-members-dialog__field.is-role {
   margin-top: 23px;
+}
+.invite-members-dialog__field.is-team {
+  margin-top: 29px;
 }
 .invite-members-dialog__field > label {
   color: var(--text);
@@ -74,10 +77,11 @@
   font-weight: 500;
   line-height: 16px;
 }
-.invite-members-dialog__field.is-team > label {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
+/* "(optional)" follows the label for Members and Admins; Guests need a team, so it is dropped. */
+.invite-members-dialog__optional {
+  margin-left: 6px;
+  color: var(--theme-text-secondary);
+  font-weight: 450;
 }
 .invite-members-dialog__field textarea {
   box-sizing: border-box;
@@ -109,8 +113,7 @@
   font-size: 12px;
   line-height: 16px;
 }
-.invite-members-role-trigger,
-.invite-members-dialog__field.is-team .select-control {
+.invite-members-role-trigger {
   box-sizing: border-box;
   position: relative;
   width: min(527px, 100%);
@@ -125,6 +128,30 @@
   color: var(--text);
   font: 400 13px/normal var(--font);
   text-align: left;
+}
+.invite-members-team-trigger {
+  gap: 8px;
+  font-weight: 500;
+}
+.invite-members-team-trigger > .team-icon,
+.invite-members-team-trigger > svg:first-child {
+  flex: none;
+}
+.invite-members-team-trigger > span.is-placeholder {
+  color: var(--theme-text-primary);
+}
+.invite-members-dialog__hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -1px 0 0;
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  font-weight: 450;
+  line-height: 15px;
+}
+.invite-members-dialog__hint svg {
+  flex: none;
 }
 .invite-members-role-trigger:hover {
   background: var(--bg-hover);
@@ -228,7 +255,7 @@ div:has(> .invite-members-role-menu) {
 .invite-members-dialog__footer {
   display: flex;
   justify-content: flex-end;
-  margin-top: 25px;
+  margin-top: 40.5px;
   padding: 0 17.5px;
 }
 .invite-members-dialog__send {
@@ -249,4 +276,21 @@ div:has(> .invite-members-role-menu) {
 .invite-members-dialog__send:disabled {
   opacity: 0.5;
   cursor: default;
+}
+/* The team picker's popover: the shared project-teams rows (checkbox, icon, name, key) at the reference app's 200px. */
+html:root body .property-command-surface.project-teams-menu.invite-members-team-menu:not(#_) {
+  z-index: 1100;
+  width: 200px;
+  min-width: 200px;
+}
+.invite-members-team-menu__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.invite-members-team-menu__key {
+  flex: none;
+  color: var(--theme-text-secondary);
+  font: 450 13px/normal var(--font);
 }

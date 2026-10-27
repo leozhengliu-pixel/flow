@@ -356,8 +356,8 @@ func (s *server) saveMCPTeam(ctx context.Context, actor mcpActor, data domain.Bo
 // mcpTeamInviteHint is what the reply tells the user about the members and owners save_team could not add because
 // they are not in the workspace. Tools cannot send workspace invitations (an email to someone outside the
 // workspace is the user's call), so the hint names the people and the settings page where someone allowed to
-// invite does it: Settings → Administration → Members → Invite, the emails to paste, then the team to add them to.
-// It is "" when everyone not added is only an ambiguous name.
+// invite does it: Settings → Administration → Members → Invite, the emails to paste, the team to select (the
+// invitation adds them to it when they accept), then Send invites. It is "" when everyone not added is only an ambiguous name.
 func mcpTeamInviteHint(teamName string, unresolved []map[string]any) string {
 	emails, names := []string{}, []string{}
 	for _, item := range unresolved {
@@ -378,8 +378,8 @@ func mcpTeamInviteHint(teamName string, unresolved []map[string]any) string {
 	hints := []string{}
 	if len(emails) > 0 {
 		list := strings.Join(emails, ", ")
-		hints = append(hints, fmt.Sprintf("Not added, because they are not members of this workspace: %s. Workspace invitations can't be sent from here. To finish, go to Settings → Administration → Members → Invite, paste %s, and click Send invites; once they accept, add them to %s in Settings → Administration → Teams → %s → Members (or ask again).",
-			list, list, teamName, teamName))
+		hints = append(hints, fmt.Sprintf("Not added, because they are not members of this workspace: %s. Workspace invitations can't be sent from here. To finish, go to Settings → Administration → Members → Invite, paste %s, select the team %s, and click Send invites; they are added to it when they accept.",
+			list, list, teamName))
 	}
 	if len(names) > 0 {
 		hints = append(hints, fmt.Sprintf("No workspace member matches %s: check the spelling, or invite them by email the same way.", strings.Join(names, ", ")))

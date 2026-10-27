@@ -604,7 +604,7 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
           </button>
         </div>
       )}
-      <InviteMembersDialog workspace={data.workspace} teams={data.teams} open={inviteOpen} onClose={() => setInviteOpen(false)} onInvited={onReload} />
+      <InviteMembersDialog workspace={data.workspace} teams={data.teams} teamSettings={data.teamSettings} open={inviteOpen} onClose={() => setInviteOpen(false)} onInvited={onReload} />
       <Dialog open={Boolean(identityTarget)} onOpenChange={(open) => !open && setIdentityTarget(undefined)}>
         <DialogContent className="settings-member-dialog">
           <DialogTitle>{t(identityTarget?.field === "displayName" ? "Update name" : identityTarget?.field === "username" ? "Update username" : "Update email")}</DialogTitle>
