@@ -1,3 +1,5 @@
+import { useLatestRef } from '@/hooks/use-latest-ref'
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import {
   useCallback,
   useEffect,
@@ -1190,9 +1192,9 @@ function Notifications({ data, values, setValue, onReload, p, notificationChanne
   const [channel, setChannel] = useState<
     NotificationSettingsView | null
   >(notificationChannel ?? null);
-  useEffect(() => setChannel(notificationChannel ?? null),[notificationChannel]);
+  useResetOnChange([notificationChannel], () => setChannel(notificationChannel ?? null))
   const openChannel = (next: NotificationSettingsView|null) => { setChannel(next); onNavigateNotification?.(next ?? undefined) };
-  useEffect(() => setPreferences(initial), [initial]);
+  useResetOnChange([initial], () => setPreferences(initial))
   const [priorityTypes, setPriorityTypes] = useState(() => Object.values(readPriorityInboxRuleState()).filter(Boolean).length);
   useEffect(() => {
     void listPushSubscriptions()
@@ -1741,7 +1743,8 @@ function SecurityOverview({
     }
   }, [p]);
   useEffect(() => {
-    void refreshSessions();
+    // load() flips the loading state up front; start it from a microtask so the effect itself never sets state.
+    queueMicrotask(() => { void refreshSessions(); });
   }, [refreshSessions]);
   useEffect(() => {
     void fetchPasskeys()
@@ -2579,8 +2582,7 @@ function CommitSigningKeyCreatePage({
   const [loading, setLoading] = useState(true);
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState("");
-  const cancelRef = useRef(onCancel);
-  cancelRef.current = onCancel;
+  const cancelRef = useLatestRef(onCancel);
 
   // Match the native flow: opening the add route while a key already exists
   // returns to the security inventory instead of allowing a second key.
@@ -2607,7 +2609,7 @@ function CommitSigningKeyCreatePage({
     return () => {
       mounted = false;
     };
-  }, [p]);
+  }, [p, cancelRef]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -2618,7 +2620,7 @@ function CommitSigningKeyCreatePage({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [busy]);
+  }, [busy, cancelRef]);
 
   const readKeyFile = useCallback(
     async (file: File) => {
@@ -2867,11 +2869,11 @@ function APIKeyCreatePage({
   const selectedTeamRecords = data.teams.filter((team) =>
     selectedTeams.includes(team.id),
   );
-  useEffect(() => {
+  useResetOnChange([teamOptions.length], () =>
     setTeamActiveIndex((current) =>
       teamOptions.length ? Math.min(current, teamOptions.length - 1) : 0,
-    );
-  }, [teamOptions.length]);
+    ),
+  );
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -3354,13 +3356,14 @@ function APIKeyDetailPage({
   const [nameDraft, setNameDraft] = useState(apiKey.name);
   const [busy, setBusy] = useState(false);
   const [revokeOpen, setRevokeOpen] = useState(false);
-  const [newlyCreatedSecret, setNewlyCreatedSecret] = useState("");
-  useEffect(() => {
+  // A key just created in this session shows its secret once; the hand-off entry is dropped after it is read.
+  const [newlyCreatedSecret, setNewlyCreatedSecret] = useState(() => pendingAPIKeySecrets.get(apiKey.id) ?? "");
+  useResetOnChange([apiKey.id], () => {
     const key = pendingAPIKeySecrets.get(apiKey.id);
-    if (key) {
-      setNewlyCreatedSecret(key);
-      pendingAPIKeySecrets.delete(apiKey.id);
-    }
+    if (key) setNewlyCreatedSecret(key);
+  });
+  useEffect(() => {
+    pendingAPIKeySecrets.delete(apiKey.id);
   }, [apiKey.id]);
   const scopeList = current.scopes ?? [];
   const teamIdList = current.teamIds ?? [];
@@ -3694,13 +3697,12 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
 function Agents({ data, values, setValue, onNavigate, p }: PersonalProps) {
   const [draft, setDraft] = useState(String(values.agentInstructions || ""));
   const mcpAnchor = useRef<HTMLDivElement>(null);
-  const [mcpTargeted, setMcpTargeted] = useState(false);
+  const [mcpTargeted, setMcpTargeted] = useState(() => window.location.hash === "#mcp-connectors");
   // Connected accounts links here with #mcp-connectors: bring the section into
   // view and outline it briefly.
   useEffect(() => {
     if (window.location.hash !== "#mcp-connectors") return;
     mcpAnchor.current?.scrollIntoView?.({ block: "center" });
-    setMcpTargeted(true);
     const timer = window.setTimeout(() => setMcpTargeted(false), 2000);
     return () => window.clearTimeout(timer);
   }, []);

@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, ArrowUpRight, Box, ChevronRight, Copy, Eye, EyeOff, Check, Link2, MessageSquare, SquareUser, Tag, TrendingUp, Users } from "lucide-react";
 
@@ -168,7 +169,7 @@ function GuidanceEdited({ data, settings }: { data: BootstrapData; settings: Wor
 function GuidanceField({ label, value, disabled, placeholder = "Optional agent guidance...", onSave }: { label: string; value: string; disabled?: boolean; placeholder?: string; onSave: (value: string) => Promise<void> | void }) {
   const { t } = useI18n();
   const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
+  useResetOnChange([value], () => setDraft(value))
   return (
     <textarea
       className="feature-guidance-field"

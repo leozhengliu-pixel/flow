@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useCurrentTimeMs } from '@/hooks/use-current-time'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { ChevronRight, Clock3 } from 'lucide-react'
 import { ReminderChoices } from '@/components/issue/issue-options-menu'
@@ -32,7 +33,8 @@ export function DocumentCustomReminderDialog({ onOpenChange, onRemind, open }: {
   const { t } = useI18n()
   const [value, setValue] = useState('')
   const [saving, setSaving] = useState(false)
-  const valid = Boolean(value) && new Date(value).getTime() > Date.now()
+  const now = useCurrentTimeMs()
+  const valid = Boolean(value) && new Date(value).getTime() > now
   const submit = async () => {
     if (!valid || saving) return
     setSaving(true)
@@ -43,7 +45,7 @@ export function DocumentCustomReminderDialog({ onOpenChange, onRemind, open }: {
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="action-dialog" overlayClassName="action-dialog-overlay">
       <DialogTitle>{t('Remind me')}</DialogTitle>
-      <div className="action-dialog-date"><DateTimeControl label={t('Reminder time')} min={new Date().toISOString()} mode="datetime" value={value} onChange={setValue}/></div>
+      <div className="action-dialog-date"><DateTimeControl label={t('Reminder time')} min={new Date(now).toISOString()} mode="datetime" value={value} onChange={setValue}/></div>
       <footer>
         <button onClick={() => onOpenChange(false)} type="button">{t('Cancel')}</button>
         <button className="primary" disabled={!valid || saving} onClick={() => void submit()} type="button">{t('Set reminder')}</button>

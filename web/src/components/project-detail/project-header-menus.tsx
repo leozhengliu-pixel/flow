@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useCurrentTimeMs } from '@/hooks/use-current-time'
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -51,7 +53,7 @@ export function ProjectNotificationMenu({ onOpenChange, open, project, subscript
   const [events,setEvents] = useState(subscription?.events ?? [])
   const [saving,setSaving] = useState(false)
   const persisted = JSON.stringify(subscription?.events ?? [])
-  useEffect(() => setEvents(JSON.parse(persisted) as string[]), [persisted])
+  useResetOnChange([persisted], () => setEvents(JSON.parse(persisted) as string[]))
   const pulse = useProjectPulse(project, events, pulseSubscribed, open, setEvents)
   const changeEvent = async (eventName: string, checked: boolean) => {
     if (saving) return
@@ -85,8 +87,9 @@ export function ProjectActionsMenu({ project, favorited, onDelete, onFavorite, o
   const [saving, setSaving] = useState(false)
   const [events, setEvents] = useState(subscription?.events ?? [])
   const persistedEvents = JSON.stringify(subscription?.events ?? [])
-  useEffect(() => setEvents(JSON.parse(persistedEvents) as string[]), [persistedEvents])
+  useResetOnChange([persistedEvents], () => setEvents(JSON.parse(persistedEvents) as string[]))
   const [menuOpen, setMenuOpen] = useState(false)
+  const now = useCurrentTimeMs()
   const pulse = useProjectPulse(project, events, pulseSubscribed, menuOpen, setEvents)
   const visible = (label: string) => !query || `${label} ${t(label)}`.toLocaleLowerCase().includes(query.toLocaleLowerCase())
   const markdown = `# ${project.name}\n\n${project.summary}${project.description ? `\n\n${project.description}` : ''}`
@@ -152,7 +155,7 @@ export function ProjectActionsMenu({ project, favorited, onDelete, onFavorite, o
         {!groups.some(groupVisible) && <div className="project-action-menu__empty">{t('No results')}</div>}
       </DropdownMenu.Content></DropdownMenu.Portal>
     </DropdownMenu.Root>
-    <Dialog.Root open={customReminder} onOpenChange={setCustomReminder}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="project-detail-page__dialog-overlay"/><Dialog.Content data-flow-motion="dialog" className="project-detail-page__form-dialog" aria-describedby={undefined}><Dialog.Title>{t('Remind me')}</Dialog.Title><DateTimeControl label={t('Reminder time')} mode="datetime" value={reminderAt} onChange={setReminderAt}/><footer><Dialog.Close asChild><button type="button">{t('Cancel')}</button></Dialog.Close><button className="is-primary" type="button" disabled={saving || !reminderAt || new Date(reminderAt).getTime() <= Date.now()} onClick={() => void remind(new Date(reminderAt).toISOString())}>{t('Set reminder')}</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
+    <Dialog.Root open={customReminder} onOpenChange={setCustomReminder}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="project-detail-page__dialog-overlay"/><Dialog.Content data-flow-motion="dialog" className="project-detail-page__form-dialog" aria-describedby={undefined}><Dialog.Title>{t('Remind me')}</Dialog.Title><DateTimeControl label={t('Reminder time')} mode="datetime" value={reminderAt} onChange={setReminderAt}/><footer><Dialog.Close asChild><button type="button">{t('Cancel')}</button></Dialog.Close><button className="is-primary" type="button" disabled={saving || !reminderAt || new Date(reminderAt).getTime() <= now} onClick={() => void remind(new Date(reminderAt).toISOString())}>{t('Set reminder')}</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
     {onUpdateSchedule && <ProjectUpdateScheduleDialog open={scheduleOpen} onOpenChange={setScheduleOpen} project={project} onSave={onUpdateSchedule}/>}
   </>
 }

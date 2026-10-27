@@ -21,7 +21,6 @@ export function CompleteFigmaAuthView() {
   useEffect(() => {
     if (done || error || !params.get('code')) return
     let active = true
-    setPending(true)
     void finishFigmaAuth(location.search).then((result) => {
       if (!active) return
       setPending(false)

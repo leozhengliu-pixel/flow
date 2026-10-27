@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
+import { useState } from 'react'
 import { toast } from '@/lib/toast'
 
 import { useI18n } from '@/i18n/i18n'
@@ -25,10 +26,10 @@ export function CodingToolsSettingsPage({
   const enabled = new Set(settings?.enabledCodingTools ?? [])
   const [customLink, setCustomLink] = useState(settings?.customDeepLinkUrlTemplate ?? '')
   const [prompt, setPrompt] = useState(settings?.codingPromptTemplate ?? '')
-  useEffect(() => {
+  useResetOnChange([settings?.customDeepLinkUrlTemplate, settings?.codingPromptTemplate], () => {
     setCustomLink(settings?.customDeepLinkUrlTemplate ?? '')
     setPrompt(settings?.codingPromptTemplate ?? '')
-  }, [settings?.customDeepLinkUrlTemplate, settings?.codingPromptTemplate])
+  })
   const save = async (patch: Partial<UserSettings>) => {
     try {
       await updateUserSettings(patch, data.workspace.urlKey)

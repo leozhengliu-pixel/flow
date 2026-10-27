@@ -1,5 +1,6 @@
 import { ExternalLink, GitBranch, MoreHorizontal, Pencil, Plus, Repeat2, SquareArrowOutUpRight, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCurrentTime } from "@/hooks/use-current-time";
 import { useNavigate } from "react-router-dom";
 import { toast } from "@/lib/toast";
 
@@ -148,7 +149,8 @@ function RecurringIssuesList({ data, team, onBack, onNavigateSubPath }: Props) {
     }
   };
   const openIssue = (issue: Issue) => navigate(issuePath(data.workspace.urlKey, issue));
-  const dateLabel = (date: Date) => formatDate(date.toISOString(), { month: "short", day: "numeric", year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
+  const currentYear = useCurrentTime().getFullYear();
+  const dateLabel = (date: Date) => formatDate(date.toISOString(), { month: "short", day: "numeric", year: date.getFullYear() === currentYear ? undefined : "numeric" });
   const newButton = (
     <button type="button" className="settings-action recurring-issues-new" disabled={!canManage} onClick={() => onNavigateSubPath("new")}>
       <Plus size={13} />
@@ -284,10 +286,10 @@ function NewRecurringIssuePage({ data, team, sourceId, onNavigateSubPath, onRelo
     fetchIssueRecord(sourceId, abort.signal).then(setSource).catch((error) => { if (!abort.signal.aborted) setSourceError(errorMessage(error)); });
     return () => abort.abort();
   }, [source, sourceId]);
-  const prefilled = useRef("");
-  useEffect(() => {
-    if (!source || prefilled.current === source.id) return;
-    prefilled.current = source.id;
+  // The form is prefilled once per source issue, while rendering the first time it is known.
+  const [prefilledId, setPrefilledId] = useState("");
+  if (source && prefilledId !== source.id) {
+    setPrefilledId(source.id);
     setTitle(source.title);
     setIcon(source.icon ?? "");
     setPriority(source.priority);
@@ -306,7 +308,7 @@ function NewRecurringIssuePage({ data, team, sourceId, onNavigateSubPath, onRelo
       setRepeatInterval(schedule.interval);
       setKeptRecurrence(source.recurrence ?? "");
     }
-  }, [source]);
+  }
 
   const close = () => {
     const url = new URL(window.location.href);

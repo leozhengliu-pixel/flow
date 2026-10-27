@@ -73,7 +73,7 @@ export function ConnectorMenu({
   const [focusRegion, setFocusRegion] = useState(false);
   // "Custom URL…" is always offered, whatever the search finds.
   const options: ConnectorEntry[] = [...CONNECTOR_CATALOG, { id: "custom", label: "Custom URL…", url: "", keywords: "" }];
-  const command = usePropertyCommand({
+  const { inputRef: commandInputRef, ...command } = usePropertyCommand({
     open,
     options,
     pinnedIds: ["custom"],
@@ -114,11 +114,11 @@ export function ConnectorMenu({
           onKeyDown={command.onKeyDown}
           onOpenAutoFocus={(e) => {
             e.preventDefault();
-            requestAnimationFrame(() => command.inputRef.current?.focus());
+            requestAnimationFrame(() => commandInputRef.current?.focus());
           }}
         >
           <input
-            ref={command.inputRef}
+            ref={commandInputRef}
             type="search"
             aria-label="Search connectors"
             placeholder="Search connectors"
@@ -192,7 +192,7 @@ export function ConnectorMenu({
                               if (e.key === "ArrowLeft" || e.key === "Escape") {
                                 e.preventDefault();
                                 setRegion(undefined);
-                                command.inputRef.current?.focus();
+                                commandInputRef.current?.focus();
                               }
                               if (e.key === "ArrowDown") {
                                 e.preventDefault();

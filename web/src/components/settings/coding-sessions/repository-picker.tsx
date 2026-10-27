@@ -1,3 +1,4 @@
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { FlowGlyph } from "@/components/ui/menu-glyphs";
@@ -33,8 +34,7 @@ export function RepositoryPickerPopover({ hosts, value, open, onOpenChange, onPi
   const list = useRef<HTMLDivElement>(null);
   const hostsKey = hosts.map(hostKey).join("|");
   // Callers rebuild the hosts array on every render; hostsKey is what identifies it.
-  const hostsRef = useRef(hosts);
-  hostsRef.current = hosts;
+  const hostsRef = useLatestRef(hosts);
 
   useEffect(() => {
     const hosts = hostsRef.current;
@@ -54,7 +54,7 @@ export function RepositoryPickerPopover({ hosts, value, open, onOpenChange, onPi
         .finally(() => id === request.current && setLoading(false));
     }, query ? 200 : 0);
     return () => clearTimeout(timer);
-  }, [open, query, hostsKey]);
+  }, [open, query, hostsKey, hostsRef]);
 
   const more = hosts.filter((host) => cursors[hostKey(host)]);
   const loadMore = async () => {

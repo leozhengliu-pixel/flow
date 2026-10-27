@@ -51,7 +51,8 @@ export function WorkspaceTeamsSettings({
     }
   }, [data.workspace.urlKey, t]);
   useEffect(() => {
-    if (visibility === "Recently deleted") void loadDeleted();
+    // Started from a microtask so the effect itself never sets state.
+    if (visibility === "Recently deleted") queueMicrotask(() => { void loadDeleted(); });
   }, [visibility, loadDeleted, data.teams]);
   const memberCounts = useMemo(() => {
     const counts = new Map<string, number>();

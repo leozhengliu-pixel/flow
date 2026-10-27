@@ -6,6 +6,7 @@ import type { SelectedDescription } from '@/components/issue/editor/structured-b
 import { IssueAgentTasksProvider } from '@/components/agent/issue-agent-tasks'
 import { SelectionIssueProvider } from '@/components/editor/selection-issue-provider'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { refreshResourcePreferences } from '@/lib/resource-preferences'
 import { toast } from '@/lib/toast'
 
@@ -100,7 +101,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   const [accessBusy, setAccessBusy] = useState(false)
   const [permissions, setPermissions] = useState<DocumentPermission[]>([])
   const pending = useRef<number | undefined>(undefined)
-  const titleFocused = useRef(false)
+  const [titleFocused, setTitleFocused] = useState(false)
 
   const navigate = useCallback((path: string) => { if (onNavigate) onNavigate(path); else window.location.assign(path) }, [onNavigate])
   const ctx: DocumentActionContext = { data, reload: onReload, navigate, t }
@@ -108,10 +109,11 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   const subscribed = data.subscriptions.some(item => item.resourceType === 'document' && item.resourceId === document.id && isActiveSubscription(item)) || document.subscriberIds.includes(data.viewer.id)
   const collaborators = [...new Map(presence.filter(user => Boolean(user.id) && user.id !== data.viewer.id).map(user => [user.id, user])).values()]
 
-  useEffect(() => {
-    if (!titleFocused.current) setTitle(document.title)
+  // A refreshed document replaces the local copy of its title (unless it is being edited) and body.
+  useResetOnChange([document], () => {
+    if (!titleFocused) setTitle(document.title)
     setBody({ value: document.content, state: document.contentData ? JSON.stringify(document.contentData) : document.contentState })
-  }, [document])
+  })
   useEffect(() => { setDocumentContent(document.id, body.value, body.state); return () => clearDocumentContent(document.id) }, [document.id, body.value, body.state])
   useEffect(() => () => window.clearTimeout(pending.current), [])
 
@@ -280,9 +282,9 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
       <input
         aria-label={t('Document title')}
         className="document-title"
-        onBlur={() => { titleFocused.current = false; if (canEdit && title !== document.title) { window.clearTimeout(pending.current); void updateDocument(document.id, { title }).then(onReload) } }}
+        onBlur={() => { setTitleFocused(false); if (canEdit && title !== document.title) { window.clearTimeout(pending.current); void updateDocument(document.id, { title }).then(onReload) } }}
         onChange={event => { setTitle(event.target.value); schedule({ title: event.target.value }) }}
-        onFocus={() => { titleFocused.current = true }}
+        onFocus={() => { setTitleFocused(true) }}
         placeholder={t('New document')}
         readOnly={!canEdit}
         value={title}

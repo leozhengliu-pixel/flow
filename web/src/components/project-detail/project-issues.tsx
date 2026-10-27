@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
+import { useDepsSnapshot } from "@/hooks/use-deps-snapshot";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Plus, Trash2, X } from "lucide-react";
 import { MilestoneProgressIcon } from "@/components/issue/milestone-progress-icon";
@@ -346,18 +347,16 @@ export function ProjectIssues({
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<Issue>();
   const [loadedIssues, setLoadedIssues] = useState<Issue[]>([]);
-  // Latest data for the paged query below, which rebuilds only on filter/display changes (a new object per data refresh would refetch).
-  const issueDataRef = useRef(issueData);
-  issueDataRef.current = issueData;
+  // The paged query below reads the latest data but rebuilds only on filter/display changes (a new object per data refresh would refetch).
   // Paged pages only hold a slice of the project, so rely on the server-side project summary total.
   const projectHasNoIssues = issueData?.issueCollectionPaged ? issueSummary?.total === 0 : projectIssues.length === 0;
   const showProjectIntro = !milestoneScope && projectHasNoIssues;
   const focusKey = issueData ? focusCasesKey(display, issueData) : '';
-  const pagedQuery = useMemo<IssueQueryInput>(() => {
-    const { sort, direction, groupBy, groupCases, archived, conditions } = pagedDisplayQuery(display, Date.now(), [], focusKey ? issueDataRef.current : undefined);
+  const pagedQuery = useDepsSnapshot<IssueQueryInput>([project.id, milestoneScope, filters, display, focusKey], () => {
+    const { sort, direction, groupBy, groupCases, archived, conditions } = pagedDisplayQuery(display, Date.now(), [], focusKey ? issueData : undefined);
     if (milestoneScope) conditions.push({ field: 'projectMilestoneId', values: [milestoneScope.id] });
-    return { projectId: project.id, archived, groupBy, groupCases, sort, direction, filter: { and: [issueFiltersToQueryAst(filters, issueDataRef.current ? { data: issueDataRef.current } : undefined), ...conditions] } };
-  }, [project.id, milestoneScope, filters, display, focusKey]);
+    return { projectId: project.id, archived, groupBy, groupCases, sort, direction, filter: { and: [issueFiltersToQueryAst(filters, issueData ? { data: issueData } : undefined), ...conditions] } };
+  });
   const visible = useMemo(
     () => applyExplorerFilters(projectIssues, filters, issueData),
     [filters, issueData, projectIssues],

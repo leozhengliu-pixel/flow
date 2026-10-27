@@ -1,3 +1,4 @@
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { useEffect, useState } from 'react'
 import { fetchUpdateDiffPreview } from '@/lib/api'
 import { useI18n } from '@/i18n/i18n'
@@ -15,8 +16,8 @@ export function PulseComposerDiffPreview({ source }: { source: Source }) {
   const [diff, setDiff] = useState<PulseDiff>()
   const id = source.entity.id
   const kind = source.kind
+  useResetOnChange([id, kind], () => setDiff(undefined))
   useEffect(() => {
-    setDiff(undefined)
     const controller = new AbortController()
     fetchUpdateDiffPreview(kind, id, controller.signal)
       .then(result => { if (!controller.signal.aborted) setDiff(result?.diff) })

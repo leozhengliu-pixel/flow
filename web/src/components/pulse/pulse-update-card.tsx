@@ -1,3 +1,4 @@
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
 import type { Editor } from '@tiptap/react'
@@ -88,9 +89,9 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
 
   // R: "Reply to update" opens the thread and focuses the composer.
   const replyRequest = props.replyRequest
+  useResetOnChange([replyRequest], () => { if (replyRequest) setCommentsOpen(true) }, { runOnMount: true })
   useEffect(() => {
     if (!replyRequest) return
-    setCommentsOpen(true)
     const timer = window.setTimeout(() => editorRef.current?.commands.focus('end'), 30)
     return () => window.clearTimeout(timer)
   }, [replyRequest])

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { IssueRowActionsProvider } from './issue-row-actions'
+import { useDepsSnapshot } from '@/hooks/use-deps-snapshot'
 import { PAGED_GROUPINGS, PAGED_ORDERINGS, focusCasesKey, groupSummaries, labelGroups, pagedDisplayQuery } from '@/components/issue-explorer/issue-grouping'
 import { boundedIssueSequence } from '@/lib/navigation-context'
 import { PagedIssueList } from '@/components/issue-explorer/paged-issue-list'
@@ -61,9 +62,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const [insightsConfig,setInsightsConfig]=useState<Record<string,unknown>>(()=>readInsights(`${workspaceSlug}:my-issues:${initialView}:insights`))
   const [previewIssueId, setPreviewIssueId] = useState<string>()
   const [mutationErrors, setMutationErrors] = useState<Map<string, string>>(new Map())
-  // Latest bootstrap data for the query memos below: they rebuild only when filters/view change, not on every data refresh (which would refetch the paged list).
-  const dataRef = useRef(data)
-  dataRef.current = data
+  // The query snapshots below read the latest bootstrap data but rebuild only when filters/view change, not on every data refresh (which would refetch the paged list).
   const mutationSequence = useRef(new Map<string, number>())
   const mutationQueues = useRef(new Map<string, Promise<Issue>>())
   const retryUpdates = useRef(new Map<string, IssueUpdateInput>())
@@ -91,10 +90,10 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   })
   // Focus buckets depend on the current cycles, triage teams and SLA risk: the query changes only when they do.
   const focusKey = focusCasesKey(controller.display, data)
-  const myIssuesPagedQuery = useMemo(() => {
-    const { sort, direction, groupBy, groupCases, archived, conditions } = pagedDisplayQuery(controller.display, Date.now(), [], focusKey ? dataRef.current : undefined)
-    return { archived, groupBy, groupCases, sort, direction, filter: { and: [issueFiltersToQueryAst(controller.filters, { data: dataRef.current }), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : projectedView === 'shared' ? 'sharedWith' : 'assignee', values: [data.viewer.id] }, ...conditions] } }
-  }, [controller.display, controller.filters, data.viewer.id, projectedView, focusKey])
+  const myIssuesPagedQuery = useDepsSnapshot([controller.display, controller.filters, data.viewer.id, projectedView, focusKey], () => {
+    const { sort, direction, groupBy, groupCases, archived, conditions } = pagedDisplayQuery(controller.display, Date.now(), [], focusKey ? data : undefined)
+    return { archived, groupBy, groupCases, sort, direction, filter: { and: [issueFiltersToQueryAst(controller.filters, { data }), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : projectedView === 'shared' ? 'sharedWith' : 'assignee', values: [data.viewer.id] }, ...conditions] } }
+  })
 
   const addFilter = (field: MyIssuesFilterKey, option?: MyIssuesFilterOption) => {
     const fieldLabel = FILTER_LABELS[field]
@@ -174,11 +173,11 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const boardGroups = displayedGroups
   const allInsightRows=useMemo(()=>insightsOpen?applyExplorerFilters(issuesForView(data,projectedView,true),controller.filters,data).map(issue=>issueToExplorerRow(issue,workspaceSlug,data.issues,data)):[],[controller.filters,data,insightsOpen,projectedView,workspaceSlug])
   const insightRows = useMemo(() => allInsightRows.filter(row => !row.archivedAt), [allInsightRows])
-  const insightQuery = useMemo(() => ({ filter: { and: [issueFiltersToQueryAst(controller.filters, { data: dataRef.current }), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : projectedView === 'shared' ? 'sharedWith' : 'assignee', values: [data.viewer.id] }] } }), [controller.filters, projectedView, data.viewer.id])
+  const insightQuery = useDepsSnapshot([controller.filters, projectedView, data.viewer.id], () => ({ filter: { and: [issueFiltersToQueryAst(controller.filters, { data }), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : projectedView === 'shared' ? 'sharedWith' : 'assignee', values: [data.viewer.id] }] } }))
   const insightsView:SavedView={id:`my-issues-${controller.view}`,name:({assigned:'Assigned to me',created:'Created by me',subscribed:'Subscribed',activity:'Activity',shared:'Shared with me'} as const)[controller.view],description:'',resource:'issues',scope:'personal',ownerId:data.viewer.id,view:'all',filters:controller.filters,display:{},insights:insightsConfig,createdAt:'',updatedAt:''}
   const split = controller.display.layout === 'split'
   const splitRowIds = useMemo(() => data.issueCollectionPaged ? pagedIssues.map(issue => issue.id) : displayedGroups.flatMap(group => group.issues.map(issue => issue.id)), [data.issueCollectionPaged, displayedGroups, pagedIssues])
-  useEffect(() => { if (split && (!previewIssueId || !splitRowIds.includes(previewIssueId)) && splitRowIds[0]) setPreviewIssueId(splitRowIds[0]) }, [previewIssueId, split, splitRowIds])
+  if (split && (!previewIssueId || !splitRowIds.includes(previewIssueId)) && splitRowIds[0]) setPreviewIssueId(splitRowIds[0])
   useEffect(() => {
     if (!split) return
     const onKey = (event: KeyboardEvent) => {

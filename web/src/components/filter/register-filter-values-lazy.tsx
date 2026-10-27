@@ -3,6 +3,7 @@
  * Project / Initiative / Team / PR / Notification / … FilterBlocks into the registry.
  */
 import { useEffect, useState } from 'react'
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import type { FilterEntityType } from './filter-block-types'
 import { hasRegisteredFilterValues, registerFilterValues } from './register-filter-values'
 import { loadFilterBlocksPack } from './filter-blocks'
@@ -29,14 +30,14 @@ export function RegisterFilterValuesShouldBeLazyLoaded({
     !force && hasRegisteredFilterValues(type) ? 'ready' : 'idle',
   )
 
+  // A new type (or force) restarts from "ready" when its pack is registered, otherwise "loading" while it loads.
+  useResetOnChange([type, force], () => setStatus(!force && hasRegisteredFilterValues(type) ? 'ready' : 'loading'))
   useEffect(() => {
     let cancelled = false
     if (!force && hasRegisteredFilterValues(type)) {
-      setStatus('ready')
       onReady?.(type)
       return
     }
-    setStatus('loading')
     loadFilterBlocksPack(type)
       .then(blocks => {
         if (cancelled) return

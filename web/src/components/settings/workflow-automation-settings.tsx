@@ -49,7 +49,8 @@ export function WorkflowAutomationSettings({ data }: { data: BootstrapData }) {
     setRuns(nextRuns);
   }, []);
   useEffect(() => {
-    void refresh().catch((error) => toast.error(message(error, t)));
+    // refresh() sets state; start it from a microtask so the effect itself never sets state.
+    queueMicrotask(() => { void refresh().catch((error) => toast.error(message(error, t))); });
   }, [refresh, t]);
   const create = async () => {
     const config: Record<string, string> = {};

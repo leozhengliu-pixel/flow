@@ -46,7 +46,8 @@ export function GitHubAppCard({ isAdmin }: { isAdmin: boolean }) {
   }, [isAdmin]);
 
   useEffect(() => {
-    void load();
+    // load() flips the loading state up front; start it from a microtask so the effect itself never sets state.
+    queueMicrotask(() => { void load(); });
   }, [load]);
 
   if (!status?.configured) return null;

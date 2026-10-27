@@ -1,3 +1,4 @@
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 /**
  * LS-0365 JiraSyncPage — SelectProjects → ConfigureSync → StatusMapping wizard.
  */
@@ -95,11 +96,13 @@ export function JiraSyncPage({ data, mode, jiraProjectId, onBack, onReload }: Pr
     };
   }, [t]);
 
+  useResetOnChange([selectedProjectId, manualProjectId, step, teamStates, t], () => {
+    if ((selectedProjectId || manualProjectId) && step !== "SelectProjects") setStatusesLoading(true);
+  }, { runOnMount: true });
   useEffect(() => {
     const projectId = selectedProjectId || manualProjectId;
     if (!projectId || step === "SelectProjects") return;
     let cancelled = false;
-    setStatusesLoading(true);
     void (async () => {
       try {
         const remote = await fetchJiraRemoteStatuses(projectId);

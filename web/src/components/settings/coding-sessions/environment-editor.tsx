@@ -1,3 +1,4 @@
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Info, Sparkles } from "lucide-react";
 import { confirmAction } from "@/components/ui/action-dialog-service";
@@ -105,7 +106,8 @@ export function EnvironmentEditorPage({ data, environmentId, disabled, onBack, o
     }
   }, [applyEnvironment, environmentId, isNew]);
   useEffect(() => {
-    void load();
+    // load() flips the loading state up front; start it from a microtask so the effect itself never sets state.
+    queueMicrotask(() => { void load(); });
   }, [load]);
 
   // A new environment starts on the first connected code host once the status is known.
@@ -151,8 +153,7 @@ export function EnvironmentEditorPage({ data, environmentId, disabled, onBack, o
   const canManageOwners = data.viewerRole === "admin" || data.viewerRole === "owner";
 
   // Leaving with unsaved changes asks first, in the app and when the tab closes.
-  const dirtyRef = useRef(dirty);
-  dirtyRef.current = dirty && !saving;
+  const dirtyRef = useLatestRef(dirty && !saving);
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
       if (!dirtyRef.current) return;
@@ -161,7 +162,7 @@ export function EnvironmentEditorPage({ data, environmentId, disabled, onBack, o
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, []);
+  }, [dirtyRef]);
   const leave = async () => {
     if (dirtyRef.current && !(await confirmAction(t("Discard changes?"), { confirmLabel: t("Confirm"), danger: true }))) return;
     onBack();

@@ -1,3 +1,4 @@
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 /**
  * Inline comment threads beside rich text (a document, or a project or initiative description), shared by every page that
  * has them: select text → toolbar "Comment" → a card in the right gutter with "Add a comment…". A thread anchors to its
@@ -41,6 +42,40 @@ export const GUTTER_MIN_VIEWPORT = 1232
 const POPOVER_WIDTH = 360
 const POPOVER_INSET = 12.5
 const POPOVER_GAP = 8
+
+/** The open thread a `#comment-<id>` deep link points at (the link may name the thread's root or one of its replies). */
+function deepLinkThread(open: InlineThread[]) {
+  const id = window.location.hash.match(/^#comment-(.+)$/)?.[1]
+  if (!id) return undefined
+  const thread = open.find(item => item.root.id === id || item.replies.some(reply => reply.id === id))
+  return thread ? { id, thread } : undefined
+}
+
+/** One stable ref callback per card (so re-renders do not re-observe) and the resize observer measuring the cards. */
+class CardRegistry {
+  private observer: ResizeObserver | null = null
+  private cards = new Map<string, HTMLDivElement>()
+  private callbacks = new Map<string, (element: HTMLDivElement | null) => void>()
+  /** Starts measuring cards attached from now on; returns the stop function. */
+  start(onResize: ResizeObserverCallback) {
+    const observer = new ResizeObserver(onResize)
+    this.observer = observer
+    return () => { observer.disconnect(); if (this.observer === observer) this.observer = null }
+  }
+  attach(id: string) {
+    let callback = this.callbacks.get(id)
+    if (!callback) {
+      callback = (element: HTMLDivElement | null) => {
+        const previous = this.cards.get(id)
+        if (previous && previous !== element) this.observer?.unobserve(previous)
+        if (element) { this.cards.set(id, element); this.observer?.observe(element) }
+        else this.cards.delete(id)
+      }
+      this.callbacks.set(id, callback)
+    }
+    return callback
+  }
+}
 
 function sameRanges(left: Map<string, AnchorRange>, right: Map<string, AnchorRange>) {
   if (left.size !== right.size) return false
@@ -91,8 +126,7 @@ export function InlineCommentGutter({ comments, viewer, users, editor, shell, dr
   const [narrow, setNarrow] = useState<boolean | undefined>(undefined)
   const popover = narrow !== false || railOpen
   const materialized = useRef(new Set<string>())
-  const observer = useRef<ResizeObserver | null>(null)
-  const cards = useRef(new Map<string, HTMLDivElement>())
+  const [cardRegistry] = useState(() => new CardRegistry())
   // Resolving the thread being read also closes it.
   const threadActions = useMemo<ThreadActions>(() => ({
     ...actions,
@@ -173,19 +207,20 @@ export function InlineCommentGutter({ comments, viewer, users, editor, shell, dr
   }, [editor, open])
 
   // Deep links (#comment-<id>) activate and reveal their thread.
+  useResetOnChange([open], () => {
+    const link = deepLinkThread(open)
+    if (link) setActive(link.thread.root.id)
+  }, { runOnMount: true })
   useEffect(() => {
-    const id = window.location.hash.match(/^#comment-(.+)$/)?.[1]
-    if (!id) return
-    const thread = open.find(item => item.root.id === id || item.replies.some(reply => reply.id === id))
-    if (!thread) return
-    setActive(thread.root.id)
-    window.setTimeout(() => window.document.getElementById(`comment-${id}`)?.scrollIntoView({ block: 'center' }), 60)
+    const link = deepLinkThread(open)
+    if (!link) return
+    window.setTimeout(() => window.document.getElementById(`comment-${link.id}`)?.scrollIntoView({ block: 'center' }), 60)
   }, [open])
 
   // Measure each card; layout is recomputed when a card resizes.
   useEffect(() => {
     if (typeof ResizeObserver === 'undefined') return
-    observer.current = new ResizeObserver(entries => {
+    return cardRegistry.start(entries => {
       setHeights(current => {
         let changed = false
         const next = new Map(current)
@@ -198,23 +233,7 @@ export function InlineCommentGutter({ comments, viewer, users, editor, shell, dr
         return changed ? next : current
       })
     })
-    return () => observer.current?.disconnect()
-  }, [])
-  // One stable ref callback per card, so re-renders do not re-observe.
-  const cardRefs = useRef(new Map<string, (element: HTMLDivElement | null) => void>())
-  const cardRef = useCallback((id: string) => {
-    let callback = cardRefs.current.get(id)
-    if (!callback) {
-      callback = (element: HTMLDivElement | null) => {
-        const previous = cards.current.get(id)
-        if (previous && previous !== element) observer.current?.unobserve(previous)
-        if (element) { cards.current.set(id, element); observer.current?.observe(element) }
-        else cards.current.delete(id)
-      }
-      cardRefs.current.set(id, callback)
-    }
-    return callback
-  }, [])
+  }, [cardRegistry])
 
   // Gutter cards need a wide viewport (a media query, like the reference app: the page's own width plays no part).
   useEffect(() => {
@@ -255,10 +274,12 @@ export function InlineCommentGutter({ comments, viewer, users, editor, shell, dr
 
   // A popover shows only the thread being read (or the composer being written); the others wait to be clicked.
   const visibleThreads = visible ? (popover ? open.filter(thread => thread.root.id === active) : open) : []
+  // Measures editor/DOM geometry (coordsAtPos) and stores the result before paint: a layout effect that syncs React with the DOM.
   useLayoutEffect(() => {
     const items = visibleThreads.map(thread => ({ id: threadKey(thread), top: thread.anchorId ? anchorTop(anchors.get(thread.anchorId)) : 0, height: heights.get(threadKey(thread)) ?? 96 }))
     if (draft) items.push({ id: 'draft', top: anchorTop(draft), height: heights.get('draft') ?? 96 })
     const next = layoutGutter(items, draft ? 'draft' : active)
+    // oxlint-disable-next-line react/set-state-in-effect -- stores measured DOM geometry before paint; this is the layout-effect measurement pattern, not derived state
     setTops(current => {
       if (current.size === next.size && [...next].every(([id, top]) => current.get(id) === top)) return current
       return next
@@ -325,7 +346,7 @@ export function InlineCommentGutter({ comments, viewer, users, editor, shell, dr
 
   if (!shown) return null
   return <TooltipProvider><div className={`document-inline-gutter${popover ? ' is-popover' : ''}`} aria-label={t('Comments')} role="complementary">
-    {draft && <div className="document-thread-card is-draft is-active" data-draft-card="draft" ref={cardRef('draft')} style={popover ? popoverStyle(draft) : { top: tops.get('draft') ?? anchorTop(draft) }}>
+    {draft && <div className="document-thread-card is-draft is-active" data-draft-card="draft" ref={cardRegistry.attach('draft')} style={popover ? popoverStyle(draft) : { top: tops.get('draft') ?? anchorTop(draft) }}>
       <div className="document-thread-draft">
         <UserAvatar avatarUrl={viewer.avatarUrl} className="document-thread-avatar" name={viewer.displayName || viewer.name}/>
         <div className="document-thread-draft-composer" ref={focusComposer}>
@@ -335,7 +356,7 @@ export function InlineCommentGutter({ comments, viewer, users, editor, shell, dr
     </div>}
     {visibleThreads.map(thread => <InlineThreadCard
       key={threadKey(thread)}
-      ref={cardRef(threadKey(thread))}
+      ref={cardRegistry.attach(threadKey(thread))}
       thread={thread}
       viewer={viewer}
       users={users}

@@ -312,7 +312,8 @@ function ChatBindingEditor({ provider, data, bindableTeamIds, binding, busy, onC
 
   useEffect(() => {
     mounted.current = true;
-    void loadChats();
+    // load() flips the loading state up front; start it from a microtask so the effect itself never sets state.
+    queueMicrotask(() => { if (mounted.current) void loadChats(); });
     return () => { mounted.current = false; };
   }, [loadChats]);
 

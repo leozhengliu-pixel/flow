@@ -6,6 +6,7 @@
  * the derivation is debounced and runs when the browser is idle.
  */
 import { useEffect, useRef, useState } from 'react'
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 
 import type { FlowDocument, User } from '@/types/flow'
 import { useLoadedRevisions } from './use-loaded-revisions'
@@ -52,8 +53,9 @@ export function DocumentAuthorLabels({ document, state, lastEditor, enabled, she
   const frame = useRef(0)
 
   // Derive per-block authors (debounced, idle) whenever the content or revisions change.
+  useResetOnChange([enabled], () => { if (!enabled) { setAuthors([]); setLabels([]) } })
   useEffect(() => {
-    if (!enabled) { setAuthors([]); setLabels([]); return }
+    if (!enabled) return
     let cancelIdle: (() => void) | undefined
     const timer = window.setTimeout(() => {
       cancelIdle = idle(() => {
@@ -67,11 +69,13 @@ export function DocumentAuthorLabels({ document, state, lastEditor, enabled, she
   }, [enabled, state, loaded, lastEditor])
 
   // Place a label at the start of each author run, and keep it in place as the editor changes.
+  const hasAuthors = authors.length > 0
+  useResetOnChange([enabled, shell, hasAuthors], () => { if (!enabled || !shell || !hasAuthors) setLabels([]) })
   useEffect(() => {
     authorsRef.current = authors
-    if (!enabled || !shell || !authors.length) { setLabels([]); return }
+    if (!enabled || !shell || !authors.length) return
     const root = shell.querySelector('.flow-prosemirror, .ProseMirror')
-    if (!root) { setLabels([]); return }
+    if (!root) { queueMicrotask(() => setLabels([])); return }
     const measure = () => {
       frame.current = 0
       const blocks = editorBlocks(root)
@@ -89,7 +93,7 @@ export function DocumentAuthorLabels({ document, state, lastEditor, enabled, she
       setLabels(previous => previous.length === next.length && previous.every((label, index) => label.key === next[index].key && label.top === next[index].top) ? previous : next)
     }
     const schedule = () => { if (!frame.current) frame.current = requestAnimationFrame(measure) }
-    measure()
+    schedule()
     const observer = new MutationObserver(schedule)
     observer.observe(root, { childList: true })
     const resize = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(schedule)

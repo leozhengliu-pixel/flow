@@ -1,8 +1,9 @@
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import * as Dialog from '@radix-ui/react-dialog'
 import { matchesSearch } from '@/lib/search-match'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check, Paperclip, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import type { Initiative, InitiativeUpdate, Project, ProjectUpdate, User } from '@/types/flow'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
@@ -31,8 +32,8 @@ export function PulseComposer({ initiatives, onCreateInitiative, onCreateProject
   const [files,setFiles]=useState<File[]>([])
   const [saving, setSaving] = useState(false)
   const fileRef=useRef<HTMLInputElement>(null)
-  useEffect(() => { if (open && !source) setSource(sources[0]) }, [open, source, sources])
-  useEffect(() => { if (!open) { setBody(undefined);setFiles([]);setSaving(false) } }, [open])
+  if (open && !source && sources[0]) setSource(sources[0])
+  useResetOnChange([open], () => { if (!open) { setBody(undefined);setFiles([]);setSaving(false) } })
   const submit = async () => {
     if (!source || !body?.markdown.trim() || saving) return
     setSaving(true)

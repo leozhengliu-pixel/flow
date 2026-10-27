@@ -1,3 +1,4 @@
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import {
   useEffect,
   useMemo,
@@ -410,13 +411,11 @@ function useTeamSettings(
   const [settings, setSettings] = useState(
     data.teamSettings?.[team.id] ?? defaultTeamSettings(team.id, data.states),
   );
-  useEffect(
-    () =>
-      setSettings(
-        data.teamSettings?.[team.id] ??
-          defaultTeamSettings(team.id, data.states),
-      ),
-    [data.states, data.teamSettings, team.id],
+  useResetOnChange([data.states, data.teamSettings, team.id], () =>
+    setSettings(
+      data.teamSettings?.[team.id] ??
+        defaultTeamSettings(team.id, data.states),
+    ),
   );
   const save = async (patch: Partial<TeamSettings>) => {
     const persisted =
@@ -478,10 +477,11 @@ function TeamOverview({
     : lastActiveTeam
       ? "Can't delete the last active team in the workspace"
       : undefined;
-  const [retireOpen, setRetireOpen] = useState(false);
-  useEffect(() => {
-    if (owner && action === "retire" && !team.retiredAt) setRetireOpen(true);
-  }, [action, owner, team.retiredAt]);
+  const retireRequested = Boolean(owner && action === "retire" && !team.retiredAt);
+  const [retireOpen, setRetireOpen] = useState(retireRequested);
+  useResetOnChange([action, owner, team.retiredAt], () => {
+    if (retireRequested) setRetireOpen(true);
+  });
   const parentAction = action === "set-parent" || action === "change-parent" ? "pick" : action === "remove-parent" ? "remove" : undefined;
   const descendantCount = Math.max(0, teamHierarchy(data.teams, data.teamSettings).subtree(team.id).size - 1);
   const retire = async () => {
@@ -685,23 +685,26 @@ function GeneralSettings({
   const [identifier, setIdentifier] = useState(team.key);
   const [icon, setIcon] = useState(team.icon || "Team");
   const [color, setColor] = useState(team.color);
-  useEffect(() => {
-    setSettings(
-      data.teamSettings?.[team.id] ?? defaultTeamSettings(team.id, data.states),
-    );
-    setName(team.name);
-    setIdentifier(team.key);
-    setIcon(team.icon || "Team");
-    setColor(team.color);
-  }, [
-    data.states,
-    data.teamSettings,
-    team.color,
-    team.icon,
-    team.id,
-    team.key,
-    team.name,
-  ]);
+  useResetOnChange(
+    [
+      data.states,
+      data.teamSettings,
+      team.color,
+      team.icon,
+      team.id,
+      team.key,
+      team.name,
+    ],
+    () => {
+      setSettings(
+        data.teamSettings?.[team.id] ?? defaultTeamSettings(team.id, data.states),
+      );
+      setName(team.name);
+      setIdentifier(team.key);
+      setIcon(team.icon || "Team");
+      setColor(team.color);
+    },
+  );
   const save = async (
     patch: Partial<TeamSettings> & { identifier?: string },
   ) => {
@@ -2452,20 +2455,24 @@ function StatusesSettings({
   const [dragging, setDragging] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<WorkflowState | null>(null);
   const [counts, setCounts] = useState<Record<string,number>>({});
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!inherited);
   const [loadError, setLoadError] = useState<string>();
   const [loadRetry, setLoadRetry] = useState(0);
-  useEffect(() => {
-    let active=true;
-    const controller=new AbortController();
-    setLoading(true);
+  // Every change of the inputs restarts the load: inherited statuses are read straight from the data, others are fetched.
+  useResetOnChange([data, inherited, team.id, loadRetry], () => {
     setLoadError(undefined);
     if (inherited) {
       setStates(teamWorkflowStates(data, team.id));
       setCounts({});
       setLoading(false);
-      return () => controller.abort();
+    } else {
+      setLoading(true);
     }
+  });
+  useEffect(() => {
+    if (inherited) return;
+    let active=true;
+    const controller=new AbortController();
     void Promise.all([fetchWorkflowStates(team.id),listIssueRecordGroups({teamId:team.id,includeSubTeams:false,groupBy:'status',archived:'all'},controller.signal)])
       .then(([next,usage])=>{if(active){setStates(next);setCounts(Object.fromEntries(usage.groups.map(group=>[group.value,group.count])))}})
       .catch(error=>{if(active)setLoadError(message(error))})
@@ -2936,9 +2943,8 @@ function CyclesSettings({
   const initial = data.cycleSettings[team.id] ?? defaultCycles();
   const inherited = Boolean(teamSettings.inheritCycles && teamSettings.parentTeamId);
   const [settings, setSettings] = useState(initial);
-  useEffect(
-    () => setSettings(data.cycleSettings[team.id] ?? defaultCycles()),
-    [data.cycleSettings, team.id],
+  useResetOnChange([data.cycleSettings, team.id], () =>
+    setSettings(data.cycleSettings[team.id] ?? defaultCycles()),
   );
   const save = async (patch: Partial<CycleSettings>) => {
     const optimistic = { ...settings, ...patch };
@@ -3280,7 +3286,7 @@ function NumberRow({
 }) {
   const { t } = useI18n();
   const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
+  useResetOnChange([value], () => setDraft(String(value)))
   return (
     <TeamRow title={title} description={description}>
       <input

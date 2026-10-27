@@ -1,5 +1,6 @@
 import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useCurrentTime } from "@/hooks/use-current-time";
 import type { ReactNode } from "react";
 
 import { confirmAction } from "@/components/ui/action-dialog-service";
@@ -223,7 +224,8 @@ export function PersonalConnectionRows() {
       window.open(url, "_blank", "noopener,noreferrer");
       setBusy(false);
     }, t("Could not start the connection"));
-  const away = googleConnection?.status === "active" && googleConnection.awayUntil && new Date(googleConnection.awayUntil) > new Date();
+  const now = useCurrentTime();
+  const away = googleConnection?.status === "active" && googleConnection.awayUntil && new Date(googleConnection.awayUntil) > now;
   let googleDescription: ReactNode = t(GOOGLE_DESCRIPTION);
   if (googleConnection?.status === "reconnect" && googleConnection.statusReason) {
     googleDescription = <span data-i18n-ignore>{googleConnection.statusReason}</span>;

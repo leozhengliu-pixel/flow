@@ -23,7 +23,7 @@ export function useEntityInlineComments(comments: Comment[] | undefined) {
     setDraft({ from: selection.from, to: selection.to, text: selection.text })
     if (editor && !editor.isDestroyed) { editor.commands.setTextSelection(selection.to); editor.view.dom.blur(); window.getSelection()?.removeAllRanges() }
   }, [editor])
-  return { editor, editorRef: setEditor, shell, shellRef: setShell, draft, setDraft, gutter, setGutter, anchored, startComment }
+  return { editor, attachEditor: setEditor, shell, attachShell: setShell, draft, setDraft, gutter, setGutter, anchored, startComment }
 }
 
 export type EntityInlineCommentsState = ReturnType<typeof useEntityInlineComments>

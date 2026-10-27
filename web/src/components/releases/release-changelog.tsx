@@ -1,5 +1,6 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCurrentTime } from '@/hooks/use-current-time'
 
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
 import { toast } from '@/lib/toast'
@@ -54,7 +55,8 @@ export function ReleaseChangelog({ data, pipeline, onCreate, onNavigate, onReloa
   const target = (pickedId ? releases.find(item => item.id === pickedId) : undefined) ?? changelogTargetRelease(data, pipeline)
   const notesUrl = (article: Article) => absoluteUrl(releasePath(workspace, pipeline.slugId, article.release.slugId, 'release-notes'))
   const openNotes = (release: Release) => onNavigate(releasePath(workspace, pipeline.slugId, release.slugId, 'release-notes'))
-  const shortDate = (value: string) => formatDate(value, new Date(value).getFullYear() === new Date().getFullYear() ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' })
+  const currentYear = useCurrentTime(0).getFullYear()
+  const shortDate = (value: string) => formatDate(value, new Date(value).getFullYear() === currentYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' })
   const clearNotes = async (article: Article) => {
     const note = data.releaseNotes?.find(item => item.releaseId === article.release.id)
     try {

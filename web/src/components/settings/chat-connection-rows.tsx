@@ -51,9 +51,13 @@ function ChatConnectionRow({ provider, data }: { provider: ChatIntegrationProvid
 
   useEffect(() => {
     mounted.current = true;
-    void load().catch((cause: unknown) => {
-      if (mounted.current) setError(chatErrorMessage(cause, t, "Could not load connected accounts"));
-    }).finally(() => { if (mounted.current) setLoading(false); });
+    // Started from a microtask so the effect itself never sets state.
+    queueMicrotask(() => {
+      if (!mounted.current) return;
+      void load().catch((cause: unknown) => {
+        if (mounted.current) setError(chatErrorMessage(cause, t, "Could not load connected accounts"));
+      }).finally(() => { if (mounted.current) setLoading(false); });
+    });
     return () => { mounted.current = false; };
   }, [load, t]);
 

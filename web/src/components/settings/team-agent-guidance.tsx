@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { ChevronRight } from "lucide-react";
 import { updateStructuredTeamSettings } from "@/lib/api";
 import { canManageTeamSettings } from "@/lib/settings-permissions";
@@ -15,7 +16,7 @@ export function TeamAgentGuidanceSettings({ data, team, onReload }: { data: Boot
   const saved = data.teamSettings?.[team.id]?.agentGuidance ?? "";
   const [draft, setDraft] = useState(saved);
   const [saving, setSaving] = useState(false);
-  useEffect(() => setDraft(saved), [saved, team.id]);
+  useResetOnChange([saved, team.id], () => setDraft(saved))
   const canEdit = canManageTeamSettings(data, team.id, "agents");
   const inherited = inheritedTeamAgentGuidance(data, team.id);
   const dirty = draft.trim() !== saved.trim();

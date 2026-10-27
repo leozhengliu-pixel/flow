@@ -1,3 +1,4 @@
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Star, X } from 'lucide-react'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
@@ -109,15 +110,16 @@ function useReleaseIssues(data: BootstrapData, release: Release): IssuesState {
   const { t } = useI18n()
   const [loaded, setLoaded] = useState<Issue[]>([])
   const [loading, setLoading] = useState(() => release.issueIds.length > 0)
-  const scope = useRef('')
   const key = release.issueIds.join(',')
+  // Another release (or issue set) clears the list at once; any change restarts the load.
+  useResetOnChange([release.id, key], () => setLoaded([]))
+  useResetOnChange([key, data.issueCollectionRevision, release.id, t], () => {
+    if (!key) { setLoaded([]); setLoading(false) } else setLoading(true)
+  })
   useEffect(() => {
-    const next = `${release.id}:${key}`
-    if (scope.current !== next) { scope.current = next; setLoaded([]) }
-    if (!key) { setLoaded([]); setLoading(false); return }
+    if (!key) return
     const controller = new AbortController()
     let cancelled = false
-    setLoading(true)
     void (async () => {
       const collected: Issue[] = []
       let cursor: string | undefined

@@ -1,4 +1,5 @@
-import { useEffect, useId, useState } from "react";
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
+import { useId, useState } from "react";
 import { ClipboardPaste, Pencil, Plus, Trash2, X } from "lucide-react";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -63,9 +64,7 @@ function FilePathDialog({ open, title, confirmLabel, initial, taken, onClose, on
   const { t } = useI18n();
   const descriptionId = useId();
   const [path, setPath] = useState(initial);
-  useEffect(() => {
-    if (open) setPath(initial);
-  }, [open, initial]);
+  useResetOnChange([open, initial], () => { if (open) setPath(initial); });
   const trimmed = path.trim();
   const invalid = !trimmed || (trimmed !== initial && taken.includes(trimmed));
   const submit = () => {

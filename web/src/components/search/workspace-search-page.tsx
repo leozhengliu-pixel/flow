@@ -1,3 +1,4 @@
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Building2, Menu, Search, UserRound, X } from 'lucide-react'
@@ -59,19 +60,22 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
 
   const types = useMemo<SearchResourceType[]>(() => tab === 'all' ? [] : [tab], [tab])
   const results = response.results
-  useEffect(()=>setDraft(query),[query])
+  useResetOnChange([query], () => setDraft(query))
   useEffect(()=>{ document.title=normalizedQuery?`${t('Search')}: ${normalizedQuery}`:t('Search') },[normalizedQuery,t])
   useEffect(()=>{resultListRef.current?.querySelector<HTMLElement>(`[data-result-index="${activeIndex}"]`)?.scrollIntoView({block:'nearest'})},[activeIndex])
-  useEffect(() => {
-    const request = ++requestRef.current
-    const controller=new AbortController()
-    moreController.current?.abort()
-    loadingRef.current = true
+  // A new search (query, type, filters, retry) starts from an empty, loading state.
+  useResetOnChange([normalizedQuery, retry, types, options, requestKey], () => {
     setLoadingMore(false)
     setMoreError(undefined)
     setNextCursor('')
     setLoading(true)
     setError(undefined)
+  })
+  useEffect(() => {
+    const request = ++requestRef.current
+    const controller=new AbortController()
+    moreController.current?.abort()
+    loadingRef.current = true
     const operation=normalizedQuery ? semanticSearch(normalizedQuery,types,options,controller.signal).then(result=>({results:result.results,history:[],recent:[],nextCursor:result.hasMore?result.nextCursor:''})) : searchWorkspace('', types,options,controller.signal).then(result=>({...result,nextCursor:''}))
     operation
       .then(result => { if (!controller.signal.aborted&&request === requestRef.current) { setResponse(result);setNextCursor(result.nextCursor);setCompletedRequest(requestKey); setActiveIndex(0) } })
@@ -86,7 +90,7 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
     if (next !== normalizedQuery) loadingRef.current = true
     updateState({...state,query:next})
   }
-  const resultsReady = currentResults && !inputPending && !loading && !loadingRef.current
+  const resultsReady = currentResults && !inputPending && !loading
   const choose = (result: SearchResult) => onOpenResult(result)
   const loadMore=async()=>{
     if(!currentResults||!nextCursor||loadingMore||!normalizedQuery)return

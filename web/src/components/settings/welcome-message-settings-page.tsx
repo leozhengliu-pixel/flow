@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from '@/lib/toast'
 
@@ -32,10 +33,10 @@ export function WelcomeMessageSettingsPage({
   const [title, setTitle] = useState(settings.welcomeMessageTitle ?? '')
   const [content, setContent] = useState(settings.welcomeMessage ?? '')
   const [sending, setSending] = useState(false)
-  useEffect(() => {
+  useResetOnChange([settings.welcomeMessage, settings.welcomeMessageTitle], () => {
     setTitle(settings.welcomeMessageTitle ?? '')
     setContent(settings.welcomeMessage ?? '')
-  }, [settings.welcomeMessage, settings.welcomeMessageTitle])
+  })
   const save = async (patch: Parameters<typeof updateWorkspacePreferences>[0], success?: string) => {
     try {
       await updateWorkspacePreferences(patch)

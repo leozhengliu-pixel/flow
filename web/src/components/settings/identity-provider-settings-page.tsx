@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { KeyRound, Plus, ShieldCheck } from "lucide-react";
 import { toast } from "@/lib/toast";
 
@@ -77,17 +78,16 @@ export function IdentityProviderSettingsPage({
   const [busy, setBusy] = useState("");
   const [revealedSecret, setRevealedSecret] = useState("");
 
-  useEffect(() => setSettings(data.workspaceSettings), [data.workspaceSettings]);
-  useEffect(() => {
+  useResetOnChange([data.workspaceSettings], () => setSettings(data.workspaceSettings))
+  useResetOnChange([data.workspaceSettings.scimRoleGroups], () =>
     setRoleGroups({
       admin: data.workspaceSettings.scimRoleGroups?.admin ?? "",
       member: data.workspaceSettings.scimRoleGroups?.member ?? "",
       guest: data.workspaceSettings.scimRoleGroups?.guest ?? "",
-    });
-  }, [data.workspaceSettings.scimRoleGroups]);
-  useEffect(
-    () => setTeamGroups(data.workspaceSettings.scimTeamGroupMapping ?? {}),
-    [data.workspaceSettings.scimTeamGroupMapping],
+    }),
+  );
+  useResetOnChange([data.workspaceSettings.scimTeamGroupMapping], () =>
+    setTeamGroups(data.workspaceSettings.scimTeamGroupMapping ?? {}),
   );
 
   useEffect(() => {

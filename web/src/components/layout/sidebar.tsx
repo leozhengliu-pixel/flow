@@ -26,6 +26,7 @@ import {
   Settings,
   X,
 } from "lucide-react";
+import { useCurrentTime } from "@/hooks/use-current-time";
 import {
   useEffect,
   createContext,
@@ -34,7 +35,6 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type MutableRefObject,
   type ReactElement,
   type ReactNode,
 } from "react";
@@ -201,7 +201,7 @@ export function Sidebar({
   onLogout: () => Promise<void>;
   onReload?: (teamId?: string) => Promise<void>;
 }) {
-  const layout = useSidebarLayout(open, onOpenChange);
+  const { surfaceRef: sidebarSurfaceRef, ...layout } = useSidebarLayout(open, onOpenChange);
   const { t: translate } = useI18n();
   const currentLocation = useLocation();
   const navigationRoute = parseAppRoute(sourcePath?.split(/[?#]/)[0] ?? currentLocation.pathname);
@@ -214,14 +214,13 @@ export function Sidebar({
     () => (data.favorites ?? []).filter((item) => item.userId === data.viewer.id),
     [data.favorites, data.viewer.id],
   );
-  const seenFavoriteKeys = useRef<Set<string>>(new Set());
-  const seededFavoriteWorkspace = useRef("");
-  if (seededFavoriteWorkspace.current !== data.workspace.id) {
-    seededFavoriteWorkspace.current = data.workspace.id;
-    seenFavoriteKeys.current = new Set(
-      favorites.map((item) => favoriteResourceKey(item.resourceType, item.resourceId, item.tab)),
-    );
-  }
+  // Favorites already present when a workspace opens do not animate in; the list adds the keys it has shown.
+  const seedFavoriteKeys = () => ({
+    workspaceId: data.workspace.id,
+    keys: new Set(favorites.map((item) => favoriteResourceKey(item.resourceType, item.resourceId, item.tab))),
+  });
+  const [seenFavorites, setSeenFavorites] = useState(seedFavoriteKeys);
+  if (seenFavorites.workspaceId !== data.workspace.id) setSeenFavorites(seedFavoriteKeys());
   const [favoriteFolders, setFavoriteFolders] = useState<FavoriteFolder[]>(() =>
     (data.favoriteFolders ?? []).filter(
       (item) => item.userId === data.viewer.id,
@@ -248,15 +247,16 @@ export function Sidebar({
   const currentCycleTeamIds = useMemo(() => new Set(data.cycles.filter(cycle => cycle.status === "current").map(cycle => cycle.teamId)), [data.cycles]);
   const upcomingCycleTeamIds = useMemo(() => new Set(data.cycles.filter(cycle => cycle.status === "upcoming").map(cycle => cycle.teamId)), [data.cycles]);
 
-  useEffect(
-    () =>
-      setFavoriteFolders(
-        (data.favoriteFolders ?? []).filter(
-          (item) => item.userId === data.viewer.id,
-        ),
+  // The folder list follows the synced data (compared during render rather than in an effect).
+  const [syncedFolders, setSyncedFolders] = useState({ folders: data.favoriteFolders, viewerId: data.viewer.id });
+  if (syncedFolders.folders !== data.favoriteFolders || syncedFolders.viewerId !== data.viewer.id) {
+    setSyncedFolders({ folders: data.favoriteFolders, viewerId: data.viewer.id });
+    setFavoriteFolders(
+      (data.favoriteFolders ?? []).filter(
+        (item) => item.userId === data.viewer.id,
       ),
-    [data.favoriteFolders, data.viewer.id],
-  );
+    );
+  }
 
   useEffect(
     () => persistPreference("flow.sidebar.dismissed-try", dismissedTry),
@@ -272,6 +272,7 @@ export function Sidebar({
     window.addEventListener("keydown", openShortcuts);
     return () => window.removeEventListener("keydown", openShortcuts);
   }, []);
+  const now = useCurrentTime();
   // Paged workspaces hold no notification list: the badge is the server's unread count.
   const pagedInboxUnread = useInboxUnread(workspaceSlug, Boolean(data.issueCollectionPaged));
   const inboxUnread = data.inboxUnreadCount ?? pagedInboxUnread ?? data.notifications.filter(
@@ -280,7 +281,7 @@ export function Sidebar({
       !item.readAt &&
       !item.archivedAt &&
       !item.deletedAt &&
-      (!item.snoozedUntil || new Date(item.snoozedUntil) <= new Date()),
+      (!item.snoozedUntil || new Date(item.snoozedUntil) <= now),
   ).length;
   const pulseAvailable = data.viewerRole !== "guest" && featureEnabled("pulse");
   const pulseUnreadCount = usePulseUnread(workspaceSlug, pulseAvailable);
@@ -675,7 +676,7 @@ export function Sidebar({
       />
       <SidebarRouteContext.Provider value={selectedNavigationPath}><SidebarItemMenuContext.Provider value={itemMenu}><div className="sidebar-layout" onPointerEnter={layout.onEdgeEnter} onPointerLeave={layout.clearHover}>
       <motion.aside
-        ref={layout.surfaceRef}
+        ref={sidebarSurfaceRef}
         className={`sidebar${layout.floating ? " is-floating" : ""}${layout.resizing ? " is-resizing" : ""}`}
         initial={false}
         animate={{ width: layout.surfaceWidth, x: layout.visible ? 0 : -layout.surfaceWidth - 16, top: layout.offset }}
@@ -749,7 +750,7 @@ export function Sidebar({
               data={data}
               favorites={favorites}
               folders={favoriteFolders}
-              seenKeys={seenFavoriteKeys}
+              seenKeys={seenFavorites.keys}
               workspaceSlug={workspaceSlug}
               onCreateFolder={createSidebarFolder}
               onMoveFavorite={moveSidebarFavorite}
@@ -907,7 +908,7 @@ export function FavoritesSection({
   data: BootstrapData;
   favorites: Favorite[];
   folders: FavoriteFolder[];
-  seenKeys?: MutableRefObject<Set<string>>;
+  seenKeys?: Set<string>;
   onCreateFolder: (name: string) => Promise<void>;
   onMoveFavorite: (
     favorite: Favorite,
@@ -952,14 +953,15 @@ export function FavoritesSection({
     if (favorites.length > previousFavoriteCount.current) setExpanded(true);
     previousFavoriteCount.current = favorites.length;
   }, [favorites.length]);
-  useEffect(
-    () =>
-      setOpenFolders(
-        (current) =>
-          new Set([...current, ...folders.map((folder) => folder.id)]),
-      ),
-    [folders],
-  );
+  // New folders start open.
+  const [seenFolders, setSeenFolders] = useState(folders);
+  if (seenFolders !== folders) {
+    setSeenFolders(folders);
+    setOpenFolders(
+      (current) =>
+        new Set([...current, ...folders.map((folder) => folder.id)]),
+    );
+  }
   const submitFolder = async () => {
     const name = folderName.trim();
     if (!name) return;

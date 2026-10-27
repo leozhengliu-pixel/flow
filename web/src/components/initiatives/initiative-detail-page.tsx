@@ -301,7 +301,7 @@ function InitiativeOverview(props: Props & { update: (input: InitiativeMutationI
   const { t } = useI18n()
   // Inline comments on the description ("Comment" on its selection toolbar), shown beside it.
   const inlineComments = useEntityInlineComments(initiative.comments)
-  const { shellRef: overviewShellRef } = inlineComments
+  const { attachShell: overviewShellRef } = inlineComments
   const workspaceKey = props.data.workspace.urlKey
   const commentEntity = useMemo<InlineCommentEntity>(() => ({ kind: 'initiative', id: initiative.id, name: initiative.name, href: initiativePath(workspaceKey, initiative), teamId: props.teams[0]?.id }), [initiative, props.teams, workspaceKey])
   const { onReloadWorkspace } = props
@@ -326,7 +326,7 @@ function InitiativeOverview(props: Props & { update: (input: InitiativeMutationI
     <section><h3>Properties</h3><InitiativeProperties initiative={initiative} teams={props.teams} users={users} onUpdate={update}/><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="More properties" className="li-more-properties" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="li-menu"><DropdownMenu.Item onSelect={() => document.querySelector<HTMLElement>('.li-detail-sidebar [aria-label="Add labels"]')?.click()}>Labels</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></section>
     <InitiativeResources data={props.data} documents={props.documents} onReload={props.onReloadWorkspace} initiativeId={initiative.id} resources={initiative.resources} onCreate={props.onCreateResource} onUpdate={props.onUpdateResource} onDelete={props.onDeleteResource}/>
     <button className="li-first-update" onClick={() => onTabChange('activity')} type="button"><Send size={15}/>{props.initiativeUpdates.length ? 'View initiative updates' : 'Write first initiative update'}</button>
-    <section className="li-description"><h3>Description</h3><InitiativeDescriptionField initiative={initiative} workspace={props.data.workspace.urlKey} data={props.data} label="Initiative description" placeholder="Add description…" value={initiative.description} onCommit={description => update({ description })} editorRef={inlineComments.editorRef} onComment={inlineComments.startComment}/></section>
+    <section className="li-description"><h3>Description</h3><InitiativeDescriptionField initiative={initiative} workspace={props.data.workspace.urlKey} data={props.data} label="Initiative description" placeholder="Add description…" value={initiative.description} onCommit={description => update({ description })} editorRef={inlineComments.attachEditor} onComment={inlineComments.startComment}/></section>
     <div className="li-overview-lists">
       <InitiativeSubInitiatives initiative={initiative} initiatives={props.initiatives} projects={projects} projectUpdates={projectUpdates} users={users} teams={props.teams} labels={initiativeLabels} viewer={props.viewer}
         creatingParentId={props.creatingSubParentId} onCreatingParentIdChange={props.onCreatingSubParentIdChange} onOpen={props.onOpenInitiative} onCreate={props.onCreateInitiative} onCreateLabel={props.onCreateLabel}

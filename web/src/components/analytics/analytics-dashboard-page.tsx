@@ -67,7 +67,8 @@ export function AnalyticsDashboardPage() {
     }
   }, [rangeDays, t]);
   useEffect(() => {
-    void load(rangeDays).catch(() => undefined);
+    // load() flips the loading state up front; start it from a microtask so the effect itself never sets state.
+    queueMicrotask(() => { void load(rangeDays).catch(() => undefined); });
   }, [load, rangeDays]);
   const entries = useMemo(
     () =>

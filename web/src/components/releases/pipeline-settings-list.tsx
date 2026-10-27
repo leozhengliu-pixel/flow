@@ -2,6 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { Command } from 'cmdk'
 import { ArchiveRestore } from 'lucide-react'
 import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react'
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { toast } from '@/lib/toast'
 
 import { TeamIcon } from '@/components/issue/issue-icons'
@@ -32,7 +33,7 @@ type BulkAction = { id: string; label: string; run: () => void }
 function useSelection(ids: string[]) {
   const [selected, setSelected] = useState<string[]>([])
   const key = ids.join(',')
-  useEffect(() => { setSelected(current => current.filter(id => key.split(',').includes(id))) }, [key])
+  useResetOnChange([key], () => setSelected(current => current.filter(id => key.split(',').includes(id))))
   useEffect(() => {
     if (!selected.length) return
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !document.querySelector('[role=dialog]')) setSelected([]) }

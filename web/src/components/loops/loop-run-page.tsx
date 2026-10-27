@@ -168,8 +168,8 @@ export function LoopRunPage({
     }
   }, [loopId]);
   useEffect(() => {
-    // oxlint-disable-next-line react/set-state-in-effect -- loadRuns sets state only after its request resolves, never synchronously
-    void loadRuns();
+    // loadRuns() sets state; start it from a microtask so the effect itself never sets state.
+    queueMicrotask(() => { void loadRuns(); });
   }, [loadRuns]);
   const retryRuns = useCallback(() => void loadRuns(), [loadRuns]);
   useBackoffRetry(listFailures, retryRuns);

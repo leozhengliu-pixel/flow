@@ -1,6 +1,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
 import { Star } from 'lucide-react'
+import { useCurrentTime } from '@/hooks/use-current-time'
 import { Suspense, forwardRef, useMemo, useState, type CSSProperties, type HTMLAttributes, type MouseEvent } from 'react'
 import { toast } from '@/lib/toast'
 
@@ -240,7 +241,8 @@ export function ProgressRing({ progress }: { progress: number }) {
 
 export function ReleaseDateCell({ release, scheduled, canManage, onReload, long = false }: { release: Release; scheduled: boolean; canManage: boolean; onReload: () => Promise<void>; long?: boolean }) {
   const { t, formatDate, formatRelative } = useI18n()
-  const short = (value: string) => long && new Date(dayValue(value)).getFullYear() !== new Date().getFullYear() ? formatDate(dayValue(value), { month: 'short', day: 'numeric', year: 'numeric' }) : formatDate(dayValue(value), { month: 'short', day: 'numeric' })
+  const currentYear = useCurrentTime(0).getFullYear()
+  const short = (value: string) => long && new Date(dayValue(value)).getFullYear() !== currentYear ? formatDate(dayValue(value), { month: 'short', day: 'numeric', year: 'numeric' }) : formatDate(dayValue(value), { month: 'short', day: 'numeric' })
   const full = (value: string) => formatDate(value, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
   if (!scheduled && long) {
     const value = release.releasedAt ?? release.createdAt

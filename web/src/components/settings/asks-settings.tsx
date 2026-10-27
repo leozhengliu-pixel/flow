@@ -1,6 +1,6 @@
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import {
   Children,
-  useEffect,
   useMemo,
   useState,
   type ComponentProps,
@@ -253,7 +253,7 @@ export function AsksSlackSettingsPage({
     data.integrationConnections.find((item) => item.id === integrationId) ??
     asksSlack(data);
   const mappings = settings.featureSettings?.asksSlackChannels ?? DEFAULT_ASKS_CHANNELS;
-  useEffect(() => setSettings(data.workspaceSettings), [data.workspaceSettings]);
+  useResetOnChange([data.workspaceSettings], () => setSettings(data.workspaceSettings))
   const setFeature = async <K extends keyof FeatureSettings>(
     key: K,
     value: FeatureSettings[K],

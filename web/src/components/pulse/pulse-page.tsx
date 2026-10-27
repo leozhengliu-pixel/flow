@@ -1,7 +1,10 @@
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check, ChevronDown, Menu, Trash2 } from 'lucide-react'
+import { useCurrentTime } from '@/hooks/use-current-time'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { toast } from '@/lib/toast'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { AddViewIcon } from '@/components/ui/view-action-icons'
@@ -309,10 +312,11 @@ function PulseFeedList({ activeReply, containerRef, data, feed, handlers, onActi
   const [renderLimit, setRenderLimit] = useState(INITIAL_RENDER)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const firstId = feed.items[0]?.id
-  useEffect(() => setRenderLimit(INITIAL_RENDER), [tab, firstId])
+  useResetOnChange([tab, firstId], () => setRenderLimit(INITIAL_RENDER))
   const weekStartsOn = weekStartsOnFromSetting(data.userSettings[data.viewer.id]?.firstDay)
   // Groups are positional over the (bounded, ≤100) loaded list — computed once per list.
-  const groups = useMemo(() => tab === 'popular' ? new Map<number, PulseGroupKey>() : pulseGroupStarts(feed.items, new Date(), weekStartsOn), [feed.items, tab, weekStartsOn])
+  const now = useCurrentTime()
+  const groups = useMemo(() => tab === 'popular' ? new Map<number, PulseGroupKey>() : pulseGroupStarts(feed.items, now, weekStartsOn), [feed.items, now, tab, weekStartsOn])
   const visible = feed.items.slice(0, renderLimit)
   const canGrow = renderLimit < feed.items.length || feed.hasMore
   const { hasMore, loadMore, loadingMore } = feed
@@ -357,8 +361,7 @@ function PulseLastSeenSeparator({ containerRef, firstOfGroup, onReached }: { con
   const ref = useRef<HTMLLIElement>(null)
   const [initiallyVisible, setInitiallyVisible] = useState<boolean>()
   const [reached, setReached] = useState(false)
-  const reachedRef = useRef(onReached)
-  reachedRef.current = onReached
+  const reachedRef = useLatestRef(onReached)
   useEffect(() => {
     const element = ref.current
     if (!element) return
@@ -368,7 +371,7 @@ function PulseLastSeenSeparator({ containerRef, firstOfGroup, onReached }: { con
     }, { root: containerRef.current, threshold: 0.1 })
     observer.observe(element)
     return () => observer.disconnect()
-  }, [containerRef])
+  }, [containerRef, reachedRef])
   return <li className="pulse-last-seen" data-first-of-group={firstOfGroup || undefined} ref={ref} role="separator">
     {initiallyVisible === false ? <div className="pulse-caught-up" data-reached={reached || undefined}>
       <i className="pulse-caught-up-line"/><span className="pulse-caught-up-check"><Check size={11}/></span><span className="pulse-caught-up-text">{t('You’re all caught up')}</span><i className="pulse-caught-up-line"/>
