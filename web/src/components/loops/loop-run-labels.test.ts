@@ -81,6 +81,21 @@ describe('run failure explanation', () => {
     expect(describeRunFailure(run, zh, 'zh-CN')).toEqual({ message: '预期产出一个新事项，但“已创建事项”失败了。', detail: 'team not found' })
   })
 
+  it("says when the agent's done summary claims an output that is not there", () => {
+    const failed: LoopRun = {
+      ...base, failureReason: 'tool_error', expectedOutputs: ['document'], summary: { status: 'done', summary: '已将今日总结追加到团队文档。' },
+      error: "No output produced: expected an append to an existing document, but Saved document failed: Invalid arguments for save_document: patch is a list of edits (the agent's summary says the work is done, but this output is not there)",
+      toolCalls: [{ name: 'save_document', label: 'Saved document', status: 'error', error: 'Invalid arguments for save_document: patch is a list of edits' }],
+    }
+    expect(describeRunFailure(failed, en, 'en-US').message).toBe("Expected an append to an existing document, but Saved document failed. The agent's summary says the work is done, but this output is not there.")
+    expect(describeRunFailure(failed, zh, 'zh-CN').message).toContain('Agent 的总结称工作已完成，但这项产出并不存在。')
+    const unchanged: LoopRun = {
+      ...base, failureReason: 'no_output', expectedOutputs: ['document'], produced: { change: 1 }, summary: { status: 'done', summary: 'Appended.' },
+      error: "No output produced: the loop's instructions call for an append to an existing document, but the run made none (save_document ran but did not change the document) (the agent's summary says the work is done, but this output is not there)",
+    }
+    expect(describeRunFailure(unchanged, zh, 'zh-CN').message).toBe('Loop 的指令要求产出向现有文档追加的内容，但本次运行没有产出。save_document 已执行，但文档没有任何变化。Agent 的总结称工作已完成，但这项产出并不存在。')
+  })
+
   it('lists unfinished work the agent reported', () => {
     const run: LoopRun = { ...base, failureReason: 'incomplete', summary: { status: 'incomplete', summary: 'Partly done', notDone: ['Could not reach Slack'] }, error: 'The agent reported unfinished work: Could not reach Slack' }
     expect(describeRunFailure(run, zh, 'zh-CN')).toEqual({ items: ['Could not reach Slack'] })

@@ -719,6 +719,11 @@ func loopOutputKind(name string, args map[string]any) string {
 	return ""
 }
 
+// loopDoneClaimNote ends the outcome of a run whose agent reported its work
+// as done although an output the loop asks for is missing; the web app
+// translates it (loop-run-labels.ts).
+const loopDoneClaimNote = "(the agent's summary says the work is done, but this output is not there)"
+
 // acceptLoopRun decides how a run that ended without an error finishes: a
 // run whose loop implies side effects completes only when it produced them.
 func acceptLoopRun(loop domain.Loop, run *domain.LoopRun, ending *loopRunEnding) (string, string, string) {
@@ -776,10 +781,16 @@ func acceptLoopRun(loop domain.Loop, run *domain.LoopRun, ending *loopRunEnding)
 	if len(missing) == 0 {
 		return "completed", "", ""
 	}
+	// The agent's report is shown as the run's answer: when it says done,
+	// the outcome says the output it may describe is not there.
+	claimed := ""
+	if run.Summary != nil && run.Summary.Status == "done" {
+		claimed = " " + loopDoneClaimNote
+	}
 	for index := len(run.ToolCalls) - 1; index >= 0; index-- {
 		call := run.ToolCalls[index]
 		if (call.Status == "error" || call.Status == "blocked") && loopWriteToolName(call.Name) && (call.Document == nil || call.Document.ExistingRunID == "") {
-			return "needs_review", "tool_error", fmt.Sprintf("No output produced: expected %s, but %s failed: %s", strings.Join(missing, " and "), firstNonEmpty(call.Label, call.Name), call.Error)
+			return "needs_review", "tool_error", fmt.Sprintf("No output produced: expected %s, but %s failed: %s", strings.Join(missing, " and "), firstNonEmpty(call.Label, call.Name), strings.TrimSpace(call.Error)) + claimed
 		}
 	}
 	message := fmt.Sprintf("No output produced: the loop's instructions call for %s, but the run made none", strings.Join(missing, " and ")) + note
@@ -791,7 +802,7 @@ func acceptLoopRun(loop domain.Loop, run *domain.LoopRun, ending *loopRunEnding)
 	case run.Summary != nil && run.Summary.Status == "nothing_to_do":
 		message += " (the agent reported there was nothing to do)"
 	}
-	return "needs_review", "no_output", message
+	return "needs_review", "no_output", message + claimed
 }
 
 // loopRunEnding is how the agent ended a run or reply it did not finish:

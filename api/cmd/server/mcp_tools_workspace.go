@@ -1400,6 +1400,22 @@ func (s *server) saveMCPDocument(ctx context.Context, actor mcpActor, data domai
 		value := boolArg(args, "archived")
 		input.Archived = &value
 	}
+	receipt := func(saved domain.Document) map[string]any {
+		return map[string]any{"id": saved.ID, "slugId": saved.SlugID, "title": saved.Title, "projectIds": saved.ProjectIDs, "teamIds": saved.TeamIDs, "issueId": saved.IssueID, "archived": saved.ArchivedAt != nil, "updatedAt": saved.UpdatedAt, "url": mcpWorkspaceURL(actor.WorkspaceKey, args, "document", saved.SlugID)}
+	}
+	if id != "" {
+		switch unchanged, empty := mcpDocumentInputUnchanged(current, input); {
+		case empty:
+			return nil, fmt.Errorf("nothing to save: pass content, patch, title or another field to change the document")
+		case unchanged && canEditDocument(documentRole(s, data, current)):
+			// The document already reads this way: no write, so its
+			// version and history stay as they are.
+			result := receipt(current)
+			result["unchanged"] = true
+			result["message"] = "The document already has this content; nothing was changed."
+			return result, nil
+		}
+	}
 	var result any
 	if id == "" {
 		result, err = s.invokeMCPRoute(ctx, actor, http.MethodPost, "/api/documents", nil, input, s.createDocument)
@@ -1413,7 +1429,21 @@ func (s *server) saveMCPDocument(ctx context.Context, actor mcpActor, data domai
 	if err := jsonClone(result, &saved); err != nil {
 		return nil, err
 	}
-	return map[string]any{"id": saved.ID, "slugId": saved.SlugID, "title": saved.Title, "projectIds": saved.ProjectIDs, "teamIds": saved.TeamIDs, "issueId": saved.IssueID, "archived": saved.ArchivedAt != nil, "updatedAt": saved.UpdatedAt, "url": mcpWorkspaceURL(actor.WorkspaceKey, args, "document", saved.SlugID)}, nil
+	return receipt(saved), nil
+}
+
+// mcpDocumentInputUnchanged reports whether an edit of document sets nothing
+// (empty) or only values the document already has (unchanged).
+func mcpDocumentInputUnchanged(document domain.Document, input documentInput) (unchanged, empty bool) {
+	same := func(value *string, current string) bool { return value == nil || *value == current }
+	sameIDs := func(value *[]string, current []string) bool {
+		return value == nil || slices.Equal(normalizedStrings(*value), normalizedStrings(current))
+	}
+	empty = input.Title == nil && input.Icon == nil && input.Color == nil && input.Content == nil && input.ProjectIDs == nil && input.TeamIDs == nil && input.IssueID == nil && input.TemplateID == nil && input.Archived == nil
+	unchanged = (input.Title == nil || strings.TrimSpace(*input.Title) == document.Title) && same(input.Icon, document.Icon) && same(input.Color, document.Color) && same(input.Content, document.Content) &&
+		sameIDs(input.ProjectIDs, document.ProjectIDs) && sameIDs(input.TeamIDs, document.TeamIDs) && (input.IssueID == nil || strings.TrimSpace(*input.IssueID) == document.IssueID) &&
+		input.TemplateID == nil && (input.Archived == nil || *input.Archived == (document.ArchivedAt != nil))
+	return unchanged, empty
 }
 
 // ---------------------------------------------------------------- templates
