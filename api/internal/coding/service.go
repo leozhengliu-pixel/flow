@@ -693,6 +693,10 @@ type PromptInput struct {
 	// Scope is the write scope the person chose for this turn ("write",
 	// "noPublish", "readOnly"); "" or "auto" lets Flow infer it from Prompt.
 	Scope string
+	// IncludeLeftovers commits the uncommitted changes left from before the
+	// turn too (Turn.IncludeLeftovers); without it Flow still sets it when
+	// the request asks for it in words.
+	IncludeLeftovers bool
 }
 
 // promptActivity is the anchor's prompt activity for a follow-up.
@@ -781,8 +785,12 @@ func (s *Service) Prompt(ctx context.Context, workspaceKey, id string, in Prompt
 	// turn. When the parser is unsure, the model's answer is settled in the
 	// background and the turn waits for it (turn_scope_pending.go).
 	scope, ask := PlanTurnScope(kind, in.Scope, in.Prompt, s.TurnScopeModel)
-	slog.Info("coding turn scope", "session", id, "turn", turnID, "kind", kind, "scope", scope.Scope, "source", scope.Source, "rule", scope.Rule, "pending", ask)
-	turn := &Turn{ID: turnID, Prompt: in.Prompt, AuthorID: in.AuthorID, Attachments: in.Attachments, Kind: kind, Scope: scope.Scope, ScopeSource: scope.Source}
+	// Earlier uncommitted changes are committed only when asked for: with
+	// the request (the "Commit earlier changes" action) or in its words.
+	// Turns Flow starts itself never take them in.
+	leftovers := in.IncludeLeftovers || (!writeTurnKinds[kind] && ParseIncludeLeftovers(in.Prompt))
+	slog.Info("coding turn scope", "session", id, "turn", turnID, "kind", kind, "scope", scope.Scope, "source", scope.Source, "rule", scope.Rule, "pending", ask, "includeLeftovers", leftovers)
+	turn := &Turn{ID: turnID, Prompt: in.Prompt, AuthorID: in.AuthorID, Attachments: in.Attachments, Kind: kind, Scope: scope.Scope, ScopeSource: scope.Source, IncludeLeftovers: leftovers}
 	if ask {
 		turn.ScopePendingSince = s.now().UTC().UnixMilli()
 	}

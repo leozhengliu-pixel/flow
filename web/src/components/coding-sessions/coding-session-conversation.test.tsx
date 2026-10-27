@@ -326,32 +326,14 @@ describe('composer', () => {
     await waitFor(() => expect(screen.queryByRole('list', { name: 'Queued messages' })).toBeNull())
   })
 
-  it('sends the scope chosen in the composer with the follow-up, then returns to Auto', async () => {
+  it('has no scope control: a follow-up goes out without a scope and Flow infers it from the text', async () => {
     const user = userEvent.setup()
     vi.mocked(api.promptCodingSession).mockResolvedValue(makeSession({ state: 'complete', phase: 'idle' }))
-    renderConversation(makeSession({ state: 'complete', phase: 'idle' }))
-    const box = screen.getByRole('textbox', { name: 'Send a message to Flow' })
-    expect(screen.getByRole('button', { name: 'Scope: Auto' })).toBeEnabled()
-    await user.click(screen.getByRole('button', { name: 'Scope: Auto' }))
-    await user.click(await screen.findByRole('menuitem', { name: /Verify only/ }))
-    expect(screen.getByRole('button', { name: 'Scope: Verify only' })).toHaveClass('is-explicit')
-    await user.type(box, 'Check that the build passes{Enter}')
-    await waitFor(() => expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'Check that the build passes', undefined, [], 'readOnly'))
-    expect(screen.getByRole('button', { name: 'Scope: Auto' })).toBeInTheDocument()
-    await user.type(box, 'Now fix it{Enter}')
-    await waitFor(() => expect(api.promptCodingSession).toHaveBeenLastCalledWith('cs-1', 'Now fix it', undefined, []))
-  })
-
-  it('a queued message keeps the scope it was queued with', async () => {
-    const user = userEvent.setup()
-    vi.mocked(api.promptCodingSession).mockResolvedValue(makeSession({ state: 'pending', phase: 'queued', version: 3 }))
-    const data = makeBootstrap({ reviews: [] })
-    const view = render(<I18nProvider><CodingSessionConversation session={makeSession({ state: 'active', phase: 'running' })} data={data} onChange={vi.fn()}/></I18nProvider>)
-    await user.click(screen.getByRole('button', { name: 'Scope: Auto' }))
-    await user.click(await screen.findByRole('menuitem', { name: /Don’t publish/ }))
-    await user.type(screen.getByRole('textbox', { name: 'Send a message to Flow' }), 'Try the refactor{Enter}')
-    view.rerender(<I18nProvider><CodingSessionConversation session={makeSession({ state: 'complete', phase: 'idle', version: 2 })} data={data} onChange={vi.fn()}/></I18nProvider>)
-    await waitFor(() => expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'Try the refactor', undefined, [], 'noPublish'))
+    const { container } = renderConversation(makeSession({ state: 'complete', phase: 'idle' }))
+    expect(screen.queryByRole('button', { name: /^Scope/ })).toBeNull()
+    expect(container.querySelector('.cs-scope-select')).toBeNull()
+    await user.type(screen.getByRole('textbox', { name: 'Send a message to Flow' }), 'Check that the build passes{Enter}')
+    await waitFor(() => expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'Check that the build passes', undefined, []))
   })
 
   it('removes a queued message, or sends it right away', async () => {
@@ -419,5 +401,39 @@ describe('composer', () => {
     await user.click(screen.getByRole('button', { name: 'Continue with selected option' }))
     expect(api.approveCodingSession).toHaveBeenCalledWith('cs-1', true)
     await act(async () => undefined)
+  })
+})
+
+describe('earlier uncommitted changes', () => {
+  const report = 'Flow did not commit 2 path(s) that already had uncommitted changes before this turn: README.md, notes.txt. They are left in the workspace unchanged.'
+
+  it('offers "Commit earlier changes" when the latest turn left them out, and queues a development turn that includes them', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.promptCodingSession).mockResolvedValue(makeSession({ state: 'pending', phase: 'queued' }))
+    stream(activity('prompt', 'Add a CONTRIBUTING.md'), activity('thought', 'Writing the file'), activity('action', 'Write', { metadata: { action: 'Write', parameter: '`CONTRIBUTING.md`' } }), activity('response', 'Added it.'), activity('thought', report))
+    renderConversation(makeSession({ state: 'complete', phase: 'idle' }))
+    const group = await screen.findByRole('group', { name: 'Commit earlier changes' })
+    expect(within(group).getByText('Earlier uncommitted changes in 2 path(s) were not committed.')).toBeVisible()
+    await user.click(within(group).getByRole('button', { name: 'Commit earlier changes' }))
+    await waitFor(() => expect(api.promptCodingSession).toHaveBeenCalledWith('cs-1', 'Commit the earlier uncommitted changes too.', undefined, undefined, { scope: 'write', includeLeftovers: true }))
+  })
+
+  it('offers nothing while the agent works, for an earlier turn, or without a report', async () => {
+    stream(activity('prompt', 'Go'), activity('response', 'Done.'), activity('thought', report))
+    const { unmount } = renderConversation(makeSession({ state: 'active', phase: 'running' }))
+    await screen.findByText('Done.')
+    expect(screen.queryByRole('button', { name: 'Commit earlier changes' })).toBeNull()
+    unmount()
+
+    stream(activity('prompt', 'Go'), activity('response', 'Done.'), activity('thought', report), activity('prompt', 'Now the docs'), activity('response', 'Docs updated.'))
+    const second = renderConversation(makeSession({ state: 'complete', phase: 'idle' }))
+    await screen.findByText('Docs updated.')
+    expect(screen.queryByRole('button', { name: 'Commit earlier changes' })).toBeNull()
+    second.unmount()
+
+    stream(activity('prompt', 'Go'), activity('response', 'Done.'))
+    renderConversation(makeSession({ state: 'complete', phase: 'idle' }))
+    await screen.findByText('Done.')
+    expect(screen.queryByRole('button', { name: 'Commit earlier changes' })).toBeNull()
   })
 })

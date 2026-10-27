@@ -94,5 +94,5 @@ func (s ServiceStarter) PromptCodingSession(ctx context.Context, workspaceKey, s
 	if notApproved(current) {
 		return domain.CodingSession{}, &TriggerError{Code: domain.CodingErrPermissionDenied, Message: "This session was not approved; start a new one."}
 	}
-	return s.Service.Prompt(ctx, workspaceKey, sessionID, PromptInput{Prompt: turn.Prompt, AuthorID: turn.AuthorID, Attachments: turn.Attachments, Kind: turn.Kind, TurnID: turn.ID, Scope: turn.Scope})
+	return s.Service.Prompt(ctx, workspaceKey, sessionID, PromptInput{Prompt: turn.Prompt, AuthorID: turn.AuthorID, Attachments: turn.Attachments, Kind: turn.Kind, TurnID: turn.ID, Scope: turn.Scope, IncludeLeftovers: turn.IncludeLeftovers})
 }

@@ -344,6 +344,105 @@ test('a dirty restored workspace: a development turn commits only its own change
   }
 })
 
+const leftoverDirt = (repo: string) => {
+  // Left over from before this turn: an unstaged edit, a staged new file and an untracked file.
+  writeFileSync(join(repo, 'README.md'), '# app (local edit)\n')
+  writeFileSync(join(repo, 'staged.txt'), 'staged\n')
+  sh('git', ['add', 'staged.txt'], { cwd: repo })
+  writeFileSync(join(repo, 'notes.txt'), 'scratch\n')
+}
+
+test('a dirty workspace: a leftover file the turn changes again is committed whole; untouched leftovers stay uncommitted', async () => {
+  const w = world({
+    harness: 'claudeCode',
+    resumeId: 'sess-old',
+    turns: [{ id: 'turn_dev', prompt: 'Add a usage section to the README and a CONTRIBUTING.md.', kind: 'followUp', scope: 'write', scopeSource: 'rules' }],
+    plans: [{
+      fixture: 'claude-recorded-turn1.jsonl',
+      act: (repo) => {
+        // The agent edits a file that was already dirty, touches another one
+        // without changing its content, and adds a new file.
+        writeFileSync(join(repo, 'README.md'), '# app (local edit)\n\n## Usage\n')
+        writeFileSync(join(repo, 'notes.txt'), 'scratch\n')
+        writeFileSync(join(repo, 'CONTRIBUTING.md'), 'Be kind.\n')
+      },
+    }],
+    dirty: leftoverDirt,
+  })
+  try {
+    assert.equal(await w.session.run(), 0)
+    const [call] = w.spawned
+    const system = call.args[call.args.indexOf('--append-system-prompt') + 1]
+    assert.match(system, /already had uncommitted changes before this turn \(README\.md, staged\.txt, notes\.txt\)/)
+    assert.match(system, /A file among them that you change in this turn counts as this turn's change: Flow commits it whole/)
+
+    assert.deepEqual(w.calls, { commitAll: 0, commitPaths: 1, push: 1 })
+    assert.equal(w.remoteHead(), w.inRepo(['rev-parse', 'HEAD']), 'the turn was pushed')
+    assert.deepEqual(w.inRepo(['diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD']).split('\n').sort(), ['CONTRIBUTING.md', 'README.md'], 'the new file and the leftover the turn changed')
+    assert.equal(w.inRepo(['show', 'HEAD:README.md']), '# app (local edit)\n\n## Usage', 'committed whole, with its earlier edit')
+    assert.equal(w.inRepo(['diff', '--cached', '--name-only']), 'staged.txt', 'the untouched staged leftover is still staged, not committed')
+    assert.equal(w.inRepo(['status', '--porcelain', '--', 'notes.txt']), '?? notes.txt', 'rewriting a leftover with the same content does not count as a change')
+    assert.equal(w.inRepo(['status', '--porcelain', '--', 'README.md']), '', 'README.md is clean')
+    const thoughts = w.api.events.filter((event) => event.type === 'thought').map((event) => event.body ?? '')
+    assert.ok(thoughts.some((body) => /^Flow committed 1 path\(s\) that had uncommitted changes before this turn because this turn changed them: README\.md\./.test(body)), thoughts.join('\n'))
+    assert.ok(thoughts.some((body) => /^Flow did not commit 2 path\(s\) that already had uncommitted changes before this turn: staged\.txt, notes\.txt\./.test(body)), thoughts.join('\n'))
+    assert.equal(w.api.completes[0].request.status, 'success')
+    assert.equal(w.api.completes[0].request.pushed, true)
+  } finally {
+    w.cleanup()
+  }
+})
+
+test('a turn whose request includes the earlier uncommitted changes commits them with its own', async () => {
+  const w = world({
+    harness: 'claudeCode',
+    resumeId: 'sess-old',
+    turns: [{ id: 'turn_all', prompt: '把之前未提交的改动也提交', kind: 'followUp', scope: 'write', scopeSource: 'rules', includeLeftovers: true }],
+    plans: [{ fixture: 'claude-recorded-turn1.jsonl', act: (repo) => writeFileSync(join(repo, 'CONTRIBUTING.md'), 'Be kind.\n') }],
+    dirty: leftoverDirt,
+  })
+  try {
+    assert.equal(await w.session.run(), 0)
+    const [call] = w.spawned
+    const system = call.args[call.args.indexOf('--append-system-prompt') + 1]
+    assert.match(system, /The latest message asks to include them: Flow commits them together with this turn's changes/)
+    assert.deepEqual(w.calls, { commitAll: 1, commitPaths: 0, push: 1 })
+    assert.deepEqual(w.inRepo(['diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD']).split('\n').sort(), ['CONTRIBUTING.md', 'README.md', 'notes.txt', 'staged.txt'])
+    assert.equal(w.inRepo(['status', '--porcelain']), '', 'nothing is left uncommitted')
+    assert.equal(w.remoteHead(), w.inRepo(['rev-parse', 'HEAD']))
+    const thoughts = w.api.events.filter((event) => event.type === 'thought').map((event) => event.body ?? '')
+    assert.ok(thoughts.some((body) => /^Flow committed 3 path\(s\) that already had uncommitted changes before this turn, as requested/.test(body)), thoughts.join('\n'))
+    assert.ok(!thoughts.some((body) => /did not commit/.test(body)))
+  } finally {
+    w.cleanup()
+  }
+})
+
+test('includeLeftovers never makes a read-only or no-publish turn commit', async () => {
+  for (const scope of ['readOnly', 'noPublish'] as const) {
+    const w = world({
+      harness: 'claudeCode',
+      resumeId: 'sess-old',
+      turns: [{ id: `turn_${scope}`, prompt: 'Commit everything.', kind: 'followUp', scope, scopeSource: 'user', includeLeftovers: true }],
+      plans: [{ fixture: 'claude-recorded-turn1.jsonl' }],
+      dirty: leftoverDirt,
+    })
+    try {
+      assert.equal(await w.session.run(), 0)
+      const [call] = w.spawned
+      const system = call.args[call.args.indexOf('--append-system-prompt') + 1]
+      assert.match(system, /Leave them as they are: do not commit, discard, stash or overwrite them/)
+      assert.deepEqual(w.calls, { commitAll: 0, commitPaths: 0, push: 0 }, scope)
+      assert.equal(w.inRepo(['rev-parse', 'HEAD']), w.prHead, scope)
+      assert.equal(w.remoteHead(), w.prHead, scope)
+      assert.equal(w.inRepo(['diff', '--cached', '--name-only']), 'staged.txt', scope)
+      assert.equal(w.api.completes[0].request.scope, scope)
+    } finally {
+      w.cleanup()
+    }
+  }
+})
+
 test('read-only turn on a dirty workspace: leftovers are neither committed nor flagged as this turn\'s changes', async () => {
   const w = world({
     harness: 'openSource',

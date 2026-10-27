@@ -14,8 +14,8 @@ import (
 // changed anyway); the API decides it once, when the turn is queued, and
 // sends it with the turn so the runner does not have to guess:
 //
-//  1. An explicit scope chosen by the person (the composer's scope menu, the
-//     `scope` field of POST /api/coding/sessions/{id}/prompt) always wins.
+//  1. An explicit scope sent with the request (the optional `scope` field of
+//     POST /api/coding/sessions/{id}/prompt) always wins.
 //  2. Turns Flow starts to change the branch (fix a PR, rebase, lint, test,
 //     environment fixes) are write turns.
 //  3. Otherwise the request is parsed clause by clause (ParseTurnScope):
@@ -370,6 +370,77 @@ func negatedPublish(clause string) (string, string) {
 		return match, ""
 	}
 	return "", ""
+}
+
+// ── earlier uncommitted changes ────────────────────────────────────────────
+//
+// Paths that already had uncommitted changes before a turn (left by an
+// earlier turn, a restore or the person) are not committed by the turn
+// unless the turn itself changes them. A request that explicitly asks to
+// commit them too ("把之前未提交的改动也提交", "include the earlier
+// uncommitted changes", "commit everything") sets Turn.IncludeLeftovers, so
+// the runner commits the whole working tree. Only write turns ever commit.
+
+var (
+	// Earlier changes as an object: "the earlier uncommitted changes",
+	// "之前未提交的改动", "遗留的修改".
+	leftoverQualifierEN = `(?:earlier|previous|prior|existing|old|older|other|remaining|pending|leftover|left-over|local|outstanding)`
+	leftoverNounEN      = reOf(`\b(?:(?:all|both)\s+)?(?:of\s+)?(?:the\s+|those\s+|these\s+|my\s+|your\s+)?(?:(?:` + leftoverQualifierEN + `)\s+)*(?:uncommitted|unstaged|leftover|left-over|earlier|previous|prior|pending|outstanding)\s+(?:(?:local|code|file)\s+)?(?:changes|edits|files|work|modifications)\b`)
+	leftoverNounZH      = reOf(`(?:之前|此前|先前|以前|早先|上次|上一轮|原来|原先|原有|已有|现有|遗留|残留|剩下|剩余|其他|其它|工作区里?|本地)?(?:的)?(?:未|没|没有|还没|还没有|尚未)(?:被)?提交(?:的)?(?:改动|修改|更改|变更|文件|代码|内容|东西)|(?:之前|此前|先前|以前|早先|上次|上一轮|遗留|残留|剩下|剩余|原有)(?:的)?(?:改动|修改|更改|变更)`)
+	// Verbs that take the earlier changes into the commit.
+	leftoverVerbEN = reOf(`\b(?:commit(?:ting)?|includ(?:e|ing))\b`)
+	leftoverVerbZH = reOf(`提交|commit|带上|包括|包含`)
+	// "commit everything", "commit all (the) changes", "全部提交", "提交所有改动".
+	commitEverything = []*regexp.Regexp{
+		reOf(`\bcommit\s+(?:everything|all(?:\s+(?:of\s+)?(?:the\s+|my\s+|your\s+)?(?:changes|files|edits|work))?)\b`),
+		reOf(`\binclude\s+everything\s+in\s+(?:the\s+|this\s+)?commit\b`),
+		reOf(`(?:全部|所有|一切)(?:的)?(?:改动|修改|更改|变更|文件|东西|内容)?(?:都|也|一起|一并|全部)?(?:提交|commit)`),
+		reOf(`(?:提交|commit)\s*(?:全部|所有|一切)(?:的)?(?:改动|修改|更改|变更|文件|东西|内容)?(?:$|[^\p{Han}]|吧|了|呢|啊|上去)`),
+	}
+	// Any negation in a clause keeps the earlier changes out ("不要提交之前的改动",
+	// "don't commit the earlier changes"); a reminder is not a negation.
+	leftoverReminder = reOf(`\b(?:don't|dont|do not|never)\s+forget\s+(?:to\s+)?|别忘了|别忘记|不要忘了|不要忘记|记得`)
+	leftoverNegation = reOf(`\b(?:don't|dont|do not|never|not|no need|without|shouldn't|should not|mustn't|must not|avoid|except|excluding|exclude)\b|\b(?:leave|keep)\b.*\b(?:out|uncommitted|aside|alone|as is|separate)\b|不要|不用|不需要|无需|别|勿|不得|不能|不准|不许|禁止|切勿|没必要|不必|除了|排除|先留着|留着`)
+)
+
+// ParseIncludeLeftovers reports whether a request explicitly asks to commit
+// the uncommitted changes that were in the working tree before the turn.
+// A clause names the earlier changes and a verb that takes them in ("提交",
+// "commit", "include"), or asks to commit everything; a negation in that
+// clause cancels it. The earlier changes may be named in one clause and the
+// verb follow in the next ("之前未提交的改动，也一起提交").
+func ParseIncludeLeftovers(request string) bool {
+	text := strings.TrimSpace(strings.ReplaceAll(request, "’", "'"))
+	if text == "" {
+		return false
+	}
+	pendingNoun := false
+	for _, clause := range clauseSplit.Split(text, -1) {
+		clause = strings.TrimSpace(leftoverReminder.ReplaceAllString(clause, " "))
+		if clause == "" {
+			continue
+		}
+		if leftoverNegation.MatchString(clause) {
+			pendingNoun = false
+			continue
+		}
+		if firstScopeMatch(commitEverything, clause) != "" {
+			return true
+		}
+		noun := leftoverNounEN.MatchString(clause) || leftoverNounZH.MatchString(clause)
+		// The verb outside the object ("未提交的改动" itself says "提交").
+		rest := leftoverNounZH.ReplaceAllString(leftoverNounEN.ReplaceAllString(clause, " "), " ")
+		verb := leftoverVerbEN.MatchString(rest) || leftoverVerbZH.MatchString(rest)
+		switch {
+		case noun && verb, pendingNoun && verb:
+			return true
+		case noun:
+			pendingNoun = true
+		default:
+			pendingNoun = false
+		}
+	}
+	return false
 }
 
 // positiveMatch is the first development or publish verb in a clause that

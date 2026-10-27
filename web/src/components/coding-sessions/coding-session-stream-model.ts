@@ -5,7 +5,7 @@
  */
 import type { ApplicationActivity } from '@/lib/application-agents'
 import type { AgentMessageAttachment, CodeReview } from '@/types/flow'
-import type { CodingCommit, CodingPlanStep, CodingSession, CodingTurnScope, SessionPullRequest } from '@/types/coding-sessions'
+import type { CodingCommit, CodingPlanStep, CodingSession, SessionPullRequest } from '@/types/coding-sessions'
 
 const SHOWN_TYPES = new Set(['prompt', 'thought', 'action', 'response', 'elicitation', 'error'])
 
@@ -226,7 +226,27 @@ export function pendingElicitation(activities: readonly ApplicationActivity[]): 
 /** A stop request is pending: the latest prompt is a stop signal and the session has not stopped yet. */
 export const stopRequested = (session: Pick<CodingSession, 'state' | 'stopRequested'>) => session.state === 'stopping' || Boolean(session.stopRequested && (session.state === 'active' || session.state === 'pending'))
 
-export type QueuedMessage = { id: string; text: string; files?: AgentMessageAttachment[]; scope?: CodingTurnScope; createdAt: string }
+export type QueuedMessage = { id: string; text: string; files?: AgentMessageAttachment[]; createdAt: string }
+
+/** The runner's report of earlier uncommitted changes it left out of a turn's commit. */
+const LEFTOVER_REPORT = /^Flow did not commit (\d+) path\(s\) that already had uncommitted changes before this turn/
+
+/**
+ * How many paths with earlier uncommitted changes Flow left out of the commit in a turn's items (its latest report,
+ * folded in a work group or not); 0 when it reported none.
+ */
+export function leftoverPathCount(items: readonly StreamItem[]): number {
+  let count = 0
+  const read = (activity: ApplicationActivity) => {
+    const match = LEFTOVER_REPORT.exec(activity.body.trim())
+    if (match) count = Number(match[1])
+  }
+  for (const item of items) {
+    if (item.kind === 'reasoning') read(item.activity)
+    else if (item.kind === 'group') for (const child of item.children) if (child.kind === 'reasoning') read(child.activity)
+  }
+  return count
+}
 
 const queueKey = (workspace: string, sessionId: string) => `flow:coding-sessions:queue:${workspace}:${sessionId}`
 
