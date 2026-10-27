@@ -436,6 +436,17 @@ func validPKCE(verifier, challenge string) bool {
 	return verifier != "" && base64.RawURLEncoding.EncodeToString(digest[:]) == challenge
 }
 
+// uncached marks the responses of an endpoint that returns tokens or client
+// credentials as never cacheable, on success and on error alike (RFC 6749
+// section 5.1: Cache-Control: no-store and Pragma: no-cache).
+func uncached(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Pragma", "no-cache")
+		next(w, r)
+	}
+}
+
 func writeOAuthError(w http.ResponseWriter, status int, code, description string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

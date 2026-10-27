@@ -216,7 +216,7 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "Workspace not found")
 		return
 	}
-	connection, err := websocket.Accept(w, r, nil)
+	connection, err := websocket.Accept(w, r, webSocketAcceptOptions(r))
 	if err != nil {
 		return
 	}

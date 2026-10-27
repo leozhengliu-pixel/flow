@@ -322,9 +322,9 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", s.oauthProtectedResource)
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp/readonly", s.oauthProtectedResource)
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", s.oauthAuthorizationServer)
-	mux.HandleFunc("POST /oauth/register", s.registerOAuthClient)
-	mux.HandleFunc("POST /oauth/token", s.exchangeMCPToken)
-	mux.HandleFunc("POST /oauth/revoke", s.revokeOAuthToken)
+	mux.HandleFunc("POST /oauth/register", uncached(s.registerOAuthClient))
+	mux.HandleFunc("POST /oauth/token", uncached(s.exchangeMCPToken))
+	mux.HandleFunc("POST /oauth/revoke", uncached(s.revokeOAuthToken))
 	readWriteMCP, readOnlyMCP := s.mcpHTTP(false), s.mcpHTTP(true)
 	mux.HandleFunc("POST /mcp", readWriteMCP)
 	mux.HandleFunc("POST /mcp/readonly", readOnlyMCP)
@@ -590,7 +590,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/oauth-applications/{id}/webhook", s.getApplicationWebhook)
 	mux.HandleFunc("PUT /api/oauth-applications/{id}/webhook", s.updateApplicationWebhook)
 	mux.HandleFunc("POST /api/oauth-applications/{id}/webhook/rotate-secret", s.rotateApplicationWebhookSecret)
-	mux.HandleFunc("POST /api/oauth/token", s.exchangeOAuthToken)
+	mux.HandleFunc("POST /api/oauth/token", uncached(s.exchangeOAuthToken))
 	mux.HandleFunc("GET /api/integrations", s.listIntegrations)
 	mux.HandleFunc("GET /api/integrations/file-preview", s.filePreview)
 	mux.HandleFunc("GET /api/integrations/link-preview", s.linkPreview)
@@ -1034,7 +1034,7 @@ func newHandler(s *server) http.Handler {
 // serverRoute reports whether path is answered by the API rather than the
 // built web app.
 func serverRoute(path string) bool {
-	return strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/scim/") || strings.HasPrefix(path, "/uploads/") || strings.HasPrefix(path, "/.well-known/oauth-") || strings.HasPrefix(path, "/internal/") || path == "/mcp" || path == "/mcp/readonly" || path == "/oauth/register" || path == "/oauth/token" || path == "/oauth/revoke"
+	return strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/scim/") || strings.HasPrefix(path, "/uploads/") || strings.HasPrefix(path, "/.well-known/oauth-") || strings.HasPrefix(path, "/internal/") || path == "/mcp" || path == "/mcp/readonly" || path == "/oauth/register" || path == "/oauth/token" || path == "/oauth/revoke" || path == "/oauth/introspect"
 }
 
 func (s *server) withStaticFiles(next http.Handler) http.Handler {
@@ -5482,9 +5482,17 @@ func (s *server) serveUpload(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, reader)
 }
 
+// inlineUploadTypes are the media types a browser may show in place from the
+// upload routes: raster images, audio, video and PDF. Matching is exact on the
+// media type, so a type that only starts with one of these (image/png-x) is a
+// download like every other type.
+var inlineUploadTypes = map[string]bool{
+	"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true, "image/avif": true, "application/pdf": true,
+}
+
 func safeInlineUploadType(value, name string) bool {
 	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(value, ";")[0]))
-	return strings.HasPrefix(mediaType, "image/png") || strings.HasPrefix(mediaType, "image/jpeg") || strings.HasPrefix(mediaType, "image/gif") || strings.HasPrefix(mediaType, "image/webp") || strings.HasPrefix(mediaType, "image/avif") || mediaType == "image/svg+xml" && strings.HasPrefix(name, "workspace_logo_") || strings.HasPrefix(mediaType, "audio/") || strings.HasPrefix(mediaType, "video/") || mediaType == "application/pdf"
+	return inlineUploadTypes[mediaType] || mediaType == "image/svg+xml" && strings.HasPrefix(name, "workspace_logo_") || strings.HasPrefix(mediaType, "audio/") || strings.HasPrefix(mediaType, "video/")
 }
 
 func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBootstrap, userID, url string) bool {

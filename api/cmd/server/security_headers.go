@@ -265,8 +265,23 @@ func (p *securityHeaderPolicy) webAppRoute(r *http.Request) bool {
 	return p.app != nil && (r.Method == http.MethodGet || r.Method == http.MethodHead) && !serverRoute(r.URL.Path)
 }
 
+// consentPagePath is the OAuth consent page of the web app, where a signed-in
+// user approves an application's access. It is the page a clickjacking attempt
+// would target, and nothing embeds it, so no framing allow list applies to it.
+const consentPagePath = "/oauth/authorize"
+
+// framingDenied reports whether the request is for a page that no site may
+// frame, whatever FLOW_SECURITY_FRAME_ANCESTORS allows for the rest of the app.
+func (p *securityHeaderPolicy) framingDenied(r *http.Request) bool {
+	return p.webAppRoute(r) && strings.TrimRight(r.URL.Path, "/") == consentPagePath
+}
+
 // apply fills in the security headers the handler did not set itself.
 func (p *securityHeaderPolicy) apply(header http.Header, r *http.Request) {
+	frameAncestors, frameOptions := p.frameAncestors, p.frameOptions
+	if p.framingDenied(r) {
+		frameAncestors, frameOptions = "frame-ancestors 'none'", "DENY"
+	}
 	set := func(name, value string) {
 		if value != "" && !p.config.Skips(name) && len(header.Values(name)) == 0 {
 			header.Set(name, value)
@@ -275,7 +290,7 @@ func (p *securityHeaderPolicy) apply(header http.Header, r *http.Request) {
 	set("X-Content-Type-Options", "nosniff")
 	set("Referrer-Policy", p.config.ReferrerPolicy)
 	set("Permissions-Policy", p.permissions)
-	set("X-Frame-Options", p.frameOptions)
+	set("X-Frame-Options", frameOptions)
 	if p.hsts != "" && p.requestOverHTTPS(r) {
 		set("Strict-Transport-Security", p.hsts)
 	}
@@ -293,9 +308,9 @@ func (p *securityHeaderPolicy) apply(header http.Header, r *http.Request) {
 			}
 		}
 		if len(own) > 0 {
-			own[0] = strings.TrimRight(strings.TrimSpace(own[0]), "; ") + "; " + p.frameAncestors
+			own[0] = strings.TrimRight(strings.TrimSpace(own[0]), "; ") + "; " + frameAncestors
 		} else {
-			header.Set(enforced, p.frameAncestors)
+			header.Set(enforced, frameAncestors)
 		}
 		return
 	}
@@ -305,14 +320,14 @@ func (p *securityHeaderPolicy) apply(header http.Header, r *http.Request) {
 	}
 	switch p.config.CSP {
 	case appconfig.CSPEnforce:
-		header.Set(enforced, policy+"; "+p.frameAncestors+p.reportDirectives)
+		header.Set(enforced, policy+"; "+frameAncestors+p.reportDirectives)
 	case appconfig.CSPReportOnly:
 		// Browsers ignore frame-ancestors in a report-only policy, so framing
 		// is enforced on its own while the rest is only reported.
-		header.Set(enforced, p.frameAncestors)
+		header.Set(enforced, frameAncestors)
 		header.Set(reportOnly, policy+p.reportDirectives)
 	default:
-		header.Set(enforced, p.frameAncestors)
+		header.Set(enforced, frameAncestors)
 		return
 	}
 	if p.reportingEndpoints != "" {

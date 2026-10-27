@@ -22,7 +22,7 @@ import (
 // token introspection, application manifests and the per-application
 // install list. (GET /api/viewer lives with the public API resources.)
 func (s *server) registerOAuthPlatformRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /oauth/introspect", s.introspectOAuthToken)
+	mux.HandleFunc("POST /oauth/introspect", uncached(s.introspectOAuthToken))
 	mux.HandleFunc("GET /.well-known/oauth-app-manifest.schema.json", s.oauthAppManifestSchema)
 	mux.HandleFunc("POST /api/oauth-applications/manifest", s.createOAuthApplicationFromManifest)
 	mux.HandleFunc("POST /api/oauth-applications/manifest/validate", s.validateOAuthAppManifest)

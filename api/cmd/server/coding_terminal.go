@@ -113,7 +113,7 @@ func (s *server) codingEnvironmentTerminal(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Sandboxes are not available", "code": string(domain.CodingErrSandboxDisabled)})
 		return
 	}
-	conn, err := websocket.Accept(w, r, nil)
+	conn, err := websocket.Accept(w, r, webSocketAcceptOptions(r))
 	if err != nil {
 		return
 	}
