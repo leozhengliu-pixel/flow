@@ -240,7 +240,7 @@ func chatProbe(ctx context.Context, record domain.ChatIntegrationRecord, credent
 		return "", "", err
 	}
 	if response.Bot.OpenID == "" {
-		return "", "", errors.New("Enable and publish the application bot before connecting")
+		return "", "", errChatBotUnpublished
 	}
 	return response.Bot.OpenID, response.Bot.Name, nil
 }
@@ -271,7 +271,7 @@ func (s *server) chatConfigurationMutation(next http.HandlerFunc) http.HandlerFu
 	return func(w http.ResponseWriter, r *http.Request) {
 		err := s.withChatConfigurationLock(r.Context(), workspaceKey(r), r.PathValue("provider"), func() error { next(w, r); return nil })
 		if err != nil {
-			writeError(w, 503, "Chat configuration is busy; retry shortly")
+			writeChatError(w, 503, "Chat configuration is busy; retry shortly")
 		}
 	}
 }
@@ -288,47 +288,47 @@ func (s *server) chatSettingsMetadata(r *http.Request) (domain.Bootstrap, error)
 }
 func (s *server) chatSession(w http.ResponseWriter, r *http.Request, admin bool) (domain.Bootstrap, bool) {
 	if !chatProvider(r.PathValue("provider")) {
-		writeError(w, 404, "Unsupported chat provider")
+		writeChatError(w, 404, "Unsupported chat provider")
 		return domain.Bootstrap{}, false
 	}
 	data, err := s.chatSettingsMetadata(r)
 	if err != nil {
-		writeError(w, 403, "Workspace access required")
+		writeChatError(w, 403, "Workspace access required")
 		return data, false
 	}
 	if !s.authDisabled {
 		if r.Header.Get("Authorization") != "" {
-			writeError(w, 403, "Interactive sign-in required")
+			writeChatError(w, 403, "Interactive sign-in required")
 			return data, false
 		}
 		cookie, err := r.Cookie(sessionCookieName)
 		if err != nil {
-			writeError(w, 401, "Interactive sign-in required")
+			writeChatError(w, 401, "Interactive sign-in required")
 			return data, false
 		}
 		user, err := s.store.AuthenticateSession(r.Context(), cookie.Value)
 		if err != nil || user.ID != data.Viewer.ID {
-			writeError(w, 401, "Interactive sign-in required")
+			writeChatError(w, 401, "Interactive sign-in required")
 			return data, false
 		}
 		policy, exists := s.store.WorkspaceMetadataFields(workspaceKey(r), "identityProviders")
 		if !exists {
-			writeError(w, 403, "Workspace policy unavailable")
+			writeChatError(w, 403, "Workspace policy unavailable")
 			return data, false
 		}
 		data.IdentityProviders = policy.IdentityProviders
 		auth, err := s.store.SessionAuthentication(r.Context(), cookie.Value)
 		if err != nil {
-			writeError(w, 503, "Could not verify session authentication")
+			writeChatError(w, 503, "Could not verify session authentication")
 			return data, false
 		}
 		if !allowedAuthenticationMethod(data, data.ViewerRole, auth) || (data.WorkspaceSettings.RequireTwoFactor && auth.MFAVerifiedAt == nil) {
-			writeError(w, 403, "Your session does not meet the workspace authentication policy")
+			writeChatError(w, 403, "Your session does not meet the workspace authentication policy")
 			return data, false
 		}
 	}
 	if admin && !s.applicationPolicyAdmin(r, data) {
-		writeError(w, 403, "Workspace administrator required")
+		writeChatError(w, 403, "Workspace administrator required")
 		return data, false
 	}
 	return data, true
@@ -349,10 +349,10 @@ func (s *server) chatSettings(w http.ResponseWriter, r *http.Request) {
 }
 func (s *server) writeChatSettings(w http.ResponseWriter, r *http.Request, data domain.Bootstrap) {
 	w.Header().Set("Cache-Control", "no-store")
-	result := map[string]any{"connection": nil, "identity": nil, "bindings": []domain.ChatBinding{}, "credentialsConfigured": false, "webhookURL": "", "canManage": s.applicationPolicyAdmin(r, data)}
+	result := map[string]any{"connection": nil, "identity": nil, "bindings": []domain.ChatBinding{}, "bindableTeamIds": []string{}, "credentialsConfigured": false, "webhookURL": "", "canManage": s.applicationPolicyAdmin(r, data)}
 	record, err := s.store.ChatIntegration(r.Context(), workspaceKey(r), r.PathValue("provider"))
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		writeError(w, 500, "Could not read chat integration")
+		writeChatError(w, 500, "Could not read chat integration")
 		return
 	}
 	if errors.Is(err, sql.ErrNoRows) {
@@ -392,18 +392,40 @@ func (s *server) writeChatSettings(w http.ResponseWriter, r *http.Request, data 
 		if result["canManage"] == true {
 			bindings, err := s.store.ChatBindings(r.Context(), record.WorkspaceKey, record.ConnectionID)
 			if err != nil {
-				writeError(w, 500, "Could not read group bindings")
+				writeChatError(w, 500, "Could not read group bindings")
 				return
 			}
 			result["bindings"] = bindings
+			result["bindableTeamIds"] = s.chatBindableTeamIDs(record.WorkspaceKey)
 			result["webhookURL"] = s.chatAppOrigin() + "/api/integrations/" + record.Provider + "/" + record.ConnectionID + "/chat/webhook"
 		}
 		identity, err := s.store.ChatIdentityForUser(r.Context(), record.WorkspaceKey, record.ConnectionID, data.Viewer.ID)
 		if err == nil {
 			result["identity"] = identity
+			// Expired links still show, so the member can reconnect them.
+			result["identityExpired"] = !s.authDisabled && !chatIdentityWithinSession(identity, workspaceSessionDuration(data.WorkspaceSettings), time.Now())
 		}
 	}
+	if connection, ok := result["connection"].(domain.IntegrationConnection); ok && connection.LastError != "" {
+		result["lastErrorCode"] = chatErrorCode(connection.LastError)
+	}
 	writeJSON(w, 200, result)
+}
+
+// chatBindableTeamIDs lists the teams a group binding may share, by the same
+// rule saveChatBinding enforces, so the settings page never copies it.
+func (s *server) chatBindableTeamIDs(workspace string) []string {
+	ids := []string{}
+	data, ok := s.store.WorkspaceMetadataFields(workspace, "teams", "teamSettings", "workspaceSettings")
+	if !ok {
+		return ids
+	}
+	for _, team := range data.Teams {
+		if chatBindingScopePermitted(data, domain.ChatBinding{TeamID: team.ID}) {
+			ids = append(ids, team.ID)
+		}
+	}
+	return ids
 }
 
 func (s *server) syncChatConnection(ctx context.Context, record domain.ChatIntegrationRecord, userID, status, testStatus, lastError string) error {
@@ -486,7 +508,7 @@ func (s *server) saveChatIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !store.ConnectorSecretsConfigured() {
-		writeError(w, 503, "Configure FLOW_CONNECTOR_SECRET_KEY before connecting chat applications")
+		writeChatError(w, 503, "Configure FLOW_CONNECTOR_SECRET_KEY before connecting chat applications")
 		return
 	}
 	var input struct {
@@ -502,30 +524,30 @@ func (s *server) saveChatIntegration(w http.ResponseWriter, r *http.Request) {
 	input.AppID = strings.TrimSpace(input.AppID)
 	input.Name = strings.TrimSpace(input.Name)
 	if input.AppID == "" || len(input.AppID) > 191 || len(input.Name) > 200 || len(input.AppSecret) > 4096 || len(input.EncryptKey) > 4096 || len(input.VerificationToken) > 4096 {
-		writeError(w, 400, "Invalid application configuration")
+		writeChatError(w, 400, "Invalid application configuration")
 		return
 	}
 	record, err := s.store.ChatIntegration(r.Context(), workspaceKey(r), r.PathValue("provider"))
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		writeError(w, 500, "Could not read chat integration")
+		writeChatError(w, 500, "Could not read chat integration")
 		return
 	}
 	credential := chatCredentials{}
 	if err == nil {
 		credential, err = s.chatCredentials(r.Context(), record)
 		if err != nil {
-			writeError(w, 500, "Could not read encrypted application credentials")
+			writeChatError(w, 500, "Could not read encrypted application credentials")
 			return
 		}
 	}
 	if record.ConnectionID != "" && record.AppID != input.AppID {
-		writeError(w, 400, "Disconnect the current application before changing App ID")
+		writeChatError(w, 400, "Disconnect the current application before changing App ID")
 		return
 	}
 	if record.ConnectionID == "" {
 		id, err := randomSecret("chat_")
 		if err != nil {
-			writeError(w, 500, "Could not create connection")
+			writeChatError(w, 500, "Could not create connection")
 			return
 		}
 		record = domain.ChatIntegrationRecord{WorkspaceKey: workspaceKey(r), Provider: r.PathValue("provider"), ConnectionID: id, AppID: input.AppID}
@@ -540,27 +562,31 @@ func (s *server) saveChatIntegration(w http.ResponseWriter, r *http.Request) {
 		credential.VerificationToken = input.VerificationToken
 	}
 	if credential.AppSecret == "" || credential.EncryptKey == "" || credential.VerificationToken == "" {
-		writeError(w, 400, "App Secret, Encrypt Key and Verification Token are required")
+		writeChatError(w, 400, "App Secret, Encrypt Key and Verification Token are required")
 		return
 	}
 	botID, botName, err := chatProbe(r.Context(), record, credential)
+	if errors.Is(err, errChatBotUnpublished) {
+		writeChatError(w, 502, err.Error())
+		return
+	}
 	if err != nil {
-		writeError(w, 502, err.Error())
+		writeChatError(w, 502, "Chat application check failed; verify app credentials and bot publication")
 		return
 	}
 	record.BotOpenID = botID
 	record.Name = firstNonEmpty(input.Name, botName, record.Provider)
 	if err = s.store.InitializeChatDomainCursor(r.Context(), record.WorkspaceKey); err != nil {
-		writeError(w, 500, "Could not initialize notification cursor")
+		writeChatError(w, 500, "Could not initialize notification cursor")
 		return
 	}
 	raw, _ := json.Marshal(credential)
 	if err = s.store.PutChatIntegration(r.Context(), record); err != nil {
-		writeError(w, 409, "Application is already connected to another workspace")
+		writeChatError(w, 409, "Application is already connected to another workspace")
 		return
 	}
 	if err = s.store.PutConnectorSecret(r.Context(), chatCredentialID(record), raw, time.Now().AddDate(10, 0, 0)); err != nil {
-		writeError(w, 500, "Could not save encrypted application credentials")
+		writeChatError(w, 500, "Could not save encrypted application credentials")
 		return
 	}
 	status := "pending_authorization"
@@ -568,7 +594,7 @@ func (s *server) saveChatIntegration(w http.ResponseWriter, r *http.Request) {
 		status = "connected"
 	}
 	if err = s.syncChatConnection(r.Context(), record, data.Viewer.ID, status, "success", ""); err != nil {
-		writeError(w, 500, "Could not save connection metadata")
+		writeChatError(w, 500, "Could not save connection metadata")
 		return
 	}
 	updated, _ := s.chatSettingsMetadata(r)
@@ -582,7 +608,7 @@ func (s *server) disconnectChatIntegration(w http.ResponseWriter, r *http.Reques
 	}
 	record, err := s.store.ChatIntegration(r.Context(), workspaceKey(r), r.PathValue("provider"))
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		writeError(w, 500, "Could not read integration")
+		writeChatError(w, 500, "Could not read integration")
 		return
 	}
 	ids := []string{}
@@ -623,7 +649,7 @@ func (s *server) testChatIntegration(w http.ResponseWriter, r *http.Request) {
 	}
 	record, err := s.store.ChatIntegration(r.Context(), workspaceKey(r), r.PathValue("provider"))
 	if err != nil {
-		writeError(w, 404, "Chat application not configured")
+		writeChatError(w, 404, "Chat application not configured")
 		return
 	}
 	credential, err := s.chatCredentials(r.Context(), record)
@@ -631,12 +657,16 @@ func (s *server) testChatIntegration(w http.ResponseWriter, r *http.Request) {
 		record.BotOpenID, _, err = chatProbe(r.Context(), record, credential)
 	}
 	if err != nil {
-		_ = s.syncChatConnection(r.Context(), record, data.Viewer.ID, "error", "failed", err.Error())
-		writeError(w, 502, "Chat application check failed; verify app credentials and bot publication")
+		message := "Chat application check failed; verify app credentials and bot publication"
+		if errors.Is(err, errChatBotUnpublished) {
+			message = err.Error()
+		}
+		_ = s.syncChatConnection(r.Context(), record, data.Viewer.ID, "error", "failed", message)
+		writeChatError(w, 502, "Chat application check failed; verify app credentials and bot publication")
 		return
 	}
 	if err = s.store.PutChatIntegration(r.Context(), record); err != nil {
-		writeError(w, 500, "Could not save application health")
+		writeChatError(w, 500, "Could not save application health")
 		return
 	}
 	status := "pending_authorization"
@@ -644,7 +674,7 @@ func (s *server) testChatIntegration(w http.ResponseWriter, r *http.Request) {
 		status = "connected"
 	}
 	if err = s.syncChatConnection(r.Context(), record, data.Viewer.ID, status, "success", ""); err != nil {
-		writeError(w, 500, "Could not save application health")
+		writeChatError(w, 500, "Could not save application health")
 		return
 	}
 	updated, _ := s.chatSettingsMetadata(r)
@@ -664,12 +694,12 @@ func (s *server) listChatGroups(w http.ResponseWriter, r *http.Request) {
 	}
 	record, err := s.store.ChatIntegration(r.Context(), workspaceKey(r), r.PathValue("provider"))
 	if err != nil || !record.Connected {
-		writeError(w, 400, "Authorize an application administrator to verify the tenant first")
+		writeChatError(w, 400, "Authorize an application administrator to verify the tenant first")
 		return
 	}
 	cursor := r.URL.Query().Get("cursor")
 	if len(cursor) > 2048 {
-		writeError(w, 400, "Invalid cursor")
+		writeChatError(w, 400, "Invalid cursor")
 		return
 	}
 	query := url.Values{"page_size": {"50"}}
@@ -689,7 +719,7 @@ func (s *server) listChatGroups(w http.ResponseWriter, r *http.Request) {
 		} `json:"data"`
 	}
 	if err = s.chatPlatformRequest(r.Context(), record, http.MethodGet, "/open-apis/im/v1/chats?"+query.Encode(), nil, &response); err != nil {
-		writeError(w, 502, err.Error())
+		writeChatError(w, 502, "The chat platform request failed; check the bot's permissions and retry")
 		return
 	}
 	items := []chatGroup{}
@@ -796,7 +826,7 @@ func (s *server) saveChatBinding(w http.ResponseWriter, r *http.Request) {
 	}
 	record, err := s.store.ChatIntegration(r.Context(), workspaceKey(r), r.PathValue("provider"))
 	if err != nil || !record.Connected {
-		writeError(w, 400, "Connect and authorize the application first")
+		writeChatError(w, 400, "Connect and authorize the application first")
 		return
 	}
 	var input domain.ChatBinding
@@ -804,12 +834,12 @@ func (s *server) saveChatBinding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if input.ChatID == "" || len(input.ChatID) > 191 || len(input.ChatName) > 200 || len(input.Events) > 5 {
-		writeError(w, 400, "Invalid group binding")
+		writeChatError(w, 400, "Invalid group binding")
 		return
 	}
 	for _, event := range input.Events {
 		if !slices.Contains([]string{"issue.created", "issue.status_changed", "issue.assignee_changed", "comment.created", "project.update_created"}, event) {
-			writeError(w, 400, "Unsupported notification event")
+			writeChatError(w, 400, "Unsupported notification event")
 			return
 		}
 	}
@@ -820,29 +850,29 @@ func (s *server) saveChatBinding(w http.ResponseWriter, r *http.Request) {
 	} else {
 		items, e := s.store.ChatBindings(r.Context(), record.WorkspaceKey, record.ConnectionID)
 		if e != nil {
-			writeError(w, 500, "Could not read group bindings")
+			writeChatError(w, 500, "Could not read group bindings")
 			return
 		}
 		index := slices.IndexFunc(items, func(item domain.ChatBinding) bool { return item.ID == input.ID })
 		if index < 0 {
-			writeError(w, 404, "Binding not found")
+			writeChatError(w, 404, "Binding not found")
 			return
 		}
 		input.CreatedAt = items[index].CreatedAt
 	}
 	if err != nil {
-		writeError(w, 500, "Could not create binding")
+		writeChatError(w, 500, "Could not create binding")
 		return
 	}
 	if err = s.chatBindingPermitted(r.Context(), record, input); err != nil {
-		writeError(w, 400, "Select a same-tenant internal group, an active public team and compatible public project/template")
+		writeChatError(w, 400, "Select a same-tenant internal group, an active public team and compatible public project/template")
 		return
 	}
 	if err = s.store.InitializeChatDomainCursor(r.Context(), record.WorkspaceKey); err == nil {
 		err = s.store.PutChatBinding(r.Context(), record.WorkspaceKey, input)
 	}
 	if err != nil {
-		writeError(w, 409, "Could not save binding; the group may already be bound")
+		writeChatError(w, 409, "Could not save binding; the group may already be bound")
 		return
 	}
 	writeJSON(w, 200, input)
@@ -854,7 +884,7 @@ func (s *server) deleteChatBinding(w http.ResponseWriter, r *http.Request) {
 	}
 	record, err := s.store.ChatIntegration(r.Context(), workspaceKey(r), r.PathValue("provider"))
 	if err != nil {
-		writeError(w, 404, "Connection not found")
+		writeChatError(w, 404, "Connection not found")
 		return
 	}
 	err = s.store.DeleteChatBinding(r.Context(), record.WorkspaceKey, record.ConnectionID, r.PathValue("id"))
@@ -874,17 +904,17 @@ func (s *server) startChatIdentity(w http.ResponseWriter, r *http.Request) {
 	}
 	record, err := s.store.ChatIntegration(r.Context(), workspaceKey(r), r.PathValue("provider"))
 	if err != nil {
-		writeError(w, 400, "Configure the application first")
+		writeChatError(w, 400, "Configure the application first")
 		return
 	}
 	admin := s.applicationPolicyAdmin(r, data)
 	if !record.Connected && !admin {
-		writeError(w, 403, "An administrator must verify the application tenant first")
+		writeChatError(w, 403, "An administrator must verify the application tenant first")
 		return
 	}
 	state, err := randomSecret("chat_oauth_")
 	if err != nil {
-		writeError(w, 500, "Could not begin authorization")
+		writeChatError(w, 500, "Could not begin authorization")
 		return
 	}
 	pending := chatOAuthState{WorkspaceKey: record.WorkspaceKey, ConnectionID: record.ConnectionID, Provider: record.Provider, AppID: record.AppID, UserID: data.Viewer.ID, Verifier: oauth2.GenerateVerifier(), RedirectURI: s.chatCallbackURL(record.Provider), CanEstablishTenant: admin}
@@ -893,7 +923,7 @@ func (s *server) startChatIdentity(w http.ResponseWriter, r *http.Request) {
 		pending.SessionHash = secretHash(cookie.Value)
 		pending.Authentication, err = s.store.SessionAuthentication(r.Context(), cookie.Value)
 		if err != nil {
-			writeError(w, 500, "Could not verify session authentication")
+			writeChatError(w, 500, "Could not verify session authentication")
 			return
 		}
 	} else {
@@ -901,13 +931,13 @@ func (s *server) startChatIdentity(w http.ResponseWriter, r *http.Request) {
 	}
 	raw, _ := json.Marshal(pending)
 	if err = s.store.PutConnectorSecret(r.Context(), state, raw, time.Now().Add(10*time.Minute)); err != nil {
-		writeError(w, 500, "Could not save authorization state")
+		writeChatError(w, 500, "Could not save authorization state")
 		return
 	}
 	// The action row makes pending OAuth states revocable by disconnect.
 	if err = s.store.PutChatAction(r.Context(), domain.ChatAction{ID: state, WorkspaceKey: record.WorkspaceKey, ConnectionID: record.ConnectionID, UserID: data.Viewer.ID, Payload: json.RawMessage(`{"kind":"oauth"}`), ExpiresAt: time.Now().Add(10 * time.Minute)}); err != nil {
 		_ = s.store.DeleteConnectorSecret(r.Context(), state)
-		writeError(w, 500, "Could not save authorization state")
+		writeChatError(w, 500, "Could not save authorization state")
 		return
 	}
 	host := "https://accounts.feishu.cn"
@@ -924,38 +954,40 @@ func (s *server) finishChatIdentity(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	state := r.URL.Query().Get("state")
 	if !chatProvider(r.PathValue("provider")) || !strings.HasPrefix(state, "chat_oauth_") || len(state) > 150 {
-		writeError(w, 400, "Invalid authorization state")
+		writeChatError(w, 400, "Invalid authorization state")
 		return
 	}
 	raw, err := s.store.ReadConnectorSecret(r.Context(), state, false)
 	var pending chatOAuthState
 	if err != nil || json.Unmarshal(raw, &pending) != nil || pending.Provider != r.PathValue("provider") {
-		writeError(w, 400, "Authorization expired")
+		writeChatError(w, 400, "Authorization expired")
 		return
 	}
 	err = s.withChatConfigurationLock(r.Context(), pending.WorkspaceKey, pending.Provider, func() error { s.finishChatIdentityLocked(w, r, state, pending); return nil })
 	if err != nil {
-		writeError(w, 503, "Chat configuration is busy; restart authorization")
+		writeChatError(w, 503, "Chat configuration is busy; restart authorization")
 	}
 }
 
 func (s *server) finishChatIdentityLocked(w http.ResponseWriter, r *http.Request, state string, pending chatOAuthState) {
-	fail := func(message string) {
+	// The redirect carries only the stable code; the web app translates it.
+	failWith := func(status int, message string) {
 		if wantsHTMLRedirect(r) {
-			http.Redirect(w, r, s.chatAppOrigin()+"/"+url.PathEscape(pending.WorkspaceKey)+"/settings/account/connections?chat_auth=error&chat_provider="+pending.Provider+"&chat_auth_error="+url.QueryEscape(message), http.StatusSeeOther)
+			http.Redirect(w, r, s.chatAppOrigin()+"/"+url.PathEscape(pending.WorkspaceKey)+"/settings/account/connections?chat_auth=error&chat_provider="+pending.Provider+"&chat_auth_error="+url.QueryEscape(chatErrorCode(message)), http.StatusSeeOther)
 		} else {
-			writeError(w, 400, message)
+			writeChatError(w, status, message)
 		}
 	}
+	fail := func(message string) { failWith(http.StatusBadRequest, message) }
 	if !s.authDisabled {
 		cookie, e := r.Cookie(sessionCookieName)
 		if e != nil || secretHash(cookie.Value) != pending.SessionHash {
-			writeError(w, 403, "Complete authorization in the same signed-in browser")
+			failWith(http.StatusForbidden, "Complete authorization in the same signed-in browser")
 			return
 		}
 		user, e := s.store.AuthenticateSession(r.Context(), cookie.Value)
 		if e != nil || user.ID != pending.UserID {
-			writeError(w, 403, "Sign in again to bind your account")
+			failWith(http.StatusForbidden, "Sign in again to bind your account")
 			return
 		}
 		access, e := s.store.OAuthWorkspaceAccess(r.Context(), pending.WorkspaceKey, user.ID)
@@ -963,11 +995,11 @@ func (s *server) finishChatIdentityLocked(w http.ResponseWriter, r *http.Request
 			pending.Authentication, e = s.store.SessionAuthentication(r.Context(), cookie.Value)
 		}
 		if e != nil || !allowedAuthenticationMethod(access, access.ViewerRole, pending.Authentication) {
-			writeError(w, 403, "Your workspace authentication policy no longer permits this binding")
+			failWith(http.StatusForbidden, "Your workspace authentication policy no longer permits this binding")
 			return
 		}
 		if access.WorkspaceSettings.RequireTwoFactor && pending.Authentication.MFAVerifiedAt == nil {
-			writeError(w, 403, "Workspace multi-factor authentication required")
+			failWith(http.StatusForbidden, "Workspace multi-factor authentication required")
 			return
 		}
 		pending.CanEstablishTenant = pending.CanEstablishTenant && workspaceAdminRole(access.ViewerRole)

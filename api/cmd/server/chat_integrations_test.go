@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -267,6 +268,14 @@ func TestChatIdentityBindingRequiresOwnerSessionAndCurrentTenant(t *testing.T) {
 			t.Fatalf("wrong browser accepted: %d %s", rec.Code, rec.Body.String())
 		}
 	}
+	browser := httptest.NewRequest("GET", callback, nil)
+	browser.Header.Set("Accept", "text/html")
+	browser.AddCookie(&http.Cookie{Name: sessionCookieName, Value: otherToken})
+	redirect := httptest.NewRecorder()
+	handler.ServeHTTP(redirect, browser)
+	if location := redirect.Header().Get("Location"); redirect.Code != http.StatusSeeOther || !strings.Contains(location, "chat_auth_error=chat_authorization_other_session") || strings.Contains(location, "browser") {
+		t.Fatalf("browser redirect does not carry only the reason code: %d %s", redirect.Code, location)
+	}
 	if _, err = s.store.ReadConnectorSecret(t.Context(), state, false); err != nil {
 		t.Fatal("wrong browser consumed another session's OAuth state")
 	}
@@ -369,6 +378,18 @@ func TestChatSettingsRecoverPartialSetupAndDisconnectStaleMetadata(t *testing.T)
 	if settings["connection"] == nil || settings["connection"].(map[string]any)["id"] != record.ConnectionID {
 		t.Fatal("authoritative app record hidden after metadata sync failure")
 	}
+	workspace := s.store.Bootstrap()
+	bindable, _ := settings["bindableTeamIds"].([]any)
+	expected := s.chatBindableTeamIDs(record.WorkspaceKey)
+	if len(bindable) != len(expected) || len(expected) == 0 {
+		t.Fatalf("bindable teams not reported: %v, expected %v", bindable, expected)
+	}
+	for _, team := range workspace.Teams {
+		permitted := chatBindingScopePermitted(workspace, domain.ChatBinding{TeamID: team.ID})
+		if permitted != slices.Contains(expected, team.ID) {
+			t.Fatalf("bindable team %s disagrees with the binding rule", team.ID)
+		}
+	}
 	if err := s.syncChatConnection(t.Context(), record, "setup_admin", "connected", "success", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -378,6 +399,13 @@ func TestChatSettingsRecoverPartialSetupAndDisconnectStaleMetadata(t *testing.T)
 	settings = requestJSON[map[string]any](t, handler, "GET", path, nil, 200)
 	if settings["connection"] == nil || settings["connection"].(map[string]any)["status"] != "error" {
 		t.Fatal("stale metadata did not expose recovery/disconnect")
+	}
+	if settings["lastErrorCode"] != "chat_setup_incomplete" {
+		t.Fatalf("connection error has no stable code: %v", settings["lastErrorCode"])
+	}
+	failure := requestJSON[map[string]any](t, handler, "POST", "/api/integrations/lark/chat/test?workspace=test-workspace", nil, 404)
+	if failure["code"] != "chat_not_configured" {
+		t.Fatalf("chat error has no stable code: %v", failure)
 	}
 	requestJSON[map[string]any](t, handler, "DELETE", path, nil, 204)
 	requestJSON[map[string]any](t, handler, "DELETE", path, nil, 204)
