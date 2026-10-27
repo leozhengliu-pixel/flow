@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useRef, type MutableRefObject, type ReactNode } from 'react'
 import { ArrowUp, X } from 'lucide-react'
 import { AgentElicitation } from './agent-elicitation'
 import { AgentElicitationResponseQueue } from './agent-elicitation-response-queue'
@@ -162,23 +162,24 @@ export function EntityAgentThread({
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const logRef = useRef<HTMLDivElement>(null)
   const draftKey = agentDraftStorageKey(conversationDraftKey)
-  const [hydratedDraft, setHydratedDraft] = useState(false)
+  // The saved draft is restored once, before any edit is saved back (saving earlier would erase it).
+  const hydratedDraft = useRef(false)
 
   useEffect(() => {
-    if (hydratedDraft) return
+    if (hydratedDraft.current) return
+    hydratedDraft.current = true
     const draft = readAgentDraft(draftKey)
     if (draft?.input && !input) onInputChange(draft.input)
-    setHydratedDraft(true)
-  }, [draftKey, hydratedDraft, input, onInputChange])
+  }, [draftKey, input, onInputChange])
 
   useEffect(() => {
-    if (!hydratedDraft) return
+    if (!hydratedDraft.current) return
     const timer = window.setTimeout(() => {
       if (!input.trim()) clearAgentDraft(draftKey)
       else writeAgentDraft(draftKey, { input })
     }, 250)
     return () => window.clearTimeout(timer)
-  }, [draftKey, hydratedDraft, input])
+  }, [draftKey, input])
 
   useEffect(() => {
     const node = logRef.current

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { toast } from '@/lib/toast'
 
 import { CustomerStatusIcon } from '@/components/customer/customer-status-icon'
@@ -23,10 +23,11 @@ export function CustomerMergeDialog({ data, source: initialSource, target: initi
   const [confirmation, setConfirmation] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-  useEffect(() => {
-    if (!open) return
-    setSource(initialSource); setTarget(initialTarget); setConfirmation(''); setError('')
-  }, [open, initialSource, initialTarget])
+  const [seen, setSeen] = useState({ open, initialSource, initialTarget })
+  if (seen.open !== open || seen.initialSource !== initialSource || seen.initialTarget !== initialTarget) {
+    setSeen({ open, initialSource, initialTarget })
+    if (open) { setSource(initialSource); setTarget(initialTarget); setConfirmation(''); setError('') }
+  }
   if (!target) return null
   const settings = data.workspaceSettings.featureSettings
   const requestCount = (customer: Customer) => data.customerRequests.filter(request => request.customerId === customer.id).length

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useI18n } from '@/i18n/i18n'
 import { translatedKeywords } from '@/lib/search-match'
 import * as Dialog from '@radix-ui/react-dialog'
@@ -37,8 +37,8 @@ export function ProjectsBulkActionBar({ projects, options, onAction, onAsk, onCl
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState<ProjectBulkAction>()
-  useEffect(() => { if (!projects.length) setOpen(false) }, [projects.length])
-  useEffect(() => { if (!open) setPending(undefined) }, [open])
+  if (!projects.length && open) setOpen(false)
+  if (!open && pending) setPending(undefined)
   if (!projects.length) return null
   const count = projects.length
   return <>

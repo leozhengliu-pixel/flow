@@ -16,11 +16,11 @@ export type CommentHashTarget = { id: string; key: string }
 export function useCommentHashPopover(enabled = true) {
   const [target, setTarget] = useState<CommentHashTarget | undefined>(() => readCommentHash())
 
+  // A disabled host never holds a target; drop a stale one as soon as it is switched off.
+  if (!enabled && target !== undefined) setTarget(undefined)
+
   useEffect(() => {
-    if (!enabled) {
-      setTarget(undefined)
-      return
-    }
+    if (!enabled) return
     const sync = () => setTarget(readCommentHash())
     sync()
     window.addEventListener('hashchange', sync)

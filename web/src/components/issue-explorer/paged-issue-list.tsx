@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useCallback, useEffect, useInsertionEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { GroupedVirtuoso, Virtuoso } from 'react-virtuoso'
 import type { BootstrapData, Issue, IssueUpdateInput } from '@/types/flow'
 import { listIssueRecordGroups, listIssueRecords, type IssueQueryInput } from '@/lib/api'
@@ -68,20 +68,31 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
     })
   }, [cachedState])
   const [dragging, setDragging] = useState<{ issue: Issue; group: string }>()
-  const lastContent = useRef<ReactNode>(null)
+  // Bumped to forget the remembered previous result (see LastContent).
+  const [lastContentEpoch, setLastContentEpoch] = useState(0)
   const active = useRef<{ signature: string; abort: AbortController; pending: Set<string>; ready: boolean } | undefined>(undefined)
-  const queryRef = useRef(query); queryRef.current = query
-  const totalRef = useRef(onTotalChange); totalRef.current = onTotalChange
-  const recordsRef = useRef(onLoadedIssuesChange); recordsRef.current = onLoadedIssuesChange
-  const stateOrderRef = useRef(data.states); stateOrderRef.current = data.states
-  const dataRef = useRef(data); dataRef.current = data
-  const groupsRef = useRef(groups); groupsRef.current = groups
+  const queryRef = useRef(query)
+  const totalRef = useRef(onTotalChange)
+  const recordsRef = useRef(onLoadedIssuesChange)
+  const stateOrderRef = useRef(data.states)
+  const dataRef = useRef(data)
+  const groupsRef = useRef(groups)
+  const openRef = useRef(onOpenIssueRecord)
+  // Latest-value refs: current before any layout/passive effect or event handler of the same commit.
+  useInsertionEffect(() => {
+    queryRef.current = query
+    totalRef.current = onTotalChange
+    recordsRef.current = onLoadedIssuesChange
+    stateOrderRef.current = data.states
+    dataRef.current = data
+    groupsRef.current = groups
+    openRef.current = onOpenIssueRecord
+  })
   // Cached pages that predate the latest refresh: shown as they are until their rows are on screen, then re-fetched in place.
   const staleKeys = useRef(new Set<string>())
   // Row models keep their identity between renders so the memoised rows can be skipped.
   const rowModels = useRef(new WeakMap<Issue, { data: BootstrapData; items: Issue[]; row: ReturnType<typeof issueToExplorerRow> }>())
   const openTargets = useRef(new Map<string, { issue: Issue; group: string }>())
-  const openRef = useRef(onOpenIssueRecord); openRef.current = onOpenIssueRecord
   const openRow = useCallback((row: { id: string }) => {
     const target = openTargets.current.get(row.id)
     if (target) openRef.current(target.issue, cache.sequence(target.group, target.issue.id))
@@ -94,13 +105,24 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
     return row
   }
   const renderedSignature = useRef(signature)
+  // A new query renders once with the old groups before its load starts: that is loading too.
+  const [seenSignature, setSeenSignature] = useState(signature)
+  if (seenSignature !== signature) {
+    setSeenSignature(signature)
+    setLoading(true)
+  }
+  // A load that starts or restarts clears the previous failure.
+  const [seenRequest, setSeenRequest] = useState({ signature, retry, cache })
+  if (seenRequest.signature !== signature || seenRequest.retry !== retry || seenRequest.cache !== cache) {
+    setSeenRequest({ signature, retry, cache })
+    setError(undefined)
+  }
   useEffect(() => {
     const request = { signature, abort: new AbortController(), pending: new Set<string>(), ready: false }
     active.current = request
     const changed = renderedSignature.current !== signature
     renderedSignature.current = signature
     if (changed || !cache.retainedEntities) { recordsRef.current?.([]); updateGroups([]); setLoading(true) }
-    setError(undefined)
     const initialQuery = queryRef.current
     // A refresh of a list that is already showing rows keeps them (and the scroll position): see `revalidate`.
     const refreshing = !changed && cache.retainedEntities > 0 && groupsRef.current.length > 0
@@ -175,7 +197,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
         return
       }
       // A forced (permission) invalidation must not keep showing rows the viewer may have lost.
-      if (detail.force) { cache.clear(); lastContent.current = null; recordsRef.current?.([]); updateGroups([]); setLoading(true) }
+      if (detail.force) { cache.clear(); setLastContentEpoch(value => value + 1); recordsRef.current?.([]); updateGroups([]); setLoading(true) }
       if (detail.force) { clearTimeout(refreshTimer.current); setRetry(value => value + 1) }
       else if (!detail.issue || cache.contains(detail.issue.id) || issueMayMatchQuery(detail.issue, queryRef.current, dataRef.current)) requestRefresh()
     }
@@ -199,6 +221,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
     // Bootstrap's bounded detail cache can evict unrelated entities. Its absence
     // alone is not a deletion; explicit deletion events invalidate the query.
     if (refresh) requestRefresh()
+    // oxlint-disable-next-line react/set-state-in-effect -- the effect patches the imperative page cache (an external store) from the new bootstrap rows; the revision bump is its change notification and cannot be derived during render
     else if (updated) { recordsRef.current?.(cache.records()); setRevision(value => value + 1) }
   }, [cache, data.issues, requestRefresh])
   const load = useCallback((group: string, pageIndex: number) => {
@@ -250,10 +273,11 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
   const counts = groups.map(group => collapsedGroupIds?.has(group.value) ? 0 : group.loaded + (group.hasMore ? 1 : 0))
   // The identifier column fits the longest identifier loaded for this query (like the full list), and only grows
   // while pages load so rows do not shift as the list scrolls.
-  const identifierLength = useRef({ signature: '', length: 6 })
-  if (identifierLength.current.signature !== signature) identifierLength.current = { signature, length: 6 }
-  for (const issue of cache.records()) identifierLength.current.length = Math.max(identifierLength.current.length, [...issue.identifier].length)
-  const listStyle = { '--issue-identifier-width': `${identifierLength.current.length}ch` } as CSSProperties
+  const [identifierWidth, setIdentifierWidth] = useState({ signature, length: 6 })
+  let identifierLength = identifierWidth.signature === signature ? identifierWidth.length : 6
+  for (const issue of cache.records()) identifierLength = Math.max(identifierLength, [...issue.identifier].length)
+  if (identifierWidth.signature !== signature || identifierWidth.length !== identifierLength) setIdentifierWidth({ signature, length: identifierLength })
+  const listStyle = { '--issue-identifier-width': `${identifierLength}ch` } as CSSProperties
   const offsets: number[] = []; let offset = 0
   for (const count of counts) { offsets.push(offset); offset += count }
   const renderList = (): ReactNode => {
@@ -306,16 +330,17 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
   }
   // While a query loads, the previous result stays (inert) and fades out after 500ms;
   // a first load is blank. Either way the loader caret shows from 1s, never text.
-  // A new query renders once with the old groups before its load starts: that is loading too.
-  const pending = loading || renderedSignature.current !== signature
-  const content = pending ? lastContent.current : renderList()
-  return <LoadingContainer loading={pending} label="Loading issues"><LastContent content={content} loading={pending} store={lastContent}/></LoadingContainer>
+  const pending = loading
+  return <LoadingContainer loading={pending} label="Loading issues"><LastContent content={pending ? null : renderList()} loading={pending} epoch={lastContentEpoch}/></LoadingContainer>
 }
 
-/** Remembers the last loaded list so a reload can keep showing it. */
-function LastContent({ content, loading, store }: { content: ReactNode; loading: boolean; store: { current: ReactNode } }) {
-  useLayoutEffect(() => { if (!loading) store.current = content }, [content, loading, store])
-  return content
+/** Remembers the last loaded list so a reload can keep showing it; a new `epoch` forgets it. */
+function LastContent({ content, loading, epoch }: { content: ReactNode; loading: boolean; epoch: number }) {
+  const [remembered, setRemembered] = useState<{ node: ReactNode; epoch: number }>({ node: loading ? null : content, epoch })
+  let node = remembered.epoch === epoch ? remembered.node : null
+  if (!loading && node !== content) node = content
+  if (remembered.node !== node || remembered.epoch !== epoch) setRemembered({ node, epoch })
+  return loading ? node : content
 }
 
 function VisibleIssueColumn({ label, children }: { label: string; children: ReactNode }) {
@@ -352,14 +377,16 @@ function issueQueryChanged(before: Issue, after: Issue, query: IssueQueryInput) 
 
 /** Starts a stale page's re-fetch once one of its rows is rendered, and again whenever a refresh lands (`revision`). */
 function StalePageProbe({ stale, revision, run }: { stale: boolean; revision: number; run: () => void }) {
-  const runRef = useRef(run); runRef.current = run
+  const runRef = useRef(run)
+  useInsertionEffect(() => { runRef.current = run })
   useEffect(() => { if (stale) runRef.current() }, [stale, revision])
   return null
 }
 
 /** A not-yet-fetched page: fetches it and shows the list-footer caret meanwhile. */
 function IssuePagePlaceholder({ load }: { load: () => void }) {
-  const loadRef = useRef(load); loadRef.current = load
+  const loadRef = useRef(load)
+  useInsertionEffect(() => { loadRef.current = load })
   useEffect(() => { loadRef.current() }, [load])
   return <LoadingListFooter label="Loading issues"/>
 }

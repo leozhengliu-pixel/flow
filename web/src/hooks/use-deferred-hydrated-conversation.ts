@@ -14,11 +14,12 @@ export function useDeferredHydratedConversation<T extends { id: string }>(
 ): DeferredHydratableConversation<T> | null | undefined {
   const [hydrated, setHydrated] = useState(conversation)
 
+  const canHydrate = Boolean(conversation?.persisted && conversation.hydrate)
+  // Without a deferred hydrate the conversation is its own hydrated copy.
+  if (!canHydrate && hydrated !== conversation) setHydrated(conversation)
+
   useEffect(() => {
-    if (!conversation?.persisted || !conversation.hydrate) {
-      setHydrated(conversation)
-      return
-    }
+    if (!conversation?.persisted || !conversation.hydrate) return
     let cancelled = false
     conversation
       .hydrate()

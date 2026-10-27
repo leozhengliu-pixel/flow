@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLatestRef } from "@/hooks/use-latest-ref";
 import { AlertTriangle, ArrowDown, ArrowUp, Ban, CheckCircle2, CircleAlert, CircleStop, Info, Link2, Paperclip, Pencil, Search, Settings2, SkipForward, ThumbsDown, ThumbsUp, Unplug, XCircle } from "lucide-react";
 import {
   DropdownMenu,
@@ -167,24 +168,26 @@ export function LoopRunPage({
     }
   }, [loopId]);
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- loadRuns sets state only after its request resolves, never synchronously
     void loadRuns();
   }, [loadRuns]);
   const retryRuns = useCallback(() => void loadRuns(), [loadRuns]);
   useBackoffRetry(listFailures, retryRuns);
 
   const activeId = runId ?? runs?.[0]?.id;
-  const runsRef = useRef(runs);
-  runsRef.current = runs;
+  const runsRef = useLatestRef(runs);
   // Consecutive failed loads of the selected run; a retry re-runs the load below after a backoff.
   const [selectFailures, setSelectFailures] = useState(0);
   const [selectAttempt, setSelectAttempt] = useState(0);
   const retrySelected = useCallback(() => setSelectAttempt((count) => count + 1), []);
   useBackoffRetry(selectFailures, retrySelected);
+  const [seenActiveId, setSeenActiveId] = useState(activeId);
+  if (seenActiveId !== activeId) {
+    setSeenActiveId(activeId);
+    if (!activeId) setSelected(undefined);
+  }
   useEffect(() => {
-    if (!activeId) {
-      setSelected(undefined);
-      return;
-    }
+    if (!activeId) return;
     let active = true;
     const fromList = runsRef.current?.find((item) => item.id === activeId);
     if (fromList) setSelected((current) => (current?.id === activeId ? current : fromList));
@@ -199,13 +202,12 @@ export function LoopRunPage({
       active = false;
     };
     // Runs refresh on their own poll; only re-fetch when the selection changes (or a failed load is retried).
-  }, [activeId, loopId, selectAttempt]);
+  }, [activeId, loopId, runsRef, selectAttempt]);
 
   // Poll the selected run and the list while anything is still running (a run, or the agent answering a reply).
   const replying = Boolean(selected?.replies?.some((reply) => reply.status === "running"));
   const running = selected?.status === "running" || replying || Boolean(runs?.some((item) => item.status === "running"));
-  const listFailuresRef = useRef(listFailures);
-  listFailuresRef.current = listFailures;
+  const listFailuresRef = useLatestRef(listFailures);
   const refreshSelected = useCallback(() => {
     if (!activeId) return;
     void getLoopRun(loopId, activeId)
@@ -224,7 +226,7 @@ export function LoopRunPage({
       void loadRuns();
     }, POLL_MS);
     return () => window.clearInterval(timer);
-  }, [loadRuns, refreshSelected, running]);
+  }, [listFailuresRef, loadRuns, refreshSelected, running]);
   // Realtime run signals refresh at once instead of waiting for the next poll.
   useEffect(() => {
     const onActivity = (event: Event) => {
@@ -235,7 +237,7 @@ export function LoopRunPage({
     };
     window.addEventListener(LOOP_RUN_ACTIVITY_EVENT, onActivity);
     return () => window.removeEventListener(LOOP_RUN_ACTIVITY_EVENT, onActivity);
-  }, [activeId, loadRuns, loopId, refreshSelected]);
+  }, [activeId, loadRuns, loopId, refreshSelected, runsRef]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();

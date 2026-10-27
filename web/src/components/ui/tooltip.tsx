@@ -83,7 +83,7 @@ export function FlowTooltip({ label, shortcut, children, side = 'bottom', align 
   const [open, setOpen] = React.useState(false)
   const [inferredTone, setInferredTone] = React.useState<TooltipTone | undefined>()
   const triggerRef = React.useRef<HTMLButtonElement>(null)
-  React.useEffect(() => { if (disabled) setOpen(false) }, [disabled])
+  if (disabled && open) setOpen(false)
   if (!label && !shortcut) return children
   // An explicit prop (even `false`) overrides what the surroundings suggest.
   const tone: TooltipTone | undefined = elevated ? 'elevated' : raised ? 'raised' : elevated === false || raised === false ? undefined : inferredTone

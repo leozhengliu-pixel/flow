@@ -15,7 +15,9 @@ export function PagedActivityTimeline({ issueId, cursors, ...props }: ComponentP
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const active = useRef<AbortController | undefined>(undefined)
-  useEffect(() => { setPage(undefined); setRequest(undefined); setPrevious([]); setLoading(false); return () => active.current?.abort() }, [issueId])
+  const [seenIssueId, setSeenIssueId] = useState(issueId)
+  if (seenIssueId !== issueId) { setSeenIssueId(issueId); setPage(undefined); setRequest(undefined); setPrevious([]); setLoading(false) }
+  useEffect(() => () => active.current?.abort(), [issueId])
   const next = page ?? cursors
   const changed = () => window.dispatchEvent(new CustomEvent('flow-issue-history-changed', { detail: issueId }))
   const edit: typeof props.onEdit = async (id, body, bodyData) => {

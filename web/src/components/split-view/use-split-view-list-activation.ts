@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useNavigationType } from 'react-router-dom'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 
 export interface SplitViewListActivationOptions {
   isSplitView: boolean
@@ -26,16 +27,11 @@ export function useSplitViewListActivation({
 }: SplitViewListActivationOptions) {
   const navigationType = useNavigationType()
   const isHistoryWrite = navigationType === 'PUSH' || navigationType === 'REPLACE'
-  const canActivateRef = useRef(canActivate)
-  const onActivateRef = useRef(onActivate)
-  const onDeactivateRef = useRef(onDeactivate)
+  const canActivateRef = useLatestRef(canActivate)
+  const onActivateRef = useLatestRef(onActivate)
+  const onDeactivateRef = useLatestRef(onDeactivate)
   const activeKeyRef = useRef<string | null>(null)
-  const frozenRef = useRef(isActiveStateFrozen)
-
-  canActivateRef.current = canActivate
-  onActivateRef.current = onActivate
-  onDeactivateRef.current = onDeactivate
-  frozenRef.current = isActiveStateFrozen
+  const frozenRef = useLatestRef(isActiveStateFrozen)
 
   useLayoutEffect(() => {
     if (!isSplitView) {
@@ -58,17 +54,18 @@ export function useSplitViewListActivation({
       activeKeyRef.current = null
       onDeactivateRef.current?.()
     }
-  }, [currentItemKey, isHistoryWrite, isSplitView])
+  }, [currentItemKey, isHistoryWrite, isSplitView, canActivateRef, onActivateRef, onDeactivateRef])
 
   useEffect(() => {
     if (!isSplitView) return
     if (activeKeyRef.current == null && !isActiveStateFrozen && !frozenRef.current) {
       onDeactivateRef.current?.()
     }
-  }, [isActiveStateFrozen, isSplitView])
+  }, [isActiveStateFrozen, isSplitView, frozenRef, onDeactivateRef])
 
   return {
-    activeItemKey: activeKeyRef.current,
+    /** The key the list selection is currently activated for; read it from handlers or effects, not while rendering. */
+    getActiveItemKey: () => activeKeyRef.current,
     isHistoryWrite,
   }
 }

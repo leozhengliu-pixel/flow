@@ -1,5 +1,6 @@
 import type { Editor } from '@tiptap/react'
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type RefObject } from 'react'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { headingSlugs } from '@/components/issue/editor/heading-links'
 import { useI18n } from '@/i18n/i18n'
 import { collectHeadings, headingElement, type OutlineHeading } from './outline-headings'
@@ -29,11 +30,17 @@ export function OutlineMinimap({ editor, rootRef }: { editor: Editor | null; roo
   const [headings, setHeadings] = useState<OutlineHeading[]>(() => collectHeadings(editor))
   const [activeSlug, setActiveSlug] = useState<string | null>(null)
   const [placement, setPlacement] = useState<{ left: number; top: number; maxHeight: number } | null>(null)
-  const headingsRef = useRef(headings)
-  headingsRef.current = headings
+  const headingsRef = useLatestRef(headings)
+
+  // Losing the editor (or getting a destroyed one) clears the outline.
+  const [seenEditor, setSeenEditor] = useState(editor)
+  if (seenEditor !== editor) {
+    setSeenEditor(editor)
+    if (!editor || editor.isDestroyed) setHeadings(current => current.length ? [] : current)
+  }
 
   useEffect(() => {
-    if (!editor || editor.isDestroyed) { setHeadings(current => current.length ? [] : current); return }
+    if (!editor || editor.isDestroyed) return
     const run = () => {
       if (editor.isDestroyed) return
       const next = collectHeadings(editor)
@@ -66,7 +73,7 @@ export function OutlineMinimap({ editor, rootRef }: { editor: Editor | null; roo
       else break
     }
     setActiveSlug(active)
-  }, [editor, rootRef])
+  }, [editor, headingsRef, rootRef])
 
   useEffect(() => {
     if (!editor || !headings.length) return

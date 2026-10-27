@@ -46,8 +46,16 @@ export function ViewIconPicker({ align = 'start', ariaLabel, color = DEFAULT_VIE
     { label: 'Smileys & People', values: PEOPLE_EMOJIS.filter(value => matchesEmoji(value, normalizedQuery)) },
   ].filter(section => section.values.length), [normalizedQuery])
 
-  useEffect(() => { if (!open) { setQuery(''); setTab('icons') } }, [open])
-  useEffect(() => setDraftColor(normalizeColor(color)), [color])
+  const [seenOpen, setSeenOpen] = useState(open)
+  if (seenOpen !== open) {
+    setSeenOpen(open)
+    if (!open) { setQuery(''); setTab('icons') }
+  }
+  const [seenColor, setSeenColor] = useState(color)
+  if (seenColor !== color) {
+    setSeenColor(color)
+    setDraftColor(normalizeColor(color))
+  }
 
   const chooseColor = (nextColor: string) => {
     const normalized = normalizeColor(nextColor)

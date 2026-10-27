@@ -51,11 +51,11 @@ function ValueList({ onSelect, option, selectedIds }: { onSelect: (option: Proje
   const { t } = useI18n()
   const children = option.children ?? []
   const system = (child: MyIssuesFilterOption) => child.id.endsWith(':') || child.label === 'Current user'
-  const command = usePropertyCommand({ open: true, autoFocus: false, closeOnSelect: false, options: children, selectedIds: [...(selectedIds ?? [])], onOpenChange: () => {}, onSelect: child => onSelect({ id: child.id, label: child.label, color: child.color, filterLabel: option.label }) })
+  const { inputRef, ...command } = usePropertyCommand({ open: true, autoFocus: false, closeOnSelect: false, options: children, selectedIds: [...(selectedIds ?? [])], onOpenChange: () => {}, onSelect: child => onSelect({ id: child.id, label: child.label, color: child.color, filterLabel: option.label }) })
   // The reference app hides the search on Customer status; the other blocks filter as you type.
   const searchable = option.kind !== 'customerStatusCategory'
   return <>
-    {searchable && <div className="lp-projects-filter__search"><input ref={command.inputRef} aria-label={t('Filter…')} onChange={event => command.onQueryChange(event.target.value)} onKeyDown={command.onKeyDown} placeholder={t('Filter…')} value={command.query}/></div>}
+    {searchable && <div className="lp-projects-filter__search"><input ref={inputRef}aria-label={t('Filter…')} onChange={event => command.onQueryChange(event.target.value)} onKeyDown={command.onKeyDown} placeholder={t('Filter…')} value={command.query}/></div>}
     <div className="lp-projects-filter__values" role="listbox" aria-multiselectable="true" onKeyDown={command.onKeyDown}>
       {command.filteredOptions.map(child => {
         const selected = selectedIds?.has(child.id) ?? false

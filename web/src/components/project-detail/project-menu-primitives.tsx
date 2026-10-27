@@ -1,5 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { useRef, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { useI18n } from '@/i18n/i18n'
@@ -12,16 +12,16 @@ export function ProjectMenuItem({ label, icon, shortcut, onSelect }: { label: st
 
 export function ProjectSubmenu({ label, icon, shortcut, children, searchable = false, alignOffset, className = '' }: { label: string; icon: ReactNode; shortcut?: string; children: ReactNode | ((close: () => void) => ReactNode); searchable?: boolean; alignOffset?: number; className?: string }) {
   const [open, setOpen] = useState(false)
-  const trigger = useRef<HTMLDivElement>(null)
+  const [trigger, setTrigger] = useState<HTMLDivElement | null>(null)
   const { t } = useI18n()
   return <DropdownMenu.Sub open={open} onOpenChange={setOpen}>
-    <DropdownMenu.SubTrigger ref={trigger}><span className="project-menu-icon">{label === 'Dependencies' ? <ProjectDependencyIcon/> : label === 'Initiatives' ? <ViewGlyph icon="Initiative" color="currentColor"/> : <IssueActionGlyph label={label === 'Blocked by' || label === 'Blocking' ? `${label}…` : label} fallback={icon}/>}</span><span className="project-menu-label">{t(label)}</span>{shortcut && <ProjectMenuShortcut value={shortcut}/>}<span className="project-menu-chevron" aria-hidden="true">▶</span></DropdownMenu.SubTrigger>
+    <DropdownMenu.SubTrigger ref={setTrigger}><span className="project-menu-icon">{label === 'Dependencies' ? <ProjectDependencyIcon/> : label === 'Initiatives' ? <ViewGlyph icon="Initiative" color="currentColor"/> : <IssueActionGlyph label={label === 'Blocked by' || label === 'Blocking' ? `${label}…` : label} fallback={icon}/>}</span><span className="project-menu-label">{t(label)}</span>{shortcut && <ProjectMenuShortcut value={shortcut}/>}<span className="project-menu-chevron" aria-hidden="true">▶</span></DropdownMenu.SubTrigger>
     <DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={`project-action-menu project-action-submenu ${className}`} data-menu={label} aria-label={t(label)} sideOffset={-2} alignOffset={alignOffset ?? (searchable ? -43 : -6.5)} collisionPadding={16} onFocusOutside={event => {
       // Radix briefly focuses the parent menu when the pointer crosses the gap.
       const target = event.target
-      if (target instanceof HTMLElement && target.matches('[role=menu]') && target.contains(trigger.current)) event.preventDefault()
+      if (target instanceof HTMLElement && target.matches('[role=menu]') && target.contains(trigger)) event.preventDefault()
     }} onKeyDown={event => { if ((event.target as HTMLElement).closest('input,[cmdk-root]') && !['ArrowLeft','Escape'].includes(event.key)) event.stopPropagation() }}>
-      {typeof children === 'function' ? children(() => { setOpen(false); trigger.current?.focus() }) : children}
+      {typeof children === 'function' ? children(() => { setOpen(false); trigger?.focus() }) : children}
     </DropdownMenu.SubContent></DropdownMenu.Portal>
   </DropdownMenu.Sub>
 }

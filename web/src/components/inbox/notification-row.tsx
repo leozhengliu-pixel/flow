@@ -1,6 +1,7 @@
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
 import { GitPullRequest } from 'lucide-react'
+import { useCurrentTime } from '@/hooks/use-current-time'
 import { useCallback, useRef, useState, type CSSProperties, type FocusEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 
 import { StatusIcon } from '@/components/issue/issue-icons'
@@ -476,6 +477,7 @@ function moveSnoozeFocus(event: KeyboardEvent<HTMLDivElement>) {
 export function InboxCustomSnoozeForm({ disabled = false, onCancel, onConfirm }: { disabled?: boolean; onCancel: () => void; onConfirm: (preset: Extract<InboxSnoozePreset, { kind: 'custom' }>) => void }) {
   const [value, setValue] = useState(() => localDateTimeValue(defaultCustomSnoozeDate()))
   const [invalid, setInvalid] = useState(false)
+  const now = useCurrentTime(10_000)
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -490,7 +492,7 @@ export function InboxCustomSnoozeForm({ disabled = false, onCancel, onConfirm }:
   return <form className="flow-inbox-snooze-custom" aria-label="Custom snooze date and time" onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); onCancel() } }} onSubmit={submit}>
     <label className="flow-inbox-snooze-custom__field">
       <span>Date and time</span>
-      <DateTimeControl label="Snooze until" min={localDateTimeValue(new Date())} mode="datetime" value={value} onChange={next => { setValue(next); setInvalid(false) }}/>
+      <DateTimeControl label="Snooze until" min={localDateTimeValue(now)} mode="datetime" value={value} onChange={next => { setValue(next); setInvalid(false) }}/>
     </label>
     {invalid ? <p className="flow-inbox-snooze-custom__error" role="alert">Choose a valid date and time.</p> : null}
     <div className="flow-inbox-snooze-custom__actions">

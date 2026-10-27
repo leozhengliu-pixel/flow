@@ -104,7 +104,11 @@ function ProjectLabelGroup({ entry, id, active, open, focusOnOpen, onOpenChange,
   const canCreate = Boolean(onCreate && query.trim().length >= 2 && !entry.children?.some(option => option.label.toLocaleLowerCase() === query.trim().toLocaleLowerCase()))
   const cancel = () => { clearTimeout(timer.current); timer.current = undefined }
   useEffect(() => cancel, [])
-  useEffect(() => { if (open) { setQuery(''); setActiveIndex(0) } }, [open])
+  const [seenOpen, setSeenOpen] = useState<boolean>()
+  if (seenOpen !== open) {
+    setSeenOpen(open)
+    if (open) { setQuery(''); setActiveIndex(0) }
+  }
   useEffect(() => { if (open && focusOnOpen) inputRef.current?.focus() }, [open, focusOnOpen])
   const onKeyDown = (event: KeyboardEvent) => {
     event.stopPropagation()

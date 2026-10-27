@@ -1,4 +1,4 @@
-import { memo, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { memo, useContext, useEffect, useInsertionEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { Virtuoso, type Components } from 'react-virtuoso'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -298,7 +298,7 @@ export function MyIssuesGroupHeader({ collapsed, createIssueLabel, group, estima
 /** The reference app's X: toggle selection of the row under the pointer (or the focused row); Shift+X extends a range. */
 function useSelectHoveredRowWithX(entries: MyIssuesListEntry[], selectedIds: ReadonlySet<string>, onSelect: MyIssuesListProps['onSelectIssue']) {
   const latest = useRef({ entries, selectedIds, onSelect })
-  latest.current = { entries, selectedIds, onSelect }
+  useInsertionEffect(() => { latest.current = { entries, selectedIds, onSelect } })
   useEffect(() => {
     const keydown = (event: globalThis.KeyboardEvent) => {
       if (event.key.toLowerCase() !== 'x' || event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented) return
@@ -486,7 +486,7 @@ function ContextPropertySub({ label, multi = false, onSelect, options, selectedI
   // Assignee: number keys on "No assignee" (0) and the rows after it, no "Agent" pill, then "New user / Invite and assign…".
   const items = assignee ? options.map((option, index) => ({ ...option, shortcut: assigneeShortcut(index) })) : options
   const choose = (id: string) => id === ASSIGNEE_INVITE_ID ? openMemberInvite() : onSelect(id)
-  const command = usePropertyCommand({ open: open && people, options: items, personOptions: people, selectedIds, onSelect: option => choose(option.id), onOpenChange: setOpen })
+  const { inputRef: commandInputRef, ...command } = usePropertyCommand({ open: open && people, options: items, personOptions: people, selectedIds, onSelect: option => choose(option.id), onOpenChange: setOpen })
   const selected = new Set(selectedIds)
   const sections = multi && label === 'Labels' ? groupContextOptions(items) : [{ id: 'all', label: undefined as string | undefined, options: people ? command.filteredOptions : items }, ...(assignee && !command.query && viewerCanInvite() ? [{ id: 'invite', label: 'New user', options: [ASSIGNEE_INVITE_OPTION] }] : [])]
   const row = (option: MyIssuesContextOption) => {
@@ -498,7 +498,7 @@ function ContextPropertySub({ label, multi = false, onSelect, options, selectedI
   }
   return <ContextMenu.Sub open={open} onOpenChange={setOpen}><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<span className={styles.menuChevron} aria-hidden="true">▶</span></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}
     onKeyDown={assignee ? event => { if (!event.metaKey && !event.ctrlKey && !event.altKey && /^\d$/.test(event.key)) { const match = items.find(option => option.shortcut === event.key); if (match) { event.preventDefault(); setOpen(false); void choose(match.id) } } } : undefined}>
-    {people && <div className="property-command-search"><input ref={command.inputRef} aria-label={assignee ? 'Assign to…' : 'Search people'} placeholder={assignee ? 'Assign to…' : 'Search people…'} value={command.query} onChange={event => command.onQueryChange(event.target.value)} onKeyDown={event => { event.stopPropagation(); command.onKeyDown(event) }}/></div>}
+    {people && <div className="property-command-search"><input ref={commandInputRef} aria-label={assignee ? 'Assign to…' : 'Search people'} placeholder={assignee ? 'Assign to…' : 'Search people…'} value={command.query} onChange={event => command.onQueryChange(event.target.value)} onKeyDown={event => { event.stopPropagation(); command.onKeyDown(event) }}/></div>}
     {sections.map(section => <ContextMenu.Group key={section.id}>{section.label && <ContextMenu.Label className={styles.groupLabel}>{section.label}</ContextMenu.Label>}{section.options.map(row)}</ContextMenu.Group>)}
   </ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
 }

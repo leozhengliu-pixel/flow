@@ -1,5 +1,6 @@
 import { animate, useMotionValue, useMotionValueEvent, useReducedMotion } from 'motion/react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { ClientStorage } from '@/lib/client-storage'
 import { motionPresets } from '@/lib/motion-presets'
 
@@ -37,37 +38,46 @@ export function useSidebarLayout(open: boolean, onOpenChange?: (open: boolean) =
   const manualOpen = useRef(false)
   const suppressTriggerHover = useRef(false)
   const returnFocus = useRef<HTMLElement | null>(null)
-  const lastOffset = useRef(0)
+  const [lastOffset, setLastOffset] = useState(0)
   const resize = useRef<{ x: number; width: number; originalWidth: number; moved: boolean; hidden: boolean } | null>(null)
   const skipClick = useRef(false)
-  const onOpenChangeRef = useRef(onOpenChange)
-  onOpenChangeRef.current = onOpenChange
+  const onOpenChangeRef = useLatestRef(onOpenChange)
   const reduced = useReducedMotion()
   const floating = compact || collapsed
   const visible = !floating || floatingOpen
   const surfaceWidth = compact ? Math.min(330, window.innerWidth) : width
-  const offset = floating && !compact ? floatingOpen ? 41.5 : lastOffset.current : 0
-  lastOffset.current = offset
+  // A floating, closed sidebar keeps the offset it last had while open.
+  const offset = floating && !compact ? floatingOpen ? 41.5 : lastOffset : 0
+  if (offset !== lastOffset) setLastOffset(offset)
+  // The floating panel cannot stay open once the sidebar is docked again.
+  if (!floating && floatingOpen) setFloatingOpen(false)
   const targetWidth = compact ? 0 : collapsed ? 8 : width
   const railWidth = useMotionValue(targetWidth)
-  const current = useRef({ compact, collapsed, floating, floatingOpen, width })
-  current.current = { compact, collapsed, floating, floatingOpen, width }
+  const current = useLatestRef({ compact, collapsed, floating, floatingOpen, width })
 
   const clearHover = useCallback(() => { clearTimeout(hoverTimer.current); hoverTimer.current = undefined }, [])
-  const close = useCallback(() => {
+  /** Everything `close` does except hiding the floating panel (state), for when it is already hidden. */
+  const release = useCallback(() => {
     clearHover()
     if (manualOpen.current && surfaceRef.current?.contains(document.activeElement)) returnFocus.current?.focus({ preventScroll: true })
     manualOpen.current = false
-    setFloatingOpen(false)
     onOpenChangeRef.current?.(false)
-  }, [clearHover])
-  const reveal = useCallback((manual = false) => {
-    if (!current.current.floating) return
+  }, [clearHover, onOpenChangeRef])
+  const close = useCallback(() => {
+    release()
+    setFloatingOpen(false)
+  }, [release])
+  /** The bookkeeping of showing the floating panel (everything except the open state itself). */
+  const markRevealed = useCallback((manual: boolean) => {
     clearHover()
     manualOpen.current = manual
     if (manual) returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    setFloatingOpen(true)
   }, [clearHover])
+  const reveal = useCallback((manual = false) => {
+    if (!current.current.floating) return
+    markRevealed(manual)
+    setFloatingOpen(true)
+  }, [markRevealed, current])
   const toggle = useCallback(() => {
     if (current.current.compact) {
       if (current.current.floatingOpen) close()
@@ -76,12 +86,12 @@ export function useSidebarLayout(open: boolean, onOpenChange?: (open: boolean) =
       close()
       setCollapsed(value => !value)
     }
-  }, [close, reveal])
+  }, [close, reveal, current])
   const onEdgeEnter = useCallback(() => {
     if (current.current.compact || !current.current.collapsed || current.current.floatingOpen || resize.current) return
     clearHover()
     hoverTimer.current = setTimeout(() => reveal(), 250)
-  }, [clearHover, reveal])
+  }, [clearHover, reveal, current])
 
   useEffect(() => {
     const media = window.matchMedia(compactQuery)
@@ -89,8 +99,14 @@ export function useSidebarLayout(open: boolean, onOpenChange?: (open: boolean) =
     media.addEventListener('change', change)
     return () => media.removeEventListener('change', change)
   }, [close])
-  useEffect(() => { if (open) reveal(true) }, [open, reveal])
-  useEffect(() => { if (!floating) close() }, [floating, close])
+  // Opening from outside reveals the floating panel: the open state is set while rendering, its bookkeeping after commit.
+  const [seenOpen, setSeenOpen] = useState(false)
+  if (open !== seenOpen) {
+    setSeenOpen(open)
+    if (open && floating) setFloatingOpen(true)
+  }
+  useEffect(() => { if (open && current.current.floating) markRevealed(true) }, [open, markRevealed, current])
+  useEffect(() => { if (!floating) release() }, [floating, release])
   useEffect(() => {
     if (floatingOpen && manualOpen.current) surfaceRef.current?.querySelector<HTMLElement>('button,a[href]')?.focus({ preventScroll: true })
   }, [floatingOpen])
@@ -173,7 +189,7 @@ export function useSidebarLayout(open: boolean, onOpenChange?: (open: boolean) =
       window.removeEventListener('keydown', keyDown)
       window.removeEventListener('flow:open-sidebar', openSidebar)
     }
-  }, [close, reveal, toggle])
+  }, [close, reveal, toggle, current])
 
   useEffect(() => {
     if (!resizing) return
@@ -202,7 +218,7 @@ export function useSidebarLayout(open: boolean, onOpenChange?: (open: boolean) =
     window.addEventListener('pointerup', finish)
     window.addEventListener('pointercancel', finish)
     return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', finish); window.removeEventListener('pointercancel', finish) }
-  }, [resizing, close])
+  }, [resizing, close, current])
   const onResizeStart = (event: ReactPointerEvent) => {
     if (event.button !== 0 || compact) return
     event.preventDefault()

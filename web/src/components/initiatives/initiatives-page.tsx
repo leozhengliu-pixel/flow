@@ -170,9 +170,12 @@ export function InitiativesPage(props: Props) {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
-  useEffect(() => {
+  // Opening the page with `createOnMount` starts the create row.
+  const [createRequested, setCreateRequested] = useState(false)
+  if (Boolean(createOnMount) !== createRequested) {
+    setCreateRequested(Boolean(createOnMount))
     if (createOnMount) setCreating(true)
-  }, [createOnMount])
+  }
   useEffect(() => { localStorage.setItem('flow:initiatives:properties-version', '2'); localStorage.setItem('flow:initiatives:properties', JSON.stringify([...properties])) }, [properties])
   useEffect(() => localStorage.setItem('flow:initiatives:sort', sort), [sort])
   useEffect(() => localStorage.setItem('flow:initiatives:grouping', grouping), [grouping])

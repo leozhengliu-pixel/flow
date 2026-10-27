@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useInsertionEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { IssueRowActionsProvider } from '@/components/my-issues/issue-row-actions'
 import { useActionGroupsForSelection } from '@/hooks/use-action-groups-for-selection'
 import { clearSelectedModels, setSelectedModels } from '@/lib/selected-models-store'
@@ -162,7 +162,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const bandActive = Boolean(savedView && !viewEditor)
   const effectiveFilters = useMemo(() => bandActive && extraFilters.length ? [...filters, ...extraFilters] : filters, [bandActive, extraFilters, filters])
   const visibleIssues = useMemo(() => data.issueCollectionPaged ? pagedIssues : applyExplorerFilters(scopedIssues, effectiveFilters, data), [data, effectiveFilters, scopedIssues, pagedIssues])
-  const explorerRows = useRef(createExplorerRowCache()).current
+  const [explorerRows] = useState(() => createExplorerRowCache())
   const baseRows = useMemo(() => explorerRows(visibleIssues, data).map((row, index) => rowOverrides.get(visibleIssues[index].id) ?? row), [data, explorerRows, rowOverrides, visibleIssues])
   const rows = drillRows ?? baseRows
   const insightRows = useMemo(() => insightsOpen ? applyExplorerFilters(insightIssues, effectiveFilters, data).map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)) : [], [data, effectiveFilters, insightIssues, insightsOpen, rowOverrides])
@@ -179,21 +179,27 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const pagedQuery = useMemo(() => buildPagedQuery(effectiveFilters), [buildPagedQuery, effectiveFilters])
   // "N issues hidden by filters": the saved view's own count without the temporary filters.
   const baseQuery = useMemo(() => bandActive && extraFilters.length && data.issueCollectionPaged ? buildPagedQuery(filters) : undefined, [bandActive, buildPagedQuery, data.issueCollectionPaged, extraFilters.length, filters])
+  if (!baseQuery && baseTotal !== undefined) setBaseTotal(undefined)
   useEffect(() => {
-    if (!baseQuery) { setBaseTotal(undefined); return }
+    if (!baseQuery) return
     const abort = new AbortController()
     void listIssueRecords({ ...baseQuery, groupBy: undefined, limit: 1, includeTotal: true }, abort.signal).then(page => setBaseTotal(page.total)).catch(() => undefined)
     return () => abort.abort()
   }, [baseQuery])
   const clientBaseCount = useMemo(() => bandActive && extraFilters.length && !data.issueCollectionPaged ? applyExplorerFilters(scopedIssues, filters, data).length : undefined, [bandActive, data, extraFilters.length, filters, scopedIssues])
   // Insights re-query only when the filters/scope change, not on every bootstrap/sync update of `data`.
-  const dataRef = useRef(data)
-  dataRef.current = data
-  const insightQuery = useMemo(() => ({
+  const buildInsightQuery = () => ({
     teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds,
     includeSubTeams: scope.kind === 'team',
-    filter: { and: [issueFiltersToQueryAst(effectiveFilters, { data: dataRef.current }), ...(view === 'backlog' ? [{ field: 'status', values: ['backlog'] }] : view === 'active' ? [{ field: 'status', values: ['unstarted', 'started'] }] : [])] },
-  }), [effectiveFilters, initialInsightFilters?.teamIds, scope, view])
+    filter: { and: [issueFiltersToQueryAst(effectiveFilters, { data }), ...(view === 'backlog' ? [{ field: 'status', values: ['backlog'] }] : view === 'active' ? [{ field: 'status', values: ['unstarted', 'started'] }] : [])] },
+  })
+  const insightTeamIds = initialInsightFilters?.teamIds
+  const [insightQuerySnapshot, setInsightQuerySnapshot] = useState(() => ({ effectiveFilters, teamIds: insightTeamIds, scope, view, query: buildInsightQuery() }))
+  let insightQuery = insightQuerySnapshot.query
+  if (insightQuerySnapshot.effectiveFilters !== effectiveFilters || insightQuerySnapshot.teamIds !== insightTeamIds || insightQuerySnapshot.scope !== scope || insightQuerySnapshot.view !== view) {
+    insightQuery = buildInsightQuery()
+    setInsightQuerySnapshot({ effectiveFilters, teamIds: insightTeamIds, scope, view, query: insightQuery })
+  }
   const selection = useMyIssuesSelection(groups)
   useActionGroupsForSelection(['Issues', 'Projects'])
   useEffect(() => {
@@ -219,11 +225,16 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   }, [savedView, workspaceKey])
 
   const split = display.layout === 'split'
-  useEffect(() => { if (!detailsOpen && !split) setPreviewIssueId(undefined) }, [detailsOpen, split])
+  // Closing the details panel outside the split layout drops the preview (compared during render, not in an effect).
+  const [seenPreviewGate, setSeenPreviewGate] = useState({ detailsOpen, split })
+  if (seenPreviewGate.detailsOpen !== detailsOpen || seenPreviewGate.split !== split) {
+    setSeenPreviewGate({ detailsOpen, split })
+    if (!detailsOpen && !split) setPreviewIssueId(undefined)
+  }
   // Split layout (the reference app `split`: narrow list beside the selected issue) always has a selection.
   const flatRowIds = useMemo(() => groups.flatMap(group => group.issues.map(issue => issue.id)), [groups])
   const splitRowIds = data.issueCollectionPaged ? pagedIssues.map(issue => issue.id) : flatRowIds
-  useEffect(() => { if (split && (!previewIssueId || !splitRowIds.includes(previewIssueId)) && splitRowIds[0]) setPreviewIssueId(splitRowIds[0]) }, [previewIssueId, split, splitRowIds])
+  if (split && (!previewIssueId || !splitRowIds.includes(previewIssueId)) && splitRowIds[0]) setPreviewIssueId(splitRowIds[0])
   useEffect(() => {
     if (!split) return
     const onKey = (event: KeyboardEvent) => {
@@ -241,19 +252,23 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   }, [previewIssueId, split, splitRowIds])
   const splitProperties = useMemo(() => new Set([...display.properties].filter(property => property === 'id' || property === 'status' || property === 'priority' || property === 'assignee')), [display.properties])
 
-  useEffect(() => {
+  const [seenEditing, setSeenEditing] = useState({ creatingView, editingView })
+  if (seenEditing.creatingView !== creatingView || seenEditing.editingView !== editingView) {
+    setSeenEditing({ creatingView, editingView })
     if (creatingView) setViewEditor('create')
     else if (editingView) setViewEditor('edit')
-  }, [creatingView, editingView])
+  }
 
-  useEffect(() => {
-    setRowOverrides(current => {
-      if (!current.size) return current
-      const next = new Map(current)
+  // Optimistic row overrides retire once the synced issue carries the same update.
+  const [seenIssues, setSeenIssues] = useState(data.issues)
+  if (seenIssues !== data.issues) {
+    setSeenIssues(data.issues)
+    if (rowOverrides.size) {
+      const next = new Map(rowOverrides)
       for (const issue of data.issues) if (next.get(issue.id)?.updatedAt === issue.updatedAt) next.delete(issue.id)
-      return next.size === current.size ? current : next
-    })
-  }, [data.issues])
+      if (next.size !== rowOverrides.size) setRowOverrides(next)
+    }
+  }
 
   // A saved view's filters belong to the view (changed only through edit / "Save to this view").
   const persistFilters = (next: MyIssuesAppliedFilter[]) => { setFilters(next); if (!sourceView && !creatingView) writeValue(`${preferencesKey}:filters`, JSON.stringify(next)) }
@@ -321,7 +336,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
       : { type: 'issueView' as const, teamKey: data.teams[0]?.key }
   // AI filter applies several filters in one go; chain them on the latest list instead of the render-time snapshot.
   const latestFilters = useRef({ base: filters, extra: extraFilters })
-  latestFilters.current = { base: filters, extra: extraFilters }
+  useInsertionEffect(() => { latestFilters.current = { base: filters, extra: extraFilters } })
   const filterTarget: 'base' | 'extra' = bandActive ? 'extra' : 'base'
   const setListFilters = (list: 'base' | 'extra', next: MyIssuesAppliedFilter[]) => {
     latestFilters.current = { ...latestFilters.current, [list]: next }
@@ -462,7 +477,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const clearAllFilters = () => setListFilters(filterTarget, [])
   // The reference app shortcuts: ⌥⇧F clear all filters, ⌥S save to this view, ⌥V create new view, ⌥F favorite view.
   const shortcutActions = useRef({ clearAllFilters, saveBandToView, createViewFromBand, openCreate: () => setViewEditor('create'), favorite: () => { if (savedView && onToggleSavedViewFavorite) void onToggleSavedViewFavorite(savedView) } })
-  shortcutActions.current = { clearAllFilters, saveBandToView, createViewFromBand, openCreate: () => setViewEditor('create'), favorite: () => { if (savedView && onToggleSavedViewFavorite) void onToggleSavedViewFavorite(savedView) } }
+  useInsertionEffect(() => { shortcutActions.current = { clearAllFilters, saveBandToView, createViewFromBand, openCreate: () => setViewEditor('create'), favorite: () => { if (savedView && onToggleSavedViewFavorite) void onToggleSavedViewFavorite(savedView) } } })
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!event.altKey || event.metaKey || event.ctrlKey || event.defaultPrevented) return

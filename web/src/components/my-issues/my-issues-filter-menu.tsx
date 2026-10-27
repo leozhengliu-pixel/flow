@@ -1,4 +1,4 @@
-import { cloneElement, Fragment, isValidElement, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactElement } from 'react'
+import { cloneElement, Fragment, isValidElement, useInsertionEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactElement } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Popover from '@radix-ui/react-popover'
 import { Command, defaultFilter } from 'cmdk'
@@ -227,11 +227,11 @@ function ValueMenu({ field, filters, label, layer, minSearchOptions, onClose, on
     const aliased = options.filter(option => option.aliases?.some(alias => stored.includes(alias))).map(option => option.id)
     return aliased.length ? [...new Set([...stored, ...aliased])] : stored
   }, [field, filters, options])
-  const command = usePropertyCommand({ personOptions: isPeopleProperty(field), closeOnSelect: false, onOpenChange: open => { if (!open) onClose() }, onSelect: option => onToggle(field, option), open: true, options, selectedIds })
+  const { inputRef: commandInputRef, ...command } = usePropertyCommand({ personOptions: isPeopleProperty(field), closeOnSelect: false, onOpenChange: open => { if (!open) onClose() }, onSelect: option => onToggle(field, option), open: true, options, selectedIds })
   const [aiPending, setAiPending] = useState(false)
   // Hosts build the next filter list from their current props, so apply AI results one render at a time.
   const toggleAnyRef = useRef(onToggleAny)
-  toggleAnyRef.current = onToggleAny
+  useInsertionEffect(() => { toggleAnyRef.current = onToggleAny })
   const runAIFilter = (query: string) => {
     setAiPending(true)
     void resolveAIFilter(query, optionsFor).then(async parsed => {
@@ -250,11 +250,11 @@ function ValueMenu({ field, filters, label, layer, minSearchOptions, onClose, on
   return <Popover.Portal>
     <Popover.Content data-flow-motion="floating" className={styles.valueMenu} data-field={field} data-level={1} style={{ zIndex: layer }} side="left" align="start" alignOffset={submenuAlignOffset(hideSearch)} sideOffset={SUBMENU_SIDE_OFFSET} collisionPadding={11} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { event.preventDefault(); onClose() }} onKeyDown={command.onKeyDown}>
       <div className={styles.valueSearch} data-hidden={hideSearch || undefined}>
-        <input ref={command.inputRef} role="searchbox" aria-label={`${t('Filter')} ${t(label)}`} placeholder={field==='content'?t('Filter by content…'):field==='ai'?t('AI filter'):t('Filter…')} value={command.query} onChange={event => command.onQueryChange(event.target.value)} onKeyDown={event=>{if(event.key!=='Enter'||!command.query.trim())return;if(field==='content'){event.preventDefault();event.stopPropagation();onToggle(field,{id:`query:${command.query.trim()}`,label:command.query.trim()})}else if(field==='ai'){event.preventDefault();event.stopPropagation();if(!aiPending)runAIFilter(command.query)}}}/>
+        <input ref={commandInputRef} role="searchbox" aria-label={`${t('Filter')} ${t(label)}`} placeholder={field==='content'?t('Filter by content…'):field==='ai'?t('AI filter'):t('Filter…')} value={command.query} onChange={event => command.onQueryChange(event.target.value)} onKeyDown={event=>{if(event.key!=='Enter'||!command.query.trim())return;if(field==='content'){event.preventDefault();event.stopPropagation();onToggle(field,{id:`query:${command.query.trim()}`,label:command.query.trim()})}else if(field==='ai'){event.preventDefault();event.stopPropagation();if(!aiPending)runAIFilter(command.query)}}}/>
       </div>
       <div className={styles.valueList} role="listbox" aria-label={label} aria-multiselectable="true">
         {aiPending ? <div className={styles.empty} role="status">{t('Building filters…')}</div> : !command.filteredOptions.length && <div className={styles.empty}>{t('No results')}</div>}
-        <FilterValueItems field={field} layer={layer + 1} options={command.filteredOptions} activeId={command.activeId} isSelected={command.isSelected} onActive={command.setActiveId} onChoose={next=>next.id==='content-prompt'?command.inputRef.current?.focus():command.choose(next)}/>
+        <FilterValueItems field={field} layer={layer + 1} options={command.filteredOptions} activeId={command.activeId} isSelected={command.isSelected} onActive={command.setActiveId} onChoose={next=>next.id==='content-prompt'?commandInputRef.current?.focus():command.choose(next)}/>
       </div>
     </Popover.Content>
   </Popover.Portal>
@@ -308,10 +308,10 @@ function NestedValueMenu({ category, field, label, layer, onChoose, onClose, opt
   // The reference app's Time in current status also offers what the search reads as a duration ("2 days", "3w").
   const [typed, setTyped] = useState('')
   const typedOptions = useMemo(() => category?.durationSearch ? durationFilterOptions(category.durationSearch, typed, category.label).filter(option => !options.some(existing => existing.id === option.id)) : [], [category, options, typed])
-  const command = usePropertyCommand({ personOptions: isPeopleProperty(field), autoFocus: false, closeOnSelect: false, onOpenChange: open => { if (!open) onClose() }, onSelect: onChoose, open: true, options: typedOptions.length ? [...options, ...typedOptions] : options })
+  const { inputRef: commandInputRef, ...command } = usePropertyCommand({ personOptions: isPeopleProperty(field), autoFocus: false, closeOnSelect: false, onOpenChange: open => { if (!open) onClose() }, onSelect: onChoose, open: true, options: typedOptions.length ? [...options, ...typedOptions] : options })
   const hideSearch = isCategoryList(field, options)
   return <Popover.Content data-flow-motion="floating" className={`${styles.valueMenu} ${styles.nestedValueMenu}`} data-level={2} style={{ zIndex: layer }} side="left" align="start" alignOffset={submenuAlignOffset(hideSearch)} sideOffset={SUBMENU_SIDE_OFFSET} collisionPadding={11} onOpenAutoFocus={event=>event.preventDefault()} onCloseAutoFocus={event=>event.preventDefault()} onEscapeKeyDown={event=>{event.preventDefault();onClose()}} onKeyDown={command.onKeyDown}>
-    <div className={styles.valueSearch} data-hidden={hideSearch || undefined}><input ref={command.inputRef} role="searchbox" aria-label={`${t('Filter')} ${t(label)}`} placeholder={t(category?.searchPlaceholder ?? 'Filter…')} value={command.query} onChange={event=>{command.onQueryChange(event.target.value);setTyped(event.target.value)}}/></div>
+    <div className={styles.valueSearch} data-hidden={hideSearch || undefined}><input ref={commandInputRef} role="searchbox" aria-label={`${t('Filter')} ${t(label)}`} placeholder={t(category?.searchPlaceholder ?? 'Filter…')} value={command.query} onChange={event=>{command.onQueryChange(event.target.value);setTyped(event.target.value)}}/></div>
     <div className={styles.valueList} role="listbox" aria-label={t(label)}><FilterValueItems field={field} layer={layer + 1} options={command.filteredOptions} activeId={command.activeId} onActive={command.setActiveId} onChoose={command.choose}/>{!command.filteredOptions.length&&<div className={styles.empty}>{t('No results')}</div>}</div>
   </Popover.Content>
 }

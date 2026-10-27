@@ -20,11 +20,11 @@ import {
 } from "lucide-react";
 import {
   Fragment,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
+import { useCurrentTimeMs } from "@/hooks/use-current-time";
 import { VirtualColumnList } from '@/components/ui/virtual-column-list';
 import { toggleFavoriteFor } from "@/lib/favorites";
 import { addSubscription, removeSubscription, setTeamMembership } from "@/lib/api";
@@ -119,7 +119,11 @@ export function WorkspaceDirectoryPage({
   const [inviteOpen, setInviteOpen] = useState(inviteOnOpen && canInvite);
   const [customerOpen, setCustomerOpen] = useState(customerOnOpen);
   // "Create new customer…" from the command menu reopens the dialog while already on the page.
-  useEffect(() => { if (customerOnOpen) setCustomerOpen(true); }, [customerOnOpen]);
+  const [seenCustomerOnOpen, setSeenCustomerOnOpen] = useState(customerOnOpen);
+  if (seenCustomerOnOpen !== customerOnOpen) {
+    setSeenCustomerOnOpen(customerOnOpen);
+    if (customerOnOpen) setCustomerOpen(true);
+  }
   const title = t(
     kind === "members"
       ? "Members"
@@ -327,6 +331,7 @@ function memberDirectoryColumns(columns: Set<MemberColumn>, longestTeamKey: numb
 
 function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; onOpen: (user: User) => void; onOpenTeam:(team:Team)=>void }) {
   const { t } = useI18n();
+  const now = useCurrentTimeMs();
   const [query, setQuery] = useState("");
   const [preferences, setPreferences] = useMemberDirectoryPreferences(data.workspace.id, data.viewer.id);
   const { ordering, descending } = preferences;
@@ -400,7 +405,7 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
     ...current,
     columns: current.columns.includes(column) ? current.columns.filter(id => id !== column) : memberColumnIds.filter(id => id === column || current.columns.includes(id)),
   }));
-  const shortDate = (value: Date) => new Intl.DateTimeFormat("en-US", value.getFullYear() === new Date().getFullYear() ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" }).format(value);
+  const shortDate = (value: Date) => new Intl.DateTimeFormat("en-US", value.getFullYear() === new Date(now).getFullYear() ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" }).format(value);
   const dateTimeTitle = (value: Date) => `${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(value)}, ${new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" }).format(value)}`;
   const longDate = (value: Date) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(value);
   const renderStatus = (entry: MemberEntry) => {
@@ -433,7 +438,7 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
     const teams = member.status === "active" ? teamsByUserId.get(user.id) ?? [] : [];
     const joined = new Date(member.joinedAt);
     const lastSeen = member.lastSeenAt ? new Date(member.lastSeenAt) : undefined;
-    const online = member.status === "active" && !user.app && (user.id === data.viewer.id || (lastSeen !== undefined && Date.now() - lastSeen.getTime() < MEMBER_ONLINE_WINDOW_MS));
+    const online = member.status === "active" && !user.app && (user.id === data.viewer.id || (lastSeen !== undefined && now - lastSeen.getTime() < MEMBER_ONLINE_WINDOW_MS));
     return <a
       className="workspace-directory-member-row"
       href={memberProfilePath(data.workspace.urlKey, memberProfileHandle(user))}

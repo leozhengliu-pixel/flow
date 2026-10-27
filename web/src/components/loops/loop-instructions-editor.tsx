@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useInsertionEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useLatestRef } from "@/hooks/use-latest-ref";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Markdown } from "@tiptap/markdown";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
@@ -67,17 +68,15 @@ function LoopInstructionsEditorBody({
 }: Parameters<typeof LoopInstructionsEditor>[0]) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [mention, setMention] = useState<MentionState>();
-  const mentionRef = useRef<MentionState | undefined>(undefined);
-  mentionRef.current = mention;
+  const mentionRef = useLatestRef<MentionState | undefined>(mention);
   const entityData = useAgentEntityData();
-  const entityDataRef = useRef(entityData);
-  entityDataRef.current = entityData;
+  const entityDataRef = useLatestRef(entityData);
+  const [getEntityData] = useState(() => () => entityDataRef.current);
   const users = useMemo(() => data.users.filter((user) => user.active !== false && !user.app), [data.users]);
   const options = useMentionOptions({ active: Boolean(mention), query: mention?.query ?? "", users });
-  const optionsRef = useRef<MentionOption[]>([]);
-  optionsRef.current = options;
-  const live = useRef({ placeholder, onChange });
-  live.current = { placeholder, onChange };
+  const optionsRef = useLatestRef<MentionOption[]>(options);
+  const live = useLatestRef({ placeholder, onChange });
+  const [getPlaceholder] = useState(() => () => live.current.placeholder ?? "");
   const initial = useMemo(() => initialContent(value, valueData), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const close = () => {
@@ -116,8 +115,8 @@ function LoopInstructionsEditorBody({
       LinkBehavior,
       Markdown,
       LoopEntityNode,
-      MentionLinksExtension.configure({ getData: () => entityDataRef.current }),
-      Placeholder.configure({ placeholder: () => live.current.placeholder ?? "" }),
+      MentionLinksExtension.configure({ getData: getEntityData }),
+      Placeholder.configure({ placeholder: getPlaceholder }),
     ],
     content: initial.content,
     contentType: initial.contentType,
@@ -160,7 +159,9 @@ function LoopInstructionsEditorBody({
     onSelectionUpdate: ({ editor: next }) => detect(next),
     onBlur: close,
   });
-  editorRef.current = editor;
+  useInsertionEffect(() => {
+    editorRef.current = editor;
+  });
 
   // The placeholder follows the trigger; repaint it when it changes.
   useEffect(() => {

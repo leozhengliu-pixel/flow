@@ -47,7 +47,9 @@ export function ProjectUpdatesPreview({ onClose, onComment, onCreate, onDelete, 
   const [activeIndex, setActiveIndex] = useState(0)
   useDismissibleLayer({ open: !deleteTarget, refs: [ref, menuRef, reactionRef, mentionMenuRef], onDismiss: onClose })
   useEffect(() => ref.current?.focus(), [])
-  useEffect(() => setActiveIndex(index => Math.min(index, Math.max(0, updates.length - 1))), [updates.length])
+  // Keep the active row inside the list when updates are removed (adjusted while rendering).
+  const lastIndex = Math.max(0, updates.length - 1)
+  if (activeIndex > lastIndex) setActiveIndex(lastIndex)
 
   const beginCreate = () => {
     setEditingId(undefined)

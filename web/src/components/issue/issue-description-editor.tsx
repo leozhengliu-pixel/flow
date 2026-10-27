@@ -16,7 +16,9 @@ import type { EditorState } from '@tiptap/pm/state'
 import { handleEmoticonInput } from '@/components/editor/emoticon-input'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useInsertionEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useLatestRef } from '@/hooks/use-latest-ref'
+import { useStableCallback } from './editor/use-stable-callback'
 import { descriptionDocumentJSON, parseDescriptionContent, sameDocument, serializeDescription, type DescriptionSnapshot } from './editor/editor-content'
 import { prosemirrorJSONToYXmlFragment, ySyncPluginKey } from '@tiptap/y-tiptap'
 import { applyUpdate, Doc as YDoc } from 'yjs'
@@ -35,7 +37,7 @@ import { insertPickedFiles } from './editor/insert-picked-files'
 import { MentionExtension } from './editor/mention-extension'
 import { MentionChipNode } from '@/components/editor/mentions/mention-chip-extension'
 import { MentionLinksExtension } from '@/components/editor/mentions/mention-links-extension'
-import { insertMentionOption, type MentionOption } from '@/components/editor/mentions/mention-options'
+import { insertMentionOption } from '@/components/editor/mentions/mention-options'
 import { EmbedPasteNode, EmbedSchema } from '@/components/editor/embeds/embed-extension'
 import { useMentionOptions } from '@/components/editor/mentions/use-mention-options'
 import { useMentionConversion } from '@/components/editor/mentions/use-mention-conversion'
@@ -102,24 +104,20 @@ export function IssueDescriptionEditor(props: DescriptionEditorProps) {
 
 function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, editorRef, className, collaboration, selectionActions, placeholder = 'Add description...', ariaLabel, users = [], onInsertImage, outline = false, readOnly = false }: DescriptionEditorProps) {
   const { t } = useI18n()
-  const placeholderRef = useRef(placeholder)
-  placeholderRef.current = t(placeholder)
-  const documentIdRef = useRef<string | undefined>(undefined)
-  documentIdRef.current = collaboration?.issueId ?? collaboration?.documentId
-  const hintRef = useRef('Type / for commands…')
-  hintRef.current = t('Type / for commands…')
+  const getPlaceholder = useStableCallback(() => t(placeholder))
+  const getDocumentId = useStableCallback(() => collaboration?.issueId ?? collaboration?.documentId)
+  const getHint = useStableCallback(() => t('Type / for commands…'))
   // The editor is contenteditable, which the page translator leaves alone: its label is translated here.
   const descriptionLabel = t(ariaLabel ?? 'Issue description')
   const initial = useMemo(() => parseDescriptionContent(value, state), []) // eslint-disable-line react-hooks/exhaustive-deps
   const rootRef = useRef<HTMLDivElement>(null)
   const commandsRef = useRef<EditorCommand[]>([])
-  const translateRef = useRef(t)
-  translateRef.current = t
+  const translateRef = useLatestRef(t)
   const slashRef = useRef<SlashCommandState>(closedSlash)
   const selectedRef = useRef(0)
   const dismissedRef = useRef<number | null>(null)
   const dismissedMentionRef = useRef<number | null>(null)
-  const submitRef = useRef(onSubmit)
+  const submitRef = useLatestRef(onSubmit)
   const persistTimerRef = useRef<number | undefined>(undefined)
   const startTimerRef = useRef<number | undefined>(undefined)
   const destroyTimerRef = useRef<number | undefined>(undefined)
@@ -132,23 +130,21 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   /** The Yjs state of this editor's latest local backup (see clearDescriptionRecovery). */
   const backupStateRef = useRef<string | undefined>(undefined)
   const blockedRef = useRef(false)
+  /** What the save-error banner shows from `blockedRef` / the revision refs, which are not read while rendering. */
+  const [blocked, setBlocked] = useState(false)
+  const [unsaved] = useState(createFlagStore)
   const recoveryKey = collaboration ? descriptionRecoveryKey(collaboration.workspaceKey, collaboration.issueId ?? collaboration.documentId, collaboration.viewer.id) : ''
   const [recovery] = useState(() => recoveryKey ? readDescriptionRecovery(recoveryKey) : undefined)
   const [saveError, setSaveError] = useState<string | undefined>(recovery ? 'Unsaved local changes are available to download.' : undefined)
-  const presenceRef = useRef(collaboration?.onPresence)
-  const revokedRef = useRef(collaboration?.onRevoked)
-  revokedRef.current = collaboration?.onRevoked
-  const revokedMessageRef = useRef(revokedDocumentMessage)
-  revokedMessageRef.current = collaboration?.issueId ? revokedIssueMessage : revokedDocumentMessage
+  const presenceRef = useLatestRef(collaboration?.onPresence)
+  const revokedRef = useLatestRef(collaboration?.onRevoked)
+  const revokedMessageRef = useLatestRef(collaboration?.issueId ? revokedIssueMessage : revokedDocumentMessage)
   /** The server removed this viewer from the document: the editor turns read-only. */
   const [revoked, setRevoked] = useState(false)
   /** The server refuses this viewer's edits (a viewer or commenter): the editor follows the document read-only. */
   const [serverReadOnly, setServerReadOnly] = useState(false)
   const serverReadOnlyRef = useRef(false)
-  submitRef.current = onSubmit
-  const selectionActionsRef = useRef(selectionActions)
-  selectionActionsRef.current = selectionActions
-  presenceRef.current = collaboration?.onPresence
+  const selectionActionsRef = useLatestRef(selectionActions)
   const [slash, setSlash] = useState<SlashCommandState>(closedSlash)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [menuPosition, setMenuPosition] = useState<{ left: number; top: number; caretTop?: number }>({ left: 14, top: 44 })
@@ -158,9 +154,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   const mentionUsers = useMemo(() => mentionableUsers(users), [users])
   const mentionRef = useRef<MentionState>(closedMention)
   const mentionSelectedRef = useRef(0)
-  const mentionOptionsRef = useRef<MentionOption[]>([])
-  const uploadImageRef = useRef(onInsertImage)
-  uploadImageRef.current = onInsertImage
+  const getUploadImage = useStableCallback(() => onInsertImage)
   const liveEditorRef = useRef<Editor | null>(null)
 
   const collaborationSession = useMemo(() => {
@@ -197,10 +191,10 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   }
 
   const entityData = useAgentEntityData()
-  const entityDataRef = useRef(entityData)
-  entityDataRef.current = entityData
+  const entityDataRef = useLatestRef(entityData)
+  const getEntityData = useStableCallback(() => entityData)
   const mentionOptionList = useMentionOptions({ active: mention.active, query: mention.query, users: mentionUsers })
-  mentionOptionsRef.current = mentionOptionList
+  const mentionOptionsRef = useLatestRef(mentionOptionList)
   const editor = useEditor({
     immediatelyRender: false,
     editable: !readOnly,
@@ -211,11 +205,11 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       LinkBehavior,
       FlowCodeBlock,
       ...flowTableKit,
-      ClipboardOrigin.configure({ getDocumentId: () => documentIdRef.current }),
+      ClipboardOrigin.configure({ getDocumentId }),
       ...structuredBlocks,
       // The editor's own placeholder only shows while the whole document is empty; later empty lines get the "Type / for commands…" hint.
-      Placeholder.configure({ placeholder: ({ editor: current }) => current.isEmpty ? placeholderRef.current : '' }),
-      EmptyLineHint.configure({ getText: () => hintRef.current }),
+      Placeholder.configure({ placeholder: ({ editor: current }) => current.isEmpty ? getPlaceholder() : '' }),
+      EmptyLineHint.configure({ getText: getHint }),
       Markdown,
       MarkdownPaste,
       DescriptionImage,
@@ -225,7 +219,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       DescriptionDiagram,
       EmbedPasteNode,
       MentionChipNode,
-      MentionLinksExtension.configure({ getData: () => entityDataRef.current }),
+      MentionLinksExtension.configure({ getData: getEntityData }),
       InlineCommentMark,
       SlashCommandExtension,
       ...(collaborationSession ? [
@@ -254,7 +248,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
         if (handleSelectionShortcut(event, view.state.selection, view.state.doc, selectionActionsRef.current, liveEditorRef.current)) return true
         if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.code === 'KeyU') {
           event.preventDefault()
-          pickDescriptionFiles(files => insertPickedFiles(view, files, uploadImageRef.current))
+          pickDescriptionFiles(files => insertPickedFiles(view, files, getUploadImage()))
           return true
         }
         if (handleBlockShortcut(event, liveEditorRef.current)) return true
@@ -318,6 +312,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       onChange?.(snapshot)
       if (collaborationSession && collaboration) {
         revisionRef.current++
+        unsaved.set(true)
         backupStateRef.current = snapshot.contentState
         if (!writeDescriptionRecovery(recoveryKey, { documentId: collaboration.documentId, version: versionRef.current, snapshot })) setSaveError('Local backup is unavailable. Keep this page open or download your changes.')
         scheduleCollaborativePersist()
@@ -351,7 +346,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     return () => window.removeEventListener('flow-reveal-description-selection', reveal)
   }, [editor, collaboration?.issueId])
 
-  persistRef.current = async () => {
+  const persist = async () => {
     // A read-only viewer's save would be refused too: its changes stay downloadable instead.
     if (!editor || !collaborationSession || !collaboration || blockedRef.current || serverReadOnlyRef.current || revisionRef.current === savedRevisionRef.current) return
     window.clearTimeout(persistTimerRef.current)
@@ -370,6 +365,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
         await collaboration.onPersist(snapshot, updateIds, expectedVersion)
         collaborationSession.provider.acknowledgeSnapshot(updateIds)
         savedRevisionRef.current = revision
+        unsaved.set(revisionRef.current !== revision)
         versionRef.current = Math.max(versionRef.current, expectedVersion + 1)
         conflictRetriesRef.current = 0
         clearDescriptionRecovery(recoveryKey, snapshot, revisionRef.current === revision ? backupState : undefined)
@@ -390,6 +386,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
           } catch { /* an unreadable state is handled as a conflict below */ }
         }
         blockedRef.current = conflict
+        setBlocked(conflict)
         if (conflict) collaborationSession.provider.stop()
         setSaveError(conflict ? 'The description changed in another session. Your local changes are preserved. Download them before reloading the latest version.' : 'Description could not be saved. Your local changes are preserved. Retry when connected.')
       }
@@ -398,6 +395,8 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     persistChainRef.current = task
     return task
   }
+  // Timers and provider events reach the latest `persist` through the ref (it closes over the current editor and session).
+  useInsertionEffect(() => { persistRef.current = persist })
 
   const commands = useMemo<EditorCommand[]>(() => {
     if (!editor) return []
@@ -418,8 +417,8 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       { id: 'bullet-list', group: 'lists', label: 'Bulleted list', keywords: 'unordered bullets', shortcut: '⌘⇧8', icon: List, run: execute(() => editor.chain().focus().toggleBulletList().run()) },
       { id: 'number-list', group: 'lists', label: 'Numbered list', keywords: 'ordered numbers', shortcut: '⌘⇧9', icon: ListOrdered, run: execute(() => editor.chain().focus().toggleOrderedList().run()) },
       { id: 'checklist', group: 'lists', label: 'Checklist', keywords: 'todo task checkbox', shortcut: '⌘⇧7', icon: ListTodo, run: execute(() => editor.chain().focus().toggleTaskList().run()) },
-      { id: 'media', group: 'media', label: 'Insert media…', keywords: 'image picture photo video screenshot', icon: ImageIcon, run: execute(() => pickDescriptionFiles(files => insertPickedFiles(editor.view, files, uploadImageRef.current), 'image/*,video/*')) },
-      { id: 'file', group: 'media', label: 'Attach files…', keywords: 'attachment upload pdf', shortcut: '⌘⇧U', icon: Paperclip, run: execute(() => pickDescriptionFiles(files => insertPickedFiles(editor.view, files, uploadImageRef.current))) },
+      { id: 'media', group: 'media', label: 'Insert media…', keywords: 'image picture photo video screenshot', icon: ImageIcon, run: execute(() => pickDescriptionFiles(files => insertPickedFiles(editor.view, files, getUploadImage()), 'image/*,video/*')) },
+      { id: 'file', group: 'media', label: 'Attach files…', keywords: 'attachment upload pdf', shortcut: '⌘⇧U', icon: Paperclip, run: execute(() => pickDescriptionFiles(files => insertPickedFiles(editor.view, files, getUploadImage()))) },
       { id: 'code-block', group: 'blocks', label: 'Code block', keywords: 'source snippet', shortcut: '⌘⇧\\', icon: Code2, run: execute(() => editor.chain().focus().toggleCodeBlock().run()) },
       { id: 'diagram', group: 'blocks', label: 'Diagram', keywords: 'mermaid flowchart sequence', icon: Workflow, run: execute(() => {
         // The reference app's diagram is a Mermaid code block, opened on its (empty) source.
@@ -438,8 +437,8 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     ]
     // Row/column commands only exist while the caret is in a table (the reference app lists them first).
     return slash.active ? [...tableSlashCommands(editor).map(tableAction), ...base] : base
-  }, [editor, slash.active])
-  commandsRef.current = commands
+  }, [editor, slash.active, getUploadImage])
+  useInsertionEffect(() => { commandsRef.current = commands })
   const filteredCommands = filterEditorCommands(commands, slash.query, t)
 
   useEffect(() => {
@@ -459,9 +458,10 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       applyUpdate(collaborationSession.document, base64ToBytes(collaboration.contentState), collaborationSession.provider)
       versionRef.current = Math.max(versionRef.current, collaboration.documentVersion ?? 0)
     } catch {
-      setSaveError('The latest description could not be loaded. Keep this page open or download your changes.')
+      // Reported right after the effect, as an event of the failed merge rather than a render-time state change.
+      queueMicrotask(() => setSaveError('The latest description could not be loaded. Keep this page open or download your changes.'))
     }
-  }, [collaborationSession, collaboration?.contentState, collaboration?.documentVersion])
+  }, [collaborationSession, collaboration?.contentState, collaboration?.documentVersion, blockedRef, versionRef])
   useEffect(() => {
     if (!collaborationSession) return
     const syncPresence = () => {
@@ -484,6 +484,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
         // Stop syncing and saving (the server refuses both now), keep the local backup for download, and let the
         // page reload the issue to show what this viewer may still see.
         blockedRef.current = true
+        setBlocked(true)
         window.clearTimeout(persistTimerRef.current)
         setRevoked(true)
         setSaveError(revokedMessageRef.current)
@@ -492,6 +493,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       }
       if (status !== 'conflict') return
       blockedRef.current = true
+      setBlocked(true)
       window.clearTimeout(persistTimerRef.current)
       setSaveError('The description changed in another session. Your local changes are preserved. Download them before reloading the latest version.')
     }
@@ -520,13 +522,14 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       collaborationSession.provider.awareness.off('change', syncPresence)
       collaborationSession.provider.off('status', onStatus)
       collaborationSession.provider.off('access', onAccess)
+      // oxlint-disable-next-line react-hooks/exhaustive-deps -- presenceRef holds the latest callback (not a DOM node), and the cleanup must call the latest one
       presenceRef.current?.([])
       destroyTimerRef.current = window.setTimeout(() => {
         collaborationSession.provider.destroy()
         collaborationSession.document.destroy()
       }, 0)
     }
-  }, [collaborationSession])
+  }, [collaborationSession, presenceRef, revokedRef, revokedMessageRef])
   useEffect(() => {
     editorRef?.(editor)
     return () => editorRef?.(null)
@@ -541,7 +544,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   useEffect(() => {
     if (!editor) return
     editor.view.dom.setAttribute('aria-label', descriptionLabel)
-    editor.storage.image.upload = uploadImageRef.current
+    editor.storage.image.upload = onInsertImage
     editor.storage.image.onComment = selection => selectionActions?.onComment?.(selection)
     if (editor.storage.codeBlock) editor.storage.codeBlock.onComment = selectionActions?.onComment ? selection => selectionActions.onComment?.(selection) : undefined
   }, [descriptionLabel, editor, onInsertImage, selectionActions])
@@ -610,8 +613,8 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     {saveError && <div role="alert" className="issue-description-save-error">
       <span>{t(saveError)}</span>
       <button type="button" onClick={() => downloadDescriptionRecovery(revisionRef.current > savedRevisionRef.current ? serializeDescription(editor, collaborationSession?.document) : recovery?.snapshot ?? serializeDescription(editor, collaborationSession?.document))}>{t('Download local changes')}</button>
-      {!blockedRef.current && !serverReadOnly && revisionRef.current > savedRevisionRef.current && <button type="button" onClick={() => void persistRef.current()}>{t('Retry save')}</button>}
-      {blockedRef.current && <button type="button" onClick={() => window.location.reload()}>{t('Reload latest version')}</button>}
+      {!blocked && !serverReadOnly && <RetrySaveButton unsaved={unsaved} label={t('Retry save')} onRetry={() => void persistRef.current()}/>}
+      {blocked && <button type="button" onClick={() => window.location.reload()}>{t('Reload latest version')}</button>}
     </div>}
     <EditorContent editor={editor}/>
     {editor.isEditable && <HeadingActions editor={editor} rootRef={rootRef}/>}
@@ -627,6 +630,30 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     />}
     {mention.active && <MentionMenu options={mentionOptionList} selectedIndex={mentionIndex} anchor={mentionAnchor} query={mention.query} onSelect={option => insertMentionOption(editor.view, mention.range, option)}/>}
   </div>
+}
+
+/** A boolean the editor flips on every edit without re-rendering itself (each render reconfigures the editor); only its subscribers re-render. */
+function createFlagStore(initial = false) {
+  let value = initial
+  const listeners = new Set<() => void>()
+  return {
+    get: () => value,
+    set(next: boolean) {
+      if (next === value) return
+      value = next
+      listeners.forEach(listener => listener())
+    },
+    subscribe(listener: () => void) {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
+  }
+}
+
+/** The save-error banner's retry action: shown while edits are waiting to be saved. */
+function RetrySaveButton({ unsaved, label, onRetry }: { unsaved: ReturnType<typeof createFlagStore>; label: string; onRetry: () => void }) {
+  const pending = useSyncExternalStore(unsaved.subscribe, unsaved.get, unsaved.get)
+  return pending ? <button type="button" onClick={onRetry}>{label}</button> : null
 }
 
 function schemaExtensions() {

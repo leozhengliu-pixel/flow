@@ -1,5 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as RadixMenu from '@radix-ui/react-dropdown-menu'
+import { useCurrentTimeMs } from '@/hooks/use-current-time'
 import { ArrowUp, CheckCircle2, Circle, CircleDot, ExternalLink, Paperclip, XCircle } from 'lucide-react'
 import type { BootstrapData, Issue, User } from '@/types/flow'
 import { UserAvatar } from '@/components/ui/user-avatar'
@@ -429,6 +430,7 @@ function MenuItem({ glyph, label, onSelect }: { glyph: FlowGlyphName; label: str
 
 function AgentMessageHeader({ user, name, time, anchor }: { user?: User; name: string; time: string; anchor?: string }) {
   const { locale } = useI18n()
-  const label = time && !Number.isNaN(Date.parse(time)) ? activityTimeLabel(time, Date.now(), locale).replace(/m(?= ago$)/, 'min') : ''
+  const now = useCurrentTimeMs()
+  const label = time && !Number.isNaN(Date.parse(time)) ? activityTimeLabel(time, now, locale).replace(/m(?= ago$)/, 'min') : ''
   return <header className="issue-agent-message-header"><UserAvatar className="avatar" name={name} avatarUrl={user?.avatarUrl}/><strong data-i18n-ignore>{name}</strong>{label && (anchor ? <a href={`#${anchor}`}><time dateTime={time}>{label}</time></a> : <time dateTime={time}>{label}</time>)}</header>
 }

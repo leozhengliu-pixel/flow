@@ -96,7 +96,8 @@ function WorkMenu({tools,onOpenTool,onCopyPrompt,configurePath,onStartCodingSess
   const[open,setOpen]=useState(false)
   // The reference app highlights a row on hover, or after the arrow keys move through the list; never the first row on open.
   const[keyboard,setKeyboard]=useState(false)
-  useEffect(()=>{if(!open)setKeyboard(false)},[open])
+  const[wasOpen,setWasOpen]=useState(open)
+  if(open!==wasOpen){setWasOpen(open);if(!open)setKeyboard(false)}
   useEffect(()=>{let armed=false;const onKey=(event:KeyboardEvent)=>{if(isEditable(event.target)||event.metaKey||event.ctrlKey||event.altKey)return;if(event.key.toLowerCase()==='w'){armed=true;setTimeout(()=>{armed=false},900);return}if(armed&&event.key.toLowerCase()==='o'){event.preventDefault();setOpen(true);armed=false}};addEventListener('keydown',onKey);return()=>removeEventListener('keydown',onKey)},[])
   return <Popover.Root open={open} onOpenChange={setOpen}>
     <HeaderTooltip label={t('Work on issue')} shortcut="W then O" disabled={open}><Popover.Trigger asChild><button className="issue-command-button issue-work-tools" type="button" aria-label={t('Choose coding tool')}><FlowChevronIcon/></button></Popover.Trigger></HeaderTooltip>

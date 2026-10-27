@@ -217,9 +217,11 @@ function FilterGroup({
   const choices = (group.choices ?? []).filter((choice) =>
     matchesSearch(query, [choice.label, choice.keywords], choice.entity ? undefined : t),
   );
-  useEffect(() => {
+  const [seenOpen, setSeenOpen] = useState(open);
+  if (seenOpen !== open) {
+    setSeenOpen(open);
     if (!open) setQuery("");
-  }, [open]);
+  }
   return (
     <>
       {group.separatorBefore && <DropdownMenu.Separator />}

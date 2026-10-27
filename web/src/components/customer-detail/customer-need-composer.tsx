@@ -162,7 +162,11 @@ function SourceButton({ value, onChange }: { value: string; onChange: (value: st
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(value)
-  useEffect(() => { if (open) setDraft(value) }, [open, value])
+  const [seen, setSeen] = useState({ open, value })
+  if (seen.open !== open || seen.value !== value) {
+    setSeen({ open, value })
+    if (open) setDraft(value)
+  }
   const host = (() => { const url = normalizeUrl(value); try { return url ? new URL(url).hostname : '' } catch { return '' } })()
   const commit = () => {
     const url = normalizeUrl(draft)
@@ -197,7 +201,6 @@ function TargetBar({ data, target, onTarget, newTitle, onNewTitle }: { data: Boo
   const titleRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
     if (!editingTitle) return
-    setTitleDraft(newTitle)
     requestAnimationFrame(() => { titleRef.current?.focus(); titleRef.current?.select(); if (titleRef.current) titleRef.current.scrollLeft = 0 })
   }, [editingTitle]) // eslint-disable-line react-hooks/exhaustive-deps
   const saveTitle = () => { if (titleDraft.trim()) onNewTitle(titleDraft.trim()); setEditingTitle(false) }
@@ -218,7 +221,7 @@ function TargetBar({ data, target, onTarget, newTitle, onNewTitle }: { data: Boo
       : <>
         <TargetPicker data={data} target={target} onTarget={onTarget} newTitle={newTitle}/>
         {target.kind === 'new' && <FlowTooltip label={t('Edit new issue title')}>
-          <button type="button" className="customer-need-composer__icon customer-need-composer__edit-title" aria-label={t('Edit new issue title')} onClick={() => setEditingTitle(true)}><EditPencilIcon size={14}/></button>
+          <button type="button" className="customer-need-composer__icon customer-need-composer__edit-title" aria-label={t('Edit new issue title')} onClick={() => { setTitleDraft(newTitle); setEditingTitle(true) }}><EditPencilIcon size={14}/></button>
         </FlowTooltip>}
       </>}
   </div>
@@ -240,7 +243,6 @@ function TargetPicker({ data, target, onTarget, newTitle }: { data: BootstrapDat
     }, query ? 150 : 0)
     return () => { window.clearTimeout(timer); controller.abort() }
   }, [open, query])
-  useEffect(() => { if (!open) setQuery('') }, [open])
   const projects = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase()
     const live = data.projects.filter(item => !item.archivedAt)
@@ -252,7 +254,7 @@ function TargetPicker({ data, target, onTarget, newTitle }: { data: BootstrapDat
       ? <span className="customer-need-composer__base" data-i18n-ignore>{target.project.name}</span>
       : <><span className="customer-need-composer__muted">{t('New issue')}</span>{newTitle !== 'New issue' && <span className="customer-need-composer__strong" data-i18n-ignore>{newTitle}</span>}</>
   const icon = target.kind === 'issue' ? <StatusIcon state={target.issue.state} size={14}/> : target.kind === 'project' ? <ViewGlyph color={target.project.color} icon={target.project.icon}/> : backlog ? <StatusIcon state={backlog} size={14}/> : <IssueCircleIcon size={14}/>
-  return <DropdownMenu.Root open={open} onOpenChange={setOpen}>
+  return <DropdownMenu.Root open={open} onOpenChange={next => { setOpen(next); if (!next) setQuery('') }}>
     <DropdownMenu.Trigger asChild>
       <button type="button" className="customer-need-composer__picker" aria-label={t('Search issues or projects…')}>{icon}{label}<ChevronDown size={12} aria-hidden="true"/></button>
     </DropdownMenu.Trigger>

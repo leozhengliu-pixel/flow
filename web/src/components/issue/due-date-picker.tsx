@@ -1,6 +1,6 @@
 import * as Popover from '@radix-ui/react-popover'
 import { X } from 'lucide-react'
-import { useMemo, useState, type ReactNode, type SyntheticEvent } from 'react'
+import { useState, type ReactNode, type SyntheticEvent } from 'react'
 import { CalendarIcon } from '@/components/issue/issue-icons'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
@@ -41,12 +41,12 @@ export function DueDateCommand({ value, onSelect, className = '', autoFocus = tr
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const dates = useMemo(() => ({
+  const [dates] = useState(() => ({
     tomorrow: isoDate(addDays(new Date(), 1)),
     endOfWeek: isoDate(endOfWorkWeek(new Date())),
     week: isoDate(addDays(new Date(), 7)),
     today: isoDate(new Date()),
-  }), [])
+  }))
   const choose = async (next: string) => {
     if (busy) return
     setBusy(true)

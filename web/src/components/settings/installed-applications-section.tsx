@@ -133,17 +133,21 @@ export function InstalledApplicationPage({ data, clientId, onReload }: { data: B
   const developerName = entry?.developerName || ownApp?.developerName
   const developerUrl = entry?.developerUrl || ownApp?.developerUrl
   const logoUrl = entry?.logoUrl || ownApp?.logoUrl || entry?.installation?.avatarUrl
-  const authorizations = entry?.authorizations ?? []
+  const entryAuthorizations = entry?.authorizations
+  const authorizations = entryAuthorizations ?? []
   const installation = entry?.installation
   // The reference app lists the granted permissions alphabetically (by their wording), without the narrower write scopes that `write` covers, and
   // "Receive realtime updates about your workspace" while the application has a webhook and is authorized.
+  const permissions = entry?.permissions
+  const realtime = entry?.realtime
+  const installedScopeList = entry?.installation?.scopes
   const scopes = useMemo(() => {
-    const granted = [...(entry?.permissions?.map(item => item.scope) ?? (entry?.authorizations ?? []).flatMap(item => item.scopes)), ...(entry?.installation?.scopes ?? [])]
-    if (entry?.realtime && granted.length) granted.push(REALTIME_PERMISSION)
+    const granted = [...(permissions?.map(item => item.scope) ?? (entryAuthorizations ?? []).flatMap(item => item.scopes)), ...(installedScopeList ?? [])]
+    if (realtime && granted.length) granted.push(REALTIME_PERMISSION)
     return consentPermissions([...new Set(granted)]).sort((a, b) => a.label.localeCompare(b.label, 'en')).map(item => item.scope)
-  }, [entry])
+  }, [entryAuthorizations, installedScopeList, permissions, realtime])
   // The "MCP" entry marks each permission an authorization used recently "Actively used".
-  const activeScopes = useMemo(() => entry?.permissions ? new Set(entry.permissions.filter(item => item.activelyUsed).map(item => item.scope)) : undefined, [entry])
+  const activeScopes = useMemo(() => permissions ? new Set(permissions.filter(item => item.activelyUsed).map(item => item.scope)) : undefined, [permissions])
   const back = () => navigate(settingsPath(workspace, 'applications'))
 
   const revokeTokens = async () => {

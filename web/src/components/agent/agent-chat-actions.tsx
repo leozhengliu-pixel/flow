@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useI18n } from '@/i18n/i18n'
@@ -51,13 +51,14 @@ export function AgentRenamePalette({ open, title, onOpenChange, onRename }: {
   const [active, setActive] = useState<'rename' | 'cancel'>('rename')
   const inputRef = useRef<HTMLInputElement>(null)
   // Prefill once per opening: a title refreshed meanwhile (generated title, realtime) must not wipe what is typed.
-  const titleRef = useRef(title)
-  titleRef.current = title
-  useEffect(() => {
-    if (!open) return
-    setValue(titleRef.current)
-    setActive('rename')
-  }, [open])
+  const [wasOpen, setWasOpen] = useState(false)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) {
+      setValue(title)
+      setActive('rename')
+    }
+  }
   const next = value.trim()
   const choose = (option: 'rename' | 'cancel') => {
     if (option === 'rename') {

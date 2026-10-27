@@ -1,5 +1,6 @@
-import { startTransition, useCallback, useEffect, useRef } from 'react'
+import { startTransition, useCallback, useEffect } from 'react'
 import { useLocation, useNavigate, type NavigateFunction, type NavigateOptions, type To } from 'react-router-dom'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { registerAppNavigator } from '@/lib/app-navigation'
 import { nextNavigationState } from '@/lib/navigation-context'
 import { clientNavigationTarget, preloadRoute } from '@/lib/route-preload'
@@ -7,8 +8,7 @@ import { clientNavigationTarget, preloadRoute } from '@/lib/route-preload'
 export function useRouteNavigation() {
   const navigate = useNavigate()
   const location = useLocation()
-  const current = useRef(location)
-  current.current = location
+  const current = useLatestRef(location)
   const navigateTo = useCallback((to: To | number, options?: NavigateOptions) => {
     if (typeof to === 'string') void preloadRoute(to).catch(() => undefined)
     startTransition(() => {
@@ -19,7 +19,7 @@ export function useRouteNavigation() {
         void navigate(to, { ...options, state })
       }
     })
-  }, [navigate]) as NavigateFunction
+  }, [navigate, current]) as NavigateFunction
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined

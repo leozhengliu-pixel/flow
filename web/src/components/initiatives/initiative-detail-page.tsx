@@ -44,6 +44,8 @@ import { InitiativePageChrome, InitiativePageChromeActions } from './initiative-
 import { initiativeProjectIds } from './initiative-hierarchy'
 import { labelsForResource } from '@/lib/labels'
 import { useI18n } from '@/i18n/i18n'
+import { useCurrentTime } from '@/hooks/use-current-time'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { ProjectsPageEmptyIcon } from '@/components/projects-page/projects-page-empty-icon'
 import { MentionTextField } from '@/components/editor/mention-text-field'
 import './initiatives.css'
@@ -167,10 +169,12 @@ export function InitiativeDetailPage(props: Props) {
   const initiativeLabels = useMemo(() => labelsForResource(props.labels, 'initiative', props.labelGroups), [props.labelGroups, props.labels])
   const projectLabels = useMemo(() => labelsForResource(props.labels, 'project', props.labelGroups), [props.labelGroups, props.labels])
 
-  useEffect(() => {
-    if (!activeView) return
-    setRoadmapQuery(activeView.query); setRoadmapZoom(activeView.zoom); setRoadmapHealth(activeView.health); setRoadmapProperties(activeView.properties)
-  }, [activeView])
+  // Opening a stored view (or a changed copy of it) loads its roadmap settings.
+  const [appliedView, setAppliedView] = useState<InitiativeStoredView>()
+  if (activeView !== appliedView) {
+    setAppliedView(activeView)
+    if (activeView) { setRoadmapQuery(activeView.query); setRoadmapZoom(activeView.zoom); setRoadmapHealth(activeView.health); setRoadmapProperties(activeView.properties) }
+  }
 
   const createStoredView = async (draft: InitiativeViewDraft) => {
     const created = await props.onCreateSavedView(initiativeViewMutation(initiative.id, draft))
@@ -297,6 +301,7 @@ function InitiativeOverview(props: Props & { update: (input: InitiativeMutationI
   const { t } = useI18n()
   // Inline comments on the description ("Comment" on its selection toolbar), shown beside it.
   const inlineComments = useEntityInlineComments(initiative.comments)
+  const { shellRef: overviewShellRef } = inlineComments
   const workspaceKey = props.data.workspace.urlKey
   const commentEntity = useMemo<InlineCommentEntity>(() => ({ kind: 'initiative', id: initiative.id, name: initiative.name, href: initiativePath(workspaceKey, initiative), teamId: props.teams[0]?.id }), [initiative, props.teams, workspaceKey])
   const { onReloadWorkspace } = props
@@ -315,7 +320,7 @@ function InitiativeOverview(props: Props & { update: (input: InitiativeMutationI
   })
   const projectColumns = ['health', 'priority', 'lead', 'target', 'status'].filter(property => projectProperties.has(property))
   const projectGrid = { gridTemplateColumns: `minmax(200px,1fr) ${projectColumns.map(property => property === 'health' ? '115px' : property === 'priority' ? '90px' : property === 'lead' ? '80px' : '105px').join(' ')}` }
-  return <div className={`li-overview inline-comment-host${inlineComments.gutter ? ' has-comment-gutter' : ''}`} ref={inlineComments.shellRef}>
+  return <div className={`li-overview inline-comment-host${inlineComments.gutter ? ' has-comment-gutter' : ''}`} ref={overviewShellRef}>
     <div className="li-overview-title"><ViewIconPicker surface="page" color={initiative.color} icon={initiative.icon || 'Initiative'} onChange={update} triggerClassName="li-overview-icon"/><InitiativeEditableText className="li-title-input" label="Initiative name" value={initiative.name} onCommit={name => update({ name })}/><InitiativeEditableText className="li-summary-input" label="Initiative summary" placeholder="Add a short summary…" value={initiative.summary} onCommit={summary => update({ summary })}/></div>
     <InitiativeContributesTo initiative={initiative} initiatives={props.initiatives} onOpen={props.onOpenInitiative} onUpdate={props.onUpdate}/>
     <section><h3>Properties</h3><InitiativeProperties initiative={initiative} teams={props.teams} users={users} onUpdate={update}/><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="More properties" className="li-more-properties" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="li-menu"><DropdownMenu.Item onSelect={() => document.querySelector<HTMLElement>('.li-detail-sidebar [aria-label="Add labels"]')?.click()}>Labels</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></section>
@@ -391,7 +396,7 @@ function InitiativeRoadmap({ initiatives, initiative, projects, projectUpdates, 
   const [updatesProjectId, setUpdatesProjectId] = useState<string>()
   const [roadmapDrag, setRoadmapDrag] = useState<{ id: string; startX: number; start: Date; target: Date }>()
   const roadmapDragged = useRef(false)
-  const today = new Date()
+  const today = useCurrentTime()
   const start = new Date(today.getFullYear(), today.getMonth() - 11, 1)
   const months = Array.from({ length: 24 }, (_, index) => new Date(start.getFullYear(), start.getMonth() + index, 1))
   const ticks: Date[] = []
@@ -495,7 +500,12 @@ function StoredViewEditDialog({ view, open, onOpenChange, onSave }: { view?: Ini
   const [description, setDescription] = useState('')
   const [visual, setVisual] = useState({ icon: 'CustomView', color: '#8a8f98' })
   const [saving, setSaving] = useState(false)
-  useEffect(() => { if (view) { setName(view.name); setDescription(view.description); setVisual({ icon: view.icon, color: view.color }); setSaving(false) } }, [view])
+  // A view handed to the dialog fills the form.
+  const [loadedView, setLoadedView] = useState<InitiativeStoredView>()
+  if (view !== loadedView) {
+    setLoadedView(view)
+    if (view) { setName(view.name); setDescription(view.description); setVisual({ icon: view.icon, color: view.color }); setSaving(false) }
+  }
   if (!view) return null
   const save = async () => { if (saving) return; const nextName = name.trim() || view.name; setSaving(true); try { await onSave({ ...view, ...visual, name: nextName, description: description.trim(), slugId: `${slugifyView(nextName)}-${view.id.replaceAll('-', '').slice(-12)}` }) } finally { setSaving(false) } }
   return <Dialog.Root onOpenChange={onOpenChange} open={open}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="li-dialog-overlay"/><Dialog.Content data-flow-motion="dialog" aria-describedby="initiative-view-edit-description" className="li-link-dialog li-stored-view-dialog"><Dialog.Title>Edit view</Dialog.Title><Dialog.Description className="sr-only" id="initiative-view-edit-description">Change the view name, description, icon, or color.</Dialog.Description><div><ViewIconPicker color={visual.color} icon={visual.icon} onChange={setVisual}/><input aria-label="View name" autoFocus value={name} onChange={event => setName(event.target.value)} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') void save() }}/></div><label><span>Description</span><input aria-label="View description" value={description} onChange={event => setDescription(event.target.value)}/></label><footer><Dialog.Close asChild><button disabled={saving} type="button">Cancel</button></Dialog.Close><button disabled={!name.trim() || saving} onClick={() => void save()} type="button">Save</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
@@ -507,8 +517,8 @@ function StoredViewDeleteDialog({ view, open, onOpenChange, onDelete }: { view?:
   return <Dialog.Root onOpenChange={next => { onOpenChange(next); if (!next) setDeleting(false) }} open={open}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="li-dialog-overlay"/><Dialog.Content data-flow-motion="dialog" aria-describedby="initiative-view-delete-description" className="li-delete-dialog"><Dialog.Title>Delete the view “<span data-i18n-ignore>{view.name}</span>”?</Dialog.Title><Dialog.Description className="sr-only" id="initiative-view-delete-description">This saved initiative view will be permanently deleted.</Dialog.Description><footer><Dialog.Close asChild><button disabled={deleting} type="button">Cancel</button></Dialog.Close><button autoFocus disabled={deleting} onClick={() => { setDeleting(true); void onDelete().finally(() => setDeleting(false)) }} type="button">Delete view</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
 }
 
-function InitiativeEditableText({ value, placeholder, label, className, onCommit }: { value: string; placeholder?: string; label: string; className: string; onCommit: (value: string) => void }) { const [draft, setDraft] = useState(value); useEffect(() => setDraft(value), [value]); return <input aria-label={label} className={className} placeholder={placeholder} value={draft} onChange={event => setDraft(event.target.value)} onBlur={() => { if (draft.trim() !== value && draft.trim()) onCommit(draft.trim()) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') { setDraft(value); event.currentTarget.blur() } }}/>}
-export function EditableArea({ value, placeholder, label, onCommit, selectionActions, editorRef }: { value: string; placeholder?: string; label: string; onCommit: (value: string) => void; selectionActions?: DescriptionSelectionActions; editorRef?: (editor: Editor | null) => void }) { const [draft, setDraft] = useState(value); useEffect(() => setDraft(value), [value]); const latest = useRef(draft); latest.current = draft; return <MentionTextField ariaLabel={label} className="li-description-field" editorRef={editorRef} placeholder={placeholder} selectionActions={selectionActions} value={draft} onChange={setDraft} onBlur={() => { if (latest.current !== value) onCommit(latest.current) }}/>}
+function InitiativeEditableText({ value, placeholder, label, className, onCommit }: { value: string; placeholder?: string; label: string; className: string; onCommit: (value: string) => void }) { const [draft, setDraft] = useState(value); const [draftSource, setDraftSource] = useState(value); if (draftSource !== value) { setDraftSource(value); setDraft(value) } return <input aria-label={label} className={className} placeholder={placeholder} value={draft} onChange={event => setDraft(event.target.value)} onBlur={() => { if (draft.trim() !== value && draft.trim()) onCommit(draft.trim()) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') { setDraft(value); event.currentTarget.blur() } }}/>}
+export function EditableArea({ value, placeholder, label, onCommit, selectionActions, editorRef }: { value: string; placeholder?: string; label: string; onCommit: (value: string) => void; selectionActions?: DescriptionSelectionActions; editorRef?: (editor: Editor | null) => void }) { const [draft, setDraft] = useState(value); const [draftSource, setDraftSource] = useState(value); if (draftSource !== value) { setDraftSource(value); setDraft(value) } const latest = useLatestRef(draft); return <MentionTextField ariaLabel={label} className="li-description-field" editorRef={editorRef} placeholder={placeholder} selectionActions={selectionActions} value={draft} onChange={setDraft} onBlur={() => { if (latest.current !== value) onCommit(latest.current) }}/>}
 /** The initiative description: selecting text offers "Ask agent" and "Create issue from selection", as in an issue description. */
 export function InitiativeDescriptionField({ initiative, workspace, data, onComment, ...field }: { initiative: Pick<Initiative, 'id' | 'name' | 'slugId'>; workspace: string; data?: BootstrapData; value: string; placeholder?: string; label: string; onCommit: (value: string) => void; editorRef?: (editor: Editor | null) => void; /** "Comment" on the selection toolbar: starts an inline comment thread. */ onComment?: DescriptionSelectionActions['onComment'] }) { const { actions, panels } = useEntityDescriptionSelectionActions({ entity: { kind: 'initiative', id: initiative.id, name: initiative.name, href: initiativePath(workspace, initiative) }, data, onComment }); return <><EditableArea {...field} selectionActions={actions}/>{panels}</>} 
 function healthLabel(value: Project['health']) { return ({ onTrack: 'On track', atRisk: 'At risk', offTrack: 'Off track', noUpdate: 'No updates' } as const)[value] }

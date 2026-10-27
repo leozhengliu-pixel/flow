@@ -5,7 +5,8 @@ import { currencySymbol } from '@/lib/customer-settings'
 import type { FeatureSettings } from '@/types/flow'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { ChevronDown, MoreHorizontal } from 'lucide-react'
-import { useEffect, useMemo, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
+import { useMemo, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
+import { useCurrentTimeMs } from '@/hooks/use-current-time'
 import { VirtualColumnList } from '@/components/ui/virtual-column-list'
 import { CalendarIcon, NoAssigneeIcon } from '@/components/issue/issue-icons'
 import { MilestoneProgressIcon } from '@/components/issue/milestone-progress-icon'
@@ -213,9 +214,11 @@ export function ProjectsDataView({
   const [hiddenGroupIds, setHiddenGroupIds] = useState<string[]>([])
   const [sort, setSort] = useState<{ column: ProjectSortColumn, direction: 'asc' | 'desc' }>(externalSort ?? { column: 'name', direction: 'asc' })
 
-  useEffect(() => {
+  const [seededSort, setSeededSort] = useState(externalSort)
+  if (seededSort !== externalSort) {
+    setSeededSort(externalSort)
     if (externalSort) setSort(externalSort)
-  }, [externalSort])
+  }
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const listEntries = useMemo<ProjectListEntry[]>(() => groups.flatMap(group => {
@@ -692,10 +695,11 @@ function ProjectSortIcon() {
 }
 
 function ProjectProgressSparkline({ createdAt, progress, startDate, targetDate }: { createdAt?: string, progress: number, startDate?: string, targetDate?: string }) {
+  // The curve tracks project age in days, so an hourly clock is plenty.
+  const now = useCurrentTimeMs(3_600_000)
   if (!targetDate) return null
   const start = new Date(startDate ?? createdAt ?? targetDate).getTime()
   const target = new Date(targetDate).getTime()
-  const now = Date.now()
   const timeline = target > start ? Math.min(1, Math.max(.12, (now - start) / (target - start))) : 1
   const elbow = Math.round(timeline * 32 * 1000) / 1000
   const completionY = Math.round((16 - Math.min(100, Math.max(0, progress)) * .16) * 10) / 10

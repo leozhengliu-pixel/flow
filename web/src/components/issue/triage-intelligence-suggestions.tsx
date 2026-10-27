@@ -78,15 +78,19 @@ export function TriageIntelligenceSuggestions({
   const hasLocal = (data.issueSuggestions ?? []).some(item => item.issueId === issue.id && item.state === 'active')
   const shouldFetch = enabled && (inTriage || hasLocal || Boolean(issue.suggestionsGeneratedAt))
 
+  // Each fetch (re)start forgets the previous failure, and turning fetching off forgets the loaded suggestions.
+  const fetchKey = `${shouldFetch}|${inTriage}|${issue.id}|${issue.suggestionsGeneratedAt ?? ''}|${reloadKey}`
+  const [fetchedFor, setFetchedFor] = useState(fetchKey)
+  if (fetchedFor !== fetchKey) {
+    setFetchedFor(fetchKey)
+    if (shouldFetch) setFailed(false)
+    else setRemote(undefined)
+  }
   useEffect(() => {
-    if (!shouldFetch) {
-      setRemote(undefined)
-      return
-    }
+    if (!shouldFetch) return
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout> | undefined
     let attempts = 0
-    setFailed(false)
     const load = () => {
       void fetchIssueSuggestions(issue.id, controller.signal)
         .then(result => {
@@ -611,10 +615,14 @@ function formatElapsed(seconds: number) {
 /** Seconds since `active` turned on (the reference app's thinking timer); resets when it turns off. */
 function usePendingSeconds(active: boolean) {
   const [seconds, setSeconds] = useState(0)
+  const [wasActive, setWasActive] = useState(active)
+  if (active !== wasActive) {
+    setWasActive(active)
+    if (active) setSeconds(0)
+  }
   useEffect(() => {
     if (!active) return
     const started = Date.now()
-    setSeconds(0)
     const timer = setInterval(() => setSeconds(Math.floor((Date.now() - started) / 1000)), 1000)
     return () => clearInterval(timer)
   }, [active])

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Check, ChevronDown, ChevronLeft } from 'lucide-react'
 import type { AccountBootstrap, BootstrapData } from '@/types/flow'
 import { slugifyWorkspace } from './workspace-model'
@@ -8,15 +8,13 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 
 export function WorkspaceOnboarding({ account, onCreate, onBack, onLogout }: { account: AccountBootstrap; onCreate: (input: { name: string; urlKey: string; region: string }) => Promise<BootstrapData>; onBack: () => void; onLogout:()=>Promise<void> }) {
   const [name, setName] = useState('')
-  const [urlKey, setUrlKey] = useState('')
+  const [editedUrlKey, setUrlKey] = useState('')
   const [slugEdited, setSlugEdited] = useState(false)
+  // The URL follows the name until the person edits it by hand.
+  const urlKey = slugEdited ? editedUrlKey : slugifyWorkspace(name)
   const [region, setRegion] = useState(account.workspaceDefaultRegion || 'us')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-
-  useEffect(() => {
-    if (!slugEdited) setUrlKey(slugifyWorkspace(name))
-  }, [name, slugEdited])
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()

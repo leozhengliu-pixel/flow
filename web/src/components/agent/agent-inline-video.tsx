@@ -15,6 +15,11 @@ function clock(seconds: number) {
   return hours ? `${hours}:${pad(Math.floor(total / 60) % 60)}:${pad(total % 60)}` : `${Math.floor(total / 60)}:${pad(total % 60)}`
 }
 
+function PlayerButton({ label, icon, run }: { label: string; icon: ReactNode; run: () => void }) {
+  const { t } = useI18n()
+  return <button aria-label={t(label)} onClick={event => { event.preventDefault(); event.stopPropagation(); run() }} onMouseDown={event => event.preventDefault()} title={t(label)} type="button">{icon}</button>
+}
+
 /**
  * A video in the Agent composer or a sent message, as the reference app draws it: a framed player without the
  * browser's controls and a floating bar with play (k), mute (m), seek, speed, download, picture in picture (p) and fullscreen.
@@ -63,9 +68,6 @@ export function AgentInlineVideo({ src, name, editable = false, uploading = fals
     else return
     event.preventDefault()
   }
-  const button = (label: string, icon: ReactNode, run: () => void) => (
-    <button aria-label={t(label)} onClick={event => { event.preventDefault(); event.stopPropagation(); run() }} onMouseDown={event => event.preventDefault()} title={t(label)} type="button">{icon}</button>
-  )
   const progress = duration ? Math.min(100, (time / duration) * 100) : 0
   return (
     <div aria-label={name} className={styles.frame} data-editable={editable || undefined} data-uploading={uploading || undefined} onKeyDown={onKeyDown} ref={frameRef} role="group" tabIndex={uploading ? undefined : 0}>
@@ -87,8 +89,8 @@ export function AgentInlineVideo({ src, name, editable = false, uploading = fals
         title={name}
       />
       {!uploading && <div className={styles.bar} role="toolbar" aria-label={t('Video controls')}>
-        {button(playing ? 'Pause' : 'Play', playing ? <Pause aria-hidden fill="currentColor" size={16}/> : <Play aria-hidden fill="currentColor" size={16}/>, toggle)}
-        {button(muted ? 'Unmute' : 'Mute', muted ? <VolumeX aria-hidden size={16}/> : <Volume2 aria-hidden size={16}/>, mute)}
+        <PlayerButton label={playing ? 'Pause' : 'Play'} icon={playing ? <Pause aria-hidden fill="currentColor" size={16}/> : <Play aria-hidden fill="currentColor" size={16}/>} run={toggle}/>
+        <PlayerButton label={muted ? 'Unmute' : 'Mute'} icon={muted ? <VolumeX aria-hidden size={16}/> : <Volume2 aria-hidden size={16}/>} run={mute}/>
         <div className={styles.time}>
           <span className={styles.clock}>{clock(time)}</span>
           <input
@@ -107,11 +109,11 @@ export function AgentInlineVideo({ src, name, editable = false, uploading = fals
         <select aria-label={t('Playback speed')} className={styles.rate} onChange={event => { if (videoRef.current) videoRef.current.playbackRate = Number(event.target.value) }} value={rate}>
           {RATES.map(value => <option key={value} value={value}>{`${value}×`}</option>)}
         </select>
-        {button('Download', <Download aria-hidden size={16}/>, () => downloadImage({ src, alt: name }))}
-        {pipSupported && button('Picture in picture', <PictureInPicture2 aria-hidden size={16}/>, pip)}
-        {button(fullscreen ? 'Exit fullscreen' : 'Fullscreen', fullscreen ? <Minimize aria-hidden size={16}/> : <Maximize aria-hidden size={16}/>, toggleFullscreen)}
+        <PlayerButton label="Download" icon={<Download aria-hidden size={16}/>} run={() => downloadImage({ src, alt: name })}/>
+        {pipSupported && <PlayerButton label="Picture in picture" icon={<PictureInPicture2 aria-hidden size={16}/>} run={pip}/>}
+        <PlayerButton label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} icon={fullscreen ? <Minimize aria-hidden size={16}/> : <Maximize aria-hidden size={16}/>} run={toggleFullscreen}/>
       </div>}
-      {editable && !uploading && <span className={styles.toolbar}>{button('Delete', <ToolbarIcon make={deleteIcon}/>, () => onRemove?.())}</span>}
+      {editable && !uploading && <span className={styles.toolbar}><PlayerButton label="Delete" icon={<ToolbarIcon make={deleteIcon}/>} run={() => onRemove?.()}/></span>}
     </div>
   )
 }

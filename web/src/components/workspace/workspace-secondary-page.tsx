@@ -147,19 +147,28 @@ function AutomationPage({ data, kind, workflowId, workflowRunId, editing, onRelo
     ...(data.integrationConnections ?? []).map(item => item.provider).filter(Boolean),
     "email",
   ]));
-  useEffect(() => { setWorkflows(data.workflowDefinitions ?? []); }, [data.workflowDefinitions]);
-  useEffect(() => {
+  // Re-seed local copies when the incoming data changes (adjusting state while rendering, not in an effect).
+  const [seededDefinitions, setSeededDefinitions] = useState(data.workflowDefinitions);
+  if (seededDefinitions !== data.workflowDefinitions) {
+    setSeededDefinitions(data.workflowDefinitions);
+    setWorkflows(data.workflowDefinitions ?? []);
+  }
+  const [seededSources, setSeededSources] = useState({ mode: data.workspaceSettings.trustedSourcesMode, allowlist: data.workspaceSettings.trustedSourcesAllowlist });
+  if (seededSources.mode !== data.workspaceSettings.trustedSourcesMode || seededSources.allowlist !== data.workspaceSettings.trustedSourcesAllowlist) {
+    setSeededSources({ mode: data.workspaceSettings.trustedSourcesMode, allowlist: data.workspaceSettings.trustedSourcesAllowlist });
     setTrustedSourcesMode(data.workspaceSettings.trustedSourcesMode ?? "none");
     setTrustedSourcesAllowlist(data.workspaceSettings.trustedSourcesAllowlist ?? []);
-  }, [data.workspaceSettings.trustedSourcesMode, data.workspaceSettings.trustedSourcesAllowlist]);
-  useEffect(() => {
+  }
+  const [seededWorkflow, setSeededWorkflow] = useState<{ selected: WorkflowDefinition | undefined; viewerId: string }>({ selected: undefined, viewerId: data.viewer.id });
+  if (seededWorkflow.selected !== selected || seededWorkflow.viewerId !== data.viewer.id) {
+    setSeededWorkflow({ selected, viewerId: data.viewer.id });
     if (selected) {
       setName(selected.name);
       setDescription(selected.description ?? "");
       setOwnerId(selected.ownerId || selected.creatorId || data.viewer.id);
       setTrustedSourceKeys(selected.trustedSourceKeys ?? []);
     }
-  }, [selected, data.viewer.id]);
+  }
   useEffect(() => { if (kind === "automation-runs" || selected) void listWorkflowRuns(selected?.id).then(setRuns).catch(() => setError(t("Could not load automation runs"))); }, [kind, selected, t]);
 
   const persistAllowlist = (next: { trustedSourcesMode: "none" | "allowlist"; trustedSourcesAllowlist: string[] }) => {

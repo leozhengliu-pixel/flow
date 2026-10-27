@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { X } from 'lucide-react'
+import { useCurrentTimeMs } from '@/hooks/use-current-time'
 import { format } from 'date-fns'
 import { DateTimeControl } from '@/components/ui/date-time-control'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -36,7 +37,12 @@ export function TeamFilterBar({ filters, groups, onChange, onChoice, onDate }: {
 /** The reference app's "Custom date or timeframe…" dialog; `value` and `onApply` use `date:YYYY-MM-DD[/YYYY-MM-DD]`. Shared by date filters outside the team directory (e.g. loops' Last executed). */
 export function TeamDateFilterDialog({ open, value, onClose, onApply, title = 'Created date', fromLabel = 'Created on or after', toLabel = 'Created through' }: { open: boolean; value?: string; onClose: () => void; onApply: (value: string) => void; title?: string; fromLabel?: string; toLabel?: string }) {
   const [from, setFrom] = useState(''), [to, setTo] = useState('')
-  useEffect(() => { if (open) { const [start, end] = value?.startsWith('date:') ? value.slice(5).split('/') : []; setFrom(start ?? format(new Date(), 'yyyy-MM-dd')); setTo(end ?? '') } }, [open, value])
+  const now = useCurrentTimeMs()
+  const [seen, setSeen] = useState<{ open: boolean; value?: string }>()
+  if (seen?.open !== open || seen.value !== value) {
+    setSeen({ open, value })
+    if (open) { const [start, end] = value?.startsWith('date:') ? value.slice(5).split('/') : []; setFrom(start ?? format(now, 'yyyy-MM-dd')); setTo(end ?? '') }
+  }
   return <Dialog open={open} onOpenChange={next => { if (!next) onClose() }}><DialogContent className="workspace-team-date-dialog"><DialogTitle>{title}</DialogTitle>
     <label>On or after<DateTimeControl label={fromLabel} value={from} onChange={setFrom}/></label>
     {to ? <><label>Through<DateTimeControl label={toLabel} min={from || undefined} value={to} onChange={setTo}/></label><button type="button" onClick={() => setTo('')}>Remove end date</button></> : <button type="button" onClick={() => setTo(from)}>Add end date</button>}

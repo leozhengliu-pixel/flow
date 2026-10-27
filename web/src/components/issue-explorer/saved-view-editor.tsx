@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useInsertionEffect, useRef, useState, type ReactNode } from 'react'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { AgentBadge } from '@/components/agent/agent-badge'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
@@ -52,18 +52,30 @@ export function SavedViewEditor({ actions, ariaLabel = 'New view', mode = 'creat
   const [visual, setVisual] = useState<ViewVisual>({ icon: initialIcon, color: initialColor })
   const [iconTouched, setIconTouched] = useState(initialIcon !== DEFAULT_VIEW_ICON)
   const [target, setTarget] = useState(initialTarget ?? saveTargets[0])
-  useEffect(() => { setName(initialName); setDescription(initialDescription); setDescriptionTouched(Boolean(initialDescription)); setVisual({ icon: initialIcon, color: initialColor }); setIconTouched(initialIcon !== DEFAULT_VIEW_ICON) }, [initialColor, initialDescription, initialIcon, initialName])
-  useEffect(() => { if (initialTarget) setTarget(initialTarget) }, [initialTarget])
+  // New initial values from the parent replace the draft (compared during render rather than in an effect).
+  const initialKey = JSON.stringify([initialColor, initialDescription, initialIcon, initialName])
+  const [seenInitialKey, setSeenInitialKey] = useState(initialKey)
+  if (seenInitialKey !== initialKey) {
+    setSeenInitialKey(initialKey)
+    setName(initialName); setDescription(initialDescription); setDescriptionTouched(Boolean(initialDescription)); setVisual({ icon: initialIcon, color: initialColor }); setIconTouched(initialIcon !== DEFAULT_VIEW_ICON)
+  }
+  const [seenInitialTarget, setSeenInitialTarget] = useState(initialTarget)
+  if (seenInitialTarget !== initialTarget) {
+    setSeenInitialTarget(initialTarget)
+    if (initialTarget) setTarget(initialTarget)
+  }
   const shownDescription = descriptionTouched ? description : (description || suggestedDescription || '')
   const shownIcon = iconTouched || !suggestedIcon ? visual.icon : suggestedIcon, shownColor = visual.color
   const shownVisual = { icon: shownIcon, color: shownColor }
-  const draftRef = useRef(onDraftChange); draftRef.current = onDraftChange
+  const draftRef = useRef(onDraftChange)
+  useInsertionEffect(() => { draftRef.current = onDraftChange })
   useEffect(() => { draftRef.current?.({ name, description: shownDescription, visual: { icon: shownIcon, color: shownColor } }) }, [name, shownDescription, shownIcon, shownColor])
   const placeholder = suggestedName || t(namePlaceholder)
   const resolvedName = name.trim() || placeholder
   const save = () => { if (!saving) onSave(resolvedName, shownDescription.trim(), target, shownVisual) }
   // Escape (with no popover open) leaves the editor and discards the draft.
-  const cancelRef = useRef(onCancel); cancelRef.current = onCancel
+  const cancelRef = useRef(onCancel)
+  useInsertionEffect(() => { cancelRef.current = onCancel })
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return

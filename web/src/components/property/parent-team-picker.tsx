@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useInsertionEffect, useMemo, useRef, useState } from 'react'
 import { PropertyMenu } from './property-menu'
 import { TeamIcon } from '@/components/issue/issue-icons'
 import { teamHierarchy, type TeamHierarchySettings } from '@/lib/team-hierarchy'
@@ -17,11 +17,16 @@ export function ParentTeamPicker({ teams, settings, teamId = '', value = '', dat
   const [pendingParentId, setPendingParentId] = useState<string>()
   const [pickerOpen, setPickerOpen] = useState(false)
   const latest = useRef({ value, onActionHandled })
-  latest.current = { value, onActionHandled }
-  useEffect(() => {
+  useInsertionEffect(() => { latest.current = { value, onActionHandled } })
+  // A deep-linked action opens the picker or the removal prompt (compared during render, not in an effect).
+  const [seenAction, setSeenAction] = useState<{ action: typeof action }>()
+  if (!seenAction || seenAction.action !== action) {
+    setSeenAction({ action })
     if (action === 'pick') setPickerOpen(true)
-    else if (action === 'remove' && latest.current.value) setPendingParentId('')
-    else if (action === 'remove') latest.current.onActionHandled?.()
+    else if (action === 'remove' && value) setPendingParentId('')
+  }
+  useEffect(() => {
+    if (action === 'remove' && !latest.current.value) latest.current.onActionHandled?.()
   }, [action])
   const finishAction = () => { if (action) onActionHandled?.() }
   const canManageTeam = useMemo(() => (candidate: Team) => {

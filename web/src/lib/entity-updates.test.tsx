@@ -1,5 +1,5 @@
 import { act, render } from '@testing-library/react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { listInitiativeUpdates, listProjectUpdates } from '@/lib/api'
 import { mergeWorkspaceDirectory } from '@/lib/issue-detail-cache'
@@ -19,7 +19,7 @@ const update = { id: 'u1', projectId: project.id, body: 'Shipped', health: 'onTr
 let latest: BootstrapData | null = null
 function Harness({ initial }: { initial: BootstrapData }) {
   const [data, setData] = useState<BootstrapData | null>(initial)
-  latest = data
+  useEffect(() => { latest = data })
   useEntityUpdatesLoader(data, setData)
   return null
 }

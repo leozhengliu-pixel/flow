@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 
 import type { InboxNotificationRowData, InboxSnoozePreset } from './notification-row'
 
@@ -30,13 +31,12 @@ export function useInboxController(options: InboxControllerOptions) {
   const [pending, setPending] = useState<Record<string, InboxMutationKind | undefined>>({})
   const [error, setError] = useState<InboxMutationError | null>(null)
   const retryRef = useRef<null | (() => Promise<void>)>(null)
-  const latestRef = useRef(notifications)
-  latestRef.current = notifications
+  const latestRef = useLatestRef(notifications)
 
   const commit = useCallback((items: InboxNotificationRowData[]) => {
     latestRef.current = items
     onNotificationsChange(items)
-  }, [onNotificationsChange])
+  }, [latestRef, onNotificationsChange])
 
   const setPendingFor = useCallback((id: string, kind?: InboxMutationKind) => {
     setPending((current) => {
@@ -83,7 +83,7 @@ export function useInboxController(options: InboxControllerOptions) {
       }
     }
     await attempt()
-  }, [commit, onSelectedIdChange, selectedId, setPendingFor])
+  }, [commit, latestRef, onSelectedIdChange, selectedId, setPendingFor])
 
   const actions = useMemo(() => ({
     open: (notification: InboxNotificationRowData) => {

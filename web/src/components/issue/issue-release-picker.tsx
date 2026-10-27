@@ -29,8 +29,13 @@ export function IssueReleasePicker({ data, issue, grouped = false, externalAncho
   const [releases, setReleases] = useState(data.releases)
   const [selected, setSelected] = useState(() => data.releases.filter(item => item.issueIds.includes(issue.id)).map(item => item.id))
 
-  useEffect(() => setReleases(data.releases), [data.releases])
-  useEffect(() => setSelected(data.releases.filter(item => item.issueIds.includes(issue.id)).map(item => item.id)), [data.releases, issue.id])
+  // New workspace releases replace the local copy; either a new release list or another issue re-derives the selection.
+  const [syncedFrom, setSyncedFrom] = useState({ releases: data.releases, issueId: issue.id })
+  if (syncedFrom.releases !== data.releases || syncedFrom.issueId !== issue.id) {
+    setSyncedFrom({ releases: data.releases, issueId: issue.id })
+    if (syncedFrom.releases !== data.releases) setReleases(data.releases)
+    setSelected(data.releases.filter(item => item.issueIds.includes(issue.id)).map(item => item.id))
+  }
   useEffect(() => {
     const sync = (event: Event) => {
       const detail = (event as CustomEvent<{ issueId: string; releaseIds: string[] }>).detail
@@ -57,9 +62,12 @@ export function IssueReleasePicker({ data, issue, grouped = false, externalAncho
   const itemIds = [...selectedOptions.map(item => item.id), ...availableOptions.map(item => item.id), '__pipelines', ...(canCreate ? ['__create'] : [])]
   const firstItemId = itemIds[0] ?? ''
 
-  useEffect(() => {
+  // While open, the highlight returns to the first row whenever the rows or the query change.
+  const [activeFor, setActiveFor] = useState({ firstItemId, open, query })
+  if (activeFor.firstItemId !== firstItemId || activeFor.open !== open || activeFor.query !== query) {
+    setActiveFor({ firstItemId, open, query })
     if (open) setActiveId(firstItemId)
-  }, [firstItemId, open, query])
+  }
 
   const close = () => { setOpen(false); setQuery(''); setPipelinesOpen(false); setCreateOpen(false) }
   const toggle = async (id: string) => {
@@ -211,7 +219,11 @@ function PipelineReleaseMenu({ open, pipeline, releases, selected, saving, onCre
   const canCreate = Boolean(query.trim() && !releases.some(item => item.name.toLocaleLowerCase() === query.trim().toLocaleLowerCase()))
   const ids = [...groups.flatMap(group => group.items.map(item => item.id)), ...(canCreate ? ['__create'] : [])]
   const firstId = ids[0] ?? ''
-  useEffect(() => { if (open) setActiveId(firstId) }, [firstId, open, query])
+  const [activeFor, setActiveFor] = useState({ firstId, open, query })
+  if (activeFor.firstId !== firstId || activeFor.open !== open || activeFor.query !== query) {
+    setActiveFor({ firstId, open, query })
+    if (open) setActiveId(firstId)
+  }
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const index = Math.max(0, ids.indexOf(activeId))
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); const offset = event.key === 'ArrowDown' ? 1 : -1; setActiveId(ids[(index + offset + ids.length) % ids.length] ?? '') }

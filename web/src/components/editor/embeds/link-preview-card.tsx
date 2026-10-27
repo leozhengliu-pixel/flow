@@ -12,10 +12,14 @@ export function LinkPreviewCard({ provider, src }: { provider: string; src: stri
   const [preview, setPreview] = useState<LinkPreview | null>(null)
   const [imageFailed, setImageFailed] = useState(false)
   const href = safeEmbedHref(src)
-  useEffect(() => {
-    let live = true
+  const [seenSrc, setSeenSrc] = useState(src)
+  if (seenSrc !== src) {
+    setSeenSrc(src)
     setPreview(null)
     setImageFailed(false)
+  }
+  useEffect(() => {
+    let live = true
     fetchLinkPreview(src).then(next => { if (live) setPreview(next) }, () => undefined)
     return () => { live = false }
   }, [src])

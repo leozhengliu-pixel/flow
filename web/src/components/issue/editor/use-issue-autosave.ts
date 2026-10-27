@@ -1,17 +1,17 @@
 import type { IssueUpdateInput } from '@/types/flow'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import type { IssueSaveState } from '../issue-header'
 
 export function useIssueAutosave(onSave: (input: IssueUpdateInput) => Promise<void>, delay = 600) {
   const [state, setState] = useState<IssueSaveState>('idle')
-  const saveRef = useRef(onSave)
+  const saveRef = useLatestRef(onSave)
   const pendingRef = useRef<IssueUpdateInput | null>(null)
   const failedRef = useRef<IssueUpdateInput | null>(null)
   const timerRef = useRef<number | undefined>(undefined)
   const drainRef = useRef<Promise<boolean> | null>(null)
   const mountedRef = useRef(true)
   const idleTimerRef = useRef<number | undefined>(undefined)
-  saveRef.current = onSave
 
   const flush = useCallback((): Promise<boolean> => {
     window.clearTimeout(timerRef.current)
@@ -47,7 +47,7 @@ export function useIssueAutosave(onSave: (input: IssueUpdateInput) => Promise<vo
     })
     drainRef.current = drain
     return drain
-  }, [])
+  }, [saveRef])
 
   const schedule = useCallback((input: IssueUpdateInput) => {
     pendingRef.current = { ...pendingRef.current, ...input }

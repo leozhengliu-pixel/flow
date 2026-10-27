@@ -79,7 +79,13 @@ function LightboxEditorProviderInner({
   const [session, setSession] = useState<Session | null>(null)
   const insets = useWindowControlsInsets()
   const commentHash = useCommentHashPopover(enableCommentHashPopover)
-  const [comment, setComment] = useState<LightboxComment | undefined>()
+  // Only a comment the host can resolve gets the popover: pages that handle `#comment-` links themselves (issue,
+  // document and project activity threads) must not also get a placeholder popover.
+  const commentTarget = commentHash.target
+  const comment = useMemo<LightboxComment | undefined>(
+    () => commentTarget ? resolveComment?.(commentTarget.id) : undefined,
+    [commentTarget, resolveComment],
+  )
   const [zoom, setZoom] = useState(100)
   const [zoomed, setZoomed] = useState(false)
   const [pan, setPan] = useState({ x: 0, y: 0 })
@@ -124,15 +130,6 @@ function LightboxEditorProviderInner({
     return () => registerLightboxOpener(null)
   }, [open])
 
-  useEffect(() => {
-    if (!commentHash.target) {
-      setComment(undefined)
-      return
-    }
-    // Only a comment the host can resolve gets the popover: pages that handle `#comment-` links themselves (issue,
-    // document and project activity threads) must not also get a placeholder popover.
-    setComment(resolveComment?.(commentHash.target.id))
-  }, [commentHash.target, resolveComment])
 
   useEffect(() => {
     if (!session) return

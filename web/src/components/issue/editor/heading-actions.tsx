@@ -1,6 +1,7 @@
 import { ChevronsDownUp, EllipsisVertical, Link2 } from 'lucide-react'
 import type { Editor } from '@tiptap/react'
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useState, type RefObject } from 'react'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { toast } from '@/lib/toast'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useI18n } from '@/i18n/i18n'
@@ -16,8 +17,7 @@ export function HeadingActions({ editor, rootRef }: { editor: Editor; rootRef: R
   const { t } = useI18n()
   const [target, setTarget] = useState<Target | null>(null)
   const [open, setOpen] = useState(false)
-  const openRef = useRef(open)
-  openRef.current = open
+  const openRef = useLatestRef(open)
 
   useEffect(() => {
     const root = rootRef.current
@@ -74,7 +74,7 @@ export function HeadingActions({ editor, rootRef }: { editor: Editor; rootRef: R
       editor.off('focus', onSelection)
       editor.off('blur', onBlur)
     }
-  }, [editor, rootRef])
+  }, [editor, openRef, rootRef])
 
   useEffect(() => {
     let revealed = false

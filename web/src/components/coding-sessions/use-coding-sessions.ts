@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { AGENT_TASK_ACTIVITY_EVENT } from '@/lib/application-agents'
 import { fetchCodingModels, fetchCodingSession, fetchCodingSessions, fetchCodingStatus } from '@/lib/coding-sessions-api'
 import type { BootstrapData } from '@/types/flow'
@@ -49,10 +50,11 @@ export function useCodingAvailability(data?: Pick<BootstrapData, 'workspaceSetti
   const flag = codingFeatureEnabled(data)
   const [available, setAvailable] = useState(false)
   useEffect(() => {
-    if (!flag || !enabled) { setAvailable(false); return }
+    if (!flag || !enabled) return
     let active = true
     void loadAvailability().then(value => { if (active) setAvailable(value) })
-    return () => { active = false }
+    // Switching the flag or `enabled` off forgets the answer, so turning it back on starts unavailable again.
+    return () => { active = false; setAvailable(false) }
   }, [flag, enabled])
   return flag && enabled && available
 }
@@ -70,8 +72,7 @@ export function useCodingSession(sessionId: string | undefined, initial?: Coding
   const [session, setSession] = useState<CodingSession | undefined>(sessionId && initial?.id === sessionId ? initial : undefined)
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
-  const latest = useRef(session)
-  latest.current = session
+  const latest = useLatestRef(session)
   useEffect(() => {
     if (!sessionId) return
     const abort = new AbortController()
@@ -112,7 +113,7 @@ export function useCodingSession(sessionId: string | undefined, initial?: Coding
       window.removeEventListener(CODING_SESSION_EVENT, onCoding)
       window.removeEventListener(AGENT_TASK_ACTIVITY_EVENT, onTask)
     }
-  }, [sessionId, revision])
+  }, [sessionId, revision, latest])
   /** Applies an action's result at once (it is newer than the last fetch). */
   const apply = useCallback((next: CodingSession) => setSession(previous => previous && previous.id === next.id && previous.version > next.version ? previous : next), [])
   const refresh = useCallback(() => setRevision(value => value + 1), [])
@@ -200,9 +201,11 @@ export function useNow(live: boolean) {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     if (!live) return
-    setNow(Date.now())
-    const timer = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(timer)
+    const tick = () => setNow(Date.now())
+    // Refresh straight away when the timer starts running, then once a second.
+    const first = setTimeout(tick, 0)
+    const timer = setInterval(tick, 1000)
+    return () => { clearTimeout(first); clearInterval(timer) }
   }, [live])
   return now
 }

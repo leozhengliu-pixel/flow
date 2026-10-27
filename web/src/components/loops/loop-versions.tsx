@@ -88,10 +88,16 @@ export function LoopVersionsDialog({
   const [restoring, setRestoring] = useState(false);
   const [reload, setReload] = useState(0);
 
+  // Every (re)load starts without the previous error.
+  const [seen, setSeen] = useState({ loopId: loop.id, open, reload });
+  if (seen.loopId !== loop.id || seen.open !== open || seen.reload !== reload) {
+    setSeen({ loopId: loop.id, open, reload });
+    if (open) setError(undefined);
+  }
+
   useEffect(() => {
     if (!open) return;
     let active = true;
-    setError(undefined);
     listLoopVersions(loop.id)
       .then((items) => {
         if (!active) return;

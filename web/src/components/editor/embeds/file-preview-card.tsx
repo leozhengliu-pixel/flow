@@ -23,9 +23,13 @@ type PreviewState = { status: 'loading' } | { status: 'ready'; preview: FilePrev
 function useFilePreview(src: string) {
   const [state, setState] = useState<PreviewState>({ status: 'loading' })
   const [attempt, setAttempt] = useState(0)
+  const [seen, setSeen] = useState({ src, attempt })
+  if (seen.src !== src || seen.attempt !== attempt) {
+    setSeen({ src, attempt })
+    setState({ status: 'loading' })
+  }
   useEffect(() => {
     let live = true
-    setState({ status: 'loading' })
     fetchFilePreview(src, { force: attempt > 0 }).then(
       preview => { if (live) setState({ status: 'ready', preview }) },
       error => { if (live) setState({ status: 'error', code: filePreviewErrorCode(error) }) },

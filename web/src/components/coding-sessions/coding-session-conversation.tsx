@@ -11,6 +11,7 @@ import { AppLink } from '@/components/ui/app-link'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
+import { useCurrentTimeMs } from '@/hooks/use-current-time'
 import { issuePath } from '@/lib/app-routes'
 import { toast } from '@/lib/toast'
 import type { BootstrapData } from '@/types/flow'
@@ -104,10 +105,11 @@ function useStreamFollow(scroller: RefObject<HTMLElement | null>, sentinel: RefO
 /** A prompt's time: "just now", "3min ago", with the full date as the tooltip. */
 function PromptTime({ at }: { at: string }) {
   const { locale } = useI18n()
+  const now = useCurrentTimeMs()
   const date = new Date(at)
   if (!at || Number.isNaN(date.getTime())) return null
   const full = date.toLocaleString(locale, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' })
-  return <time dateTime={at} title={full} aria-label={full}>{activityTimeLabel(at, Date.now(), locale).replace(/m(?= ago$)/, 'min')}</time>
+  return <time dateTime={at} title={full} aria-label={full}>{activityTimeLabel(at, now, locale).replace(/m(?= ago$)/, 'min')}</time>
 }
 
 /** A prompt's text with its backticked spans as inline code chips (the rest stays as typed, line breaks included). */

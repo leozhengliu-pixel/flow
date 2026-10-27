@@ -10,6 +10,7 @@ import {
   type RefObject,
 } from "react";
 
+import { useLatestRef } from "@/hooks/use-latest-ref";
 import {
   PullRequestReviewShortcutsContext,
   resolveReviewShortcut,
@@ -45,8 +46,7 @@ export function PullRequestReviewShortcutsProvider({
   scope?: RefObject<HTMLElement | null>;
 }) {
   const registered = useRef<PullRequestReviewShortcutHandlers>({});
-  const base = useRef(handlers);
-  base.current = handlers;
+  const base = useLatestRef(handlers);
 
   const register = useCallback((partial: Partial<PullRequestReviewShortcutHandlers>) => {
     registered.current = { ...registered.current, ...partial };
@@ -60,7 +60,7 @@ export function PullRequestReviewShortcutsProvider({
   const resolve = useCallback(
     (key: keyof PullRequestReviewShortcutHandlers) =>
       registered.current[key] ?? base.current?.[key],
-    [],
+    [base],
   );
 
   useEffect(() => {

@@ -132,7 +132,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   }
   const kind = explicitKind ?? (multiple && label === 'Labels' ? 'labels' : label === 'Project' ? 'project' : 'standard')
   const orderedOptions = useMemo(() => multiple && kind !== 'labels' ? [...menuOptions.filter(option => selectedSet.has(option.id)), ...menuOptions.filter(option => !selectedSet.has(option.id))] : menuOptions, [menuOptions, multiple, kind, selectedSet])
-  const command = usePropertyCommand({
+  const { inputRef: commandInputRef, ...command } = usePropertyCommand({
     autoFocus: kind !== 'project-labels',
     closeOnSelect: closeOnSelect ?? !multiple,
     keepSelectedVisible,
@@ -144,7 +144,8 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
     onSelect: option => { void onChange?.(option.id) },
   })
   const labelMenu = groupLabelOptions(command.filteredOptions, selectedSet)
-  const standardSections = useMemo(() => groupOptionSections(command.filteredOptions), [command.filteredOptions])
+  const filteredCommandOptions = command.filteredOptions
+  const standardSections = useMemo(() => groupOptionSections(filteredCommandOptions), [filteredCommandOptions])
   const noProject = command.filteredOptions.filter(option => !option.id)
   const projects = command.filteredOptions.filter(option => option.id)
   const selectedProjects = projects.filter(option => command.isSelected(option.id))
@@ -184,7 +185,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
     : tooltipContent ? <Tooltip.Trigger asChild>{popoverTrigger}</Tooltip.Trigger> : popoverTrigger
   const content = kind === 'project-labels' ? <ProjectLabelMenuContent options={options} selectedIds={selected} groupId={labelGroupId} onChoose={id => { void onChange?.(id) }} onCreate={onCreate} onClose={() => setOpen(false)}/> : <div onKeyDown={onCommandKeyDown}>
           <div className={`property-command-search${hideSearch && !command.query ? ' is-visually-hidden' : ''}`}>
-            <input ref={command.inputRef} value={command.query} onFocus={() => setOpenLabelGroupId(undefined)} onChange={event => command.onQueryChange(event.target.value)} aria-label={placeholder} aria-controls={listboxId} aria-activedescendant={command.activeId ? `${listboxId}-${command.activeId || 'none'}` : undefined} placeholder={placeholder} autoComplete="off" spellCheck={false}/>
+            <input ref={commandInputRef} value={command.query} onFocus={() => setOpenLabelGroupId(undefined)} onChange={event => command.onQueryChange(event.target.value)} aria-label={placeholder} aria-controls={listboxId} aria-activedescendant={command.activeId ? `${listboxId}-${command.activeId || 'none'}` : undefined} placeholder={placeholder} autoComplete="off" spellCheck={false}/>
             {(searchShortcut ?? (kind === 'labels' ? 'L' : kind === 'project' ? 'Shift P' : undefined)) && <SearchShortcut value={searchShortcut ?? (kind === 'labels' ? 'L' : 'Shift P')}/>}
           </div>
           {kind === 'standard' && command.filteredOptions.length > 60 ? <VirtualStandardOptions sections={standardSections} activeId={command.activeId} selected={selectedSet} label={label} multiple={multiple} listboxId={listboxId} onChoose={command.choose} onActive={command.setActiveId}/> : <div id={listboxId} className="property-command-options" role="listbox" aria-label={label} aria-multiselectable={multiple || undefined} onWheel={event => event.stopPropagation()}>

@@ -3,7 +3,8 @@
  * pane, list/board selection) or the project/document page they render; the
  * command menu reads the most specific registration and lists its actions first.
  */
-import { useEffect, useId, useRef, useSyncExternalStore } from 'react'
+import { useEffect, useId, useSyncExternalStore } from 'react'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import type { FlowDocument, Issue, IssueRelationType, IssueUpdateInput, Project } from '@/types/flow'
 import type { ProjectMutationInput } from '@/components/projects-page/projects-page'
 import type { CommandPage, ContextAction, PageOption } from './context-commands'
@@ -99,15 +100,14 @@ function identity(context: CommandContext | undefined) {
  */
 export function useRegisterCommandContext(context: CommandContext | undefined) {
   const key = useId()
-  const latest = useRef(context)
-  latest.current = context
+  const latest = useLatestRef(context)
   const id = identity(context)
   useEffect(() => {
     if (!id) return
     entries.set(key, { key, order: ++sequence, read: () => latest.current ?? { kind: 'issues', source: 'detail', issues: [] } })
     emit()
     return () => { entries.delete(key); emit() }
-  }, [id, key])
+  }, [id, key, latest])
 }
 
 /** Window event that opens ⌘K (App listens); surfaces register a context first to scope it ("Actions" buttons). */

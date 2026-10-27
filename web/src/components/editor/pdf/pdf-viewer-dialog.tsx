@@ -12,6 +12,11 @@ const FALLBACK_PAGE = { width: 612, height: 792 }
 type Insets = { left: number; right: number }
 type PageSize = { width: number; height: number }
 
+/** Scrolling is a DOM side effect on the scroll container the dialog renders, not React state. */
+function setScrollTop(element: HTMLElement, top: number) {
+  element.scrollTop = top
+}
+
 export function PdfViewerDialog({ src, title, insets, onClose }: { src: string; title: string; insets?: Insets; onClose: () => void }) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
@@ -30,13 +35,19 @@ export function PdfViewerDialog({ src, title, insets, onClose }: { src: string; 
     dialogRef.current?.focus({ preventScroll: true })
   }, [])
 
-  useEffect(() => {
-    const controller = new AbortController()
-    let loaded: PDFDocumentProxy | null = null
+  // Opening another file starts over.
+  const [seenSrc, setSeenSrc] = useState(src)
+  if (seenSrc !== src) {
+    setSeenSrc(src)
     setStatus('loading')
     setPdf(null)
     setSizes([])
     setCurrent(1)
+  }
+
+  useEffect(() => {
+    const controller = new AbortController()
+    let loaded: PDFDocumentProxy | null = null
     loadPdfDocument(src, controller.signal).then(async file => {
       if (controller.signal.aborted) { destroyPdfDocument(file); return }
       loaded = file
@@ -83,7 +94,7 @@ export function PdfViewerDialog({ src, title, insets, onClose }: { src: string; 
   // A zoom change keeps the same part of the document in view.
   useLayoutEffect(() => {
     if (!scroller || keepRatio.current == null) return
-    scroller.scrollTop = keepRatio.current * scroller.scrollHeight
+    setScrollTop(scroller, keepRatio.current * scroller.scrollHeight)
     keepRatio.current = null
     updateCurrent()
   }, [zoomIndex, scroller, updateCurrent])

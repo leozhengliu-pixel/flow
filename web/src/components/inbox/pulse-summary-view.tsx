@@ -48,10 +48,16 @@ export function PulseSummaryView({ notificationId, title, data, onOpenProject, o
   useRequestEntityUpdates('project', sourceIds('project'))
   useRequestEntityUpdates('initiative', sourceIds('initiative'))
 
-  useEffect(() => {
-    const controller = new AbortController()
+  // A new notification, or a retry, starts from an empty summary (adjusted while rendering).
+  const fetchKey = `${attempt}|${notificationId}`
+  const [fetchedKey, setFetchedKey] = useState(fetchKey)
+  if (fetchedKey !== fetchKey) {
+    setFetchedKey(fetchKey)
     setSummary(undefined)
     setFailed(false)
+  }
+  useEffect(() => {
+    const controller = new AbortController()
     fetchPulseSummary(notificationId, controller.signal)
       .then(next => { if (!controller.signal.aborted) setSummary(next) })
       .catch(() => { if (!controller.signal.aborted) setFailed(true) })
@@ -337,7 +343,11 @@ function ReportSummaryDialog({ notificationId, target, onClose }: { notification
   const { t } = useI18n()
   const [reason, setReason] = useState('')
   const [sending, setSending] = useState(false)
-  useEffect(() => { if (target) setReason('') }, [target])
+  const [seededTarget, setSeededTarget] = useState(target)
+  if (seededTarget !== target) {
+    setSeededTarget(target)
+    if (target) setReason('')
+  }
   const submit = useCallback(async () => {
     const text = reason.trim()
     if (!target || !text || sending) return

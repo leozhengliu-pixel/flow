@@ -130,10 +130,11 @@ export function ProjectsPageSurface({
       : openSurface?.kind === 'filter' ? filterTriggerRef : displayTriggerRef,
   })
 
-  useEffect(() => {
-    if (!displaySettings) return
-    setSettings(current => ({ ...current, ...displaySettings }))
-  }, [displaySettings])
+  const [mergedDisplaySettings, setMergedDisplaySettings] = useState(displaySettings)
+  if (mergedDisplaySettings !== displaySettings) {
+    setMergedDisplaySettings(displaySettings)
+    if (displaySettings) setSettings(current => ({ ...current, ...displaySettings }))
+  }
 
   const updateSettings = (next: ProjectsDisplaySettings) => {
     setSettings(next)
@@ -244,7 +245,8 @@ function IconButton({ active = false, badge = false, buttonRef, children, classN
 function ProjectsFilterMenu({ customerFilterOptions = [], filterOptions = {}, onSelect, rootRef, selectedFilters, onSearchFilterOptions }: { customerFilterOptions?: MyIssuesFilterOption[]; filterOptions?: Partial<Record<string, ProjectFilterOption[]>>; onSelect: (filter: string, option?: ProjectFilterOption) => void; rootRef?: RefObject<HTMLDivElement | null>; selectedFilters: ProjectFilter[]; onSearchFilterOptions?: (field: string, query: string) => Promise<ProjectFilterOption[]> }) {
   const [nested, setNested] = useState<string>()
   const [nestedPosition, setNestedPosition] = useState({ top: 112, openRight: false, maxHeight: 360 })
-  const options=FILTER_GROUPS.flat().map(item=>({id:item,label:item})),command=usePropertyCommand({open:true,options,onOpenChange:()=>{},onSelect:option=>choose(option.id)})
+  const options=FILTER_GROUPS.flat().map(item=>({id:item,label:item}))
+  const { inputRef, ...command } = usePropertyCommand({open:true,options,onOpenChange:()=>{},onSelect:option=>choose(option.id)})
   const selectedByField = new Map(selectedFilters.map(filter => [filter.field, new Set(filter.values.map(value => value.id))]))
   const placeNested = (item: string, anchor: HTMLElement) => {
     const root = (rootRef?.current ?? anchor.closest('.lp-projects-filter'))?.getBoundingClientRect()
@@ -272,7 +274,7 @@ function ProjectsFilterMenu({ customerFilterOptions = [], filterOptions = {}, on
   return <div aria-label="Project filters" className="lp-projects-filter" ref={rootRef} role="dialog">
     <div className="lp-projects-filter__search">
       <input
-        ref={command.inputRef}
+        ref={inputRef}
         aria-activedescendant={command.activeId?`project-filter-${command.activeId}`:undefined}
         aria-controls="project-filter-options"
         aria-label="Add Filter…"
@@ -363,8 +365,11 @@ function ProjectPeopleFilterValues({field,nestedPosition,onSelect,options,select
 }
 function ProjectStandardFilterValues({ field, nestedPosition, onSelect, onSearch, options, selectedIds }: { field: string; nestedPosition?: FilterNestedPosition; onSelect: (option: ProjectFilterOption) => void; onSearch?: (query: string) => Promise<ProjectFilterOption[]>; options: ProjectFilterOption[]; selectedIds?: Set<string> }) {
   const [resolvedOptions,setResolvedOptions]=useState(options)
-  const command=usePropertyCommand({personOptions:isPeopleProperty(field),open:true,options:resolvedOptions,onOpenChange:()=>{},onSelect:option=>{const selected=resolvedOptions.find(item=>item.id===option.id);if(selected)onSelect(selected)}})
-  useEffect(()=>setResolvedOptions(options),[options])
-  useEffect(()=>{if(!onSearch)return;if(!command.query.trim()){setResolvedOptions(options);return}let active=true;const timer=setTimeout(()=>{void onSearch(command.query.trim()).then(next=>{if(active)setResolvedOptions(next)})},150);return()=>{active=false;clearTimeout(timer)}},[command.query,onSearch,options])
-  return <div aria-label={`${field} filters`} className={nestedFilterClass(nestedPosition)} style={nestedFilterStyle(nestedPosition)} role="dialog"><div className="lp-projects-filter__search"><input ref={command.inputRef} aria-label="Filter…" autoFocus onChange={event=>command.onQueryChange(event.target.value)} onKeyDown={command.onKeyDown} placeholder="Filter…" value={command.query}/></div><div className="lp-projects-filter__values" role="listbox" onKeyDown={command.onKeyDown}>{command.filteredOptions.map(option=>{const selected=selectedIds?.has(option.id) ?? false;return <PersonHover key={option.id} userId={isPeopleProperty(field)?option.id:undefined}><button aria-selected={command.activeId===option.id} aria-checked={selected} onPointerMove={()=>command.setActiveId(option.id)} onFocus={()=>command.setActiveId(option.id)} onClick={()=>command.choose(option)} role="option" type="button"><span className="lp-projects-filter__checkbox">{selected&&<CheckIcon/>}</span><i style={{background:option.color??'var(--theme-text-secondary)'}}/><span className="lp-projects-filter__value-label" title={option.label}>{option.label}</span>{(option.count??0)>0&&<small>{option.count} {option.count===1?'project':'projects'}</small>}</button></PersonHover>})}{!command.filteredOptions.length&&<div className="lp-projects-filter__empty">No results</div>}</div></div>
+  const { inputRef, ...command } = usePropertyCommand({personOptions:isPeopleProperty(field),open:true,options:resolvedOptions,onOpenChange:()=>{},onSelect:option=>{const selected=resolvedOptions.find(item=>item.id===option.id);if(selected)onSelect(selected)}})
+  // New options, or an emptied search, reset the list to the options as given (adjusted while rendering).
+  const [syncedOptions,setSyncedOptions]=useState(options)
+  if(syncedOptions!==options){setSyncedOptions(options);setResolvedOptions(options)}
+  else if(!command.query.trim()&&resolvedOptions!==options)setResolvedOptions(options)
+  useEffect(()=>{if(!onSearch)return;if(!command.query.trim())return;let active=true;const timer=setTimeout(()=>{void onSearch(command.query.trim()).then(next=>{if(active)setResolvedOptions(next)})},150);return()=>{active=false;clearTimeout(timer)}},[command.query,onSearch,options])
+  return <div aria-label={`${field} filters`} className={nestedFilterClass(nestedPosition)} style={nestedFilterStyle(nestedPosition)} role="dialog"><div className="lp-projects-filter__search"><input ref={inputRef} aria-label="Filter…" autoFocus onChange={event=>command.onQueryChange(event.target.value)} onKeyDown={command.onKeyDown} placeholder="Filter…" value={command.query}/></div><div className="lp-projects-filter__values" role="listbox" onKeyDown={command.onKeyDown}>{command.filteredOptions.map(option=>{const selected=selectedIds?.has(option.id) ?? false;return <PersonHover key={option.id} userId={isPeopleProperty(field)?option.id:undefined}><button aria-selected={command.activeId===option.id} aria-checked={selected} onPointerMove={()=>command.setActiveId(option.id)} onFocus={()=>command.setActiveId(option.id)} onClick={()=>command.choose(option)} role="option" type="button"><span className="lp-projects-filter__checkbox">{selected&&<CheckIcon/>}</span><i style={{background:option.color??'var(--theme-text-secondary)'}}/><span className="lp-projects-filter__value-label" title={option.label}>{option.label}</span>{(option.count??0)>0&&<small>{option.count} {option.count===1?'project':'projects'}</small>}</button></PersonHover>})}{!command.filteredOptions.length&&<div className="lp-projects-filter__empty">No results</div>}</div></div>
 }

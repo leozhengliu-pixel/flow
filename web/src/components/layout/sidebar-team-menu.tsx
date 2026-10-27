@@ -39,7 +39,13 @@ export function SidebarTeamMenu({ data, team, onReload, children }: { data: Boot
   const savedEvents = subscription?.events ?? []
   const savedKey = JSON.stringify(savedEvents)
   const [events, setEvents] = useState<string[]>(savedEvents)
-  useEffect(() => { if (!pending) setEvents(JSON.parse(savedKey) as string[]) }, [savedKey, pending])
+  // The saved events win again whenever they change, or once a pending save settles.
+  const eventsSyncKey = `${pending}|${savedKey}`
+  const [seenEventsSyncKey, setSeenEventsSyncKey] = useState(eventsSyncKey)
+  if (seenEventsSyncKey !== eventsSyncKey) {
+    setSeenEventsSyncKey(eventsSyncKey)
+    if (!pending) setEvents(JSON.parse(savedKey) as string[])
+  }
   // "A team project update is posted" is the team's Pulse subscription (contract item 2): written through the
   // Pulse API, on by default for teams you belong to, and an explicit choice overrides that default.
   const pulseFallback = useMemo(() => open && teamPulseSubscribed(team.id, { viewerId: data.viewer.id, subscriptions: data.subscriptions, teamMembers: data.teamMembers }), [open, team.id, data.viewer.id, data.subscriptions, data.teamMembers])

@@ -20,6 +20,7 @@ import type { BootstrapData, FeatureSettings, WorkspaceSettings } from '@/types/
 
 import { StatusColorPicker, StatusMenuIcon } from './issues-projects-settings'
 import { SettingsSelect, SettingsToggle } from './settings-primitives'
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import './customer-requests-settings.css'
 
 const DOCS_URL = 'https://flow.app/docs/customer-requests'
@@ -170,14 +171,14 @@ function TaxonomyList({ kind, items, disabled, onReload }: { kind: CustomerTaxon
   const [local, setLocal] = useState(items)
   const [editing, setEditing] = useState<string | 'new' | null>(null)
   const [dragging, setDragging] = useState<string | null>(null)
-  useEffect(() => setLocal(items), [items])
+  useResetOnChange([items], () => setLocal(items))
   const visible = useMemo(() => local.filter(item => !item.archivedAt).sort((a, b) => (a.position ?? 0) - (b.position ?? 0)), [local])
   const label = kind === 'status' ? 'customer status' : 'customer tier'
   const count = visible.length
   const title = kind === 'status'
     ? countText(t, count, 'customer status', 'customer statuses')
     : count ? countText(t, count, 'customer tier', 'customer tiers') : null
-  useEffect(() => { if (disabled) setEditing(null) }, [disabled])
+  useResetOnChange([disabled], () => { if (disabled) setEditing(null) })
 
   const run = async (action: () => Promise<unknown>, rollback?: () => void) => {
     try {
@@ -327,7 +328,7 @@ function TaxonomyEditor({ kind, label, item, onCancel, onSubmit }: { kind: Custo
 function SourceList({ kind, values, disabled, busy, onChange }: { kind: 'excluded' | 'generic'; values: string[]; disabled: boolean; busy: boolean; onChange: (values: string[]) => void | Promise<void> }) {
   const { t } = useI18n()
   const [adding, setAdding] = useState(false)
-  useEffect(() => { if (disabled) setAdding(false) }, [disabled])
+  useResetOnChange([disabled], () => { if (disabled) setAdding(false) })
   const allEmails = values.every(value => value.includes('@'))
   const allDomains = values.every(value => !value.includes('@'))
   const title = !values.length ? null

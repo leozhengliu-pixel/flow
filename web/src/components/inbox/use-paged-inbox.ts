@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { fetchInboxNotifications, listIssueRecords } from '@/lib/api'
 import { INBOX_ACTIVITY_EVENT, inboxUnread } from '@/lib/inbox-unread'
 import type { Issue, Notification, RealtimeEvent } from '@/types/flow'
@@ -38,8 +39,7 @@ function query(limit: number, cursor?: string) {
  */
 export function usePagedInbox({ enabled, workspaceKey, live, loadedIssues }: { enabled: boolean; workspaceKey: string; live: Notification[]; loadedIssues: Issue[] }) {
   const [page, setPage] = useState<PageState>({ items: [], hasMore: false, loading: enabled, loadingMore: false, error: false })
-  const pageRef = useRef(page)
-  pageRef.current = page
+  const pageRef = useLatestRef(page)
   const generation = useRef(0)
 
   const applyCount = useCallback((unreadCount: number | undefined) => {
@@ -58,12 +58,13 @@ export function usePagedInbox({ enabled, workspaceKey, live, loadedIssues }: { e
     } catch {
       if (run === generation.current) setPage(current => ({ ...current, loading: false, error: true }))
     }
-  }, [applyCount])
+  }, [applyCount, pageRef])
 
   const cancel = useCallback(() => { generation.current++ }, [])
   useEffect(() => {
     if (!enabled) return
-    void reload()
+    // reload() flips the loading state up front; start it from a microtask so the effect itself never sets state.
+    queueMicrotask(() => { void reload() })
     return cancel
   }, [cancel, enabled, reload, workspaceKey])
 
@@ -79,7 +80,7 @@ export function usePagedInbox({ enabled, workspaceKey, live, loadedIssues }: { e
     } catch {
       if (run === generation.current) setPage(current => ({ ...current, loadingMore: false }))
     }
-  }, [])
+  }, [pageRef])
 
   /** Re-reads the first page and merges it in (new rows on top, older pages kept). */
   const refreshFirstPage = useCallback(async () => {

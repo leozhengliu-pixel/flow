@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Check } from 'lucide-react'
 import { useI18n } from '@/i18n/i18n'
+import { useCurrentTimeMs } from '@/hooks/use-current-time'
 import type { CodingPlanStep } from '@/types/coding-sessions'
 import { currentPlanStep } from './coding-session-stream-model'
 import './coding-session-stream.css'
@@ -10,9 +11,14 @@ const STATUS_PREFIX: Record<CodingPlanStep['status'], string> = { pending: 'Pend
 /** When the plan last changed: the session's update time at first, then the moment a new plan arrived. */
 function usePlanUpdatedAt(plan: readonly CodingPlanStep[], updatedAt: string) {
   const key = JSON.stringify(plan)
-  const state = useRef({ key, at: updatedAt })
-  if (state.current.key !== key) state.current = { key, at: new Date().toISOString() }
-  return state.current.at
+  const now = useCurrentTimeMs()
+  const [state, setState] = useState({ key, at: updatedAt })
+  if (state.key !== key) {
+    const next = { key, at: new Date(now).toISOString() }
+    setState(next)
+    return next.at
+  }
+  return state.at
 }
 
 /** The collapsed step text; when it overflows, hovering scrolls it as a marquee. */
@@ -50,7 +56,12 @@ export function CodingPlanPill({ plan, updatedAt, complete }: { plan?: CodingPla
   const steps = plan ?? []
   const planUpdatedAt = usePlanUpdatedAt(steps, updatedAt)
   const current = currentPlanStep(steps)
-  useEffect(() => { if (complete) setOpen(false) }, [complete])
+  // The plan folds when the session completes.
+  const [wasComplete, setWasComplete] = useState(complete)
+  if (complete !== wasComplete) {
+    setWasComplete(complete)
+    if (complete) setOpen(false)
+  }
   useEffect(() => {
     if (!open) return
     const panel = root.current?.closest('.coding-agent-panel') ?? document

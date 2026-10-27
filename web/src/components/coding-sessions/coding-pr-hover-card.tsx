@@ -5,6 +5,7 @@ import { avatarColor } from '@/components/issue/avatar-color'
 import { ReviewStatusValueGlyph } from '@/components/issue/issue-icons'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
+import { useCurrentTimeMs } from '@/hooks/use-current-time'
 import type { CodeReview } from '@/types/flow'
 import type { CodingSession, SessionPullRequest } from '@/types/coding-sessions'
 import { PULL_REQUEST_STATE_LABELS, pullRequestDisplayState, pullRequestNumberLabel } from './coding-session-model'
@@ -21,12 +22,13 @@ export function CodingPullRequestGlyph({ pr, size = 16, className }: { pr: Sessi
  */
 export function CodingPullRequestHoverCard({ pr, review, session }: { pr: SessionPullRequest; review?: CodeReview; session?: Pick<CodingSession, 'diffs'> }) {
   const { t, locale } = useI18n()
+  const now = useCurrentTimeMs()
   const state = pullRequestDisplayState(pr)
   const files = review?.files?.length || session?.diffs?.length || 0
   const additions = review ? review.additions : (session?.diffs ?? []).reduce((sum, diff) => sum + diff.additions, 0)
   const deletions = review ? review.deletions : (session?.diffs ?? []).reduce((sum, diff) => sum + diff.deletions, 0)
   const at = state === 'closed' ? review?.closedAt ?? pr.updatedAt : state === 'merged' ? review?.mergedAt ?? pr.updatedAt : undefined
-  const when = at && !Number.isNaN(Date.parse(at)) ? activityTimeLabel(at, Date.now(), locale) : ''
+  const when = at && !Number.isNaN(Date.parse(at)) ? activityTimeLabel(at, now, locale) : ''
   const author = review?.author
   const authorName = author?.displayName || author?.name || pr.openedAs || ''
   return <div className="coding-pr-hover-card" data-pr-state={state}>

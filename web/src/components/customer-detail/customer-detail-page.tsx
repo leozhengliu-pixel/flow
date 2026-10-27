@@ -69,7 +69,8 @@ export function CustomerDetailPage({
   const [view, setViewState] = useState<CustomerPageViewPreferences>(readCustomerPageView)
   const setView = (next: CustomerPageViewPreferences) => { setViewState(next); writeCustomerPageView(next) }
   const [showArchived, setShowArchivedState] = useState(() => readFlag(showArchivedStorageKey(customer.id)))
-  useEffect(() => { setShowArchivedState(readFlag(showArchivedStorageKey(customer.id))) }, [customer.id])
+  const [seenCustomerId, setSeenCustomerId] = useState(customer.id)
+  if (seenCustomerId !== customer.id) { setSeenCustomerId(customer.id); setShowArchivedState(readFlag(showArchivedStorageKey(customer.id))) }
   const toggleShowArchived = () => setShowArchivedState(current => { writeFlag(showArchivedStorageKey(customer.id), !current); return !current })
 
   const requests = useMemo(() => data.customerRequests.filter(request => request.customerId === customer.id), [data.customerRequests, customer.id])

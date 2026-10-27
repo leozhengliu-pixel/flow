@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { AgentMessage, AgentMessageAttachment, AgentToolCall } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
 import { AgentRichText } from "./agent-rich-text";
@@ -19,10 +19,14 @@ export function AgentWorkGroup({ message, parts: allParts, onToolApproval, appro
   const running = forceRunning || !settled && parts.some(part => part.status === "running" || part.status === "pending" || part.toolCall?.status === "running" || part.toolCall?.status === "pending");
   const failed = parts.some(part => part.status === "error" || part.toolCall?.status === "error");
   const [open, setOpen] = useState(running || failed);
-  useEffect(() => {
+  // When the turn starts, fails or (with collapseWhenDone) finishes, the group follows; the user's own toggle stands otherwise.
+  const followKey = `${collapseWhenDone}|${failed}|${running}`;
+  const [seenFollowKey, setSeenFollowKey] = useState(followKey);
+  if (seenFollowKey !== followKey) {
+    setSeenFollowKey(followKey);
     if (running || failed) setOpen(true);
     else if (collapseWhenDone) setOpen(false);
-  }, [collapseWhenDone, failed, running]);
+  }
   const toolCount = parts.filter(part => part.type === "toolCall").length;
   const duration = Math.max(1, Math.round((message.durationMs ?? 0) / 1000));
   const label = running

@@ -107,6 +107,7 @@ function useEditorLoop(data: BootstrapData, id: string | undefined) {
     }
   }, [cached, id]);
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- refetch sets state only after its request resolves, never synchronously
     void refetch();
   }, [refetch]);
   return { loop, setLoop, missing, refetch };
