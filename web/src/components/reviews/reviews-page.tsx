@@ -670,6 +670,7 @@ function PeopleIssuePicker({
     onOpenChange: (open) => !open && onClose(),
     onSelect: (option) => setSelected((current) => (current.includes(option.id) ? current.filter((id) => id !== option.id) : [...current, option.id])),
   });
+  const { inputRef: filterInputRef } = command;
   return (
     <Dialog open onOpenChange={(value) => !value && onClose()}>
       <DialogContent className="review-picker-dialog" onInteractOutside={(event) => event.preventDefault()} onPointerDownOutside={(event) => event.preventDefault()}>
@@ -677,7 +678,7 @@ function PeopleIssuePicker({
         <label>
           <Search />
           <input
-            ref={command.inputRef}
+            ref={filterInputRef}
             autoFocus
             aria-label={t("Filter…")}
             placeholder={t("Filter…")}

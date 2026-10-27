@@ -86,11 +86,15 @@ export function IssueCustomerRequests({ data, issueId, requests, onLocalCreated 
   }, [startRequest, open, visible.length, composer]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // A `#customerRequest-{id}` link opens the section and reveals the request.
+  const hashRevealsRequest = hash.startsWith(CUSTOMER_REQUEST_HASH) && visible.some(request => request.id === hash.slice(CUSTOMER_REQUEST_HASH.length))
+  const [seenReveal, setSeenReveal] = useState<{ hash: string; count: number }>()
+  if (seenReveal?.hash !== hash || seenReveal.count !== visible.length) {
+    setSeenReveal({ hash, count: visible.length })
+    if (hashRevealsRequest) setOpenState(true)
+  }
   useEffect(() => {
-    if (!hash.startsWith(CUSTOMER_REQUEST_HASH)) return
-    const id = hash.slice(CUSTOMER_REQUEST_HASH.length)
-    if (!visible.some(request => request.id === id)) return
-    setOpen(true)
+    if (!hashRevealsRequest) return
+    try { localStorage.setItem(OPEN_KEY, 'open') } catch { /* storage unavailable */ }
     requestAnimationFrame(() => document.getElementById(hash)?.scrollIntoView({ block: 'center' }))
   }, [hash, visible.length]) // eslint-disable-line react-hooks/exhaustive-deps
 

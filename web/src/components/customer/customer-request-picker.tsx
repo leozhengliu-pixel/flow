@@ -16,19 +16,29 @@ export function CustomerPickIcon({ option }: { option: Pick<CustomerPickOption, 
 }
 
 /** Renders the picker for `openCustomerRequestPicker`; the first mounted host on a page renders it. */
+const hostListeners = new Set<() => void>()
+function subscribeHosts(listener: () => void) {
+  hostListeners.add(listener)
+  return () => { hostListeners.delete(listener) }
+}
+function notifyHosts() {
+  for (const listener of [...hostListeners]) listener()
+}
+
 export function CustomerRequestPickerHost({ customers }: { customers: readonly Customer[] }) {
   const id = useId()
-  const [, force] = useState(0)
   useEffect(() => {
     customerRequestPickerHosts.push(id)
-    force(value => value + 1)
+    notifyHosts()
     return () => {
       customerRequestPickerHosts.splice(customerRequestPickerHosts.indexOf(id), 1)
+      notifyHosts()
       if (!customerRequestPickerHosts.length) closeCustomerRequestPicker()
     }
   }, [id])
+  const primary = useSyncExternalStore(subscribeHosts, () => customerRequestPickerHosts[0] === id, () => false)
   const request = useSyncExternalStore(subscribeCustomerRequestPicker, currentCustomerRequestPicker, () => undefined)
-  if (customerRequestPickerHosts[0] !== id || !request) return null
+  if (!primary || !request) return null
   return <CustomerRequestPicker key={request.id} customers={customers} title={request.title} onClose={closeCustomerRequestPicker} onPick={pick => { closeCustomerRequestPicker(); request.onPick(pick) }}/>
 }
 

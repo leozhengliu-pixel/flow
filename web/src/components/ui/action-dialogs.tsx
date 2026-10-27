@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DateTimeControl } from "@/components/ui/date-time-control";
@@ -21,9 +21,36 @@ export function ActionDialogHost() {
   const [selectedId, setSelectedId] = useState("");
   const [choice, setChoice] = useState("");
   const [error, setError] = useState<string>();
-  const lastRequest = useRef<DialogRequest | undefined>(request);
-  if (request) lastRequest.current = request;
-  const displayRequest = request ?? lastRequest.current;
+  // The last request shown keeps the dialog's content while it animates out, and every new request resets the fields.
+  const [lastRequest, setLastRequest] = useState<DialogRequest | undefined>(request);
+  const [seenRequest, setSeenRequest] = useState<DialogRequest | undefined>(request);
+  if (request !== seenRequest) {
+    setSeenRequest(request);
+    if (request) {
+      setLastRequest(request);
+      setError(undefined);
+      switch (request.kind) {
+        case "prompt":
+        case "stringValidated":
+          setValue(request.defaultValue);
+          break;
+        case "date":
+        case "dateOrInterval":
+          setValue(request.defaultValue);
+          if (request.kind === "dateOrInterval") setCompare(request.initialCompare);
+          break;
+        case "dropdown":
+          setSelectedId(request.selectedId ?? request.options[0]?.id ?? "");
+          break;
+        case "choice":
+          setChoice(request.defaultChoice);
+          break;
+        default:
+          break;
+      }
+    }
+  }
+  const displayRequest = request ?? lastRequest;
 
   useEffect(() => {
     const sync = () => setRequest(current => current ?? currentActionDialog());
@@ -31,30 +58,6 @@ export function ActionDialogHost() {
     sync();
     return unsubscribe;
   }, []);
-
-  useEffect(() => {
-    if (!request) return;
-    setError(undefined);
-    switch (request.kind) {
-      case "prompt":
-      case "stringValidated":
-        setValue(request.defaultValue);
-        break;
-      case "date":
-      case "dateOrInterval":
-        setValue(request.defaultValue);
-        if (request.kind === "dateOrInterval") setCompare(request.initialCompare);
-        break;
-      case "dropdown":
-        setSelectedId(request.selectedId ?? request.options[0]?.id ?? "");
-        break;
-      case "choice":
-        setChoice(request.defaultChoice);
-        break;
-      default:
-        break;
-    }
-  }, [request]);
 
   const finish = (result: Parameters<typeof completeActionDialog>[0]) => {
     completeActionDialog(result);

@@ -14,9 +14,14 @@ export function SimilarIssues({ issue, issues, workspaceKey, onOpen, onMarkDupli
   // Latest issue for the response filter, so a new issue object identity does not refetch.
   const issueRef = useRef(issue)
   useEffect(() => { issueRef.current = issue })
+  // A new issue (or title, or workspace) retries the server ranking.
+  const [requestedFor, setRequestedFor] = useState({ id: issue.id, title: issue.title, workspaceKey })
+  if (requestedFor.id !== issue.id || requestedFor.title !== issue.title || requestedFor.workspaceKey !== workspaceKey) {
+    setRequestedFor({ id: issue.id, title: issue.title, workspaceKey })
+    setServerFailed(false)
+  }
   useEffect(() => {
     const controller = new AbortController()
-    setServerFailed(false)
     fetchSimilarIssues(issue.id, controller.signal, workspaceKey)
       .then(response => setServer({ id: issue.id, matches: response.results.filter(result => !sameRecurringSeries(issueRef.current, result.issue)).slice(0, 3).map(result => ({ candidate: result.issue, score: result.score, duplicate: result.possibleDuplicate })) }))
       .catch(() => { if (!controller.signal.aborted) setServerFailed(true) })

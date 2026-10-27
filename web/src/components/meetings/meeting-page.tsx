@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLatestRef } from "@/hooks/use-latest-ref";
 import {
   CalendarDays,
   ChevronRight,
@@ -32,24 +33,28 @@ export function MeetingPage({ data, meetingId, onNavigate }: Props) {
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
 
-  const load = useCallback(async () => {
+  // The list is (re)loaded on mount and whenever the translator changes; each load starts from the loading state.
+  const [loadedFor, setLoadedFor] = useState(() => t);
+  if (loadedFor !== t) {
+    setLoadedFor(() => t);
     setLoading(true);
     setError("");
-    try {
-      const page = await fetchMeetings();
-      setMeetings(page.items);
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : t("Could not load meetings"),
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [t]);
+  }
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void (async () => {
+      try {
+        const page = await fetchMeetings();
+        setMeetings(page.items);
+      } catch (cause) {
+        setError(
+          cause instanceof Error ? cause.message : t("Could not load meetings"),
+        );
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [t]);
 
   const selected = meetingId
     ? meetings.find((item) => item.id === meetingId)
@@ -207,20 +212,22 @@ function MeetingDetail({
   const [title, setTitle] = useState(meeting.title);
   const [startsAt, setStartsAt] = useState(toLocalInput(meeting.startsAt));
   const [notes, setNotes] = useState(meeting.notes || "");
-  const notesRef = useRef(notes);
-  notesRef.current = notes;
+  const notesRef = useLatestRef(notes);
   const [transcript, setTranscript] = useState(meeting.transcript || "");
   const [attendeeIds, setAttendeeIds] = useState(meeting.attendeeIds);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  // A newer copy of the meeting (saved, or pushed) replaces the draft fields.
+  const [shownMeeting, setShownMeeting] = useState(meeting);
+  if (shownMeeting !== meeting) {
+    setShownMeeting(meeting);
     setTitle(meeting.title);
     setStartsAt(toLocalInput(meeting.startsAt));
     setNotes(meeting.notes || "");
     setTranscript(meeting.transcript || "");
     setAttendeeIds(meeting.attendeeIds);
-  }, [meeting]);
+  }
 
   const attendees = useMemo(
     () =>

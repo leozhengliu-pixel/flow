@@ -3,7 +3,8 @@
  * the command menu lists the reference app's entries (Display options › Grouping › Customer,
  * Display options › View ordering › By customer count…).
  */
-import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import './display-commands.css'
 
 export type DisplayCommandKind = 'grouping' | 'subGrouping' | 'ordering'
@@ -42,10 +43,9 @@ export function registerDisplayCommands(source: Source) {
 
 /** Registers the surface's display commands while mounted; `source` is read lazily when ⌘K opens. */
 export function useRegisterDisplayCommands(source: Source | undefined) {
-  const ref = useRef(source)
-  ref.current = source
+  const ref = useLatestRef(source)
   const enabled = Boolean(source)
-  useEffect(() => enabled ? registerDisplayCommands(() => ref.current?.() ?? []) : undefined, [enabled])
+  useEffect(() => enabled ? registerDisplayCommands(() => ref.current?.() ?? []) : undefined, [enabled, ref])
 }
 
 export function useDisplayCommands(open: boolean) {

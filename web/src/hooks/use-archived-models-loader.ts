@@ -127,7 +127,10 @@ export function useArchivedModelsLoader(
 
   useEffect(() => {
     if (!autoLoadOnMount || !teamId) return;
-    void fetchPage(true);
+    // The load flips several state slots up front; start it from a microtask so the effect itself never sets state.
+    queueMicrotask(() => {
+      void fetchPage(true);
+    });
   }, [teamId, autoLoadOnMount, fetchPage]);
 
   const loadMore = useCallback(

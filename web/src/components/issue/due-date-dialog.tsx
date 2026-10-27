@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { useI18n } from '@/i18n/i18n'
+import { useCurrentTime } from '@/hooks/use-current-time'
 import { currentDueDateRequest, settleDueDate, subscribeDueDateRequests } from './due-date-dialog-service'
 import { formatFieldDate, isoDate, parseNaturalDate } from './due-date-utils'
 import './due-date-dialog.css'
@@ -33,7 +34,7 @@ export function DueDateDialog({ value, onSave, onCancel }: { value?: string; onS
   const [month, setMonth] = useState(() => monthKey(value ? new Date(`${value}T12:00:00`) : new Date()))
   const input = useRef<HTMLInputElement>(null)
   const parsed = parseNaturalDate(text)
-  const today = isoDate(new Date())
+  const today = isoDate(useCurrentTime())
   // The menu the dialog was opened from hands focus back to its trigger while it closes; take it after that.
   useEffect(() => { const timer = setTimeout(() => input.current?.focus(), 60); return () => clearTimeout(timer) }, [])
   const months = [month, addMonths(month, 1)]

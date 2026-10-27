@@ -1,8 +1,9 @@
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import Placeholder from '@tiptap/extension-placeholder'
 import { FlowStarterKit } from '@/components/editor/flow-starter-kit'
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { useI18n } from '@/i18n/i18n'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { handleEditorSubmit } from './editor/editor-keyboard'
 
 interface IssueTitleEditorProps {
@@ -19,10 +20,8 @@ interface IssueTitleEditorProps {
 export function IssueTitleEditor({ value, onChange, onBlur, onEnter, onSubmit, autoFocus = false, className, editorRef }: IssueTitleEditorProps) {
   const { t } = useI18n()
   const titleLabel = t('Issue title')
-  const enterRef = useRef(onEnter)
-  const submitRef = useRef(onSubmit)
-  enterRef.current = onEnter
-  submitRef.current = onSubmit
+  const enterRef = useLatestRef(onEnter)
+  const submitRef = useLatestRef(onSubmit)
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [

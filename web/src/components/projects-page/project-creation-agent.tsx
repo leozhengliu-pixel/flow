@@ -41,6 +41,9 @@ export type ProjectCreationAgentProps = {
 
 type ProjectCreationAgentMessage = AgentMessage & { pending?: boolean };
 
+/** Monotonic clock for timing a stream; only read from the send handler, never while rendering. */
+const monotonicNow = () => performance.now();
+
 const SUGGESTIONS = [
   ["Outline the scope", "Outline the scope"],
   ["Research customer requests", "Research customer requests"],
@@ -111,9 +114,7 @@ export function ProjectCreationAgent({
     return () => document.removeEventListener("pointerdown", close);
   }, [skillsOpen]);
 
-  useEffect(() => {
-    if (!skillsOpen) setSkillQuery("");
-  }, [skillsOpen]);
+  if (!skillsOpen && skillQuery) setSkillQuery("");
 
   const chooseSuggestion = (message: string) => {
     setInput(message);
@@ -182,7 +183,7 @@ export function ProjectCreationAgent({
     ]);
     setConversationStartedAt((current) => current ?? new Date().toISOString());
     setBusy(true);
-    streamStartedAtRef.current = performance.now();
+    streamStartedAtRef.current = monotonicNow();
     const controller = new AbortController();
     abortRef.current = controller;
     let nextSession = session;

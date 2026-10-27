@@ -1,8 +1,9 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { Repeat2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { SelectControl } from '@/components/ui/select-control'
+import { useCurrentTime } from '@/hooks/use-current-time'
 import { useI18n } from '@/i18n/i18n'
 import {
   MAX_RECURRENCE_INTERVAL,
@@ -78,7 +79,8 @@ export interface RecurrencePickerProps {
  */
 export function RecurrencePicker({ value, dueDate, nextOccurrenceAt, timeZone, busy = false, onSave, onStop, onCancel, today: todayInput }: RecurrencePickerProps) {
   const { t, locale, formatDate } = useI18n()
-  const today = useMemo(() => recurrenceDate(todayInput ?? new Date()), [todayInput])
+  const mountedAt = useCurrentTime(0)
+  const today = useMemo(() => recurrenceDate(todayInput ?? mountedAt), [todayInput, mountedAt])
   const initial = useMemo(() => {
     const current = value ? recurrenceDueDate({ dueDate, nextOccurrenceAt }, timeZone) : dueDate ? recurrenceDate(dueDate.slice(0, 10)) : undefined
     const start = current && (value || current >= today) ? current : defaultFirstDue(today)
@@ -140,7 +142,12 @@ export function RecurrencePicker({ value, dueDate, nextOccurrenceAt, timeZone, b
 export function RecurrenceDialog({ open, onOpenChange, title, ...props }: Omit<RecurrencePickerProps, 'onCancel'> & { open: boolean; onOpenChange: (open: boolean) => void; title?: string }) {
   const { t } = useI18n()
   const [key, setKey] = useState(0)
-  useEffect(() => { if (open) setKey(value => value + 1) }, [open])
+  const [wasOpen, setWasOpen] = useState(false)
+  // Each time the dialog opens, the picker remounts with a fresh key.
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) setKey(value => value + 1)
+  }
   const heading = title ?? t(props.value ? 'Recurring issue' : 'Make recurring')
   return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="dialog-overlay"/><Dialog.Content data-flow-motion="dialog" className="issue-action-dialog recurrence-dialog" aria-label={heading} aria-describedby={undefined}><Dialog.Title>{heading}</Dialog.Title><RecurrencePicker key={key} {...props} onCancel={() => onOpenChange(false)}/></Dialog.Content></Dialog.Portal></Dialog.Root>
 }

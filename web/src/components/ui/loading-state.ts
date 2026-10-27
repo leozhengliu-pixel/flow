@@ -15,11 +15,12 @@ export function useLoadingState(loading: boolean) {
   const [mountedAt] = useState(() => Date.now())
   const startedAt = useRef(mountedAt)
   const previous = useRef(loading)
+  // A load that starts is shown at once (adjusted during render, so there is no frame without it).
+  if (loading && !visible) setVisible(true)
   useLayoutEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined
     const elapsed = Date.now() - startedAt.current
     if (loading) {
-      setVisible(true)
       if (!previous.current) startedAt.current = Date.now()
     } else if (elapsed < LOADING_HIDE_IMMEDIATELY_BEFORE) setVisible(false)
     else if (elapsed < LOADING_MIN_VISIBLE_UNTIL) timer = setTimeout(() => setVisible(false), LOADING_MIN_VISIBLE_UNTIL - elapsed)

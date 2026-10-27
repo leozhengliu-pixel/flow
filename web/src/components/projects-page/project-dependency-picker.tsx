@@ -200,7 +200,7 @@ function DirectionPicker({ active, closeOnSelect, direction, label, onChange, on
   value: ProjectDependencyValue[]
 }) {
   const { t } = useI18n()
-  const command = usePropertyCommand({
+  const { inputRef, ...command } = usePropertyCommand({
     closeOnSelect,
     keepSelectedVisible: true,
     onOpenChange,
@@ -244,7 +244,7 @@ function DirectionPicker({ active, closeOnSelect, direction, label, onChange, on
         onCloseAutoFocus={event => event.preventDefault()}
         onOpenAutoFocus={event => {
           event.preventDefault()
-          requestAnimationFrame(() => command.inputRef.current?.focus())
+          requestAnimationFrame(() => inputRef.current?.focus())
         }}
         role="dialog"
         side="right"
@@ -258,7 +258,7 @@ function DirectionPicker({ active, closeOnSelect, direction, label, onChange, on
             onChange={event => command.onQueryChange(event.target.value)}
             onKeyDown={command.onKeyDown}
             placeholder={t(placeholder)}
-            ref={command.inputRef}
+            ref={inputRef}
             spellCheck={false}
             value={command.query}
           />

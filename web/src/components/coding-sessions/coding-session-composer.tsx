@@ -5,6 +5,7 @@ import { AGENT_ATTACHMENT_ACCEPT, AGENT_UPLOAD_MAX_ITEMS, agentFileKind, agentUp
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { SearchableMenuItems } from '@/components/ui/searchable-menu-items'
 import { useI18n } from '@/i18n/i18n'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { uploadAgentFile } from '@/lib/api'
 import { type ApplicationActivity } from '@/lib/application-agents'
 import { commentShortcutMatches } from '@/lib/runtime-preferences'
@@ -23,7 +24,12 @@ export type ComposerRequest =
 /** The queue of messages typed while the agent works, kept per session in this browser. */
 function useCodingMessageQueue(workspace: string, sessionId: string) {
   const [messages, setMessages] = useState<QueuedMessage[]>(() => readQueuedMessages(workspace, sessionId))
-  useEffect(() => { setMessages(readQueuedMessages(workspace, sessionId)) }, [workspace, sessionId])
+  // Another session (or workspace) has its own queue.
+  const [queueKey, setQueueKey] = useState({ workspace, sessionId })
+  if (queueKey.workspace !== workspace || queueKey.sessionId !== sessionId) {
+    setQueueKey({ workspace, sessionId })
+    setMessages(readQueuedMessages(workspace, sessionId))
+  }
   const update = (next: (current: QueuedMessage[]) => QueuedMessage[]) => setMessages(current => {
     const value = next(current)
     writeQueuedMessages(workspace, sessionId, value)
@@ -42,9 +48,8 @@ type ComposerFile = { key: string; name: string; contentType: string; size: numb
 function useComposerFiles() {
   const { t } = useI18n()
   const [files, setFiles] = useState<ComposerFile[]>([])
-  const filesRef = useRef(files)
-  filesRef.current = files
-  useEffect(() => () => { for (const file of filesRef.current) if (file.preview) URL.revokeObjectURL(file.preview) }, [])
+  const filesRef = useLatestRef(files)
+  useEffect(() => () => { for (const file of filesRef.current) if (file.preview) URL.revokeObjectURL(file.preview) }, [filesRef])
   const attach = async (picked: File[]) => {
     const usable = picked.filter(file => agentFileKind(file) !== 'audio')
     const room = AGENT_UPLOAD_MAX_ITEMS - filesRef.current.length
@@ -134,7 +139,11 @@ export function CodingComposer({ data, sessionId, generating, stopPending, canPr
   const requestKey = approval ? 'approval' : elicitation?.id ?? ''
   const [selected, setSelected] = useState<string | undefined>()
   // A new request (or none) clears the choice.
-  useEffect(() => { setSelected(undefined) }, [requestKey])
+  const [selectedFor, setSelectedFor] = useState(requestKey)
+  if (selectedFor !== requestKey) {
+    setSelectedFor(requestKey)
+    setSelected(undefined)
+  }
   const choice = options.find(option => option.value === selected)
   const agentName = t('Flow')
   const auth = elicitation?.signal === 'auth' ? elicitation : undefined

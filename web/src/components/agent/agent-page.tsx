@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { AlertCircle, Plus } from "lucide-react";
+import { useLatestRef } from "@/hooks/use-latest-ref";
 import {
   fetchAgentStatus,
   getAgentSession,
@@ -106,7 +107,7 @@ export function AgentPage({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamAbortRef = useRef<AbortController | undefined>(undefined);
   // Chats already re-read from the server since this page opened.
-  const hydratedIdsRef = useRef(new Set<string>());
+  const [hydratedIds, setHydratedIds] = useState<ReadonlySet<string>>(() => new Set());
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -118,7 +119,11 @@ export function AgentPage({
   const historyRequested = new URLSearchParams(window.location.search).get("history") === "1";
   const agentDraftKey = `flow:agent-draft:${data.workspace.id}`;
   const restoredAgentDraft = useRef(readAgentDraft(agentDraftKey));
-  useEffect(() => setSessions(data.agentSessions ?? []), [data.agentSessions]);
+  const [seenAgentSessions, setSeenAgentSessions] = useState(data.agentSessions);
+  if (seenAgentSessions !== data.agentSessions) {
+    setSeenAgentSessions(data.agentSessions);
+    setSessions(data.agentSessions ?? []);
+  }
   useEffect(() => {
     if (chatSlug || !restoredAgentDraft.current?.input) return;
     const restored = restoredAgentDraft.current;
@@ -129,9 +134,12 @@ export function AgentPage({
       if (document.activeElement === editorRef.current) placeCaretAtEnd(editorRef.current);
     });
   }, [chatSlug]);
-  useEffect(() => {
+  const historyRequestKey = `${chatSlug ?? ""}|${historyRequested}`;
+  const [seenHistoryRequestKey, setSeenHistoryRequestKey] = useState<string>();
+  if (seenHistoryRequestKey !== historyRequestKey) {
+    setSeenHistoryRequestKey(historyRequestKey);
     if (historyRequested) setHistoryOpen(true);
-  }, [chatSlug, historyRequested]);
+  }
   useEffect(() => {
     let active = true;
     fetchAgentStatus()
@@ -162,17 +170,17 @@ export function AgentPage({
     if (!currentSummary) return currentSummary;
     // Opening a chat re-reads it from the server once, so a reply that
     // finished while the page was away (or in another tab) shows up.
-    if (hydratedIdsRef.current.has(currentSummary.id)) return currentSummary;
+    if (hydratedIds.has(currentSummary.id)) return currentSummary;
     return asPersistedConversation(currentSummary, async (id) => {
       const full = await getAgentSession(id);
-      hydratedIdsRef.current.add(id);
+      setHydratedIds((ids) => new Set(ids).add(id));
       // A reply streamed meanwhile (an answer sent right after opening) is newer than this read: keep it.
       setSessions((list) =>
         list.map((item) => (item.id === full.id && Date.parse(full.updatedAt) >= Date.parse(item.updatedAt) ? full : item)),
       );
       return full;
     });
-  }, [currentSummary]);
+  }, [currentSummary, hydratedIds]);
   const hydratedCurrent = useDeferredHydratedConversation(deferredConversation) ?? undefined;
   const current = live ?? hydratedCurrent;
   // The reply is still running on the server while this page does not stream it (the page that asked was reloaded or
@@ -207,10 +215,12 @@ export function AgentPage({
     const timer = window.setTimeout(() => writeAgentDraft(agentDraftKey, { input, skillIds: selectedSkills }), 250);
     return () => window.clearTimeout(timer);
   }, [agentDraftKey, chatSlug, current, input, selectedSkills]);
-  useEffect(
-    () => setSelectedSkills(current?.skillIds ?? []),
-    [current?.id, current?.skillIds],
-  );
+  // The skills picked follow the chat shown (and what it saved).
+  const [skillsFor, setSkillsFor] = useState<{ id?: string; skillIds?: string[] }>();
+  if (!skillsFor || skillsFor.id !== current?.id || skillsFor.skillIds !== current?.skillIds) {
+    setSkillsFor({ id: current?.id, skillIds: current?.skillIds });
+    setSelectedSkills(current?.skillIds ?? []);
+  }
   const writeInput = (value: string) => {
     setInput(value);
     writeInputToEditor(editorRef, value);
@@ -335,8 +345,7 @@ export function AgentPage({
     }
   };
   // ⌘K "Ask Flow" (Tab) on this page sends the typed question in the chat shown here.
-  const sendRef = useRef(send);
-  sendRef.current = send;
+  const sendRef = useLatestRef(send);
   useEffect(() => {
     const ask = (event: Event) => {
       const prompt = (event as CustomEvent<AgentPageAskDetail>).detail?.prompt;
@@ -344,7 +353,7 @@ export function AgentPage({
     };
     window.addEventListener(AGENT_PAGE_ASK_EVENT, ask);
     return () => window.removeEventListener(AGENT_PAGE_ASK_EVENT, ask);
-  }, []);
+  }, [sendRef]);
   // The buttons stay off until the reply shows the approval resolved (streamed here, or saved when the reply runs
   // without this page), so a second click never answers it twice.
   const { approvalBusy, decideToolApproval } = useAgentApprovalAnswer({ sessionId: current?.id, parts: shownParts, onError: setError, onStale: follow.refresh });
@@ -357,7 +366,16 @@ export function AgentPage({
     ],
     [sessions, t],
   );
-  const historyCommand = usePropertyCommand({
+  const {
+    activeId: historyActiveId,
+    choose: chooseHistory,
+    filteredOptions: historyFilteredOptions,
+    inputRef: historyInputRef,
+    onKeyDown: onHistoryKeyDown,
+    onQueryChange: onHistoryQueryChange,
+    query: historyQuery,
+    setActiveId: setHistoryActiveId,
+  } = usePropertyCommand({
     open: historyOpen,
     options: historyOptions,
     selectedIds: current ? [current.id] : ["__new__"],
@@ -376,11 +394,11 @@ export function AgentPage({
     },
   });
   const historyGroups = useMemo(
-    () => groupAgentHistory(historyCommand.filteredOptions
+    () => groupAgentHistory(historyFilteredOptions
       .filter((option) => option.id !== "__new__")
       .map((option) => sessions.find((session) => session.id === option.id))
       .filter((session): session is AgentSession => Boolean(session))),
-    [historyCommand.filteredOptions, sessions],
+    [historyFilteredOptions, sessions],
   );
   // Like the reference app, the empty new-chat page opens ready to type: focus lands in the composer on arrival and whenever
   // the page goes back to a new chat. It never takes focus from another text field or an open dialog/menu.
@@ -448,22 +466,22 @@ export function AgentPage({
               side="bottom"
               sideOffset={3}
               onOpenAutoFocus={(event) => event.preventDefault()}
-              onKeyDown={historyCommand.onKeyDown}
+              onKeyDown={onHistoryKeyDown}
             >
               <input
-                ref={historyCommand.inputRef}
+                ref={historyInputRef}
                 autoFocus
                 aria-label={t("Chat history")}
                 className={styles.historySearch}
-                value={historyCommand.query}
-                onChange={(event) => historyCommand.onQueryChange(event.target.value)}
+                value={historyQuery}
+                onChange={(event) => onHistoryQueryChange(event.target.value)}
               />
               <div role="listbox">
-                {historyCommand.filteredOptions.some(({ id }) => id === "__new__") && <button
-                  aria-selected={historyCommand.activeId === "__new__"}
+                {historyFilteredOptions.some(({ id }) => id === "__new__") && <button
+                  aria-selected={historyActiveId === "__new__"}
                   className={styles.newChat}
-                  onMouseMove={() => historyCommand.setActiveId("__new__")}
-                  onClick={() => historyCommand.choose(historyOptions[0])}
+                  onMouseMove={() => setHistoryActiveId("__new__")}
+                  onClick={() => chooseHistory(historyOptions[0])}
                   role="option"
                   type="button"
                 >
@@ -475,12 +493,12 @@ export function AgentPage({
                     <div className={styles.historySeparator} role="separator" />
                     <div aria-label={t(group.label)} className={styles.historyGroup} role="group">{t(group.label)}</div>
                     {group.sessions.map((item) => {
-                      const option = historyCommand.filteredOptions.find(({ id }) => id === item.id)!;
+                      const option = historyFilteredOptions.find(({ id }) => id === item.id)!;
                       return <button
-                        aria-selected={historyCommand.activeId === item.id}
+                        aria-selected={historyActiveId === item.id}
                         key={item.id}
-                        onMouseMove={() => historyCommand.setActiveId(item.id)}
-                        onClick={() => historyCommand.choose(option)}
+                        onMouseMove={() => setHistoryActiveId(item.id)}
+                        onClick={() => chooseHistory(option)}
                         role="option"
                         type="button"
                       >

@@ -2,6 +2,7 @@ import * as Tooltip from '@radix-ui/react-tooltip'
 import type { ReactElement } from 'react'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
+import { useCurrentTimeMs } from '@/hooks/use-current-time'
 import { directoryPerson, personDisplayName, personIdentifier, type PersonIdentity } from '@/lib/people'
 import { usePeopleDirectory } from './people-context'
 import './person-info.css'
@@ -9,6 +10,7 @@ import './person-info.css'
 export function PersonIdentityDetails({ person }: { person: PersonIdentity }) {
   const { t } = useI18n()
   const directory = usePeopleDirectory()
+  const now = useCurrentTimeMs()
   const user = { ...person, ...directoryPerson(directory.users, person.id) }
   const identifier = personIdentifier(user)
   if (!identifier && !user.email && !user.jobTitle && !user.outOfOfficeUntil) return null
@@ -16,7 +18,7 @@ export function PersonIdentityDetails({ person }: { person: PersonIdentity }) {
     {identifier && <div><dt>{t('User ID')}</dt><dd data-i18n-ignore>{identifier}</dd></div>}
     {user.email && <div><dt>{t('Email')}</dt><dd data-i18n-ignore>{user.email}</dd></div>}
     {user.jobTitle && <div><dt>{t('Job title')}</dt><dd data-i18n-ignore>{user.jobTitle}</dd></div>}
-    {user.outOfOfficeUntil&&new Date(user.outOfOfficeUntil).getTime()>Date.now()&&<div><dt>{t('Availability')}</dt><dd>{t('Out of office')} · {new Date(user.outOfOfficeUntil).toLocaleString()}</dd></div>}
+    {user.outOfOfficeUntil&&new Date(user.outOfOfficeUntil).getTime()>now&&<div><dt>{t('Availability')}</dt><dd>{t('Out of office')} · {new Date(user.outOfOfficeUntil).toLocaleString()}</dd></div>}
   </dl>
 }
 

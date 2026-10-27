@@ -197,9 +197,9 @@ function IssueSearch({ data, exclude, onPick }: { data: BootstrapData; exclude: 
   const [open, setOpen] = useState(true)
   const candidates = useIssueCandidates(data, true)
   const options = useMemo(() => candidates.filter(item => item.id !== exclude).map(item => ({ id: item.id, label: `${item.identifier} ${item.title}` })), [candidates, exclude])
-  const command = usePropertyCommand({ open, options, onOpenChange: setOpen, closeOnSelect: false, onSelect: option => { const target = candidates.find(item => item.id === option.id); if (target) onPick(target) } })
+  const { inputRef: commandInputRef, ...command } = usePropertyCommand({ open, options, onOpenChange: setOpen, closeOnSelect: false, onSelect: option => { const target = candidates.find(item => item.id === option.id); if (target) onPick(target) } })
   return <div onKeyDown={event => { event.stopPropagation(); command.onKeyDown(event) }}>
-    <div className={styles.issueSearch}><input ref={command.inputRef} aria-label="Search issues" placeholder="Search issues…" value={command.query} onChange={event => command.onQueryChange(event.target.value)}/></div>
+    <div className={styles.issueSearch}><input ref={commandInputRef} aria-label="Search issues" placeholder="Search issues…" value={command.query} onChange={event => command.onQueryChange(event.target.value)}/></div>
     <div className={styles.issueResults}>
       {command.filteredOptions.slice(0, 8).map(option => { const target = candidates.find(item => item.id === option.id); return <ContextMenu.Item key={option.id} className={styles.submenuItem} onSelect={() => command.choose(option)}>{target && <StatusIcon state={target.state} size={14}/>}<span className={styles.issueIdentifier} data-i18n-ignore>{target?.identifier}</span><span data-i18n-ignore>{target?.title}</span></ContextMenu.Item> })}
       {!command.filteredOptions.length && <div className={styles.issueEmpty}>No matching issues</div>}

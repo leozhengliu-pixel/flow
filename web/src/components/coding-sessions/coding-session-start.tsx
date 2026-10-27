@@ -1,4 +1,4 @@
-import { createElement, useCallback, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useRef, useState, type ReactNode } from 'react'
 import { useI18n } from '@/i18n/i18n'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { ApiError } from '@/lib/api-client'
@@ -74,7 +74,7 @@ export function useIssueCodingSessionStarter(issue: StartIssue, data: BootstrapD
     if (suggestion.kind === 'single') return launch(suggestion.environment.id, options.prompt)
     setPicker({ environments: suggestion.environments, suggested: suggestion.suggested, prompt: options.prompt })
   }, [data.reviews, issue, workspace, t, launch])
-  const element: ReactNode = picker ? createElement(CodingEnvironmentPickerDialog, { environments: picker.environments, suggested: picker.suggested, initialPrompt: picker.prompt, busy, onCancel: () => setPicker(undefined), onStart: (environmentId: string, prompt: string) => void launch(environmentId, prompt) }) : null
+  const element: ReactNode = picker ? <CodingEnvironmentPickerDialog environments={picker.environments} suggested={picker.suggested} initialPrompt={picker.prompt} busy={busy} onCancel={() => setPicker(undefined)} onStart={(environmentId: string, prompt: string) => void launch(environmentId, prompt)}/> : null
   return { available, start, element, busy }
 }
 

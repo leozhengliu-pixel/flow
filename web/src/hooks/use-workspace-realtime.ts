@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { realtimeClientId, updatePresence } from '@/lib/api'
 import { AGENT_TASK_ACTIVITY_EVENT } from '@/lib/application-agents'
 // coding sessions (track G)
@@ -22,15 +23,12 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, o
 }) {
   const [presence, setPresence] = useState<Presence[]>([])
   const [connected, setConnected] = useState(false)
-  const syncRef = useRef(onRemoteSync)
-  syncRef.current = onRemoteSync
+  const syncRef = useLatestRef(onRemoteSync)
 
+  // Presence starts empty and the previous subscription's cleanup empties it again, so there is nothing to
+  // reset here before subscribing.
   useEffect(() => {
-    if (!workspaceKey) {
-      setPresence([])
-      return
-    }
-    setPresence([])
+    if (!workspaceKey) return
     const clientId = realtimeClientId()
     let disposed = false
     let timer: number | undefined
@@ -143,7 +141,7 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, o
       setConnected(false)
       setPresence([])
     }
-  }, [workspaceKey, viewerId])
+  }, [workspaceKey, viewerId, syncRef])
 
   useEffect(() => {
     if (!workspaceKey) return

@@ -27,7 +27,9 @@ import { MentionMenu } from '@/components/issue/editor/mention-menu'
 import { DescriptionImage, insertImageFiles } from '@/components/issue/editor/image-extension'
 import { DescriptionFile, DescriptionVideo, insertEmbedFiles } from '@/components/issue/editor/file-extension'
 import '@/components/issue/issue-description-editor.css'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useInsertionEffect, useMemo, useRef, useState } from 'react'
+import { useLatestRef } from '@/hooks/use-latest-ref'
+import { bindImageUpload } from './image-upload-binding'
 import { commentShortcutMatches } from '@/lib/runtime-preferences'
 import { handleEmoticonInput } from './emoticon-input'
 import { useI18n } from '@/i18n/i18n'
@@ -35,28 +37,26 @@ import { useI18n } from '@/i18n/i18n'
 export function Composer({ placeholder = 'Leave a comment…', initialValue = '', initialData, compact = false, onCancel, onSubmit, onAttach, onUpload, draftType, draftResourceId, drafts = [], draftTitle = '', draftMetadata, users }: { users?:User[]; placeholder?: string; initialValue?: string; initialData?: Record<string,unknown>; compact?: boolean; onCancel?: () => void; onSubmit?: (body: string, bodyData?: Record<string, unknown>) => Promise<void>; onAttach?:()=>void; onUpload?: (file: File) => Promise<string>; draftType?: ComposerDraftType; draftResourceId?: string; drafts?: Draft[]; draftTitle?: string; draftMetadata?: Record<string, unknown> }) {
   const { t } = useI18n()
   const directory=usePeopleDirectory()
-  const people=useRef<User[]>([]);people.current=(users??[...directory.users.values()]).filter(user=>user.active&&(!user.app||user.appScopes?.includes('app:mentionable')))
+  const mentionUsers=(users??[...directory.users.values()]).filter(user=>user.active&&(!user.app||user.appScopes?.includes('app:mentionable')))
   const [mention,setMention]=useState<{query:string;from:number;to:number;index:number}>()
-  const mentionRef=useRef(mention);mentionRef.current=mention
+  const mentionRef=useLatestRef(mention)
   const entityData=useAgentEntityData()
-  const entityDataRef=useRef(entityData);entityDataRef.current=entityData
-  const mentionUsers=people.current
+  const entityDataRef=useLatestRef(entityData)
+  const [getEntityData]=useState(()=>()=>entityDataRef.current)
   const mentionOptionList=useMentionOptions({active:Boolean(mention),query:mention?.query??'',users:mentionUsers})
-  const optionsRef=useRef<MentionOption[]>([]);optionsRef.current=mentionOptionList
+  const optionsRef=useLatestRef(mentionOptionList)
   const updateMention=(editor:Editor)=>{const {$from,empty}=editor.state.selection;const match=empty&&$from.parent.type.name!=='codeBlock'?$from.parent.textBetween(0,$from.parentOffset,' ',' ').match(/(?:^|\s)@([^\s@]*)$/):null;const next=match?{query:match[1],from:$from.pos-match[1].length-1,to:$from.pos,index:0}:undefined;mentionRef.current=next;setMention(next)}
   const insertMention=(editor:Editor,option:MentionOption)=>{const range=mentionRef.current;if(!range)return;insertMentionOption(editor.view,range,option);editor.commands.focus();mentionRef.current=undefined;setMention(undefined)}
   const persistedDraft = useMemo(() => draftType && draftResourceId ? drafts.find(item => item.type === draftType && item.resourceId === draftResourceId) ?? readComposerDraft(draftType, draftResourceId) : undefined, [draftResourceId, draftType, drafts])
   const initialBody = persistedDraft?.body ?? initialValue
   const initialDocument = persistedDraft?.metadata?.bodyData as Record<string, unknown> | undefined ?? initialData
   const draftDocument = useRef(initialDocument)
-  const onUploadRef = useRef(onUpload)
-  onUploadRef.current = onUpload
+  const onUploadRef = useLatestRef(onUpload)
   const [saving, setSaving] = useState(false), [error, setError] = useState(''), [empty, setEmpty] = useState(!commentSendable(initialBody, initialDocument)), [draftBody, setDraftBody] = useState(initialBody)
   const draftId = useRef(persistedDraft?.id ?? '')
   // Like the reference app, selecting text in a comment offers "Create issue from selection" and "Ask agent" on the formatting toolbar.
   const selectionActions = useComposerSelectionActions()
-  const selectionActionsRef = useRef(selectionActions)
-  selectionActionsRef.current = selectionActions
+  const selectionActionsRef = useLatestRef(selectionActions)
   const editorRef = useRef<Editor | null>(null)
   // Comment boxes sit in cards, popovers and scrolling panels that would clip the toolbar, so it floats in the page body
   // (fixed); inside a dialog (whose outside does not take clicks) it stays next to the editor.
@@ -66,7 +66,7 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
   const editor = useEditor({
     immediatelyRender: false,
     // Headings, collapsible sections and checklists back the selection toolbar's text-style, collapse and list menus.
-    extensions: [FlowStarterKit.configure({ heading: { levels: [1, 2, 3, 4] }, link: { openOnClick: false, autolink: true, linkOnPaste: true } }), LinkBehavior, ClipboardOrigin, ...structuredBlocks, EmbedPasteNode, MentionChipNode, MentionLinksExtension.configure({ getData: () => entityDataRef.current }), DescriptionImage, DescriptionFile, DescriptionVideo, Placeholder.configure({ placeholder: t(placeholder) })],
+    extensions: [FlowStarterKit.configure({ heading: { levels: [1, 2, 3, 4] }, link: { openOnClick: false, autolink: true, linkOnPaste: true } }), LinkBehavior, ClipboardOrigin, ...structuredBlocks, EmbedPasteNode, MentionChipNode, MentionLinksExtension.configure({ getData: getEntityData }), DescriptionImage, DescriptionFile, DescriptionVideo, Placeholder.configure({ placeholder: t(placeholder) })],
     content: initialDocument?.type === 'doc' ? initialDocument : initialBody || { type: 'doc', content: [{ type: 'paragraph' }] },
     editorProps: { handleTextInput: handleEmoticonInput, attributes: { class: 'comment-prosemirror', role: 'textbox', 'aria-label': t(placeholder), 'aria-multiline': 'true' }, handleKeyDown: (_view, event) => { const current=mentionRef.current;if(current&&!event.isComposing){const options=optionsRef.current;if(event.key==='Escape'){setMention(undefined);mentionRef.current=undefined;return true}if(options.length&&(event.key==='ArrowDown'||event.key==='ArrowUp')){const next={...current,index:(current.index+(event.key==='ArrowDown'?1:-1)+options.length)%options.length};mentionRef.current=next;setMention(next);event.preventDefault();return true}if(options.length&&(event.key==='Enter'||event.key==='Tab')&&editor){event.preventDefault();insertMention(editor,options[current.index]??options[0]);return true}} if (!event.isComposing && commentShortcutMatches(event)) { event.preventDefault(); void submit(); return true } if (handleSelectionShortcut(event, _view.state.selection, _view.state.doc, selectionActionsRef.current, editorRef.current)) return true; if (event.key === 'Escape' && onCancel) { event.preventDefault(); onCancel(); return true } return false } },
     onUpdate: ({editor}) => { const json = editor.getJSON() as Record<string, unknown>; draftDocument.current = json; const text = commentText(editor); setEmpty(!commentSendable(text, json)); setDraftBody(text);updateMention(editor) },
@@ -84,15 +84,15 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
     }, 350)
     return () => window.clearTimeout(timer)
   }, [draftBody, draftMetadata, draftResourceId, draftTitle, draftType, saving])
-  editorRef.current = editor
+  useInsertionEffect(() => { editorRef.current = editor })
   useEffect(() => {
     if (!editor) return
-    editor.storage.image.upload = file => {
+    bindImageUpload(editor, file => {
       const upload = onUploadRef.current
       if (!upload) return Promise.reject(new Error('Upload unavailable'))
       return upload(file)
-    }
-  }, [editor])
+    })
+  }, [editor, onUploadRef])
   const attachFiles = () => {
     if (onUploadRef.current && editor) {
       pickComposerFiles(files => {

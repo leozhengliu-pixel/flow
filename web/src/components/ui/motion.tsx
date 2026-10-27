@@ -1,7 +1,7 @@
 /* oxlint-disable react/only-export-components -- Provider and hooks share the captured activation origin. */
 import { AnimatePresence, m as motion, LazyMotion, domAnimation, MotionConfig, useIsPresent, useReducedMotion, type HTMLMotionProps } from 'motion/react'
 import { animated, useTransition } from '@react-spring/web'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react'
+import { useCallback, useEffect, useInsertionEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react'
 import { motionPresets } from '@/lib/motion-presets'
 
 let activation: { x: number; y: number; at: number } | undefined
@@ -21,9 +21,10 @@ export function FlowMotionProvider({ children }: { children: ReactNode }) {
 export function useExitPresence(open: boolean, duration = 420) {
   const reduced = useReducedMotion()
   const [present, setPresent] = useState(open)
+  if (open && !present) setPresent(true)
+  else if (!open && reduced && present) setPresent(false)
   useEffect(() => {
-    if (open) { setPresent(true); return }
-    if (reduced) { setPresent(false); return }
+    if (open || reduced) return
     const timer = setTimeout(() => setPresent(false), duration)
     return () => clearTimeout(timer)
   }, [duration, open, reduced])
@@ -34,8 +35,11 @@ export function useCreateMotion(open: boolean) {
   const element = useRef<HTMLElement | null>(null)
   const wasOpen = useRef(false)
   const origin = useRef<typeof activation>(undefined)
-  if (open && !wasOpen.current) origin.current = activation && performance.now() - activation.at < 1000 ? activation : undefined
-  wasOpen.current = open
+  // Runs before the commit's layout phase, where `measure` is attached as a ref and reads `origin`.
+  useInsertionEffect(() => {
+    if (open && !wasOpen.current) origin.current = activation && performance.now() - activation.at < 1000 ? activation : undefined
+    wasOpen.current = open
+  })
   const measure = useCallback((node: HTMLElement | null) => {
     element.current = node
     if (!node) return

@@ -136,23 +136,31 @@ function ChangeFooter({ card, children }: { card: AgentChangeCard; children: Rea
   const [highlight, setHighlight] = useState(false)
   const [diff, setDiff] = useState(false)
   const text = card.undone ? undefined : card.text
-  useEffect(() => {
+  // A different card state starts without the in-card diff; the effect below turns it on when the editor has nothing to highlight.
+  const [seenHighlight, setSeenHighlight] = useState({ highlight, text })
+  if (seenHighlight.highlight !== highlight || seenHighlight.text !== text) {
+    setSeenHighlight({ highlight, text })
     setDiff(false)
+  }
+  useEffect(() => {
     if (!highlight || !text) return
     const targets = changedBlockTexts(text.before, text.after)
     let active: AgentChangeHighlight | undefined
     let tries = 0
     let timer: number | undefined
-    const attempt = () => {
+    // Reports what the editor showed to the card: highlight bars (no in-card diff) or, on the first try, the diff.
+    const attempt = (first = false) => {
       const next = highlightAgentChanges(targets)
-      if (!next.matched) return false
+      if (!next.matched) {
+        if (first) setDiff(true)
+        return false
+      }
       active = next
       setDiff(false)
       return true
     }
     // Without the edited editor on screen the card shows the diff; an editor that catches up (realtime) switches to bars.
-    if (!attempt()) {
-      setDiff(true)
+    if (!attempt(true)) {
       timer = window.setInterval(() => { if (++tries >= 15 || attempt()) window.clearInterval(timer) }, 1000)
     }
     return () => {

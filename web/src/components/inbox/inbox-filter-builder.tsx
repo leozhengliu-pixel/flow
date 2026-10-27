@@ -263,7 +263,7 @@ function FilterCommandStage({ property, options, itemCount, onActivate, onSelect
   const [searching, setSearching] = useState(false)
   const values = property ? options[property] ?? [] : []
   const ordered = property === 'notificationType' ? [...values].sort((a, b) => a.label.localeCompare(b.label)) : values
-  const command = usePropertyCommand<InboxFilterOption>({
+  const { inputRef, ...command } = usePropertyCommand<InboxFilterOption>({
     open: true,
     closeOnSelect: false,
     options: property
@@ -279,7 +279,7 @@ function FilterCommandStage({ property, options, itemCount, onActivate, onSelect
       onActivate(undefined)
     } else command.onKeyDown(event)
   }}>
-    <div className={styles.commandSearch}><input ref={command.inputRef} aria-label={t('Command menu')} placeholder={t(property ? 'Filter…' : 'Filter notifications by…')} value={command.query} onChange={event => { setSearching(Boolean(event.target.value.trim())); command.onQueryChange(event.target.value) }}/></div>
+    <div className={styles.commandSearch}><input ref={inputRef} aria-label={t('Command menu')} placeholder={t(property ? 'Filter…' : 'Filter notifications by…')} value={command.query} onChange={event => { setSearching(Boolean(event.target.value.trim())); command.onQueryChange(event.target.value) }}/></div>
     <div className={styles.commandList} role="listbox" aria-label={t(property ? properties.find(item => item.id === property)!.label : 'Filter property')}>
       {command.filteredOptions.map(option => property ? <FilterValueOption key={option.id} active={command.activeId === option.id} checked={false} option={option} property={property} onActive={() => command.setActiveId(option.id)} onChoose={() => command.choose(option)}/> : <button key={option.id} className={styles.propertyItem} type="button" role="option" aria-selected={command.activeId === option.id} onMouseMove={() => command.setActiveId(option.id)} onClick={() => command.choose(option)}><PropertyIcon property={option.id as InboxFilterProperty}/><span>{t(option.label)}</span></button>)}
       {!command.filteredOptions.length && <div className={styles.empty}>{t('No results')}</div>}
@@ -411,7 +411,7 @@ function PropertyPicker({
                 property={property}
                 options={valueOptions}
                 itemCount={itemCount}
-                anchorTop={propertyRefs.current.get(property.id)?.getBoundingClientRect().top ?? 0}
+                getAnchorTop={() => propertyRefs.current.get(property.id)?.getBoundingClientRect().top ?? 0}
                 autoFocus={focusValuePicker}
                 isAnchorTarget={target => target instanceof Node && Boolean(propertyRefs.current.get(property.id)?.contains(target))}
                 onClose={() => onActivate(undefined)}
@@ -440,7 +440,7 @@ function ValuePicker({
   onToggle,
   onReturnToProperties,
   itemCount,
-  anchorTop = 0,
+  getAnchorTop,
   isAnchorTarget,
   selectedIds = [],
   variant = 'nested',
@@ -453,13 +453,15 @@ function ValuePicker({
   onToggle: (option: InboxFilterOption) => void
   onReturnToProperties: () => void
   itemCount: number
-  anchorTop?: number
+  /** Measures the top (or bottom) edge of the row that anchors this menu; read once when the menu opens. */
+  getAnchorTop?: () => number
   /** True when an outside interaction landed on the row that anchors this menu. */
   isAnchorTarget?: (target: EventTarget | null) => boolean
   selectedIds?: string[]
   variant?: 'nested' | 'condition'
 }) {
   const { t } = useI18n()
+  const [anchorTop] = useState(() => getAnchorTop?.() ?? 0)
   const [showUnmatched, setShowUnmatched] = useState(false)
   const [searching, setSearching] = useState(false)
   const [highlight, setHighlight] = useState(false)
@@ -476,7 +478,7 @@ function ValuePicker({
   const collapsed = !showUnmatched && !searching && split.unmatched.length > 0
   const unmatchedLabel = `${split.unmatched.length} ${t('options not matching any notifications')}`
   const commandOptions: InboxFilterOption[] = collapsed ? [...split.matching, { id: UNMATCHED_OPTION_ID, label: unmatchedLabel }] : [...split.matching, ...split.unmatched]
-  const command = usePropertyCommand({
+  const { inputRef, ...command } = usePropertyCommand({
     autoFocus,
     closeOnSelect: false,
     open: true,
@@ -488,14 +490,14 @@ function ValuePicker({
       if (option.id === UNMATCHED_OPTION_ID) {
         setShowUnmatched(true)
         setHighlight(false)
-        requestAnimationFrame(() => command.inputRef.current?.focus())
+        requestAnimationFrame(() => inputRef.current?.focus())
       } else onToggle(option)
     },
   })
   const filtered = command.filteredOptions.filter(option => option.id !== UNMATCHED_OPTION_ID)
   const displayed = variant === 'condition' ? [...filtered.filter(option => selectedIds.includes(option.id)), ...filtered.filter(option => !selectedIds.includes(option.id))] : filtered
   const visibleSearch = showUnmatched || searching || commandOptions.length > 2
-  const initialSearch = useRef(visibleSearch)
+  const [initialSearch] = useState(visibleSearch)
   const separators = new Set<string>()
   if (!command.query) {
     if (showUnmatched && split.matching.length && split.unmatched.length) separators.add(split.unmatched[0].id)
@@ -538,7 +540,7 @@ function ValuePicker({
         align="start"
         // Menus with a visible search header align that header above the
         // property row; compact menus align directly with the row itself.
-        alignOffset={variant === 'condition' ? 0 : initialSearch.current ? -43 : -6.5}
+        alignOffset={variant === 'condition' ? 0 : initialSearch ? -43 : -6.5}
         sideOffset={variant === 'condition' ? 4.5 : -1.5}
         collisionPadding={10}
         aria-label={`${t('Filter')} ${t(property.label)}`}
@@ -552,7 +554,7 @@ function ValuePicker({
         }}
         onKeyDown={onKeyDown}
       >
-        <FilterValueList activeId={highlight ? command.activeId : undefined} inputRef={command.inputRef} isSelected={command.isSelected} onActive={id => { setHighlight(true); command.setActiveId(id) }} onChoose={command.choose} onQuery={value => { setSearching(Boolean(value.trim())); setHighlight(Boolean(value)); command.onQueryChange(value) }} options={displayed} separatorBeforeIds={[...separators]} placeholder={variant === 'condition' || showUnmatched ? t(property.label) : t('Filter…')} property={property} query={command.query} hideSearch={!visibleSearch} footer={collapsed ? <>
+        <FilterValueList activeId={highlight ? command.activeId : undefined} inputRef={inputRef} isSelected={command.isSelected} onActive={id => { setHighlight(true); command.setActiveId(id) }} onChoose={command.choose} onQuery={value => { setSearching(Boolean(value.trim())); setHighlight(Boolean(value)); command.onQueryChange(value) }} options={displayed} separatorBeforeIds={[...separators]} placeholder={variant === 'condition' || showUnmatched ? t(property.label) : t('Filter…')} property={property} query={command.query} hideSearch={!visibleSearch} footer={collapsed ? <>
             {displayed.length > 0 && <div className={styles.valueSeparator} role="separator" />}
             <button className={styles.unmatchedItem} type="button" role="option" aria-selected={highlight && command.activeId === UNMATCHED_OPTION_ID} onMouseMove={() => { setHighlight(true); command.setActiveId(UNMATCHED_OPTION_ID) }} onClick={() => command.choose({ id: UNMATCHED_OPTION_ID, label: unmatchedLabel })}>
               <span>{unmatchedLabel}</span>
@@ -657,7 +659,7 @@ function AppliedCondition({
           <FilterValueSummary property={property.id} values={condition.values} />
         </button>
       </Popover.Trigger>
-      {valuesOpen && <ValuePicker variant="condition" property={property} options={options} selectedIds={selectedIds} itemCount={itemCount} anchorTop={valueTrigger.current?.getBoundingClientRect().bottom ?? 0} autoFocus onClose={() => setValuesOpen(false)} onCloseAll={() => setValuesOpen(false)} onReturnToProperties={() => setValuesOpen(false)} onToggle={option => { onToggleValue(condition.id, option); setValuesOpen(false) }}/>}
+      {valuesOpen && <ValuePicker variant="condition" property={property} options={options} selectedIds={selectedIds} itemCount={itemCount} getAnchorTop={() => valueTrigger.current?.getBoundingClientRect().bottom ?? 0} autoFocus onClose={() => setValuesOpen(false)} onCloseAll={() => setValuesOpen(false)} onReturnToProperties={() => setValuesOpen(false)} onToggle={option => { onToggleValue(condition.id, option); setValuesOpen(false) }}/>}
     </Popover.Root>
     <button className={styles.removeCondition} type="button" aria-label={`${t('Remove')} ${t(property.label)} ${t('filter')}`} title={`${t('Remove')} ${t(property.label)} ${t('filter')}`} onClick={() => onRemove(condition.id)}>
       <X aria-hidden="true" />
@@ -700,10 +702,18 @@ function OperatorMenu({
     : operatorOptions
   const visibleOperators = contextualOperators.filter(option => matchesSearch(query, [option.label], t))
 
+  // Opening the menu (or changing the operator while open) clears the search (adjusted while rendering).
+  const openKey = open ? condition.operator : undefined
+  const [seenOpenKey, setSeenOpenKey] = useState<typeof openKey>()
+  if (seenOpenKey !== openKey) {
+    setSeenOpenKey(openKey)
+    if (openKey !== undefined) {
+      setQuery('')
+      setActiveIndex(-1)
+    }
+  }
   useEffect(() => {
     if (!open) return
-    setQuery('')
-    setActiveIndex(-1)
     requestAnimationFrame(() => inputRef.current?.focus())
   }, [condition.operator, open])
 

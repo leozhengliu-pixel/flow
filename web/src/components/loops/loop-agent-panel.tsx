@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCurrentTimeMs } from "@/hooks/use-current-time";
+import { useLatestRef } from "@/hooks/use-latest-ref";
 import { fetchAgentStatus, getAgentSession, listAgentSessions } from "@/lib/api";
 import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from "@/lib/agent-stream";
 import { AgentPanel } from "@/components/agent/agent-panel";
@@ -62,8 +64,15 @@ export function LoopAgentPanel({
   const autoSent = useRef(false);
   const published = useRef(false);
   const draftKey = `loop:${loopId}:${session?.id ?? "new"}`;
-  const callbacks = useRef({ onLoopSaved, onPublished });
-  callbacks.current = { onLoopSaved, onPublished };
+  const callbacks = useLatestRef({ onLoopSaved, onPublished });
+  const now = useCurrentTimeMs();
+
+  // Reopening the panel (or switching loops) hydrates again.
+  const [seen, setSeen] = useState({ loopId, open });
+  if (seen.loopId !== loopId || seen.open !== open) {
+    setSeen({ loopId, open });
+    if (open) setHydrated(false);
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -84,7 +93,6 @@ export function LoopAgentPanel({
   useEffect(() => {
     if (!open) return;
     let active = true;
-    setHydrated(false);
     listAgentSessions()
       .then(async (sessions) => {
         const match = (Array.isArray(sessions) ? sessions : [])
@@ -112,7 +120,7 @@ export function LoopAgentPanel({
       published.current = true;
       callbacks.current.onPublished?.(result);
     }
-  }, []);
+  }, [callbacks]);
 
   // A turn still running on the server without this panel streaming it: follow its saved progress until it finishes.
   const shownSession = useMemo(() => session && { ...session, messages }, [messages, session]);
@@ -216,8 +224,8 @@ export function LoopAgentPanel({
       const known = new Set(streamParts.map((part) => part.id));
       return [...visibleMessages.slice(0, -1), { ...last, parts: [...(last.parts ?? []).filter((part) => !known.has(part.id)), ...streamParts] }];
     }
-    return [...visibleMessages, { id: streamMessageId ?? "loop-builder-stream", role: "assistant" as const, content: "", createdAt: new Date().toISOString(), parts: streamParts }];
-  }, [loading, streamMessageId, streamParts, visibleMessages]);
+    return [...visibleMessages, { id: streamMessageId ?? "loop-builder-stream", role: "assistant" as const, content: "", createdAt: new Date(now).toISOString(), parts: streamParts }];
+  }, [loading, now, streamMessageId, streamParts, visibleMessages]);
 
   const sessionTitle = session?.title?.trim();
   const heading = sessionTitle && sessionTitle !== "New chat" && !TEMPLATE_SETUP_MESSAGE.test(sessionTitle) ? sessionTitle : (title ?? t("New chat"));

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { createAgentSessionFeedback, updateAgentMessageFeedback } from '@/lib/api'
 import { toast } from '@/lib/toast'
@@ -39,7 +39,11 @@ export function AgentReplyActions({ content, message, sessionId, onSessionChange
   const feedbackEnabled = useUsageFeedbackEnabled()
   const [rating, setRating] = useState<Rating | undefined>(message.feedback?.rating)
   const [dialogOpen, setDialogOpen] = useState(false)
-  useEffect(() => setRating(message.feedback?.rating), [message.feedback?.rating])
+  const [syncedRating, setSyncedRating] = useState(message.feedback?.rating)
+  if (syncedRating !== message.feedback?.rating) {
+    setSyncedRating(message.feedback?.rating)
+    setRating(message.feedback?.rating)
+  }
   const persisted = Boolean(sessionId && !message.id.startsWith('pending-') && !message.id.startsWith('awaiting-'))
   const save = async (next: Rating | '', comment?: string) => {
     const previous = rating
@@ -98,11 +102,15 @@ export function AgentFeedbackDialog({ open, onOpenChange, onSubmit }: { open: bo
   const [files, setFiles] = useState<File[]>([])
   const [busy, setBusy] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
-  useEffect(() => {
-    if (open) return
-    setText('')
-    setFiles([])
-  }, [open])
+  // Closing the dialog discards the draft note and attachments.
+  const [wasOpen, setWasOpen] = useState(open)
+  if (wasOpen !== open) {
+    setWasOpen(open)
+    if (!open) {
+      setText('')
+      setFiles([])
+    }
+  }
   const ready = Boolean(text.trim() || files.length) && !busy
   const send = async () => {
     if (!ready) return

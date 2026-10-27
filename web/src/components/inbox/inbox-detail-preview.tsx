@@ -1,7 +1,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Dialog from '@radix-ui/react-dialog'
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
-import { forwardRef, useEffect, useState } from 'react'
+import { forwardRef, useState } from 'react'
 
 import { MentionBody } from '@/components/editor/mentions/mention-body'
 import { IssueOptionsMenu } from '@/components/issue/issue-options-menu'
@@ -50,11 +50,14 @@ export function InboxDetailPreview(props: InboxDetailPreviewProps) {
   const [snoozeOpen, setSnoozeOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
 
-  useEffect(() => {
+  // Selecting another notification closes whatever was open for the previous one (adjusted while rendering).
+  const [shownId, setShownId] = useState(notification.id)
+  if (shownId !== notification.id) {
+    setShownId(notification.id)
     setRelationType(null)
     setSnoozeOpen(false)
     setHistoryOpen(false)
-  }, [notification.id])
+  }
 
   const issueOptions = props.issue && props.onUpdateIssue && props.onDeleteIssue && props.onCreateRelation ? (
     <IssueOptionsMenu
@@ -122,9 +125,11 @@ function DetailSnoozeMenu({ notification, onSnooze, pending, open, onOpenChange 
     onOpenChange(false)
     setCustom(false)
   }
-  useEffect(() => {
+  const [shownId, setShownId] = useState(notification.id)
+  if (shownId !== notification.id) {
+    setShownId(notification.id)
     setCustom(false)
-  }, [notification.id])
+  }
   return <DropdownMenu.Root modal={false} open={open} onOpenChange={(nextOpen) => { onOpenChange(nextOpen); if (!nextOpen) setCustom(false) }}><DropdownMenu.Trigger asChild><DetailIconButton data-detail-action="snooze" disabled={pending} label="Snooze notification"><ClockIcon /></DetailIconButton></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="flow-inbox-menu flow-inbox-detail-snooze" align="end" sideOffset={4}>
     {custom ? <InboxCustomSnoozeForm disabled={pending} onCancel={() => setCustom(false)} onConfirm={(preset) => { onSnooze(notification, preset); close() }} /> : <>
       <div className="flow-inbox-menu__search-wrap flow-inbox-menu__search-wrap--passive"><span>Try: 4 pm, 2 days, in 5 weeks…</span></div>

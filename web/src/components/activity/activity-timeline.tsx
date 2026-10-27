@@ -16,6 +16,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n/i18n'
+import { useCurrentTimeMs } from '@/hooks/use-current-time'
 import { CalendarIcon, CycleIcon, LabelIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { activityTimeLabel, coalesceIssueEvents, describeIssueActivityParts, withoutSessionDelegations, issueEventFieldCount, type ActivityContext, type ActivityPart } from './issue-activity-model'
 import { MentionReference } from '@/components/editor/mentions/mention-reference'
@@ -66,6 +67,7 @@ export function ActivityTimeline({
   renderAgentSession?: (taskId: string) => ReactNode
 }) {
   const { t } = useI18n()
+  const now = useCurrentTimeMs()
   const agentCommentIds = useAgentCommentThreadIds()
   const standaloneSessions = useStandaloneAgentSessions()
   const [threadOverrides, setThreadOverrides] = useState<Record<string, ThreadSubscriptionState | null>>({})
@@ -183,7 +185,7 @@ export function ActivityTimeline({
                   <ActivityEventIcon event={item} context={context} />
                 </div>
                 <div>
-                  <ActivityRow event={item} description={item.description} context={context} />
+                  <ActivityRow event={item} description={item.description} context={context} now={now} />
                 </div>
               </>
             ) : (
@@ -354,7 +356,7 @@ export function ActivityTimeline({
 /** Rows whose sentence names no actor ("Session with Flow archived"). */
 const ACTORLESS_ACTIVITY = new Set(['issue.coding_session_archived'])
 
-function ActivityRow({ event, description, context }: { event: ActivityEvent; description: ActivityPart[]; context?: ActivityContext }) {
+function ActivityRow({ event, description, context, now }: { event: ActivityEvent; description: ActivityPart[]; context?: ActivityContext; now: number }) {
   const { locale } = useI18n()
   const sentence = description.map((part, index) => typeof part === 'string' ? part : <MentionReference key={`${index}-${part.type}-${part.id}`} id={part.id} label={part.label} type={part.type}/>)
   return (
@@ -363,7 +365,7 @@ function ActivityRow({ event, description, context }: { event: ActivityEvent; de
       <span className="activity-time">
         <span className="activity-dot">·</span>
         <a href={`#activity-${event.id}`} title={format(new Date(event.createdAt), 'PPpp')}>
-          <time dateTime={event.createdAt}>{activityTimeLabel(event.createdAt, Date.now(), locale)}</time>
+          <time dateTime={event.createdAt}>{activityTimeLabel(event.createdAt, now, locale)}</time>
         </a>
       </span>
     </p>

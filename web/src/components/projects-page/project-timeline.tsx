@@ -1,5 +1,7 @@
 import * as Tooltip from '@radix-ui/react-tooltip'
 import { memo, useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
+import { useCurrentTime } from '@/hooks/use-current-time'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { MILESTONE_SHAPE_PATH } from '@/components/issue/milestone-progress'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import type { ProjectDataGroup, ProjectPageItem } from './projects-data-view'
@@ -74,7 +76,9 @@ export function ProjectTimeline({ groups, zoom: zoomProp, onZoomChange, onOpenPr
   const scrollerRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const markerId = useId().replace(/:/g, '')
-  const todayKey = isoTimelineDay(todayProp ?? new Date())
+  // The timeline only cares which day it is, so a coarse clock keeps it from re-rendering every minute.
+  const clock = useCurrentTime(15 * 60_000)
+  const todayKey = isoTimelineDay(todayProp ?? clock)
   const today = useMemo(() => parseTimelineDay(todayKey)!, [todayKey])
 
   const rows = useMemo(() => {
@@ -271,8 +275,7 @@ export function ProjectTimeline({ groups, zoom: zoomProp, onZoomChange, onOpenPr
     void onUpdateProject(project.id, { ...(span.hasStart ? { startDate: isoTimelineDay(addTimelineDays(span.start, days)) } : {}), ...(span.hasTarget ? { targetDate: isoTimelineDay(addTimelineDays(span.end, days)) } : {}) })
   }
 
-  const latest = useRef({ startBarDrag, startMilestoneDrag, startCreate, startLink, nudge, consumeSuppressedClick })
-  latest.current = { startBarDrag, startMilestoneDrag, startCreate, startLink, nudge, consumeSuppressedClick }
+  const latest = useLatestRef({ startBarDrag, startMilestoneDrag, startCreate, startLink, nudge, consumeSuppressedClick })
   const stable = useMemo(() => ({
     startBarDrag: (...args: Parameters<typeof startBarDrag>) => latest.current.startBarDrag(...args),
     startMilestoneDrag: (...args: Parameters<typeof startMilestoneDrag>) => latest.current.startMilestoneDrag(...args),
@@ -280,7 +283,7 @@ export function ProjectTimeline({ groups, zoom: zoomProp, onZoomChange, onOpenPr
     startLink: (...args: Parameters<typeof startLink>) => latest.current.startLink(...args),
     nudge: (...args: Parameters<typeof nudge>) => latest.current.nudge(...args),
     consumeSuppressedClick: () => latest.current.consumeSuppressedClick(),
-  }), [])
+  }), [latest])
 
   const linkingActive = drag?.kind === 'link'
   const activeIds = new Set<string>([hoveredId, drag?.kind === 'bar' ? drag.id : undefined].filter((value): value is string => Boolean(value)))

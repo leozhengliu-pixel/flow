@@ -1,4 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 
 export type DismissReason = 'escape' | 'outside-pointer'
 
@@ -73,12 +74,9 @@ export function useDismissibleLayer({
   closeOnPointerOutside?: boolean
 }) {
   const id = useRef(Symbol('dismissible-layer'))
-  const refsRef = useRef(refs)
-  const onDismissRef = useRef(onDismiss)
-  const restoreFocusRefRef = useRef(restoreFocusRef)
-  refsRef.current = refs
-  onDismissRef.current = onDismiss
-  restoreFocusRefRef.current = restoreFocusRef
+  const refsRef = useLatestRef(refs)
+  const onDismissRef = useLatestRef(onDismiss)
+  const restoreFocusRefRef = useLatestRef(restoreFocusRef)
 
   useEffect(() => {
     if (!open) return
@@ -97,5 +95,5 @@ export function useDismissibleLayer({
       if (index >= 0) layers.splice(index, 1)
       stopListening()
     }
-  }, [closeOnEscape, closeOnPointerOutside, open])
+  }, [closeOnEscape, closeOnPointerOutside, open, refsRef, onDismissRef, restoreFocusRefRef])
 }

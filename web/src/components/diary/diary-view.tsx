@@ -34,18 +34,18 @@ export function DiaryView({
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const latest = useRef<Record<string, string>>({})
 
-  const refresh = useCallback(async () => {
+  const loadEntries = useCallback(async () => {
     try {
       const docs = await listDocuments({ archived: 'false' })
-      setEntries(docs.filter(doc => isDiaryDocument(doc, data.viewer)).map(toDiaryEntry))
+      return docs.filter(doc => isDiaryDocument(doc, data.viewer)).map(toDiaryEntry)
     } catch {
-      setEntries(data.documents.filter(doc => isDiaryDocument(doc, data.viewer)).map(toDiaryEntry))
+      return data.documents.filter(doc => isDiaryDocument(doc, data.viewer)).map(toDiaryEntry)
     }
   }, [data.documents, data.viewer])
 
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    void loadEntries().then(setEntries)
+  }, [loadEntries])
 
   const weeks = useMemo(() => groupDiaryByWeek(entries), [entries])
 

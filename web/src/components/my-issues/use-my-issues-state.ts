@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { MyIssuesGroupData, MyIssuesRowData } from './my-issues-list'
 
 export interface MyIssuesSelectionState {
@@ -20,14 +20,16 @@ export function useMyIssuesSelection(groups: MyIssuesGroupData[], pruneHidden = 
   const [previewIssueId, setPreviewIssueId] = useState<string | undefined>(undefined)
   const rangeAnchor = useRef<string | undefined>(undefined)
 
-  useEffect(() => {
-    if (!pruneHidden) return
-    updateSelectedIds(current => {
-      const next = new Set([...current].filter(id => visibleIds.has(id)))
-      return sameSet(current, next) ? current : next
-    })
-    setPreviewIssueId(current => current && visibleIds.has(current) ? current : undefined)
-  }, [pruneHidden, visibleIds])
+  // Selection and preview drop rows that are no longer visible (compared during render rather than in an effect).
+  const [seenPrune, setSeenPrune] = useState<{ pruneHidden: boolean; visibleIds: Set<string> }>()
+  if (!seenPrune || seenPrune.pruneHidden !== pruneHidden || seenPrune.visibleIds !== visibleIds) {
+    setSeenPrune({ pruneHidden, visibleIds })
+    if (pruneHidden) {
+      const next = new Set([...selectedIds].filter(id => visibleIds.has(id)))
+      if (!sameSet(selectedIds, next)) updateSelectedIds(next)
+      if (previewIssueId && !visibleIds.has(previewIssueId)) setPreviewIssueId(undefined)
+    }
+  }
 
   const selectIssue = (issueId: string, selected: boolean, range: boolean) => {
     updateSelectedIds(current => {

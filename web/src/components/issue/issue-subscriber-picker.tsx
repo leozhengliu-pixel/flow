@@ -18,6 +18,7 @@ export function IssueSubscriberPicker({ issue, users, onToggle }: { issue: Issue
   const selectedSet = useMemo(() => new Set(issue.subscriberIds), [issue.subscriberIds])
   const options = useMemo(() => users.filter(user => user.active).sort((left, right) => Number(selectedSet.has(right.id)) - Number(selectedSet.has(left.id))).map(user => ({ id: user.id, label: user.displayName, keywords: personSearchText(user), person: user })), [selectedSet, users])
   const command = usePropertyCommand({ closeOnSelect: false, open, options, selectedIds: issue.subscriberIds, onOpenChange: setOpen, onSelect: option => onToggle(option.id) })
+  const { inputRef: searchInputRef } = command
   const selected = command.filteredOptions.filter(option => selectedSet.has(option.id))
   const available = command.filteredOptions.filter(option => !selectedSet.has(option.id))
 
@@ -40,7 +41,7 @@ export function IssueSubscriberPicker({ issue, users, onToggle }: { issue: Issue
     <Popover.Root open={open} onOpenChange={next => { setOpen(next); if (!next) command.onQueryChange('') }}>
       <Popover.Trigger asChild><button type="button" className="subscriber-avatars" aria-label={t('Change subscribers')} aria-haspopup="dialog" aria-expanded={open}>{users.filter(user => selectedSet.has(user.id)).slice(0,3).map(user => <Avatar name={user.displayName} key={user.id}/>)}</button></Popover.Trigger>
       <Popover.Portal><Popover.Content data-flow-motion="floating" className="issue-subscriber-menu" role="dialog" aria-label={t('Change subscribers')} align="end" side="bottom" sideOffset={4} collisionPadding={8} onOpenAutoFocus={event => event.preventDefault()} onKeyDown={onKeyDown}>
-        <label className="issue-subscriber-search"><input ref={command.inputRef} role="searchbox" aria-label={t('Change subscribers…')} aria-activedescendant={command.activeId ? `subscriber-${command.activeId}` : undefined} placeholder={t('Change subscribers…')} value={command.query} onChange={event => command.onQueryChange(event.target.value)}/><kbd>⌘ ⇧ S</kbd></label>
+        <label className="issue-subscriber-search"><input ref={searchInputRef}role="searchbox" aria-label={t('Change subscribers…')} aria-activedescendant={command.activeId ? `subscriber-${command.activeId}` : undefined} placeholder={t('Change subscribers…')} value={command.query} onChange={event => command.onQueryChange(event.target.value)}/><kbd>⌘ ⇧ S</kbd></label>
         <div className="issue-subscriber-options" role="listbox" aria-label={t('Subscribers')} aria-multiselectable="true">
           {selected.map(option => <SubscriberOption active={option.id === command.activeId} assignee={issue.assignee?.id === option.id} checked key={option.id} option={option} user={users.find(user => user.id === option.id)!} onActive={() => command.setActiveId(option.id)} onChoose={() => command.choose(option)}/>)}
           {selected.length > 0 && available.length > 0 && <div className="issue-subscriber-separator" role="separator"/>}

@@ -76,9 +76,11 @@ export function ActivityPage({
     preferencesProp ?? readStoredPreferences(entityType, entityId),
   )
 
-  useEffect(() => {
+  const [seenPreferencesProp, setSeenPreferencesProp] = useState(preferencesProp)
+  if (preferencesProp !== seenPreferencesProp) {
+    setSeenPreferencesProp(preferencesProp)
     if (preferencesProp) setPreferences(preferencesProp)
-  }, [preferencesProp])
+  }
 
   useEffect(() => {
     const node = scrollRef.current

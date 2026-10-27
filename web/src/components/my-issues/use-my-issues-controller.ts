@@ -1,5 +1,5 @@
 import { normalizeStoredFilters } from '@/components/issue-explorer/advanced-filter'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import type { MyIssuesBulkAction } from './my-issues-bulk-action-bar'
 import type { MyIssuesDetailsSummary, MyIssuesSummaryItem } from './my-issues-details-pane'
 import { consolidateFilters, toggleFilterOption, updateFilterOperator, updateFilterValues, type MyIssuesAppliedFilter, type MyIssuesFilterOperator } from './my-issues-filter-types'
@@ -42,7 +42,11 @@ export function useMyIssuesController({ workspaceSlug, initialView, initialGroup
   const [bulkLoading, setBulkLoading] = useState(false)
   const [bulkError, setBulkError] = useState<string>()
   const displayRequest = useRef(0)
-  useEffect(() => setGroups(initialGroups), [initialGroups])
+  const [seenInitialGroups, setSeenInitialGroups] = useState(initialGroups)
+  if (seenInitialGroups !== initialGroups) {
+    setSeenInitialGroups(initialGroups)
+    setGroups(initialGroups)
+  }
   const visibleGroups = useMemo(() => projectGroups(drillRows ? [{ id: 'insights', label: 'Issues', issues: drillRows }] : applyFilters(groups, filters, groupingContext), display, groupingContext), [display, filters, groups, drillRows, groupingContext])
   const visibleSelection = useMyIssuesSelection(visibleGroups)
   const summary = useMemo(() => deriveSummary(visibleGroups), [visibleGroups])

@@ -80,6 +80,7 @@ import { LoopsDirectory } from "@/components/loops/loops-page";
 import { workspaceFeatureEnabled } from "@/components/layout/sidebar-customization-state";
 import { canManageTeamSettings, viewerOwnsTeam } from "@/lib/settings-permissions";
 import { useI18n } from "@/i18n/i18n";
+import { useCurrentTime } from "@/hooks/use-current-time";
 import type {
   BootstrapData,
   FlowDocument,
@@ -170,12 +171,15 @@ export function TeamOverviewPage({
       setLoading(false);
     }
   }, [team.id]);
-  useEffect(() => {
+  // Another team starts from an empty, loading resource list and its own stored collapsed sections.
+  const [resourcesTeamId, setResourcesTeamId] = useState(team.id);
+  if (resourcesTeamId !== team.id) {
+    setResourcesTeamId(team.id);
     setLoading(true);
     setResourceState({ resources: [], sections: [] });
     try { setCollapsedSections(new Set(JSON.parse(localStorage.getItem(`flow:team:${team.id}:collapsed-sections`) ?? '[]'))); } catch { setCollapsedSections(new Set()); }
-    void load();
-  }, [load, team.id]);
+  }
+  useEffect(() => { void load(); }, [load]);
   // Pins, moves and section edits apply here at once, before their request finishes.
   useEffect(() => onTeamResourcesChange(change => {
     if (change.teamId === team.id) setResourceState(current => applyTeamResourcesChange(current, change));
@@ -1065,12 +1069,13 @@ function ResourceCommandMenu({
   empty?: boolean;
 }) {
   const { t } = useI18n();
+  const now = useCurrentTime();
   const [query, setQuery] = useState('');
   const visible = [...new Map(documents.filter(document => !document.archivedAt && document.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).map(document => [document.id, document])).values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const groups = new Map<string, FlowDocument[]>();
   for (const document of visible) {
     const date = new Date(document.createdAt);
-    const label = !Number.isFinite(date.getTime()) ? 'Earlier' : isToday(date) ? 'Today' : isYesterday(date) ? 'Yesterday' : isThisWeek(date) ? 'This week' : isSameWeek(date, subWeeks(new Date(), 1)) ? 'Last week' : isThisMonth(date) ? 'This month' : isSameMonth(date, subMonths(new Date(), 1)) ? 'Last month' : format(date, 'MMMM yyyy');
+    const label = !Number.isFinite(date.getTime()) ? 'Earlier' : isToday(date) ? 'Today' : isYesterday(date) ? 'Yesterday' : isThisWeek(date) ? 'This week' : isSameWeek(date, subWeeks(now, 1)) ? 'Last week' : isThisMonth(date) ? 'This month' : isSameMonth(date, subMonths(now, 1)) ? 'Last month' : format(date, 'MMMM yyyy');
     const group = groups.get(label) ?? []; group.push(document); groups.set(label, group);
   }
   const pinned = (document: FlowDocument) => resources.find(item => item.resourceType === 'document' && item.resourceId === document.id);

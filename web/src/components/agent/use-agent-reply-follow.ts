@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLatestRef } from "@/hooks/use-latest-ref";
 import { getAgentSession, resolveAgentApproval, stopAgentSession } from "@/lib/api";
 import type { AgentMessagePart, AgentSession, AgentToolCall } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
@@ -41,16 +42,17 @@ export function useAgentReplyFollow({
   const following = Boolean(enabled && id && !streaming && agentReplyInProgress(session));
   const listening = Boolean(enabled && id && !streaming);
   // Latest values for the timer and listeners, so a new callback or copy never restarts them.
-  const latest = useRef({ onUpdate, session, streaming, signature: session ? agentReplySignature(session) : "" });
-  latest.current = { onUpdate, session, streaming, signature: session ? agentReplySignature(session) : "" };
+  const latest = useLatestRef({ onUpdate, session, streaming });
+  // The signature of the newest copy handed to `onUpdate` (or shown), updated at once so a duplicate push is ignored.
+  const signatureRef = useLatestRef(session ? agentReplySignature(session) : "");
   const apply = useCallback((next: AgentSession) => {
     // A read that lands once this surface streams the reply itself, or shows another chat, is older than what it shows.
     if (latest.current.streaming || next.id !== latest.current.session?.id) return;
     const signature = agentReplySignature(next);
-    if (signature === latest.current.signature || settledEarlier(latest.current.session, next)) return;
-    latest.current.signature = signature;
+    if (signature === signatureRef.current || settledEarlier(latest.current.session, next)) return;
+    signatureRef.current = signature;
     latest.current.onUpdate(next);
-  }, []);
+  }, [latest, signatureRef]);
   // Bumped by every read and push, so a read still in flight never replaces a newer copy.
   const generation = useRef(0);
   const read = useCallback(async (sessionId: string) => {
@@ -113,10 +115,8 @@ export function useAgentApprovalAnswer({
 }) {
   const { t } = useI18n();
   const [approvalBusy, setApprovalBusy] = useState<string>();
-  const busyRef = useRef<string | undefined>(undefined);
-  busyRef.current = approvalBusy;
-  const callbacks = useRef({ onError, onStale, t });
-  callbacks.current = { onError, onStale, t };
+  const busyRef = useLatestRef<string | undefined>(approvalBusy);
+  const callbacks = useLatestRef({ onError, onStale, t });
   const decideToolApproval = useCallback(async (call: AgentToolCall | undefined, decision: "approve" | "reject") => {
     if (!sessionId || !call?.approvalId || busyRef.current) return;
     const approvalId = call.approvalId;
@@ -134,11 +134,10 @@ export function useAgentApprovalAnswer({
       }
       callbacks.current.onError(reason instanceof Error && reason.message ? reason.message : callbacks.current.t("Flow Agent is unavailable"));
     }
-  }, [sessionId]);
+  }, [sessionId, busyRef, callbacks]);
   const waiting = Boolean(approvalBusy) && parts.some((part) => part.toolCall?.approvalId === approvalBusy && part.toolCall?.status === "pending");
-  useEffect(() => {
-    if (approvalBusy && !waiting) setApprovalBusy(undefined);
-  }, [approvalBusy, waiting]);
+  // Once the reply no longer shows the approval as pending, the card's buttons come back.
+  if (approvalBusy && !waiting) setApprovalBusy(undefined);
   return { approvalBusy, decideToolApproval };
 }
 

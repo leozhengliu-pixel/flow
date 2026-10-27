@@ -113,12 +113,17 @@ export function AgentPanel({
   const minimized = minimizedProp ?? minimizedState
   const fullscreen = fullscreenProp ?? fullscreenState
 
-  useEffect(() => {
+  // A controlled dock/width also becomes the remembered one for when the prop goes away.
+  const [seenDockProp, setSeenDockProp] = useState(dockProp)
+  if (seenDockProp !== dockProp) {
+    setSeenDockProp(dockProp)
     if (dockProp) setDockState(dockProp)
-  }, [dockProp])
-  useEffect(() => {
+  }
+  const [seenWidthProp, setSeenWidthProp] = useState(widthProp)
+  if (seenWidthProp !== widthProp) {
+    setSeenWidthProp(widthProp)
     if (widthProp != null) setWidthState(widthProp)
-  }, [widthProp])
+  }
 
   const setDock = (next: AgentPanelDock) => {
     setDockState(next)
@@ -184,7 +189,9 @@ export function AgentPanel({
   // The minimized chat lives in the bottom bar, next to the Agent button (the reference app's chat pill).
   useEffect(() => {
     if (variant !== 'floating' || !open) return
-    setDockSlot(document.querySelector('[data-agent-dock-slot]'))
+    // The slot is an element of the page layout outside React's tree: look it up once the panel is shown.
+    const findDockSlot = () => setDockSlot(document.querySelector('[data-agent-dock-slot]'))
+    findDockSlot()
   }, [open, variant])
 
   useEffect(() => {

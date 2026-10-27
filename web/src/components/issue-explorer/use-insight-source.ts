@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useInsertionEffect, useMemo, useRef, useState } from 'react'
 import { listIssueRecords, type IssueQueryInput } from '@/lib/api'
 import type { BootstrapData, IssueQueryPage } from '@/types/flow'
 import { issueToExplorerRow } from './issue-explorer-model'
@@ -28,7 +28,8 @@ export function useInsightSource(data: BootstrapData, query: IssueQueryInput | u
   const key = JSON.stringify([data.workspace.urlKey, data.viewer.id, query, refresh, data.issueCollectionRevision])
   const [revision, setRevision] = useState(0)
   const [state, setState] = useState<{ key: string; revision: number; page?: Awaited<ReturnType<typeof readInsightPages>>; error?: string }>()
-  const queryRef = useRef(query); queryRef.current = query
+  const queryRef = useRef(query)
+  useInsertionEffect(() => { queryRef.current = query })
   useEffect(() => {
     if (!enabled) return
     let timer: ReturnType<typeof setTimeout> | undefined

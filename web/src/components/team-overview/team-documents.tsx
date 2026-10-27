@@ -9,6 +9,7 @@ import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronRight, Search, X } from
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
 
 import { openCommandMenu, useRegisterCommandContext } from '@/components/command/command-context'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { documentDisplayTitle, documentOwner, type DocumentActionContext } from '@/components/documents/document-actions'
 import { DocumentMenuItems, DocumentRowMenu } from '@/components/documents/document-menu'
@@ -156,7 +157,11 @@ export function TeamDocuments({ creating, data, documents, onNavigate, onNew, on
     return (checked ?? !has) ? (has ? current : [...current, id]) : current.filter(item => item !== id)
   }), [])
   // Selected ids that left the list (deleted, moved, filtered out) drop out of the selection.
-  useEffect(() => { setSelected(current => current.some(id => !visibleIds.has(id)) ? current.filter(id => visibleIds.has(id)) : current) }, [visibleIds])
+  const [prunedFor, setPrunedFor] = useState(visibleIds)
+  if (prunedFor !== visibleIds) {
+    setPrunedFor(visibleIds)
+    setSelected(current => current.some(id => !visibleIds.has(id)) ? current.filter(id => visibleIds.has(id)) : current)
+  }
 
   // "Actions" scopes ⌘K to the selection (the reference app: one document, or "N documents").
   useRegisterCommandContext(selectedDocuments.length ? { kind: 'document', document: selectedDocuments[0], documents: selectedDocuments } : undefined)
@@ -200,16 +205,11 @@ export function TeamDocuments({ creating, data, documents, onNavigate, onNew, on
     row?.focus({ preventScroll: true })
     row?.scrollIntoView({ block: 'nearest' })
   }, [])
-  const rowIdsRef = useRef(rowIds)
-  rowIdsRef.current = rowIds
-  const handlers = useRef({ focusRow, toggleSelected, onNavigate })
-  handlers.current = { focusRow, toggleSelected, onNavigate }
-  const activeRef = useRef(activeId)
-  activeRef.current = activeId
-  const selectionRef = useRef(selectedVisible)
-  selectionRef.current = selectedVisible
-  const visibleDocumentsRef = useRef(visible)
-  visibleDocumentsRef.current = visible
+  const rowIdsRef = useLatestRef(rowIds)
+  const handlers = useLatestRef({ focusRow, toggleSelected, onNavigate })
+  const activeRef = useLatestRef(activeId)
+  const selectionRef = useLatestRef(selectedVisible)
+  const visibleDocumentsRef = useLatestRef(visible)
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return
@@ -239,7 +239,7 @@ export function TeamDocuments({ creating, data, documents, onNavigate, onNew, on
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [data.workspace.urlKey])
+  }, [data.workspace.urlKey, rowIdsRef, handlers, activeRef, selectionRef, visibleDocumentsRef])
   const visibleProperties = properties
   const hasDocuments = documents.some(document => !document.archivedAt)
   const sortIcon = (key: DocumentOrdering) => ordering === key ? (descending ? <ArrowUp size={12}/> : <ArrowDown size={12}/>) : null

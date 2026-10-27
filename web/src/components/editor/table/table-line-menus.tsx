@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { shortcutSteps } from '@/components/ui/menu-shortcuts'
 import { useI18n } from '@/i18n/i18n'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { toast } from '@/lib/toast'
 import { tableAt } from './table-commands'
 import {
@@ -163,10 +164,8 @@ export function TableLineHandles({ editor, getPos, onMenuChange }: { editor: Edi
   const [open, setOpen] = useState<OpenLine | null>(null)
   const [placement, setPlacement] = useState<Placement>({})
   const [tick, setTick] = useState(0)
-  const activeRef = useRef(false)
-  activeRef.current = !!hover || !!open
-  const openRef = useRef<OpenLine | null>(null)
-  openRef.current = open
+  const activeRef = useLatestRef(!!hover || !!open)
+  const openRef = useLatestRef(open)
 
   const outer = () => rootRef.current?.closest<HTMLElement>('.flow-table') ?? null
 
@@ -201,7 +200,7 @@ export function TableLineHandles({ editor, getPos, onMenuChange }: { editor: Edi
       editor.off('transaction', refresh)
       window.removeEventListener('resize', refresh)
     }
-  }, [editor])
+  }, [activeRef, editor, openRef])
 
   const rowIndex = open?.axis === 'row' ? open.index : hover?.row ?? null
   const colIndex = open?.axis === 'column' ? open.index : hover?.col ?? null
@@ -229,6 +228,7 @@ export function TableLineHandles({ editor, getPos, onMenuChange }: { editor: Edi
     return placement
   }, [rowIndex, colIndex])
 
+  // oxlint-disable-next-line react/set-state-in-effect -- measures laid-out DOM geometry after commit and must apply it before paint
   useLayoutEffect(() => { setPlacement(measure()) }, [measure, tick, hover, open])
 
   const setMenu = (next: OpenLine | null) => {

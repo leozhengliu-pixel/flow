@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNod
 import { useI18n, type AppLocale } from '@/i18n/i18n'
 import styles from './project-row-menus.module.css'
 import { FlowTooltip } from '@/components/ui/tooltip'
+import { useCurrentTime, useCurrentTimeMs } from '@/hooks/use-current-time'
 import { firstWeekday, useUserPreferences, useWorkspacePreferences, fiscalMonth, fiscalYear, fiscalMonthOffset } from '@/lib/runtime-preferences'
 
 export type DateMode = 'day' | 'month' | 'quarter' | 'half-year' | 'year'
@@ -62,17 +63,23 @@ export function ProjectDatePicker({ ariaLabel, buttonClassName = '', children, c
   const selected = parseDate(value)
   const minDate = parseDate(min)
   const maxDate = parseDate(max)
-  useEffect(() => {
-    if (!open) return
-    const today = startOfDay(new Date())
-    const floor = parseDate(min)
-    const date = parseDate(value) ?? (floor && floor > today ? floor : today)
-    const nextMode = resolution ? resolutionToMode(resolution) : defaultMode
-    setCursor(date)
-    setMode(nextMode)
-    // Like the reference app, an empty picker opens with its suggested date typed in and selected.
-    setQuery(formatForMode(date, nextMode, locale))
-  }, [defaultMode, locale, min, open, resolution, value])
+  const clock = useCurrentTimeMs()
+  // Each time the picker opens, or its inputs change while open, it re-seeds its cursor, mode and query (adjusted while rendering).
+  const seedKey = open ? [defaultMode, locale, min, resolution, value].join('|') : undefined
+  const [seededKey, setSeededKey] = useState<string>()
+  if (seedKey !== seededKey) {
+    setSeededKey(seedKey)
+    if (seedKey !== undefined) {
+      const today = startOfDay(new Date(clock))
+      const floor = parseDate(min)
+      const date = parseDate(value) ?? (floor && floor > today ? floor : today)
+      const nextMode = resolution ? resolutionToMode(resolution) : defaultMode
+      setCursor(date)
+      setMode(nextMode)
+      // Like the reference app, an empty picker opens with its suggested date typed in and selected.
+      setQuery(formatForMode(date, nextMode, locale))
+    }
+  }
 
   const choose = (date: Date, nextResolution?: DateResolution) => {
     onChange(isoDate(date), nextResolution)
@@ -123,7 +130,7 @@ function DayPanel({ cursor, locale, max, min, onChangeCursor, onChoose, selected
   const labels = locale === 'zh-CN' ? ['日','一','二','三','四','五','六'] : ['Su','Mo','Tu','We','Th','Fr','Sa']
   const weekdays = Array.from({length:7},(_,index)=>labels[(index+weekStart)%7])
   const weekendColumns = Array.from({length:7},(_,index)=>index).filter(index => isWeekend((index+weekStart)%7))
-  const today = startOfDay(new Date())
+  const today = startOfDay(useCurrentTime())
   return <div className={styles.dayPanel}>
     <header><strong>{monthLabel}</strong><span><button aria-label={locale === 'zh-CN' ? '上个月' : 'Previous month'} onClick={() => onChangeCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))} type="button"><ChevronLeft size={14}/></button><button aria-label={locale === 'zh-CN' ? '下个月' : 'Next month'} onClick={() => onChangeCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))} type="button"><ChevronRight size={14}/></button></span></header>
     <div className={styles.weekdays}>{weekdays.map((day,index) => <span data-weekend={isWeekend((index+weekStart)%7) || undefined} key={day}>{day}</span>)}</div>
@@ -134,7 +141,8 @@ function DayPanel({ cursor, locale, max, min, onChangeCursor, onChoose, selected
 function PeriodPanel({ cursor: _cursor, label, locale, max, min, mode, onChoose, selected }: { cursor: Date; label: 'Start date' | 'Target date'; locale: AppLocale; max?: Date; min?: Date; mode: Exclude<DateMode, 'day'>; onChoose: (date: Date, resolution: DateResolution) => void; selected?: Date }) {
   useWorkspacePreferences()
   const scrollerRef = useRef<HTMLDivElement>(null)
-  const currentYear = mode === 'month' ? new Date().getFullYear() : fiscalYear(new Date())
+  const now = useCurrentTime()
+  const currentYear = mode === 'month' ? now.getFullYear() : fiscalYear(now)
   const years = Array.from({ length: 10 }, (_, index) => currentYear - 4 + index)
   useEffect(() => {
     const scroller = scrollerRef.current

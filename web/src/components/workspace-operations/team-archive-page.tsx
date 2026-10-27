@@ -69,7 +69,9 @@ export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,on
     return () => node.removeEventListener('scroll', onScroll)
   }, [loadMore, tab.id])
 
-  useEffect(()=>{setFilterOpen(false);setFilters([])},[tab.id])
+  // Each archive tab starts without filters.
+  const[filtersTab,setFiltersTab]=useState(tab.id)
+  if(filtersTab!==tab.id){setFiltersTab(tab.id);setFilterOpen(false);setFilters([])}
 
   const toggleFilter=(field:Parameters<typeof toggleFilterOption>[1],option:Parameters<typeof toggleFilterOption>[3])=>{
     const label=ISSUE_FILTER_LABELS[field]

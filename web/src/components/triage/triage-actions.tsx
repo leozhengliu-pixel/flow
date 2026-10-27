@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { DateTimeControl } from '@/components/ui/date-time-control'
 import { FlowTooltip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n/i18n'
+import { useCurrentTimeMs } from '@/hooks/use-current-time'
 import { teamWorkflowStates } from '@/lib/team-workflow'
 import type { BootstrapData, Issue, IssueRelationType, Team } from '@/types/flow'
 import { canceledState, duplicateState, formatSnoozeDate, isSnoozed, parseSnoozeInput, resolveAcceptState, snoozePresets, TRIAGE_SHORTCUTS, type TriageActionKind } from './triage-model'
@@ -247,7 +248,8 @@ function SnoozeDialog({ issue, work, onOpenChange }: { issue: Issue; work: Triag
   const [customValue, setCustomValue] = useState(() => localInputValue(snoozePresets()[1].until))
   const [now] = useState(() => new Date())
   const presets = useMemo(() => snoozePresets(now), [now])
-  const parsed = useMemo(() => parseSnoozeInput(query, new Date()), [query])
+  const clock = useCurrentTimeMs(10_000)
+  const parsed = useMemo(() => parseSnoozeInput(query, new Date(clock)), [query, clock])
   const text = query.trim().toLowerCase()
   const options = parsed
     ? [{ id: 'parsed', label: t('Snooze until'), until: parsed }]
@@ -258,10 +260,10 @@ function SnoozeDialog({ issue, work, onOpenChange }: { issue: Issue; work: Triag
       <DialogTitle className="sr-only">{t('Snooze issue until')}</DialogTitle>
       {custom ? <div className="triage-snooze-custom">
         <IssueChip issue={issue}/>
-        <label><span>{t('Snooze until')}</span><DateTimeControl label={t('Custom snooze date and time')} mode="datetime" value={customValue} min={localInputValue(new Date()).slice(0, 10)} onChange={setCustomValue}/></label>
+        <label><span>{t('Snooze until')}</span><DateTimeControl label={t('Custom snooze date and time')} mode="datetime" value={customValue} min={localInputValue(new Date(clock)).slice(0, 10)} onChange={setCustomValue}/></label>
         <footer>
           <button type="button" onClick={() => setCustom(false)}>{t('Back')}</button>
-          <button type="button" className="primary" disabled={work.busy || !(new Date(customValue).getTime() > Date.now())} onClick={() => snooze(new Date(customValue))}>{t('Snooze')}</button>
+          <button type="button" className="primary" disabled={work.busy || !(new Date(customValue).getTime() > clock)} onClick={() => snooze(new Date(customValue))}>{t('Snooze')}</button>
         </footer>
       </div> : <Command shouldFilter={false} loop>
         <IssueChip issue={issue}/>

@@ -26,6 +26,14 @@ import { CustomerPageViewOptions } from './customer-page-view-options'
 export const CUSTOMER_REQUEST_HASH_PREFIX = 'customerRequest-'
 const DOCS_URL = 'https://flow.app/docs/customer-requests'
 
+/** The request group a `#customerRequest-{id}` URL hash points at, if any. */
+function hashedRequestGroupKey(groups: CustomerNeedGroup[]) {
+  const id = decodeURIComponent(window.location.hash.replace(/^#/, ''))
+  if (!id.startsWith(CUSTOMER_REQUEST_HASH_PREFIX)) return undefined
+  const requestId = id.slice(CUSTOMER_REQUEST_HASH_PREFIX.length)
+  return groups.find(item => item.primary.id === requestId || item.additional.some(request => request.id === requestId))?.key
+}
+
 type RequestsProps = {
   data: BootstrapData
   customer: Customer
@@ -58,14 +66,16 @@ export function CustomerPageRequests({ data, customer, groups, archivedCount, sh
   const hiddenByDisplayOptions = groups.length - visible.length
 
   // A `#customerRequest-{id}` link opens and reveals that request (the reference app highlights it).
+  const [seenGroupCount, setSeenGroupCount] = useState<number>()
+  if (seenGroupCount !== groups.length) {
+    setSeenGroupCount(groups.length)
+    const key = hashedRequestGroupKey(groups)
+    if (key) setExpanded(current => new Set([...current, key]))
+  }
   useEffect(() => {
-    const id = decodeURIComponent(window.location.hash.replace(/^#/, ''))
-    if (!id.startsWith(CUSTOMER_REQUEST_HASH_PREFIX)) return
-    const requestId = id.slice(CUSTOMER_REQUEST_HASH_PREFIX.length)
-    const group = groups.find(item => item.primary.id === requestId || item.additional.some(request => request.id === requestId))
-    if (!group) return
-    setExpanded(current => new Set([...current, group.key]))
-    requestAnimationFrame(() => document.querySelector(`[data-customer-need="${CSS.escape(group.key)}"]`)?.scrollIntoView({ block: 'center' }))
+    const key = hashedRequestGroupKey(groups)
+    if (!key) return
+    requestAnimationFrame(() => document.querySelector(`[data-customer-need="${CSS.escape(key)}"]`)?.scrollIntoView({ block: 'center' }))
   }, [groups.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = (key: string, open?: boolean) => setExpanded(current => {

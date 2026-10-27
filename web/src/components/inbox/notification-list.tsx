@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { Virtuoso, type Components, type VirtuosoHandle } from 'react-virtuoso'
 
 import { InboxNotificationRow, type InboxNotificationRowData, type InboxNotificationRowProps } from './notification-row'
@@ -26,10 +27,9 @@ function InboxVirtualFooter({ context }: { context: InboxListContext }) {
 export function InboxNotificationList({ notifications, selectedId = null, pending, hasMore = false, loadingMore = false, onLoadMore, filterHiddenCount = 0, onClearFilters, ...rowActions }: InboxNotificationListProps) {
   const listRef = useRef<HTMLElement | null>(null)
   const virtuosoRef = useRef<VirtuosoHandle | null>(null)
-  const loadingRef = useRef(loadingMore)
+  const loadingRef = useLatestRef(loadingMore)
   const focusedRowRef = useRef<{ id: string; index: number } | null>(null)
   const virtualized = notifications.length > 80
-  loadingRef.current = loadingMore
 
   useEffect(() => {
     const list = listRef.current
@@ -39,7 +39,7 @@ export function InboxNotificationList({ notifications, selectedId = null, pendin
     }
     list.addEventListener('scroll', onScroll, { passive: true })
     return () => list.removeEventListener('scroll', onScroll)
-  }, [hasMore, onLoadMore, virtualized])
+  }, [hasMore, loadingRef, onLoadMore, virtualized])
 
   useEffect(() => {
     const focused = focusedRowRef.current

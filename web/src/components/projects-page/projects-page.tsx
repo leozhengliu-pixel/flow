@@ -236,9 +236,11 @@ export function ProjectsPage({
     for (const customer of page.customers ?? []) if (!customers.some(item => item.id === customer.id)) customers.push(customer)
     return { summaries: { ...base.summaries, ...page.customerSummaries }, customers }
   }), [])
-  useEffect(() => {
+  const [seededProjects, setSeededProjects] = useState(projects)
+  if (seededProjects !== projects) {
+    setSeededProjects(projects)
     if (projects.length) setPagedProjects(projects)
-  }, [projects])
+  }
   useEffect(() => {
     if (!workspaceKey || projects.length > 100) return
     const controller = new AbortController()
@@ -364,7 +366,7 @@ export function ProjectsPage({
   const leadScopedItems = useMemo(() => filterProjectsByLeadTeam(items, view.state.display, scopeTeamId), [items, scopeTeamId, view.state.display])
   const leadScopedVisibleItems = useMemo(() => filterProjectsByLeadTeam(visibleItems, view.state.display, scopeTeamId), [scopeTeamId, view.state.display, visibleItems])
   const displayProperties = useMemo(() => projectDisplayProperties(featureFlags), [featureFlags])
-  const [createOpen, setCreateOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(createOnMount)
   const [createStatus, setCreateStatus] = useState(defaultCreateStatus)
   const [updatesProjectId, setUpdatesProjectId] = useState<string>()
   const [scheduleProjectId, setScheduleProjectId] = useState<string>()
@@ -392,13 +394,18 @@ export function ProjectsPage({
   ], [teams])
   const initialSaveTarget = saveTargets.find(target => target.scope === (sourceView?.scope ?? defaultSaveScope ?? (scopeTeamId ? 'team' : 'workspace')) && (target.scope !== 'team' || target.teamId === (sourceView?.teamId ?? scopeTeamId))) ?? saveTargets[0]
 
-  useEffect(() => setViewEditor(creatingView ? 'create' : editingView ? 'edit' : undefined), [creatingView, editingView])
-  useEffect(() => {
-    if (!availableProjectStatuses.some(status => status.name === createStatus)) setCreateStatus(defaultCreateStatus)
-  }, [availableProjectStatuses, createStatus, defaultCreateStatus])
-  useEffect(() => {
+  // Local state that follows props is adjusted while rendering, when the prop it follows changes.
+  const [seededViewMode, setSeededViewMode] = useState({ creatingView, editingView })
+  if (seededViewMode.creatingView !== creatingView || seededViewMode.editingView !== editingView) {
+    setSeededViewMode({ creatingView, editingView })
+    setViewEditor(creatingView ? 'create' : editingView ? 'edit' : undefined)
+  }
+  if (createStatus !== defaultCreateStatus && !availableProjectStatuses.some(status => status.name === createStatus)) setCreateStatus(defaultCreateStatus)
+  const [seededCreateOnMount, setSeededCreateOnMount] = useState(createOnMount)
+  if (seededCreateOnMount !== createOnMount) {
+    setSeededCreateOnMount(createOnMount)
     if (createOnMount) setCreateOpen(true)
-  }, [createOnMount])
+  }
 
   const openCreate = (status = defaultCreateStatus) => {
     setCreateStatus(status)

@@ -93,8 +93,12 @@ export function AgentMentionInput({
   onBusyChange?: (busy: boolean) => void
 }) {
   const { t } = useI18n()
-  const ownRef = useRef<HTMLDivElement>(null)
-  const editorRef = externalRef ?? ownRef
+  const editorRef = useRef<HTMLDivElement | null>(null)
+  // The host's ref (if any) follows the editor element too.
+  const attachEditor = useCallback((node: HTMLDivElement | null) => {
+    editorRef.current = node
+    if (externalRef) externalRef.current = node
+  }, [externalRef])
   const [query, setQuery] = useState<string | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
   const [chips, setChips] = useState<Chip[]>([])
@@ -125,7 +129,11 @@ export function AgentMentionInput({
     return [...page, ...users, ...issues, ...projects, ...initiatives, ...documents]
   }, [candidates, data.documents, data.initiatives, data.projects, data.users, pageIssues, query])
 
-  useEffect(() => { setActiveIndex(0) }, [query])
+  const [activeQuery, setActiveQuery] = useState(query)
+  if (activeQuery !== query) {
+    setActiveQuery(query)
+    setActiveIndex(0)
+  }
 
   const read = useCallback(() => {
     const editor = editorRef.current
@@ -545,12 +553,17 @@ export function AgentMentionInput({
   }
 
   let lastGroup = ''
-  // The menu lives in a portal so scroll containers around the editor cannot clip it.
-  const anchor = query !== null ? editorRef.current?.getBoundingClientRect() : undefined
-  const menuStyle = anchor ? { left: Math.max(8, anchor.left - 12), bottom: window.innerHeight - anchor.top + 12 } : undefined
+  // The menu lives in a portal so scroll containers around the editor cannot clip it. It sits above the editor, positioned
+  // on every commit (the editor can move or resize between renders).
+  const placeMenu = (menu: HTMLDivElement | null) => {
+    const anchor = editorRef.current?.getBoundingClientRect()
+    if (!menu || !anchor) return
+    menu.style.left = `${Math.max(8, anchor.left - 12)}px`
+    menu.style.bottom = `${window.innerHeight - anchor.top + 12}px`
+  }
   return <div className={styles.root}>
-    {query !== null && anchor && createPortal(
-      <div className={styles.menu} style={menuStyle} role="listbox" aria-label={t('Mention')} onMouseDown={event => event.preventDefault()}>
+    {query !== null && createPortal(
+      <div className={styles.menu} ref={placeMenu} role="listbox" aria-label={t('Mention')} onMouseDown={event => event.preventDefault()}>
         {options.length ? options.map((option, index) => {
           const heading = option.group !== lastGroup ? option.group : ''
           lastGroup = option.group
@@ -569,7 +582,7 @@ export function AgentMentionInput({
     )}
     {hint && hint.link.isConnected && createPortal(<LinkHint hint={hint} onKeep={() => setHint(null)} onEmbed={acceptEmbed} onActive={active => setHint(current => current && { ...current, active })}/>, document.body)}
     <div
-      ref={editorRef}
+      ref={attachEditor}
       aria-label={ariaLabel}
       aria-multiline="true"
       className={className ? `${styles.editor} ${className}` : styles.editor}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useSyncExternalStore } from 'react'
 
 const SPLIT_VIEW_QUERY = '(min-width: 801px)'
 
@@ -7,22 +7,14 @@ const SPLIT_VIEW_QUERY = '(min-width: 801px)'
  * The reference app gates on screen size (+ store); Flow mirrors the viewport half here.
  */
 export function useIsSplitView(enabled = true) {
-  const [matches, setMatches] = useState(() => {
-    if (typeof window === 'undefined' || !enabled) return false
-    return window.matchMedia(SPLIT_VIEW_QUERY).matches
-  })
-
-  useEffect(() => {
-    if (!enabled) {
-      setMatches(false)
-      return
-    }
+  const subscribe = useCallback((onChange: () => void) => {
+    if (!enabled) return () => {}
     const media = window.matchMedia(SPLIT_VIEW_QUERY)
-    const update = () => setMatches(media.matches)
-    update()
-    media.addEventListener('change', update)
-    return () => media.removeEventListener('change', update)
+    media.addEventListener('change', onChange)
+    return () => media.removeEventListener('change', onChange)
   }, [enabled])
+  const getSnapshot = useCallback(() => enabled && window.matchMedia(SPLIT_VIEW_QUERY).matches, [enabled])
+  const matches = useSyncExternalStore(subscribe, getSnapshot, () => false)
 
   return enabled && matches
 }

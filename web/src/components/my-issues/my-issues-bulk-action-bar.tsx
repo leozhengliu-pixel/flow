@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { NoAssigneeIcon } from '@/components/issue/issue-icons'
 import { avatarColor } from '@/components/issue/avatar-color'
 import { UserAvatar } from '@/components/ui/user-avatar'
@@ -57,10 +57,18 @@ export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, 
   const [pendingAction, setPendingAction] = useState<MyIssuesBulkAction>()
   const [agentIssues, setAgentIssues] = useState<MyIssuesRowData[]>([])
   const [agentOpen, setAgentOpen] = useState(false)
-  useEffect(() => { if (!selectedIssues.length) setOpen(false) }, [selectedIssues.length])
+  const [seenSelectionCount, setSeenSelectionCount] = useState(selectedIssues.length)
+  if (seenSelectionCount !== selectedIssues.length) {
+    setSeenSelectionCount(selectedIssues.length)
+    if (!selectedIssues.length) setOpen(false)
+  }
   // ⌘K acts on the selection too: it lists issue actions for these rows first.
   useRegisterCommandContext(selectedIssues.length ? { kind: 'issues', source: 'selection', issues: selectedIssues.map(issue => ({ id: issue.id, identifier: issue.identifier, title: issue.title })) } : undefined)
-  useEffect(() => { if (!open) setPendingAction(undefined) }, [open])
+  const [seenOpen, setSeenOpen] = useState(open)
+  if (seenOpen !== open) {
+    setSeenOpen(open)
+    if (!open) setPendingAction(undefined)
+  }
   if (!selectedIssues.length) return null
   const count = selectedIssues.length
   const options = pendingAction ? actionOptions?.(pendingAction) ?? [] : []

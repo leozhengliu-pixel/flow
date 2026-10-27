@@ -47,7 +47,8 @@ export function AutomationTrustedSourceEditor({
 }: Props) {
   const { t } = useI18n();
   const [options, setOptions] = useState<TrustedSourceEditorOption[]>([]);
-  const [hydrating, setHydrating] = useState(true);
+  // The context the shown options were hydrated for; a new context is "hydrating" until its sources load.
+  const [hydratedCtx, setHydratedCtx] = useState<object>();
 
   const settings = useMemo(
     () => ({
@@ -56,25 +57,23 @@ export function AutomationTrustedSourceEditor({
     }),
     [trustedSourcesMode, trustedSourcesAllowlist],
   );
+  const hydrationCtx = useMemo(
+    () => ({ users, integrationServices, policySourceKeys, settings }),
+    [users, integrationServices, policySourceKeys, settings],
+  );
+  const hydrating = hydratedCtx !== hydrationCtx;
 
   useEffect(() => {
     let cancelled = false;
-    const ctx = {
-      users,
-      integrationServices,
-      policySourceKeys,
-      settings,
-    };
-    setHydrating(true);
-    void AutomationTrustedSourceEditorOptions.hydrateSources(ctx).then(() => {
+    void AutomationTrustedSourceEditorOptions.hydrateSources(hydrationCtx).then(() => {
       if (cancelled) return;
-      setOptions(AutomationTrustedSourceEditorOptions.sourcesForEditor(ctx));
-      setHydrating(false);
+      setOptions(AutomationTrustedSourceEditorOptions.sourcesForEditor(hydrationCtx));
+      setHydratedCtx(hydrationCtx);
     });
     return () => {
       cancelled = true;
     };
-  }, [users, integrationServices, policySourceKeys, settings]);
+  }, [hydrationCtx]);
 
   const mode = getTrustedSourcesMode(settings);
   const editable = Boolean(onAllowlistChange) && !disabled;

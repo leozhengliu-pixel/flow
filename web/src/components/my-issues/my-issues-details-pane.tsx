@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
+import { useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import { AlertCircle, Box, X } from 'lucide-react'
 import { PriorityIcon } from '@/components/issue/issue-icons'
 import type { MyIssuesRowData } from './my-issues-list'
@@ -30,7 +30,11 @@ export function MyIssuesDetailsPane({ open, selectedIssue, summary, loading = fa
   const [activeTab, setActiveTab] = useState<MyIssuesSummaryTab>('labels')
   const [dragging, setDragging] = useState(false)
   const pointerStart = useRef({ x: 0, width })
-  useEffect(() => { if (!open) setDragging(false) }, [open])
+  const [seenOpen, setSeenOpen] = useState(open)
+  if (seenOpen !== open) {
+    setSeenOpen(open)
+    if (!open) setDragging(false)
+  }
   const present = useExitPresence(open, 320)
   if (!present) return null
 

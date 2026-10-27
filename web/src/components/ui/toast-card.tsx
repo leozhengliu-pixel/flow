@@ -1,5 +1,6 @@
-import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, type KeyboardEvent, type ReactNode } from 'react'
 import { toast as sonnerToast } from 'sonner'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { isMacPlatform } from '@/components/project-detail/project-detail-shortcuts'
 import { shortcutSteps } from '@/components/ui/menu-shortcuts'
 import { ScopedFlowTooltip } from '@/components/ui/tooltip'
@@ -41,14 +42,13 @@ export function ToastCard({ id, content }: { id: string | number; content: Toast
   const dismiss = () => { sonnerToast.dismiss(id) }
   const icon = content.icon === false ? null : content.icon ?? toastKindIcon(kind, COPY_TITLE.test(titleText(title)))
   const primary = primaryToastTarget(content)
-  const primaryRef = useRef(primary)
-  primaryRef.current = primary
+  const primaryRef = useLatestRef(primary)
   const hasPrimary = Boolean(primary)
 
   useEffect(() => {
     if (!hasPrimary) return undefined
     return registerToastLink(id, () => { primaryRef.current?.(); sonnerToast.dismiss(id) })
-  }, [id, hasPrimary])
+  }, [id, hasPrimary, primaryRef])
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); dismiss() }

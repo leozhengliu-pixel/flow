@@ -27,8 +27,13 @@ export function useMentionOptions({ active, query, users }: { active: boolean; q
     return () => { window.clearTimeout(timer); controller.abort() }
   }, [active, query, workspace])
   const [byIdentifier, setByIdentifier] = useState<Issue>()
-  useEffect(() => {
+  // A typed identifier's record belongs to the data and query it was fetched for.
+  const [seen, setSeen] = useState({ active, data, query })
+  if (seen.active !== active || seen.data !== data || seen.query !== query) {
+    setSeen({ active, data, query })
     setByIdentifier(undefined)
+  }
+  useEffect(() => {
     const identifier = query.trim()
     if (!active || !data || !TYPED_IDENTIFIER.test(identifier) || !isAgentIdentifier(data, identifier)) return
     let cancelled = false

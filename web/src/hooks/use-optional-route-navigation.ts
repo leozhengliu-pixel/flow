@@ -1,5 +1,6 @@
-import { startTransition, useCallback, useContext, useRef } from 'react'
+import { startTransition, useCallback, useContext } from 'react'
 import { UNSAFE_LocationContext, UNSAFE_NavigationContext } from 'react-router-dom'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { nextNavigationState } from '@/lib/navigation-context'
 import { preloadRoute } from '@/lib/route-preload'
 
@@ -11,8 +12,7 @@ import { preloadRoute } from '@/lib/route-preload'
 export function useOptionalRouteNavigation() {
   const navigation = useContext(UNSAFE_NavigationContext)
   const location = useContext(UNSAFE_LocationContext)?.location
-  const current = useRef(location)
-  current.current = location
+  const current = useLatestRef(location)
   return useCallback((path: string) => {
     const navigator = navigation?.navigator
     if (!navigator) { window.location.assign(path); return }
@@ -20,5 +20,5 @@ export function useOptionalRouteNavigation() {
     const here = current.current
     const state = here && path.startsWith('/') && !path.startsWith('//') ? nextNavigationState(here, path) : undefined
     startTransition(() => navigator.push(path, state))
-  }, [navigation])
+  }, [navigation, current])
 }

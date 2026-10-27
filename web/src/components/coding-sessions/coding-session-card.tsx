@@ -7,6 +7,7 @@ import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { AppLink } from '@/components/ui/app-link'
 import { useI18n } from '@/i18n/i18n'
+import { useCurrentTimeMs } from '@/hooks/use-current-time'
 import { issuePath } from '@/lib/app-routes'
 import { useCodingSessionOpener } from './use-coding-session-opener'
 import type { BootstrapData } from '@/types/flow'
@@ -78,6 +79,7 @@ function CodingStatusIcon({ tone }: { tone: ReturnType<typeof codingStatusLine>[
  */
 export function CodingSessionCard({ sessionId, initial, data, onDismiss }: { sessionId: string; initial?: CodingSession; data: BootstrapData; onDismiss?: () => void }) {
   const { t, locale } = useI18n()
+  const clock = useCurrentTimeMs()
   const { session, error, apply } = useCodingSession(sessionId, initial)
   const opener = useCodingSessionOpener(session, data, onDismiss)
   const [stopping, setStopping] = useState(false)
@@ -93,7 +95,7 @@ export function CodingSessionCard({ sessionId, initial, data, onDismiss }: { ses
   if (!session) return error ? <p className="coding-session-error-text" role="alert">{error}</p> : <div className="coding-session-card is-loading" role="status">{t('Loading coding session…')}</div>
   const issue = session.issueId ? data.issues.find(item => item.id === session.issueId) : undefined
   const creator = data.users.find(user => user.id === session.creatorId)
-  const created = Number.isNaN(Date.parse(session.createdAt)) ? '' : activityTimeLabel(session.createdAt, Date.now(), locale).replace(/m(?= ago$)/, 'min')
+  const created = Number.isNaN(Date.parse(session.createdAt)) ? '' : activityTimeLabel(session.createdAt, clock, locale).replace(/m(?= ago$)/, 'min')
   return <article className="coding-session-card" data-state={session.state} aria-label={t('Coding session')}>
     <header className="coding-session-card-header">
       <CodingAgentAvatar state={session.state} stalled={codingSessionStalled(session)}/>

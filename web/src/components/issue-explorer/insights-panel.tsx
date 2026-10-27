@@ -71,8 +71,17 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
   const introKey = `flow:saved-view:${view.id}:insights-intro`
   const [showIntro, setShowIntro] = useState(() => localStorage.getItem(introKey) !== 'dismissed')
   const [refreshKey, setRefreshKey] = useState(0)
-  useEffect(() => setConfigState(readPersonal() ?? shared), [readPersonal, shared])
-  useEffect(() => setShowIntro(localStorage.getItem(introKey) !== 'dismissed'), [introKey])
+  // A different view (or shared default) reloads the stored choices; compared during render rather than in an effect.
+  const [seenReadPersonal, setSeenReadPersonal] = useState(() => readPersonal)
+  if (seenReadPersonal !== readPersonal) {
+    setSeenReadPersonal(() => readPersonal)
+    setConfigState(readPersonal() ?? shared)
+  }
+  const [seenIntroKey, setSeenIntroKey] = useState(introKey)
+  if (seenIntroKey !== introKey) {
+    setSeenIntroKey(introKey)
+    setShowIntro(localStorage.getItem(introKey) !== 'dismissed')
+  }
   const sharedKey = insightsConfigKey(shared)
   const setConfig = (update: (current: SavedViewInsightsConfig) => SavedViewInsightsConfig) => setConfigState(current => {
     const next = update(current)
@@ -119,16 +128,23 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
   const issueCount = target ? selectedRows.length : insight.samples.length
   const timeInStatusKey = JSON.stringify(config.timeInStatusIds)
   const aggregationsKey = JSON.stringify(config.aggregations)
-  useEffect(() => { setTarget(undefined) }, [config.slice, config.segment, config.measure, config.aggregation, aggregationsKey, timeInStatusKey, view.id])
-  useEffect(() => {
-    if (remote.loading || remote.error || !target) return
-    if (target.slice !== undefined && !insight.rows.some(row => row.id === target.slice) || target.segment !== undefined && !insight.segments.some(segment => segment.id === target.segment)) { setTarget(undefined); return }
-    if (target.aggregation) {
+  // Changing the measure, slice, segment, aggregation or view drops the drill-down target (compared during render).
+  const targetResetKey = JSON.stringify([config.slice, config.segment, config.measure, config.aggregation, aggregationsKey, timeInStatusKey, view.id])
+  const [seenTargetResetKey, setSeenTargetResetKey] = useState(targetResetKey)
+  if (seenTargetResetKey !== targetResetKey) {
+    setSeenTargetResetKey(targetResetKey)
+    if (target) setTarget(undefined)
+  } else if (!remote.loading && !remote.error && target) {
+    // Once the data settles, a target that no longer exists is dropped and an aggregation target follows its threshold.
+    let settled: InsightTarget | undefined = target
+    if (target.slice !== undefined && !insight.rows.some(row => row.id === target.slice) || target.segment !== undefined && !insight.segments.some(segment => segment.id === target.segment)) settled = undefined
+    else if (target.aggregation) {
       const threshold = aggregateInsightValues(insight.samples.filter(sample => target.slice === undefined || sample.slices.includes(target.slice)).map(sample => sample.value), target.aggregation as InsightAggregation)
-      if (threshold === undefined) setTarget(undefined)
-      else if (threshold !== target.threshold) setTarget({ ...target, threshold })
+      if (threshold === undefined) settled = undefined
+      else if (threshold !== target.threshold) settled = { ...target, threshold }
     }
-  }, [insight, target, remote.loading, remote.error])
+    if (settled !== target) setTarget(settled)
+  }
   useEffect(() => { onDrillChange?.(target && !remote.loading && !remote.error ? selectedRows : undefined) }, [target, selectedRows, onDrillChange, remote.loading, remote.error])
   useEffect(() => () => onDrillChange?.(undefined), [onDrillChange])
   // The reference app's Ctrl ⇧ F toggles fullscreen from anywhere outside a text field.
@@ -347,7 +363,11 @@ function InsightPicker({ label, layout, onChange, options, value, display, subme
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const content = useRef<HTMLDivElement>(null)
-  useEffect(() => { if (open) setQuery('') }, [open])
+  const [seenOpen, setSeenOpen] = useState(open)
+  if (seenOpen !== open) {
+    setSeenOpen(open)
+    if (open) setQuery('')
+  }
   const normalized = query.trim().toLocaleLowerCase()
   const visible = normalized ? options.filter(option => t(option.label).toLocaleLowerCase().includes(normalized) || option.label.toLocaleLowerCase().includes(normalized) || option.children?.some(child => child.label.toLocaleLowerCase().includes(normalized))) : options
   const firstFocus = useRef(true)

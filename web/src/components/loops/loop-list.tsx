@@ -89,9 +89,11 @@ export function LoopList({
   const grouped = grouping !== "none";
   const sort = { key: display.ordering, desc: display.descending };
   const [createOpen, setCreateOpen] = useState(Boolean(createOpenProp));
-  useEffect(() => {
+  const [seenCreateOpenProp, setSeenCreateOpenProp] = useState(createOpenProp);
+  if (seenCreateOpenProp !== createOpenProp) {
+    setSeenCreateOpenProp(createOpenProp);
     if (createOpenProp) setCreateOpen(true);
-  }, [createOpenProp]);
+  }
   useEffect(() => {
     try {
       localStorage.setItem("flow:loops:tab", storedTab);
@@ -197,13 +199,15 @@ export function LoopList({
     () => groups.flatMap((group) => (grouped && collapsed.includes(group.key) ? [] : group.loops.map((loop) => loop.id))),
     [collapsed, grouped, groups],
   );
-  useEffect(() => {
-    // Rows hidden by filters or collapsed groups leave the selection.
+  // Rows hidden by filters or collapsed groups leave the selection.
+  const [seenRowIds, setSeenRowIds] = useState(rowIds);
+  if (seenRowIds !== rowIds) {
+    setSeenRowIds(rowIds);
     setSelected((current) => {
       const next = current.filter((id) => rowIds.includes(id));
       return next.length === current.length ? current : next;
     });
-  }, [rowIds]);
+  }
   const toggleSelect = useCallback(
     (id: string, range: boolean) => {
       // Read the anchor now: the updater may run after it moves to `id`.

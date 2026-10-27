@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react'
+import { useEffect } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, makeIssue, viewer } from '@/test/fixtures'
@@ -53,7 +54,7 @@ describe('agent session state in comment threads', () => {
     vi.mocked(listApplicationTasks).mockResolvedValue([newer, older])
     vi.mocked(getApplicationTask).mockImplementation(async (_workspace, id) => ({ session: id === 'older' ? older : newer, activities: [] }))
     let seen: readonly { id: string }[] = []
-    function Probe() { seen = useStandaloneAgentSessions(); return null }
+    function Probe() { const sessions = useStandaloneAgentSessions(); useEffect(() => { seen = sessions }); return null }
     const issue = makeIssue({ delegate: app }), data = makeBootstrap({ users: [viewer, app] })
     const { container } = render(<I18nProvider><IssueAgentTasksProvider issue={issue} data={data}><Probe/><IssueAgentTasks issue={issue} data={data} standalone/></IssueAgentTasksProvider></I18nProvider>)
     await screen.findAllByText(`Delegated to Flow by ${viewer.displayName}`)

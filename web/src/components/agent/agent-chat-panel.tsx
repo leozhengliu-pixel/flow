@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { FileText, Lightbulb, Plus } from 'lucide-react'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { AgentDraftCard } from './agent-draft-card'
 import { splitAgentDraft } from './agent-draft'
 import { splitAgentSuggestions } from './agent-answer-content'
@@ -112,9 +113,12 @@ export function AgentChatPanel({
   const [minimized, setMinimized] = useState(false)
   // A reply that finishes while the chat is minimized marks its bottom-bar pill with a dot.
   const [unread, setUnread] = useState(false)
-  const minimizedRef = useRef(minimized)
-  minimizedRef.current = minimized
-  useEffect(() => { if (!minimized) setUnread(false) }, [minimized])
+  const minimizedRef = useLatestRef(minimized)
+  const [seenMinimized, setSeenMinimized] = useState(minimized)
+  if (seenMinimized !== minimized) {
+    setSeenMinimized(minimized)
+    if (!minimized) setUnread(false)
+  }
   const [fullscreen, setFullscreen] = useState(false)
   const abortRef = useRef<AbortController | undefined>(undefined)
   // A reply running on the server without this panel streaming it (opened or reloaded mid-reply, or asked from another
@@ -173,10 +177,15 @@ export function AgentChatPanel({
   const idsOf = (type: AgentMention['type']) => mentions.filter(item => item.type === type).map(item => item.id)
   const draftKey = conversationDraftKeyFor(session?.id ?? `toolbar:${issues.map(issue => issue.id).join(',') || 'new'}`)
 
+  // Opening (or a language change) clears the last error before the status is read again.
+  const [statusFor, setStatusFor] = useState({ open, t })
+  if (statusFor.open !== open || statusFor.t !== t) {
+    setStatusFor({ open, t })
+    if (open) setError(undefined)
+  }
   useEffect(() => {
     if (!open) return
     let active = true
-    setError(undefined)
     fetchAgentStatus()
       .then(next => {
         if (active) {
@@ -192,10 +201,17 @@ export function AgentChatPanel({
     }
   }, [open, t])
 
+  // A chat handed in (opened from a list) replaces what the panel holds.
+  const [seenInitial, setSeenInitial] = useState<{ initialSession?: AgentSession; open: boolean }>({ open: false })
+  if (seenInitial.initialSession !== initialSession || seenInitial.open !== open) {
+    setSeenInitial({ initialSession, open })
+    if (open && initialSession) {
+      setSession(initialSession)
+      setMessages(initialSession.messages)
+    }
+  }
   useEffect(() => {
     if (!open || !initialSession) return
-    setSession(initialSession)
-    setMessages(initialSession.messages)
     // A long chat is listed without its messages: read it, so a reply still running shows (and is followed) too.
     if (initialSession.messages.length || initialSession.id.startsWith('pending-')) return
     let active = true
@@ -208,15 +224,21 @@ export function AgentChatPanel({
     return () => { active = false }
   }, [initialSession, open])
 
-  useEffect(() => {
+  const [seenPrompt, setSeenPrompt] = useState(initialPrompt)
+  if (seenPrompt !== initialPrompt) {
+    setSeenPrompt(initialPrompt)
     if (initialPrompt) setInput(initialPrompt)
-  }, [initialPrompt])
+  }
 
   // The quoted text keeps a faint highlight on the page while its chip is here; this chat owns it.
   const quoteHighlight = useRef(claimAgentQuoteHighlight(initialQuote))
+  const [seenQuote, setSeenQuote] = useState(initialQuote)
+  if (seenQuote !== initialQuote) {
+    setSeenQuote(initialQuote)
+    if (initialQuote) setQuote(initialQuote)
+  }
   useEffect(() => {
     if (!initialQuote) return
-    setQuote(initialQuote)
     quoteHighlight.current = claimAgentQuoteHighlight(initialQuote) ?? quoteHighlight.current
   }, [initialQuote])
   // It goes once the chip is removed or sent, or the chat is minimized or closed (and stays gone on reopening).

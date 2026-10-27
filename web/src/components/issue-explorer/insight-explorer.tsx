@@ -57,6 +57,15 @@ export function InsightExplorer({ config, data, insight, expanded, target, onSel
   const operator = 'gt' as const
   const [scrollLeft, setScrollLeft] = useState(0)
   const table = useRef<HTMLDivElement>(null)
+  // The scroller's width decides how many columns are rendered; the observer reports it on mount and on resize.
+  const [tableWidth, setTableWidth] = useState(1000)
+  useLayoutEffect(() => {
+    const node = table.current
+    if (!node || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => { const next = node.clientWidth; if (next > 0) setTableWidth(next) })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
   const virtual = useRef<VirtuosoHandle>(null)
   const latency = config.measure !== 'issueCount'
   const highlight = hover ?? target
@@ -68,7 +77,14 @@ export function InsightExplorer({ config, data, insight, expanded, target, onSel
       return difference * (sort.descending ? -1 : 1) || a.id.localeCompare(b.id)
     })
   }, [insight, sort, latency])
-  useEffect(() => { setHover(undefined); setSort(undefined) }, [config.slice, config.segment, config.measure])
+  // A different slice, segment or measure drops the hover and sort state (compared during render, not in an effect).
+  const configKey = `${config.slice}\u0000${config.segment}\u0000${config.measure}`
+  const [seenConfigKey, setSeenConfigKey] = useState(configKey)
+  if (seenConfigKey !== configKey) {
+    setSeenConfigKey(configKey)
+    setHover(undefined)
+    setSort(undefined)
+  }
   const columns = useMemo(() => latency ? selectedAggregations(config).map(id => ({ id, label: percentileLabel(id), color: undefined as string | undefined })) : config.segment === 'none' ? [] : insight.segments, [latency, config, insight.segments])
   // The reference app sizes every value column to its content (20px padding each side) and gives the rest to the first column.
   const uniform = columns.length > 30
@@ -107,7 +123,7 @@ export function InsightExplorer({ config, data, insight, expanded, target, onSel
     return () => cancelAnimationFrame(frame)
   }, [target, rows, columns, uniform, lead])
   const columnStart = uniform ? Math.max(0, Math.floor((scrollLeft - lead) / 106) - 1) : 0
-  const visibleColumns = uniform ? columns.slice(columnStart, columnStart + Math.ceil((table.current?.clientWidth ?? 1000) / 106) + 4) : columns
+  const visibleColumns = uniform ? columns.slice(columnStart, columnStart + Math.ceil(tableWidth / 106) + 4) : columns
   const cellOffset = latency ? 2 : 3
   const tableStyle = {
     '--insight-columns': `minmax(${firstMin}px,1fr)${latency ? '' : ` ${widths.total}px`}${columns.length ? ` ${widths.columns.map(width => `${width}px`).join(' ')}` : ''}`,

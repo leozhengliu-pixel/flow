@@ -32,6 +32,7 @@ import './issue-options-select.css'
 import './issue-options-menu.css'
 import { IssueReleasePicker } from './issue-release-picker'
 import { useI18n } from '@/i18n/i18n'
+import { useCurrentTime, useCurrentTimeMs } from '@/hooks/use-current-time'
 import { issueDeleteConfirmation } from '@/lib/issue-delete-confirmation'
 import { IssueActionGlyph } from './issue-action-glyphs'
 import { CustomerRequestCreateDialog } from '@/components/customer/customer-request-create-dialog'
@@ -168,14 +169,16 @@ export function IssueOptionsMenu({
   }, [busy, closeMenu])
   const subscribed = Boolean(data?.viewer.id && issue.subscriberIds.includes(data.viewer.id))
   const cycles = data?.cycles.filter(cycle => cycle.teamId === issue.team.id).sort((a,b) => a.startsAt.localeCompare(b.startsAt)) ?? []
-  const currentCycle = cycles.find(cycle => new Date(cycle.startsAt).getTime() <= Date.now() && new Date(cycle.endsAt).getTime() > Date.now())
-  const nextCycle = cycles.find(cycle => new Date(cycle.startsAt).getTime() > Date.now())
+  const nowMs = useCurrentTimeMs()
+  const currentCycle = cycles.find(cycle => new Date(cycle.startsAt).getTime() <= nowMs && new Date(cycle.endsAt).getTime() > nowMs)
+  const nextCycle = cycles.find(cycle => new Date(cycle.startsAt).getTime() > nowMs)
   const cycleDates = [currentCycle && {label:t('End of this cycle'),value:currentCycle.endsAt.slice(0,10)},nextCycle && {label:t('End of next cycle'),value:nextCycle.endsAt.slice(0,10)}].filter((item): item is {label:string;value:string} => Boolean(item))
+  const viewerId = data?.viewer.id
   const toggleSubscription = useCallback(() => {
-    if (!data?.viewer.id) return
-    const next = subscribed ? issue.subscriberIds.filter(id => id !== data.viewer.id) : [...issue.subscriberIds, data.viewer.id]
+    if (!viewerId) return
+    const next = subscribed ? issue.subscriberIds.filter(id => id !== viewerId) : [...issue.subscriberIds, viewerId]
     void perform(() => onUpdate({ subscriberIds: next }), subscribed ? 'Unsubscribed from issue' : 'Subscribed to issue')
-  }, [data?.viewer.id, issue.subscriberIds, onUpdate, perform, subscribed])
+  }, [viewerId, issue.subscriberIds, onUpdate, perform, subscribed])
 
   const removable = useMemo(() => data ? issueRemovableLinks(issue, data) : [], [data, issue])
   const removeLink = (link: IssueRemovableLink) => {
@@ -404,8 +407,8 @@ export function IssueOptionsMenu({
       <IssueOptionsDialogFooter busy={busy} disabled={!relatedTitle.trim()} action="Create issue" onCancel={() => setDialog(null)} onSubmit={() => actions && void perform(() => actions.createRelated(relatedKind, relatedTitle.trim()), 'Related issue created')}/>
     </ActionDialog>
     <ActionDialog open={dialog === 'reminder'} title={`Remind me about ${issue.identifier}`} onOpenChange={value => !value && setDialog(null)}>
-      <label>Date and time<DateTimeControl label="Date and time" min={new Date().toISOString()} mode="datetime" value={customReminder} onChange={setCustomReminder}/></label>
-      <IssueOptionsDialogFooter busy={busy} disabled={!customReminder || new Date(customReminder).getTime() <= Date.now()} action="Set reminder" onCancel={() => setDialog(null)} onSubmit={() => remindAt(new Date(customReminder))}/>
+      <label>Date and time<DateTimeControl label="Date and time" min={new Date(nowMs).toISOString()} mode="datetime" value={customReminder} onChange={setCustomReminder}/></label>
+      <IssueOptionsDialogFooter busy={busy} disabled={!customReminder || new Date(customReminder).getTime() <= nowMs} action="Set reminder" onCancel={() => setDialog(null)} onSubmit={() => remindAt(new Date(customReminder))}/>
     </ActionDialog>
     <ActionDialog open={dialog === 'loop'} title={`Run loop on ${issue.identifier}`} onOpenChange={value => !value && setDialog(null)}>
       <label>Instructions<textarea autoFocus placeholder="What should the loop do?" value={loopPrompt} onChange={event => setLoopPrompt(event.target.value)}/></label>
@@ -521,16 +524,17 @@ function reminderDate(kind: 'hour' | 'tomorrow' | 'week' | 'month') {
 export function ReminderChoices({ data, teamId, onChoose, onCustom }: { data?: BootstrapData; teamId?: string; onChoose: (date: Date) => void; onCustom: () => void }) {
   const { t, locale } = useI18n()
   const [query, setQuery] = useState('')
-  const nextCycle = data?.cycles.filter(cycle => cycle.teamId === teamId && new Date(cycle.startsAt).getTime() > Date.now()).sort((a,b) => a.startsAt.localeCompare(b.startsAt))[0]
+  const now = useCurrentTime()
+  const nextCycle = data?.cycles.filter(cycle => cycle.teamId === teamId && new Date(cycle.startsAt).getTime() > now.getTime()).sort((a,b) => a.startsAt.localeCompare(b.startsAt))[0]
   const options = [
     {label:'An hour from now',date:reminderDate('hour')}, {label:'Tomorrow',date:reminderDate('tomorrow')},
     {label:'Next week',date:reminderDate('week')}, {label:'A month from now',date:reminderDate('month')},
     ...(nextCycle ? [{label:'Next cycle',date:new Date(nextCycle.startsAt)}] : []),
   ]
   const matches = options.filter(option => `${option.label} ${t(option.label)}`.toLowerCase().includes(query.toLowerCase()))
-  const parsed = query.trim() && !matches.length ? parseDate(query, new Date(), {forwardDate:true}) : null
+  const parsed = query.trim() && !matches.length ? parseDate(query, now, {forwardDate:true}) : null
   const format = (date: Date) => date.toLocaleString(locale, {weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
-  return <Command loop defaultValue="__no_selection__" shouldFilter={false}><Command.Input className="issue-options-submenu-search" aria-label={t('Remind me')} placeholder={t('Try: 4 pm, 2 days, in 5 weeks…')} value={query} onValueChange={setQuery}/><Command.List>{matches.map(option => <Option key={option.label} icon={<CalendarIcon/>} label={option.label} detail={format(option.date)} onSelect={() => onChoose(option.date)}/>)}{parsed && parsed.getTime() > Date.now() && <Option icon={<CalendarIcon/>} label={format(parsed)} onSelect={() => onChoose(parsed)}/>}<Option icon={<CalendarIcon/>} label="Custom…" onSelect={onCustom}/></Command.List></Command>
+  return <Command loop defaultValue="__no_selection__" shouldFilter={false}><Command.Input className="issue-options-submenu-search" aria-label={t('Remind me')} placeholder={t('Try: 4 pm, 2 days, in 5 weeks…')} value={query} onValueChange={setQuery}/><Command.List>{matches.map(option => <Option key={option.label} icon={<CalendarIcon/>} label={option.label} detail={format(option.date)} onSelect={() => onChoose(option.date)}/>)}{parsed && parsed.getTime() > now.getTime() && <Option icon={<CalendarIcon/>} label={format(parsed)} onSelect={() => onChoose(parsed)}/>}<Option icon={<CalendarIcon/>} label="Custom…" onSelect={onCustom}/></Command.List></Command>
 }
 
 function toLocalDateTime(date: Date) {

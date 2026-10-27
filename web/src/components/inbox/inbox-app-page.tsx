@@ -1,5 +1,7 @@
 import { workspaceFeatureEnabled } from '@/components/layout/sidebar-customization-state'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCurrentTimeMs } from '@/hooks/use-current-time'
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { toast } from '@/lib/toast'
 import { useRequestEntityUpdates } from '@/lib/entity-updates'
 import { ProjectGlyph } from '@/components/views/project-glyph'
@@ -115,7 +117,11 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
   const source = useMemo(() => projectInbox(inboxData, t), [inboxData, t])
   const savedPulseFrequency = effectivePulseFrequency(data)
   const [pulseFrequency, setPulseFrequency] = useState<PulseFrequency>(savedPulseFrequency)
-  useEffect(() => setPulseFrequency(savedPulseFrequency), [savedPulseFrequency])
+  const [seenPulseFrequency, setSeenPulseFrequency] = useState(savedPulseFrequency)
+  if (seenPulseFrequency !== savedPulseFrequency) {
+    setSeenPulseFrequency(savedPulseFrequency)
+    setPulseFrequency(savedPulseFrequency)
+  }
   const changePulseFrequency = async (next: PulseFrequency) => {
     const previous = pulseFrequency
     if (next === previous) return
@@ -156,9 +162,9 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
     () => buildInboxFilterOptions(notifications, displayOptions, inboxData, retainedIds),
     [inboxData, displayOptions, notifications, retainedIds],
   )
-  const notificationsRef = useRef(notifications)
-  notificationsRef.current = notifications
-  const sourceByIdRef = useRef(new Map(source.map(notification => [notification.id, notification])))
+  const notificationsRef = useLatestRef(notifications)
+  const sourceById = useMemo(() => new Map(source.map(notification => [notification.id, notification])), [source])
+  const sourceByIdRef = useLatestRef(sourceById)
 
   useEffect(() => {
     const url = new URL(window.location.href)
@@ -177,11 +183,13 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
 
   // Until the first paged load lands, keep a `?notification=` selection from a desktop/email link.
   const listPending = paged && pagedInbox.loading && !pagedInbox.notifications.length
-  useEffect(() => {
-    sourceByIdRef.current = new Map(source.map(notification => [notification.id, notification]))
+  // The local list follows a fresh source (adjusted while rendering; unset so the first render also reconciles the selection).
+  const [syncedSource, setSyncedSource] = useState<{ listPending: boolean; source: InboxProjection[] }>()
+  if (syncedSource?.listPending !== listPending || syncedSource.source !== source) {
+    setSyncedSource({ listPending, source })
     setNotifications(source)
     if (!listPending) setSelectedId(current => source.some(notification => notification.id === current) ? current : null)
-  }, [listPending, source])
+  }
 
   const { upsert: upsertPaged, reload: reloadPaged } = pagedInbox
   const adapter = useMemo<InboxPageAdapter>(() => {
@@ -235,7 +243,7 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
       try { await batch('deleteReadCompleted') } catch (error) { setNotifications(snapshot); throw error }
     },
   }
-  }, [data.workspace.urlKey, inboxData.issues, paged, reloadPaged, upsertPaged])
+  }, [data.workspace.urlKey, inboxData.issues, notificationsRef, paged, reloadPaged, sourceByIdRef, upsertPaged])
 
   const tabNotifications = useMemo(() => {
     const scope = activeTab === 'all' && displayOptions.priorityInbox ? 'priority' : activeTab
@@ -250,9 +258,9 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
       const projection = tabNotifications.find(notification => notification.id === current) ?? sourceByIdRef.current.get(current)
       return projection && matchesInboxTab(projection, scope) ? current : null
     })
-  }, [activeTab, displayOptions.priorityInbox, listPending, tabNotifications])
+  }, [activeTab, displayOptions.priorityInbox, listPending, sourceByIdRef, tabNotifications])
+  const now = useCurrentTimeMs()
   const visibleNotifications = useMemo(() => {
-    const now = Date.now()
     let visible = tabNotifications.filter(notification => {
       if (!displayOptions.showSnoozed && notification.snoozedUntil && new Date(notification.snoozedUntil).getTime() > now) return false
       return (displayOptions.showRead || !notification.read || retainedIds.has(notification.id)) && filters.every(filter => notificationMatchesFilter(notification, filter))
@@ -264,16 +272,16 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
       return displayOptions.ordering === 'newest' ? delta : -delta
     })
     return visible
-  }, [displayOptions, filters, retainedIds, tabNotifications])
+  }, [displayOptions, filters, now, retainedIds, tabNotifications])
   const filterHiddenCount = useMemo(() => {
     const withoutFilters = tabNotifications.filter(notification => notificationVisibleForDisplay(notification, displayOptions, retainedIds))
     return Math.max(0, withoutFilters.length - withoutFilters.filter(notification => filters.every(filter => notificationMatchesFilter(notification, filter))).length)
   }, [displayOptions, filters, retainedIds, tabNotifications])
 
   const tabCounts = useMemo(() => ({
-    priority: notifications.filter(item => matchesInboxTab(item, 'priority') && !item.read && (!item.snoozedUntil || new Date(item.snoozedUntil).getTime() <= Date.now())).length,
-    other: notifications.filter(item => matchesInboxTab(item, 'other') && !item.read && (!item.snoozedUntil || new Date(item.snoozedUntil).getTime() <= Date.now())).length,
-  }), [notifications])
+    priority: notifications.filter(item => matchesInboxTab(item, 'priority') && !item.read && (!item.snoozedUntil || new Date(item.snoozedUntil).getTime() <= now)).length,
+    other: notifications.filter(item => matchesInboxTab(item, 'other') && !item.read && (!item.snoozedUntil || new Date(item.snoozedUntil).getTime() <= now)).length,
+  }), [notifications, now])
 
   const updateVisible = (nextVisible: InboxNotificationRowData[]) => {
     const visibleIds = new Set(visibleNotifications.map(item => item.id))

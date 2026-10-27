@@ -1,6 +1,6 @@
 import * as Select from "@radix-ui/react-select";
 import { Info } from "lucide-react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { toast } from "@/lib/toast";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -60,12 +60,16 @@ export function InviteMembersDialog({ workspace, teams, teamSettings, open, onCl
   const parsed = useMemo(() => parseInviteEmails(emails), [emails]);
   const canSend = parsed.valid.length > 0 && !sending;
 
-  useEffect(() => {
-    if (open) return;
-    setError("");
-    setRole(defaultRole);
-    setTeamIds([]);
-  }, [defaultRole, open]);
+  // Closing the dialog (or changing the default role while it is closed) resets the form.
+  const [seen, setSeen] = useState({ open, defaultRole });
+  if (seen.open !== open || seen.defaultRole !== defaultRole) {
+    setSeen({ open, defaultRole });
+    if (!open) {
+      setError("");
+      setRole(defaultRole);
+      setTeamIds([]);
+    }
+  }
 
   const send = async () => {
     if (!canSend) return;

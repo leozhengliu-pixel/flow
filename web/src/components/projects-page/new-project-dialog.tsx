@@ -132,42 +132,41 @@ export function NewProjectDialog({
     .map(template => [template.id, template.name, template.icon, template.color].join(':'))
     .join('|')
   const labelSignature = labels.map(label => label.id).join('|')
-  const templatesRef = useRef(templates)
-  const labelsRef = useRef(labels)
-  const leadsRef = useRef(leads)
-  const membersRef = useRef(members)
-  const dependenciesRef = useRef(dependencies)
-  templatesRef.current = templates
-  labelsRef.current = labels
-  leadsRef.current = leads
-  membersRef.current = members
-  dependenciesRef.current = dependencies
   const [draft, setDraft] = useState<NewProjectDraft>(() => emptyDraft(resolvedDefaultStatus, defaultTeamId))
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [nameError, setNameError] = useState(false)
   const [agentOpen, setAgentOpen] = useState(false)
   const [discardOpen, setDiscardOpen] = useState(false)
-  const initialDraftRef = useRef<NewProjectDraft | undefined>(undefined)
-  const dirty = initialDraftRef.current ? JSON.stringify(draft) !== JSON.stringify(initialDraftRef.current) : false
+  const [initialDraft, setInitialDraft] = useState<NewProjectDraft>()
+  const dirty = initialDraft ? JSON.stringify(draft) !== JSON.stringify(initialDraft) : false
   const requestClose = useCallback(() => {
     if (submitting) return
     if (dirty) setDiscardOpen(true)
     else onClose()
   }, [dirty, onClose, submitting])
 
+  // Each time the dialog opens (or its defaults/templates change while open) it starts from a fresh draft.
+  // The draft is rebuilt while rendering, from the current lists, as soon as that key changes.
+  const resetKey = open ? [defaultTeamId, initialTemplateId, labelSignature, resolvedDefaultStatus, templateSignature].join('\u0000') : undefined
+  const [resetFor, setResetFor] = useState<string>()
+  if (resetKey !== resetFor) {
+    setResetFor(resetKey)
+    if (resetKey !== undefined) {
+      const baseDraft = emptyDraft(resolvedDefaultStatus, defaultTeamId)
+      const nextDraft = applyProjectTemplateDraft(baseDraft, initialTemplateId, templates, { labels, leads, members, dependencies }, baseDraft)
+      setInitialDraft(nextDraft)
+      setDraft(nextDraft)
+      setError(null)
+      setNameError(false)
+      setAgentOpen(false)
+      setDiscardOpen(false)
+    }
+  }
   useEffect(() => {
-    if (!open) return
-    const baseDraft = emptyDraft(resolvedDefaultStatus, defaultTeamId)
-    const nextDraft = applyProjectTemplateDraft(baseDraft, initialTemplateId, templatesRef.current, { labels: labelsRef.current, leads: leadsRef.current, members: membersRef.current, dependencies: dependenciesRef.current }, baseDraft)
-    initialDraftRef.current = nextDraft
-    setDraft(nextDraft)
-    setError(null)
-    setNameError(false)
-    setAgentOpen(false)
-    setDiscardOpen(false)
+    if (resetKey === undefined) return
     requestAnimationFrame(() => nameRef.current?.focus())
-  }, [defaultTeamId, initialTemplateId, labelSignature, open, resolvedDefaultStatus, templateSignature])
+  }, [resetKey])
 
   useEffect(() => {
     if (!open) return

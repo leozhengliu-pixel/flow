@@ -143,12 +143,12 @@ export function FlowSubmenu({ icon, label, detail, shortcut, children, className
   const [open, setOpenState] = useState(false)
   const setOpen = (next: boolean) => { setOpenState(next); onOpenChange?.(next) }
   const [container, setContainer] = useState<HTMLDivElement | null>(null)
-  const trigger = useRef<HTMLDivElement>(null)
+  const [trigger, setTrigger] = useState<HTMLDivElement | null>(null)
   const text = useLabel(label, translate)
   const registry = useMemo(() => new Set<ShortcutEntry>(), [])
   const onKeyDown = useShortcutKeys(registry)
   useRegisterShortcut(shortcut, () => setOpen(true), disabled)
-  const close = () => { setOpen(false); trigger.current?.focus() }
+  const close = () => { setOpen(false); trigger?.focus() }
   // A submenu with a filter field takes focus there's pickers.
   useEffect(() => {
     if (!container) return
@@ -156,7 +156,7 @@ export function FlowSubmenu({ icon, label, detail, shortcut, children, className
     return () => cancelAnimationFrame(frame)
   }, [container])
   return <Kit.Sub open={open} onOpenChange={setOpen}>
-    <Kit.SubTrigger ref={trigger} className="flow-menu__row" data-menu-item={label} disabled={disabled}>
+    <Kit.SubTrigger ref={setTrigger}className="flow-menu__row" data-menu-item={label} disabled={disabled}>
       <FlowMenuRowContent icon={icon} label={text} detail={detail} shortcut={shortcut} submenu/>
     </Kit.SubTrigger>
     <Kit.Portal>
@@ -165,7 +165,7 @@ export function FlowSubmenu({ icon, label, detail, shortcut, children, className
           onFocusOutside={event => {
             // Radix briefly focuses the parent menu while the pointer crosses into the submenu.
             const target = event.target
-            if (target instanceof HTMLElement && target.matches('[role=menu]') && target.contains(trigger.current)) event.preventDefault()
+            if (target instanceof HTMLElement && target.matches('[role=menu]') && target.contains(trigger)) event.preventDefault()
           }}
           onKeyDown={onKeyDown}>
           {typeof children === 'function' ? children({ close, container }) : children}

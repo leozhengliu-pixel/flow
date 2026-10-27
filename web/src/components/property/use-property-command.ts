@@ -42,10 +42,6 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
   const [query, setQuery] = useState('')
   const [activeId, setActiveId] = useState<string>()
   const inputRef = useRef<HTMLInputElement>(null)
-  const optionsRef = useRef(options)
-  optionsRef.current = options
-  const selectedIdsRef = useRef(selectedIds)
-  selectedIdsRef.current = selectedIds
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const selectionKey = JSON.stringify(selectedIds)
   const selectedSet = useMemo(() => new Set<string>(JSON.parse(selectionKey)), [selectionKey])
@@ -53,20 +49,26 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
   const pinnedSet = useMemo(() => new Set<string>(pinnedKey ? pinnedKey.split('\n') : []), [pinnedKey])
   const filteredOptions = useMemo(() => options.filter(option => pinnedSet.has(option.id) || ((!option.searchOnly || normalizedQuery.length > 1 || selectedSet.has(option.id)) && (!normalizedQuery || (keepSelectedVisible && selectedSet.has(option.id)) || matchesOption(option, normalizedQuery)))), [keepSelectedVisible, normalizedQuery, options, pinnedSet, selectedSet, matchesOption])
 
+  // Opening (or re-keying) the picker clears the search and highlights the selected option. Compared during render
+  // rather than in an effect; the first render counts as a change.
+  const [seenOpening, setSeenOpening] = useState<{ autoFocus: boolean; open: boolean; resetKey?: string }>()
+  if (!seenOpening || seenOpening.autoFocus !== autoFocus || seenOpening.open !== open || seenOpening.resetKey !== resetKey) {
+    setSeenOpening({ autoFocus, open, resetKey })
+    if (open) {
+      setQuery('')
+      setActiveId(options.find(option => selectedIds.includes(option.id) && !option.disabled)?.id ?? options.find(option => !option.disabled && !option.searchOnly)?.id)
+    }
+  }
   useEffect(() => {
-    if (!open) return
-    setQuery('')
-    const currentIds = selectedIdsRef.current
-    setActiveId(optionsRef.current.find(option => currentIds.includes(option.id) && !option.disabled)?.id ?? optionsRef.current.find(option => !option.disabled && !option.searchOnly)?.id)
-    if (autoFocus) requestAnimationFrame(() => inputRef.current?.focus())
-  }, [autoFocus, open, resetKey])
+    if (!open || !autoFocus) return
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }, [autoFocus, inputRef, open, resetKey])
 
   // Options can arrive after the picker opens (fetched lists); highlight the first one once they do.
-  useEffect(() => {
-    if (!open || activeId !== undefined) return
+  if (open && activeId === undefined) {
     const first = filteredOptions.find(option => !option.disabled && !option.searchOnly)
     if (first) setActiveId(first.id)
-  }, [activeId, filteredOptions, open])
+  }
 
   const choose = (option: T) => {
     if (option.disabled) return

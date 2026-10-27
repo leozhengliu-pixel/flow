@@ -72,7 +72,8 @@ export function TriagePage({ data, team, onReload, onCreateIssue, onNavigate, se
   const [responsibilityOpen, setResponsibilityOpen] = useState(false)
   const displayKey = triageDisplayKey(data.workspace.id, data.viewer.id, team.id)
   const [display, setDisplayState] = useState(() => readTriageDisplay(displayKey))
-  useEffect(() => { setDisplayState(readTriageDisplay(displayKey)) }, [displayKey])
+  const [displayKeyRead, setDisplayKeyRead] = useState(displayKey)
+  if (displayKeyRead !== displayKey) { setDisplayKeyRead(displayKey); setDisplayState(readTriageDisplay(displayKey)) }
   const setDisplay = (next: TriageDisplaySettings) => { setDisplayState(next); writeTriageDisplay(displayKey, next) }
   const [menuAction, setMenuAction] = useState<{ issue: Issue; kind: TriageActionKind }>()
 

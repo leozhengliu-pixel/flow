@@ -28,7 +28,7 @@ export function AgentSkillsPicker({
     () => [...(data.agentSkills ?? []).map((item) => ({ id: item.id, label: item.name })), { id: "__create__", label: t("Create skill") }],
     [data.agentSkills, t],
   );
-  const command = usePropertyCommand({
+  const { activeId, choose, filteredOptions, inputRef, isSelected, onKeyDown, onQueryChange, query, setActiveId } = usePropertyCommand({
     closeOnSelect: false,
     open,
     options,
@@ -52,31 +52,31 @@ export function AgentSkillsPicker({
         </button>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content data-flow-motion="floating" align="start" className={styles.skillsMenu} side="bottom" sideOffset={4} onKeyDown={command.onKeyDown}>
+        <Popover.Content data-flow-motion="floating" align="start" className={styles.skillsMenu} side="bottom" sideOffset={4} onKeyDown={onKeyDown}>
           <div className={styles.menuSearch}>
             <Search />
             <input
-              ref={command.inputRef}
+              ref={inputRef}
               autoFocus
               aria-label={t("Search skills…")}
               placeholder={t("Search skills…")}
-              value={command.query}
-              onChange={(event) => command.onQueryChange(event.target.value)}
+              value={query}
+              onChange={(event) => onQueryChange(event.target.value)}
             />
           </div>
           <div role="listbox">
-            {command.filteredOptions.map((option) => (
+            {filteredOptions.map((option) => (
               <button
-                aria-selected={command.activeId === option.id}
+                aria-selected={activeId === option.id}
                 key={option.id}
-                onMouseMove={() => command.setActiveId(option.id)}
-                onClick={() => command.choose(option)}
+                onMouseMove={() => setActiveId(option.id)}
+                onClick={() => choose(option)}
                 role="option"
                 type="button"
               >
                 {option.id === "__create__" ? <Plus /> : <AgentSkillsIcon />}
                 <span data-i18n-ignore>{option.label}</span>
-                {option.id !== "__create__" && command.isSelected(option.id) && <Check />}
+                {option.id !== "__create__" && isSelected(option.id) && <Check />}
               </button>
             ))}
           </div>
