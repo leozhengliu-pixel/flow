@@ -19,5 +19,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "vitest.workflows.config.ts", "vitest.all.config.ts", "playwright.config.ts", "tour-media-plugin.ts", "tour-media-plugin.test.ts"]
+  "include": ["vite.config.ts", "vitest.config.ts", "vitest.workflows.config.ts", "vitest.all.config.ts", "playwright.config.ts", "tour-media-plugin.ts", "tour-media-plugin.test.ts", "release-assets.ts", "release-assets.test.ts"]
 }

@@ -22,6 +22,22 @@
         document.documentElement.lang = locale;
       })();
     </script>
+    <script>
+      // An entry file that fails to load (a replica without it, mid-deploy) leaves the startup screen up for good, and
+      // the app's own handler (src/lib/stale-chunk-reload.ts) never runs. Reload once for fresh HTML; the shared
+      // sessionStorage key stops a loop and leaves a real outage visible.
+      addEventListener('error', event => {
+        const element = event.target;
+        if (!(element instanceof HTMLScriptElement || element instanceof HTMLLinkElement)) return;
+        if (!/\/assets\//.test(element.src || element.href || '') || !document.querySelector('.flow-startup')) return;
+        try {
+          const last = Number(sessionStorage.getItem('flow:stale-chunk-reload-at'));
+          if (last && Date.now() - last < 30000) return;
+          sessionStorage.setItem('flow:stale-chunk-reload-at', String(Date.now()));
+        } catch { return; }
+        location.reload();
+      }, true);
+    </script>
     <style>
       /* Also used by AppStartup while authentication and bootstrap are pending. */
       html { background: #121213; }
