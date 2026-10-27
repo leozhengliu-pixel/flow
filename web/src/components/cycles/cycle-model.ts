@@ -26,9 +26,10 @@ type CycleEstimateSettings = Partial<Pick<TeamSettings, 'estimateType' | 'estima
  * unestimated issues" is off, and a 0 estimate counts as 0 only when zero
  * estimates are allowed — otherwise it is the number of issues.
  *
- * Capacity is the cycle's own capacity (set in Edit cycle; new cycles take the
- * team's cycle capacity setting, 4 by default), in the same unit as scope, and
- * capacity % = scope / capacity.
+ * Capacity comes from the server, in the same unit as scope: the override typed
+ * in Edit cycle, else the team's velocity (average completed scope of its last
+ * three completed cycles) or, without history, 30 per active team member.
+ * Capacity % = scope / capacity.
  */
 export function cycleStats(cycle: Cycle, issues: Issue[], settings?: CycleEstimateSettings): CycleStats {
   const scoped = issues.filter(issue => issue.cycleId === cycle.id && !issue.archivedAt)

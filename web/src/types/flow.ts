@@ -440,7 +440,13 @@ export interface Cycle {
   startsAt: string;
   endsAt: string;
   status: CycleStatus;
+  /** Planning capacity in the scope's unit: the override when set, else the automatic capacity (computed by the server). */
   capacity: number;
+  /** Capacity typed in Edit cycle; absent when automatic. */
+  capacityOverride?: number;
+  /** The team's velocity (average completed scope of its last three completed cycles) or the per-member default. */
+  capacityAutomatic?: number;
+  capacitySource?: "override" | "velocity" | "default";
   capacityByMember?: Record<UUID, Record<string, number>>;
   favorite: boolean;
   resources: CycleResource[];
@@ -476,7 +482,8 @@ export interface CycleMutationInput {
   description?: string;
   startsAt?: string;
   endsAt?: string;
-  capacity?: number;
+  /** Capacity override; null returns the cycle to the automatic capacity. */
+  capacity?: number | null;
   capacityByMember?: Record<UUID, Record<string, number>>;
   favorite?: boolean;
   status?: CycleStatus;

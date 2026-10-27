@@ -39179,7 +39179,12 @@
             "type": "string"
           },
           "capacity": {
-            "type": "integer"
+            "description": "Capacity is the cycle's planning capacity, in the unit of its scope (estimate points, or issues when the team does not use estimates): capacityOverride when one is set, otherwise capacityAutomatic. It is computed when the cycle is read.",
+            "type": "number"
+          },
+          "capacityAutomatic": {
+            "description": "CapacityAutomatic is the computed capacity: the team's velocity (the average completed scope of its last three completed cycles, fewer when fewer exist) or, without history, a default of 30 per active team member. Computed when the cycle is read.",
+            "type": "number"
           },
           "capacityByMember": {
             "additionalProperties": {
@@ -39189,6 +39194,22 @@
               "type": "object"
             },
             "type": "object"
+          },
+          "capacityOverride": {
+            "description": "CapacityOverride is the capacity typed in Edit cycle. Absent means the capacity is automatic; PATCH /api/cycles/{id} with \"capacity\": null (or 0) clears it.",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "capacitySource": {
+            "description": "CapacitySource tells where capacity comes from: override, velocity or default. Computed when the cycle is read.",
+            "enum": [
+              "override",
+              "velocity",
+              "default"
+            ],
+            "type": "string"
           },
           "createdAt": {
             "format": "date-time",
@@ -39242,6 +39263,7 @@
         },
         "required": [
           "capacity",
+          "capacityAutomatic",
           "createdAt",
           "description",
           "endsAt",
@@ -39287,7 +39309,12 @@
             "type": "string"
           },
           "capacity": {
-            "type": "integer"
+            "description": "Capacity is the cycle's planning capacity, in the unit of its scope (estimate points, or issues when the team does not use estimates): capacityOverride when one is set, otherwise capacityAutomatic. It is computed when the cycle is read.",
+            "type": "number"
+          },
+          "capacityAutomatic": {
+            "description": "CapacityAutomatic is the computed capacity: the team's velocity (the average completed scope of its last three completed cycles, fewer when fewer exist) or, without history, a default of 30 per active team member. Computed when the cycle is read.",
+            "type": "number"
           },
           "capacityByMember": {
             "additionalProperties": {
@@ -39297,6 +39324,22 @@
               "type": "object"
             },
             "type": "object"
+          },
+          "capacityOverride": {
+            "description": "CapacityOverride is the capacity typed in Edit cycle. Absent means the capacity is automatic; PATCH /api/cycles/{id} with \"capacity\": null (or 0) clears it.",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "capacitySource": {
+            "description": "CapacitySource tells where capacity comes from: override, velocity or default. Computed when the cycle is read.",
+            "enum": [
+              "override",
+              "velocity",
+              "default"
+            ],
+            "type": "string"
           },
           "createdAt": {
             "format": "date-time",

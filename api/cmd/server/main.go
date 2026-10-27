@@ -1155,6 +1155,11 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 		issueRecordsError(w, err)
 		return
 	}
+	// Before development members are synthesized, so both bootstraps count the same team members.
+	if err := s.decorateCycleCapacity(r.Context(), &data); err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	if s.authDisabled {
 		if err := s.store.ApplyTeamDefaultFavorites(r.Context(), &data, data.Viewer.ID); err != nil {
 			issueRecordsError(w, err)
@@ -2745,11 +2750,10 @@ func (s *server) updateCycle(w http.ResponseWriter, r *http.Request) {
 		if !cycle.EndsAt.After(cycle.StartsAt) {
 			return errInvalid
 		}
-		if input.Capacity != nil {
-			if *input.Capacity < 0 || *input.Capacity > 10000 {
-				return errInvalid
+		if input.Capacity.Set {
+			if err := setCycleCapacityOverride(cycle, input.Capacity.Value); err != nil {
+				return err
 			}
-			cycle.Capacity = *input.Capacity
 		}
 		if input.CapacityByMember != nil {
 			for memberID, days := range input.CapacityByMember {
@@ -2785,7 +2789,7 @@ func (s *server) updateCycle(w http.ResponseWriter, r *http.Request) {
 		updated = *cycle
 		return nil
 	})
-	respondMutation(w, err, http.StatusOK, updated)
+	s.respondCycle(w, r, err, updated)
 }
 
 func (s *server) startCycle(w http.ResponseWriter, r *http.Request) {
@@ -2805,7 +2809,7 @@ func (s *server) startCycle(w http.ResponseWriter, r *http.Request) {
 		started = *cycle
 		return nil
 	})
-	respondMutation(w, err, http.StatusOK, started)
+	s.respondCycle(w, r, err, started)
 }
 
 func (s *server) completeCycle(w http.ResponseWriter, r *http.Request) {
@@ -2831,7 +2835,7 @@ func (s *server) completeCycle(w http.ResponseWriter, r *http.Request) {
 		completed.UpdatedAt = time.Now().UTC()
 		return nil
 	})
-	respondMutation(w, err, http.StatusOK, completed)
+	s.respondCycle(w, r, err, completed)
 }
 
 func transitionToCycle(data *domain.Bootstrap, target *domain.Cycle, now time.Time) error {
@@ -2894,11 +2898,8 @@ func appendFutureCycle(data *domain.Bootstrap, teamID string, previous *domain.C
 		number = previous.Number + 1
 	}
 	now := time.Now().UTC()
-	capacity := settings.Capacity
-	if capacity < 1 {
-		capacity = 4
-	}
-	cycle := domain.Cycle{ID: fmt.Sprintf("cycle_%d", time.Now().UnixNano()), Number: number, Name: fmt.Sprintf("Cycle %d", number), TeamID: teamID, StartsAt: start, EndsAt: start.AddDate(0, 0, weeks*7-1), Status: "upcoming", Capacity: capacity, CreatedAt: now, UpdatedAt: now}
+	// Capacity is automatic (cycle_capacity.go) until someone overrides it.
+	cycle := domain.Cycle{ID: fmt.Sprintf("cycle_%d", time.Now().UnixNano()), Number: number, Name: fmt.Sprintf("Cycle %d", number), TeamID: teamID, StartsAt: start, EndsAt: start.AddDate(0, 0, weeks*7-1), Status: "upcoming", CreatedAt: now, UpdatedAt: now}
 	data.Cycles = append(data.Cycles, cycle)
 	return &data.Cycles[len(data.Cycles)-1]
 }

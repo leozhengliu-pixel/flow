@@ -132,3 +132,8 @@
 .cycle-planning-row > span:first-child > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .cycle-planning-row > span:first-child > svg, .cycle-planning-row .option-dot { flex: none; }
 .cycle-planning-avatar { width: 14px; height: 14px; flex: 0 0 14px; font-size: 8px; }
+/* Edit cycle capacity: empty means automatic ("Automatic (30 points)" placeholder); a typed value is an override. */
+.flow-cycle-dialog .cycle-capacity-field > span { display: flex; align-items: center; gap: 6px; }
+.flow-cycle-dialog .cycle-capacity-field > span > input { flex: 1 1 auto; min-width: 0; }
+.flow-cycle-dialog .cycle-capacity-field > span > button { flex: none; height: 30px; padding: 0 10px; border: .5px solid var(--theme-border); border-radius: 7px; background: var(--theme-surface-1); color: var(--theme-text-primary); font: 500 12px inherit; white-space: nowrap; }
+.flow-cycle-dialog .cycle-capacity-field > small { color: var(--theme-text-tertiary); font-size: 11px; line-height: 15px; }

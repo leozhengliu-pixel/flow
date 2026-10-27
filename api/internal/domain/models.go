@@ -685,15 +685,31 @@ type Issue struct {
 }
 
 type Cycle struct {
-	ID               string                    `json:"id"`
-	Number           int                       `json:"number"`
-	Name             string                    `json:"name"`
-	Description      string                    `json:"description"`
-	TeamID           string                    `json:"teamId"`
-	StartsAt         time.Time                 `json:"startsAt"`
-	EndsAt           time.Time                 `json:"endsAt"`
-	Status           string                    `json:"status"`
-	Capacity         int                       `json:"capacity"`
+	ID          string    `json:"id"`
+	Number      int       `json:"number"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	TeamID      string    `json:"teamId"`
+	StartsAt    time.Time `json:"startsAt"`
+	EndsAt      time.Time `json:"endsAt"`
+	Status      string    `json:"status"`
+	// Capacity is the cycle's planning capacity, in the unit of its scope
+	// (estimate points, or issues when the team does not use estimates):
+	// capacityOverride when one is set, otherwise capacityAutomatic. It is
+	// computed when the cycle is read.
+	Capacity float64 `json:"capacity"`
+	// CapacityOverride is the capacity typed in Edit cycle. Absent means the
+	// capacity is automatic; PATCH /api/cycles/{id} with "capacity": null
+	// (or 0) clears it.
+	CapacityOverride *int `json:"capacityOverride,omitempty"`
+	// CapacityAutomatic is the computed capacity: the team's velocity (the
+	// average completed scope of its last three completed cycles, fewer when
+	// fewer exist) or, without history, a default of 30 per active team
+	// member. Computed when the cycle is read.
+	CapacityAutomatic float64 `json:"capacityAutomatic"`
+	// CapacitySource tells where capacity comes from: override, velocity or
+	// default. Computed when the cycle is read.
+	CapacitySource   string                    `json:"capacitySource,omitempty" enum:"override,velocity,default"`
 	CapacityByMember map[string]map[string]int `json:"capacityByMember,omitempty"`
 	Favorite         bool                      `json:"favorite"`
 	Resources        []CycleResource           `json:"resources"`
@@ -702,6 +718,36 @@ type Cycle struct {
 	CreatedAt        time.Time                 `json:"createdAt"`
 	UpdatedAt        time.Time                 `json:"updatedAt"`
 }
+
+// OptionalInt is a request number that tells an absent key from null: Set
+// reports that the key was sent, and Value is nil when it was null.
+type OptionalInt struct {
+	Set   bool
+	Value *int
+}
+
+func (value *OptionalInt) UnmarshalJSON(raw []byte) error {
+	value.Set = true
+	value.Value = nil
+	if string(raw) == "null" {
+		return nil
+	}
+	var number int
+	if err := json.Unmarshal(raw, &number); err != nil {
+		return err
+	}
+	value.Value = &number
+	return nil
+}
+
+func (value OptionalInt) MarshalJSON() ([]byte, error) {
+	if value.Value == nil {
+		return []byte("null"), nil
+	}
+	return json.Marshal(*value.Value)
+}
+
+func (value OptionalInt) IsZero() bool { return !value.Set }
 
 type CycleResource struct {
 	ID         string    `json:"id"`
@@ -2976,11 +3022,13 @@ type IssueLoopRunInput struct {
 }
 
 type CycleMutationInput struct {
-	Name             *string                   `json:"name,omitempty"`
-	Description      *string                   `json:"description,omitempty"`
-	StartsAt         *string                   `json:"startsAt,omitempty"`
-	EndsAt           *string                   `json:"endsAt,omitempty"`
-	Capacity         *int                      `json:"capacity,omitempty"`
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
+	StartsAt    *string `json:"startsAt,omitempty"`
+	EndsAt      *string `json:"endsAt,omitempty"`
+	// Capacity sets the cycle's capacity override; null or 0 returns it to
+	// the automatic capacity.
+	Capacity         OptionalInt               `json:"capacity,omitzero"`
 	CapacityByMember map[string]map[string]int `json:"capacityByMember,omitempty"`
 	Favorite         *bool                     `json:"favorite,omitempty"`
 	Status           *string                   `json:"status,omitempty"`

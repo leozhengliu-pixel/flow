@@ -205,7 +205,11 @@ func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, a
 		if err != nil {
 			return nil, err
 		}
-		items := slices.Clone(data.Cycles)
+		planned := data
+		if err := s.decorateCycleCapacity(ctx, &planned); err != nil {
+			return nil, err
+		}
+		items := planned.Cycles
 		filter := stringArg(args, "type")
 		items = slices.DeleteFunc(items, func(item domain.Cycle) bool {
 			if item.TeamID != team.ID {

@@ -28,6 +28,10 @@ func validCycleCapacityDay(cycle domain.Cycle, day string) bool {
 
 func (s *server) getCycleCapacity(w http.ResponseWriter, r *http.Request) {
 	data := s.workspaceData(r)
+	if err := s.decorateCycleCapacity(r.Context(), &data); err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
 	cycle, err := cycleByID(&data, r.PathValue("id"))
 	if err != nil {
 		respondMutation(w, err, http.StatusNotFound, nil)
@@ -64,18 +68,19 @@ func (s *server) getCycleCapacity(w http.ResponseWriter, r *http.Request) {
 			members = append(members, map[string]any{"user": user, "capacity": values})
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"cycleId": cycle.ID, "capacity": cycle.Capacity, "weekdays": cycleCapacityWeekdays, "dates": dates, "members": members})
+	writeJSON(w, http.StatusOK, map[string]any{"cycleId": cycle.ID, "capacity": cycle.Capacity, "capacityOverride": cycle.CapacityOverride, "capacityAutomatic": cycle.CapacityAutomatic, "capacitySource": cycle.CapacitySource, "weekdays": cycleCapacityWeekdays, "dates": dates, "members": members})
 }
 
 func (s *server) updateCycleCapacity(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Capacity         *int                      `json:"capacity"`
+		// capacity: the override; null or 0 returns to the automatic capacity.
+		Capacity         domain.OptionalInt        `json:"capacity,omitzero"`
 		CapacityByMember map[string]map[string]int `json:"capacityByMember"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	if input.Capacity == nil && input.CapacityByMember == nil {
+	if !input.Capacity.Set && input.CapacityByMember == nil {
 		writeError(w, http.StatusBadRequest, "capacity or capacityByMember is required")
 		return
 	}
@@ -86,11 +91,10 @@ func (s *server) updateCycleCapacity(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		if input.Capacity != nil {
-			if *input.Capacity < 0 || *input.Capacity > 10000 {
-				return errInvalid
+		if input.Capacity.Set {
+			if err := setCycleCapacityOverride(cycle, input.Capacity.Value); err != nil {
+				return err
 			}
-			cycle.Capacity = *input.Capacity
 		}
 		if input.CapacityByMember != nil {
 			for userID, days := range input.CapacityByMember {
@@ -118,7 +122,7 @@ func (s *server) updateCycleCapacity(w http.ResponseWriter, r *http.Request) {
 		updated = *cycle
 		return nil
 	})
-	respondMutation(w, err, http.StatusOK, updated)
+	s.respondCycle(w, r, err, updated)
 }
 
 func (s *server) createCycleResource(w http.ResponseWriter, r *http.Request) {

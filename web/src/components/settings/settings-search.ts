@@ -156,7 +156,6 @@ const TEAM_SEARCH_SECTIONS: SettingsTeamSearchGroup[] = [
       { title: 'Enable cycles', keywords: ['sprints'] },
       { title: 'Cycle duration', keywords: ['length'] },
       { title: 'Cooldown', keywords: ['break'] },
-      { title: 'Capacity', keywords: ['estimate'] },
       { title: 'Upcoming cycles', keywords: ['future'] },
       { title: 'Automatically create upcoming cycles', keywords: ['automation'] },
       { title: 'Add active issues', keywords: ['automation'] },
