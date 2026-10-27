@@ -644,6 +644,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/integrations/{provider}/{id}/oauth/token", supportedIntegrationHandler(s.revokeIntegrationOAuth))
 	mux.HandleFunc("DELETE /api/integrations/{provider}", supportedIntegrationHandler(s.disconnectIntegration))
 	mux.HandleFunc("POST /api/integrations/{provider}/webhook", supportedIntegrationHandler(s.codeWebhook))
+	s.registerChatIntegrationRoutes(mux)
+	mux.HandleFunc("POST /api/integrations/{provider}/{id}/chat/webhook", s.handleChatWebhook)
 	mux.HandleFunc("POST /api/integrations/{provider}/test", supportedIntegrationHandler(s.testIntegrationConnection))
 	mux.HandleFunc("POST /api/integrations/{provider}/{id}/test", supportedIntegrationHandler(s.testIntegrationConnection))
 	mux.HandleFunc("POST /api/integrations/gitlab/{id}/token", s.updateGitLabToken)
@@ -4961,12 +4963,23 @@ func (s *server) createComment(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
+		if key := store.CommentCreationKey(r.Context()); key != "" {
+			for _, existing := range data.Comments[id] {
+				if existing.ID == key {
+					comment = existing
+					return store.ErrNoMutation
+				}
+			}
+		}
 		if input.ParentID != nil {
 			if slices.IndexFunc(data.Comments[id], func(comment domain.Comment) bool { return comment.ID == *input.ParentID }) < 0 {
 				return errNotFound
 			}
 		}
 		comment = domain.Comment{ID: fmt.Sprintf("comment_%d", time.Now().UnixNano()), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
+		if key := store.CommentCreationKey(r.Context()); key != "" {
+			comment.ID = key
+		}
 		data.Comments[id] = append(data.Comments[id], comment)
 		activity := appendActivity(data, id, "comment.created", data.Viewer, map[string]string{"commentId": comment.ID})
 		appendIssueNotifications(data, *issue, activity, &comment)

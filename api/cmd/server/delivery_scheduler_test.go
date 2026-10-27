@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -71,5 +73,61 @@ func TestDueDeliveryIDsRespectsNextAttemptAndLimit(t *testing.T) {
 	ids := dueDeliveryIDs([]domain.IntegrationDelivery{{ID: "pending", Status: "pending"}, {ID: "due", Status: "failed", NextAttemptAt: &due}, {ID: "future", Status: "failed", NextAttemptAt: &future}, {ID: "limited", Status: "pending", Attempts: 8}}, now)
 	if len(ids) != 2 || ids[0] != "due" || ids[1] != "pending" {
 		t.Fatalf("due ids = %#v", ids)
+	}
+}
+
+func TestChatWorkerDoesNotBlockDeliverySweeps(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	s := &server{store: repository, realtime: newRealtimeHub()}
+	ctx, cancel := context.WithCancel(t.Context())
+	var mu sync.Mutex
+	active, peak := 0, 0
+	started := make(chan struct{}, 16)
+	blocked := func(ctx context.Context, _ string) error {
+		mu.Lock()
+		active++
+		peak = max(peak, active)
+		mu.Unlock()
+		started <- struct{}{}
+		<-ctx.Done()
+		mu.Lock()
+		active--
+		mu.Unlock()
+		return ctx.Err()
+	}
+	keys := make([]string, chatWorkerConcurrency*2)
+	for index := range keys {
+		keys[index] = fmt.Sprintf("workspace-%d", index)
+	}
+	finished := make(chan struct{})
+	go func() {
+		s.sweepChatIntegrations(ctx, keys, blocked)
+		close(finished)
+	}()
+	for range chatWorkerConcurrency {
+		<-started
+	}
+	sweep := make(chan error, 1)
+	go func() { sweep <- s.processDueDeliveries(t.Context(), time.Now().UTC()) }()
+	select {
+	case err := <-sweep:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("delivery sweep waited for slow chat platform calls")
+	}
+	cancel()
+	select {
+	case <-finished:
+	case <-time.After(5 * time.Second):
+		t.Fatal("chat sweep ignored shutdown")
+	}
+	if peak > chatWorkerConcurrency {
+		t.Fatalf("chat sweep ran %d workspaces at once; limit is %d", peak, chatWorkerConcurrency)
 	}
 }

@@ -5,6 +5,7 @@
 import { Plug } from "lucide-react";
 
 import { IntegrationBrandIcon } from "@/components/settings/integration-brand-icon";
+import { ChatIntegrationSettings } from "@/components/settings/chat-integration-settings";
 import { useI18n } from "@/i18n/i18n";
 import {
   authorizeIntegration,
@@ -14,6 +15,7 @@ import {
   availabilityLabel,
   getIntegrationCatalogEntry,
   getIntegrationProductPattern,
+  isChatProvider,
   subtypesFor,
   type IntegrationCatalogEntry,
 } from "@/lib/integration-catalog";
@@ -39,6 +41,10 @@ export function IntegrationSettingsPage({
   const { t } = useI18n();
   const entry = getIntegrationCatalogEntry(slug);
   const [busy, setBusy] = useState(false);
+
+  if (isChatProvider(slug)) {
+    return <ChatIntegrationSettings key={slug} provider={slug} data={data} onBack={onBack} onReload={onReload} />;
+  }
 
   if (!entry) {
     return (

@@ -525,12 +525,18 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	}
 	if !s.authDisabled {
 		if _, apiAuthenticated := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); !apiAuthenticated {
+			identity, chatAuthenticated := chatIdentityFromRequest(r)
 			cookie, err := r.Cookie(sessionCookieName)
 			durationDays := data.WorkspaceSettings.SessionDurationDays
 			if durationDays < 1 {
 				durationDays = 30
 			}
-			if err != nil || !s.store.EnforceSessionDuration(r.Context(), cookie.Value, durationDays) {
+			if chatAuthenticated {
+				if !chatIdentityWithinSession(identity, workspaceSessionDuration(data.WorkspaceSettings), time.Now()) {
+					writeJSON(w, http.StatusUnauthorized, map[string]string{"error": chatReconnectMessage, "code": "chat_identity_expired"})
+					return false
+				}
+			} else if err != nil || !s.store.EnforceSessionDuration(r.Context(), cookie.Value, durationDays) {
 				clearSessionCookie(w, r)
 				writeError(w, http.StatusUnauthorized, "Your workspace session has expired")
 				return false
@@ -763,6 +769,12 @@ func integrationConfigurationRequest(r *http.Request) bool {
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	if len(parts) < 3 || parts[0] != "api" || parts[1] != "integrations" {
 		return false
+	}
+	if len(parts) >= 4 && (parts[2] == "feishu" || parts[2] == "lark") && parts[3] == "chat" {
+		if len(parts) >= 5 && parts[4] == "identity" {
+			return false
+		}
+		return r.Method != http.MethodGet && r.Method != http.MethodHead
 	}
 	switch len(parts) {
 	case 3:

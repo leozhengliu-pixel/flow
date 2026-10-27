@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"slices"
+	"sync"
 	"time"
 
 	"flow/api/internal/domain"
@@ -25,8 +26,20 @@ func (s *server) startDeliveryScheduler() {
 	s.deliverySchedulerMu.Lock()
 	s.deliverySchedulerCancel, s.deliverySchedulerDone = cancel, done
 	s.deliverySchedulerMu.Unlock()
+	var workers sync.WaitGroup
+	workers.Add(2)
 	go func() {
-		defer close(done)
+		workers.Wait()
+		close(done)
+	}()
+	// Chat platform calls can be slow; they run in their own loop so they
+	// never delay webhook, email or settings sweeps.
+	go func() {
+		defer workers.Done()
+		s.runChatWorkerLoop(ctx, interval, s.processChatIntegrationTick)
+	}()
+	go func() {
+		defer workers.Done()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -75,6 +88,9 @@ func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error 
 	if sweepSettings {
 		s.reconcileAllApplicationWebhooks(ctx)
 		s.sendDueOnboardingEmails(ctx, now)
+		if err := s.store.PurgeChatHistory(ctx, now); err != nil {
+			log.Printf("Chat history retention: %v", err)
+		}
 	}
 	for _, key := range s.store.WorkspaceKeys() {
 		s.sweepAppUserNotifications(ctx, key, now)
@@ -113,6 +129,53 @@ func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error 
 		}
 	}
 	return nil
+}
+
+const (
+	chatWorkerConcurrency = 4
+	chatWorkspaceTimeout  = 15 * time.Second
+)
+
+func (s *server) runChatWorkerLoop(ctx context.Context, interval time.Duration, tick func(context.Context, string) error) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.store.WorkerContext().Done():
+			return
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.sweepChatIntegrations(ctx, s.store.WorkspaceKeys(), tick)
+		}
+	}
+}
+
+// sweepChatIntegrations runs one bounded pass over the workspaces. The
+// per-workspace database lease (ClaimChatWorker) keeps instances from
+// processing the same workspace at once, so no leader lock is needed.
+func (s *server) sweepChatIntegrations(ctx context.Context, keys []string, tick func(context.Context, string) error) {
+	slots := make(chan struct{}, chatWorkerConcurrency)
+	var running sync.WaitGroup
+	for _, key := range keys {
+		select {
+		case <-ctx.Done():
+			running.Wait()
+			return
+		case slots <- struct{}{}:
+		}
+		running.Add(1)
+		go func() {
+			defer running.Done()
+			defer func() { <-slots }()
+			workspaceCtx, cancel := context.WithTimeout(ctx, chatWorkspaceTimeout)
+			defer cancel()
+			if err := tick(workspaceCtx, key); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+				log.Printf("Chat integration workspace=%s: %v", key, err)
+			}
+		}()
+	}
+	running.Wait()
 }
 
 func (s *server) prepareDueNotificationDeliveries(ctx context.Context, key string, now time.Time) error {

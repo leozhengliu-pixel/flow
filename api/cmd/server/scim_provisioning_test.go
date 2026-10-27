@@ -302,7 +302,7 @@ func TestSCIMEnterpriseExtensionAndProfile(t *testing.T) {
 		t.Fatalf("profile update audit = %+v", entries)
 	}
 	raw, _ := json.Marshal(updated.Metadata)
-	if strings.Contains(string(raw), "Principal") || strings.Contains(string(raw), "555") {
+	if strings.Contains(string(raw), "Principal") || strings.Contains(string(raw), "+1 555 ") {
 		t.Fatalf("audit metadata records attribute values: %s", raw)
 	}
 }

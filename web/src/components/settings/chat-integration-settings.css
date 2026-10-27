@@ -1,0 +1,42 @@
+/* Layout only: rows, cards, buttons and fields use the shared feature-* and settings-* styles. */
+.chat-integration-settings .feature-section { margin-top: 40px; }
+.chat-integration-settings .integration-settings-title { align-items: center; }
+.chat-integration-settings .integration-settings-title > div { flex: 1; min-width: 0; }
+.chat-integration-settings .feature-back-link { gap: 4px; }
+.chat-integration-logo { box-sizing: border-box; width: 44px; height: 44px; flex: none; display: grid; place-items: center; border: 1px solid var(--theme-border); border-radius: 8px; background: var(--theme-surface-1); }
+.chat-integration-settings .feature-button > svg { flex: none; width: 14px; height: 14px; }
+.chat-integration-settings .feature-button.chat-icon-button { width: 32px; min-width: 32px; padding: 0; flex: none; }
+.chat-integration-settings .feature-button.chat-icon-button > svg { width: 16px; height: 16px; }
+.chat-integration-settings a.feature-button { text-decoration: none; }
+.chat-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.chat-integration-settings .feature-row aside { min-width: 0; }
+.chat-integration-settings .feature-row aside .settings-input,
+.chat-integration-settings .feature-row aside .settings-select { box-sizing: border-box; width: 280px; max-width: 100%; }
+.chat-integration-settings .settings-select-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-integration-settings .settings-input[readonly] { color: var(--theme-text-secondary); }
+.chat-integration-settings .feature-row strong label { cursor: pointer; }
+.chat-integration-alert { margin-top: 24px; border-color: color-mix(in srgb, var(--semantic-danger) 40%, var(--theme-border)); }
+.chat-integration-alert .feature-row span { color: var(--semantic-danger); overflow-wrap: anywhere; }
+.chat-binding-editor .chat-integration-alert { margin: 0 0 12px; }
+.chat-integration-settings .feature-empty { margin-top: 24px; }
+.chat-status-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--theme-text-tertiary); }
+.chat-status-dot.is-connected { background: var(--integration-status-ok); }
+.chat-status-dot.is-pending { background: var(--integration-status-warn); }
+.chat-status-dot.is-error { background: var(--semantic-danger); }
+.chat-integration-settings .feature-row strong { min-width: 0; }
+.chat-integration-settings .feature-row strong > small { flex: none; white-space: nowrap; }
+.chat-integration-settings .chat-binding-name { min-width: 0; overflow: hidden; color: inherit; font-size: inherit; line-height: inherit; text-overflow: ellipsis; white-space: nowrap; }
+.chat-binding-scope { overflow-wrap: anywhere; }
+.chat-muted { color: var(--theme-text-secondary); font-size: 13px; }
+.chat-subheading { margin: 24px 16px 10px; color: var(--theme-text-secondary); font-size: 12px; font-weight: 500; line-height: 18px; }
+.chat-approval { margin-top: 12px; }
+.chat-actions { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.chat-connection-row { flex-wrap: wrap; padding-block: 12px; }
+.chat-connection-row > div { flex: 1 1 260px; }
+.chat-connection-row > aside { margin-left: auto; }
+@media (max-width: 760px) {
+  .chat-integration-settings .feature-row.chat-inline { flex-wrap: nowrap; align-items: center; }
+  .chat-integration-settings .feature-row.chat-inline aside { width: auto; }
+  .chat-integration-settings .feature-row aside .settings-input,
+  .chat-integration-settings .feature-row aside .settings-select { width: auto; flex: 1; }
+}

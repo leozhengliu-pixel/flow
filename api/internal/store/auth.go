@@ -507,6 +507,7 @@ func (s *SQLiteStore) ListSessions(ctx context.Context, userID, currentToken str
 func (s *SQLiteStore) RevokeOtherSessions(ctx context.Context, userID, currentToken string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE user_id=? AND token_hash<>?`, userID, tokenHash(currentToken))
 	if err == nil {
+		err = s.revokeChatIdentities(ctx, userID)
 		s.accountAccessChanged(userID)
 	}
 	return err
@@ -525,8 +526,9 @@ func (s *SQLiteStore) RevokeSession(ctx context.Context, userID, sessionID, curr
 	if count, _ := result.RowsAffected(); count != 1 {
 		return sql.ErrNoRows
 	}
+	err = s.revokeChatIdentities(ctx, userID)
 	s.accountAccessChanged(userID)
-	return nil
+	return err
 }
 
 func (s *SQLiteStore) ListAuthIdentities(ctx context.Context, userID string) ([]domain.AuthIdentity, error) {
@@ -627,6 +629,7 @@ func (s *SQLiteStore) ResetPassword(ctx context.Context, token, password string)
 	_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET password_hash=?,updated_at=? WHERE id=?`, string(hash), time.Now().UTC().Format(time.RFC3339Nano), userID)
 	if err == nil {
 		_, _ = s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE user_id=?`, userID)
+		err = s.revokeChatIdentities(ctx, userID)
 		s.accountAccessChanged(userID)
 	}
 	return err
@@ -669,6 +672,9 @@ func (s *SQLiteStore) LoginWithAuthToken(ctx context.Context, email, token strin
 	}
 	if forceReauth {
 		_, _ = s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE user_id=?`, user.ID)
+		if err := s.revokeChatIdentities(ctx, user.ID); err != nil {
+			return domain.AuthSession{}, "", err
+		}
 		s.accountAccessChanged(user.ID)
 	}
 	return s.createSession(ctx, user)
