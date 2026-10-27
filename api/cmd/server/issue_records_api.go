@@ -430,7 +430,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.authDisabled && issuePermissionRank(issueRole(s, metadata, page.Items[0])) < issuePermissionRank("editor") {
-		issueRecordsError(w, store.ErrAuthForbidden)
+		writeError(w, http.StatusForbidden, issueEditForbiddenMessage)
 		return
 	}
 	if issueUpdateIsNoop(page.Items[0], input) && store.ChatMutationKey(r.Context()) == "" {
@@ -680,6 +680,11 @@ func (s *server) projectIssueRecordReferences(r *http.Request, metadata domain.B
 	}
 	return issues, nil
 }
+
+// issueEditForbiddenMessage is the refusal of a change to an issue the caller can see but not edit (a public team's
+// issue for someone outside the team, a viewer share). It names the real reason rather than workspace access, so
+// people and agents relaying it say what was refused.
+const issueEditForbiddenMessage = "You can view this issue but don't have permission to edit it"
 
 func issueRecordsError(w http.ResponseWriter, err error) {
 	if err == nil || errors.Is(err, context.Canceled) {
