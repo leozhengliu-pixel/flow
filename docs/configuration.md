@@ -1967,6 +1967,14 @@ cancellation. This reduces transient memory but does not turn the legacy client
 into a paged client. Other compatibility workflows still require complete
 collections.
 
+With several API replicas, issue, comment and agent writes commit as their
+own record transactions without the workspace lock. The few writes that still
+load and replace whole issue and content collections remember what they
+loaded: records another replica created, changed or removed in the meantime
+are kept as that replica left them, and when both changed the same record the
+write runs again on fresh records (up to three times, then `409`). Audit
+entries recorded after a change only append to the audit log.
+
 For an app container limited to 1 GiB, `GOMEMLIMIT=650MiB` can leave headroom for
 runtime overhead and filesystem cache. Compose passes this optional environment
 variable through. It is a soft Go memory target, not a hard cap or an assurance

@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -41,7 +42,10 @@ func (s *SQLiteStore) migrateIssueCollections(ctx context.Context) error {
 	return nil
 }
 
-func (s *SQLiteStore) replaceIssueRecords(ctx context.Context, tx *sqlTx, workspace string, issues []domain.Issue, metadata domain.Bootstrap) error {
+// With base (the records a full mutation loaded, see recordBase) rows other
+// servers committed after the load are kept rather than deleted or
+// overwritten.
+func (s *SQLiteStore) replaceIssueRecords(ctx context.Context, tx *sqlTx, workspace string, issues []domain.Issue, metadata domain.Bootstrap, base map[string]recordFingerprint) error {
 	refs := newIssueReferences(metadata)
 	// Compatibility mutations supply the full collection; compare the existing
 	// row payloads so unchanged entities never become database writes.
@@ -102,6 +106,18 @@ func (s *SQLiteStore) replaceIssueRecords(ctx context.Context, tx *sqlTx, worksp
 				return err
 			}
 			raw := values[len(values)-1].([]byte)
+			if base != nil {
+				fingerprint, loaded := base[issue.ID]
+				current, stored := payloads[issue.ID]
+				if loaded && (!stored || sha256.Sum256(current) != fingerprint.stored) || !loaded && stored {
+					if loaded && fingerprint.loaded == sha256.Sum256(raw) {
+						// Changed or deleted elsewhere, untouched here.
+						delete(previous, issue.ID)
+						continue
+					}
+					return fmt.Errorf("issue %s: %w", issue.ID, ErrConcurrentWrite)
+				}
+			}
 			if !equalIssueRecordData(payloads[issue.ID], raw) && !refs.equalOwned(payloads[issue.ID], issue) {
 				if old := payloads[issue.ID]; len(old) > 0 {
 					var previousIssue domain.Issue
@@ -124,6 +140,19 @@ func (s *SQLiteStore) replaceIssueRecords(ctx context.Context, tx *sqlTx, worksp
 		}
 	}
 	for id := range previous {
+		if base != nil {
+			fingerprint, loaded := base[id]
+			if !loaded {
+				continue // committed elsewhere after the load
+			}
+			var current []byte
+			if err := tx.QueryRowContext(ctx, `SELECT data FROM issue_records WHERE workspace_key=? AND id=?`, workspace, id).Scan(&current); err != nil {
+				return err
+			}
+			if sha256.Sum256(current) != fingerprint.stored {
+				return fmt.Errorf("issue %s: %w", id, ErrConcurrentWrite)
+			}
+		}
 		for _, table := range []string{"issue_subscriber_records", "issue_actor_records", "issue_attribute_records", "issue_attachment_records", "issue_search_documents", "issue_identifier_aliases"} {
 			if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE workspace_key=? AND issue_id=?", workspace, id); err != nil {
 				return err
@@ -151,7 +180,14 @@ func (s *SQLiteStore) replaceIssueRecords(ctx context.Context, tx *sqlTx, worksp
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO issue_collection_counts(workspace_key,total) VALUES(?,?) ON CONFLICT(workspace_key) DO UPDATE SET total=excluded.total`, workspace, len(issues))
+	total := len(issues)
+	if base != nil {
+		// Kept rows from other servers count; skipped deleted ones do not.
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM issue_records WHERE workspace_key=?`, workspace).Scan(&total); err != nil {
+			return err
+		}
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO issue_collection_counts(workspace_key,total) VALUES(?,?) ON CONFLICT(workspace_key) DO UPDATE SET total=excluded.total`, workspace, total)
 	if err != nil {
 		return err
 	}

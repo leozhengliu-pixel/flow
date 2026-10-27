@@ -64,6 +64,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   the open descriptions it affects at once, since sub-issues inherit their
   parents' grants. Issue updates no longer leave other servers reading the
   previous record from the shared cache.
+- Data loss with several API replicas: archiving an agent session (and other
+  audit entries recorded after a change: connector and MCP tool calls, code
+  host accounts, personal connections, coding environments, OAuth credentials,
+  SCIM) rewrote every issue and comment record, deleting issues another
+  replica created at the same moment. These writes now add only the audit
+  entry. Writes that still replace whole collections keep issues, comments and
+  activity that another replica committed meanwhile, and run again on fresh
+  data when they changed the same record (`409` after three tries).
 - Security: `X-Forwarded-Proto` and `X-Forwarded-Host` were believed from any
   client when Flow built links (OAuth and MCP metadata, SCIM locations, signed
   file URLs) and chose `Secure` for cookies, and rate limits trusted the

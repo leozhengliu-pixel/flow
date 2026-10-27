@@ -1436,15 +1436,22 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 			current = cloneBootstrap(current)
 		}
 		traceMark(ctx, "clone")
+		// The records are read outside the write transaction and other
+		// servers commit standalone record transactions meanwhile: base
+		// lets the replace keep their records (see recordBase).
+		var base *recordBase
+		if !metadataOnly {
+			base = newRecordBase()
+		}
 		if current.Issues == nil && !metadataOnly {
-			issues, err := s.readIssueRecords(ctx, workspaceKey)
+			issues, err := s.readIssueRecordsWithBase(ctx, workspaceKey, base)
 			if err != nil {
 				return err
 			}
 			current.Issues = issues
 		}
 		if !metadataOnly {
-			if err := s.hydrateContentRecords(ctx, workspaceKey, &current); err != nil {
+			if err := s.hydrateContentRecordsWithBase(ctx, workspaceKey, &current, base); err != nil {
 				return err
 			}
 		}
@@ -1479,6 +1486,11 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 				next.Users = append(next.Users, actor)
 			}
 		}
+		if base != nil {
+			if err := base.fingerprintLoaded(next); err != nil {
+				return err
+			}
+		}
 		aggregateID, err := mutate(&next)
 		next.ViewerRole, next.ViewerTeamIDs = originalViewerRole, nil
 		traceMark(ctx, "mutate")
@@ -1510,7 +1522,7 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		// realtime envelope with the post-mutation entity. Clients can apply a
 		// delta for common entities without downloading another full bootstrap.
 		realtimePayload = enrichRealtimePayload(payloadRaw, aggregateJSONValue(next, aggregateID), eventType)
-		if err := s.persistWorkspaceFrom(ctx, workspaceKey, &stored, next, &event); err != nil {
+		if err := s.persistWorkspaceOnto(ctx, workspaceKey, &stored, next, &event, base); err != nil {
 			return err
 		}
 		traceMark(ctx, "persist")
@@ -1520,10 +1532,18 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		return nil
 	}
 	var err error
-	if s.coordinator != nil {
-		err = s.coordinator.WithWorkspaceLock(ctx, workspaceKey, apply)
-	} else {
-		err = apply()
+	// A record the callback changed was changed on another server after the
+	// load: run the callback again on fresh records.
+	for attempt := 1; ; attempt++ {
+		if s.coordinator != nil {
+			err = s.coordinator.WithWorkspaceLock(ctx, workspaceKey, apply)
+		} else {
+			err = apply()
+		}
+		if !errors.Is(err, ErrConcurrentWrite) || attempt == fullMutationAttempts {
+			break
+		}
+		traceMark(ctx, "retry")
 	}
 	if err != nil {
 		if errors.Is(err, ErrNoMutation) {
@@ -1706,6 +1726,13 @@ func (s *SQLiteStore) persistWorkspace(ctx context.Context, workspaceKey string,
 // state, only the metadata fields that differ from it are encoded and written;
 // otherwise the whole metadata document is compared against the stored rows.
 func (s *SQLiteStore) persistWorkspaceFrom(ctx context.Context, workspaceKey string, before *domain.Bootstrap, data domain.Bootstrap, event *domain.DomainEvent) error {
+	return s.persistWorkspaceOnto(ctx, workspaceKey, before, data, event, nil)
+}
+
+// persistWorkspaceOnto persists data like persistWorkspaceFrom. base, when
+// set, names the records data's collections were loaded from (see
+// recordBase): records committed elsewhere since are kept.
+func (s *SQLiteStore) persistWorkspaceOnto(ctx context.Context, workspaceKey string, before *domain.Bootstrap, data domain.Bootstrap, event *domain.DomainEvent, base *recordBase) error {
 	if fullMutationsForced.Load() {
 		before = nil
 	}
@@ -1721,7 +1748,7 @@ func (s *SQLiteStore) persistWorkspaceFrom(ctx context.Context, workspaceKey str
 		return err
 	}
 	defer tx.Rollback()
-	if err := s.persistWorkspaceTx(ctx, tx, workspaceKey, before, data, raw, event); err != nil {
+	if err := s.persistWorkspaceTx(ctx, tx, workspaceKey, before, data, raw, event, base); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -1754,7 +1781,7 @@ func (s *SQLiteStore) encodeWorkspaceMetadata(data domain.Bootstrap) ([]byte, er
 // collections and the domain event inside tx. A nil collection is left as
 // stored. With before (the stored metadata state) the metadata document is
 // written as a delta and raw is unused.
-func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspaceKey string, before *domain.Bootstrap, inputData domain.Bootstrap, raw []byte, event *domain.DomainEvent) error {
+func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspaceKey string, before *domain.Bootstrap, inputData domain.Bootstrap, raw []byte, event *domain.DomainEvent, base *recordBase) error {
 	data := compactImportInputs(inputData)
 	issues := data.Issues
 	activities, comments := data.Activities, data.Comments
@@ -1765,6 +1792,18 @@ func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspa
 	data.Comments = nil
 	data.Notifications = nil
 	data.NotificationDeliveries = nil
+	if base != nil {
+		kinds := []string{}
+		for kind, present := range map[string]bool{"delivery": deliveries != nil, "notification": notifications != nil, "activity": activities != nil, "comment": comments != nil} {
+			if present {
+				kinds = append(kinds, kind)
+			}
+		}
+		slices.Sort(kinds)
+		if err := s.lockReplacedRecords(ctx, tx, workspaceKey, base, issues != nil, kinds); err != nil {
+			return err
+		}
+	}
 	if err := writeImportInputs(ctx, tx, workspaceKey, inputData); err != nil {
 		return err
 	}
@@ -1802,27 +1841,27 @@ func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspa
 		notifications, deliveries = nil, nil
 	}
 	if deliveries != nil {
-		if err := syncContentRecords(ctx, tx, workspaceKey, "delivery", map[string][]domain.NotificationDelivery{"": deliveries}, data); err != nil {
+		if err := syncContentRecordsFrom(ctx, tx, workspaceKey, "delivery", map[string][]domain.NotificationDelivery{"": deliveries}, data, base.contentKind("delivery")); err != nil {
 			return err
 		}
 	}
 	if notifications != nil {
-		if err := syncContentRecords(ctx, tx, workspaceKey, "notification", notificationRecords(notifications), data); err != nil {
+		if err := syncContentRecordsFrom(ctx, tx, workspaceKey, "notification", notificationRecords(notifications), data, base.contentKind("notification")); err != nil {
 			return err
 		}
 	}
 	if activities != nil {
-		if err := syncContentRecords(ctx, tx, workspaceKey, "activity", activities, data); err != nil {
+		if err := syncContentRecordsFrom(ctx, tx, workspaceKey, "activity", activities, data, base.contentKind("activity")); err != nil {
 			return err
 		}
 	}
 	if comments != nil {
-		if err := syncContentRecords(ctx, tx, workspaceKey, "comment", comments, data); err != nil {
+		if err := syncContentRecordsFrom(ctx, tx, workspaceKey, "comment", comments, data, base.contentKind("comment")); err != nil {
 			return err
 		}
 	}
 	if issues != nil {
-		if err := s.replaceIssueRecords(ctx, tx, workspaceKey, issues, data); err != nil {
+		if err := s.replaceIssueRecords(ctx, tx, workspaceKey, issues, data, base.issueRecords()); err != nil {
 			return err
 		}
 	}
