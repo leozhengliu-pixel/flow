@@ -17,12 +17,12 @@ import { AgentAttachIcon, AgentStopIcon } from "@/components/agent/agent-icons";
 import { AgentSkillsPicker } from "@/components/agent/agent-skills-picker";
 import { AttachmentRemoveButton } from "@/components/ui/attachment-remove-button";
 import { toast } from "@/lib/toast";
-import { cancelLoopRun, getLoopRun, listLoopRuns, rateLoopRun, replyToLoopRun } from "@/lib/api";
+import { cancelLoopRun, getLoopRun, getLoopVersion, listLoopRuns, rateLoopRun, replyToLoopRun } from "@/lib/api";
 import { LOOP_RUN_ACTIVITY_EVENT, type LoopRunActivity } from "@/lib/loop-run-activity";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { editLoopPath, loopPath, loopRunPath, loopsPath } from "@/lib/app-routes";
 import { useI18n } from "@/i18n/i18n";
-import type { BootstrapData, LoopRun, LoopRunReply, LoopRunStatus } from "@/types/flow";
+import type { BootstrapData, LoopRun, LoopRunReply, LoopRunStatus, LoopVersion } from "@/types/flow";
 import { copyText, loopUrl, runParts, useLoopRecord } from "./loop-data";
 import { LoopBreadcrumb } from "./loop-breadcrumb";
 import { LoopInstructionsEditor } from "./loop-instructions-editor";
@@ -204,6 +204,22 @@ export function LoopRunPage({
     // Runs refresh on their own poll; only re-fetch when the selection changes (or a failed load is retried).
   }, [activeId, loopId, runsRef, selectAttempt]);
 
+  // The instructions a run ran are its version's: a run of an older version
+  // loads that version's definition (null when it is no longer stored).
+  const [versionDefinitions, setVersionDefinitions] = useState<Record<string, LoopVersion["definition"] | null>>({});
+  const runVersionId = selected?.versionId && loop && selected.versionId !== loop.versionId ? selected.versionId : undefined;
+  useEffect(() => {
+    if (!runVersionId || runVersionId in versionDefinitions) return;
+    let active = true;
+    getLoopVersion(loopId, runVersionId)
+      .then((version) => active && setVersionDefinitions((current) => ({ ...current, [runVersionId]: version.definition })))
+      .catch(() => active && setVersionDefinitions((current) => ({ ...current, [runVersionId]: null })));
+    return () => {
+      active = false;
+    };
+  }, [loopId, runVersionId, versionDefinitions]);
+  const runDefinition = runVersionId ? versionDefinitions[runVersionId] : undefined;
+
   // Poll the selected run and the list while anything is still running (a run, or the agent answering a reply).
   const replying = Boolean(selected?.replies?.some((reply) => reply.status === "running"));
   const running = selected?.status === "running" || replying || Boolean(runs?.some((item) => item.status === "running"));
@@ -324,6 +340,8 @@ export function LoopRunPage({
   };
   const parts = selected ? runParts(selected) : [];
   const started = selected ? new Date(selected.startedAt) : undefined;
+  // "Ran version N" opens the published versions with that version selected.
+  const versionsHref = `${loopPath(workspace, loop ?? loopId)}?versions=1${selected?.versionId ? `&version=${encodeURIComponent(selected.versionId)}` : ""}`;
   return (
     <main className="main-panel loops-run-page" aria-label={t("Run history")}>
       <header className="loops-editor-topbar">
@@ -459,11 +477,11 @@ export function LoopRunPage({
                 {selected.version !== undefined && (
                   <a
                     className="loops-run-version"
-                    href={`${loopPath(workspace, loop ?? loopId)}?versions=1`}
+                    href={versionsHref}
                     title={t("Show published versions")}
                     onClick={(event) => {
                       event.preventDefault();
-                      onNavigate(`${loopPath(workspace, loop ?? loopId)}?versions=1`);
+                      onNavigate(versionsHref);
                     }}
                   >
                     · {t("Ran version {version}").replace("{version}", String(selected.version))}
@@ -479,9 +497,26 @@ export function LoopRunPage({
               {loop && (
                 <section className={`loops-run-instructions${instructionsOpen ? "" : " is-collapsed"}`} aria-label={t("Instructions")}>
                   <h3>{t("Instructions")}</h3>
-                  <div className={`loops-instructions-text${instructionsOpen ? "" : " is-collapsed"}`} data-i18n-ignore>
-                    <LoopInstructionsEditor readOnly ariaLabel={t("Instructions")} data={data} value={loop.instructions} valueData={loop.instructionsData} onNavigate={onNavigate} />
-                  </div>
+                  {runDefinition === null && selected.version !== undefined && (
+                    <p className="loops-run-notice" role="note">
+                      <Info size={14} />
+                      <span>{t("Version {version} is no longer stored; these are the current instructions.").replace("{version}", String(selected.version))}</span>
+                    </p>
+                  )}
+                  {/* A run of an older version waits for that version's instructions instead of showing the current ones. */}
+                  {(!runVersionId || runDefinition !== undefined) && (
+                    <div className={`loops-instructions-text${instructionsOpen ? "" : " is-collapsed"}`} data-i18n-ignore>
+                      <LoopInstructionsEditor
+                        key={runDefinition ? runVersionId : "current"}
+                        readOnly
+                        ariaLabel={t("Instructions")}
+                        data={data}
+                        value={runDefinition ? runDefinition.instructions : loop.instructions}
+                        valueData={runDefinition ? runDefinition.instructionsData : loop.instructionsData}
+                        onNavigate={onNavigate}
+                      />
+                    </div>
+                  )}
                   <button className="loops-expand-button is-small" type="button" aria-expanded={instructionsOpen} onClick={() => setInstructionsOpen((value) => !value)}>
                     {t(instructionsOpen ? "Collapse" : "Expand")}
                   </button>

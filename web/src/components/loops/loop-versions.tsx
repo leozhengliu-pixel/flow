@@ -73,10 +73,13 @@ export function LoopVersionsDialog({
   onOpenChange,
   onRestored,
   onNavigate,
+  initialVersionId,
 }: {
   data: BootstrapData;
   loop: Loop;
   open: boolean;
+  /** The version selected when the dialog opens (a run page's "Ran version N"); the newest otherwise. */
+  initialVersionId?: string;
   onOpenChange: (open: boolean) => void;
   onRestored: (loop: Loop) => void;
   onNavigate: (path: string) => void;
@@ -103,7 +106,8 @@ export function LoopVersionsDialog({
         if (!active) return;
         const list = Array.isArray(items) ? [...items].sort((a, b) => b.version - a.version) : [];
         setVersions(list);
-        setSelectedId((current) => (current && list.some((item) => item.id === current) ? current : list[0]?.id));
+        const listed = (id: string | undefined) => (id && list.some((item) => item.id === id) ? id : undefined);
+        setSelectedId((current) => listed(current) ?? listed(initialVersionId) ?? list[0]?.id);
       })
       .catch((reason) => {
         if (!active) return;
@@ -113,7 +117,7 @@ export function LoopVersionsDialog({
     return () => {
       active = false;
     };
-  }, [loop.id, open, reload, t]);
+  }, [initialVersionId, loop.id, open, reload, t]);
 
   const selected = versions?.find((item) => item.id === selectedId);
   const restore = async () => {

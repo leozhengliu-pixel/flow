@@ -112,6 +112,18 @@ describe('LoopVersionsDialog', () => {
     expect(await screen.findByRole('dialog', { name: 'Published versions' })).toBeVisible()
     expect(api.listLoopVersions).toHaveBeenCalledWith('loop-1')
   })
+
+  it("opens a run's version selected from the run page link", async () => {
+    window.history.replaceState(null, '', '/workspace/loop/loop-1?versions=1&version=loop-1_v1')
+    try {
+      render(<I18nProvider><LoopDetail data={makeBootstrap({ loops: [loop], favorites: [], drafts: [] })} loopId="loop-1" onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+      const detail = await screen.findByRole('region', { name: 'Version 1' })
+      expect(within(detail).getByRole('region', { name: 'Instructions' })).toHaveTextContent('Summarize.')
+      expect(within(screen.getByRole('list', { name: 'Versions' })).getByRole('button', { name: /Version 1/ })).toHaveAttribute('aria-current', 'true')
+    } finally {
+      window.history.replaceState(null, '', '/')
+    }
+  })
 })
 
 describe('version helpers', () => {

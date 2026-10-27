@@ -5059,6 +5059,7 @@ Object.assign(zhCN, {
   "Externally synced changes": "外部同步内容的更改",
   "Version instructions": "版本说明",
   "Ran version {version}": "运行的是版本 {version}",
+  "Version {version} is no longer stored; these are the current instructions.": "版本 {version} 已不再保存；这里显示的是当前说明。",
   "Could not save feedback": "无法保存反馈",
   "Web search is enabled for this loop, but no web search provider is configured on this server.":
     "此循环已启用网页搜索，但服务器未配置网页搜索服务。",

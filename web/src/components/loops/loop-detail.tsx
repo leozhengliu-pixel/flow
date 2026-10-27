@@ -102,6 +102,8 @@ export function LoopDetail({
   const { loop, setLoop, missing } = useLoopRecord(data, loopId);
   const [expanded, setExpanded] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(() => new URLSearchParams(window.location.search).get("versions") === "1");
+  // "?versions=1&version=<id>" (a run's "Ran version N") opens with that version selected.
+  const [initialVersionId] = useState(() => new URLSearchParams(window.location.search).get("version") ?? undefined);
   // Published from the loop builder: keep its conversation docked while it finishes the reply.
   const [agentOpen, setAgentOpen] = useState(() => takeLoopAgentHandoff(loopId));
   const { run, picker, busy } = useRunLoop(data, loop, onNavigate);
@@ -316,6 +318,7 @@ export function LoopDetail({
         data={data}
         loop={loop}
         open={versionsOpen}
+        initialVersionId={initialVersionId}
         onNavigate={onNavigate}
         onOpenChange={(open) => {
           setVersionsOpen(open);
