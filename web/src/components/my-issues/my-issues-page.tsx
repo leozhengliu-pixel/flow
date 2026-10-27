@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { IssueRowActionsProvider } from './issue-row-actions'
-import { PAGED_GROUPINGS, PAGED_ORDERINGS, groupSummaries, labelGroups, pagedDisplayQuery } from '@/components/issue-explorer/issue-grouping'
+import { PAGED_GROUPINGS, PAGED_ORDERINGS, focusCasesKey, groupSummaries, labelGroups, pagedDisplayQuery } from '@/components/issue-explorer/issue-grouping'
 import { boundedIssueSequence } from '@/lib/navigation-context'
 import { PagedIssueList } from '@/components/issue-explorer/paged-issue-list'
 import { issueFiltersToQueryAst } from './my-issues-filter-types'
@@ -89,10 +89,12 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
       executeBulk: async (action, ids, value) => (await executeExplorerBulkAction({ action, ids, value, data, issuesById, onUpdateIssue, onUpdateIssues, onDeleteIssues }))?.map(issue => toRow(issue, workspaceSlug, data, issueMatchesView(issue, data, projectedView))),
     },
   })
+  // Focus buckets depend on the current cycles, triage teams and SLA risk: the query changes only when they do.
+  const focusKey = focusCasesKey(controller.display, data)
   const myIssuesPagedQuery = useMemo(() => {
-    const { sort, direction, groupBy, archived, conditions } = pagedDisplayQuery(controller.display)
-    return { archived, groupBy, sort, direction, filter: { and: [issueFiltersToQueryAst(controller.filters, { data: dataRef.current }), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : projectedView === 'shared' ? 'sharedWith' : 'assignee', values: [data.viewer.id] }, ...conditions] } }
-  }, [controller.display, controller.filters, data.viewer.id, projectedView])
+    const { sort, direction, groupBy, groupCases, archived, conditions } = pagedDisplayQuery(controller.display, Date.now(), [], focusKey ? dataRef.current : undefined)
+    return { archived, groupBy, groupCases, sort, direction, filter: { and: [issueFiltersToQueryAst(controller.filters, { data: dataRef.current }), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : projectedView === 'shared' ? 'sharedWith' : 'assignee', values: [data.viewer.id] }, ...conditions] } }
+  }, [controller.display, controller.filters, data.viewer.id, projectedView, focusKey])
 
   const addFilter = (field: MyIssuesFilterKey, option?: MyIssuesFilterOption) => {
     const fieldLabel = FILTER_LABELS[field]

@@ -31,7 +31,7 @@ import {
   issueHierarchyFields,
   issueToExplorerRow,
 } from "@/components/issue-explorer/issue-explorer-model";
-import { buildIssueGroups, groupMoveUpdate, groupSummaries, labelGroups, pagedDisplayQuery } from "@/components/issue-explorer/issue-grouping";
+import { buildIssueGroups, groupMoveUpdate, groupSummaries, focusCasesKey, labelGroups, pagedDisplayQuery } from "@/components/issue-explorer/issue-grouping";
 import { boundedIssueSequence } from "@/lib/navigation-context";
 import { MyIssuesBulkActionBar } from "@/components/my-issues/my-issues-bulk-action-bar";
 import { IssueRowActionsProvider } from "@/components/my-issues/issue-row-actions";
@@ -352,11 +352,12 @@ export function ProjectIssues({
   // Paged pages only hold a slice of the project, so rely on the server-side project summary total.
   const projectHasNoIssues = issueData?.issueCollectionPaged ? issueSummary?.total === 0 : projectIssues.length === 0;
   const showProjectIntro = !milestoneScope && projectHasNoIssues;
+  const focusKey = issueData ? focusCasesKey(display, issueData) : '';
   const pagedQuery = useMemo<IssueQueryInput>(() => {
-    const { sort, direction, groupBy, archived, conditions } = pagedDisplayQuery(display);
+    const { sort, direction, groupBy, groupCases, archived, conditions } = pagedDisplayQuery(display, Date.now(), [], focusKey ? issueDataRef.current : undefined);
     if (milestoneScope) conditions.push({ field: 'projectMilestoneId', values: [milestoneScope.id] });
-    return { projectId: project.id, archived, groupBy, sort, direction, filter: { and: [issueFiltersToQueryAst(filters, issueDataRef.current ? { data: issueDataRef.current } : undefined), ...conditions] } };
-  }, [project.id, milestoneScope, filters, display]);
+    return { projectId: project.id, archived, groupBy, groupCases, sort, direction, filter: { and: [issueFiltersToQueryAst(filters, issueDataRef.current ? { data: issueDataRef.current } : undefined), ...conditions] } };
+  }, [project.id, milestoneScope, filters, display, focusKey]);
   const visible = useMemo(
     () => applyExplorerFilters(projectIssues, filters, issueData),
     [filters, issueData, projectIssues],

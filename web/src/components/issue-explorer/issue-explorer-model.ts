@@ -14,6 +14,7 @@ import { teamStateChanges, teamWorkflowStates, workflowStatusOptions } from '@/l
 import { resolvedTeamSettings } from '@/lib/team-hierarchy'
 import { estimateOnTeamScale } from '@/lib/estimates'
 import { estimateBulkOptions } from '@/components/issue/estimate-menu'
+import { statusGroupIndex, type StatusGroupIndex } from '@/lib/status-groups'
 import { milestoneIssueProgress } from '@/components/issue/milestone-progress'
 import { buildIssueGroups, groupMoveUpdate, nestIssueRows } from './issue-grouping'
 import { confirmAction } from '@/components/ui/action-dialog-service'
@@ -336,6 +337,7 @@ export function explorerPropertyOptions(data: BootstrapData, issues = data.issue
   }
   return {
     status: [...scopedStates].sort((a, b) => (a.position??0) - (b.position??0)).map(state => ({ id: state.id, teamId: state.teamId, label: state.name, color: state.color, count: statusCounts.get(state.id) ?? 0, kind: 'status' as const, stateType: state.type })),
+    statusFilter: statusFilterOptions(data, scopedStates, statusCounts),
     priority: PRIORITIES.map(priority => ({ ...priority, count: priorityCounts.get(priority.id) ?? 0 })),
     // The Assignee filter lists people only; delegated agents are filtered under "Agent".
     assigneeFilter: [{ id: '', label: 'No assignee', count: noAssignee, kind: 'assignee' as const }, ...data.users.filter(user => user.active && !user.app).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: assigneeCounts.get(user.id) ?? 0, kind: 'assignee' as const }))],
@@ -369,6 +371,26 @@ export function explorerPropertyOptions(data: BootstrapData, issues = data.issue
   }
 }
 
+/**
+ * The Status filter's options: one per status group (`statusGroupIndex`: the same name and type across team
+ * workflows), so a team and its sub-teams offer one "Done". The option is the group's status in the list's own
+ * workflow (else its representative); `aliases` lists every status of the group, which the filter matches and
+ * which resolves a saved filter that stored another of them.
+ */
+function statusFilterOptions(data: BootstrapData, scopedStates: BootstrapData['states'], counts: Map<string, number>): MyIssuesFilterOption[] {
+  const groups = statusGroupIndex(data)
+  const scoped = new Set(scopedStates.map(state => state.id))
+  const options = new Map<string, MyIssuesFilterOption>()
+  for (const state of [...scopedStates].sort((a, b) => (a.position??0) - (b.position??0))) {
+    const members = groups.memberIds(state.id)
+    const id = members.find(member => scoped.has(member)) ?? state.id
+    if (options.has(id)) continue
+    const shown = id === state.id ? state : scopedStates.find(item => item.id === id) ?? state
+    options.set(id, { id, label: shown.name, color: shown.color, count: members.reduce((sum, member) => sum + (counts.get(member) ?? 0), 0), kind: 'status', stateType: shown.type, ...(members.length > 1 ? { aliases: members } : {}) })
+  }
+  return [...options.values()]
+}
+
 function incrementCount(counts: Map<string, number>, key: string, amount = 1) {
   counts.set(key, (counts.get(key) ?? 0) + amount)
 }
@@ -387,7 +409,8 @@ export function explorerFilterOptions(field: MyIssuesFilterKey, options: Explore
   if (field === 'ai') return [{id:'assigned-to-me',label:'assigned to me'},{id:'completed-last-month',label:'completed in the last month'},{id:'due-next-two-weeks',label:'due in the next 2 weeks'}]
   if (field === 'labels') return [{ id: '', label: 'No labels', kind: 'labels' as const }, ...options.labels]
   if (field === 'assignee') return options.assigneeFilter
-  if (field === 'status'||field==='agent'||field==='agentSession'||field==='creator'||field==='priority'||field==='relations'||field==='triageIntelligence'||field==='suggestedLabel'||field==='dates'||field==='projectMilestone'||field==='project'||field==='projectProperties'||field==='initiative'||field==='cycle'||field==='addedToCycle'||field==='releases'||field==='customers'||field==='subscribers'||field==='externalSource'||field==='autoClosed'||field==='content'||field==='links'||field==='template') return options[field]
+  if (field === 'status') return options.statusFilter
+  if (field==='agent'||field==='agentSession'||field==='creator'||field==='priority'||field==='relations'||field==='triageIntelligence'||field==='suggestedLabel'||field==='dates'||field==='projectMilestone'||field==='project'||field==='projectProperties'||field==='initiative'||field==='cycle'||field==='addedToCycle'||field==='releases'||field==='customers'||field==='subscribers'||field==='externalSource'||field==='autoClosed'||field==='content'||field==='links'||field==='template') return options[field]
 }
 
 /** Bulk action choices; with the selection's teams, the status choices are the ones their workflows can use. */
@@ -514,21 +537,26 @@ export function replaceExplorerRow(groups: MyIssuesGroupData[], row: MyIssuesRow
 export function applyExplorerFilters(issues: Issue[], filters: MyIssuesAppliedFilter[], data?: BootstrapData) {
   const workspaceSlug = data?.workspace.urlKey ?? ''
   const allIssues = data?.issues ?? issues
-  return issues.filter(issue => filters.every(filter => matchesExplorerFilter(issueToExplorerRow(issue, workspaceSlug, allIssues, data), filter)))
+  const statusGroups = data?.states.length ? statusGroupIndex(data) : undefined
+  return issues.filter(issue => filters.every(filter => matchesExplorerFilter(issueToExplorerRow(issue, workspaceSlug, allIssues, data), filter, Date.now(), statusGroups)))
 }
 
-export function matchesExplorerFilter(issue: MyIssuesRowData, filter: MyIssuesAppliedFilter, now = Date.now()): boolean {
-  if (filter.field === 'advanced') return matchesAdvancedGroup(issue, advancedFilterTree(filter), now)
+/**
+ * Whether a row matches a filter. With the workspace's status groups a Status value matches every status of its
+ * group (the same name and type in another team's workflow), as the Status filter offers them.
+ */
+export function matchesExplorerFilter(issue: MyIssuesRowData, filter: MyIssuesAppliedFilter, now = Date.now(), statusGroups?: StatusGroupIndex): boolean {
+  if (filter.field === 'advanced') return matchesAdvancedGroup(issue, advancedFilterTree(filter), now, statusGroups)
   const values = filterValues(filter).map(value => value.value)
   // "include all of" / "exclude if all": every value must match on its own.
   if (filter.operator === 'includesAll' || filter.operator === 'excludesAll') {
-    const all = values.length > 0 && values.every(value => matchesExplorerFilter(issue, { ...filter, operator: 'is', value, values: [{ value, valueLabel: value }] }, now))
+    const all = values.length > 0 && values.every(value => matchesExplorerFilter(issue, { ...filter, operator: 'is', value, values: [{ value, valueLabel: value }] }, now, statusGroups))
     return filter.operator === 'includesAll' ? all : !all
   }
   const comparison = filter.operator === 'before' || filter.operator === 'after' ? filter.operator : undefined
   let matched = true
   if (filter.field === 'priority') matched = values.includes(String(issue.priority))
-  else if (filter.field === 'status') matched = values.includes(issue.state.id) || values.includes(issue.state.type)
+  else if (filter.field === 'status') matched = values.includes(issue.state.id) || values.includes(issue.state.type) || Boolean(statusGroups && values.some(value => statusGroups.memberIds(value).includes(issue.state.id)))
   // Older saved filters may hold an agent under Assignee: it matches the issues delegated to it (agents are never assignees).
   else if (filter.field === 'assignee') matched = values.includes(issue.assignee?.id ?? '') || Boolean(issue.delegate && values.includes(issue.delegate.id))
   else if (filter.field === 'agent') matched = values.includes('*') ? Boolean(issue.delegate) : values.includes(issue.delegate?.id ?? '')
@@ -562,10 +590,10 @@ export function matchesExplorerFilter(issue: MyIssuesRowData, filter: MyIssuesAp
 }
 
 /** AND / OR over the tree; empty groups and value-less conditions do not constrain. */
-export function matchesAdvancedGroup(issue: MyIssuesRowData, group: AdvancedFilterGroup, now = Date.now()): boolean {
+export function matchesAdvancedGroup(issue: MyIssuesRowData, group: AdvancedFilterGroup, now = Date.now(), statusGroups?: StatusGroupIndex): boolean {
   const results = group.items.flatMap(item => isAdvancedGroup(item)
-    ? (item.items.length ? [matchesAdvancedGroup(issue, item, now)] : [])
-    : (item.values.length ? [matchesExplorerFilter(issue, conditionAsFilter(item), now)] : []))
+    ? (item.items.length ? [matchesAdvancedGroup(issue, item, now, statusGroups)] : [])
+    : (item.values.length ? [matchesExplorerFilter(issue, conditionAsFilter(item), now, statusGroups)] : []))
   if (!results.length) return true
   return group.conjunction === 'or' ? results.some(Boolean) : results.every(Boolean)
 }

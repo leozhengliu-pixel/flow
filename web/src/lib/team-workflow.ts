@@ -1,4 +1,5 @@
 import type { BootstrapData, WorkflowState, WorkflowStateType } from '@/types/flow'
+import { statusGroupId } from '@/lib/status-groups'
 
 export type WorkflowData = Pick<BootstrapData, 'states'> & Partial<Pick<BootstrapData, 'teamSettings'>>
 
@@ -44,13 +45,21 @@ export function teamHasWorkflowState(data: WorkflowData, teamId: string, stateId
 
 /**
  * The status a new issue in the team starts in: the first candidate the team's workflow
- * has, else the team default — never another team's status. Before any statuses have
- * loaded the first candidate is kept, so it can be checked once they arrive.
+ * has, or the team's status of the same name and type (a merged status group of another
+ * workflow), else the team default — never another team's status. Before any statuses
+ * have loaded the first candidate is kept, so it can be checked once they arrive.
  */
 export function teamStateIdFor(data: WorkflowData, teamId: string, ...candidates: (string | undefined)[]): string {
   const states = teamWorkflowStates(data, teamId)
   if (!states.length) return (data.states.length ? undefined : candidates.find(Boolean)) ?? ''
-  return candidates.find(id => id && states.some(state => state.id === id)) ?? teamDefaultState(data, teamId, states)?.id ?? ''
+  for (const id of candidates) {
+    if (!id) continue
+    if (states.some(state => state.id === id)) return id
+    const other = data.states.find(state => state.id === id)
+    const equivalent = other && states.find(state => !state.reserved && statusGroupId(state) === statusGroupId(other))
+    if (equivalent) return equivalent.id
+  }
+  return teamDefaultState(data, teamId, states)?.id ?? ''
 }
 
 /** The first of the teams whose workflow has the status, so a status preset picks a team it is valid for. */
@@ -64,10 +73,10 @@ export function teamForWorkflowState(data: WorkflowData, teamIds: readonly strin
  */
 export function teamEquivalentState(data: WorkflowData, teamId: string, state: Pick<WorkflowState, 'id' | 'name' | 'type'>): WorkflowState | undefined {
   const states = teamWorkflowStates(data, teamId)
-  const name = state.name.trim().toLowerCase()
+  const group = statusGroupId(state)
   const ofType = states.filter(item => item.type === state.type)
   return states.find(item => item.id === state.id)
-    ?? ofType.find(item => !item.reserved && item.name.trim().toLowerCase() === name)
+    ?? ofType.find(item => !item.reserved && statusGroupId(item) === group)
     ?? ofType.find(item => !item.reserved)
     ?? ofType[0]
 }

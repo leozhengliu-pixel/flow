@@ -6,6 +6,8 @@ import { MyIssuesGroupHeader, MyIssuesRow, type MyIssuesGroupData, type MyIssues
 import { issueToExplorerRow } from './issue-explorer-model'
 import { nestedIssuePage, nestedPageLines } from './paged-issue-cache'
 import { teamEquivalentState } from '@/lib/team-workflow'
+import { focusGroupDescriptor } from './issue-grouping'
+import { pagedGroupQuery, pagedStatusGroups } from './paged-issue-groups'
 import { issueListState, pagedIssueListSignature, retainIssueList, trimPagedIssueListCache, type IssueListGroup } from './paged-issue-list-cache'
 import { ISSUE_QUERY_INVALIDATED, issueMayMatchQuery, queryUsesLabels, type IssueQueryInvalidation } from './paged-issue-invalidation'
 import styles from '@/components/my-issues/my-issues-list.module.css'
@@ -104,16 +106,18 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
     const refreshing = !changed && cache.retainedEntities > 0 && groupsRef.current.length > 0
     const firstGroup = refreshing ? undefined
       : !changed && groupsRef.current.length ? groupsRef.current[0].value
-      : initialQuery.groupBy === 'none' ? 'all' : initialQuery.groupBy === 'status' || !initialQuery.groupBy ? stateOrderRef.current[0]?.id : undefined
+      : initialQuery.groupBy === 'none' ? 'all' : initialQuery.groupBy === 'status' || !initialQuery.groupBy ? pagedStatusGroups(stateOrderRef.current.map(state => ({ value: state.id, count: 1 })), dataRef.current)[0]?.value : undefined
     // The common status/all-issues first page does not have to wait for counts.
-    const prefetched = firstGroup === undefined ? undefined : fetchIssuePage({ ...initialQuery, groupValue: firstGroup, limit: PAGE_SIZE, includeTotal: false }, request.abort.signal)
+    const prefetched = firstGroup === undefined ? undefined : fetchIssuePage({ ...pagedGroupQuery(initialQuery, firstGroup, dataRef.current), limit: PAGE_SIZE, includeTotal: false }, request.abort.signal)
     // A rejected speculative page is handled after groups resolve, never as an
     // unhandled rejection while the slower aggregate query is still pending.
     const firstPage = prefetched?.then(page => ({ page }), error => ({ error }))
     void listIssueRecordGroups(initialQuery, request.abort.signal).then(async result => {
       if (request.abort.signal.aborted) return
       const previous = refreshing ? new Map(groupsRef.current.map(group => [group.value, group])) : undefined
-      const groups = result.groups.map(group => {
+      // Statuses several team workflows share are one group; Focus cases come back in their own order.
+      const serverGroups = queryRef.current.groupBy === 'status' || !queryRef.current.groupBy ? pagedStatusGroups(result.groups, dataRef.current) : result.groups
+      const groups = serverGroups.map(group => {
         const before = previous?.get(group.value)
         const loaded = before ? Math.min(before.loaded, group.count) : 0
         return { ...group, loaded, hasMore: before ? before.hasMore && loaded < group.count : group.count > 0 }
@@ -124,10 +128,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
         const names = new Map((dataRef.current.customers ?? []).map(customer => [customer.id, customer.name]))
         groups.sort((a, b) => rank(a.value) - rank(b.value) || (names.get(a.value) ?? '').localeCompare(names.get(b.value) ?? ''))
       }
-      if (queryRef.current.groupBy === 'status') {
-        const order = new Map(stateOrderRef.current.map((state, index) => [state.id, index]))
-        groups.sort((a, b) => (order.get(a.value) ?? 999) - (order.get(b.value) ?? 999))
-      }
+      if (queryRef.current.groupBy === 'cases') groups.sort((a, b) => Number(focusGroupDescriptor(a.value).rank) - Number(focusGroupDescriptor(b.value).rank))
       if (refreshing) {
         cache.retainGroups(new Set(groups.map(group => group.value)))
         staleKeys.current = new Set(cache.pageKeys())
@@ -143,7 +144,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
       if (first) {
         const prefetched = first.value === firstGroup ? await firstPage : undefined
         if (prefetched && 'error' in prefetched) throw prefetched.error
-        page = prefetched?.page ?? await fetchIssuePage({ ...initialQuery, groupValue: first.value, limit: PAGE_SIZE, includeTotal: false }, request.abort.signal)
+        page = prefetched?.page ?? await fetchIssuePage({ ...pagedGroupQuery(initialQuery, first.value, dataRef.current), limit: PAGE_SIZE, includeTotal: false }, request.abort.signal)
       }
       if (request.abort.signal.aborted) return
       cache.clear(); staleKeys.current.clear()
@@ -205,7 +206,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
     if (!request || !request.ready || request.signature !== signature || request.abort.signal.aborted || request.pending.has(key) || !cache.hasCursor(group, pageIndex)) return
     request.pending.add(key)
     const cursor = cache.cursors.get(key)
-    void fetchIssuePage({ ...queryRef.current, groupValue: group, cursor, limit: PAGE_SIZE, includeTotal: false }, request.abort.signal).then(page => {
+    void fetchIssuePage({ ...pagedGroupQuery(queryRef.current, group, dataRef.current), cursor, limit: PAGE_SIZE, includeTotal: false }, request.abort.signal).then(page => {
       if (request.abort.signal.aborted) return
       cache.put(group, pageIndex, page, cursor)
       recordsRef.current?.(cache.records())
@@ -221,7 +222,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
     if (!request || !request.ready || request.signature !== signature || request.abort.signal.aborted || request.pending.has(key) || !staleKeys.current.has(key)) return
     request.pending.add(key)
     const cursor = cache.cursors.get(key)
-    void fetchIssuePage({ ...queryRef.current, groupValue: group, cursor, limit: PAGE_SIZE, includeTotal: false }, request.abort.signal).then(page => {
+    void fetchIssuePage({ ...pagedGroupQuery(queryRef.current, group, dataRef.current), cursor, limit: PAGE_SIZE, includeTotal: false }, request.abort.signal).then(page => {
       if (request.abort.signal.aborted) return
       staleKeys.current.delete(key)
       const previousLength = cache.get(group, pageIndex)?.items.length
@@ -238,6 +239,10 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
   }, [cache, signature, updateGroups])
   const descriptor = useCallback((group: Group): MyIssuesGroupData => {
     const field = query.groupBy ?? 'status'
+    if (field === 'cases') {
+      const { rank: _rank, ...focus } = focusGroupDescriptor(group.value, { cycles: data.cycles })
+      return { ...focus, issues: [], totalCount: group.count }
+    }
     const state = field === 'status' ? data.states.find(state => state.id === group.value) : undefined
     const label = state?.name ?? (field === 'none' ? 'All issues' : field === 'priority' ? ['No priority', 'Urgent', 'High', 'Medium', 'Low'][Number(group.value)] : field === 'assignee' || field === 'creator' ? data.users.find(user => user.id === group.value)?.displayName : field === 'project' ? data.projects.find(project => project.id === group.value)?.name : field === 'team' ? data.teams.find(team => team.id === group.value)?.name : field === 'cycle' ? data.cycles.find(cycle => cycle.id === group.value)?.name : field === 'label' ? data.labels.find(label => label.id === group.value)?.name : field === 'milestone' ? data.projects.flatMap(project => project.milestones ?? []).find(milestone => milestone.id === group.value)?.name : field === 'customer' ? (group.value === UNKNOWN_CUSTOMER_GROUP ? 'Unknown customer' : group.value ? data.customers?.find(customer => customer.id === group.value)?.name ?? 'Unknown customer' : 'No customer') : undefined) ?? (group.value || `No ${field}`)
     return { id: group.value, label, state, stateType: state?.type, issues: [], totalCount: group.count, createContext: state ? { stateId: state.id } : field === 'priority' ? { priority: Number(group.value) as 0|1|2|3|4 } : field === 'project' ? { projectId: group.value } : field === 'assignee' ? { assigneeId: group.value } : field === 'team' ? { teamId: group.value } : field === 'cycle' ? { cycleId: group.value } : field === 'label' ? { labelIds: group.value ? [group.value] : [] } : undefined }
@@ -334,11 +339,14 @@ function issueQueryChanged(before: Issue, after: Issue, query: IssueQueryInput) 
     const filter = node as Record<string, unknown>
     if (typeof filter.field === 'string') fields.add(({ assigneeId: 'assignee', creatorId: 'creator', projectId: 'project', labelId: 'labels', cycleId: 'cycle' } as Record<string, string>)[filter.field] ?? filter.field)
     for (const key of ['and','or']) { const children = filter[key]; if (Array.isArray(children)) children.forEach(visit) }
+    visit(filter.not)
   }
   visit(query.filter)
+  // Focus cases: a change of what decides an issue's bucket moves it to another group.
+  if (query.groupBy === 'cases') { fields.delete('cases'); for (const item of query.groupCases ?? []) visit(item.filter) }
   if (before.archivedAt !== after.archivedAt || before.team.id !== after.team.id) return true
   if (query.projectId && before.project?.id !== after.project?.id || query.stateId && before.state.id !== after.state.id) return true
-  const value = (issue: Issue, field: string | undefined) => field === 'status' ? issue.state.id : field === 'project' ? issue.project?.id : field === 'assignee' ? issue.assignee?.id : field === 'creator' ? issue.creator.id : field === 'cycle' ? issue.cycleId : field === 'label' || field === 'labels' ? (issue.labels ?? []).map(label => label.id).sort().join(',') : field === 'parent' ? issue.parentId : field ? issue[field as keyof Issue] : undefined
+  const value = (issue: Issue, field: string | undefined) => field === 'status' ? issue.state.id : field === 'statusType' ? issue.state.type : field === 'team' ? issue.team.id : field === 'delegateId' ? issue.delegate?.id : field?.startsWith('relation:') ? (issue.relations ?? []).filter(relation => relation.type === field.slice(9)).length : field === 'project' ? issue.project?.id : field === 'assignee' ? issue.assignee?.id : field === 'creator' ? issue.creator.id : field === 'cycle' ? issue.cycleId : field === 'label' || field === 'labels' ? (issue.labels ?? []).map(label => label.id).sort().join(',') : field === 'parent' ? issue.parentId : field ? issue[field as keyof Issue] : undefined
   return [...fields].some(field => value(before, field) !== value(after, field)) || Boolean(query.q && (before.title !== after.title || before.description !== after.description))
 }
 

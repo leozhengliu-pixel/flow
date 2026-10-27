@@ -130,8 +130,10 @@ export function toggleFilterOption(filters: MyIssuesAppliedFilter[], field: MyIs
     return filters.map(filter => filter.id === existing.id ? { ...replacement, id: existing.id } : filter)
   }
   const current = filterValues(existing)
-  const values = current.some(value => value.value === option.id)
-    ? current.filter(value => value.value !== option.id)
+  // An option stands for its aliases too (a merged status group): any of them selects it, and unselecting drops them all.
+  const means = new Set([option.id, ...option.aliases ?? []])
+  const values = current.some(value => means.has(value.value))
+    ? current.filter(value => !means.has(value.value))
     : [...current, { value: option.id, valueLabel: option.label, color: option.color }]
   if (!values.length) return filters.filter(filter => filter.id !== existing.id)
   const first = values[0]

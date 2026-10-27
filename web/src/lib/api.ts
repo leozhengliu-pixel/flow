@@ -433,6 +433,10 @@ export type IssueQueryInput = {
   direction?: "asc" | "desc";
   groupBy?: string;
   groupValue?: string;
+  /** One group of several status IDs (a status that several team workflows share), instead of `groupValue`. */
+  groupValues?: string[];
+  /** `groupBy: 'cases'`: each row is in the group of the first case whose filter it matches (the Focus buckets). */
+  groupCases?: { value: string; filter: Record<string, unknown> }[];
   includeTotal?: boolean;
   includeStatusHistory?: boolean;
   /** Nested sub-issues: sub-issues whose parent matches come with the parent's page (`descendants`), not as rows of their own. */
@@ -444,7 +448,7 @@ export function listIssueRecords(filters: IssueQueryInput = {}, signal?: AbortSi
   params.set('projection', 'list')
   for (const [key, value] of Object.entries(filters)) {
     if (value === undefined) continue
-    params.set(key, key === 'filter' ? JSON.stringify(value) : Array.isArray(value) ? value.join(',') : String(value))
+    params.set(key, key === 'filter' || key === 'groupCases' ? JSON.stringify(value) : Array.isArray(value) ? value.join(',') : String(value))
   }
   return request<IssueQueryPage>(`/api/issue-records?${params}`, { signal, ...(workspaceKey ? { headers: { 'X-Workspace-Key': workspaceKey } } : {}) })
 }
@@ -466,8 +470,8 @@ export function listProjectRecords(filters: ProjectQueryInput = {}, signal?: Abo
 export function listIssueRecordGroups(filters: IssueQueryInput, signal?: AbortSignal): Promise<{ groups: { value: string; count: number }[] }> {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(filters)) {
-    if (value === undefined || key === 'cursor' || key === 'groupValue') continue
-    params.set(key, key === 'filter' ? JSON.stringify(value) : Array.isArray(value) ? value.join(',') : String(value))
+    if (value === undefined || key === 'cursor' || key === 'groupValue' || key === 'groupValues') continue
+    params.set(key, key === 'filter' || key === 'groupCases' ? JSON.stringify(value) : Array.isArray(value) ? value.join(',') : String(value))
   }
   return request(`/api/issue-records/groups?${params}`, { signal })
 }
