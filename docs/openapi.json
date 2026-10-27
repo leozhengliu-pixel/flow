@@ -21098,6 +21098,31 @@
         "x-flow-source": "oauth_platform.go"
       }
     },
+    "/api/oauth/authorized-applications/mcp": {
+      "delete": {
+        "operationId": "delete_oauth_authorized_applications_mcp",
+        "tags": [
+          "oauth"
+        ],
+        "summary": "DELETE /api/oauth/authorized-applications/mcp",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "oauth_platform.go"
+      }
+    },
     "/api/oauth/installation": {
       "get": {
         "operationId": "get_oauth_installation",

@@ -34,6 +34,7 @@ func (s *server) registerOAuthPlatformRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/oauth-applications/{id}/developer-token", s.getApplicationDeveloperToken)
 	mux.HandleFunc("GET /api/oauth-applications/{id}/webhook/secret", s.getApplicationWebhookSecret)
 	mux.HandleFunc("GET /api/oauth/authorized-applications", s.listAuthorizedApplications)
+	mux.HandleFunc("DELETE /api/oauth/authorized-applications/mcp", s.revokeMCPAuthorizations)
 	mux.HandleFunc("GET /api/oauth/installation", s.oauthConsentInstallation)
 	mux.HandleFunc("POST /api/oauth-applications/icon", s.uploadOAuthApplicationIcon)
 }

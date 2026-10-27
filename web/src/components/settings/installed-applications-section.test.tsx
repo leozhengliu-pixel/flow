@@ -8,7 +8,7 @@ import { makeBootstrap, viewer } from '@/test/fixtures'
 import { InstalledApplicationPage, InstalledApplicationsPage } from './installed-applications-section'
 
 const apps = vi.hoisted(() => ({ listApplications: vi.fn(), uninstallApplication: vi.fn(), saveApplication: vi.fn() }))
-const api = vi.hoisted(() => ({ fetchAuthorizedApplications: vi.fn(), revokeOAuthAuthorization: vi.fn() }))
+const api = vi.hoisted(() => ({ fetchAuthorizedApplications: vi.fn(), revokeOAuthAuthorization: vi.fn(), revokeMCPAccess: vi.fn() }))
 const dialogs = vi.hoisted(() => ({ confirmAction: vi.fn() }))
 const toasts = vi.hoisted(() => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 vi.mock('@/lib/application-agents', () => apps)
@@ -19,6 +19,15 @@ vi.mock('@/lib/toast', () => toasts)
 const authorization = { id: 'auth-1', clientId: 'client_a', clientName: 'Deploy bot', userId: viewer.id, scopes: ['read', 'write'], createdAt: '2026-10-13T12:00:00Z' }
 const installation = { id: 'installation_a', workspaceKey: 'workspace', clientId: 'client_b', name: 'Triage agent', userId: 'app-user', installedBy: viewer.id, scopes: ['read', 'app:assignable'], teamIds: [], allPublicTeams: true, builtin: false, active: true, createdAt: '2026-10-13T12:00:00Z', updatedAt: '2026-10-13T12:00:00Z' }
 const data = makeBootstrap({ viewerRole: 'admin' })
+const mcpAuthorization = { id: 'mcp-1', clientId: 'flow_mcp_claude', clientName: 'Claude', userId: viewer.id, scopes: ['read'], createdAt: '2026-10-20T12:00:00Z', lastUsedAt: '2026-10-22T12:00:00Z' }
+const other = data.users.find(user => user.id !== viewer.id)!
+const mcpEntry = {
+  clientId: 'mcp', kind: 'mcp' as const, name: 'MCP', developerName: 'Flow', developerUrl: 'https://flow.example.test',
+  clientIds: ['flow_mcp_claude', 'flow_mcp_cursor'],
+  authorizations: [mcpAuthorization, { ...mcpAuthorization, id: 'mcp-2', clientId: 'flow_mcp_cursor', clientName: 'Cursor', userId: other.id, scopes: ['read', 'write'], createdAt: '2026-10-21T12:00:00Z', lastUsedAt: undefined }],
+  members: [{ userId: viewer.id, authorizedAt: '2026-10-20T12:00:00Z', lastUsedAt: '2026-10-22T12:00:00Z', scopes: ['read'] }, { userId: other.id, authorizedAt: '2026-10-21T12:00:00Z', scopes: ['read', 'write'] }],
+  permissions: [{ scope: 'read', activelyUsed: true }, { scope: 'write', activelyUsed: false }],
+}
 
 function Where() {
   return <output data-testid="where">{useLocation().pathname}</output>
@@ -66,6 +75,34 @@ describe('InstalledApplicationsPage', () => {
     expect(row('Deploy bot').querySelector('.oauth-app-avatar.is-placeholder .oauth-icon-placeholder')).not.toBeNull()
     expect(within(row('Uploaded')).getByRole('img', { name: 'Uploaded' })).toHaveAttribute('src', 'https://cdn.example.test/u.png')
     expect(row('Cursor').querySelector('.oauth-app-avatar')).toHaveStyle({ width: '32px', height: '32px' })
+  })
+
+  it('lists every MCP client as one "MCP" application by Flow next to other applications', async () => {
+    const user = userEvent.setup()
+    api.fetchAuthorizedApplications.mockResolvedValue([mcpEntry, { clientId: 'client_a', name: 'Deploy bot', authorizations: [authorization] }])
+    apps.listApplications.mockResolvedValue([])
+    renderAt(<InstalledApplicationsPage data={data}/>)
+    const row = (await screen.findByText('MCP')).closest('a') as HTMLElement
+    expect(within(row).getByText('Authorized by 2 members')).toBeVisible()
+    expect(within(row).getByRole('img', { name: 'Flow' })).toHaveClass('is-flow')
+    expect(screen.getAllByRole('link').map(link => link.textContent)).toEqual(['MCPAuthorized by 2 members', 'Deploy botAuthorized by 1 member'])
+    expect(screen.queryByText('Claude')).toBeNull()
+    await user.click(row)
+    expect(screen.getByTestId('where')).toHaveTextContent('/workspace/settings/applications/mcp')
+  })
+
+  it('folds a member\'s own MCP authorizations into "MCP" (singular count)', async () => {
+    const member = makeBootstrap({ viewerRole: 'member', oauthAuthorizations: [
+      { ...mcpAuthorization, id: 'own-1' },
+      { ...mcpAuthorization, id: 'own-2', clientId: 'flow_mcp_cursor', clientName: 'Cursor' },
+      authorization,
+    ] })
+    renderAt(<InstalledApplicationsPage data={member}/>)
+    const row = (await screen.findByText('MCP')).closest('a') as HTMLElement
+    expect(within(row).getByText('Authorized by 1 member')).toBeVisible()
+    expect(screen.getByText('Deploy bot')).toBeVisible()
+    expect(screen.queryByText('Cursor')).toBeNull()
+    expect(api.fetchAuthorizedApplications).not.toHaveBeenCalled()
   })
 
   it('shows the reference app\'s empty state', async () => {
@@ -138,6 +175,48 @@ describe('InstalledApplicationPage', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Confirm' }))
     await waitFor(() => expect(apps.saveApplication).toHaveBeenCalledWith('workspace', expect.objectContaining({ id: 'installation_a', allPublicTeams: true, teamIds: ['team-secret'] })))
     expect(toasts.toast.success).toHaveBeenCalledWith('Team access updated', { description: 'The application’s team access has been updated.' })
+  })
+
+  it('shows "MCP" by Flow with its website, used permissions and members, and revokes every MCP client at once', async () => {
+    const user = userEvent.setup()
+    dialogs.confirmAction.mockResolvedValue(true)
+    api.fetchAuthorizedApplications.mockResolvedValue([mcpEntry])
+    api.revokeMCPAccess.mockResolvedValue({ revoked: 2 })
+    const onReload = vi.fn().mockResolvedValue(undefined)
+    renderAt(<InstalledApplicationPage data={data} clientId="mcp" onReload={onReload}/>)
+    expect(await screen.findByRole('heading', { name: 'MCP' })).toBeVisible()
+    expect(screen.getByText('by Flow')).toBeVisible()
+    expect(document.querySelector('.oauth-app-page-header .oauth-app-avatar.is-flow')).toHaveStyle({ width: '48px', height: '48px' })
+    expect(screen.getByText('Developer website')).toBeVisible()
+    expect(screen.getByText('https://flow.example.test')).toBeVisible()
+    const rows = [...document.querySelectorAll('.oauth-app-permission')].map(row => row.textContent)
+    expect(rows).toEqual(['Read access to your workspaceActively used', 'Write access to your workspace'])
+    const members = [...document.querySelectorAll('.oauth-app-member')]
+    expect(members).toHaveLength(2)
+    expect(members[0]).toHaveTextContent('Authorized on Oct 20 · Last used on Oct 22')
+    expect(members[1]).toHaveTextContent('Authorized on Oct 21')
+    expect(members[1]).not.toHaveTextContent('Last used')
+    await user.click(screen.getByRole('button', { name: 'Open menu' }))
+    expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Revoke access'])
+    await user.click(screen.getByRole('menuitem', { name: 'Revoke access' }))
+    expect(dialogs.confirmAction).toHaveBeenCalledWith('Revoke access for "MCP"?', expect.objectContaining({ confirmLabel: 'Revoke', danger: true }))
+    await waitFor(() => expect(api.revokeMCPAccess).toHaveBeenCalledTimes(1))
+    expect(api.revokeOAuthAuthorization).not.toHaveBeenCalled()
+    expect(toasts.toast.success).toHaveBeenCalledWith('Tokens revoked', { description: 'The tokens for "MCP" have been revoked.' })
+    expect(onReload).toHaveBeenCalled()
+  })
+
+  it('opens "MCP" from an MCP client\'s own link, and lets a member revoke their own MCP access', async () => {
+    const user = userEvent.setup()
+    dialogs.confirmAction.mockResolvedValue(true)
+    api.revokeMCPAccess.mockResolvedValue({ revoked: 1 })
+    const member = makeBootstrap({ viewerRole: 'member', oauthAuthorizations: [mcpAuthorization] })
+    renderAt(<InstalledApplicationPage data={member} clientId="flow_mcp_claude" onReload={vi.fn().mockResolvedValue(undefined)}/>)
+    expect(await screen.findByRole('heading', { name: 'MCP' })).toBeVisible()
+    expect(screen.getByText(window.location.origin)).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Open menu' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Revoke access' }))
+    await waitFor(() => expect(api.revokeMCPAccess).toHaveBeenCalledTimes(1))
   })
 
   it('does nothing when the confirmation is cancelled', async () => {

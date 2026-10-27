@@ -1010,7 +1010,17 @@ export interface AuthorizedApplication {
   realtime?: boolean;
   /** The client's registered redirect URIs: recognise well-known clients (Claude, Cursor, …) for their logo. */
   redirectUris?: string[];
+  /** "mcp" for the one entry that folds every MCP client (Claude, Cursor, …) members authorized. */
+  kind?: 'mcp';
+  /** The "mcp" entry's folded MCP client IDs. */
+  clientIds?: string[];
+  /** The "mcp" entry per authorizing member: first authorization and last use across their MCP clients. */
+  members?: AuthorizedApplicationMember[];
+  /** The "mcp" entry's granted scopes (the union across its authorizations), each marked when used recently. */
+  permissions?: AuthorizedApplicationPermission[];
 }
+export interface AuthorizedApplicationMember { userId: string; authorizedAt: string; lastUsedAt?: string; scopes: string[] }
+export interface AuthorizedApplicationPermission { scope: string; activelyUsed: boolean }
 export function fetchAuthorizedApplications(signal?: AbortSignal): Promise<AuthorizedApplication[]> {
   return request('/api/oauth/authorized-applications', { signal })
 }
@@ -1067,6 +1077,10 @@ export function decideOAuthAuthorization(input: {
 }
 export function revokeOAuthAuthorization(id: string): Promise<void> {
   return request(`/api/oauth/authorizations/${id}`, { method: "DELETE" });
+}
+/** Revokes MCP access: every MCP client's authorizations and tokens (an admin's: every member's; otherwise the viewer's own). */
+export function revokeMCPAccess(): Promise<{ revoked: number }> {
+  return request("/api/oauth/authorized-applications/mcp", { method: "DELETE" });
 }
 export function fetchIntegrations(): Promise<IntegrationConnection[]> {
   return request("/api/integrations");

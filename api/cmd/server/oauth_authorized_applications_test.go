@@ -6,11 +6,10 @@ import (
 	"testing"
 )
 
-// TestAuthorizedApplicationsExposeDynamicClientRedirectURIs: a dynamically
-// registered MCP client (here one calling itself "Claude" with claude.ai's
-// callback) is listed with its registered redirect URIs, which the web app
-// uses to recognise well-known clients and show their logo.
-func TestAuthorizedApplicationsExposeDynamicClientRedirectURIs(t *testing.T) {
+// TestAuthorizedApplicationsFoldDynamicClient: a dynamically registered MCP
+// client (here one calling itself "Claude" with claude.ai's callback) is not
+// listed on its own: it is folded into the single "MCP" entry.
+func TestAuthorizedApplicationsFoldDynamicClient(t *testing.T) {
 	_, host, admin, data := applicationHTTPFixture(t)
 	workspace := data.Workspace.URLKey
 	redirects := []string{"https://claude.ai/api/mcp/auth_callback", "https://claude.com/api/mcp/auth_callback"}
@@ -24,8 +23,11 @@ func TestAuthorizedApplicationsExposeDynamicClientRedirectURIs(t *testing.T) {
 		t.Fatalf("authorization = %v", decision)
 	}
 	listed := authRequest[[]authorizedApplication](t, admin, "GET", host.URL+"/api/oauth/authorized-applications", nil, workspace, 200)
-	index := slices.IndexFunc(listed, func(item authorizedApplication) bool { return item.ClientID == registered.ClientID })
-	if index < 0 || listed[index].Name != "Claude" || !slices.Equal(listed[index].RedirectURIs, redirects) {
+	if slices.ContainsFunc(listed, func(item authorizedApplication) bool { return item.ClientID == registered.ClientID }) {
+		t.Fatalf("MCP client listed on its own: %+v", listed)
+	}
+	index := slices.IndexFunc(listed, func(item authorizedApplication) bool { return item.ClientID == mcpApplicationID })
+	if index < 0 || listed[index].Name != "MCP" || !slices.Equal(listed[index].ClientIDs, []string{registered.ClientID}) || len(listed[index].Members) != 1 {
 		t.Fatalf("authorized applications = %+v", listed)
 	}
 }

@@ -496,6 +496,19 @@ Flow's settings pages:
   admins may revoke other members' authorizations with
   `DELETE /api/oauth/authorizations/{id}`); the app user's own menu removes the
   installation.
+- **MCP** is one entry in that list, however many MCP clients (Claude, Cursor,
+  ChatGPT, …) members connected: every user authorization of a dynamically
+  registered client (`POST /oauth/register`, client IDs `flow_mcp_…`) that is
+  not installed as an app user is folded into it (`clientId: "mcp"`,
+  `kind: "mcp"`, with the folded `clientIds`). Its page
+  (`/<workspace>/settings/applications/mcp`; a folded client's own link opens it
+  too) shows "MCP" by Flow, Flow's website (`FLOW_APP_URL`), the union of the
+  granted permissions — "Actively used" when an authorization granting it was
+  used in the last 30 days — and each authorizing member with their first
+  authorization and last use across their MCP clients. **Revoke access** calls
+  `DELETE /api/oauth/authorized-applications/mcp`, which revokes every MCP
+  client's authorizations and tokens: every member's for owners and admins,
+  the caller's own for anyone else.
 
 ## Developer tokens
 

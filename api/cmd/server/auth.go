@@ -177,7 +177,7 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 }
 
 func apiKeyRestrictedPersonalPath(path string) bool {
-	if path == "/api/oauth/authorization-request" || strings.HasPrefix(path, "/api/oauth/authorizations/") {
+	if path == "/api/oauth/authorization-request" || strings.HasPrefix(path, "/api/oauth/authorizations/") || strings.HasPrefix(path, "/api/oauth/authorized-applications/") {
 		return true
 	}
 	if strings.HasPrefix(path, "/api/application-policies/") && (strings.HasSuffix(path, "/oauth/start") || strings.HasSuffix(path, "/headers") || strings.HasSuffix(path, "/connect")) {
