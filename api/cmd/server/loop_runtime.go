@@ -779,6 +779,7 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 		return nil
 	}
 	toolCalls, corrections := 0, 0
+	recovery := newLoopTurnRecovery(limits)
 	for turnIndex := 0; ; turnIndex++ {
 		final := turnIndex >= limits.MaxTurns
 		if final {
@@ -800,13 +801,15 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 			}
 			return callErr
 		})
-		rec.timing.ModelMs += time.Since(modelStarted).Milliseconds()
+		modelWait := time.Since(modelStarted)
+		rec.timing.ModelMs += modelWait.Milliseconds()
 		rec.timing.ModelTurns++
 		rec.addRetries(retries)
 		if rec.noTools {
 			turn.ToolCalls = nil
 		}
 		if err != nil {
+			rec.recordModelTurn(turnIndex, turn, loopTurnReading{}, modelWait, retries, err, "")
 			rec.setOutputNow(strings.TrimSpace(output))
 			if ctx.Err() != nil {
 				return err
@@ -822,6 +825,25 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 		}
 		if final {
 			turn.ToolCalls = nil
+		}
+		// A turn the run cannot act on (cut off, reasoning only, empty, unreadable) gets a bounded, targeted
+		// continuation, then ends the run with what went wrong. The last, tool-less turn is the summary.
+		reading := readLoopTurn(turn)
+		continuation := ""
+		nothingDone := strings.TrimSpace(output) == "" && rec.toolCount() == 0 && rec.summary() == nil
+		if reading.outcome.unusable() && !final && !(reading.outcome == loopTurnEmpty && nothingDone) && recovery.allow(ctx, reading.outcome, turn, modelWait) {
+			continuation = string(reading.outcome)
+		}
+		rec.recordModelTurn(turnIndex, turn, reading, modelWait, retries, nil, continuation)
+		if reading.outcome.unusable() && !final {
+			if continuation == "" {
+				return rec.endUnusableTurn(reading, recovery, turn, output, nothingDone)
+			}
+			if len(turn.ToolCalls) == 0 {
+				messages = append(messages, loopRecoveryMessages(reading, turn, rec.answering)...)
+				rec.setOutputNow(strings.TrimSpace(output))
+				continue
+			}
 		}
 		if len(turn.ToolCalls) == 0 {
 			text := strings.TrimSpace(turn.Text)
@@ -854,12 +876,23 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 		rec.setOutput(strings.TrimSpace(output))
 		messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, ToolCalls: turn.ToolCalls, Reasoning: turn.Reasoning})
 		var finished *domain.LoopRunSummary
-		for _, call := range turn.ToolCalls {
+		for callIndex, call := range turn.ToolCalls {
 			reply := func(content string, isError bool) {
 				messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: content, IsError: isError}})
 			}
 			if finished != nil {
 				reply("The run already finished with finish_run; this call was not executed.", true)
+				continue
+			}
+			if reading.cut[callIndex] {
+				// Its arguments were cut off: never run a partial change.
+				message := loopCutToolCallResult
+				if reading.outcome != loopTurnTruncated {
+					message = loopUnfinishedToolCall
+				}
+				index := rec.startTool(call)
+				rec.finishTool(index, "blocked", errors.New(message), false, nil, nil)
+				reply(message, true)
 				continue
 			}
 			switch call.Name {

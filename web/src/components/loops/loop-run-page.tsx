@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, Ban, CheckCircle2, CircleAlert, CircleStop, Info, Link2, Paperclip, Pencil, Search, Settings2, ThumbsDown, ThumbsUp, Unplug, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Ban, CheckCircle2, CircleAlert, CircleStop, Info, Link2, Paperclip, Pencil, Search, Settings2, SkipForward, ThumbsDown, ThumbsUp, Unplug, XCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -26,7 +26,7 @@ import { copyText, loopUrl, runParts, useLoopRecord } from "./loop-data";
 import { LoopBreadcrumb } from "./loop-breadcrumb";
 import { LoopInstructionsEditor } from "./loop-instructions-editor";
 import { dayLabel, runDuration } from "./loop-model";
-import { describeRunFailure, runTriggerText } from "./loop-run-labels";
+import { describeRunFailure, runSkipNote, runTriggerText } from "./loop-run-labels";
 import { ErrorDetails } from "@/components/agent/agent-error-detail";
 import { GridLoader } from '@/components/ui/grid-loader'
 import { REASON_LABELS, RUN_STATUSES, STATUS_LABELS } from './loop-run-status'
@@ -69,6 +69,17 @@ function RunFailureDetail({ run }: { run: LoopRun | LoopRunReply }) {
 /** Why a finished run did not simply complete: needs review, failed, cancelled or interrupted. */
 function RunOutcome({ data, run }: { data: BootstrapData; run: LoopRun }) {
   const { t } = useI18n();
+  const skip = runSkipNote(run, t);
+  if (skip)
+    return (
+      <div className="loops-run-error is-stopped" role="status">
+        <SkipForward size={16} />
+        <div>
+          <strong>{skip.label}</strong>
+          {skip.reason && <p data-i18n-ignore>{skip.reason}</p>}
+        </div>
+      </div>
+    );
   if (run.status === "completed" || run.status === "running") return null;
   const reason = run.failureReason ? t(REASON_LABELS[run.failureReason] ?? run.failureReason) : undefined;
   if (run.status === "needs_review")

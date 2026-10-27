@@ -79,6 +79,29 @@ export const OUTPUT_LABELS: Record<string, string> = {
   change: "a change in Flow",
 };
 
+/** The document output acceptLoopRun names by operation (append, update, create) instead of "a document". */
+export const DOCUMENT_OUTPUT_LABELS = ["an append to an existing document", "an update to an existing document", "a new document"];
+
+/** Notes acceptLoopRun (loop_document_writes.go) adds to a missing document output, and their translation keys. */
+const DOCUMENT_OUTPUT_NOTES: [string, string][] = [
+  ["(the run created a new document instead of changing the existing one)", "The run created a new document instead of changing the existing one."],
+  ["(save_document ran but did not change the document)", "save_document ran but did not change the document."],
+];
+
+/** The agent's finish_run status, as the run page labels it. */
+export const SUMMARY_STATUS_LABELS: Record<string, string> = {
+  done: "Done",
+  incomplete: "Incomplete",
+  nothing_to_do: "Nothing to do",
+  skipped: "Skipped",
+};
+
+/** A run the agent skipped because a skip condition in its instructions applied: the label and the condition. */
+export function runSkipNote(run: Pick<LoopRun, "status" | "summary">, t: Translate) {
+  if (run.status !== "completed" || run.summary?.status !== "skipped") return undefined;
+  return { label: t(SUMMARY_STATUS_LABELS.skipped), reason: run.summary.skipReason?.trim() || undefined };
+}
+
 /**
  * Fixed run failure messages the server stores in run.error (loop_run_reliability.go, loop_runtime.go), as
  * translation keys; {limit}, {size} are read back from the stored text.
@@ -97,6 +120,14 @@ export const FAILURE_MESSAGES = [
   "Flow Agent is not configured on this server",
   "the loop owner is no longer in this workspace",
   "the loop owner cannot access this workspace",
+  // Unusable model turns (loopUnusableEnding in api/cmd/server/loop_turn_outcome.go).
+  "Model turns cut off at the output limit: {count} (stop reason {reason}). The run stopped before it finished.",
+  "Model turns with only reasoning and no answer or tool call: {count} (stop reason {reason}).",
+  "Model turns with no text and no tool call after the run's tool calls: {count} (stop reason {reason}).",
+  "Model turns with no text and no tool call: {count} (stop reason {reason}).",
+  "Model turns that wrote a tool call as text, which Flow cannot run: {count}.",
+  "The model provider withheld the output (stop reason {reason}).",
+  "The model stream could not be parsed: {detail}",
 ];
 
 /** What the run page shows under a run's failure reason: a translated message, model-written items, the raw detail. */
@@ -109,18 +140,32 @@ export function describeRunFailure(run: FailedRun | LoopRunReply, t: Translate, 
   const raw = run.error?.trim() ?? "";
   const full = run as FailedRun;
   const list = (items: string[]) => new Intl.ListFormat(locale, { type: "conjunction" }).format(items);
+  // A document output is named by its operation ("an append to an existing document") when the server said so.
+  const documentLabel = DOCUMENT_OUTPUT_LABELS.find((label) => raw.includes(label));
+  const label = (kind: string) => (kind === "document" && documentLabel ? documentLabel : OUTPUT_LABELS[kind]);
   const missing = () => {
-    const expected = full.expectedOutputs?.filter((kind) => OUTPUT_LABELS[kind] && !full.produced?.[kind]) ?? [];
+    // A document write that changed nothing counts as produced but is still missing: the message names it.
+    const expected = full.expectedOutputs?.filter((kind) => OUTPUT_LABELS[kind] && (!full.produced?.[kind] || raw.includes(label(kind)))) ?? [];
     // Older runs only have the English message: read the kinds back from it.
-    const kinds = expected.length ? expected : Object.keys(OUTPUT_LABELS).filter((kind) => raw.includes(OUTPUT_LABELS[kind]));
-    return kinds.map((kind) => t(OUTPUT_LABELS[kind]));
+    const kinds = expected.length ? expected : Object.keys(OUTPUT_LABELS).filter((kind) => raw.includes(label(kind)));
+    return kinds.map((kind) => t(label(kind)));
   };
+  const space = locale.startsWith("zh") ? "" : " ";
   switch (run.failureReason) {
     case "no_output": {
       const outputs = missing();
       if (!outputs.length) break;
       let message = t("The loop's instructions call for {outputs}, but the run made none.").replace("{outputs}", list(outputs));
-      if (full.summary?.status === "nothing_to_do" || raw.includes("nothing to do")) message += `${locale.startsWith("zh") ? "" : " "}${t("The agent reported there was nothing to do.")}`;
+      for (const [note, key] of DOCUMENT_OUTPUT_NOTES) if (raw.includes(note)) message += space + t(key);
+      const skipped = raw.match(/\(the agent skipped the run — (.*) — but the instructions name no skip condition\)/);
+      if (full.summary?.status === "skipped" || skipped) {
+        const reason = full.summary?.skipReason?.trim() || skipped?.[1] || "";
+        message += space + t("The agent skipped the run ({reason}), but the instructions name no skip condition.").replace("{reason}", () => reason);
+      } else if (raw.includes("require the output even when nothing changed")) {
+        message += space + t("The agent reported there was nothing to do, but the instructions require the output even when nothing changed.");
+      } else if (full.summary?.status === "nothing_to_do" || raw.includes("nothing to do")) {
+        message += space + t("The agent reported there was nothing to do.");
+      }
       return { message };
     }
     case "tool_error": {
@@ -144,6 +189,9 @@ export function describeRunFailure(run: FailedRun | LoopRunReply, t: Translate, 
       return {};
     case "provider_timeout":
     case "empty_response":
+    case "output_truncated":
+    case "reasoning_only":
+    case "stream_error":
     case "timeout":
     case "budget_exhausted":
     case "no_output":

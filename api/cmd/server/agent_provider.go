@@ -65,11 +65,18 @@ type agentProviderEvent struct {
 }
 
 type agentProviderTurn struct {
-	Text       string
-	Reasoning  string
-	ToolCalls  []domain.AgentToolCall
+	Text      string
+	Reasoning string
+	ToolCalls []domain.AgentToolCall
+	// StopReason is the provider's raw reason the turn ended: Chat Completions finish_reason, Responses status,
+	// Anthropic stop_reason. StopDetail qualifies it where the provider says more (Responses
+	// incomplete_details.reason: max_output_tokens, content_filter).
 	StopReason string
+	StopDetail string
 	ResponseID string
+	// Usage and Stream describe the response for diagnostics (agent_provider_diagnostics.go).
+	Usage  *agentProviderUsage
+	Stream agentStreamStats
 }
 
 func (s *server) requestAgentTurn(ctx context.Context, messages []agentProviderMessage, emit func(agentProviderEvent) error) (agentProviderTurn, error) {
@@ -272,15 +279,18 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 		return agentProviderTurn{}, err
 	}
 	defer response.Body.Close()
-	if !isEventStream(response) {
+	if !agentEventStream(response) {
 		turn, decodeErr := decodeOpenAIResponse(response)
+		turn.Stream.Bytes = agentResponseBytes(response.Body)
 		return turn, emitDecodedAgentTurn(turn, decodeErr, emit)
 	}
 	turn := agentProviderTurn{}
 	calls := map[string]*domain.AgentToolCall{}
 	order := []string{}
 	err = readSSE(response.Body, func(_ string, data string) error {
+		turn.Stream.Events++
 		if data == "[DONE]" {
+			turn.Stream.Finished = true
 			return nil
 		}
 		var event struct {
@@ -300,18 +310,12 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 				} `json:"action"`
 			} `json:"item"`
 			Response struct {
-				ID     string `json:"id"`
-				Status string `json:"status"`
-				Usage  *struct {
-					InputTokens        int `json:"input_tokens"`
-					OutputTokens       int `json:"output_tokens"`
-					InputTokensDetails struct {
-						CachedTokens int `json:"cached_tokens"`
-					} `json:"input_tokens_details"`
-					OutputTokensDetails struct {
-						ReasoningTokens int `json:"reasoning_tokens"`
-					} `json:"output_tokens_details"`
-				} `json:"usage"`
+				ID                string `json:"id"`
+				Status            string `json:"status"`
+				IncompleteDetails *struct {
+					Reason string `json:"reason"`
+				} `json:"incomplete_details"`
+				Usage json.RawMessage `json:"usage"`
 				Error *struct {
 					Code    string `json:"code"`
 					Message string `json:"message"`
@@ -326,7 +330,11 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 			Message string `json:"message"`
 		}
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
+			turn.Stream.Unreadable++
 			return nil
+		}
+		if event.Type != "error" && !strings.HasPrefix(event.Type, "response.") {
+			turn.Stream.Unrecognized++
 		}
 		switch event.Type {
 		case "response.created", "response.in_progress":
@@ -369,10 +377,16 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 			if call := calls[event.ItemID]; call != nil && event.Arguments != "" {
 				call.Arguments = json.RawMessage(event.Arguments)
 			}
-		case "response.completed":
-			turn.StopReason = event.Response.Status
-			if usage := event.Response.Usage; usage != nil {
-				slog.InfoContext(ctx, "agent provider usage", "model", s.agent.Model, "input_tokens", usage.InputTokens, "cached_tokens", usage.InputTokensDetails.CachedTokens, "output_tokens", usage.OutputTokens, "reasoning_tokens", usage.OutputTokensDetails.ReasoningTokens, "tools", len(tools))
+		case "response.completed", "response.incomplete":
+			// A response cut off at max_output_tokens (or by a content filter) ends with response.incomplete.
+			turn.StopReason = firstNonEmpty(event.Response.Status, strings.TrimPrefix(event.Type, "response."))
+			if event.Response.IncompleteDetails != nil {
+				turn.StopDetail = event.Response.IncompleteDetails.Reason
+			}
+			turn.Stream.Finished = true
+			if usage := agentResponsesUsage(event.Response.Usage); usage != nil {
+				turn.Usage = usage
+				slog.InfoContext(ctx, "agent provider usage", "model", s.agent.Model, "input_tokens", usage.InputTokens, "cached_tokens", usage.CachedTokens, "output_tokens", usage.OutputTokens, "reasoning_tokens", usage.ReasoningTokens, "tools", len(tools))
 			}
 		case "response.failed", "error":
 			message, code := "OpenAI Responses stream failed", event.Code
@@ -390,6 +404,7 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 		return nil
 	})
 	turn.ToolCalls = orderedToolCalls(calls, order)
+	turn.Stream.Bytes = agentResponseBytes(response.Body)
 	return turn, err
 }
 
@@ -421,8 +436,9 @@ func (s *server) requestChatCompletions(ctx context.Context, messages []agentPro
 		return agentProviderTurn{}, err
 	}
 	defer response.Body.Close()
-	if !isEventStream(response) {
+	if !agentEventStream(response) {
 		turn, decodeErr := decodeChatResponse(response)
+		turn.Stream.Bytes = agentResponseBytes(response.Body)
 		if turn.Reasoning != "" {
 			agentChatReasoningProviders.Store(reasoningKey, true)
 		}
@@ -433,36 +449,54 @@ func (s *server) requestChatCompletions(ctx context.Context, messages []agentPro
 	// slots maps a delta index to the call it currently continues (see the parallel calls without an index below).
 	slots := map[int]int{}
 	err = readSSE(response.Body, func(_ string, data string) error {
+		turn.Stream.Events++
 		if data == "[DONE]" {
+			turn.Stream.Finished = true
 			return nil
 		}
 		var event struct {
 			Choices []struct {
-				Delta struct {
-					Content          string `json:"content"`
-					ReasoningContent string `json:"reasoning_content"`
-					ToolCalls        []struct {
-						Index    int                              `json:"index"`
-						ID       string                           `json:"id"`
-						Function struct{ Name, Arguments string } `json:"function"`
-					} `json:"tool_calls"`
-				} `json:"delta"`
-				FinishReason string `json:"finish_reason"`
+				Delta chatStreamDelta `json:"delta"`
+				// Some gateways stream whole messages instead of deltas.
+				Message      *chatStreamDelta `json:"message"`
+				FinishReason string           `json:"finish_reason"`
 			} `json:"choices"`
+			Usage json.RawMessage `json:"usage"`
 			Error *struct {
 				Message string `json:"message"`
 			} `json:"error"`
 		}
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
+			turn.Stream.Unreadable++
 			return nil
 		}
 		if event.Error != nil {
 			return errors.New(event.Error.Message)
 		}
+		usage := agentChatUsage(event.Usage)
+		if usage != nil {
+			turn.Usage = usage
+		}
 		if len(event.Choices) == 0 {
+			if usage == nil {
+				turn.Stream.Unrecognized++
+			}
 			return nil
 		}
 		choice := event.Choices[0]
+		if choice.Message != nil && !choice.Delta.known {
+			choice.Delta = *choice.Message
+		}
+		if !choice.Delta.known && choice.FinishReason == "" && usage == nil {
+			turn.Stream.Unrecognized++
+		}
+		if reasoning := string(choice.Delta.Reasoning); reasoning != "" && choice.Delta.ReasoningContent == "" {
+			// OpenRouter-style gateways name the field "reasoning".
+			turn.Reasoning += reasoning
+			if err := emit(agentProviderEvent{Type: "reasoning.delta", Delta: reasoning}); err != nil {
+				return err
+			}
+		}
 		if choice.Delta.Content != "" {
 			turn.Text += choice.Delta.Content
 			if err := emit(agentProviderEvent{Type: "text.delta", Delta: choice.Delta.Content}); err != nil {
@@ -518,15 +552,58 @@ func (s *server) requestChatCompletions(ctx context.Context, messages []agentPro
 		}
 		if choice.FinishReason != "" {
 			turn.StopReason = choice.FinishReason
+			turn.Stream.Finished = true
 		}
 		return nil
 	})
 	turn.ToolCalls = indexedToolCalls(calls)
+	turn.Stream.Bytes = agentResponseBytes(response.Body)
 	if err == nil && turn.StopReason == "tool_calls" && len(turn.ToolCalls) == 0 {
 		// The provider says the model called tools but none arrived in a shape Flow reads.
 		slog.WarnContext(ctx, "agent provider finished with tool_calls but sent no tool calls", "model", s.agent.Model, "text_bytes", len(turn.Text), "reasoning_bytes", len(turn.Reasoning))
 	}
 	return turn, err
+}
+
+// chatStreamDelta is a Chat Completions stream delta (or a whole message, from gateways that stream those).
+type chatStreamDelta struct {
+	Content          string `json:"content"`
+	ReasoningContent string `json:"reasoning_content"`
+	// Reasoning is the reasoning field some gateways use instead of reasoning_content; only a string is read.
+	Reasoning agentLenientText `json:"reasoning"`
+	ToolCalls []struct {
+		Index    int                              `json:"index"`
+		ID       string                           `json:"id"`
+		Function struct{ Name, Arguments string } `json:"function"`
+	} `json:"tool_calls"`
+	// known: the delta held a field Flow reads, even an empty one (a role-only first chunk counts).
+	known bool
+}
+
+func (delta *chatStreamDelta) UnmarshalJSON(raw []byte) error {
+	type plain chatStreamDelta
+	if err := json.Unmarshal(raw, (*plain)(delta)); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	_ = json.Unmarshal(raw, &fields)
+	for _, key := range []string{"role", "content", "reasoning_content", "reasoning", "tool_calls", "refusal"} {
+		if _, ok := fields[key]; ok {
+			delta.known = true
+		}
+	}
+	return nil
+}
+
+// agentLenientText is a JSON string; any other JSON value reads as empty instead of failing the whole frame.
+type agentLenientText string
+
+func (text *agentLenientText) UnmarshalJSON(raw []byte) error {
+	var value string
+	if json.Unmarshal(raw, &value) == nil {
+		*text = agentLenientText(value)
+	}
+	return nil
 }
 
 func (s *server) requestAnthropicMessages(ctx context.Context, messages []agentProviderMessage, tools []agentProviderTool, emit func(agentProviderEvent) error) (agentProviderTurn, error) {
@@ -559,8 +636,9 @@ func (s *server) requestAnthropicMessages(ctx context.Context, messages []agentP
 		return agentProviderTurn{}, err
 	}
 	defer response.Body.Close()
-	if !isEventStream(response) {
+	if !agentEventStream(response) {
 		turn, decodeErr := decodeAnthropicResponse(response)
+		turn.Stream.Bytes = agentResponseBytes(response.Body)
 		return turn, emitDecodedAgentTurn(turn, decodeErr, emit)
 	}
 	turn := agentProviderTurn{}
@@ -569,6 +647,7 @@ func (s *server) requestAnthropicMessages(ctx context.Context, messages []agentP
 	hosted := map[int]string{}
 	hostedArgs := map[string]json.RawMessage{}
 	err = readSSE(response.Body, func(_ string, data string) error {
+		turn.Stream.Events++
 		var event struct {
 			Type         string `json:"type"`
 			Index        int    `json:"index"`
@@ -588,18 +667,29 @@ func (s *server) requestAnthropicMessages(ctx context.Context, messages []agentP
 				StopReason  string `json:"stop_reason"`
 			} `json:"delta"`
 			Message struct {
-				ID string `json:"id"`
+				ID    string          `json:"id"`
+				Usage json.RawMessage `json:"usage"`
 			} `json:"message"`
+			Usage json.RawMessage `json:"usage"`
 			Error *struct {
 				Message string `json:"message"`
 			} `json:"error"`
 		}
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
+			turn.Stream.Unreadable++
 			return nil
+		}
+		switch event.Type {
+		case "message_start", "content_block_start", "content_block_delta", "content_block_stop", "message_delta", "message_stop", "ping", "error":
+		default:
+			turn.Stream.Unrecognized++
 		}
 		switch event.Type {
 		case "message_start":
 			turn.ResponseID = event.Message.ID
+			turn.Usage = mergeAnthropicUsage(turn.Usage, event.Message.Usage)
+		case "message_stop":
+			turn.Stream.Finished = true
 		case "content_block_start":
 			switch event.ContentBlock.Type {
 			case "server_tool_use":
@@ -638,6 +728,7 @@ func (s *server) requestAnthropicMessages(ctx context.Context, messages []agentP
 			}
 		case "message_delta":
 			turn.StopReason = event.Delta.StopReason
+			turn.Usage = mergeAnthropicUsage(turn.Usage, event.Usage)
 		case "error":
 			if event.Error != nil {
 				return errors.New(event.Error.Message)
@@ -647,6 +738,7 @@ func (s *server) requestAnthropicMessages(ctx context.Context, messages []agentP
 		return nil
 	})
 	turn.ToolCalls = indexedToolCalls(calls)
+	turn.Stream.Bytes = agentResponseBytes(response.Body)
 	return turn, err
 }
 
@@ -783,6 +875,8 @@ type agentProviderError struct {
 	status    int
 	transient bool
 	timeout   bool
+	// unreadable: the provider answered, but not in a shape Flow could parse.
+	unreadable bool
 }
 
 func (e *agentProviderError) Error() string { return e.message }
@@ -990,6 +1084,9 @@ func readSSE(reader io.Reader, visit func(event, data string) error) error {
 		if errors.As(err, &providerErr) {
 			return providerErr
 		}
+		if errors.Is(err, bufio.ErrTooLong) {
+			return agentUnreadableResponse("could not read Agent stream: an event was larger than 4 MB")
+		}
 		return fmt.Errorf("could not read Agent stream: %w", err)
 	}
 	return flush()
@@ -1008,11 +1105,19 @@ func decodeOpenAIResponse(response *http.Response) (agentProviderTurn, error) {
 			Content   []struct{ Type, Text string } `json:"content"`
 			Summary   []struct{ Type, Text string } `json:"summary"`
 		} `json:"output"`
+		Status            string `json:"status"`
+		IncompleteDetails *struct {
+			Reason string `json:"reason"`
+		} `json:"incomplete_details"`
+		Usage json.RawMessage `json:"usage"`
 	}
 	if err := json.NewDecoder(io.LimitReader(response.Body, 4<<20)).Decode(&decoded); err != nil {
-		return agentProviderTurn{}, fmt.Errorf("Flow Agent provider returned an invalid Responses payload")
+		return agentProviderTurn{}, agentUnreadableResponse("Flow Agent provider returned an invalid Responses payload")
 	}
-	turn := agentProviderTurn{ResponseID: decoded.ID, Text: decoded.OutputText, StopReason: "completed"}
+	turn := agentProviderTurn{ResponseID: decoded.ID, Text: decoded.OutputText, StopReason: firstNonEmpty(decoded.Status, "completed"), Usage: agentResponsesUsage(decoded.Usage), Stream: agentStreamStats{Events: 1, Finished: true}}
+	if decoded.IncompleteDetails != nil {
+		turn.StopDetail = decoded.IncompleteDetails.Reason
+	}
 	for _, item := range decoded.Output {
 		for _, summary := range item.Summary {
 			if summary.Type == "summary_text" {
@@ -1044,12 +1149,13 @@ func decodeChatResponse(response *http.Response) (agentProviderTurn, error) {
 				} `json:"tool_calls"`
 			} `json:"message"`
 		} `json:"choices"`
+		Usage json.RawMessage `json:"usage"`
 	}
 	if err := json.NewDecoder(io.LimitReader(response.Body, 4<<20)).Decode(&decoded); err != nil || len(decoded.Choices) == 0 {
-		return agentProviderTurn{}, fmt.Errorf("Flow Agent provider returned an invalid Chat Completions payload")
+		return agentProviderTurn{}, agentUnreadableResponse("Flow Agent provider returned an invalid Chat Completions payload")
 	}
 	choice := decoded.Choices[0]
-	turn := agentProviderTurn{Text: choice.Message.Content, Reasoning: choice.Message.ReasoningContent, StopReason: choice.FinishReason}
+	turn := agentProviderTurn{Text: choice.Message.Content, Reasoning: choice.Message.ReasoningContent, StopReason: choice.FinishReason, Usage: agentChatUsage(decoded.Usage), Stream: agentStreamStats{Events: 1, Finished: true}}
 	for _, item := range choice.Message.ToolCalls {
 		turn.ToolCalls = append(turn.ToolCalls, domain.AgentToolCall{ID: item.ID, Name: item.Function.Name, Arguments: json.RawMessage(item.Function.Arguments), Status: "running"})
 	}
@@ -1068,11 +1174,12 @@ func decodeAnthropicResponse(response *http.Response) (agentProviderTurn, error)
 			Name     string          `json:"name"`
 			Input    json.RawMessage `json:"input"`
 		} `json:"content"`
+		Usage json.RawMessage `json:"usage"`
 	}
 	if err := json.NewDecoder(io.LimitReader(response.Body, 4<<20)).Decode(&decoded); err != nil {
-		return agentProviderTurn{}, fmt.Errorf("Flow Agent provider returned an invalid Anthropic Messages payload")
+		return agentProviderTurn{}, agentUnreadableResponse("Flow Agent provider returned an invalid Anthropic Messages payload")
 	}
-	turn := agentProviderTurn{ResponseID: decoded.ID, StopReason: decoded.StopReason}
+	turn := agentProviderTurn{ResponseID: decoded.ID, StopReason: decoded.StopReason, Usage: mergeAnthropicUsage(nil, decoded.Usage), Stream: agentStreamStats{Events: 1, Finished: true}}
 	for _, item := range decoded.Content {
 		switch item.Type {
 		case "text":

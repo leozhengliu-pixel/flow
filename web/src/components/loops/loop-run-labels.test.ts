@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { translateToChinese } from '@/i18n/translate'
 import type { LoopRun } from '@/types/flow'
-import { describeRunFailure, fixedFailureMessage, parseTriggerLabel, runTriggerText } from './loop-run-labels'
+import { describeRunFailure, fixedFailureMessage, parseTriggerLabel, runSkipNote, runTriggerText } from './loop-run-labels'
 
 const zh = translateToChinese
 const en = (source: string) => source
@@ -42,6 +42,33 @@ describe('run failure explanation', () => {
     // Older runs without expectedOutputs: the kinds are read off the stored text.
     const legacy: LoopRun = { ...base, failureReason: 'no_output', error: "No output produced: the loop's instructions call for a new issue and a comment, but the run made none (the agent reported there was nothing to do)" }
     expect(describeRunFailure(legacy, zh, 'zh-CN').message).toBe('Loop 的指令要求产出一个新事项和一条评论，但本次运行没有产出。Agent 报告没有需要处理的内容。')
+  })
+
+  it('names document outputs by operation, with the skip and document notes', () => {
+    const append: LoopRun = {
+      ...base, failureReason: 'no_output', expectedOutputs: ['document'], produced: { document: 1, change: 1 },
+      error: "No output produced: the loop's instructions call for an append to an existing document, but the run made none (save_document ran but did not change the document)",
+    }
+    expect(describeRunFailure(append, en, 'en-US').message).toBe("The loop's instructions call for an append to an existing document, but the run made none. save_document ran but did not change the document.")
+    expect(describeRunFailure(append, zh, 'zh-CN').message).toBe('Loop 的指令要求产出向现有文档追加的内容，但本次运行没有产出。save_document 已执行，但文档没有任何变化。')
+    const skipped: LoopRun = {
+      ...base, failureReason: 'no_output', expectedOutputs: ['document'], summary: { status: 'skipped', summary: 'Holiday', skipReason: 'public holiday' },
+      error: "No output produced: the loop's instructions call for a new document, but the run made none (the agent skipped the run — public holiday — but the instructions name no skip condition)",
+    }
+    expect(describeRunFailure(skipped, zh, 'zh-CN').message).toBe('Loop 的指令要求产出一篇新文档，但本次运行没有产出。Agent 跳过了本次运行（public holiday），但指令中没有写明跳过条件。')
+    const always: LoopRun = { ...base, failureReason: 'no_output', error: "No output produced: the loop's instructions call for a comment, but the run made none (the agent reported there was nothing to do, but the instructions require the output even when nothing changed)" }
+    expect(describeRunFailure(always, en, 'en-US').message).toBe("The loop's instructions call for a comment, but the run made none. The agent reported there was nothing to do, but the instructions require the output even when nothing changed.")
+  })
+
+  it('labels a skipped run with its skip condition', () => {
+    const run: LoopRun = { ...base, status: 'completed', summary: { status: 'skipped', summary: 'Skipped', skipReason: 'public holiday' } }
+    expect(runSkipNote(run, zh)).toEqual({ label: '已跳过', reason: 'public holiday' })
+    expect(runSkipNote({ ...run, summary: { status: 'done', summary: 'Done' } }, zh)).toBeUndefined()
+  })
+
+  it('translates unusable model turn failures', () => {
+    expect(fixedFailureMessage('Model turns cut off at the output limit: 3 (stop reason length). The run stopped before it finished.', zh)).toBe('在输出上限处被截断的模型轮次：3（停止原因 length）。本次运行在完成前停止。')
+    expect(fixedFailureMessage("Model turns with no text and no tool call after the run's tool calls: 2 (stop reason stop).", zh)).toBe('在本次运行的工具调用之后，既无文本也无工具调用的模型轮次：2（停止原因 stop）。')
   })
 
   it('names the failed change and keeps its error as the detail', () => {

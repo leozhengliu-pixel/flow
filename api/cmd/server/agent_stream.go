@@ -996,7 +996,7 @@ const agentOutputLimitError = "The reply reached the output limit and is incompl
 // Completions), "max_tokens" (Anthropic Messages) or "incomplete" (Responses).
 func agentTurnTruncated(stopReason string) bool {
 	switch strings.ToLower(strings.TrimSpace(stopReason)) {
-	case "length", "max_tokens", "incomplete":
+	case "length", "max_tokens", "max_output_tokens", "incomplete", "model_context_window_exceeded":
 		return true
 	}
 	return false
