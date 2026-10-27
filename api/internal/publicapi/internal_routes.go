@@ -86,6 +86,7 @@ var InternalRoutes = []string{
 	"PATCH /api/agent-tasks/{id}",
 	"POST /api/agent-tasks",
 	"POST /api/agent-tasks/{id}/activities",
+	"POST /api/agent-tasks/{id}/archive",
 	// /api/ai
 	"GET /api/ai/conversations",
 	"PATCH /api/ai/conversations/{id}",

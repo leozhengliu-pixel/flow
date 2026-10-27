@@ -13,7 +13,7 @@ export type ApplicationPlanStep = { content: string; status: 'pending' | 'inProg
  * An agent session. "stale" is derived by the server: a pending or active session whose agent has been silent for
  * 30 minutes. `unresponsive` is set when the agent did not acknowledge a delivered event within 10 seconds.
  */
-export type ApplicationTask = { id: string; issueId: string; teamId: string; commentId?: string; appUserId: string; creatorId: string; status: 'pending' | 'active' | 'awaitingInput' | 'complete' | 'error' | 'canceled' | 'stale'; prompt: string; initialPrompt?: string; trigger: string; version: number; createdAt?: string; updatedAt: string; pendingTool?: {name:string;arguments:unknown;status:string}; externalUrls?: ApplicationExternalUrl[]; plan?: ApplicationPlanStep[]; unresponsive?: boolean; deliveredAt?: string; lastActivityAt?: string; /** Set when the task anchors a coding session (docs/coding-sessions-design.md §6). */ codingSessionId?: string }
+export type ApplicationTask = { id: string; issueId: string; teamId: string; commentId?: string; appUserId: string; creatorId: string; status: 'pending' | 'active' | 'awaitingInput' | 'complete' | 'error' | 'canceled' | 'stale'; prompt: string; initialPrompt?: string; trigger: string; version: number; createdAt?: string; updatedAt: string; pendingTool?: {name:string;arguments:unknown;status:string}; externalUrls?: ApplicationExternalUrl[]; plan?: ApplicationPlanStep[]; unresponsive?: boolean; deliveredAt?: string; lastActivityAt?: string; /** Set when the task anchors a coding session (docs/coding-sessions-design.md §6). */ codingSessionId?: string; /** Set once the whole session was archived: it leaves the activity (its log is kept). */ archivedAt?: string; archivedBy?: string }
 /** Window event fired when the realtime stream reports an agent task change; detail is the task's resource id. */
 export const AGENT_TASK_ACTIVITY_EVENT = 'flow:agent-task-activity'
 /** Task states the agent may still change on its own; only these keep a fallback poll running. */
@@ -36,7 +36,13 @@ export const listApplicationTasks = (workspace: string, issueId: string, signal?
 export const getApplicationTask = (workspace: string, id: string, after = '', signal?: AbortSignal) => apiRequest<{session: ApplicationTask; activities: ApplicationActivity[]}>(`/api/agent-tasks/${encodeURIComponent(id)}?after=${encodeURIComponent(after)}`, workspace, { signal })
 /** Removes one of the agent's replies from its thread (a "deleted" marker; the reply stays in the session log). */
 export const deleteApplicationActivity = (workspace: string, task: ApplicationTask, activityId: string) => apiRequest<ApplicationTask>(`/api/agent-tasks/${encodeURIComponent(task.id)}/activities`, workspace, { method: 'POST', body: JSON.stringify({ expectedVersion: task.version, type: 'deleted', activityId }) })
-export const reactApplicationTask = (workspace: string, task: ApplicationTask, activityId: string, emoji: string, enabled: boolean) => apiRequest<ApplicationTask>(`/api/agent-tasks/${encodeURIComponent(task.id)}/activities`, workspace, { method: 'POST', body: JSON.stringify({ expectedVersion: task.version, type: 'feedback', activityId, body: emoji, enabled }) })
+/**
+ * Archives the whole session (its requester or an admin): it and all of its messages leave the activity for everyone,
+ * a running session is stopped, and its log, audit entries, reports, attachments and linked issues are kept. Archiving
+ * an archived session changes nothing (`alreadyArchived`).
+ */
+export const archiveApplicationTask = (workspace: string, taskId: string) => apiRequest<{ session: ApplicationTask; archived: boolean; alreadyArchived: boolean; stopped: boolean; previousStatus: string }>(`/api/agent-tasks/${encodeURIComponent(taskId)}/archive`, workspace, { method: 'POST', body: '{}' })
+export const reactApplicationTask =(workspace: string, task: ApplicationTask, activityId: string, emoji: string, enabled: boolean) => apiRequest<ApplicationTask>(`/api/agent-tasks/${encodeURIComponent(task.id)}/activities`, workspace, { method: 'POST', body: JSON.stringify({ expectedVersion: task.version, type: 'feedback', activityId, body: emoji, enabled }) })
 export async function replyApplicationTask(workspace: string, task: ApplicationTask, type: 'prompt' | 'canceled' | 'retry', body: string, approve?: boolean): Promise<ApplicationTask> {
   const send = (version: number) => apiRequest<ApplicationTask>(`/api/agent-tasks/${encodeURIComponent(task.id)}/activities`, workspace, { method: 'POST', body: JSON.stringify({ expectedVersion: version, type, body, approve }) })
   try { return await send(task.version) }

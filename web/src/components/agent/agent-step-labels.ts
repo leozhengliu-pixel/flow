@@ -33,6 +33,8 @@ export const CHAT_TOOL_LABELS: Record<string, [string, string]> = {
   delete_document: ["Deleting document…", "Deleted document"], restore_document: ["Restoring document…", "Restored document"],
   list_document_history: ["Looking at document history…", "Looked at document history"],
   restore_document_version: ["Restoring document version…", "Restored document version"],
+  list_agent_sessions: ["Looking at agent sessions…", "Looked at agent sessions"], get_agent_session: ["Looking at agent session…", "Looked at agent session"],
+  archive_agent_session: ["Archiving agent session…", "Archived agent session"],
   get_document_permissions: ["Looking at document access…", "Looked at document access"],
   save_document_permissions: ["Updating document access…", "Updated document access"],
   save_template: ["Saving template…", "Saved template"], update_notification: ["Updating inbox…", "Updated inbox"],

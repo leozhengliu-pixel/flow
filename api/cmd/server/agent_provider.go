@@ -203,7 +203,7 @@ func (s *server) agentToolDefinitions() ([]agentProviderTool, error) {
 
 // agentMCPOnlyTools are Flow tools offered to MCP clients and worker runs (/mcp) but not to the in-process agent,
 // whose tool set stays as it was until the worker runtime replaces it.
-var agentMCPOnlyTools = map[string]bool{"count_issues": true}
+var agentMCPOnlyTools = map[string]bool{"count_issues": true, "list_agent_sessions": true, "get_agent_session": true, "archive_agent_session": true}
 
 // agentProgressTool lets the model narrate its plan the way the reference app's agent does ("Reviewing project activity").
 // It never touches data: chat sessions render it as a step title, other runners simply acknowledge it.

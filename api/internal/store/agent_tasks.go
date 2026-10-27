@@ -65,22 +65,55 @@ func syncApplicationTask(ctx context.Context, tx *sqlTx, workspace string, issue
 	return err
 }
 
-func (s *SQLiteStore) AgentTask(ctx context.Context, workspace, id string) (domain.AgentTask, error) {
+// agentTaskColumns are the columns scanAgentTask reads: the stored task and
+// the columns that are authoritative over its JSON (status, version and the
+// archive stamp, which writers that replace data cannot undo).
+const agentTaskColumns = "data,status,version,archived_at,archived_by"
+
+func scanAgentTask(scan func(...any) error) (domain.AgentTask, error) {
 	var task domain.AgentTask
 	var raw []byte
-	var status string
+	var status, archivedAt, archivedBy string
 	var version int64
-	err := s.db.QueryRowContext(ctx, `SELECT data,status,version FROM application_agent_tasks WHERE workspace_key=? AND id=?`, workspace, id).Scan(&raw, &status, &version)
-	if err == nil {
-		err = json.Unmarshal(raw, &task)
-		task.Status = status
-		task.Version = version
+	if err := scan(&raw, &status, &version, &archivedAt, &archivedBy); err != nil {
+		return task, err
 	}
-	return task, err
+	if err := json.Unmarshal(raw, &task); err != nil {
+		return task, err
+	}
+	task.Status, task.Version = status, version
+	task.ArchivedAt, task.ArchivedBy = nil, ""
+	if archivedAt != "" {
+		at, err := time.Parse(time.RFC3339Nano, archivedAt)
+		if err != nil {
+			return task, err
+		}
+		task.ArchivedAt, task.ArchivedBy = &at, archivedBy
+	}
+	return task, nil
 }
 
+func (s *SQLiteStore) AgentTask(ctx context.Context, workspace, id string) (domain.AgentTask, error) {
+	return scanAgentTask(s.db.QueryRowContext(ctx, `SELECT `+agentTaskColumns+` FROM application_agent_tasks WHERE workspace_key=? AND id=?`, workspace, id).Scan)
+}
+
+// ListAgentTasks lists a resource's sessions (or, with appUserID and no
+// resource, an application's open sessions), newest first. Archived sessions
+// are left out: they are no longer part of the resource's activity.
 func (s *SQLiteStore) ListAgentTasks(ctx context.Context, workspace, issueID, appUserID string) ([]domain.AgentTask, error) {
+	return s.listAgentTasks(ctx, workspace, issueID, appUserID, false)
+}
+
+// ListAgentTasksIncludingArchived is ListAgentTasks with archived sessions.
+func (s *SQLiteStore) ListAgentTasksIncludingArchived(ctx context.Context, workspace, issueID, appUserID string) ([]domain.AgentTask, error) {
+	return s.listAgentTasks(ctx, workspace, issueID, appUserID, true)
+}
+
+func (s *SQLiteStore) listAgentTasks(ctx context.Context, workspace, issueID, appUserID string, includeArchived bool) ([]domain.AgentTask, error) {
 	where, args := "workspace_key=?", []any{workspace}
+	if !includeArchived {
+		where += " AND archived_at=''"
+	}
 	if issueID != "" {
 		where += " AND issue_id=?"
 		args = append(args, issueID)
@@ -92,25 +125,17 @@ func (s *SQLiteStore) ListAgentTasks(ctx context.Context, workspace, issueID, ap
 			where += " AND status IN ('pending','active','awaitingInput')"
 		}
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT data,status,version FROM application_agent_tasks WHERE `+where+` ORDER BY created_at DESC,id DESC LIMIT 100`, args...)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+agentTaskColumns+` FROM application_agent_tasks WHERE `+where+` ORDER BY created_at DESC,id DESC LIMIT 100`, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	result := []domain.AgentTask{}
 	for rows.Next() {
-		var task domain.AgentTask
-		var raw []byte
-		var status string
-		var version int64
-		if err := rows.Scan(&raw, &status, &version); err != nil {
+		task, err := scanAgentTask(rows.Scan)
+		if err != nil {
 			return nil, err
 		}
-		if err := json.Unmarshal(raw, &task); err != nil {
-			return nil, err
-		}
-		task.Status = status
-		task.Version = version
 		result = append(result, task)
 	}
 	return result, rows.Err()
@@ -144,6 +169,12 @@ func (s *SQLiteStore) AppendAgentActivity(ctx context.Context, workspace, id str
 	task, err := s.AgentTask(ctx, workspace, id)
 	if err != nil {
 		return task, err
+	}
+	if task.ArchivedAt != nil {
+		// An archived session is closed for good: a run that was still writing
+		// (or a late webhook, a coding session's progress, a reply) cannot
+		// reopen it or bring it back into the activity.
+		return task, ErrAgentTaskArchived
 	}
 	if expected != task.Version {
 		return task, ErrIssueVersion
@@ -285,7 +316,7 @@ func (s *SQLiteStore) AppendAgentActivity(ctx context.Context, workspace, id str
 	if task.Status == "active" {
 		lease = task.UpdatedAt.Add(5 * time.Minute).Format(time.RFC3339Nano)
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE application_agent_tasks SET status=?,version=?,data=?,next_attempt='',lease_until=?,stale_at=? WHERE workspace_key=? AND id=? AND version=?`, task.Status, task.Version, taskRaw, lease, agentTaskStaleAt(task), workspace, id, expected)
+	result, err := tx.ExecContext(ctx, `UPDATE application_agent_tasks SET status=?,version=?,data=?,next_attempt='',lease_until=?,stale_at=? WHERE workspace_key=? AND id=? AND version=? AND archived_at=''`, task.Status, task.Version, taskRaw, lease, agentTaskStaleAt(task), workspace, id, expected)
 	if err != nil {
 		return task, err
 	}
@@ -294,6 +325,8 @@ func (s *SQLiteStore) AppendAgentActivity(ctx context.Context, workspace, id str
 		return task, err
 	}
 	if count != 1 {
+		// The version moved, or the session was archived since the read (the
+		// archive bumps the version as well); the caller rereads either way.
 		return task, ErrIssueVersion
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO application_agent_activities(session_id,id,data,created_at) VALUES(?,?,?,?)`, id, activity.ID, activityRaw, activity.CreatedAt.Format(time.RFC3339Nano)); err != nil {
@@ -359,25 +392,17 @@ func agentReplyActivity(kind string) bool {
 
 func (s *SQLiteStore) PendingApplicationTasks(ctx context.Context) ([]domain.AgentTask, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	rows, err := s.db.QueryContext(ctx, `SELECT data,status,version FROM application_agent_tasks WHERE status IN ('pending','active') AND next_attempt<=? AND lease_until<=? ORDER BY id LIMIT 16`, now, now)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+agentTaskColumns+` FROM application_agent_tasks WHERE status IN ('pending','active') AND archived_at='' AND next_attempt<=? AND lease_until<=? ORDER BY id LIMIT 16`, now, now)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	result := []domain.AgentTask{}
 	for rows.Next() {
-		var raw []byte
-		var status string
-		var version int64
-		var task domain.AgentTask
-		if err := rows.Scan(&raw, &status, &version); err != nil {
+		task, err := scanAgentTask(rows.Scan)
+		if err != nil {
 			return nil, err
 		}
-		if err := json.Unmarshal(raw, &task); err != nil {
-			return nil, err
-		}
-		task.Status = status
-		task.Version = version
 		result = append(result, task)
 	}
 	return result, rows.Err()
@@ -385,7 +410,7 @@ func (s *SQLiteStore) PendingApplicationTasks(ctx context.Context) ([]domain.Age
 
 func (s *SQLiteStore) ClaimApplicationTask(ctx context.Context, id string, version int64) (bool, error) {
 	now := time.Now().UTC()
-	result, err := s.db.ExecContext(ctx, `UPDATE application_agent_tasks SET lease_until=?,attempts=attempts+1 WHERE id=? AND version=? AND status IN ('pending','active') AND lease_until<=?`, now.Add(5*time.Minute).Format(time.RFC3339Nano), id, version, now.Format(time.RFC3339Nano))
+	result, err := s.db.ExecContext(ctx, `UPDATE application_agent_tasks SET lease_until=?,attempts=attempts+1 WHERE id=? AND version=? AND status IN ('pending','active') AND archived_at='' AND lease_until<=?`, now.Add(5*time.Minute).Format(time.RFC3339Nano), id, version, now.Format(time.RFC3339Nano))
 	if err != nil {
 		return false, err
 	}

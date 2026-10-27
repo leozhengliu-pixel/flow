@@ -19,6 +19,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   own `FLOW_SECURITY_*` setting and `FLOW_SECURITY_HEADERS_SKIP` leaves
   headers to a gateway; Helm `securityHeaders` and `trustProxyHeaders`. See
   [Security response headers](docs/configuration.md#security-response-headers).
+- Agent sessions can be archived as a whole: **Archive session…** in a
+  session's "…" menu (and `POST /api/agent-tasks/{id}/archive`) hides the
+  session and all of its messages, people's replies included, from the
+  activity for everyone, live and after a reload. A running session is stopped
+  first and late activity cannot bring it back; its log, audit entry, reports,
+  attachments, pull requests and linked issues are kept. Only the person who
+  started it or a workspace admin can archive it, and archiving twice changes
+  nothing. MCP adds `list_agent_sessions`, `get_agent_session` and
+  `archive_agent_session`. See [Application agents](docs/application-agents.md#archive-a-session).
 - SCIM provisioning: ETags (`If-Match`/`If-None-Match`), `sortBy`/`sortOrder`,
   `POST /Bulk`, `POST /Users/.search` and `/Groups/.search`, the enterprise
   User extension and profile attributes, audit log entries for every

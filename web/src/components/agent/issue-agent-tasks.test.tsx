@@ -121,7 +121,7 @@ describe('issue agent tasks',()=>{
     const issue=makeIssue({delegate:app}),data=makeBootstrap({users:[viewer,app]})
     render(<I18nProvider><IssueAgentTasksProvider issue={issue} data={data}><IssueAgentTasks issue={issue} data={data} commentId="comment-one" threadControls={{following:true,onToggleSubscription:vi.fn(),resolved:false,onResolve:vi.fn(),parentIssueId:'issue-1'}}/></IssueAgentTasksProvider></I18nProvider>)
     await user.click(await screen.findByRole('button',{name:'Comment options'}))
-    expect((await screen.findAllByRole('menuitem')).map(item=>item.textContent)).toEqual(['Unsubscribe from thread','Resolve thread with comment','Copy link to comment','Copy content as Markdown','New issue from comment…','New sub-issue from comment…','Delete'])
+    expect((await screen.findAllByRole('menuitem')).map(item=>item.textContent)).toEqual(['Unsubscribe from thread','Resolve thread with comment','Copy link to comment','Copy content as Markdown','New issue from comment…','New sub-issue from comment…','Delete','Archive session…'])
     await user.click(screen.getByRole('menuitem',{name:'Delete'}))
     await waitFor(()=>expect(deleteApplicationActivity).toHaveBeenCalledWith('workspace',done,'r'))
     await waitFor(()=>expect(screen.queryByText('Done')).not.toBeInTheDocument())

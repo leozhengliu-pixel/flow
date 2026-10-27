@@ -301,7 +301,7 @@
   {
     "name": "mcp__flow.delete_comment",
     "access": "write",
-    "description": "Delete a Flow comment. Inline description comments (those with non-null `quotedText`) anchor a mark in the editor, so their root cannot be deleted — delete the replies individually or resolve the thread instead.",
+    "description": "Delete a Flow comment. Inline description comments (those with non-null `quotedText`) anchor a mark in the editor, so their root cannot be deleted — delete the replies individually or resolve the thread instead. This deletes one ordinary comment only: an agent session (an agent's work on the issue with its replies and the replies people sent it) is not a comment; hide a whole session with `archive_agent_session`.",
     "input_schema": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "description": "Comment ID" } } }
   },
   {
@@ -1519,6 +1519,46 @@
         "issueId": { "type": "string", "description": "Issue ID or identifier (e.g. ENG-123) the session works on; omit for a chat-only request" },
         "environmentId": { "type": "string", "description": "Coding environment (repository) to use, when known" },
         "repository": { "type": "string", "description": "Repository name the user mentioned (e.g. acme/web), to help pick the environment" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_agent_sessions",
+    "access": "read",
+    "description": "List the agent sessions on a Flow issue, newest first. A session is one run of an agent on the issue: the issue was delegated to the agent, the agent was @-mentioned in a comment (`commentId` names that comment), or the agent opened the session itself. Each session has `id`, `status` (pending, active, awaitingInput, complete, error, canceled, stale), `trigger`, `agent`, `initiator` (who started it), `request`, `createdAt`, `updatedAt`, and `archivedAt`/`archivedBy` once archived. Archived sessions are hidden from the issue's activity and are left out unless `includeArchived` is true. Sessions are not comments: `list_comments` lists ordinary comments, `get_agent_session` reads the messages of one session, and `archive_agent_session` hides a whole session.",
+    "input_schema": {
+      "type": "object",
+      "required": ["issueId"],
+      "properties": {
+        "issueId": { "type": "string", "description": "Issue ID or identifier (e.g., ENG-123)" },
+        "includeArchived": { "type": "boolean", "description": "Also list archived sessions (default false)" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.get_agent_session",
+    "access": "read",
+    "description": "Read one agent session (an `id` from `list_agent_sessions`) and its messages, oldest first: replies people sent the agent (`prompt`), the agent's replies (`response`), questions (`elicitation`) and errors (`error`), stops (`canceled`) and retries (`retry`); with `includeSteps` also the agent's steps (`thought`, `action`, `output`). A single reply someone deleted from the thread is marked `deleted: true`. These messages are not comments: `list_comments` returns the issue's ordinary comments, including the comment that @-mentioned the agent. Archived sessions can still be read: archiving keeps the whole log. Long bodies are cut at 8000 characters (`truncated: true`). Pass `nextCursor` as `cursor` to read the next page.",
+    "input_schema": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "description": "Agent session ID" },
+        "includeSteps": { "type": "boolean", "description": "Include the agent's thoughts, actions and streamed output (default false)" },
+        "cursor": { "type": "string", "description": "Return messages after this message ID (`nextCursor` of the previous page)" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 250, "default": 100, "description": "Max messages (default 100, max 250)" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.archive_agent_session",
+    "access": "write",
+    "description": "Archive a whole agent session (an `id` from `list_agent_sessions`): the session and all of its messages, the agent's replies and the replies people sent it, leave the issue's activity for everyone. A session that is still pending, working or waiting for input is stopped first. Nothing is deleted: the session log (`get_agent_session` still reads it), the audit log, the coding session and pull requests it opened, documents and reports it wrote, attachments and linked issues are kept. Only the person who started the session or a workspace admin can archive it; an agent or application cannot archive a session it did not open. Archiving an archived session changes nothing (`alreadyArchived: true`). This is not `delete_comment`, which deletes one ordinary comment: the comment that @-mentioned the agent stays and can be deleted on its own.",
+    "input_schema": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "description": "Agent session ID" }
       }
     }
   }

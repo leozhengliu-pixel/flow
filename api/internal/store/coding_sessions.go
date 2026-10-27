@@ -177,6 +177,11 @@ func (s *SQLiteStore) endedCodingAnchor(ctx context.Context, anchor domain.Agent
 	if err != nil {
 		return nil, err
 	}
+	if task.ArchivedAt != nil {
+		// A person archived the whole session: it is never reopened to anchor
+		// a coding session.
+		return nil, ErrCodingAnchorRevoked
+	}
 	if task.Status != "complete" && task.Status != "error" && task.Status != "canceled" {
 		return nil, nil
 	}
@@ -296,8 +301,14 @@ func (s *SQLiteStore) insertCodingSession(ctx context.Context, session domain.Co
 		if existingRaw, err = json.Marshal(linked); err != nil {
 			return false, err
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE application_agent_tasks SET data=?,next_attempt=? WHERE id=? AND workspace_key=?`, existingRaw, agentSessionNeverDue, anchor.ID, anchor.WorkspaceKey); err != nil {
+		linkedRows, err := tx.ExecContext(ctx, `UPDATE application_agent_tasks SET data=?,next_attempt=? WHERE id=? AND workspace_key=? AND archived_at=''`, existingRaw, agentSessionNeverDue, anchor.ID, anchor.WorkspaceKey)
+		if err != nil {
 			return false, err
+		}
+		if count, err := linkedRows.RowsAffected(); err != nil {
+			return false, err
+		} else if count != 1 {
+			return true, nil // archived since the read: endedCodingAnchor refuses it
 		}
 	}
 	key := sql.NullString{String: idempotencyKey, Valid: idempotencyKey != ""}
@@ -334,7 +345,7 @@ func reopenCodingAnchor(ctx context.Context, tx *sqlTx, task *domain.AgentTask, 
 	if err != nil {
 		return err
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE application_agent_tasks SET status=?,version=?,data=?,next_attempt=?,lease_until='',stale_at=? WHERE workspace_key=? AND id=? AND version=? AND status=?`,
+	result, err := tx.ExecContext(ctx, `UPDATE application_agent_tasks SET status=?,version=?,data=?,next_attempt=?,lease_until='',stale_at=? WHERE workspace_key=? AND id=? AND version=? AND status=? AND archived_at=''`,
 		task.Status, task.Version, taskRaw, agentSessionNeverDue, agentTaskStaleAt(*task), session.WorkspaceKey, task.ID, expected, from)
 	if err != nil {
 		return err
