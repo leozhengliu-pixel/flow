@@ -67,6 +67,9 @@ describe('InboxFilterBuilder', () => {
     await user.keyboard('{Enter}')
     expect(onFiltersChange).toHaveBeenCalledWith([expect.objectContaining({values:[expect.objectContaining({value:'type-5'})]})])
     await user.click(screen.getByRole('button',{name:'Add filter'}))
+    // The menu moves focus to its search box on the next frame; opening a
+    // submenu before that would be dismissed by the late focus change.
+    await waitFor(() => expect(screen.getByRole('searchbox', {name:'Add Filter'})).toHaveFocus(), { timeout: 3000 })
     await user.click(screen.getByRole('option',{name:'Notification type'}))
     await user.click(screen.getByRole('option',{name:'11 options not matching any notifications'}))
     const expanded = screen.getByRole('dialog',{name:'Filter Notification type'})
