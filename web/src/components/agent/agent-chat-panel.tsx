@@ -3,7 +3,7 @@ import { FileText, Lightbulb, Plus } from 'lucide-react'
 import { AgentDraftCard } from './agent-draft-card'
 import { splitAgentDraft } from './agent-draft'
 import { splitAgentSuggestions } from './agent-answer-content'
-import { fetchAgentStatus, resolveAgentApproval, updateAgentSession, uploadAgentFile } from '@/lib/api'
+import { fetchAgentStatus, getAgentSession, updateAgentSession, uploadAgentFile } from '@/lib/api'
 import { toast } from '@/lib/toast'
 import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from '@/lib/agent-stream'
 import { markStoppedAgentReply } from './agent-stopped-reply'
@@ -31,6 +31,7 @@ import { useMarkAgentSessionRead } from './agent-read-state'
 import { AgentChatMenu, AgentRenamePalette } from './agent-chat-actions'
 import { deleteAgentChat, useAgentChatHotkeys } from './agent-chat-commands'
 import { AgentSessionFeedbackDialog } from './agent-message-actions'
+import { agentShownParts, useAgentApprovalAnswer, useAgentReplyFollow } from './use-agent-reply-follow'
 // coding sessions (track G)
 import { ChatCodingSessionCards } from '@/components/coding-sessions/chat-coding-session-cards'
 
@@ -115,10 +116,21 @@ export function AgentChatPanel({
   minimizedRef.current = minimized
   useEffect(() => { if (!minimized) setUnread(false) }, [minimized])
   const [fullscreen, setFullscreen] = useState(false)
-  const [approvalBusy, setApprovalBusy] = useState<string>()
   const abortRef = useRef<AbortController | undefined>(undefined)
+  // A reply running on the server without this panel streaming it (opened or reloaded mid-reply, or asked from another
+  // surface): its saved progress shows with live approval and question cards, followed until it finishes.
+  const shownSession = useMemo(() => session && { ...session, messages }, [messages, session])
+  const follow = useAgentReplyFollow({
+    session: shownSession,
+    streaming: loading,
+    enabled: open,
+    onUpdate: latest => { setSession(latest); setMessages(latest.messages); onSessionChange?.(latest) },
+  })
+  const replyRunning = loading || follow.following
+  const shownParts = useMemo(() => agentShownParts(messages, streamParts), [messages, streamParts])
+  const { approvalBusy, decideToolApproval } = useAgentApprovalAnswer({ sessionId: session?.id, parts: shownParts, onError: setError, onStale: follow.refresh })
   // Seeing the chat here (once its reply has settled) clears its unread dot on the Agent page too.
-  useMarkAgentSessionRead(open ? session : undefined, loading, (read, lastReadAt) => {
+  useMarkAgentSessionRead(open ? session : undefined, replyRunning, (read, lastReadAt) => {
     if (!session || session.id !== read.id) return
     const next = { ...session, lastReadAt }
     setSession(next)
@@ -184,6 +196,16 @@ export function AgentChatPanel({
     if (!open || !initialSession) return
     setSession(initialSession)
     setMessages(initialSession.messages)
+    // A long chat is listed without its messages: read it, so a reply still running shows (and is followed) too.
+    if (initialSession.messages.length || initialSession.id.startsWith('pending-')) return
+    let active = true
+    const id = initialSession.id
+    void Promise.resolve().then(() => getAgentSession(id)).then(full => {
+      if (!active || !full?.messages) return
+      setSession(full)
+      setMessages(full.messages)
+    }).catch(() => undefined)
+    return () => { active = false }
   }, [initialSession, open])
 
   useEffect(() => {
@@ -225,7 +247,6 @@ export function AgentChatPanel({
     setStreamParts([])
     setMinimized(false)
     setFullscreen(false)
-    setApprovalBusy(undefined)
     setMentions([])
     setSkillIds([])
     setRemovedContext([])
@@ -251,21 +272,6 @@ export function AgentChatPanel({
   const hasDraft = Boolean(input.trim() || quote || mentions.length || attachments.length)
   const requestClose = () => { if (hasDraft) setDiscardOpen(true); else close() }
 
-  const decideToolApproval = async (
-    call: AgentMessagePart['toolCall'] | undefined,
-    decision: 'approve' | 'reject',
-  ) => {
-    if (!session || !call?.approvalId || approvalBusy) return
-    setApprovalBusy(call.approvalId)
-    try {
-      await resolveAgentApproval(session.id, call.approvalId, decision)
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t('Flow Agent is unavailable'))
-    } finally {
-      setApprovalBusy(undefined)
-    }
-  }
-
   /**
    * Sends the composer text, or `followUp` (a suggestion chip or a question's option) without touching the composer.
    * `answer` picks that option of the reply's pending question: it shows as the chosen pill, not as a message.
@@ -273,7 +279,7 @@ export function AgentChatPanel({
   const submit = async (followUp?: string, answer?: { partId: string; value: string }) => {
     // Like the reference app, a quoted selection goes first (the model reads it as a quote, the chat shows it as a chip).
     const message = followUp !== undefined ? followUp.trim() : quoteAgentMessage(quote, input).trim()
-    if (!message || loading || !status?.enabled || (followUp === undefined && filesUploading)) return
+    if (!message || replyRunning || !status?.enabled || (followUp === undefined && filesUploading)) return
     const sentFiles = followUp === undefined ? attachments : []
     // Files go with the message for the server to keep and give to the model (images as images, not text).
     const sentAttachments = await Promise.all(sentFiles.map(agentFileAttachment))
@@ -449,7 +455,7 @@ export function AgentChatPanel({
           const outdated = Boolean(onDraft) && card.current !== undefined && !current.includes(opening)
           return <AgentDraftCard context={card.context} draft={draft} icon={'icon' in card ? card.icon : undefined} onRestore={onDraft ? () => onDraft(draft) : undefined} outdated={outdated} title={card.title} />
         }}
-        renderMessageActions={onUseResponse ? (message, index) => message.role === 'assistant' && message.content.trim() && !(loading && index === messages.length - 1) ? (
+        renderMessageActions={onUseResponse ? (message, index) => message.role === 'assistant' && message.content.trim() && !(replyRunning && index === messages.length - 1) ? (
           <button className={styles.useResponse} onClick={() => { onUseResponse(splitAgentSuggestions(message.content).prose.trim()); close() }} type="button">
             {t(useResponseLabel)}
           </button>
@@ -517,10 +523,11 @@ export function AgentChatPanel({
         enabled={Boolean(status?.enabled)}
         error={error}
         input={input}
-        loading={loading}
+        loading={replyRunning}
         messages={displayMessages}
         onInputChange={setInput}
-        onStop={() => abortRef.current?.abort()}
+        // The reply runs on the server even without this panel, so Stop ends it there too.
+        onStop={() => { void follow.stop(); abortRef.current?.abort() }}
         onSubmit={() => void submit()}
         onSendSuggestion={message => void submit(message)}
         onAnswer={(part, choice) => void submit(choice.label, { partId: part.id, value: choice.value })}

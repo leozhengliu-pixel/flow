@@ -16,6 +16,8 @@ vi.mock('@/lib/agent-stream', () => streams)
 import { AgentPage } from './agent-page'
 import { applyAgentStreamEvent } from './agent-stream-state'
 import { clearLiveAgentSession, setLiveAgentSession } from './agent-live-sessions'
+import { pushAgentSession } from './use-agent-reply-follow'
+import { finishedReplySession, runningReplySession } from '@/test/agent-running-reply'
 
 describe('agent page composer', () => {
   beforeEach(() => {
@@ -237,6 +239,27 @@ describe('agent page composer', () => {
     ] }] })
     await waitFor(() => expect(screen.getByText('Deleted the branch.')).toBeVisible(), { timeout: 4000 })
     expect(screen.queryByRole('button', { name: 'Approve tool' })).not.toBeInTheDocument()
+  })
+
+  it('follows a running reply answered from another chat surface, and Stop ends it on the server', async () => {
+    const user = userEvent.setup()
+    api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
+    api.stopAgentSession.mockResolvedValue(undefined)
+    const running = runningReplySession({ location: 'page' })
+    api.getAgentSession.mockResolvedValue(running)
+    const onSessionChange = vi.fn()
+    render(<I18nProvider><AgentPage chatSlug="live" data={makeBootstrap({ agentSessions: [running], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={onSessionChange}/></I18nProvider>)
+    expect(await screen.findByRole('button', { name: 'Approve tool' })).toBeEnabled()
+    expect(screen.getByRole('region', { name: 'Local tools requests information' })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Stop responding' }))
+    expect(api.stopAgentSession).toHaveBeenCalledWith('session-live')
+    // The floating chat answered the approval and the question; the realtime push shows it here at once.
+    const finished = finishedReplySession(running)
+    act(() => pushAgentSession(finished))
+    expect(await screen.findByText('Deleted the branch.')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Approve tool' })).not.toBeInTheDocument()
+    expect(screen.getByText('Response sent')).toBeVisible()
+    expect(onSessionChange).toHaveBeenCalledWith('session-live', finished)
   })
 
   it('renders persisted reasoning, tool, text, and error parts', async () => {

@@ -198,6 +198,7 @@ import { FlowTooltip } from "@/components/ui/tooltip";
 import { OPEN_FLOATING_AGENT_EVENT, type FloatingAgentRequest } from "@/components/agent/agent-floating-request";
 import { CREATE_ISSUE_INLINE_EVENT, type InlineIssueInput, type InlineIssueRequest } from "@/components/editor/selection-issue";
 import { AGENT_PAGE_ASK_EVENT } from "@/components/agent/agent-ask-request";
+import { pushAgentSession } from "@/components/agent/use-agent-reply-follow";
 import { documentsRedirectPath } from "@/lib/documents-redirect";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
 import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-list";
@@ -485,6 +486,8 @@ function App() {
       catch (error) { if (!(error instanceof ApiError && [403, 404].includes(error.status))) throw error; }
     }
     setData(current => applies(current) ? withAgentSession(current!, id, session) : current);
+    // Chat surfaces that hold their own copy (the floating chat, entity and loop panels) follow the reply from it.
+    if (session) pushAgentSession(session);
   }, []);
   const bootstrapRequest = useRef<BootstrapRequest | null>(null);
   useEffect(() => () => bootstrapRequest.current?.controller.abort(), []);

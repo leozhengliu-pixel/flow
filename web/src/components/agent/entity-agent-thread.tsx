@@ -381,7 +381,8 @@ export function EntityAgentThread({
           />
         )}
         {/* A custom body shows its own progress once the reply has started. */}
-        {loading && !streamWork.length && !(renderAssistantBody && messages.at(-1)?.role === 'assistant') && (
+        {/* A reply followed from its saved copy shows its own work group, as a streamed one does. */}
+        {loading && !streamWork.length && !(renderAssistantBody && messages.at(-1)?.role === 'assistant') && !savedReplyWorking(savedMessages.at(-1)) && (
           <div className={styles.thinking} data-state="loading">
             <GridLoader variant="agent" size={14} />
             {t('Thinking…')}
@@ -487,6 +488,11 @@ export function EntityAgentThread({
       </div>
     </div>
   )
+}
+
+/** A reply saved while it runs (followed, not streamed here) that already shows work: reasoning, steps or tool calls. */
+function savedReplyWorking(message: AgentMessage | undefined) {
+  return message?.role === 'assistant' && message.status === 'streaming' && Boolean(message.parts?.some(part => part.type === 'reasoning' || part.type === 'step' || part.type === 'toolCall'))
 }
 
 /** A sent message that starts with a quoted selection: the selection as the reference app's inline chip, then the text. */

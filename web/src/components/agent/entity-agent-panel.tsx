@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileText } from 'lucide-react'
 import { ProjectIcon } from '@/components/issue/issue-icons'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
-import { fetchAgentStatus, getAgentSession, listAgentSessions, resolveAgentApproval } from '@/lib/api'
+import { fetchAgentStatus, getAgentSession, listAgentSessions } from '@/lib/api'
 import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from '@/lib/agent-stream'
 import { markAgentSessionDocked } from './agent-docked-sessions'
 import { markStoppedAgentReply } from './agent-stopped-reply'
@@ -14,6 +14,7 @@ import { EntityAgentThread } from './entity-agent-thread'
 import { clearEntityThreadDraft } from './entity-thread-draft'
 import { conversationDraftKeyFor } from './agent-drafts'
 import { useMarkAgentSessionRead } from './agent-read-state'
+import { agentShownParts, useAgentApprovalAnswer, useAgentReplyFollow } from './use-agent-reply-follow'
 import styles from './entity-agent-panel.module.css'
 
 export type EntityAgentEntityType = 'issue' | 'document' | 'initiative' | 'project'
@@ -75,12 +76,23 @@ export function EntityAgentPanel({
   const [loading, setLoading] = useState(false)
   const [streamParts, setStreamParts] = useState<AgentMessagePart[]>([])
   const [error, setError] = useState<string>()
-  const [approvalBusy, setApprovalBusy] = useState<string>()
   const [hydration, setHydration] = useState<HydrationState>({ isHydrated: false, observing: false })
   const [draftEpoch, setDraftEpoch] = useState(0)
   const abortRef = useRef<AbortController | undefined>(undefined)
+  // A reply running on the server without this panel streaming it (opened or reloaded mid-reply, or asked from another
+  // surface): its saved progress shows with live approval and question cards, followed until it finishes.
+  const shownSession = useMemo(() => session && { ...session, messages }, [messages, session])
+  const follow = useAgentReplyFollow({
+    session: shownSession,
+    streaming: loading,
+    enabled: open,
+    onUpdate: latest => { setSession(latest); setMessages(latest.messages); onSessionChange?.(latest) },
+  })
+  const replyRunning = loading || follow.following
+  const shownParts = useMemo(() => agentShownParts(messages, streamParts), [messages, streamParts])
+  const { approvalBusy, decideToolApproval } = useAgentApprovalAnswer({ sessionId: session?.id, parts: shownParts, onError: setError, onStale: follow.refresh })
   // Seeing the chat here (once its reply has settled) clears its unread dot on the Agent page too.
-  useMarkAgentSessionRead(open ? session : undefined, loading, (read, lastReadAt) => {
+  useMarkAgentSessionRead(open ? session : undefined, replyRunning, (read, lastReadAt) => {
     if (!session || session.id !== read.id) return
     const next = { ...session, lastReadAt }
     setSession(next)
@@ -169,21 +181,6 @@ export function EntityAgentPanel({
     if (initialPrompt) setInput(initialPrompt)
   }, [initialPrompt, entityKey])
 
-  const decideToolApproval = async (
-    call: AgentMessagePart['toolCall'] | undefined,
-    decision: 'approve' | 'reject',
-  ) => {
-    if (!session || !call?.approvalId || approvalBusy) return
-    setApprovalBusy(call.approvalId)
-    try {
-      await resolveAgentApproval(session.id, call.approvalId, decision)
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t('Flow Agent is unavailable'))
-    } finally {
-      setApprovalBusy(undefined)
-    }
-  }
-
   const resetConversation = () => {
     abortRef.current?.abort()
     clearEntityThreadDraft(conversationDraftKey)
@@ -199,7 +196,7 @@ export function EntityAgentPanel({
   /** Sends the composer text, or `followUp` (a suggestion chip) without touching the composer. */
   const submit = async (followUp?: string, answer?: { partId: string; value: string }) => {
     const message = (followUp ?? input).trim()
-    if (!message || loading || !status?.enabled) return
+    if (!message || replyRunning || !status?.enabled) return
     setMessages(current => [
       // A picked option shows as the chosen pill on its question until the server's copy arrives.
       ...current.map(item => answer && item.parts?.some(part => part.id === answer.partId)
@@ -338,10 +335,11 @@ export function EntityAgentPanel({
           enabled={Boolean(status?.enabled)}
           error={error}
           input={input}
-          loading={loading}
+          loading={replyRunning}
           messages={messages}
           onInputChange={setInput}
-          onStop={() => abortRef.current?.abort()}
+          // The reply runs on the server even without this panel, so Stop ends it there too.
+          onStop={() => { void follow.stop(); abortRef.current?.abort() }}
           onSubmit={() => void submit()}
           onSendSuggestion={message => void submit(message)}
           onAnswer={(part, choice) => void submit(choice.label, { partId: part.id, value: choice.value })}
