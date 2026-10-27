@@ -1954,8 +1954,14 @@ func appendIssueNotifications(data *domain.Bootstrap, issue domain.Issue, activi
 	for _, userID := range mentionIDs {
 		recipients[userID] = "mentions"
 	}
+	// A move to another team can take the issue away from its subscribers:
+	// only those who can open it in its new team hear about it.
+	moved := activity.Metadata["teamBefore"] != "" && activity.Metadata["team"] != activity.Metadata["teamBefore"]
 	for recipientID, category := range recipients {
 		if recipientID == "" || recipientID == activity.Actor.ID || userByID(data, recipientID) == nil {
+			continue
+		}
+		if moved && !issueVisibleToMember(data, issue, recipientID) {
 			continue
 		}
 		preferences, ok := data.NotificationPreferences[recipientID]
@@ -1986,6 +1992,39 @@ func appendIssueNotifications(data *domain.Bootstrap, issue domain.Issue, activi
 		}
 		enqueueNotificationDeliveries(data, notification, preferences)
 	}
+}
+
+// issueVisibleToMember reports whether workspace member userID can open
+// issue: its team's content is visible to them (team access, membership and
+// workspace role, as the store projects issues), they created it, or they
+// hold a grant on it or an ancestor.
+func issueVisibleToMember(data *domain.Bootstrap, issue domain.Issue, userID string) bool {
+	if issue.Creator.ID == userID {
+		return true
+	}
+	role := ""
+	for _, member := range data.Members {
+		if member.User.ID == userID {
+			if member.Status != "" && member.Status != "active" {
+				return false
+			}
+			role = member.Role
+			break
+		}
+	}
+	if role == "" {
+		if len(data.Members) > 0 {
+			return false
+		}
+		// No member directory in this write: team access alone decides.
+		role = "member"
+	}
+	if store.TeamContentVisible(*data, issue.Team.ID, userID, role) {
+		return true
+	}
+	view := *data
+	view.Viewer, view.ViewerRole = domain.User{ID: userID}, role
+	return issueGrantedRole(view, issue) != ""
 }
 
 func notificationType(category string) string {

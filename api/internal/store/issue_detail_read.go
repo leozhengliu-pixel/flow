@@ -74,7 +74,10 @@ func authorizedIssueStatement(query IssueRecordQuery, id, column string) (string
 	}
 	prefix, prefixArgs := issueAccessCTE(query)
 	args = append(prefixArgs, args...)
-	args = append(args, query.Workspace, id, query.Workspace, strings.ToUpper(id), query.Workspace, strings.ToUpper(id))
-	// An issue that moved to another team keeps answering to its old identifiers.
-	return prefix + "SELECT " + column + " FROM issue_records i WHERE " + where + " AND i.id IN (SELECT id FROM issue_records WHERE workspace_key=? AND id=? UNION SELECT id FROM issue_records WHERE workspace_key=? AND identifier=? UNION SELECT issue_id FROM issue_identifier_aliases WHERE workspace_key=? AND identifier=?) LIMIT 1", args, nil
+	upper := strings.ToUpper(id)
+	args = append(args, query.Workspace, id, query.Workspace, upper, query.Workspace, upper, id, upper)
+	// An issue that moved to another team keeps answering to its old
+	// identifiers. An internal id wins over an identifier, and an issue's
+	// current identifier over one another issue had before it moved.
+	return prefix + "SELECT " + column + " FROM issue_records i WHERE " + where + " AND i.id IN (SELECT id FROM issue_records WHERE workspace_key=? AND id=? UNION SELECT id FROM issue_records WHERE workspace_key=? AND identifier=? UNION SELECT issue_id FROM issue_identifier_aliases WHERE workspace_key=? AND identifier=?) ORDER BY CASE WHEN i.id=? THEN 0 WHEN i.identifier=? THEN 1 ELSE 2 END LIMIT 1", args, nil
 }

@@ -443,7 +443,12 @@ func (s *SQLiteStore) loadScopedIssues(ctx context.Context, tx *sqlTx, workspace
 	}
 	if err := chunks(scope.IssueIdentifiers, func(values []string) error {
 		clause, args := bindList("identifier", values)
-		return collect(&direct, `SELECT id FROM issue_records WHERE workspace_key=? AND `+clause, append([]any{workspace}, args...)...)
+		if err := collect(&direct, `SELECT id FROM issue_records WHERE workspace_key=? AND `+clause, append([]any{workspace}, args...)...); err != nil {
+			return err
+		}
+		// An identifier an issue had before it moved to another team
+		// (issue_identifier_aliases_lookup_idx) still names it.
+		return collect(&direct, `SELECT issue_id FROM issue_identifier_aliases WHERE workspace_key=? AND `+clause, append([]any{workspace}, args...)...)
 	}); err != nil {
 		return nil, nil, err
 	}

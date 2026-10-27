@@ -49,6 +49,21 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Every route under an issue (`/api/issues/{id}/…` and
+  `/api/issue-records/{id}/…`: comments, reactions, relations, attachments,
+  links, permissions, subscriptions, history, sharing…) accepts the issue's
+  identifier, and an identifier it had before it moved to another team, not
+  only its internal id. Pull and merge requests (branch, title, description,
+  magic words) and release references from commits link a moved issue by its
+  old identifier too, and `ENG-1` no longer matches `ENG-12`. Subscribers who
+  cannot see the team an issue moved to are not notified of the move.
+- Collaboration: an issue permission change is in force when its request
+  returns (a downgraded member's next edit is refused, an upgraded one's is
+  applied) and on other servers as soon as the change reaches them.
+  Re-parenting an issue (PATCH `parentId` or a sub-issue relation) re-checks
+  the open descriptions it affects at once, since sub-issues inherit their
+  parents' grants. Issue updates no longer leave other servers reading the
+  previous record from the shared cache.
 - Security: `X-Forwarded-Proto` and `X-Forwarded-Host` were believed from any
   client when Flow built links (OAuth and MCP metadata, SCIM locations, signed
   file URLs) and chose `Secure` for cookies, and rate limits trusted the

@@ -121,6 +121,51 @@ func (s *server) issueRecordAuthorizationData(r *http.Request) (domain.Bootstrap
 	return metadata, nil
 }
 
+// issuePathReference splits an issue route (/api/issue-records/{ref}... or
+// /api/issues/{ref}...) into its prefix, the issue reference and the rest of
+// the path.
+func issuePathReference(path string) (prefix, reference, rest string, ok bool) {
+	for _, prefix := range []string{"/api/issue-records/", "/api/issues/"} {
+		tail, found := strings.CutPrefix(path, prefix)
+		if !found {
+			continue
+		}
+		reference, rest, found = strings.Cut(tail, "/")
+		if found {
+			rest = "/" + rest
+		}
+		return prefix, reference, rest, reference != ""
+	}
+	return "", "", "", false
+}
+
+// resolveIssuePathReference rewrites an issue route that names the issue by
+// an identifier (its current one, or one it had before it moved to another
+// team) to the issue's internal id, so every route under /api/issues/{id} and
+// /api/issue-records/{id}, its authorization and its handler see the id. The
+// lookup is the viewer's authorized point read (indexed by id, identifier and
+// alias); a reference the viewer cannot read is left as it is and answers as
+// an unknown id does.
+func (s *server) resolveIssuePathReference(r *http.Request) {
+	prefix, reference, rest, ok := issuePathReference(r.URL.Path)
+	if !ok || !issueIdentifierPattern.MatchString(reference) {
+		return
+	}
+	data, access, err := s.requestIssueQueryAccess(r)
+	if err != nil || data.Workspace.URLKey == "" {
+		return
+	}
+	query := store.IssueRecordQuery{Workspace: data.Workspace.URLKey}
+	query.Access, query.AllowedTeamIDs = s.issueRecordAccess(r, data, access)
+	id, err := s.store.AuthorizedIssueRecordID(r.Context(), query, reference)
+	if err != nil || id == "" || id == reference {
+		return
+	}
+	target := *r.URL
+	target.Path, target.RawPath = prefix+id+rest, ""
+	r.URL = &target
+}
+
 func (s *server) issueRecordAlias(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		data, err := s.issueRecordAuthorizationData(r)
