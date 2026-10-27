@@ -5,7 +5,8 @@ import type { BootstrapData, Issue, User } from '@/types/flow'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { activityTimeLabel } from '@/components/activity/issue-activity-model'
 import { commentShortcutMatches } from '@/lib/runtime-preferences'
-import { AGENT_TASK_ACTIVITY_EVENT, deleteApplicationActivity, getApplicationTask, isApplicationTaskRunning, listApplicationTasks, reactApplicationTask, recommendedChoiceValue, replyApplicationTask, type ApplicationTask, type ApplicationActivity } from '@/lib/application-agents'
+import { AGENT_TASK_ACTIVITY_EVENT, archiveApplicationTask, deleteApplicationActivity, getApplicationTask, isApplicationTaskRunning, listApplicationTasks, reactApplicationTask, recommendedChoiceValue, replyApplicationTask, type ApplicationTask, type ApplicationActivity } from '@/lib/application-agents'
+import { confirmAction } from '@/components/ui/action-dialog-service'
 import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
 import { AgentAnswerText, AgentChoicePills } from './agent-answer'
 import { agentApprovalChoices, agentApprovalMarkdown } from './agent-approval-model'
@@ -122,6 +123,7 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
   const fileInput = useRef<HTMLInputElement>(null)
   const [error, setError] = useState('')
   const [session, setSession] = useState(task)
+  const [archived, setArchived] = useState(false)
   const cursor = useRef({ key: '', after: '' })
   const agent = data.users.find(user => user.id === task.appUserId)
   const name = agent?.displayName || agent?.name || t('Application')
@@ -206,12 +208,35 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
   const shown = items.filter(item => item.kind === 'message' && !(generating && item.output))
   const phase = generating ? agentWorkingPhase(activities, t) : ''
   const canDelete = data.viewer.id === task.creatorId || data.viewerRole === 'admin' || data.viewerRole === 'owner'
+  // The whole session (every message in it, people's replies included) can be archived by whoever started it or an
+  // admin, as the server enforces; deleting a reply hides only that reply.
+  const canArchive = !data.viewer.app && canDelete
+  const archiveSession = async () => {
+    if (busyRef.current) return
+    const description = [
+      t('The session and all of its messages, including the replies people sent the agent, will be hidden from this activity for everyone. A running session is stopped first.'),
+      t('The execution log, the audit log, reports and documents it created, attachments and linked issues are kept. To remove a single reply, use Delete on that reply instead.'),
+      ...(task.commentId ? [t('The comment that mentioned the agent stays.')] : []),
+    ].join(' ')
+    if (!await confirmAction(t('Archive this agent session?'), { description, confirmLabel: t('Archive session'), cancelLabel: t('Cancel'), danger: true })) return
+    busyRef.current = true; setBusy(true); setError('')
+    try {
+      await archiveApplicationTask(data.workspace.urlKey, task.id)
+      setArchived(true)
+      toast.success(t('Agent session archived'))
+      onChanged()
+    } catch (error) { setError(error instanceof Error ? error.message : String(error)) }
+    finally { busyRef.current = false; setBusy(false) }
+  }
+  const sessionMenu = canArchive ? <AgentSessionMenu linkId={`agent-session-${task.id}`} onArchive={() => void archiveSession()}/> : null
+  // Gone at once for the archiver; other viewers drop it on the agent_task push (the list leaves archived sessions out).
+  if (archived || current.archivedAt) return null
   const delegator = task.trigger === 'delegation' && !task.commentId ? data.users.find(user => user.id === task.creatorId) : undefined
   // A document's comment card says "Reply…", like its own reply row.
   const replyPlaceholder = t(variant === 'document' ? 'Reply…' : 'Leave a reply…')
   return <section className="issue-agent-thread" id={`agent-session-${task.id}`} data-agent-task-id={task.id} data-status={current.status} data-unresponsive={unresponsive || undefined} aria-label={`${name} ${t('Agent session')}`}>
     {/* AIG: a delegated issue names the responsible human ("Delegated to Flow by Skyler"). */}
-    {delegator && <div className="issue-agent-delegation"><AgentMessageHeader user={agent} name={t('Delegated to {name} by {user}').replace('{name}', name).replace('{user}', delegator.displayName || delegator.name)} time={taskCreatedAt(task)}/></div>}
+    {delegator && <div className="issue-agent-delegation"><AgentMessageHeader user={agent} name={t('Delegated to {name} by {user}').replace('{name}', name).replace('{user}', delegator.displayName || delegator.name)} time={taskCreatedAt(task)}/>{sessionMenu && <div className="issue-agent-message-actions">{sessionMenu}</div>}</div>}
     <AgentSessionDetails session={current}/>
     {/* coding sessions (track G): the session view when this task anchors a coding session */}
     <AgentTaskCodingSession task={current} data={data}/>
@@ -236,9 +261,12 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
             controls={threadControls}
             linkId={`agent-activity-${item.id}`}
             onDelete={canDelete ? () => void remove(activity.id) : undefined}
+            onArchiveSession={canArchive ? () => void archiveSession() : undefined}
             teamId={teamId}
           />
         </div>}
+        {/* A person's reply in the session has no reply menu of its own; it offers the session's menu. */}
+        {human && sessionMenu && !delegator && <div className="issue-agent-message-actions">{sessionMenu}</div>}
         <div className="issue-agent-message-body"><AgentAnswerText className="issue-agent-markdown" data={data} markdown={body}/>
           {choices.length > 0 && <AgentChoicePills choices={choices} disabled={busy || item.id !== pendingQuestion?.id} onSelect={choice => void submit('prompt', choice.value)} recommended={approval || activity.signal !== 'select' ? undefined : recommendedChoiceValue(activity.signalMetadata)} selected={item.resolved ? item.selected ?? '' : undefined}/>}
           {auth && (authUser && authUser !== data.viewer.id ? <p className="issue-agent-auth-wait">{t('Waiting for')} {data.users.find(user => user.id === authUser)?.displayName || t('another member')} {t('to link their account.')}</p> : <a className="issue-agent-auth-link" href={activity.signalMetadata?.url} target="_blank" rel="noreferrer"><ExternalLink size={14}/>{t('Link account')}</a>)}
@@ -250,10 +278,12 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
     {generating && <div className="issue-agent-working" role="status" aria-live="polite">
       <AgentMessageHeader user={agent} name={name} time=""/>
       <AgentWorkingLabel text={phase}/>
+      {sessionMenu && !delegator && <div className="issue-agent-message-actions">{sessionMenu}</div>}
     </div>}
     {(unresponsive || current.status === 'stale') && <div className="issue-agent-working issue-agent-session-state" role="status" data-state={unresponsive ? 'unresponsive' : 'stale'}>
       <AgentMessageHeader user={agent} name={name} time=""/>
       <span className="issue-agent-working-text">{t(unresponsive ? '{name} didn’t respond' : 'No activity from {name} for 30 minutes').replace('{name}', name)}</span>
+      {sessionMenu && !delegator && <div className="issue-agent-message-actions">{sessionMenu}</div>}
     </div>}
     {current.pendingTool && current.status === 'awaitingInput' && !pendingQuestion?.activity.signalMetadata?.options?.length && <div className="issue-agent-approval"><span>{t('Approval required')}: {current.pendingTool.name}</span><button type="button" disabled={busy} onClick={() => void submit('prompt', '', false)}>{t('Reject')}</button><button type="button" disabled={busy} onClick={() => void submit('prompt', '', true)}>{t('Approve')}</button></div>}
     <div className="issue-agent-thread-footer">
@@ -282,7 +312,9 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
       ) : <>
         <button type="button" className="issue-agent-start-reply" onClick={() => setReplying(true)}><UserAvatar name={data.viewer.displayName} avatarUrl={data.viewer.avatarUrl} className="avatar"/><span>{replyPlaceholder}</span></button>
         <div className="issue-agent-idle-tools">
-          {onUpload && <button type="button" aria-label={t('Attach images, files, or videos')} disabled={busy} onClick={() => fileInput.current?.click()}><Paperclip size={14}/></button>}
+          {/* A session with no row to carry its menu (stopped before the agent replied) offers it here. */}
+          {sessionMenu && !delegator && !shown.length && !generating && !unresponsive && current.status !== 'stale' && sessionMenu}
+          {onUpload &&<button type="button" aria-label={t('Attach images, files, or videos')} disabled={busy} onClick={() => fileInput.current?.click()}><Paperclip size={14}/></button>}
           <button type="button" aria-label={t('Send reply')} disabled><ArrowUp size={14}/></button>
         </div>
       </>}
@@ -329,16 +361,17 @@ function AgentWorkingLabel({ text }: { text: string }) {
  * The "…" menu on an agent's reply in a comment thread, as the reference app lists it: thread subscription, resolve the thread,
  * copy link / Markdown, new issue or sub-issue from the reply, delete.
  */
-function AgentReplyCommentMenu({ body, controls, linkId, onDelete, teamId }: { body: string; controls?: AgentThreadControls; linkId: string; onDelete?: () => void; teamId?: string }) {
+function AgentReplyCommentMenu({ body, controls, linkId, onDelete, onArchiveSession, teamId }: { body: string; controls?: AgentThreadControls; linkId: string; onDelete?: () => void; /** Archives the whole session this reply belongs to. */ onArchiveSession?: () => void; teamId?: string }) {
   const { t } = useI18n()
   const copy = (value: string, done: string) => void navigator.clipboard.writeText(value)
     .then(() => toast.success(t(done)))
     .catch(() => toast.error(t('Could not copy to clipboard')))
   const newIssue = (subIssue: boolean) => window.dispatchEvent(new CustomEvent('flow-create-issue-from-selection', { detail: { text: body, teamId, parentId: subIssue ? controls?.parentIssueId : undefined } }))
+  const afterClose = useAfterMenuClose()
   return <RadixMenu.Root>
     <RadixMenu.Trigger asChild><button type="button" aria-label={t('Comment options')}><AgentCommentGlyph name="more"/></button></RadixMenu.Trigger>
     <RadixMenu.Portal>
-      <RadixMenu.Content data-flow-motion="floating" align="end" sideOffset={4} collisionPadding={16} className="project-action-menu project-comment-menu" aria-label={t('Comment options')}>
+      <RadixMenu.Content data-flow-motion="floating" align="end" sideOffset={4} collisionPadding={16} className="project-action-menu project-comment-menu" aria-label={t('Comment options')} onCloseAutoFocus={afterClose.onCloseAutoFocus}>
         {controls?.onToggleSubscription && <><MenuItem glyph={controls.following ? 'unsubscribe' : 'subscribe'} label={t(controls.following ? 'Unsubscribe from thread' : 'Subscribe to thread')} onSelect={controls.onToggleSubscription}/><RadixMenu.Separator/></>}
         {controls?.onResolve && <><MenuItem glyph="resolveThread" label={t(controls.resolved ? 'Unresolve thread' : 'Resolve thread with comment')} onSelect={controls.onResolve}/><RadixMenu.Separator/></>}
         <MenuItem glyph="copyLink" label={t('Copy link to comment')} onSelect={() => copy(`${location.href.split('#')[0]}#${linkId}`, 'Copied link to comment')}/>
@@ -347,6 +380,44 @@ function AgentReplyCommentMenu({ body, controls, linkId, onDelete, teamId }: { b
         <MenuItem glyph="newIssueFromComment" label={t('New issue from comment…')} onSelect={() => newIssue(false)}/>
         {controls?.parentIssueId && <MenuItem glyph="newSubIssueFromComment" label={t('New sub-issue from comment…')} onSelect={() => newIssue(true)}/>}
         {onDelete && <><RadixMenu.Separator/><MenuItem glyph="delete" label={t('Delete')} onSelect={onDelete}/></>}
+        {onArchiveSession && <>{!onDelete && <RadixMenu.Separator/>}<MenuItem glyph="agentSessionDismissed" label={t('Archive session…')} onSelect={() => afterClose.then(onArchiveSession)}/></>}
+      </RadixMenu.Content>
+    </RadixMenu.Portal>
+  </RadixMenu.Root>
+}
+
+/**
+ * Runs a menu action once the menu has closed, without handing focus back to its trigger: the confirmation dialog
+ * the action opens would otherwise see that focus move as an outside interaction and close at once.
+ */
+function useAfterMenuClose() {
+  const pending = useRef<(() => void) | undefined>(undefined)
+  return {
+    then: (action: () => void) => { pending.current = action },
+    onCloseAutoFocus: (event: Event) => {
+      const action = pending.current
+      pending.current = undefined
+      if (!action) return
+      event.preventDefault()
+      action()
+    },
+  }
+}
+
+/** The session's own "…" menu (delegation header, people's replies, the working row): its link and "Archive session…". */
+function AgentSessionMenu({ linkId, onArchive }: { linkId: string; onArchive: () => void }) {
+  const { t } = useI18n()
+  const copyLink = () => void navigator.clipboard.writeText(`${location.href.split('#')[0]}#${linkId}`)
+    .then(() => toast.success(t('Link copied to clipboard')))
+    .catch(() => toast.error(t('Could not copy to clipboard')))
+  const afterClose = useAfterMenuClose()
+  return <RadixMenu.Root>
+    <RadixMenu.Trigger asChild><button type="button" aria-label={t('Agent session options')}><AgentCommentGlyph name="more"/></button></RadixMenu.Trigger>
+    <RadixMenu.Portal>
+      <RadixMenu.Content data-flow-motion="floating" align="end" sideOffset={4} collisionPadding={16} className="project-action-menu project-comment-menu" aria-label={t('Agent session options')} onCloseAutoFocus={afterClose.onCloseAutoFocus}>
+        <MenuItem glyph="copyLink" label={t('Copy link to session')} onSelect={copyLink}/>
+        <RadixMenu.Separator/>
+        <MenuItem glyph="agentSessionDismissed" label={t('Archive session…')} onSelect={() => afterClose.then(onArchive)}/>
       </RadixMenu.Content>
     </RadixMenu.Portal>
   </RadixMenu.Root>

@@ -289,7 +289,13 @@ func (s *server) listApplicationAgentTasks(w http.ResponseWriter, r *http.Reques
 			workspace = metadata.Workspace.URLKey
 		}
 	}
-	tasks, err := s.store.ListAgentTasks(r.Context(), workspace, issueID, appID)
+	// Archived sessions are not part of the resource's activity; MCP's
+	// list_agent_sessions asks for them with includeArchived=true.
+	list := s.store.ListAgentTasks
+	if r.URL.Query().Get("includeArchived") == "true" {
+		list = s.store.ListAgentTasksIncludingArchived
+	}
+	tasks, err := list(r.Context(), workspace, issueID, appID)
 	if err != nil {
 		respondMutation(w, err, 200, nil)
 		return
@@ -424,6 +430,10 @@ func (s *server) appendApplicationAgentActivity(w http.ResponseWriter, r *http.R
 	}
 	if err == store.ErrIssueQuery {
 		writeError(w, 400, "Invalid activity or feedback target")
+		return
+	}
+	if errors.Is(err, store.ErrAgentTaskArchived) {
+		writeError(w, 409, "This agent session was archived")
 		return
 	}
 	if err == store.ErrIssueVersion {

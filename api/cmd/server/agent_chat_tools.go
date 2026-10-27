@@ -88,7 +88,7 @@ var agentToolGroups = []agentToolGroup{
 var agentChatHiddenTools = map[string]bool{
 	agentProgressTool: true, "prepare_attachment_upload": true, "create_attachment_from_upload": true, "create_attachment": true,
 	// MCP-only tools (agentMCPOnlyTools) are not in the in-process agent's tool set at all.
-	"count_issues": true,
+	"count_issues": true, "list_agent_sessions": true, "get_agent_session": true, "archive_agent_session": true,
 }
 
 const agentLoadToolsTool = "load_tools"

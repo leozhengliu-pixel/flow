@@ -9,6 +9,11 @@
 .issue-agent-message{position:relative}
 .issue-agent-message-actions{position:absolute;right:10px;top:10px;display:flex;align-items:center;padding:1px 1px 1px 50px;background:var(--agent-thread-surface);opacity:0;pointer-events:none}
 .issue-agent-message:hover .issue-agent-message-actions,.issue-agent-message:focus-within .issue-agent-message-actions,.issue-agent-message-actions:has([data-state=open]){opacity:1;pointer-events:auto}
+/* The session's own menu (archive the whole session) on the delegation header and the working / state rows. */
+.issue-agent-delegation{position:relative}
+.issue-agent-delegation .issue-agent-message-actions{top:8px}
+.issue-agent-working .issue-agent-message-actions{top:50%;transform:translateY(-50%)}
+:is(.issue-agent-delegation,.issue-agent-working):is(:hover,:focus-within) .issue-agent-message-actions{opacity:1;pointer-events:auto}
 .issue-agent-message-actions button{width:28px;height:28px;display:grid;place-items:center;border:.5px solid transparent;border-radius:9999px;padding:0 2px;background:transparent;color:var(--agent-thread-muted);cursor:pointer}
 .issue-agent-message-actions button:hover,.issue-agent-message-actions button[aria-pressed=true]{background:var(--agent-thread-option)}
 .issue-agent-message-actions button:disabled{cursor:default;opacity:.45}

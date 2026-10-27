@@ -1,4 +1,5 @@
 [
+  "archive_agent_session",
   "count_issues",
   "create_attachment",
   "create_attachment_from_upload",
@@ -19,6 +20,7 @@
   "delete_project",
   "delete_view",
   "extract_images",
+  "get_agent_session",
   "get_agent_skill",
   "get_customer",
   "get_diff",
@@ -33,6 +35,7 @@
   "get_team",
   "get_user",
   "get_workspace",
+  "list_agent_sessions",
   "list_agent_skills",
   "list_comments",
   "list_customers",

@@ -181,6 +181,52 @@ HTTPS `auth` links. Human replies can continue both waiting and completed
 conversations; stop clears pending execution. See the bilingual developer guide
 for signal schemas and the runnable streaming model example.
 
+## Archive a Session
+
+After failed, canceled or repeated runs, a person can hide a whole session from
+the issue's activity: open the "…" menu on the session (its delegation header,
+an agent reply, a reply you sent it, or the working row) and choose
+**Archive session…**. MCP clients use `list_agent_sessions`,
+`get_agent_session` and `archive_agent_session`.
+
+```http
+POST /api/agent-tasks/SESSION_ID/archive
+Content-Type: application/json
+
+{}
+```
+
+Returns `{ session, archived, alreadyArchived, stopped, previousStatus }`.
+
+- **Scope.** The session and every message in it, the agent's replies and the
+  replies people sent it, leave the activity for everyone, live (an
+  `agent_task.updated` push with `archived: true`) and after a reload (session
+  lists leave archived sessions out; `GET /api/agent-tasks?…&includeArchived=true`
+  includes them). Deleting a comment removes one ordinary comment, and
+  **Delete** on an agent reply hides that one reply; neither removes the session.
+  The comment that @-mentioned the agent is an ordinary comment and stays.
+- **What is kept.** Nothing is deleted. The activity log stays readable with
+  `GET /api/agent-tasks/SESSION_ID`, the audit log records
+  `agent_session.archived`, and documents, reports, attachments, pull requests
+  and linked issues the session produced are untouched. The issue keeps its
+  delegate.
+- **Who.** The person who started the session, while they can still see the
+  issue, or a workspace admin. An application can archive only a session it
+  opened itself and never a person's; agent runs cannot archive sessions.
+- **Running sessions.** A pending, working or waiting session is canceled in
+  the same commit (a `canceled` activity with `reason: archived`), so workers
+  stop. The archive bumps the session version: a run still writing loses its
+  version check, and every later activity, reply, retry, plan or link change is
+  refused with `409`, so late events can neither reopen the session nor show
+  it again.
+- **Coding sessions.** A coding session the task anchors is stopped if it is
+  still working, but not archived: its pull requests stay open and the session
+  stays in Coding sessions. Archive it there to close its pull requests.
+- **Repeats.** Archiving an archived session returns `alreadyArchived: true`
+  and writes nothing: no activity, change, push or audit entry.
+
+Archiving cannot be undone from the UI yet.
+
 ## Operational Boundaries
 
 - The built-in application reuses Flow's configured model endpoint. External agents

@@ -1203,6 +1203,41 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/agent-tasks/{id}/archive": {
+      "post": {
+        "operationId": "post_agent_tasks_id_archive",
+        "tags": [
+          "agent-tasks"
+        ],
+        "summary": "POST /api/agent-tasks/{id}/archive",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/agent/activities": {
       "get": {
         "operationId": "get_agent_activities",

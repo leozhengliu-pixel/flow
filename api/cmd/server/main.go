@@ -823,6 +823,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/agent-tasks", s.listApplicationAgentTasks)
 	mux.HandleFunc("GET /api/agent-tasks/{id}", s.getApplicationAgentTask)
 	mux.HandleFunc("POST /api/agent-tasks/{id}/activities", s.appendApplicationAgentActivity)
+	mux.HandleFunc("POST /api/agent-tasks/{id}/archive", s.archiveApplicationAgentTask)
 	mux.HandleFunc("POST /api/agent-tasks", s.createApplicationAgentTask)
 	mux.HandleFunc("PATCH /api/agent-tasks/{id}", s.updateApplicationAgentTask)
 	mux.HandleFunc("GET /api/issue-records", s.listIssueRecords)

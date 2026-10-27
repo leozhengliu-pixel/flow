@@ -33,6 +33,11 @@ func (s *SQLiteStore) UpdateAgentTaskSession(ctx context.Context, workspace, id 
 		if err != nil {
 			return task, err
 		}
+		if task.ArchivedAt != nil {
+			// Plan, links and delivery times of an archived session no longer
+			// change (and publish no update that would refresh it into view).
+			return task, ErrAgentTaskArchived
+		}
 		if err := mutate(&task); err != nil {
 			return task, err
 		}
@@ -40,7 +45,7 @@ func (s *SQLiteStore) UpdateAgentTaskSession(ctx context.Context, workspace, id 
 		if err != nil {
 			return task, err
 		}
-		result, err := s.db.ExecContext(ctx, `UPDATE application_agent_tasks SET data=?,stale_at=? WHERE workspace_key=? AND id=? AND version=?`, raw, agentTaskStaleAt(task), workspace, id, task.Version)
+		result, err := s.db.ExecContext(ctx, `UPDATE application_agent_tasks SET data=?,stale_at=? WHERE workspace_key=? AND id=? AND version=? AND archived_at=''`, raw, agentTaskStaleAt(task), workspace, id, task.Version)
 		if err != nil {
 			return task, err
 		}

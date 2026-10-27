@@ -400,6 +400,10 @@ func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, a
 		return s.listMCPCustomers(ctx, actor, data, args)
 	case "get_customer":
 		return s.getMCPCustomer(ctx, actor, data, args)
+	case "list_agent_sessions":
+		return s.listMCPAgentSessions(ctx, actor, data, args)
+	case "get_agent_session":
+		return s.getMCPAgentSession(ctx, actor, data, args)
 	default:
 		return s.callFlowWriteTool(ctx, actor, data, name, args)
 	}

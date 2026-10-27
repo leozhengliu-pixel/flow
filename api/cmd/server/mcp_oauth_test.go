@@ -74,8 +74,8 @@ func TestMCPOAuthPKCEAndToolLifecycle(t *testing.T) {
 	}
 	listed := callMCP(t, server.URL+"/mcp", tokens.AccessToken, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": map[string]any{}})
 	tools := listed.Result.(map[string]any)["tools"].([]any)
-	if len(tools) != 93 {
-		t.Fatalf("tools/list count = %d, want 93", len(tools))
+	if len(tools) != 96 {
+		t.Fatalf("tools/list count = %d, want 96", len(tools))
 	}
 	teams := callMCP(t, server.URL+"/mcp", tokens.AccessToken, map[string]any{"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": map[string]any{"name": "list_teams", "arguments": map[string]any{}}})
 	if teams.Error != nil || teams.Result == nil {

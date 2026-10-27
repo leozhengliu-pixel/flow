@@ -40,6 +40,8 @@ func (s *server) callFlowWriteTool(ctx context.Context, actor mcpActor, data dom
 		return s.saveMCPComment(ctx, actor, data, args)
 	case "delete_comment":
 		return s.deleteMCPComment(ctx, actor, stringArg(args, "id"))
+	case "archive_agent_session":
+		return s.archiveMCPAgentSession(ctx, actor, data, args)
 	case "prepare_attachment_upload":
 		return s.prepareMCPAttachmentUpload(ctx, actor, data, args)
 	case "create_attachment":

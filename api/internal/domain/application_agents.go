@@ -1,10 +1,15 @@
 package domain
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"time"
 )
+
+// ErrAgentSessionArchived refuses a write to an archived agent session
+// (AgentTask.ArchivedAt): it accepts no activity, plan or link changes.
+var ErrAgentSessionArchived = errors.New("agent session archived")
 
 type ApplicationInstallation struct {
 	ID             string   `json:"id"`
@@ -121,6 +126,14 @@ type AgentTask struct {
 	// CodingSessionID is set when the task anchors a coding session
 	// (docs/coding-sessions-design.md §6); the session UI mounts from it.
 	CodingSessionID string `json:"codingSessionId,omitempty"`
+	// ArchivedAt and ArchivedBy are set when a person archived the whole
+	// session: it and all of its messages leave the resource's activity, while
+	// its activities, audit entries, coding session and the documents and
+	// links it produced are kept. An archived session accepts no further
+	// activity. The application_agent_tasks archived_at/archived_by columns
+	// are authoritative; reads copy them here.
+	ArchivedAt *time.Time `json:"archivedAt,omitempty"`
+	ArchivedBy string     `json:"archivedBy,omitempty"`
 }
 
 // Agent session timing, as in the agent interaction guidelines: an agent

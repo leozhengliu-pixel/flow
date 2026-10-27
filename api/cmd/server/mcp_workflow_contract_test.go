@@ -217,6 +217,13 @@ func TestMCPAllToolsThroughRealSDK(t *testing.T) {
 	call("delete_project", map[string]any{"id": "SDK project"})
 	call("delete_initiative", map[string]any{"id": initiative["id"]})
 	call("delete_issue", map[string]any{"id": triage["id"]})
+	// Agent sessions: one on the issue, listed, read and archived as a whole.
+	if err := f.repository.CreateMentionTask(t.Context(), domain.AgentTask{ID: "mention_sdk", WorkspaceKey: f.data.Workspace.URLKey, IssueID: issue, ResourceType: "issue", ResourceID: issue, AppUserID: "app_sdk", CreatorID: f.data.Viewer.ID}); err != nil {
+		t.Fatal(err)
+	}
+	call("list_agent_sessions", map[string]any{"issueId": issue})
+	call("get_agent_session", map[string]any{"id": "mention_sdk"})
+	call("archive_agent_session", map[string]any{"id": "mention_sdk"})
 	listed, err := session.ListTools(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)

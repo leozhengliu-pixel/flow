@@ -955,6 +955,7 @@ var loopToolLabels = map[string]string{
 	"get_diff": "Read code change", "get_diff_threads": "Read review threads", "list_initiatives": "Listed initiatives",
 	"get_initiative": "Read initiative", "list_releases": "Listed releases", "list_milestones": "Listed milestones",
 	"restore_document": "Restored document", "restore_document_version": "Restored document version",
+	"list_agent_sessions": "Listed agent sessions", "get_agent_session": "Read agent session", "archive_agent_session": "Archived agent session",
 	agentProgressTool: "Reported progress",
 }
 

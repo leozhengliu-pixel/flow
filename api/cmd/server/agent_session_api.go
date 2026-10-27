@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"net/http"
@@ -143,6 +144,10 @@ func (s *server) updateApplicationAgentTask(w http.ResponseWriter, r *http.Reque
 	})
 	if invalid != nil {
 		writeError(w, http.StatusBadRequest, invalid.Error())
+		return
+	}
+	if errors.Is(err, store.ErrAgentTaskArchived) {
+		writeError(w, http.StatusConflict, "This agent session was archived")
 		return
 	}
 	if err == store.ErrIssueVersion {

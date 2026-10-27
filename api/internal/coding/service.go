@@ -668,7 +668,8 @@ func (s *Service) syncAnchor(ctx context.Context, session domain.CodingSession) 
 		task.ExternalURLs = urls
 		return nil
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, domain.ErrAgentSessionArchived) {
+		// An archived anchor keeps the plan and links it had.
 		slog.Warn("coding session anchor sync failed", "session", session.ID, "error", err)
 	}
 }
