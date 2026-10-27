@@ -52,6 +52,9 @@ type loopOutputExpectation struct {
 	Alternatives [][]string
 	// Explicit: Outputs come from the loop's expectedOutputs setting.
 	Explicit bool
+	// NoWrites: the text forbids every write ("只回复总结文本即可", "不要…
+	// 写入内容", "read-only"); a run's write calls are all refused.
+	NoWrites bool
 }
 
 // effectiveLoopOutputs are the outputs a run of the loop must produce.
@@ -161,7 +164,81 @@ var (
 	loopConjVerbs   = []string{"在", "将", "把", "为", "给", "对", "向", "追加", "更新", "发布", "创建", "写", "评论", "留言", "回复", "添加", "记录", "汇总", "检查", "读取", "阅读", "查看", "统计", "总结", "附加", "新建", "修改", "编辑"}
 
 	loopSentenceBreak = regexp.MustCompile(`[。；;！!？?\n]|\.\s|\.$`)
+
+	// loopReportHeading is a report section ("2. 今日新增事项：简要列出…",
+	// "New issues today: list them…"): the heading names what the report
+	// covers, and what follows the colon says to read, list or summarise it,
+	// so the heading asks for nothing to be made.
+	loopReportHeading = regexp.MustCompile(`^\s*(?:(?:\d+|[一二三四五六七八九十]+)\s*[.、)）]\s*|[-*•·]\s*|[（(]\s*\d+\s*[)）]\s*)?([^：:，,。；;]{1,32}[：:])\s*(?:请|简要|简单|简短|大致|逐条|分别|按条)*\s*(?:列出|列举|罗列|汇总|总结|统计|说明|描述|概述|简述|介绍|整理|梳理|盘点|概括|\b(?:list|lists|summari[sz]e|describe|count|outline|mention|include|show|give|report|name)\b)`)
+	// loopReportHeadingTarget: a heading that names a destination or refuses
+	// something is an instruction, not a section name.
+	loopReportHeadingTarget = regexp.MustCompile(`将|把|到|\b(to|into|onto)\b`)
+	// loopIssueNounLead: "今日新增事项", "列出新建事项", "新增事项和新建事项" —
+	// a create verb after a time or scope word, a read verb or a conjunction
+	// qualifies the issues being talked about (the issues created today),
+	// it does not ask to create one. "新建一个事项" (with a quantifier) still does.
+	loopIssueNounLead   = regexp.MustCompile(`(今日|今天|本日|当天|当日|昨日|昨天|本周|上周|这周|本月|上月|近期|最近|近日|期间|所有|全部|哪些|多少|的|和|及|与|、|列出|列举|罗列|汇总|总结|统计|查看|检查|整理|梳理|回顾|读取|阅读|获取|查询|关注|监控|盘点|概括)\s*$`)
+	loopIssueQuantifier = regexp.MustCompile(`一个|一条|一些`)
+	// loopVerbNouns are nouns built on a write verb ("创建者", "提交时间"):
+	// they name a property, not a write.
+	loopVerbNouns = regexp.MustCompile(`(创建|新建|提交|发布|添加|回复|更新|修改|编辑)(者|人|时间|日期)`)
+	// loopReplyOnly limits the run to its text reply ("只回复总结文本即可",
+	// "reply only", "just reply with the summary"): it writes nothing.
+	loopReplyOnly = regexp.MustCompile(`(只|仅)(需|要|需要)?\s*(回复|回答|输出|返回|给出)[^，,。；;]{0,10}?(文本|文字|即可|就行|就可以|就好)|\b(reply|respond|answer)\s+only\b|\b(only|just)\s+(reply|respond|answer)(\s+with\s+(the|a|your)?\s*(summary|report|text|answer|digest|results?)\b|\s+in\s+(the\s+)?(chat|run)\b|\s*$|\s*[,;.])|\btext\s+(reply|answer|response)\s+only\b`)
+	// loopReplyOnlyComment: "只回复评论即可" replies to comments; it is a write.
+	loopReplyOnlyComment = regexp.MustCompile(`评论|留言|事项|\b(comments?|threads?|issues?)\b`)
+	// loopReplyTarget: "reply only to comments that …" names whom to reply
+	// to; it is a comment, not a reply-only run.
+	loopReplyTarget = regexp.MustCompile(`^\s*(to|on|in the thread|under)\b`)
+	// loopGenericWrite is a refusal of writing anything ("写入内容",
+	// "write anything"), whatever resources it names as places.
+	loopGenericWrite = regexp.MustCompile(`(写入|写|添加|修改|更改|改动|变更|创建|新建|发布|保存)\s*(任何)?\s*(内容|东西|数据|信息)|\b(write|add|change|modify|create|edit|post|save)\s+(anything|any content|content|any data|any changes|any output)\b`)
 )
+
+// loopIssueAction finds the first match of an issue or comment action that
+// asks for one: an issue create verb that qualifies the issues talked about
+// ("今日新增事项") is not one (see loopIssueNounLead).
+func loopIssueAction(marker loopOutputMarker, clause string) []int {
+	for _, match := range marker.actions.FindAllStringIndex(clause, -1) {
+		if !loopIssueNounMatch(marker, clause, match) {
+			return match
+		}
+	}
+	return nil
+}
+
+// loopIssueNoun finds an issue named as a noun phrase ("今日新增事项"), or nil.
+func loopIssueNoun(marker loopOutputMarker, clause string) []int {
+	if marker.kind != "issue" {
+		return nil
+	}
+	for _, match := range marker.actions.FindAllStringIndex(clause, -1) {
+		if loopIssueNounMatch(marker, clause, match) {
+			return match
+		}
+	}
+	return nil
+}
+
+// loopIssueNounMatch reports whether an issue action match only qualifies
+// the issues talked about.
+func loopIssueNounMatch(marker loopOutputMarker, clause string, match []int) bool {
+	text := clause[match[0]:match[1]]
+	return marker.kind == "issue" && text != "" && text[0] >= utf8.RuneSelf && !loopIssueQuantifier.MatchString(text) && loopIssueNounLead.MatchString(clause[:match[0]])
+}
+
+// loopStripReportHeading drops a report section's heading from a sentence.
+func loopStripReportHeading(sentence string) string {
+	match := loopReportHeading.FindStringSubmatchIndex(sentence)
+	if match == nil {
+		return sentence
+	}
+	heading := sentence[match[2]:match[3]]
+	if loopNegationIndex(heading) >= 0 || loopReportHeadingTarget.MatchString(heading) {
+		return sentence
+	}
+	return sentence[match[3]:]
+}
 
 // loopNegationIndex is where the clause's first refusal starts, or -1.
 func loopNegationIndex(clause string) int {
@@ -250,8 +327,10 @@ func loopStripNouns(clause string) string {
 // and whether an action asks for it.
 func loopKindMention(marker loopOutputMarker, clause string) (int, bool) {
 	position, action := -1, false
-	if match := marker.actions.FindStringIndex(clause); match != nil {
+	if match := loopIssueAction(marker, clause); match != nil {
 		position, action = match[0], true
+	} else if match := loopIssueNoun(marker, clause); match != nil {
+		position = match[0]
 	}
 	if marker.nouns != nil {
 		if match := marker.nouns.FindStringIndex(clause); match != nil && (position < 0 || match[0] < position) {
@@ -301,10 +380,13 @@ type loopIntentState struct {
 	prohibited map[string]bool
 	optional   map[string]bool
 	blanket    bool
-	exclusive  bool
-	changes    bool
-	always     bool
-	skips      []string
+	// excepted: a refusal carves out what the loop does write ("除追加团队
+	// 文档外", "除此之外").
+	excepted  bool
+	exclusive bool
+	changes   bool
+	always    bool
+	skips     []string
 	// reads and writes: the instructions use any read or write verb.
 	reads, writes bool
 	// alternatives are kinds a clause offers as a choice.
@@ -339,8 +421,12 @@ func inferLoopOutputIntent(text string) loopOutputExpectation {
 func inferLoopOutputIntentParts(name, text string) loopOutputExpectation {
 	state := &loopIntentState{ops: map[string]string{}, read: map[string]bool{}, prohibited: map[string]bool{}, optional: map[string]bool{}}
 	for part, body := range []string{name, text} {
-		body = strings.ToLower(body)
+		body = loopVerbNouns.ReplaceAllString(strings.ToLower(body), "$2")
 		if loopBlanket.MatchString(body) {
+			state.blanket = true
+		}
+		if match := loopReplyOnly.FindStringIndex(body); match != nil && part == 1 && !loopReplyOnlyComment.MatchString(body[match[0]:match[1]]) && !loopReplyTarget.MatchString(body[match[1]:]) {
+			// "只回复总结文本即可": the reply is the run's only output.
 			state.blanket = true
 		}
 		if part == 1 {
@@ -359,6 +445,7 @@ func inferLoopOutputIntentParts(name, text string) loopOutputExpectation {
 
 // sentence reads one sentence's clauses.
 func (state *loopIntentState) sentence(sentence string, title bool) {
+	sentence = loopStripReportHeading(sentence)
 	if loopAlways.MatchString(sentence) {
 		state.always = true
 	}
@@ -381,6 +468,7 @@ func (state *loopIntentState) sentence(sentence string, title bool) {
 			clause = clause[:match[0]]
 		}
 		if exception != "" {
+			state.excepted = true
 			for _, marker := range loopOutputMarkers {
 				if position, action := loopKindMention(marker, exception); position >= 0 {
 					op := loopClauseOp(marker, exception, action)
@@ -403,7 +491,7 @@ func (state *loopIntentState) sentence(sentence string, title bool) {
 		// ("post a comment with links to the documents").
 		actionAt := -1
 		for _, marker := range loopOutputMarkers {
-			if match := marker.actions.FindStringIndex(positive); !marker.writeByNoun && match != nil && (actionAt < 0 || match[0] < actionAt) {
+			if match := loopIssueAction(marker, positive); !marker.writeByNoun && match != nil && (actionAt < 0 || match[0] < actionAt) {
 				actionAt = match[0]
 			}
 		}
@@ -499,6 +587,10 @@ func (state *loopIntentState) sentence(sentence string, title bool) {
 		case refused:
 			if conditional {
 				state.addSkip(sentence)
+			} else if loopGenericWrite.MatchString(objects) {
+				// "不要在任何事项、文档上发布评论或写入内容": writing anything
+				// is refused too, not only the kinds it names.
+				state.blanket = true
 			}
 		case loopBlanketObject.MatchString(negated) && !conditional:
 			state.blanket = true
@@ -511,6 +603,13 @@ func (state *loopIntentState) sentence(sentence string, title bool) {
 
 func (state *loopIntentState) expectation() loopOutputExpectation {
 	result := loopOutputExpectation{Operations: map[string]string{}, Always: state.always, Skips: state.skips, Alternatives: state.alternatives}
+	if state.blanket && !state.exclusive && !state.excepted {
+		// A refusal of every write ("只回复…即可", "不要…写入内容", "read
+		// only") wins over outputs read off other clauses; only a refusal
+		// that names its exceptions, or the loop's expectedOutputs, keeps them.
+		state.ops, state.alternatives = map[string]string{}, nil
+		result.Alternatives, result.NoWrites = nil, true
+	}
 	for _, kind := range loopOutputKinds {
 		if op, ok := state.ops[kind]; ok {
 			result.Outputs = append(result.Outputs, kind)
@@ -535,6 +634,9 @@ func (state *loopIntentState) expectation() loopOutputExpectation {
 		// report is the output.
 		result.ReadOnly = len(state.read) > 0 || len(result.Prohibited) > 0 || state.blanket || state.reads && !state.writes
 	}
+	// Every write refused: the reply is the output, whatever the text's
+	// other verbs ("回复", "写") say.
+	result.ReadOnly = result.ReadOnly || result.NoWrites
 	if len(result.Outputs) == 0 && !result.ReadOnly {
 		result.Operations = nil
 	}

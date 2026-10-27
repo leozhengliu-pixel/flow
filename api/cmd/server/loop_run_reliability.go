@@ -724,11 +724,21 @@ func loopOutputKind(name string, args map[string]any) string {
 // translates it (loop-run-labels.ts).
 const loopDoneClaimNote = "(the agent's summary says the work is done, but this output is not there)"
 
+// loopRefusedWriteNotice is the run notice when a change the instructions
+// forbid was refused; the web app translates it.
+const loopRefusedWriteNotice = "The agent tried a change this loop's instructions forbid. It was refused and not made, even if the summary lists it."
+
 // acceptLoopRun decides how a run that ended without an error finishes: a
 // run whose loop implies side effects completes only when it produced them.
 func acceptLoopRun(loop domain.Loop, run *domain.LoopRun, ending *loopRunEnding) (string, string, string) {
 	expectation := loopOutputExpectations(loop)
 	run.ExpectedOutputs = expectation.Outputs
+	if run.Summary != nil && run.Summary.Status == "done" && !slices.Contains(run.Notices, loopRefusedWriteNotice) && slices.ContainsFunc(run.ToolCalls, func(call domain.LoopRunToolCall) bool {
+		return call.Status == "blocked" && strings.HasPrefix(call.Error, loopProhibitedCallPrefix)
+	}) {
+		// The summary is the agent's own: it may list the refused change as done.
+		run.Notices = append(run.Notices, loopRefusedWriteNotice)
+	}
 	if ending != nil {
 		return "needs_review", ending.reason, ending.message
 	}

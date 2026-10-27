@@ -94,6 +94,8 @@ describe('run failure explanation', () => {
       error: "No output produced: the loop's instructions call for an append to an existing document, but the run made none (save_document ran but did not change the document) (the agent's summary says the work is done, but this output is not there)",
     }
     expect(describeRunFailure(unchanged, zh, 'zh-CN').message).toBe('Loop 的指令要求产出向现有文档追加的内容，但本次运行没有产出。save_document 已执行，但文档没有任何变化。Agent 的总结称工作已完成，但这项产出并不存在。')
+    // The run notice of a refused forbidden change (loopRefusedWriteNotice).
+    expect(zh("The agent tried a change this loop's instructions forbid. It was refused and not made, even if the summary lists it.")).toBe('Agent 尝试了此 Loop 指令禁止的更改。该更改已被拒绝，并未执行，即使总结中列出了它。')
   })
 
   it('lists unfinished work the agent reported', () => {
