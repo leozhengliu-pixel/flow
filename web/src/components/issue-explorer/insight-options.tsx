@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { StatusIcon, WorkflowStatusGlyph } from '@/components/issue/issue-icons'
 import type { BootstrapData, WorkflowState } from '@/types/flow'
-import { statusGroupId, statusGroupIndex } from './insight-status-groups'
+import { statusGroupId, statusGroupIndex } from '@/lib/status-groups'
 import styles from './insights-panel.module.css'
 
 /** The reference app: Ctrl ⇧ F toggles the Insights fullscreen view. */

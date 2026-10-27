@@ -7,7 +7,7 @@ type StatusGroupData = Pick<BootstrapData, 'states' | 'teams'> & Partial<Pick<Bo
 const TYPE_ORDER: Record<string, number> = { backlog: 0, unstarted: 1, started: 2, completed: 3, canceled: 4 }
 
 /**
- * The insight group a status belongs to. Teams with their own workflows each have their own status
+ * The status group a status belongs to (insights, list and board groups, the Status filter). Teams with their own workflows each have their own status
  * IDs, so across a team and its sub-teams "Done" would otherwise show up once per workflow. Statuses
  * merge when they share a type and a name; names compare trimmed and case-insensitively because
  * that is how people read them ("Done" and "done " are the same column), while the type is part of
@@ -20,7 +20,7 @@ export function statusGroupId(state: Pick<StatusRef, 'name' | 'type'>) {
 export type StatusGroupIndex = ReturnType<typeof buildStatusGroupIndex>
 
 const cache = new WeakMap<object, { data: StatusGroupData; index: StatusGroupIndex }>()
-/** Resolves statuses to their merged insight group and ranks them for display and ordering (memoised per workflow data). */
+/** Resolves statuses to their merged status group and ranks them for display and ordering (memoised per workflow data). */
 export function statusGroupIndex(data: StatusGroupData): StatusGroupIndex {
   const cached = cache.get(data.states)
   if (cached && cached.data.teams === data.teams && cached.data.teamSettings === data.teamSettings) return cached.index
@@ -57,6 +57,19 @@ function buildStatusGroupIndex(data: StatusGroupData) {
     stateIds,
     /** The workspace status that names and colours a group (see `rank`). */
     representative(groupId: string): WorkflowState | undefined { const [id] = stateIds(groupId); return id ? states.get(id)?.state : undefined },
+    /**
+     * The status that stands for a status's group (list groups, Status filter options): the group's
+     * representative, or the status itself when the workspace does not list it.
+     */
+    representativeId(stateId: string): string {
+      const known = states.get(stateId)?.state
+      return (known && stateIds(statusGroupId(known))[0]) || stateId
+    },
+    /** Every status ID in a status's group, best representative first (the status alone when unknown). */
+    memberIds(stateId: string): string[] {
+      const known = states.get(stateId)?.state
+      return known ? stateIds(statusGroupId(known)) : [stateId]
+    },
     /** Sorts status IDs best representative first. */
     compare,
     /** Workflow order: Triage, then type, then the representative's position. */

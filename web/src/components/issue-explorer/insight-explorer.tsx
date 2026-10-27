@@ -7,7 +7,7 @@ import type { BootstrapData } from '@/types/flow'
 import { formatMetric, insightColor, type InsightData, type InsightRow } from './insight-data'
 import { acrossAllLabel, percentileLabel, selectedAggregations, type SavedViewInsightDimension, type SavedViewInsightsConfig } from './insight-config'
 import { aggregateInsightValues, durationAxis, insightAxis, insightHighlight, sameInsightTarget, type InsightTarget, type InsightAggregation } from './insight-interaction'
-import { statusGroupIndex } from './insight-status-groups'
+import { statusGroupIndex } from '@/lib/status-groups'
 import styles from './insight-explorer.module.css'
 
 /** Status / priority glyphs where the reference app shows them; a colour mark for every other value. */

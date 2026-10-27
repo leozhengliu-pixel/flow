@@ -2,7 +2,7 @@ import type { BootstrapData } from '@/types/flow'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import { emptyDimensionLabel, type SavedViewInsightsConfig, type SavedViewInsightDimension, type SavedViewInsightMeasure } from './insight-config'
 import { aggregateInsightValues, insightAggregations, type InsightSample, type InsightAggregation } from './insight-interaction'
-import { statusGroupIndex, type StatusGroupIndex } from './insight-status-groups'
+import { statusGroupIndex, type StatusGroupIndex } from '@/lib/status-groups'
 
 /** `stateIds`: on Status and Status type values, the underlying status IDs (best representative first). */
 export type InsightValue = { id: string; label: string; color?: string; stateIds?: string[] }

@@ -170,11 +170,11 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const groups = useMemo(() => buildExplorerIssueGroups(rows, display, data, view, manualOrder), [data, display, manualOrder, rows, view])
   const buildPagedQuery = useCallback((list: MyIssuesAppliedFilter[]) => {
     const triageTeamIds = Object.values(data.teamSettings ?? {}).filter(settings => settings.triageEnabled).map(settings => settings.teamId)
-    const { sort, direction, groupBy, archived, conditions } = pagedDisplayQuery(display, Date.now(), triageTeamIds)
+    const { sort, direction, groupBy, groupCases, archived, conditions } = pagedDisplayQuery(display, Date.now(), triageTeamIds, data)
     if (view === 'backlog') conditions.push({ field: 'status', operator: 'is', values: ['backlog'] })
     if (view === 'active') conditions.push({ field: 'status', operator: 'in', values: ['unstarted', 'started'] })
     const includeSubTeams = scope.kind === 'team' && display.showSubTeamIssues !== false
-    return { teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds, includeSubTeams, archived, groupBy, sort, direction, filter: { and: [issueFiltersToQueryAst(list, { data }), ...conditions, ...(scopeConditions ?? [])] } }
+    return { teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds, includeSubTeams, archived, groupBy, groupCases, sort, direction, filter: { and: [issueFiltersToQueryAst(list, { data }), ...conditions, ...(scopeConditions ?? [])] } }
   }, [data, display, initialInsightFilters?.teamIds, scope, scopeConditions, view])
   const pagedQuery = useMemo(() => buildPagedQuery(effectiveFilters), [buildPagedQuery, effectiveFilters])
   // "N issues hidden by filters": the saved view's own count without the temporary filters.

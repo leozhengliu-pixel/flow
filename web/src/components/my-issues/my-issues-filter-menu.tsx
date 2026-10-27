@@ -221,7 +221,12 @@ import { agentSessionStateOption } from '@/lib/agent-members'
 
 function ValueMenu({ field, filters, label, layer, minSearchOptions, onClose, onToggle, onToggleAny, options, optionsFor }: { field: MyIssuesFilterKey; filters: MyIssuesAppliedFilter[]; label: string; layer: number; minSearchOptions?: number; onClose: () => void; onToggle: MyIssuesFilterMenuProps['onToggle']; onToggleAny: MyIssuesFilterMenuProps['onToggle']; options: MyIssuesFilterOption[]; optionsFor: (field: MyIssuesFilterKey) => MyIssuesFilterOption[] | undefined }) {
   const { t } = useI18n()
-  const selectedIds = useMemo(() => filters.filter(filter => filter.field === field).flatMap(filter => filter.values?.map(value => value.value) ?? [filter.value]), [field, filters])
+  const selectedIds = useMemo(() => {
+    const stored = filters.filter(filter => filter.field === field).flatMap(filter => filter.values?.map(value => value.value) ?? [filter.value])
+    // A stored alias (another status of a merged status group) shows its option as selected.
+    const aliased = options.filter(option => option.aliases?.some(alias => stored.includes(alias))).map(option => option.id)
+    return aliased.length ? [...new Set([...stored, ...aliased])] : stored
+  }, [field, filters, options])
   const command = usePropertyCommand({ personOptions: isPeopleProperty(field), closeOnSelect: false, onOpenChange: open => { if (!open) onClose() }, onSelect: option => onToggle(field, option), open: true, options, selectedIds })
   const [aiPending, setAiPending] = useState(false)
   // Hosts build the next filter list from their current props, so apply AI results one render at a time.

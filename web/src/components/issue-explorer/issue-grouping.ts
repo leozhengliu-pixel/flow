@@ -2,6 +2,7 @@ import type { BootstrapData, IssueUpdateInput } from '@/types/flow'
 import type { MyIssuesGroupData, MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import type { MyIssuesDisplayOptions, MyIssuesGrouping, MyIssuesOrdering } from '@/components/my-issues/my-issues-surface'
 import { teamEquivalentState } from '@/lib/team-workflow'
+import { statusGroupIndex } from '@/lib/status-groups'
 
 /**
  * Single grouping / ordering engine for every issue surface (the reference app `ViewPreferences` + list grouping).
@@ -130,9 +131,30 @@ export function labelGroups(labels: Pick<BootstrapData['labels'][number], 'id' |
   return labels.filter(label => parents.has(label.id) && !label.archivedAt)
 }
 
+/**
+ * The status group a status shows in. Statuses of several team workflows with the same name and type are one
+ * group (`statusGroupIndex`, as in insights); the group's id is the status standing for it — the first member in
+ * the list's own statuses (a team board keeps its own IDs), else the group's representative — which also names
+ * and colours it. Without workspace data every status is its own group.
+ */
+export function statusGroupFor(state: MyIssuesRowData['state'], context: IssueGroupingContext): MyIssuesRowData['state'] {
+  const data = context.data
+  if (!data?.states.length || !data.teams) return state
+  const groups = statusGroupIndex(data)
+  const members = groups.memberIds(state.id)
+  if (members.length < 2) return state
+  const scoped = context.states && members.find(id => context.states!.some(item => item.id === id))
+  const id = scoped ?? groups.representativeId(state.id)
+  return id === state.id ? state : data.states.find(item => item.id === id) ?? state
+}
+
 function statusDescriptor(state: MyIssuesRowData['state'], context: IssueGroupingContext): GroupDescriptor {
-  const order = (context.states ?? context.data?.states ?? []).findIndex(item => item.id === state.id)
-  return { id: state.id, label: state.name, stateType: state.type, state, rank: (STATE_TYPE_RANK[state.type] ?? 9) * 1000 + (order < 0 ? 999 : order), createContext: { stateId: state.id } }
+  const shown = statusGroupFor(state, context)
+  const pool = context.states ?? context.data?.states ?? []
+  const members = context.data?.teams && context.data.states.length ? statusGroupIndex(context.data).memberIds(state.id) : [state.id]
+  const indexes = members.map(id => pool.findIndex(item => item.id === id)).filter(index => index >= 0)
+  const order = indexes.length ? Math.min(...indexes) : -1
+  return { id: shown.id, label: shown.name, stateType: shown.type, state: shown, rank: (STATE_TYPE_RANK[shown.type] ?? 9) * 1000 + (order < 0 ? 999 : order), createContext: { stateId: shown.id } }
 }
 
 /**
@@ -142,18 +164,90 @@ function statusDescriptor(state: MyIssuesRowData['state'], context: IssueGroupin
 export function focusDescriptor(row: MyIssuesRowData, context: IssueGroupingContext = {}): GroupDescriptor {
   const now = context.now ?? Date.now()
   const type = row.state.type
-  if (type === 'completed') return { id: 'focus-completed', label: 'Completed', stateType: 'completed', rank: 90 }
-  if (type === 'canceled') return { id: 'focus-canceled', label: 'Canceled', stateType: 'canceled', rank: 91 }
-  if (isTriage(row)) return { id: 'focus-triage', label: 'Triage', rank: 80 }
-  if (row.delegate && row.agentSessionId && type !== 'backlog') return { id: 'focus-agents', label: 'Agents waiting for input', rank: 0 }
-  if (row.priority === 1) return { id: 'focus-urgent', label: 'Urgent issues', rank: 10, createContext: { priority: 1 } }
+  const bucket = (id: string) => focusGroupDescriptor(id, context.data)
+  if (type === 'completed') return bucket('focus-completed')
+  if (type === 'canceled') return bucket('focus-canceled')
+  if (isTriage(row)) return bucket('focus-triage')
+  if (row.delegate && row.agentSessionId && type !== 'backlog') return bucket('focus-agents')
+  if (row.priority === 1) return bucket('focus-urgent')
   const sla = slaDescriptor(row, now)
-  if (sla.id !== 'sla-none' && sla.id !== 'sla-met') return { ...sla, id: `focus-${sla.id}`, rank: 20 + Number(sla.rank) }
+  if (sla.id !== 'sla-none' && sla.id !== 'sla-met') return bucket(`focus-${sla.id}`)
   const cycle = row.cycleId ? context.data?.cycles.find(item => item.id === row.cycleId) : undefined
-  if (cycle && cycle.status === 'current' && type !== 'backlog') return { id: `focus-cycle-${cycle.id}`, label: cycle.name, rank: 30, createContext: { cycleId: cycle.id } }
-  if ((row.blockingCount ?? 0) > 0) return { id: 'focus-blocking', label: 'Blocking issues', rank: 40 }
-  if (type === 'backlog') return { id: 'focus-backlog', label: 'Backlog', stateType: 'backlog', rank: 70 }
-  return { id: 'focus-active', label: 'Other active', stateType: 'started', rank: 50 }
+  if (cycle && cycle.status === 'current' && type !== 'backlog') return bucket(`focus-cycle-${cycle.id}`)
+  if ((row.blockingCount ?? 0) > 0) return bucket('focus-blocking')
+  if (type === 'backlog') return bucket('focus-backlog')
+  return bucket('focus-active')
+}
+
+const FOCUS_GROUPS: Record<string, Omit<GroupDescriptor, 'id'>> = {
+  'focus-agents': { label: 'Agents waiting for input', rank: 0 },
+  'focus-urgent': { label: 'Urgent issues', rank: 10, createContext: { priority: 1 } },
+  'focus-sla-breached': { label: 'SLA breached', rank: 20 },
+  'focus-sla-high': { label: 'High risk', rank: 21 },
+  'focus-sla-medium': { label: 'Medium risk', rank: 22 },
+  'focus-sla-low': { label: 'Low risk', rank: 23 },
+  'focus-blocking': { label: 'Blocking issues', rank: 40 },
+  'focus-active': { label: 'Other active', stateType: 'started', rank: 50 },
+  'focus-backlog': { label: 'Backlog', stateType: 'backlog', rank: 70 },
+  'focus-triage': { label: 'Triage', rank: 80 },
+  'focus-completed': { label: 'Completed', stateType: 'completed', rank: 90 },
+  'focus-canceled': { label: 'Canceled', stateType: 'canceled', rank: 91 },
+}
+
+/** A Focus bucket's group (label, order, what "+" creates) from its id, for in-memory and server-paged lists alike. */
+export function focusGroupDescriptor(id: string, data?: Pick<BootstrapData, 'cycles'>): GroupDescriptor {
+  const fixed = FOCUS_GROUPS[id]
+  if (fixed) return { id, ...fixed }
+  if (id.startsWith('focus-cycle-')) {
+    const cycleId = id.slice(12)
+    return { id, label: data?.cycles.find(item => item.id === cycleId)?.name ?? 'Current cycle', rank: 30, createContext: { cycleId } }
+  }
+  return { id, label: 'Other active', stateType: 'started', rank: 50 }
+}
+
+export type FocusCaseData = Pick<BootstrapData, 'cycles'> & Partial<Pick<BootstrapData, 'teamSettings' | 'issueSlas'>>
+type QueryNode = Record<string, unknown>
+
+/**
+ * The Focus buckets as ordered server query cases (`groupBy: 'cases'`): a row is in the first bucket whose case
+ * it matches, the same order `focusDescriptor` checks, so a paged list groups and counts like the in-memory one.
+ * SLA risk is time-based and comes from the workspace SLAs, so those buckets list their issues.
+ */
+export function focusGroupCases(data: FocusCaseData, now = Date.now()): { value: string; filter: QueryNode }[] {
+  const type = (types: string[]): QueryNode => ({ field: 'statusType', operator: 'in', values: types })
+  const notBacklog: QueryNode = { not: type(['backlog']) }
+  const triageTeams = Object.entries(data.teamSettings ?? {}).filter(([, settings]) => settings?.triageEnabled).map(([id]) => id).sort()
+  const slaIssues = new Map<string, string[]>()
+  const slas = new Map((data.issueSlas ?? []).filter(sla => sla.status !== 'removed').map(sla => [sla.issueId, sla]))
+  for (const [issueId, sla] of slas) {
+    const risk = slaDescriptor({ sla } as MyIssuesRowData, now).id
+    if (risk !== 'sla-none' && risk !== 'sla-met') slaIssues.set(risk, [...slaIssues.get(risk) ?? [], issueId])
+  }
+  const cases: { value: string; filter: QueryNode }[] = [
+    { value: 'focus-completed', filter: type(['completed']) },
+    { value: 'focus-canceled', filter: type(['canceled']) },
+  ]
+  if (triageTeams.length) cases.push({ value: 'focus-triage', filter: { and: [{ field: 'team', operator: 'in', values: triageTeams }, type(['backlog']), { field: 'triagedAt', operator: 'isEmpty' }] } })
+  cases.push(
+    { value: 'focus-agents', filter: { and: [{ field: 'delegateId', operator: 'isNotEmpty' }, { field: 'agentSessionId', operator: 'isNotEmpty' }, notBacklog] } },
+    { value: 'focus-urgent', filter: { field: 'priority', operator: 'in', values: ['1'] } },
+  )
+  for (const risk of ['sla-breached', 'sla-high', 'sla-medium', 'sla-low']) {
+    const ids = slaIssues.get(risk)
+    if (!ids?.length) continue
+    // The server takes at most 1000 values per condition.
+    const chunks = Array.from({ length: Math.ceil(ids.length / 1000) }, (_, index): QueryNode => ({ field: 'id', operator: 'in', values: ids.sort().slice(index * 1000, index * 1000 + 1000) }))
+    cases.push({ value: `focus-${risk}`, filter: chunks.length === 1 ? chunks[0] : { or: chunks } })
+  }
+  for (const cycle of data.cycles.filter(item => item.status === 'current').sort((a, b) => a.id.localeCompare(b.id))) {
+    cases.push({ value: `focus-cycle-${cycle.id}`, filter: { and: [{ field: 'cycle', operator: 'in', values: [cycle.id] }, notBacklog] } })
+  }
+  cases.push(
+    { value: 'focus-blocking', filter: { field: 'relation:blocks', operator: 'isNotEmpty' } },
+    { value: 'focus-backlog', filter: type(['backlog']) },
+    { value: 'focus-active', filter: { and: [] } },
+  )
+  return cases
 }
 
 /** Triage: backlog issues that were never accepted (Flow has no dedicated triage state type). */
@@ -264,7 +358,8 @@ export function buildIssueGroups(rows: MyIssuesRowData[], display: MyIssuesDispl
   }
   if (display.showEmptyGroups && grouping === 'status') {
     for (const state of options.states ?? options.data?.states ?? []) {
-      if (!primary.has(state.id) && withinCompletedWindow({ state } as MyIssuesRowData, display.completedWindow === 'none' ? 'none' : 'all')) primary.set(state.id, { descriptor: statusDescriptor(state, options), issues: [] })
+      const descriptor = statusDescriptor(state, options)
+      if (!primary.has(descriptor.id) && withinCompletedWindow({ state } as MyIssuesRowData, display.completedWindow === 'none' ? 'none' : 'all')) primary.set(descriptor.id, { descriptor, issues: [] })
     }
   }
   if (display.showEmptyGroups && grouping === 'priority') for (const priority of [1, 2, 3, 4, 0] as const) {
@@ -347,9 +442,10 @@ export function groupMoveUpdate(row: MyIssuesRowData, grouping: MyIssuesGrouping
   switch (grouping) {
     case 'status': {
       if (!context.data) return { stateId: id }
-      const target = (context.states ?? context.data.states).find(state => state.id === id)
+      const target = context.states?.find(state => state.id === id) ?? context.data.states.find(state => state.id === id)
       if (!target) return undefined
-      // A column of another team's workflow moves the issue to its own team's equivalent status.
+      // A column of another team's workflow, or a status several workflows share, moves the issue to its own
+      // team's equivalent status.
       const next = row.teamId && context.data.states.length ? teamEquivalentState(context.data, row.teamId, target) : target
       return next ? { stateId: next.id } : undefined
     }
@@ -383,8 +479,11 @@ export const PAGED_GROUPINGS: MyIssuesGrouping[] = ['none', 'focus', 'status', '
 /** Orderings the server-backed issue list can sort by. */
 export const PAGED_ORDERINGS: MyIssuesOrdering[] = ['importance', 'title', 'priority', 'created', 'updated', 'customerCount', 'customerRevenue', 'customerImportantCount']
 
-/** Sort, direction, groupBy and display-derived conditions for `PagedIssueList` queries. */
-export function pagedDisplayQuery(display: MyIssuesDisplayOptions, now = Date.now(), triageTeamIds: string[] = []) {
+/**
+ * Sort, direction, groupBy and display-derived conditions for `PagedIssueList` queries. Focus groups by the
+ * ordered Focus cases (`focusGroupCases`) when the workspace data is given, else by status.
+ */
+export function pagedDisplayQuery(display: MyIssuesDisplayOptions, now = Date.now(), triageTeamIds: string[] = [], focusData?: FocusCaseData) {
   const sort = ({ importance: 'sortOrder', title: 'title', priority: 'priority', created: 'createdAt', updated: 'updatedAt', customerCount: 'customerCount', customerRevenue: 'customerRevenue', customerImportantCount: 'customerImportantCount' } as const)[display.ordering as 'importance' | 'title' | 'priority' | 'created' | 'updated' | 'customerCount' | 'customerRevenue' | 'customerImportantCount'] ?? 'sortOrder'
   const direction = display.orderDirection ?? defaultOrderDirection(display.ordering)
   const conditions: Record<string, unknown>[] = []
@@ -398,8 +497,17 @@ export function pagedDisplayQuery(display: MyIssuesDisplayOptions, now = Date.no
   }
   // Hide untriaged backlog issues of triage-enabled teams, like the local isTriage() check.
   if (display.showTriageIssues === false && triageTeamIds.length) conditions.push({ not: { and: [{ field: 'team', operator: 'in', values: triageTeamIds }, { field: 'statusType', operator: 'in', values: ['backlog'] }, { field: 'triagedAt', operator: 'isEmpty' }] } })
-  const groupBy = display.grouping === 'focus' ? 'status' : PAGED_GROUPINGS.includes(display.grouping) ? display.grouping : 'status'
-  return { sort, direction, groupBy, archived: display.showArchived ? 'all' as const : 'false' as const, conditions }
+  const focus = display.grouping === 'focus' && focusData ? focusGroupCases(focusData, now) : undefined
+  const groupBy = focus ? 'cases' : display.grouping === 'focus' ? 'status' : PAGED_GROUPINGS.includes(display.grouping) ? display.grouping : 'status'
+  return { sort, direction, groupBy, ...(focus ? { groupCases: focus } : {}), archived: display.showArchived ? 'all' as const : 'false' as const, conditions }
+}
+
+/**
+ * What a paged Focus query depends on (its cases), as a string, so a memoised query is rebuilt only when the
+ * buckets change; empty when the list is not a paged Focus list.
+ */
+export function focusCasesKey(display: Pick<MyIssuesDisplayOptions, 'grouping'>, data: FocusCaseData & Pick<BootstrapData, 'issueCollectionPaged'>, now = Date.now()) {
+  return display.grouping === 'focus' && data.issueCollectionPaged ? JSON.stringify(focusGroupCases(data, now)) : ''
 }
 
 /** Top-level groups (sub-groups roll up to their parent) for the display menu's group list. */

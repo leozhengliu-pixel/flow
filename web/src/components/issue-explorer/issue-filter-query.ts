@@ -5,6 +5,7 @@ import { DATE_FILTER_FIELDS, dateFilterThreshold, localDay, parseDateFilterValue
 import { triageIntelligenceQueryNode } from './triage-intelligence-filter'
 import { agentSessionStatesFor } from '@/lib/agent-members'
 import { customerNumberQueryValue, isCustomerNumberComparison } from './customer-filter'
+import { statusGroupIndex } from '@/lib/status-groups'
 
 /**
  * Translate a filter-bar filter into the server query vocabulary (`compileIssueFilter`), so every
@@ -12,7 +13,7 @@ import { customerNumberQueryValue, isCustomerNumberComparison } from './customer
  * workspace data (initiatives, releases, project properties) are resolved to ids here.
  */
 export interface IssueFilterQueryContext {
-  data: Pick<BootstrapData, 'projects' | 'releases' | 'viewer'> & Partial<Pick<BootstrapData, 'labels' | 'users'>>
+  data: Pick<BootstrapData, 'projects' | 'releases' | 'viewer'> & Partial<Pick<BootstrapData, 'labels' | 'users' | 'states' | 'teams' | 'teamSettings'>>
   now?: number
 }
 
@@ -52,7 +53,8 @@ function positiveNode(field: MyIssuesAppliedFilter['field'], values: string[], {
   const since = (days: number) => new Date(now - days * DAY).toISOString()
   const isoDay = (offset: number) => localDay(now + offset * DAY)
   switch (field) {
-    case 'status': return { field: 'status', operator: 'in', values }
+    // A status matches its whole status group: the same name and type in every team's workflow.
+    case 'status': return { field: 'status', operator: 'in', values: data.states?.length && data.teams ? [...new Set(values.flatMap(value => statusGroupIndex({ states: data.states!, teams: data.teams!, teamSettings: data.teamSettings }).memberIds(value)))] : values }
     case 'priority': return { field: 'priority', operator: 'in', values }
     case 'assignee': {
       // Agents listed under Assignee match the issues delegated to them.

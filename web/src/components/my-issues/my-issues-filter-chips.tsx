@@ -17,8 +17,14 @@ export function flattenFilterOptions(options: MyIssuesFilterOption[] = []): MyIs
 
 /** Chip data shared by the filter bar and the advanced editor: the reference app operators, value icons, "2 priorities". */
 export function filterChipItem(filter: Pick<MyIssuesAppliedFilter, 'id' | 'field' | 'fieldLabel' | 'operator' | 'operatorLabel' | 'negativeOperatorLabel' | 'value' | 'valueLabel' | 'color' | 'values'>, options: MyIssuesFilterOption[] | undefined): NormalizedFilter {
-  const known = new Map(flattenFilterOptions(options).map(option => [option.id, option]))
-  const values = filterValues(filter as MyIssuesAppliedFilter).map(value => {
+  const flat = flattenFilterOptions(options)
+  // Aliases (every status of a merged status group) resolve to their option, so a saved single status shows as it.
+  const known = new Map([...flat.flatMap(option => (option.aliases ?? []).map(alias => [alias, option] as const)), ...flat.map(option => [option.id, option] as const)])
+  const seen = new Set<string>()
+  const values = filterValues(filter as MyIssuesAppliedFilter).filter(value => {
+    const id = known.get(value.value)?.id ?? value.value
+    return !seen.has(id) && Boolean(seen.add(id))
+  }).map(value => {
     // Legacy Agent Session values (Awaiting input) show as the reference app state they now match.
     const legacy = filter.field === 'agentSession' && !known.has(value.value) ? known.get(agentSessionFilterValue(value.value) ?? '') : undefined
     const option = known.get(value.value) ?? (legacy && { ...legacy, id: value.value })

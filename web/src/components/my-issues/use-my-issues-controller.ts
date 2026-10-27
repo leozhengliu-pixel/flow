@@ -7,6 +7,7 @@ import type { MyIssuesGroupData, MyIssuesRowData } from './my-issues-list'
 import { useMyIssuesSelection } from './use-my-issues-state'
 import type { MyIssuesDisplayOptions, MyIssuesProperty, MyIssuesView } from './my-issues-surface'
 import { matchesExplorerFilter } from '@/components/issue-explorer/issue-explorer-model'
+import { statusGroupIndex } from '@/lib/status-groups'
 import { buildIssueGroups, type IssueGroupingContext } from '@/components/issue-explorer/issue-grouping'
 
 export interface MyIssuesControllerAdapter {
@@ -42,7 +43,7 @@ export function useMyIssuesController({ workspaceSlug, initialView, initialGroup
   const [bulkError, setBulkError] = useState<string>()
   const displayRequest = useRef(0)
   useEffect(() => setGroups(initialGroups), [initialGroups])
-  const visibleGroups = useMemo(() => projectGroups(drillRows ? [{ id: 'insights', label: 'Issues', issues: drillRows }] : applyFilters(groups, filters), display, groupingContext), [display, filters, groups, drillRows, groupingContext])
+  const visibleGroups = useMemo(() => projectGroups(drillRows ? [{ id: 'insights', label: 'Issues', issues: drillRows }] : applyFilters(groups, filters, groupingContext), display, groupingContext), [display, filters, groups, drillRows, groupingContext])
   const visibleSelection = useMyIssuesSelection(visibleGroups)
   const summary = useMemo(() => deriveSummary(visibleGroups), [visibleGroups])
   const counts = useMemo(() => ({ [view]: visibleGroups.reduce((total, group) => total + group.issues.length, 0) }) as Partial<Record<MyIssuesView, number>>, [view, visibleGroups])
@@ -115,8 +116,11 @@ export function useMyIssuesController({ workspaceSlug, initialView, initialGroup
 
 export function myIssuesViewHref(workspaceSlug: string, view: MyIssuesView) { return `/${workspaceSlug}/my-issues/${view}` }
 
-function applyFilters(groups: MyIssuesGroupData[], filters: MyIssuesAppliedFilter[]) {
-  return groups.map(group => ({ ...group, issues: group.issues.filter(issue => filters.every(filter => matchesExplorerFilter(issue, filter))) })).filter(group => group.issues.length)
+function applyFilters(groups: MyIssuesGroupData[], filters: MyIssuesAppliedFilter[], context?: IssueGroupingContext) {
+  // A Status value matches its whole status group (the same status in another team's workflow).
+  const statusGroups = context?.data?.states.length && context.data.teams ? statusGroupIndex(context.data) : undefined
+  const now = Date.now()
+  return groups.map(group => ({ ...group, issues: group.issues.filter(issue => filters.every(filter => matchesExplorerFilter(issue, filter, now, statusGroups))) })).filter(group => group.issues.length)
 }
 
 function projectGroups(groups: MyIssuesGroupData[], display: MyIssuesDisplayOptions, context?: IssueGroupingContext): MyIssuesGroupData[] {
