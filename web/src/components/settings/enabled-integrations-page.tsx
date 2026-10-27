@@ -11,14 +11,19 @@ import { disconnectIntegration } from "@/lib/api";
 import { disconnectChatIntegration } from "@/lib/chat-integrations-api";
 import { isWorkspaceAdmin } from "@/lib/settings-access";
 import {
+  chatProviderName,
   getIntegrationCatalogEntry,
+  isChatProvider,
   isInstalledIntegrationConnection,
   primaryIntegrations,
 } from "@/lib/integration-catalog";
+import type { ChatProvider } from "@/lib/integration-catalog";
 import type { BootstrapData } from "@/types/flow";
 import { toast } from "@/lib/toast";
 // The page's own layout (feature-* classes): without it, opening this route first renders unstyled.
 import "./feature-settings.css";
+
+const CHAT_STATUS_LABELS: Record<string, string> = { connected: "Connected", pending_authorization: "Configured", error: "Connection failed" };
 
 type Props = {
   data: BootstrapData;
@@ -33,7 +38,7 @@ export function EnabledIntegrationsSettingsPage({ data, onBack, onOpenSlug, onRe
 
   const revokeConnection = async (provider: string) => {
     try {
-      if (provider === "feishu" || provider === "lark") await disconnectChatIntegration(provider);
+      if (isChatProvider(provider)) await disconnectChatIntegration(provider);
       else await disconnectIntegration(provider);
       await onReload();
     } catch (error) {
@@ -64,9 +69,10 @@ export function EnabledIntegrationsSettingsPage({ data, onBack, onOpenSlug, onRe
                   getIntegrationCatalogEntry(item.provider) ??
                   primaryIntegrations().find((entry) => entry.connectProvider === item.provider);
                 const slug = catalog?.slug ?? item.provider;
+                const chat = isChatProvider(item.provider) ? item.provider : null;
                 const brand =
-                  item.provider === "github" || item.provider === "gitlab" || item.provider === "slack" || item.provider === "feishu" || item.provider === "lark"
-                    ? (item.provider as "github" | "gitlab" | "slack" | "feishu" | "lark")
+                  item.provider === "github" || item.provider === "gitlab" || item.provider === "slack" || chat
+                    ? (item.provider as "github" | "gitlab" | "slack" | ChatProvider)
                     : null;
                 return (
                   <div key={item.id} className="feature-row">
@@ -76,21 +82,21 @@ export function EnabledIntegrationsSettingsPage({ data, onBack, onOpenSlug, onRe
                     <div>
                       <strong data-i18n-ignore>
                         <button type="button" className="feature-text-link" onClick={() => onOpenSlug(slug)}>
-                          {item.name}
+                          {chat ? chatProviderName(chat, t) : item.name}
                         </button>
                       </strong>
                       <span>
                         {t("Enabled")}
                         {item.createdAt ? ` · ${formatDate(item.createdAt)}` : ""}
                         {" · "}
-                        {t(item.status)}
+                        {t(chat ? CHAT_STATUS_LABELS[item.status] ?? item.status : item.status)}
                       </span>
                     </div>
                     <aside>
                       <button type="button" className="feature-button" onClick={() => onOpenSlug(slug)}>
                         {t("Manage")}
                       </button>
-                      {(!(item.provider === "feishu" || item.provider === "lark") || isWorkspaceAdmin(data)) && <button
+                      {(!chat || isWorkspaceAdmin(data)) && <button
                         type="button"
                         className="feature-button danger"
                         onClick={() => void revokeConnection(item.provider)}

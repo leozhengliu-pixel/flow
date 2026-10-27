@@ -32,8 +32,14 @@ export interface ChatBinding {
 
 export interface ChatIntegrationSettings {
   connection: IntegrationConnection | null;
+  /** Stable code for connection.lastError; the web app translates it. */
+  lastErrorCode?: string;
   identity: ChatIdentity | null;
+  /** The linked account is older than the workspace session duration and must reconnect. */
+  identityExpired?: boolean;
   bindings: ChatBinding[];
+  /** Teams a group binding may share, by the server's binding rule (administrators only). */
+  bindableTeamIds?: string[];
   credentialsConfigured: boolean;
   webhookURL: string;
   canManage: boolean;

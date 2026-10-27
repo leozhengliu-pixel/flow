@@ -5,6 +5,8 @@
  * P1-D adds product patterns for long-tail OAuth shells (LS-0340 / LS-0685…).
  */
 
+import type { ChatIntegrationProvider } from "@/types/chat-integrations";
+
 export type IntegrationAvailability = "supported" | "coming_soon" | "not_supported";
 
 export type IntegrationCategory =
@@ -38,14 +40,33 @@ export interface IntegrationCatalogEntry {
   /** Hide subtype rows from the main All Integrations grid. */
   subtype?: boolean;
   /** Providers that currently have REST connect / manage flows. */
-  connectProvider?: "github" | "gitlab" | "slack" | "jira" | "feishu" | "lark";
+  connectProvider?: "github" | "gitlab" | "slack" | "jira" | ChatProvider;
   /** Optional product-capability copy for Coming soon / Not supported detail pages. */
   productPattern?: IntegrationProductPattern;
 }
 
+export type ChatProvider = ChatIntegrationProvider;
+
+export const CHAT_PROVIDERS: readonly ChatProvider[] = ["feishu", "lark"];
+
+/** Feishu and Lark are chat applications configured per workspace. */
+export function isChatProvider(provider: unknown): provider is ChatProvider {
+  return provider === "feishu" || provider === "lark";
+}
+
+/** Product name in the member's language: Feishu is 飞书 in Chinese, Lark keeps its name. */
+export function chatProviderName(provider: ChatProvider, t: (source: string) => string): string {
+  return provider === "feishu" ? t("Feishu") : "Lark";
+}
+
+/** Catalog display name; chat products are localized, other brands are not. */
+export function integrationDisplayName(entry: Pick<IntegrationCatalogEntry, "name" | "connectProvider">, t: (source: string) => string): string {
+  return isChatProvider(entry.connectProvider) ? chatProviderName(entry.connectProvider, t) : entry.name;
+}
+
 export function isInstalledIntegrationConnection(connection: { provider: string; status: string }): boolean {
   return connection.status === "connected" || connection.status === "configured" ||
-    ((connection.provider === "feishu" || connection.provider === "lark") &&
+    (isChatProvider(connection.provider) &&
       (connection.status === "pending_authorization" || connection.status === "error"));
 }
 

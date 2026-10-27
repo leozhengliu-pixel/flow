@@ -334,10 +334,11 @@ it('lets members connect chat identities from Connected accounts without workspa
   });
   const input = props();
   input.page = 'connections';
-  input.data = { ...input.data, viewerRole: 'member', integrationConnections: [] };
+  input.data = { ...input.data, viewerRole: 'member', integrationConnections: [{ id: 'chat-connection', provider: 'feishu', name: 'Feishu', status: 'connected' } as never] };
   const view = render(<MemoryRouter><I18nProvider><SettingsPage {...input}/></I18nProvider></MemoryRouter>);
   try {
     const row = await screen.findByRole('region', { name: 'Feishu account' });
+    expect(screen.queryByRole('region', { name: 'Lark account' })).not.toBeInTheDocument();
     expect(await within(row).findByRole('button', { name: 'Connect' })).toBeEnabled();
     expect(screen.queryByRole('textbox', { name: 'App ID' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add group' })).not.toBeInTheDocument();
