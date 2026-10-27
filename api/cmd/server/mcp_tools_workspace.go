@@ -324,7 +324,7 @@ func (s *server) saveMCPTeam(ctx context.Context, actor mcpActor, data domain.Bo
 	receipt["memberCount"] = people
 	if len(unresolved) > 0 {
 		receipt["unresolved"] = unresolved
-		receipt["unresolvedNote"] = "These people were not added. not_found: not a member of this workspace; workspace invitations cannot be sent from here, so say who was not added and pass on inviteHint. ambiguous: several members match; pass one candidate's id or email."
+		receipt["unresolvedNote"] = "These people were not added. not_found: not a member of this workspace; workspace invitations cannot be sent from here, so say who was not added and pass on inviteHint with every email written out in full (the user pastes them). ambiguous: several members match; pass one candidate's id or email."
 		if hint := mcpTeamInviteHint(team.Name, unresolved); hint != "" {
 			receipt["inviteHint"] = hint
 		}
