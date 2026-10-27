@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Cycle, Issue } from '@/types/flow'
-import { cycleStats, cycleStatusLabel, formatCycleDay, formatCycleRange, weekdaysLeft } from './cycle-model'
+import { cooldownWeeksBetween, cycleStats, cycleStatusLabel, formatCycleDay, formatCycleRange, weekdaysLeft } from './cycle-model'
 
 const cycle = {
   id: 'cycle-1', name: 'Cycle 1', number: 1, capacity: 4, status: 'current',
@@ -21,9 +21,31 @@ describe('cycle model', () => {
       issue('other-cycle', 'completed', { cycleId: 'cycle-2' }),
     ])
     expect(stats).toEqual({
-      scope: 3, started: 1, completed: 1, capacity: 4,
+      estimates: false, scope: 3, started: 1, completed: 1, capacity: 4, capacityRatio: .75,
       capacityPercent: 75, successPercent: 42, startedPercent: 33, completedPercent: 33,
     })
+  })
+
+  it('measures scope and capacity in estimate points when the team uses estimates', () => {
+    const pointsCycle = { ...cycle, capacity: 30 }
+    const issues = [issue('a', 'unstarted', { estimate: 3 }), issue('b', 'started', { estimate: 5 })]
+    const stats = cycleStats(pointsCycle, issues, { estimateType: 'fibonacci' })
+    expect(stats).toMatchObject({ estimates: true, scope: 8, started: 5, capacityPercent: 27 })
+    expect(Math.floor(stats.capacityRatio * 100)).toBe(26)
+  })
+
+  it('counts unestimated issues as 1 point unless turned off, and zero estimates only when allowed', () => {
+    const issues = [issue('a', 'unstarted', { estimate: 3 }), issue('none', 'unstarted'), issue('zero', 'unstarted', { estimate: 0 })]
+    expect(cycleStats(cycle, issues, { estimateType: 'fibonacci' }).scope).toBe(5)
+    expect(cycleStats(cycle, issues, { estimateType: 'fibonacci', estimateAllowZero: true }).scope).toBe(4)
+    expect(cycleStats(cycle, issues, { estimateType: 'fibonacci', estimateAllowZero: true, estimateCountUnestimated: false }).scope).toBe(3)
+    expect(cycleStats(cycle, issues, { estimateType: 'notUsed' }).scope).toBe(3)
+  })
+
+  it('measures the cooldown between consecutive cycles in weeks', () => {
+    expect(cooldownWeeksBetween({ endsAt: '2026-11-09T00:00:00Z' }, { startsAt: '2026-11-24T00:00:00Z' })).toBe(2)
+    expect(cooldownWeeksBetween({ endsAt: '2026-11-09T00:00:00Z' }, { startsAt: '2026-11-17T00:00:00Z' })).toBe(1)
+    expect(cooldownWeeksBetween({ endsAt: '2026-11-09T00:00:00Z' }, { startsAt: '2026-11-10T00:00:00Z' })).toBe(0)
   })
 
   it('formats dates and status labels consistently', () => {

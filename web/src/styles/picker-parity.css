@@ -1245,3 +1245,22 @@ html:root body .property-command-surface .property-command-options [role=option]
 html:root body .property-command-surface .property-command-options [role=option].has-submenu[aria-expanded=true] .property-command-option-background { background: var(--pk-hover); }
 html:root body .property-command-surface .property-command-options [role=option].has-submenu .property-command-group-chevron { grid-column: 4; justify-self: end; color: var(--pk-muted); }
 html:root body .property-command-surface.project-teams-menu:not(#_) .property-command-search-shortcut > span { font: 450 10px/11px var(--font); }
+
+/* ── Estimate picker (composer pill, issue properties, sub-issue composer) ──
+   228px menu; rows are a 16px estimate icon at 14.5px, the label at 38.5px and
+   the check 15.5px from the right edge (no shortcut column, so no empty gap). */
+html:root body .property-command-surface.property-command-estimate:not(#_) {
+  box-sizing: border-box;
+  width: 228px;
+  min-width: 228px;
+  max-width: calc(100vw - 20px);
+}
+html:root body .property-command-surface.property-command-estimate:not(#_) .property-command-options [role=option] {
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  padding: 0 15px 0 14px;
+}
+html:root body .property-command-surface.property-command-estimate:not(#_) .property-command-icon > .estimate-icon { width: 16px; height: 16px; }
+/* "⇧" "E" keycaps: 18px wide, 3px apart. */
+html:root body .property-command-surface.property-command-estimate:not(#_) .property-command-search-shortcut { gap: 3px; }
+html:root body .property-command-surface.property-command-estimate:not(#_) .property-command-search-shortcut kbd { width: 18px; min-width: 18px; padding: 2px 0; }
+html:root body .property-command-surface.property-command-estimate .property-command-options [role=option][aria-selected=true] .estimate-icon { color: var(--pk-text-strong); }

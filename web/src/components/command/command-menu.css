@@ -90,12 +90,6 @@ html:root body .command-dialog .command-avatar {
   height: 16px;
   font-size: 8px;
 }
-html:root body .command-dialog .command-estimate {
-  min-width: 16px;
-  color: var(--pk-muted);
-  font-size: 11px;
-  text-align: center;
-}
 
 /* "Open past agent chat…": an unread dot, the chat title and its short age (the reference app's chat list). */
 html:root body .command-dialog .command-chat-dot {

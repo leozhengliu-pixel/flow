@@ -1,6 +1,8 @@
 import type { Cycle, Issue, IssueLabel, LabelGroup, Project, ProjectSummary, TeamSettings } from '@/types/flow'
-import { estimateLabel, estimatePickerOptions, NO_ESTIMATE } from '@/lib/estimates'
-import { CircleDashed, Plus } from 'lucide-react'
+import { estimateLabel } from '@/lib/estimates'
+import { EstimateValueIcon } from '@/components/issue/estimate-icon'
+import { estimateMenuProps } from '@/components/issue/estimate-menu'
+import { Plus } from 'lucide-react'
 import { CycleIcon, LabelIcon, NoProjectIcon, ProjectIcon } from '@/components/issue/issue-icons'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { LabelHoverPreview } from '@/components/property/label-hover-preview'
@@ -68,10 +70,9 @@ export function CyclePicker({ valueId, cycles, issues = [], teamId, onChange }: 
 
 export function EstimatePicker({ value, settings, onChange }: { value?: number; settings: TeamSettings | undefined; onChange: (estimate: number) => void | Promise<void> }) {
   const type = settings?.estimateType ?? 'notUsed'
-  const hasValue = value !== undefined && value !== null
+  const hasValue = value !== undefined && value !== null && value >= 0
   const label = hasValue ? estimateLabel(value, type) : 'Estimate'
-  return <div className="label-project-picker estimate-picker"><PropertyMenu label="Estimate" value={label} selectedId={String(hasValue ? value : NO_ESTIMATE)} options={estimatePickerOptions(settings).map(option => ({ id: option.id, label: option.label, icon: <EstimateIcon value={Math.max(option.value, 0)}/> }))} searchPlaceholder={hasValue ? 'Change estimate to…' : 'Set estimate to…'} searchShortcut="⇧ E" ariaLabel={hasValue ? `Change estimate. Current estimate is ${label}` : 'Set estimate'} triggerClassName="label-project-trigger" trigger={<><EstimateIcon value={value ?? 0}/><span>{label}</span></>} onChange={id => onChange(Number(id))}/></div>
+  return <div className="label-project-picker estimate-picker"><PropertyMenu {...estimateMenuProps(value, settings)} value={label} ariaLabel={hasValue ? `Change estimate. Current estimate is ${label}` : 'Set estimate'} triggerClassName="label-project-trigger" trigger={<><EstimateValueIcon value={value} settings={settings}/><span>{label}</span></>} onChange={id => onChange(Number(id))}/></div>
 }
 
-function EstimateIcon({ value }: { value: number }) { return value ? <span aria-hidden="true" className="estimate-value-icon">{value}</span> : <CircleDashed aria-hidden="true" size={15}/> }
 function cycleProgress(issues: Issue[], cycleId: string) { const scoped=issues.filter(issue=>issue.cycleId===cycleId&&!issue.archivedAt);return scoped.length?Math.round(scoped.filter(issue=>issue.state.type==='completed'||issue.state.type==='canceled').length/scoped.length*100):0 }

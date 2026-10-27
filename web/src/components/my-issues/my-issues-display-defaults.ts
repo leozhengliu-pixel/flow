@@ -14,7 +14,8 @@ export function createIssueDisplayOptions(overrides: Partial<Omit<MyIssuesDispla
   showEmptyGroups: false,
   nestedSubIssues: false,
   hiddenGroupIds: [],
-  properties: new Set(properties ?? ['id', 'status', 'assignee', 'priority', 'project', 'labels', 'created']),
+  // Estimates show by default; rows and group headers hide them for teams that do not use estimates.
+  properties: new Set(properties ?? ['id', 'status', 'assignee', 'priority', 'project', 'estimate', 'labels', 'created']),
   ...rest,
   }
 }

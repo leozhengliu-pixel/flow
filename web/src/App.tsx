@@ -156,6 +156,7 @@ import type {
   UserSettings,
 } from "@/types/flow";
 import { deriveResourceCounts } from "@/lib/resource-counts";
+import { resolvedTeamSettings } from "@/lib/team-hierarchy";
 import { Sidebar, type PageId } from "@/components/layout/sidebar";
 import { workspaceFeatureEnabled } from "@/components/layout/sidebar-customization-state";
 import { issueListContextPath, issueReturnPath } from '@/lib/issue-navigation-context';
@@ -5737,6 +5738,7 @@ function App() {
               }
             }
             team={cycleTeam}
+            estimateSettings={resolvedTeamSettings(data.teamSettings, cycleTeam.id)}
             onOpen={openCycle}
             onUpdateCycle={(cycle, input) => changeCycle(cycle.id, input)}
             onStartCycle={startCycle}

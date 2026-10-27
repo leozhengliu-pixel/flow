@@ -12,6 +12,7 @@ import { teamLeaveDisabledReason } from '@/lib/team-access';
 import { ScopedFlowTooltip } from '@/components/ui/tooltip';
 import * as Popover from "@radix-ui/react-popover";
 import {
+  ArrowUpRight,
   ChevronRight,
   Copy,
   GitBranch,
@@ -95,6 +96,8 @@ import {
 } from "./settings-primitives";
 import { DomainLabelsSettings } from "./domain-settings";
 import { ESTIMATE_TYPE_NAMES, estimateScaleDetails } from "@/lib/estimates";
+
+const ESTIMATES_DOCS_URL = "https://flow.app/docs/estimates";
 import { TeamMembersSettings } from "./team-members-settings";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { StatusIcon } from "@/components/issue/issue-icons";
@@ -674,6 +677,7 @@ function GeneralSettings({
   team: Team;
   onReload: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const initial =
     data.teamSettings?.[team.id] ?? defaultTeamSettings(team.id, data.states);
   const [settings, setSettings] = useState(initial);
@@ -805,7 +809,7 @@ function GeneralSettings({
           onChange={(value) => save({ showInitiatives: !value })}
         />
       </TeamSection>
-      <TeamSection title="Estimates" description="Used to estimate issue complexity and plan cycle capacity.">
+      <TeamSection title="Estimates" description={<>{t("Used to estimate issue complexity and plan cycle capacity.")} <a className="feature-docs-link" href={ESTIMATES_DOCS_URL} target="_blank" rel="noreferrer">{t("Docs")}<ArrowUpRight size={11} aria-hidden="true" /></a></>}>
         {settings.parentTeamId && <ToggleRow
           title="Inherit estimate settings from parent team"
           description="Keep these settings in sync with parent team"
@@ -816,10 +820,11 @@ function GeneralSettings({
           title="Issue estimation"
           value={settings.estimateType}
           options={["notUsed", "exponential", "fibonacci", "flow", "tShirt"]}
-          labels={Object.fromEntries(
-            (["notUsed", "exponential", "fibonacci", "flow", "tShirt"] as const).map((type) => [
+          labels={ESTIMATE_TYPE_NAMES}
+          hints={Object.fromEntries(
+            (["exponential", "fibonacci", "flow", "tShirt"] as const).map((type) => [
               type,
-              `${ESTIMATE_TYPE_NAMES[type]} ${estimateScaleDetails(type, settings.estimateAllowZero, settings.estimateExtended)}`.trim(),
+              estimateScaleDetails(type, settings.estimateAllowZero, settings.estimateExtended),
             ]),
           )}
           onChange={(value) =>
@@ -827,26 +832,29 @@ function GeneralSettings({
           }
         />}
         {settings.estimateType !== "notUsed" && !(settings.inheritIssueEstimation && settings.parentTeamId) && (
-          <>
+          <div className="team-estimate-options">
             <ToggleRow
+              className="team-estimate-option"
               title="Allow zero estimates"
               description="When enabled, issues can be estimated with zero points. This is useful if, for example, you don’t want to count parent issues towards the total estimate."
               checked={Boolean(settings.estimateAllowZero)}
               onChange={(value) => save({ estimateAllowZero: value })}
             />
             <ToggleRow
+              className="team-estimate-option"
               title="Extended estimate scale"
               description="When enabled, the estimate scale is extended. This is normally not recommended, as large estimates usually mean that an issue should be broken up into smaller issues."
               checked={Boolean(settings.estimateExtended)}
               onChange={(value) => save({ estimateExtended: value })}
             />
             <ToggleRow
+              className="team-estimate-option"
               title="Count unestimated issues"
-              description="When enabled, issues that have not been estimated will count as 1 estimate point. When disabled, unestimated issues count as 0 estimate points."
+              description="When enabled, issues without an estimate will count as 1 estimate point. When disabled, they count as 0 estimate points."
               checked={settings.estimateCountUnestimated !== false}
               onChange={(value) => save({ estimateCountUnestimated: value })}
             />
-          </>
+          </div>
         )}
       </TeamSection>
       <EmailIntakeSettings
@@ -3209,6 +3217,7 @@ function SelectRow({
   value,
   options,
   labels = {},
+  hints = {},
   icons = {},
   entityOptions = [],
   onChange,
@@ -3218,6 +3227,8 @@ function SelectRow({
   value: string;
   options: string[];
   labels?: Record<string, string>;
+  /** Muted text after an option's label in the menu (e.g. "(1, 2, 3, 5, 8 Points)"). */
+  hints?: Record<string, string>;
   icons?: Record<string, ReactNode>;
   entityOptions?: string[];
   onChange: (value: string) => void | Promise<void>;
@@ -3236,6 +3247,7 @@ function SelectRow({
             : t(labels[option] ?? option),
             entityName: entityOptions.includes(option),
             icon: icons[option],
+            hint: hints[option] || undefined,
         }))}
       />
     </TeamRow>
@@ -3245,16 +3257,18 @@ function ToggleRow({
   title,
   description,
   checked,
+  className,
   onChange,
 }: {
   title: string;
   description?: string;
   checked: boolean;
+  className?: string;
   onChange: (value: boolean) => void | Promise<void>;
 }) {
   const { t } = useI18n();
   return (
-    <TeamRow title={title} description={description}>
+    <TeamRow title={title} description={description} className={className}>
       <SettingsToggle checked={checked} label={t(title)} onChange={onChange} />
     </TeamRow>
   );

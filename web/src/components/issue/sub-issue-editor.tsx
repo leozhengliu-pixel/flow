@@ -1,8 +1,10 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { assigneeMenuOptions } from '@/components/issue/assignee-menu-options'
 import { agentsAvailable } from '@/lib/agent-members'
-import { estimateLabel, estimatePickerOptions, NO_ESTIMATE } from '@/lib/estimates'
-import { CalendarDays, ChevronRight, CircleDashed, MoreHorizontal, Paperclip } from 'lucide-react'
+import { estimateLabel, estimateShortLabel, NO_ESTIMATE } from '@/lib/estimates'
+import { EstimateValueIcon } from '@/components/issue/estimate-icon'
+import { estimateMenuProps } from '@/components/issue/estimate-menu'
+import { CalendarDays, ChevronRight, MoreHorizontal, Paperclip } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 
 import type { BootstrapData, Issue } from '@/types/flow'
@@ -61,8 +63,8 @@ export function SubIssueEditor({ parent, data, onCancel, onCreate }: { parent: I
   const labels = labelsForResource(data.labels, 'issue', data.labelGroups).filter(label => !label.scope || label.scope === 'Workspace' || labelScopes.has(label.scope))
   const labelGroupNames = useMemo(() => new Map(data.labelGroups.map(group => [group.id, group.name])), [data.labelGroups])
   const labelGroupColors = useMemo(() => new Map(data.labelGroups.map(group => [group.id, group.color])), [data.labelGroups])
-  const estimateType = resolvedTeamSettings(data.teamSettings, parent.team.id)?.estimateType ?? 'notUsed'
-  const estimateOptions = estimatePickerOptions(resolvedTeamSettings(data.teamSettings, parent.team.id))
+  const estimateSettings = resolvedTeamSettings(data.teamSettings, parent.team.id)
+  const estimateType = estimateSettings?.estimateType ?? 'notUsed'
   const toggleLabel = (id: string) => setLabelIds(current => toggleGroupedLabelIds(current, id, labels))
   const submit = async () => {
     if (!title.trim() || saving) return
@@ -80,7 +82,7 @@ export function SubIssueEditor({ parent, data, onCancel, onCreate }: { parent: I
     <div className="sub-issue-actions"><div className="sub-issue-properties">
       <button type="button" className="sub-issue-team" aria-label="Set team" disabled><TeamIcon team={parent.team} /><span data-i18n-ignore>{parent.team.key}</span></button>
       <PropertyMenu compact label="Priority" value={priority ? ['', 'Urgent', 'High', 'Medium', 'Low'][priority] : 'Priority'} selectedId={String(priority)} icon={<PriorityIcon priority={priority}/>} options={['No priority', 'Urgent', 'High', 'Medium', 'Low'].map((label, id) => ({ id: String(id), label, icon: <PriorityIcon priority={id}/> }))} onChange={id => setPriority(Number(id))}/>
-      {estimateType!=='notUsed'&&<PropertyMenu compact label="Estimate" value={estimate >= 0 ? estimateLabel(estimate, estimateType) : 'Estimate'} selectedId={String(estimate)} icon={<EstimateGlyph value={Math.max(estimate, 0)}/>} options={estimateOptions.map(option=>({id:option.id,label:option.label,icon:<EstimateGlyph value={Math.max(option.value, 0)}/>}))} onChange={id=>setEstimate(Number(id))}/>}
+      {estimateType!=='notUsed'&&<PropertyMenu compact {...estimateMenuProps(estimate, estimateSettings)} value={estimate >= 0 ? estimateShortLabel(estimate, estimateType) : 'Estimate'} ariaLabel={estimate >= 0 ? `Change estimate. Current estimate is ${estimateLabel(estimate, estimateType)}` : 'Set estimate'} icon={<EstimateValueIcon value={estimate} settings={estimateSettings} size={14}/>} onChange={id=>setEstimate(Number(id))}/>}
       <PropertyMenu compact label="Assignee" value={assignee?.displayName ?? 'Assignee'} selectedId={assigneeId} icon={assignee ? <Avatar name={assignee.displayName}/> : <NoAssigneeIcon size={14}/>} options={assigneeMenuOptions(data.users.filter(user => user.active), { teamId: parent.team.id, allowAgents: agentsAvailable(data), emptyIconSize: 14 })} searchPlaceholder="Assign to…" onChange={setAssigneeId}/>
       <PropertyMenu compact multiple label="Labels" value={labelIds.length ? `${labelIds.length} labels` : 'Labels'} selectedIds={labelIds} icon={<LabelIcon size={14}/>} options={labels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, resourceType: label.resourceType, groupId: label.groupId, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined, groupColor: label.groupId ? labelGroupColors.get(label.groupId) : undefined }))} onChange={toggleLabel}/>
       <PropertyMenu compact label="Cycle" value={cycle?.name ?? ''} valueIsEntityName={Boolean(cycle)} selectedId={cycleId} icon={<CycleIcon size={14}/>} options={[{ id: '', label: 'No cycle', icon: <CycleIcon noCycle size={14}/> }, ...cycles.map(item => ({ id: item.id, label: item.name, icon: <CycleIcon cycle={item} nextUpcomingId={nextUpcomingCycleId} progress={cycleIssueProgress(data.issues,item.id)} size={14}/>, i18nIgnore: true }))]} onChange={setCycleId} trigger={cycle ? <><CycleIcon cycle={cycle} nextUpcomingId={nextUpcomingCycleId} progress={cycleIssueProgress(data.issues,cycle.id)} size={14}/><span data-i18n-ignore>{cycle.name}</span></> : <CycleIcon size={14}/>} triggerClassName="sub-issue-cycle-trigger" ariaLabel="Add to cycle"/>
@@ -99,5 +101,4 @@ function SubIssueMoreMenu({ data, dueDate, project, onDueDate, onProject }: { da
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 
-function EstimateGlyph({ value }: { value: number }) { return value ? <span aria-hidden="true" className="estimate-value-icon">{value}</span> : <CircleDashed aria-hidden="true"/> }
 function cycleIssueProgress(issues: Issue[], cycleId: string) { const scoped=issues.filter(issue=>issue.cycleId===cycleId&&!issue.archivedAt);return scoped.length?Math.round(scoped.filter(issue=>issue.state.type==='completed'||issue.state.type==='canceled').length/scoped.length*100):0 }

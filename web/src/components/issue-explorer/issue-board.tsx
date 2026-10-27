@@ -4,7 +4,10 @@ import { ProjectGlyph } from '@/components/views/project-glyph'
 import { useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as ContextMenu from '@radix-ui/react-context-menu'
-import { Clock3, Ellipsis, Link2, Minus, Plus } from 'lucide-react'
+import { Clock3, Ellipsis, Link2, Plus } from 'lucide-react'
+import { EstimateChip } from '@/components/issue/estimate-icon'
+import { useIssueRowActions, useTeamEstimateSettings } from '@/components/my-issues/use-issue-row-actions'
+import { teamUsesEstimates } from '@/lib/estimates'
 import { IssueReleaseChip } from '@/components/issue/issue-release-chip'
 import { Virtuoso } from 'react-virtuoso'
 import { toast } from '@/lib/toast'
@@ -267,11 +270,14 @@ function CardProperties({ issue, properties, propertyOptions, onPropertyChange }
   const labels = properties.has('labels') ? issue.labels ?? [] : []
   const shownLabels = labels.slice(0, 4)
   const hiddenLabelCount = labels.length - shownLabels.length
-  const visible = properties.has('priority') || Boolean(properties.has('estimate') && issue.estimate) || Boolean(properties.has('sla') && issue.sla) || Boolean(properties.has('project') && issue.project) || Boolean(properties.has('cycle') && issue.cycleId) || shownLabels.length > 0 || Boolean(properties.has('dueDate') && issue.dueDate) || Boolean(properties.has('release') && issue.releaseCount) || Boolean(properties.has('links') && issue.linkCount) || Boolean((properties.has('pullRequests') && issue.pullRequestCount) || issue.blockedByCount || issue.blockingCount) || Boolean(properties.has('timeInStatus') && issue.timeInStatusMinutes != null) || Boolean(properties.has('myActivity') && issue.myActivityAt) || Boolean(properties.has('customers') && issue.customerCount) || Boolean(properties.has('customerRevenue') && issue.customers?.some(customer => (customer.annualRevenue ?? 0) > 0))
+  const estimateSettings = useTeamEstimateSettings()(issue.teamId)
+  const hasEstimateContext = Boolean(useIssueRowActions())
+  const showEstimate = properties.has('estimate') && issue.estimate != null && issue.estimate >= 0 && (hasEstimateContext ? teamUsesEstimates(estimateSettings) : issue.estimate > 0)
+  const visible = properties.has('priority') || showEstimate || Boolean(properties.has('sla') && issue.sla) || Boolean(properties.has('project') && issue.project) || Boolean(properties.has('cycle') && issue.cycleId) || shownLabels.length > 0 || Boolean(properties.has('dueDate') && issue.dueDate) || Boolean(properties.has('release') && issue.releaseCount) || Boolean(properties.has('links') && issue.linkCount) || Boolean((properties.has('pullRequests') && issue.pullRequestCount) || issue.blockedByCount || issue.blockingCount) || Boolean(properties.has('timeInStatus') && issue.timeInStatusMinutes != null) || Boolean(properties.has('myActivity') && issue.myActivityAt) || Boolean(properties.has('customers') && issue.customerCount) || Boolean(properties.has('customerRevenue') && issue.customers?.some(customer => (customer.annualRevenue ?? 0) > 0))
   if (!visible) return null
   return <div className={styles.cardMeta}>
     {properties.has('priority') && <RowCommandPicker propertyLabel="Priority" label={`${priorityName(issue.priority)} priority`} searchLabel="Change priority to..." selectedIds={[String(issue.priority)]} options={propertyOptions.priority} onSelect={value => onPropertyChange('priority', value)} triggerClassName={`${styles.metaTrigger} ${styles.iconBadge}`} trigger={<PriorityIcon priority={issue.priority} size={14}/>}/>}
-    {properties.has('estimate') && issue.estimate != null && issue.estimate > 0 && <span className={styles.badge}><span className={styles.estimateIcon}><Minus size={10}/></span><span>{issue.estimate}</span></span>}
+    {showEstimate && <EstimateChip className={styles.badge} value={issue.estimate!} settings={estimateSettings} label={`Estimate ${issue.estimate}`}/>}
     {properties.has('sla') && issue.sla && <IssueSLAIndicator compact sla={issue.sla} ruleName={issue.sla.ruleName}/>}
     {properties.has('release') && issue.releases?.length ? <IssueReleaseChip className={styles.badge} iconSize={12} releases={issue.releases}/> : null}
     {properties.has('links') && issue.linkCount ? <span className={styles.badge}><Link2 size={12}/><span>{issue.linkCount}</span></span> : null}
