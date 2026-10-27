@@ -4,8 +4,6 @@ import { AlertCircle, Plus } from "lucide-react";
 import {
   fetchAgentStatus,
   getAgentSession,
-  stopAgentSession,
-  resolveAgentApproval,
   updateAgentSession,
 } from "@/lib/api";
 import { streamAgentSessionMessage, streamAgentSessionMessageEdit, streamNewAgentSession, type AgentStreamEvent } from "@/lib/agent-stream";
@@ -45,7 +43,7 @@ import { AgentSkillsPicker } from './agent-skills-picker'
 import { applyAgentStreamEvent, markAgentSessionFailed, markAgentSessionStopped } from './agent-stream-state'
 import { isBlankStoppedReply, settleStoppedAgentReply } from './agent-stopped-reply'
 import { clearLiveAgentSession, liveAgentSession, setLiveAgentSession, useLiveAgentSessionsVersion } from './agent-live-sessions'
-import { agentReplyInProgress, agentReplySignature } from './agent-reply-progress'
+import { agentShownParts, useAgentApprovalAnswer, useAgentReplyFollow } from './use-agent-reply-follow'
 import { AgentElicitation } from './agent-elicitation';
 import {
   asPersistedConversation,
@@ -94,7 +92,6 @@ export function AgentPage({
     [selectedSkills, setSelectedSkills] = useState<string[]>([]),
     [renameOpen, setRenameOpen] = useState(false),
     [editingId, setEditingId] = useState<string>(),
-    [approvalBusy, setApprovalBusy] = useState<string>(),
     [activeStreamId, setActiveStreamId] = useState<string>(),
     // The message just sent, shown with a working indicator until the server's stream catches up.
     [pending, setPending] = useState<AgentSession>(),
@@ -179,35 +176,17 @@ export function AgentPage({
   const hydratedCurrent = useDeferredHydratedConversation(deferredConversation) ?? undefined;
   const current = live ?? hydratedCurrent;
   // The reply is still running on the server while this page does not stream it (the page that asked was reloaded or
-  // closed, or this is another tab): show its saved progress, approvals and questions included, and poll just this
-  // chat until it finishes (realtime pushes the same updates sooner).
-  const awaitingReply = Boolean(!busy && !live && agentReplyInProgress(current));
-  const currentId = current?.id;
-  // Latest callback for the poller, so a new function identity does not restart the polling interval.
-  const onSessionChangeRef = useRef(onSessionChange);
-  useEffect(() => {
-    onSessionChangeRef.current = onSessionChange;
+  // closed, or it was asked from another tab or chat surface): show its saved progress, approvals and questions
+  // included, and follow it until it finishes.
+  const follow = useAgentReplyFollow({
+    session: current,
+    streaming: busy || Boolean(live),
+    onUpdate: (latest) => {
+      setSessions((list) => list.map((item) => (item.id === latest.id ? latest : item)));
+      onSessionChange(latest.id, latest);
+    },
   });
-  useEffect(() => {
-    if (!awaitingReply || !currentId) return;
-    const id = currentId;
-    let active = true;
-    let seen = "";
-    const timer = window.setInterval(() => {
-      void getAgentSession(id).then((latest) => {
-        if (!active || latest.messages.at(-1)?.role !== "assistant") return;
-        const signature = agentReplySignature(latest);
-        if (signature === seen) return;
-        seen = signature;
-        setSessions((list) => list.map((item) => (item.id === latest.id ? latest : item)));
-        onSessionChangeRef.current(latest.id, latest);
-      }).catch(() => undefined);
-    }, 2000);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [awaitingReply, currentId]);
+  const awaitingReply = follow.following;
   const replyRunning = busy || Boolean(live) || awaitingReply;
   const attachShortcut = isMacPlatform() ? "⌘⇧U" : "Ctrl Shift U";
   // Seeing a chat (once its reply has settled) clears its unread dot here and in the history list.
@@ -219,6 +198,7 @@ export function AgentPage({
   // Until the reply's first part arrives the conversation ends with the user's message: keep the working indicator
   // under it while a reply is running (streaming here, or on the server after the page was reopened).
   const shown = pending ?? (replyRunning && current?.messages.at(-1)?.role === "user" ? withReplyPlaceholder(current) : current);
+  const shownParts = useMemo(() => agentShownParts(shown?.messages), [shown?.messages]);
   useEffect(() => {
     if (chatSlug || current || !input.trim()) {
       if (!chatSlug && !current && !input.trim()) clearAgentDraft(agentDraftKey);
@@ -365,24 +345,9 @@ export function AgentPage({
     window.addEventListener(AGENT_PAGE_ASK_EVENT, ask);
     return () => window.removeEventListener(AGENT_PAGE_ASK_EVENT, ask);
   }, []);
-  const decideToolApproval = async (call: AgentToolCall | undefined, decision: "approve" | "reject") => {
-    if (!current || !call?.approvalId || approvalBusy) return;
-    setApprovalBusy(call.approvalId);
-    setError(undefined);
-    try {
-      await resolveAgentApproval(current.id, call.approvalId, decision);
-      // The buttons stay off until the reply shows the approval resolved (streamed here, or saved when the reply runs
-      // without this page), so a second click never answers it twice.
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("Flow Agent is unavailable"));
-      setApprovalBusy(undefined);
-    }
-  };
-  useEffect(() => {
-    if (!approvalBusy) return;
-    const waiting = shown?.messages.some((message) => message.parts?.some((part) => part.toolCall?.approvalId === approvalBusy && part.toolCall.status === "pending"));
-    if (!waiting) setApprovalBusy(undefined);
-  }, [approvalBusy, shown]);
+  // The buttons stay off until the reply shows the approval resolved (streamed here, or saved when the reply runs
+  // without this page), so a second click never answers it twice.
+  const { approvalBusy, decideToolApproval } = useAgentApprovalAnswer({ sessionId: current?.id, parts: shownParts, onError: setError, onStale: follow.refresh });
   const historyOptions = useMemo(
     () => [
       { id: "__new__", label: t("New chat") },
@@ -731,7 +696,7 @@ export function AgentPage({
               data-state="working"
               onClick={() => {
                 // The reply runs on the server even without this page, so stop it there too.
-                if (current) void stopAgentSession(current.id).catch(() => undefined);
+                void follow.stop();
                 streamAbortRef.current?.abort();
               }}
               type="button"

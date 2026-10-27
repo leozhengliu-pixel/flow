@@ -48,7 +48,8 @@ describe('LoopDetail', () => {
   })
 
   it('docks the loop builder after it published the loop and follows the reply still running on the server', async () => {
-    const setup = { id: 'm-user', role: 'user', content: 'Set up this loop from the Triage agent template', createdAt: '2026-09-29T10:00:00Z' }
+    // Asked a moment ago, before the page moved to the published loop: its reply is still on the way.
+    const setup = { id: 'm-user', role: 'user', content: 'Set up this loop from the Triage agent template', createdAt: new Date().toISOString() }
     const reply = { id: 'm-reply', role: 'assistant', content: 'The Triage agent loop is live.', durationMs: 4000, createdAt: '2026-09-29T10:00:04Z', parts: [] }
     const session = { id: 'session-1', title: 'Triage agent', loopIds: ['loop-1'], messages: [setup], updatedAt: '2026-09-29T10:00:00Z' }
     api.listAgentSessions.mockResolvedValue([session])

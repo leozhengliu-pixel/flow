@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
@@ -6,13 +6,15 @@ import { makeBootstrap } from '@/test/fixtures'
 import { issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import type { AgentSession } from '@/types/flow'
 
-const api = vi.hoisted(() => ({ fetchAgentStatus: vi.fn(), markAgentSessionRead: vi.fn(), updateAgentMessageFeedback: vi.fn(), createAgentSessionFeedback: vi.fn() }))
+const api = vi.hoisted(() => ({ fetchAgentStatus: vi.fn(), markAgentSessionRead: vi.fn(), updateAgentMessageFeedback: vi.fn(), createAgentSessionFeedback: vi.fn(), getAgentSession: vi.fn(), resolveAgentApproval: vi.fn(), stopAgentSession: vi.fn() }))
 const streams = vi.hoisted(() => ({ streamNewAgentSession: vi.fn(), streamAgentSessionMessage: vi.fn() }))
 vi.mock('@/lib/api', () => api)
 vi.mock('@/lib/agent-stream', () => streams)
 
 import { AgentChatPanel } from './agent-chat-panel'
 import { splitAgentDraft } from './agent-draft'
+import { pushAgentSession } from './use-agent-reply-follow'
+import { finishedReplySession, runningReplySession } from '@/test/agent-running-reply'
 
 const session: AgentSession = {
   id: 'session-1', slugId: 'chat', userId: 'user-1', title: 'Chat', favorite: false, location: 'toolbar', issueIds: ['issue-1'], skillIds: [],
@@ -202,6 +204,51 @@ describe('splitAgentDraft', () => {
     expect(splitAgentDraft('Drafting…\n```update\nWe matched', 'update')).toEqual({ prose: 'Drafting…', draft: undefined })
     expect(splitAgentDraft('```ts\nconst a = 1\n```', 'update').prose).toContain('const a = 1')
     expect(splitAgentDraft('plain', undefined)).toEqual({ prose: 'plain' })
+  })
+})
+
+describe('Agent chat panel following a reply that runs on the server', () => {
+  beforeEach(() => {
+    api.fetchAgentStatus.mockReset().mockResolvedValue({ enabled: true, model: 'model' })
+    api.getAgentSession.mockReset()
+    api.resolveAgentApproval.mockReset()
+    api.stopAgentSession.mockReset().mockResolvedValue(undefined)
+    Object.values(streams).forEach(mock => mock.mockReset())
+  })
+
+  it('shows the partial reply after a reload with a live approval card and Stop, and answers the approval once', async () => {
+    const user = userEvent.setup()
+    const running = runningReplySession()
+    api.getAgentSession.mockResolvedValue(running)
+    api.resolveAgentApproval.mockResolvedValue({ approvalId: 'approval-1', decision: 'approved' })
+    render(<I18nProvider><AgentChatPanel initialSession={running} issues={[]} onClose={vi.fn()} open/></I18nProvider>)
+    expect(await screen.findByText('Checking the branch first.')).toBeVisible()
+    expect(screen.getByRole('region', { name: 'Local tools requests information' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Stop responding' })).toBeVisible()
+    await user.click(await screen.findByRole('button', { name: 'Approve tool' }))
+    expect(api.resolveAgentApproval).toHaveBeenCalledWith('session-live', 'approval-1', 'approve')
+    // Stays off until the saved reply shows the approval resolved: a second click never answers it twice.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Reject tool' })).toBeDisabled())
+    expect(api.resolveAgentApproval).toHaveBeenCalledTimes(1)
+    api.getAgentSession.mockResolvedValue(finishedReplySession(running))
+    await waitFor(() => expect(screen.getByText('Deleted the branch.')).toBeVisible(), { timeout: 4000 })
+    expect(screen.queryByRole('button', { name: 'Approve tool' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Stop responding' })).not.toBeInTheDocument()
+  })
+
+  it('updates when the approval is answered on another surface, and Stop ends the reply on the server', async () => {
+    const user = userEvent.setup()
+    const running = runningReplySession()
+    api.getAgentSession.mockResolvedValue(running)
+    render(<I18nProvider><AgentChatPanel initialSession={running} issues={[]} onClose={vi.fn()} open/></I18nProvider>)
+    expect(await screen.findByRole('button', { name: 'Approve tool' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Stop responding' }))
+    expect(api.stopAgentSession).toHaveBeenCalledWith('session-live')
+    // The Agent page (or another tab) answered: the realtime push reaches this panel without waiting for a poll.
+    act(() => pushAgentSession(finishedReplySession(running)))
+    expect(await screen.findByText('Deleted the branch.')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Approve tool' })).not.toBeInTheDocument()
+    expect(screen.getByText('Response sent')).toBeVisible()
   })
 })
 

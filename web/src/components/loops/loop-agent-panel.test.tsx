@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   listAgentSessions: vi.fn(),
   getAgentSession: vi.fn(),
   resolveAgentApproval: vi.fn(),
+  stopAgentSession: vi.fn(),
 }))
 const stream = vi.hoisted(() => ({ streamNewAgentSession: vi.fn(), streamAgentSessionMessage: vi.fn() }))
 vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/api')>()), ...api }))
@@ -18,6 +19,8 @@ vi.mock('@/lib/agent-stream', async importOriginal => ({ ...(await importOrigina
 
 import { LoopAgentPanel } from './loop-agent-panel'
 import { splitBuilderReply } from './loop-data'
+import { pushAgentSession } from '@/components/agent/use-agent-reply-follow'
+import { finishedReplySession, runningReplySession } from '@/test/agent-running-reply'
 
 const SETUP = 'Set up this loop from the Triage agent template'
 const question = (id: string, message: string, options: string[]) => ({
@@ -56,8 +59,10 @@ describe('LoopAgentPanel', () => {
   })
 
   it('polls a turn still running on the server and then shows the whole conversation', async () => {
-    api.listAgentSessions.mockResolvedValue([session([userMessage])])
-    api.getAgentSession.mockResolvedValue(session([userMessage, reply]))
+    // Asked a moment ago (the stream dropped when the page moved on): its reply is still on the way.
+    const asked = { ...userMessage, createdAt: new Date().toISOString() }
+    api.listAgentSessions.mockResolvedValue([session([asked])])
+    api.getAgentSession.mockResolvedValue(session([asked, reply]))
     const { onLoopSaved } = renderPanel({ onPublished: undefined })
     const panel = await screen.findByRole('complementary', { name: 'Loop agent' })
     await waitFor(() => expect(api.getAgentSession).toHaveBeenCalledWith('session-1'), { timeout: 4000 })
@@ -117,6 +122,30 @@ describe('LoopAgentPanel', () => {
     // Waiting on the answer is not "Working…".
     expect(within(panel).queryByText('Working…')).toBeNull()
     expect(within(panel).queryByText('Thinking…')).toBeNull()
+  })
+
+  it('shows a reply saved mid-run after a reload with a live approval card, answered once, and Stop on the server', async () => {
+    const running = runningReplySession({ id: 'session-1', loopIds: ['loop-9'] })
+    api.listAgentSessions.mockResolvedValue([running])
+    api.getAgentSession.mockResolvedValue(running)
+    api.resolveAgentApproval.mockResolvedValue({ approvalId: 'approval-1', decision: 'approved' })
+    api.stopAgentSession.mockResolvedValue(undefined)
+    renderPanel({ visual: undefined, title: undefined })
+    const panel = await screen.findByRole('complementary', { name: 'Loop agent' })
+    expect(await within(panel).findByText('Checking the branch first.')).toBeVisible()
+    expect(within(panel).getByRole('region', { name: 'Local tools requests information' })).toBeVisible()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Stop responding' }))
+    await waitFor(() => expect(api.stopAgentSession).toHaveBeenCalledWith('session-1'))
+    fireEvent.click(within(panel).getByRole('button', { name: 'Approve tool' }))
+    expect(api.resolveAgentApproval).toHaveBeenCalledWith('session-1', 'approval-1', 'approve')
+    await waitFor(() => expect(within(panel).getByRole('button', { name: 'Approve tool' })).toBeDisabled())
+    fireEvent.click(within(panel).getByRole('button', { name: 'Reject tool' }))
+    expect(api.resolveAgentApproval).toHaveBeenCalledTimes(1)
+    // Answered on the Agent page: the realtime push reaches the loop chat at once.
+    act(() => pushAgentSession(finishedReplySession(running)))
+    expect(await within(panel).findByText('Deleted the branch.')).toBeVisible()
+    expect(within(panel).queryByRole('button', { name: 'Approve tool' })).toBeNull()
+    expect(within(panel).queryByRole('button', { name: 'Stop responding' })).toBeNull()
   })
 })
 

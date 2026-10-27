@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
@@ -10,6 +10,7 @@ const api = vi.hoisted(() => ({
   getAgentSession: vi.fn(),
   resolveAgentApproval: vi.fn(),
   markAgentSessionRead: vi.fn(),
+  stopAgentSession: vi.fn(),
 }))
 const streams = vi.hoisted(() => ({
   streamNewAgentSession: vi.fn(),
@@ -19,6 +20,8 @@ vi.mock('@/lib/api', () => api)
 vi.mock('@/lib/agent-stream', () => streams)
 
 import { EntityAgentPanel } from './entity-agent-panel'
+import { pushAgentSession } from './use-agent-reply-follow'
+import { finishedReplySession, runningReplySession } from '@/test/agent-running-reply'
 
 const session: AgentSession = {
   id: 'session-1',
@@ -211,5 +214,51 @@ describe('EntityAgentPanel', () => {
     rerender(view('Payments Q4 (renamed)'))
     await new Promise(resolve => setTimeout(resolve, 50))
     expect(api.listAgentSessions).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('EntityAgentPanel following a reply that runs on the server', () => {
+  const issueTarget = { type: 'issue' as const, id: 'issue-1', title: 'Bug', identifier: 'FLOW-1', issueIds: ['issue-1'] }
+  beforeEach(() => {
+    api.fetchAgentStatus.mockReset().mockResolvedValue({ enabled: true, model: 'model' })
+    api.getAgentSession.mockReset()
+    api.resolveAgentApproval.mockReset()
+    api.stopAgentSession.mockReset().mockResolvedValue(undefined)
+    Object.values(streams).forEach(mock => mock.mockReset())
+  })
+
+  it('shows the partial reply after a reload with a live approval card and answers it once', async () => {
+    const user = userEvent.setup()
+    const running = runningReplySession({ issueIds: ['issue-1'] })
+    api.listAgentSessions.mockReset().mockResolvedValue([running])
+    api.getAgentSession.mockResolvedValue(running)
+    api.resolveAgentApproval.mockResolvedValue({ approvalId: 'approval-1', decision: 'approved' })
+    render(<I18nProvider><EntityAgentPanel open onRequestClose={vi.fn()} target={issueTarget}/></I18nProvider>)
+    expect(await screen.findByText('Checking the branch first.')).toBeVisible()
+    expect(screen.getByRole('region', { name: 'Local tools requests information' })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Stop responding' }))
+    expect(api.stopAgentSession).toHaveBeenCalledWith('session-live')
+    await user.click(screen.getByRole('button', { name: 'Approve tool' }))
+    expect(api.resolveAgentApproval).toHaveBeenCalledWith('session-live', 'approval-1', 'approve')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Approve tool' })).toBeDisabled())
+    api.getAgentSession.mockResolvedValue(finishedReplySession(running))
+    await waitFor(() => expect(screen.getByText('Deleted the branch.')).toBeVisible(), { timeout: 4000 })
+    expect(screen.queryByRole('button', { name: 'Approve tool' })).not.toBeInTheDocument()
+  })
+
+  it('updates when another surface answers, and re-reads instead of failing when the approval is already answered', async () => {
+    const user = userEvent.setup()
+    const running = runningReplySession({ issueIds: ['issue-1'] })
+    api.listAgentSessions.mockReset().mockResolvedValue([running])
+    api.getAgentSession.mockResolvedValue(running)
+    api.resolveAgentApproval.mockRejectedValue(Object.assign(new Error('agent approval not found'), { status: 404 }))
+    render(<I18nProvider><EntityAgentPanel open onRequestClose={vi.fn()} target={issueTarget}/></I18nProvider>)
+    await user.click(await screen.findByRole('button', { name: 'Approve tool' }))
+    await waitFor(() => expect(api.getAgentSession).toHaveBeenCalledWith('session-live'))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    act(() => pushAgentSession(finishedReplySession(running)))
+    expect(await screen.findByText('Deleted the branch.')).toBeVisible()
+    expect(screen.getByText('Response sent')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Stop responding' })).not.toBeInTheDocument()
   })
 })

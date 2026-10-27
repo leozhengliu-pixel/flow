@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchAgentStatus, getAgentSession, listAgentSessions, resolveAgentApproval } from "@/lib/api";
+import { fetchAgentStatus, getAgentSession, listAgentSessions } from "@/lib/api";
 import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from "@/lib/agent-stream";
 import { AgentPanel } from "@/components/agent/agent-panel";
 import { EntityAgentThread } from "@/components/agent/entity-agent-thread";
 import { clearEntityThreadDraft } from "@/components/agent/entity-thread-draft";
+import { agentShownParts, useAgentApprovalAnswer, useAgentReplyFollow } from "@/components/agent/use-agent-reply-follow";
 import { useI18n } from "@/i18n/i18n";
 import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus, BootstrapData } from "@/types/flow";
 import { isPublishCall, isPublishedResult, loopToolResult, type LoopToolResult } from "./loop-data";
@@ -13,15 +14,13 @@ export { LoopToolCard } from "./loop-builder-message";
 
 /** The message the panel sends for a template draft (loopBuilderFirstMessage); the reference app shows no bubble for it. */
 const TEMPLATE_SETUP_MESSAGE = /^Set up this loop from the .+ template$/;
-const POLL_INTERVAL_MS = 1500;
-/** Stop polling a turn that never finishes (about three minutes). */
-const MAX_POLLS = 120;
 
 /**
  * Loop-builder agent docked on the right of the loop editor (and of the loop page after publishing). It attaches the
  * loop (`loopIds`), can send its first message on open, reports `save_loop` completions so the editor refetches, and
- * hands off publishing. A turn that is still running on the server (the stream dropped when the page navigated to the
- * published loop) is polled until the reply is saved.
+ * hands off publishing. A turn still running on the server without this panel streaming it (the stream dropped when
+ * the page navigated to the published loop, a reload, another tab) is followed like on every chat surface: its saved
+ * progress shows with live questions and approvals until the reply is saved.
  */
 export function LoopAgentPanel({
   data,
@@ -58,8 +57,6 @@ export function LoopAgentPanel({
   const [hydrated, setHydrated] = useState(false);
   const [streamParts, setStreamParts] = useState<AgentMessagePart[]>([]);
   const [error, setError] = useState<string>();
-  const [approvalBusy, setApprovalBusy] = useState<string>();
-  const [polling, setPolling] = useState(false);
   const [streamMessageId, setStreamMessageId] = useState<string>();
   const abortRef = useRef<AbortController | undefined>(undefined);
   const autoSent = useRef(false);
@@ -117,10 +114,24 @@ export function LoopAgentPanel({
     }
   }, []);
 
+  // A turn still running on the server without this panel streaming it: follow its saved progress until it finishes.
+  const shownSession = useMemo(() => session && { ...session, messages }, [messages, session]);
+  const follow = useAgentReplyFollow({
+    session: shownSession,
+    streaming: loading,
+    enabled: open && hydrated,
+    onUpdate: (next) => {
+      setSession(next);
+      setMessages(next.messages);
+      for (const part of next.messages.at(-1)?.parts ?? []) handleToolPart(part);
+    },
+  });
+  const following = follow.following;
+
   const submit = useCallback(
     async (text?: string) => {
       const message = (text ?? input).trim();
-      if (!message || loading || !status?.enabled) return;
+      if (!message || loading || following || !status?.enabled) return;
       setMessages((current) => [...current, { id: `pending-${Date.now()}`, role: "user", content: message, createdAt: new Date().toISOString() }]);
       if (text === undefined) setInput("");
       setError(undefined);
@@ -177,7 +188,7 @@ export function LoopAgentPanel({
         setLoading(false);
       }
     },
-    [draftKey, handleToolPart, input, loading, loopId, session, status?.enabled, t],
+    [draftKey, following, handleToolPart, input, loading, loopId, session, status?.enabled, t],
   );
 
   // Template and prompt drafts start the conversation as soon as the panel is ready.
@@ -189,48 +200,8 @@ export function LoopAgentPanel({
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const decide = async (call: AgentMessagePart["toolCall"] | undefined, decision: "approve" | "reject") => {
-    if (!session || !call?.approvalId || approvalBusy) return;
-    setApprovalBusy(call.approvalId);
-    try {
-      await resolveAgentApproval(session.id, call.approvalId, decision);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("Flow Agent is unavailable"));
-    } finally {
-      setApprovalBusy(undefined);
-    }
-  };
-
-  // A turn still running on the server: the session ends with the user's message until the reply is saved.
-  const lastRole = messages.at(-1)?.role;
-  const sessionId = session?.id;
-  useEffect(() => {
-    if (!open || !hydrated || loading || !sessionId || lastRole !== "user") return;
-    let active = true;
-    let attempts = 0;
-    setPolling(true);
-    const timer = window.setInterval(() => {
-      attempts += 1;
-      if (attempts > MAX_POLLS) {
-        window.clearInterval(timer);
-        setPolling(false);
-        return;
-      }
-      getAgentSession(sessionId)
-        .then((next) => {
-          if (!active || next.messages?.at(-1)?.role !== "assistant") return;
-          setSession(next);
-          setMessages(next.messages);
-          for (const part of next.messages.at(-1)?.parts ?? []) handleToolPart(part);
-        })
-        .catch(() => undefined);
-    }, POLL_INTERVAL_MS);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-      setPolling(false);
-    };
-  }, [handleToolPart, hydrated, lastRole, loading, open, sessionId]);
+  const shownParts = useMemo(() => agentShownParts(messages, streamParts), [messages, streamParts]);
+  const { approvalBusy, decideToolApproval: decide } = useAgentApprovalAnswer({ sessionId: session?.id, parts: shownParts, onError: setError, onStale: follow.refresh });
 
   const templateId = visual?.templateId;
   const visibleMessages = useMemo(
@@ -268,12 +239,16 @@ export function LoopAgentPanel({
         enabled={Boolean(status?.enabled)}
         error={error}
         input={input}
-        loading={loading || polling}
+        loading={loading || following}
         mentionData={data}
         messages={displayedMessages}
         onInputChange={setInput}
         onSendSuggestion={(message) => void submit(message)}
-        onStop={() => abortRef.current?.abort()}
+        // The reply runs on the server even without this panel, so Stop ends it there too.
+        onStop={() => {
+          void follow.stop();
+          abortRef.current?.abort();
+        }}
         onSubmit={() => void submit()}
         onToolApproval={(call, decision) => void decide(call, decision)}
         placeholder={status && !status.enabled ? t("Flow Agent is not configured") : t("Describe what this loop should do…")}
