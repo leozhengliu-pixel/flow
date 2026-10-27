@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -66,6 +67,8 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 		}
 		query.GroupValue = &v
 	}
+	// groupValues pages one group of several status IDs (a status shared by several team workflows).
+	query.GroupValues = splitQueryValues(r.URL.Query().Get("groupValues"))
 	root, err := decodeIssueQuery(r.URL.Query().Get("filter"))
 	if err != nil {
 		return data, query, store.ErrIssueQuery
@@ -86,7 +89,46 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 		return result
 	}
 	query.Filter = convert(root)
+	if query.GroupBy == "cases" {
+		// groupCases: [{"value": "…", "filter": <filter expression>}, …], the groups in order.
+		cases, err := decodeIssueGroupCases(r.URL.Query().Get("groupCases"))
+		if err != nil {
+			return data, query, store.ErrIssueQuery
+		}
+		for _, item := range cases {
+			query.GroupCases = append(query.GroupCases, store.IssueGroupCase{Value: item.Value, Filter: convert(item.Filter)})
+		}
+	}
 	return data, query, nil
+}
+
+type issueGroupCaseNode struct {
+	Value  string          `json:"value"`
+	Filter json.RawMessage `json:"filter"`
+}
+
+type decodedIssueGroupCase struct {
+	Value  string
+	Filter issueQueryNode
+}
+
+func decodeIssueGroupCases(raw string) ([]decodedIssueGroupCase, error) {
+	if strings.TrimSpace(raw) == "" || len(raw) > 256<<10 {
+		return nil, store.ErrIssueQuery
+	}
+	var nodes []issueGroupCaseNode
+	if err := json.Unmarshal([]byte(raw), &nodes); err != nil || len(nodes) == 0 || len(nodes) > store.MaxIssueGroupCases {
+		return nil, store.ErrIssueQuery
+	}
+	cases := make([]decodedIssueGroupCase, len(nodes))
+	for index, node := range nodes {
+		filter, err := decodeIssueQuery(string(node.Filter))
+		if err != nil {
+			return nil, store.ErrIssueQuery
+		}
+		cases[index] = decodedIssueGroupCase{Value: node.Value, Filter: filter}
+	}
+	return cases, nil
 }
 
 func (s *server) listIssueRecords(w http.ResponseWriter, r *http.Request) {

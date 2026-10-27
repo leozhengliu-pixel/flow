@@ -76,7 +76,7 @@ func (s *server) issueRecordAuthorizationData(r *http.Request) (domain.Bootstrap
 	}
 	query.Limit = 500
 	query.Cursor = ""
-	query.GroupValue = nil
+	query.GroupValue, query.GroupValues = nil, nil
 	query.TeamIDs = nil
 	query.ProjectIDs = nil
 	query.StateIDs = nil

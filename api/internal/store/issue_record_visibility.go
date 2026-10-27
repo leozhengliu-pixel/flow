@@ -14,7 +14,7 @@ func (s *SQLiteStore) VisibleIssueRecordIDs(ctx context.Context, q IssueRecordQu
 	q.ReleaseIDs = nil
 	q.IssueIDs = nil
 	q.RestrictToIssueIDs = false
-	q.GroupValue = nil
+	q = q.withoutGroupValue()
 	q.GroupBy = ""
 	for start := 0; start < len(ids); start += 500 {
 		q.Filter = IssueFilter{Field: "id", Values: ids[start:min(start+500, len(ids))]}

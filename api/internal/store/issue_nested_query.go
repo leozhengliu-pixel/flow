@@ -24,7 +24,7 @@ const maxNestedDepth = 32
 // issueNestedBase is the condition (on alias i) a parent must meet for its
 // sub-issues to nest under it: the whole query, whatever group is paged.
 func (s *SQLiteStore) issueNestedBase(query IssueRecordQuery) (string, []any, error) {
-	query.GroupValue = nil
+	query = query.withoutGroupValue()
 	where, args, err := issueRecordWhere(query)
 	if err != nil {
 		return "", nil, err
@@ -140,7 +140,8 @@ func (s *SQLiteStore) issueNestedDescendants(ctx context.Context, query IssueRec
 // descendants: every row of the result is counted once, in the group(s) of
 // its top-level row.
 func (s *SQLiteStore) nestedIssueGroups(ctx context.Context, query IssueRecordQuery) ([]IssueRecordGroup, error) {
-	query.Cursor, query.GroupValue = "", nil
+	query.Cursor = ""
+	query = query.withoutGroupValue()
 	base, baseArgs, err := s.issueNestedBase(query)
 	if err != nil {
 		return nil, err
@@ -152,7 +153,13 @@ func (s *SQLiteStore) nestedIssueGroups(ctx context.Context, query IssueRecordQu
 	// A column grouping carries the top-level row's value down the tree (g);
 	// the others join the top-level row (its id) for their group joins.
 	carried := ""
-	if query.GroupBy != "none" && query.GroupBy != "customer" && issueGroupAttribute(query.GroupBy) == "" {
+	var carriedArgs []any
+	if query.GroupBy == "cases" {
+		// The top-level row's case index is carried like a column.
+		if carried, carriedArgs, err = issueGroupCaseExpression(query.GroupCases); err != nil {
+			return nil, err
+		}
+	} else if query.GroupBy != "none" && query.GroupBy != "customer" && issueGroupAttribute(query.GroupBy) == "" {
 		column, err := issueGroupColumn(query.GroupBy)
 		if err != nil {
 			return nil, err
@@ -168,10 +175,19 @@ func (s *SQLiteStore) nestedIssueGroups(ctx context.Context, query IssueRecordQu
 		" UNION ALL " + s.issueNestedChildStep(step, base) + ")"
 	head := withIssueCTE(prefix, cte)
 	args := append([]any{}, prefixArgs...)
+	args = append(args, carriedArgs...)
 	args = append(args, baseArgs...)
 	args = append(args, rootArgs...)
 	args = append(args, query.Workspace)
 	args = append(args, baseArgs...)
+	if query.GroupBy == "cases" {
+		rows, err := s.db.QueryContext(ctx, head+"SELECT t.root_key,COUNT(*) FROM nest_tree t GROUP BY t.root_key", args...)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		return scanIssueCaseGroups(rows, query.GroupCases)
+	}
 	count := func(statement string, extra ...any) ([]IssueRecordGroup, error) {
 		rows, err := s.db.QueryContext(ctx, head+statement, append(append([]any{}, args...), extra...)...)
 		if err != nil {
