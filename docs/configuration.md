@@ -338,6 +338,51 @@ Cluster keys that participate in a single Lua script or transaction use Redis
 hash tags so they remain in one slot. The client follows cluster redirections
 and maintains a connection pool per node.
 
+## Web assets across releases
+
+While replicas of two versions serve side by side (a rolling update or a
+rollback), a replica answers requests for content-hashed `/assets/` files that
+another release built. The layers, and what each one covers, are described in
+[Rolling updates and web assets](operations.md#rolling-updates-and-web-assets).
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FLOW_STATIC_PATH` | empty | Built web app this server serves. The image sets `/app/web`. |
+| `FLOW_ASSET_PREVIOUS_PATH` | empty | Assets of earlier releases carried by the image (`<path>/assets/<name>`). The image sets `/app/web-previous`. |
+| `FLOW_ASSET_SHARED_PATH` | empty | Directory every release publishes its assets to at startup (`assets/`, `releases/<id>.json`) and reads missing ones from. Several replicas need a shared (ReadWriteMany) volume. |
+| `FLOW_ASSET_SHARED_KEEP_RELEASES` | `5` | Releases whose files stay in the shared directory, newest publish first (at least 2). Files written in the last hour are never removed. |
+| `FLOW_ASSET_PEERS` | empty | Comma-separated `host:port`. Each host resolves to the other replicas (a headless Service), which are asked for a missing file. |
+| `FLOW_ASSET_FALLBACK_URL` | empty | Comma-separated base URLs where releases publish their assets; Flow fetches `<url>/assets/<name>`. Plain `http(s)` without credentials or query. |
+
+A file that no layer has is a `404` with `Cache-Control: no-store`, never the
+app's HTML. Pages are served `no-cache`, and hashed files are served
+`immutable` for a year.
+
+Image build arguments:
+
+| Argument | Default | Description |
+| --- | --- | --- |
+| `PREVIOUS_RELEASE_IMAGE` | none | The image this one replaces. Its release's assets, and the releases it carried, are copied into `/app/web-previous`. |
+| `CARRY_RELEASES` | `2` | How many earlier releases to carry. |
+
+Helm:
+
+```yaml
+assets:
+  peerFallback:
+    enabled: true            # headless <release>-peers Service and FLOW_ASSET_PEERS
+  shared:
+    enabled: true            # mounts /app/assets-shared, sets FLOW_ASSET_SHARED_PATH
+    existingClaim: ""        # or a chart-made <release>-assets claim:
+    accessModes: [ReadWriteMany]
+    size: 1Gi
+    keepReleases: 5
+  fallbackUrls: [https://assets.example.com/flow]
+```
+
+With more than one replica, the chart requires the shared claim to be
+ReadWriteMany (or an `existingClaim`).
+
 ## Security response headers
 
 Flow adds security headers to every response it sends: pages, static files,

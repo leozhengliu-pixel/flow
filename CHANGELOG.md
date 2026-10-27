@@ -49,6 +49,20 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Rolling updates and rollbacks no longer break pages whose scripts and
+  styles were built by the other version. A refresh served by a new replica
+  stayed on the loading screen when an old replica answered its files with
+  404, and a page opened before the deploy could not open new routes. A
+  replica now finds another release's hashed `/assets/` file in the earlier
+  releases its image carries (`/app/web-previous`, Dockerfile
+  `PREVIOUS_RELEASE_IMAGE`), on the other replicas (`FLOW_ASSET_PEERS`, Helm
+  headless `<release>-peers` Service, on by default), in an optional shared
+  directory every release publishes to (`FLOW_ASSET_SHARED_PATH`, Helm
+  `assets.shared`), or at published origins (`FLOW_ASSET_FALLBACK_URL`, Helm
+  `assets.fallbackUrls`). A file found nowhere is a 404 with
+  `Cache-Control: no-store`, never the app's HTML. As a last resort the page
+  reloads once when an entry file fails before the app starts. See
+  [Rolling updates and web assets](docs/operations.md#rolling-updates-and-web-assets).
 - Every route under an issue (`/api/issues/{id}/…` and
   `/api/issue-records/{id}/…`: comments, reactions, relations, attachments,
   links, permissions, subscriptions, history, sharing…) accepts the issue's
