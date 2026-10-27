@@ -36,7 +36,7 @@ type agentToolGroup struct {
 }
 
 // agentChangeIntent matches requests to create, change, or remove something (Chinese and English).
-var agentChangeIntent = regexp.MustCompile(`(?i)改|设置|设为|设成|调成|调到|调整|更新|创建|新建|新增|建一个|建个|添加|加上|加个|加到|删除|删掉|去掉|移除|移到|分配|指派|指给|交给|关闭|关掉|完成|标记|评论|回复|留言|订阅|提醒|草稿|分流|接受|拒绝|重新打开|归档|恢复|发布|提交|合并|批准|写一?[个份篇]|\b(set|change|update|edit|create|add|remove|delete|assign|unassign|close|reopen|mark|move|rename|comment|reply|subscribe|unsubscribe|remind|draft|triage|accept|decline|file|log|make|prioriti[sz]e|label|tag|archive|restore|estimate|post|publish|submit|merge|approve|write)\b`)
+var agentChangeIntent = regexp.MustCompile(`(?i)改|设置|设为|设成|调成|调到|调整|更新|创建|新建|新增|建一个|建个|添加|加上|加个|加到|删除|删掉|去掉|移除|移到|移动到|移动至|移入|迁移|迁到|挪到|转移|转到|转入|放到|放进|分配|指派|指给|交给|关闭|关掉|完成|标记|评论|回复|留言|订阅|提醒|草稿|分流|接受|拒绝|重新打开|归档|恢复|发布|提交|合并|批准|写一?[个份篇]|\b(set|change|update|edit|create|add|remove|delete|assign|unassign|close|reopen|mark|move|migrate|transfer|rename|comment|reply|subscribe|unsubscribe|remind|draft|triage|accept|decline|file|log|make|prioriti[sz]e|label|tag|archive|restore|estimate|post|publish|submit|merge|approve|write)\b`)
 
 // agentToolGroups are the optional chat tool groups, in the order they are appended after the core tools.
 var agentToolGroups = []agentToolGroup{

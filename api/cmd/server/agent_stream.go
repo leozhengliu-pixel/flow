@@ -461,16 +461,21 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	}
 
 	// The user answered an approval the previous reply stopped on: run the held calls (or drop them) first.
-	if resumed, err := s.resumeAgentApproval(r, data, session, messageID, writer, &parts, partIndex); err != nil {
+	resumed, err := s.resumeAgentApproval(r, data, session, messageID, writer, &parts, partIndex)
+	if err != nil {
 		return s.persistAgentFailure(r, *session, messageID, "", parts, started, err)
-	} else {
-		messages = append(messages, resumed...)
 	}
+	messages = append(messages, resumed...)
 	finalText := ""
 	// The question the reply stopped on (ask_user), which becomes the end of the reply.
 	asked := ""
 	seenNarration := map[string]bool{}
 	textApprovalRetried := false
+	// The reply's write calls and their outcomes (agent_action_outcomes.go); outcomeNudged is set once an answer
+	// reporting outcomes no tool produced was sent back.
+	ledger := &agentWriteLedger{}
+	outcomeNudged := false
+	chinese := containsHan(agentLatestUserMessage(*session))
 	// The answer stopped at the provider's output limit instead of ending.
 	truncated := false
 	// The reply's tool budget (agent_tool_budget.go). Once it is spent (stopped names why), one more turn without
@@ -493,9 +498,27 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			parts = append(parts, domain.AgentMessagePart{ID: fmt.Sprintf("%s_tool_%d", messageID, index), Type: "toolCall", Status: call.Status, ToolCall: cloneToolCall(&call)})
 		}
 		messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: message, IsError: true}})
+		ledger.record(call, agentWriteNotRun, message)
 		if writer != nil {
 			part := parts[index]
 			return send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part})
+		}
+		return nil
+	}
+	// dropTurnText takes the turn's streamed text back out of the reply: it is not the answer.
+	dropTurnText := func() error {
+		if textIndex, ok := partIndex["text"]; ok {
+			cleaned := &strings.Builder{}
+			cleaned.WriteString(finalText)
+			partText["text"] = cleaned
+			parts[textIndex].Text = finalText
+			if strings.TrimSpace(finalText) == "" {
+				parts = removeAgentPart(parts, partIndex, textIndex)
+				delete(partText, "text")
+			}
+		}
+		if writer != nil {
+			return send(agentStreamEvent{Type: "text.replaced", MessageID: messageID, Delta: finalText})
 		}
 		return nil
 	}
@@ -609,20 +632,8 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		// Asking for approval in text instead of calling the tool is not an answer (nothing ran, nothing to approve):
 		// the text leaves the reply, the model is told to call the tool once, and a second such turn fails the reply.
 		if !wrapUp && s.agentTextApprovalRequest(r.Context(), turn) {
-			if textIndex, ok := partIndex["text"]; ok {
-				cleaned := &strings.Builder{}
-				cleaned.WriteString(finalText)
-				partText["text"] = cleaned
-				parts[textIndex].Text = finalText
-				if strings.TrimSpace(finalText) == "" {
-					parts = removeAgentPart(parts, partIndex, textIndex)
-					delete(partText, "text")
-				}
-			}
-			if writer != nil {
-				if err := send(agentStreamEvent{Type: "text.replaced", MessageID: messageID, Delta: finalText}); err != nil {
-					return domain.AgentSession{}, err
-				}
+			if err := dropTurnText(); err != nil {
+				return domain.AgentSession{}, err
 			}
 			if textApprovalRetried {
 				return s.persistAgentFailure(r, *session, messageID, finalText, parts, started, errors.New(agentTextApprovalError))
@@ -630,6 +641,25 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			textApprovalRetried = true
 			messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, Reasoning: turn.Reasoning}, agentProviderMessage{Role: "user", Content: agentTextApprovalNudge})
 			continue
+		}
+		// An answer that reports change outcomes (failures, permission errors, successes) while no write ran is not
+		// passed on: the model is told once to call the tool, and a second such answer becomes Flow's own statement.
+		if !wrapUp && asked == "" && len(resumed) == 0 && s.agentUngroundedOutcome(agentLatestUserMessage(*session), turn, ledger) {
+			slog.WarnContext(r.Context(), "agent reported change outcomes without a write call", "session", session.ID, "model", s.agent.Model, "retried", outcomeNudged, "text_bytes", len(turn.Text))
+			if err := dropTurnText(); err != nil {
+				return domain.AgentSession{}, err
+			}
+			if !outcomeNudged {
+				outcomeNudged = true
+				messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, Reasoning: turn.Reasoning}, agentProviderMessage{Role: "user", Content: agentUngroundedOutcomeNudge})
+				continue
+			}
+			statement := agentNothingExecutedText(chinese)
+			if err := emit(agentProviderEvent{Type: "text.delta", Delta: statement}); err != nil {
+				return domain.AgentSession{}, err
+			}
+			finalText += statement
+			break
 		}
 		finalText += turn.Text
 		if len(turn.ToolCalls) == 0 {
@@ -873,6 +903,11 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				content = agentToolFailureText(result, callErr)
 			}
 			budget.after(call, content, callErr != nil)
+			if callErr != nil {
+				ledger.record(call, agentWriteFailed, content)
+			} else {
+				ledger.record(call, agentWriteSucceeded, "")
+			}
 			messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: content, IsError: callErr != nil}})
 			executed = append(executed, call)
 		}
@@ -901,7 +936,6 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	}
 	if stopped != "" {
 		// A reply the budget stopped says so under its answer; without a summary from the model, Flow writes one.
-		chinese := containsHan(agentLatestUserMessage(*session))
 		if strings.TrimSpace(finalText) == "" {
 			changes := 0
 			for _, part := range parts {
@@ -916,6 +950,18 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			finalText += fallback
 		}
 		parts = append(parts, domain.AgentMessagePart{ID: messageID + "_budget", Type: "event", Text: agentToolBudgetNotice(stopped, maxTurns, maxCalls, chinese), Status: "completed"})
+	}
+	// When the writes did not all succeed, or the answer claims failures they did not have, the reply ends with
+	// Flow's own count of them, taken from the tool results.
+	if summary := ledger.summary(finalText, chinese); summary != "" {
+		separator := ""
+		if strings.TrimSpace(finalText) != "" {
+			separator = "\n\n"
+		}
+		if err := emit(agentProviderEvent{Type: "text.delta", Delta: separator + summary}); err != nil {
+			return domain.AgentSession{}, err
+		}
+		finalText += separator + summary
 	}
 	for index := range parts {
 		if parts[index].Status == "running" {
