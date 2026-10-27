@@ -303,3 +303,51 @@ func TestAgentForwardedAnswerResolvesLocalRun(t *testing.T) {
 		t.Fatalf("forwarded elicitation = %+v", result)
 	}
 }
+
+// Stopping a reply that waits on a connector question ends the question at once (the connector's call gets a
+// cancel answer), instead of leaving the reply running until the question times out.
+func TestStoppingAReplyCancelsItsWaitingConnectorQuestion(t *testing.T) {
+	s := &server{authDisabled: true}
+	run, stop := context.WithCancel(context.Background())
+	defer stop()
+	parts := make(chan domain.AgentMessagePart, 2)
+	done := make(chan *mcp.ElicitResult, 1)
+	go func() {
+		// The SDK's handler context belongs to the connection and outlives the reply's run.
+		ctx, cancel := agentElicitationContext(context.Background(), run)
+		defer cancel()
+		result, err := s.requestAgentElicitation(ctx, "ws", "chat", "user", applicationPolicy{Name: "Local tools", URL: "http://127.0.0.1:9/mcp"}, &mcp.ElicitParams{Mode: "form", Message: "Which branch?", RequestedSchema: map[string]any{"type": "object", "properties": map[string]any{"branch": map[string]any{"type": "string"}}}}, func(part domain.AgentMessagePart, _ string) error {
+			parts <- part
+			return nil
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		done <- result
+	}()
+	select {
+	case part := <-parts:
+		if part.Status != "pending" {
+			t.Fatalf("question status = %q, want pending", part.Status)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the question was not asked")
+	}
+	stop()
+	select {
+	case result := <-done:
+		if result == nil || result.Action != "cancel" {
+			t.Fatalf("stopped question answered %+v, want cancel", result)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("stopping the reply left its question waiting")
+	}
+	if final := <-parts; final.Status != "error" || final.Elicitation.Action != "cancel" {
+		t.Fatalf("stopped question saved as %q / %q, want error / cancel", final.Status, final.Elicitation.Action)
+	}
+	s.agentApprovalsMu.Lock()
+	defer s.agentApprovalsMu.Unlock()
+	if len(s.agentElicitations) != 0 {
+		t.Fatal("the stopped question can still be answered")
+	}
+}
