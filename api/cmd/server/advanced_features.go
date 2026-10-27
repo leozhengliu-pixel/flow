@@ -431,21 +431,8 @@ func inheritDocumentTeams(data *domain.Bootstrap, document *domain.Document) boo
 	} else if issue, err := issueByID(data, document.IssueID); err == nil {
 		document.IssueTeamID = issue.Team.ID
 	}
-	var teams []string
-	add := func(teamID string) {
-		// A deleted team is no longer in the workspace and scopes nothing.
-		if teamID != "" && !slices.Contains(teams, teamID) && slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) {
-			teams = append(teams, teamID)
-		}
-	}
-	add(document.IssueTeamID)
-	for _, projectID := range document.ProjectIDs {
-		if project, err := fullProjectByID(data, projectID); err == nil {
-			for _, teamID := range project.TeamIDs {
-				add(teamID)
-			}
-		}
-	}
+	// A deleted team is no longer in the workspace and scopes nothing.
+	teams := domain.InheritedDocumentTeams(document.IssueTeamID, document.ProjectIDs, data.Projects, data.Teams)
 	document.InheritedTeamIDs = teams
 	return !slices.Equal(before, teams)
 }
