@@ -300,6 +300,10 @@ type AgentToolCall struct {
 	Error     string          `json:"error,omitempty"`
 	// Title overrides the tool row label, e.g. "Updated workflow definition draft".
 	Title string `json:"title,omitempty"`
+	// Connector and RemoteTool name an external connector tool call, whose Name is only an opaque id
+	// ("external_<hash>"): the connector's display name and the tool's own name on that connector.
+	Connector  string `json:"connector,omitempty"`
+	RemoteTool string `json:"remoteTool,omitempty"`
 	// ApprovalID is set while a write tool is waiting for the user decision.
 	// It is intentionally transient and omitted from normal tool calls.
 	ApprovalID string `json:"approvalId,omitempty"`

@@ -382,6 +382,7 @@ func (s *server) resumeAgentApproval(r *http.Request, data domain.Bootstrap, ses
 		call := held
 		call.ID = "approved_" + held.ID
 		call.Status, call.Result, call.Error = "running", nil, ""
+		annotateConnectorCall(r.Context(), &call)
 		result, callErr := s.executeAgentToolRecordingChange(r, data, &call)
 		call.Status = "completed"
 		content := string(result)

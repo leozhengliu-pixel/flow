@@ -156,6 +156,8 @@ export const agentStepsZhCN: Record<string, string> = {
   "Resolved {subject}": "已解决{subject}",
   "Running {subject}…": "正在运行{subject}…",
   "Ran {subject}": "已运行{subject}",
+  "Running {tool} in {connector}…": "正在 {connector} 中运行 {tool}…",
+  "Ran {tool} in {connector}": "已在 {connector} 中运行 {tool}",
 
   // Chat phase titles the server writes above a turn's tool rows (agentPhaseTemplates in agent_chat_steps.go).
   "Looking up {subject}": "查找{subject}",

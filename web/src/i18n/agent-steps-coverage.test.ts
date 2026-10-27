@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { AGENT_ERROR_MESSAGES } from '@/components/agent/agent-error-detail'
-import { CHAT_TOOL_FALLBACK, CHAT_TOOL_LABELS, CHAT_TOOL_UPDATE_LABELS, CHAT_TOOL_VERBS, LOOP_TOOL_TEMPLATES, PHASE_TITLE_TEMPLATES, toolStatusLabel, translatePhaseTitle, translateToolTitle } from '@/components/agent/agent-step-labels'
+import { CHAT_CONNECTOR_TOOL_LABELS, CHAT_TOOL_FALLBACK, CHAT_TOOL_LABELS, CHAT_TOOL_UPDATE_LABELS, CHAT_TOOL_VERBS, LOOP_TOOL_TEMPLATES, PHASE_TITLE_TEMPLATES, toolStatusLabel, translatePhaseTitle, translateToolTitle } from '@/components/agent/agent-step-labels'
 // Kept equal to api/cmd/server/flow_mcp_tools.json by TestAgentToolNamesFixtureCurrent (Go).
 import toolNames from '@/components/agent/agent-tool-names.json'
 import { FAILURE_MESSAGES, OUTPUT_LABELS, TRIGGER_REASON_NONE, TRIGGER_REASON_TEXTS, triggerReasonTemplate } from '@/components/loops/loop-run-labels'
@@ -21,7 +21,7 @@ function expectTranslated(source: string) {
 
 describe('agent step and loop run vocabulary', () => {
   it('translates every chat tool label, verb template and the fallback', () => {
-    for (const pair of [...Object.values(CHAT_TOOL_LABELS), ...Object.values(CHAT_TOOL_UPDATE_LABELS), ...Object.values(CHAT_TOOL_VERBS), CHAT_TOOL_FALLBACK]) {
+    for (const pair of [...Object.values(CHAT_TOOL_LABELS), ...Object.values(CHAT_TOOL_UPDATE_LABELS), ...Object.values(CHAT_TOOL_VERBS), CHAT_TOOL_FALLBACK, CHAT_CONNECTOR_TOOL_LABELS]) {
       for (const source of pair) expectTranslated(source)
     }
   })

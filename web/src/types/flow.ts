@@ -3110,6 +3110,9 @@ export interface AgentToolCall {
   name: string;
   /** Server-provided row title ("Updated workflow definition draft", "Created automation"). */
   title?: string;
+  /** An external connector tool's connector (display name) and its own tool name; `name` is only an opaque id. */
+  connector?: string;
+  remoteTool?: string;
   arguments?: Record<string, unknown>;
   result?: unknown;
   status: "pending" | "running" | "completed" | "error";
