@@ -1,8 +1,9 @@
 import { SlackIcon } from '@/components/issue/issue-icons'
 
-export type IntegrationBrand = 'github' | 'gitlab' | 'slack' | 'jira' | 'google-calendar' | 'notion'
+export type IntegrationBrand = 'github' | 'gitlab' | 'slack' | 'jira' | 'google-calendar' | 'notion' | 'feishu' | 'lark'
 
 export function IntegrationBrandIcon({ provider, size = 25 }: { provider: IntegrationBrand; size?: number }) {
+  if (provider === 'feishu' || provider === 'lark') return <img src={`/integrations/${provider}.${provider === 'feishu' ? 'svg' : 'png'}`} alt="" aria-hidden="true" width={size} height={size} style={{ objectFit: 'contain', flexShrink: 0 }}/>
   if (provider === 'slack') return <SlackIcon size={size}/>
   if (provider === 'google-calendar') {
     return (

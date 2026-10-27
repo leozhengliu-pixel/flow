@@ -13,7 +13,7 @@ import (
 
 func supportedIntegration(provider string) bool {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "github", "gitlab", "slack", "jira", "figma":
+	case "github", "gitlab", "slack", "jira", "figma", "feishu", "lark":
 		return true
 	default:
 		return false
@@ -86,7 +86,8 @@ func wantsHTMLRedirect(r *http.Request) bool {
 
 func supportedIntegrationHandler(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !supportedIntegration(r.PathValue("provider")) {
+		provider := strings.ToLower(strings.TrimSpace(r.PathValue("provider")))
+		if !supportedIntegration(provider) || provider == "feishu" || provider == "lark" {
 			writeError(w, http.StatusNotFound, "Unsupported integration provider")
 			return
 		}

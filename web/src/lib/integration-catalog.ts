@@ -38,9 +38,15 @@ export interface IntegrationCatalogEntry {
   /** Hide subtype rows from the main All Integrations grid. */
   subtype?: boolean;
   /** Providers that currently have REST connect / manage flows. */
-  connectProvider?: "github" | "gitlab" | "slack" | "jira";
+  connectProvider?: "github" | "gitlab" | "slack" | "jira" | "feishu" | "lark";
   /** Optional product-capability copy for Coming soon / Not supported detail pages. */
   productPattern?: IntegrationProductPattern;
+}
+
+export function isInstalledIntegrationConnection(connection: { provider: string; status: string }): boolean {
+  return connection.status === "connected" || connection.status === "configured" ||
+    ((connection.provider === "feishu" || connection.provider === "lark") &&
+      (connection.status === "pending_authorization" || connection.status === "error"));
 }
 
 /** Primary (non-subtype) catalog used by All Integrations. */
@@ -62,6 +68,24 @@ export const INTEGRATION_CATALOG: IntegrationCatalogEntry[] = [
     category: "Essentials",
     availability: "supported",
     connectProvider: "slack",
+  },
+  {
+    slug: "feishu",
+    service: "feishu",
+    name: "Feishu",
+    description: "Get issue updates and manage issues from group chats",
+    category: "Essentials",
+    availability: "supported",
+    connectProvider: "feishu",
+  },
+  {
+    slug: "lark",
+    service: "lark",
+    name: "Lark",
+    description: "Get issue updates and manage issues from group chats",
+    category: "Essentials",
+    availability: "supported",
+    connectProvider: "lark",
   },
   {
     slug: "gitlab",

@@ -8,8 +8,11 @@ import { Plug } from "lucide-react";
 import { IntegrationBrandIcon } from "@/components/settings/integration-brand-icon";
 import { useI18n } from "@/i18n/i18n";
 import { disconnectIntegration } from "@/lib/api";
+import { disconnectChatIntegration } from "@/lib/chat-integrations-api";
+import { isWorkspaceAdmin } from "@/lib/settings-access";
 import {
   getIntegrationCatalogEntry,
+  isInstalledIntegrationConnection,
   primaryIntegrations,
 } from "@/lib/integration-catalog";
 import type { BootstrapData } from "@/types/flow";
@@ -26,13 +29,12 @@ type Props = {
 
 export function EnabledIntegrationsSettingsPage({ data, onBack, onOpenSlug, onReload }: Props) {
   const { t, formatDate } = useI18n();
-  const connections = data.integrationConnections.filter(
-    (item) => item.status === "connected" || item.status === "configured",
-  );
+  const connections = data.integrationConnections.filter(isInstalledIntegrationConnection);
 
   const revokeConnection = async (provider: string) => {
     try {
-      await disconnectIntegration(provider);
+      if (provider === "feishu" || provider === "lark") await disconnectChatIntegration(provider);
+      else await disconnectIntegration(provider);
       await onReload();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("Could not revoke access"));
@@ -63,8 +65,8 @@ export function EnabledIntegrationsSettingsPage({ data, onBack, onOpenSlug, onRe
                   primaryIntegrations().find((entry) => entry.connectProvider === item.provider);
                 const slug = catalog?.slug ?? item.provider;
                 const brand =
-                  item.provider === "github" || item.provider === "gitlab" || item.provider === "slack"
-                    ? (item.provider as "github" | "gitlab" | "slack")
+                  item.provider === "github" || item.provider === "gitlab" || item.provider === "slack" || item.provider === "feishu" || item.provider === "lark"
+                    ? (item.provider as "github" | "gitlab" | "slack" | "feishu" | "lark")
                     : null;
                 return (
                   <div key={item.id} className="feature-row">
@@ -88,13 +90,13 @@ export function EnabledIntegrationsSettingsPage({ data, onBack, onOpenSlug, onRe
                       <button type="button" className="feature-button" onClick={() => onOpenSlug(slug)}>
                         {t("Manage")}
                       </button>
-                      <button
+                      {(!(item.provider === "feishu" || item.provider === "lark") || isWorkspaceAdmin(data)) && <button
                         type="button"
                         className="feature-button danger"
                         onClick={() => void revokeConnection(item.provider)}
                       >
                         {t("Revoke access")}
-                      </button>
+                      </button>}
                     </aside>
                   </div>
                 );

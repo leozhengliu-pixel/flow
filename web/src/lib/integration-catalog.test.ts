@@ -3,6 +3,7 @@ import {
   availabilityLabel,
   getIntegrationCatalogEntry,
   getIntegrationProductPattern,
+  isInstalledIntegrationConnection,
   primaryIntegrations,
   subtypesFor,
 } from './integration-catalog'
@@ -11,8 +12,16 @@ it('exposes primary catalog entries with honest availability', () => {
   const entries = primaryIntegrations()
   expect(entries.some((item) => item.slug === 'github' && item.availability === 'supported')).toBe(true)
   expect(entries.some((item) => item.slug === 'jira' && item.availability === 'supported' && item.connectProvider === 'jira')).toBe(true)
+  expect(entries.filter((item) => item.connectProvider === 'feishu' || item.connectProvider === 'lark').map((item) => item.slug)).toEqual(['feishu', 'lark'])
   expect(entries.some((item) => item.slug === 'salesforce' && item.availability === 'not_supported')).toBe(true)
   expect(availabilityLabel('coming_soon')).toBe('Coming soon')
+})
+
+it('keeps pending or unhealthy chat applications available for management', () => {
+  expect(isInstalledIntegrationConnection({ provider: 'feishu', status: 'pending_authorization' })).toBe(true)
+  expect(isInstalledIntegrationConnection({ provider: 'lark', status: 'error' })).toBe(true)
+  expect(isInstalledIntegrationConnection({ provider: 'feishu', status: 'disconnected' })).toBe(false)
+  expect(isInstalledIntegrationConnection({ provider: 'slack', status: 'error' })).toBe(false)
 })
 
 it('keeps subtypes out of the primary grid and nested under parents', () => {

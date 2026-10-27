@@ -184,25 +184,39 @@ func (s *SQLiteStore) webhookConfigured() bool {
 	return s.webhookSink.Load() != nil
 }
 
-func (s *SQLiteStore) webhookNeeded(workspaceKey string) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	data, ok := s.workspaces[workspaceKey]
-	if !ok {
+func (s *SQLiteStore) webhookNeeded(ctx context.Context, workspaceKey string) bool {
+	needed := func() bool {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		data, ok := s.workspaces[workspaceKey]
+		if !ok {
+			return false
+		}
+		for _, webhook := range data.Webhooks {
+			if webhook.Enabled && strings.TrimSpace(webhook.URL) != "" {
+				return true
+			}
+		}
+		// Event loops and chat subscriptions need the changed fields too.
+		for _, loop := range data.Loops {
+			if loop.Enabled && loop.Status != "draft" && loop.TriggerType != "" && loop.TriggerType != "schedule" {
+				return true
+			}
+		}
+		for _, connection := range data.IntegrationConnections {
+			if (connection.Provider == "feishu" || connection.Provider == "lark") && connection.Status == "connected" {
+				return true
+			}
+		}
 		return false
+	}()
+	if needed {
+		return true
 	}
-	for _, webhook := range data.Webhooks {
-		if webhook.Enabled && strings.TrimSpace(webhook.URL) != "" {
-			return true
-		}
-	}
-	// Event loops match on what an update changed, which needs previous values too.
-	for _, loop := range data.Loops {
-		if loop.Enabled && loop.Status != "draft" && loop.TriggerType != "" && loop.TriggerType != "schedule" {
-			return true
-		}
-	}
-	return false
+	// A setup interrupted before display metadata sync must not lose diffs.
+	// Query outside mu to preserve database/cache lock ordering.
+	needed, err := s.chatSnapshotsNeeded(ctx, workspaceKey)
+	return needed || err != nil
 }
 
 func (s *SQLiteStore) webhook() func(string, domain.DomainEvent) {
@@ -369,6 +383,15 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		{version: 12, name: "code host account refresh lease", apply: s.addCodeHostAccountRefreshLease},
 		{version: 13, name: "review import state", apply: s.createReviewImportSchema},
 		{version: 14, name: "members' personal connections", apply: s.createPersonalConnectionsSchema},
+		{version: 15, name: "chat integrations and notification cursors", apply: func(ctx context.Context) error {
+			if err := s.EnsureChatIntegrationsSchema(ctx); err != nil {
+				return err
+			}
+			if err := s.createChatDomainCursorSchema(ctx); err != nil {
+				return err
+			}
+			return s.createChatMutationReceiptsSchema(ctx)
+		}},
 		// Versions from 1000 up are data migrations (runDataMigrations),
 		// which run after the workspaces are loaded.
 	}
@@ -1374,7 +1397,7 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 	}
 	var event domain.DomainEvent
 	var realtimePayload json.RawMessage
-	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(workspaceKey)
+	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(ctx, workspaceKey)
 	apply := func() error {
 		// Every callback works on a copy of the snapshot (cloneBootstrap or
 		// a field snapshot), so only writers are serialized while the
@@ -1963,6 +1986,9 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 	raw, _ := json.Marshal(data)
 	now := time.Now().UTC()
 	if workspace.URLKey != workspaceKey {
+		if err := renameChatWorkspace(ctx, tx, workspaceKey, workspace.URLKey); err != nil {
+			return domain.Bootstrap{}, err
+		}
 		for _, table := range workspaceRecordTables {
 			if _, err := tx.ExecContext(ctx, "UPDATE "+table+" SET workspace_key=? WHERE workspace_key=?", workspace.URLKey, workspaceKey); err != nil {
 				return domain.Bootstrap{}, err
@@ -2081,6 +2107,9 @@ func (s *SQLiteStore) deleteWorkspace(ctx context.Context, workspaceKey string) 
 		return err
 	}
 	defer tx.Rollback()
+	if err := deleteChatWorkspace(ctx, tx, workspaceKey); err != nil {
+		return err
+	}
 	for _, table := range workspaceRecordTables {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE workspace_key=?", workspaceKey); err != nil {
 			return err

@@ -75,8 +75,16 @@ func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error 
 	if sweepSettings {
 		s.reconcileAllApplicationWebhooks(ctx)
 		s.sendDueOnboardingEmails(ctx, now)
+		if err := s.store.PurgeChatHistory(ctx, now); err != nil {
+			log.Printf("Chat history retention: %v", err)
+		}
 	}
 	for _, key := range s.store.WorkspaceKeys() {
+		chatCtx, chatCancel := context.WithTimeout(ctx, 15*time.Second)
+		if err := s.processChatIntegrationTick(chatCtx, key); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			log.Printf("Chat integration workspace=%s: %v", key, err)
+		}
+		chatCancel()
 		s.sweepAppUserNotifications(ctx, key, now)
 		if sweepSettings {
 			s.sweepIssueSLAWebhooks(ctx, key, now)
