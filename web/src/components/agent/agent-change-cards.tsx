@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { FileText, Redo2, Trash2, Undo2 } from 'lucide-react'
-import { NoAssigneeIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
+import { NoAssigneeIcon, PriorityIcon, ProjectIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { healthColor } from '@/components/project-detail/health-color'
 import { HealthGlyph } from '@/components/project-detail/health-glyph'
@@ -182,6 +182,7 @@ function ChangeFooter({ card, children }: { card: AgentChangeCard; children: Rea
 }
 
 function ChangeEntity({ card, data }: { card: AgentChangeCard; data?: BootstrapData }) {
+  if (card.entityType === 'team' && card.action !== 'deleted') return <TeamChangeEntity card={card} data={data}/>
   if (data && card.kind && card.entityId) return <ResolvedChangeEntity card={card} data={data} kind={card.kind}/>
   return <FallbackEntity card={card}/>
 }
@@ -214,6 +215,23 @@ function FallbackEntity({ card }: { card: AgentChangeCard }) {
       {(card.preview?.body || card.preview?.instructions) && <p className={styles.preview} data-i18n-ignore>{card.preview.body || card.preview.instructions}</p>}
     </>
   )
+}
+
+/** "Created team": the team's icon and name, its key at the right; the team as loaded when the client has it. */
+function TeamChangeEntity({ card, data }: { card: AgentChangeCard; data?: BootstrapData }) {
+  const team = data?.teams.find(item => item.id === card.entityId)
+  const key = team?.key || card.preview?.key
+  const content = (
+    <>
+      <TeamIcon size={16} team={team}/>
+      <span className={styles.entityLabel}>{team?.name || card.label}</span>
+      {key && <span className={styles.entityKey}>{key}</span>}
+    </>
+  )
+  const linked = card.url && !(card.undone && card.action === 'created')
+  return linked
+    ? <AppLink className={styles.entity} data-agent-entity="team" data-i18n-ignore href={card.url!}>{content}</AppLink>
+    : <span className={styles.entity} data-agent-entity="team" data-i18n-ignore>{content}</span>
 }
 
 function ResolvedChangeEntity({ card, data, kind }: { card: AgentChangeCard; data: BootstrapData; kind: AgentEntityKind }) {

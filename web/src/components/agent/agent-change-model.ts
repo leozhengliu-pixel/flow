@@ -29,7 +29,7 @@ export type AgentChangeCard = {
   /** Why an undone change has no Restore (e.g. a customer the Undo deleted permanently). */
   finalNote?: string
   /** Extra preview data the write returned (status update body and health, skill instructions). */
-  preview?: { body?: string; health?: string; parent?: string; instructions?: string }
+  preview?: { body?: string; health?: string; parent?: string; instructions?: string; key?: string }
 }
 
 type Labels = { created: string; updated: string; deleted: string }
@@ -124,6 +124,11 @@ function previewOf(change: AgentChange, args: Record<string, unknown> | undefine
   if (change.entityType === 'skill') {
     const instructions = textValue((result as Record<string, unknown> | undefined)?.instructions) || textValue(args?.instructions)
     return instructions ? { instructions } : undefined
+  }
+  if (change.entityType === 'team') {
+    // The team's key ("INV") for the card's right edge, while the new team is not in the client's data yet.
+    const key = textValue((result as Record<string, unknown> | undefined)?.key) || textValue(args?.key)
+    return key ? { key } : undefined
   }
   return undefined
 }

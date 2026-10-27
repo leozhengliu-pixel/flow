@@ -59,7 +59,7 @@ var agentToolGroups = []agentToolGroup{
 		Tools:  []string{"list_views", "save_view", "delete_view", "list_templates", "save_template", "save_label", "delete_label"},
 		Intent: regexp.MustCompile(`(?i)视图|模板|标签|工作流|\b(view|views|template|templates|label|labels|workflow)\b`)},
 	// Creating a team or changing its members is common enough that it should not cost a load_tools step first.
-	{Name: "teams", Summary: "create teams, change team settings, add or remove team members and owners, invite people to a team",
+	{Name: "teams", Summary: "create teams, change team settings, add or remove team members and owners (people not in the workspace are reported, not invited)",
 		Tools:  []string{"save_team"},
 		Intent: regexp.MustCompile(`(?i)团队|小组|组员|成员|\b(teams?|squads?|members?|team settings)\b`), NeedsChange: true},
 	{Name: "inbox", Summary: "the user's notifications (inbox)",
