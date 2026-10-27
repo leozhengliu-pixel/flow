@@ -46,10 +46,13 @@ type server struct {
 	// coding is the coding-session runtime (coding_runtime.go).
 	coding *codingServices
 	// agentAutoTitle names new Agent chats with a small extra model call (off in test fixtures).
-	agentAutoTitle                 bool
-	uploadPath                     string
-	objectStore                    objectstore.Store
-	staticPath                     string
+	agentAutoTitle bool
+	uploadPath     string
+	objectStore    objectstore.Store
+	staticPath     string
+	// securityHeaders is the response security header policy
+	// (security_headers.go); nil uses the defaults.
+	securityHeaders                *appconfig.SecurityHeadersConfig
 	authDisabled                   bool
 	devLoopbackCodeHosts           bool // FLOW_DEV_ALLOW_LOOPBACK_CODE_HOSTS (development only): loopback GitLab with auth on
 	mailer                         *smtpMailer
@@ -180,6 +183,7 @@ func main() {
 		uploadPath:                     applicationConfig.Storage.LocalPath,
 		objectStore:                    objects,
 		staticPath:                     applicationConfig.StaticPath,
+		securityHeaders:                &applicationConfig.SecurityHeaders,
 		authDisabled:                   applicationConfig.AuthDisabled,
 		devLoopbackCodeHosts:           applicationConfig.DevAllowLoopbackCodeHosts,
 		coordinator:                    redisCoordinator,
@@ -1005,7 +1009,18 @@ func newHandler(s *server) http.Handler {
 	s.registerCodingRoutes(mux)
 
 	handler := s.withStaticFiles(boundedLegacyIssueWrites(s.limitFailedAuthentication(s.authenticate(s.limitAuthenticatedAPI(mux)))))
-	return requestLog(s.cors(compressAPIResponses(s.signedFileURLs(apiErrorEnvelope(requestBodyBudget(handler))))))
+	securityConfig := appconfig.DefaultSecurityHeaders()
+	if s.securityHeaders != nil {
+		securityConfig = *s.securityHeaders
+	}
+	security := newSecurityHeaderPolicy(securityConfig, s.allowedOrigin, s.staticPath)
+	return withSecurityHeaders(security, requestLog(s.cors(compressAPIResponses(s.signedFileURLs(apiErrorEnvelope(requestBodyBudget(handler)))))))
+}
+
+// serverRoute reports whether path is answered by the API rather than the
+// built web app.
+func serverRoute(path string) bool {
+	return strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/scim/") || strings.HasPrefix(path, "/uploads/") || strings.HasPrefix(path, "/.well-known/oauth-") || strings.HasPrefix(path, "/internal/") || path == "/mcp" || path == "/mcp/readonly" || path == "/oauth/register" || path == "/oauth/token" || path == "/oauth/revoke"
 }
 
 func (s *server) withStaticFiles(next http.Handler) http.Handler {
@@ -1014,7 +1029,7 @@ func (s *server) withStaticFiles(next http.Handler) http.Handler {
 	}
 	files := http.FileServer(http.Dir(s.staticPath))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/scim/") || strings.HasPrefix(r.URL.Path, "/uploads/") || strings.HasPrefix(r.URL.Path, "/.well-known/oauth-") || strings.HasPrefix(r.URL.Path, "/internal/") || r.URL.Path == "/mcp" || r.URL.Path == "/mcp/readonly" || r.URL.Path == "/oauth/register" || r.URL.Path == "/oauth/token" || r.URL.Path == "/oauth/revoke" {
+		if serverRoute(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}

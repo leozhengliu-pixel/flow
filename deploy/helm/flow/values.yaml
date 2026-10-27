@@ -78,6 +78,45 @@ ingress:
   #  - secretName: flow-tls
   #    hosts: [flow.example.com]
 
+# Trust X-Forwarded-For / X-Forwarded-Proto from the proxy in front of Flow
+# (FLOW_TRUST_PROXY_HEADERS): rate limits use the client address it reports,
+# and HSTS follows the scheme it reports. Turn on only when Flow is reachable
+# solely through that proxy (ingress plus networkPolicy); clients can forge
+# these headers otherwise.
+trustProxyHeaders: false
+
+# Response security headers (docs/configuration.md "Security response
+# headers"). Empty values keep Flow's defaults. When the ingress or a gateway
+# sets one of these headers itself, list it in `skip` so responses carry one
+# value; a header a Flow handler sets (uploads' sandbox CSP) always wins.
+securityHeaders:
+  # false sends none of these headers (FLOW_SECURITY_HEADERS=off), the
+  # rollback switch.
+  enabled: true
+  # Content-Security-Policy: report-only (default) | enforce | off.
+  csp: ""
+  # Where browsers send CSP violation reports: an https URL or a path here.
+  cspReportUri: ""
+  # Extra sources for the web app policy, e.g.
+  # "connect-src https://telemetry.example.com; img-src https://cdn.example.com"
+  cspExtraSources: ""
+  # Who may frame Flow: "'self'" (default), "'none'" or https origins such as
+  # https://portal.example.com. Enforced in every CSP mode.
+  frameAncestors: []
+  # Strict-Transport-Security: auto (default; only when config.appUrl is
+  # https and the request came over HTTPS, see trustProxyHeaders) | off.
+  hsts: ""
+  # Seconds; empty is one year. 0 tells browsers to forget an earlier HSTS.
+  hstsMaxAge: ""
+  hstsIncludeSubdomains: false
+  hstsPreload: false
+  # Empty is strict-origin-when-cross-origin.
+  referrerPolicy: ""
+  # Empty is Flow's built-in policy (docs/configuration.md).
+  permissionsPolicy: ""
+  # Headers the ingress sets instead of Flow, e.g. [Strict-Transport-Security].
+  skip: []
+
 probes:
   startup:
     enabled: true

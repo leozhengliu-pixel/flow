@@ -88,6 +88,48 @@ data:
   FLOW_TRUSTED_CA_FILE: /var/run/flow/trusted-ca/ca.crt
   {{- end }}
   {{- end }}
+  {{- if $v.trustProxyHeaders }}
+  FLOW_TRUST_PROXY_HEADERS: "true"
+  {{- end }}
+  {{- with $v.securityHeaders }}
+  {{- /* Response security headers (docs/configuration.md); unset keys keep Flow's defaults. */}}
+  {{- if eq (toString .enabled) "false" }}
+  FLOW_SECURITY_HEADERS: "off"
+  {{- end }}
+  {{- with .csp }}
+  FLOW_SECURITY_CSP: {{ . | quote }}
+  {{- end }}
+  {{- with .cspReportUri }}
+  FLOW_SECURITY_CSP_REPORT_URI: {{ . | quote }}
+  {{- end }}
+  {{- with .cspExtraSources }}
+  FLOW_SECURITY_CSP_EXTRA_SOURCES: {{ . | quote }}
+  {{- end }}
+  {{- with .frameAncestors }}
+  FLOW_SECURITY_FRAME_ANCESTORS: {{ join " " . | quote }}
+  {{- end }}
+  {{- with .hsts }}
+  FLOW_SECURITY_HSTS: {{ . | quote }}
+  {{- end }}
+  {{- if ne (toString .hstsMaxAge) "" }}
+  FLOW_SECURITY_HSTS_MAX_AGE: {{ .hstsMaxAge | int64 | toString | quote }}
+  {{- end }}
+  {{- if .hstsIncludeSubdomains }}
+  FLOW_SECURITY_HSTS_INCLUDE_SUBDOMAINS: "true"
+  {{- end }}
+  {{- if .hstsPreload }}
+  FLOW_SECURITY_HSTS_PRELOAD: "true"
+  {{- end }}
+  {{- with .referrerPolicy }}
+  FLOW_SECURITY_REFERRER_POLICY: {{ . | quote }}
+  {{- end }}
+  {{- with .permissionsPolicy }}
+  FLOW_SECURITY_PERMISSIONS_POLICY: {{ . | quote }}
+  {{- end }}
+  {{- with .skip }}
+  FLOW_SECURITY_HEADERS_SKIP: {{ join "," . | quote }}
+  {{- end }}
+  {{- end }}
   # Coding sessions (docs/coding-sessions.md).
   FLOW_CODING_ENABLED: {{ $c.enabled | quote }}
   {{- if $c.enabled }}

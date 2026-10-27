@@ -142,6 +142,64 @@
         }
       }
     },
+    "trustProxyHeaders": {
+      "type": "boolean"
+    },
+    "securityHeaders": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "csp": {
+          "enum": ["", "report-only", "enforce", "off"]
+        },
+        "cspReportUri": {
+          "type": "string",
+          "pattern": "^(|https://[^\\s;,'\"]+|/[^/\\s;,'\"][^\\s;,'\"]*)$"
+        },
+        "cspExtraSources": {
+          "type": "string",
+          "pattern": "^[^\\r\\n,\"]*$"
+        },
+        "frameAncestors": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^('self'|'none'|self|none|https://(\\*\\.)?[A-Za-z0-9.-]+(:[0-9]+)?/?|http://(localhost|127\\.0\\.0\\.1)(:[0-9]+)?/?)$"
+          }
+        },
+        "hsts": {
+          "enum": ["", "auto", "off"]
+        },
+        "hstsMaxAge": {
+          "anyOf": [
+            {"type": "integer", "minimum": 0},
+            {"type": "string", "pattern": "^[0-9]*$"}
+          ]
+        },
+        "hstsIncludeSubdomains": {
+          "type": "boolean"
+        },
+        "hstsPreload": {
+          "type": "boolean"
+        },
+        "referrerPolicy": {
+          "enum": ["", "no-referrer", "no-referrer-when-downgrade", "origin", "origin-when-cross-origin", "same-origin", "strict-origin", "strict-origin-when-cross-origin", "unsafe-url"]
+        },
+        "permissionsPolicy": {
+          "type": "string",
+          "pattern": "^[^\\r\\n]*$"
+        },
+        "skip": {
+          "type": "array",
+          "items": {
+            "enum": ["Content-Security-Policy", "Permissions-Policy", "Referrer-Policy", "Strict-Transport-Security", "X-Content-Type-Options", "X-Frame-Options"]
+          }
+        }
+      }
+    },
     "outbound": {
       "type": "object",
       "additionalProperties": false,
