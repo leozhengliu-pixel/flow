@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/coder/websocket"
+
 	appconfig "flow/api/internal/config"
 )
 
@@ -233,6 +235,23 @@ func validForwardedHost(host string) bool {
 func externalBaseURL(r *http.Request) string {
 	policy := requestForwarding(r)
 	return policy.scheme(r) + "://" + policy.host(r)
+}
+
+// webSocketAcceptOptions are the options for accepting a WebSocket from the
+// web app. The library accepts an Origin only when it equals the Host header,
+// which fails behind a gateway that rewrites Host to its upstream. The
+// browser's Origin is also accepted when it is the origin the browser used
+// according to the forwarding policy (a trusted proxy's X-Forwarded-Host and
+// X-Forwarded-Proto) or FLOW_APP_URL's; any other site stays refused, so a
+// page elsewhere cannot open a socket with the visitor's cookie.
+func webSocketAcceptOptions(r *http.Request) *websocket.AcceptOptions {
+	policy := requestForwarding(r)
+	quote := strings.NewReplacer(`\`, `\\`, `*`, `\*`, `?`, `\?`, `[`, `\[`).Replace
+	patterns := []string{quote(policy.scheme(r) + "://" + policy.host(r))}
+	if policy.appHost != "" {
+		patterns = append(patterns, quote(policy.appScheme+"://"+policy.appHost))
+	}
+	return &websocket.AcceptOptions{OriginPatterns: patterns}
 }
 
 // secureCookie reports whether cookies set on this response get Secure: the
