@@ -1267,8 +1267,13 @@ type LoopRun struct {
 	// priority, assignee, agent, project, team, label, update, started,
 	// completed); TriggerValue is the property's new value, empty when it was
 	// cleared. Clients translate them; TriggerLabel stays the English label.
-	TriggerReason    string            `json:"triggerReason,omitempty"`
-	TriggerValue     string            `json:"triggerValue,omitempty"`
+	TriggerReason string `json:"triggerReason,omitempty"`
+	TriggerValue  string `json:"triggerValue,omitempty"`
+	// Occurrence is the schedule occurrence a scheduled loop's run is for —
+	// its date in the loop's timezone (with the hour for hourly schedules) —
+	// whether the schedule or a person started it; empty for event runs. A
+	// loop appends to a document once per occurrence.
+	Occurrence       string            `json:"occurrence,omitempty"`
 	EventType        string            `json:"eventType,omitempty"`
 	EntityType       string            `json:"entityType,omitempty"`
 	EntityID         string            `json:"entityId,omitempty"`
@@ -1382,6 +1387,12 @@ type LoopRunDocumentWrite struct {
 	Changed bool `json:"changed"`
 	// Key identifies an append (document and text) within the run.
 	Key string `json:"key,omitempty"`
+	// Occurrence is the run's occurrence an append was made for.
+	Occurrence string `json:"occurrence,omitempty"`
+	// ExistingRunID: an earlier run of the loop already appended to the
+	// document for this occurrence, so the append was refused; the
+	// occurrence's output exists.
+	ExistingRunID string `json:"existingRunId,omitempty"`
 }
 
 type ProjectTemplate struct {

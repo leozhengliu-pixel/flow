@@ -266,6 +266,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"ensureReleaseIssueIndex", s.ensureReleaseIssueIndex},
 		{"ensureTeamDefaultFavorites", s.ensureTeamDefaultFavorites},
 		{"ensureLoopRunRecords", s.ensureLoopRunRecords},
+		{"ensureLoopDocumentAppends", s.ensureLoopDocumentAppends},
 		{"ensureAgentRuns", s.ensureAgentRuns},
 		{"ensureCodingSessions", s.ensureCodingSessions},
 		{"ensureFileUploads", s.ensureFileUploads},

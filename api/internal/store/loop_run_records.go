@@ -394,8 +394,12 @@ func (s *SQLiteStore) TrimLoopRuns(ctx context.Context, workspace, loopID string
 	return s.deleteLoopRunsWhere(ctx, workspace, `loop_id=? AND started_at<=? AND status<>'running'`, loopID, cutoff)
 }
 
-// DeleteLoopRuns removes every run of a deleted loop.
+// DeleteLoopRuns removes every run of a deleted loop and its document
+// append claims.
 func (s *SQLiteStore) DeleteLoopRuns(ctx context.Context, workspace, loopID string) error {
+	if err := s.deleteLoopDocumentAppends(ctx, workspace, loopID); err != nil {
+		return err
+	}
 	return s.deleteLoopRunsWhere(ctx, workspace, `loop_id=?`, loopID)
 }
 
