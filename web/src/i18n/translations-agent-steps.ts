@@ -335,6 +335,7 @@ export const agentStepsZhCN: Record<string, string> = {
   "The run created a new document instead of changing the existing one.": "本次运行新建了一篇文档，而没有修改现有文档。",
   "save_document ran but did not change the document.": "save_document 已执行，但文档没有任何变化。",
   "Expected {outputs}, but {tool} failed.": "预期产出{outputs}，但“{tool}”失败了。",
+  "The agent's summary says the work is done, but this output is not there.": "Agent 的总结称工作已完成，但这项产出并不存在。",
   "Too many loop runs are in progress on this server (limit {limit}); try again when one finishes": "此服务器上正在进行的 Loop 运行过多（上限 {limit}）；请等其中一个完成后重试",
   "Too many loop runs are in progress in this workspace (limit {limit}); try again when one finishes": "此工作区中正在进行的 Loop 运行过多（上限 {limit}）；请等其中一个完成后重试",
   "The run's conversation reached {size} KB, over its {limit} KB context budget. Narrow the instructions or the tool queries (filters, smaller limits).": "本次运行的对话达到 {size} KB，超出 {limit} KB 的上下文预算。请收窄指令或工具查询（使用筛选条件或更小的数量上限）。",

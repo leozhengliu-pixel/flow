@@ -20,6 +20,12 @@ import (
 // callFlowTool runs a Flow tool for MCP clients and the built-in agent, and
 // logs failures (they don't go through an HTTP route of their own).
 func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, args map[string]any) (any, error) {
+	if mcpPatchNotAList(args) {
+		// /mcp refuses it by the tool's schema; in-process agent calls are not
+		// schema-checked, and the tools would otherwise ignore the patch and
+		// report a save that changed nothing.
+		return nil, fmt.Errorf("Invalid arguments for %s: %s; nothing was saved. Call it again with corrected arguments.", strings.TrimPrefix(name, "mcp__flow."), mcpPatchShapeHint)
+	}
 	if _, batch := args["ids"]; batch && mcpBatchDeleteTools()[name] {
 		return s.callFlowBatchDelete(ctx, actor, name, args)
 	}

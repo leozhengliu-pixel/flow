@@ -88,6 +88,9 @@ const DOCUMENT_OUTPUT_NOTES: [string, string][] = [
   ["(save_document ran but did not change the document)", "save_document ran but did not change the document."],
 ];
 
+/** The note acceptLoopRun (loop_run_reliability.go loopDoneClaimNote) adds when the agent reported done but an output is missing. */
+const DONE_CLAIM_NOTE: [string, string] = ["(the agent's summary says the work is done, but this output is not there)", "The agent's summary says the work is done, but this output is not there."]
+
 /** The agent's finish_run status, as the run page labels it. */
 export const SUMMARY_STATUS_LABELS: Record<string, string> = {
   done: "Done",
@@ -166,6 +169,7 @@ export function describeRunFailure(run: FailedRun | LoopRunReply, t: Translate, 
       } else if (full.summary?.status === "nothing_to_do" || raw.includes("nothing to do")) {
         message += space + t("The agent reported there was nothing to do.");
       }
+      if (raw.includes(DONE_CLAIM_NOTE[0])) message += space + t(DONE_CLAIM_NOTE[1]);
       return { message };
     }
     case "tool_error": {
@@ -173,7 +177,9 @@ export function describeRunFailure(run: FailedRun | LoopRunReply, t: Translate, 
       const failed = [...(full.toolCalls ?? [])].reverse().find((call) => (call.status === "error" || call.status === "blocked") && writeTool(call.name));
       if (!outputs.length || !failed) break;
       const tool = translateToolTitle(failed.label || failed.name, t, failed);
-      return { message: t("Expected {outputs}, but {tool} failed.").replace("{outputs}", list(outputs)).replace("{tool}", tool), detail: failed.error || undefined };
+      let message = t("Expected {outputs}, but {tool} failed.").replace("{outputs}", list(outputs)).replace("{tool}", tool);
+      if (raw.includes(DONE_CLAIM_NOTE[0])) message += space + t(DONE_CLAIM_NOTE[1]);
+      return { message, detail: failed.error || undefined };
     }
     case "incomplete": {
       const items = full.summary?.notDone?.length ? full.summary.notDone : raw.split(/^The agent reported unfinished work:?\s*/)[1]?.split("; ").filter(Boolean);
