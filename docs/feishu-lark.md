@@ -53,6 +53,8 @@ Group users link their own Flow account from **Personal > Connected accounts**.
 Linking does not grant workspace or team membership, and names or email
 addresses are never used to match accounts automatically.
 
+![Feishu and Lark in Connected accounts](media/integrations/connected-accounts.png)
+
 Mention the bot with `@Flow create issue <title>` or `@Flow 创建事项 <title>`.
 The bot sends a personal confirmation form with the bound team/project,
 title, state, priority, and assignee. After creation it replies to the source
