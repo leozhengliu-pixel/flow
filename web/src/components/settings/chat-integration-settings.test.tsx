@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 
 import { I18nProvider } from "@/i18n/i18n";
+import { ApiError } from "@/lib/api-client";
 import * as api from "@/lib/chat-integrations-api";
 import { makeBootstrap, viewer } from "@/test/fixtures";
 import type { ChatBinding, ChatIntegrationSettings } from "@/types/chat-integrations";
@@ -36,7 +37,7 @@ const settings = (overrides: Partial<ChatIntegrationSettings> = {}): ChatIntegra
     createdAt: "2026-10-26T00:00:00Z", updatedAt: "2026-10-26T00:00:00Z",
   },
   identity: { userId: viewer.id, openId: "open-1", tenantKey: "tenant-1", name: "Alex" },
-  bindings: [], credentialsConfigured: true, webhookURL: "https://flow.example/api/integrations/feishu/chat/events/connection-1", canManage: true,
+  bindings: [], bindableTeamIds: ["team-1"], credentialsConfigured: true, webhookURL: "https://flow.example/api/integrations/feishu/chat/events/connection-1", canManage: true,
   ...overrides,
 });
 
@@ -75,19 +76,19 @@ it("recovers the read-only application ID after the initial settings request fai
   vi.mocked(api.fetchChatIntegration).mockRejectedValueOnce(new Error("Connection unavailable"));
   show();
   const user = userEvent.setup();
-  expect(await screen.findByRole("alert")).toHaveTextContent("Connection unavailable");
+  expect(await screen.findByRole("alert")).toHaveTextContent("Could not load integration");
   await user.click(screen.getByRole("button", { name: "Retry" }));
   expect(await screen.findByRole("textbox", { name: "App ID" })).toHaveValue("app-1");
 });
 
 it("keeps unsaved credentials and group editor intact when saving fails", async () => {
-  vi.mocked(api.saveChatIntegration).mockRejectedValue(new Error("Application rejected"));
+  vi.mocked(api.saveChatIntegration).mockRejectedValue(new ApiError("Chat application check failed; verify app credentials and bot publication", 502, "chat_check_failed"));
   show();
   await screen.findByRole("textbox", { name: "App ID" });
   const user = userEvent.setup();
   await user.type(screen.getByLabelText("App Secret"), "new-secret");
   await user.click(screen.getByRole("button", { name: "Save settings" }));
-  expect(await screen.findByRole("alert")).toHaveTextContent("Application rejected");
+  expect(await screen.findByRole("alert")).toHaveTextContent("The application check failed. Verify the app credentials and that the bot is published.");
   expect(screen.getByLabelText("App Secret")).toHaveValue("new-secret");
   expect(api.fetchChatIntegration).toHaveBeenCalledTimes(1);
 });
@@ -112,6 +113,29 @@ it("links pending administrators to Connected accounts for tenant verification",
   show();
   expect(await screen.findByRole("link", { name: "Verify workspace" })).toHaveAttribute("href", "/workspace/settings/account/connections");
   expect(screen.queryByRole("button", { name: "Link account" })).not.toBeInTheDocument();
+});
+
+it("translates the product name, connection errors and unknown failures in Chinese", async () => {
+  localStorage.setItem("flow:locale", "zh-CN");
+  const failing = settings({ lastErrorCode: "chat_delivery_failed" });
+  failing.connection!.lastError = "Chat delivery: Chat platform request failed (HTTP 400, code 230002)";
+  vi.mocked(api.fetchChatIntegration).mockResolvedValue(failing);
+  vi.mocked(api.testChatIntegration).mockRejectedValue(new Error("socket hang up"));
+  show();
+  expect(await screen.findByRole("heading", { level: 1, name: "飞书" })).toBeInTheDocument();
+  expect(screen.getByText("消息无法送达。请检查机器人权限、群访问权限和应用凭据。")).toBeInTheDocument();
+  expect(screen.queryByText(/HTTP 400/)).not.toBeInTheDocument();
+  await userEvent.setup().click(screen.getByRole("button", { name: "测试连接" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("无法更新集成");
+});
+
+it("offers only the teams the server reports as bindable", async () => {
+  show({ teams: [makeBootstrap().teams[0], { id: "team-2", name: "Second team", key: "SEC", color: "" }] });
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "Add group" }));
+  await user.click(await screen.findByRole("combobox", { name: "Team" }));
+  expect(screen.getByRole("option", { name: "Test team" })).toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: "Second team" })).not.toBeInTheDocument();
 });
 
 it("paginates groups, excludes external groups, and saves the public scope after approval", async () => {
@@ -143,19 +167,19 @@ it("paginates groups, excludes external groups, and saves the public scope after
 
 it("keeps existing group values after load failure, retries, and preserves edits on save failure", async () => {
   vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ bindings: [binding] }));
-  vi.mocked(api.fetchChatIntegrationChats).mockRejectedValueOnce(new Error("Group list unavailable"));
-  vi.mocked(api.saveChatBinding).mockRejectedValue(new Error("Binding rejected"));
+  vi.mocked(api.fetchChatIntegrationChats).mockRejectedValueOnce(new ApiError("The chat platform request failed; check the bot's permissions and retry", 502, "chat_platform_failed"));
+  vi.mocked(api.saveChatBinding).mockRejectedValue(new ApiError("Could not save binding; the group may already be bound", 409, "chat_binding_conflict"));
   show();
   const user = userEvent.setup();
   await user.click(await screen.findByRole("button", { name: "Edit group binding: Engineering" }));
   const form = await screen.findByRole("form", { name: "Edit group binding" });
-  expect(await within(form).findByRole("alert")).toHaveTextContent("Group list unavailable");
+  expect(await within(form).findByRole("alert")).toHaveTextContent("The chat platform request failed. Check the bot's permissions and try again.");
   await user.click(within(form).getByRole("button", { name: "Retry" }));
   await waitFor(() => expect(api.fetchChatIntegrationChats).toHaveBeenCalledTimes(2));
   await user.click(within(form).getByRole("checkbox", { name: "Status changed" }));
   await user.click(within(form).getByRole("checkbox", { name: /I approve sharing/ }));
   await user.click(within(form).getByRole("button", { name: "Save group binding" }));
-  expect(await screen.findByText("Binding rejected")).toBeInTheDocument();
+  expect(await screen.findByText("This group is already bound.")).toBeInTheDocument();
   expect(within(form).getByRole("checkbox", { name: "Status changed" })).toBeChecked();
 });
 

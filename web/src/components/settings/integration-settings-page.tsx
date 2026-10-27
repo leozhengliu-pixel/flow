@@ -15,6 +15,7 @@ import {
   availabilityLabel,
   getIntegrationCatalogEntry,
   getIntegrationProductPattern,
+  isChatProvider,
   subtypesFor,
   type IntegrationCatalogEntry,
 } from "@/lib/integration-catalog";
@@ -41,7 +42,7 @@ export function IntegrationSettingsPage({
   const entry = getIntegrationCatalogEntry(slug);
   const [busy, setBusy] = useState(false);
 
-  if (slug === "feishu" || slug === "lark") {
+  if (isChatProvider(slug)) {
     return <ChatIntegrationSettings key={slug} provider={slug} data={data} onBack={onBack} onReload={onReload} />;
   }
 

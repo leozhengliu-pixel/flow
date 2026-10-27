@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "@/i18n/i18n";
+import { ApiError } from "@/lib/api-client";
 import * as api from "@/lib/chat-integrations-api";
 import { toast } from "@/lib/toast";
 import { makeBootstrap } from "@/test/fixtures";
@@ -26,8 +27,10 @@ function settings(overrides: Partial<ChatIntegrationSettings> = {}): ChatIntegra
   };
 }
 
+const configured = ["feishu", "lark"].map((provider) => ({ id: `${provider}-connection`, provider, name: provider, status: "connected" }) as never);
+
 function show(overrides: Parameters<typeof makeBootstrap>[0] = {}) {
-  return render(<MemoryRouter><I18nProvider><ChatConnectionRows data={makeBootstrap({ integrationConnections: [], ...overrides })} /></I18nProvider></MemoryRouter>);
+  return render(<MemoryRouter><I18nProvider><ChatConnectionRows data={makeBootstrap({ integrationConnections: configured, ...overrides })} /></I18nProvider></MemoryRouter>);
 }
 
 beforeEach(() => {
@@ -49,6 +52,38 @@ it("offers both personal chat accounts for members in the current workspace", as
   expect(screen.queryByRole("button", { name: "Add group" })).not.toBeInTheDocument();
   expect(api.fetchChatIntegration).toHaveBeenCalledWith("feishu");
   expect(api.fetchChatIntegration).toHaveBeenCalledWith("lark");
+});
+
+it("lists only the chat applications the workspace has configured", async () => {
+  show({ integrationConnections: [configured[1]] });
+  expect(await screen.findByRole("region", { name: "Lark account" })).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Feishu account" })).not.toBeInTheDocument();
+  expect(api.fetchChatIntegration).toHaveBeenCalledTimes(1);
+  expect(api.fetchChatIntegration).toHaveBeenCalledWith("lark");
+});
+
+it("shows the workspace setup link to administrators only", async () => {
+  vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ connection: { id: "connection-1", status: "pending_authorization" } as never, credentialsConfigured: false, canManage: true }));
+  const member = show({ viewerRole: "member" });
+  expect(await screen.findAllByText("Waiting for workspace setup")).toHaveLength(2);
+  expect(screen.queryByRole("link", { name: "Set up workspace integration" })).not.toBeInTheDocument();
+  member.unmount();
+  show({ viewerRole: "admin" });
+  expect(await screen.findAllByRole("link", { name: "Set up workspace integration" })).toHaveLength(2);
+});
+
+it("offers reconnection for a link older than the workspace session duration", async () => {
+  vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ identity: { userId: "user-1", openId: "open-1", tenantKey: "tenant-1" }, identityExpired: true }));
+  show({ integrationConnections: [configured[0]] });
+  expect(await screen.findByRole("button", { name: "Feishu account options" })).toHaveTextContent("Reconnect needed");
+});
+
+it("shows the Chinese product name and translated reasons", async () => {
+  localStorage.setItem("flow:locale", "zh-CN");
+  window.history.replaceState(null, "", "/workspace/settings/account/connections?chat_provider=feishu&chat_auth=error&chat_auth_error=chat_other_tenant");
+  show({ integrationConnections: [configured[0]] });
+  expect(await screen.findByRole("region", { name: "飞书 账户" })).toBeInTheDocument();
+  expect(await screen.findByRole("alert")).toHaveTextContent("此账号属于其他组织。");
 });
 
 it.each(["feishu", "lark"] as const)("starts %s identity authorization and safely surfaces a rejected URL", async (provider) => {
@@ -90,23 +125,23 @@ it("confirms personal unlink without disconnecting the workspace application", a
 
 it("keeps a linked account available when unlink fails", async () => {
   vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ identity: { userId: "user-1", openId: "open-1", tenantKey: "tenant-1" } }));
-  vi.mocked(api.removeChatIdentity).mockRejectedValue(new Error("Could not unlink now"));
+  vi.mocked(api.removeChatIdentity).mockRejectedValue(new Error("raw server text"));
   show();
   const user = userEvent.setup();
   await user.click(await screen.findByRole("button", { name: "Lark account options" }));
   await user.click(await screen.findByRole("menuitem", { name: "Disconnect…" }));
   await user.click(await screen.findByRole("button", { name: "Disconnect" }));
-  expect(await screen.findByRole("alert")).toHaveTextContent("Could not unlink now");
+  expect(await screen.findByRole("alert")).toHaveTextContent("Could not disconnect the account");
   expect(screen.getByRole("button", { name: "Lark account options" })).toBeEnabled();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
 
 it("retries an unavailable provider without hiding the other account", async () => {
-  vi.mocked(api.fetchChatIntegration).mockRejectedValueOnce(new Error("Feishu unavailable"));
+  vi.mocked(api.fetchChatIntegration).mockRejectedValueOnce(new ApiError("Chat configuration is busy; retry shortly", 503, "chat_busy"));
   show();
   const user = userEvent.setup();
   const row = screen.getByRole("region", { name: "Feishu account" });
-  expect(await within(row).findByRole("alert")).toHaveTextContent("Feishu unavailable");
+  expect(await within(row).findByRole("alert")).toHaveTextContent("Chat settings are being changed elsewhere. Try again shortly.");
   expect(await within(screen.getByRole("region", { name: "Lark account" })).findByRole("button", { name: "Connect" })).toBeEnabled();
   await user.click(within(row).getByRole("button", { name: "Retry" }));
   expect(await within(row).findByRole("button", { name: "Connect" })).toBeEnabled();
@@ -117,6 +152,13 @@ it("verifies the selected provider after OAuth and removes callback parameters",
   vi.mocked(api.fetchChatIntegration).mockImplementation(async (provider) => settings({ identity: provider === "lark" ? { userId: "user-1", openId: "open-1", tenantKey: "tenant-1" } : null }));
   show();
   await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Account linked"));
+  expect(window.location.search).toBe("");
+});
+
+it("shows the server's reason when linking fails", async () => {
+  window.history.replaceState(null, "", "/workspace/settings/account/connections?chat_provider=lark&chat_auth=error&chat_auth_error=chat_authorization_other_session");
+  show();
+  expect(await within(screen.getByRole("region", { name: "Lark account" })).findByRole("alert")).toHaveTextContent("Finish linking in the browser where you're signed in to Flow.");
   expect(window.location.search).toBe("");
 });
 

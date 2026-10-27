@@ -13,6 +13,8 @@ import { toast } from "@/lib/toast";
 import { IntegrationBrandIcon } from './integration-brand-icon';
 import {
   integrationCategories,
+  integrationDisplayName,
+  isChatProvider,
   isInstalledIntegrationConnection,
   primaryIntegrations,
 } from '@/lib/integration-catalog';
@@ -358,7 +360,7 @@ function IntegrationsPage({data,onOpen}:{data:BootstrapData;onOpen:(provider:Int
   // Only integrations with a working backend are listed; placeholders are not.
   const catalog = primaryIntegrations().filter(item => item.availability === "supported");
   const normalized = query.trim().toLowerCase();
-  const list = catalog.filter(item => !normalized || `${item.name} ${item.description}`.toLowerCase().includes(normalized));
+  const list = catalog.filter(item => !normalized || `${item.name} ${integrationDisplayName(item, t)} ${item.description} ${t(item.description)}`.toLowerCase().includes(normalized));
   const sections = integrationCategories(list).map(category => ({ category, items: list.filter(item => item.category === category) }));
   // Authorized applications are not integrations; Settings › Applications lists them.
   const enabledCount = data.integrationConnections.filter(isInstalledIntegrationConnection).length;
@@ -376,12 +378,12 @@ function IntegrationsPage({data,onOpen}:{data:BootstrapData;onOpen:(provider:Int
         const code = item.connectProvider === "github" || item.connectProvider === "gitlab" || item.connectProvider === "jira";
         return <button type="button" key={item.slug} className="feature-integration-card" onClick={() => onOpen(code ? item.connectProvider as IntegrationProvider : item.slug)}>
           <span className="feature-integration-card-head">
-            <span className="feature-integration-card-icon">{item.connectProvider === "github" || item.connectProvider === "gitlab" || item.connectProvider === "slack" || item.connectProvider === "jira" || item.connectProvider === "feishu" || item.connectProvider === "lark"
+            <span className="feature-integration-card-icon">{item.connectProvider === "github" || item.connectProvider === "gitlab" || item.connectProvider === "slack" || item.connectProvider === "jira" || isChatProvider(item.connectProvider)
               ? <IntegrationBrandIcon provider={item.connectProvider} size={20}/>
               : <Sparkles size={16}/>}</span>
-            <strong data-i18n-ignore>{item.name}</strong>
+            <strong data-i18n-ignore>{integrationDisplayName(item, t)}</strong>
             {connection?.status === "connected" && <small>{t("Connected")}</small>}
-            {connection?.status === "pending_authorization" && (item.connectProvider === "feishu" || item.connectProvider === "lark") && <small>{t("Configured")}</small>}
+            {connection?.status === "pending_authorization" && isChatProvider(item.connectProvider) && <small>{t("Configured")}</small>}
             {connection && connection.status === "error" && <small className="is-error">{t("Connection failed")}</small>}
           </span>
           <span className="feature-integration-card-description">{t(item.description)}</span>
