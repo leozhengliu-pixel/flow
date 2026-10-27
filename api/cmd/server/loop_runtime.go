@@ -945,7 +945,10 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 			if kind := loopOutputKind(call.Name, loopToolArgs(call)); callErr == nil && !rec.answering && slices.Contains(expectation.Prohibited, kind) {
 				// The loop's own work follows its instructions' refusals; a
 				// person replying on the run page may still ask for it.
-				callErr = fmt.Errorf("This loop's instructions say not to %s; the call was not made", loopProhibitedLabels[kind])
+				callErr = fmt.Errorf("%s %s; the call was not made", loopProhibitedCallPrefix, loopProhibitedLabels[kind])
+			} else if name := strings.TrimPrefix(call.Name, "mcp__flow."); callErr == nil && !rec.answering && expectation.NoWrites && !readOnly[name] && loopWriteToolName(name) && !strings.HasPrefix(name, "external_") {
+				// "只回复总结文本即可，不要…写入内容": no change of any kind.
+				callErr = fmt.Errorf("%s change anything in Flow; reply with the summary only. The call was not made", loopProhibitedCallPrefix)
 			}
 			var document *loopDocumentWrite
 			if callErr == nil && strings.TrimPrefix(call.Name, "mcp__flow.") == "save_document" {
@@ -1443,6 +1446,10 @@ var loopDocumentPrompts = map[string]string{
 	loopOpCreate: "create the document(s) the instructions ask for with save_document (title and content, no id)",
 }
 
+// loopProhibitedCallPrefix starts the error of a call refused because the
+// loop's instructions forbid it.
+const loopProhibitedCallPrefix = "This loop's instructions say not to"
+
 // loopProhibitedLabels name the writes a loop's instructions forbid.
 var loopProhibitedLabels = map[string]string{
 	"statusUpdate": "post status updates",
@@ -1477,6 +1484,9 @@ func loopOutputPlanPrompt(prompt *strings.Builder, plan loopRunPlan) {
 		}
 	} else if plan.ReadOnly {
 		prompt.WriteString("\nThis loop reads and reports: its instructions mention status updates, issues, comments or documents only as things to check, read or summarize. Do not post status updates or create issues, comments or documents, and do not look for a place to publish. Put the complete report in finish_run's summary (status done, or nothing_to_do when there is nothing new, worded the way the instructions ask).\n")
+	}
+	if expectation.NoWrites {
+		prompt.WriteString("The instructions forbid every change: do not create, change or delete anything in Flow (such calls are refused). The text reply in finish_run's summary is the run's only output.\n")
 	}
 	if !expectation.Explicit && len(expectation.Prohibited) > 0 && !plan.ReadOnly {
 		refused := []string{}
