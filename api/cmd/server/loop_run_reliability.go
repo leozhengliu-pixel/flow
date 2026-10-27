@@ -119,6 +119,8 @@ func loopProviderFailure(err error) error {
 	var netErr net.Error
 	if errors.As(err, &providerErr) && providerErr.timeout || errors.As(err, &netErr) && netErr.Timeout() {
 		reason = "provider_timeout"
+	} else if providerErr != nil && providerErr.unreadable {
+		return &loopRunError{reason: "stream_error", message: "The model stream could not be parsed: " + err.Error(), err: err}
 	}
 	return &loopRunError{reason: reason, message: err.Error(), err: err}
 }
@@ -170,7 +172,7 @@ func loopRetry(ctx context.Context, limits loopRunLimits, call func() error) (in
 
 // loopFailureReasons are the failure reason codes runs and replies store. The
 // web app labels each one (REASON_LABELS in web/src/components/loops/loop-run-status.ts).
-var loopFailureReasons = []string{"cancelled", "interrupted", "timeout", "provider_timeout", "provider_error", "empty_response", "tool_error", "budget_exhausted", "no_output", "incomplete", "unavailable", "error"}
+var loopFailureReasons = []string{"cancelled", "interrupted", "timeout", "provider_timeout", "provider_error", "empty_response", "output_truncated", "reasoning_only", "stream_error", "tool_error", "budget_exhausted", "no_output", "incomplete", "unavailable", "error"}
 
 // classifyLoopRunFailure maps how a run ended to its status, failure reason
 // and message.
@@ -814,11 +816,12 @@ const (
 var loopPromisePattern = regexp.MustCompile(`(?i)^((ok|okay|sure|alright)[,.!]?\s*)?(i will|i'll|i am going to|i'm going to|let me|let's|next,? i|now,? i|i need to|first,? i|i am now|i'm now|going to)\b|^((好的|好|嗯)[，,。!！]?\s*)?(我将|我会|我先|我来|让我|接下来|下面我|现在我|现在开始|我需要|我要|稍后|马上|正在)`)
 
 // loopTextPromisesMoreWork reports whether a turn's text only announces work
-// still to come. A long answer is an answer even when it starts with "I will".
+// still to come. A long answer is an answer even when it starts with "I will". Empty text promises nothing: a turn
+// without text or tool calls is an unusable turn (see readLoopTurn), not a promise to continue.
 func loopTextPromisesMoreWork(text string) bool {
 	text = strings.TrimSpace(text)
 	if text == "" {
-		return true
+		return false
 	}
 	length := len([]rune(text))
 	if strings.HasSuffix(text, ":") || strings.HasSuffix(text, "：") || strings.HasSuffix(text, "…") || strings.HasSuffix(text, "...") {
