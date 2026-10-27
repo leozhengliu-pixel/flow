@@ -479,6 +479,9 @@ func (s *server) chatMutationFailure(ctx context.Context, record domain.ChatInte
 		if failure.Status == http.StatusConflict {
 			message = "This issue changed after the form opened. Open a current card and confirm your change again."
 		}
+		if failure.Message == chatReconnectMessage {
+			message = chatReconnectMessage
+		}
 		return s.chatSendCommandError(ctx, record, job, openID, message)
 	}
 	return err

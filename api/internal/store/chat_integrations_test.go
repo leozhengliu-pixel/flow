@@ -216,3 +216,39 @@ func TestChatRetentionPreservesRecentInboxDedup(t *testing.T) {
 		t.Fatal("old terminal job was not purged")
 	}
 }
+
+func TestChatIdentitiesEndWithRevokedSessionsAndPasswordReset(t *testing.T) {
+	repo, record := chatStoreFixture(t)
+	viewer := repo.Bootstrap().Viewer
+	bind := func() {
+		t.Helper()
+		identity := domain.ChatIdentity{UserID: viewer.ID, OpenID: "ou_viewer", TenantKey: record.TenantKey, AuthProvider: "password", AuthenticatedAt: time.Now().UTC()}
+		if err := repo.PutChatIdentity(t.Context(), record.WorkspaceKey, record.ConnectionID, identity); err != nil {
+			t.Fatal(err)
+		}
+		bound, err := repo.ChatIdentityForUser(t.Context(), record.WorkspaceKey, record.ConnectionID, viewer.ID)
+		if err != nil || bound.AuthenticatedAt.IsZero() {
+			t.Fatalf("consent time not persisted: %#v %v", bound, err)
+		}
+	}
+	unbound := func(reason string) {
+		t.Helper()
+		if _, err := repo.ChatIdentityForUser(t.Context(), record.WorkspaceKey, record.ConnectionID, viewer.ID); !errors.Is(err, sql.ErrNoRows) {
+			t.Fatalf("chat identity survived %s: %v", reason, err)
+		}
+	}
+	bind()
+	if err := repo.RevokeOtherSessions(t.Context(), viewer.ID, "current-session"); err != nil {
+		t.Fatal(err)
+	}
+	unbound("signing out other sessions")
+	bind()
+	token, err := repo.RequestPasswordReset(t.Context(), viewer.Email)
+	if err != nil || token == "" {
+		t.Fatalf("reset token: %v", err)
+	}
+	if err = repo.ResetPassword(t.Context(), token, "a-new-test-password"); err != nil {
+		t.Fatal(err)
+	}
+	unbound("a password reset")
+}

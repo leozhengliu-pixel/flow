@@ -94,6 +94,13 @@ func TestChatDomainReplayReportsRetentionGap(t *testing.T) {
 	if _, err := repository.ChatDomainEventPage(ctx, "test-workspace", 20); !errors.Is(err, ErrChatDomainCursorExpired) {
 		t.Fatalf("retention gap was hidden: %v", err)
 	}
+	from, to, err := repository.ResetChatDomainCursor(ctx, "test-workspace")
+	if err != nil || to <= from {
+		t.Fatalf("cursor was not moved to the head: %d -> %d %v", from, to, err)
+	}
+	if records, err := repository.ChatDomainEventPage(ctx, "test-workspace", 20); err != nil || len(records) != 0 {
+		t.Fatalf("replay did not resume after the gap: %v %v", records, err)
+	}
 }
 
 func TestChatWorkerLeaseCannotBeReleasedByAnExpiredWorker(t *testing.T) {
@@ -153,5 +160,48 @@ func TestChatSnapshotsSurviveInterruptedDisplayMetadataSync(t *testing.T) {
 	events, err := repository.Events(ctx, issue.ID)
 	if err != nil || len(events) == 0 || len(events[len(events)-1].PreviousValues) == 0 {
 		t.Fatalf("authoritative connected application lost its event diff: %+v %v", events, err)
+	}
+}
+
+func TestChatSnapshotFlagFollowsIntegrationWritesWithoutPerMutationQueries(t *testing.T) {
+	repository, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "chat-snapshot-flag.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	ctx := context.Background()
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	if repository.webhookNeeded(canceled, "test-workspace") {
+		t.Fatal("a failed read forced event diffs")
+	}
+	if _, cached := repository.chatSnapshotFlags.Load("test-workspace"); cached {
+		t.Fatal("a failed read was cached")
+	}
+	if repository.webhookNeeded(ctx, "test-workspace") {
+		t.Fatal("workspace without chat applications needs diffs")
+	}
+	if value, cached := repository.chatSnapshotFlags.Load("test-workspace"); !cached || value.(bool) {
+		t.Fatalf("flag was not cached after the first read: %v %v", value, cached)
+	}
+	record := domain.ChatIntegrationRecord{WorkspaceKey: "test-workspace", Provider: "lark", ConnectionID: "chat-flag", AppID: "app-flag"}
+	if err := repository.PutChatIntegration(ctx, record); err != nil {
+		t.Fatal(err)
+	}
+	if repository.webhookNeeded(ctx, "test-workspace") {
+		t.Fatal("an unverified application needs diffs")
+	}
+	record.Connected, record.TenantKey = true, "tenant-flag"
+	if err := repository.PutChatIntegration(ctx, record); err != nil {
+		t.Fatal(err)
+	}
+	if !repository.webhookNeeded(canceled, "test-workspace") {
+		t.Fatal("connected application write did not set the cached flag")
+	}
+	if err := repository.DeleteChatIntegration(ctx, "test-workspace", record.ConnectionID); err != nil {
+		t.Fatal(err)
+	}
+	if repository.webhookNeeded(ctx, "test-workspace") {
+		t.Fatal("disconnected application still needs diffs")
 	}
 }

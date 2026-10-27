@@ -35,25 +35,28 @@ type SQLiteStore struct {
 	viewer           domain.User
 	// The sinks are read after every committed write; atomics keep that
 	// read from queueing behind a writer holding mu.
-	realtimeSink     atomic.Pointer[func(string, domain.RealtimeEvent)]
-	webhookSink      atomic.Pointer[func(string, domain.DomainEvent)]
-	accountSink      atomic.Pointer[func(string)]       // see SetAccountAccessSink
-	agentReplies     atomic.Pointer[AgentReplyListener] // see SetAgentReplyListener
-	agentRunWake     agentRunWaker                      // see AgentRunWake
-	agentRunCancel   agentRunWaker                      // see AgentRunCancelWake
-	coordinator      WorkspaceCoordinator
-	fixtureProfile   string
-	fixturePassword  string
-	maxStateBytes    int
-	lifecycle        context.Context
-	stopLifecycle    context.CancelFunc
-	apiKeyUseOnce    sync.Once
-	apiKeyUseMu      sync.Mutex
-	apiKeyUseTimes   map[string]time.Time
-	apiKeyUseQueue   chan apiKeyUse
-	apiKeyUseWorkers sync.WaitGroup
-	apiKeyUseClosed  bool
-	teamMembershipMu sync.Mutex
+	realtimeSink atomic.Pointer[func(string, domain.RealtimeEvent)]
+	webhookSink  atomic.Pointer[func(string, domain.DomainEvent)]
+	// chatSnapshotFlags caches, per workspace key, whether a connected chat
+	// application needs event diffs (see chatSnapshotFlag).
+	chatSnapshotFlags sync.Map
+	accountSink       atomic.Pointer[func(string)]       // see SetAccountAccessSink
+	agentReplies      atomic.Pointer[AgentReplyListener] // see SetAgentReplyListener
+	agentRunWake      agentRunWaker                      // see AgentRunWake
+	agentRunCancel    agentRunWaker                      // see AgentRunCancelWake
+	coordinator       WorkspaceCoordinator
+	fixtureProfile    string
+	fixturePassword   string
+	maxStateBytes     int
+	lifecycle         context.Context
+	stopLifecycle     context.CancelFunc
+	apiKeyUseOnce     sync.Once
+	apiKeyUseMu       sync.Mutex
+	apiKeyUseTimes    map[string]time.Time
+	apiKeyUseQueue    chan apiKeyUse
+	apiKeyUseWorkers  sync.WaitGroup
+	apiKeyUseClosed   bool
+	teamMembershipMu  sync.Mutex
 	// changeLogMinRows: see SetChangeLogMinRows.
 	changeLogMinRows atomic.Int64
 	// startupCacheDrops lists workspaces whose metadata records a startup
@@ -213,10 +216,10 @@ func (s *SQLiteStore) webhookNeeded(ctx context.Context, workspaceKey string) bo
 	if needed {
 		return true
 	}
-	// A setup interrupted before display metadata sync must not lose diffs.
-	// Query outside mu to preserve database/cache lock ordering.
-	needed, err := s.chatSnapshotsNeeded(ctx, workspaceKey)
-	return needed || err != nil
+	// A setup interrupted before display metadata sync must not lose diffs,
+	// so the authoritative application records are consulted too, through a
+	// flag kept current by the chat integration writes.
+	return s.chatSnapshotFlag(ctx, workspaceKey)
 }
 
 func (s *SQLiteStore) webhook() func(string, domain.DomainEvent) {
@@ -2016,6 +2019,7 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 	}
 	if workspace.URLKey != workspaceKey {
 		_, _ = s.db.ExecContext(ctx, `UPDATE auth_account_state SET last_workspace_key=?,updated_at=? WHERE last_workspace_key=?`, workspace.URLKey, time.Now().UTC().Format(time.RFC3339Nano), workspaceKey)
+		s.forgetChatSnapshotFlag(workspaceKey, workspace.URLKey)
 	}
 	delete(s.workspaces, workspaceKey)
 	domain.RebuildTeamDirectory(&data)
@@ -2144,6 +2148,7 @@ func (s *SQLiteStore) deleteWorkspace(ctx context.Context, workspaceKey string) 
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	s.forgetChatSnapshotFlag(workspaceKey)
 	s.workspaces = remaining
 	s.lastWorkspaceKey = nextWorkspaceKey
 	return nil
