@@ -10,8 +10,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.run_id }}
-  cancel-in-progress: false
+  # A newer push to the same ref supersedes the older run, which keeps the
+  # hosted-runner concurrency limit free for the run that matters.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # The three vitest coverage gates run the same suite against different coverage
@@ -236,12 +238,12 @@ jobs:
       - name: Check test shards cover every test once (cmd/server)
         env:
           CHECK_PATTERNS: '1'
-        run: ../scripts/ci/go-test-shard.sh check ./cmd/server 8
+        run: ../scripts/ci/go-test-shard.sh check ./cmd/server 6
 
       - name: Check test shards cover every test once (internal/store)
         env:
           CHECK_PATTERNS: '1'
-        run: ../scripts/ci/go-test-shard.sh check ./internal/store 3
+        run: ../scripts/ci/go-test-shard.sh check ./internal/store 2
 
   api-test:
     name: API tests (${{ matrix.name }})
@@ -254,17 +256,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: 'server 1/8', profile: server-1, package: ./cmd/server, shard: 1, shards: 8 }
-          - { name: 'server 2/8', profile: server-2, package: ./cmd/server, shard: 2, shards: 8 }
-          - { name: 'server 3/8', profile: server-3, package: ./cmd/server, shard: 3, shards: 8 }
-          - { name: 'server 4/8', profile: server-4, package: ./cmd/server, shard: 4, shards: 8 }
-          - { name: 'server 5/8', profile: server-5, package: ./cmd/server, shard: 5, shards: 8 }
-          - { name: 'server 6/8', profile: server-6, package: ./cmd/server, shard: 6, shards: 8 }
-          - { name: 'server 7/8', profile: server-7, package: ./cmd/server, shard: 7, shards: 8 }
-          - { name: 'server 8/8', profile: server-8, package: ./cmd/server, shard: 8, shards: 8 }
-          - { name: 'store 1/3', profile: store-1, package: ./internal/store, shard: 1, shards: 3 }
-          - { name: 'store 2/3', profile: store-2, package: ./internal/store, shard: 2, shards: 3 }
-          - { name: 'store 3/3', profile: store-3, package: ./internal/store, shard: 3, shards: 3 }
+          - { name: 'server 1/6', profile: server-1, package: ./cmd/server, shard: 1, shards: 6 }
+          - { name: 'server 2/6', profile: server-2, package: ./cmd/server, shard: 2, shards: 6 }
+          - { name: 'server 3/6', profile: server-3, package: ./cmd/server, shard: 3, shards: 6 }
+          - { name: 'server 4/6', profile: server-4, package: ./cmd/server, shard: 4, shards: 6 }
+          - { name: 'server 5/6', profile: server-5, package: ./cmd/server, shard: 5, shards: 6 }
+          - { name: 'server 6/6', profile: server-6, package: ./cmd/server, shard: 6, shards: 6 }
+          - { name: 'store 1/2', profile: store-1, package: ./internal/store, shard: 1, shards: 2 }
+          - { name: 'store 2/2', profile: store-2, package: ./internal/store, shard: 2, shards: 2 }
           - { name: 'other packages', profile: other, package: others, shard: 0, shards: 0 }
     env:
       # Same flags as the test run, so the instrumented test binary is built once

@@ -13,8 +13,10 @@ permissions:
   packages: write
 
 concurrency:
-  group: container-${{ github.workflow }}-${{ github.ref }}-${{ github.run_id }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Release tag builds are never cancelled; branch and pull request builds are
+  # superseded by the next push.
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 env:
   REGISTRY: ghcr.io
