@@ -1,0 +1,3 @@
+# The CSP mode is report-only, enforce or off.
+securityHeaders:
+  csp: strict

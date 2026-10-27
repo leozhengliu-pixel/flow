@@ -1,7 +1,8 @@
 # Several replicas: external PostgreSQL and Redis Cluster from existing
 # secrets, S3, autoscaling, Ingress, Flow NetworkPolicy, GitHub App key
 # mounted from a Secret, ACL secret from an existing Secret, an
-# operator-trusted intranet MCP host with an enterprise CA bundle.
+# operator-trusted intranet MCP host with an enterprise CA bundle, and
+# enforced security headers and HSTS behind the trusted ingress.
 replicaCount: 3
 image:
   digest: sha256:abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd
@@ -66,6 +67,13 @@ ingress:
       hosts: [flow.example.com]
 networkPolicy:
   enabled: true
+trustProxyHeaders: true
+securityHeaders:
+  csp: enforce
+  cspReportUri: https://csp-reports.example.com/flow
+  frameAncestors: ["'self'", https://portal.example.com]
+  hstsMaxAge: 15552000
+  hstsIncludeSubdomains: true
 topologySpreadConstraints:
   - maxSkew: 1
     topologyKey: topology.kubernetes.io/zone
