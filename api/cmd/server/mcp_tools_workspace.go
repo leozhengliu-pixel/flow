@@ -1345,6 +1345,10 @@ func (s *server) saveMCPDocument(ctx context.Context, actor mcpActor, data domai
 			return nil, err
 		}
 		hasContent = true
+		// The patch was applied to this version: a concurrent edit makes the
+		// write fail instead of being overwritten (an append keeps it).
+		version := current.Version
+		input.ExpectedVersion = &version
 	}
 	if hasContent {
 		// The editor renders contentData over the Markdown projection, so keep

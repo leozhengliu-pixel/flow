@@ -1282,11 +1282,14 @@ type LoopRunReply struct {
 
 // LoopRunSummary is the structured report a loop run ends with.
 type LoopRunSummary struct {
-	// done | incomplete | nothing_to_do
+	// done | incomplete | nothing_to_do | skipped
 	Status  string   `json:"status"`
 	Summary string   `json:"summary"`
 	Done    []string `json:"done,omitempty"`
 	NotDone []string `json:"notDone,omitempty"`
+	// SkipReason names the skip condition of the instructions that applied
+	// (status skipped).
+	SkipReason string `json:"skipReason,omitempty"`
 }
 
 // LoopRunReplyAttachment is a file sent with a run reply.
@@ -1314,6 +1317,25 @@ type LoopRunToolCall struct {
 	Error      string     `json:"error,omitempty"`
 	StartedAt  *time.Time `json:"startedAt,omitempty"`
 	FinishedAt *time.Time `json:"finishedAt,omitempty"`
+	// Document is what a save_document call did to the stored document.
+	Document *LoopRunDocumentWrite `json:"document,omitempty"`
+}
+
+// LoopRunDocumentWrite records a loop run's document write as the stored
+// document shows it, so acceptance checks that the change happened and a
+// repeated append is not written twice.
+type LoopRunDocumentWrite struct {
+	ID    string `json:"id,omitempty"`
+	Title string `json:"title,omitempty"`
+	// create | update | append
+	Mode          string `json:"mode"`
+	VersionBefore int64  `json:"versionBefore,omitempty"`
+	VersionAfter  int64  `json:"versionAfter,omitempty"`
+	// Changed: the document's title or content differs after the write (a
+	// new document always counts).
+	Changed bool `json:"changed"`
+	// Key identifies an append (document and text) within the run.
+	Key string `json:"key,omitempty"`
 }
 
 type ProjectTemplate struct {

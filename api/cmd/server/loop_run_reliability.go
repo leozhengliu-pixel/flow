@@ -634,8 +634,8 @@ const loopFinishToolName = "finish_run"
 
 var loopFinishToolDefinition = agentProviderTool{
 	Name:        loopFinishToolName,
-	Description: "End the loop run with your final report. Call it exactly once, after the self-check, as your last action; call no other tool after it. status: done (everything the instructions ask for was done), incomplete (something could not be done) or nothing_to_do (the instructions did not apply this time). summary: under about 150 words, in the workspace's language, linking the issues, projects and updates you changed with the urls the tools returned. done: each change you made. notDone: each thing you did not do and why.",
-	Parameters:  json.RawMessage(`{"type":"object","required":["status","summary"],"properties":{"status":{"type":"string","enum":["done","incomplete","nothing_to_do"]},"summary":{"type":"string","description":"Short final summary with links"},"done":{"type":"array","items":{"type":"string"},"description":"Changes made, one per item, with identifiers or links"},"notDone":{"type":"array","items":{"type":"string"},"description":"What was not done and why"}},"additionalProperties":false}`),
+	Description: "End the loop run with your final report. Call it exactly once, after the self-check, as your last action; call no other tool after it. status: done (everything the instructions ask for was done), incomplete (something could not be done) , nothing_to_do (the instructions did not apply this time) or skipped (a skip condition the instructions name applies, such as a holiday; give skipReason). summary: under about 150 words, in the workspace's language, linking the issues, projects and updates you changed with the urls the tools returned. done: each change you made. notDone: each thing you did not do and why.",
+	Parameters:  json.RawMessage(`{"type":"object","required":["status","summary"],"properties":{"status":{"type":"string","enum":["done","incomplete","nothing_to_do","skipped"]},"summary":{"type":"string","description":"Short final summary with links"},"done":{"type":"array","items":{"type":"string"},"description":"Changes made, one per item, with identifiers or links"},"notDone":{"type":"array","items":{"type":"string"},"description":"What was not done and why"},"skipReason":{"type":"string","description":"For status skipped: the skip condition from the instructions that applies"}},"additionalProperties":false}`),
 	Access:      "read",
 }
 
@@ -646,11 +646,15 @@ func parseLoopSummary(arguments json.RawMessage) (*domain.LoopRunSummary, error)
 	}
 	summary.Status = strings.TrimSpace(summary.Status)
 	summary.Summary = strings.TrimSpace(summary.Summary)
-	if !slices.Contains([]string{"done", "incomplete", "nothing_to_do"}, summary.Status) {
-		return nil, fmt.Errorf("finish_run status must be done, incomplete or nothing_to_do")
+	summary.SkipReason = strings.TrimSpace(summary.SkipReason)
+	if !slices.Contains([]string{"done", "incomplete", "nothing_to_do", "skipped"}, summary.Status) {
+		return nil, fmt.Errorf("finish_run status must be done, incomplete, nothing_to_do or skipped")
 	}
 	if summary.Summary == "" {
 		return nil, fmt.Errorf("finish_run needs a summary")
+	}
+	if summary.Status == "skipped" && summary.SkipReason == "" {
+		return nil, fmt.Errorf("finish_run status skipped needs skipReason: the skip condition from the instructions that applies")
 	}
 	clean := func(items []string) []string {
 		items = slices.DeleteFunc(slices.Clone(items), func(item string) bool { return strings.TrimSpace(item) == "" })
@@ -696,131 +700,6 @@ var loopOutputLabels = map[string]string{
 	"change":       "a change in Flow",
 }
 
-// loopOutputExpectation is what a loop's runs are expected to produce:
-// Outputs must exist for the run to complete; ReadOnly marks a loop whose
-// text names outputs only as things to read, check or summarise (or forbids
-// writing), so its runs report rather than publish.
-type loopOutputExpectation struct {
-	Outputs  []string
-	ReadOnly bool
-}
-
-// effectiveLoopOutputs are the outputs a run of the loop must produce.
-func effectiveLoopOutputs(loop domain.Loop) []string {
-	return loopOutputExpectations(loop).Outputs
-}
-
-// loopOutputExpectations are the loop's explicit expectedOutputs (["none"]:
-// no output required), else what its name and instructions ask for.
-func loopOutputExpectations(loop domain.Loop) loopOutputExpectation {
-	explicit := []string{}
-	for _, item := range loop.ExpectedOutputs {
-		if item == "none" {
-			return loopOutputExpectation{}
-		}
-		if slices.Contains(loopOutputKinds, item) && !slices.Contains(explicit, item) {
-			explicit = append(explicit, item)
-		}
-	}
-	if len(explicit) > 0 {
-		return loopOutputExpectation{Outputs: explicit}
-	}
-	return inferLoopOutputIntent(loop.Name + "\n" + loop.Instructions)
-}
-
-// inferLoopOutputs reads the outputs a loop's text asks for.
-func inferLoopOutputs(text string) []string {
-	return inferLoopOutputIntent(text).Outputs
-}
-
-// loopOutputMarkers name each output kind in loop text. A marker alone does
-// not ask for the output: "check for new status updates" reads them. Nouns
-// name the output; actions are verb phrases ("comment on", "留言") that ask
-// for it unless their clause reads or refuses.
-var loopOutputMarkers = []struct {
-	kind    string
-	nouns   []string
-	actions []string
-}{
-	{"statusUpdate", []string{"status update", "project update", "initiative update", "weekly update", "周更新", "项目更新", "状态更新", "进展更新", "周报"}, []string{"post an update", "post updates", "发布更新"}},
-	{"issue", nil, []string{"create an issue", "create issues", "create a new issue", "create new issues", "file an issue", "file issues", "open an issue", "创建 issue", "创建issue", "新建 issue", "新建issue", "创建问题", "创建任务"}},
-	{"comment", nil, []string{"comment on", "leave a comment", "add a comment", "post a comment", "reply with a comment", "评论", "留言"}},
-	{"document", nil, []string{"create a document", "write a document", "创建文档", "撰写文档"}},
-}
-
-var (
-	// loopWriteVerbs ask for something to be made or published.
-	loopWriteVerbs = regexp.MustCompile(`\b(post|posts|posting|publish|publishes|publishing|create|creates|creating|write|writes|writing|add|adds|adding|leave|leaves|leaving|submit|submits|send|sends|share|shares|file an|open an)\b|发布|发表|发送|发一|创建|新建|撰写|编写|写一|写入|提交|添加|留下|回复`)
-	// loopReadVerbs ask for something to be read, checked or summarised.
-	loopReadVerbs = regexp.MustCompile(`\b(check|checks|checking|whether|review|reviews|reviewing|read|reads|reading|look|looks|find|finds|see|summarize|summarise|summarizes|summarises|summary|summaries|list|lists|count|counts|monitor|monitors|track|tracks|watch|watches|collect|collects|gather|gathers)\b|检查|查看|看看|是否|有没有|有无|汇总|总结|统计|读取|阅读|列出|查询|监控|关注|回顾|获取|整理|现有|已有`)
-	// loopNegatedWrite refuses a write in the same clause ("do not post the update").
-	loopNegatedWrite = regexp.MustCompile(`\b(do not|don't|dont|never|without|must not|should not|shouldn't|no need to)\b[^.;:!?\n]*\b(post|posting|publish|publishing|create|creating|write|writing|add|adding|leave|submit|send|change|modify|update)\b|(不要|不用|无需|不需要|不必|别|勿|禁止|不得|不)\s*(发布|发表|发送|创建|新建|撰写|编写|写|提交|添加|修改|更改|留言|评论)`)
-	// loopNoWrites forbids writing anything ("read-only", "make no changes").
-	loopNoWrites      = regexp.MustCompile(`\bread[- ]only\b|\b(do not|don't|never)\s+(post|publish|write|create|change|modify|make)\s+(anything|any changes|any)\b|\bmake no changes\b|只读|仅读取|不要(发布|写入|创建|修改|更改)任何|不(做|作)任何(修改|更改)|不要做任何(修改|更改)|不写入|无需(发布|写入)任何`)
-	loopClauseBreak   = regexp.MustCompile(`[。；;！!？?\n，,、：:]|\.\s`)
-	loopSentenceBreak = regexp.MustCompile(`[。；;！!？?\n]|\.\s`)
-)
-
-// inferLoopOutputIntent reads side effects off the loop's text. A marker
-// counts as an expected output when its clause asks for a write ("post a
-// status update", "为每个 bug 留言"), or names it without any verb (a title
-// such as "Weekly update"); it does not when its clause (or, for a noun in a
-// clause with no verb, its sentence) only reads, checks or summarises, or
-// refuses the write.
-func inferLoopOutputIntent(text string) loopOutputExpectation {
-	text = strings.ToLower(text)
-	if loopNoWrites.MatchString(text) {
-		return loopOutputExpectation{ReadOnly: true}
-	}
-	contains := func(clause string, markers []string) bool {
-		return slices.ContainsFunc(markers, func(marker string) bool { return strings.Contains(clause, marker) })
-	}
-	outputs, readOnly := []string{}, false
-	for _, sentence := range loopSentenceBreak.Split(text, -1) {
-		for _, clause := range loopClauseBreak.Split(sentence, -1) {
-			for _, group := range loopOutputMarkers {
-				action := contains(clause, group.actions)
-				if slices.Contains(outputs, group.kind) || !action && !contains(clause, group.nouns) {
-					continue
-				}
-				write := false
-				switch {
-				case loopNegatedWrite.MatchString(clause):
-				case loopWriteVerbs.MatchString(clause):
-					write = true
-				case loopReadVerbs.MatchString(clause):
-				case action:
-					write = true
-				case loopNegatedWrite.MatchString(sentence):
-				case loopWriteVerbs.MatchString(sentence):
-					write = true
-				case loopReadVerbs.MatchString(sentence):
-				default:
-					write = true
-				}
-				if write {
-					outputs = append(outputs, group.kind)
-				} else {
-					readOnly = true
-				}
-			}
-		}
-	}
-	// Keep the kinds in their usual order.
-	ordered := []string{}
-	for _, kind := range loopOutputKinds {
-		if slices.Contains(outputs, kind) {
-			ordered = append(ordered, kind)
-		}
-	}
-	if len(ordered) == 0 && !readOnly && !loopWriteVerbs.MatchString(text) && loopReadVerbs.MatchString(text) {
-		// Only reading verbs and no object to write ("count open issues per
-		// team and summarise"): the report is the output, not a new document.
-		readOnly = true
-	}
-	return loopOutputExpectation{Outputs: ordered, ReadOnly: readOnly && len(ordered) == 0}
-}
-
 // loopOutputKind is the kind of output a successful write tool call made.
 func loopOutputKind(name string, args map[string]any) string {
 	switch strings.TrimPrefix(name, "mcp__flow.") {
@@ -841,7 +720,8 @@ func loopOutputKind(name string, args map[string]any) string {
 // acceptLoopRun decides how a run that ended without an error finishes: a
 // run whose loop implies side effects completes only when it produced them.
 func acceptLoopRun(loop domain.Loop, run *domain.LoopRun, ending *loopRunEnding) (string, string, string) {
-	run.ExpectedOutputs = effectiveLoopOutputs(loop)
+	expectation := loopOutputExpectations(loop)
+	run.ExpectedOutputs = expectation.Outputs
 	if ending != nil {
 		return "needs_review", ending.reason, ending.message
 	}
@@ -852,11 +732,44 @@ func acceptLoopRun(loop domain.Loop, run *domain.LoopRun, ending *loopRunEnding)
 		}
 		return "needs_review", "incomplete", message
 	}
-	missing := []string{}
-	for _, kind := range run.ExpectedOutputs {
-		if run.Produced[kind] == 0 {
-			missing = append(missing, loopOutputLabels[kind])
+	skipped := run.Summary != nil && run.Summary.Status == "skipped"
+	if skipped && len(expectation.Skips) > 0 {
+		// The instructions say when to skip, and the agent named the
+		// condition: the outputs are not due this time.
+		return "completed", "", ""
+	}
+	operation := func(kind string) string {
+		if expectation.Explicit {
+			return ""
 		}
+		return expectation.Operations[kind]
+	}
+	done := func(kind string) bool {
+		if kind == "document" {
+			return loopDocumentOutputDone(run, operation(kind))
+		}
+		return run.Produced[kind] > 0
+	}
+	missing, note := []string{}, ""
+	for _, kind := range run.ExpectedOutputs {
+		if done(kind) || slices.ContainsFunc(expectation.Alternatives, func(group []string) bool {
+			return slices.Contains(group, kind) && slices.ContainsFunc(group, done)
+		}) {
+			continue
+		}
+		label := loopOutputLabels[kind]
+		if kind == "document" {
+			switch operation(kind) {
+			case loopOpAppend:
+				label = "an append to an existing document"
+			case loopOpUpdate:
+				label = "an update to an existing document"
+			case loopOpCreate:
+				label = "a new document"
+			}
+			note += loopDocumentMissingNote(run, operation(kind))
+		}
+		missing = append(missing, label)
 	}
 	if len(missing) == 0 {
 		return "completed", "", ""
@@ -867,8 +780,13 @@ func acceptLoopRun(loop domain.Loop, run *domain.LoopRun, ending *loopRunEnding)
 			return "needs_review", "tool_error", fmt.Sprintf("No output produced: expected %s, but %s failed: %s", strings.Join(missing, " and "), firstNonEmpty(call.Label, call.Name), call.Error)
 		}
 	}
-	message := fmt.Sprintf("No output produced: the loop's instructions call for %s, but the run made none", strings.Join(missing, " and "))
-	if run.Summary != nil && run.Summary.Status == "nothing_to_do" {
+	message := fmt.Sprintf("No output produced: the loop's instructions call for %s, but the run made none", strings.Join(missing, " and ")) + note
+	switch {
+	case skipped:
+		message += fmt.Sprintf(" (the agent skipped the run — %s — but the instructions name no skip condition)", run.Summary.SkipReason)
+	case run.Summary != nil && run.Summary.Status == "nothing_to_do" && expectation.Always:
+		message += " (the agent reported there was nothing to do, but the instructions require the output even when nothing changed)"
+	case run.Summary != nil && run.Summary.Status == "nothing_to_do":
 		message += " (the agent reported there was nothing to do)"
 	}
 	return "needs_review", "no_output", message
