@@ -6,6 +6,18 @@
 are healthy. The container image invokes the same endpoint through
 `/app/flow-api healthcheck`.
 
+## Handler panics
+
+A panic in a request handler does not take the server down. Flow logs it at
+error level as `http handler panic` with `request_id`, `method`, `path`
+(without the query string), `panic` (the value, cut to 512 characters) and
+`stack`; headers and bodies are never logged. The client gets a `500` with
+`{"error":"Internal server error","code":"INTERNAL_ERROR","type":"INTERNAL_ERROR","requestId":"..."}`,
+and `requestId` matches the `X-Request-ID` response header, so a user's
+report leads to the log line. If the response had already started (an event
+stream or a download), the connection is cut instead, and a WebSocket is left
+to its handler. Search the logs for `http handler panic` after an incident.
+
 ## Security headers
 
 Responses carry the security headers in

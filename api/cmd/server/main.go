@@ -1021,7 +1021,7 @@ func newHandler(s *server) http.Handler {
 	if s.securityHeaders != nil {
 		forwarding = forwardingPolicyFromConfig(securityConfig, s.allowedOrigin)
 	}
-	return withForwardingPolicy(forwarding, withSecurityHeaders(security, requestLog(s.cors(compressAPIResponses(s.signedFileURLs(apiErrorEnvelope(requestBodyBudget(handler))))))))
+	return withForwardingPolicy(forwarding, withSecurityHeaders(security, recoverPanics(requestLog(s.cors(compressAPIResponses(s.signedFileURLs(apiErrorEnvelope(requestBodyBudget(handler)))))))))
 }
 
 // serverRoute reports whether path is answered by the API rather than the

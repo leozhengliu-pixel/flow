@@ -60,6 +60,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   address, and the scheme of `FLOW_APP_URL` for requests to its host, so links
   and cookies stay `https` behind a TLS ingress. See
   [HTTPS detection and trusted proxies](docs/configuration.md#https-detection-and-trusted-proxies).
+- A panic in a request handler is now logged once (`http handler panic`, with
+  the request id, method, path and stack; no headers, query strings or
+  bodies) and answered with a JSON 500 in the standard error envelope that
+  carries the request id and the security headers. A response that already
+  started, such as an event stream, is aborted instead, and WebSocket
+  connections are left to their handler.
 - Flow Agent: asking it to create a team of 40 people no longer runs out of
   steps. `save_team` adds everyone it finds in one call and lists the rest
   (not in the workspace, or a name several members share, with candidates)
