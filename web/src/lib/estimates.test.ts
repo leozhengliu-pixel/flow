@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { estimateIconLevel, estimateLabel, estimatePickerOptions, estimatePoints, estimateScaleDetails, estimateShortLabel, estimateValues, formatEstimatePoints, sumEstimatePoints, teamUsesEstimates, unestimatedValue } from './estimates'
+import { estimateBulkValues, estimateIconLevel, estimateLabel, estimateOnTeamScale, estimatePickerOptions, estimatePoints, estimateScaleDetails, estimateShortLabel, estimateValues, formatEstimatePoints, sumEstimatePoints, teamUsesEstimates, unestimatedValue } from './estimates'
 
 describe('estimates', () => {
   it('builds each scale with optional zero and extended values', () => {
@@ -47,5 +47,23 @@ describe('estimates', () => {
     expect(estimatePickerOptions({ estimateType: 'fibonacci', estimateAllowZero: true }).map(option => option.id).slice(0, 3)).toEqual(['-1', '0', '1'])
     expect(unestimatedValue(undefined)).toBe(1)
     expect(unestimatedValue({ estimateCountUnestimated: false })).toBe(0)
+  })
+
+  it('puts a bulk estimate on each team scale', () => {
+    const fibonacci = { estimateType: 'fibonacci' as const }
+    expect(estimateOnTeamScale(3, fibonacci)).toBe(3)
+    expect(estimateOnTeamScale(4, fibonacci)).toBe(5)
+    expect(estimateOnTeamScale(16, fibonacci)).toBe(8)
+    expect(estimateOnTeamScale(-1, fibonacci)).toBe(-1)
+    expect(estimateOnTeamScale(0, fibonacci)).toBe(1)
+    expect(estimateOnTeamScale(0, { ...fibonacci, estimateAllowZero: true })).toBe(0)
+    expect(estimateOnTeamScale(3, { estimateType: 'notUsed' })).toBeUndefined()
+    expect(estimateOnTeamScale(3, undefined)).toBeUndefined()
+  })
+
+  it('offers one scale as it is and merges different scales', () => {
+    expect(estimateBulkValues([{ estimateType: 'fibonacci' }, { estimateType: 'notUsed' }])).toMatchObject({ values: [1, 2, 3, 5, 8], type: 'fibonacci' })
+    expect(estimateBulkValues([{ estimateType: 'fibonacci' }, { estimateType: 'exponential' }])).toMatchObject({ values: [1, 2, 3, 4, 5, 8, 16], type: 'fibonacci', settings: undefined })
+    expect(estimateBulkValues([{ estimateType: 'notUsed' }, undefined]).values).toEqual([])
   })
 })

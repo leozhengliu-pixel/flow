@@ -11,6 +11,9 @@ import { compareDateFilter, DATE_FILTER_FIELDS, dateFilterMenu, parseDateFilterV
 import { advancedFilterTree, conditionAsFilter, isAdvancedGroup } from './advanced-filter'
 import { labelsForResource, setGroupedLabelSelected, toggleGroupedLabelIds } from '@/lib/labels'
 import { teamStateChanges, teamWorkflowStates, workflowStatusOptions } from '@/lib/team-workflow'
+import { resolvedTeamSettings } from '@/lib/team-hierarchy'
+import { estimateOnTeamScale } from '@/lib/estimates'
+import { estimateBulkOptions } from '@/components/issue/estimate-menu'
 import { milestoneIssueProgress } from '@/components/issue/milestone-progress'
 import { buildIssueGroups, groupMoveUpdate, nestIssueRows } from './issue-grouping'
 import { confirmAction } from '@/components/ui/action-dialog-service'
@@ -391,11 +394,33 @@ export function explorerFilterOptions(field: MyIssuesFilterKey, options: Explore
 export function explorerBulkOptions(action: MyIssuesBulkAction, options: ExplorerPropertyOptions, selection?: { data: BootstrapData; teamIds: (string | undefined)[] }): MyIssuesBulkActionOption[] | undefined {
   if (action === 'status') return selection ? workflowStatusOptions(selection.data, selection.teamIds, options.status) : options.status
   if (action === 'priority') return options.priority
+  if (action === 'estimate') return selection ? explorerEstimateBulkOptions(selection.data, selection.teamIds) : undefined
   if (action === 'assign') return options.assignee
   if (action === 'project') return options.project
   if (action === 'labels') return options.labels
   if (action === 'dueDate') return explorerDueDateOptions()
   if (action === 'subscribers') return options.assignee.filter(option => option.id && !('agent' in option && option.agent))
+}
+
+/** "Set estimate…" rows for the selection's teams: their scale, or undefined when none of them uses estimates. */
+export function explorerEstimateBulkOptions(data: BootstrapData, teamIds: (string | undefined)[]): MyIssuesBulkActionOption[] | undefined {
+  const ids = [...new Set(teamIds.filter((id): id is string => Boolean(id)))]
+  return estimateBulkOptions(ids.map(id => resolvedTeamSettings(data.teamSettings, id)))
+}
+
+/**
+ * Estimate updates for a bulk "Set estimate…": each issue gets the value on its
+ * own team's scale (the nearest one when the scale lacks it); issues of teams
+ * that do not use estimates are left alone.
+ */
+export function teamEstimateChanges(data: BootstrapData, issues: { id: string; teamId?: string }[], value: number): { ids: string[]; estimate: number }[] {
+  const changes = new Map<number, string[]>()
+  for (const issue of issues) {
+    const estimate = issue.teamId ? estimateOnTeamScale(value, resolvedTeamSettings(data.teamSettings, issue.teamId)) : undefined
+    if (estimate === undefined) continue
+    changes.set(estimate, [...(changes.get(estimate) ?? []), issue.id])
+  }
+  return [...changes].map(([estimate, ids]) => ({ ids, estimate }))
 }
 
 export async function executeExplorerBulkAction({ action, ids, value, data, issuesById, onUpdateIssue, onUpdateIssues, onDeleteIssues }: {
@@ -421,6 +446,10 @@ export async function executeExplorerBulkAction({ action, ids, value, data, issu
   if (action === 'subscribers' && value != null) return Promise.all(ids.map(id => { const issue = issuesById.get(id)!; return onUpdateIssue(id, { subscriberIds: issue.subscriberIds.includes(value) ? issue.subscriberIds : [...issue.subscriberIds, value] }) }))
   if (action === 'removeSubscribers') return Promise.all(ids.map(id => onUpdateIssue(id, { subscriberIds: [] })))
   if (action === 'unassignMe') return onUpdateIssues(ids, { assigneeId: '' })
+  if (action === 'estimate' && value != null && value !== '') {
+    const changes = teamEstimateChanges(data, ids.map(id => ({ id, teamId: issuesById.get(id)?.team.id })), Number(value))
+    return (await Promise.all(changes.map(change => onUpdateIssues(change.ids, { estimate: change.estimate })))).flat()
+  }
   // Issues of several teams each get their team's equivalent status.
   if (action === 'status' && value) {
     const changes = teamStateChanges(data, ids.map(id => ({ id, teamId: issuesById.get(id)?.team.id })), value)

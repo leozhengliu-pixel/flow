@@ -10,7 +10,8 @@ import { CyclePlanning } from './cycle-planning'
 import { cyclePlanningDays, cyclePlanningRows } from './cycle-planning-model'
 import { CyclesPage } from './cycles-page'
 
-vi.mock('./use-cycle-graph', () => ({ useCycleGraph: () => ({ graph: undefined }) }))
+const graphState = vi.hoisted(() => ({ graph: undefined as unknown }))
+vi.mock('./use-cycle-graph', () => ({ useCycleGraph: () => ({ graph: graphState.graph }) }))
 
 const team = { id: 'team-1', key: 'TST', name: 'Test team', color: '#5e6ad2' } as Team
 const fibonacci = { teamId: 'team-1', estimateType: 'fibonacci' } as TeamSettings
@@ -61,6 +62,29 @@ describe('cycle capacity and scope', () => {
     await user.click(screen.getByRole('tab', { name: 'Teams' }))
     expect(breakdown()).toEqual(['Test team △ 9'])
     expect(within(screen.getByRole('tabpanel')).getByText('Test team').closest('.cycle-planning-row')?.querySelector('.estimate-icon')).not.toBeNull()
+  })
+
+  it('draws the current cycle summary in estimate points, or issue counts without estimates', () => {
+    const totals = (scope: number, started: number, completed: number, points: number) => ({ scope, started, completed, scopePoints: scope * points, startedPoints: started * points, completedPoints: completed * points })
+    graphState.graph = {
+      cycleId: 'c1', timezone: 'UTC', startDate: '2026-11-02', endDate: '2026-11-15', today: '2026-11-03', estimates: true,
+      days: [{ date: '2026-11-02', ...totals(2, 0, 0, 4) }, { date: '2026-11-03', ...totals(2, 1, 1, 4) }, { date: '2026-11-04', future: true, ...totals(0, 0, 0, 0) }],
+      summary: { ...totals(2, 1, 1, 4), added: 1, removed: 0, addedPoints: 5, removedPoints: 0 },
+      breakdown: { assignees: [], labels: [], projects: [] },
+    }
+    try {
+      const current = { ...cycle1, status: 'current' as const }
+      const metrics = (settings: TeamSettings) => {
+        const { container, unmount } = render(<I18nProvider><CyclesPage cycles={[current]} issues={issues} team={team} estimateSettings={settings} settings={{ enabled: true, durationWeeks: 2, cooldownWeeks: 0, upcomingCount: 2 }} onOpen={vi.fn()} onUpdateCycle={vi.fn()} onStartCycle={vi.fn()} onCompleteCycle={vi.fn()} onUpdateSettings={vi.fn()} onReload={vi.fn()} onOpenSidebar={vi.fn()}/></I18nProvider>)
+        const values = [...container.querySelectorAll('.flow-cycle-current-metrics > span')].map(item => `${item.querySelector('small')?.textContent}=${item.querySelector('strong')?.textContent}${item.querySelector('em')?.textContent ?? ''}`)
+        unmount()
+        return values
+      }
+      expect(metrics(fibonacci)).toEqual(['Scope=8+5', 'Started=4• 50%', 'Completed=4• 50%'])
+      expect(metrics({ ...fibonacci, estimateType: 'notUsed' })).toEqual(['Scope=2+1', 'Started=1• 50%', 'Completed=1• 50%'])
+    } finally {
+      graphState.graph = undefined
+    }
   })
 
   it('builds breakdown rows and the days count', () => {

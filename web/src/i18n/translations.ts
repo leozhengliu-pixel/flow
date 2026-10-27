@@ -4666,6 +4666,7 @@ Object.assign(zhCN, {
   "Search issues…": "搜索事项…",
   "No estimate": "无估算",
   "Set estimate to…": "设置估算为…",
+  "Set estimate...": "设置估算...",
   "Change estimate to…": "更改估算为…",
   "Move to cycle…": "移动到周期…",
   "Add to cycle…": "添加到周期…",

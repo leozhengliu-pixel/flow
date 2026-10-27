@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { NoAssigneeIcon } from '@/components/issue/issue-icons'
 import { avatarColor } from '@/components/issue/avatar-color'
 import { UserAvatar } from '@/components/ui/user-avatar'
@@ -19,8 +19,8 @@ import { useI18n } from '@/i18n/i18n'
 import { matchesSearch, translatedKeywords } from '@/lib/search-match'
 import { useRegisterCommandContext } from '@/components/command/command-context'
 
-export type MyIssuesBulkAction = 'assign' | 'unassignMe' | 'status' | 'priority' | 'project' | 'labels' | 'dueDate' | 'copyId' | 'copyUrl' | 'copyTitle' | 'copyTitleLink' | 'copyDescriptionMarkdown' | 'copyContentMarkdown' | 'copyBranch' | 'copyPrompt' | 'subscribers' | 'removeSubscribers' | 'markAs' | 'archive' | 'delete'
-export interface MyIssuesBulkActionOption { id: string; label: string; color?: string; /** Agent member: assigning delegates (the "Agent" pill lives in the hover card only). */ agent?: boolean }
+export type MyIssuesBulkAction = 'assign' | 'unassignMe' | 'status' | 'priority' | 'estimate' | 'project' | 'labels' | 'dueDate' | 'copyId' | 'copyUrl' | 'copyTitle' | 'copyTitleLink' | 'copyDescriptionMarkdown' | 'copyContentMarkdown' | 'copyBranch' | 'copyPrompt' | 'subscribers' | 'removeSubscribers' | 'markAs' | 'archive' | 'delete'
+export interface MyIssuesBulkActionOption { id: string; label: string; color?: string; /** Agent member: assigning delegates (the "Agent" pill lives in the hover card only). */ agent?: boolean; /** Leading glyph, e.g. the estimate icon of a "Set estimate…" row. */ icon?: ReactNode }
 
 export interface MyIssuesBulkActionBarProps {
   selectedIssues: MyIssuesRowData[]
@@ -37,6 +37,7 @@ export interface MyIssuesBulkActionBarProps {
 const actions: { id: MyIssuesBulkAction; label: string; shortcut?: string }[] = [
   { id: 'assign', label: 'Assign to...', shortcut: 'A' }, { id: 'unassignMe', label: 'Un-assign from me', shortcut: 'I' },
   { id: 'status', label: 'Change status...', shortcut: 'S' }, { id: 'priority', label: 'Change priority...', shortcut: 'P' },
+  { id: 'estimate', label: 'Set estimate...', shortcut: '⇧ E' },
   { id: 'project', label: 'Add to project...', shortcut: '⇧ P' }, { id: 'labels', label: 'Change or add labels...', shortcut: 'L' },
   { id: 'dueDate', label: 'Set due date...', shortcut: '⇧ D' }, { id: 'copyId', label: 'Copy issue ID', shortcut: '⌘ .' },
   { id: 'copyUrl', label: 'Copy issue URL', shortcut: '⌘ ⇧ ,' }, { id: 'copyTitle', label: 'Copy issue title', shortcut: "⌘ ⇧ '" },
@@ -48,7 +49,8 @@ const actions: { id: MyIssuesBulkAction; label: string; shortcut?: string }[] = 
 ]
 
 export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, actionOptions, onAction, onAskFlow, onClear, destructiveActions = [] }: MyIssuesBulkActionBarProps) {
-  const availableActions = actions.filter(action => (action.id !== 'archive' && action.id !== 'delete') || destructiveActions.includes(action.id))
+  // "Set estimate…" is listed only when a selected issue's team uses estimates (the host returns its scale).
+  const availableActions = actions.filter(action => ((action.id !== 'archive' && action.id !== 'delete') || destructiveActions.includes(action.id)) && (action.id !== 'estimate' || Boolean(actionOptions?.('estimate')?.length)))
   const directory = usePeopleDirectory()
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
@@ -75,9 +77,9 @@ export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, 
       {pendingAction && <button type="button" className={styles.commandBack} aria-label="Back to actions" onClick={() => setPendingAction(undefined)}><ChevronLeft size={13}/>Back</button>}
       <Dialog.Close className={styles.commandClose} aria-label="Close command menu"><span>Backspace</span><kbd>⌫</kbd></Dialog.Close>
       <Command onKeyDown={event => { if (pendingAction !== 'assign' || event.metaKey || event.ctrlKey || event.altKey || !/^\d$/.test(event.key)) return; const index = options.findIndex((_option, position) => assigneeShortcut(position) === event.key); if (index >= 0) { event.preventDefault(); onAction('assign', selectedIssues, options[index].id); setOpen(false) } }} label={pendingAction ? `Search ${actions.find(action => action.id === pendingAction)?.label}` : 'Command menu'} className={styles.command} loop filter={pendingAction && ['assign','subscribers','removeSubscribers'].includes(pendingAction) ? (value, query) => { const person = directoryPerson(directory.users, value); return person ? Number(personMatchesQuery(person, query)) : Number(matchesSearch(query, [actionOptions?.(pendingAction)?.find(option => (option.id || 'none') === value)?.label ?? value], t)) } : undefined}>
-        <div className={styles.commandInput}><Command.Input key={pendingAction ?? 'actions'} aria-label={pendingAction ? `Search ${actions.find(action => action.id === pendingAction)?.label}` : 'Command menu'} placeholder={pendingAction === 'assign' ? 'Assign to…' : pendingAction ? 'Search...' : 'Type a command...'} autoFocus/>{!pendingAction && <><span>Ask Flow</span><kbd>Tab</kbd></>}</div>
+        <div className={styles.commandInput}><Command.Input key={pendingAction ?? 'actions'} aria-label={pendingAction ? `Search ${actions.find(action => action.id === pendingAction)?.label}` : 'Command menu'} placeholder={pendingAction === 'assign' ? 'Assign to…' : pendingAction === 'estimate' ? 'Set estimate to…' : pendingAction ? 'Search...' : 'Type a command...'} autoFocus/>{!pendingAction && <><span>Ask Flow</span><kbd>Tab</kbd></>}</div>
         <Command.List className={styles.commandList}><Command.Empty className={styles.commandEmpty}>No commands found</Command.Empty>{pendingAction
-          ? <>{options.map((option, position) => { const person = ['assign','subscribers','removeSubscribers'].includes(pendingAction) ? directoryPerson(directory.users, option.id) : undefined; return <PersonHover key={option.id || 'none'} person={person}><Command.Item value={option.id || 'none'} keywords={[option.label, ...translatedKeywords([option.label], t), ...(person ? [personSearchText(person)] : [])]} className={styles.commandItem} onSelect={() => { onAction(pendingAction, selectedIssues, option.id); setOpen(false) }}><span className={styles.optionLabel}>{pendingAction === 'assign' && (option.id ? <UserAvatar avatarUrl={person?.avatarUrl} className={`avatar core-person-picker-avatar ${styles.optionAvatar}`} color={avatarColor(option.id)} name={option.label}/> : <NoAssigneeIcon size={16}/>)}{option.color && <i style={{ backgroundColor: option.color }}/>}<span>{option.label}</span></span>{pendingAction === 'assign' && assigneeShortcut(position) && <kbd>{assigneeShortcut(position)}</kbd>}</Command.Item></PersonHover> })}
+          ? <>{options.map((option, position) => { const person = ['assign','subscribers','removeSubscribers'].includes(pendingAction) ? directoryPerson(directory.users, option.id) : undefined; return <PersonHover key={option.id || 'none'} person={person}><Command.Item value={option.id || 'none'} keywords={[option.label, ...translatedKeywords([option.label], t), ...(person ? [personSearchText(person)] : [])]} className={styles.commandItem} onSelect={() => { onAction(pendingAction, selectedIssues, option.id); setOpen(false) }}><span className={styles.optionLabel}>{pendingAction === 'assign' && (option.id ? <UserAvatar avatarUrl={person?.avatarUrl} className={`avatar core-person-picker-avatar ${styles.optionAvatar}`} color={avatarColor(option.id)} name={option.label}/> : <NoAssigneeIcon size={16}/>)}{option.icon}{option.color && <i style={{ backgroundColor: option.color }}/>}<span>{option.label}</span></span>{pendingAction === 'assign' && assigneeShortcut(position) && <kbd>{assigneeShortcut(position)}</kbd>}</Command.Item></PersonHover> })}
             {pendingAction === 'assign' && viewerCanInvite() && <Command.Group heading="New user"><Command.Item value="Invite and assign…" keywords={['invite']} className={styles.commandItem} onSelect={() => { setOpen(false); openMemberInvite() }}><span className={styles.optionLabel}><FlowGlyph name="invitePlane" size={16} className={styles.inviteIcon}/><span>Invite and assign…</span></span></Command.Item></Command.Group>}</>
           : availableActions.map(action => <Command.Item key={action.id} value={action.label} keywords={translatedKeywords([action.label], t)} className={styles.commandItem} onSelect={() => { const options = actionOptions?.(action.id); if (options?.length) setPendingAction(action.id); else { onAction(action.id, selectedIssues); setOpen(false) } }}><span>{action.label}</span>{action.shortcut && <kbd>{action.shortcut}</kbd>}</Command.Item>)}</Command.List>
       </Command>
