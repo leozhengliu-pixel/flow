@@ -51,14 +51,26 @@ func (s *server) authorizeAuthenticationPolicy(w http.ResponseWriter, r *http.Re
 	if _, apiKey := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); apiKey {
 		return true
 	}
-	cookie, err := r.Cookie(sessionCookieName)
-	if err != nil {
-		return false
+	auth, chatAuthenticated := chatIdentityAuthentication(r)
+	if chatAuthenticated {
+		policy, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "identityProviders")
+		if !ok {
+			writeError(w, http.StatusForbidden, "Workspace authentication policy is unavailable")
+			return false
+		}
+		data.IdentityProviders = policy.IdentityProviders
 	}
-	auth, err := s.store.SessionAuthentication(r.Context(), cookie.Value)
-	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "could not validate authentication policy")
-		return false
+	if !chatAuthenticated {
+		cookie, err := r.Cookie(sessionCookieName)
+		if err != nil {
+			return false
+		}
+		var authErr error
+		auth, authErr = s.store.SessionAuthentication(r.Context(), cookie.Value)
+		if authErr != nil {
+			writeError(w, http.StatusServiceUnavailable, "could not validate authentication policy")
+			return false
+		}
 	}
 	if !allowedAuthenticationMethod(data, role, auth) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "Sign in using an authentication method allowed by this workspace", "code": "authentication_method_required"})

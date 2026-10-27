@@ -1,0 +1,192 @@
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
+
+import { I18nProvider } from "@/i18n/i18n";
+import * as api from "@/lib/chat-integrations-api";
+import { makeBootstrap, viewer } from "@/test/fixtures";
+import type { ChatBinding, ChatIntegrationSettings } from "@/types/chat-integrations";
+import { ChatIntegrationSettings as ChatSettings } from "./chat-integration-settings";
+import { IntegrationSettingsPage } from "./integration-settings-page";
+
+vi.mock("@/lib/chat-integrations-api", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/chat-integrations-api")>(),
+  fetchChatIntegration: vi.fn(),
+  saveChatIntegration: vi.fn(),
+  testChatIntegration: vi.fn(),
+  disconnectChatIntegration: vi.fn(),
+  fetchChatIntegrationChats: vi.fn(),
+  saveChatBinding: vi.fn(),
+  removeChatBinding: vi.fn(),
+  startChatIdentityBinding: vi.fn(),
+  removeChatIdentity: vi.fn(),
+}));
+vi.mock("@/components/ui/action-dialog-service", () => ({ confirmAction: vi.fn().mockResolvedValue(true) }));
+vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+
+const binding: ChatBinding = {
+  id: "binding-1", connectionId: "connection-1", chatId: "chat-1", chatName: "Engineering",
+  teamId: "team-1", events: ["issue.created"], enabled: true, allowCreate: true, allowUpdate: true,
+};
+const settings = (overrides: Partial<ChatIntegrationSettings> = {}): ChatIntegrationSettings => ({
+  connection: {
+    id: "connection-1", provider: "feishu", name: "Feishu", status: "connected", config: { appId: "app-1", tenantKey: "tenant-1" },
+    scopes: [], channels: [], linkbackEnabled: false, deliveryAttempts: 0, connectedBy: viewer.id,
+    createdAt: "2026-10-26T00:00:00Z", updatedAt: "2026-10-26T00:00:00Z",
+  },
+  identity: { userId: viewer.id, openId: "open-1", tenantKey: "tenant-1", name: "Alex" },
+  bindings: [], credentialsConfigured: true, webhookURL: "https://flow.example/api/integrations/feishu/chat/events/connection-1", canManage: true,
+  ...overrides,
+});
+
+beforeEach(() => {
+  localStorage.setItem("flow:locale", "en-US");
+  vi.clearAllMocks();
+  vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings());
+  vi.mocked(api.saveChatIntegration).mockResolvedValue({});
+  vi.mocked(api.testChatIntegration).mockResolvedValue({});
+  vi.mocked(api.saveChatBinding).mockResolvedValue({});
+  vi.mocked(api.removeChatIdentity).mockResolvedValue(undefined);
+  vi.mocked(api.removeChatBinding).mockResolvedValue(undefined);
+  vi.mocked(api.disconnectChatIntegration).mockResolvedValue(undefined);
+  vi.mocked(api.fetchChatIntegrationChats).mockResolvedValue({ items: [{ id: "chat-1", name: "Engineering", external: false }], hasMore: false });
+});
+
+function show(overrides: Parameters<typeof makeBootstrap>[0] = {}) {
+  return render(<MemoryRouter><I18nProvider><ChatSettings provider="feishu" data={makeBootstrap({ viewerRole: "admin", integrationConnections: [], ...overrides })} onBack={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)} /></I18nProvider></MemoryRouter>);
+}
+
+it.each(["feishu", "lark"] as const)("routes %s to its dedicated settings and loads the live connection", async (provider) => {
+  render(<MemoryRouter><I18nProvider><IntegrationSettingsPage slug={provider} data={makeBootstrap({ viewerRole: "admin", integrationConnections: [] })} onBack={vi.fn()} onReload={vi.fn()} /></I18nProvider></MemoryRouter>);
+  expect(await screen.findByRole("textbox", { name: "App ID" })).toHaveValue("app-1");
+  expect(api.fetchChatIntegration).toHaveBeenCalledWith(provider);
+});
+
+it("preserves stored credentials when submitting blank secret fields", async () => {
+  show();
+  await screen.findByRole("textbox", { name: "App ID" });
+  for (const label of ["App Secret", "Encrypt Key", "Verification Token"]) expect(screen.getByLabelText(label)).toHaveValue("");
+  await userEvent.setup().click(screen.getByRole("button", { name: "Save settings" }));
+  await waitFor(() => expect(api.saveChatIntegration).toHaveBeenCalledWith("feishu", { name: "Feishu", appId: "app-1" }));
+});
+
+it("recovers the read-only application ID after the initial settings request fails", async () => {
+  vi.mocked(api.fetchChatIntegration).mockRejectedValueOnce(new Error("Connection unavailable"));
+  show();
+  const user = userEvent.setup();
+  expect(await screen.findByRole("alert")).toHaveTextContent("Connection unavailable");
+  await user.click(screen.getByRole("button", { name: "Retry" }));
+  expect(await screen.findByRole("textbox", { name: "App ID" })).toHaveValue("app-1");
+});
+
+it("keeps unsaved credentials and group editor intact when saving fails", async () => {
+  vi.mocked(api.saveChatIntegration).mockRejectedValue(new Error("Application rejected"));
+  show();
+  await screen.findByRole("textbox", { name: "App ID" });
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText("App Secret"), "new-secret");
+  await user.click(screen.getByRole("button", { name: "Save settings" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Application rejected");
+  expect(screen.getByLabelText("App Secret")).toHaveValue("new-secret");
+  expect(api.fetchChatIntegration).toHaveBeenCalledTimes(1);
+});
+
+it("keeps personal account controls out of workspace integration settings", async () => {
+  vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ canManage: false }));
+  show({ viewerRole: "member" });
+  expect(await screen.findByRole("region", { name: "Connection" })).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Your account" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Unlink account" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Link account" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("textbox", { name: "App ID" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Add group" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Disconnect" })).not.toBeInTheDocument();
+  expect(api.removeChatIdentity).not.toHaveBeenCalled();
+});
+
+it("links pending administrators to Connected accounts for tenant verification", async () => {
+  const pending = settings({ identity: null });
+  pending.connection!.status = "pending_authorization";
+  vi.mocked(api.fetchChatIntegration).mockResolvedValue(pending);
+  show();
+  expect(await screen.findByRole("link", { name: "Verify workspace" })).toHaveAttribute("href", "/workspace/settings/account/connections");
+  expect(screen.queryByRole("button", { name: "Link account" })).not.toBeInTheDocument();
+});
+
+it("paginates groups, excludes external groups, and saves the public scope after approval", async () => {
+  vi.mocked(api.fetchChatIntegrationChats)
+    .mockResolvedValueOnce({ items: [{ id: "external", name: "Customers", external: true }], hasMore: true, pageToken: "page-2" })
+    .mockResolvedValueOnce({ items: [{ id: "chat-2", name: "Delivery", external: false }], hasMore: false });
+  show({
+    teams: [makeBootstrap().teams[0], { id: "private-team", name: "Private team", key: "PVT", color: "", private: true }, { id: "restricted-team", name: "Restricted team", key: "RST", color: "" }, { id: "private-child", name: "Private child", key: "CHD", color: "" }, { id: "members-only", name: "Members only", key: "MEM", color: "" }],
+    teamSettings: { "restricted-team": { access: "restricted" }, "private-child": { parentTeamId: "private-team" }, "members-only": { membershipRestriction: "members" } } as never,
+  });
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "Add group" }));
+  await user.click(await screen.findByRole("button", { name: "Load more groups" }));
+  await waitFor(() => expect(api.fetchChatIntegrationChats).toHaveBeenLastCalledWith("feishu", "page-2"));
+  await user.click(screen.getByRole("combobox", { name: "Group" }));
+  expect(screen.getByRole("option", { name: "Customers (External group)" })).toHaveAttribute("data-disabled");
+  await user.click(screen.getByRole("option", { name: "Delivery" }));
+  await user.click(screen.getByRole("combobox", { name: "Team" }));
+  expect(screen.queryByRole("option", { name: "Private team" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: "Restricted team" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: "Private child" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: "Members only" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("option", { name: "Test team" }));
+  expect(screen.getByRole("button", { name: "Save group binding" })).toBeDisabled();
+  await user.click(screen.getByRole("checkbox", { name: /I approve sharing/ }));
+  await user.click(screen.getByRole("button", { name: "Save group binding" }));
+  await waitFor(() => expect(api.saveChatBinding).toHaveBeenCalledWith("feishu", expect.objectContaining({ chatId: "chat-2", chatName: "Delivery", teamId: "team-1", enabled: true, allowCreate: true, allowUpdate: true })));
+});
+
+it("keeps existing group values after load failure, retries, and preserves edits on save failure", async () => {
+  vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ bindings: [binding] }));
+  vi.mocked(api.fetchChatIntegrationChats).mockRejectedValueOnce(new Error("Group list unavailable"));
+  vi.mocked(api.saveChatBinding).mockRejectedValue(new Error("Binding rejected"));
+  show();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "Edit group binding: Engineering" }));
+  const form = await screen.findByRole("form", { name: "Edit group binding" });
+  expect(await within(form).findByRole("alert")).toHaveTextContent("Group list unavailable");
+  await user.click(within(form).getByRole("button", { name: "Retry" }));
+  await waitFor(() => expect(api.fetchChatIntegrationChats).toHaveBeenCalledTimes(2));
+  await user.click(within(form).getByRole("checkbox", { name: "Status changed" }));
+  await user.click(within(form).getByRole("checkbox", { name: /I approve sharing/ }));
+  await user.click(within(form).getByRole("button", { name: "Save group binding" }));
+  expect(await screen.findByText("Binding rejected")).toBeInTheDocument();
+  expect(within(form).getByRole("checkbox", { name: "Status changed" })).toBeChecked();
+});
+
+it("clears binding and identity controls after disconnect and uses the dedicated removal API", async () => {
+  vi.mocked(api.fetchChatIntegration).mockResolvedValueOnce(settings({ bindings: [binding] })).mockResolvedValue(settings({ connection: null, bindings: [], identity: null, credentialsConfigured: false }));
+  show();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "Disconnect" }));
+  await waitFor(() => expect(api.disconnectChatIntegration).toHaveBeenCalledWith("feishu"));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Edit group binding: Engineering" })).not.toBeInTheDocument());
+  expect(screen.getByRole("textbox", { name: "App ID" })).toHaveValue("");
+  expect(screen.getByRole("button", { name: "Add group" })).toBeDisabled();
+});
+
+it("removes only the selected group binding after confirmation", async () => {
+  vi.mocked(api.fetchChatIntegration).mockResolvedValueOnce(settings({ bindings: [binding] })).mockResolvedValue(settings());
+  show();
+  await userEvent.setup().click(await screen.findByRole("button", { name: "Remove group binding: Engineering" }));
+  await waitFor(() => expect(api.removeChatBinding).toHaveBeenCalledWith("feishu", "binding-1"));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Remove group binding: Engineering" })).not.toBeInTheDocument());
+});
+
+it("requires disconnecting before changing an existing application", async () => {
+  show();
+  const id = await screen.findByRole("textbox", { name: "App ID" });
+  expect(id).toHaveAttribute("readonly");
+  expect(screen.getByText("To use another application, disconnect this integration first.")).toBeInTheDocument();
+});
+
+it("keeps sharing controls unavailable when workspace policy blocks external processing", async () => {
+  show({ workspaceSettings: { ...makeBootstrap().workspaceSettings, hipaaCompliance: true } });
+  expect(await screen.findByRole("button", { name: "Add group" })).toBeDisabled();
+  expect(screen.getByText("Workspace policy prevents sharing updates with chat applications.")).toBeInTheDocument();
+});

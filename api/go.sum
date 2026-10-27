@@ -162,6 +162,8 @@ github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnr
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
 github.com/klauspost/cpuid/v2 v2.2.10 h1:tBs3QSyvjDyFTq3uoc/9xFpCuOsJQFNPiAhYdw2skhE=
 github.com/klauspost/cpuid/v2 v2.2.10/go.mod h1:hqwkgyIinND0mEev00jJYCxPNVRVXFQeu1XKlok6oO0=
+github.com/larksuite/oapi-sdk-go/v3 v3.12.2 h1:YjIVkSXW3TZOL3HCdJdTKYYP3ZBIM9ql9+TVyb1XL2w=
+github.com/larksuite/oapi-sdk-go/v3 v3.12.2/go.mod h1:F1nwLfYBSKvD8mS/OFw90Gr+V4RIugPBR44m/ThA5jg=
 github.com/ledongthuc/pdf v0.0.0-20260907135840-6c8c28e0e8a0 h1:7Q+xNAZFmnfYOMweHN3c/PDFUKKfY1pVJ26K++QvVfU=
 github.com/ledongthuc/pdf v0.0.0-20260907135840-6c8c28e0e8a0/go.mod h1:1fEHWurg7pvf5SG6XNE5Q8UZmOwex51Mkx3SLhrW5B4=
 github.com/mattermost/xml-roundtrip-validator v0.1.0 h1:RXbVD2UAl7A7nOTR4u7E3ILa4IbtvKBHw64LDsmu9hU=

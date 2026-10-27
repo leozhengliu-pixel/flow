@@ -14,6 +14,9 @@ type discussionMutationKey struct{}
 type discussionMutation struct{ CommentID string }
 
 func WithIssueDiscussionMutation(ctx context.Context, issueID, commentID string) context.Context {
+	if commentID == "" {
+		commentID = CommentCreationKey(ctx)
+	}
 	return context.WithValue(WithIssueRecordMutations(ctx, issueID), discussionMutationKey{}, discussionMutation{commentID})
 }
 

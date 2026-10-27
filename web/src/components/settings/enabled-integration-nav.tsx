@@ -1,10 +1,11 @@
 import { SettingsNavGlyph } from "@/components/settings/settings-nav-glyphs";
+import { IntegrationBrandIcon } from "@/components/settings/integration-brand-icon";
 import { useI18n } from "@/i18n/i18n";
-import { getIntegrationCatalogEntry, primaryIntegrations } from "@/lib/integration-catalog";
+import { getIntegrationCatalogEntry, isInstalledIntegrationConnection, primaryIntegrations } from "@/lib/integration-catalog";
 import type { IntegrationProvider } from "@/lib/app-routes";
 import type { BootstrapData } from "@/types/flow";
 
-type EnabledIntegration = { id: string; target: string; name: string; brand: "github" | "gitlab" | null };
+type EnabledIntegration = { id: string; target: string; name: string; brand: "github" | "gitlab" | "feishu" | "lark" | null };
 
 const CODE_PROVIDERS = new Set(["github", "gitlab", "jira"]);
 
@@ -12,12 +13,12 @@ const CODE_PROVIDERS = new Set(["github", "gitlab", "jira"]);
 function enabledIntegrations(data: Pick<BootstrapData, "integrationConnections">): EnabledIntegration[] {
   const seen = new Set<string>();
   return (data.integrationConnections ?? [])
-    .filter((item) => item.status === "connected" || item.status === "configured")
+    .filter(isInstalledIntegrationConnection)
     .flatMap((item) => {
       if (seen.has(item.provider)) return [];
       seen.add(item.provider);
       const catalog = getIntegrationCatalogEntry(item.provider) ?? primaryIntegrations().find((entry) => entry.connectProvider === item.provider);
-      const brand: EnabledIntegration["brand"] = item.provider === "github" || item.provider === "gitlab" ? item.provider : null;
+      const brand: EnabledIntegration["brand"] = item.provider === "github" || item.provider === "gitlab" || item.provider === "feishu" || item.provider === "lark" ? item.provider : null;
       return [{ id: item.provider, target: CODE_PROVIDERS.has(item.provider) ? item.provider : catalog?.slug ?? item.provider, name: catalog?.name ?? item.name, brand }];
     })
     .sort((left, right) => left.name.localeCompare(right.name));
@@ -54,7 +55,9 @@ export function EnabledIntegrationNav({ data, onIntegrationsPage, provider, slug
           onClick={() => onOpen(item.target)}
         >
           {/* Monochrome brand marks like the rest of the nav; integrations without one use the integrations glyph. */}
-          <SettingsNavGlyph name={item.brand ?? "integrations"} />
+          {item.brand === "feishu" || item.brand === "lark"
+            ? <IntegrationBrandIcon provider={item.brand} size={16} />
+            : <SettingsNavGlyph name={item.brand ?? "integrations"} />}
           <span data-i18n-ignore>{item.name}</span>
         </button>
       ))}

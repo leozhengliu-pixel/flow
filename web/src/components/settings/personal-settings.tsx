@@ -92,6 +92,7 @@ import {
 
 import { CodeHostConnectionRows, ConnectAction } from "./code-host-accounts";
 import { PersonalConnectionRows } from "./personal-connection-rows";
+import { ChatConnectionRows } from "./chat-connection-rows";
 import { IntegrationBrandIcon } from "./integration-brand-icon";
 
 import "./personal-settings.css";
@@ -3623,6 +3624,7 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
           );
         })}
         <PersonalConnectionRows />
+        <ChatConnectionRows data={data} />
         <CodeHostConnectionRows
           githubDescription="Review code in Flow and sync attribution of your git-related actions"
           githubOrganization={github?.config?.organization || github?.name}

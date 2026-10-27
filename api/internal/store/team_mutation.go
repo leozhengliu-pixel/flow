@@ -93,7 +93,7 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 	var realtimePayload json.RawMessage
 	var deletedIssues bool
 	var deletedProjectRefs bool
-	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(workspaceKey)
+	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(ctx, workspaceKey)
 	traceStart(ctx, "team")
 	apply := func() error {
 		s.lockWorkspaceWrites()

@@ -13,6 +13,7 @@ import { toast } from "@/lib/toast";
 import { IntegrationBrandIcon } from './integration-brand-icon';
 import {
   integrationCategories,
+  isInstalledIntegrationConnection,
   primaryIntegrations,
 } from '@/lib/integration-catalog';
 import {
@@ -360,7 +361,7 @@ function IntegrationsPage({data,onOpen}:{data:BootstrapData;onOpen:(provider:Int
   const list = catalog.filter(item => !normalized || `${item.name} ${item.description}`.toLowerCase().includes(normalized));
   const sections = integrationCategories(list).map(category => ({ category, items: list.filter(item => item.category === category) }));
   // Authorized applications are not integrations; Settings › Applications lists them.
-  const enabledCount = data.integrationConnections.filter(item => item.status === "connected" || item.status === "configured").length;
+  const enabledCount = data.integrationConnections.filter(isInstalledIntegrationConnection).length;
   return <div className="feature-integrations"><FeatureShell title="Integrations" description="Enhance your Flow experience with a wide variety of add-ons and integrations">
     <div className="feature-integration-toolbar">
       <div className="feature-integration-search"><Search size={16}/><input aria-label={t("Search integrations")} placeholder={t("Search integrations")} value={query} onChange={event=>setQuery(event.target.value)}/></div>
@@ -375,11 +376,12 @@ function IntegrationsPage({data,onOpen}:{data:BootstrapData;onOpen:(provider:Int
         const code = item.connectProvider === "github" || item.connectProvider === "gitlab" || item.connectProvider === "jira";
         return <button type="button" key={item.slug} className="feature-integration-card" onClick={() => onOpen(code ? item.connectProvider as IntegrationProvider : item.slug)}>
           <span className="feature-integration-card-head">
-            <span className="feature-integration-card-icon">{item.connectProvider === "github" || item.connectProvider === "gitlab" || item.connectProvider === "slack" || item.connectProvider === "jira"
+            <span className="feature-integration-card-icon">{item.connectProvider === "github" || item.connectProvider === "gitlab" || item.connectProvider === "slack" || item.connectProvider === "jira" || item.connectProvider === "feishu" || item.connectProvider === "lark"
               ? <IntegrationBrandIcon provider={item.connectProvider} size={20}/>
               : <Sparkles size={16}/>}</span>
             <strong data-i18n-ignore>{item.name}</strong>
             {connection?.status === "connected" && <small>{t("Connected")}</small>}
+            {connection?.status === "pending_authorization" && (item.connectProvider === "feishu" || item.connectProvider === "lark") && <small>{t("Configured")}</small>}
             {connection && connection.status === "error" && <small className="is-error">{t("Connection failed")}</small>}
           </span>
           <span className="feature-integration-card-description">{t(item.description)}</span>
