@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
@@ -23,13 +24,37 @@ func withChatIdentityAuthentication(ctx context.Context, identity domain.ChatIde
 	return context.WithValue(ctx, chatAuthenticationContextKey{}, identity)
 }
 
-func chatIdentityAuthentication(r *http.Request) (store.SessionAuthentication, bool) {
+func chatIdentityFromRequest(r *http.Request) (domain.ChatIdentity, bool) {
 	identity, ok := r.Context().Value(chatAuthenticationContextKey{}).(domain.ChatIdentity)
 	if !ok || identity.UserID == "" || identity.UserID != authUser(r).ID || identity.AuthProvider == "" {
+		return domain.ChatIdentity{}, false
+	}
+	return identity, true
+}
+
+func chatIdentityAuthentication(r *http.Request) (store.SessionAuthentication, bool) {
+	identity, ok := chatIdentityFromRequest(r)
+	if !ok {
 		return store.SessionAuthentication{}, false
 	}
 	return store.SessionAuthentication{Provider: identity.AuthProvider, Issuer: identity.AuthIssuer, MFAVerifiedAt: identity.MFAVerifiedAt}, true
 }
+
+// workspaceSessionDuration is the workspace's maximum session age. A chat
+// binding is held to it like a browser session, measured from consent.
+func workspaceSessionDuration(settings domain.WorkspaceSettings) time.Duration {
+	days := settings.SessionDurationDays
+	if days < 1 {
+		days = 30
+	}
+	return time.Duration(days) * 24 * time.Hour
+}
+
+func chatIdentityWithinSession(identity domain.ChatIdentity, duration time.Duration, now time.Time) bool {
+	return !identity.AuthenticatedAt.IsZero() && now.Before(identity.AuthenticatedAt.Add(duration))
+}
+
+const chatReconnectMessage = "Your linked chat account has expired. Reconnect it in Settings > Connected accounts."
 
 type chatMutationError struct {
 	Status  int
@@ -87,7 +112,7 @@ func (s *server) chatAuthorizedMutation(ctx context.Context, workspace, userID, 
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("X-Workspace-Key", workspace)
 	if _, ok := chatIdentityAuthentication(r); !ok && !s.authDisabled {
-		return &chatMutationError{Status: http.StatusForbidden, Message: "Reconnect your Flow account to authorize this action"}
+		return &chatMutationError{Status: http.StatusForbidden, Message: chatReconnectMessage}
 	}
 	var handler http.HandlerFunc
 	parts := strings.Split(strings.Trim(path, "/"), "/")

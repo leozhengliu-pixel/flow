@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
+
+	"flow/api/internal/store"
 )
 
 // The persisted commit-ordered log closes the gap between a business commit
@@ -24,6 +27,14 @@ func (s *server) processChatIntegrationTick(ctx context.Context, workspace strin
 
 func (s *server) queueCommittedChatEvents(ctx context.Context, workspace string) error {
 	records, err := s.store.ChatDomainEventPage(ctx, workspace, 200)
+	if errors.Is(err, store.ErrChatDomainCursorExpired) {
+		from, to, resetErr := s.store.ResetChatDomainCursor(ctx, workspace)
+		if resetErr != nil {
+			return resetErr
+		}
+		log.Printf("Chat integration workspace=%s: notification cursor %d is outside the retained event log; resuming at %d", workspace, from, to)
+		return nil
+	}
 	if err != nil {
 		return err
 	}

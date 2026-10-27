@@ -82,6 +82,20 @@ func (s *SQLiteStore) AdvanceChatDomainCursor(ctx context.Context, workspace str
 	return err
 }
 
+// ResetChatDomainCursor moves an expired cursor to the current head of the
+// event log. Events pruned before they were read cannot be replayed; skipping
+// them lets notifications resume instead of failing on every tick. It returns
+// the previous and new positions.
+func (s *SQLiteStore) ResetChatDomainCursor(ctx context.Context, workspace string) (int64, int64, error) {
+	var since, head int64
+	err := s.db.QueryRowContext(ctx, `SELECT c.seq,COALESCE(e.head,0) FROM chat_domain_cursors c JOIN workspace_states w ON w.workspace_key=c.workspace_key LEFT JOIN workspace_event_seq e ON e.workspace_id=w.workspace_id WHERE c.workspace_key=?`, workspace).Scan(&since, &head)
+	if err != nil {
+		return 0, 0, err
+	}
+	_, err = s.db.ExecContext(ctx, `UPDATE chat_domain_cursors SET seq=? WHERE workspace_key=? AND seq=?`, head, workspace, since)
+	return since, head, err
+}
+
 // ClaimChatWorker serializes message updates even when several servers share a
 // database without a Redis coordinator. The worker deadline must be shorter
 // than this lease; conditional release cannot clear a successor's claim.

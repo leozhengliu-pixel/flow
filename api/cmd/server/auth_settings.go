@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
@@ -59,6 +60,10 @@ func (s *server) authorizeAuthenticationPolicy(w http.ResponseWriter, r *http.Re
 			return false
 		}
 		data.IdentityProviders = policy.IdentityProviders
+		// Second-factor evidence ages out with the session it came from.
+		if auth.MFAVerifiedAt != nil && !time.Now().Before(auth.MFAVerifiedAt.Add(workspaceSessionDuration(data.WorkspaceSettings))) {
+			auth.MFAVerifiedAt = nil
+		}
 	}
 	if !chatAuthenticated {
 		cookie, err := r.Cookie(sessionCookieName)

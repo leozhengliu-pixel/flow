@@ -87,7 +87,16 @@ func (s *SQLiteStore) PutChatIntegration(ctx context.Context, item domain.ChatIn
 	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	if item.Connected {
+		s.chatSnapshotFlags.Store(item.WorkspaceKey, true)
+	} else {
+		// Another provider of the workspace may still be connected.
+		s.forgetChatSnapshotFlag(item.WorkspaceKey)
+	}
+	return nil
 }
 
 func (s *SQLiteStore) ChatIntegration(ctx context.Context, workspace, provider string) (domain.ChatIntegrationRecord, error) {
@@ -108,6 +117,29 @@ func (s *SQLiteStore) ChatIntegrationByID(ctx context.Context, provider, id stri
 		err = json.Unmarshal(raw, &item)
 	}
 	return item, err
+}
+
+// chatSnapshotFlag reports whether a connected chat application record exists
+// for the workspace. The answer is read from the database once and then kept
+// current by PutChatIntegration, DeleteChatIntegration and workspace
+// rename/deletion, so mutations do not query on every write. A read error is
+// not cached and does not force snapshots.
+func (s *SQLiteStore) chatSnapshotFlag(ctx context.Context, workspace string) bool {
+	if value, ok := s.chatSnapshotFlags.Load(workspace); ok {
+		return value.(bool)
+	}
+	needed, err := s.chatSnapshotsNeeded(ctx, workspace)
+	if err != nil {
+		return false
+	}
+	s.chatSnapshotFlags.Store(workspace, needed)
+	return needed
+}
+
+func (s *SQLiteStore) forgetChatSnapshotFlag(workspaces ...string) {
+	for _, workspace := range workspaces {
+		s.chatSnapshotFlags.Delete(workspace)
+	}
 }
 
 // chatSnapshotsNeeded reads the authoritative app records independently from
@@ -149,7 +181,11 @@ func (s *SQLiteStore) DeleteChatIntegration(ctx context.Context, workspace, id s
 			return err
 		}
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	s.forgetChatSnapshotFlag(workspace)
+	return nil
 }
 
 func (s *SQLiteStore) ChatBindings(ctx context.Context, workspace, connection string) ([]domain.ChatBinding, error) {
@@ -214,7 +250,7 @@ func (s *SQLiteStore) PutChatIdentity(ctx context.Context, workspace, connection
 	if !validChatKey(workspace, connection, item.UserID, item.OpenID, item.TenantKey) {
 		return ErrIssueQuery
 	}
-	raw, err := json.Marshal(persistedChatIdentity{item, item.AuthProvider, item.AuthIssuer, item.MFAVerifiedAt})
+	raw, err := json.Marshal(persistedChatIdentity{item, item.AuthProvider, item.AuthIssuer, item.MFAVerifiedAt, item.AuthenticatedAt})
 	if err != nil {
 		return err
 	}
@@ -280,14 +316,16 @@ func (s *SQLiteStore) chatIdentity(ctx context.Context, workspace, connection, f
 	item.AuthProvider = saved.AuthProvider
 	item.AuthIssuer = saved.AuthIssuer
 	item.MFAVerifiedAt = saved.MFAVerifiedAt
+	item.AuthenticatedAt = saved.AuthenticatedAt
 	return item, err
 }
 
 type persistedChatIdentity struct {
 	domain.ChatIdentity
-	AuthProvider  string     `json:"authProvider"`
-	AuthIssuer    string     `json:"authIssuer"`
-	MFAVerifiedAt *time.Time `json:"mfaVerifiedAt,omitempty"`
+	AuthProvider    string     `json:"authProvider"`
+	AuthIssuer      string     `json:"authIssuer"`
+	MFAVerifiedAt   *time.Time `json:"mfaVerifiedAt,omitempty"`
+	AuthenticatedAt time.Time  `json:"authenticatedAt"`
 }
 
 func (s *SQLiteStore) DeleteChatIdentity(ctx context.Context, workspace, connection, userID string) error {
@@ -306,6 +344,17 @@ func (s *SQLiteStore) DeleteChatIdentity(ctx context.Context, workspace, connect
 		return err
 	}
 	return tx.Commit()
+}
+
+// revokeChatIdentities removes every chat platform binding of a member, in all
+// workspaces. A binding carries the authentication of the session that
+// consented to it, so revoking sessions or resetting a password must end it too.
+func (s *SQLiteStore) revokeChatIdentities(ctx context.Context, userID string) error {
+	if userID == "" {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, `DELETE FROM chat_identities WHERE user_id=?`, userID)
+	return err
 }
 
 func (s *SQLiteStore) PutChatAction(ctx context.Context, item domain.ChatAction) error {

@@ -42,6 +42,9 @@ type ChatIdentity struct {
 	AuthProvider  string     `json:"-"`
 	AuthIssuer    string     `json:"-"`
 	MFAVerifiedAt *time.Time `json:"-"`
+	// AuthenticatedAt is when the member consented from a signed-in session.
+	// The workspace session duration is measured from it.
+	AuthenticatedAt time.Time `json:"-"`
 }
 
 type ChatAction struct {

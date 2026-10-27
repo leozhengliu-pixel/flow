@@ -1041,7 +1041,7 @@ func (s *server) finishChatIdentityLocked(w http.ResponseWriter, r *http.Request
 		fail("Application tenant is already connected to another workspace")
 		return
 	}
-	identity := domain.ChatIdentity{UserID: pending.UserID, OpenID: profile.Data.OpenID, TenantKey: record.TenantKey, Name: profile.Data.Name, AuthProvider: pending.Authentication.Provider, AuthIssuer: pending.Authentication.Issuer, MFAVerifiedAt: pending.Authentication.MFAVerifiedAt}
+	identity := domain.ChatIdentity{UserID: pending.UserID, OpenID: profile.Data.OpenID, TenantKey: record.TenantKey, Name: profile.Data.Name, AuthProvider: pending.Authentication.Provider, AuthIssuer: pending.Authentication.Issuer, MFAVerifiedAt: pending.Authentication.MFAVerifiedAt, AuthenticatedAt: time.Now().UTC()}
 	if err = s.store.PutChatIdentity(r.Context(), record.WorkspaceKey, record.ConnectionID, identity); err != nil {
 		fail("This platform identity is already bound to another Flow account")
 		return

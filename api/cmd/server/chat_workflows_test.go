@@ -56,7 +56,7 @@ func newChatWorkflowFixture(t *testing.T) *chatWorkflowFixture {
 	data := repo.Bootstrap()
 	f := &chatWorkflowFixture{s: &server{store: repo, uploadPath: t.TempDir()}, responseIDs: map[string]string{}}
 	f.record = domain.ChatIntegrationRecord{WorkspaceKey: data.Workspace.URLKey, Provider: "feishu", ConnectionID: "chat_connection_test", AppID: "cli_workflow_test", TenantKey: "tenant_workflow_test", BotOpenID: "ou_bot_test", Connected: true}
-	f.identity = domain.ChatIdentity{UserID: data.Viewer.ID, OpenID: "ou_actor_test", TenantKey: f.record.TenantKey, AuthProvider: "password"}
+	f.identity = domain.ChatIdentity{UserID: data.Viewer.ID, OpenID: "ou_actor_test", TenantKey: f.record.TenantKey, AuthProvider: "password", AuthenticatedAt: time.Now().UTC()}
 	f.credentials = chatCredentials{AppSecret: "app_secret_test", EncryptKey: "encryption_test", VerificationToken: "verify_test"}
 	f.binding = domain.ChatBinding{ID: "binding_workflow_test", ConnectionID: f.record.ConnectionID, ChatID: "oc_group_test", TeamID: data.Teams[0].ID, Enabled: true, AllowCreate: true, AllowUpdate: true, Events: []string{"issue.created", "issue.status_changed", "comment.created"}, CreatedAt: time.Now().UTC().Add(-time.Hour)}
 	if err := repo.PutChatIntegration(t.Context(), f.record); err != nil {
@@ -524,7 +524,7 @@ func TestChatSharedCardNeverGrantsViewerEditPermission(t *testing.T) {
 	if err := f.s.store.EnsureWorkspaceMembership(t.Context(), data.Workspace.ID, user.ID); err != nil {
 		t.Fatal(err)
 	}
-	viewer := domain.ChatIdentity{UserID: user.ID, OpenID: "ou_viewer_test", TenantKey: f.record.TenantKey, AuthProvider: "password"}
+	viewer := domain.ChatIdentity{UserID: user.ID, OpenID: "ou_viewer_test", TenantKey: f.record.TenantKey, AuthProvider: "password", AuthenticatedAt: time.Now().UTC()}
 	if err := f.s.store.PutChatIdentity(t.Context(), f.record.WorkspaceKey, f.record.ConnectionID, viewer); err != nil {
 		t.Fatal(err)
 	}

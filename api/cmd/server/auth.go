@@ -525,13 +525,18 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	}
 	if !s.authDisabled {
 		if _, apiAuthenticated := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); !apiAuthenticated {
-			_, chatAuthenticated := chatIdentityAuthentication(r)
+			identity, chatAuthenticated := chatIdentityFromRequest(r)
 			cookie, err := r.Cookie(sessionCookieName)
 			durationDays := data.WorkspaceSettings.SessionDurationDays
 			if durationDays < 1 {
 				durationDays = 30
 			}
-			if !chatAuthenticated && (err != nil || !s.store.EnforceSessionDuration(r.Context(), cookie.Value, durationDays)) {
+			if chatAuthenticated {
+				if !chatIdentityWithinSession(identity, workspaceSessionDuration(data.WorkspaceSettings), time.Now()) {
+					writeJSON(w, http.StatusUnauthorized, map[string]string{"error": chatReconnectMessage, "code": "chat_identity_expired"})
+					return false
+				}
+			} else if err != nil || !s.store.EnforceSessionDuration(r.Context(), cookie.Value, durationDays) {
 				clearSessionCookie(w, r)
 				writeError(w, http.StatusUnauthorized, "Your workspace session has expired")
 				return false
