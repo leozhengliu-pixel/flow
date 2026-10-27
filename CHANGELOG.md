@@ -56,6 +56,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- `GET /api/health` answers anonymous probes with only `{"status":"ok"}`
+  (`"degraded"` with `503` when Redis does not answer); the build version,
+  commit and Redis mode moved to the startup log, and a coordinator outage is
+  logged once when it starts and once when it ends.
+
 - The floating agent chat, the entity agent panel and the loop chat follow a
   reply that runs on the server like the Agent page does: after a reload, in
   another tab or when the reply was asked from another surface they show its

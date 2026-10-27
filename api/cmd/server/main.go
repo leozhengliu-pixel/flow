@@ -62,6 +62,7 @@ type server struct {
 	realtime                       *realtimeHub
 	coordinator                    *coordination.Redis
 	coordinationStarted            atomic.Bool
+	healthDegraded                 atomic.Bool       // the last health probe found the coordinator unreachable (health.go)
 	remoteEvents                   remoteEventQueue  // peer events waiting to be applied (redis_coordination.go)
 	coordinationContext            context.Context   // ends the peer event subscription (nil: never; tests)
 	workspaceVersions              workspaceVersions // peer change versions this instance has applied (workspace_freshness.go)
@@ -248,7 +249,7 @@ func main() {
 	if s.agentRuntimeWorker() {
 		log.Printf("FLOW_AGENT_RUNTIME=worker: the internal runtime API is on; built-in agent runs still execute in-process until the worker runtime takes them over")
 	}
-	log.Printf("Flow API listening on %s using database=%s storage=%s redis=%s", httpServer.Addr, applicationConfig.Database.Driver, applicationConfig.Storage.Driver, applicationConfig.Redis.Mode)
+	log.Printf("Flow API %s (commit %s) listening on %s using database=%s storage=%s redis=%s", version, commit, httpServer.Addr, applicationConfig.Database.Driver, applicationConfig.Storage.Driver, applicationConfig.Redis.Mode)
 	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
@@ -305,18 +306,7 @@ func newHandler(s *server) http.Handler {
 	s.startAgentRunReconciler()
 	s.startAgentLiveReplySweeper()
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
-		response := map[string]string{"status": "ok", "redis": "disabled", "version": version, "commit": commit}
-		if s.coordinator != nil {
-			response["redis"] = s.coordinator.Mode()
-			if err := s.coordinator.Ping(r.Context()); err != nil {
-				response["status"] = "degraded"
-				writeJSON(w, http.StatusServiceUnavailable, response)
-				return
-			}
-		}
-		writeJSON(w, http.StatusOK, response)
-	})
+	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("POST /api/email-intake/{token}/receive", s.receiveEmailIntake)
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource", s.oauthProtectedResource)
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", s.oauthProtectedResource)

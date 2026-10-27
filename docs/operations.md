@@ -2,9 +2,16 @@
 
 ## Health and readiness
 
-`GET /api/health` returns `200` when the API and configured Redis coordinator
-are healthy. The container image invokes the same endpoint through
-`/app/flow-api healthcheck`.
+`GET /api/health` returns `200` with `{"status":"ok"}` when the API and
+configured Redis coordinator are healthy, and `503` with `"status":"degraded"`
+when the coordinator does not answer. The container image invokes the same
+endpoint through `/app/flow-api healthcheck`.
+
+The endpoint is anonymous, so it reports nothing else: no build version,
+commit or Redis mode, and no error detail. The startup log line names the
+version, commit, database, storage and Redis mode, and a coordinator outage is
+logged once at error level (`health check degraded`, with the Redis mode and
+the error) and once more when it recovers (`health check recovered`).
 
 ## Handler panics
 
