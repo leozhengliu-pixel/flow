@@ -188,6 +188,10 @@ spec:
               mountPath: /app/data
             - name: tmp
               mountPath: /tmp
+            {{- if $v.assets.shared.enabled }}
+            - name: assets-shared
+              mountPath: /app/assets-shared
+            {{- end }}
             {{- if $c.githubApp.privateKeySecret.name }}
             - name: github-app-key
               mountPath: /var/run/flow/github-app
@@ -220,6 +224,11 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 1Gi
+        {{- if $v.assets.shared.enabled }}
+        - name: assets-shared
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-assets" (include "flow.fullname" .)) $v.assets.shared.existingClaim }}
+        {{- end }}
         {{- with $c.githubApp.privateKeySecret.name }}
         - name: github-app-key
           secret:

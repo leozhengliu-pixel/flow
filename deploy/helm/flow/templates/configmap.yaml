@@ -13,6 +13,17 @@ data:
   FLOW_HTTP_ADDR: ":{{ include "flow.httpPort" . }}"
   FLOW_APP_URL: {{ $v.config.appUrl | quote }}
   FLOW_STATIC_PATH: /app/web
+  FLOW_ASSET_PREVIOUS_PATH: /app/web-previous
+  {{- if $v.assets.peerFallback.enabled }}
+  FLOW_ASSET_PEERS: {{ printf "%s-peers.%s.svc:%s" (include "flow.fullname" .) .Release.Namespace (include "flow.httpPort" .) | quote }}
+  {{- end }}
+  {{- if $v.assets.shared.enabled }}
+  FLOW_ASSET_SHARED_PATH: /app/assets-shared
+  FLOW_ASSET_SHARED_KEEP_RELEASES: {{ $v.assets.shared.keepReleases | quote }}
+  {{- end }}
+  {{- with $v.assets.fallbackUrls }}
+  FLOW_ASSET_FALLBACK_URL: {{ join "," . | quote }}
+  {{- end }}
   FLOW_LOG_LEVEL: {{ $v.config.logLevel | quote }}
   FLOW_LOG_FORMAT: {{ $v.config.logFormat | quote }}
   FLOW_DATABASE_DRIVER: {{ $v.database.driver | quote }}
