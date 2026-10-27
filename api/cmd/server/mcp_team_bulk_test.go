@@ -105,7 +105,7 @@ func TestMCPSaveTeamAddsFortyMembersInOneCall(t *testing.T) {
 		t.Fatalf("an ambiguous name lists the members it fits: %v", ambiguous)
 	}
 	hint, _ := receipt["inviteHint"].(string)
-	for _, want := range []string{"Settings → Administration → Members → Invite", "new.hire@bulk.test, ana@bulk.test, ghost@bulk.test", "Send invites", "add them to Platform", "Nobody Here"} {
+	for _, want := range []string{"Settings → Administration → Members → Invite", "new.hire@bulk.test, ana@bulk.test, ghost@bulk.test", "Send invites", "select the team Platform", "Nobody Here"} {
 		if !strings.Contains(hint, want) {
 			t.Fatalf("the hint names the people to invite and where (%q): %q", want, hint)
 		}
@@ -170,7 +170,7 @@ func TestMCPSaveTeamCannotInvite(t *testing.T) {
 		t.Fatalf("each person outside the workspace is reported: %v", receipt)
 	}
 	hint, _ := receipt["inviteHint"].(string)
-	want := "Not added, because they are not members of this workspace: qa-invite-1@example.com, qa-invite-2@example.com, qa-invite-3@example.com. Workspace invitations can't be sent from here. To finish, go to Settings → Administration → Members → Invite, paste qa-invite-1@example.com, qa-invite-2@example.com, qa-invite-3@example.com, and click Send invites; once they accept, add them to Invite Test in Settings → Administration → Teams → Invite Test → Members (or ask again)."
+	want := "Not added, because they are not members of this workspace: qa-invite-1@example.com, qa-invite-2@example.com, qa-invite-3@example.com. Workspace invitations can't be sent from here. To finish, go to Settings → Administration → Members → Invite, paste qa-invite-1@example.com, qa-invite-2@example.com, qa-invite-3@example.com, select the team Invite Test, and click Send invites; they are added to it when they accept."
 	if hint != want {
 		t.Fatalf("inviteHint:\n got %q\nwant %q", hint, want)
 	}

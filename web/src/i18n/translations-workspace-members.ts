@@ -4,6 +4,9 @@
  * elsewhere. Merged into zhCN by translations.ts, filling gaps only.
  */
 export const workspaceMembersZhCN: Record<string, string> = {
+  "Add to team": "添加到团队",
+  "Guests only have access to the selected teams.": "访客只能访问所选团队。",
+  "Select a team for guest access": "请为访客选择团队",
   "Members group: Active": "活跃",
   "Members group: Invited": "已邀请",
   "Members group: Application": "应用",

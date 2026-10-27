@@ -1962,6 +1962,13 @@ func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "Guest accounts are disabled for this workspace")
 		return
 	}
+	input.TeamIDs = uniqueStrings(input.TeamIDs)
+	if !s.authDisabled {
+		if team, denied := s.inviteTeamDenied(r, data, input.TeamIDs); denied {
+			writeError(w, http.StatusForbidden, fmt.Sprintf("You can't add people to %s", team.Name))
+			return
+		}
+	}
 	if s.authDisabled {
 		var created []domain.Invitation
 		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_invitations.created", strings.Join(input.Emails, ","), input, func(workspace *domain.Bootstrap) error {
@@ -2020,6 +2027,35 @@ func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
 		result = append(result, item)
 	}
 	writeJSON(w, http.StatusCreated, result)
+}
+
+// inviteTeamDenied reports the first team an invitation names that the inviter may not add people to. Invitations
+// of any role can name teams (the invitee joins them when they accept), under the rule for adding a member to a
+// team directly: workspace admins may use any team, private ones included; anyone else needs the team's member
+// management permission, which also requires being on a private team. A team that does not exist is left to the
+// store, which refuses it as an invalid team.
+func (s *server) inviteTeamDenied(r *http.Request, data domain.Bootstrap, teamIDs []string) (domain.Team, bool) {
+	if len(teamIDs) == 0 {
+		return domain.Team{}, false
+	}
+	actorID := authUser(r).ID
+	role, _, _ := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, actorID)
+	if workspaceAdminRole(role) {
+		return domain.Team{}, false
+	}
+	for _, teamID := range teamIDs {
+		index := slices.IndexFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID })
+		if index < 0 {
+			continue
+		}
+		team := data.Teams[index]
+		settings := data.TeamSettings[teamID]
+		teamRole, _ := s.store.TeamRole(r.Context(), data.Workspace.ID, teamID, actorID)
+		if team.Private && teamRole == "" || !teamOperationAllowed(settings, settings.MemberPermission, teamRole, role) {
+			return team, true
+		}
+	}
+	return domain.Team{}, false
 }
 
 func (s *server) invitationPreview(w http.ResponseWriter, r *http.Request) {
