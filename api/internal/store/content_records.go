@@ -346,6 +346,13 @@ func writeContentRecordRows(ctx context.Context, tx *sqlTx, rows []contentRecord
 }
 
 func syncContentRecords[T any](ctx context.Context, tx *sqlTx, workspace, kind string, items map[string][]T, metadata domain.Bootstrap, scopes ...[]string) error {
+	return syncContentRecordsFrom(ctx, tx, workspace, kind, items, metadata, nil, scopes...)
+}
+
+// syncContentRecordsFrom writes items as the kind's records. With base (the
+// records a full mutation loaded, see recordBase) it keeps records other
+// servers committed after the load instead of deleting or overwriting them.
+func syncContentRecordsFrom[T any](ctx context.Context, tx *sqlTx, workspace, kind string, items map[string][]T, metadata domain.Bootstrap, base map[contentRecordKey]recordFingerprint, scopes ...[]string) error {
 	refs := newIssueReferences(metadata)
 	query := `SELECT resource_id,id,data FROM workspace_content_records WHERE workspace_key=? AND kind=?`
 	args := []any{workspace, kind}
@@ -385,6 +392,18 @@ func syncContentRecords[T any](ctx context.Context, tx *sqlTx, workspace, kind s
 				return err
 			}
 			k := key{resource, id}
+			if base != nil {
+				fingerprint, loaded := base[contentRecordKey{resource, id}]
+				current, stored := previous[k]
+				if loaded && (!stored || current != fingerprint.stored) || !loaded && stored {
+					if loaded && fingerprint.loaded == sha256.Sum256(raw) {
+						// Changed or removed elsewhere, untouched here.
+						delete(previous, k)
+						continue
+					}
+					return fmt.Errorf("%s %s: %w", kind, id, ErrConcurrentWrite)
+				}
+			}
 			if previous[k] != sha256.Sum256(raw) {
 				var before []byte
 				if _, exists := previous[k]; exists {
@@ -403,7 +422,16 @@ func syncContentRecords[T any](ctx context.Context, tx *sqlTx, workspace, kind s
 			delete(previous, k)
 		}
 	}
-	for k := range previous {
+	for k, current := range previous {
+		if base != nil {
+			fingerprint, loaded := base[contentRecordKey{k.resource, k.id}]
+			if !loaded {
+				continue // committed elsewhere after the load
+			}
+			if current != fingerprint.stored {
+				return fmt.Errorf("%s %s: %w", kind, k.id, ErrConcurrentWrite)
+			}
+		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_content_records WHERE workspace_key=? AND kind=? AND resource_id=? AND id=?`, workspace, kind, k.resource, k.id); err != nil {
 			return err
 		}
@@ -441,24 +469,30 @@ func readContentRecords[T any](ctx context.Context, s *SQLiteStore, workspace, k
 }
 
 func (s *SQLiteStore) hydrateContentRecords(ctx context.Context, workspace string, data *domain.Bootstrap) error {
+	return s.hydrateContentRecordsWithBase(ctx, workspace, data, nil)
+}
+
+// hydrateContentRecordsWithBase loads the content collections data lacks;
+// with base it remembers each loaded record (see recordBase).
+func (s *SQLiteStore) hydrateContentRecordsWithBase(ctx context.Context, workspace string, data *domain.Bootstrap, base *recordBase) error {
 	if err := s.hydrateImportInputs(ctx, workspace, data); err != nil {
 		return err
 	}
 	var err error
 	if data.Activities == nil {
-		data.Activities, err = readContentRecords[domain.ActivityEvent](ctx, s, workspace, "activity", nil)
+		data.Activities, err = readContentRecordsWithBase[domain.ActivityEvent](ctx, s, workspace, "activity", base)
 		if err != nil {
 			return err
 		}
 	}
 	if data.Comments == nil {
-		data.Comments, err = readContentRecords[domain.Comment](ctx, s, workspace, "comment", nil)
+		data.Comments, err = readContentRecordsWithBase[domain.Comment](ctx, s, workspace, "comment", base)
 		if err != nil {
 			return err
 		}
 	}
 	if data.Notifications == nil {
-		values, err := readContentRecords[domain.Notification](ctx, s, workspace, "notification", nil)
+		values, err := readContentRecordsWithBase[domain.Notification](ctx, s, workspace, "notification", base)
 		if err != nil {
 			return err
 		}
@@ -469,7 +503,7 @@ func (s *SQLiteStore) hydrateContentRecords(ctx context.Context, workspace strin
 		}
 	}
 	if data.NotificationDeliveries == nil {
-		values, err := readContentRecords[domain.NotificationDelivery](ctx, s, workspace, "delivery", nil)
+		values, err := readContentRecordsWithBase[domain.NotificationDelivery](ctx, s, workspace, "delivery", base)
 		if err != nil {
 			return err
 		}

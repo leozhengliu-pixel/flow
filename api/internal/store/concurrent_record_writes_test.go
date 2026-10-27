@@ -85,13 +85,22 @@ func createPeerIssue(t *testing.T, repo *SQLiteStore, workspace, id string, temp
 	return created
 }
 
-func peerIssueTemplate(t *testing.T, repo *SQLiteStore, workspace string) domain.Issue {
+// peerWorkspace is a workspace with issues (the test fixture's; a shared
+// external database also holds workspaces other tests created) and one of
+// its issues as a template.
+func peerWorkspace(t *testing.T, repo *SQLiteStore) (string, domain.Issue) {
 	t.Helper()
-	page, err := repo.readIssueRecords(t.Context(), workspace)
-	if err != nil || len(page) == 0 {
-		t.Fatalf("fixture issues: %d %v", len(page), err)
+	for _, workspace := range repo.WorkspaceKeys() {
+		page, err := repo.readIssueRecords(t.Context(), workspace)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page) > 0 {
+			return workspace, page[0]
+		}
 	}
-	return page[0]
+	t.Fatal("no workspace with issues")
+	return "", domain.Issue{}
 }
 
 func countIssueRows(t *testing.T, repo *SQLiteStore, workspace string) int {
@@ -144,8 +153,7 @@ func TestArchiveAuditKeepsAnIssueCreatedOnAnotherServer(t *testing.T) {
 	for name, pair := range peerStoreSets(t) {
 		t.Run(name, func(t *testing.T) {
 			first, second := pair[0], pair[1]
-			workspace := first.Bootstrap().Workspace.URLKey
-			template := peerIssueTemplate(t, second, workspace)
+			workspace, template := peerWorkspace(t, second)
 			before := countIssueRows(t, second, workspace)
 			taskID := fmt.Sprintf("mention_audit_%d", time.Now().UnixNano())
 			ctx := WithMetadataFields(t.Context(), "auditLog")

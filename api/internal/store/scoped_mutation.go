@@ -358,7 +358,7 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		}
 		traceMark(ctx, "progress")
 		metadata := collectionMetadata(next)
-		if err := s.persistWorkspaceTx(ctx, tx, workspaceKey, &stored, metadata, nil, &event); err != nil {
+		if err := s.persistWorkspaceTx(ctx, tx, workspaceKey, &stored, metadata, nil, &event, nil); err != nil {
 			return err
 		}
 		traceMark(ctx, "metadata")

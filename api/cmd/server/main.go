@@ -6980,6 +6980,10 @@ func respondMutation(w http.ResponseWriter, err error, success int, value any) {
 		writeError(w, http.StatusConflict, err.Error())
 		return
 	}
+	if errors.Is(err, store.ErrConcurrentWrite) {
+		writeError(w, http.StatusConflict, store.ErrConcurrentWrite.Error())
+		return
+	}
 	if errors.Is(err, errInvalid) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
