@@ -6,6 +6,29 @@
 are healthy. The container image invokes the same endpoint through
 `/app/flow-api healthcheck`.
 
+## Security headers
+
+Responses carry the security headers in
+[Security response headers](configuration.md#security-response-headers). To
+check a deployment, compare a page, an API response and a missing asset:
+
+```bash
+curl -sSI https://flow.example.com/ | grep -iE 'content-security|frame|permissions|referrer|nosniff|strict-transport'
+curl -sSI https://flow.example.com/api/health | grep -iE 'content-security|frame|nosniff|strict-transport'
+curl -sSI https://flow.example.com/assets/missing-00000000.js | grep -iE 'content-security|nosniff'
+```
+
+Each header should appear once. Two copies mean the gateway sets it too, so
+list it in `FLOW_SECURITY_HEADERS_SKIP`. No `Strict-Transport-Security` behind
+a TLS ingress means Flow does not trust the proxy's `X-Forwarded-Proto`. Set
+`FLOW_TRUST_PROXY_HEADERS=true` if only the ingress can reach Flow.
+
+If an enforced CSP breaks a page, set `FLOW_SECURITY_CSP=report-only` and
+restart. The page works again and the browser console keeps naming the
+blocked source. `FLOW_SECURITY_HEADERS=off` removes every header Flow adds.
+HSTS is the exception: browsers keep it for its max-age, so serve
+`FLOW_SECURITY_HSTS_MAX_AGE=0` over HTTPS before turning it off.
+
 ## Backup boundary
 
 A complete backup contains both the SQL database and attachment storage. Keep

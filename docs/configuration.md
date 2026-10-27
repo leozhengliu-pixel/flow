@@ -335,6 +335,152 @@ Cluster keys that participate in a single Lua script or transaction use Redis
 hash tags so they remain in one slot. The client follows cluster redirections
 and maintains a connection pool per node.
 
+## Security response headers
+
+Flow adds security headers to every response it sends: pages, static files,
+API and health responses, error responses (404, 500, a missing asset chunk),
+redirects such as OAuth callbacks, file downloads and SSE streams. WebSocket
+upgrade responses (`101`) are left as they are. All of it is decided in one
+middleware (`api/cmd/server/security_headers.go`).
+
+| Header | Default |
+| --- | --- |
+| `X-Content-Type-Options` | `nosniff` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `Permissions-Policy` | Allows clipboard writes, fullscreen, picture in picture, autoplay, encrypted media and passkeys for Flow itself. Fullscreen and picture in picture are also allowed for the embedded video players (YouTube, Loom, Descript, Tella, Miro). Camera, microphone, screen capture, geolocation, payment, USB, serial, HID, Bluetooth, MIDI, sensors, idle detection, local fonts, window management, clipboard reads and `browsing-topics` are turned off for Flow and every frame in it. |
+| `X-Frame-Options` | `SAMEORIGIN`; `DENY` with `FLOW_SECURITY_FRAME_ANCESTORS=none`; not sent when other origins may frame Flow |
+| `Content-Security-Policy` | `frame-ancestors 'self'`, always enforced. The rest of the policy is report-only until you set `FLOW_SECURITY_CSP=enforce`. |
+| `Content-Security-Policy-Report-Only` | The policy below, while `FLOW_SECURITY_CSP=report-only` (the default) |
+| `Strict-Transport-Security` | `max-age=31536000`, only over confirmed HTTPS (see below) |
+
+Pages and static files of the built web app (`FLOW_STATIC_PATH`) get this
+policy:
+
+```text
+default-src 'self'; script-src 'self' 'sha256-<inline theme script>';
+style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:;
+media-src 'self' blob:; font-src 'self';
+connect-src 'self' wss://<FLOW_APP_URL host> https://api.github.com;
+frame-src blob: https://www.youtube-nocookie.com https://www.loom.com
+  https://share.descript.com https://www.tella.tv https://miro.com;
+worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self';
+form-action 'self'; frame-ancestors 'self'
+```
+
+- Scripts are only Flow's own bundles. The one inline script in `index.html`
+  (it applies the saved theme before the bundle loads) is allowed by its
+  SHA-256 hash. Flow reads the hash from `index.html` and reads it again when
+  the file changes, so a rebuilt web app needs no configuration change.
+  Nothing needs `'unsafe-eval'`.
+- `style-src` keeps `'unsafe-inline'`. Diagrams (Mermaid and the math it
+  renders), the editor, the coding-session terminal and toasts write styles
+  at runtime, and none of them can take a nonce. Scripts stay strict, so
+  injected markup cannot run code.
+- `img-src https:` is there for pictures from other hosts: avatars from
+  identity providers, workspace and customer logos, link preview images and
+  images in markdown. Pasted and drawn images use `data:` and `blob:`.
+- `connect-src` covers the API, realtime (SSE and the WebSocket on the app's
+  own origin) and the GitHub username check in the OAuth application form.
+  Uploads and object storage go through Flow (`/uploads`, `/api`), so no
+  storage host is listed. OAuth, OIDC, SAML and MCP connector sign-ins are
+  top-level navigations and popups, not requests from the page.
+- `frame-src` lists the video players the editor embeds, plus `blob:` for the
+  hidden frame PDF printing uses. A saved embed pointing anywhere else is not
+  loaded. `worker-src 'self'` covers the PDF viewer's worker and the service
+  worker.
+
+API responses (`/api/`, `/uploads/`, `/mcp`, `/oauth/*`, `/scim/`) get
+`default-src 'none'; base-uri 'none'; form-action 'none'` plus the same
+`frame-ancestors`. When the API runs without `FLOW_STATIC_PATH` (development
+with the Vite dev server), only this policy is sent, and the dev server's
+pages carry none.
+
+**A header a handler sets itself wins.** Uploaded files keep
+`sandbox; default-src 'none'`, the SAML sign-in form keeps the policy the
+SAML library sets, and the email unsubscribe page sends a policy that allows
+only its own stylesheet. Flow adds `frame-ancestors` to such a policy when it
+has none, so framing rules stay the same everywhere. It never sends the
+report-only web app policy next to a handler's own policy.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FLOW_SECURITY_HEADERS` | on | `off` sends none of the headers in this section. Use it when a gateway owns them all, or as the rollback switch. |
+| `FLOW_SECURITY_HEADERS_SKIP` | empty | Comma-separated headers Flow leaves to the gateway in front of it: `Content-Security-Policy`, `Permissions-Policy`, `Referrer-Policy`, `Strict-Transport-Security`, `X-Content-Type-Options`, `X-Frame-Options`. Skipping `Content-Security-Policy` also drops the report-only policy and `frame-ancestors`. |
+| `FLOW_SECURITY_CSP` | `report-only` | `report-only` reports violations without blocking. `enforce` blocks them and sends the whole policy, `frame-ancestors` included, as one `Content-Security-Policy`. `off` sends only `frame-ancestors`. |
+| `FLOW_SECURITY_CSP_REPORT_URI` | empty | Where browsers send violation reports (`report-uri` and `report-to` with a `Reporting-Endpoints` header): an `https` URL, or a path on Flow's origin. Flow has no collector of its own. |
+| `FLOW_SECURITY_CSP_EXTRA_SOURCES` | empty | Sources added to the web app policy, as `directive source ...; directive source ...`, e.g. `connect-src https://telemetry.example.com; img-src https://cdn.example.com`. Allowed directives: `script-src`, `style-src`, `img-src`, `media-src`, `font-src`, `connect-src`, `frame-src`, `worker-src`, `manifest-src`. Startup fails on a bare `*`, on `'unsafe-eval'`, and on `'unsafe-inline'` or a scheme such as `https:` in `script-src`. |
+| `FLOW_SECURITY_FRAME_ANCESTORS` | `'self'` | Who may frame Flow: `self`, `none`, or a space- or comma-separated list of `https` origins (`https://*.example.com` works; plain `http` only for loopback). Enforced in every CSP mode. |
+| `FLOW_SECURITY_HSTS` | `auto` | `auto` sends `Strict-Transport-Security` only when `FLOW_APP_URL` is `https` and the request reached Flow over HTTPS. `off` never sends it. |
+| `FLOW_SECURITY_HSTS_MAX_AGE` | `31536000` | Seconds. `0` tells browsers to forget an earlier policy. |
+| `FLOW_SECURITY_HSTS_INCLUDE_SUBDOMAINS` | `false` | Adds `includeSubDomains`. Every subdomain of the host must then serve HTTPS. |
+| `FLOW_SECURITY_HSTS_PRELOAD` | `false` | Adds `preload`. Needs `includeSubDomains` and a max-age of at least one year. Leaving the preload list takes months. |
+| `FLOW_SECURITY_REFERRER_POLICY` | `strict-origin-when-cross-origin` | Any `Referrer-Policy` token. |
+| `FLOW_SECURITY_PERMISSIONS_POLICY` | built in | Replaces the whole built-in `Permissions-Policy`. |
+| `FLOW_TRUST_PROXY_HEADERS` | `false` | `X-Forwarded-For` and `X-Forwarded-Proto` come from a proxy you trust. Rate limits then use the client address it reports, and HSTS follows the scheme it reports. |
+
+The Helm chart sets these from `securityHeaders` and `trustProxyHeaders` in
+`values.yaml`. It renders only the keys you set, so Flow's defaults apply
+otherwise.
+
+### HTTPS detection and trusted proxies
+
+Flow counts a request as HTTPS when it arrived over TLS on Flow's own
+listener, or when `FLOW_TRUST_PROXY_HEADERS=true` and `X-Forwarded-Proto`
+says `https`. When several proxies append to the header, Flow reads the last
+value, which is the one the nearest proxy wrote. Without the trust setting the
+header is ignored, because any client can send it. Turn the setting on only
+when Flow is reachable solely through that proxy (for example the Helm
+ingress with `networkPolicy.enabled`). Browsers ignore HSTS on plain-HTTP
+responses, so HSTS is not sent there.
+
+Behind a TLS-terminating ingress, set `FLOW_TRUST_PROXY_HEADERS=true` to
+have Flow send HSTS, or let the ingress send it (ingress-nginx does by
+default) and set `FLOW_SECURITY_HEADERS_SKIP=Strict-Transport-Security`.
+
+### When a gateway also sets headers
+
+Set each header in one place. If the ingress, CDN or gateway adds a header
+Flow also sends, list that header in `FLOW_SECURITY_HEADERS_SKIP`. Otherwise
+some proxies send both values, and browsers combine two CSPs by applying both,
+so the stricter one wins. To keep Flow's CSP and add a host, use
+`FLOW_SECURITY_CSP_EXTRA_SOURCES` instead of a second policy at the gateway.
+
+### Allowing Flow in a frame
+
+Set `FLOW_SECURITY_FRAME_ANCESTORS` to the origins of the pages that embed
+Flow, for example `self https://portal.example.com`. `X-Frame-Options` is
+then dropped, because it cannot name other origins, and `frame-ancestors`
+decides. The session cookie is `SameSite=Lax`, so a browser does not send it
+to Flow inside a frame on another site. Embedded Flow pages need their own
+sign-in there or an API key flow.
+
+### Rolling out and rolling back
+
+1. Keep the default `report-only` and set `FLOW_SECURITY_CSP_REPORT_URI` to
+   a collector. Use Flow normally for a while (editor, attachments, PDFs,
+   diagrams, embeds, sign-in, the Agent, coding sessions).
+2. Add a source with `FLOW_SECURITY_CSP_EXTRA_SOURCES` only when a report
+   shows a legitimate use your deployment needs.
+3. Set `FLOW_SECURITY_CSP=enforce`.
+
+Each part can be turned off on its own without a rebuild:
+`FLOW_SECURITY_CSP=report-only` or `off`, `FLOW_SECURITY_HSTS=off`,
+`FLOW_SECURITY_FRAME_ANCESTORS=...`, `FLOW_SECURITY_HEADERS_SKIP=...`, or
+`FLOW_SECURITY_HEADERS=off` for everything. HSTS stays in browsers for its
+max-age after you turn it off. To withdraw it, serve
+`FLOW_SECURITY_HSTS_MAX_AGE=0` over HTTPS for a while first.
+
+Known limits of the enforced policy:
+
+- Client-side requests to other hosts are blocked unless you add the host to
+  `connect-src`. In Flow these are copying or downloading a picture from
+  another site in the image viewer (copy falls back to the link), and adding
+  an image pasted as a web page selection in the Agent composer.
+- Images over plain `http://` from other hosts (an attachment `iconUrl` can
+  be one) are not shown.
+- Without `FLOW_STATIC_PATH`, the page policy comes from whatever serves the
+  web app.
+
 ## Trusted private endpoints
 
 Flow makes server-side requests to URLs that workspace members, admins and
@@ -441,7 +587,8 @@ buckets (see [api.md](api.md#rate-limits)). Buckets are kept in memory, or in
 Redis when Redis coordination is enabled so limits hold across instances.
 Browser sessions are exempt unless a session budget is set. Set
 `FLOW_TRUST_PROXY_HEADERS=true` behind a trusted proxy so unauthenticated
-budgets apply per client address rather than to the proxy.
+budgets apply per client address rather than to the proxy (see
+[HTTPS detection and trusted proxies](#https-detection-and-trusted-proxies)).
 
 | Variable | Default | Description |
 | --- | --- | --- |

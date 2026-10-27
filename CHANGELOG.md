@@ -9,6 +9,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Security response headers on every response (pages, static files, API,
+  health, errors, redirects, downloads, streams): `X-Content-Type-Options`,
+  `Referrer-Policy`, a `Permissions-Policy` that keeps only what the web app
+  uses, `frame-ancestors` with `X-Frame-Options`, HSTS when HTTPS is
+  confirmed (TLS, or `X-Forwarded-Proto` from a proxy trusted with
+  `FLOW_TRUST_PROXY_HEADERS`), and a Content Security Policy that starts in
+  report-only mode (`FLOW_SECURITY_CSP=enforce` to block). Each part has its
+  own `FLOW_SECURITY_*` setting and `FLOW_SECURITY_HEADERS_SKIP` leaves
+  headers to a gateway; Helm `securityHeaders` and `trustProxyHeaders`. See
+  [Security response headers](docs/configuration.md#security-response-headers).
 - SCIM provisioning: ETags (`If-Match`/`If-None-Match`), `sortBy`/`sortOrder`,
   `POST /Bulk`, `POST /Users/.search` and `/Groups/.search`, the enterprise
   User extension and profile attributes, audit log entries for every

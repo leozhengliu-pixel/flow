@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"html/template"
 	"log"
@@ -193,9 +194,18 @@ func (s *server) unsubscribeURL(ctx context.Context, userID string) (string, err
 	return s.mailer.appURL + "/api/email/unsubscribe?" + query.Encode(), nil
 }
 
+// unsubscribeStyle is the unsubscribe page's only inline content; its hash is the page's style-src.
+const unsubscribeStyle = `body{margin:0;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f9f8f9;color:#3c4149;font-size:15px;line-height:1.4}main{max-width:480px;margin:64px auto;padding:32px 28px;background:#fff;border:1px solid #eff1f4;border-radius:5px}h1{font-size:20px;color:#282a30;margin:0 0 12px}button{margin-top:12px;padding:12px 16px;border:0;border-radius:5px;background:#5e6ad2;color:#fff;font:500 13px/1.2 inherit;cursor:pointer}`
+
+// unsubscribePolicy lets the page have its stylesheet and post its own confirm form, nothing else.
+var unsubscribePolicy = func() string {
+	digest := sha256.Sum256([]byte(unsubscribeStyle))
+	return "default-src 'none'; style-src 'sha256-" + base64.StdEncoding.EncodeToString(digest[:]) + "'; form-action 'self'; base-uri 'none'"
+}()
+
 var unsubscribePage = template.Must(template.New("unsubscribe").Parse(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Title}} · Flow</title>
-<style>body{margin:0;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f9f8f9;color:#3c4149;font-size:15px;line-height:1.4}main{max-width:480px;margin:64px auto;padding:32px 28px;background:#fff;border:1px solid #eff1f4;border-radius:5px}h1{font-size:20px;color:#282a30;margin:0 0 12px}button{margin-top:12px;padding:12px 16px;border:0;border-radius:5px;background:#5e6ad2;color:#fff;font:500 13px/1.2 inherit;cursor:pointer}</style></head>
+<style>` + unsubscribeStyle + `</style></head>
 <body><main><h1>{{.Title}}</h1><p>{{.Text}}</p>{{if .Confirm}}<form method="post"><button type="submit">Unsubscribe</button></form>{{end}}</main></body></html>`))
 
 // unsubscribeEmails is GET/POST /api/email/unsubscribe?list=onboarding&user=&sig=. GET asks for confirmation
@@ -208,6 +218,7 @@ func (s *server) unsubscribeEmails(w http.ResponseWriter, r *http.Request) {
 	valid := err == nil && list == onboardingList && userID != "" && hmac.Equal([]byte(signature), []byte(unsubscribeSignature(key, list, userID)))
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Security-Policy", unsubscribePolicy)
 	if !valid {
 		w.WriteHeader(http.StatusNotFound)
 		_ = unsubscribePage.Execute(w, map[string]any{"Title": "Link not valid", "Text": "This unsubscribe link is not valid."})

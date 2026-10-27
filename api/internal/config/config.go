@@ -37,6 +37,8 @@ type Config struct {
 	WebSearch            WebSearchConfig
 	Telemetry            TelemetryConfig
 	Retention            RetentionConfig
+	// SecurityHeaders is the response security header policy (security_headers.go).
+	SecurityHeaders SecurityHeadersConfig
 	// Coding configures coding sessions (coding.go).
 	Coding CodingConfig
 	// DevAllowLoopbackCodeHosts lets the workspace GitLab integration and
@@ -290,6 +292,7 @@ func Load() (Config, error) {
 	}
 	config.Coding = loadCoding(appURL)
 	config.Outbound = outbound.LoadConfig()
+	config.SecurityHeaders = loadSecurityHeaders()
 	config.resolveTTSCredential()
 	config.resolveAgentMedia()
 	config.clampRetention()
@@ -461,6 +464,9 @@ func (c Config) Validate() error {
 		return err
 	}
 	if err := outbound.Validate(c.Outbound); err != nil {
+		return err
+	}
+	if err := c.SecurityHeaders.Validate(); err != nil {
 		return err
 	}
 	if c.Telemetry.Enabled && c.Telemetry.Endpoint == "" && (c.Telemetry.TraceEndpoint == "" || c.Telemetry.MetricEndpoint == "") {
