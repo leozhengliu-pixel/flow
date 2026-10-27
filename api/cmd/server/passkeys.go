@@ -61,11 +61,7 @@ func (s *server) listPasskeys(w http.ResponseWriter, r *http.Request) {
 func webAuthnForRequest(r *http.Request) (*webauthn.WebAuthn, string, error) {
 	origin := strings.TrimSpace(r.Header.Get("Origin"))
 	if origin == "" {
-		scheme := "https"
-		if r.TLS == nil {
-			scheme = "http"
-		}
-		origin = scheme + "://" + r.Host
+		origin = externalBaseURL(r)
 	}
 	parsed, err := url.Parse(origin)
 	if err != nil || parsed.Hostname() == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {

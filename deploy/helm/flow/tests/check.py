@@ -324,6 +324,7 @@ for key in default_env:
 # Security headers: the chart passes what the operator set and nothing else.
 for key, want in {
     "FLOW_TRUST_PROXY_HEADERS": "true",
+    "FLOW_TRUSTED_PROXIES": "10.0.0.0/8,fd00::/8",
     "FLOW_SECURITY_CSP": "enforce",
     "FLOW_SECURITY_CSP_REPORT_URI": "https://csp-reports.example.com/flow",
     "FLOW_SECURITY_FRAME_ANCESTORS": "'self' https://portal.example.com",

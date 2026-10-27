@@ -90,6 +90,11 @@ data:
   {{- end }}
   {{- if $v.trustProxyHeaders }}
   FLOW_TRUST_PROXY_HEADERS: "true"
+  {{- with $v.trustedProxies }}
+  FLOW_TRUSTED_PROXIES: {{ join "," . | quote }}
+  {{- end }}
+  {{- else if $v.trustedProxies }}
+  {{- fail "trustedProxies needs trustProxyHeaders: true" }}
   {{- end }}
   {{- with $v.securityHeaders }}
   {{- /* Response security headers (docs/configuration.md); unset keys keep Flow's defaults. */}}

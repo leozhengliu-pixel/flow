@@ -29,6 +29,25 @@ blocked source. `FLOW_SECURITY_HEADERS=off` removes every header Flow adds.
 HSTS is the exception: browsers keep it for its max-age, so serve
 `FLOW_SECURITY_HSTS_MAX_AGE=0` over HTTPS before turning it off.
 
+## Proxies in front of Flow
+
+Check what Flow makes of the proxy chain from outside:
+
+```bash
+curl -sS https://flow.example.com/.well-known/oauth-authorization-server | grep -o '"issuer":"[^"]*"'
+```
+
+The issuer should be the `https` address users open, and after signing in
+the browser shows the session cookie as `Secure`. An `http` issuer means `FLOW_APP_URL` does not match the host
+users open and the proxy is not trusted: fix `FLOW_APP_URL`, or set
+`FLOW_TRUST_PROXY_HEADERS=true` when only the proxy can reach Flow.
+
+If every client shares one rate limit budget (429s for everyone after a few
+sign-in attempts), Flow sees the proxy's address as the client: trust the
+proxy. If clients get their own budget but it follows an address they can
+choose, the chain has more hops than Flow trusts: list the extra proxies (a
+CDN or load balancer in front of the ingress) in `FLOW_TRUSTED_PROXIES`.
+
 ## Backup boundary
 
 A complete backup contains both the SQL database and attachment storage. Keep

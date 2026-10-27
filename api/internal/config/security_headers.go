@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 )
@@ -69,10 +70,18 @@ type SecurityHeadersConfig struct {
 	// fetch directives of the web app policy, e.g.
 	// "connect-src https://telemetry.example.com; img-src https://cdn.example.com".
 	CSPExtraSources map[string][]string
-	// TrustProxyHeaders is FLOW_TRUST_PROXY_HEADERS: X-Forwarded-* headers
-	// come from a proxy the operator trusts (rate limiting by client address,
-	// HTTPS detection for HSTS). Off by default: clients can forge them.
+	// TrustProxyHeaders is FLOW_TRUST_PROXY_HEADERS: X-Forwarded-For,
+	// X-Forwarded-Proto and X-Forwarded-Host come from a proxy the operator
+	// trusts (client address for rate limits, HTTPS detection for HSTS and
+	// cookies, the scheme and host of links Flow builds). Off by default:
+	// clients can forge them.
 	TrustProxyHeaders bool
+	// TrustedProxies is FLOW_TRUSTED_PROXIES: the addresses (IPs or CIDR
+	// ranges) of the proxies in front of Flow. When set, forwarding headers
+	// are read only from a peer in the list, and the client address is the
+	// right-most X-Forwarded-For entry outside it. Empty: the direct peer is
+	// the one trusted proxy, so the right-most entry is the client.
+	TrustedProxies []string
 }
 
 // DefaultSecurityHeaders is the policy with every variable unset.
@@ -108,7 +117,46 @@ func loadSecurityHeaders() SecurityHeadersConfig {
 	config.CSPReportURI = value("FLOW_SECURITY_CSP_REPORT_URI", "")
 	config.CSPExtraSources = parseCSPExtraSources(value("FLOW_SECURITY_CSP_EXTRA_SOURCES", ""))
 	config.TrustProxyHeaders = boolean("FLOW_TRUST_PROXY_HEADERS", false)
+	if proxies := csvRaw(value("FLOW_TRUSTED_PROXIES", "")); len(proxies) > 0 {
+		config.TrustedProxies = proxies
+	}
 	return config
+}
+
+// TrustedProxyPrefixes parses TrustedProxies: each entry is an IP address
+// (a single host) or a CIDR range, IPv4 or IPv6.
+func (c SecurityHeadersConfig) TrustedProxyPrefixes() ([]netip.Prefix, error) {
+	return ParseTrustedProxies(c.TrustedProxies)
+}
+
+// ParseTrustedProxies parses IP addresses and CIDR ranges. IPv4-mapped IPv6
+// entries are read as IPv4, as client addresses are.
+func ParseTrustedProxies(entries []string) ([]netip.Prefix, error) {
+	prefixes := make([]netip.Prefix, 0, len(entries))
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if strings.Contains(entry, "/") {
+			prefix, err := netip.ParsePrefix(entry)
+			if err != nil {
+				return nil, fmt.Errorf("FLOW_TRUSTED_PROXIES: %q is not an IP address or CIDR range", entry)
+			}
+			if prefix.Addr().Is4In6() && prefix.Bits() >= 96 {
+				prefix = netip.PrefixFrom(prefix.Addr().Unmap(), prefix.Bits()-96)
+			}
+			prefixes = append(prefixes, prefix.Masked())
+			continue
+		}
+		addr, err := netip.ParseAddr(entry)
+		if err != nil || addr.Zone() != "" {
+			return nil, fmt.Errorf("FLOW_TRUSTED_PROXIES: %q is not an IP address or CIDR range", entry)
+		}
+		addr = addr.Unmap()
+		prefixes = append(prefixes, netip.PrefixFrom(addr, addr.BitLen()))
+	}
+	return prefixes, nil
 }
 
 // Skips reports whether FLOW_SECURITY_HEADERS_SKIP leaves header to the gateway.
@@ -206,6 +254,12 @@ func (c SecurityHeadersConfig) Validate() error {
 		if err != nil || strings.ContainsAny(c.CSPReportURI, " ;,\"'") || !(parsed.Scheme == "https" || parsed.Scheme == "http" && loopbackURL(c.CSPReportURI) || parsed.Scheme == "" && strings.HasPrefix(parsed.Path, "/") && !strings.HasPrefix(c.CSPReportURI, "//")) {
 			return fmt.Errorf("FLOW_SECURITY_CSP_REPORT_URI must be an https URL or a path on this server such as /csp-reports")
 		}
+	}
+	if _, err := c.TrustedProxyPrefixes(); err != nil {
+		return err
+	}
+	if len(c.TrustedProxies) > 0 && !c.TrustProxyHeaders {
+		return fmt.Errorf("FLOW_TRUSTED_PROXIES needs FLOW_TRUST_PROXY_HEADERS=true")
 	}
 	for directive, sources := range c.CSPExtraSources {
 		if !cspExtraDirectives[directive] {

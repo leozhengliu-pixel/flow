@@ -49,6 +49,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Security: `X-Forwarded-Proto` and `X-Forwarded-Host` were believed from any
+  client when Flow built links (OAuth and MCP metadata, SCIM locations, signed
+  file URLs) and chose `Secure` for cookies, and rate limits trusted the
+  client-supplied first `X-Forwarded-For` entry. Forwarding headers are now
+  read only with `FLOW_TRUST_PROXY_HEADERS=true`, and only from the proxies in
+  the new `FLOW_TRUSTED_PROXIES` (IPs or CIDR ranges; Helm `trustedProxies`)
+  when it is set; the client address is the right-most entry that is not a
+  trusted proxy. Without trust Flow uses TLS, the `Host` header and the peer
+  address, and the scheme of `FLOW_APP_URL` for requests to its host, so links
+  and cookies stay `https` behind a TLS ingress. See
+  [HTTPS detection and trusted proxies](docs/configuration.md#https-detection-and-trusted-proxies).
 - Flow Agent: asking it to create a team of 40 people no longer runs out of
   steps. `save_team` adds everyone it finds in one call and lists the rest
   (not in the workspace, or a name several members share, with candidates)

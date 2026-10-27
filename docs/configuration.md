@@ -416,26 +416,53 @@ report-only web app policy next to a handler's own policy.
 | `FLOW_SECURITY_HSTS_PRELOAD` | `false` | Adds `preload`. Needs `includeSubDomains` and a max-age of at least one year. Leaving the preload list takes months. |
 | `FLOW_SECURITY_REFERRER_POLICY` | `strict-origin-when-cross-origin` | Any `Referrer-Policy` token. |
 | `FLOW_SECURITY_PERMISSIONS_POLICY` | built in | Replaces the whole built-in `Permissions-Policy`. |
-| `FLOW_TRUST_PROXY_HEADERS` | `false` | `X-Forwarded-For` and `X-Forwarded-Proto` come from a proxy you trust. Rate limits then use the client address it reports, and HSTS follows the scheme it reports. |
+| `FLOW_TRUST_PROXY_HEADERS` | `false` | `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Host` come from a proxy you trust. Rate limits then use the client address it reports, and HSTS, `Secure` cookies and the links Flow builds follow the scheme and host it reports. |
+| `FLOW_TRUSTED_PROXIES` | empty | Comma-separated IP addresses or CIDR ranges (IPv4 or IPv6) of the proxies in front of Flow, e.g. `10.0.0.0/8,fd00::/8`. Needs `FLOW_TRUST_PROXY_HEADERS=true`. Forwarding headers are then read only from a peer in the list, and the client address is the right-most `X-Forwarded-For` entry outside it. Empty: the direct peer is the one trusted proxy. |
 
-The Helm chart sets these from `securityHeaders` and `trustProxyHeaders` in
-`values.yaml`. It renders only the keys you set, so Flow's defaults apply
+The Helm chart sets these from `securityHeaders`, `trustProxyHeaders` and
+`trustedProxies` in `values.yaml`. It renders only the keys you set, so Flow's defaults apply
 otherwise.
 
 ### HTTPS detection and trusted proxies
 
-Flow counts a request as HTTPS when it arrived over TLS on Flow's own
-listener, or when `FLOW_TRUST_PROXY_HEADERS=true` and `X-Forwarded-Proto`
-says `https`. When several proxies append to the header, Flow reads the last
-value, which is the one the nearest proxy wrote. Without the trust setting the
-header is ignored, because any client can send it. Turn the setting on only
-when Flow is reachable solely through that proxy (for example the Helm
-ingress with `networkPolicy.enabled`). Browsers ignore HSTS on plain-HTTP
-responses, so HSTS is not sent there.
+Flow reads `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Host`
+only when `FLOW_TRUST_PROXY_HEADERS=true` and, if `FLOW_TRUSTED_PROXIES` is
+set, only when the connection comes from an address in that list. Otherwise
+the headers are ignored, because any client can send them. Flow does not read
+the RFC 7239 `Forwarded` header. Turn the setting on only when Flow is
+reachable solely through that proxy (for example the Helm ingress with
+`networkPolicy.enabled`), and list the proxy's addresses in
+`FLOW_TRUSTED_PROXIES` when you know them.
+
+Every proxy appends to these headers, so values a client sent come first and
+the value the nearest proxy wrote comes last. Flow reads from the right:
+
+- **Client address** (rate limits, new sign-in alerts): the right-most
+  `X-Forwarded-For` entry that is not a trusted proxy. Without
+  `FLOW_TRUSTED_PROXIES` that is the right-most entry, which the one proxy
+  in front of Flow wrote. With a CDN or load balancer in front of the ingress,
+  list both in `FLOW_TRUSTED_PROXIES` so Flow skips their entries. Without
+  trust, it is the connection's peer address.
+- **Scheme**: TLS on Flow's own listener, else the last `X-Forwarded-Proto`
+  value from a trusted proxy, else the scheme of `FLOW_APP_URL` when the
+  request is for `FLOW_APP_URL`'s host, else `http`. HSTS is sent only for
+  TLS or a trusted `X-Forwarded-Proto` of `https`; browsers ignore HSTS on
+  plain-HTTP responses.
+- **Host**: the last `X-Forwarded-Host` value from a trusted proxy when it is
+  a plain host and port, else the `Host` header.
+
+The scheme and host make up the links Flow builds from a request: OAuth and
+MCP metadata, SCIM locations, signed file URLs and links in agent answers.
+Session cookies get `Secure` when the scheme is `https` (or with
+`FLOW_COOKIE_SECURE=true`). Links in emails always use `FLOW_APP_URL`.
+Because the scheme falls back to `FLOW_APP_URL`'s, links and cookies stay
+`https` behind a TLS-terminating ingress even without the trust setting, as
+long as `FLOW_APP_URL` is the `https` address users open.
 
 Behind a TLS-terminating ingress, set `FLOW_TRUST_PROXY_HEADERS=true` to
-have Flow send HSTS, or let the ingress send it (ingress-nginx does by
-default) and set `FLOW_SECURITY_HEADERS_SKIP=Strict-Transport-Security`.
+have Flow send HSTS and rate limit per client, or let the ingress send HSTS
+(ingress-nginx does by default) and set
+`FLOW_SECURITY_HEADERS_SKIP=Strict-Transport-Security`.
 
 ### When a gateway also sets headers
 

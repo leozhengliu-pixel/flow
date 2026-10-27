@@ -145,6 +145,13 @@
     "trustProxyHeaders": {
       "type": "boolean"
     },
+    "trustedProxies": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9A-Fa-f:.]+(/[0-9]{1,3})?$"
+      }
+    },
     "securityHeaders": {
       "type": "object",
       "additionalProperties": false,

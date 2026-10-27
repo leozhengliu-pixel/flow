@@ -78,12 +78,20 @@ ingress:
   #  - secretName: flow-tls
   #    hosts: [flow.example.com]
 
-# Trust X-Forwarded-For / X-Forwarded-Proto from the proxy in front of Flow
+# Trust X-Forwarded-For / -Proto / -Host from the proxy in front of Flow
 # (FLOW_TRUST_PROXY_HEADERS): rate limits use the client address it reports,
-# and HSTS follows the scheme it reports. Turn on only when Flow is reachable
-# solely through that proxy (ingress plus networkPolicy); clients can forge
-# these headers otherwise.
+# and HSTS, Secure cookies and links follow the scheme and host it reports.
+# Turn on only when Flow is reachable solely through that proxy (ingress plus
+# networkPolicy); clients can forge these headers otherwise. Left off, links
+# and cookies still use config.appUrl's scheme for requests to its host, so
+# OAuth metadata and cookies stay https behind a TLS ingress.
 trustProxyHeaders: false
+# The ingress controller's pod or node addresses (IPs or CIDR ranges,
+# FLOW_TRUSTED_PROXIES). With trustProxyHeaders, forwarding headers are then
+# read only from these peers, and the client address is the right-most
+# X-Forwarded-For entry outside them (for a CDN or load balancer in front of
+# the ingress, list its ranges too). Empty: the direct peer is the one proxy.
+trustedProxies: []
 
 # Response security headers (docs/configuration.md "Security response
 # headers"). Empty values keep Flow's defaults. When the ingress or a gateway

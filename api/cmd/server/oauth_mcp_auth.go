@@ -436,18 +436,6 @@ func validPKCE(verifier, challenge string) bool {
 	return verifier != "" && base64.RawURLEncoding.EncodeToString(digest[:]) == challenge
 }
 
-func externalBaseURL(r *http.Request) string {
-	scheme := "http"
-	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
-		scheme = "https"
-	}
-	host := r.Host
-	if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Host"), ",")[0]); forwarded != "" {
-		host = forwarded
-	}
-	return scheme + "://" + host
-}
-
 func writeOAuthError(w http.ResponseWriter, status int, code, description string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
