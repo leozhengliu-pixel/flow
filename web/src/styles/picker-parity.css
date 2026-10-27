@@ -1189,6 +1189,11 @@ html:root body .property-command-surface.project-teams-menu:not(#_) {
   width: 252px;
   min-width: 252px;
   max-width: min(360px, calc(100vw - 20px));
+  /* The sidebar menu class sets its own light border and shadow: the picker keeps the shared surface tokens. */
+  border: .5px solid var(--pk-border);
+  background: var(--pk-surface);
+  box-shadow: var(--pk-shadow);
+  color: var(--pk-text);
 }
 /* "Change lead team…": 178px, overlapping the menu's right edge by 2px, first row level with the lead row. */
 html:root body .property-command-surface.property-command-option-submenu:not(#_) {
@@ -1235,6 +1240,17 @@ html:root body .property-command-surface:is(.project-teams-menu, .property-comma
   color: var(--pk-muted);
   font: 450 11px/normal var(--font);
 }
+/* The highlighted row's name is the strong text colour in both themes (the light theme's row colour rule is more specific). */
+html:root body .property-command-surface:is(.project-teams-menu, .property-command-option-submenu):not(#_) .property-command-options [role=option][aria-selected=true] .project-teams-menu__name { color: var(--pk-text-strong); }
+/* Checkboxes: a 1px outline unchecked, the accent fill checked. */
+html:root body .property-command-surface:is(.project-teams-menu, .property-command-option-submenu):not(#_) .property-command-options [role=option] .property-command-checkbox:not(.is-locked) {
+  border: 1px solid var(--pk-check-off);
+}
+html:root body .property-command-surface:is(.project-teams-menu, .property-command-option-submenu):not(#_) .property-command-options [role=option][aria-checked=true] .property-command-checkbox:not(.is-locked) {
+  border-color: var(--pk-check-on);
+  background: var(--pk-check-on);
+  color: var(--pk-check-mark);
+}
 /* The lead team cannot be unchecked: its checkbox stays checked in a neutral colour. */
 html:root body .property-command-surface .property-command-options [role=option] .property-command-checkbox.is-locked,
 html:root body .property-command-surface .property-command-options [role=option][aria-checked=true] .property-command-checkbox.is-locked {
@@ -1245,6 +1261,20 @@ html:root body .property-command-surface .property-command-options [role=option]
 html:root body .property-command-surface .property-command-options [role=option].has-submenu[aria-expanded=true] .property-command-option-background { background: var(--pk-hover); }
 html:root body .property-command-surface .property-command-options [role=option].has-submenu .property-command-group-chevron { grid-column: 4; justify-self: end; color: var(--pk-muted); }
 html:root body .property-command-surface.project-teams-menu:not(#_) .property-command-search-shortcut > span { font: 450 10px/11px var(--font); }
+
+/* Sub-teams: listed under their parent; the icon and name shift 24px per level, the checkbox column stays, and a
+   10x9 elbow sits 6px right of the parent's icon column. */
+html:root body .property-command-surface.project-teams-menu:not(#_) .property-command-options [role=option][data-indent] {
+  grid-template-columns: 16px calc(16px + var(--option-indent, 0) * 24px) minmax(0, 1fr) auto;
+}
+html:root body .property-command-surface.project-teams-menu:not(#_) .property-command-options [role=option][data-indent] .property-command-icon { justify-self: end; }
+html:root body .property-command-options [role=option] > .property-command-tree-elbow {
+  position: absolute;
+  top: 8px;
+  left: calc(14px + 30px + (var(--option-indent, 1) - 1) * 24px);
+  fill: var(--pk-tree-elbow);
+  pointer-events: none;
+}
 
 /* ── Estimate picker (composer pill, issue properties, sub-issue composer) ──
    228px menu; rows are a 16px estimate icon at 14.5px, the label at 38.5px and

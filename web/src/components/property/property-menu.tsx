@@ -1,7 +1,7 @@
 import * as Popover from '@radix-ui/react-popover'
 import * as Tooltip from '@radix-ui/react-tooltip'
 import { ChevronRight, Layers3, Plus } from 'lucide-react'
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import './virtual-property-options.css'
 import { createPortal } from 'react-dom'
@@ -46,6 +46,10 @@ export interface PropertyOption {
   action?: boolean
   hoverContent?: ReactNode
   hoverClassName?: string
+  /** Opens the hover card beside the whole menu (to its left) instead of beside the row. */
+  hoverBesideMenu?: boolean
+  /** Nesting level of a sub-item (a sub-team under its parent): the icon and label shift right by 24px per level and a tree elbow is drawn. */
+  indent?: number
   /** A row that opens a single-select submenu to its right (e.g. a project's lead team). Choosing the row itself opens the submenu. */
   submenu?: PropertyOptionSubmenu
 }
@@ -279,11 +283,15 @@ function LabelGroupOption({ group, open, selectedIds, listboxId, onOpenChange, o
 
 function CommandOption({ option, active, checked, icon, labelHover = false, listboxId, multi = false, showGroupLabel = false, submenuOpen = false, onSubmenuOpenChange, onSubmenuChosen, onChoose, onActive }: { option: PropertyOption; active: boolean; checked: boolean; icon: ReactNode; labelHover?: boolean; listboxId: string; multi?: boolean; showGroupLabel?: boolean; submenuOpen?: boolean; onSubmenuOpenChange?: (open: boolean) => void; onSubmenuChosen?: () => void; onChoose: () => void; onActive: () => void }) {
   const { t } = useI18n()
-  if (option.submenu) return <OptionSubmenuRow option={option} submenu={option.submenu} active={active} checked={checked} listboxId={listboxId} multi={multi} open={submenuOpen} onOpenChange={next => onSubmenuOpenChange?.(next)} onChosen={onSubmenuChosen} onActive={onActive}/>
-  const row = <button aria-disabled={option.disabled || undefined} className={showGroupLabel && option.groupLabel ? 'is-grouped-label' : undefined} disabled={option.disabled} id={`${listboxId}-${option.id || 'none'}`} role="option" type="button" aria-selected={active} aria-checked={checked} onPointerMove={onActive} onFocus={onActive} onClick={onChoose}>
-    <span className="property-command-option-background"/>{multi && !option.action && <span className="property-command-checkbox">{checked && <CheckboxMark/>}</span>}<span className="property-command-icon">{option.icon ?? (option.color ? <i className="option-dot" style={{ background: option.color }}/> : icon)}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.labelContent ?? (option.i18nIgnore ? option.label : t(option.label))}</span>{showGroupLabel && option.groupLabel && <span className="property-command-option-group" data-i18n-ignore>{option.groupLabel}</span>}{!multi && checked && <span className="property-command-check"><FlowGlyph name="check" width={16} height={16}/></span>}{option.end && <span className="property-command-option-end">{t(option.end)}</span>}{option.shortcut && <kbd>{option.shortcut}</kbd>}
+  if (option.submenu) {
+    const submenuRow = <OptionSubmenuRow option={option} submenu={option.submenu} active={active} checked={checked} listboxId={listboxId} multi={multi} open={submenuOpen} onOpenChange={next => onSubmenuOpenChange?.(next)} onChosen={onSubmenuChosen} onActive={onActive}/>
+    return option.hoverContent ? <OptionHover besideMenu={option.hoverBesideMenu} className={option.hoverClassName} content={option.hoverContent} suppressed={submenuOpen}>{submenuRow}</OptionHover> : submenuRow
+  }
+  const indent = option.indent ?? 0
+  const row = <button aria-disabled={option.disabled || undefined} className={showGroupLabel && option.groupLabel ? 'is-grouped-label' : undefined} data-indent={indent || undefined} style={indent ? { '--option-indent': indent } as CSSProperties : undefined} disabled={option.disabled} id={`${listboxId}-${option.id || 'none'}`} role="option" type="button" aria-selected={active} aria-checked={checked} onPointerMove={onActive} onFocus={onActive} onClick={onChoose}>
+    <span className="property-command-option-background"/>{multi && !option.action && <span className="property-command-checkbox">{checked && <CheckboxMark/>}</span>}{indent > 0 && <TreeElbow/>}<span className="property-command-icon">{option.icon ?? (option.color ? <i className="option-dot" style={{ background: option.color }}/> : icon)}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.labelContent ?? (option.i18nIgnore ? option.label : t(option.label))}</span>{showGroupLabel && option.groupLabel && <span className="property-command-option-group" data-i18n-ignore>{option.groupLabel}</span>}{!multi && checked && <span className="property-command-check"><FlowGlyph name="check" width={16} height={16}/></span>}{option.end && <span className="property-command-option-end">{t(option.end)}</span>}{option.shortcut && <kbd>{option.shortcut}</kbd>}
   </button>
-  if (option.hoverContent) return <OptionHover className={option.hoverClassName} content={option.hoverContent}>{row}</OptionHover>
+  if (option.hoverContent) return <OptionHover besideMenu={option.hoverBesideMenu} className={option.hoverClassName} content={option.hoverContent}>{row}</OptionHover>
   return labelHover && option.color ? <LabelHoverPreview label={{ name: option.label, color: option.color, description: option.description, issueCount: option.issueCount, scope: option.scope, resourceType: option.resourceType }}>{row}</LabelHoverPreview> : row
 }
 
@@ -328,8 +336,8 @@ function OptionSubmenuRow({ option, submenu, active, checked, listboxId, multi, 
     }
   }
   return <Popover.Root open={open} onOpenChange={onOpenChange}>
-    <Popover.Anchor asChild><button aria-checked={checked} aria-expanded={open} aria-haspopup="listbox" aria-selected={active} className="has-submenu" id={`${listboxId}-${option.id}`} role="option" type="button" onClick={() => onOpenChange(true)} onFocus={onActive} onPointerEnter={openFromHover} onPointerLeave={cancelHoverOpen} onPointerMove={onActive}>
-      <span className="property-command-option-background"/>{multi && <span className="property-command-checkbox is-locked">{checked && <CheckboxMark/>}</span>}<span className="property-command-icon">{option.icon}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.labelContent ?? (option.i18nIgnore ? option.label : t(option.label))}</span><ChevronRight className="property-command-group-chevron" size={13}/>
+    <Popover.Anchor asChild><button aria-checked={checked} aria-expanded={open} aria-haspopup="listbox" aria-selected={active} className="has-submenu" data-indent={option.indent || undefined} style={option.indent ? { '--option-indent': option.indent } as CSSProperties : undefined} id={`${listboxId}-${option.id}`} role="option" type="button" onClick={() => onOpenChange(true)} onFocus={onActive} onPointerEnter={openFromHover} onPointerLeave={cancelHoverOpen} onPointerMove={onActive}>
+      <span className="property-command-option-background"/>{multi && <span className="property-command-checkbox is-locked">{checked && <CheckboxMark/>}</span>}{Boolean(option.indent) && <TreeElbow/>}<span className="property-command-icon">{option.icon}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.labelContent ?? (option.i18nIgnore ? option.label : t(option.label))}</span><ChevronRight className="property-command-group-chevron" size={13}/>
     </button></Popover.Anchor>
     <Popover.Portal><Popover.Content data-flow-motion="floating" className="property-command-surface property-command-option-submenu" side="right" align="start" alignOffset={-67} sideOffset={-2} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()} role="dialog" aria-label={submenu.placeholder}>
       <div onKeyDown={onKeyDown}>
@@ -344,7 +352,12 @@ function OptionSubmenuRow({ option, submenu, active, checked, listboxId, multi, 
   </Popover.Root>
 }
 
-function OptionHover({ children, className, content }: { children: ReactNode; className?: string; content: ReactNode }) {
+/** The 10x9 elbow that ties a sub-item to its parent row. */
+function TreeElbow() {
+  return <svg aria-hidden="true" className="property-command-tree-elbow" width="10" height="9" viewBox="0 0 10 9"><path d="M0 0h1.5v4a3 3 0 0 0 3 3H10v1.5H4.5A4.5 4.5 0 0 1 0 4z"/></svg>
+}
+
+function OptionHover({ children, besideMenu = false, className, content, suppressed = false }: { children: ReactNode; besideMenu?: boolean; className?: string; content: ReactNode; suppressed?: boolean }) {
   const anchorRef = useRef<HTMLSpanElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -380,7 +393,12 @@ function OptionHover({ children, className, content }: { children: ReactNode; cl
       const padding = 8
       const gap = 6
       let left = anchor.right + gap
-      if (left + card.width > window.innerWidth - padding) left = anchor.left - card.width - gap
+      if (besideMenu) {
+        // To the left of the whole menu; the right side only when there is no room.
+        const menu = anchorRef.current?.closest('.property-command-surface')?.getBoundingClientRect() ?? anchor
+        left = menu.left - card.width - gap
+        if (left < padding) left = menu.right + gap
+      } else if (left + card.width > window.innerWidth - padding) left = anchor.left - card.width - gap
       let top = anchor.top
       left = Math.max(padding, Math.min(left, window.innerWidth - card.width - padding))
       top = Math.max(padding, Math.min(top, window.innerHeight - card.height - padding))
@@ -392,14 +410,14 @@ function OptionHover({ children, className, content }: { children: ReactNode; cl
       cancelAnimationFrame(frame)
       window.removeEventListener('resize', updatePosition)
     }
-  }, [open])
+  }, [open, besideMenu])
   useEffect(() => () => {
     if (hideTimer.current) clearTimeout(hideTimer.current)
     if (showTimer.current) clearTimeout(showTimer.current)
   }, [])
   return <>
     <span className="property-option-hover-trigger" onBlur={hide} onFocus={showNow} onPointerEnter={show} onPointerLeave={hide} ref={anchorRef} role="presentation">{children}</span>
-    {open && createPortal(<div className={`property-option-hover-card ${className ?? 'property-rich-hover'}`} onPointerEnter={showNow} onPointerLeave={hide} ref={cardRef} role="tooltip" style={{ left: position.left, top: position.top }}>{content}</div>, document.body)}
+    {open && !suppressed && createPortal(<div className={`property-option-hover-card ${className ?? 'property-rich-hover'}`} onPointerEnter={showNow} onPointerLeave={hide} ref={cardRef} role="tooltip" style={{ left: position.left, top: position.top }}>{content}</div>, document.body)}
   </>
 }
 

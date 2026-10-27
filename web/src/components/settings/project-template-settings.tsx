@@ -18,6 +18,7 @@ import {
 import { PersonPicker } from "@/components/issue/core-property-pickers";
 import { PropertyMenu, type PropertyOption } from "@/components/property/property-menu";
 import { ProjectDependencyPicker } from "@/components/projects-page/project-dependency-picker";
+import { ProjectTeamsPicker } from "@/components/projects-page/project-teams-picker";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { FlowGlyph } from "@/components/ui/menu-glyphs";
 import {
@@ -731,7 +732,6 @@ function TemplatePills({
   const status = data.projectStatuses.find((item) => item.id === draft.statusId);
   const lead = data.users.find((item) => item.id === draft.leadId);
   const members = data.users.filter((item) => draft.memberIds.includes(item.id));
-  const teams = data.teams.filter((item) => draft.teamIds.includes(item.id));
   const initiatives = data.initiatives.filter((item) => draft.initiativeIds.includes(item.id));
   const projectLabels = labelOptions(data, "project");
   const labels = projectLabels.filter((item) => draft.labelIds.includes(item.id));
@@ -822,21 +822,16 @@ function TemplatePills({
         }
         onChange={(id) => set("memberIds", toggleId(draft.memberIds, id))}
       />
-      <PropertyMenu
-        compact
-        multiple
-        label={t("Team")}
+      <ProjectTeamsPicker
         ariaLabel={t("Change project teams")}
-        searchPlaceholder={t("Change teams…")}
+        fallbackLabel={t("Team")}
         searchShortcut="P, then T"
         surfaceClassName="pt-picker project-details-sidebar__property-menu is-standard"
-        value={teams.length === 1 ? teams[0].name : teams.length ? countLabel(t, teams.length, "1 team", "{count} teams") : t("Team")}
-        valueIsEntityName={teams.length === 1}
-        selectedIds={draft.teamIds}
+        teamIds={draft.teamIds}
+        teams={data.teams.filter((item) => !item.archivedAt).map((item) => ({ id: item.id, name: item.name, key: item.key, color: item.color, icon: item.icon || "Team", parentId: data.teamSettings?.[item.id]?.parentTeamId || undefined }))}
         triggerClassName={pill(false, "pt-pill--team")}
-        icon={teams[0] ? <TeamIcon team={teams[0]} size={14} /> : <FlowGlyph name="leadTeam" width={14} height={14} />}
-        options={teamOptions(data).map((item) => ({ ...item, groupLabel: t("Your teams") }))}
-        onChange={(id) => set("teamIds", toggleId(draft.teamIds, id))}
+        triggerIconSize={14}
+        onChange={(teamIds) => set("teamIds", teamIds)}
       />
       <PropertyMenu
         compact

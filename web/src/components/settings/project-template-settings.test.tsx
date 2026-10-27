@@ -134,6 +134,40 @@ describe('project template editor', () => {
     expect(onReload).toHaveBeenCalled()
   })
 
+  it('picks project teams with the shared picker: none to start, then lead and sub-team rules', async () => {
+    const user = userEvent.setup()
+    const base = fixture()
+    const lead = base.teams[0]
+    const data = {
+      ...base,
+      teams: [...base.teams, { ...lead, id: 'team-2', name: 'Design', key: 'DES' }, { ...lead, id: 'team-3', name: 'Design Web', key: 'WEB' }],
+      teamSettings: { ...base.teamSettings, 'team-3': { ...base.teamSettings?.['team-3'], parentTeamId: 'team-2' } },
+    } as unknown as BootstrapData
+    render(settings(data, 'new'))
+    const trigger = screen.getByRole('combobox', { name: 'Change project teams' })
+    // A template may have no team: the pill shows its placeholder.
+    expect(trigger).toHaveTextContent('Team')
+    await user.click(trigger)
+    const listbox = screen.getByRole('listbox', { name: 'Teams' })
+    expect(within(listbox).getAllByRole('option').map(row => row.getAttribute('aria-checked'))).toEqual(['false', 'false', 'false'])
+    // A sub-team follows its parent, indented.
+    expect(within(listbox).getAllByRole('option').map(row => row.getAttribute('data-indent'))).toEqual([null, null, '1'])
+    expect(within(listbox).getAllByRole('option')[2]).toHaveTextContent('Design Web')
+    await user.click(within(listbox).getByRole('option', { name: /Design Web/ }))
+    expect(screen.getByRole('combobox', { name: 'Change project teams' })).toHaveTextContent('Design Web')
+    await user.click(screen.getByRole('combobox', { name: 'Change project teams' }))
+    // Once there is a team the lead rules apply: it shows its key, cannot be unchecked, and a second team makes it the lead.
+    await user.click(screen.getByRole('option', { name: /Design Web/ }))
+    expect(screen.getByRole('combobox', { name: 'Change project teams' })).toHaveTextContent('Design Web')
+    await user.click(screen.getByRole('combobox', { name: 'Change project teams' }))
+    await user.click(screen.getByRole('option', { name: /Test team/ }))
+    expect(screen.getByRole('combobox', { name: 'Change project teams' })).toHaveTextContent('Design Web, TST')
+    await user.type(screen.getByPlaceholderText('Add a descriptive name…'), 'Teamed')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    await waitFor(() => expect(api.createProjectTemplate).toHaveBeenCalled())
+    expect(api.createProjectTemplate.mock.calls[0][0]).toEqual(expect.objectContaining({ teamIds: ['team-3', 'team-1'] }))
+  })
+
   it('asks for a name instead of saving an unnamed template', async () => {
     const user = userEvent.setup()
     render(settings(fixture(), 'new'))
