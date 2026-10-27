@@ -93,6 +93,27 @@ jobs:
           version=$(node --print "require('./web/package.json').version")
           printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
 
+      # The image carries the previous release's hashed web assets (Dockerfile
+      # PREVIOUS_RELEASE_IMAGE), so pages of that release keep loading from new
+      # replicas during a rolling update: the previous version tag for a tag
+      # build, the last published main image otherwise.
+      - name: Find previous release image
+        id: previous
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        run: |
+          candidate="${IMAGE}:latest"
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then
+            previous=$(git ls-remote --tags --refs origin 'v*.*.*' | sed 's#.*refs/tags/##' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | awk -v current="${GITHUB_REF_NAME}" '$0 == current { print last; exit } { last = $0 }')
+            candidate=${previous:+${IMAGE}:${previous}}
+          fi
+          if [ -n "${candidate}" ] && docker buildx imagetools inspect "${candidate}" >/dev/null 2>&1; then
+            printf 'image=%s\n' "${candidate}" >> "$GITHUB_OUTPUT"
+          else
+            printf 'image=no-previous-release\n' >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build image
         uses: docker/build-push-action@v7
         with:
@@ -105,6 +126,7 @@ jobs:
           build-args: |
             VERSION=${{ steps.app-version.outputs.version }}
             VCS_REF=${{ github.sha }}
+            PREVIOUS_RELEASE_IMAGE=${{ steps.previous.outputs.image || 'no-previous-release' }}
           provenance: mode=max
           sbom: true
           cache-from: type=gha,scope=container

@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'node:path'
 import { readFileSync } from 'node:fs'
 import { tourMedia } from './tour-media-plugin.ts'
+import { releaseManifest } from './release-assets.ts'
 
 const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:8080'
 
@@ -40,7 +41,8 @@ function chunkSizeBudget() {
 // https://vite.dev/config/
 export default defineConfig({
   // tourMedia: docs/media/*.gif → /tour/ (dev server and build output) for the Getting started issues.
-  plugins: [react(), tailwindcss(), inlineIconSprites(), chunkSizeBudget(), tourMedia()],
+  // releaseManifest: dist/asset-manifest.json, which lets other releases' servers find this build's assets.
+  plugins: [react(), tailwindcss(), inlineIconSprites(), chunkSizeBudget(), tourMedia(), releaseManifest()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
   build: {
     chunkSizeWarningLimit: 1500,
