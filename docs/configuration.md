@@ -399,6 +399,13 @@ middleware (`api/cmd/server/security_headers.go`).
 | `X-Frame-Options` | `SAMEORIGIN`; `DENY` with `FLOW_SECURITY_FRAME_ANCESTORS=none`; not sent when other origins may frame Flow |
 | `Content-Security-Policy` | `frame-ancestors 'self'`, always enforced. The rest of the policy is report-only until you set `FLOW_SECURITY_CSP=enforce`. |
 | `Content-Security-Policy-Report-Only` | The policy below, while `FLOW_SECURITY_CSP=report-only` (the default) |
+| `Cache-Control` | `no-store` (with `Pragma: no-cache`) on the OAuth token, registration, revocation and introspection endpoints |
+
+The OAuth consent page (`/oauth/authorize`) is never framed: it always sends
+`frame-ancestors 'none'` and `X-Frame-Options: DENY`, whatever
+`FLOW_SECURITY_FRAME_ANCESTORS` allows for the rest of the app. Files that
+people upload are served with `sandbox; default-src 'none'`, `nosniff`, and as a
+download unless they are a raster image, audio, video or PDF.
 | `Strict-Transport-Security` | `max-age=31536000`, only over confirmed HTTPS (see below) |
 
 Pages and static files of the built web app (`FLOW_STATIC_PATH`) get this
