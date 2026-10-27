@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { render, waitFor } from '@testing-library/react'
 import { VirtuosoMockContext } from 'react-virtuoso'
 import { describe, expect, it, vi } from 'vitest'
@@ -26,6 +28,37 @@ describe('MyIssuesList virtualization', () => {
     expect(nested()).toEqual(['parent:false', 'child-1:true', 'child-2:true', 'other:false'])
     rerender(view(false))
     await waitFor(() => expect(nested()).toEqual(['parent:false', 'child-1:false', 'child-2:false', 'other:false']))
+  })
+
+  it('keeps the selection checkbox in one column at every depth and indents only the row content', async () => {
+    const state = { id: 'started', name: 'In progress', type: 'started' as const, color: '#f2c94c' }
+    const row = (id: string, parentId?: string): MyIssuesGroupData['issues'][number] => ({ id, identifier: `FLOW-${id}`, title: id, href: `#${id}`, priority: 0, state, parentId, createdAt: '2026-09-07T00:00:00.000Z', updatedAt: '2026-09-07T00:00:00.000Z' })
+    const groups: MyIssuesGroupData[] = [{ id: 'started', label: 'In progress', issues: [row('parent'), row('child', 'parent'), row('grandchild', 'child')] }]
+    const { container } = render(<I18nProvider><VirtuosoMockContext.Provider value={{ viewportHeight: 440, itemHeight: 44 }}><MyIssuesList groups={groups} nestedSubIssues/></VirtuosoMockContext.Provider></I18nProvider>)
+    await waitFor(() => expect(container.querySelectorAll('a[data-issue-row-id]').length).toBe(3))
+    const rows = [...container.querySelectorAll<HTMLElement>('a[data-issue-row-id]')]
+    expect(rows.map(link => link.style.getPropertyValue('--nested-depth'))).toEqual(['0', '1', '2'])
+    // The checkbox cell is the same element with the same placement at every depth: no per-row offset, no row padding.
+    const cells = rows.map(link => link.querySelector('[role="checkbox"]')!.parentElement!)
+    expect(new Set(cells.map(cell => cell.className)).size).toBe(1)
+    for (const [index, link] of rows.entries()) {
+      expect(cells[index].getAttribute('style')).toBeNull()
+      expect(link.style.paddingLeft).toBe('')
+      // The depth only widens the lead track that holds the checkbox, which pushes the priority and identifier right.
+      const columns = link.style.getPropertyValue('--row-columns').split(' ')
+      expect(columns.slice(0, 2)).toEqual(['8px', 'var(--row-lead-column)'])
+    }
+    // The guide is anchored per level inside the row, away from the checkbox column.
+    expect(rows[0].querySelector('[aria-hidden="true"][class*="nestingGuide"]')).toBeNull()
+    // An ancestor that is its parent's last child has no line left to continue, so only the current level draws.
+    expect(rows[1].querySelectorAll('[class*="nestingSegment"]').length).toBe(1)
+    expect(rows[2].querySelectorAll('[class*="nestingSegment"]').length).toBe(1)
+    expect((rows[2].querySelector('[class*="nestingSegment"]') as HTMLElement).style.getPropertyValue('--nest-level')).toBe('1')
+    const css = readFileSync(path.join(import.meta.dirname, 'my-issues-list.module.css'), 'utf8')
+    expect(css).toMatch(/--row-lead-column:calc\(18px \+ var\(--nested-depth,0\) \* 24px\)/)
+    expect(css).not.toMatch(/\.row\[data-nested=true\]\s*\{[^}]*padding/)
+    expect(css).toMatch(/\.checkboxCell\{width:15px;height:22px;margin-left:3px;/)
+    expect(css).toMatch(/\.nestingSegment\{[^}]*left:calc\(var\(--nest-level\) \* 24px \+ 49\.5px\)/)
   })
 
   it('keeps large lists bounded to the visible viewport', async () => {
