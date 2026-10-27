@@ -2803,6 +2803,9 @@ export function updateCycle(
 export type CycleCapacity = {
   cycleId: string;
   capacity: number;
+  capacityOverride?: number | null;
+  capacityAutomatic: number;
+  capacitySource: "override" | "velocity" | "default";
   weekdays: string[];
   members: Array<{ user: User; capacity: Record<string, number> }>;
 };
@@ -2838,7 +2841,8 @@ export function getCycleGraph(id: string): Promise<CycleGraphData> {
 }
 export function updateCycleCapacity(
   id: string,
-  input: { capacity?: number; capacityByMember?: Record<string, Record<string, number>> },
+  /** capacity: the override; null returns to the automatic capacity. */
+  input: { capacity?: number | null; capacityByMember?: Record<string, Record<string, number>> },
 ): Promise<Cycle> {
   return request(`/api/cycles/${id}/capacity`, jsonRequest("PUT", input));
 }

@@ -675,7 +675,10 @@ func calculateDashboard(data domain.Bootstrap, dashboard domain.Dashboard) []dom
 			value = counts
 		case "cycle_progress":
 			rows := []map[string]any{}
-			for _, cycle := range data.Cycles {
+			planned := data
+			planned.Cycles = slices.Clone(data.Cycles)
+			applyCycleCapacities(&planned, cycleCompletedIssuesIn(data.Issues))
+			for _, cycle := range planned.Cycles {
 				total, done := 0, 0
 				for _, issue := range issues {
 					if issue.CycleID != nil && *issue.CycleID == cycle.ID {

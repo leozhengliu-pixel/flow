@@ -170,6 +170,10 @@ func (s *server) issueRecordsBootstrap(w http.ResponseWriter, r *http.Request) {
 		issueRecordsError(w, err)
 		return
 	}
+	if err := s.decorateCycleCapacity(r.Context(), &data); err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	sanitizeBootstrap(&data)
 	s.applyCalendarAway(r.Context(), &data)
 	s.applyLoopRunCounts(r.Context(), data.Workspace.URLKey, data.Loops)

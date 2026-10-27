@@ -303,6 +303,10 @@ func (s *server) listCyclesConnection(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if err := s.decorateCycleCapacity(r.Context(), &data); err != nil {
+		writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load cycles")
+		return
+	}
 	teams := visibleTeamSet(data)
 	filterTeams := queryValues(r, "teamId")
 	items := slices.DeleteFunc(slices.Clone(data.Cycles), func(cycle domain.Cycle) bool {

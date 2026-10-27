@@ -640,8 +640,15 @@ export interface CustomerWebhookEvent {
 
 export interface Cycle {
   calendarToken?: string
+  /** Capacity is the cycle's planning capacity, in the unit of its scope (estimate points, or issues when the team does not use estimates): capacityOverride when one is set, otherwise capacityAutomatic. It is computed when the cycle is read. */
   capacity: number
+  /** CapacityAutomatic is the computed capacity: the team's velocity (the average completed scope of its last three completed cycles, fewer when fewer exist) or, without history, a default of 30 per active team member. Computed when the cycle is read. */
+  capacityAutomatic: number
   capacityByMember?: Record<string, Record<string, number>>
+  /** CapacityOverride is the capacity typed in Edit cycle. Absent means the capacity is automatic; PATCH /api/cycles/{id} with "capacity": null (or 0) clears it. */
+  capacityOverride?: number | null
+  /** CapacitySource tells where capacity comes from: override, velocity or default. Computed when the cycle is read. */
+  capacitySource?: "override" | "velocity" | "default"
   createdAt: string
   description: string
   endsAt: string
@@ -667,8 +674,15 @@ export interface CycleConnection {
 
 export interface CyclePartial {
   calendarToken?: string
+  /** Capacity is the cycle's planning capacity, in the unit of its scope (estimate points, or issues when the team does not use estimates): capacityOverride when one is set, otherwise capacityAutomatic. It is computed when the cycle is read. */
   capacity?: number
+  /** CapacityAutomatic is the computed capacity: the team's velocity (the average completed scope of its last three completed cycles, fewer when fewer exist) or, without history, a default of 30 per active team member. Computed when the cycle is read. */
+  capacityAutomatic?: number
   capacityByMember?: Record<string, Record<string, number>>
+  /** CapacityOverride is the capacity typed in Edit cycle. Absent means the capacity is automatic; PATCH /api/cycles/{id} with "capacity": null (or 0) clears it. */
+  capacityOverride?: number | null
+  /** CapacitySource tells where capacity comes from: override, velocity or default. Computed when the cycle is read. */
+  capacitySource?: "override" | "velocity" | "default"
   createdAt?: string
   description?: string
   endsAt?: string

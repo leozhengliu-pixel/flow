@@ -1631,7 +1631,8 @@ func reconcileInheritedCycles(data *domain.Bootstrap, teamID, parentID string) {
 			clone := parent
 			clone.ID = fmt.Sprintf("cycle_%d_%d", now.UnixNano(), index)
 			clone.TeamID = teamID
-			clone.Capacity = settings.Capacity
+			// The sub-team plans with its own (automatic) capacity.
+			clone.Capacity, clone.CapacityOverride = 0, nil
 			clone.CreatedAt = now
 			clone.UpdatedAt = now
 			data.Cycles = append(data.Cycles, clone)
@@ -1642,7 +1643,6 @@ func reconcileInheritedCycles(data *domain.Bootstrap, teamID, parentID string) {
 		data.Cycles[target].StartsAt = parent.StartsAt
 		data.Cycles[target].EndsAt = parent.EndsAt
 		data.Cycles[target].Status = parent.Status
-		data.Cycles[target].Capacity = settings.Capacity
 		data.Cycles[target].UpdatedAt = now
 	}
 	removed := map[string]bool{}

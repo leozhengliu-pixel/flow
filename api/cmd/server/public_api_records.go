@@ -117,6 +117,10 @@ func (s *server) getCycleRecord(w http.ResponseWriter, r *http.Request) {
 		writePublicRecordNotFound(w, "cycle")
 		return
 	}
+	if err := s.decorateCycleCapacity(r.Context(), &data); err != nil {
+		writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load the cycle")
+		return
+	}
 	cycle := data.Cycles[index]
 	cycle.CalendarToken = ""
 	writeJSON(w, http.StatusOK, cycle)

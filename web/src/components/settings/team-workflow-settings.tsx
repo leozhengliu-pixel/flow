@@ -3031,12 +3031,6 @@ function CyclesSettings({
                 )
               }
             />
-            <NumberRow
-              title="Capacity"
-              description="Planning capacity shown on each generated cycle."
-              value={settings.capacity}
-              onCommit={(value) => save({ capacity: value })}
-            />
           </>
         )}
       </TeamSection>
