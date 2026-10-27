@@ -172,7 +172,7 @@ export function describeRunFailure(run: FailedRun | LoopRunReply, t: Translate, 
       const outputs = missing();
       const failed = [...(full.toolCalls ?? [])].reverse().find((call) => (call.status === "error" || call.status === "blocked") && writeTool(call.name));
       if (!outputs.length || !failed) break;
-      const tool = translateToolTitle(failed.label || failed.name, t);
+      const tool = translateToolTitle(failed.label || failed.name, t, failed);
       return { message: t("Expected {outputs}, but {tool} failed.").replace("{outputs}", list(outputs)).replace("{tool}", tool), detail: failed.error || undefined };
     }
     case "incomplete": {

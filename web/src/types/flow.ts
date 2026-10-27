@@ -1207,6 +1207,9 @@ export interface LoopRun {
     id?: string;
     name: string;
     label?: string;
+    /** A connector tool call's connector (display name) and its own tool name; `name` is only an opaque id. */
+    connector?: string;
+    remoteTool?: string;
     args?: string;
     status: "running" | "completed" | "error" | "blocked";
     error?: string;

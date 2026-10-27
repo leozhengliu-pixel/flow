@@ -1363,10 +1363,14 @@ type LoopRunStep struct {
 }
 
 type LoopRunToolCall struct {
-	Order      int        `json:"order"`
-	ID         string     `json:"id,omitempty"`
-	Name       string     `json:"name"`
-	Label      string     `json:"label,omitempty"`
+	Order int    `json:"order"`
+	ID    string `json:"id,omitempty"`
+	Name  string `json:"name"`
+	Label string `json:"label,omitempty"`
+	// Connector and RemoteTool name a connector tool call, whose Name is only an opaque id ("external_<hash>"):
+	// the connector's display name and the tool's own name there. Runs stored before they existed lack both.
+	Connector  string     `json:"connector,omitempty"`
+	RemoteTool string     `json:"remoteTool,omitempty"`
 	Args       string     `json:"args,omitempty"`
 	Status     string     `json:"status"` // running | completed | error | blocked
 	Error      string     `json:"error,omitempty"`

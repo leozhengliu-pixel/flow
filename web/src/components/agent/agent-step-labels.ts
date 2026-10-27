@@ -83,10 +83,21 @@ export const CHAT_CONNECTOR_TOOL_LABELS: [string, string] = ["Running {tool} in 
 /** The connector a tool call belongs to and the tool's own name (external connector tools only; their `name` is an opaque id). */
 export type ConnectorToolRef = Pick<AgentToolCall, "connector" | "remoteTool">
 
+/** Loop run log label of a connector tool: "Used search_code in Code search"; mirrors loopConnectorToolTemplate in loop_runtime.go. */
+export const LOOP_CONNECTOR_TOOL_TEMPLATE = "Used {tool} in {connector}"
+
+/** What a connector tool whose name is not known is called (mirrors loopUnknownConnectorTool); its own name is only a hash. */
+export const UNKNOWN_CONNECTOR_TOOL = "a connector tool"
+
+/** The opaque name the server gives a connector tool: external_ and 32 hex digits. */
+const CONNECTOR_HASH_NAME = /^external_[0-9a-f]{32}$/
+
 /** A running or finished chat tool call's label, translated. */
 export function toolStatusLabel(name: string, running: boolean, t: Translate, args?: Record<string, unknown>, argumentsPending = false, connector?: ConnectorToolRef) {
   if (connector?.remoteTool) return connectorToolLabel(connector, running, t)
   const tool = name.replace(/^mcp__flow\./, "")
+  // A connector tool saved without its names (an older chat or run) is not shown as its hash.
+  if (CONNECTOR_HASH_NAME.test(tool)) return fillSubject(CHAT_TOOL_FALLBACK[running ? 0 : 1], UNKNOWN_CONNECTOR_TOOL, t)
   const updating = typeof args?.id === "string" && args.id !== ""
   const [verb, ...words] = tool.split("_")
   // A save_* call is a create or an update depending on its id; while its arguments still stream in it is neither yet.
@@ -113,8 +124,14 @@ function hasArguments(args?: Record<string, unknown>) {
   return Boolean(args && typeof args === "object" && Object.keys(args).length)
 }
 
-/** A server-written tool label (loop run steps, the loop builder's save_loop title), translated. */
-export function translateToolTitle(title: string, t: Translate) {
+/**
+ * A server-written tool label (loop run steps, the loop builder's save_loop title), translated. A connector call
+ * that names its tool is labelled from the names, so the connector's name is never split as a "subject".
+ */
+export function translateToolTitle(title: string, t: Translate, connector?: ConnectorToolRef) {
+  if (connector?.remoteTool) return loopConnectorLabel(connector, t)
+  // Runs stored before connector calls were named: "Used <hash>".
+  if (/^Used [0-9a-f]{32}$/.test(title)) return fillSubject("Used {subject}", UNKNOWN_CONNECTOR_TOOL, t)
   const exact = t(title)
   if (exact !== title) return exact
   for (const template of LOOP_TOOL_TEMPLATES) {
@@ -122,6 +139,15 @@ export function translateToolTitle(title: string, t: Translate) {
     if (title.startsWith(prefix) && title.length > prefix.length) return fillSubject(template, title.slice(prefix.length), t)
   }
   return title
+}
+
+/** "Used search_code in Code search" in the run log; without the connector, "Used search_code". */
+function loopConnectorLabel(ref: ConnectorToolRef, t: Translate) {
+  const tool = ref.remoteTool ?? ""
+  if (!ref.connector) return fillSubject("Used {subject}", tool, t)
+  const translated = t(LOOP_CONNECTOR_TOOL_TEMPLATE)
+  const text = translated.replace("{tool}", () => tool).replace("{connector}", () => ref.connector!)
+  return translated === LOOP_CONNECTOR_TOOL_TEMPLATE ? text : spaceMixedScripts(text)
 }
 
 /** Fills {subject} with its translation; a translated (Chinese) template gets spaces around a Latin subject. */

@@ -9,6 +9,7 @@ import (
 	"maps"
 	"net/http"
 	"os"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -506,11 +507,14 @@ func (rec *loopRunRecorder) addStep(title, message string) {
 	rec.save(true)
 }
 
-func (rec *loopRunRecorder) startTool(call domain.AgentToolCall) int {
+// startTool records a tool call as running. ctx carries the connector tools the run offers, which name a
+// connector call (its Name is only an opaque id) after its connector and the tool's own name.
+func (rec *loopRunRecorder) startTool(ctx context.Context, call domain.AgentToolCall) int {
 	now := time.Now().UTC()
 	args := loopToolArgs(call)
 	_, calls, _ := rec.parts()
-	record := domain.LoopRunToolCall{Order: rec.nextOrder(), ID: call.ID, Name: call.Name, Label: loopToolLabel(call.Name, args), Args: loopToolArgsSummary(args), Status: "running", StartedAt: &now}
+	annotateConnectorCall(ctx, &call)
+	record := domain.LoopRunToolCall{Order: rec.nextOrder(), ID: call.ID, Name: call.Name, Label: loopCallLabel(call, args), Connector: call.Connector, RemoteTool: call.RemoteTool, Args: loopToolArgsSummary(args), Status: "running", StartedAt: &now}
 	*calls = append(*calls, record)
 	rec.logEvent("tool_started", record)
 	rec.save(true)
@@ -897,7 +901,7 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 				if reading.outcome != loopTurnTruncated {
 					message = loopUnfinishedToolCall
 				}
-				index := rec.startTool(call)
+				index := rec.startTool(request.Context(), call)
 				rec.finishTool(index, "blocked", errors.New(message), false, nil, nil)
 				reply(message, true)
 				continue
@@ -928,7 +932,7 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 				rec.setOutputNow(strings.TrimSpace(output))
 				return loopBudgetError("The run made more than %d tool calls, its budget. Narrow the instructions or raise FLOW_LOOP_MAX_TOOL_CALLS.", limits.MaxToolCalls)
 			}
-			index := rec.startTool(call)
+			index := rec.startTool(request.Context(), call)
 			status := "completed"
 			var result []byte
 			toolStarted := time.Now()
@@ -1041,9 +1045,27 @@ var loopToolVerbTemplates = map[string]string{
 const (
 	// loopExternalToolTemplate labels connector tools ("external_<tool>").
 	loopExternalToolTemplate = "Used {subject}"
+	// loopConnectorToolTemplate labels a connector tool by its own name and its connector.
+	loopConnectorToolTemplate = "Used {tool} in {connector}"
+	// loopUnknownConnectorTool is the subject of a connector call whose tool is not known: its name is only a hash.
+	loopUnknownConnectorTool = "a connector tool"
 	// loopOtherToolTemplate labels any other tool.
 	loopOtherToolTemplate = "Ran {subject}"
 )
+
+// loopCallLabel names a tool call the way the run log shows it; a known connector call names its tool and connector.
+func loopCallLabel(call domain.AgentToolCall, args map[string]any) string {
+	if call.RemoteTool == "" {
+		return loopToolLabel(call.Name, args)
+	}
+	if call.Connector == "" {
+		return strings.Replace(loopExternalToolTemplate, "{subject}", call.RemoteTool, 1)
+	}
+	return strings.NewReplacer("{tool}", call.RemoteTool, "{connector}", call.Connector).Replace(loopConnectorToolTemplate)
+}
+
+// loopConnectorHash matches what follows external_ in a connector tool's name: 32 hex digits.
+var loopConnectorHash = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
 // loopToolLabel names a tool call the way the run log shows it.
 func loopToolLabel(name string, args map[string]any) string {
@@ -1056,7 +1078,12 @@ func loopToolLabel(name string, args map[string]any) string {
 func loopToolLabelTemplate(name string, args map[string]any) (string, string) {
 	name = strings.TrimPrefix(name, "mcp__flow.")
 	if strings.HasPrefix(name, "external_") {
-		return loopExternalToolTemplate, strings.ReplaceAll(strings.TrimPrefix(name, "external_"), "_", " ")
+		subject := strings.TrimPrefix(name, "external_")
+		if loopConnectorHash.MatchString(subject) {
+			// A hash says nothing: a call whose tool is unknown says only that a connector tool was used.
+			return loopExternalToolTemplate, loopUnknownConnectorTool
+		}
+		return loopExternalToolTemplate, strings.ReplaceAll(subject, "_", " ")
 	}
 	if label, ok := loopToolLabels[name]; ok {
 		return label, ""

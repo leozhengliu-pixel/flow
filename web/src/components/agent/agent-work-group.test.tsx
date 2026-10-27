@@ -51,6 +51,16 @@ describe('AgentWorkGroup', () => {
     expect(zh.container.querySelector('[class*="toolCallRow"]')?.textContent).toBe('已在 Code search 中运行 search_code')
   })
 
+  it('labels a loop run connector row from its names, not from the stored title', () => {
+    const part = (extra: object) => ({ id: 't1', type: 'toolCall' as const, status: 'completed' as const, toolCall: { id: 't1', name: 'external_13e42ac3f0b8a2d1c4e5f60718293a4b', status: 'completed' as const, ...extra } })
+    const named = renderGroup([part({ title: 'Used search_code in Code search', connector: 'Code search', remoteTool: 'search_code' })], 'zh-CN')
+    expect(named.container.querySelector('[class*="toolCallRow"]')?.textContent).toBe('已在 Code search 中使用 search_code')
+    named.unmount()
+    const older = renderGroup([part({ title: 'Used 13e42ac3f0b8a2d1c4e5f60718293a4b' })])
+    fireEvent.click(screen.getByText(/Worked for/))
+    expect(older.container.querySelector('[class*="toolCallRow"]')?.textContent).toBe('Used a connector tool')
+  })
+
   it('names the running connector tool in the live header', () => {
     const parts: Parts = [{ id: 't1', type: 'toolCall', status: 'running', toolCall: { id: 't1', name: 'external_13e42ac3f0b8a2d1c4e5f60718293a4b', connector: 'Code search', remoteTool: 'search_code', status: 'running' } }]
     expect(workingLabel(parts, source => source)).toBe('Running search_code in Code search…')
