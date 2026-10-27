@@ -251,6 +251,9 @@ seccompProfile:
 {{- if and (eq $v.storage.driver "local") (not (has "ReadWriteMany" $v.storage.persistence.accessModes)) -}}
 {{- fail "replicaCount > 1 or autoscaling requires storage.driver=s3 or a ReadWriteMany volume" -}}
 {{- end -}}
+{{- if and $v.assets.shared.enabled (not $v.assets.shared.existingClaim) (not (has "ReadWriteMany" $v.assets.shared.accessModes)) -}}
+{{- fail "assets.shared with replicaCount > 1 or autoscaling needs assets.shared.accessModes to include ReadWriteMany (or an existingClaim that is)" -}}
+{{- end -}}
 {{- end -}}
 {{- with $v.outbound -}}
 {{- if and .trustedPrivateEndpoints (not .trustedPrivateNetworks) -}}

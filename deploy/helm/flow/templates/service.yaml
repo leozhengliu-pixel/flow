@@ -25,3 +25,24 @@ spec:
       targetPort: runtime
       protocol: TCP
     {{- end }}
+{{- if .Values.assets.peerFallback.enabled }}
+---
+# Headless: resolves to every ready Flow Pod, so a replica can ask the others
+# for a web asset its release did not build (FLOW_ASSET_PEERS).
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "flow.fullname" . }}-peers
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    {{- include "flow.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ include "flow.httpPort" . }}
+      targetPort: http
+      protocol: TCP
+{{- end }}

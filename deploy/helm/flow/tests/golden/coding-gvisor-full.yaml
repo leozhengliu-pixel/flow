@@ -384,6 +384,8 @@ data:
   FLOW_HTTP_ADDR: ":8080"
   FLOW_APP_URL: "https://flow.example.com"
   FLOW_STATIC_PATH: /app/web
+  FLOW_ASSET_PREVIOUS_PATH: /app/web-previous
+  FLOW_ASSET_PEERS: "flow-peers.flow.svc:8080"
   FLOW_LOG_LEVEL: "info"
   FLOW_LOG_FORMAT: "json"
   FLOW_DATABASE_DRIVER: "sqlite"
@@ -733,6 +735,30 @@ spec:
       port: 8090
       targetPort: runtime
       protocol: TCP
+---
+# Source: flow/templates/service.yaml
+# Headless: resolves to every ready Flow Pod, so a replica can ask the others
+# for a web asset its release did not build (FLOW_ASSET_PEERS).
+apiVersion: v1
+kind: Service
+metadata:
+  name: flow-peers
+  namespace: flow
+  labels:
+    helm.sh/chart: flow-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: flow
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: flow
+    app.kubernetes.io/instance: flow
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
 
 ---
 # Source: flow/templates/sandbox/prepull-daemonset.yaml
@@ -877,7 +903,7 @@ spec:
         app.kubernetes.io/instance: flow
         app.kubernetes.io/component: api
       annotations:
-        checksum/config: df84c96c6610604b91e6914660bb7496f8c6182dec1fea89097a9b09796e3155
+        checksum/config: d3c3b13d0dcde1637f367212218383f358a329482f88fe848cd280eedc460118
         checksum/secret: e891932d726785fffb0b07bdd11b0e8ab743e922733061fa446dea1fc3c8cec9
     spec:
       serviceAccountName: flow

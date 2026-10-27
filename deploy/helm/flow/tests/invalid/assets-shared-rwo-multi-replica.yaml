@@ -1,0 +1,20 @@
+# Several replicas cannot share a ReadWriteOnce asset volume.
+replicaCount: 2
+database:
+  driver: postgres
+  existingSecret:
+    name: flow-db
+    key: url
+redisBundled:
+  enabled: true
+storage:
+  driver: s3
+  persistence:
+    enabled: false
+  s3:
+    bucket: flow-uploads
+    region: eu-west-1
+assets:
+  shared:
+    enabled: true
+    accessModes: [ReadWriteOnce]

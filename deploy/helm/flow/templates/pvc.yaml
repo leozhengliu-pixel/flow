@@ -22,3 +22,29 @@ spec:
     requests:
       storage: {{ $p.size }}
 {{- end }}
+{{- $a := .Values.assets.shared }}
+{{- if and $a.enabled (not $a.existingClaim) }}
+---
+# Web assets every release publishes (FLOW_ASSET_SHARED_PATH).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "flow.fullname" . }}-assets
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+    {{- with $a.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  accessModes:
+    {{- toYaml $a.accessModes | nindent 4 }}
+  {{- with $a.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $a.size }}
+{{- end }}

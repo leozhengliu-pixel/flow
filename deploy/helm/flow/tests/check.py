@@ -337,6 +337,35 @@ for key in ("FLOW_SECURITY_HEADERS", "FLOW_SECURITY_HSTS_PRELOAD", "FLOW_SECURIT
     if key in config_data:
         fail("production-ha", f"{key} must not render unless configured")
 
+# Web assets across releases: every scenario carries the image's previous
+# releases and asks peers through a headless Service; production-ha adds a
+# shared claim and fallback origins.
+for name in ("default", "production-ha"):
+    docs = load(name)
+    env = flow_env(docs)
+    if env.get("FLOW_ASSET_PREVIOUS_PATH") != "/app/web-previous" or env.get("FLOW_ASSET_PEERS") != "flow-peers.flow.svc:8080":
+        fail(name, f"asset fallback env {env.get('FLOW_ASSET_PREVIOUS_PATH')!r} {env.get('FLOW_ASSET_PEERS')!r}")
+    peers = find(docs, "Service", "flow-peers")
+    if not peers or peers[0]["spec"].get("clusterIP") != "None" or peers[0]["spec"]["selector"] != find(docs, "Deployment", "flow")[0]["spec"]["selector"]["matchLabels"]:
+        fail(name, "headless flow-peers Service selecting the Flow Pods")
+default_env = flow_env(load("default"))
+if any(key in default_env for key in ("FLOW_ASSET_SHARED_PATH", "FLOW_ASSET_FALLBACK_URL")):
+    fail("default", "shared assets and fallback URLs only when configured")
+docs = load("production-ha")
+env = flow_env(docs)
+for key, want in {
+    "FLOW_ASSET_SHARED_PATH": "/app/assets-shared",
+    "FLOW_ASSET_SHARED_KEEP_RELEASES": "8",
+    "FLOW_ASSET_FALLBACK_URL": "https://assets.example.com/flow,http://flow-blue.flow-blue.svc:8080",
+}.items():
+    if env.get(key) != want:
+        fail("production-ha", f"{key}={env.get(key)!r}, want {want!r}")
+pod = find(docs, "Deployment", "flow")[0]["spec"]["template"]["spec"]
+mounts = {m["name"]: m for m in pod["containers"][0]["volumeMounts"]}
+volumes = {v["name"]: v for v in pod["volumes"]}
+if mounts.get("assets-shared", {}).get("mountPath") != "/app/assets-shared" or volumes.get("assets-shared", {}).get("persistentVolumeClaim", {}).get("claimName") != "flow-web-assets":
+    fail("production-ha", "shared assets claim mounted at /app/assets-shared")
+
 if failures:
     for failure in failures:
         print("FAIL", failure)

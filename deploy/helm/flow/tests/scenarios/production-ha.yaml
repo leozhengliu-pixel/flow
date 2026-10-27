@@ -2,8 +2,15 @@
 # secrets, S3, autoscaling, Ingress, Flow NetworkPolicy, GitHub App key
 # mounted from a Secret, ACL secret from an existing Secret, an
 # operator-trusted intranet MCP host with an enterprise CA bundle, and
-# enforced security headers and HSTS behind the trusted ingress.
+# enforced security headers and HSTS behind the trusted ingress. Web assets
+# of recent releases from a shared ReadWriteMany claim and a CDN origin.
 replicaCount: 3
+assets:
+  shared:
+    enabled: true
+    existingClaim: flow-web-assets
+    keepReleases: 8
+  fallbackUrls: [https://assets.example.com/flow, http://flow-blue.flow-blue.svc:8080]
 image:
   digest: sha256:abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd
 config:
