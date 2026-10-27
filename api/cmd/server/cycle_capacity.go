@@ -263,5 +263,9 @@ func (s *server) respondCycle(w http.ResponseWriter, r *http.Request, err error,
 	if err == nil {
 		cycle, err = s.cycleWithCapacity(r.Context(), workspaceKey(r), cycle)
 	}
+	// Cycles generated before their first reload can hold a nil list; clients map over it.
+	if cycle.Resources == nil {
+		cycle.Resources = []domain.CycleResource{}
+	}
 	respondMutation(w, err, http.StatusOK, cycle)
 }

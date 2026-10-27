@@ -2901,7 +2901,13 @@ func appendFutureCycle(data *domain.Bootstrap, teamID string, previous *domain.C
 	}
 	now := time.Now().UTC()
 	// Capacity is automatic (cycle_capacity.go) until someone overrides it.
-	cycle := domain.Cycle{ID: fmt.Sprintf("cycle_%d", time.Now().UnixNano()), Number: number, Name: fmt.Sprintf("Cycle %d", number), TeamID: teamID, StartsAt: start, EndsAt: start.AddDate(0, 0, weeks*7-1), Status: "upcoming", CreatedAt: now, UpdatedAt: now}
+	// Cycles created in one loop can read the same clock value, so the id is
+	// bumped until it is unused.
+	id := fmt.Sprintf("cycle_%d", now.UnixNano())
+	for suffix := 1; slices.ContainsFunc(data.Cycles, func(item domain.Cycle) bool { return item.ID == id }); suffix++ {
+		id = fmt.Sprintf("cycle_%d_%d", now.UnixNano(), suffix)
+	}
+	cycle := domain.Cycle{ID: id, Number: number, Name: fmt.Sprintf("Cycle %d", number), TeamID: teamID, StartsAt: start, EndsAt: start.AddDate(0, 0, weeks*7-1), Status: "upcoming", Resources: []domain.CycleResource{}, CreatedAt: now, UpdatedAt: now}
 	data.Cycles = append(data.Cycles, cycle)
 	return &data.Cycles[len(data.Cycles)-1]
 }
