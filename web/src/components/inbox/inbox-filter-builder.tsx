@@ -413,6 +413,7 @@ function PropertyPicker({
                 itemCount={itemCount}
                 anchorTop={propertyRefs.current.get(property.id)?.getBoundingClientRect().top ?? 0}
                 autoFocus={focusValuePicker}
+                isAnchorTarget={target => target instanceof Node && Boolean(propertyRefs.current.get(property.id)?.contains(target))}
                 onClose={() => onActivate(undefined)}
                 onCloseAll={onValueSelected}
                 onToggle={option => {
@@ -440,6 +441,7 @@ function ValuePicker({
   onReturnToProperties,
   itemCount,
   anchorTop = 0,
+  isAnchorTarget,
   selectedIds = [],
   variant = 'nested',
 }: {
@@ -452,6 +454,8 @@ function ValuePicker({
   onReturnToProperties: () => void
   itemCount: number
   anchorTop?: number
+  /** True when an outside interaction landed on the row that anchors this menu. */
+  isAnchorTarget?: (target: EventTarget | null) => boolean
   selectedIds?: string[]
   variant?: 'nested' | 'condition'
 }) {
@@ -539,6 +543,9 @@ function ValuePicker({
         collisionPadding={10}
         aria-label={`${t('Filter')} ${t(property.label)}`}
         onOpenAutoFocus={event => event.preventDefault()}
+        // Focusing or pressing the anchoring row (which opens this menu) is
+        // not an outside interaction; Popover would otherwise dismiss it.
+        onInteractOutside={event => { if (isAnchorTarget?.(event.target)) event.preventDefault() }}
         onEscapeKeyDown={event => {
           event.preventDefault()
           onCloseAll()
