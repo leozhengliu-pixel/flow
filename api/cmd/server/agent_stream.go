@@ -334,6 +334,8 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	connectorContext := connectorRequestContext{Workspace: workspaceKey(r), UserID: data.Viewer.ID}
 	if writer != nil {
 		connectorContext.Elicit = func(ctx context.Context, item applicationPolicy, params *mcp.ElicitParams) (*mcp.ElicitResult, error) {
+			ctx, cancel := agentElicitationContext(ctx, r.Context())
+			defer cancel()
 			elicitMu.Lock()
 			defer elicitMu.Unlock()
 			return s.requestAgentElicitation(ctx, workspaceKey(r), session.ID, session.UserID, item, params, func(part domain.AgentMessagePart, kind string) error {

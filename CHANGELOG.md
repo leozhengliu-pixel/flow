@@ -49,6 +49,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- The floating agent chat, the entity agent panel and the loop chat follow a
+  reply that runs on the server like the Agent page does: after a reload, in
+  another tab or when the reply was asked from another surface they show its
+  text so far, live approval and connector question cards and Stop, and an
+  answer given in one surface shows in the others at once. An approval is
+  answered only once, and Stop ends the reply on the server from every
+  surface, including a reply waiting on a connector question (which is
+  cancelled instead of waiting until it times out).
 - Rolling updates and rollbacks no longer break pages whose scripts and
   styles were built by the other version. A refresh served by a new replica
   stayed on the loading screen when an old replica answered its files with

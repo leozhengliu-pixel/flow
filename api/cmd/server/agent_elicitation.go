@@ -101,6 +101,18 @@ func validAgentElicitationAnswer(mode string, schemaJSON json.RawMessage, input 
 	return ""
 }
 
+// agentElicitationContext is what a chat reply's connector question waits under: the connector call's context (the
+// MCP SDK hands the handler its connection's, which a Stop does not end) and the reply's run, so stopping a reply
+// that waits on a question cancels the question instead of leaving it running until the question times out.
+func agentElicitationContext(call, run context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(call)
+	stop := context.AfterFunc(run, cancel)
+	return ctx, func() {
+		stop()
+		cancel()
+	}
+}
+
 func (s *server) requestAgentElicitation(ctx context.Context, workspace, sessionID, userID string, item applicationPolicy, params *mcp.ElicitParams, emit func(domain.AgentMessagePart, string) error) (*mcp.ElicitResult, error) {
 	if params == nil || len(params.Message) > 8000 {
 		return nil, errInvalid
