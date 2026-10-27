@@ -92,6 +92,7 @@ describe('cycle edit dialog capacity', () => {
     expect(dialog).toHaveTextContent('Automatic (30 points)')
     await user.click(within(dialog).getByRole('button', { name: 'Use automatic' }))
     expect(within(dialog).getByRole('spinbutton', { name: /Cycle capacity/ })).toHaveAttribute('placeholder', 'Automatic (30 points)')
+    expect(dialog).toHaveTextContent('Saving returns the cycle to the automatic capacity.')
     await user.click(within(dialog).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(onUpdate).toHaveBeenCalled())
     expect(onUpdate.mock.calls[0][0]).toMatchObject({ capacity: null })

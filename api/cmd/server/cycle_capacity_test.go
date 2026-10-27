@@ -90,6 +90,19 @@ func TestCycleCapacityVelocity(t *testing.T) {
 	})
 }
 
+// Cycles generated in one go get distinct ids even when the clock reads the same value.
+func TestGeneratedCycleIDsAreUnique(t *testing.T) {
+	data := domain.Bootstrap{CycleSettings: map[string]domain.CycleSettings{"team_a": {DurationWeeks: 2}}}
+	seen := map[string]bool{}
+	for range 50 {
+		cycle := appendFutureCycle(&data, "team_a", latestCycle(&data, "team_a"))
+		if seen[cycle.ID] {
+			t.Fatalf("duplicate cycle id %s", cycle.ID)
+		}
+		seen[cycle.ID] = true
+	}
+}
+
 // The API computes capacity from completed cycles, takes an override from Edit
 // cycle and returns to automatic when the override is cleared.
 func TestCycleCapacityOverrideAndVelocityHTTP(t *testing.T) {
@@ -163,6 +176,9 @@ func TestCycleCapacityOverrideAndVelocityHTTP(t *testing.T) {
 	overridden := requestJSON[domain.Cycle](t, handler, http.MethodPatch, "/api/cycles/"+next.ID, map[string]any{"capacity": 20}, http.StatusOK)
 	if overridden.Capacity != 20 || overridden.CapacityOverride == nil || *overridden.CapacityOverride != 20 || overridden.CapacityAutomatic != 8 || overridden.CapacitySource != "override" {
 		t.Fatalf("override: %#v", overridden)
+	}
+	if overridden.Resources == nil {
+		t.Fatal("cycle update returned resources: null")
 	}
 	renamed := requestJSON[domain.Cycle](t, handler, http.MethodPatch, "/api/cycles/"+next.ID, map[string]any{"name": "Renamed"}, http.StatusOK)
 	if renamed.Capacity != 20 || renamed.CapacitySource != "override" {
