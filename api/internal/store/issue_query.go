@@ -49,6 +49,14 @@ type IssueRecordQuery struct {
 	Limit              int
 	GroupBy            string
 	GroupValue         *string
+	// GroupValues pages one group made of several values of a column
+	// grouping (a status that several team workflows share by name and
+	// type); it is used instead of GroupValue.
+	GroupValues []string `json:",omitempty"`
+	// GroupCases defines the groups of GroupBy "cases": each row is in the
+	// group of the first case whose filter it matches (a row matching none
+	// is in the "" group). GroupValue then names a case's Value.
+	GroupCases         []IssueGroupCase `json:",omitempty"`
 	IncludeTotal       bool
 	Summary            bool
 	IncludeDescription bool
@@ -316,6 +324,62 @@ type IssueRecordPage struct {
 type IssueRecordGroup struct {
 	Value string `json:"value"`
 	Count int64  `json:"count"`
+}
+
+// IssueGroupCase is one group of a "cases" grouping (for example a Focus
+// bucket): the rows that match Filter and no earlier case.
+type IssueGroupCase struct {
+	Value  string      `json:"value"`
+	Filter IssueFilter `json:"filter"`
+}
+
+// MaxIssueGroupCases bounds the cases of one grouping.
+const MaxIssueGroupCases = 64
+
+// issueGroupCaseExpression is the case index (0-based, -1 for no case) of
+// alias i's row. Case values never reach the SQL: groups map the index back.
+func issueGroupCaseExpression(cases []IssueGroupCase) (string, []any, error) {
+	if len(cases) == 0 || len(cases) > MaxIssueGroupCases {
+		return "", nil, ErrIssueQuery
+	}
+	budget := 400
+	seen := make(map[string]bool, len(cases))
+	var expression strings.Builder
+	var args []any
+	expression.WriteString("(CASE")
+	for index, item := range cases {
+		if item.Value == "" || len(item.Value) > 191 || seen[item.Value] {
+			return "", nil, ErrIssueQuery
+		}
+		seen[item.Value] = true
+		clause, values, err := compileIssueFilter(item.Filter, 0, &budget)
+		if err != nil {
+			return "", nil, err
+		}
+		expression.WriteString(" WHEN " + clause + " THEN " + strconv.Itoa(index))
+		args = append(args, values...)
+	}
+	expression.WriteString(" ELSE -1 END)")
+	return expression.String(), args, nil
+}
+
+// issueGroupCaseValue is the group value of a case index scanned from SQL.
+func issueGroupCaseValue(cases []IssueGroupCase, index string) (string, bool) {
+	position, err := strconv.Atoi(index)
+	if err != nil || position >= len(cases) {
+		return "", false
+	}
+	if position < 0 {
+		return "", true
+	}
+	return cases[position].Value, true
+}
+
+// withoutGroupValue is the query with no group selected, for counts and the
+// conditions every group shares.
+func (query IssueRecordQuery) withoutGroupValue() IssueRecordQuery {
+	query.GroupValue, query.GroupValues = nil, nil
+	return query
 }
 
 type issueRecordCursor struct {
@@ -604,6 +668,34 @@ func issueRecordWhere(query IssueRecordQuery) (string, []any, error) {
 	}
 	clauses = append(clauses, filter)
 	args = append(args, values...)
+	if query.GroupBy == "cases" {
+		// Validated even when no group is selected, so counts reject bad cases too.
+		expression, values, err := issueGroupCaseExpression(query.GroupCases)
+		if err != nil || len(query.GroupValues) > 0 {
+			return "", nil, ErrIssueQuery
+		}
+		if query.GroupValue != nil {
+			index := slices.IndexFunc(query.GroupCases, func(item IssueGroupCase) bool { return item.Value == *query.GroupValue })
+			if index < 0 && *query.GroupValue != "" {
+				clauses = append(clauses, "1=0")
+			} else {
+				clauses = append(clauses, expression+"="+strconv.Itoa(index))
+				args = append(args, values...)
+			}
+		}
+		return strings.Join(clauses, " AND "), args, nil
+	}
+	if len(query.GroupValues) > 0 {
+		// One group of several values: only column groupings (status) take one.
+		column, err := issueGroupColumn(query.GroupBy)
+		if err != nil || query.GroupValue != nil || len(query.GroupValues) > 1000 {
+			return "", nil, ErrIssueQuery
+		}
+		clause, values := bindList("i."+column, query.GroupValues)
+		clauses = append(clauses, clause)
+		args = append(args, values...)
+		return strings.Join(clauses, " AND "), args, nil
+	}
 	if query.GroupValue != nil && query.GroupBy == "customer" {
 		// Customer groups are multi-membership: an issue is in every requesting customer's group.
 		clause, values := customerGroupClause(*query.GroupValue)
@@ -924,7 +1016,7 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 }
 
 func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQuery) ([]IssueRecordGroup, error) {
-	query.GroupValue = nil
+	query = query.withoutGroupValue()
 	if err := s.applyIssueRecordScope(ctx, &query); err != nil {
 		return nil, err
 	}
@@ -948,7 +1040,13 @@ func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQue
 		return groups, err
 	}
 	query.Cursor = ""
-	query.GroupValue = nil
+	if query.GroupBy == "cases" {
+		groups, err := s.caseIssueGroups(ctx, query)
+		if err == nil {
+			s.cacheSetIssueGroups(ctx, query, groups)
+		}
+		return groups, err
+	}
 	if query.GroupBy == "none" {
 		where, args, err := issueRecordWhere(query)
 		if err != nil {
@@ -1008,6 +1106,54 @@ func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQue
 		return groups, err
 	}
 	s.cacheSetIssueGroups(ctx, query, groups)
+	return groups, nil
+}
+
+// caseIssueGroups counts the rows of each case of a "cases" grouping, in the
+// cases' order (empty cases are left out).
+func (s *SQLiteStore) caseIssueGroups(ctx context.Context, query IssueRecordQuery) ([]IssueRecordGroup, error) {
+	expression, expressionArgs, err := issueGroupCaseExpression(query.GroupCases)
+	if err != nil {
+		return nil, err
+	}
+	where, args, err := issueRecordWhere(query)
+	if err != nil {
+		return nil, err
+	}
+	prefix, prefixArgs := issueAccessCTE(query)
+	values := append(append(append([]any{}, prefixArgs...), expressionArgs...), args...)
+	rows, err := s.db.QueryContext(ctx, prefix+"SELECT grouped.case_index,COUNT(*) FROM (SELECT "+expression+" AS case_index FROM issue_records i WHERE "+where+") grouped GROUP BY grouped.case_index", values...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanIssueCaseGroups(rows, query.GroupCases)
+}
+
+// scanIssueCaseGroups reads (case index, count) rows as groups in the cases' order.
+func scanIssueCaseGroups(rows *sql.Rows, cases []IssueGroupCase) ([]IssueRecordGroup, error) {
+	counts := map[string]int64{}
+	for rows.Next() {
+		var index string
+		var count int64
+		if err := rows.Scan(&index, &count); err != nil {
+			return nil, err
+		}
+		value, ok := issueGroupCaseValue(cases, index)
+		if !ok {
+			return nil, ErrIssueQuery
+		}
+		counts[value] += count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	groups := []IssueRecordGroup{}
+	for _, item := range append(slices.Clone(cases), IssueGroupCase{}) {
+		if count := counts[item.Value]; count > 0 {
+			groups = append(groups, IssueRecordGroup{Value: item.Value, Count: count})
+		}
+	}
 	return groups, nil
 }
 

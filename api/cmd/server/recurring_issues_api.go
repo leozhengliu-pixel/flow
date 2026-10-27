@@ -41,7 +41,7 @@ func (s *server) listTeamRecurringIssues(w http.ResponseWriter, r *http.Request)
 		issueRecordsError(w, err)
 		return
 	}
-	query.Filter, query.Text, query.Cursor, query.GroupBy, query.GroupValue = store.IssueFilter{}, "", "", "", nil
+	query.Filter, query.Text, query.Cursor, query.GroupBy, query.GroupValue, query.GroupValues, query.GroupCases = store.IssueFilter{}, "", "", "", nil, nil, nil
 	query.ProjectIDs, query.StateIDs, query.ReleaseIDs = nil, nil, nil
 	query.TeamIDs, query.Archived, query.Sort, query.Direction, query.Summary, query.IncludeTotal, query.Limit = []string{teamID}, "", "", "", false, false, 500
 	query.RestrictToIssueIDs = true
