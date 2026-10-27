@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   cancelLoopRun: vi.fn(),
   getLoop: vi.fn(),
   getLoopRun: vi.fn(),
+  getLoopVersion: vi.fn(),
   listLoopRuns: vi.fn(),
   rateLoopRun: vi.fn(),
   replyToLoopRun: vi.fn(),
@@ -56,6 +57,7 @@ describe('LoopRunPage', () => {
     api.getLoopRun.mockReset().mockImplementation(async (_loop: string, id: string) => [completed, failed, running].find(run => run.id === id))
     api.rateLoopRun.mockReset()
     api.cancelLoopRun.mockReset()
+    api.getLoopVersion.mockReset().mockImplementation(async (_loop: string, id: string) => ({ id, loopId: 'loop-1', version: Number(id.split('_v')[1]), publishedAt: '2026-09-01T00:00:00Z', changeSummary: [], current: false, definition: loop }))
     localStorage.clear()
   })
 
@@ -144,7 +146,49 @@ describe('LoopRunPage', () => {
     const link = await screen.findByRole('link', { name: /Ran version 3/ })
     expect(screen.getByRole('note')).toHaveTextContent('no web search provider is configured')
     await user.click(link)
-    expect(onNavigate).toHaveBeenCalledWith('/workspace/loop/loop-1?versions=1')
+    expect(onNavigate).toHaveBeenCalledWith('/workspace/loop/loop-1?versions=1&version=loop-1_v3')
+  })
+
+  it('shows the instructions of the version a run ran, not the current ones', async () => {
+    const user = userEvent.setup()
+    const current = { ...loop, instructions: '只回复总结文本，不要写入任何文档或其他资源', version: 2, versionId: 'loop-1_v2' }
+    api.getLoop.mockResolvedValue(current)
+    const old = { ...completed, version: 1, versionId: 'loop-1_v1' }
+    api.listLoopRuns.mockResolvedValue([old])
+    api.getLoopRun.mockResolvedValue(old)
+    api.getLoopVersion.mockReset().mockResolvedValue({
+      id: 'loop-1_v1', loopId: 'loop-1', version: 1, publishedAt: '2026-09-01T00:00:00Z', changeSummary: ['published'], current: false,
+      definition: { ...loop, instructions: '将总结追加到已有团队文档' },
+    })
+    cleanup()
+    const onNavigate = vi.fn()
+    render(<I18nProvider><LoopRunPage data={makeBootstrap({ loops: [current], agentSkills: [skill] })} loopId="loop-1" runId="run-1" onNavigate={onNavigate} onOpenSidebar={vi.fn()}/></I18nProvider>)
+    const instructions = await screen.findByRole('region', { name: 'Instructions' })
+    await waitFor(() => expect(instructions).toHaveTextContent('将总结追加到已有团队文档'))
+    expect(instructions).not.toHaveTextContent('只回复总结文本')
+    expect(api.getLoopVersion).toHaveBeenCalledWith('loop-1', 'loop-1_v1')
+    await user.click(screen.getByRole('link', { name: /Ran version 1/ }))
+    expect(onNavigate).toHaveBeenCalledWith('/workspace/loop/loop-1?versions=1&version=loop-1_v1')
+  })
+
+  it("shows the current instructions for a run of the current version, and when the run's version is gone", async () => {
+    const current = { ...loop, version: 2, versionId: 'loop-1_v2' }
+    api.getLoop.mockResolvedValue(current)
+    const run = { ...completed, version: 2, versionId: 'loop-1_v2' }
+    api.listLoopRuns.mockResolvedValue([run])
+    api.getLoopRun.mockResolvedValue(run)
+    api.getLoopVersion.mockReset().mockRejectedValue(new Error('loop version not found'))
+    cleanup()
+    render(<I18nProvider><LoopRunPage data={makeBootstrap({ loops: [current], agentSkills: [skill] })} loopId="loop-1" runId="run-1" onNavigate={vi.fn()} onOpenSidebar={vi.fn()}/></I18nProvider>)
+    expect(await screen.findByRole('region', { name: 'Instructions' })).toHaveTextContent('Summarize the week.')
+    expect(api.getLoopVersion).not.toHaveBeenCalled()
+    // A run of a version no longer stored says the instructions shown are the current ones.
+    const gone = { ...completed, version: 1, versionId: 'loop-1_v1' }
+    api.listLoopRuns.mockResolvedValue([gone])
+    api.getLoopRun.mockResolvedValue(gone)
+    cleanup()
+    render(<I18nProvider><LoopRunPage data={makeBootstrap({ loops: [current], agentSkills: [skill] })} loopId="loop-1" runId="run-1" onNavigate={vi.fn()} onOpenSidebar={vi.fn()}/></I18nProvider>)
+    expect(await screen.findByText('Version 1 is no longer stored; these are the current instructions.')).toBeVisible()
   })
 
   it('moves to the next and previous run with ↓/↑', async () => {
