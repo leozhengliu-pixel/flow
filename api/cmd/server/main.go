@@ -50,6 +50,8 @@ type server struct {
 	uploadPath     string
 	objectStore    objectstore.Store
 	staticPath     string
+	// assets answers /assets/ files another release built (static_assets.go); nil when not configured.
+	assets *assetFallback
 	// securityHeaders is the response security header policy
 	// (security_headers.go); nil uses the defaults.
 	securityHeaders                *appconfig.SecurityHeadersConfig
@@ -183,6 +185,7 @@ func main() {
 		uploadPath:                     applicationConfig.Storage.LocalPath,
 		objectStore:                    objects,
 		staticPath:                     applicationConfig.StaticPath,
+		assets:                         newAssetFallback(applicationConfig.Assets),
 		securityHeaders:                &applicationConfig.SecurityHeaders,
 		authDisabled:                   applicationConfig.AuthDisabled,
 		devLoopbackCodeHosts:           applicationConfig.DevAllowLoopbackCodeHosts,
@@ -227,6 +230,8 @@ func main() {
 	}); err != nil {
 		log.Fatal(err)
 	}
+	// Other replicas look here for this release's assets once it serves pages.
+	startSharedAssetPublish(s.staticPath, applicationConfig.Assets, 30*time.Second)
 	go s.runCoding(shutdownSignal)
 	go s.runApplicationAgentWorker(shutdownSignal)
 	go s.runRecurringIssueScheduler(shutdownSignal)
@@ -1069,11 +1074,17 @@ func (s *server) withStaticFiles(next http.Handler) http.Handler {
 			files.ServeHTTP(w, r)
 			return
 		}
+		// A hashed file another release built: a page from that release,
+		// answered by this replica during a rolling update or rollback.
+		if name, ok := hashedAssetName(r.URL.Path); ok && s.assets != nil && s.assets.serve(w, r, name) {
+			return
+		}
 		// A missing asset is a 404, not the app: a stale client asking for an
 		// old chunk hash must see the failure instead of parsing HTML as JS.
 		// Decided by extension, not prefix, since "assets" can be a URL key.
+		// no-store: no cache may keep the 404 once the file is available.
 		if staticAssetExtensions[strings.ToLower(filepath.Ext(path))] {
-			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Cache-Control", "no-store")
 			http.NotFound(w, r)
 			return
 		}

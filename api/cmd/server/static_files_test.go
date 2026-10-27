@@ -82,7 +82,7 @@ func TestStaticFilesMissingAssetsAre404NotTheApp(t *testing.T) {
 	for _, path := range []string{"/assets/definitely-not-here-12345.js", "/assets/index-old.CSS", "/fonts/gone.woff2", "/favicon-old.svg", "/haier/agent/chunk.mjs"} {
 		missing := httptest.NewRecorder()
 		handler.ServeHTTP(missing, httptest.NewRequest(http.MethodGet, path, nil))
-		if missing.Code != http.StatusNotFound {
+		if missing.Code != http.StatusNotFound || missing.Header().Get("Cache-Control") != "no-store" {
 			t.Fatalf("%s status=%d body=%q", path, missing.Code, missing.Body.String())
 		}
 	}

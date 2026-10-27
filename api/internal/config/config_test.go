@@ -118,6 +118,33 @@ func TestWorkspaceTutorialConfig(t *testing.T) {
 	}
 }
 
+func TestAssetFallbackConfig(t *testing.T) {
+	t.Setenv("FLOW_ASSET_PREVIOUS_PATH", "/app/web-previous")
+	t.Setenv("FLOW_ASSET_SHARED_PATH", "/var/lib/flow-assets")
+	t.Setenv("FLOW_ASSET_PEERS", "flow-peers.flow.svc:8080")
+	t.Setenv("FLOW_ASSET_FALLBACK_URL", "https://cdn.example.com/flow, http://flow-blue:8080")
+	loaded, err := Load()
+	if err != nil || loaded.Assets.PreviousPath != "/app/web-previous" || loaded.Assets.SharedPath != "/var/lib/flow-assets" || loaded.Assets.SharedKeepReleases != DefaultAssetSharedKeepReleases || len(loaded.Assets.Peers) != 1 || len(loaded.Assets.FallbackURLs) != 2 {
+		t.Fatalf("assets config = %#v, %v", loaded.Assets, err)
+	}
+	for name, value := range map[string]string{
+		"FLOW_ASSET_SHARED_KEEP_RELEASES": "1",
+		"FLOW_ASSET_PEERS":                "flow-peers",
+		"FLOW_ASSET_FALLBACK_URL":         "ftp://cdn.example.com",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(name, value)
+			if _, err := Load(); err == nil || !strings.Contains(err.Error(), name) {
+				t.Fatalf("%s=%s error = %v", name, value, err)
+			}
+		})
+	}
+	t.Setenv("FLOW_ASSET_FALLBACK_URL", "https://user:secret@cdn.example.com")
+	if _, err := Load(); err == nil || strings.Contains(err.Error(), "secret") {
+		t.Fatalf("credentials in FLOW_ASSET_FALLBACK_URL: error = %v", err)
+	}
+}
+
 func TestLoadRedisClusterValidation(t *testing.T) {
 	t.Setenv("FLOW_REDIS_MODE", "cluster")
 	t.Setenv("FLOW_REDIS_ADDRS", "redis-1:6379, redis-2:6379,redis-3:6379")

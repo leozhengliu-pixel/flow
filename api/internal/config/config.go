@@ -16,8 +16,11 @@ import (
 )
 
 type Config struct {
-	HTTPAddr                       string
-	StaticPath                     string
+	HTTPAddr   string
+	StaticPath string
+	// Assets finds content-hashed web app files another release built
+	// (static_assets.go in cmd/server).
+	Assets                         AssetsConfig
 	AppURL                         string
 	AuthDisabled                   bool
 	WorkspaceRegionSelectorEnabled bool
@@ -59,6 +62,30 @@ type Config struct {
 	// off for a missing credential); the server logs them at startup.
 	Warnings []string
 }
+
+// AssetsConfig lets a server answer /assets/ requests for files another
+// release of the web app built, so pages keep loading while replicas of two
+// versions serve side by side (a rolling update or a rollback).
+type AssetsConfig struct {
+	// PreviousPath holds the assets of the releases before this one, baked
+	// into the image (FLOW_ASSET_PREVIOUS_PATH; the image sets /app/web-previous).
+	PreviousPath string
+	// SharedPath is a directory every release publishes its assets to at
+	// startup and reads missing ones from (FLOW_ASSET_SHARED_PATH).
+	SharedPath string
+	// SharedKeepReleases is how many of the newest releases' assets stay in
+	// SharedPath (FLOW_ASSET_SHARED_KEEP_RELEASES, default 5, at least 2).
+	SharedKeepReleases int
+	// Peers are host:port addresses whose host resolves to the other
+	// replicas, such as a headless Service (FLOW_ASSET_PEERS).
+	Peers []string
+	// FallbackURLs are base URLs where releases publish their assets; a
+	// missing file is fetched from <url>/assets/<name> (FLOW_ASSET_FALLBACK_URL).
+	FallbackURLs []string
+}
+
+// DefaultAssetSharedKeepReleases is AssetsConfig.SharedKeepReleases' default.
+const DefaultAssetSharedKeepReleases = 5
 
 // RetentionConfig bounds how long Flow keeps history it no longer serves.
 type RetentionConfig struct {
@@ -210,8 +237,15 @@ type TelemetryConfig struct {
 func Load() (Config, error) {
 	appURL := strings.TrimRight(value("FLOW_APP_URL", "http://localhost:5173"), "/")
 	config := Config{
-		HTTPAddr:                       value("FLOW_HTTP_ADDR", ":8080"),
-		StaticPath:                     value("FLOW_STATIC_PATH", ""),
+		HTTPAddr:   value("FLOW_HTTP_ADDR", ":8080"),
+		StaticPath: value("FLOW_STATIC_PATH", ""),
+		Assets: AssetsConfig{
+			PreviousPath:       value("FLOW_ASSET_PREVIOUS_PATH", ""),
+			SharedPath:         value("FLOW_ASSET_SHARED_PATH", ""),
+			SharedKeepReleases: integer("FLOW_ASSET_SHARED_KEEP_RELEASES", DefaultAssetSharedKeepReleases),
+			Peers:              csvRaw(value("FLOW_ASSET_PEERS", "")),
+			FallbackURLs:       csvRaw(value("FLOW_ASSET_FALLBACK_URL", "")),
+		},
 		AppURL:                         appURL,
 		AuthDisabled:                   boolean("FLOW_AUTH_DISABLED", false),
 		DevAllowLoopbackCodeHosts:      boolean("FLOW_DEV_ALLOW_LOOPBACK_CODE_HOSTS", false),
@@ -340,6 +374,9 @@ func (c *Config) resolveAgentMedia() {
 
 func (c Config) Validate() error {
 	if err := c.validateDevLoopbackCodeHosts(); err != nil {
+		return err
+	}
+	if err := c.Assets.validate(); err != nil {
 		return err
 	}
 	if !validWorkspaceRegion(c.WorkspaceDefaultRegion) {
@@ -677,4 +714,27 @@ func csvRaw(value string) []string {
 		}
 	}
 	return result
+}
+
+func (c AssetsConfig) validate() error {
+	if c.SharedKeepReleases < 2 {
+		return fmt.Errorf("FLOW_ASSET_SHARED_KEEP_RELEASES must be at least 2 (this release and the one before it)")
+	}
+	for _, peer := range c.Peers {
+		host, port, err := net.SplitHostPort(peer)
+		if number, convErr := strconv.Atoi(port); err != nil || host == "" || convErr != nil || number < 1 || number > 65535 {
+			return fmt.Errorf("FLOW_ASSET_PEERS entries must be host:port, got %q", peer)
+		}
+	}
+	for _, raw := range c.FallbackURLs {
+		parsed, err := url.Parse(raw)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.User != nil {
+			shown := raw
+			if parsed != nil && parsed.User != nil {
+				shown = parsed.Scheme + "://" + parsed.Host
+			}
+			return fmt.Errorf("FLOW_ASSET_FALLBACK_URL entries must be http(s) base URLs without credentials, query or fragment, got %q", shown)
+		}
+	}
+	return nil
 }
