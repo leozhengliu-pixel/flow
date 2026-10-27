@@ -24,6 +24,8 @@ func (s *SQLiteStore) ensureIssueStats(ctx context.Context) error {
 	for _, statement := range []string{
 		`CREATE TABLE IF NOT EXISTS issue_scope_counts(workspace_key VARCHAR(191) NOT NULL,scope_type VARCHAR(24) NOT NULL,scope_id VARCHAR(191) NOT NULL,state_id VARCHAR(191) NOT NULL,state_type VARCHAR(32) NOT NULL,priority INTEGER NOT NULL,archived INTEGER NOT NULL,total BIGINT NOT NULL,PRIMARY KEY(workspace_key,scope_type,scope_id,state_id,state_type,priority,archived))`,
 		`CREATE TABLE IF NOT EXISTS issue_stats_migrations(workspace_key VARCHAR(191) PRIMARY KEY)`,
+		// The issue revision group count caches are keyed by (issue_group_cache.go).
+		`CREATE TABLE IF NOT EXISTS issue_count_revisions(workspace_key VARCHAR(191) PRIMARY KEY,revision BIGINT NOT NULL)`,
 	} {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
 			return err
@@ -104,7 +106,13 @@ func addIssueStats(deltas map[issueStatsKey]int64, d *issueStatsDimensions, delt
 	}
 }
 
+// writeIssueStats applies counter deltas. Every transaction that writes issue
+// records calls it (with no deltas when no counted dimension changed), so it
+// also advances the workspace's issue revision.
 func writeIssueStats(ctx context.Context, tx *sqlTx, workspace string, deltas map[issueStatsKey]int64) error {
+	if err := advanceIssueCountRevision(ctx, tx, workspace); err != nil {
+		return err
+	}
 	type entry struct {
 		key   issueStatsKey
 		order string

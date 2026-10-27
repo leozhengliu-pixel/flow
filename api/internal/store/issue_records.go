@@ -19,7 +19,7 @@ func isDuplicateIndex(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "duplicate key name")
 }
 
-var workspaceRecordTables = []string{"issue_records", "issue_label_records", "issue_identifier_aliases", "issue_subscriber_records", "issue_actor_records", "issue_permission_records", "issue_attribute_records", "issue_attribute_migrations", "issue_collection_counts", "issue_records_migrations", "issue_scope_counts", "issue_stats_migrations", "issue_number_sequences", "workspace_content_records", "workspace_metadata_records", "issue_attachment_records", "issue_attachment_migrations", "issue_list_migrations", "issue_search_documents", "issue_search_migrations", "customer_filter_records", "customer_request_filter_records", "customer_filter_migrations", "team_default_favorites", "team_default_favorite_overrides", "recurrence_instance_migrations", "webhook_deliveries", "webhook_signing_secrets", "agent_runs", "agent_run_tokens", "agent_run_changes", "agent_run_keys", "agent_session_states"}
+var workspaceRecordTables = []string{"issue_records", "issue_label_records", "issue_identifier_aliases", "issue_subscriber_records", "issue_actor_records", "issue_permission_records", "issue_attribute_records", "issue_attribute_migrations", "issue_collection_counts", "issue_records_migrations", "issue_scope_counts", "issue_stats_migrations", "issue_count_revisions", "issue_number_sequences", "workspace_content_records", "workspace_metadata_records", "issue_attachment_records", "issue_attachment_migrations", "issue_list_migrations", "issue_search_documents", "issue_search_migrations", "customer_filter_records", "customer_request_filter_records", "customer_filter_migrations", "team_default_favorites", "team_default_favorite_overrides", "recurrence_instance_migrations", "webhook_deliveries", "webhook_signing_secrets", "agent_runs", "agent_run_tokens", "agent_run_changes", "agent_run_keys", "agent_session_states"}
 
 func (s *SQLiteStore) migrateIssueCollections(ctx context.Context) error {
 	for key, data := range s.workspaces {
@@ -259,6 +259,7 @@ func (s *SQLiteStore) ensureIssueRecords(ctx context.Context) error {
 		"issue_actors_user_idx ON issue_actor_records(workspace_key,user_id,issue_id)",
 		"issue_permissions_subject_idx ON issue_permission_records(workspace_key,subject_type,subject_id,issue_id)",
 		"issue_identifier_aliases_lookup_idx ON issue_identifier_aliases(workspace_key,identifier,issue_id)",
+		issueTreeIndex[s.dialect],
 	}
 	for _, index := range indexes {
 		statement := "CREATE INDEX IF NOT EXISTS " + index
@@ -568,7 +569,31 @@ func (s *SQLiteStore) ImportIssues(ctx context.Context, workspace string, issues
 	if err := writeIssueNumber(ctx, tx, workspace, maxNumber); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.refreshImportedIssueStatistics(ctx)
+	return nil
+}
+
+// refreshImportedIssueStatistics analyzes the issue tables on Postgres once
+// imports have changed more rows than their statistics describe. Postgres
+// takes no index hints, and an index built on an empty table records it as
+// empty until autovacuum analyzes it, so lookups by parent or id (sub-issue
+// walks, parent checks) would scan the workspace once per row meanwhile.
+// SQLite and MySQL name their indexes instead. Each refresh at least doubles
+// the rows described, so a large import analyzes a handful of times.
+func (s *SQLiteStore) refreshImportedIssueStatistics(ctx context.Context) {
+	if s.dialect != "postgres" {
+		return
+	}
+	var behind bool
+	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(t.n_mod_since_analyze > GREATEST(c.reltuples, 1000), false) FROM pg_stat_user_tables t JOIN pg_class c ON c.oid=t.relid WHERE t.schemaname=current_schema() AND t.relname='issue_records'`).Scan(&behind)
+	if err != nil || !behind {
+		return
+	}
+	// Best effort: autovacuum analyzes later in any case.
+	_, _ = s.db.ExecContext(ctx, `ANALYZE issue_records, issue_attribute_records, issue_label_records`)
 }
 
 func writeIssueNumber(ctx context.Context, tx *sqlTx, workspace string, number int) error {

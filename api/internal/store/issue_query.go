@@ -1026,52 +1026,81 @@ func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQue
 	if _, _, err := issueRecordWhere(query); err != nil {
 		return nil, err
 	}
+	revision, err := s.issueCountRevision(ctx, query.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	key, now := issueGroupCountKey(query, revision), time.Now()
+	if groups, ok := s.issueGroupCounts.get(key, now); ok {
+		return groups, nil
+	}
+	counted := withoutRedundantIssueAccess(query)
+	var groups []IssueRecordGroup
 	if query.Nested {
-		groups, err := s.nestedIssueGroups(ctx, query)
-		if err == nil {
-			s.cacheSetIssueGroups(ctx, query, groups)
-		}
-		return groups, err
+		groups, err = s.nestedIssueGroups(ctx, counted)
+	} else {
+		groups, err = s.flatIssueGroups(ctx, counted)
 	}
-	if groups, handled, err := s.issueGroupsFromStats(ctx, query); handled {
-		if err == nil {
-			s.cacheSetIssueGroups(ctx, query, groups)
-		}
-		return groups, err
+	if err == nil {
+		s.issueGroupCounts.put(key, query.Workspace, groups, now)
+		s.cacheSetIssueGroups(ctx, query, groups)
 	}
+	return groups, err
+}
+
+// withoutRedundantIssueAccess drops a viewer's team restriction from a query
+// whose teams are all visible to the viewer (and none deleted): the teams
+// filter already implies it, and without it the counts can come from the
+// precomputed counters and skip the shared-issue scan.
+func withoutRedundantIssueAccess(query IssueRecordQuery) IssueRecordQuery {
+	access := query.Access
+	if access == nil || access.Admin || len(query.TeamIDs) == 0 {
+		return query
+	}
+	for _, id := range query.TeamIDs {
+		if !slices.Contains(access.VisibleTeamIDs, id) || slices.Contains(access.ArchivedTeamIDs, id) {
+			return query
+		}
+	}
+	query.Access = nil
+	return query
+}
+
+// flatIssueGroups counts the query's rows, each in its own group. Nested
+// counts correct these, so for them the condition is the nested base (the
+// indexed text search included).
+func (s *SQLiteStore) flatIssueGroups(ctx context.Context, query IssueRecordQuery) ([]IssueRecordGroup, error) {
 	query.Cursor = ""
-	if query.GroupBy == "cases" {
-		groups, err := s.caseIssueGroups(ctx, query)
-		if err == nil {
-			s.cacheSetIssueGroups(ctx, query, groups)
+	query = query.withoutGroupValue()
+	search := query.Nested && query.SearchText != ""
+	if !search {
+		if groups, handled, err := s.issueGroupsFromStats(ctx, query); handled {
+			return groups, err
 		}
-		return groups, err
+	}
+	where, args, err := issueRecordWhere(query)
+	if search {
+		where, args, err = s.issueNestedBase(query)
+	}
+	if err != nil {
+		return nil, err
+	}
+	prefix, prefixArgs := issueAccessCTE(query)
+	if query.GroupBy == "cases" {
+		return s.caseIssueGroups(ctx, query, where, args)
 	}
 	if query.GroupBy == "none" {
-		where, args, err := issueRecordWhere(query)
-		if err != nil {
-			return nil, err
-		}
-		prefix, prefixArgs := issueAccessCTE(query)
 		var total int64
 		if err := s.db.QueryRowContext(ctx, prefix+"SELECT COUNT(*) FROM issue_records i WHERE "+where, append(prefixArgs, args...)...).Scan(&total); err != nil {
 			return nil, err
 		}
 		if total == 0 {
-			groups := []IssueRecordGroup{}
-			s.cacheSetIssueGroups(ctx, query, groups)
-			return groups, nil
+			return []IssueRecordGroup{}, nil
 		}
-		groups := []IssueRecordGroup{{Value: "all", Count: total}}
-		s.cacheSetIssueGroups(ctx, query, groups)
-		return groups, nil
+		return []IssueRecordGroup{{Value: "all", Count: total}}, nil
 	}
 	if query.GroupBy == "customer" {
-		groups, err := s.customerIssueGroups(ctx, query)
-		if err == nil {
-			s.cacheSetIssueGroups(ctx, query, groups)
-		}
-		return groups, err
+		return s.customerIssueGroups(ctx, query, where, args)
 	}
 	column, err := issueGroupColumn(query.GroupBy)
 	from := "issue_records i"
@@ -1084,12 +1113,20 @@ func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQue
 	} else {
 		column = "i." + column
 	}
-	where, args, err := issueRecordWhere(query)
-	if err != nil {
-		return nil, err
+	statement := prefix + "SELECT " + column + ",COUNT(*) FROM " + from + " WHERE " + where + " GROUP BY " + column + " ORDER BY " + column
+	if query.Nested {
+		// Nested counts read the result again to move its sub-issues, so
+		// the result is read through the index its condition picks, not
+		// the grouping column's index (which serves the order but then
+		// reads every row of the workspace).
+		selection := "SELECT " + column + " AS k FROM " + from + " WHERE " + where
+		if s.dialect == "mysql" {
+			statement = prefix + "SELECT /*+ NO_MERGE(g) */ g.k,COUNT(*) FROM (" + selection + ") g GROUP BY g.k ORDER BY g.k"
+		} else {
+			statement = withIssueCTE(prefix, "nest_flat(k) AS MATERIALIZED ("+selection+")") + "SELECT g.k,COUNT(*) FROM nest_flat g GROUP BY g.k ORDER BY g.k"
+		}
 	}
-	prefix, prefixArgs := issueAccessCTE(query)
-	rows, err := s.db.QueryContext(ctx, prefix+"SELECT "+column+",COUNT(*) FROM "+from+" WHERE "+where+" GROUP BY "+column+" ORDER BY "+column, append(prefixArgs, args...)...)
+	rows, err := s.db.QueryContext(ctx, statement, append(prefixArgs, args...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -1102,21 +1139,13 @@ func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQue
 		}
 		groups = append(groups, group)
 	}
-	if err := rows.Err(); err != nil {
-		return groups, err
-	}
-	s.cacheSetIssueGroups(ctx, query, groups)
-	return groups, nil
+	return groups, rows.Err()
 }
 
 // caseIssueGroups counts the rows of each case of a "cases" grouping, in the
 // cases' order (empty cases are left out).
-func (s *SQLiteStore) caseIssueGroups(ctx context.Context, query IssueRecordQuery) ([]IssueRecordGroup, error) {
+func (s *SQLiteStore) caseIssueGroups(ctx context.Context, query IssueRecordQuery, where string, args []any) ([]IssueRecordGroup, error) {
 	expression, expressionArgs, err := issueGroupCaseExpression(query.GroupCases)
-	if err != nil {
-		return nil, err
-	}
-	where, args, err := issueRecordWhere(query)
 	if err != nil {
 		return nil, err
 	}

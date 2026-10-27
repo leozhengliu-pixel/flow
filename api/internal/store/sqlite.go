@@ -30,6 +30,7 @@ type SQLiteStore struct {
 	mu               sync.RWMutex
 	writeMu          sync.Mutex
 	pulseIndexes     pulseIndexCache
+	issueGroupCounts issueGroupCountCache
 	workspaces       map[string]domain.Bootstrap
 	lastWorkspaceKey string
 	viewer           domain.User
@@ -2059,6 +2060,8 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 	if workspace.URLKey != workspaceKey {
 		_, _ = s.db.ExecContext(ctx, `UPDATE auth_account_state SET last_workspace_key=?,updated_at=? WHERE last_workspace_key=?`, workspace.URLKey, time.Now().UTC().Format(time.RFC3339Nano), workspaceKey)
 		s.forgetChatSnapshotFlag(workspaceKey, workspace.URLKey)
+		s.issueGroupCounts.drop(workspaceKey)
+		s.issueGroupCounts.drop(workspace.URLKey)
 	}
 	delete(s.workspaces, workspaceKey)
 	domain.RebuildTeamDirectory(&data)
@@ -2188,6 +2191,7 @@ func (s *SQLiteStore) deleteWorkspace(ctx context.Context, workspaceKey string) 
 		return err
 	}
 	s.forgetChatSnapshotFlag(workspaceKey)
+	s.issueGroupCounts.drop(workspaceKey)
 	s.workspaces = remaining
 	s.lastWorkspaceKey = nextWorkspaceKey
 	return nil

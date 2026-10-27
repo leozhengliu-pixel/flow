@@ -43,6 +43,13 @@ func (s *SQLiteStore) ensureCustomerFilterIndex(ctx context.Context) error {
 
 func writeCustomerFilterRecord(ctx context.Context, tx *sqlTx, workspace, field, id string, raw []byte) error {
 	switch field {
+	case "customers", "customerRequests", customerRequestImportanceMigration:
+		// Customer groups and filters read these rows.
+		if err := advanceIssueCountRevision(ctx, tx, workspace); err != nil {
+			return err
+		}
+	}
+	switch field {
 	case "customers":
 		if raw == nil {
 			_, err := tx.ExecContext(ctx, `DELETE FROM customer_filter_records WHERE workspace_key=? AND customer_id=?`, workspace, id)
@@ -311,11 +318,7 @@ func customerGroupClause(value string) (string, []any) {
 
 // customerIssueGroups counts issues per requesting customer through the
 // customer request index, plus the "No customer" group.
-func (s *SQLiteStore) customerIssueGroups(ctx context.Context, query IssueRecordQuery) ([]IssueRecordGroup, error) {
-	where, args, err := issueRecordWhere(query)
-	if err != nil {
-		return nil, err
-	}
+func (s *SQLiteStore) customerIssueGroups(ctx context.Context, query IssueRecordQuery, where string, args []any) ([]IssueRecordGroup, error) {
 	prefix, prefixArgs := issueAccessCTE(query)
 	key := "COALESCE(c.customer_id,'" + UnknownCustomerGroup + "')"
 	rows, err := s.db.QueryContext(ctx, prefix+"SELECT "+key+",COUNT(DISTINCT i.id) FROM issue_records i JOIN customer_request_filter_records r ON r.workspace_key=i.workspace_key AND r.issue_id=i.id LEFT JOIN customer_filter_records c ON c.workspace_key=r.workspace_key AND c.customer_id=r.customer_id WHERE "+where+" GROUP BY "+key+" ORDER BY "+key, append(prefixArgs, args...)...)
