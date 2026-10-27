@@ -16,7 +16,9 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Pull request and feature branch runs are superseded by the next push; a run
+  # on main finishes, and only the newest pending run per group is kept.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   dependency-and-secret-scan:
