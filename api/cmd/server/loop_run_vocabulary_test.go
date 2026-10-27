@@ -91,6 +91,8 @@ func TestLoopRunVocabularyTranslated(t *testing.T) {
 		require(template, "verb template")
 	}
 	require(loopExternalToolTemplate, "connector tools")
+	require(loopConnectorToolTemplate, "named connector tools")
+	require("subject:"+loopUnknownConnectorTool, "connector tools that are not known")
 	require(loopOtherToolTemplate, "other tools")
 	for _, name := range append(flowToolNames(t), webSearchToolName, fetchURLToolName, "external_github_search_code") {
 		for _, args := range []map[string]any{nil, {"id": "x"}} {

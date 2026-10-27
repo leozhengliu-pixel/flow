@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { AGENT_ERROR_MESSAGES } from '@/components/agent/agent-error-detail'
-import { CHAT_CONNECTOR_TOOL_LABELS, CHAT_TOOL_FALLBACK, CHAT_TOOL_LABELS, CHAT_TOOL_UPDATE_LABELS, CHAT_TOOL_VERBS, LOOP_TOOL_TEMPLATES, PHASE_TITLE_TEMPLATES, toolStatusLabel, translatePhaseTitle, translateToolTitle } from '@/components/agent/agent-step-labels'
+import { CHAT_CONNECTOR_TOOL_LABELS, CHAT_TOOL_FALLBACK, CHAT_TOOL_LABELS, CHAT_TOOL_UPDATE_LABELS, CHAT_TOOL_VERBS, LOOP_CONNECTOR_TOOL_TEMPLATE, LOOP_TOOL_TEMPLATES, PHASE_TITLE_TEMPLATES, toolStatusLabel, translatePhaseTitle, translateToolTitle } from '@/components/agent/agent-step-labels'
 // Kept equal to api/cmd/server/flow_mcp_tools.json by TestAgentToolNamesFixtureCurrent (Go).
 import toolNames from '@/components/agent/agent-tool-names.json'
 import { FAILURE_MESSAGES, OUTPUT_LABELS, TRIGGER_REASON_NONE, TRIGGER_REASON_TEXTS, triggerReasonTemplate } from '@/components/loops/loop-run-labels'
@@ -76,6 +76,8 @@ describe('agent step and loop run vocabulary', () => {
 
   it('translates the server loop run labels, by entry or by verb template', () => {
     for (const template of LOOP_TOOL_TEMPLATES) expectTranslated(template)
+    expectTranslated(LOOP_CONNECTOR_TOOL_TEMPLATE)
+    expectTranslated('subject:a connector tool')
     expect(translateToolTitle('Read project', translateToChinese)).toBe('已读取项目')
     expect(translateToolTitle('Listed release notes', translateToChinese)).toBe('已列出发布说明')
     expect(translateToolTitle('Used github search', translateToChinese)).toBe('已使用 github search')

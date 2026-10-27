@@ -183,6 +183,8 @@ export const agentStepsZhCN: Record<string, string> = {
   "Listed {subject}": "已列出{subject}",
   "Saved {subject}": "已保存{subject}",
   "Used {subject}": "已使用{subject}",
+  "Used {tool} in {connector}": "已在 {connector} 中使用 {tool}",
+  "subject:a connector tool": "连接器工具",
 
   // Loop run fixed tool labels (loopToolLabels, loopToolSaveLabels).
   "Searched the web": "已搜索网页",

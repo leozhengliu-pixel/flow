@@ -201,6 +201,8 @@ export function runParts(run: Pick<LoopRun, "steps" | "toolCalls">): AgentMessag
         id: call.id ?? `tool-${index}`,
         name: call.name,
         title: call.label,
+        connector: call.connector,
+        remoteTool: call.remoteTool,
         arguments: call.args ? { title: call.args } : undefined,
         status: call.status === "blocked" ? "error" : call.status,
         error: call.status === "blocked" ? (call.error ?? "Blocked by loop permissions") : call.error,

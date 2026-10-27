@@ -64,7 +64,7 @@ function AgentToolCallItem({ part, onApproval, approvalBusy, attachments }: { at
   const detail = readableToolDetail(call.arguments, call.result, call.name, attachments);
   const approvalPending = call.status === "pending" && Boolean(call.approvalId);
   return <div className={`${styles.toolCall} ${call.status === "error" ? styles.toolCallError : ""}`}>
-    <div className={styles.toolCallRow} title={call.error || undefined}><span className={running ? styles.workShimmer : undefined} data-i18n-ignore>{call.title && !running ? translateToolTitle(call.title, t) : toolStatusLabel(call.name, running, t, call.arguments, call.status === "running", call)}</span>{detail && <span data-i18n-ignore>{detail}</span>}</div>
+    <div className={styles.toolCallRow} title={call.error || undefined}><span className={running ? styles.workShimmer : undefined} data-i18n-ignore>{call.title && !running ? translateToolTitle(call.title, t, call) : toolStatusLabel(call.name, running, t, call.arguments, call.status === "running", call)}</span>{detail && <span data-i18n-ignore>{detail}</span>}</div>
     {approvalPending && <div className={styles.approvalPrompt}><span>{t("Waiting for approval")}</span><span className={styles.approvalActions}><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "reject")} type="button">{t("Reject tool")}</button><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "approve")} type="button">{t("Approve tool")}</button></span></div>}
     {call.error && <p className={styles.toolCallErrorText} role="alert">{t(call.error)}</p>}
   </div>;

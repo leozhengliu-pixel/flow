@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { toolStatusLabel, translateToolTitle } from '@/components/agent/agent-step-labels'
 import { translateToChinese } from '@/i18n/translate'
 import type { LoopRun } from '@/types/flow'
+import { runParts } from './loop-data'
 import { describeRunFailure, fixedFailureMessage, parseTriggerLabel, runSkipNote, runTriggerText } from './loop-run-labels'
 
 const zh = translateToChinese
@@ -95,5 +97,29 @@ describe('run failure explanation', () => {
     const error = 'Flow Agent provider returned status 429: {"error":{"message":"Rate limit reached for requests"}}'
     expect(describeRunFailure({ ...base, status: 'failed', failureReason: 'provider_error', error }, zh, 'zh-CN')).toEqual({ message: '模型服务商正在限制请求频率。请稍候再试。', detail: error })
     expect(describeRunFailure({ ...base, status: 'failed', failureReason: 'provider_timeout', error: 'Flow Agent provider is unavailable' }, zh, 'zh-CN')).toEqual({ detail: 'Flow Agent provider is unavailable' })
+  })
+})
+
+describe('connector tool rows in the run log', () => {
+  const hash = 'external_13e42ac3f0b8a2d1c4e5f60718293a4b'
+  const call = { id: 'c1', name: hash, label: 'Used search_code in Code search', connector: 'Code search', remoteTool: 'search_code', status: 'completed' as const }
+
+  it('carries the connector and tool names into the work-group parts', () => {
+    const [part] = runParts({ steps: [], toolCalls: [call] })
+    expect(part.toolCall).toMatchObject({ name: hash, title: 'Used search_code in Code search', connector: 'Code search', remoteTool: 'search_code' })
+  })
+
+  it('reads "Used <tool> in <connector>" in both languages', () => {
+    expect(translateToolTitle(call.label, en, call)).toBe('Used search_code in Code search')
+    expect(translateToolTitle(call.label, zh, call)).toBe('已在 Code search 中使用 search_code')
+    expect(translateToolTitle('Used search_code', zh, { remoteTool: 'search_code' })).toBe('已使用 search_code')
+  })
+
+  it('shows a run stored without the names as a connector tool, never as its hash', () => {
+    const stored = 'Used 13e42ac3f0b8a2d1c4e5f60718293a4b'
+    expect(translateToolTitle(stored, en)).toBe('Used a connector tool')
+    expect(translateToolTitle(stored, zh)).toBe('已使用连接器工具')
+    expect(toolStatusLabel(hash, true, en)).toBe('Running a connector tool…')
+    expect(toolStatusLabel(hash, false, zh)).toBe('已运行连接器工具')
   })
 })
