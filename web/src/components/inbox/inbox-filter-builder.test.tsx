@@ -78,6 +78,16 @@ describe('InboxFilterBuilder', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  it('keeps a property submenu open when it is clicked before the search takes focus', async () => {
+    const user = userEvent.setup()
+    render(<I18nProvider><InboxFilterBuilder filters={[]} onFiltersChange={vi.fn()} /></I18nProvider>)
+    await user.click(screen.getByRole('button',{name:'Add filter'}))
+    await user.click(screen.getByRole('option',{name:'Issue priority'}))
+    await new Promise(resolve => setTimeout(resolve, 60))
+    expect(screen.getByRole('dialog',{name:'Filter Issue priority'})).toBeInTheDocument()
+    expect(screen.getByRole('option',{name:'Issue priority'})).toHaveAttribute('aria-expanded','true')
+  })
+
   it('opens submenus on hover without preselecting the first property', async () => {
     const user = userEvent.setup()
     render(<I18nProvider><InboxFilterBuilder open filters={[]} onFiltersChange={vi.fn()} /></I18nProvider>)

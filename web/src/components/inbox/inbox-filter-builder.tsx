@@ -109,6 +109,7 @@ export function InboxFilterBuilder({
   const [filterBarHost, setFilterBarHost] = useState<HTMLElement | null>(null)
   const triggerAnchorRef = useRef<HTMLSpanElement>(null)
   const propertySearchRef = useRef<HTMLInputElement>(null)
+  const propertyMenuRef = useRef<HTMLDivElement>(null)
   const open = controlledOpen ?? uncontrolledOpen
   const normalizedFilters = useMemo(() => normalizeInboxFilters(filters), [filters])
   const fieldOptions = useMemo<InboxFilterOptions>(() => ({ ...standardOptions, ...options }), [options])
@@ -164,6 +165,7 @@ export function InboxFilterBuilder({
           <Popover.Trigger asChild>{toolbarTrigger}</Popover.Trigger>
           <Popover.Portal>
             <Popover.Content data-flow-motion="floating"
+              ref={propertyMenuRef}
               className={styles.propertyMenu}
               data-additional={normalizedFilters.length > 0}
               side="bottom"
@@ -173,7 +175,15 @@ export function InboxFilterBuilder({
               aria-label="Add filter"
               onOpenAutoFocus={event => {
                 event.preventDefault()
-                requestAnimationFrame(() => propertySearchRef.current?.focus())
+                // Focus the search on the next frame, unless the person already
+                // moved into the list (a fast click on a property): stealing
+                // focus then reads as a focus-outside and closes the submenu.
+                requestAnimationFrame(() => {
+                  const active = document.activeElement
+                  const menu = propertyMenuRef.current
+                  if (menu && active && active !== menu && menu.contains(active)) return
+                  propertySearchRef.current?.focus()
+                })
               }}
               onEscapeKeyDown={() => setOpen(false)}
             >
