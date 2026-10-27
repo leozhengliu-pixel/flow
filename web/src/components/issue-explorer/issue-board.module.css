@@ -253,15 +253,6 @@
 }
 /* The reference app centres the 9px dot in a 14px slot and leaves 1px after the name (Bug pill = 60px). */
 .labelDot{margin:0 3px 0 2px}.badge>.labelDot+span{margin-right:1px}
-.estimateIcon{
-  width:14px;
-  height:14px;
-  display:grid;
-  place-items:center;
-  border-radius:5px;
-  background:var(--semantic-warning);
-  color:var(--semantic-danger-surface);
-}
 .labelStack{
   position:relative;
   width:17px;

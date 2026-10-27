@@ -8,6 +8,7 @@ import { enabledCodingTools, renderCodingPrompt } from '@/lib/coding-tools'
 import { findFavorite, toggleFavoriteFor } from '@/lib/favorites'
 import { configuredIssueBranch, issueWorkPrompt } from '@/lib/issue-work-actions'
 import { estimateLabel, estimateValues } from '@/lib/estimates'
+import { EstimateIcon, EstimateValueIcon } from '@/components/issue/estimate-icon'
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { useIssueCandidates } from '@/components/issue/use-issue-candidates'
@@ -53,8 +54,8 @@ export function IssueRowEstimateItem({ row }: { row: MyIssuesRowData }) {
   const current = context.data.issues.find(item => item.id === row.id)?.estimate
   const update = (estimate: number) => void context.onUpdateIssue(row.id, { estimate }).catch(() => toast.error('Could not update issue'))
   return <Sub label="Estimate" shortcut="⇧ E">
-    <Item label="No estimate" checked={current === undefined || current === null} onSelect={() => update(-1)}/>
-    {values.map(value => <Item key={value} label={estimateLabel(value, type)} checked={current === value} onSelect={() => update(value)}/>)}
+    <Item label="No estimate" icon={<EstimateIcon none/>} checked={current === undefined || current === null || current < 0} onSelect={() => update(-1)}/>
+    {values.map(value => <Item key={value} label={estimateLabel(value, type)} icon={<EstimateValueIcon value={value} settings={settings}/>} checked={current === value} onSelect={() => update(value)}/>)}
   </Sub>
 }
 
@@ -184,8 +185,8 @@ function Separator() {
   return <ContextMenu.Separator className={styles.menuSeparator}/>
 }
 
-function Item({ label, shortcut, checked, top = false, onSelect }: { label: string; shortcut?: string; checked?: boolean; top?: boolean; onSelect: () => void }) {
-  return <ContextMenu.Item className={top ? styles.menuItem : styles.submenuItem} onSelect={onSelect}>{top && <ContextMenuIcon label={label}/>}<span>{label}</span>{checked ? <span aria-label="Selected">✓</span> : shortcut ? <kbd>{shortcut}</kbd> : null}</ContextMenu.Item>
+function Item({ label, icon, shortcut, checked, top = false, onSelect }: { label: string; icon?: ReactNode; shortcut?: string; checked?: boolean; top?: boolean; onSelect: () => void }) {
+  return <ContextMenu.Item className={top ? styles.menuItem : styles.submenuItem} onSelect={onSelect}>{top ? <ContextMenuIcon label={label}/> : icon}<span>{label}</span>{checked ? <span aria-label="Selected">✓</span> : shortcut ? <kbd>{shortcut}</kbd> : null}</ContextMenu.Item>
 }
 
 function Sub({ label, shortcut, issueSearch = false, children }: { label: string; shortcut?: string; issueSearch?: boolean; children: ReactNode }) {

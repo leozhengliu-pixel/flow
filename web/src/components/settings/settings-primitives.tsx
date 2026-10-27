@@ -174,7 +174,7 @@ export function SettingsToggle({
 
 export type SettingsSelectOption =
   | string
-  | { value: string; label: string; disabled?: boolean; entityName?: boolean; icon?: ReactNode; /** Draws a separator above the option. */ divider?: boolean };
+  | { value: string; label: string; disabled?: boolean; entityName?: boolean; icon?: ReactNode; /** Draws a separator above the option. */ divider?: boolean; /** Muted text after the label, shown in the menu only. */ hint?: string };
 
 export function SettingsSelect({
   align = "end",
@@ -252,6 +252,7 @@ export function SettingsSelect({
                     <span data-i18n-ignore={option.entityName || undefined}>
                       {option.label}
                     </span>
+                    {"hint" in option && option.hint && <span className="settings-select-option-hint" data-i18n-ignore>{option.hint}</span>}
                   </span>
                 </SelectPrimitive.ItemText>
                 <SelectPrimitive.ItemIndicator className="settings-select-indicator">

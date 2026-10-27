@@ -64,9 +64,64 @@ export function estimateLabel(value: number | undefined, type: EstimateType): st
   return `${value} Point${value === 1 ? "" : "s"}`;
 }
 
+/** Short value shown on chips and the composer pill: the number, or the T-shirt size. */
+export function estimateShortLabel(value: number, type: EstimateType): string {
+  if (type === "tShirt") return T_SHIRT_LABELS[value] ?? String(value);
+  return String(value);
+}
+
 /** Points an unestimated issue contributes to totals (1 unless turned off). */
 export function unestimatedValue(settings: Pick<TeamSettings, "estimateCountUnestimated"> | undefined): number {
   return settings?.estimateCountUnestimated === false ? 0 : 1;
+}
+
+type EstimatePointSettings = Partial<Pick<TeamSettings, "estimateType" | "estimateAllowZero" | "estimateCountUnestimated">>;
+
+export function teamUsesEstimates(settings: Pick<TeamSettings, "estimateType"> | Partial<Pick<TeamSettings, "estimateType">> | undefined): boolean {
+  return Boolean(settings?.estimateType && settings.estimateType !== "notUsed");
+}
+
+/**
+ * Points an issue contributes to sums, scope and capacity. Unestimated issues
+ * count as 1 point unless "Count unestimated issues" is off; a 0 estimate only
+ * counts as 0 when the team allows zero estimates (otherwise it is treated as
+ * unestimated, matching the server's cycle graph).
+ */
+export function estimatePoints(estimate: number | null | undefined, settings: EstimatePointSettings | undefined): number {
+  if (estimate === undefined || estimate === null || estimate < 0 || (estimate === 0 && !settings?.estimateAllowZero)) return unestimatedValue(settings);
+  return estimate;
+}
+
+/** Sum of estimate points of the issues whose team uses estimates; undefined when none does. */
+export function sumEstimatePoints<T extends { estimate?: number | null; teamId?: string }>(
+  issues: readonly T[],
+  settingsForTeam: (teamId: string | undefined) => EstimatePointSettings | undefined,
+): number | undefined {
+  let total: number | undefined;
+  for (const issue of issues) {
+    const settings = settingsForTeam(issue.teamId);
+    if (!teamUsesEstimates(settings)) continue;
+    total = (total ?? 0) + estimatePoints(issue.estimate, settings);
+  }
+  return total;
+}
+
+/** Point totals as shown next to the estimate icon ("8", "2.5"). */
+export function formatEstimatePoints(points: number): string {
+  return Number.isInteger(points) ? String(points) : String(Math.round(points * 10) / 10);
+}
+
+/**
+ * How full the estimate icon is drawn (0–3 bars) for a value on the team's
+ * scale: the scale is split into thirds by rank, so the largest values fill
+ * the whole triangle.
+ */
+export function estimateIconLevel(value: number | undefined, settings: EstimateScaleSettings | undefined): 0 | 1 | 2 | 3 {
+  if (value === undefined || value === null || value <= 0) return 0;
+  const scale = estimateValues(settings).filter((item) => item > 0);
+  if (!scale.length) return value <= 1 ? 1 : value <= 3 ? 2 : 3;
+  const rank = scale.filter((item) => item <= value).length;
+  return Math.max(1, Math.min(3, Math.ceil((rank / scale.length) * 3))) as 1 | 2 | 3;
 }
 
 /** Picker value for "No estimate"; the API treats -1 as clearing the estimate. */

@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, ty
 import { assigneeMenuOptions } from '@/components/issue/assignee-menu-options'
 import { agentsAvailable } from '@/lib/agent-members'
 import { ProjectGlyph } from '@/components/views/project-glyph'
-import { estimateLabel, estimatePickerOptions, NO_ESTIMATE } from '@/lib/estimates'
+import { estimateLabel, estimateShortLabel, NO_ESTIMATE } from '@/lib/estimates'
+import { EstimateValueIcon } from '@/components/issue/estimate-icon'
+import { estimateMenuProps } from '@/components/issue/estimate-menu'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import type { Editor } from '@tiptap/react'
@@ -266,8 +268,8 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   const cycle = data.cycles.find(item => item.id === cycleId)
   const cycles = data.cycles.filter(item => item.teamId === teamId && item.status !== 'completed')
   const nextUpcomingCycleId = [...cycles].filter(item => item.status === 'upcoming').sort((left,right)=>left.startsAt.localeCompare(right.startsAt))[0]?.id
-  const estimateType = resolvedTeamSettings(data.teamSettings, teamId)?.estimateType ?? 'notUsed'
-  const estimateOptions = estimatePickerOptions(resolvedTeamSettings(data.teamSettings, teamId))
+  const estimateSettings = resolvedTeamSettings(data.teamSettings, teamId)
+  const estimateType = estimateSettings?.estimateType ?? 'notUsed'
   const issueLabels = useMemo(() => labelsForResource(data.labels, 'issue', data.labelGroups), [data.labelGroups, data.labels])
   const availableLabels = useMemo(() => {
     const scopes = new Set(labelTeamScopeIds(teamId, data.teams, data.teamSettings))
@@ -357,7 +359,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     statusRequestRef.current = statusRequest()
     setStateId(defaultState?.id ?? '')
     setPriority(0)
-    setEstimate(0)
+    setEstimate(NO_ESTIMATE)
     setAssigneeId(data.viewer.id)
     setProjectId('')
     setProjectMilestoneId('')
@@ -503,7 +505,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
           <div className={styles.properties}>
             <MiniProperty label="Status" value={inTriage ? TRIAGE_STATUS.name : state?.name ?? 'Status'} selectedId={stateId} icon={inTriage || state ? <StatusIcon state={inTriage || !state ? TRIAGE_STATUS : state}/> : <CircleDashed aria-hidden="true"/>} options={[...availableStates].sort((a,b) => (a.position??0)-(b.position??0)).map((item,index) => ({ id:item.id,label:item.name,color:item.color,icon:<StatusIcon state={item}/>,shortcut:index < 5 ? String(index+1) : undefined }))} onChange={pickStatus}/>
             <MiniProperty label="Priority" value={priority ? priorityNames[priority] : 'Priority'} selectedId={String(priority)} icon={<PriorityIcon priority={priority}/>} options={[0,1,2,3,4].map(item => ({ id:String(item),label:priorityNames[item],icon:<PriorityIcon priority={item}/>,shortcut:String(item) }))} onChange={value => setPriority(Number(value))}/>
-            {estimateType!=='notUsed'&&<MiniProperty label="Estimate" value={estimate >= 0 ? estimateLabel(estimate, estimateType) : 'Estimate'} selectedId={String(estimate)} icon={<EstimateGlyph value={Math.max(estimate, 0)}/>} options={estimateOptions.map(option=>({id:option.id,label:option.label,icon:<EstimateGlyph value={Math.max(option.value, 0)}/>}))} onChange={value=>setEstimate(Number(value))}/>}
+            {estimateType!=='notUsed'&&<MiniProperty {...estimateMenuProps(estimate, estimateSettings)} value={estimate >= 0 ? estimateShortLabel(estimate, estimateType) : 'Estimate'} ariaLabel={estimate >= 0 ? `Change estimate. Current estimate is ${estimateLabel(estimate, estimateType)}` : 'Set estimate'} icon={<EstimateValueIcon value={estimate} settings={estimateSettings}/>} onChange={value=>setEstimate(Number(value))}/>}
             <MiniProperty label="Assignee" value={assignee?.displayName ?? 'Assignee'} selectedId={assigneeId} icon={assignee ? <Avatar name={assignee.displayName}/> : <NoAssigneeIcon/>} options={assigneeMenuOptions(data.users.filter(user => user.active), { teamId, allowAgents: agentsAvailable(data) })} searchPlaceholder="Assign to…" onChange={setAssigneeId}/>
             <MiniProperty label="Project" value={project?.name ?? 'Project'} valueIsEntityName={Boolean(project)} selectedId={projectId} icon={project ? <ProjectGlyph project={project}/> : <ProjectIcon/>} options={[{id:'',label:'No project',icon:<NoProjectIcon/>},...data.projects.map(item => ({id:item.id,label:item.name,color:item.color,icon:<ProjectGlyph project={item}/>,i18nIgnore:true }))]} onChange={value => { setProjectId(value); setProjectMilestoneId('') }}/>
             {project && project.milestones.length > 0 && <MiniProperty label="Milestone" value={projectMilestone?.name ?? 'Milestone'} valueIsEntityName={Boolean(projectMilestone)} selectedId={projectMilestoneId} icon={<Diamond size={14}/>} options={[{id:'',label:'No milestone',icon:<Diamond size={14}/>},...project.milestones.map(item => ({id:item.id,label:item.name,icon:<Diamond size={14}/>,i18nIgnore:true}))]} onChange={setProjectMilestoneId}/>}
@@ -567,7 +569,6 @@ export function ExistingDraftDiscardDialog({ description = 'Your draft will be d
 }
 
 function MiniProperty(props: React.ComponentProps<typeof PropertyMenu>) { return <PropertyMenu compact {...props}/> }
-function EstimateGlyph({ value }: { value: number }) { return value ? <span aria-hidden="true" className="estimate-value-icon">{value}</span> : <CircleDashed aria-hidden="true"/> }
 function cycleIssueProgress(issues: Issue[], cycleId: string) { const scoped=issues.filter(issue=>issue.cycleId===cycleId&&!issue.archivedAt);return scoped.length?Math.round(scoped.filter(issue=>issue.state.type==='completed'||issue.state.type==='canceled').length/scoped.length*100):0 }
 
 /** The due date doubles as a recurring issue's first due date (the reference app's model). */

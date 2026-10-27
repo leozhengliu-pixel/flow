@@ -2135,6 +2135,8 @@ export const zhCN: Record<string, string> = {
   week: "周",
   "weekdays left": "个工作日剩余",
   "of capacity": "容量占用",
+  "{count} week cooldown": "{count} 周冷却期",
+  "{count} weeks cooldown": "{count} 周冷却期",
   "Cycle capacity": "周期容量",
   "Capacity by member and day": "按成员和工作日设置容量",
   scope: "范围",
@@ -5609,7 +5611,7 @@ Object.assign(zhCN, {
   "When enabled, the estimate scale is extended. This is normally not recommended, as large estimates usually mean that an issue should be broken up into smaller issues.":
     "启用后会扩展估算刻度。通常不建议这样做，因为估算过大往往意味着事项应拆分为更小的事项。",
   "Count unestimated issues": "统计未估算的事项",
-  "When enabled, issues that have not been estimated will count as 1 estimate point. When disabled, unestimated issues count as 0 estimate points.":
+  "When enabled, issues without an estimate will count as 1 estimate point. When disabled, they count as 0 estimate points.":
     "启用后，未估算的事项按 1 个估算点计算；停用后按 0 个估算点计算。",
   "All workspace owners and admins are automatically considered team owners": "所有工作区所有者和管理员都自动视为团队所有者",
   "Control who can access the team and its content": "控制谁可以访问团队及其内容",

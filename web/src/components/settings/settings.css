@@ -277,3 +277,10 @@ body .domain-label-row-menu .menu-separator:after,body .domain-label-group-subme
 .settings-admin-hint>a:hover{color:var(--tooltip-text)}
 /* Hover target around a disabled action so its tooltip can say why. */
 .settings-action-hint{display:inline-flex}
+/* Muted scale after an option name ("Fibonacci (1, 2, 3, 5, 8 Points)"). */
+.settings-select-option-hint{color:var(--theme-text-secondary)}
+/* Estimate options hang under "Issue estimation" on a tree line. */
+.team-estimate-options>.settings-row.team-estimate-option{position:relative;padding-left:43px}
+.team-estimate-options>.team-estimate-option:before{content:"";position:absolute;left:23px;top:0;bottom:0;width:1px;background:var(--theme-border-strong)}
+.team-estimate-options>.team-estimate-option:last-child:before{bottom:50%}
+.team-estimate-options>.team-estimate-option:after{content:"";position:absolute;left:23px;top:50%;width:10px;height:1px;background:var(--theme-border-strong)}

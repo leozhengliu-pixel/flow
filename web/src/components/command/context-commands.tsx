@@ -6,7 +6,7 @@
 import { useState, type ReactNode } from 'react'
 import { parseDate } from 'chrono-node'
 import {
-  Archive, ArrowDown, ArrowUp, Bell, BellOff, CalendarRange, CircleDashed, Clipboard, Copy, CopyPlus, GitBranch, Hash, Layers3,
+  Archive, ArrowDown, ArrowUp, Bell, BellOff, CalendarRange, Clipboard, Copy, CopyPlus, GitBranch, Layers3,
   Lightbulb, Link2, ListTree, Trash2, UserRound, Users, X,
 } from 'lucide-react'
 import { toast } from '@/lib/toast'
@@ -30,6 +30,7 @@ import { isMacPlatform } from '@/components/project-detail/project-detail-shortc
 import { PulseIcon } from '@/components/pulse/pulse-icon'
 import { changePulseSubscription, projectPulseSubscribed, sessionPulseChoice } from '@/lib/pulse-subscriptions'
 import { estimatePickerOptions } from '@/lib/estimates'
+import { EstimateIcon, EstimateValueIcon } from '@/components/issue/estimate-icon'
 import { configuredIssueBranch, copyIssueForWork } from '@/lib/issue-work-actions'
 import { labelTeamScopeIds, labelsForResource, setGroupedLabelSelected } from '@/lib/labels'
 import { resolvedTeamSettings } from '@/lib/team-hierarchy'
@@ -244,7 +245,7 @@ function issueCommands({ context, data, page, query, handlers, close, t, refs, i
     { id: 'ctx-due-date', label: 'Set due date…', icon: <CalendarIcon/>, shortcut: ['⇧', 'D'], keywords: 'deadline', page: { id: 'dueDate', label: 'Set due date…' } },
     { id: 'ctx-project', label: 'Move to project…', icon: <ProjectIcon/>, shortcut: ['⇧', 'P'], keywords: 'add to project', page: { id: 'project', label: 'Move to project…' } },
     ...(cycles.length ? [{ id: 'ctx-cycle', label: 'Add to cycle…', icon: <CycleIcon/>, shortcut: ['⇧', 'C'], keywords: 'sprint', page: { id: 'cycle' as const, label: 'Add to cycle…' } }] : []),
-    ...(estimatesUsed ? [{ id: 'ctx-estimate', label: 'Set estimate…', icon: <Hash/>, shortcut: ['⇧', 'E'], keywords: 'points', page: { id: 'estimate' as const, label: 'Set estimate…' } }] : []),
+    ...(estimatesUsed ? [{ id: 'ctx-estimate', label: 'Set estimate…', icon: <EstimateIcon/>, shortcut: ['⇧', 'E'], keywords: 'points', page: { id: 'estimate' as const, label: 'Set estimate…' } }] : []),
     { id: 'ctx-parent', label: 'Set parent issue…', icon: <ListTree/>, keywords: 'parent', page: { id: 'parent', label: 'Set parent issue…' } },
     ...(single ? [
       { id: 'ctx-sub-issue', label: 'Add sub-issue…', icon: <ListTree/>, keywords: 'child existing', page: { id: 'subIssue' as const, label: 'Add sub-issue…' } },
@@ -329,7 +330,7 @@ function issueCommands({ context, data, page, query, handlers, close, t, refs, i
     }
     if (page.id === 'estimate') {
       const current = same(issue => issue.estimate ?? -1)
-      return estimatePickerOptions(teamSettings).map(option => ({ id: option.id, label: option.label, icon: option.value > 0 ? <span className="command-estimate">{option.value}</span> : <CircleDashed/>, current: current === option.value, select: choose(() => apply({ estimate: option.value })) }))
+      return estimatePickerOptions(teamSettings).map(option => ({ id: option.id, label: option.label, icon: <EstimateValueIcon value={option.value} settings={teamSettings}/>, current: current === option.value, select: choose(() => apply({ estimate: option.value })) }))
     }
     if (page.id === 'team') {
       return data.teams.filter(team => !team.archivedAt).map(team => ({ id: team.id, label: team.name, entity: true, keywords: team.key, icon: <TeamIcon team={team}/>, current: oneTeam === team.id, select: choose(() => apply({ teamId: team.id })) }))

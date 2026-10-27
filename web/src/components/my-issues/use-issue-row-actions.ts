@@ -1,5 +1,6 @@
-import { createContext, useContext } from 'react'
-import type { BootstrapData, Issue, IssueUpdateInput } from '@/types/flow'
+import { createContext, useCallback, useContext } from 'react'
+import type { BootstrapData, Issue, IssueUpdateInput, TeamSettings } from '@/types/flow'
+import { resolvedTeamSettings } from '@/lib/team-hierarchy'
 import type { MyIssuesCreateContext } from './my-issues-list'
 
 /**
@@ -17,3 +18,12 @@ export interface IssueRowActionContextValue {
 export const IssueRowActionContext = createContext<IssueRowActionContextValue | undefined>(undefined)
 
 export function useIssueRowActions() { return useContext(IssueRowActionContext) }
+
+/**
+ * Estimate settings (inheritance resolved) for a row's team. Returns undefined
+ * for every team when the list is rendered outside an issue page provider.
+ */
+export function useTeamEstimateSettings() {
+  const teamSettings = useIssueRowActions()?.data.teamSettings
+  return useCallback((teamId?: string): TeamSettings | undefined => teamId && teamSettings ? resolvedTeamSettings(teamSettings, teamId) : undefined, [teamSettings])
+}

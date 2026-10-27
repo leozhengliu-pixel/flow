@@ -14,7 +14,9 @@ import { DueDatePicker } from '@/components/issue/due-date-picker'
 import styles from './my-issues-list.module.css'
 import { ContextMenuIcon } from './context-menu-icon'
 import { IssueRowActionGroups, IssueRowEstimateItem, IssueRowMoreProperties } from './issue-row-actions'
-import { useIssueRowActions } from './use-issue-row-actions'
+import { useIssueRowActions, useTeamEstimateSettings } from './use-issue-row-actions'
+import { EstimateChip, EstimateIcon } from '@/components/issue/estimate-icon'
+import { formatEstimatePoints, sumEstimatePoints, teamUsesEstimates } from '@/lib/estimates'
 import { useTeamStatusOptions } from './use-team-status-options'
 import { teamWorkflowStates } from '@/lib/team-workflow'
 import { AvatarImage, UserAvatar } from '@/components/ui/user-avatar'
@@ -239,6 +241,8 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
     return [...parent, header, ...group.issues.map((issue, index) => ({ key: `issue:${group.id}:${issue.id}`, kind: 'issue' as const, issue, nestedLines: nestedLines.get(issue.id) ?? EMPTY_LINES, groupEnd: index === group.issues.length - 1 }))]
   }), [collapsedGroupIds, groups, hideGroupHeaders, nestedSubIssues])
   useSelectHoveredRowWithX(entries, selectedIds, onSelectIssue)
+  const estimateSettingsFor = useTeamEstimateSettings()
+  const groupEstimate = (group: MyIssuesGroupData) => displayProperties.has('estimate') ? sumEstimatePoints(group.issues, estimateSettingsFor) : undefined
   if (loading) return <LoadingContainer loading label="Loading issues"/>
   if (error) return <MyIssuesListError message={error} onRetry={onClearError}/>
   if (!groups.some(group => group.issues.length)) return emptyState ?? <MyIssuesListEmpty/>
@@ -247,7 +251,7 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
   const renderEntry = (entry: MyIssuesListEntry) => entry.kind === 'parent'
     ? <MyIssuesParentGroupHeader label={entry.label} count={entry.count}/>
     : entry.kind === 'group'
-    ? <div style={{ paddingBottom: !entry.collapsed && !entry.group.issues.length ? 4 : 2 }}><MyIssuesGroupHeader collapsed={entry.collapsed} createIssueLabel={createIssueLabel} group={entry.group} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/></div>
+    ? <div style={{ paddingBottom: !entry.collapsed && !entry.group.issues.length ? 4 : 2 }}><MyIssuesGroupHeader collapsed={entry.collapsed} createIssueLabel={createIssueLabel} group={entry.group} estimateSum={groupEstimate(entry.group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/></div>
     : <div style={{ paddingBottom: entry.groupEnd ? 2 : 0 }}><MyIssuesRow issue={entry.issue} active={activeIssueId === entry.issue.id} selected={selectedIds.has(entry.issue.id)} displayProperties={displayProperties} nestedLines={entry.nestedLines} showSubIssueProgress={!nestedSubIssues} propertyOptions={propertyOptions} mutationError={mutationErrors.get(entry.issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/></div>
   if (entries.length > VIRTUALIZATION_THRESHOLD) return <Virtuoso
     className={styles.virtualList}
@@ -269,7 +273,7 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
       const parentHeader = group.parentGroupId && groups[index - 1]?.parentGroupId !== group.parentGroupId
       return <section className={styles.group} key={group.id} aria-labelledby={hideGroupHeaders ? undefined : `my-issues-group-${group.id}`} data-subgroup={group.parentGroupId ? true : undefined}>
         {parentHeader && <MyIssuesParentGroupHeader label={group.parentLabel ?? ''} count={groups.filter(item => item.parentGroupId === group.parentGroupId).reduce((total, item) => total + item.issues.length, 0)}/>}
-        {!hideGroupHeaders && <MyIssuesGroupHeader collapsed={collapsed} createIssueLabel={createIssueLabel} group={group} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/>}
+        {!hideGroupHeaders && <MyIssuesGroupHeader collapsed={collapsed} createIssueLabel={createIssueLabel} group={group} estimateSum={groupEstimate(group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/>}
         {!collapsed && <div>{group.issues.map(issue => <MyIssuesRow key={issue.id} issue={issue} active={activeIssueId === issue.id} selected={selectedIds.has(issue.id)} displayProperties={displayProperties} nestedLines={nestedLines.get(issue.id)??EMPTY_LINES} showSubIssueProgress={!nestedSubIssues} propertyOptions={propertyOptions} mutationError={mutationErrors.get(issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>)}</div>}
       </section>
     })}
@@ -281,10 +285,12 @@ function MyIssuesParentGroupHeader({ label, count }: { label: string; count: num
   return <header className={styles.parentGroupHeader}><span data-i18n-ignore className={styles.groupName}>{label}</span><span className={styles.groupCount}>{count}</span></header>
 }
 
-export function MyIssuesGroupHeader({ collapsed, createIssueLabel, group, onCreateIssue, onGroupCollapsedChange }: { collapsed: boolean; createIssueLabel: string; group: MyIssuesGroupData; onCreateIssue?: (group: MyIssuesGroupData) => void; onGroupCollapsedChange?: (groupId: string, collapsed: boolean) => void }) {
+/** `estimateSum`: the group's estimate total ("Todo 2 △ 8"), shown when the issues' team uses estimates. */
+export function MyIssuesGroupHeader({ collapsed, createIssueLabel, group, estimateSum, onCreateIssue, onGroupCollapsedChange }: { collapsed: boolean; createIssueLabel: string; group: MyIssuesGroupData; estimateSum?: number; onCreateIssue?: (group: MyIssuesGroupData) => void; onGroupCollapsedChange?: (groupId: string, collapsed: boolean) => void }) {
   return <header className={styles.groupHeader} data-subgroup={group.parentGroupId ? true : undefined}>
     <button className={styles.collapseButton} aria-label={collapsed ? 'Expand group' : 'Collapse group'} aria-expanded={!collapsed} onClick={() => onGroupCollapsedChange?.(group.id, !collapsed)}><ChevronDown size={12}/></button>
     <GroupStateIcon state={group.state ?? group.issues[0]?.state} type={group.stateType}/><span data-i18n-ignore id={`my-issues-group-${group.id}`} className={styles.groupName}>{group.label}</span><span className={styles.groupCount}>{group.totalCount ?? group.issues.length}</span>
+    {estimateSum !== undefined && <span className={`estimate-chip ${styles.groupEstimate}`} aria-label={`${estimateSum} estimate points`}><EstimateIcon level={0} size={14}/><span className="estimate-chip__value">{formatEstimatePoints(estimateSum)}</span></span>}
     {onCreateIssue && <button className={styles.createButton} aria-label={createIssueLabel} onClick={() => onCreateIssue(group)}><Plus size={16}/></button>}
   </header>
 }
@@ -318,6 +324,11 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
   onSelect?: (issueId: string, selected: boolean, range: boolean) => void
 }) {
   const nestedDepth=nestedLines.length
+  const estimateSettingsFor = useTeamEstimateSettings()
+  const hasEstimateContext = Boolean(useIssueRowActions())
+  const estimateSettings = estimateSettingsFor(issue.teamId)
+  // The chip shows only for teams that use estimates (any estimate outside an issue page provider).
+  const showEstimate = displayProperties.has('estimate') && issue.estimate != null && issue.estimate >= 0 && (hasEstimateContext ? teamUsesEstimates(estimateSettings) : true)
   const open = () => onOpen?.(issue)
   const keydown = (event: KeyboardEvent<HTMLAnchorElement>) => { if (event.target === event.currentTarget && event.key === ' ') { event.preventDefault(); open() } }
   const click = (event: MouseEvent<HTMLAnchorElement>) => {
@@ -383,7 +394,7 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
               blockingIds={issue.blockingIds}
             /> : null}
             {displayProperties.has('sla') && issue.sla && <IssueSLAIndicator compact sla={issue.sla} ruleName={issue.sla.ruleName}/>}
-            {displayProperties.has('estimate') && issue.estimate != null && <span className={styles.badge} aria-label={`Estimate ${issue.estimate}`}>{issue.estimate}</span>}
+            {showEstimate && <EstimateChip className={styles.estimateChip} value={issue.estimate!} settings={estimateSettings} label={`Estimate ${issue.estimate}`}/>}
             {displayProperties.has('assignee') ? <IssueAssigneeSlot issue={issue} options={propertyOptions.assignee} onChange={value => change('assignee', value)} avatarClassName={styles.avatar} emptyClassName={styles.noAssignee}/> : null}
             {mutationError && <button type="button" className={styles.rowError} title={mutationError} onClick={() => onRetryMutation?.(issue)}>Retry</button>}
           </span>
@@ -522,7 +533,7 @@ export function MyIssuesListError({ message, onRetry }: { message: string; onRet
 
 const EMPTY_SET = new Set<string>()
 const EMPTY_ERRORS = new Map<string, string>()
-const DEFAULT_PROPERTIES = new Set<MyIssuesProperty>(['id', 'status', 'assignee', 'priority', 'project', 'labels', 'created'])
+const DEFAULT_PROPERTIES = new Set<MyIssuesProperty>(['id', 'status', 'assignee', 'priority', 'project', 'estimate', 'labels', 'created'])
 const EMPTY_OPTIONS: MyIssuesRowPropertyOptions = { status: [], priority: [], assignee: [], dueDate: [], labels: [], project: [], cycle: [] }
 function priorityName(priority: number) { return ['No', 'Urgent', 'High', 'Medium', 'Low'][priority] }
 function rowAriaLabel(issue: MyIssuesRowData) { return `Select issue ${priorityName(issue.priority)} Priority ${issue.identifier} ${issue.title}` }
