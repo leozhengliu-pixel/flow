@@ -64,6 +64,16 @@ func metadataOnlyMutation(event string, payload any) bool {
 		return true
 	case "application_policy.updated":
 		return true
+	// Audit writes recorded after the change they describe committed: each
+	// callback only prepends entries to the audit log (and runs with
+	// WithMetadataFields(ctx, "auditLog")). SCIM profile sync only edits the
+	// member's userSettings. Through the full path they would load and
+	// replace every issue and content record, deleting records another
+	// server committed meanwhile.
+	case "audit.agent_session", "audit.agent_run_mcp", "audit.code_host_account", "audit.coding_environment",
+		"audit.coding_mcp", "audit.oauth_application_credential", "audit.personal_connection",
+		"scim.audited", "scim.token_revoked", "user_settings.scim_profile":
+		return true
 	// Audit log streaming only advances the streaming webhook's cursor.
 	case "webhook.audit_stream_progress":
 		return true
