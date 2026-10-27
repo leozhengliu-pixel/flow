@@ -40,6 +40,25 @@ describe('AgentWorkGroup', () => {
     expect(container.textContent).toContain('已转写媒体')
   })
 
+  it('labels a connector tool by its own name and connector instead of its opaque id', () => {
+    const connectorCall = (id: string, status: 'running' | 'completed') => ({ id, type: 'toolCall' as const, status, toolCall: { id, name: 'external_13e42ac3f0b8a2d1c4e5f60718293a4b', connector: 'Code search', remoteTool: 'search_code', arguments: {}, status } })
+    const done = renderGroup([connectorCall('t1', 'completed')])
+    fireEvent.click(screen.getByText(/Worked for/))
+    expect(done.container.querySelector('[class*="toolCallRow"]')?.textContent).toBe('Ran search_code in Code search')
+    expect(done.container.textContent).not.toContain('13e42ac3')
+    done.unmount()
+    const zh = renderGroup([connectorCall('t1', 'completed')], 'zh-CN')
+    expect(zh.container.querySelector('[class*="toolCallRow"]')?.textContent).toBe('已在 Code search 中运行 search_code')
+  })
+
+  it('names the running connector tool in the live header', () => {
+    const parts: Parts = [{ id: 't1', type: 'toolCall', status: 'running', toolCall: { id: 't1', name: 'external_13e42ac3f0b8a2d1c4e5f60718293a4b', connector: 'Code search', remoteTool: 'search_code', status: 'running' } }]
+    expect(workingLabel(parts, source => source)).toBe('Running search_code in Code search…')
+    expect(workingLabel(parts, translateToChinese)).toBe('正在 Code search 中运行 search_code…')
+    expect(toolStatusLabel('external_abc', false, source => source, {}, false, { remoteTool: 'search_code' })).toBe('Ran search_code')
+    expect(toolStatusLabel('external_abc', true, source => source, {}, false, {})).toBe('Running external abc…')
+  })
+
   it('hides raw provider reasoning, also in older chats, but keeps the agent\'s own narration and step labels', () => {
     const { container } = renderGroup([
       { id: 'agent_message_1_reasoning', type: 'reasoning', text: 'Figuring out query filters — I need to look into the priority filter', status: 'completed' },

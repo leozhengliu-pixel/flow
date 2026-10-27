@@ -152,6 +152,10 @@ func agentCallPhrase(call domain.AgentToolCall) (string, string) {
 		}
 		return phaseUpdate, firstNonEmpty(target, noun)
 	}
+	if call.Connector != "" {
+		// A connector tool's name is an opaque id: the phase names its connector.
+		return phaseUse, call.Connector
+	}
 	return phaseUse, strings.ReplaceAll(name, "_", " ")
 }
 

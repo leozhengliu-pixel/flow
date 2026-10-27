@@ -245,6 +245,17 @@ func (s *server) discoverConnectorTools(ctx context.Context, data domain.Bootstr
 	return items, nil
 }
 
+// annotateConnectorCall names an external connector tool call after its connector and the tool's own name, so the
+// chat can label a row whose Name is only an opaque id. Other calls, and connector tools no longer offered, are left as is.
+func annotateConnectorCall(ctx context.Context, call *domain.AgentToolCall) {
+	if call == nil || !strings.HasPrefix(call.Name, "external_") {
+		return
+	}
+	if tool, ok := offeredConnectorTool(ctx, call.Name); ok {
+		call.Connector, call.RemoteTool = tool.Policy.label(), tool.RemoteName
+	}
+}
+
 // listConnectorTools connects to one connector and lists its tools.
 func (s *server) listConnectorTools(ctx context.Context, policy applicationPolicy) ([]connectorTool, error) {
 	client, err := s.openConnector(ctx, policy)

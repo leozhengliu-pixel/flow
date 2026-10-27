@@ -439,12 +439,14 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			}
 			key := "tool:" + event.ToolCall.ID
 			index, ok := partIndex[key]
+			named := cloneToolCall(event.ToolCall)
+			annotateConnectorCall(r.Context(), named)
 			if !ok {
 				index = len(parts)
 				partIndex[key] = index
-				parts = append(parts, domain.AgentMessagePart{ID: fmt.Sprintf("%s_tool_%d", messageID, index), Type: "toolCall", Status: "running", ToolCall: cloneToolCall(event.ToolCall)})
+				parts = append(parts, domain.AgentMessagePart{ID: fmt.Sprintf("%s_tool_%d", messageID, index), Type: "toolCall", Status: "running", ToolCall: named})
 			} else if event.Type == "tool.started" {
-				parts[index].ToolCall = cloneToolCall(event.ToolCall)
+				parts[index].ToolCall = named
 			}
 			if writer != nil {
 				part := parts[index]
@@ -667,6 +669,9 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		if len(turn.ToolCalls) == 0 {
 			truncated = agentTurnTruncated(turn.StopReason)
 			break
+		}
+		for index := range turn.ToolCalls {
+			annotateConnectorCall(r.Context(), &turn.ToolCalls[index])
 		}
 		messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, ToolCalls: turn.ToolCalls, Reasoning: turn.Reasoning})
 		// A turn running several tools gets a phase title above their rows, named from the calls (no model call).

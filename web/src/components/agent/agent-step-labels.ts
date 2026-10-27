@@ -77,8 +77,15 @@ export const LOOP_TOOL_TEMPLATES = [
   "Used {subject}", "Ran {subject}",
 ]
 
+/** Chat labels of an external connector tool: [running, done]; {tool} is its own name, {connector} the connector. */
+export const CHAT_CONNECTOR_TOOL_LABELS: [string, string] = ["Running {tool} in {connector}…", "Ran {tool} in {connector}"]
+
+/** The connector a tool call belongs to and the tool's own name (external connector tools only; their `name` is an opaque id). */
+export type ConnectorToolRef = Pick<AgentToolCall, "connector" | "remoteTool">
+
 /** A running or finished chat tool call's label, translated. */
-export function toolStatusLabel(name: string, running: boolean, t: Translate, args?: Record<string, unknown>, argumentsPending = false) {
+export function toolStatusLabel(name: string, running: boolean, t: Translate, args?: Record<string, unknown>, argumentsPending = false, connector?: ConnectorToolRef) {
+  if (connector?.remoteTool) return connectorToolLabel(connector, running, t)
   const tool = name.replace(/^mcp__flow\./, "")
   const updating = typeof args?.id === "string" && args.id !== ""
   const [verb, ...words] = tool.split("_")
@@ -90,6 +97,16 @@ export function toolStatusLabel(name: string, running: boolean, t: Translate, ar
   const templates = words.length ? CHAT_TOOL_VERBS[verb] : undefined
   if (templates) return fillSubject(templates[running ? 0 : 1], words.join(" "), t)
   return fillSubject(CHAT_TOOL_FALLBACK[running ? 0 : 1], tool.replaceAll("_", " ") || "tool", t)
+}
+
+/** "Running search_code in Code search…": a connector tool by its own name; without the connector, "Running search_code…". */
+function connectorToolLabel(ref: ConnectorToolRef, running: boolean, t: Translate) {
+  const tool = ref.remoteTool ?? ""
+  if (!ref.connector) return fillSubject(CHAT_TOOL_FALLBACK[running ? 0 : 1], tool, t)
+  const template = CHAT_CONNECTOR_TOOL_LABELS[running ? 0 : 1]
+  const translated = t(template)
+  const text = translated.replace("{tool}", () => tool).replace("{connector}", () => ref.connector!)
+  return translated === template ? text : spaceMixedScripts(text)
 }
 
 function hasArguments(args?: Record<string, unknown>) {
@@ -172,7 +189,7 @@ export function workingLabel(parts: NonNullable<AgentMessage["parts"]>, t: Trans
   const between = step >= 0 && parts.slice(step + 1, tool).every(part => part.type === "toolCall");
   if (between) return `${translatePhaseTitle(parts[step].title!, t).replace(/…$/, "")}…`;
   const call = parts[tool].toolCall!;
-  return toolStatusLabel(call.name, true, t, call.arguments, call.status === "running");
+  return toolStatusLabel(call.name, true, t, call.arguments, call.status === "running", call);
 }
 
 /**
