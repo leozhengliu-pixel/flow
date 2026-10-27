@@ -1,3 +1,5 @@
+import { useLatestRef } from '@/hooks/use-latest-ref'
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { WelcomeMessageSettingsPage } from "./welcome-message-settings-page";
 import { CodingToolsSettingsPage } from "./coding-tools-settings-page";
 import {
@@ -2201,10 +2203,7 @@ function SecurityPage({
   const [settings, setSettings] = useState(data.workspaceSettings);
   const [uploadPolicyOpen, setUploadPolicyOpen] = useState(false);
   const [privacyDialog, setPrivacyDialog] = useState<"support" | "health" | null>(null);
-  useEffect(
-    () => setSettings(data.workspaceSettings),
-    [data.workspaceSettings],
-  );
+  useResetOnChange([data.workspaceSettings], () => setSettings(data.workspaceSettings));
   const save = async (next: WorkspaceSettings) => {
     setSettings(next);
     try {
@@ -2475,7 +2474,7 @@ function ApiPage({
 }) {
   const navigate = useNavigate();
   const [settings, setSettings] = useState(data.workspaceSettings);
-  useEffect(() => setSettings(data.workspaceSettings), [data.workspaceSettings]);
+  useResetOnChange([data.workspaceSettings], () => setSettings(data.workspaceSettings))
   const admin = data.viewerRole === "admin" || data.viewerRole === "owner";
   const apiPath = settingsPath(data.workspace.urlKey, "api");
   const issuedKeys = (data.apiKeys ?? []).filter((item) => !item.revokedAt && !item.oauthClientId);
@@ -2835,7 +2834,7 @@ function AuthenticationPage({
   onReload: () => Promise<void>;
 }) {
   const [settings, setSettings] = useState(data.workspaceSettings);
-  useEffect(() => setSettings(data.workspaceSettings), [data.workspaceSettings]);
+  useResetOnChange([data.workspaceSettings], () => setSettings(data.workspaceSettings))
   const save = async (next: WorkspaceSettings) => {
     setSettings(next);
     try {
@@ -2915,11 +2914,9 @@ function WorkspaceInviteLinkRow({
 }) {
   const [link, setLink] = useState<string>("");
   const [busy, setBusy] = useState(false);
+  useResetOnChange([enabled], () => { if (!enabled) setLink(""); });
   useEffect(() => {
-    if (!enabled) {
-      setLink("");
-      return;
-    }
+    if (!enabled) return;
     void fetchWorkspaceInviteLink(data.workspace.urlKey)
       .then(async (result) => {
         if ("token" in result && result.enabled) {
@@ -3293,8 +3290,7 @@ function useUserStoredSettings(data: BootstrapData) {
     values: storedUserValues(source),
     lists: {},
   }));
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  const stateRef = useLatestRef(state);
   const setState = useCallback<
     React.Dispatch<React.SetStateAction<StoredSettings>>
   >((update) => {
@@ -3309,7 +3305,7 @@ function useUserStoredSettings(data: BootstrapData) {
       setStateInternal(current => ({...current,values:{...current.values,...Object.fromEntries(Object.entries(patch).filter(([key,value]) => Object.is(current.values[key],value)).map(([key]) => [key,before.values[key]]))}}));
       toast.error('Could not save settings');
     }).finally(() => { pending.current--; });
-  }, [data.workspace.urlKey,data.viewer.id]);
+  }, [data.workspace.urlKey,data.viewer.id,stateRef]);
   useEffect(() => {
     const next = data.userSettings[data.viewer.id];
     if (next)

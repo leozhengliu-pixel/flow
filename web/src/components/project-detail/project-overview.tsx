@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import type { Editor } from '@tiptap/react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
@@ -71,11 +72,12 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
   const teamNames = projectTeams.map(team => team.name).join(', ')
   // Inline comments on the description ("Comment" on its selection toolbar), shown beside it.
   const inlineComments = useEntityInlineComments(project.comments)
+  const { attachEditor: attachDescriptionEditor, attachShell: attachOverviewShell } = inlineComments
   const projectHref = issueData ? projectPath(issueData.workspace.urlKey, project) : undefined
   const commentEntity = useMemo<InlineCommentEntity>(() => ({ kind: 'project', id: project.id, name: project.name, href: projectHref, teamId: project.teamIds?.[0] ?? teams[0]?.id }), [project.id, project.name, project.teamIds, projectHref, teams])
   const reloadComments = useCallback(async () => { await onReloadWorkspace?.() }, [onReloadWorkspace])
 
-  return <TooltipProvider delayDuration={450} skipDelayDuration={400}><div className={`project-overview inline-comment-host${inlineComments.gutter ? ' has-comment-gutter' : ''}`} ref={inlineComments.shellRef}>
+  return <TooltipProvider delayDuration={450} skipDelayDuration={400}><div className={`project-overview inline-comment-host${inlineComments.gutter ? ' has-comment-gutter' : ''}`} ref={attachOverviewShell}>
     {outline.length > 1 && <ProjectOutlineRail items={outline}/>}
     <section className="project-overview__intro">
       <ViewIconPicker surface="page" color={project.color} icon={normalizeProjectIcon(project.icon)} onChange={visual => void save(visual)} triggerClassName="project-overview__icon"/>
@@ -107,7 +109,7 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
 
     <section className="project-overview__description" id="project-overview-description">
       <h3>Description</h3>
-      <ProjectDescriptionEditor users={users} value={project.description} onCommit={description => save({ description })} editorRef={inlineComments.editorRef} selection={{ entity: { kind: 'project', id: project.id, name: project.name, href: projectHref }, data: issueData, teamId: project.teamIds?.[0] ?? teams[0]?.id, onComment: issueData ? inlineComments.startComment : undefined }}/>
+      <ProjectDescriptionEditor users={users} value={project.description} onCommit={description => save({ description })} editorRef={attachDescriptionEditor} selection={{ entity: { kind: 'project', id: project.id, name: project.name, href: projectHref }, data: issueData, teamId: project.teamIds?.[0] ?? teams[0]?.id, onComment: issueData ? inlineComments.startComment : undefined }}/>
     </section>
 
     <section className="project-overview__milestones" id="project-overview-milestones">
@@ -225,7 +227,7 @@ function DateProperty({ label, max, min, onChange, onOpenChange, open, placehold
 function ProjectEditableText({ ariaLabel, autoFocus, className, multiline, onCommit, onDone, placeholder, value }: { ariaLabel: string; autoFocus?: boolean; className: string; multiline?: boolean; onCommit: (value: string) => Promise<void>; onDone?: () => void; placeholder: string; value: string }) {
   const [draft, setDraft] = useState(value)
   const cancelled = useRef(false)
-  useEffect(() => setDraft(value), [value])
+  useResetOnChange([value], () => setDraft(value))
   const commit = () => { const next = draft.trim(); const skip = cancelled.current || (onDone && !next); cancelled.current = false; if (!skip && next !== value) void onCommit(next); onDone?.() }
   if (multiline) return <MentionTextField ariaLabel={ariaLabel} autoFocus={autoFocus} className={className} onBlur={commit} onChange={setDraft} placeholder={placeholder} value={draft}/>
   return <input aria-label={ariaLabel} autoFocus={autoFocus} className={className} onBlur={commit} onChange={event => setDraft(event.target.value)} onKeyDown={onDone ? event => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') { cancelled.current = true; setDraft(value); event.currentTarget.blur() } } : undefined} placeholder={placeholder} value={draft}/>
@@ -233,7 +235,7 @@ function ProjectEditableText({ ariaLabel, autoFocus, className, multiline, onCom
 
 function ProjectDescriptionEditor({ users, value, onCommit, selection, editorRef }: { users: Props['users']; value: string; onCommit: (value: string) => Promise<void>; selection: Parameters<typeof useEntityDescriptionSelectionActions>[0]; editorRef?: (editor: Editor | null) => void }) {
   const [draft, setDraft] = useState(value)
-  useEffect(() => setDraft(value), [value])
+  useResetOnChange([value], () => setDraft(value))
   // Selecting text offers "Create issue from selection", "Ask agent" and "Comment", as in an issue description.
   const { actions, panels } = useEntityDescriptionSelectionActions(selection)
   return <>

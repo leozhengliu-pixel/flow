@@ -1,6 +1,7 @@
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import { ArrowUpRight, Check, ChevronDown } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { useI18n } from "@/i18n/i18n";
 import { updateProjectUpdateSettings } from "@/lib/api";
@@ -140,12 +141,12 @@ export function ProjectUpdateSettingsPage({
       ? optionLabel(0)
       : `${optionLabel(c)} ${t("on")} ${t(DAYS[d - 1])} ${t("between")} ${hourLabel(h)}`;
 
-  useEffect(() => {
+  useResetOnChange([editing, saved.cadence, saved.day, saved.hour], () => {
     if (editing) return;
     setCadence(saved.cadence);
     setDay(saved.day);
     setHour(saved.hour);
-  }, [editing, saved.cadence, saved.day, saved.hour]);
+  });
 
   const cancel = () => {
     setCadence(saved.cadence);

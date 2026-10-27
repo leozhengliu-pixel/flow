@@ -437,14 +437,13 @@ function MigrationAssistant({
   const [apiToken, setApiToken] = useState("");
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    const latest = data.migrationJobs?.[0];
-    if (latest && latest.id !== job?.id) {
-      setJob(latest);
-      setTarget(latest.target);
-      setTargetTeamId(latest.targetTeamId ?? data.teams[0]?.id ?? "");
-    }
-  }, [data.migrationJobs, data.teams, job?.id]);
+  // A newer migration job in the synced data replaces the one shown (adjusted while rendering).
+  const latestJob = data.migrationJobs?.[0];
+  if (latestJob && latestJob.id !== job?.id) {
+    setJob(latestJob);
+    setTarget(latestJob.target);
+    setTargetTeamId(latestJob.targetTeamId ?? data.teams[0]?.id ?? "");
+  }
   const upload = async (file?: File) => {
     if (!file) return;
     setBusy(true);

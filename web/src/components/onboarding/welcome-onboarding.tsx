@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
+import { useCallback, useState, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { GitBranch, Mail, MessageSquare, UserRound } from "lucide-react";
 import type { AccountBootstrap, User, Workspace } from "@/types/flow";
@@ -54,9 +55,7 @@ export function WelcomeOnboarding({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    setStepId(readStep(location.state));
-  }, [location.state]);
+  useResetOnChange([location.state], () => setStepId(readStep(location.state)));
 
   const step = Math.max(0, WELCOME_STEPS.indexOf(stepId));
   const goTo = useCallback(

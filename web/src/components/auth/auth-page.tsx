@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { ArrowLeft, Check, Eye, EyeOff, Mail } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
@@ -43,7 +44,7 @@ export function AuthPage({ session, onAuthenticated, onInvitationAccepted }: Pro
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [pending, setPending] = useState(false)
+  const [pending, setPending] = useState(Boolean(inviteToken))
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [devToken, setDevToken] = useState('')
@@ -52,9 +53,9 @@ export function AuthPage({ session, onAuthenticated, onInvitationAccepted }: Pro
 
   useEffect(()=>{fetchAuthProviders().then(setProviders).catch(()=>undefined)},[])
 
+  useResetOnChange([inviteToken], () => { if (inviteToken) setPending(true) })
   useEffect(() => {
     if (!inviteToken) return
-    setPending(true)
     fetchInvitationPreview(inviteToken)
       .then(setInvitation)
       .catch(error => setError(error instanceof Error ? error.message : 'This invitation is no longer valid.'))

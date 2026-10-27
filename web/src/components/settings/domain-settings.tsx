@@ -1,8 +1,10 @@
 import { AppLink } from '@/components/ui/app-link'
+import { nowISO } from '@/lib/clock'
 import { refreshResourcePreferences } from '@/lib/resource-preferences'
 import { Archive, ChevronDown, ChevronRight, Merge, MoreHorizontal, RotateCcw, Search, Star, Trash2, X } from 'lucide-react'
 import * as Popover from '@radix-ui/react-popover'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { toast } from '@/lib/toast'
 
 import {
@@ -154,7 +156,7 @@ export function DomainLabelsSettings({ data, resourceType, team, onReload }: { d
     await removeGroup(group)
     finishDeletion([group.id, ...data.labels.filter(label => label.groupId === group.id).map(label => label.id)], refresh)
   }
-  const archiveLabel = (label: IssueLabel) => saveLabel(label, { archivedAt: label.archivedAt ? '' : new Date().toISOString() })
+  const archiveLabel = (label: IssueLabel) => saveLabel(label, { archivedAt: label.archivedAt ? '' : nowISO() })
   const moveLabelToTeams = async (label: IssueLabel) => { await run(() => moveWorkspaceLabelToTeams(label.id)) }
   const createLabel = (input: NewLabelInput, groupId?: string, scope = team?.id) => scope
     ? createTeamLabel(scope, { ...input, color: input.color ?? '#5E6AD2', resourceType: resourceType === 'project' ? 'project' : 'issue', groupId })
@@ -488,7 +490,7 @@ function SelectionCell({ kind, selected, onToggle }: { kind: 'label'|'group'; se
 function LabelEditableText({ value, field, editing, archived, onEdit, onCancel, onSave }: { value: string; field: string; editing: boolean; archived: boolean; onEdit: () => void; onCancel: () => void; onSave: (value: string) => Promise<void> }) {
   const [draft, setDraft] = useState(value)
   const inputRef=useRef<HTMLInputElement>(null)
-  useEffect(()=>setDraft(value),[value])
+  useResetOnChange([value], () => setDraft(value))
   useEffect(()=>{if(editing){inputRef.current?.focus();inputRef.current?.select()}},[editing])
   return <input ref={inputRef} className={`domain-label-inline-input domain-label-name-input${editing?' is-editing':''}`} aria-label={editing?`Edit ${field}`:value} readOnly={!editing||archived} value={editing?draft:value} onFocus={()=>{if(!archived&&!editing)onEdit()}} onClick={()=>{if(!archived&&!editing)onEdit()}} onChange={event=>setDraft(event.target.value)} onBlur={()=>{if(!editing)return;const next=draft.trim();if(next&&next!==value)void onSave(next);else onCancel()}} onKeyDown={event=>{if(!editing)return;if(event.key==='Enter')event.currentTarget.blur();if(event.key==='Escape'){event.preventDefault();setDraft(value);onCancel();requestAnimationFrame(()=>inputRef.current?.blur())}}}/>
 }
@@ -497,7 +499,7 @@ function EditableDescription({ value, editing, archived, onEdit, onCancel, onSav
   const { t } = useI18n()
   const [draft, setDraft] = useState(value)
   const editorRef = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => setDraft(value), [value])
+  useResetOnChange([value], () => setDraft(value))
   useEffect(() => { if (editing) { editorRef.current?.focus(); editorRef.current?.select() } }, [editing])
   if (editing) return <textarea ref={editorRef} rows={1} className="domain-label-description domain-label-description-editor" aria-label={t('Edit description')} placeholder={t('Add label description…')} value={draft} onChange={event => setDraft(event.target.value.replace(/[\r\n]+/g, ' '))} onBlur={() => { if (draft !== value) void onSave(draft); else onCancel() }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() } if (event.key === 'Escape') { event.preventDefault(); setDraft(value); onCancel(); requestAnimationFrame(() => editorRef.current?.blur()) } }}/>
   return <button type="button" tabIndex={-1} className={`domain-label-description domain-label-description-button${value ? '' : ' is-empty'}`} disabled={archived} onClick={onEdit}>{value || t('Add label description…')}</button>

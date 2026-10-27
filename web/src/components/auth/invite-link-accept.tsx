@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useNavigate, useParams } from "react-router-dom";
 
 import {
@@ -34,8 +35,11 @@ export function InviteLinkAccept({ session, onJoined }: Props) {
   const { token = "" } = useParams();
   const navigate = useNavigate();
   const [preview, setPreview] = useState<InviteLinkPreview | null>(null);
-  const [pending, setPending] = useState(true);
-  const [error, setError] = useState("");
+  const [fetching, setPending] = useState(true);
+  const [fetchError, setError] = useState("");
+  // A link without a token never loads: it is invalid from the start.
+  const error = token ? fetchError : "This invite link is invalid or has expired";
+  const pending = token ? fetching : false;
   const [joining, setJoining] = useState(false);
 
   const handleJoined = useCallback(
@@ -45,14 +49,10 @@ export function InviteLinkAccept({ session, onJoined }: Props) {
     [onJoined],
   );
 
+  useResetOnChange([token], () => setPending(true));
   useEffect(() => {
-    if (!token) {
-      setError("This invite link is invalid or has expired");
-      setPending(false);
-      return;
-    }
+    if (!token) return;
     let cancelled = false;
-    setPending(true);
     fetchInviteLinkPreview(token)
       .then(async (details) => {
         if (cancelled) return;

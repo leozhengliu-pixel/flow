@@ -1,3 +1,4 @@
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { useEffect, useRef, useState } from 'react'
 
 /** Property pickers the project page opens from the keyboard (the reference app: P then S/P/A/M/L, Ctrl ⌥ S/D). */
@@ -71,10 +72,9 @@ export function useProjectPickerOpen(kind: ProjectPickerKind, request?: ProjectP
   const handled = useRef(onHandled)
   useEffect(() => { handled.current = onHandled })
   // Only a new request id reopens the picker.
+  useResetOnChange([requestId], () => { if (requestId !== undefined) setOpen(true) }, { runOnMount: true })
   useEffect(() => {
-    if (requestId === undefined) return
-    setOpen(true)
-    handled.current?.()
+    if (requestId !== undefined) handled.current?.()
   }, [requestId])
   return [open, setOpen] as const
 }

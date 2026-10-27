@@ -56,7 +56,6 @@ export function DebugTerminal({ environmentId, disabled, available = true }: { e
   const [open, setOpen] = useState(false);
   const [expiresAt, setExpiresAt] = useState<number>();
   const [now, setNow] = useState(() => Date.now());
-  const host = useRef<HTMLDivElement | null>(null);
   const socket = useRef<WebSocket | null>(null);
   const term = useRef<XTerm | null>(null);
   const fit = useRef<(() => void) | undefined>(undefined);
@@ -64,16 +63,18 @@ export function DebugTerminal({ environmentId, disabled, available = true }: { e
   const stopping = useRef(false);
 
   // xterm renders into one host element that moves into the dialog while it is open, so minimising keeps the session.
-  if (!host.current && typeof document !== "undefined") {
-    host.current = document.createElement("div");
-    host.current.className = "cs-terminal-host";
-  }
+  const [host] = useState(() => {
+    if (typeof document === "undefined") return null;
+    const element = document.createElement("div");
+    element.className = "cs-terminal-host";
+    return element;
+  });
   const mountHost = useCallback((region: HTMLDivElement | null) => {
-    if (!region || !host.current) return;
-    region.appendChild(host.current);
+    if (!region || !host) return;
+    region.appendChild(host);
     fit.current?.();
     term.current?.focus();
-  }, []);
+  }, [host]);
 
   const teardown = useCallback(() => {
     for (const fn of cleanup.current.splice(0)) {
@@ -119,11 +120,11 @@ export function DebugTerminal({ environmentId, disabled, available = true }: { e
     }
     term.current = terminal;
     cleanup.current.push(() => terminal.dispose());
-    if (host.current) {
-      host.current.replaceChildren();
-      terminal.open(host.current);
+    if (host) {
+      host.replaceChildren();
+      terminal.open(host);
       fit.current?.();
-      cleanup.current.push(observeResize(host.current, () => fit.current?.()));
+      cleanup.current.push(observeResize(host, () => fit.current?.()));
     }
 
     const ws = new WebSocket(codingTerminalURL(environmentId));

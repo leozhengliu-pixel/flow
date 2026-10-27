@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { canCreateReleasePipeline } from '@/lib/settings-access';
 import {
   ArrowUpRight,
@@ -99,7 +100,7 @@ export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpe
   const saving = useRef(false);
   const [savedSettings, setSavedSettings] = useState<{ workspace: string; value: WorkspaceSettings }>();
   const settings = useMemo(() => normalizeSettings(savedSettings?.workspace === data.workspace.urlKey ? savedSettings.value : data.workspaceSettings), [savedSettings, data.workspace.urlKey, data.workspaceSettings]);
-  useEffect(() => setSavedSettings(undefined), [data.workspace.urlKey, data.workspaceSettings]);
+  useResetOnChange([data.workspace.urlKey, data.workspaceSettings], () => setSavedSettings(undefined))
   const save = async (next: Parameters<typeof updateWorkspacePreferences>[0]) => {
     if (saving.current || page === 'asks' && !['admin', 'owner'].includes(data.viewerRole)) return;
     saving.current = true;
@@ -201,9 +202,9 @@ function InitiativesFeatureSettings({data,settings,busy,setEnabled,onScheduleCha
   }), [settings.featureSettings.initiativeUpdateFrequencyWeeks, settings.featureSettings.initiativeUpdateHour, settings.featureSettings.initiativeUpdateSchedule, settings.featureSettings.initiativeUpdateWeekday]);
   const [editingSchedule, setEditingSchedule] = useState(false);
   const [draftSchedule, setDraftSchedule] = useState(schedule);
-  useEffect(() => {
+  useResetOnChange([editingSchedule, schedule], () => {
     if (!editingSchedule) setDraftSchedule(schedule);
-  }, [editingSchedule, schedule]);
+  });
   const initiativeLabelCount = useMemo(
     () => countLabelsByResource(data.labels, "initiative"),
     [data.labels],

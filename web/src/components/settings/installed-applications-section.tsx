@@ -31,33 +31,36 @@ type AppEntry = AuthorizedApplication & { installation?: ApplicationInstallation
 function useAuthorizedApplications(data: BootstrapData) {
   const admin = data.viewerRole === 'admin' || data.viewerRole === 'owner'
   const workspace = data.workspace.urlKey
-  const [entries, setEntries] = useState<AppEntry[]>()
-  const load = useCallback(async () => {
-    if (!admin) {
-      // Members see the applications they authorized themselves, every MCP client folded into "MCP".
-      const own = new Map<string, AppEntry>()
-      const mcp: OAuthAuthorization[] = []
-      for (const item of data.oauthAuthorizations ?? []) {
-        if (item.revokedAt) continue
-        if (isMCPAuthorization(item)) {
-          mcp.push(item)
-          continue
-        }
-        const entry = own.get(item.clientId) ?? { clientId: item.clientId, name: item.clientName, authorizations: [] }
-        entry.authorizations.push(item)
-        own.set(item.clientId, entry)
+  // Members see the applications they authorized themselves, every MCP client folded into "MCP".
+  const oauthAuthorizations = data.oauthAuthorizations
+  const memberEntries = useMemo(() => {
+    const own = new Map<string, AppEntry>()
+    const mcp: OAuthAuthorization[] = []
+    for (const item of oauthAuthorizations ?? []) {
+      if (item.revokedAt) continue
+      if (isMCPAuthorization(item)) {
+        mcp.push(item)
+        continue
       }
-      const listed: AppEntry[] = [...own.values()]
-      if (mcp.length) listed.push(mcpApplication(mcp, window.location.origin))
-      setEntries(listed.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())))
-      return
+      const entry = own.get(item.clientId) ?? { clientId: item.clientId, name: item.clientName, authorizations: [] }
+      entry.authorizations.push(item)
+      own.set(item.clientId, entry)
     }
+    const listed: AppEntry[] = [...own.values()]
+    if (mcp.length) listed.push(mcpApplication(mcp, window.location.origin))
+    return listed.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+  }, [oauthAuthorizations])
+  // Admins see every member's grants, fetched with the app-user installations.
+  const [adminEntries, setAdminEntries] = useState<AppEntry[]>()
+  const fetchAdminEntries = useCallback(async (): Promise<AppEntry[]> => {
     const [authorized, installations] = await Promise.all([fetchAuthorizedApplications(), listApplications(workspace)])
     const installed = installations.filter(item => !item.builtin && item.active)
-    setEntries(authorized.map(entry => ({ ...entry, installation: installed.find(item => item.clientId === entry.clientId) })))
-  }, [admin, data.oauthAuthorizations, workspace])
-  useEffect(() => { void load().catch(() => setEntries([])) }, [load])
-  return { entries, reload: load, admin }
+    return authorized.map(entry => ({ ...entry, installation: installed.find(item => item.clientId === entry.clientId) }))
+  }, [workspace])
+  const reload = useCallback(async () => { if (admin) setAdminEntries(await fetchAdminEntries()) }, [admin, fetchAdminEntries])
+  useEffect(() => { if (admin) void fetchAdminEntries().then(setAdminEntries, () => setAdminEntries([])) }, [admin, fetchAdminEntries])
+  const entries = admin ? adminEntries : memberEntries
+  return { entries, reload, admin }
 }
 
 function appSubtitle(entry: AppEntry, data: BootstrapData, t: (value: string) => string, formatDate: (value: string, options?: Intl.DateTimeFormatOptions) => string) {
@@ -133,21 +136,16 @@ export function InstalledApplicationPage({ data, clientId, onReload }: { data: B
   const developerName = entry?.developerName || ownApp?.developerName
   const developerUrl = entry?.developerUrl || ownApp?.developerUrl
   const logoUrl = entry?.logoUrl || ownApp?.logoUrl || entry?.installation?.avatarUrl
-  const entryAuthorizations = entry?.authorizations
-  const authorizations = entryAuthorizations ?? []
+  const authorizations = entry?.authorizations ?? []
   const installation = entry?.installation
   // The reference app lists the granted permissions alphabetically (by their wording), without the narrower write scopes that `write` covers, and
   // "Receive realtime updates about your workspace" while the application has a webhook and is authorized.
   const permissions = entry?.permissions
-  const realtime = entry?.realtime
-  const installedScopeList = entry?.installation?.scopes
-  const scopes = useMemo(() => {
-    const granted = [...(permissions?.map(item => item.scope) ?? (entryAuthorizations ?? []).flatMap(item => item.scopes)), ...(installedScopeList ?? [])]
-    if (realtime && granted.length) granted.push(REALTIME_PERMISSION)
-    return consentPermissions([...new Set(granted)]).sort((a, b) => a.label.localeCompare(b.label, 'en')).map(item => item.scope)
-  }, [entryAuthorizations, installedScopeList, permissions, realtime])
+  const granted = [...(permissions?.map(item => item.scope) ?? authorizations.flatMap(item => item.scopes)), ...(entry?.installation?.scopes ?? [])]
+  if (entry?.realtime && granted.length) granted.push(REALTIME_PERMISSION)
+  const scopes = consentPermissions([...new Set(granted)]).sort((a, b) => a.label.localeCompare(b.label, 'en')).map(item => item.scope)
   // The "MCP" entry marks each permission an authorization used recently "Actively used".
-  const activeScopes = useMemo(() => permissions ? new Set(permissions.filter(item => item.activelyUsed).map(item => item.scope)) : undefined, [permissions])
+  const activeScopes = permissions ? new Set(permissions.filter(item => item.activelyUsed).map(item => item.scope)) : undefined
   const back = () => navigate(settingsPath(workspace, 'applications'))
 
   const revokeTokens = async () => {

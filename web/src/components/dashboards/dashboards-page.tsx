@@ -1,6 +1,7 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { PeopleMenuItems } from '@/components/property/people-menu-items'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import {
   BarChart3,
   Bell,
@@ -124,7 +125,7 @@ export function DashboardsPage({
   const [loading, setLoading] = useState(true);
   const [directoryError, setDirectoryError] = useState("");
   const [resultsError, setResultsError] = useState("");
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(creating);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [draftName, setDraftName] = useState("");
@@ -136,7 +137,6 @@ export function DashboardsPage({
     routeTeam?.id ?? data.teams[0]?.id ?? "",
   );
   const [busy, setBusy] = useState(false);
-  const [favorite, setFavorite] = useState(false);
   const [query, setQuery] = useState("");
   const [ordering, setOrdering] = useState<DashboardOrdering>("name");
   const [direction, setDirection] = useState<"asc" | "desc">("asc");
@@ -148,11 +148,9 @@ export function DashboardsPage({
     () => items.find((item) => item.id === selectedId),
     [items, selectedId],
   );
-  useEffect(() => {
-    setFavorite(Boolean(selectedId && data.favorites.some((item) => item.userId === data.viewer.id && item.resourceType === "dashboard" && item.resourceId === selectedId)));
-  }, [data.favorites, data.viewer.id, selectedId]);
-  useEffect(() => setSelectedId(dashboardId ?? ""), [dashboardId]);
-  useEffect(() => setCreateOpen(creating), [creating]);
+  const favorite = Boolean(selectedId && data.favorites.some((item) => item.userId === data.viewer.id && item.resourceType === "dashboard" && item.resourceId === selectedId));
+  useResetOnChange([dashboardId], () => setSelectedId(dashboardId ?? ""))
+  useResetOnChange([creating], () => setCreateOpen(creating))
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -175,19 +173,21 @@ export function DashboardsPage({
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [t, setItems, setSelectedId]);
   useEffect(() => {
-    void load().catch(() => toast.error(t("Could not load dashboards")));
+    // load() flips the loading state up front; start it from a microtask so the effect itself never sets state.
+    queueMicrotask(() => {
+      void load().catch(() => toast.error(t("Could not load dashboards")));
+    });
   }, [load, t]);
+  useResetOnChange([selected, t], () => {
+    setResultsError("");
+    if (selected) setLoading(true);
+    else setResults([]);
+  });
   useEffect(() => {
     const request = ++resultsRequest.current;
-    if (!selected) {
-      setResults([]);
-      setResultsError("");
-      return;
-    }
-    setLoading(true);
-    setResultsError("");
+    if (!selected) return;
     void fetchDashboardResults(selected.id)
       .then((value) => { if (resultsRequest.current === request) setResults(value.results); })
       .catch(() => {
@@ -1405,17 +1405,14 @@ function InsightEditorPage({
 }) {
   const { t } = useI18n();
   const initialDraft = useMemo(() => insightDraftFromWidget(widget), [widget]);
-  const [draft, setDraft] = useState(initialDraft);
+  const [draft, setDraft] = useState(() => readInsightURLState() ?? initialDraft);
   const [preview, setPreview] = useState<DashboardWidgetResult>();
   const [previewing, setPreviewing] = useState(false);
   const [previewError, setPreviewError] = useState("");
   const initialSerialized = JSON.stringify(initialDraft);
   const dirty = JSON.stringify(draft) !== initialSerialized;
   const allowNavigationRef = useRef(false);
-  useEffect(() => {
-    const restored = readInsightURLState();
-    setDraft(restored ?? initialDraft);
-  }, [initialDraft, initialSerialized]);
+  useResetOnChange([initialDraft, initialSerialized], () => setDraft(readInsightURLState() ?? initialDraft));
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       setPreviewing(true);
@@ -1635,12 +1632,12 @@ function FilterDialog({
   const { t } = useI18n();
   const [draft, setDraft] = useState(filters);
   const [hide, setHide] = useState(hideFilters);
-  useEffect(() => {
+  useResetOnChange([open, filters, hideFilters], () => {
     if (open) {
       setDraft(filters);
       setHide(hideFilters);
     }
-  }, [open, filters, hideFilters]);
+  });
   return (
     <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
       <DialogContent className="dashboard-dialog dashboard-filter-dialog">

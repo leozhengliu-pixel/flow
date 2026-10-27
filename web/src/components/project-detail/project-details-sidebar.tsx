@@ -1,7 +1,8 @@
 import { AppLink } from '@/components/ui/app-link'
 import { matchesSearch } from '@/lib/search-match'
 import { DisclosureTriangle } from '@/components/ui/disclosure-triangle'
-import { Component, useId, useEffect, useMemo, useState, type DragEvent, type ErrorInfo, type KeyboardEvent, type ReactNode } from 'react'
+import { useCurrentTime } from '@/hooks/use-current-time'
+import { Component, useId, useMemo, useState, type DragEvent, type ErrorInfo, type KeyboardEvent, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Line, type LineCustomSvgLayerProps, type SliceTooltipProps } from '@nivo/line'
@@ -79,7 +80,11 @@ export function ProjectDetailsSidebar({ featureFlags, issueSummary, availableIss
   const { t } = useI18n()
   // A keyboard picker request (P then S, Ctrl ⌥ D, …) needs the Properties section expanded.
   const pickerRequestId = pickerRequest?.id
-  useEffect(() => { if (pickerRequestId !== undefined) setPropertiesOpen(true) }, [pickerRequestId])
+  const [seenPickerRequestId, setSeenPickerRequestId] = useState<typeof pickerRequestId>(undefined)
+  if (seenPickerRequestId !== pickerRequestId) {
+    setSeenPickerRequestId(pickerRequestId)
+    if (pickerRequestId !== undefined) setPropertiesOpen(true)
+  }
   const { blockedBy: blockedByProjects, blocking: blockingProjects } = dependencyProjects(project, projects, projectRelations)
   const started = issueSummary?.started ?? projectIssues.filter(issue => issue.state.type === 'started').length
   const completed = issueSummary?.completed ?? projectIssues.filter(issue => issue.state.type === 'completed').length
@@ -453,16 +458,21 @@ function MilestoneEditor({ milestone, onCancel, onSubmit, progress }: { mileston
 }
 
 function MilestoneDateDialog({ milestone, onOpenChange, onSubmit, open }: { milestone: ProjectMilestone; onOpenChange: (open: boolean) => void; onSubmit: (targetDate: string) => Promise<ProjectMilestone>; open: boolean }) {
-  const initial = parseMilestoneDate(milestone.targetDate) ?? new Date()
+  const now = useCurrentTime()
+  const [initial] = useState(() => parseMilestoneDate(milestone.targetDate) ?? new Date())
   const [selected, setSelected] = useState(initial)
   const [cursor, setCursor] = useState(() => new Date(initial.getFullYear(), initial.getMonth(), 1))
   const [saving, setSaving] = useState(false)
-  useEffect(() => {
-    if (!open) return
-    const next = parseMilestoneDate(milestone.targetDate) ?? new Date()
-    setSelected(next)
-    setCursor(new Date(next.getFullYear(), next.getMonth(), 1))
-  }, [milestone.targetDate, open])
+  // Opening the dialog (or a new target date arriving while open) restarts from that date; compared during render.
+  const [synced, setSynced] = useState({ targetDate: milestone.targetDate, open })
+  if (synced.targetDate !== milestone.targetDate || synced.open !== open) {
+    setSynced({ targetDate: milestone.targetDate, open })
+    if (open) {
+      const next = parseMilestoneDate(milestone.targetDate) ?? now
+      setSelected(next)
+      setCursor(new Date(next.getFullYear(), next.getMonth(), 1))
+    }
+  }
   const secondMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
   const save = async () => {
     setSaving(true)
@@ -491,7 +501,7 @@ function MilestoneDateDialog({ milestone, onOpenChange, onSubmit, open }: { mile
 }
 
 function MilestoneCalendarMonth({ month, onSelect, selected }: { month: Date; onSelect: (date: Date) => void; selected: Date }) {
-  const today = new Date()
+  const today = useCurrentTime()
   const days = milestoneMonthDays(month)
   const monthLabel = format(month, 'MMMM yyyy')
   return <section className="project-milestone-date-dialog__month"><h3>{monthLabel}</h3><div aria-label={monthLabel} className="project-milestone-date-dialog__grid" role="grid">

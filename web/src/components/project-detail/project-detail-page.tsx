@@ -1,3 +1,4 @@
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as ContextMenu from "@radix-ui/react-context-menu";
@@ -371,10 +372,10 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
     return () => window.removeEventListener("keydown", toggle);
   });
 
-  const routedSavedViewId = useRef(savedView?.id);
-  useEffect(() => {
-    const previous = routedSavedViewId.current;
-    routedSavedViewId.current = savedView?.id;
+  const [routedSavedViewId, setRoutedSavedViewId] = useState(savedView?.id);
+  useResetOnChange([issueLabels, project.id, savedView], () => {
+    const previous = routedSavedViewId;
+    setRoutedSavedViewId(savedView?.id);
     // Leaving a saved view's route (e.g. for the Issues tab) leaves the view.
     if (!savedView) {
       if (previous) setActiveSavedViewId(undefined);
@@ -384,7 +385,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
     setActiveSavedViewId(savedView.id);
     setViewIssueFilters(filtersFromSavedView(savedView.filters, issueLabels));
     setViewIssueDisplay(displayFromSavedView(savedView.display));
-  }, [issueLabels, project.id, savedView]);
+  }, { runOnMount: true });
 
   const save = async (input: Parameters<ProjectDetailProps["onUpdate"]>[1]) => {
     try {

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useLatestRef } from '@/hooks/use-latest-ref'
+import { useCallback, useEffect, useState } from "react";
 import { ChevronRight, CircleCheck, CircleMinus, CircleX, Copy } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { GridLoader } from "@/components/ui/grid-loader";
@@ -36,8 +37,7 @@ export function SnapshotPanel({ environmentId, initial, disabled, onFixWithAgent
   const [refreshing, setRefreshing] = useState(false);
   const [openId, setOpenId] = useState<string>();
   const latest = snapshots[0];
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  const onChangeRef = useLatestRef(onChange);
 
   const load = useCallback(async () => {
     try {
@@ -48,9 +48,10 @@ export function SnapshotPanel({ environmentId, initial, disabled, onFixWithAgent
     } catch {
       // Keep the snapshot embedded in the environment when the history can't be read.
     }
-  }, [environmentId]);
+  }, [environmentId, onChangeRef]);
   useEffect(() => {
-    void load();
+    // load() flips the loading state up front; start it from a microtask so the effect itself never sets state.
+    queueMicrotask(() => { void load(); });
   }, [load]);
   const inProgress = snapshots.some((snapshot) => snapshotInProgress(snapshot.status));
   useEffect(() => {

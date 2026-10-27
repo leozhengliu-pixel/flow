@@ -4,11 +4,11 @@
   "rules": {
     "react/rules-of-hooks": "error",
     "react/only-export-components": ["warn", { "allowConstantExport": true }],
-    "react/refs": "off",
-    "react/set-state-in-effect": "off",
-    "react/purity": "off",
-    "react/preserve-manual-memoization": "off",
-    "react/immutability": "off",
-    "react/globals": "off"
+    "react/refs": "error",
+    "react/set-state-in-effect": "error",
+    "react/purity": "error",
+    "react/preserve-manual-memoization": "error",
+    "react/immutability": "error",
+    "react/globals": "error"
   }
 }

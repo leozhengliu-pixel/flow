@@ -1,3 +1,4 @@
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowDown, ArrowUp, ChevronDown, Circle, FileText, Hash, MoreHorizontal, Plus, RefreshCw, Star, X } from 'lucide-react'
 import { toast } from '@/lib/toast'
@@ -54,10 +55,9 @@ function DefaultFavoritesEditor({ data, team }: Props) {
     return () => { mounted.current = false }
   }, [])
 
+  useResetOnChange([team.id, attempt], () => { setLoading(true); setLoadError(false) })
   useEffect(() => {
     let active = true
-    setLoading(true)
-    setLoadError(false)
     void fetchTeamDefaultFavorites(team.id).then(result => {
       if (!active) return
       setItems(result.items)

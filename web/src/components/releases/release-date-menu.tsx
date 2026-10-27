@@ -2,6 +2,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { addMonths, eachDayOfInterval, endOfMonth, endOfWeek, isSameDay, isSameMonth, startOfMonth, startOfWeek, subMonths } from 'date-fns'
 import { useState, type ReactNode } from 'react'
+import { useCurrentTime } from '@/hooks/use-current-time'
 
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
@@ -60,7 +61,8 @@ function dateValue(date: Date) {
 /** Month calendar behind "Custom…". */
 export function ReleaseCalendar({ value, onCancel, onSave }: { value?: string; onCancel: () => void; onSave: (value: string) => void }) {
   const { t, formatDate } = useI18n()
-  const initial = value ? new Date(`${value}T12:00:00`) : new Date()
+  const today = useCurrentTime()
+  const [initial] = useState(() => value ? new Date(`${value}T12:00:00`) : new Date())
   const [month, setMonth] = useState(startOfMonth(initial))
   const [draft, setDraft] = useState(initial)
   const days = eachDayOfInterval({ start: startOfWeek(startOfMonth(month)), end: endOfWeek(endOfMonth(month)) })
@@ -72,7 +74,7 @@ export function ReleaseCalendar({ value, onCancel, onSave }: { value?: string; o
       <button aria-label={t('Next month')} onClick={() => setMonth(current => addMonths(current, 1))} type="button"><ChevronRight/></button>
     </header>
     <div className="flow-release-calendar__weekdays">{weekdays.map(day => <span key={day.getDay()}>{formatDate(day.toISOString(), { weekday: 'narrow' })}</span>)}</div>
-    <div className="flow-release-calendar__grid">{days.map(day => <button aria-label={formatDate(day.toISOString(), { month: 'long', day: 'numeric', year: 'numeric' })} aria-pressed={isSameDay(day, draft)} className={!isSameMonth(day, month) ? 'is-outside' : isSameDay(day, new Date()) ? 'is-today' : ''} key={day.toISOString()} onClick={() => setDraft(day)} onDoubleClick={() => onSave(dateValue(day))} type="button">{day.getDate()}</button>)}</div>
+    <div className="flow-release-calendar__grid">{days.map(day => <button aria-label={formatDate(day.toISOString(), { month: 'long', day: 'numeric', year: 'numeric' })} aria-pressed={isSameDay(day, draft)} className={!isSameMonth(day, month) ? 'is-outside' : isSameDay(day, today) ? 'is-today' : ''} key={day.toISOString()} onClick={() => setDraft(day)} onDoubleClick={() => onSave(dateValue(day))} type="button">{day.getDate()}</button>)}</div>
     <footer><button onClick={onCancel} type="button">{t('Cancel')}</button><button className="is-primary" onClick={() => onSave(dateValue(draft))} type="button">{t('Save target date')}</button></footer>
   </div>
 }

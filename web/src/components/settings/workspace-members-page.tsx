@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCurrentTimeMs } from "@/hooks/use-current-time";
 import { useNavigate } from "react-router-dom";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { ArrowDown, ArrowUp, Check, ChevronDown, Command, MoreHorizontal, Search, UserRound, X } from "lucide-react";
@@ -125,7 +126,7 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
   const [confirmTarget, setConfirmTarget] = useState<{ members: WorkspaceMember[]; action: ConfirmKind }>();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const now = Date.now();
+  const now = useCurrentTimeMs();
 
   // Inactive users (suspended and departed) are listed only for admins, as the reference app lists them only to members who can manage them.
   const allMembers = useMemo(

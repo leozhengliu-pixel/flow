@@ -69,11 +69,11 @@ function setViewport(width: number) {
 /** A description host like the project overview: the hook's editor and shell refs, the gutter and the resolved panel. */
 function Host({ comments, editor, onReload, resolvedOpen = false, railOpen = false, onState }: { comments: Comment[]; editor: Editor; onReload: () => Promise<void>; resolvedOpen?: boolean; railOpen?: boolean; onState?: (state: ReturnType<typeof useEntityInlineComments>) => void }) {
   const state = useEntityInlineComments(comments)
-  const { shellRef } = state
+  const { attachShell: shellRef } = state
   onState?.(state)
   const data = makeBootstrap()
   return <div ref={shellRef}>
-    <button type="button" onClick={() => state.editorRef(editor as never)}>attach</button>
+    <button type="button" onClick={() => state.attachEditor(editor as never)}>attach</button>
     <EntityInlineComments state={state} entity={entity} data={data} railOpen={railOpen} onReload={onReload}/>
     {resolvedOpen && <EntityResolvedCommentsPanel state={state} entity={entity} data={data} onReload={onReload} onClose={vi.fn()}/>}
   </div>

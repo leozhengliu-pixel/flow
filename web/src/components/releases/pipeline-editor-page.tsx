@@ -1,6 +1,7 @@
 import * as Popover from '@radix-ui/react-popover'
 import { Check } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from '@/lib/toast'
 
@@ -125,7 +126,7 @@ function PipelineSettingsForm({ data, pipeline, onCancel, onSaved, onChanged }: 
   const stageTimer = useRef<number>(undefined)
   const templateTimer = useRef<number>(undefined)
   const templateDraft = useRef(pipeline.releaseNotesTemplate ?? '')
-  useEffect(() => { setName(pipeline.name) }, [pipeline.name])
+  useResetOnChange([pipeline.name], () => setName(pipeline.name))
   useEffect(() => () => { window.clearTimeout(stageTimer.current); window.clearTimeout(templateTimer.current) }, [])
   const reload = onChanged ?? (async () => {})
   // The reference app autosaves every pipeline setting; there is no Save button.
@@ -256,7 +257,7 @@ function TeamsRow({ data, teamIds, disabled = false, onChange }: { data: Bootstr
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(teamIds)
-  useEffect(() => { if (!open) setDraft(teamIds) }, [open, teamIds])
+  useResetOnChange([open, teamIds], () => { if (!open) setDraft(teamIds) })
   const memberTeamIds = useMemo(() => new Set((data.teamMembers ?? []).filter(member => member.userId === data.viewer.id).map(member => member.teamId)), [data.teamMembers, data.viewer.id])
   const teams = useMemo(() => {
     const active = data.teams.filter(team => !team.archivedAt && !team.retiredAt)
@@ -268,7 +269,7 @@ function TeamsRow({ data, teamIds, disabled = false, onChange }: { data: Bootstr
     setDraft(next)
     onChange(next)
   }
-  const command = usePropertyCommand({ closeOnSelect: false, open, options, selectedIds: draft, onOpenChange: setOpen, onSelect: option => toggle(option.id) })
+  const { inputRef: commandInputRef, ...command } = usePropertyCommand({ closeOnSelect: false, open, options, selectedIds: draft, onOpenChange: setOpen, onSelect: option => toggle(option.id) })
   const filtered = command.filteredOptions.map(option => teams.find(team => team.id === option.id)).filter((team): team is Team => Boolean(team))
   const selected = data.teams.filter(team => draft.includes(team.id))
   const groupOf = (team: Team) => memberTeamIds.has(team.id) ? 'Your teams' : 'Other teams'
@@ -276,7 +277,7 @@ function TeamsRow({ data, teamIds, disabled = false, onChange }: { data: Bootstr
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Anchor asChild>
         <div className="pipeline-settings-team-trigger" data-disabled={disabled || undefined}>
-          <input ref={command.inputRef} disabled={disabled} data-i18n-ignore={selected.length ? true : undefined} role="combobox" aria-label={t('Teams')} aria-expanded={open} aria-haspopup="listbox" aria-controls="flow-pipeline-team-options" aria-activedescendant={open && command.activeId ? `flow-pipeline-team-${command.activeId}` : undefined} autoComplete="off" spellCheck={false} placeholder={t('Select teams…')} value={open ? command.query : selected.map(team => team.name).join(', ')} onFocus={() => setOpen(true)} onClick={() => setOpen(true)} onChange={event => { command.onQueryChange(event.target.value); setOpen(true) }} onKeyDown={command.onKeyDown}/>
+          <input ref={commandInputRef} disabled={disabled} data-i18n-ignore={selected.length ? true : undefined} role="combobox" aria-label={t('Teams')} aria-expanded={open} aria-haspopup="listbox" aria-controls="flow-pipeline-team-options" aria-activedescendant={open && command.activeId ? `flow-pipeline-team-${command.activeId}` : undefined} autoComplete="off" spellCheck={false} placeholder={t('Select teams…')} value={open ? command.query : selected.map(team => team.name).join(', ')} onFocus={() => setOpen(true)} onClick={() => setOpen(true)} onChange={event => { command.onQueryChange(event.target.value); setOpen(true) }} onKeyDown={command.onKeyDown}/>
           <span className="pipeline-settings-team-chevron" aria-hidden="true"><FlowGlyph name="selectChevron" width={10} height={5}/></span>
         </div>
       </Popover.Anchor>

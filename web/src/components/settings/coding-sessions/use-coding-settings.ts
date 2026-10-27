@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useLatestRef } from '@/hooks/use-latest-ref'
+import { useCallback, useEffect, useState } from "react";
 import {
   fetchCodingEnvironments,
   fetchCodingModels,
@@ -51,8 +52,7 @@ export function useCodingPolicy(legacy: CodingAgentSettings | undefined, enabled
   const [settings, setSettings] = useState<CodingSettings>(() => legacyCodingSettings(legacy, enabled));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
-  const current = useRef(settings);
-  current.current = settings;
+  const current = useLatestRef(settings);
   useEffect(() => {
     let active = true;
     fetchCodingSettings()
@@ -78,7 +78,7 @@ export function useCodingPolicy(legacy: CodingAgentSettings | undefined, enabled
     } finally {
       setSaving(false);
     }
-  }, []);
+  }, [current]);
   return { settings, update, saving, error };
 }
 
@@ -103,7 +103,8 @@ export function useCodingEnvironments(includeArchived: boolean) {
     }
   }, [includeArchived]);
   useEffect(() => {
-    void reload();
+    // reload() flips the loading state up front; start it from a microtask so the effect itself never sets state.
+    queueMicrotask(() => { void reload(); });
   }, [reload]);
   return { environments, archived, loaded, error, reload };
 }

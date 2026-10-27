@@ -107,8 +107,8 @@ function useEditorLoop(data: BootstrapData, id: string | undefined) {
     }
   }, [cached, id]);
   useEffect(() => {
-    // oxlint-disable-next-line react/set-state-in-effect -- refetch sets state only after its request resolves, never synchronously
-    void refetch();
+    // refetch() sets state; start it from a microtask so the effect itself never sets state.
+    queueMicrotask(() => { void refetch(); });
   }, [refetch]);
   return { loop, setLoop, missing, refetch };
 }

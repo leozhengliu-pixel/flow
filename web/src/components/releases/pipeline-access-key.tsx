@@ -1,5 +1,7 @@
 import { Check, Copy, RotateCw, ShieldOff } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { useResetOnChange } from '@/hooks/use-reset-on-change'
+import { useCurrentTime } from '@/hooks/use-current-time'
 import { toast } from '@/lib/toast'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -79,6 +81,7 @@ export function PipelineAccessKeySection({ pipeline, disabled, onChanged }: { pi
       setBusy(false)
     }
   }
+  const currentYear = useCurrentTime(0).getFullYear()
   const title = t('Access key')
   const description = t('Allows external integrations to interact with this pipeline.')
   if (state === 'none' && !secret) return <Subsection title={title} description={description}>
@@ -89,7 +92,7 @@ export function PipelineAccessKeySection({ pipeline, disabled, onChanged }: { pi
     </div>
   </Subsection>
   const expiring = state === 'expiring' && pipeline.accessKeyRevokedAt
-  const shortDate = (value: string) => formatDate(value, { month: 'short', day: 'numeric', ...(new Date(value).getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }) })
+  const shortDate = (value: string) => formatDate(value, { month: 'short', day: 'numeric', ...(new Date(value).getFullYear() === currentYear ? {} : { year: 'numeric' }) })
   const fullDate = (value: string) => formatDate(value, { dateStyle: 'medium', timeStyle: 'short' })
   return <Subsection title={title} description={description}>
     <div className="settings-card pipeline-settings-key-card">
@@ -175,7 +178,7 @@ export function PipelinePathFilters({ pipeline, disabled, onSave }: { pipeline: 
   const hasKey = accessKeyState(pipeline) !== 'none'
   const [value, setValue] = useState(() => pipeline.pathFilters.join('\n'))
   const saved = pipeline.pathFilters.join('\n')
-  useEffect(() => { setValue(saved) }, [saved])
+  useResetOnChange([saved], () => setValue(saved))
   const commit = () => {
     const filters = value.split('\n').map(line => line.trim()).filter(Boolean)
     if (filters.join('\n') !== saved) onSave(filters)

@@ -1,3 +1,4 @@
+import { useLatestRef } from '@/hooks/use-latest-ref'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fetchPulseFeed, markPulseSeen } from '@/lib/api'
 import type { InitiativeUpdate, ProjectUpdate, PulseFeedView, PulseItem } from '@/types/flow'
@@ -46,10 +47,8 @@ export function usePulseFeed(query: PulseFeedQueryState, options: { enabled?: bo
   const [unreadCount, setUnreadCount] = useState(0)
   const [newIds, setNewIds] = useState<string[]>([])
   const [, bump] = useState(0)
-  const itemsRef = useRef(items)
-  itemsRef.current = items
-  const cursorRef = useRef(nextCursor)
-  cursorRef.current = nextCursor
+  const itemsRef = useLatestRef(items)
+  const cursorRef = useLatestRef(nextCursor)
   const generation = useRef(0)
   const abortRef = useRef<AbortController | undefined>(undefined)
   const filter = useMemo(() => pulseFilterParam(query.config), [query.config])
@@ -91,7 +90,8 @@ export function usePulseFeed(query: PulseFeedQueryState, options: { enabled?: bo
   const cancel = useCallback(() => { generation.current++; abortRef.current?.abort() }, [])
   useEffect(() => {
     if (!enabled) return
-    void load()
+    // load() flips the loading state up front; start it from a microtask so the effect itself never sets state.
+    queueMicrotask(() => { void load() })
     return cancel
   }, [cancel, enabled, filterKey, load])
 
@@ -110,7 +110,7 @@ export function usePulseFeed(query: PulseFeedQueryState, options: { enabled?: bo
       setNextCursor(page.nextCursor)
     } catch { /* keep what is shown; the sentinel retries on the next scroll */ }
     finally { if (run === generation.current) setLoadingMore(false) }
-  }, [loadingMore, request])
+  }, [loadingMore, request, cursorRef, itemsRef])
 
   /** Realtime: re-read the first page, refresh shown cards, count (not insert) new ones. */
   const probe = useCallback(async () => {
@@ -132,7 +132,7 @@ export function usePulseFeed(query: PulseFeedQueryState, options: { enabled?: bo
       setUnreadCount(page.unreadCount ?? 0)
       setNewIds(page.items.filter(item => !known.has(item.id) && (!chronological || new Date(item.update.createdAt).getTime() > newest)).map(item => item.id))
     } catch { /* the next event retries */ }
-  }, [query.view, request])
+  }, [query.view, request, itemsRef])
 
   useEffect(() => {
     if (!enabled) return
