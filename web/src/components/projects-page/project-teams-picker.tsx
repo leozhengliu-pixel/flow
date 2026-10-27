@@ -1,15 +1,18 @@
 import type { ReactNode } from 'react'
 import { TeamIcon } from '@/components/issue/issue-icons'
 import { useI18n } from '@/i18n/i18n'
-import { projectTeamsLabel, setProjectLeadTeam, toggleProjectTeam, type ProjectTeamChoice } from './project-teams'
+import { orderTeamTree, projectTeamsLabel, teamGlyph, setProjectLeadTeam, toggleProjectTeam, type ProjectTeamChoice } from './project-teams'
 import { PropertyMenu, type PropertyOption } from '@/components/property/property-menu'
+import { usePeopleDirectory } from '@/components/property/people-context'
+import { TEAM_HOVER_CLASS, TeamHoverCard } from './team-hover-card'
 
-function teamGlyph(team: ProjectTeamChoice) { return { icon: team.icon ?? 'Team', color: team.color ?? '#5e6ad2' } }
-
-/** Orders the picker rows: the project's teams (lead first), then the remaining teams. */
-function orderedTeams(teams: ProjectTeamChoice[], teamIds: string[]) {
+/**
+ * Orders the picker rows: the project's teams, then the remaining teams. In each block a sub-team follows its parent
+ * (indented one level per ancestor shown in the same block).
+ */
+function orderedTeams(teams: ProjectTeamChoice[], teamIds: string[], parentOf: (id: string) => string | undefined) {
   const selected = teamIds.map(id => teams.find(team => team.id === id)).filter((team): team is ProjectTeamChoice => Boolean(team))
-  return { selected, others: teams.filter(team => !teamIds.includes(team.id)) }
+  return { selected: orderTeamTree(selected, parentOf), others: orderTeamTree(teams.filter(team => !teamIds.includes(team.id)), parentOf), lead: selected[0] }
 }
 
 function teamRowLabel(team: ProjectTeamChoice, leadText?: string): ReactNode {
@@ -37,9 +40,10 @@ export function ProjectTeamsPicker({ teams, teamIds, onChange, fallbackLabel = '
   onOpenChange?: (open: boolean) => void
 }) {
   const { t } = useI18n()
-  const { selected, others } = orderedTeams(teams, teamIds)
+  const directory = usePeopleDirectory()
+  const parents = new Map(teams.map(team => [team.id, team.parentId ?? directory.teamDirectory.get(team.id)?.parentId]))
+  const { selected, others, lead } = orderedTeams(teams, teamIds, id => parents.get(id) ?? directory.teamDirectory.get(id)?.parentId)
   const label = projectTeamsLabel(teams, teamIds, fallbackLabel)
-  const lead = selected[0]
   const multiple = selected.length > 1
   const toOption = (team: ProjectTeamChoice, extra: Partial<PropertyOption> = {}): PropertyOption => ({
     id: team.id,
@@ -50,16 +54,17 @@ export function ProjectTeamsPicker({ teams, teamIds, onChange, fallbackLabel = '
     keywords: team.key,
     ...extra,
   })
+  const withHover = (team: ProjectTeamChoice, option: PropertyOption): PropertyOption => ({ ...option, hoverContent: <TeamHoverCard team={team}/>, hoverClassName: TEAM_HOVER_CLASS, hoverBesideMenu: true })
   const leadSubmenu = {
     placeholder: 'Change lead team…',
     heading: 'Project teams',
     selectedId: lead?.id ?? '',
-    options: selected.map(team => toOption(team)),
+    options: selected.map(row => toOption(row.team)),
     onChoose: (id: string) => { const next = setProjectLeadTeam(teamIds, id); if (next !== teamIds) onChange(next) },
   }
   const options: PropertyOption[] = [
-    ...selected.map((team, index) => index === 0 && multiple ? toOption(team, { labelContent: teamRowLabel(team, t('Lead')), submenu: leadSubmenu }) : toOption(team)),
-    ...others.map(team => toOption(team, { groupId: 'your-teams', groupLabel: 'Your teams' })),
+    ...selected.map(({ team, depth }) => withHover(team, team.id === lead?.id && multiple ? toOption(team, { labelContent: teamRowLabel(team, t('Lead')), submenu: leadSubmenu, indent: depth }) : toOption(team, { indent: depth }))),
+    ...others.map(({ team, depth }) => withHover(team, toOption(team, { groupId: 'your-teams', groupLabel: 'Your teams', indent: depth }))),
   ]
   return <PropertyMenu
     compact
@@ -68,8 +73,8 @@ export function ProjectTeamsPicker({ teams, teamIds, onChange, fallbackLabel = '
     label="Teams"
     ariaLabel={ariaLabel}
     value={label}
-    valueIsEntityName={selected.length > 0}
-    selectedIds={selected.map(team => team.id)}
+    valueIsEntityName={Boolean(lead)}
+    selectedIds={selected.map(row => row.team.id)}
     options={options}
     searchPlaceholder="Change teams…"
     searchShortcut={searchShortcut}
@@ -82,7 +87,7 @@ export function ProjectTeamsPicker({ teams, teamIds, onChange, fallbackLabel = '
     onOpenChange={onOpenChange}
     tooltip={tooltip}
     tooltipShortcut={tooltipShortcut}
-    trigger={<><TeamIcon className={triggerIconClassName} team={lead ? teamGlyph(lead) : undefined} size={triggerIconSize}/><span data-i18n-ignore={selected.length ? true : undefined}>{label}</span></>}
+    trigger={<><TeamIcon className={triggerIconClassName} team={lead ? teamGlyph(lead) : undefined} size={triggerIconSize}/><span data-i18n-ignore={lead ? true : undefined}>{label}</span></>}
     onChange={id => { const next = toggleProjectTeam(teamIds, id); if (next !== teamIds) onChange(next) }}
   />
 }

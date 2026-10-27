@@ -1,0 +1,62 @@
+/* The hover card a team row opens beside the project teams picker: 309 x 107, header + project and document counts. */
+html:root body .team-hover-surface {
+  box-sizing: border-box;
+  width: 309px;
+  padding: 6px;
+  border: .5px solid var(--pk-border);
+  border-radius: 8px;
+  background: var(--pk-surface);
+  box-shadow: var(--pk-card-shadow);
+  color: var(--pk-text);
+}
+.team-hover-card {
+  display: grid;
+  font: 450 13px/normal var(--font);
+}
+.team-hover-card__head {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+}
+.team-hover-card__icon { flex: none; }
+.team-hover-card__name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--pk-text-strong);
+  font: 500 13px/normal var(--font);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.team-hover-card__avatars {
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+.team-hover-card__avatars > span {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  flex: 0 0 20px;
+  place-items: center;
+  margin-left: -6px;
+  overflow: hidden;
+  border: 1.5px solid var(--pk-surface);
+  border-radius: 50%;
+  background: var(--avatar, var(--avatar-fallback));
+  color: var(--on-accent);
+  font: 500 8px/1 var(--font);
+}
+.team-hover-card__avatars > span:first-child { margin-left: 0; }
+.team-hover-card__avatars img { width: 100%; height: 100%; object-fit: cover; }
+.team-hover-card__row {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  color: var(--pk-muted);
+}
+.team-hover-card__row > svg { flex: none; }
