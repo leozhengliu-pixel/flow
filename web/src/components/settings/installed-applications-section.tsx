@@ -10,7 +10,10 @@ import { UserAvatar } from '@/components/ui/user-avatar'
 import { TeamCombobox } from '@/components/auth/oauth-team-combobox'
 import { ScopeIcon } from '@/components/auth/oauth-scope-icon'
 import { listApplications, saveApplication, uninstallApplication, type ApplicationInstallation } from '@/lib/application-agents'
-import { fetchAuthorizedApplications, revokeOAuthAuthorization, type AuthorizedApplication } from '@/lib/api'
+import { fetchAuthorizedApplications, revokeMCPAccess, revokeOAuthAuthorization, type AuthorizedApplication } from '@/lib/api'
+import { isMCPAuthorization, matchesApplication, mcpApplication } from '@/lib/mcp-application'
+import { FlowLogo } from '@/components/ui/flow-logo'
+import type { OAuthAuthorization } from '@/types/flow'
 import { OAUTH_SCOPE_LABELS, REALTIME_PERMISSION, consentPermissions, nextTeamSelection, type TeamMode } from '@/lib/oauth-consent'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { TeamIcon } from '@/components/issue/issue-icons'
@@ -31,15 +34,22 @@ function useAuthorizedApplications(data: BootstrapData) {
   const [entries, setEntries] = useState<AppEntry[]>()
   const load = useCallback(async () => {
     if (!admin) {
-      // Members see the applications they authorized themselves.
+      // Members see the applications they authorized themselves, every MCP client folded into "MCP".
       const own = new Map<string, AppEntry>()
+      const mcp: OAuthAuthorization[] = []
       for (const item of data.oauthAuthorizations ?? []) {
         if (item.revokedAt) continue
+        if (isMCPAuthorization(item)) {
+          mcp.push(item)
+          continue
+        }
         const entry = own.get(item.clientId) ?? { clientId: item.clientId, name: item.clientName, authorizations: [] }
         entry.authorizations.push(item)
         own.set(item.clientId, entry)
       }
-      setEntries([...own.values()])
+      const listed: AppEntry[] = [...own.values()]
+      if (mcp.length) listed.push(mcpApplication(mcp, window.location.origin))
+      setEntries(listed.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())))
       return
     }
     const [authorized, installations] = await Promise.all([fetchAuthorizedApplications(), listApplications(workspace)])
@@ -57,6 +67,18 @@ function appSubtitle(entry: AppEntry, data: BootstrapData, t: (value: string) =>
   }
   const count = new Set(entry.authorizations.map(item => item.userId)).size
   return count === 1 ? t('Authorized by 1 member') : t('Authorized by {count} members').replace('{count}', String(count))
+}
+
+/** The "MCP" entry's logo: Flow's own mark on its brand tile. */
+function FlowAppLogo({ size = 32 }: { size?: number }) {
+  return <span className="oauth-app-avatar app-logo is-flow" style={{ width: size, height: size }} role="img" aria-label="Flow">
+    <FlowLogo size={size} variant="ridge"/>
+  </span>
+}
+
+function ApplicationLogo({ entry, logoUrl, name, redirectUris, size }: { entry?: AppEntry; logoUrl?: string; name: string; redirectUris?: string[]; size?: number }) {
+  if (entry?.kind === 'mcp') return <FlowAppLogo size={size}/>
+  return <OAuthAppAvatar logoUrl={logoUrl} name={name} redirectUris={redirectUris} size={size}/>
 }
 
 /**
@@ -80,7 +102,7 @@ export function InstalledApplicationsPage({ data }: { data: BootstrapData }) {
             event.preventDefault()
             navigate(installedApplicationPath(data.workspace.urlKey, entry.clientId))
           }}>
-            <OAuthAppAvatar logoUrl={entry.logoUrl || entry.installation?.avatarUrl} name={entry.name} redirectUris={entry.redirectUris}/>
+            <ApplicationLogo entry={entry} logoUrl={entry.logoUrl || entry.installation?.avatarUrl} name={entry.name} redirectUris={entry.redirectUris}/>
             <span className="oauth-app-list-copy">
               <strong data-i18n-ignore>{entry.name}</strong>
               <span data-i18n-ignore>{appSubtitle(entry, data, t, formatDate)}</span>
@@ -102,7 +124,9 @@ export function InstalledApplicationPage({ data, clientId, onReload }: { data: B
   const navigate = useNavigate()
   const { entries, reload, admin } = useAuthorizedApplications(data)
   const workspace = data.workspace.urlKey
-  const entry = entries?.find(item => item.clientId === clientId)
+  // An MCP client's own (older) link opens the "MCP" entry it is folded into.
+  const entry = entries?.find(item => matchesApplication(item, clientId))
+  const mcp = entry?.kind === 'mcp'
   const ownApp = (data.oauthApplications ?? []).find(item => item.clientId === clientId)
   const name = entry?.name || ownApp?.name || ''
   const description = entry?.description || ownApp?.description
@@ -114,17 +138,21 @@ export function InstalledApplicationPage({ data, clientId, onReload }: { data: B
   // The reference app lists the granted permissions alphabetically (by their wording), without the narrower write scopes that `write` covers, and
   // "Receive realtime updates about your workspace" while the application has a webhook and is authorized.
   const scopes = useMemo(() => {
-    const granted = [...(entry?.authorizations ?? []).flatMap(item => item.scopes), ...(entry?.installation?.scopes ?? [])]
+    const granted = [...(entry?.permissions?.map(item => item.scope) ?? (entry?.authorizations ?? []).flatMap(item => item.scopes)), ...(entry?.installation?.scopes ?? [])]
     if (entry?.realtime && granted.length) granted.push(REALTIME_PERMISSION)
     return consentPermissions([...new Set(granted)]).sort((a, b) => a.label.localeCompare(b.label, 'en')).map(item => item.scope)
   }, [entry])
+  // The "MCP" entry marks each permission an authorization used recently "Actively used".
+  const activeScopes = useMemo(() => entry?.permissions ? new Set(entry.permissions.filter(item => item.activelyUsed).map(item => item.scope)) : undefined, [entry])
   const back = () => navigate(settingsPath(workspace, 'applications'))
 
   const revokeTokens = async () => {
     const confirmed = await confirmAction(t('Revoke access for "{name}"?').replace('{name}', name), { description: t('This will revoke all existing tokens for "{name}". You cannot undo this action.').replace('{name}', name), confirmLabel: t('Revoke'), danger: true })
     if (!confirmed) return
     try {
-      for (const item of authorizations) await revokeOAuthAuthorization(item.id)
+      // MCP: every MCP client's authorizations at once (an admin's revoke covers every member, a member's their own).
+      if (mcp) await revokeMCPAccess()
+      else for (const item of authorizations) await revokeOAuthAuthorization(item.id)
       await Promise.all([reload(), onReload()])
       toast.success(t('Tokens revoked'), { description: t('The tokens for "{name}" have been revoked.').replace('{name}', name) })
     } catch (error) {
@@ -152,12 +180,12 @@ export function InstalledApplicationPage({ data, clientId, onReload }: { data: B
   return <div className="application-page">
     <SettingsCrumb pinned onClick={back}>{t('Applications')}</SettingsCrumb>
     <header className="oauth-app-page-header">
-      <OAuthAppAvatar logoUrl={logoUrl} name={name} redirectUris={entry?.redirectUris ?? ownApp?.redirectUris} size={48}/>
+      <ApplicationLogo entry={entry} logoUrl={logoUrl} name={name} redirectUris={entry?.redirectUris ?? ownApp?.redirectUris} size={48}/>
       <div className="oauth-app-page-header-copy">
         <h1 data-i18n-ignore>{name}</h1>
         {developerName && <p data-i18n-ignore>{t('by {developer}').replace('{developer}', developerName)}</p>}
       </div>
-      {admin && (ownApp || authorizations.length > 0) && <DropdownMenu>
+      {(admin || mcp) && (ownApp || authorizations.length > 0) && <DropdownMenu>
         <DropdownMenuTrigger className="oauth-app-icon-button is-small" aria-label={t('Open menu')}><MoreHorizontal aria-hidden="true"/></DropdownMenuTrigger>
         <DropdownMenuContent align="end" sideOffset={4} className="oauth-app-menu">
           {ownApp && <DropdownMenuItem onSelect={() => navigate(applicationSettingsPath(workspace, ownApp.id))}>{t('View application settings')}</DropdownMenuItem>}
@@ -171,10 +199,28 @@ export function InstalledApplicationPage({ data, clientId, onReload }: { data: B
     </Section>}
     <Section className="oauth-app-section" title={t('Permissions')}>
       {scopes.length ? <div className="oauth-app-permissions">
-        {scopes.map(scope => <div key={scope} className="oauth-app-permission"><ScopeIcon scope={scope}/><span>{t(OAUTH_SCOPE_LABELS[scope] ?? scope)}</span></div>)}
+        {scopes.map(scope => <div key={scope} className="oauth-app-permission"><ScopeIcon scope={scope}/>
+          {activeScopes ? <span className="oauth-app-permission-copy">
+            <span>{t(OAUTH_SCOPE_LABELS[scope] ?? scope)}</span>
+            {activeScopes.has(scope) && <span className="oauth-app-permission-note">{t('Actively used')}</span>}
+          </span> : <span>{t(OAUTH_SCOPE_LABELS[scope] ?? scope)}</span>}
+        </div>)}
       </div> : <Row title={<span className="oauth-app-muted-title">{t('No permissions')}</span>}/>}
     </Section>
-    {authorizations.length > 0 && <Section className="oauth-app-section" title={t('Authorizing members')} description={t('Members who have authorized this application to access workspace data')}>
+    {mcp && entry.members && entry.members.length > 0 && <Section className="oauth-app-section" title={t('Authorizing members')} description={t('Members who have authorized this application to access workspace data')}>
+      {entry.members.map(item => {
+        const user = data.users.find(member => member.id === item.userId)
+        const authorized = t('Authorized on {date}').replace('{date}', formatDate(item.authorizedAt, { month: 'short', day: 'numeric' }))
+        return <div key={item.userId} className="oauth-app-member">
+          <UserAvatar className="oauth-app-member-avatar" name={user?.displayName || user?.name || '?'} avatarUrl={user?.avatarUrl}/>
+          <div className="oauth-app-member-copy">
+            <span data-i18n-ignore>{user?.displayName || user?.name || t('Unknown user')}{user?.username && <em>({user.username})</em>}</span>
+            <span data-i18n-ignore>{item.lastUsedAt ? `${authorized} · ${t('Last used on {date}').replace('{date}', formatDate(item.lastUsedAt, { month: 'short', day: 'numeric' }))}` : authorized}</span>
+          </div>
+        </div>
+      })}
+    </Section>}
+    {!mcp && authorizations.length > 0 && <Section className="oauth-app-section" title={t('Authorizing members')} description={t('Members who have authorized this application to access workspace data')}>
       {authorizations.map(item => {
         const user = data.users.find(member => member.id === item.userId)
         return <div key={item.id} className="oauth-app-member">

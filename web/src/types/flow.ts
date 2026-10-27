@@ -1692,6 +1692,8 @@ export interface ActorBot {
 }
 export interface OAuthAuthorization {
   id: UUID;
+  /** "app" for an app-user installation; absent or "user" for a member's own authorization. */
+  actor?: string;
   clientId: string;
   clientName: string;
   userId: UUID;

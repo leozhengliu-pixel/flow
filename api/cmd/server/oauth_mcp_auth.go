@@ -133,7 +133,7 @@ func (s *server) registerOAuthClient(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, existing)
 		return
 	}
-	clientID, err := randomSecret("flow_mcp_")
+	clientID, err := randomSecret(dynamicOAuthClientPrefix)
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not register client")
 		return

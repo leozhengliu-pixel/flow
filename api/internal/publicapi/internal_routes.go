@@ -470,6 +470,7 @@ var InternalRoutes = []string{
 	"POST /api/notifications/batch",
 	// /api/oauth
 	"DELETE /api/oauth/authorizations/{id}",
+	"DELETE /api/oauth/authorized-applications/mcp",
 	"GET /api/oauth/authorization-request",
 	"GET /api/oauth/authorized-applications",
 	"GET /api/oauth/installation",

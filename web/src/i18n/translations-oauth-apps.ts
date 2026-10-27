@@ -269,6 +269,8 @@ export const oauthAppsZhCN: Record<string, string> = {
   "Authorizing members": "授权成员",
   "Members who have authorized this application to access workspace data": "已授权此应用访问工作区数据的成员",
   "Authorized on {date}": "授权于 {date}",
+  "Last used on {date}": "上次使用于 {date}",
+  "Actively used": "正在使用",
   "Installation status": "安装状态",
   "No installations": "没有安装",
   "Team access updated": "团队访问权限已更新",
