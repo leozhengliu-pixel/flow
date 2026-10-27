@@ -98,9 +98,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Flow Agent: asking it to create a team of 40 people no longer runs out of
   steps. `save_team` adds everyone it finds in one call and lists the rest
   (not in the workspace, or a name several members share, with candidates)
-  instead of failing on the first; with `inviteMissing` it invites people
-  given by email to the workspace and the team (with the viewer's invite
-  permission); `get_user` takes `queries` to look up many people at once;
+  instead of failing on the first. It does not send workspace invitations:
+  for people who are not members its result carries `inviteHint`, which the
+  reply passes on (Settings → Administration → Members → Invite, the emails
+  to paste, then the team to add them to); `get_user` takes `queries` to
+  look up many people at once;
   `list_users` honours `orderBy: createdAt`; and team requests get `save_team`
   without a `load_tools` step. A chat reply or agent thread run may now take
   `FLOW_AGENT_MAX_TOOL_TURNS` turns (default 40, was 8) and

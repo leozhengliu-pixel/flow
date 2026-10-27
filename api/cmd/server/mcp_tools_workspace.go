@@ -313,7 +313,6 @@ func (s *server) saveMCPTeam(ctx context.Context, actor mcpActor, data domain.Bo
 		}
 		createdLabels = append(createdLabels, result)
 	}
-	invited, alreadyInvited, inviteErrors := s.inviteMCPTeamPeople(ctx, actor, data, args, team.ID, unresolved)
 	receipt := map[string]any{"id": team.ID, "key": team.Key, "name": team.Name, "created": creating, "url": mcpWorkspaceURL(ws, args, "team", team.Key, "all")}
 	// People on the team now (apps such as Flow Agent, which join teams on their own, are not counted).
 	people := 0
@@ -325,17 +324,10 @@ func (s *server) saveMCPTeam(ctx context.Context, actor mcpActor, data domain.Bo
 	receipt["memberCount"] = people
 	if len(unresolved) > 0 {
 		receipt["unresolved"] = unresolved
-		receipt["unresolvedNote"] = "These people were not added. not_found: no workspace member matches (an email can be invited with inviteMissing: true). ambiguous: several members match; pass one candidate's id or email."
-	}
-	if len(invited) > 0 {
-		receipt["invited"] = invited
-		receipt["invitedNote"] = "Invited to the workspace; they join this team when they accept."
-	}
-	if len(alreadyInvited) > 0 {
-		receipt["alreadyInvited"] = alreadyInvited
-	}
-	if len(inviteErrors) > 0 {
-		receipt["inviteErrors"] = inviteErrors
+		receipt["unresolvedNote"] = "These people were not added. not_found: not a member of this workspace; workspace invitations cannot be sent from here, so say who was not added and pass on inviteHint. ambiguous: several members match; pass one candidate's id or email."
+		if hint := mcpTeamInviteHint(team.Name, unresolved); hint != "" {
+			receipt["inviteHint"] = hint
+		}
 	}
 	if len(settings) > 0 {
 		receipt["settings"] = settings
@@ -361,16 +353,13 @@ func (s *server) saveMCPTeam(ctx context.Context, actor mcpActor, data domain.Bo
 	return receipt, nil
 }
 
-// inviteMCPTeamPeople invites the members and owners save_team could not find when the call asks for it
-// (inviteMissing) and they were named by email: one workspace invitation each, through the same route and checks
-// as inviting from Settings (the workspace's invite permission, approved email domains), naming the team so they
-// join it when they accept. Owners join as members; making them owners waits until they have joined.
-func (s *server) inviteMCPTeamPeople(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any, teamID string, unresolved []map[string]any) (invited, alreadyInvited []string, failures []map[string]string) {
-	if !boolArg(args, "inviteMissing") {
-		return nil, nil, nil
-	}
-	ws := actor.WorkspaceKey
-	seen := map[string]bool{}
+// mcpTeamInviteHint is what the reply tells the user about the members and owners save_team could not add because
+// they are not in the workspace. Tools cannot send workspace invitations (an email to someone outside the
+// workspace is the user's call), so the hint names the people and the settings page where someone allowed to
+// invite does it: Settings → Administration → Members → Invite, the emails to paste, then the team to add them to.
+// It is "" when everyone not added is only an ambiguous name.
+func mcpTeamInviteHint(teamName string, unresolved []map[string]any) string {
+	emails, names := []string{}, []string{}
 	for _, item := range unresolved {
 		field, _ := item["field"].(string)
 		status, _ := item["status"].(string)
@@ -378,25 +367,24 @@ func (s *server) inviteMCPTeamPeople(ctx context.Context, actor mcpActor, data d
 		if field != "members" && field != "owners" || status != mcpUserNotFound {
 			continue
 		}
-		email := mcpInviteEmail(query)
-		if email == "" || seen[email] {
-			continue
+		if email := mcpInviteEmail(query); email != "" {
+			if !slices.Contains(emails, email) {
+				emails = append(emails, email)
+			}
+		} else if name := strings.TrimSpace(query); name != "" && !slices.Contains(names, name) {
+			names = append(names, name)
 		}
-		seen[email] = true
-		if slices.ContainsFunc(data.Invitations, func(invitation domain.Invitation) bool {
-			return invitation.Status == "pending" && strings.EqualFold(invitation.Email, email)
-		}) {
-			alreadyInvited = append(alreadyInvited, email)
-			continue
-		}
-		input := map[string]any{"emails": []string{email}, "role": "member", "teamIds": []string{teamID}}
-		if _, err := s.invokeMCPRoute(ctx, actor, http.MethodPost, "/api/workspaces/"+pathID(ws)+"/invitations", map[string]string{"workspaceKey": ws}, input, s.createInvitation); err != nil {
-			failures = append(failures, map[string]string{"email": email, "error": err.Error()})
-			continue
-		}
-		invited = append(invited, email)
 	}
-	return invited, alreadyInvited, failures
+	hints := []string{}
+	if len(emails) > 0 {
+		list := strings.Join(emails, ", ")
+		hints = append(hints, fmt.Sprintf("Not added, because they are not members of this workspace: %s. Workspace invitations can't be sent from here. To finish, go to Settings → Administration → Members → Invite, paste %s, and click Send invites; once they accept, add them to %s in Settings → Administration → Teams → %s → Members (or ask again).",
+			list, list, teamName, teamName))
+	}
+	if len(names) > 0 {
+		hints = append(hints, fmt.Sprintf("No workspace member matches %s: check the spelling, or invite them by email the same way.", strings.Join(names, ", ")))
+	}
+	return strings.Join(hints, " ")
 }
 
 // mcpInviteEmail is the email address a person reference names ("ana@example.com", "Ana <ana@example.com>"), or

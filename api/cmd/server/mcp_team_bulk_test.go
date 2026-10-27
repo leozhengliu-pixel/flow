@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // seedMCPMembers adds workspace members to the contract fixture the way people join: they register, verify their
@@ -103,60 +104,85 @@ func TestMCPSaveTeamAddsFortyMembersInOneCall(t *testing.T) {
 	if candidates, _ := ambiguous["candidates"].([]any); len(candidates) != 2 {
 		t.Fatalf("an ambiguous name lists the members it fits: %v", ambiguous)
 	}
+	hint, _ := receipt["inviteHint"].(string)
+	for _, want := range []string{"Settings → Administration → Members → Invite", "new.hire@bulk.test, ana@bulk.test, ghost@bulk.test", "Send invites", "add them to Platform", "Nobody Here"} {
+		if !strings.Contains(hint, want) {
+			t.Fatalf("the hint names the people to invite and where (%q): %q", want, hint)
+		}
+	}
+	if strings.Contains(hint, "Alex Kim") {
+		t.Fatalf("an ambiguous name is not someone to invite: %q", hint)
+	}
 	if receipt["invited"] != nil || len(f.repository.Bootstrap().Invitations) > 42 {
-		t.Fatalf("nobody is invited unless the call asks for it: %v", receipt["invited"])
+		t.Fatalf("nobody is invited: %v", receipt["invited"])
 	}
 
-	// The follow-up: the ambiguous name by email, and invitations for the people given by email.
-	updated := mcpObject(t, f, "save_team", map[string]any{"id": "PLAT", "members": []string{"alex.kim2@bulk.test", "new.hire@bulk.test", "Ana <ana@bulk.test>", "Nobody Here"}, "owners": []string{"ghost@bulk.test"}, "inviteMissing": true})
+	// The follow-up: the ambiguous name by email; the people outside the workspace are still only reported.
+	updated := mcpObject(t, f, "save_team", map[string]any{"id": "PLAT", "members": []string{"alex.kim2@bulk.test", "new.hire@bulk.test"}})
 	if added, _ := updated["addedMembers"].([]any); len(added) != 1 || added[0] != ids["alex.kim2@bulk.test"] {
 		t.Fatalf("the chosen Alex Kim is added: %v", updated["addedMembers"])
 	}
-	invited, _ := updated["invited"].([]any)
-	if len(invited) != 3 || !slices.Contains(invited, any("new.hire@bulk.test")) || !slices.Contains(invited, any("ana@bulk.test")) || !slices.Contains(invited, any("ghost@bulk.test")) {
-		t.Fatalf("people given by email are invited, a name is not: %v", updated)
+	if hint, _ := updated["inviteHint"].(string); !strings.Contains(hint, "new.hire@bulk.test") || strings.Contains(hint, "alex.kim2") {
+		t.Fatalf("the hint lists only who is still missing: %q", hint)
 	}
-	invitations, err := f.repository.ListInvitations(t.Context(), f.data.Workspace.ID)
+	assertNoInvitations(t, f.repository, "new.hire@bulk.test", "ana@bulk.test", "ghost@bulk.test")
+}
+
+func assertNoInvitations(t *testing.T, repository *store.SQLiteStore, emails ...string) {
+	t.Helper()
+	invitations, err := repository.ListInvitations(t.Context(), repository.Bootstrap().Workspace.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, email := range []string{"new.hire@bulk.test", "ana@bulk.test", "ghost@bulk.test"} {
-		index := slices.IndexFunc(invitations, func(item domain.Invitation) bool { return item.Email == email && item.Status == "pending" })
-		if index < 0 || !slices.Equal(invitations[index].TeamIDs, []string{teamID}) || invitations[index].Role != "member" {
-			t.Fatalf("%s is invited to the workspace and the team: %+v", email, invitations)
+	for _, email := range emails {
+		if slices.ContainsFunc(invitations, func(item domain.Invitation) bool { return strings.EqualFold(item.Email, email) }) {
+			t.Fatalf("%s was invited: save_team cannot send workspace invitations", email)
 		}
-	}
-	again := mcpObject(t, f, "save_team", map[string]any{"id": "PLAT", "members": []string{"new.hire@bulk.test"}, "inviteMissing": true})
-	if already, _ := again["alreadyInvited"].([]any); len(already) != 1 || again["invited"] != nil {
-		t.Fatalf("a pending invitation is not sent twice: %v", again)
 	}
 }
 
-// Inviting through save_team needs the viewer's permission to invite, like Settings → Members.
-func TestMCPSaveTeamInviteMissingRespectsInvitePermission(t *testing.T) {
+// save_team cannot invite: the public /mcp endpoint rejects the old `inviteMissing` argument as not in the schema,
+// and the built-in agent (which calls the tool without schema validation) has it ignored — either way no
+// invitation is created and the people are reported with the settings path instead.
+func TestMCPSaveTeamCannotInvite(t *testing.T) {
 	f := newMCPContractFixture(t)
-	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "workspace_settings.updated", "invite", nil, func(data *domain.Bootstrap) error {
-		data.WorkspaceSettings.InvitePermission = "admins"
-		return nil
-	}); err != nil {
+	message := mcpToolError(t, f, "save_team", map[string]any{"name": "Guests", "key": "GST", "members": []string{"outsider@bulk.test"}, "inviteMissing": true})
+	if !strings.Contains(message, "Invalid arguments for save_team") || !strings.Contains(message, "inviteMissing") {
+		t.Fatalf("an MCP client is told the argument does not exist: %s", message)
+	}
+	if _, err := mcpFindTeam(f.repository.Bootstrap(), "GST"); err == nil {
+		t.Fatal("a rejected call creates nothing")
+	}
+	assertNoInvitations(t, f.repository, "outsider@bulk.test")
+
+	repository, actor, ctx := newMCPToolTestContext(t)
+	service := &server{store: repository, uploadPath: t.TempDir()}
+	result, err := service.callFlowTool(ctx, actor, "save_team", map[string]any{"name": "Invite Test", "key": "INV", "members": []any{"qa-invite-1@example.com", "qa-invite-2@example.com", "qa-invite-3@example.com"}, "inviteMissing": true})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.repository.UpdateMemberRole(t.Context(), f.data.Workspace.ID, "usr_member", "member"); err != nil {
-		t.Fatal(err)
+	receipt := result.(map[string]any)
+	if receipt["created"] != true || receipt["key"] != "INV" || receipt["memberCount"] != 1 {
+		t.Fatalf("the team is created with its creator: %v", receipt)
 	}
-	member := f.addMCPKey(t, "member-key", "usr_member", []string{"read", "write"}, nil)
-	receipt := f.objectWith(t, member, "save_team", map[string]any{"name": "Guests", "key": "GST", "members": []string{"outsider@bulk.test"}, "inviteMissing": true})
-	if receipt["invited"] != nil {
-		t.Fatalf("a member without invite permission invites nobody: %v", receipt)
+	unresolved, _ := receipt["unresolved"].([]map[string]any)
+	if len(unresolved) != 3 || unresolved[0]["status"] != mcpUserNotFound {
+		t.Fatalf("each person outside the workspace is reported: %v", receipt)
 	}
-	failures, _ := receipt["inviteErrors"].([]any)
-	if len(failures) != 1 || !strings.Contains(fmt.Sprint(failures[0]), "cannot perform this action") {
-		t.Fatalf("the refusal is reported per person: %v", receipt)
+	hint, _ := receipt["inviteHint"].(string)
+	want := "Not added, because they are not members of this workspace: qa-invite-1@example.com, qa-invite-2@example.com, qa-invite-3@example.com. Workspace invitations can't be sent from here. To finish, go to Settings → Administration → Members → Invite, paste qa-invite-1@example.com, qa-invite-2@example.com, qa-invite-3@example.com, and click Send invites; once they accept, add them to Invite Test in Settings → Administration → Teams → Invite Test → Members (or ask again)."
+	if hint != want {
+		t.Fatalf("inviteHint:\n got %q\nwant %q", hint, want)
 	}
-	invitations, _ := f.repository.ListInvitations(t.Context(), f.data.Workspace.ID)
-	if slices.ContainsFunc(invitations, func(item domain.Invitation) bool { return item.Email == "outsider@bulk.test" }) {
-		t.Fatal("no invitation was created")
+	if note, _ := receipt["unresolvedNote"].(string); strings.Contains(note, "inviteMissing") || !strings.Contains(note, "inviteHint") {
+		t.Fatalf("the note points at the hint, not an invite option: %q", note)
 	}
+	for _, key := range []string{"invited", "alreadyInvited", "inviteErrors"} {
+		if receipt[key] != nil {
+			t.Fatalf("no invitation result (%s): %v", key, receipt)
+		}
+	}
+	assertNoInvitations(t, repository, "qa-invite-1@example.com", "qa-invite-2@example.com", "qa-invite-3@example.com")
 }
 
 // get_user looks up many people in one call and says for each whether it was found, missing, or ambiguous.

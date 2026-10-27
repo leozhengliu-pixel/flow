@@ -145,4 +145,27 @@ describe('agent result cards', () => {
     expect(screen.getByRole('list', { name: 'Created issues' })).toHaveTextContent('Second issue')
     expect(screen.getAllByRole('button', { name: 'Undo' })).toHaveLength(1)
   })
+
+  it('shows "Created team" with the team icon, its name and its key at the right', () => {
+    const team: AgentChange = { action: 'created', entityType: 'team', entityId: 'team-new', label: 'Invite Test', url: '/test/team/INV/all', undoable: false }
+    const message = reply(team)
+    // The new team is not in the client's data yet: the key comes from the tool's receipt.
+    message.parts![0].toolCall!.result = { id: 'team-new', key: 'INV', name: 'Invite Test', created: true }
+    renderCards(message)
+    const card = screen.getByRole('region', { name: 'Created team' })
+    const link = screen.getByRole('link', { name: /Invite Test/ })
+    expect(link).toHaveAttribute('href', expect.stringContaining('/team/INV'))
+    expect(link).toHaveAttribute('data-agent-entity', 'team')
+    expect(link.querySelector('svg, img')).not.toBeNull()
+    expect(link.lastElementChild).toHaveTextContent('INV')
+    expect(card).not.toHaveTextContent('Undo')
+  })
+
+  it('a team the client has loaded shows its own icon, name and key', () => {
+    const loaded = data.teams[0]
+    renderCards(reply({ action: 'created', entityType: 'team', entityId: loaded.id, label: loaded.name, undoable: false }))
+    const card = screen.getByRole('region', { name: 'Created team' })
+    expect(card).toHaveTextContent(loaded.name)
+    expect(card).toHaveTextContent(loaded.key)
+  })
 })
