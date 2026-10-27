@@ -199,3 +199,87 @@ acquired startup lock lock="database schema" waited_ms=1758
   instance of the new version first (step 3 above), for example as a one-off
   Pod or a Helm `pre-upgrade` hook Job with the same configuration. Then roll
   the remaining replicas, which find the schema current.
+
+## Rolling updates and web assets
+
+Each build of the web app names its scripts and styles by content hash
+(`/assets/index-<hash>.js`). During a rolling update or a rollback, replicas
+of two versions serve side by side, and a page from one version asks for files
+only that version built. If such a request reaches a replica of the other
+version and fails, the page stays on the loading screen, or a route of a page
+opened before the deploy fails to load. A replica that does not have a hashed
+file looks for it in four layers:
+
+1. **Each image carries earlier releases.** The image build copies the
+   assets of the image passed as `PREVIOUS_RELEASE_IMAGE` (that image's own
+   release and the releases it carried, `CARRY_RELEASES`, default 2) into
+   `/app/web-previous`. The build output's `asset-manifest.json` decides
+   which files belong to which release. The server reads them from
+   `FLOW_ASSET_PREVIOUS_PATH`. A new replica therefore serves an old page's
+   chunks, also after every replica is new. The published images pass the
+   previous version tag (tag builds) or the last published `main` image. For
+   your own builds, pass the image you are replacing:
+
+   ```bash
+   docker build --build-arg PREVIOUS_RELEASE_IMAGE=registry.example.com/flow:1.4.2 -t registry.example.com/flow:1.5.0 .
+   ```
+
+2. **Replicas ask each other.** When a file is missing, a replica asks every
+   replica behind `FLOW_ASSET_PEERS` (the Helm chart's headless
+   `<release>-peers` Service, `assets.peerFallback.enabled`, on by default).
+   This works in both directions while versions are mixed, during a rollout
+   and during a rollback, without shared storage. Requests between replicas
+   carry `X-Flow-Asset-Peer` and are answered from disk only, so they never
+   bounce on.
+3. **Shared directory (optional).** With `FLOW_ASSET_SHARED_PATH` (Helm
+   `assets.shared`, a ReadWriteMany volume), every replica publishes its
+   release's assets there at startup and reads missing ones from there. The
+   newest `FLOW_ASSET_SHARED_KEEP_RELEASES` releases (default 5) are kept.
+   This is the layer that covers a page of a *later* release after a rollback
+   finished: an older image cannot carry files that were built after it.
+4. **Published origins (optional).** `FLOW_ASSET_FALLBACK_URL` (Helm
+   `assets.fallbackUrls`) lists base URLs where releases' assets are
+   published, such as an object storage bucket, a CDN, or the Service of a
+   blue/green twin. Flow fetches `<url>/assets/<name>`. To publish a release,
+   copy `/app/web/assets/` out of the image and upload it without deleting
+   older files:
+
+   ```bash
+   id=$(docker create registry.example.com/flow:1.5.0)
+   docker cp "$id:/app/web/assets" ./assets && docker rm "$id"
+   aws s3 sync ./assets s3://flow-web-assets/assets --cache-control "public, max-age=31536000, immutable"
+   ```
+
+Files from peers and origins are kept in a 64 MiB memory cache. A file no
+layer has is remembered for 10 seconds. A fallback answer carries
+`X-Flow-Asset-Source: previous|shared|peer|url`. An answer that is an HTML
+page is never used, because an older server, or a misconfigured origin, may
+answer a missing file with the app's index page.
+
+What the browser sees:
+
+- `index.html` (any app route) is served with `Cache-Control: no-cache`.
+  Hashed files are served with `public, max-age=31536000, immutable`.
+- A hashed file that no layer has is a `404` with `Cache-Control: no-store`.
+  It is never the app's HTML.
+- As a last resort, the page reloads once: when a lazy route chunk fails
+  (`vite:preloadError`, or a failed dynamic import), or when an entry script
+  or stylesheet fails before the app starts. The reload fetches current HTML.
+  A `sessionStorage` guard allows one reload per 30 seconds, so a file that is
+  really gone shows an error instead of a reload loop.
+
+What stays uncovered:
+
+- The first rollout *to* a version with this fallback. The old replicas do
+  not have it yet, so a new page's files can still fail on them until the
+  rollout finishes. The client reload covers that window.
+- After a rollback finishes, a page of the later release that is still open
+  needs layer 3 or 4 to open routes it has not loaded yet. Without them it
+  reloads once onto the rolled-back version.
+- Peers are found through DNS. A replica that is terminating has already
+  left the headless Service, so its files come from the other layers.
+
+To check a rollout, request a file of the new release from an old Pod
+directly, for example `kubectl port-forward pod/<old-pod> 8080` and then
+`curl -sI localhost:8080/assets/<new-file>`. The answer should be `200` with
+`X-Flow-Asset-Source: peer`.
