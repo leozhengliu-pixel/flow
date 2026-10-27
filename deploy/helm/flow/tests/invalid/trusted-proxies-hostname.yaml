@@ -1,0 +1,3 @@
+# Trusted proxies are IP addresses or CIDR ranges, not host names.
+trustProxyHeaders: true
+trustedProxies: [ingress.example.com]

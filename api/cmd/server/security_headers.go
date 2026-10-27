@@ -41,6 +41,7 @@ var webAppConnectOrigins = []string{"https://api.github.com"}
 // missing, right before the response header is written.
 type securityHeaderPolicy struct {
 	config             appconfig.SecurityHeadersConfig
+	forwarding         *forwardingPolicy
 	httpsApp           bool
 	frameAncestors     string
 	frameOptions       string
@@ -59,7 +60,7 @@ func newSecurityHeaderPolicy(config appconfig.SecurityHeadersConfig, appURL, sta
 		return nil
 	}
 	parsedApp, _ := url.Parse(strings.TrimSpace(appURL))
-	policy := &securityHeaderPolicy{config: config, httpsApp: parsedApp != nil && parsedApp.Scheme == "https" && parsedApp.Host != ""}
+	policy := &securityHeaderPolicy{config: config, forwarding: forwardingPolicyFromConfig(config, appURL), httpsApp: parsedApp != nil && parsedApp.Scheme == "https" && parsedApp.Host != ""}
 	policy.frameAncestors = "frame-ancestors " + strings.Join(config.FrameAncestors, " ")
 	switch strings.Join(config.FrameAncestors, " ") {
 	case "'none'":
@@ -251,22 +252,11 @@ func inlineScriptHashList(document []byte) []string {
 
 // requestOverHTTPS reports whether the browser reached Flow over HTTPS: TLS on
 // this listener, or X-Forwarded-Proto set by a proxy the operator trusts
-// (FLOW_TRUST_PROXY_HEADERS). Without that trust the header is ignored, since
-// any client can send it. With several proxies the last value is the one the
-// nearest proxy wrote.
+// (forwardingPolicy.overHTTPS). Without that trust the header is ignored,
+// since any client can send it. With several proxies the last value is the
+// one the nearest proxy wrote.
 func (p *securityHeaderPolicy) requestOverHTTPS(r *http.Request) bool {
-	if r.TLS != nil {
-		return true
-	}
-	if !p.config.TrustProxyHeaders {
-		return false
-	}
-	values := r.Header.Values("X-Forwarded-Proto")
-	if len(values) == 0 {
-		return false
-	}
-	items := strings.Split(values[len(values)-1], ",")
-	return strings.EqualFold(strings.TrimSpace(items[len(items)-1]), "https")
+	return p.forwarding.overHTTPS(r)
 }
 
 // webAppRoute reports whether the request is served by the built web app

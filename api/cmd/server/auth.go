@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"slices"
@@ -77,19 +76,6 @@ func (l *authRateLimiter) Allow(_ context.Context, key string, limit int, durati
 	item.count++
 	l.windows[key] = item
 	return true, 0, nil
-}
-
-func authClientAddress(r *http.Request) string {
-	if strings.EqualFold(os.Getenv("FLOW_TRUST_PROXY_HEADERS"), "true") {
-		if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-For"), ",")[0]); forwarded != "" {
-			return forwarded
-		}
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err == nil {
-		return host
-	}
-	return r.RemoteAddr
 }
 
 type authUserContextKey struct{}
@@ -2697,9 +2683,6 @@ func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 
 func devAuthTokens() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("FLOW_DEV_AUTH_TOKENS")), "true")
-}
-func secureCookie(r *http.Request) bool {
-	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") || strings.EqualFold(os.Getenv("FLOW_COOKIE_SECURE"), "true")
 }
 
 // pruneSuggestedAssignee drops Triage Intelligence assignee suggestions for a

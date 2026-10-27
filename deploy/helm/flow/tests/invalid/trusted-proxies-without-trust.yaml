@@ -1,0 +1,2 @@
+# A trusted proxy list only applies when the proxy headers are trusted.
+trustedProxies: [10.0.0.0/8]

@@ -1015,7 +1015,13 @@ func newHandler(s *server) http.Handler {
 		securityConfig = *s.securityHeaders
 	}
 	security := newSecurityHeaderPolicy(securityConfig, s.allowedOrigin, s.staticPath)
-	return withSecurityHeaders(security, requestLog(s.cors(compressAPIResponses(s.signedFileURLs(apiErrorEnvelope(requestBodyBudget(handler)))))))
+	// Handlers read the forwarding headers only as the trust settings allow
+	// (request_origin.go); without configuration they read the environment.
+	var forwarding *forwardingPolicy
+	if s.securityHeaders != nil {
+		forwarding = forwardingPolicyFromConfig(securityConfig, s.allowedOrigin)
+	}
+	return withForwardingPolicy(forwarding, withSecurityHeaders(security, requestLog(s.cors(compressAPIResponses(s.signedFileURLs(apiErrorEnvelope(requestBodyBudget(handler))))))))
 }
 
 // serverRoute reports whether path is answered by the API rather than the

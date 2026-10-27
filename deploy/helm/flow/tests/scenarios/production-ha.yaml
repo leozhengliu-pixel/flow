@@ -68,6 +68,7 @@ ingress:
 networkPolicy:
   enabled: true
 trustProxyHeaders: true
+trustedProxies: [10.0.0.0/8, "fd00::/8"]
 securityHeaders:
   csp: enforce
   cspReportUri: https://csp-reports.example.com/flow
