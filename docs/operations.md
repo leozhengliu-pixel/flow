@@ -155,6 +155,22 @@ history) and restore the version from there if the body should come back.
    instances.
 5. Retain the old image and backup until the validation window ends.
 
+### Inherited document scope
+
+The first start of a version with this migration (schema migration 1006,
+"inherited document scope") records, for every document attached to an issue
+or project, the teams it inherits from them. Until then a document on a
+private team's issue or project stayed readable across the workspace until it
+was attached or detached again. Live documents and documents in "Recently
+deleted" are covered; grants, the document's own teams, its version and its
+update time do not change. Issue teams are read from the issue records 500 at
+a time and documents are written 500 per transaction, under the startup lock.
+Only the issues documents are attached to are read, so the work grows with
+the number of documents, not with the number of issues. The log line
+`derived inherited document scope documents=… deleted_documents=…` reports
+how many documents changed. The migration only fills in what attaching the
+document today would record, so running it again changes nothing.
+
 ### Several servers starting at once
 
 Every server runs the migrations when it starts. There is no separate

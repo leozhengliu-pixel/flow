@@ -35,6 +35,7 @@ func (s *SQLiteStore) dataMigrations() []struct {
 		{version: documentDefaultAccessMigrationVersion, name: "default document access grants", apply: s.migrateDocumentDefaultAccess},
 		{version: agentWebAccessMigrationVersion, name: "explicit agent web access", apply: s.migrateAgentWebAccess},
 		{version: resourceSlugMigrationVersion, name: "stable project and initiative slugs", apply: s.migrateResourceSlugs},
+		{version: documentInheritedScopeMigrationVersion, name: "inherited document scope", apply: s.migrateDocumentInheritedScope},
 		// coding sessions (track K)
 		{version: codingEnvironmentsMigrationVersion, name: "coding environments table", apply: s.migrateLegacyCodingEnvironments},
 	}

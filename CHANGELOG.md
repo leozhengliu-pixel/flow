@@ -60,6 +60,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   address, and the scheme of `FLOW_APP_URL` for requests to its host, so links
   and cookies stay `https` behind a TLS ingress. See
   [HTTPS detection and trusted proxies](docs/configuration.md#https-detection-and-trusted-proxies).
+- Security: documents attached to a private team's issue or project before
+  inherited document scope existed stayed readable across the workspace until
+  they were attached or detached again. A one-time startup migration records
+  the inherited teams of every such document (including deleted ones), without
+  changing grants, the document's own teams, its version or update time. See
+  [Inherited document scope](docs/operations.md#inherited-document-scope).
 - A panic in a request handler is now logged once (`http handler panic`, with
   the request id, method, path and stack; no headers, query strings or
   bodies) and answered with a JSON 500 in the standard error envelope that
