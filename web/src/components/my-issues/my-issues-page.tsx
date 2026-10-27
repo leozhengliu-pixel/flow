@@ -14,7 +14,7 @@ import { MyIssuesSurface, type MyIssuesDisplayOptions, type MyIssuesFilterKey, t
 import { useMyIssuesController } from './use-my-issues-controller'
 import { assigneeUpdate } from '@/lib/agent-members'
 import { workflowStatusOptions } from '@/lib/team-workflow'
-import { applyExplorerFilters, executeExplorerBulkAction, explorerBoardGroupUpdate, explorerFilterOptions, explorerPropertyOptions, issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
+import { applyExplorerFilters, executeExplorerBulkAction, explorerBoardGroupUpdate, explorerEstimateBulkOptions, explorerFilterOptions, explorerPropertyOptions, issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import { useI18n } from '@/i18n/i18n'
 import { InsightHiddenNotice, SavedViewInsightsPanel, type SavedViewInsightsConfig } from '@/components/issue-explorer/saved-view-panels'
 import { IssueBoard } from '@/components/issue-explorer/issue-board'
@@ -350,7 +350,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         }}
       />}
     </MyIssuesSurface>
-    <MyIssuesBulkActionBar selectedIssues={controller.selectedIssues} destructiveActions={['archive', 'delete']} loading={controller.bulkLoading} error={controller.bulkError} actionOptions={action => action === 'status' ? workflowStatusOptions(data, controller.selectedIssues.map(issue => issue.teamId), rowOptions.status) : bulkOptions(action, rowOptions)} onAction={(action, _issues, value) => { void controller.executeBulk(action, value) }} onClear={controller.clearSelection}/>
+    <MyIssuesBulkActionBar selectedIssues={controller.selectedIssues} destructiveActions={['archive', 'delete']} loading={controller.bulkLoading} error={controller.bulkError} actionOptions={action => action === 'status' ? workflowStatusOptions(data, controller.selectedIssues.map(issue => issue.teamId), rowOptions.status) : action === 'estimate' ? explorerEstimateBulkOptions(data, controller.selectedIssues.map(issue => issue.teamId)) : bulkOptions(action, rowOptions)} onAction={(action, _issues, value) => { void controller.executeBulk(action, value) }} onClear={controller.clearSelection}/>
   </IssueRowActionsProvider>
 }
 

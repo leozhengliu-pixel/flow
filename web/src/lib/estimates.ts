@@ -127,6 +127,35 @@ export function estimateIconLevel(value: number | undefined, settings: EstimateS
 /** Picker value for "No estimate"; the API treats -1 as clearing the estimate. */
 export const NO_ESTIMATE = -1;
 
+/**
+ * The estimate an issue of a team gets when several issues are set to `value`
+ * at once: undefined (left alone) when the team does not use estimates,
+ * NO_ESTIMATE to clear it, the value itself when it is on the team's scale,
+ * otherwise the nearest value of the scale (the larger one on a tie).
+ */
+export function estimateOnTeamScale(value: number, settings: (EstimateScaleSettings & Partial<Pick<TeamSettings, "estimateType">>) | undefined): number | undefined {
+  if (!teamUsesEstimates(settings)) return undefined;
+  if (value < 0) return NO_ESTIMATE;
+  const scale = estimateValues(settings);
+  if (scale.includes(value)) return value;
+  return scale.reduce((best, item) => Math.abs(item - value) < Math.abs(best - value) || (Math.abs(item - value) === Math.abs(best - value) && item > best) ? item : best, scale[0]);
+}
+
+/**
+ * Bulk estimate choices for the scales of the selected teams that use
+ * estimates: one scale as it is, several merged (T-shirt labels only when every
+ * scale is T-shirt). Empty when no selected team uses estimates.
+ */
+export function estimateBulkValues(scales: readonly (EstimateScaleSettings | undefined)[]): { values: number[]; type: EstimateType; settings: EstimateScaleSettings | undefined } {
+  const used = scales.filter((settings) => teamUsesEstimates(settings));
+  if (!used.length) return { values: [], type: "notUsed", settings: undefined };
+  const first = used[0];
+  const same = used.every((settings) => settings?.estimateType === first?.estimateType && estimateValues(settings).join() === estimateValues(first).join());
+  if (same) return { values: estimateValues(first), type: first?.estimateType ?? "notUsed", settings: first };
+  const values = [...new Set(used.flatMap((settings) => estimateValues(settings)))].sort((a, b) => a - b);
+  return { values, type: used.every((settings) => settings?.estimateType === "tShirt") ? "tShirt" : "fibonacci", settings: undefined };
+}
+
 export function estimatePickerOptions(settings: EstimateScaleSettings | undefined) {
   const type = settings?.estimateType ?? "notUsed";
   return [

@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -29,6 +30,26 @@ describe('issue list estimates', () => {
   it('leaves unestimated issues out of the total when "Count unestimated issues" is off', () => {
     mount({ estimateType: 'fibonacci', estimateCountUnestimated: false })
     expect(screen.getByLabelText('8 estimate points')).toHaveTextContent('8')
+  })
+
+  it('counts a 0 estimate as unestimated unless zero estimates are allowed', () => {
+    const issues = [makeIssue({ id: 'a', identifier: 'TST-1', estimate: 0 }), makeIssue({ id: 'b', identifier: 'TST-2', estimate: 5 })]
+    for (const [settings, total] of [[{ estimateType: 'fibonacci' }, 6], [{ estimateType: 'fibonacci', estimateAllowZero: true }, 5]] as const) {
+      const data = makeBootstrap({ issues, teamSettings: { 'team-1': { teamId: 'team-1', ...settings } as TeamSettings } })
+      const { unmount } = render(<I18nProvider><IssueRowActionsProvider value={{ data, onUpdateIssue: vi.fn() }}>
+        <MyIssuesList groups={[{ id: 'todo', label: 'Todo', issues: issues.map(issue => issueToExplorerRow(issue, data.workspace.urlKey, data.issues, data)) }]}/>
+      </IssueRowActionsProvider></I18nProvider>)
+      expect(screen.getByLabelText(`${total} estimate points`)).toBeInTheDocument()
+      unmount()
+    }
+  })
+
+  it('colours the group total with the estimate total token in both themes', () => {
+    const tokens = fs.readFileSync('src/styles/tokens.css', 'utf8')
+    const css = fs.readFileSync('src/components/my-issues/my-issues-list.module.css', 'utf8')
+    expect(tokens).toMatch(/:root\{color-scheme:dark;[^}]*--estimate-group-total:lch\(63\.304% 7 271\.994\)/)
+    expect(tokens).toMatch(/:root\[data-theme="light"\]\{[^}]*--estimate-group-total:lch\(/)
+    expect(css).toContain('.groupEstimate:global(.estimate-chip){gap:4px;color:var(--estimate-group-total)')
   })
 
   it('hides chips and totals for teams that do not use estimates', () => {
