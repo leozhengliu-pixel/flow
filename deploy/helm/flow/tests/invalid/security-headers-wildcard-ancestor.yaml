@@ -1,0 +1,3 @@
+# A bare wildcard would let any site frame Flow.
+securityHeaders:
+  frameAncestors: ["*"]

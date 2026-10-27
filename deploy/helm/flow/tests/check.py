@@ -318,8 +318,23 @@ for key, want in {
 if secret_data.get("FLOW_GOOGLE_OAUTH_CLIENT_SECRET") != "google-secret-value" or "FLOW_GOOGLE_OAUTH_CLIENT_SECRET" in config_data:
     fail("production-ha", "the Google OAuth client secret belongs in the Secret only")
 for key in default_env:
-    if key.startswith(("FLOW_GOOGLE_", "FLOW_NOTION_", "FLOW_REVIEW_IMPORT", "FLOW_DEV_")):
-        fail("default", f"{key} must not render unless configured")
+    if key.startswith(("FLOW_GOOGLE_", "FLOW_NOTION_", "FLOW_REVIEW_IMPORT", "FLOW_DEV_", "FLOW_SECURITY_", "FLOW_TRUST_PROXY")):
+        fail("default", f"{key} must not render unless configured (Flow's own defaults apply)")
+
+# Security headers: the chart passes what the operator set and nothing else.
+for key, want in {
+    "FLOW_TRUST_PROXY_HEADERS": "true",
+    "FLOW_SECURITY_CSP": "enforce",
+    "FLOW_SECURITY_CSP_REPORT_URI": "https://csp-reports.example.com/flow",
+    "FLOW_SECURITY_FRAME_ANCESTORS": "'self' https://portal.example.com",
+    "FLOW_SECURITY_HSTS_MAX_AGE": "15552000",
+    "FLOW_SECURITY_HSTS_INCLUDE_SUBDOMAINS": "true",
+}.items():
+    if config_data.get(key) != want:
+        fail("production-ha", f"ConfigMap {key}={config_data.get(key)!r}, want {want!r}")
+for key in ("FLOW_SECURITY_HEADERS", "FLOW_SECURITY_HSTS_PRELOAD", "FLOW_SECURITY_HEADERS_SKIP"):
+    if key in config_data:
+        fail("production-ha", f"{key} must not render unless configured")
 
 if failures:
     for failure in failures:

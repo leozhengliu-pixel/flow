@@ -427,6 +427,12 @@ data:
   FLOW_TRUSTED_PRIVATE_ENDPOINTS: "hsb.haier.net,*.corp.example.com"
   FLOW_TRUSTED_PRIVATE_NETWORKS: "10.218.0.0/16"
   FLOW_TRUSTED_CA_FILE: /var/run/flow/trusted-ca/ca.crt
+  FLOW_TRUST_PROXY_HEADERS: "true"
+  FLOW_SECURITY_CSP: "enforce"
+  FLOW_SECURITY_CSP_REPORT_URI: "https://csp-reports.example.com/flow"
+  FLOW_SECURITY_FRAME_ANCESTORS: "'self' https://portal.example.com"
+  FLOW_SECURITY_HSTS_MAX_AGE: "15552000"
+  FLOW_SECURITY_HSTS_INCLUDE_SUBDOMAINS: "true"
   # Coding sessions (docs/coding-sessions.md).
   FLOW_CODING_ENABLED: "true"
   FLOW_CODING_PROVIDER: "kubernetes"
