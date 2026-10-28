@@ -93,11 +93,15 @@
 .issue-properties .label-project-trigger {
   gap: 6px;
 }
-/* The nested row's icon cell grows past 16px so the 24px indent pushes the name right. */
+/* The nested row's icon cell grows past 16px so the 24px indent pushes the name right. The person-avatar wrapper
+   (`span[aria-hidden]`) is pinned to 16px by picker-parity.css, so its override names the same element and
+   adds `:has()` to outrank it: a 16px wrapper centred in the 40px cell let the 40px nest overflow 12px to the
+   right, detaching the curve from the assignee's avatar and drawing the agent's avatar over its name. */
 html:root body .property-command-surface .property-command-icon:has(.core-nested-delegate-icon),
-html:root body .property-command-surface .property-command-icon > :has(> .core-nested-delegate-icon) {
+html:root body .property-command-surface .property-command-icon > span[aria-hidden]:has(> .core-nested-delegate-icon) {
   width: auto;
   flex: none;
+  justify-self: start;
 }
 html:root body .property-command-surface:not(.property-command-labels):not(.property-command-project):not(.property-command-milestone):not(.property-command-project-labels) .property-command-options [role=option]:not(:has(.property-command-checkbox)):has(.core-nested-delegate-icon) {
   grid-template-columns: 40px minmax(0, 1fr) auto auto;
