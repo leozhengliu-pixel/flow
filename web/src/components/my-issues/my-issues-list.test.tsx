@@ -59,6 +59,10 @@ describe('MyIssuesList virtualization', () => {
     expect(css).not.toMatch(/\.row\[data-nested=true\]\s*\{[^}]*padding/)
     expect(css).toMatch(/\.checkboxCell\{width:15px;height:22px;margin-left:3px;/)
     expect(css).toMatch(/\.nestingSegment\{[^}]*left:calc\(var\(--nest-level\) \* 24px \+ 49\.5px\)/)
+    // The priority icon is 16x16 at the start of its 16px column (row x+42, +24 per level): its 22px trigger starts 3px left of it.
+    for (const link of rows) expect(link.querySelector('svg.priority')?.getAttribute('width')).toBe('16')
+    expect(rows[0].querySelector('svg.priority')!.closest('button')!.className).toMatch(/priorityTrigger/)
+    expect(css).toMatch(/\.priorityTrigger\{justify-self:start;margin-left:-3px\}/)
   })
 
   it('keeps large lists bounded to the visible viewport', async () => {

@@ -350,7 +350,8 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
           selectedIds={[String(issue.priority)]}
           options={propertyOptions.priority}
           onSelect={value => change('priority', value)}
-          trigger={<PriorityIcon priority={issue.priority}/>}
+          triggerClassName={`${styles.propertyTrigger} ${styles.priorityTrigger}`}
+          trigger={<PriorityIcon priority={issue.priority} size={16}/>}
         />}
         {displayProperties.has('id') && <span className={styles.identifier}>{issue.identifier}</span>}
         {displayProperties.has('status') && <RowCommandPicker
