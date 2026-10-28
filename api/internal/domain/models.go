@@ -2778,6 +2778,12 @@ type Bootstrap struct {
 	WorkspaceInviteLink    *WorkspaceInviteLink    `json:"workspaceInviteLink,omitempty"`
 	OAuthSyncGroupRequests []OAuthSyncGroupRequest `json:"oauthSyncGroupRequests,omitempty"`
 	ViewerRole             string                  `json:"viewerRole"`
+	// FormerMembers is set by the store only while a write's callback runs
+	// (never stored or serialized): it reports the people the workspace's
+	// memberships mark as no longer members (removed, or suspended), read on
+	// first use. The users collection keeps them, so references stay
+	// readable. Nil outside a write.
+	FormerMembers func() map[string]bool `json:"-"`
 
 	// TrashRetentionDays is set on bootstrap responses only: how long deleted
 	// items stay restorable (FLOW_TRASH_RETENTION_DAYS).

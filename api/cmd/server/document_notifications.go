@@ -198,7 +198,7 @@ func appendDocumentNotifications(s *server, data *domain.Bootstrap, document dom
 	}
 	seen := map[string]bool{}
 	for _, recipientID := range notice.recipients {
-		if recipientID == "" || seen[recipientID] || recipientID == actor.ID {
+		if recipientID == "" || seen[recipientID] || recipientID == actor.ID || formerMember(data, recipientID) {
 			continue
 		}
 		seen[recipientID] = true

@@ -246,7 +246,9 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		refreshDisplayReferences(&data)
 		refreshIssueReferences(&data)
 		traceMark(ctx, "load")
+		data.FormerMembers = s.formerMemberLookup(ctx, tx, &data)
 		aggregate, err := mutate(&data)
+		data.FormerMembers = nil
 		traceMark(ctx, "mutate")
 		if err != nil {
 			return err

@@ -204,7 +204,7 @@ func appendAgentReplyNotifications(data *domain.Bootstrap, thread agentReplyThre
 	agentName := firstNonEmpty(agent.DisplayName, agent.Name, "Agent")
 	seen := map[string]bool{}
 	for _, recipientID := range recipients {
-		if recipientID == "" || seen[recipientID] || thread.muted[recipientID] || recipientID == agent.ID {
+		if recipientID == "" || seen[recipientID] || thread.muted[recipientID] || recipientID == agent.ID || formerMember(data, recipientID) {
 			continue
 		}
 		seen[recipientID] = true

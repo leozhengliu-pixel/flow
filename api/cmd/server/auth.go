@@ -1162,7 +1162,7 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		if input.CycleID != nil && *input.CycleID != "" && !slices.ContainsFunc(data.Cycles, func(item domain.Cycle) bool { return item.ID == *input.CycleID }) {
 			return false
 		}
-		if input.AssigneeID != nil && *input.AssigneeID != "" && !slices.ContainsFunc(data.Users, func(item domain.User) bool { return item.ID == *input.AssigneeID }) {
+		if input.AssigneeID != nil && *input.AssigneeID != "" && !slices.ContainsFunc(data.Users, func(item domain.User) bool { return item.ID == *input.AssigneeID }) && !s.formerMemberOutsideWrite(r.Context(), workspace, *input.AssigneeID) {
 			return false
 		}
 		if input.ParentID != nil && *input.ParentID != "" && !issueAllowed(*input.ParentID) {
@@ -1174,11 +1174,16 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		if slices.ContainsFunc(input.TeamIDs, func(id string) bool { return !teamAllowed(id) }) || slices.ContainsFunc(input.DependencyIDs, func(id string) bool { return !projectAllowed(id) }) {
 			return false
 		}
-		if input.LeadID != nil && *input.LeadID != "" && !slices.ContainsFunc(data.Users, func(item domain.User) bool { return item.ID == *input.LeadID }) {
+		// The viewer's directory leaves removed people out; the write decides
+		// whether naming one keeps a reference (allowed) or adds one (400).
+		knownPerson := func(id string) bool {
+			return slices.ContainsFunc(data.Users, func(item domain.User) bool { return item.ID == id }) || s.formerMemberOutsideWrite(r.Context(), workspace, id)
+		}
+		if input.LeadID != nil && *input.LeadID != "" && !knownPerson(*input.LeadID) {
 			return false
 		}
 		if slices.ContainsFunc(input.MemberIDs, func(id string) bool {
-			return !slices.ContainsFunc(data.Users, func(item domain.User) bool { return item.ID == id })
+			return !knownPerson(id)
 		}) || slices.ContainsFunc(input.Initiatives, func(id string) bool {
 			return !slices.ContainsFunc(data.Initiatives, func(item domain.Initiative) bool { return item.ID == id })
 		}) || slices.ContainsFunc(input.Customers, func(id string) bool {

@@ -186,6 +186,20 @@ write or syncing the same state again is safe.
 Optimistic locking is checked first: a stale `expectedVersion` is refused with
 `409 VERSION_CONFLICT` (and the current resource) even when the values match.
 
+## People who left the workspace
+
+People removed from or suspended in the workspace keep their place on the
+records that name them (assignee, subscribers, project lead and members,
+history), so those stay readable. A write cannot add them again: naming one
+as a new assignee, delegate, subscriber, project lead or member, initiative
+owner, triage owner or template assignee is refused with `400` and
+`This person is no longer a member of the workspace`. A write that keeps such
+a reference as it is (for example a `PATCH` that sends the current
+`subscriberIds`) goes through. They get no new notifications, triage rotations
+pass over them, and a template whose default assignee left creates issues
+unassigned. Membership is read from the workspace's memberships at write
+time, so a resumed member can be assigned again at once.
+
 ## Rate limits
 
 Flow uses a leaky-bucket model: each budget refills continuously at

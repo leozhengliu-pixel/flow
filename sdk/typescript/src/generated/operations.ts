@@ -1455,7 +1455,7 @@ export class FlowApi {
   /**
    * `PATCH /api/documents/{id}`
    * Update a document
-   * Send expectedVersion to detect a concurrent change: the write is then refused with 409 and the current document. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification. A stale expectedVersion is still refused with 409, even when the values match.
+   * Send expectedVersion to detect a concurrent change: the write is then refused with 409 and the current document. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification. A stale expectedVersion is still refused with 409, even when the values match. Naming someone who was removed from or suspended in the workspace as a new assignee, delegate, subscriber, lead, member or owner is refused with 400 ("This person is no longer a member of the workspace"); such people the resource already names stay as they are, and they get no new notifications.
    */
   patchDocumentsId(request: PatchDocumentsIdRequest, options?: RequestOptions): Promise<Document> {
     return this.transport.request({ method: "PATCH", path: "/api/documents/{id}", pathParams: request.path, body: request.body, ...options })
@@ -1532,7 +1532,7 @@ export class FlowApi {
   /**
    * `PATCH /api/initiatives/{id}`
    * Update an initiative
-   * A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.
+   * A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification. Naming someone who was removed from or suspended in the workspace as a new assignee, delegate, subscriber, lead, member or owner is refused with 400 ("This person is no longer a member of the workspace"); such people the resource already names stay as they are, and they get no new notifications.
    */
   patchInitiativesId(request: PatchInitiativesIdRequest, options?: RequestOptions): Promise<Initiative> {
     return this.transport.request({ method: "PATCH", path: "/api/initiatives/{id}", pathParams: request.path, body: request.body, ...options })
@@ -1620,6 +1620,7 @@ export class FlowApi {
   /**
    * `POST /api/issues`
    * Create an issue
+   * Naming someone who was removed from or suspended in the workspace as a new assignee, delegate, subscriber, lead, member or owner is refused with 400 ("This person is no longer a member of the workspace"); such people the resource already names stay as they are, and they get no new notifications.
    */
   postIssues(request: PostIssuesRequest, options?: RequestOptions): Promise<Issue> {
     return this.transport.request({ method: "POST", path: "/api/issues", body: request.body, ...options })
@@ -1636,7 +1637,7 @@ export class FlowApi {
   /**
    * `PATCH /api/issues/{id}`
    * Update an issue
-   * The path takes the issue's id, identifier, or an identifier it had before it moved to another team. Fields not listed in the request schema are rejected with 400. teamId moves the issue to another team; the caller needs access to that team (guests cannot move issues). The issue gets the target team's key and a new number (previousIdentifiers keeps the old identifiers, which still resolve), the target team's status of the same name and type (else the first of that type, else its default), leaves its cycle, replaces team-scoped labels by the target team's labels of the same name (dropping the others), and loses its estimate when the target team does not use estimates. Sub-issues stay in their teams. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.
+   * The path takes the issue's id, identifier, or an identifier it had before it moved to another team. Fields not listed in the request schema are rejected with 400. teamId moves the issue to another team; the caller needs access to that team (guests cannot move issues). The issue gets the target team's key and a new number (previousIdentifiers keeps the old identifiers, which still resolve), the target team's status of the same name and type (else the first of that type, else its default), leaves its cycle, replaces team-scoped labels by the target team's labels of the same name (dropping the others), and loses its estimate when the target team does not use estimates. Sub-issues stay in their teams. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification. Naming someone who was removed from or suspended in the workspace as a new assignee, delegate, subscriber, lead, member or owner is refused with 400 ("This person is no longer a member of the workspace"); such people the resource already names stay as they are, and they get no new notifications.
    */
   patchIssuesId(request: PatchIssuesIdRequest, options?: RequestOptions): Promise<Issue> {
     return this.transport.request({ method: "PATCH", path: "/api/issues/{id}", pathParams: request.path, body: request.body, ...options })
@@ -1933,7 +1934,7 @@ export class FlowApi {
   /**
    * `PATCH /api/projects/{id}`
    * Update a project
-   * A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.
+   * A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification. Naming someone who was removed from or suspended in the workspace as a new assignee, delegate, subscriber, lead, member or owner is refused with 400 ("This person is no longer a member of the workspace"); such people the resource already names stay as they are, and they get no new notifications.
    */
   patchProjectsId(request: PatchProjectsIdRequest, options?: RequestOptions): Promise<Project> {
     return this.transport.request({ method: "PATCH", path: "/api/projects/{id}", pathParams: request.path, body: request.body, ...options })

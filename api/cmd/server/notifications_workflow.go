@@ -837,6 +837,9 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 				if userByID(data, id) == nil {
 					return errInvalid
 				}
+				if err := refuseNewFormerMembers(data, settings.TriageActionUserIDs, id); err != nil {
+					return err
+				}
 				if !slices.Contains(ids, id) {
 					ids = append(ids, id)
 				}
@@ -1259,6 +1262,9 @@ func applyIssueTemplate(data *domain.Bootstrap, template *domain.IssueTemplate, 
 	if input.AssigneeID != nil {
 		if *input.AssigneeID != "" && userByID(data, *input.AssigneeID) == nil {
 			return errInvalid
+		}
+		if err := refuseNewFormerMembers(data, []string{template.AssigneeID}, *input.AssigneeID); err != nil {
+			return err
 		}
 		template.AssigneeID = *input.AssigneeID
 	}
@@ -1977,7 +1983,7 @@ func appendIssueNotifications(data *domain.Bootstrap, issue domain.Issue, activi
 	// only those who can open it in its new team hear about it.
 	moved := activity.Metadata["teamBefore"] != "" && activity.Metadata["team"] != activity.Metadata["teamBefore"]
 	for recipientID, category := range recipients {
-		if recipientID == "" || recipientID == activity.Actor.ID || userByID(data, recipientID) == nil {
+		if recipientID == "" || recipientID == activity.Actor.ID || userByID(data, recipientID) == nil || formerMember(data, recipientID) {
 			continue
 		}
 		if moved && !issueVisibleToMember(data, issue, recipientID) {

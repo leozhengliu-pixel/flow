@@ -268,7 +268,7 @@ func (s *server) createIssueRecord(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 403, "Team is outside your workspace access")
 		return
 	}
-	if input.AssigneeID != nil && *input.AssigneeID != "" && !slices.ContainsFunc(metadata.Users, func(user domain.User) bool { return user.ID == *input.AssigneeID }) {
+	if input.AssigneeID != nil && *input.AssigneeID != "" && !slices.ContainsFunc(metadata.Users, func(user domain.User) bool { return user.ID == *input.AssigneeID }) && !s.formerMemberOutsideWrite(r.Context(), query.Workspace, *input.AssigneeID) {
 		writeError(w, 403, "Assignee is outside this workspace")
 		return
 	}
@@ -468,7 +468,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 403, "Cycle is outside your teams")
 		return
 	}
-	if input.AssigneeID != nil && *input.AssigneeID != "" && !slices.ContainsFunc(metadata.Users, func(user domain.User) bool { return user.ID == *input.AssigneeID }) {
+	if input.AssigneeID != nil && *input.AssigneeID != "" && !slices.ContainsFunc(metadata.Users, func(user domain.User) bool { return user.ID == *input.AssigneeID }) && !s.formerMemberOutsideWrite(r.Context(), query.Workspace, *input.AssigneeID) {
 		writeError(w, 403, "Assignee is outside this workspace")
 		return
 	}

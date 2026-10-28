@@ -1,4 +1,4 @@
-import type { User } from '@/types/flow'
+import type { User, WorkspaceMember } from '@/types/flow'
 
 export type PersonIdentity = Pick<User, 'id'> & Partial<Omit<User, 'id'>> & { label?: string }
 
@@ -54,4 +54,15 @@ export function isPeopleProperty(property: string) {
 
 export function directoryPerson(users: ReadonlyMap<string, User>, id: string) {
   return users.get(id) ?? users.get(id.replace(/^(assignee|creator|owner|lead|project-lead|member|subscriber|delegate):/, ''))
+}
+
+/**
+ * People whose workspace membership is suspended keep their user record (their name stays on what they are part
+ * of) but are not active here: pickers, which offer active people only, leave them out, and the server refuses to
+ * newly assign, subscribe or lead with them. People removed from the workspace are not in the users list at all.
+ */
+export function markSuspendedMembersInactive(users: User[], members: Pick<WorkspaceMember, 'user' | 'status'>[] | undefined): User[] {
+  const suspended = new Set((members ?? []).filter(member => member.status === 'suspended').map(member => member.user.id))
+  if (!suspended.size) return users
+  return users.map(user => suspended.has(user.id) && user.active !== false ? { ...user, active: false } : user)
 }

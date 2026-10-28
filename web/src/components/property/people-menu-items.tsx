@@ -21,12 +21,19 @@ import './virtual-property-options.css'
  */
 export function PeopleMenuItems({ users, selectedId, selectedIds, onSelect, emptyLabel, itemClassName, contextMenu = false, assignee = false, onInvite = openMemberInvite }: { users: User[]; selectedId?: string; selectedIds?: string[]; onSelect: (id: string) => void; emptyLabel?: string; itemClassName?: string; contextMenu?: boolean; assignee?: boolean; onInvite?: () => void }) {
   const { t } = useI18n()
-  const options = useMemo(() => [
-    ...(emptyLabel ? [{ id: '', label: emptyLabel, person: undefined as User | undefined, entity: false, shortcut: assignee ? '0' : undefined, groupLabel: undefined as string | undefined }] : []),
-    ...users.map((user, index) => ({ id: user.id, label: user.displayName || user.name, keywords: personSearchText(user), person: user as User | undefined, entity: true, shortcut: assignee ? assigneeShortcut(index + 1) : undefined, groupLabel: undefined as string | undefined })),
-    ...(assignee && viewerCanInvite() ? [{ id: ASSIGNEE_INVITE_ID, label: 'Invite and assign…', person: undefined as User | undefined, entity: false, shortcut: undefined as string | undefined, groupLabel: 'New user' as string | undefined }] : []),
-  ], [assignee, emptyLabel, users])
   const checked = selectedIds ?? (selectedId === undefined ? [] : [selectedId])
+  const checkedKey = checked.join('\n')
+  const options = useMemo(() => {
+    // Inactive people (deactivated, or suspended in the workspace) cannot be newly picked; one already picked stays
+    // listed so it can be cleared.
+    const picked = new Set(checkedKey.split('\n'))
+    const pickable = users.filter(user => user.active !== false || picked.has(user.id))
+    return [
+      ...(emptyLabel ? [{ id: '', label: emptyLabel, person: undefined as User | undefined, entity: false, shortcut: assignee ? '0' : undefined, groupLabel: undefined as string | undefined }] : []),
+      ...pickable.map((user, index) => ({ id: user.id, label: user.displayName || user.name, keywords: personSearchText(user), person: user as User | undefined, entity: true, shortcut: assignee ? assigneeShortcut(index + 1) : undefined, groupLabel: undefined as string | undefined })),
+      ...(assignee && viewerCanInvite() ? [{ id: ASSIGNEE_INVITE_ID, label: 'Invite and assign…', person: undefined as User | undefined, entity: false, shortcut: undefined as string | undefined, groupLabel: 'New user' as string | undefined }] : []),
+    ]
+  }, [assignee, checkedKey, emptyLabel, users])
   return <SearchableMenuItems options={options} className="people-menu-body" searchClassName="property-command-search" itemClassName={itemClassName} searchLabel={assignee ? 'Assign to…' : 'Search people'} selectedId={selectedId} contextMenu={contextMenu}
     matches={(option, query) => option.person ? personMatchesQuery(option.person, query) : personMatchesQuery({ id: option.id, label: option.label }, query) || matchesSearch(query, [option.label], t)}
     onSelect={option => option.id === ASSIGNEE_INVITE_ID ? onInvite() : onSelect(option.id)}

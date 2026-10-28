@@ -239,7 +239,10 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		if err != nil {
 			return err
 		}
-		if err := mutate(&metadata, target); err != nil {
+		metadata.FormerMembers = s.formerMemberLookup(ctx, tx, &metadata)
+		err = mutate(&metadata, target)
+		metadata.FormerMembers = nil
+		if err != nil {
 			if errors.Is(err, ErrNoMutation) {
 				result = original
 				if mutationKey != "" {

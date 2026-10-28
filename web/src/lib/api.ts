@@ -112,6 +112,7 @@ import type {
 } from "@/types/flow";
 import type { ApplicationInstallation } from "@/lib/application-agents";
 import { rememberTrashRetention } from "@/lib/trash-retention";
+import { markSuspendedMembersInactive } from "@/lib/people";
 import { apiFetch, ApiError as PulseApiError, jsonRequest, request } from "@/lib/api-client";
 
 export { ApiError, realtimeClientId } from "@/lib/api-client";
@@ -801,6 +802,7 @@ function normalizeAPIKey(key: APIKey): APIKey {
 function normalizeBootstrapData(data: BootstrapData): BootstrapData {
   return {
     ...data,
+    users: Array.isArray(data.users) ? markSuspendedMembersInactive(data.users, data.members) : data.users,
     apiKeys: Array.isArray(data.apiKeys)
       ? data.apiKeys.map(normalizeAPIKey)
       : [],

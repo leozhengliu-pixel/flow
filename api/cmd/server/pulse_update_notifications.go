@@ -30,7 +30,7 @@ func canEditPulseUpdate(data *domain.Bootstrap, author domain.User) bool {
 // (category "updates"); the actor's own activity is never notified.
 func notifyUpdateAuthor(data *domain.Bootstrap, kind, sourceID, sourceName, updateID string, author domain.User, notificationType, commentID, emoji string, now time.Time) {
 	actor := data.Viewer
-	if author.ID == "" || author.ID == actor.ID || author.App {
+	if author.ID == "" || author.ID == actor.ID || author.App || formerMember(data, author.ID) {
 		return
 	}
 	preferences, ok := data.NotificationPreferences[author.ID]

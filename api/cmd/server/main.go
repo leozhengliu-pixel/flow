@@ -3086,7 +3086,8 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 			if input.Priority == nil {
 				input.Priority = &template.Priority
 			}
-			if input.AssigneeID == nil && template.AssigneeID != "" {
+			// A template's assignee who left is skipped, not refused.
+			if input.AssigneeID == nil && template.AssigneeID != "" && !formerMember(data, template.AssigneeID) {
 				input.AssigneeID = &template.AssigneeID
 			}
 			if input.ProjectID == nil && template.ProjectID != "" {
@@ -3182,7 +3183,7 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 			}
 			childNumber := number + childIndex + 1
 			child := domain.Issue{ID: fmt.Sprintf("issue_%d", childNumber), Version: 1, Identifier: fmt.Sprintf("%s-%d", childTeam.Key, childNumber), Number: childNumber, Title: strings.TrimSpace(templateChild.Title), Description: strings.TrimSpace(templateChild.Description), Priority: templateChild.Priority, PriorityLabel: priorityLabel(templateChild.Priority), SortOrder: float64(childNumber), CreatedAt: now, UpdatedAt: now, Team: childTeam, State: *childState, Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), Labels: labelsByID(data, templateChild.LabelIDs), ParentID: &created.ID, SubscriberIDs: []string{data.Viewer.ID}, Reactions: map[string][]string{}, SubIssueIDs: []string{}, Relations: []domain.IssueRelation{}, Attachments: []domain.Attachment{}}
-			if templateChild.AssigneeID != "" {
+			if templateChild.AssigneeID != "" && !formerMember(data, templateChild.AssigneeID) {
 				child.Assignee = userByID(data, templateChild.AssigneeID)
 			}
 			created.SubIssueIDs = append(created.SubIssueIDs, child.ID)
@@ -5923,6 +5924,9 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 			if issue.Assignee != nil {
 				changes["previousAssignee"] = issue.Assignee.ID
 			}
+			if err := refuseNewFormerMembers(data, nil, *input.AssigneeID); err != nil {
+				return nil, err
+			}
 			issue.Assignee = userByID(data, *input.AssigneeID)
 			if *input.AssigneeID != "" && issue.Assignee == nil {
 				return nil, fmt.Errorf("%w: unknown assignee", errInvalid)
@@ -5940,6 +5944,9 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		previousDelegate := ""
 		if issue.Delegate != nil {
 			previousDelegate = issue.Delegate.ID
+		}
+		if err := refuseNewFormerMembers(data, []string{previousDelegate}, *input.DelegateID); err != nil {
+			return nil, err
 		}
 		issue.Delegate = userByID(data, *input.DelegateID)
 		if *input.DelegateID != "" && issue.Delegate == nil {
@@ -6082,6 +6089,9 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 			if userByID(data, id) == nil {
 				return nil, fmt.Errorf("%w: unknown subscriber", errInvalid)
 			}
+		}
+		if err := refuseNewFormerMembers(data, issue.SubscriberIDs, *input.SubscriberIDs...); err != nil {
+			return nil, err
 		}
 		issue.SubscriberIDs = slices.Clone(*input.SubscriberIDs)
 		changes["subscribers"] = strings.Join(*input.SubscriberIDs, ",")
@@ -6560,6 +6570,13 @@ func applyProjectUpdate(data *domain.Bootstrap, project *domain.Project, input d
 		project.Health = *input.Health
 	}
 	if input.LeadID != nil {
+		lead := ""
+		if project.Lead != nil {
+			lead = project.Lead.ID
+		}
+		if err := refuseNewFormerMembers(data, []string{lead}, *input.LeadID); err != nil {
+			return err
+		}
 		project.Lead = userByID(data, *input.LeadID)
 		if *input.LeadID != "" && project.Lead == nil {
 			return errInvalid
@@ -6570,6 +6587,9 @@ func applyProjectUpdate(data *domain.Bootstrap, project *domain.Project, input d
 			if userByID(data, id) == nil {
 				return errInvalid
 			}
+		}
+		if err := refuseNewFormerMembers(data, project.MemberIDs, input.MemberIDs...); err != nil {
+			return err
 		}
 		project.MemberIDs = slices.Clone(input.MemberIDs)
 	}
@@ -6764,6 +6784,13 @@ func applyInitiativeUpdate(data *domain.Bootstrap, initiative *domain.Initiative
 		initiative.Health = *input.Health
 	}
 	if input.OwnerID != nil {
+		owner := ""
+		if initiative.Owner != nil {
+			owner = initiative.Owner.ID
+		}
+		if err := refuseNewFormerMembers(data, []string{owner}, *input.OwnerID); err != nil {
+			return err
+		}
 		initiative.Owner = userByID(data, *input.OwnerID)
 		if *input.OwnerID != "" && initiative.Owner == nil {
 			return errInvalid

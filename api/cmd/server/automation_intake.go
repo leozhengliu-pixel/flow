@@ -47,7 +47,9 @@ func (s *server) listTriageResponsibilities(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, result)
 }
 
-func validateTriageResponsibility(data *domain.Bootstrap, teamID string, input triageResponsibilityInput) error {
+// validateTriageResponsibility checks a responsibility's owners; kept are the
+// ones it already has (a former member among them may stay).
+func validateTriageResponsibility(data *domain.Bootstrap, teamID string, input triageResponsibilityInput, kept []string) error {
 	if strings.TrimSpace(input.Name) == "" || !slices.Contains([]string{"individual", "roundRobin"}, input.Mode) || len(input.UserIDs) == 0 {
 		return errInvalid
 	}
@@ -59,7 +61,7 @@ func validateTriageResponsibility(data *domain.Bootstrap, teamID string, input t
 			return fmt.Errorf("%w: responsibility users must be active team members", errInvalid)
 		}
 	}
-	return nil
+	return refuseNewFormerMembers(data, kept, input.UserIDs...)
 }
 
 func (s *server) createTriageResponsibility(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +75,7 @@ func (s *server) createTriageResponsibility(w http.ResponseWriter, r *http.Reque
 		if !teamExists(data, teamID) {
 			return "", errNotFound
 		}
-		if err := validateTriageResponsibility(data, teamID, input); err != nil {
+		if err := validateTriageResponsibility(data, teamID, input, nil); err != nil {
 			return "", err
 		}
 		now := time.Now().UTC()
@@ -96,12 +98,12 @@ func (s *server) updateTriageResponsibility(w http.ResponseWriter, r *http.Reque
 	teamID, id := r.PathValue("id"), r.PathValue("responsibilityId")
 	var updated domain.TriageResponsibility
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "triage_responsibility.updated", id, input, func(data *domain.Bootstrap) error {
-		if err := validateTriageResponsibility(data, teamID, input); err != nil {
-			return err
-		}
 		index := slices.IndexFunc(data.TriageResponsibilities, func(item domain.TriageResponsibility) bool { return item.ID == id && item.TeamID == teamID })
 		if index < 0 {
 			return errNotFound
+		}
+		if err := validateTriageResponsibility(data, teamID, input, data.TriageResponsibilities[index].UserIDs); err != nil {
+			return err
 		}
 		item := &data.TriageResponsibilities[index]
 		item.Name, item.Mode, item.UserIDs, item.UpdatedAt = strings.TrimSpace(input.Name), input.Mode, slices.Clone(input.UserIDs), time.Now().UTC()
@@ -260,9 +262,18 @@ func applyTriageRouting(data *domain.Bootstrap, issue *domain.Issue, now time.Ti
 		resp := &data.TriageResponsibilities[respIndex]
 		userID := resp.UserIDs[0]
 		if resp.Mode == "roundRobin" {
-			userID = resp.UserIDs[resp.Cursor%len(resp.UserIDs)]
-			resp.Cursor = (resp.Cursor + 1) % len(resp.UserIDs)
+			// The rotation passes over people who are no longer members.
+			for range resp.UserIDs {
+				userID = resp.UserIDs[resp.Cursor%len(resp.UserIDs)]
+				resp.Cursor = (resp.Cursor + 1) % len(resp.UserIDs)
+				if !formerMember(data, userID) {
+					break
+				}
+			}
 			resp.UpdatedAt = now
+		}
+		if formerMember(data, userID) {
+			userID = ""
 		}
 		issue.Assignee = userByID(data, userID)
 		if rule.Priority != nil {
@@ -273,12 +284,12 @@ func applyTriageRouting(data *domain.Bootstrap, issue *domain.Issue, now time.Ti
 		applyTriageResponsibility(data, settings, issue, now)
 		return
 	}
-	if issue.Assignee == nil && settings.TriageAction == "creator" {
+	if issue.Assignee == nil && settings.TriageAction == "creator" && !formerMember(data, issue.Creator.ID) {
 		issue.Assignee = userByID(data, issue.Creator.ID)
 	}
 	if issue.Assignee == nil && settings.TriageAction == "teamOwner" {
 		for _, member := range data.TeamMembers {
-			if member.TeamID == issue.Team.ID && member.Role == "owner" {
+			if member.TeamID == issue.Team.ID && member.Role == "owner" && !formerMember(data, member.UserID) {
 				issue.Assignee = userByID(data, member.UserID)
 				break
 			}
@@ -301,14 +312,14 @@ func applyTriageResponsibility(data *domain.Bootstrap, settings domain.TeamSetti
 	}
 	switch settings.TriageAction {
 	case "assign":
-		if issue.Assignee == nil {
+		if issue.Assignee == nil && !formerMember(data, settings.TriageActionUserIDs[0]) {
 			if user := userByID(data, settings.TriageActionUserIDs[0]); user != nil {
 				issue.Assignee = user
 			}
 		}
 	case "notify":
 		for _, recipientID := range settings.TriageActionUserIDs {
-			if recipientID == data.Viewer.ID || userByID(data, recipientID) == nil {
+			if recipientID == data.Viewer.ID || userByID(data, recipientID) == nil || formerMember(data, recipientID) {
 				continue
 			}
 			preferences, ok := data.NotificationPreferences[recipientID]
@@ -595,7 +606,7 @@ func applyWorkflowActions(data *domain.Bootstrap, definition domain.WorkflowDefi
 			if recipient == "" {
 				recipient = definition.CreatorID
 			}
-			if userByID(data, recipient) == nil {
+			if userByID(data, recipient) == nil || formerMember(data, recipient) {
 				return fmt.Errorf("notification recipient no longer exists")
 			}
 			now := time.Now().UTC()
@@ -605,7 +616,7 @@ func applyWorkflowActions(data *domain.Bootstrap, definition domain.WorkflowDefi
 				return fmt.Errorf("assignIssue requires an issue trigger")
 			}
 			user := userByID(data, action.Config["userId"])
-			if user == nil {
+			if user == nil || formerMember(data, user.ID) {
 				return fmt.Errorf("workflow assignee no longer exists")
 			}
 			issue.Assignee = user
