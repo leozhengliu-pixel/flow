@@ -20,7 +20,13 @@ imagePullSecrets: []
 replicaCount: 1
 
 # Rolling updates need multi-replica-safe storage. Empty = Recreate for a
-# single replica on a ReadWriteOnce volume, RollingUpdate otherwise.
+# single replica on a ReadWriteOnce volume, RollingUpdate otherwise
+# (maxSurge 1, maxUnavailable 0). For the first upgrade to a release with the
+# web asset fallbacks below, Recreate avoids and maxSurge 100% shortens the
+# window in which old replicas, which lack them, get a new page's requests
+# (docs/operations.md "First rollout to this version"):
+#   updateStrategy: {type: Recreate}
+#   updateStrategy: {type: RollingUpdate, rollingUpdate: {maxSurge: 100%, maxUnavailable: 0}}
 updateStrategy: {}
 
 # Web app files across releases. During a rolling update or a rollback,
