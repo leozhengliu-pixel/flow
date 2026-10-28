@@ -3,6 +3,7 @@ package config
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoadDefaultsAndBackendValidation(t *testing.T) {
@@ -322,11 +323,11 @@ func TestLoadTTSKeyFallsBackOnlyToTheAgentHost(t *testing.T) {
 }
 
 func TestLoadAgentRuntimeValidation(t *testing.T) {
-	for _, key := range []string{"FLOW_DATABASE_DRIVER", "FLOW_DATABASE_URL", "FLOW_STORAGE_DRIVER", "FLOW_REDIS_MODE", "FLOW_AGENT_RUNTIME", "FLOW_AGENT_WORKER_SECRET", "FLOW_AGENT_WORKER_SECRET_FILE", "FLOW_AGENT_WORKSPACE_CONCURRENCY"} {
+	for _, key := range []string{"FLOW_DATABASE_DRIVER", "FLOW_DATABASE_URL", "FLOW_STORAGE_DRIVER", "FLOW_REDIS_MODE", "FLOW_AGENT_RUNTIME", "FLOW_AGENT_WORKER_SECRET", "FLOW_AGENT_WORKER_SECRET_FILE", "FLOW_AGENT_WORKSPACE_CONCURRENCY", "FLOW_AGENT_WORKER_CLAIM_TIMEOUT"} {
 		t.Setenv(key, "")
 	}
 	loaded, err := Load()
-	if err != nil || loaded.Agent.Runtime != AgentRuntimeInProcess || loaded.Agent.WorkerSecret != "" || loaded.Agent.WorkspaceRunConcurrency != 4 {
+	if err != nil || loaded.Agent.Runtime != AgentRuntimeInProcess || loaded.Agent.WorkerSecret != "" || loaded.Agent.WorkspaceRunConcurrency != 4 || loaded.Agent.WorkerClaimTimeout != 2*time.Minute {
 		t.Fatalf("runtime defaults = %+v, %v", loaded.Agent, err)
 	}
 	t.Setenv("FLOW_AGENT_RUNTIME", "sidecar")
@@ -345,6 +346,14 @@ func TestLoadAgentRuntimeValidation(t *testing.T) {
 	t.Setenv("FLOW_AGENT_WORKSPACE_CONCURRENCY", "2")
 	if loaded, err := Load(); err != nil || loaded.Agent.Runtime != AgentRuntimeWorker || loaded.Agent.WorkspaceRunConcurrency != 2 {
 		t.Fatalf("worker runtime = %+v, %v", loaded.Agent.Runtime, err)
+	}
+	t.Setenv("FLOW_AGENT_WORKER_CLAIM_TIMEOUT", "1s")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_AGENT_WORKER_CLAIM_TIMEOUT") {
+		t.Fatalf("short claim timeout error = %v", err)
+	}
+	t.Setenv("FLOW_AGENT_WORKER_CLAIM_TIMEOUT", "5m")
+	if loaded, err := Load(); err != nil || loaded.Agent.WorkerClaimTimeout != 5*time.Minute {
+		t.Fatalf("claim timeout = %v, %v", loaded.Agent.WorkerClaimTimeout, err)
 	}
 }
 
