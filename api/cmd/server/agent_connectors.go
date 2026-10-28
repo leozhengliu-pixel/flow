@@ -23,6 +23,11 @@ type connectorTool struct {
 	Definition agentProviderTool
 	Policy     applicationPolicy
 	RemoteName string
+	// ReadOnly is the tool's MCP readOnlyHint: true only when the connector declares that the tool does not modify
+	// its environment. The MCP default (no annotations, or readOnlyHint false) is a tool that may write.
+	ReadOnly bool
+	// Annotated is true when the connector sent the tool's annotations at all.
+	Annotated bool
 }
 type connectorToolsKey struct{}
 
@@ -279,6 +284,9 @@ func (s *server) listConnectorTools(ctx context.Context, policy applicationPolic
 				Name        string          `json:"name"`
 				Description string          `json:"description"`
 				InputSchema json.RawMessage `json:"inputSchema"`
+				Annotations *struct {
+					ReadOnlyHint *bool `json:"readOnlyHint"`
+				} `json:"annotations"`
 			} `json:"tools"`
 			NextCursor string `json:"nextCursor"`
 		}
@@ -291,7 +299,12 @@ func (s *server) listConnectorTools(ctx context.Context, policy applicationPolic
 				return nil, fmt.Errorf("invalid MCP tool definition")
 			}
 			hash := sha256.Sum256([]byte(policy.ID + "\x00" + tool.Name))
-			items = append(items, connectorTool{Definition: agentProviderTool{Name: fmt.Sprintf("external_%x", hash[:16]), Description: connectorToolDescription(policy.label(), tool.Name, tool.Description, tool.InputSchema), Parameters: tool.InputSchema, Access: "write"}, Policy: policy, RemoteName: tool.Name})
+			item := connectorTool{Definition: agentProviderTool{Name: fmt.Sprintf("external_%x", hash[:16]), Description: connectorToolDescription(policy.label(), tool.Name, tool.Description, tool.InputSchema), Parameters: tool.InputSchema, Access: "write"}, Policy: policy, RemoteName: tool.Name}
+			if tool.Annotations != nil {
+				item.Annotated = true
+				item.ReadOnly = tool.Annotations.ReadOnlyHint != nil && *tool.Annotations.ReadOnlyHint
+			}
+			items = append(items, item)
 			if len(items) > maxConnectorTools {
 				return nil, fmt.Errorf("too many MCP tools (maximum %d)", maxConnectorTools)
 			}
