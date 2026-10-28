@@ -359,7 +359,11 @@ func collectTeamDeletionRecords(snap *teamDeletionSnapshot, next domain.Bootstra
 		if err != nil {
 			continue
 		}
-		changes = append(changes, metadataRecordChange{field: "teamSettings", key: id, raw: raw})
+		base, err := json.Marshal(old)
+		if err != nil {
+			continue
+		}
+		changes = append(changes, metadataRecordChange{field: "teamSettings", key: id, base: base, raw: raw})
 	}
 	if len(snap.projects) > 0 {
 		previous := make(map[string]domain.Project, len(snap.projects))
@@ -375,8 +379,12 @@ func collectTeamDeletionRecords(snap *teamDeletionSnapshot, next domain.Bootstra
 			if err != nil {
 				continue
 			}
+			base, err := json.Marshal(old)
+			if err != nil {
+				continue
+			}
 			snap.projectsTouched = true
-			changes = append(changes, metadataRecordChange{field: "projects", key: project.ID, raw: raw})
+			changes = append(changes, metadataRecordChange{field: "projects", key: project.ID, base: base, raw: raw})
 		}
 	}
 	if len(snap.pipelines) > 0 {
@@ -393,7 +401,11 @@ func collectTeamDeletionRecords(snap *teamDeletionSnapshot, next domain.Bootstra
 			if err != nil {
 				continue
 			}
-			changes = append(changes, metadataRecordChange{field: "releasePipelines", key: pipeline.ID, raw: raw})
+			base, err := json.Marshal(old)
+			if err != nil {
+				continue
+			}
+			changes = append(changes, metadataRecordChange{field: "releasePipelines", key: pipeline.ID, base: base, raw: raw})
 		}
 	}
 	return changes

@@ -40,27 +40,32 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		mutationActor = actor.ID
 	}
 	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(ctx, workspace)
-	metadata, ok := s.WorkspaceMetadata(workspace)
-	if !ok {
-		return domain.Issue{}, sql.ErrNoRows
-	}
 	if len(scope.RelatedIDs) > 100 {
 		return domain.Issue{}, fmt.Errorf("too many related issues")
 	}
-	if actor, ok := actorFromContext(ctx); ok {
-		metadata.Viewer = actor
-		role, status, err := s.WorkspaceRole(ctx, metadata.Workspace.ID, actor.ID)
-		if err != nil {
-			return domain.Issue{}, err
+	// Each attempt starts from the server's current copy of the metadata.
+	loadMetadata := func() (domain.Bootstrap, error) {
+		metadata, ok := s.WorkspaceMetadata(workspace)
+		if !ok {
+			return domain.Bootstrap{}, sql.ErrNoRows
 		}
-		if mutationKey != "" && status != "active" {
-			return domain.Issue{}, ErrAuthForbidden
+		if actor, ok := actorFromContext(ctx); ok {
+			metadata.Viewer = actor
+			role, status, err := s.WorkspaceRole(ctx, metadata.Workspace.ID, actor.ID)
+			if err != nil {
+				return domain.Bootstrap{}, err
+			}
+			if mutationKey != "" && status != "active" {
+				return domain.Bootstrap{}, ErrAuthForbidden
+			}
+			metadata.ViewerRole = role
 		}
-		metadata.ViewerRole = role
+		if err := s.loadMemberAccess(ctx, &metadata); err != nil {
+			return domain.Bootstrap{}, err
+		}
+		return metadata, nil
 	}
-	if err := s.loadMemberAccess(ctx, &metadata); err != nil {
-		return domain.Issue{}, err
-	}
+	var metadata domain.Bootstrap
 	var result domain.Issue
 	var event domain.DomainEvent
 	var realtime json.RawMessage
@@ -68,7 +73,15 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 	metadataWritten := false
 	// written: the issues this write changed (the target and its family).
 	var written []string
-	err := func() error {
+	// A metadata record the write changes (a project's progress, a document's
+	// scope) was changed on another server in the same field: refresh it and
+	// rerun the write; after the last attempt the conflict is the error.
+	err := mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
+		var err error
+		if metadata, err = loadMetadata(); err != nil {
+			return err
+		}
+		progressMetadata, metadataWritten, written = nil, false, nil
 		// The callback edits a metadata clone and progress refreshes copy
 		// the projects they change, so readers keep the committed snapshot
 		// while the transaction runs (see SQLiteStore.writeMu).
@@ -359,7 +372,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			s.dropMetadataCache(ctx, workspace)
 		}
 		return nil
-	}()
+	}, s.refreshConflictedMetadata(ctx, workspace))
 	if errors.Is(err, ErrNoMutation) {
 		return result, nil
 	}

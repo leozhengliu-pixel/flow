@@ -16,9 +16,10 @@ import (
 // The store retries such a mutation on fresh records before returning it.
 var ErrConcurrentWrite = errors.New("this change conflicts with a change made at the same time; try again")
 
-// fullMutationAttempts bounds how often a full-workspace mutation reruns
-// after a concurrent record change.
-const fullMutationAttempts = 3
+// fullMutationAttempts bounds how often a write reruns after a concurrent
+// record change (a full-workspace mutation, an issue or metadata write whose
+// merge conflicted); the last conflict is returned as ErrConcurrentWrite.
+const fullMutationAttempts = 5
 
 // A full-workspace mutation (mutateFull) loads every issue and content
 // record outside its write transaction, runs the callback and then replaces
@@ -39,6 +40,12 @@ type recordBase struct {
 	// content holds the loaded records by kind; a kind missing from it was
 	// not loaded from records.
 	content map[string]map[contentRecordKey]recordFingerprint
+	// progressProjects names the projects whose progress the mutation
+	// changes. Their progress is computed inside the write transaction, after
+	// their rows are locked, from the issue rows as committed (see
+	// persistWorkspaceTx): the issues loaded before it may lack another
+	// server's issue write.
+	progressProjects []string
 }
 
 // recordFingerprint hashes a record as stored when loaded and as the

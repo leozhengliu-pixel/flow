@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -387,7 +388,29 @@ type agentChangeConflict struct{ message string }
 
 func (e agentChangeConflict) Error() string { return e.message }
 
-var agentChangeLocks sync.Map
+// agentChangeLocks serializes Undo and Restore of one reply's change cards
+// within this server; withAgentChangeLock adds the cross-server lock.
+var agentChangeLocks [64]sync.Mutex
+
+// agentChangeTargetsHook, when set (tests only), runs after an Undo or
+// Restore chose the changes it applies, while it holds the reply's lock.
+var agentChangeTargetsHook func()
+
+// withAgentChangeLock runs action while no other Undo or Restore of the same
+// agent reply runs, on this server or another one sharing the database: both
+// would read the change cards as not yet applied and revert the same writes
+// twice. Across servers it takes the Redis lock named after the reply (not
+// the workspace's own lock, which the writes inside take).
+func (s *server) withAgentChangeLock(ctx context.Context, workspace, sessionID, messageID string, action func() error) error {
+	digest := sha256.Sum256([]byte(workspace + "\x00" + sessionID + "\x00" + messageID))
+	lock := &agentChangeLocks[int(digest[0])%len(agentChangeLocks)]
+	lock.Lock()
+	defer lock.Unlock()
+	if s.coordinator != nil {
+		return s.coordinator.WithWorkspaceLock(ctx, "agent-change-"+fmt.Sprintf("%x", digest), action)
+	}
+	return action()
+}
 
 // undoAgentMessageChanges reverts the writes an agent reply made (the reference app's Undo on a result card).
 func (s *server) undoAgentMessageChanges(w http.ResponseWriter, r *http.Request) {
@@ -405,10 +428,21 @@ func (s *server) applyAgentMessageChanges(w http.ResponseWriter, r *http.Request
 		return
 	}
 	sessionID, messageID := r.PathValue("id"), r.PathValue("messageId")
-	lock, _ := agentChangeLocks.LoadOrStore(workspaceKey(r)+"\x00"+sessionID+"\x00"+messageID, &sync.Mutex{})
-	lock.(*sync.Mutex).Lock()
-	defer lock.(*sync.Mutex).Unlock()
+	if err := s.withAgentChangeLock(r.Context(), workspaceKey(r), sessionID, messageID, func() error {
+		s.applyAgentMessageChangesLocked(w, r, input, sessionID, messageID, undo)
+		return nil
+	}); err != nil {
+		writeError(w, http.StatusConflict, "This reply's changes are being undone or restored; try again")
+	}
+}
 
+func (s *server) applyAgentMessageChangesLocked(w http.ResponseWriter, r *http.Request, input agentChangeActionInput, sessionID, messageID string, undo bool) {
+	// Another server may have just undone or restored these changes: read the
+	// chat as stored, not as this server's copy has it.
+	if err := s.store.RefreshMetadataRecord(r.Context(), workspaceKey(r), "agentSessions", sessionID); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	data := s.workspaceData(r)
 	session, err := ownedAgentSession(&data, sessionID)
 	if err != nil {
@@ -444,6 +478,9 @@ func (s *server) applyAgentMessageChanges(w http.ResponseWriter, r *http.Request
 	}
 	if undo {
 		slices.Reverse(targets)
+	}
+	if agentChangeTargetsHook != nil {
+		agentChangeTargetsHook()
 	}
 	ctx, actor := s.agentChangeActor(r, data.Viewer)
 	// The reverted records change on the server only: publish their realtime events to this tab too (the client did

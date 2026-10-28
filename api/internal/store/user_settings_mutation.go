@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -96,13 +97,39 @@ func (s *SQLiteStore) mutateUserSettingsRecord(ctx context.Context, workspace, e
 		if err != nil {
 			return err
 		}
-		for key, value := range next.UserSettings {
-			if previous, ok := before[key]; ok && reflect.DeepEqual(previous, value) {
+		refs := newIssueReferences(domain.Bootstrap{Users: current.Users})
+		for _, key := range sortedKeys(next.UserSettings) {
+			value := next.UserSettings[key]
+			previous, existed := before[key]
+			if existed && reflect.DeepEqual(previous, value) {
 				continue
 			}
 			raw, err := json.Marshal(value)
 			if err != nil {
 				return err
+			}
+			// Settings other than the actor's come from this server's copy:
+			// apply only this change onto the stored record.
+			var base []byte
+			if existed {
+				if base, err = json.Marshal(previous); err != nil {
+					return err
+				}
+			}
+			rebased, write, err := rebaseMetadataRecordWrite(ctx, tx, workspace, refs, "userSettings", key, base, raw)
+			if err != nil {
+				return err
+			}
+			if !write {
+				delete(next.UserSettings, key)
+				continue
+			}
+			if !bytes.Equal(rebased, raw) {
+				var merged domain.UserSettings
+				if err := json.Unmarshal(rebased, &merged); err != nil {
+					return err
+				}
+				next.UserSettings[key], raw = merged, rebased
 			}
 			if _, err := tx.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'userSettings',?,0,?) ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET collection_order=excluded.collection_order,data=excluded.data`, workspace, key, raw); err != nil {
 				return err
@@ -145,12 +172,14 @@ func (s *SQLiteStore) mutateUserSettingsRecord(ctx context.Context, workspace, e
 		s.lastWorkspaceKey = workspace
 		return nil
 	}
-	var err error
-	if s.coordinator != nil {
-		err = s.coordinator.WithWorkspaceLock(ctx, workspace, apply)
-	} else {
-		err = apply()
-	}
+	// Another server changed a record this write replaces in the same field:
+	// rerun on the stored record.
+	err := mutationAttempts(ctx, fullMutationAttempts, func(context.Context) error {
+		if s.coordinator != nil {
+			return s.coordinator.WithWorkspaceLock(ctx, workspace, apply)
+		}
+		return apply()
+	}, s.refreshConflictedMetadata(ctx, workspace))
 	if err != nil {
 		if errors.Is(err, ErrNoMutation) {
 			return nil

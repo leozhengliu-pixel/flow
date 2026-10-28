@@ -238,6 +238,10 @@ func TestHotCacheMetadataHashReplaceDropsDeletedFields(t *testing.T) {
 		{Field: "teams", Key: "keep", Order: 1, Data: []byte(`{"id":"keep"}`)},
 		{Field: "teams", Key: "gone", Order: 2, Data: []byte(`{"id":"gone"}`)},
 	})
+	// A write moved the generation on (one fill per stamp fills the copy).
+	if _, err := repo.hotCache().CacheIncr(ctx, repo.metadataGenerationKey(workspace)); err != nil {
+		t.Fatal(err)
+	}
 	repo.fillMetadataRecordsCache(ctx, workspace, []metadataCacheRow{
 		{Field: "teams", Key: "keep", Order: 1, Data: []byte(`{"id":"keep"}`)},
 	})

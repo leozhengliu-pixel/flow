@@ -24,7 +24,11 @@ const resourceSlugMigrationVersion = 1003
 func (s *SQLiteStore) migrateResourceSlugs(ctx context.Context) error {
 	projects, initiatives := 0, 0
 	for _, key := range s.WorkspaceKeys() {
-		p, i, err := s.migrateWorkspaceResourceSlugs(ctx, key)
+		var p, i int
+		err := s.rerunBackgroundWrite(ctx, "resource slug migration", key, func() (err error) {
+			p, i, err = s.migrateWorkspaceResourceSlugs(ctx, key)
+			return err
+		})
 		if err != nil {
 			return fmt.Errorf("workspace %q: %w", key, err)
 		}

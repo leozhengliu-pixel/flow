@@ -36,7 +36,11 @@ const legacyCycleCapacityDefault = 4
 func (s *SQLiteStore) migrateCycleCapacityOverrides(ctx context.Context) error {
 	total := 0
 	for _, key := range s.WorkspaceKeys() {
-		count, err := s.migrateWorkspaceCycleCapacity(ctx, key)
+		var count int
+		err := s.rerunBackgroundWrite(ctx, "cycle capacity migration", key, func() (err error) {
+			count, err = s.migrateWorkspaceCycleCapacity(ctx, key)
+			return err
+		})
 		if err != nil {
 			return fmt.Errorf("workspace %q: %w", key, err)
 		}

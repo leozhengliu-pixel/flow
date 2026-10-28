@@ -34,7 +34,11 @@ var documentScopeMigrationBatch = 500
 func (s *SQLiteStore) migrateDocumentInheritedScope(ctx context.Context) error {
 	documents, deleted := 0, 0
 	for _, key := range s.WorkspaceKeys() {
-		live, trashed, err := s.migrateWorkspaceDocumentScope(ctx, key)
+		var live, trashed int
+		err := s.rerunBackgroundWrite(ctx, "document scope migration", key, func() (err error) {
+			live, trashed, err = s.migrateWorkspaceDocumentScope(ctx, key)
+			return err
+		})
 		if err != nil {
 			return fmt.Errorf("workspace %q: %w", key, err)
 		}

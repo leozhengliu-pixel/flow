@@ -140,6 +140,23 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- With several API servers, metadata writes no longer silently undo each
+  other. Comments, reactions and edits on one project or initiative update
+  made on two servers are all kept (updates merge one by one, reactions key
+  by key), as is an import job's progress written while another server edits
+  the job. Nested settings merge key by key, so two servers turning on
+  different notification switches of a team keep both. Team writers (rename,
+  settings, deletion) and user settings apply only their change onto the
+  stored team, label, cycle or settings record. When both servers changed the
+  same value, every writer reruns on the stored record (with a short,
+  jittered backoff) and answers 409 if it keeps conflicting, instead of
+  keeping its own value; startup migrations and the progress backfill rerun
+  until they succeed. Issue updates rerun the same way. A full workspace
+  mutation computes project progress inside its transaction from the issues
+  as committed, so an issue created on another server meanwhile is counted.
+  Two servers filling the shared metadata cache at once no longer leave a
+  partial copy, and Undo or Restore of an agent reply's changes runs once
+  across servers.
 - On MySQL, a long issue title (more than about 128 characters of CJK text,
   or a long English title) no longer fails the full-text search with Error
   191 "Too many words in a FTS phrase", which left triage suggestions,
