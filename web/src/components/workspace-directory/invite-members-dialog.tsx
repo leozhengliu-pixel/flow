@@ -53,6 +53,8 @@ export function InviteMembersDialog({ workspace, teams, teamSettings, open, onCl
   const roleId = useId();
   const [emails, setEmails] = useState("");
   const [error, setError] = useState("");
+  /** "Select a team for guest access" shows under the team picker, the email and send errors under Email. */
+  const [teamError, setTeamError] = useState("");
   const [role, setRole] = useState<InviteRole>(defaultRole);
   const activeTeams = useMemo(() => teams.filter((team) => !team.retiredAt), [teams]);
   const [teamIds, setTeamIds] = useState<string[]>([]);
@@ -66,6 +68,7 @@ export function InviteMembersDialog({ workspace, teams, teamSettings, open, onCl
     setSeen({ open, defaultRole });
     if (!open) {
       setError("");
+      setTeamError("");
       setRole(defaultRole);
       setTeamIds([]);
     }
@@ -78,7 +81,7 @@ export function InviteMembersDialog({ workspace, teams, teamSettings, open, onCl
       return;
     }
     if (role === "guest" && !teamIds.length) {
-      setError(t("Select a team for guest access"));
+      setTeamError(t("Select a team for guest access"));
       return;
     }
     setSending(true);
@@ -140,14 +143,15 @@ export function InviteMembersDialog({ workspace, teams, teamSettings, open, onCl
         </div>
         <div className="invite-members-dialog__field is-role">
           <label id={roleId}>{t("Role")}</label>
-          <InviteRoleSelect labelledBy={roleId} value={role} onChange={setRole} />
+          <InviteRoleSelect labelledBy={roleId} value={role} onChange={(next) => { setRole(next); setTeamError(""); }} />
         </div>
         <div className="invite-members-dialog__field is-team">
           <label>
             {t("Add to team")}
             {role !== "guest" && <span className="invite-members-dialog__optional">{t("(optional)")}</span>}
           </label>
-          <InviteTeamSelect teams={activeTeams} teamSettings={teamSettings} value={teamIds} onChange={(next) => { setTeamIds(next); setError(""); }} />
+          <InviteTeamSelect teams={activeTeams} teamSettings={teamSettings} value={teamIds} onChange={(next) => { setTeamIds(next); setTeamError(""); }} />
+          {teamError && <p className="invite-members-dialog__error" role="alert">{teamError}</p>}
           {role === "guest" && (
             <p className="invite-members-dialog__hint">
               <Info aria-hidden="true" size={11} />

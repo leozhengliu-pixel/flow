@@ -1,8 +1,9 @@
-/* Invite members dialog — parity (562×307 at the default Member role). */
+/* Invite members dialog — parity: 562px wide, 16.5px from the card edge to the fields, the close
+   button and the send button. */
 .dialog-content.invite-members-dialog {
   top: 154px;
   width: min(562px, calc(100vw - 32px));
-  padding: 0 0 13.5px;
+  padding: 0 0 12.5px;
   border: 0.5px solid var(--invite-dialog-border);
   border-radius: 12px;
   background: var(--invite-dialog-bg);
@@ -10,8 +11,8 @@
   color: var(--theme-text-primary);
 }
 .invite-members-dialog > .dialog-close {
-  top: 12.5px;
-  right: 17.5px;
+  top: 13.5px;
+  right: 16px;
   width: 28px;
   height: 28px;
   border-radius: 9999px;
@@ -27,11 +28,11 @@
 }
 .invite-members-dialog__header {
   box-sizing: border-box;
-  height: 36px;
+  height: 36.75px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 17.5px 56px 0 15.5px;
+  padding: 18.25px 56px 0 16px;
 }
 .invite-members-dialog__header .workspace-avatar {
   width: 18px;
@@ -55,18 +56,18 @@
 .invite-members-dialog__field {
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  padding: 0 15.5px;
+  gap: 7.5px;
+  padding: 0 16px;
 }
 .invite-members-dialog__field.is-email {
-  margin-top: 35.5px;
+  margin-top: 35.25px;
 }
 .invite-members-dialog__field.is-role,
 .invite-members-dialog__field.is-team {
-  gap: 9px;
+  gap: 8.5px;
 }
 .invite-members-dialog__field.is-role {
-  margin-top: 23px;
+  margin-top: 23.5px;
 }
 .invite-members-dialog__field.is-team {
   margin-top: 29px;
@@ -75,17 +76,22 @@
   color: var(--text);
   font-size: 13px;
   font-weight: 500;
-  line-height: 16px;
+  /* Inter's normal line height, fixed so Chinese labels (taller glyph boxes) do not move the fields. */
+  line-height: 15.5px;
 }
 /* "(optional)" follows the label for Members and Admins; Guests need a team, so it is dropped. */
 .invite-members-dialog__optional {
-  margin-left: 6px;
+  margin-left: 8px;
   color: var(--theme-text-secondary);
   font-weight: 450;
 }
+/* "（可选）" opens with a full-width parenthesis that carries its own space. */
+html[lang|="zh"] .invite-members-dialog__optional {
+  margin-left: 2px;
+}
 .invite-members-dialog__field textarea {
   box-sizing: border-box;
-  width: min(527px, 100%);
+  width: 100%;
   height: 64px;
   padding: 6px 12px;
   border: 0.5px solid var(--invite-dialog-field-border);
@@ -94,7 +100,7 @@
   resize: none;
   background: var(--invite-dialog-bg);
   color: var(--theme-text-primary);
-  font: 400 13px/20px var(--font);
+  font: 400 13px/normal var(--font);
 }
 .invite-members-dialog__field textarea::placeholder {
   color: var(--theme-text-tertiary);
@@ -116,12 +122,12 @@
 .invite-members-role-trigger {
   box-sizing: border-box;
   position: relative;
-  width: min(527px, 100%);
+  width: 100%;
   height: 30px;
   display: flex;
   align-items: center;
   padding: 1px 28px 1px 10px;
-  border: 0;
+  border: 0.5px solid transparent;
   border-radius: 8px;
   outline: 0;
   background: var(--invite-dialog-control-bg);
@@ -138,7 +144,8 @@
   flex: none;
 }
 .invite-members-team-trigger > span.is-placeholder {
-  color: var(--theme-text-primary);
+  color: var(--theme-text-secondary);
+  font-weight: 450;
 }
 .invite-members-dialog__hint {
   display: flex;
@@ -167,7 +174,7 @@
 }
 .invite-members-role-trigger__chevron {
   position: absolute;
-  right: 12px;
+  right: 10px;
   top: 50%;
   width: 10px;
   height: 5px;
@@ -255,8 +262,8 @@ div:has(> .invite-members-role-menu) {
 .invite-members-dialog__footer {
   display: flex;
   justify-content: flex-end;
-  margin-top: 40.5px;
-  padding: 0 17.5px;
+  margin-top: 41px;
+  padding: 0 16px;
 }
 .invite-members-dialog__send {
   height: 32px;
