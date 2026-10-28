@@ -399,7 +399,8 @@ What stays uncovered:
 
 - The first rollout *to* a version with this fallback. The old replicas do
   not have it yet, so a new page's files can still fail on them until the
-  rollout finishes. The client reload covers that window.
+  rollout finishes. The client reload covers that window. To avoid or shorten
+  it, see [First rollout to this version](#first-rollout-to-this-version).
 - After a rollback finishes, a page of the later release that is still open
   needs layer 3 or 4 to open routes it has not loaded yet. Without them it
   reloads once onto the rolled-back version.
@@ -410,3 +411,134 @@ To check a rollout, request a file of the new release from an old Pod
 directly, for example `kubectl port-forward pod/<old-pod> 8080` and then
 `curl -sI localhost:8080/assets/<new-file>`. The answer should be `200` with
 `X-Flow-Asset-Source: peer`.
+
+### First rollout to this version
+
+The first upgrade *to* a release with these fallbacks replaces replicas that
+do not have them. The direction from old pages to new replicas is covered:
+the new image carries the old release's files (layer 1), as long as it was
+built with `PREVIOUS_RELEASE_IMAGE` set to the image you are replacing (the
+published images are). An image older than the asset manifest works as
+`PREVIOUS_RELEASE_IMAGE`: its `assets/` listing stands in for the manifest.
+The other direction is not covered: a page served by a new replica asks for
+new files, and an old replica answers them with `404`. The page then reloads
+once, which normally lands on a new replica, but it can land on an old one
+again. Pick one of these procedures for that single upgrade. Later upgrades
+need none of them.
+
+**A. No mixed versions (`Recreate`).** Every old Pod stops before the new
+ones start, so no page is ever served by both versions. Flow is unavailable
+from the moment the old Pods stop until the first new Pod is ready (start-up
+and migrations), and open pages reconnect after that. Pages that were open
+keep loading their routes from the new replicas, from the old release's files
+in the image. A single replica with SQLite or a ReadWriteOnce volume already
+upgrades this way.
+
+```yaml
+# first-rollout values: helm upgrade flow ./deploy/helm/flow -f values.yaml -f first-rollout.yaml
+updateStrategy:
+  type: Recreate
+```
+
+**B. Every replica at once (`maxSurge: 100%`).** No downtime. All new Pods
+start together next to the old ones. The old Pods keep serving until new ones
+pass the readiness probe (`/api/health`), and are removed as the new ones
+become ready. Since all new Pods start at the same time, versions are mixed
+for roughly the spread of their start-up times, instead of one start-up per
+replica with the default `maxSurge: 1`. The cluster needs room for twice the
+replicas (with autoscaling, twice the current count).
+
+```yaml
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 100%
+    maxUnavailable: 0
+```
+
+**C. A one-replica window.** Use this when there is no room for B. Scale the
+old release to one replica first, upgrade, then scale back up, so only one
+Pod is replaced while versions are mixed. The first command keeps the chart
+and image you run now (`--reuse-values` with your current chart; with an
+unpinned `image.tag` the new chart would already change the image):
+
+```bash
+helm upgrade flow <current chart> --reuse-values --set replicaCount=1 --set autoscaling.enabled=false
+helm upgrade flow ./deploy/helm/flow -f values.yaml --set replicaCount=1 --set autoscaling.enabled=false
+helm upgrade flow ./deploy/helm/flow -f values.yaml   # your replica count or autoscaling again
+```
+
+Add `--set updateStrategy.type=Recreate` to the second command to avoid the
+overlap altogether, at the cost of the one Pod's start-up time.
+
+After any of these, drop the `updateStrategy` override (back to `{}`, which
+is `maxSurge: 1` and `maxUnavailable: 0` with several replicas). From now on
+the replicas of both versions ask each other.
+
+**Own builds without `PREVIOUS_RELEASE_IMAGE`.** If the new image does not
+carry the old release, publish the old release's files before the upgrade so
+that new replicas can answer old pages. With `assets.fallbackUrls`, upload the
+old image's `/app/web/assets/` as shown under layer 4 (for example from
+`registry.example.com/flow:1.4.2`) and set the URL in the upgrade's values.
+With `assets.shared`, copy the files into the claim before the upgrade, as
+the Flow user (65532), together with a release entry, so that pruning keeps
+them:
+
+```bash
+id=$(docker create registry.example.com/flow:1.4.2)
+docker cp "$id:/app/web/assets" ./old-assets && docker rm "$id"
+ls old-assets | jq -R . | jq -sc '{release: "legacy-1-4-2", assets: .}' > legacy-1-4-2.json
+kubectl -n flow apply -f - <<'YAML'
+apiVersion: v1
+kind: Pod
+metadata: {name: flow-assets-seed}
+spec:
+  restartPolicy: Never
+  securityContext: {runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532}
+  containers:
+    - name: seed
+      image: busybox:1.36
+      command: [sleep, "3600"]
+      volumeMounts: [{name: shared, mountPath: /shared}]
+  volumes:
+    - name: shared
+      persistentVolumeClaim: {claimName: flow-web-assets}
+YAML
+kubectl -n flow wait --for=condition=Ready pod/flow-assets-seed
+kubectl -n flow exec flow-assets-seed -- mkdir -p /shared/assets /shared/releases
+kubectl -n flow cp ./old-assets/. flow-assets-seed:/shared/assets/
+kubectl -n flow cp ./legacy-1-4-2.json flow-assets-seed:/shared/releases/legacy-1-4-2.json
+kubectl -n flow delete pod flow-assets-seed
+```
+
+Create the ReadWriteMany claim yourself before the upgrade and pass it as
+`assets.shared.existingClaim` (`flow-web-assets` here): the claim the chart
+creates (`<release>-assets`) only exists once the upgrade runs. Neither
+pre-populated layer makes old replicas answer new pages: that still needs
+A, B or C.
+
+**Verify through the Service.** Before the upgrade, note an entry file of the
+old release; after it, one of the new release. Then request both through the
+Service (not `kubectl port-forward`, which picks a single Pod), so the
+answers come from every replica:
+
+```bash
+entry() { kubectl -n flow run asset-entry --rm -i --quiet --restart=Never --image=curlimages/curl:8.11.1 -- \
+  sh -c 'curl -s http://flow:8080/ | grep -o "/assets/index-[A-Za-z0-9_-]*\.js" | head -1'; }
+OLD=$(entry)   # before the upgrade
+# ... helm upgrade ...
+NEW=$(entry)   # after the rollout finished
+kubectl -n flow run asset-check --rm -i --quiet --restart=Never --image=curlimages/curl:8.11.1 --env OLD="$OLD" --env NEW="$NEW" -- \
+  sh -c 'for i in $(seq 30); do for f in "$OLD" "$NEW"; do
+    curl -s -o /dev/null -w "%{http_code} %header{x-flow-asset-source} %{content_type} $f\n" "http://flow:8080$f"; done; done | sort | uniq -c'
+```
+
+`flow` is the chart's Service (the release's full name) and `8080` its
+`service.port`. Every line should be `200` with a JavaScript content type:
+the new file with no source (each replica's own build), the old file with
+`previous` (from the image), `shared` or `url`. A `404` for the new file
+while the rollout runs means a request reached an old replica; that is the
+window A, B and C remove or shorten. A `404` for the old file after the
+rollout means the new image carries no old release and no shared directory or
+fallback URL has it. Run the second command again while the rollout runs to
+see the mixed window.
