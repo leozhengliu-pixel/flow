@@ -1,0 +1,14 @@
+.issue-properties-rail {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.issue-properties-rail > div {
+  min-height: 0;
+}
+@media (max-width: 800px) {
+  .issue-properties-rail {
+    padding: 0 14px 24px;
+  }
+}

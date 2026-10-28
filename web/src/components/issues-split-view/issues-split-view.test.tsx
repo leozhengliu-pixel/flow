@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { I18nProvider } from '@/i18n/i18n'
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import {
@@ -7,7 +7,6 @@ import {
   IssueViewSplitPage,
   SplitViewIssueView,
   SplitIssueView,
-  IssueDetailsPaneSidebar,
   IssueWidgetAdornments,
   buildIssueWidgetAdornments,
   resolvePullRequestLifecycle,
@@ -130,33 +129,6 @@ describe('SplitIssueView + IssueDetailsPaneSidebar', () => {
     expect(screen.getByLabelText('Issue details sidebar')).toBeInTheDocument()
     expect(screen.getByText('Entity agent')).toBeInTheDocument()
     expect(screen.queryByLabelText('Customer needs')).toBeNull()
-  })
-
-  it('toggles agent panel when host provides open state', () => {
-    const onAgentOpenChange = vi.fn()
-    const { rerender } = renderWithI18n(
-      <IssueDetailsPaneSidebar
-        issue={sampleIssue}
-        agentPanel={<div>Agent body</div>}
-        agentOpen={false}
-        onAgentOpenChange={onAgentOpenChange}
-      />,
-    )
-    expect(screen.getByText('Properties')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Open chat' }))
-    expect(onAgentOpenChange).toHaveBeenCalledWith(true)
-
-    rerender(
-      <I18nProvider>
-        <IssueDetailsPaneSidebar
-          issue={sampleIssue}
-          agentPanel={<div>Agent body</div>}
-          agentOpen
-          onAgentOpenChange={onAgentOpenChange}
-        />
-      </I18nProvider>,
-    )
-    expect(screen.getByText('Agent body')).toBeInTheDocument()
   })
 })
 

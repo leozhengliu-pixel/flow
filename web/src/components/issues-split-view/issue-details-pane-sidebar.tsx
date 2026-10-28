@@ -3,14 +3,11 @@ import type { ReactNode } from 'react'
 import { PriorityIcon, StatusIcon } from '@/components/issue/issue-icons'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import styles from './issues-split-view.module.css'
-import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 
 export interface IssueDetailsPaneSidebarProps {
   issue?: MyIssuesRowData
-  /** LS-0252 EntityAgentPanel slot (Wave 3). Host renders panel content here when ready. */
+  /** Optional host content shown under the properties. */
   agentPanel?: ReactNode
-  agentOpen?: boolean
-  onAgentOpenChange?: (open: boolean) => void
   /**
    * @deprecated the reference app's issue properties sidebar has no customers section (requests live in the
    * issue's Customers section), so these rows are no longer rendered.
@@ -21,55 +18,27 @@ export interface IssueDetailsPaneSidebarProps {
 
 /**
  * LS-0346 — IssueDetailsPaneSidebar.
- * Property sidebar for split/detail hosts with an AgentPanel slot.
+ * Property sidebar for split/detail hosts, with an optional slot for host content.
  */
 export function IssueDetailsPaneSidebar({
   issue,
   agentPanel,
-  agentOpen = false,
-  onAgentOpenChange,
   className,
 }: IssueDetailsPaneSidebarProps) {
-  const replaceWithAgent = Boolean(onAgentOpenChange && agentOpen && agentPanel)
-
   return (
     <div
       className={[styles.sidebar, className].filter(Boolean).join(' ')}
       data-issue-details-pane-sidebar=""
       aria-label="Issue properties"
     >
-      {onAgentOpenChange ? (
-        <div className={styles.agentToggleRow}>
-          <button
-            type="button"
-            className={styles.agentToggle}
-            aria-expanded={agentOpen}
-            aria-label={agentOpen ? 'Close chat' : 'Open chat'}
-            data-active={agentOpen || undefined}
-            onClick={() => onAgentOpenChange(!agentOpen)}
-          >
-            <AgentCursorGlyph size={14} />
-            <span>Chat</span>
-          </button>
-        </div>
-      ) : null}
-
-      {replaceWithAgent ? (
+      <h3 className={styles.sidebarTitle}>Properties</h3>
+      {issue ? <PropertyList issue={issue} /> : <p className={styles.sidebarEmpty}>No issue selected</p>}
+      {agentPanel ? (
         <div className={styles.agentSlot} data-agent-panel-slot="">
           {agentPanel}
         </div>
       ) : (
-        <>
-          <h3 className={styles.sidebarTitle}>Properties</h3>
-          {issue ? <PropertyList issue={issue} /> : <p className={styles.sidebarEmpty}>No issue selected</p>}
-          {agentPanel ? (
-            <div className={styles.agentSlot} data-agent-panel-slot="">
-              {agentPanel}
-            </div>
-          ) : (
-            <div className={styles.agentSlot} data-agent-panel-slot="ready" hidden aria-hidden="true" />
-          )}
-        </>
+        <div className={styles.agentSlot} data-agent-panel-slot="ready" hidden aria-hidden="true" />
       )}
     </div>
   )

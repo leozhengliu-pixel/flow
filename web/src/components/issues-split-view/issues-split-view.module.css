@@ -190,7 +190,7 @@
 }
 /* Full IssueDetails in split: host sidebar owns properties (LS-0346/0559). */
 .splitIssueBody :global(.issue-properties),
-.splitIssueBody :global(.issue-agent-rail) {
+.splitIssueBody :global(.issue-properties-rail) {
   display: none;
 }
 .splitIssueBody :global(.issue-layout) {
@@ -356,28 +356,6 @@
   font-size: 12px;
 }
 
-.agentToggleRow {
-  padding: 0 4px 8px;
-}
-.agentToggle {
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-  border: 0.5px solid transparent;
-  border-radius: 9999px;
-  background: var(--bg-subtle);
-  color: var(--issue-muted);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-}
-.agentToggle:hover,
-.agentToggle[data-active] {
-  background: var(--bg-active);
-  color: var(--text);
-}
 .agentSlot {
   min-height: 0;
   margin-top: 8px;

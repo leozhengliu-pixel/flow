@@ -142,7 +142,6 @@ export function InitiativeDetailPage(props: Props) {
   }, [props.presence, props.viewer.active, props.viewer.id])
   const peopleChoices = useMemo(() => projectPeopleChoices(props.users, props.invitations, onlineUserIds), [onlineUserIds, props.invitations, props.users])
   const [detailsOpen, setDetailsOpen] = useStoredBoolean(`flow:initiative:${initiative.id}:details`, false)
-  const [agentOpen, setAgentOpen] = useState(false)
   const [updatesOpen, setUpdatesOpen] = useState(false)
   // "Show resolved comments" (while the description has resolved inline threads) takes the details panel's place.
   const resolvedThreadCount = useResolvedInlineThreadCount(initiative.comments)
@@ -227,14 +226,13 @@ export function InitiativeDetailPage(props: Props) {
     <div className="li-detail-toolbar"><nav>{(['overview', 'activity', 'projects'] as InitiativeRouteTab[]).map(item => <a aria-current={tab === item ? 'page' : undefined} href={location.pathname.replace(/\/(overview|activity|projects|view\/[^/]+)$/, `/${item}`)} key={item} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); onTabChange(item) }}>{titleCase(item)}</a>)}{storedViews.map(view => <ContextMenu.Root key={view.id}><ContextMenu.Trigger asChild><a aria-current={activeView?.id === view.id ? 'page' : undefined} aria-label={view.name} className="li-saved-view-tab" data-i18n-ignore href={location.pathname.replace(/\/(overview|activity|projects|view\/[^/]+)$/, `/view/${view.slugId}`)} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); props.onOpenView(view.slugId) }}><ViewGlyph color={view.color} icon={view.icon}/><span>{view.name}</span></a></ContextMenu.Trigger><ContextMenu.Portal><ContextMenu.Content data-flow-motion="floating" className="li-menu li-saved-view-menu"><ContextMenu.Item onSelect={() => void navigator.clipboard.writeText(`${location.origin}${location.pathname.replace(/\/(overview|activity|projects|view\/[^/]+)$/, `/view/${view.slugId}`)}`)}><Copy size={14}/>Copy link</ContextMenu.Item><ContextMenu.Item onSelect={() => void updateStoredView({ ...view, favorite: !view.favorite })}><Star fill={view.favorite ? 'currentColor' : 'none'} size={14}/>{view.favorite ? 'Unfavorite' : 'Favorite'}</ContextMenu.Item><ContextMenu.Separator/><ContextMenu.Item onSelect={() => setEditingView(view)}><Edit3 size={14}/>Edit…</ContextMenu.Item><ContextMenu.Item onSelect={() => void duplicateStoredView(view)}><Copy size={14}/>Duplicate…</ContextMenu.Item><ContextMenu.Item className="danger" onSelect={() => setDeletingView(view)}><Trash2 size={14}/>Delete</ContextMenu.Item></ContextMenu.Content></ContextMenu.Portal></ContextMenu.Root>)}{tab === 'new' ? <a aria-current="page" className="li-new-view-tab" href={location.pathname}><ViewGlyph color="#8a8f98" icon="CustomView"/><span>New view</span><Edit3 size={11}/></a> : <button aria-label="Add new view" onClick={() => onTabChange('new')} type="button"><ViewGlyph color="#8a8f98" icon="CustomView"/></button>}</nav><div>
       {tab === 'activity' && <ActivityDisplayMenu value={activityDisplay} onChange={setActivityDisplay}/>} 
       {(tab === 'projects' || tab === 'view') && <><RoadmapFilterMenu health={roadmapHealth} query={roadmapQuery} onHealth={changeRoadmapHealth} onQuery={changeRoadmapQuery}/><RoadmapDisplayMenu properties={roadmapProperties} onChange={changeRoadmapProperties}/></>}
-      {tab === 'overview' && <ResolvedCommentsButton className="li-resolved-comments" count={resolvedThreadCount} label="Show resolved comments" open={resolvedCommentsOpen} onToggle={() => { setResolvedCommentsOpen(open => !open); setDetailsOpen(false); setAgentOpen(false) }}/>}
+      {tab === 'overview' && <ResolvedCommentsButton className="li-resolved-comments" count={resolvedThreadCount} label="Show resolved comments" open={resolvedCommentsOpen} onToggle={() => { setResolvedCommentsOpen(open => !open); setDetailsOpen(false) }}/>}
       {/* Like the reference app, no docked agent here: the agent is the floating chat (bottom-right Agent, with this initiative as context). */}
       <InitiativePageChromeActions
-        agentOpen={agentOpen}
         updatesOpen={updatesOpen}
         onToggleUpdates={() => setUpdatesOpen(open => !open)}
       />
-      <button aria-expanded={detailsOpen && !agentOpen} aria-label={detailsOpen && !agentOpen ? 'Close Initiative details' : 'Open Initiative details'} onClick={() => { setAgentOpen(false); setResolvedCommentsOpen(false); setDetailsOpen(open => !open) }} title={`${detailsOpen && !agentOpen ? 'Close' : 'Open'} Initiative details (⌘I)`} type="button">{detailsOpen && !agentOpen ? <PanelRightClose size={15}/> : <PanelRightOpen size={15}/>}</button>
+      <button aria-expanded={detailsOpen} aria-label={detailsOpen ? 'Close Initiative details' : 'Open Initiative details'} onClick={() => { setResolvedCommentsOpen(false); setDetailsOpen(open => !open) }} title={`${detailsOpen ? 'Close' : 'Open'} Initiative details (⌘I)`} type="button">{detailsOpen ? <PanelRightClose size={15}/> : <PanelRightOpen size={15}/>}</button>
     </div></div>
     <InitiativePageChrome
       // "Resolved comments" takes the details panel's place (the column makes room for it).
@@ -244,8 +242,6 @@ export function InitiativeDetailPage(props: Props) {
       viewer={props.viewer}
       tab={tab}
       detailsOpen={detailsOpen}
-      agentOpen={agentOpen}
-      onAgentOpenChange={setAgentOpen}
       updatesOpen={updatesOpen}
       onUpdatesOpenChange={setUpdatesOpen}
       onOpenActivity={() => onTabChange('activity')}
@@ -253,7 +249,7 @@ export function InitiativeDetailPage(props: Props) {
       onUpdate={update}
       detailsSidebar={<InitiativeSidebar {...props} labels={initiativeLabels} update={update}/>}
     >
-      {tab === 'overview' && <InitiativeOverview {...props} update={update} creatingSubParentId={creatingSubParentId} onCreatingSubParentIdChange={setCreatingSubParentId} onCreateNewProject={() => setProjectCreateOpen(true)} sidePanelOpen={detailsOpen || agentOpen || updatesOpen} resolvedCommentsOpen={resolvedCommentsOpen && resolvedThreadCount > 0} onResolvedCommentsClose={closeResolvedComments}/>}
+      {tab === 'overview' && <InitiativeOverview {...props} update={update} creatingSubParentId={creatingSubParentId} onCreatingSubParentIdChange={setCreatingSubParentId} onCreateNewProject={() => setProjectCreateOpen(true)} sidePanelOpen={detailsOpen || updatesOpen} resolvedCommentsOpen={resolvedCommentsOpen && resolvedThreadCount > 0} onResolvedCommentsClose={closeResolvedComments}/>}
       {tab === 'activity' && <InitiativeActivity {...props} display={activityDisplay}/>}
       {(tab === 'projects' || tab === 'view') && <InitiativeRoadmap {...props} healthFilter={roadmapHealth} properties={roadmapProperties} query={roadmapQuery} zoom={roadmapZoom} onZoom={changeRoadmapZoom}/>}
       {tab === 'new' && <InitiativeNewView {...props} onCancel={() => onTabChange('projects')} onSave={createStoredView}/>}

@@ -431,7 +431,7 @@ html:root body .triage-snooze-dialog [cmdk-item]:not(#_) { font-size: 15px; }
 .issue-view--triage .issue-header--triage .issue-header-context { min-width: 0; flex: 1; }
 .issue-view--triage .issue-layout { width: 100%; max-width: none; min-height: 100%; display: block; padding: 0; }
 .issue-view--triage .issue-document { box-sizing: border-box; max-width: 760px; margin: 0 auto; padding: 8px 32px 72px; }
-.issue-view--triage .issue-agent-rail { display: none; }
+.issue-view--triage .issue-properties-rail { display: none; }
 .issue-view--triage .issue-title-field { margin-top: 24px; }
 .issue-view--triage .issue-mobile-properties { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 24px; margin: 4px 0 16px; overflow: visible; }
 .issue-view--triage .issue-mobile-properties > .core-property-picker,

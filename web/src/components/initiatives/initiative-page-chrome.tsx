@@ -1,9 +1,9 @@
 /**
- * LS-0311 InitiativePageChrome — packs AgentSidebar + UpdatesFloatingPanel into detail chrome.
+ * LS-0311 InitiativePageChrome — packs the details sidebar + UpdatesFloatingPanel into detail chrome. The page has no
+ * docked agent: the floating chat (⌘J, with this initiative as context) is the agent.
  */
 import type { ReactNode } from 'react'
 import { Send } from 'lucide-react'
-import { InitiativeAgentSidebarContainer } from './initiative-agent-sidebar-container'
 import { UpdatesFloatingPanel } from './updates-floating-panel'
 import type {
   Initiative,
@@ -12,15 +12,12 @@ import type {
   Project,
   User,
 } from '@/types/flow'
-import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 
 export type InitiativePageChromeProps = {
   initiative: Initiative
   initiativeUpdates: InitiativeUpdate[]
   viewer: User
   detailsOpen: boolean
-  agentOpen: boolean
-  onAgentOpenChange: (open: boolean) => void
   updatesOpen: boolean
   onUpdatesOpenChange: (open: boolean) => void
   onOpenActivity: () => void
@@ -28,10 +25,8 @@ export type InitiativePageChromeProps = {
   onUpdate: (input: InitiativeMutationInput) => Promise<Initiative>
   /** Main body (overview / activity / projects / …). */
   children: ReactNode
-  /** Details sidebar when agent is closed. */
+  /** Details sidebar, shown while `detailsOpen`. */
   detailsSidebar?: ReactNode
-  /** Optional Agent panel body slot (Wave 3 EntityAgentPanel). */
-  agentChildren?: ReactNode
   className?: string
   tab: string
 }
@@ -41,8 +36,6 @@ export function InitiativePageChrome({
   initiativeUpdates,
   viewer,
   detailsOpen,
-  agentOpen,
-  onAgentOpenChange,
   updatesOpen,
   onUpdatesOpenChange,
   onOpenActivity,
@@ -50,29 +43,17 @@ export function InitiativePageChrome({
   onUpdate,
   children,
   detailsSidebar,
-  agentChildren,
   className,
   tab,
 }: InitiativePageChromeProps) {
-  const railOpen = detailsOpen || agentOpen
   return (
     <>
       <div
-        className={`li-detail-body is-${tab}${railOpen ? ' has-details' : ''}${agentOpen ? ' has-agent' : ''}${className ? ` ${className}` : ''}`}
+        className={`li-detail-body is-${tab}${detailsOpen ? ' has-details' : ''}${className ? ` ${className}` : ''}`}
         data-initiative-page-chrome
       >
         <section className="li-detail-main">{children}</section>
-        {agentOpen ? (
-          <InitiativeAgentSidebarContainer
-            initiative={initiative}
-            open={agentOpen}
-            onOpenChange={onAgentOpenChange}
-          >
-            {agentChildren}
-          </InitiativeAgentSidebarContainer>
-        ) : (
-          detailsOpen && detailsSidebar
-        )}
+        {detailsOpen && detailsSidebar}
       </div>
       <UpdatesFloatingPanel
         initiative={initiative}
@@ -91,17 +72,12 @@ export function InitiativePageChrome({
   )
 }
 
-/** Toolbar controls for Agent sidebar + floating updates (LS-0311). */
+/** Toolbar control for the floating updates panel (LS-0311). */
 export function InitiativePageChromeActions({
-  agentOpen,
   updatesOpen,
-  onToggleAgent,
   onToggleUpdates,
 }: {
-  agentOpen: boolean
   updatesOpen: boolean
-  /** Without it there is no agent button (the reference app's initiative page has none; the floating chat is the agent). */
-  onToggleAgent?: () => void
   onToggleUpdates: () => void
 }) {
   return (
@@ -116,16 +92,6 @@ export function InitiativePageChromeActions({
       >
         <Send size={14} />
       </button>
-      {onToggleAgent && <button
-        aria-expanded={agentOpen}
-        aria-label={agentOpen ? 'Close agent sidebar' : 'Open agent sidebar'}
-        className={agentOpen ? 'is-agent-active is-active' : undefined}
-        onClick={onToggleAgent}
-        title="Agent"
-        type="button"
-      >
-        <AgentCursorGlyph size={14} />
-      </button>}
     </>
   )
 }
