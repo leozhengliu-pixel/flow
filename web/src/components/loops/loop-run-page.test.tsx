@@ -322,6 +322,23 @@ describe('LoopRunPage', () => {
     expect(screen.queryByRole('button', { name: 'Cancel run' })).toBeNull()
   })
 
+  it('shows the output contract the run worked to and the work its agent listed as not done', async () => {
+    const review: LoopRun = {
+      ...completed, id: 'run-6', status: 'needs_review', failureReason: 'incomplete',
+      error: 'The agent reported the run as done but listed work it did not do: 无法创建要求的独立新文档。',
+      summary: { status: 'done', summary: '已将每日总结追加到现有文档。', notDone: ['无法创建要求的独立新文档。'] },
+      outputContract: { source: 'model', readOnly: false, outputs: [{ kind: 'document', operation: 'create', required: true, target: { mode: 'new', titleTemplate: '每日总结-{date}', renderedTitle: '每日总结-2026-10-28' }, cardinality: 'onePerRun', evidence: '标题格式' }] },
+    }
+    api.listLoopRuns.mockResolvedValue([review])
+    api.getLoopRun.mockResolvedValue(review)
+    renderPage('run-6')
+    const contract = await screen.findByRole('region', { name: 'Outputs this run worked to' })
+    expect(contract).toHaveTextContent('CreateDocumentMust produce')
+    expect(contract).toHaveTextContent('titled 每日总结-2026-10-28 · One per run')
+    expect(contract).not.toHaveTextContent('标题格式')
+    expect(screen.getAllByText('无法创建要求的独立新文档。').length).toBeGreaterThan(0)
+  })
+
   it('shows interrupted runs and failure reasons', async () => {
     const interrupted: LoopRun = { ...failed, id: 'run-5', status: 'interrupted', failureReason: 'interrupted', error: 'Interrupted by server restart' }
     const timedOut: LoopRun = { ...failed, id: 'run-6', failureReason: 'provider_timeout', error: 'Flow Agent provider is unavailable' }

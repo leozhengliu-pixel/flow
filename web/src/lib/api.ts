@@ -61,6 +61,7 @@ import type {
   Loop,
   LoopAttachment,
   LoopConfig,
+  LoopOutputContract,
   LoopRun,
   LoopTemplate,
   LoopVersion,
@@ -2959,7 +2960,14 @@ export type LoopMutation = Partial<
     | "trustedSourceKeys"
     | "editPolicy"
   >
->;
+> & {
+  /** A person's outputs (authoritative); null returns to the outputs read from the instructions. */
+  outputContract?: LoopOutputContract | null;
+};
+/** Reads the loop's output contract now (or again, with force) and returns the loop. */
+export function analyzeLoopOutputs(id: string, force = false): Promise<Loop> {
+  return request(`/api/loops/${encodeURIComponent(id)}/output-contract`, jsonRequest("POST", { force }));
+}
 export function listLoops(workspaceKey?: string): Promise<Loop[]> {
   return request("/api/loops", workspaceKey ? { headers: { "X-Workspace-Key": workspaceKey } } : undefined);
 }

@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   listAgentSessions: vi.fn(),
   getLoopConfig: vi.fn(),
   listLoopVersions: vi.fn(),
+  analyzeLoopOutputs: vi.fn(),
 }))
 const stream = vi.hoisted(() => ({ streamNewAgentSession: vi.fn(), streamAgentSessionMessage: vi.fn() }))
 vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/api')>()), ...api }))
@@ -48,6 +49,7 @@ describe('LoopEditor', () => {
     api.listAgentSessions.mockResolvedValue([])
     resetLoopConfigCache()
     api.getLoopConfig.mockResolvedValue({ webSearchAvailable: true, webSearchProvider: 'tavily' })
+    api.analyzeLoopOutputs.mockImplementation(async (id: string) => ({ ...draft, id, outputContract: { source: 'model', readOnly: false, outputs: [{ kind: 'issue', operation: 'update', required: true, target: { mode: 'triggering' } }] } }))
     api.updateLoop.mockImplementation(async (id: string, input: Partial<Loop>) => ({ ...draft, ...input, id }))
   })
 
@@ -62,6 +64,14 @@ describe('LoopEditor', () => {
     expect(team).toHaveAttribute('href', '/workspace/team/TST/loops')
     await userEvent.click(team)
     expect(onNavigate).toHaveBeenCalledWith('/workspace/team/TST/loops')
+  })
+
+  it('shows what the loop will produce, read from the saved instructions', async () => {
+    renderEditor({ ...draft, templateId: undefined })
+    const panel = await screen.findByRole('region', { name: 'What this loop will produce' })
+    await waitFor(() => expect(api.analyzeLoopOutputs).toHaveBeenCalledWith('loop-9'), { timeout: 4000 })
+    await waitFor(() => expect(panel).toHaveTextContent('UpdateIssueMust produce'))
+    expect(panel).toHaveTextContent('The triggering item')
   })
 
   it('lays out the name row, trigger, instructions, connectors, permissions and footer', async () => {

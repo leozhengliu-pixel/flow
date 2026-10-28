@@ -61,7 +61,7 @@ func TestLoopRunCompletionContract(t *testing.T) {
 	provider := &fakeLoopProvider{}
 	srv, handler := newReliableLoopServer(t, provider)
 	projectID := firstProjectID(t, handler)
-	loop := requestJSON[domain.Loop](t, handler, http.MethodPost, "/api/loops", map[string]any{"name": "Digest", "instructions": "Summarize open bugs.", "status": "published"}, http.StatusCreated)
+	loop := requestJSON[domain.Loop](t, handler, http.MethodPost, "/api/loops", map[string]any{"name": "Digest", "instructions": "Summarize open bugs and post what the projects need.", "status": "published"}, http.StatusCreated)
 	run := func(replies ...string) domain.LoopRun {
 		t.Helper()
 		provider.script(replies...)

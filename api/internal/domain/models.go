@@ -1211,6 +1211,96 @@ type Loop struct {
 	// run may legitimately change nothing. Empty means inferred from the
 	// instructions (see EffectiveOutputs on the run).
 	ExpectedOutputs []string `json:"expectedOutputs,omitempty"`
+	// OutputContract is what the loop's runs produce: read from the name and
+	// instructions by the model (source model), set by a person in the
+	// editor (source person, authoritative), or the conservative report-only
+	// contract used when it could not be determined (source fallback).
+	OutputContract *LoopOutputContract `json:"outputContract,omitempty"`
+}
+
+// LoopOutputContract says, for each output kind, what a loop's runs make:
+// the operation, its target, how many, when, and the instruction text it
+// was read from. Runs are prompted from it, their write tools are checked
+// against it, and acceptance verifies its required outputs exist.
+type LoopOutputContract struct {
+	// Source: model | person | fallback.
+	Source string `json:"source"`
+	// InstructionsHash identifies the name, instructions and extraction
+	// prompt a model contract was read from; a different hash is stale.
+	InstructionsHash string `json:"instructionsHash,omitempty"`
+	// ReadOnly: the run's reply (finish_run summary) is its only output;
+	// every Flow and connector write is refused.
+	ReadOnly         bool   `json:"readOnly"`
+	ReadOnlyEvidence string `json:"readOnlyEvidence,omitempty"`
+	// Outputs are the outputs the instructions name, one entry per kind
+	// and operation.
+	Outputs []LoopContractOutput `json:"outputs"`
+	// Always: required outputs are due even when nothing changed.
+	Always         bool   `json:"always,omitempty"`
+	AlwaysEvidence string `json:"alwaysEvidence,omitempty"`
+	// SkipConditions are the instructions' conditions for skipping a run.
+	SkipConditions []LoopContractCondition `json:"skipConditions,omitempty"`
+	// Model and ExtractedAt describe a model extraction; Error says why a
+	// fallback contract was used.
+	Model       string     `json:"model,omitempty"`
+	ExtractedAt *time.Time `json:"extractedAt,omitempty"`
+	Error       string     `json:"error,omitempty"`
+	// UpdatedBy is the person who set a person contract.
+	UpdatedBy string `json:"updatedBy,omitempty"`
+	// Stale is computed when a loop is served: the name or instructions
+	// changed since the contract was read or set.
+	Stale bool `json:"stale,omitempty"`
+}
+
+// LoopContractOutput is one output of a loop's contract.
+type LoopContractOutput struct {
+	// Kind: document | issue | comment | statusUpdate | change (other Flow
+	// changes such as issue properties).
+	Kind string `json:"kind"`
+	// Operation: create | update | append | write (create or update) |
+	// read (only read) | forbidden.
+	Operation string `json:"operation"`
+	// Required: a run must produce it (create, update, append, write).
+	Required bool               `json:"required"`
+	Target   LoopContractTarget `json:"target"`
+	// Cardinality: onePerRun | perItem | any.
+	Cardinality string `json:"cardinality,omitempty"`
+	// Conditions under which the output is made ("only for bugs without
+	// repro steps"); an output with conditions is usually not required.
+	Conditions []string `json:"conditions,omitempty"`
+	// Group: outputs sharing a group are alternatives; one is enough.
+	Group string `json:"group,omitempty"`
+	// Evidence quotes the instruction text; Reasoning says why.
+	Evidence  string `json:"evidence,omitempty"`
+	Reasoning string `json:"reasoning,omitempty"`
+}
+
+// LoopContractTarget is where an output goes.
+type LoopContractTarget struct {
+	// Mode: new (a new one each time) | existing (an existing one) |
+	// triggering (the run's triggering entity) | any.
+	Mode string `json:"mode,omitempty"`
+	// TitleTemplate is a new document's title, with {date}, {week},
+	// {month} or {year} for the run's period.
+	TitleTemplate string `json:"titleTemplate,omitempty"`
+	// Title and DocumentID name an existing document; a person picks the
+	// document by id in the editor.
+	Title      string `json:"title,omitempty"`
+	DocumentID string `json:"documentId,omitempty"`
+	// Team is the team named in the instructions; TeamID the resolved one.
+	Team   string `json:"team,omitempty"`
+	TeamID string `json:"teamId,omitempty"`
+	// Description says the target in words.
+	Description string `json:"description,omitempty"`
+	// RenderedTitle is the title template for a run's period (on a run's
+	// contract only).
+	RenderedTitle string `json:"renderedTitle,omitempty"`
+}
+
+// LoopContractCondition is a condition quoted from the instructions.
+type LoopContractCondition struct {
+	Condition string `json:"condition"`
+	Evidence  string `json:"evidence,omitempty"`
 }
 
 // LoopDefinition is the part of a loop a published version snapshots.
@@ -1244,6 +1334,8 @@ type LoopVersion struct {
 	RestoredFromVersion int            `json:"restoredFromVersion,omitempty"`
 	Current             bool           `json:"current"`
 	Definition          LoopDefinition `json:"definition"`
+	// OutputContract is the contract read for this version's instructions.
+	OutputContract *LoopOutputContract `json:"outputContract,omitempty"`
 }
 
 // LoopAttachment is a file uploaded for the "Ask Flow to build the loop"
@@ -1317,6 +1409,9 @@ type LoopRun struct {
 	// counts the successful changes it made by kind.
 	ExpectedOutputs []string       `json:"expectedOutputs,omitempty"`
 	Produced        map[string]int `json:"produced,omitempty"`
+	// OutputContract is the loop's output contract the run used, with its
+	// targets resolved for the run (titles rendered, teams found).
+	OutputContract *LoopOutputContract `json:"outputContract,omitempty"`
 	// Retries counts provider and read-only tool calls that were retried.
 	Retries     int        `json:"retries,omitempty"`
 	CancelledBy string     `json:"cancelledBy,omitempty"`
@@ -1400,6 +1495,8 @@ type LoopRunToolCall struct {
 type LoopRunDocumentWrite struct {
 	ID    string `json:"id,omitempty"`
 	Title string `json:"title,omitempty"`
+	// TeamIDs are the document's teams after the write.
+	TeamIDs []string `json:"teamIds,omitempty"`
 	// create | update | append
 	Mode          string `json:"mode"`
 	VersionBefore int64  `json:"versionBefore,omitempty"`

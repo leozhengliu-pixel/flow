@@ -146,7 +146,7 @@ func TestLoopOccurrenceClaimsAcrossRuns(t *testing.T) {
 	ctx := context.Background()
 	const workspace, loopID, occurrence = "test-workspace", "loop_claims", "2026-10-26"
 	document := loopTestDocument(t, handler, map[string]any{"title": "Team log", "content": "Existing entry"})
-	expectation := loopOutputExpectation{Outputs: []string{"document"}, Operations: map[string]string{"document": loopOpAppend}}
+	contract := appendContract()
 	entry := "\n\n## 2026-10-26\n\n- Fixed login"
 	call := domain.AgentToolCall{ID: "call_append", Name: "save_document", Arguments: json.RawMessage(strings.TrimPrefix(loopAppendCall(document.ID, entry), "tool:save_document "))}
 	run := func(id, status string) *loopRunRecorder {
@@ -170,24 +170,24 @@ func TestLoopOccurrenceClaimsAcrossRuns(t *testing.T) {
 
 	// Another server's run claimed the occurrence and is appending.
 	other := run("loop_run_other", "running")
-	if prepared, err := srv.prepareLoopDocumentWrite(other, expectation, call); err != nil || prepared.claim == nil {
+	if prepared, err := srv.prepareLoopDocumentWrite(other, domain.Bootstrap{}, contract, call); err != nil || prepared.claim == nil {
 		t.Fatalf("first claim = %+v %v", prepared, err)
 	}
 	mine := run("loop_run_mine", "running")
-	prepared, err := srv.prepareLoopDocumentWrite(mine, expectation, call)
+	prepared, err := srv.prepareLoopDocumentWrite(mine, domain.Bootstrap{}, contract, call)
 	if err == nil || !strings.Contains(err.Error(), "right now") || prepared.record.ExistingRunID != other.run.ID {
 		t.Fatalf("append while another run appends = %+v %v", prepared, err)
 	}
 	// It stopped without writing: this run takes the occurrence over.
 	stop(other.run.ID)
-	if prepared, err = srv.prepareLoopDocumentWrite(mine, expectation, call); err != nil || prepared.claim == nil || prepared.claim.RunID != mine.run.ID {
+	if prepared, err = srv.prepareLoopDocumentWrite(mine, domain.Bootstrap{}, contract, call); err != nil || prepared.claim == nil || prepared.claim.RunID != mine.run.ID {
 		t.Fatalf("take-over = %+v %v", prepared, err)
 	}
 	// It writes the document, then its server stops before recording it.
 	requestJSON[domain.Document](t, handler, http.MethodPatch, "/api/documents/"+document.ID, map[string]any{"content": "Existing entry" + entry}, http.StatusOK)
 	stop(mine.run.ID)
 	third := run("loop_run_third", "running")
-	if prepared, err = srv.prepareLoopDocumentWrite(third, expectation, call); err == nil || !strings.Contains(err.Error(), "already appended its section for "+occurrence) || prepared.record.ExistingRunID != mine.run.ID {
+	if prepared, err = srv.prepareLoopDocumentWrite(third, domain.Bootstrap{}, contract, call); err == nil || !strings.Contains(err.Error(), "already appended its section for "+occurrence) || prepared.record.ExistingRunID != mine.run.ID {
 		t.Fatalf("append after a lost result = %+v %v", prepared, err)
 	}
 	if claim, err := srv.store.LoopDocumentAppend(ctx, workspace, loopID, occurrence, document.ID); err != nil || claim.Status != store.LoopAppendAppended || claim.RunID != mine.run.ID {
@@ -200,7 +200,7 @@ func TestLoopOccurrenceClaimsAcrossRuns(t *testing.T) {
 	// A call that failed without writing releases its claim.
 	next := run("loop_run_next", "running")
 	next.run.Occurrence = "2026-10-27"
-	prepared, err = srv.prepareLoopDocumentWrite(next, expectation, call)
+	prepared, err = srv.prepareLoopDocumentWrite(next, domain.Bootstrap{}, contract, call)
 	if err != nil || prepared.claim == nil {
 		t.Fatalf("next occurrence claim = %+v %v", prepared, err)
 	}
@@ -261,7 +261,7 @@ func TestLoopDocumentOperationsAgree(t *testing.T) {
 		provider.script(item.call(document.ID), `tool:finish_run {"status":"done","summary":"Done."}`)
 		loop, started := startTestRun(t, handler, "Doc "+item.op, item.instructions, nil)
 		run := waitForRun(t, handler, loop.ID, started.ID)
-		if !strings.Contains(loopRunPrompt(t, provider, 0), loopDocumentPrompts[item.op]) {
+		if !strings.Contains(loopRunPrompt(t, provider, 0), map[string]string{loopOpCreate: "create a new document with save_document", loopOpUpdate: "then call save_document with its id (patch to change part of it)", loopOpAppend: `patch [{"op":"append","text":"..."}]`}[item.op]) {
 			t.Errorf("%s: the prompt does not ask for it", item.op)
 		}
 		if run.Status != "completed" || run.Produced["document"] != 1 {
@@ -293,10 +293,6 @@ func TestLoopChineseCommentRefusalAllowsReadingComments(t *testing.T) {
 	provider := &fakeLoopProvider{}
 	_, handler := newReliableLoopServer(t, provider)
 	instructions := "阅读今天事项下的评论并汇总需要跟进的问题。不要在任何事项、项目或其他资源上发布评论。"
-	intent := inferLoopOutputIntent(instructions)
-	if strings.Join(intent.Prohibited, ",") != "comment" || len(intent.Outputs) != 0 || !intent.ReadOnly {
-		t.Fatalf("intent = %+v", intent)
-	}
 	issue := firstIssueIdentifier(t, handler)
 	provider.script(
 		`tool:list_comments {"issueId":"`+issue+`","limit":5}`,
@@ -308,7 +304,7 @@ func TestLoopChineseCommentRefusalAllowsReadingComments(t *testing.T) {
 	if read := loopRunCall(run, "list_comments", 0); read.Status != "completed" {
 		t.Fatalf("reading comments = %+v", read)
 	}
-	if post := loopRunCall(run, "save_comment", 0); post.Status != "blocked" || !strings.Contains(post.Error, "not to post comments") {
+	if post := loopRunCall(run, "save_comment", 0); post.Status != "blocked" || !strings.HasPrefix(post.Error, loopProhibitedCallPrefix) {
 		t.Fatalf("posting a comment = %+v", post)
 	}
 	if run.Produced["comment"] != 0 || len(run.ExpectedOutputs) != 0 {

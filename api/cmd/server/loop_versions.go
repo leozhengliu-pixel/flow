@@ -148,6 +148,10 @@ func recordLoopVersion(data *domain.Bootstrap, before *domain.Loop, after *domai
 		}
 	}
 	version := domain.LoopVersion{ID: loopVersionID(after.ID, latest+1), LoopID: after.ID, Version: latest + 1, PublishedAt: now, PublishedBy: data.Viewer, ChangeSummary: summary, RestoredFromVersion: restoredFrom, Definition: loopDefinition(*after)}
+	if contract, ok := loopStoredContract(*after); ok && after.OutputContract == contract {
+		// The contract read (or set) for this text; one read later is stored by storeLoopContract.
+		version.OutputContract = contract
+	}
 	data.LoopVersions = append(data.LoopVersions, version)
 	// Keep the newest loopVersionHistory versions of this loop.
 	if versions := loopVersionsFor(data, after.ID); len(versions) > loopVersionHistory {
@@ -158,6 +162,20 @@ func recordLoopVersion(data *domain.Bootstrap, before *domain.Loop, after *domai
 	}
 	after.Version, after.VersionID = version.Version, version.ID
 	return &version
+}
+
+// setLatestLoopVersionContract gives the newest version the loop's contract
+// (a person's outputs, set without changing the versioned definition).
+func setLatestLoopVersionContract(data *domain.Bootstrap, loopID string, contract *domain.LoopOutputContract) {
+	latest := -1
+	for index, version := range data.LoopVersions {
+		if version.LoopID == loopID && (latest < 0 || version.Version > data.LoopVersions[latest].Version) {
+			latest = index
+		}
+	}
+	if latest >= 0 {
+		data.LoopVersions[latest].OutputContract = contract
+	}
 }
 
 // presentLoopVersions returns a loop's versions newest first, with a
@@ -246,6 +264,10 @@ func (s *server) restoreLoopVersion(w http.ResponseWriter, r *http.Request) {
 		next.TeamAccess, next.AllowChangesOutsideTrigger, next.AllowExternalSync = definition.TeamAccess, definition.AllowChangesOutsideTrigger, definition.AllowExternalSync
 		next.WebSearch, next.CodeAccess = definition.WebSearch, definition.CodeAccess
 		next.NextRunAt = nil
+		if source.OutputContract != nil {
+			// The version's outputs come back with its instructions.
+			next.OutputContract = source.OutputContract
+		}
 		if err := checkLoop(data, next, false); err != nil {
 			return err
 		}
@@ -260,6 +282,9 @@ func (s *server) restoreLoopVersion(w http.ResponseWriter, r *http.Request) {
 	if err != nil && strings.Contains(err.Error(), "only created loops") {
 		writeError(w, http.StatusConflict, "Only created loops have published versions")
 		return
+	}
+	if err == nil {
+		s.extractLoopContractAsync(workspaceKey(r), restored)
 	}
 	respondLoopMutation(w, err, http.StatusOK, presentLoop(s.loopRunCounts(r.Context(), s.workspaceURLKey(r)), restored))
 }

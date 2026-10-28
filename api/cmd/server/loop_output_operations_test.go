@@ -18,116 +18,6 @@ const (
 	loopTeamDigestEN = "Summarize the dev team's work today and append the result to the existing team document. Do not post comments on any issue, project, or other resource."
 )
 
-type loopIntentCase struct {
-	text       string
-	outputs    string // required kinds, comma separated
-	operations string // kind:op pairs of the required kinds, comma separated
-	prohibited string // forbidden kinds, comma separated
-	readOnly   bool
-	always     bool
-	skips      bool
-}
-
-func loopIntentOperations(intent loopOutputExpectation) string {
-	pairs := []string{}
-	for _, kind := range intent.Outputs {
-		if op := intent.Operations[kind]; op != "" {
-			pairs = append(pairs, kind+":"+op)
-		}
-	}
-	return strings.Join(pairs, ",")
-}
-
-func checkLoopIntent(t *testing.T, item loopIntentCase) {
-	t.Helper()
-	got := inferLoopOutputIntent(item.text)
-	if outputs := strings.Join(got.Outputs, ","); outputs != item.outputs {
-		t.Errorf("%q: outputs %q, want %q (%+v)", item.text, outputs, item.outputs, got)
-	}
-	if item.operations != "" && loopIntentOperations(got) != item.operations {
-		t.Errorf("%q: operations %q, want %q", item.text, loopIntentOperations(got), item.operations)
-	}
-	if prohibited := strings.Join(got.Prohibited, ","); prohibited != item.prohibited {
-		t.Errorf("%q: prohibited %q, want %q", item.text, prohibited, item.prohibited)
-	}
-	if got.ReadOnly != item.readOnly {
-		t.Errorf("%q: read-only %v, want %v", item.text, got.ReadOnly, item.readOnly)
-	}
-	if got.Always != item.always {
-		t.Errorf("%q: always %v, want %v", item.text, got.Always, item.always)
-	}
-	if (len(got.Skips) > 0) != item.skips {
-		t.Errorf("%q: skips %q, want any=%v", item.text, got.Skips, item.skips)
-	}
-}
-
-func TestInferLoopOutputOperations(t *testing.T) {
-	for _, item := range []loopIntentCase{
-		// The report, in Chinese and English.
-		{text: loopTeamDigestZH, outputs: "document", operations: "document:append", prohibited: "comment"},
-		{text: loopTeamDigestEN, outputs: "document", operations: "document:append", prohibited: "comment"},
-		// Read-only mentions are not outputs.
-		{text: "Read the doc and comment on the issue.", outputs: "comment", operations: "comment:write"},
-		{text: "阅读团队文档，并在事项上评论", outputs: "comment", operations: "comment:write"},
-		{text: "Read the team document and summarize it.", readOnly: true},
-		// Create, update and append.
-		{text: "Create a new document with today's summary.", outputs: "document", operations: "document:create"},
-		{text: "新建一篇文档记录今日总结", outputs: "document", operations: "document:create"},
-		{text: "Update the team document with today's summary.", outputs: "document", operations: "document:update"},
-		{text: "将今日总结写入已有的团队文档", outputs: "document", operations: "document:update"},
-		{text: "Append today's summary to the team doc.", outputs: "document", operations: "document:append"},
-		{text: "在团队文档末尾追加今日总结", outputs: "document", operations: "document:append"},
-		{text: "Read the existing team doc, then append today's summary to it.", outputs: "document", operations: "document:append"},
-		{text: "Don't overwrite the team document, only append to it.", outputs: "document", operations: "document:append", prohibited: "statusUpdate,issue,comment"},
-		// Conditional outputs.
-		{text: "汇总今日工作并追加到团队文档。如果没有变动也要写日报。", outputs: "document", operations: "document:append", always: true},
-		{text: "Append the daily report to the team doc, even if nothing changed.", outputs: "document", operations: "document:append", always: true},
-		{text: "每天把日报追加到团队文档，节假日跳过。", outputs: "document", operations: "document:append", skips: true},
-		{text: "Append the daily report to the team doc; skip on public holidays and weekends.", outputs: "document", operations: "document:append", skips: true},
-		// Skipping items is not skipping the run.
-		{text: "Comment on new bugs; skip issues that already have a comment.", outputs: "comment", operations: "comment:write"},
-		{text: "Post a weekly update on each project. If nothing changed, don't post.", outputs: "statusUpdate", operations: "statusUpdate:write", skips: true},
-		// Documents named as references are not outputs.
-		{text: "Post a comment on the issue with links to the documents you used.", outputs: "comment", operations: "comment:write"},
-		{text: "Reply in the thread with a short answer, followed by links to the issues, projects or documents you relied on.", readOnly: true},
-		{text: "Merge requests that describe the same need even when worded differently, then append the themes to the team doc.", outputs: "document", operations: "document:append"},
-	} {
-		checkLoopIntent(t, item)
-	}
-	// A choice of outputs needs one of them.
-	choice := inferLoopOutputIntent(`Post the report as a document or project update titled "Feature requests".`)
-	if strings.Join(choice.Outputs, ",") != "statusUpdate,document" || len(choice.Alternatives) != 1 || strings.Join(choice.Alternatives[0], ",") != "statusUpdate,document" {
-		t.Errorf("choice of outputs = %+v", choice)
-	}
-	run := domain.LoopRun{Produced: map[string]int{"statusUpdate": 1, "change": 1}}
-	if status, reason, message := acceptLoopRun(domain.Loop{Instructions: `Post the report as a document or project update titled "Feature requests".`}, &run, nil); status != "completed" {
-		t.Errorf("one output of a choice = %s %s %q", status, reason, message)
-	}
-}
-
-// A refusal covers every object it names, across enumeration punctuation
-// (、 , or) and the different ways of saying no.
-func TestInferLoopOutputProhibitions(t *testing.T) {
-	for _, item := range []loopIntentCase{
-		{text: "汇总今日工作。禁止在事项、项目或其他资源上发布评论。", prohibited: "comment", readOnly: true},
-		{text: "汇总今日工作。不得在任何事项、项目上留言。", prohibited: "comment", readOnly: true},
-		{text: "汇总今日工作，别在事项、项目或文档上发评论", prohibited: "comment", readOnly: true},
-		{text: "汇总今日工作，请勿在事项、项目或其他资源上发布评论", prohibited: "comment", readOnly: true},
-		{text: "汇总今日工作，无需在事项、项目上发布评论或创建事项", prohibited: "issue,comment", readOnly: true},
-		{text: "除追加团队文档外，不要发布评论或创建事项。", outputs: "document", operations: "document:append", prohibited: "issue,comment"},
-		{text: "汇总今日进展并写入团队文档，除此之外不要做任何修改。", outputs: "document", operations: "document:update", prohibited: "statusUpdate,issue,comment"},
-		{text: "Summarize today's work. Don't post comments on any issue, project, or other resource.", prohibited: "comment", readOnly: true},
-		{text: "Summarize today's work. Never comment on issues or projects.", prohibited: "comment", readOnly: true},
-		{text: "Append today's notes to the team doc without commenting on any issue.", outputs: "document", operations: "document:append", prohibited: "comment"},
-		{text: "Only update the doc.", outputs: "document", operations: "document:update", prohibited: "statusUpdate,issue,comment"},
-		{text: "Do not comment on status updates; post a status update on each project.", outputs: "statusUpdate", operations: "statusUpdate:write", prohibited: "comment"},
-		{text: "Comment on bugs that don't have repro steps.", outputs: "comment", operations: "comment:write"},
-		{text: "Triage new issues and set their priority; do not comment.", prohibited: "comment"},
-	} {
-		checkLoopIntent(t, item)
-	}
-}
-
 // The repro end to end: the prompt asks for the append and forbids comments,
 // and a run that writes nothing is flagged for missing the document.
 func TestLoopTeamDigestPromptAndAcceptance(t *testing.T) {
@@ -292,7 +182,7 @@ func TestLoopDocumentAppendRetryAfterLostResult(t *testing.T) {
 	updated := requestJSON[domain.Document](t, handler, http.MethodPatch, "/api/documents/"+document.ID, map[string]any{"content": "Existing entry" + entry}, http.StatusOK)
 	rec := &loopRunRecorder{s: srv, workspace: "test-workspace", run: domain.LoopRun{ID: "loop_run_lost", ToolCalls: []domain.LoopRunToolCall{{Name: "save_document", Status: "error", Error: "timeout", Document: &domain.LoopRunDocumentWrite{ID: document.ID, Mode: "append", Key: key, VersionBefore: document.Version}}}}}
 	call := domain.AgentToolCall{ID: "call_retry", Name: "save_document", Arguments: json.RawMessage(strings.TrimPrefix(loopAppendCall(document.ID, entry), "tool:save_document "))}
-	prepared, err := srv.prepareLoopDocumentWrite(rec, loopOutputExpectation{Outputs: []string{"document"}, Operations: map[string]string{"document": "append"}}, call)
+	prepared, err := srv.prepareLoopDocumentWrite(rec, domain.Bootstrap{}, appendContract(), call)
 	if err != nil || prepared == nil || prepared.applied == "" || !prepared.record.Changed || prepared.record.VersionAfter != updated.Version {
 		t.Fatalf("retry after a lost result = %+v err %v", prepared, err)
 	}

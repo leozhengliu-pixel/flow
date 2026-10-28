@@ -45,6 +45,55 @@ type loopInput struct {
 	// ExpectedOutputs: [] infers from the instructions, ["none"] expects no
 	// output, else statusUpdate, issue, comment, document or change.
 	ExpectedOutputs *[]string `json:"expectedOutputs,omitempty"`
+	// OutputContract sets the loop's outputs by hand (it becomes the
+	// authoritative person contract); null goes back to the outputs the
+	// model reads from the instructions.
+	OutputContract json.RawMessage `json:"outputContract,omitempty"`
+}
+
+// loopInputContract reads an input's outputContract: set is false when the
+// input has none, contract nil when it resets to the model's.
+func loopInputContract(input loopInput) (contract *domain.LoopOutputContract, set bool, err error) {
+	if len(input.OutputContract) == 0 {
+		return nil, false, nil
+	}
+	if string(input.OutputContract) == "null" {
+		return nil, true, nil
+	}
+	var value domain.LoopOutputContract
+	if err := json.Unmarshal(input.OutputContract, &value); err != nil {
+		return nil, true, fmt.Errorf("outputContract must be an output contract object")
+	}
+	if value.Outputs == nil {
+		value.Outputs = []domain.LoopContractOutput{}
+	}
+	for index := range value.Outputs {
+		value.Outputs[index].Target.RenderedTitle = ""
+	}
+	if err := normalizeLoopContract(&value); err != nil {
+		return nil, true, fmt.Errorf("outputContract: %s", err.Error())
+	}
+	value.Source, value.Model, value.ExtractedAt, value.Error, value.Stale = loopContractPerson, "", nil, "", false
+	return &value, true, nil
+}
+
+// applyLoopInputContract applies an input's outputContract to a loop that
+// already has the input's other fields: a person contract is tied to the
+// text it was set for and replaces the legacy expectedOutputs.
+func applyLoopInputContract(loop *domain.Loop, input loopInput, viewerID string) {
+	contract, set, err := loopInputContract(input)
+	if !set || err != nil {
+		return
+	}
+	loop.ExpectedOutputs = nil
+	if contract == nil {
+		if loop.OutputContract != nil && loop.OutputContract.Source == loopContractPerson {
+			loop.OutputContract = nil
+		}
+		return
+	}
+	contract.InstructionsHash, contract.UpdatedBy = loopContractHashOf(*loop), viewerID
+	loop.OutputContract = contract
 }
 
 var loopTriggerTypes = []string{"schedule", "issue", "project", "initiative", "release", "team", "cycle"}
@@ -140,6 +189,9 @@ func validateLoopInput(input loopInput) error {
 		if slices.Contains(*input.ExpectedOutputs, "none") && len(*input.ExpectedOutputs) > 1 {
 			return fmt.Errorf("expectedOutputs cannot combine none with other outputs")
 		}
+	}
+	if _, _, err := loopInputContract(input); err != nil {
+		return err
 	}
 	return nil
 }
@@ -314,6 +366,11 @@ func presentLoop(counts map[string]int, loop domain.Loop) domain.Loop {
 	}
 	loop.RunCount30d = counts[loop.ID]
 	loop.SlugID = domain.LoopSlugID(loop)
+	if loop.OutputContract != nil {
+		contract := *loop.OutputContract
+		contract.Stale = loopContractStale(loop)
+		loop.OutputContract = &contract
+	}
 	return loop
 }
 
@@ -409,6 +466,7 @@ func (s *server) createLoop(w http.ResponseWriter, r *http.Request) {
 		}
 		publish := input.Status != nil && *input.Status == "published"
 		applyLoopInput(&created, input)
+		applyLoopInputContract(&created, input, data.Viewer.ID)
 		if len(input.InstructionsData) == 0 && strings.TrimSpace(created.Instructions) != "" {
 			created.InstructionsData = loopMarkdownDocumentWithIssues(data, created.Instructions, referenced)
 		}
@@ -447,6 +505,9 @@ func (s *server) createLoop(w http.ResponseWriter, r *http.Request) {
 	})
 	if err == nil && created.Status == "published" && input.Description == nil {
 		s.describeLoopAsync(workspaceKey(r), created)
+	}
+	if err == nil {
+		s.extractLoopContractAsync(workspaceKey(r), created)
 	}
 	respondMutation(w, err, http.StatusCreated, presentLoop(nil, created))
 }
@@ -493,6 +554,7 @@ func (s *server) updateLoop(w http.ResponseWriter, r *http.Request) {
 		if input.Status != nil {
 			next.Status = *input.Status
 		}
+		applyLoopInputContract(&next, input, data.Viewer.ID)
 		now := time.Now().UTC()
 		if wasDraft && next.Status == "published" {
 			next.PublishedAt = &now
@@ -519,6 +581,10 @@ func (s *server) updateLoop(w http.ResponseWriter, r *http.Request) {
 		} else {
 			recordLoopVersion(data, loop, &next, now, 0)
 		}
+		if _, set, _ := loopInputContract(input); set && next.Status != "draft" {
+			// A person's outputs are the current version's contract.
+			setLatestLoopVersionContract(data, id, next.OutputContract)
+		}
 		*loop = next
 		updated = next
 		appendAudit(data, "updated", "loop", id, nil)
@@ -526,6 +592,9 @@ func (s *server) updateLoop(w http.ResponseWriter, r *http.Request) {
 	})
 	if err == nil && describe {
 		s.describeLoopAsync(workspaceKey(r), updated)
+	}
+	if err == nil {
+		s.extractLoopContractAsync(workspaceKey(r), updated)
 	}
 	respondLoopMutation(w, err, http.StatusOK, presentLoop(s.loopRunCounts(r.Context(), s.workspaceURLKey(r)), updated))
 }
