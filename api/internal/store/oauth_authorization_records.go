@@ -72,6 +72,13 @@ func (s *SQLiteStore) oauthMetadataTransaction(ctx context.Context, workspace st
 		if err := tx.Commit(); err != nil {
 			return err
 		}
+		// The callback wrote workspace_metadata_records itself (an app user,
+		// API keys, grants), so the shared copy of those rows is stale: drop
+		// it, or a reload on any server (a peer applying this change, or the
+		// next mutation's reload under the coordinator) reads the old rows and
+		// loses the change, e.g. an installed app no longer accepts
+		// delegation there.
+		s.dropMetadataCache(ctx, workspace)
 		s.workspaces[workspace] = next
 		return nil
 	}
