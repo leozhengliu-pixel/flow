@@ -186,6 +186,45 @@ func (s *server) requestAgentTurnWithoutTools(ctx context.Context, messages []ag
 	}
 }
 
+// agentStructuredKey marks a structured request (requestAgentStructuredTurn): the model must call one tool, at
+// temperature 0.
+type agentStructuredKey struct{}
+
+type agentStructuredRequest struct {
+	tool string
+}
+
+func agentStructuredFrom(ctx context.Context) *agentStructuredRequest {
+	request, _ := ctx.Value(agentStructuredKey{}).(*agentStructuredRequest)
+	return request
+}
+
+// requestAgentStructuredTurn asks for one call of tool, whose parameters are the answer's JSON schema: the tool is
+// the only one offered, tool_choice forces it and the temperature is 0. A provider that refuses the forced choice
+// or the temperature (400) is asked again without them; callers also read a JSON answer written as text.
+func (s *server) requestAgentStructuredTurn(ctx context.Context, messages []agentProviderMessage, tool agentProviderTool) (agentProviderTurn, error) {
+	request := func(ctx context.Context) (agentProviderTurn, error) {
+		emit := func(agentProviderEvent) error { return nil }
+		tools := []agentProviderTool{tool}
+		switch protocol := firstNonEmpty(s.agent.Protocol, "openai-chat-completions"); protocol {
+		case "openai-responses":
+			return s.requestOpenAIResponses(ctx, messages, tools, emit)
+		case "anthropic-messages":
+			return s.requestAnthropicMessages(ctx, messages, tools, emit)
+		case "openai-chat-completions":
+			return s.requestChatCompletions(ctx, messages, tools, emit)
+		default:
+			return agentProviderTurn{}, fmt.Errorf("unsupported Agent protocol %q", protocol)
+		}
+	}
+	turn, err := request(context.WithValue(ctx, agentStructuredKey{}, &agentStructuredRequest{tool: tool.Name}))
+	var providerErr *agentProviderError
+	if errors.As(err, &providerErr) && providerErr.status == http.StatusBadRequest {
+		return request(ctx)
+	}
+	return turn, err
+}
+
 func (s *server) agentToolDefinitions() ([]agentProviderTool, error) {
 	if !s.agent.ToolsEnabled {
 		return nil, nil
@@ -257,6 +296,10 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 	}
 	if len(tools) > 0 && agentToolsWithheld(ctx) {
 		payload["tool_choice"] = "none"
+	}
+	if forced := agentStructuredFrom(ctx); forced != nil {
+		payload["tool_choice"] = map[string]any{"type": "function", "name": forced.tool}
+		payload["temperature"] = 0
 	}
 	response, err := s.agentProviderRequest(ctx, "/responses", payload, false)
 	var providerErr *agentProviderError
@@ -422,6 +465,10 @@ func (s *server) requestChatCompletions(ctx context.Context, messages []agentPro
 		if agentToolsWithheld(ctx) {
 			payload["tool_choice"] = "none"
 		}
+	}
+	if forced := agentStructuredFrom(ctx); forced != nil {
+		payload["tool_choice"] = map[string]any{"type": "function", "function": map[string]any{"name": forced.tool}}
+		payload["temperature"] = 0
 	}
 	response, err := s.agentProviderRequest(ctx, "/chat/completions", payload, false)
 	if !replay && agentReasoningReplayRequired(err) {
@@ -621,6 +668,10 @@ func (s *server) requestAnthropicMessages(ctx context.Context, messages []agentP
 	}
 	if len(tools) > 0 && agentToolsWithheld(ctx) {
 		payload["tool_choice"] = map[string]any{"type": "none"}
+	}
+	if forced := agentStructuredFrom(ctx); forced != nil {
+		payload["tool_choice"] = map[string]any{"type": "tool", "name": forced.tool}
+		payload["temperature"] = 0
 	}
 	response, err := s.agentProviderRequest(ctx, "/messages", payload, true)
 	var providerErr *agentProviderError

@@ -18565,6 +18565,41 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/loops/{id}/output-contract": {
+      "post": {
+        "operationId": "post_loops_id_output_contract",
+        "tags": [
+          "loops"
+        ],
+        "summary": "POST /api/loops/{id}/output-contract",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/loops/{id}/runs": {
       "get": {
         "operationId": "get_loops_id_runs",

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,6 +27,37 @@ type fakeLoopProvider struct {
 	wait func(n int)
 	// aborted counts "block" requests the client cancelled.
 	aborted int
+	// contracts answer output contract extractions (a server with
+	// loopContractLive), in order; when none is left the extraction gets
+	// the instructions' fixture. extractions are those requests, apart
+	// from inputs.
+	contracts   []string
+	extractions []string
+}
+
+// fakeContractReply answers an extraction request: its scripted reply, else
+// the fixture contract of the instructions in it.
+func (p *fakeLoopProvider) fakeContractReply(raw string) string {
+	if len(p.contracts) > 0 {
+		reply := p.contracts[0]
+		p.contracts = p.contracts[1:]
+		return reply
+	}
+	var payload []any
+	_ = json.Unmarshal([]byte(raw), &payload)
+	input, _ := json.Marshal(payload[1])
+	text := string(input)
+	var items []map[string]any
+	if json.Unmarshal(input, &items) == nil {
+		for _, item := range items {
+			if content, ok := item["content"].(string); ok && strings.Contains(content, "Instructions:\n") {
+				text = content
+			}
+		}
+	}
+	_, instructions, _ := strings.Cut(text, "Instructions:\n")
+	contract, _ := json.Marshal(loopFixtureContract(instructions))
+	return "tool:" + loopContractToolName + " " + string(contract)
 }
 
 func (p *fakeLoopProvider) serve(w http.ResponseWriter, r *http.Request) {
@@ -42,12 +74,19 @@ func (p *fakeLoopProvider) serve(w http.ResponseWriter, r *http.Request) {
 	raw, _ := json.Marshal([]any{payload["instructions"], payload["input"]})
 	p.mu.Lock()
 	index := len(p.inputs)
-	p.tools, p.inputs = append(p.tools, names), append(p.inputs, string(raw))
-	reply := "Nothing to do."
-	if len(p.replies) > 0 {
-		reply, p.replies = p.replies[0], p.replies[1:]
+	var reply string
+	var wait func(int)
+	if slices.Contains(names, loopContractToolName) {
+		p.extractions = append(p.extractions, string(raw))
+		reply = p.fakeContractReply(string(raw))
+	} else {
+		p.tools, p.inputs = append(p.tools, names), append(p.inputs, string(raw))
+		reply = "Nothing to do."
+		if len(p.replies) > 0 {
+			reply, p.replies = p.replies[0], p.replies[1:]
+		}
+		wait = p.wait
 	}
-	wait := p.wait
 	p.mu.Unlock()
 	if wait != nil {
 		wait(index)

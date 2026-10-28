@@ -28,6 +28,8 @@ import { LoopBreadcrumb } from "./loop-breadcrumb";
 import { LoopInstructionsEditor } from "./loop-instructions-editor";
 import { dayLabel, runDuration } from "./loop-model";
 import { describeRunFailure, runSkipNote, runTriggerText } from "./loop-run-labels";
+import { LoopContractSummary } from "./loop-output-contract";
+import { CONTRACT_FALLBACK_NOTICE } from "./loop-output-contract-model";
 import { ErrorDetails } from "@/components/agent/agent-error-detail";
 import { GridLoader } from '@/components/ui/grid-loader'
 import { REASON_LABELS, RUN_STATUSES, STATUS_LABELS } from './loop-run-status'
@@ -520,6 +522,18 @@ export function LoopRunPage({
                   <button className="loops-expand-button is-small" type="button" aria-expanded={instructionsOpen} onClick={() => setInstructionsOpen((value) => !value)}>
                     {t(instructionsOpen ? "Collapse" : "Expand")}
                   </button>
+                </section>
+              )}
+              {selected.outputContract && (
+                <section className="loops-run-contract" aria-label={t("Outputs this run worked to")}>
+                  <h3>{t("Outputs this run worked to")}</h3>
+                  {selected.outputContract.source === "fallback" && (
+                    <p className="loops-run-notice" role="note">
+                      <Info size={14} />
+                      <span>{t(CONTRACT_FALLBACK_NOTICE)}</span>
+                    </p>
+                  )}
+                  <LoopContractSummary contract={selected.outputContract} data={data} showEvidence={false} />
                 </section>
               )}
               {parts.length > 0 && (

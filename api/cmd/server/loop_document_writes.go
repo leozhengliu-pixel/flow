@@ -31,6 +31,9 @@ type loopDocumentWrite struct {
 	// claim, when set, is the occurrence claim this call made for its
 	// append; it is settled once the call ends.
 	claim *store.LoopDocumentAppend
+	// arguments, when set, replace the call's: the contract's title for the
+	// run and its team.
+	arguments json.RawMessage
 }
 
 // loopDocumentAppendKey identifies an append within a run: the document and
@@ -83,28 +86,46 @@ func loopPriorDocumentWrites(rec *loopRunRecorder) []domain.LoopRunToolCall {
 	return slices.DeleteFunc(calls, func(call domain.LoopRunToolCall) bool { return call.Document == nil })
 }
 
-// prepareLoopDocumentWrite checks a save_document call before it runs. A loop
-// that appends (or updates an existing document) may not create a new one
-// instead, nor replace the content it appends to; an append this run already
-// made is not made again, including one whose call failed after the
-// document was written.
-func (s *server) prepareLoopDocumentWrite(rec *loopRunRecorder, expectation loopOutputExpectation, call domain.AgentToolCall) (*loopDocumentWrite, error) {
+// prepareLoopDocumentWrite checks a save_document call against the run's
+// output contract before it runs: a new document only when the contract
+// creates one (with the contract's title for this run and its team), a
+// change only to a document the contract targets or this run created — a
+// loop that creates a new document each run changes no other document. An
+// append may not replace the content it appends to; an append this run
+// already made is not made again, including one whose call failed after the
+// document was written. A reply on the run page (rec.answering) is not held
+// to the contract.
+func (s *server) prepareLoopDocumentWrite(rec *loopRunRecorder, data domain.Bootstrap, contract *domain.LoopOutputContract, call domain.AgentToolCall) (*loopDocumentWrite, error) {
 	args := loopToolArgs(call)
-	op := ""
-	if !expectation.Explicit && slices.Contains(expectation.Outputs, "document") {
-		op = expectation.Operations["document"]
-	}
+	gate := contract != nil && !rec.answering
 	ref := loopStringArg(args, "id")
 	if ref == "" {
-		if op == loopOpAppend || op == loopOpUpdate {
-			return nil, fmt.Errorf("This loop writes to an existing document: find it with search_documents or list_documents and call save_document with its id instead of creating a new document")
+		prepared := &loopDocumentWrite{record: &domain.LoopRunDocumentWrite{Mode: loopOpCreate}}
+		if gate {
+			_, next, err := loopContractCreate(rec, data, contract, args)
+			if err != nil {
+				return nil, err
+			}
+			if !sameJSON(next, args) {
+				prepared.arguments, _ = json.Marshal(next)
+			}
 		}
-		return &loopDocumentWrite{record: &domain.LoopRunDocumentWrite{Mode: loopOpCreate}}, nil
+		return prepared, nil
 	}
 	document, found := s.loopFindDocument(rec.workspace, ref)
 	if !found {
 		// The tool reports the missing document.
 		return &loopDocumentWrite{record: &domain.LoopRunDocumentWrite{Mode: loopOpUpdate}}, nil
+	}
+	op := ""
+	if gate {
+		output, err := loopContractDocumentTarget(rec, contract, document)
+		if err != nil {
+			return nil, err
+		}
+		if output != nil {
+			op = output.Operation
+		}
 	}
 	prepared := &loopDocumentWrite{record: &domain.LoopRunDocumentWrite{ID: document.ID, Title: document.Title, Mode: loopOpUpdate, VersionBefore: document.Version}, content: document.Content, title: document.Title}
 	text, appendOnly := loopAppendText(args)
@@ -363,6 +384,7 @@ func (s *server) verifyLoopDocumentWrite(workspace string, prepared *loopDocumen
 		}
 		if document, ok := s.loopFindDocument(workspace, receipt.ID); ok {
 			record.ID, record.Title, record.VersionAfter, record.Changed = document.ID, document.Title, document.Version, true
+			record.TeamIDs = slices.Clone(document.TeamIDs)
 		}
 		return
 	}
@@ -370,51 +392,33 @@ func (s *server) verifyLoopDocumentWrite(workspace string, prepared *loopDocumen
 		return
 	}
 	if document, ok := s.loopFindDocument(workspace, record.ID); ok {
-		record.Title, record.VersionAfter = document.Title, document.Version
+		record.Title, record.VersionAfter, record.TeamIDs = document.Title, document.Version, slices.Clone(document.TeamIDs)
 		record.Changed = document.Content != prepared.content || document.Title != prepared.title
 	}
 }
 
-// loopDocumentOutputDone reports whether the run made the document write its
-// loop asks for, as the stored document shows it.
-func loopDocumentOutputDone(run *domain.LoopRun, op string) bool {
-	for _, call := range run.ToolCalls {
-		if call.Document != nil && call.Document.ExistingRunID != "" && op != loopOpCreate {
-			// An earlier run already appended this occurrence's section.
-			return true
-		}
-		if call.Status != "completed" || call.Document == nil || !call.Document.Changed {
-			continue
-		}
-		switch op {
-		case loopOpAppend, loopOpUpdate:
-			if call.Document.Mode != loopOpCreate {
-				return true
-			}
-		case loopOpCreate:
-			if call.Document.Mode == loopOpCreate {
-				return true
-			}
-		default:
-			return true
-		}
-	}
-	return false
-}
-
-// loopDocumentMissingNote explains a missing document write.
-func loopDocumentMissingNote(run *domain.LoopRun, op string) string {
-	created, unchanged := false, false
+// loopDocumentMissingNote explains a missing document output.
+func loopDocumentMissingNote(run *domain.LoopRun, output domain.LoopContractOutput) string {
+	created, unchanged, misnamed := false, false, ""
 	for _, call := range run.ToolCalls {
 		if call.Status != "completed" || call.Document == nil {
 			continue
 		}
-		created = created || call.Document.Changed && call.Document.Mode == loopOpCreate
+		if call.Document.Changed && call.Document.Mode == loopOpCreate {
+			created = true
+			if rendered := output.Target.RenderedTitle; rendered != "" && !loopTitleMatches(rendered, call.Document.Title) {
+				misnamed = call.Document.Title
+			} else if teamID := output.Target.TeamID; teamID != "" && !slices.Contains(call.Document.TeamIDs, teamID) {
+				misnamed = call.Document.Title
+			}
+		}
 		unchanged = unchanged || !call.Document.Changed && call.Document.Mode != loopOpCreate
 	}
 	switch {
-	case created && (op == loopOpAppend || op == loopOpUpdate):
+	case created && (output.Operation == loopOpAppend || output.Operation == loopOpUpdate):
 		return " (the run created a new document instead of changing the existing one)"
+	case output.Operation == loopOpCreate && misnamed != "":
+		return fmt.Sprintf(" (the run created %q, which does not have the contract's title or team)", misnamed)
 	case unchanged:
 		return " (save_document ran but did not change the document)"
 	}

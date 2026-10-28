@@ -1056,6 +1056,8 @@ export interface Loop {
   runCount30d?: number;
   /** What a run must produce: statusUpdate, issue, comment, document or change; ["none"] for nothing; unset infers from the instructions. */
   expectedOutputs?: string[];
+  /** What the loop's runs produce, read from the instructions by the model or set by a person. */
+  outputContract?: LoopOutputContract;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -1064,6 +1066,49 @@ export interface Loop {
   /** Current published version number (absent for drafts). */
   version?: number;
   versionId?: string;
+}
+export type LoopOutputKind = "document" | "issue" | "comment" | "statusUpdate" | "change";
+export type LoopOutputOperation = "create" | "update" | "append" | "write" | "read" | "forbidden";
+/** One output of a loop's output contract: the kind, what the run does with it, where, how many, and the instruction text it was read from. */
+export interface LoopContractOutput {
+  kind: LoopOutputKind;
+  operation: LoopOutputOperation;
+  required: boolean;
+  target: {
+    mode?: "new" | "existing" | "triggering" | "any";
+    /** A new document's title with {date}, {week}, {month} or {year}. */
+    titleTemplate?: string;
+    /** An existing document's title and id. */
+    title?: string;
+    documentId?: string;
+    team?: string;
+    teamId?: UUID;
+    description?: string;
+    /** The title template for a run's period (on a run's contract). */
+    renderedTitle?: string;
+  };
+  cardinality?: "onePerRun" | "perItem" | "any";
+  conditions?: string[];
+  group?: string;
+  evidence?: string;
+  reasoning?: string;
+}
+export interface LoopOutputContract {
+  /** model: read from the instructions; person: set in the editor; fallback: could not be read (report only). */
+  source: "model" | "person" | "fallback";
+  instructionsHash?: string;
+  readOnly: boolean;
+  readOnlyEvidence?: string;
+  outputs: LoopContractOutput[];
+  always?: boolean;
+  alwaysEvidence?: string;
+  skipConditions?: { condition: string; evidence?: string }[];
+  model?: string;
+  extractedAt?: string;
+  error?: string;
+  updatedBy?: UUID;
+  /** The name or instructions changed since it was read or set. */
+  stale?: boolean;
 }
 export interface LoopAttachment {
   id: UUID;
@@ -1242,6 +1287,8 @@ export interface LoopRun {
   /** Outputs the run was checked for, and the successful changes it made by kind. */
   expectedOutputs?: string[];
   produced?: Record<string, number>;
+  /** The output contract the run worked to, resolved for the run (titles rendered, teams found). */
+  outputContract?: LoopOutputContract;
   retries?: number;
   cancelledBy?: UUID;
   heartbeatAt?: string;

@@ -157,13 +157,13 @@ func TestLoopRunProgressSkipsWorkspaceMutations(t *testing.T) {
 	for _, event := range log {
 		kinds = append(kinds, event.Kind)
 	}
-	// Each model turn is logged (model_turn) before what the run did with it.
-	if got := strings.Join(kinds, ","); got != "model_turn,step,model_turn,tool_started,tool_finished,model_turn,tool_started,tool_finished,model_turn,summary,timing,finished" {
+	// The run records its output contract, then logs each model turn (model_turn) before what the run did with it.
+	if got := strings.Join(kinds, ","); got != "output_contract,model_turn,step,model_turn,tool_started,tool_finished,model_turn,tool_started,tool_finished,model_turn,summary,timing,finished" {
 		t.Fatalf("event log = %s", got)
 	}
-	api := requestJSON[[]store.LoopRunEvent](t, handler, http.MethodGet, "/api/loops/"+loop.ID+"/runs/"+run.ID+"/events?after=9", nil, http.StatusOK)
+	api := requestJSON[[]store.LoopRunEvent](t, handler, http.MethodGet, "/api/loops/"+loop.ID+"/runs/"+run.ID+"/events?after=10", nil, http.StatusOK)
 	if len(api) != 3 || api[0].Kind != "summary" || api[1].Kind != "timing" {
-		t.Fatalf("events after 9 = %+v", api)
+		t.Fatalf("events after 10 = %+v", api)
 	}
 	time.Sleep(50 * time.Millisecond)
 	mu.Lock()
@@ -214,22 +214,6 @@ func TestLoopRunAcceptance(t *testing.T) {
 		t.Fatalf("run of a loop expecting nothing = %+v", run)
 	}
 	requestJSON[any](t, handler, http.MethodPatch, "/api/loops/"+quiet.ID, map[string]any{"expectedOutputs": []string{"poem"}}, http.StatusBadRequest)
-}
-
-func TestInferLoopOutputs(t *testing.T) {
-	cases := map[string]string{
-		"Flow 项目周更新":                               "statusUpdate",
-		"Post a status update on each project":     "statusUpdate",
-		"Create an issue for every failing check":  "issue",
-		"Comment on new bugs with a triage note":   "comment",
-		"Summarize open bugs":                      "",
-		"Label new issues and set their priority.": "",
-	}
-	for text, want := range cases {
-		if got := strings.Join(inferLoopOutputs(text), ","); got != want {
-			t.Errorf("inferLoopOutputs(%q) = %q, want %q", text, got, want)
-		}
-	}
 }
 
 func TestLoopRunCancelStopsTheModelRequest(t *testing.T) {

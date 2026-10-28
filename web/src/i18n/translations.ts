@@ -36,6 +36,7 @@ import { teamMemberOriginsZhCN } from './translations-team-member-origins';
 import { scimProvisioningZhCN } from './translations-scim-provisioning';
 import { agentMentionsZhCN } from './translations-agent-mentions';
 import { loopRunsZhCN } from './translations-loop-runs';
+import { loopOutputsZhCN } from './translations-loop-outputs';
 import { agentStepsZhCN } from './translations-agent-steps';
 import { mentionsZhCN } from './translations-mentions';
 import { mentionsSurfacesZhCN } from './translations-mentions-surfaces';
@@ -5909,6 +5910,7 @@ Object.assign(zhCN, teamMemberOriginsZhCN);
 // SCIM provisioning: only fills keys the shared dictionary does not already translate.
 for (const [key, value] of Object.entries(scimProvisioningZhCN)) if (!(key in zhCN)) zhCN[key] = value;
 Object.assign(zhCN, loopRunsZhCN);
+Object.assign(zhCN, loopOutputsZhCN);
 Object.assign(zhCN, agentMentionsZhCN);
 Object.assign(zhCN, agentThreadsZhCN);
 // Release pipeline settings copy, and one zh term (发布管线) for "pipeline" there.

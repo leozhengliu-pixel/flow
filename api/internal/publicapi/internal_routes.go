@@ -446,6 +446,7 @@ var InternalRoutes = []string{
 	"POST /api/loops",
 	"POST /api/loops/attachments",
 	"POST /api/loops/{id}/duplicate",
+	"POST /api/loops/{id}/output-contract",
 	"POST /api/loops/{id}/runs",
 	"POST /api/loops/{id}/runs/{runId}/cancel",
 	"POST /api/loops/{id}/runs/{runId}/feedback",

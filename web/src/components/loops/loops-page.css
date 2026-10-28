@@ -1019,3 +1019,28 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 /* The reference app's "Current user" owner option: a small muted person glyph in the avatar slot. */
 .loops-current-user-glyph { display: inline-flex; width: 16px; height: 16px; align-items: center; justify-content: center; color: var(--theme-text-secondary); }
 .loops-current-user-glyph svg { width: 14px; height: 14px; }
+
+/* "What this loop will produce": the output contract read from the instructions, and the one a run worked to. */
+.loops-contract-actions { display: flex; gap: 6px; margin-bottom: 8px; }
+.loops-ghost-button.is-small { min-height: 24px; padding: 0 8px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+.loops-contract-summary { display: flex; flex-direction: column; gap: 8px; }
+.loops-contract-list, .loops-contract-edit-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.loops-contract-item { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.loops-contract-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--theme-text-primary); font-size: 13px; font-weight: 500; line-height: 16px; }
+.loops-contract-item.is-forbidden .loops-contract-operation { color: var(--theme-danger-text); }
+.loops-contract-item.is-read .loops-contract-head { color: var(--theme-text-secondary); }
+.loops-contract-badge { padding: 1px 6px; border-radius: 9px; background: var(--theme-surface-3); color: var(--theme-text-secondary); font-size: 11px; font-weight: 500; }
+.loops-contract-target { color: var(--theme-text-secondary); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+.loops-contract-evidence { display: block; color: var(--theme-text-tertiary); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+.loops-contract-readonly, .loops-contract-note, .loops-contract-empty, .loops-contract-reading, .loops-contract-hint, .loops-contract-source { margin: 0; color: var(--theme-text-secondary); font-size: 12px; line-height: 18px; }
+.loops-contract-readonly strong { display: block; color: var(--theme-text-primary); font-size: 13px; font-weight: 500; }
+.loops-contract-warning { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; color: var(--semantic-warning-text); font-size: 12px; line-height: 18px; }
+.loops-contract-hint { margin-bottom: 8px; }
+.loops-contract-edit-row { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 0.5px solid var(--theme-border); }
+.loops-contract-edit-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.loops-contract-input { flex: 1 1 200px; min-width: 0; height: 28px; padding: 0 8px; border: 0.5px solid var(--theme-border); border-radius: 6px; background: transparent; color: var(--theme-text-primary); font-size: 13px; }
+.loops-contract-check { display: inline-flex; align-items: center; gap: 4px; color: var(--theme-text-secondary); font-size: 12px; }
+.loops-contract-edit-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
+.loops-contract-edit-buttons { display: flex; gap: 8px; }
+.loops-run-contract { margin: 0 0 16px; padding: 12px 16px; border: 0.5px solid var(--theme-border); border-radius: 10px; background: var(--theme-surface-2); }
+.loops-run-contract h3 { margin: 0 0 10px; color: var(--theme-text-secondary); font: 500 12px/15px var(--font); }

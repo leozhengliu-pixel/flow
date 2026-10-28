@@ -22,6 +22,7 @@ import { LoopBreadcrumb } from "./loop-breadcrumb";
 import { LoopIcon } from "./loop-glyph";
 import { loopIconColor } from "./loop-template-visuals";
 import { LoopInstructionsEditor } from "./loop-instructions-editor";
+import { LoopOutputContractPanel } from "./loop-output-contract";
 import { activeTeams, copyText, loopBuilderFirstMessage, loopUrl, markLoopAgentHandoff, takeLoopAgentAutostart, useLoopConfig } from "./loop-data";
 import { ENTITY_NAMES, LOOP_PERMISSION_COPY, configStrings, defaultScheduleConfig, instructionsPlaceholder, isLoopDraft, loopTeamId } from "./loop-model";
 import { LoopTriggerEditor } from "./loop-trigger";
@@ -396,6 +397,13 @@ function LoopEditorForm({
             />
             </div>
           </section>
+
+          <LoopOutputContractPanel
+            data={data}
+            loop={loop}
+            unsaved={form.name.trim() !== loop.name.trim() || form.instructions.trim() !== loop.instructions.trim()}
+            onLoopChange={onLoopChange}
+          />
 
           <section className="loops-section" aria-label={t("Connectors")}>
             <h3 className="loops-section-title">{t("Connectors")}</h3>

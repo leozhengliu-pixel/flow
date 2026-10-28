@@ -756,14 +756,19 @@ const loopDoneClaimNote = "(the agent's summary says the work is done, but this 
 // forbid was refused; the web app translates it.
 const loopRefusedWriteNotice = "The agent tried a change this loop's instructions forbid. It was refused and not made, even if the summary lists it."
 
-// acceptLoopRun decides how a run that ended without an error finishes: a
-// run whose loop implies side effects completes only when it produced them.
-func acceptLoopRun(loop domain.Loop, run *domain.LoopRun, ending *loopRunEnding) (string, string, string) {
-	expectation := loopOutputExpectations(loop)
-	run.ExpectedOutputs = expectation.Outputs
-	if run.Summary != nil && run.Summary.Status == "done" && !slices.Contains(run.Notices, loopRefusedWriteNotice) && slices.ContainsFunc(run.ToolCalls, func(call domain.LoopRunToolCall) bool {
-		return call.Status == "blocked" && strings.HasPrefix(call.Error, loopProhibitedCallPrefix)
-	}) {
+// loopNotDoneNote ends the outcome of a run whose agent reported done but
+// listed work it did not do; the web app translates the prefix.
+const loopNotDoneNote = "The agent reported the run as done but listed work it did not do"
+
+// acceptLoopRun decides how a run that ended without an error finishes, from
+// the output contract the run used: it completes only when every required
+// output exists (as its tool records and the stored documents show it — a
+// refused or failed call never counts) and the agent's report lists nothing
+// as not done.
+func acceptLoopRun(run *domain.LoopRun, ending *loopRunEnding) (string, string, string) {
+	contract := run.OutputContract
+	run.ExpectedOutputs = loopContractRequiredKinds(contract)
+	if run.Summary != nil && run.Summary.Status == "done" && !slices.Contains(run.Notices, loopRefusedWriteNotice) && slices.ContainsFunc(run.ToolCalls, loopRefusedCall) {
 		// The summary is the agent's own: it may list the refused change as done.
 		run.Notices = append(run.Notices, loopRefusedWriteNotice)
 	}
@@ -778,69 +783,80 @@ func acceptLoopRun(loop domain.Loop, run *domain.LoopRun, ending *loopRunEnding)
 		return "needs_review", "incomplete", message
 	}
 	skipped := run.Summary != nil && run.Summary.Status == "skipped"
-	if skipped && len(expectation.Skips) > 0 {
+	if skipped && contract != nil && len(contract.SkipConditions) > 0 {
 		// The instructions say when to skip, and the agent named the
 		// condition: the outputs are not due this time.
 		return "completed", "", ""
 	}
-	operation := func(kind string) string {
-		if expectation.Explicit {
-			return ""
-		}
-		return expectation.Operations[kind]
+	notDone := ""
+	if run.Summary != nil && run.Summary.Status == "done" && len(run.Summary.NotDone) > 0 {
+		notDone = strings.Join(run.Summary.NotDone, "; ")
 	}
-	done := func(kind string) bool {
-		if kind == "document" {
-			return loopDocumentOutputDone(run, operation(kind))
+	missingOutputs := loopContractMissing(run, contract)
+	if len(missingOutputs) == 0 {
+		if notDone != "" {
+			return "needs_review", "incomplete", loopNotDoneNote + ": " + notDone
 		}
-		return run.Produced[kind] > 0
-	}
-	missing, note := []string{}, ""
-	for _, kind := range run.ExpectedOutputs {
-		if done(kind) || slices.ContainsFunc(expectation.Alternatives, func(group []string) bool {
-			return slices.Contains(group, kind) && slices.ContainsFunc(group, done)
-		}) {
-			continue
-		}
-		label := loopOutputLabels[kind]
-		if kind == "document" {
-			switch operation(kind) {
-			case loopOpAppend:
-				label = "an append to an existing document"
-			case loopOpUpdate:
-				label = "an update to an existing document"
-			case loopOpCreate:
-				label = "a new document"
-			}
-			note += loopDocumentMissingNote(run, operation(kind))
-		}
-		missing = append(missing, label)
-	}
-	if len(missing) == 0 {
 		return "completed", "", ""
+	}
+	missing, note, kinds := []string{}, "", []string{}
+	for _, output := range missingOutputs {
+		missing = append(missing, loopContractOutputLabel(output))
+		kinds = append(kinds, output.Kind)
+		if output.Kind == "document" {
+			note += loopDocumentMissingNote(run, output)
+		}
 	}
 	// The agent's report is shown as the run's answer: when it says done,
 	// the outcome says the output it may describe is not there.
 	claimed := ""
 	if run.Summary != nil && run.Summary.Status == "done" {
 		claimed = " " + loopDoneClaimNote
-	}
-	for index := len(run.ToolCalls) - 1; index >= 0; index-- {
-		call := run.ToolCalls[index]
-		if (call.Status == "error" || call.Status == "blocked") && loopWriteToolName(call.Name) && (call.Document == nil || call.Document.ExistingRunID == "") {
-			return "needs_review", "tool_error", fmt.Sprintf("No output produced: expected %s, but %s failed: %s", strings.Join(missing, " and "), firstNonEmpty(call.Label, call.Name), strings.TrimSpace(call.Error)) + claimed
+		if notDone != "" {
+			claimed += " " + loopNotDoneNote + ": " + notDone
 		}
+	}
+	// The failure that explains the missing output: a failed call of its
+	// kind, else a refused one, else any failed write.
+	failed := func(match func(domain.LoopRunToolCall) bool) *domain.LoopRunToolCall {
+		for index := len(run.ToolCalls) - 1; index >= 0; index-- {
+			call := run.ToolCalls[index]
+			if (call.Status == "error" || call.Status == "blocked") && loopWriteToolName(call.Name) && (call.Document == nil || call.Document.ExistingRunID == "") && match(call) {
+				return &run.ToolCalls[index]
+			}
+		}
+		return nil
+	}
+	ofKind := func(call domain.LoopRunToolCall) bool {
+		kind, _ := loopCallOutput(call.Name, nil)
+		return slices.Contains(kinds, kind)
+	}
+	call := failed(func(call domain.LoopRunToolCall) bool { return ofKind(call) && !loopRefusedCall(call) })
+	if call == nil {
+		call = failed(ofKind)
+	}
+	if call == nil {
+		call = failed(func(domain.LoopRunToolCall) bool { return true })
+	}
+	if call != nil {
+		return "needs_review", "tool_error", fmt.Sprintf("No output produced: expected %s, but %s failed: %s", strings.Join(missing, " and "), firstNonEmpty(call.Label, call.Name), strings.TrimSpace(call.Error)) + claimed
 	}
 	message := fmt.Sprintf("No output produced: the loop's instructions call for %s, but the run made none", strings.Join(missing, " and ")) + note
 	switch {
 	case skipped:
 		message += fmt.Sprintf(" (the agent skipped the run — %s — but the instructions name no skip condition)", run.Summary.SkipReason)
-	case run.Summary != nil && run.Summary.Status == "nothing_to_do" && expectation.Always:
+	case run.Summary != nil && run.Summary.Status == "nothing_to_do" && contract.Always:
 		message += " (the agent reported there was nothing to do, but the instructions require the output even when nothing changed)"
 	case run.Summary != nil && run.Summary.Status == "nothing_to_do":
 		message += " (the agent reported there was nothing to do)"
 	}
 	return "needs_review", "no_output", message + claimed
+}
+
+// loopRefusedCall reports whether a call was refused for the loop's
+// instructions or outside its output contract.
+func loopRefusedCall(call domain.LoopRunToolCall) bool {
+	return call.Status == "blocked" && (strings.HasPrefix(call.Error, loopProhibitedCallPrefix) || strings.HasPrefix(call.Error, loopContractRefusalPrefix))
 }
 
 // loopRunEnding is how the agent ended a run or reply it did not finish:

@@ -109,6 +109,12 @@ type server struct {
 	loopInstanceOnce      sync.Once
 	loopInstance          string
 	loopReconcilerStarted atomic.Bool
+	// loopContractMigration reads existing loops' output contracts in the background (off in test fixtures);
+	// loopContractDebounce delays the read after a save.
+	loopContractMigration bool
+	loopContractDebounce  time.Duration
+	// loopContractLive asks the model for output contracts even in tests (see loopContractStub).
+	loopContractLive bool
 	// agentRunReconcilerStarted guards the agent runtime's lease reconciler (agent_runtime_api.go).
 	agentRunReconcilerStarted atomic.Bool
 	// agentLiveReplies holds the replies this process is writing, by message id (agent_live_reply.go).
@@ -184,6 +190,8 @@ func main() {
 	defer shutdownTelemetry(context.Background())
 	s := &server{
 		agentAutoTitle:                 true,
+		loopContractMigration:          true,
+		loopContractDebounce:           2 * time.Second,
 		store:                          repository,
 		uploadPath:                     applicationConfig.Storage.LocalPath,
 		objectStore:                    objects,
@@ -305,6 +313,7 @@ func newHandler(s *server) http.Handler {
 	s.startWorkflowScheduler()
 	s.startDeliveryScheduler()
 	s.startLoopRunReconciler()
+	s.startLoopContractMigration()
 	s.startAgentRunReconciler()
 	s.startAgentLiveReplySweeper()
 	mux := http.NewServeMux()
@@ -507,6 +516,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/loops/{id}", s.withLoopRef(s.getLoop))
 	mux.HandleFunc("PATCH /api/loops/{id}", s.withLoopRef(s.updateLoop))
 	mux.HandleFunc("DELETE /api/loops/{id}", s.withLoopRef(s.deleteLoop))
+	mux.HandleFunc("POST /api/loops/{id}/output-contract", s.withLoopRef(s.analyzeLoopOutputs))
 	mux.HandleFunc("GET /api/loops/{id}/runs", s.withLoopRef(s.listLoopRuns))
 	mux.HandleFunc("POST /api/loops/{id}/runs", s.withLoopRef(s.runLoopNow))
 	mux.HandleFunc("GET /api/loops/{id}/runs/{runId}", s.withLoopRef(s.getLoopRun))
