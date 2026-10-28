@@ -36,16 +36,46 @@ func TestAgentLedgerCorrectsContraryAllClaims(t *testing.T) {
 		{partial, "除了 DEV-2，其余都已移动。", true, "除了 DEV-2，其余都已移动。"},
 		{failedOnly, "Both moves failed.", false, "Both moves failed."},
 		{succeededOnly, "All moves succeeded.", false, "All moves succeeded."},
+		// A real run's answer: "nothing failed" is not a failure claim, and emphasis around the sentence holds.
+		{succeededOnly, "**结论：两个都迁移成功了，没有失败项。** 这与描述里的预判相反。", true, "**结论：两个都迁移成功了，没有失败项。** 这与描述里的预判相反。"},
+		{partial, "**结论：两个都迁移成功了，没有失败项。** 这与描述里的预判相反。", true, "**" + zh + "** 这与描述里的预判相反。"},
+		{partial, "**Both moves failed.** Sorry.", false, "**" + en + "** Sorry."},
+		{partial, "Result: **both moves failed**.", false, en},
+		{succeededOnly, "All moves went through, no failures.", false, "All moves went through, no failures."},
 		{&agentWriteLedger{}, "All moves failed.", false, "All moves failed."},
 	} {
 		if got := item.ledger.correct(item.answer, item.chinese); got != item.want {
 			t.Errorf("correct(%q) = %q, want %q", item.answer, got, item.want)
 		}
 	}
+	// "Nothing failed" wording does not earn an all-success reply the summary.
+	if summary := succeededOnly.summary("两个都迁移成功了，没有失败项。", true); summary != "" {
+		t.Errorf("no failure claimed: %q", summary)
+	}
 	// report appends the summary once; a reported answer is left alone.
 	reported := partial.report("Both updates failed.", false)
 	if !strings.HasPrefix(reported, en+"\n\n"+agentSummaryHeading) || partial.report(reported, false) != reported {
 		t.Fatalf("report: %q", reported)
+	}
+}
+
+// A request that asks for no change at all is an assessment: its answer may talk about failures and permissions
+// without a write. A real run asked "先别真的改动任何 issue … 告诉我迁移结果" and had its assessment replaced.
+func TestAgentUngroundedTextSkipsAssessments(t *testing.T) {
+	s := &server{}
+	s.agent.ToolsEnabled, s.agent.WriteTools = true, true
+	answer := "两个都能迁移，看不到权限导致的失败点。"
+	for request, want := range map[string]bool{
+		"把 REA-11 和 REA-12 迁移到 VLT 团队": true,
+		"Move ENG-1 to the Vault team": true,
+		"我想把 REA-11 和 REA-12 迁移到 VLT 团队。先别真的改动任何 issue：只查看一下，然后告诉我迁移结果":                   false,
+		"不要做任何修改，告诉我能否把 ENG-1 移到 VLT":                                                     false,
+		"Don't actually move anything, just tell me if moving ENG-1 to Vault would fail.": false,
+		"Can ENG-1 move to Vault? Do not change any issues.":                              false,
+	} {
+		if got := s.agentUngroundedText(request, answer, &agentWriteLedger{}); got != want {
+			t.Errorf("%q: ungrounded = %v, want %v", request, got, want)
+		}
 	}
 }
 

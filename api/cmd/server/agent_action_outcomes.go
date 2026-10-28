@@ -153,11 +153,20 @@ func (s *server) agentUngroundedOutcome(request string, turn agentProviderTurn, 
 // agentUngroundedText reports whether answer, a reply's final text, reports change outcomes while the reply ran no
 // write, for a request to change something while write tools are on.
 func (s *server) agentUngroundedText(request, answer string, ledger *agentWriteLedger) bool {
-	if !s.agent.ToolsEnabled || !s.agent.WriteTools || ledger.attempted() {
+	if !s.agent.ToolsEnabled || !s.agent.WriteTools || ledger.attempted() || agentNoChangeRequest.MatchString(request) {
 		return false
 	}
 	return agentChangeIntent.MatchString(request) && agentOutcomeClaim.MatchString(answer)
 }
+
+// agentNoChangeRequest matches a request that asks for no change at all ("先别真的改动任何 issue，只告诉我能否迁移",
+// "don't actually move anything, just tell me"): an assessment, which no write is expected for.
+var agentNoChangeRequest = regexp.MustCompile(`(?i)` +
+	`(?:不要|别|勿|无需|不用|不必)[^，,。；;\n]{0,6}?(?:改动|修改|更改|执行|变更|操作|动)[^，,。；;\n]{0,4}?任何` +
+	`|(?:不要|别|勿|无需|不用|不必)(?:做|进行|作|有)?任何(?:改动|修改|更改|变更|操作|写入)` +
+	`|(?:不要|别|勿)(?:真的|真正|实际)(?:去)?(?:改动|修改|更改|执行|迁移|移动|变更|操作|动)` +
+	`|\b(?:don't|do not|without)\s+(?:actually\s+)?(?:change|modify|move|touch|execute|make|update)\s+(?:anything|any\s+changes?|any\s+issues?)\b` +
+	`|\bdon't actually\b|\bdo not actually\b|\bdry[- ]run\b`)
 
 // agentNothingExecutedText replaces an answer that kept reporting outcomes no tool produced.
 func agentNothingExecutedText(chinese bool) string {
@@ -184,7 +193,7 @@ func (l *agentWriteLedger) summary(answer string, chinese bool) string {
 		return ""
 	}
 	succeeded, failed, notRun := l.counts()
-	if failed == 0 && notRun == 0 && !agentFailureClaim.MatchString(answer) {
+	if failed == 0 && notRun == 0 && !agentClaimsFailure(answer) {
 		return ""
 	}
 	executed := succeeded + failed
@@ -243,6 +252,15 @@ func (l *agentWriteLedger) report(answer string, chinese bool) string {
 	return answer
 }
 
+// agentNoFailure is wording that says nothing failed ("没有失败项", "no failures"): it is not a failure claim.
+var agentNoFailure = regexp.MustCompile(`(?i)(?:没有|无|未|零)(?:任何)?(?:失败|报错|错误)|失败\s*0\s*项|0\s*项失败|\bno (?:failures?|errors?)\b|\b(?:nothing|none(?: of them)?) failed\b|\bwithout (?:any )?(?:failures?|errors?)\b|\b0 failed\b`)
+
+// agentClaimsFailure reports whether text says changes failed or were refused, leaving out wording that says
+// nothing failed.
+func agentClaimsFailure(text string) bool {
+	return agentFailureClaim.MatchString(agentNoFailure.ReplaceAllString(text, " "))
+}
+
 // A sentence that says every change failed, or that none went through.
 var agentAllFailedClaim = regexp.MustCompile(`(?i)` +
 	`\b(?:all|every|each|both)\b[^.!?。！？\n]{0,80}?(?:\b(?:failed|denied|refused|rejected)\b|\b(?:could ?n[o']t|cannot|can't|unable to|(?:was|were) not able to|(?:was|were)n't|(?:was|were) not)\s+(?:be\s+)?(?:moved|migrated|transferred|updated|changed|assigned|edited|modified|deleted|created|applied|move|migrate|transfer|update|change|assign|edit|modify|delete|create|apply)\b)` +
@@ -258,8 +276,12 @@ var agentAllSucceededClaim = regexp.MustCompile(`(?i)` +
 // A sentence that qualifies its claim ("all but one", "其余", "not all") is not a claim about every change.
 var agentPartialWording = regexp.MustCompile(`(?i)\b(?:except|but|other than|apart from|besides|only|some|partially|partly|remaining|rest|not all|not every|while|whereas|although|however|if|when|once|will|would|should)\b|除了|除此|除去|之外|以外|其余|其他|其它|部分|只有|仅|但|不过|其中|并非|不是所有|有的|个别|如果|若|将会|将要`)
 
-// agentSentenceLead is the indentation and list marker a rewritten sentence keeps.
-var agentSentenceLead = regexp.MustCompile(`^\s*(?:[-*•]\s+|\d+[.)]\s+|>\s*)?`)
+// agentSentenceLead is the indentation, list marker and opening emphasis a rewritten sentence keeps;
+// agentSentenceTrail its closing emphasis.
+var (
+	agentSentenceLead  = regexp.MustCompile(`^\s*(?:[-*•]\s+|\d+[.)]\s+|>\s*)?(?:\*\*|__)?`)
+	agentSentenceTrail = regexp.MustCompile(`(?:\*\*|__)\s*$`)
+)
 
 // correct rewrites each sentence of answer that says all changes failed while some succeeded, or that all succeeded
 // while some failed or did not run, into Flow's count of them (the first such sentence; later ones are dropped).
@@ -278,25 +300,39 @@ func (l *agentWriteLedger) correct(answer string, chinese bool) string {
 		if len(sentence) > 400 || agentPartialWording.MatchString(sentence) {
 			continue
 		}
+		// "两个都迁移成功了，没有失败项" says nothing failed: its "失败" is not a failure claim.
+		claim := agentNoFailure.ReplaceAllString(sentence, " ")
 		contrary := false
 		switch {
-		case agentAllFailedClaim.MatchString(sentence):
+		case agentAllFailedClaim.MatchString(claim):
 			contrary = succeeded > 0
-		case agentAllSucceededClaim.MatchString(sentence) && !agentFailureClaim.MatchString(sentence):
+		case agentAllSucceededClaim.MatchString(claim) && !agentFailureClaim.MatchString(claim):
 			contrary = failed+notRun > 0
 		}
 		if !contrary {
 			continue
 		}
 		out.WriteString(answer[last:span[0]])
-		lead := agentSentenceLead.FindString(sentence)
 		if !corrected {
+			// The sentence's indentation and list marker stay, and the emphasis marks that open or close an emphasis
+			// around other sentences, so the Markdown around it still holds.
+			lead, trail := agentSentenceLead.FindString(sentence), agentSentenceTrail.FindString(sentence)
+			opens := strings.HasSuffix(lead, "**") || strings.HasSuffix(lead, "__")
+			switch marks := strings.Count(sentence, "**") + strings.Count(sentence, "__"); {
+			case marks%2 == 0 && !(opens && trail != ""):
+				lead, trail = strings.TrimRight(lead, "*_"), ""
+			case marks%2 == 1 && opens:
+				trail = ""
+			case marks%2 == 1:
+				lead = strings.TrimRight(lead, "*_")
+			}
 			out.WriteString(lead)
 			if chinese {
 				fmt.Fprintf(&out, "Flow 更正：%d 项更改中，成功 %d 项，失败 %d 项，未执行 %d 项。", len(l.outcomes), succeeded, failed, notRun)
 			} else {
 				fmt.Fprintf(&out, "Correction from Flow: of %d change(s), %d succeeded, %d failed and %d were not executed.", len(l.outcomes), succeeded, failed, notRun)
 			}
+			out.WriteString(trail)
 		}
 		corrected = true
 		last = span[1]
@@ -321,16 +357,21 @@ func agentSentenceSpans(text string) [][2]int {
 	for index := 0; index < len(text); {
 		r, size := utf8.DecodeRuneInString(text[index:])
 		next := index + size
+		// Emphasis closing right after the mark ("**All failed.**") belongs to the sentence.
+		closed := next
+		for closed < len(text) && (text[closed] == '*' || text[closed] == '_') {
+			closed++
+		}
 		switch {
 		case r == '\n':
 			add(index)
 			start = next
 		case r == '。' || r == '！' || r == '？' || r == '!' || r == '?':
-			add(next)
-			start = next
-		case r == '.' && (next == len(text) || text[next] == ' ' || text[next] == '\n' || text[next] == '\t'):
-			add(next)
-			start = next
+			add(closed)
+			start, next = closed, closed
+		case r == '.' && (closed == len(text) || text[closed] == ' ' || text[closed] == '\n' || text[closed] == '\t'):
+			add(closed)
+			start, next = closed, closed
 		}
 		index = next
 	}
