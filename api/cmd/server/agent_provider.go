@@ -192,6 +192,8 @@ type agentStructuredKey struct{}
 
 type agentStructuredRequest struct {
 	tool string
+	// force sets tool_choice to the tool; without it the tool is only the one offered.
+	force bool
 }
 
 func agentStructuredFrom(ctx context.Context) *agentStructuredRequest {
@@ -217,12 +219,19 @@ func (s *server) requestAgentStructuredTurn(ctx context.Context, messages []agen
 			return agentProviderTurn{}, fmt.Errorf("unsupported Agent protocol %q", protocol)
 		}
 	}
-	turn, err := request(context.WithValue(ctx, agentStructuredKey{}, &agentStructuredRequest{tool: tool.Name}))
+	structured := &agentStructuredRequest{tool: tool.Name, force: !s.agentForcedToolChoiceOff.Load()}
+	turn, err := request(context.WithValue(ctx, agentStructuredKey{}, structured))
 	var providerErr *agentProviderError
-	if errors.As(err, &providerErr) && providerErr.status == http.StatusBadRequest {
-		return request(ctx)
+	if !errors.As(err, &providerErr) || providerErr.status != http.StatusBadRequest {
+		return turn, err
 	}
-	return turn, err
+	slog.WarnContext(ctx, "agent provider refused a structured request; asking again with fewer constraints", "model", s.agent.Model, "error", truncateSettingsText(providerErr.message, 300))
+	if structured.force && strings.Contains(providerErr.message, "tool_choice") {
+		// A provider (or a thinking model) that cannot force a tool: stop forcing it from now on.
+		s.agentForcedToolChoiceOff.Store(true)
+		return request(context.WithValue(ctx, agentStructuredKey{}, &agentStructuredRequest{tool: tool.Name}))
+	}
+	return request(ctx)
 }
 
 func (s *server) agentToolDefinitions() ([]agentProviderTool, error) {
@@ -298,7 +307,9 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 		payload["tool_choice"] = "none"
 	}
 	if forced := agentStructuredFrom(ctx); forced != nil {
-		payload["tool_choice"] = map[string]any{"type": "function", "name": forced.tool}
+		if forced.force {
+			payload["tool_choice"] = map[string]any{"type": "function", "name": forced.tool}
+		}
 		payload["temperature"] = 0
 	}
 	response, err := s.agentProviderRequest(ctx, "/responses", payload, false)
@@ -467,7 +478,9 @@ func (s *server) requestChatCompletions(ctx context.Context, messages []agentPro
 		}
 	}
 	if forced := agentStructuredFrom(ctx); forced != nil {
-		payload["tool_choice"] = map[string]any{"type": "function", "function": map[string]any{"name": forced.tool}}
+		if forced.force {
+			payload["tool_choice"] = map[string]any{"type": "function", "function": map[string]any{"name": forced.tool}}
+		}
 		payload["temperature"] = 0
 	}
 	response, err := s.agentProviderRequest(ctx, "/chat/completions", payload, false)
@@ -670,7 +683,9 @@ func (s *server) requestAnthropicMessages(ctx context.Context, messages []agentP
 		payload["tool_choice"] = map[string]any{"type": "none"}
 	}
 	if forced := agentStructuredFrom(ctx); forced != nil {
-		payload["tool_choice"] = map[string]any{"type": "tool", "name": forced.tool}
+		if forced.force {
+			payload["tool_choice"] = map[string]any{"type": "tool", "name": forced.tool}
+		}
 		payload["temperature"] = 0
 	}
 	response, err := s.agentProviderRequest(ctx, "/messages", payload, true)

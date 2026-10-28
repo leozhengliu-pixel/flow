@@ -82,6 +82,7 @@ type server struct {
 	agent                          appconfig.AgentConfig
 	agentClient                    *http.Client
 	agentPromptCacheOff            atomic.Bool // the provider rejected prompt_cache_key; later requests leave it out
+	agentForcedToolChoiceOff       atomic.Bool // the provider cannot force a tool choice; structured requests only offer the tool
 	agentNativeWebSearchOff        atomic.Bool // the provider rejected its hosted web search tool; later requests leave it out
 	tts                            appconfig.TTSConfig
 	ttsClient                      *http.Client

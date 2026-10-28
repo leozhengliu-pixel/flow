@@ -173,9 +173,7 @@ export function LoopOutputContractPanel({
           if (active) onLoopChange(next);
         })
         .catch(() => undefined)
-        .finally(() => {
-          if (active) setAnalyzing(false);
-        });
+        .finally(() => setAnalyzing(false));
     }, readDelayMs);
     return () => {
       active = false;
