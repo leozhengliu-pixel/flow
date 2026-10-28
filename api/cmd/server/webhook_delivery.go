@@ -1166,7 +1166,11 @@ func (s *server) disableFailingWebhook(workspace, webhookID string, now time.Tim
 		recipient := userByID(data, item.CreatorID)
 		if recipient != nil && recipient.Active {
 			notification := domain.Notification{
-				ID: "notification_webhook_disabled_" + item.ID + "_" + strconv.FormatInt(now.Unix(), 10), RecipientID: recipient.ID, Type: "integration",
+				// The webhook's Enabled check above is what keeps one
+				// disable from notifying twice; the id only has to be
+				// unique (a webhook re-enabled and disabled again within
+				// a second used to reuse it and replace the first notice).
+				ID: "notification_webhook_disabled_" + item.ID + "_" + idgen.Stamp(), RecipientID: recipient.ID, Type: "integration",
 				SourceType: "webhook", SourceID: item.ID, Actor: *recipient, Category: "integrations", GroupKey: "webhook:" + item.ID,
 				OccurrenceCount: 1, LatestActorIDs: []string{recipient.ID},
 				Title:     "Webhook disabled: " + item.Name,

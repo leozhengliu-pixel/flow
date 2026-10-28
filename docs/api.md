@@ -119,6 +119,26 @@ Comments on issues and documents are read from an index and are ordered by
 Prefer webhooks over polling. When you must poll, order by `updatedAt` and
 stop at the first node you have already seen.
 
+### Record ids
+
+Treat every id as an opaque string: compare it for equality, store it whole
+(up to 191 bytes) and pass it back unchanged. Do not parse it, match it
+against a pattern such as `prefix_\d+$` or derive a time from it.
+
+Ids Flow generates today look like `<prefix><19 digits>_<10 characters>`, for
+example `evt_1793112233445566778_k3j9x0abcd` or
+`notification_webhook_disabled_<webhook id>_1793112233445566778_k3j9x0abcd`:
+the digits are a zero-padded creation time in nanoseconds and the characters
+are random lowercase base32, so ids created at the same instant on different
+servers stay distinct. The generated part uses only digits, lowercase
+letters and `_`, so it is safe in URLs. Ids of one kind created by Flow sort by creation time as plain
+strings, after ids in the older `<prefix><digits>` shape; records keep the
+id they were created with, so both shapes appear in one workspace. Ids that
+are a sequence (`issue_42`) or derived from another record or a schedule
+(one notification per project update due time) keep their shape. To order
+records, sort by `createdAt` rather than by id. Issue identifiers such as
+`ENG-123` are not ids and keep their `KEY-number` shape.
+
 ## Filtering
 
 `filter` is a JSON object. Conditions in one
