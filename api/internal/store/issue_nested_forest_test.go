@@ -148,6 +148,56 @@ func testNestedIndexMovesParity(t *testing.T, repository *SQLiteStore, workspace
 	if moved < 20 {
 		t.Fatalf("nested counts differ from the flat ones in only %d combinations", moved)
 	}
+
+	// The in-memory count on the same trees, for its groupings and with
+	// label, OR and case terms: nested against the walk, flat against SQL.
+	cases := []IssueGroupCase{{Value: "high", Filter: IssueFilter{Field: "priority", Operator: "lte", Values: []string{"2"}}}, {Value: "started", Filter: IssueFilter{Field: "statusType", Values: []string{"started"}}}}
+	inMemory := 0
+	for _, access := range accesses {
+		for _, scope := range append(scopes, IssueRecordQuery{TeamIDs: []string{teamA.ID}, Filter: IssueFilter{Or: []IssueFilter{{Field: "labels", Operator: "isEmpty"}, {Field: "priority", Values: []string{"3"}}}}}) {
+			for _, archived := range []string{"false", "all"} {
+				for _, groupBy := range []string{"status", "priority", "team", "assignee", "label", "cases", "none"} {
+					q := scope
+					q.Workspace, q.Access, q.Archived, q.GroupBy, q.Nested = workspace, access, archived, groupBy, true
+					if groupBy == "cases" {
+						q.GroupCases = cases
+					}
+					got, handled, err := repository.issueForestGroups(ctx, q, true)
+					if err != nil {
+						t.Fatal(err)
+					}
+					// MySQL evaluates status type terms per status on the
+					// counters, which hold the retyped status: those decline.
+					statusType := strings.Contains(fmt.Sprint(scope.Filter), "statusType") || groupBy == "cases"
+					if !handled && !(statusType && repository.dialect == "mysql") {
+						t.Fatalf("%+v: in-memory count not used", q)
+					}
+					if !handled {
+						continue
+					}
+					inMemory++
+					want, err := repository.nestedIssueGroupsByWalk(ctx, q)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !slices.Equal(got, want) {
+						t.Fatalf("in-memory nested %s counts (access %+v, archived %s, %+v)\n got %v\nwant %v", groupBy, access, archived, scope, got, want)
+					}
+					q.Nested = false
+					flat, _, err := repository.issueForestGroups(ctx, q, false)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if reference, err := repository.flatIssueGroupsBySQL(ctx, q); err != nil || !slices.Equal(flat, reference) {
+						t.Fatalf("in-memory flat %s counts (access %+v, archived %s, %+v)\n got %v\nwant %v (%v)", groupBy, access, archived, scope, flat, reference, err)
+					}
+				}
+			}
+		}
+	}
+	if inMemory < 100 {
+		t.Fatalf("the in-memory count served only %d combinations", inMemory)
+	}
 }
 
 // countIssueRowsByGroup counts the query's rows by its status or priority
