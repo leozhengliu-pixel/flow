@@ -1121,7 +1121,7 @@ func (s *server) memberHostTokens(ctx context.Context, account domain.CodeHostAc
 	for {
 		claimed, err := s.store.ClaimCodeHostAccountRefresh(ctx, account.ID, owner, codeHostRefreshLease)
 		if err != nil {
-			return codeHostAccountTokens{}, fmt.Errorf("%w: refresh lease: %v", codehost.ErrTransient, err)
+			return codeHostAccountTokens{}, fmt.Errorf("%w: refresh lease: %w", codehost.ErrTransient, err)
 		}
 		if claimed {
 			break

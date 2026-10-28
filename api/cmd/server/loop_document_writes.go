@@ -267,7 +267,7 @@ func (s *server) claimLoopOccurrenceAppend(rec *loopRunRecorder, prepared *loopD
 	for attempt := 0; attempt < 3; attempt++ {
 		existing, claimed, err := s.store.ClaimLoopDocumentAppend(ctx, rec.workspace, claim)
 		if err != nil {
-			return fmt.Errorf("Could not check whether this loop already appended to %q for %s (%v); the text was not appended. Try the call again", document.Title, label, err)
+			return fmt.Errorf("Could not check whether this loop already appended to %q for %s (%w); the text was not appended. Try the call again", document.Title, label, err)
 		}
 		if claimed {
 			prepared.claim = &claim

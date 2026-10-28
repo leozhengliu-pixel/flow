@@ -82,7 +82,7 @@ func checkSCIMUserLengths(input SCIMUserInput) error {
 		textField{"emails", input.Email, domain.EmailMaxLength},
 		textField{"photos", input.AvatarURL, domain.AvatarURLMaxLength},
 	); err != nil {
-		return fmt.Errorf("%w: %s", ErrSCIMInvalid, err.Error())
+		return fmt.Errorf("%w: %w", ErrSCIMInvalid, err)
 	}
 	return nil
 }

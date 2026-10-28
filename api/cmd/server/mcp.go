@@ -411,13 +411,14 @@ func (e *toolInternalError) Error() string {
 
 // publicToolError is the error a tool call reports to an MCP client or an
 // agent model. Tool errors are written for the caller ("issue not found",
-// "title is required"), except database and driver errors: their text names
-// tables, columns and SQL states, so they are logged with the request id and
+// "title is required"), except database, driver and object-storage errors
+// (isInternalError): their text names tables, columns, SQL states, buckets
+// and paths, so they are logged with the request id and
 // replaced, as is a 500 from a REST handler the tool ran in process. A call
 // outside an HTTP request gets a fresh id for the log line.
 func publicToolError(ctx context.Context, tool string, err error) error {
 	var handlerErr *internalHandlerError
-	if err == nil || !store.IsDatabaseError(err) && !errors.As(err, &handlerErr) {
+	if err == nil || !isInternalError(err) && !errors.As(err, &handlerErr) {
 		return err
 	}
 	requestID := requestIDFrom(ctx)

@@ -117,6 +117,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- 4xx responses, MCP tool errors and collaboration socket errors no longer
+  carry raw database or object-storage text. Store errors keep their driver
+  type through every wrap, object-storage (S3 and local file) errors are
+  treated like database errors (a logged 500 with the request id), and a 4xx
+  whose message still reads like driver or storage text answers "The request
+  could not be completed (request id …)." with the original logged.
 - People removed from or suspended in the workspace can no longer be made an
   assignee, delegate, subscriber, project lead or member, initiative owner,
   triage owner or template assignee: such a write is refused with 400 "This

@@ -103,7 +103,7 @@ func writeGitLabError(w http.ResponseWriter, err error) {
 		writeJSON(w, status, payload)
 		return
 	}
-	if store.IsDatabaseError(err) {
+	if isInternalError(err) {
 		// The error envelope logs it and writes the generic message.
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

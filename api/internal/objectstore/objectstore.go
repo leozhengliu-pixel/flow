@@ -3,6 +3,7 @@ package objectstore
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -81,7 +82,32 @@ func Open(ctx context.Context, config Config) (Store, error) {
 
 type localStore struct{ root string }
 
+// Put reports a failure to read the caller's reader (a request body over its
+// limit, a dropped upload) as it is, and a file system failure as an *Error.
 func (s *localStore) Put(_ context.Context, key string, reader io.Reader, _ string) (int64, error) {
+	source := &sourceReader{reader: reader}
+	size, err := s.put(key, source)
+	if err != nil && source.err != nil && errors.Is(err, source.err) {
+		return size, err
+	}
+	return size, storageError("put", err)
+}
+
+// sourceReader remembers the error its reader returned.
+type sourceReader struct {
+	reader io.Reader
+	err    error
+}
+
+func (r *sourceReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	if err != nil && err != io.EOF {
+		r.err = err
+	}
+	return n, err
+}
+
+func (s *localStore) put(key string, reader io.Reader) (int64, error) {
 	path, err := s.path(key)
 	if err != nil {
 		return 0, err
@@ -105,16 +131,16 @@ func (s *localStore) Put(_ context.Context, key string, reader io.Reader, _ stri
 func (s *localStore) Open(_ context.Context, key string) (io.ReadCloser, string, int64, error) {
 	path, err := s.path(key)
 	if err != nil {
-		return nil, "", 0, err
+		return nil, "", 0, storageError("open", err)
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, "", 0, err
+		return nil, "", 0, storageError("open", err)
 	}
 	info, err := file.Stat()
 	if err != nil {
 		file.Close()
-		return nil, "", 0, err
+		return nil, "", 0, storageError("open", err)
 	}
 	return file, "", info.Size(), nil
 }
@@ -122,13 +148,13 @@ func (s *localStore) Open(_ context.Context, key string) (io.ReadCloser, string,
 func (s *localStore) Delete(_ context.Context, key string) error {
 	path, err := s.path(key)
 	if err != nil {
-		return err
+		return storageError("delete", err)
 	}
 	err = os.Remove(path)
 	if os.IsNotExist(err) {
 		return nil
 	}
-	return err
+	return storageError("delete", err)
 }
 
 func (s *localStore) path(key string) (string, error) {
@@ -158,20 +184,20 @@ func (s *s3Store) Put(ctx context.Context, key string, reader io.Reader, content
 		return 0, err
 	}
 	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(s.objectKey(key)), Body: bytes.NewReader(content), ContentLength: aws.Int64(int64(len(content))), ContentType: optionalString(contentType)})
-	return int64(len(content)), err
+	return int64(len(content)), storageError("put", err)
 }
 
 func (s *s3Store) Open(ctx context.Context, key string) (io.ReadCloser, string, int64, error) {
 	result, err := s.client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(s.objectKey(key))})
 	if err != nil {
-		return nil, "", 0, err
+		return nil, "", 0, storageError("open", err)
 	}
 	return result.Body, aws.ToString(result.ContentType), aws.ToInt64(result.ContentLength), nil
 }
 
 func (s *s3Store) Delete(ctx context.Context, key string) error {
 	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(s.objectKey(key))})
-	return err
+	return storageError("delete", err)
 }
 
 func optionalString(value string) *string {

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/objectstore"
 	"flow/api/internal/store"
 
 	"github.com/go-sql-driver/mysql"
@@ -137,6 +138,16 @@ func TestClientErrorMessagesUnchanged(t *testing.T) {
 		{"upstream", func(w http.ResponseWriter, r *http.Request) {
 			writeErrorFor(w, r, http.StatusBadGateway, errors.New("GitHub refused the merge"))
 		}, http.StatusBadGateway, "GitHub refused the merge"},
+		// Names a person chose that mention databases or storage are not driver text.
+		{"user text", func(w http.ResponseWriter, r *http.Request) {
+			writeError(w, http.StatusNotFound, `label "sqlite duplicate key error" not found`)
+		}, http.StatusNotFound, `label "sqlite duplicate key error" not found`},
+		{"validation with url", func(w http.ResponseWriter, r *http.Request) {
+			writeError(w, http.StatusBadRequest, "delivery URL is not allowed: https://hooks.example.com/flow resolves to a private address")
+		}, http.StatusBadRequest, "delivery URL is not allowed: https://hooks.example.com/flow resolves to a private address"},
+		{"length", func(w http.ResponseWriter, r *http.Request) {
+			writeError(w, http.StatusBadRequest, "title must be 2048 characters or fewer")
+		}, http.StatusBadRequest, "title must be 2048 characters or fewer"},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -299,5 +310,129 @@ func TestPublicToolErrorKeepsCallerMessages(t *testing.T) {
 	id := strings.TrimSuffix(strings.TrimPrefix(detached[strings.Index(detached, "request id "):], "request id "), "). Try again later.")
 	if id == "" || !strings.Contains(logs.String(), "request_id="+id) {
 		t.Fatalf("detached error %q not logged with its id:\n%s", detached, logs.String())
+	}
+}
+
+// objectStorageFailure is the error an S3 Put refused with AccessDenied
+// returns, wrapped by the store.
+func objectStorageFailure(t *testing.T) error {
+	t.Helper()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`<Error><Code>AccessDenied</Code><Message>Access Denied</Message><RequestId>REQ42</RequestId></Error>`))
+	}))
+	t.Cleanup(upstream.Close)
+	objects, err := objectstore.Open(t.Context(), objectstore.Config{Driver: "s3", Bucket: "secret-bucket", Region: "us-east-1", Endpoint: upstream.URL, AccessKeyID: "key", SecretAccessKey: "secret", PathStyle: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = objects.Put(t.Context(), "doc.txt", strings.NewReader("x"), "text/plain")
+	if !objectstore.IsStorageError(err) {
+		t.Fatalf("Put error = %v", err)
+	}
+	return fmt.Errorf("store offloaded content: %w", err)
+}
+
+// A database error wrapped with %v (its type lost) or an object-storage error
+// answered as a 4xx never shows its text: a typed storage error behind
+// writeErrorFor is the generic 500, driver-like text in a 4xx is the generic
+// 4xx message with the request id, and the log has the original.
+func TestClientErrorResponseHidesBackendText(t *testing.T) {
+	logs := captureServerLogs(t)
+	lostType := fmt.Errorf("update issue: %v", mysqlDataTooLong())
+	if store.IsDatabaseError(lostType) {
+		t.Fatalf("the error wrapped with %%v kept its type")
+	}
+	storageErr := objectStorageFailure(t)
+	cases := []struct {
+		name    string
+		handler http.HandlerFunc
+		status  int
+		leaked  []string
+	}{
+		{"%v-wrapped database error as 400", func(w http.ResponseWriter, r *http.Request) {
+			writeError(w, http.StatusBadRequest, lostType.Error())
+		}, http.StatusBadRequest, []string{"1406", "previous_values", "Data too long"}},
+		{"%v-wrapped database error through writeErrorFor", func(w http.ResponseWriter, r *http.Request) {
+			writeErrorFor(w, r, http.StatusBadRequest, lostType)
+		}, http.StatusInternalServerError, []string{"1406", "previous_values"}},
+		{"storage error through writeErrorFor", func(w http.ResponseWriter, r *http.Request) {
+			writeErrorFor(w, r, http.StatusBadRequest, storageErr)
+		}, http.StatusInternalServerError, []string{"AccessDenied", "secret-bucket", "REQ42", "S3"}},
+		{"storage text as 400", func(w http.ResponseWriter, r *http.Request) {
+			writeError(w, http.StatusBadRequest, "could not attach: "+storageErr.Error())
+		}, http.StatusBadRequest, []string{"AccessDenied", "secret-bucket", "REQ42", "S3"}},
+		{"postgres text in an extra field", func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(w, http.StatusConflict, map[string]any{"error": "save failed", "code": "SAVE_FAILED", "details": `ERROR: duplicate key value violates unique constraint "issues_pkey" (SQLSTATE 23505)`})
+		}, http.StatusConflict, []string{"issues_pkey", "23505", "details", "save failed"}},
+		{"sqlite text as 422", func(w http.ResponseWriter, r *http.Request) {
+			writeError(w, http.StatusUnprocessableEntity, "constraint failed: UNIQUE constraint failed: issue_records.id (2067)")
+		}, http.StatusUnprocessableEntity, []string{"issue_records", "2067"}},
+		{"file system path as 404", func(w http.ResponseWriter, r *http.Request) {
+			writeError(w, http.StatusNotFound, "open /var/lib/flow/uploads/doc.txt: no such file or directory")
+		}, http.StatusNotFound, []string{"/var/lib/flow"}},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			requestLog(apiErrorEnvelope(test.handler)).ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/issues", nil))
+			raw := recorder.Body.String()
+			if recorder.Code != test.status {
+				t.Fatalf("status = %d, want %d: %s", recorder.Code, test.status, raw)
+			}
+			for _, leaked := range test.leaked {
+				if strings.Contains(raw, leaked) {
+					t.Fatalf("response leaks %q: %s", leaked, raw)
+				}
+			}
+			body := decodeErrorBody(t, recorder)
+			requestID := recorder.Header().Get("X-Request-ID")
+			want := clientErrorFallback(requestID)
+			if test.status == http.StatusInternalServerError {
+				want = internalErrorMessage
+			}
+			if requestID == "" || body["error"] != want || body["requestId"] != requestID {
+				t.Fatalf("body = %s, want error %q", raw, want)
+			}
+			if logged := logs.String(); !strings.Contains(logged, "request_id="+requestID) || !strings.Contains(logged, test.leaked[0]) {
+				t.Fatalf("log lacks the original for %s:\n%s", requestID, logged)
+			}
+		})
+	}
+	if body := decodeErrorBody(t, func() *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		requestLog(apiErrorEnvelope(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(w, http.StatusConflict, map[string]any{"error": "x", "code": "SAVE_FAILED", "details": "SQLSTATE 23505"})
+		}))).ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/issues", nil))
+		return recorder
+	}()); body["code"] != "SAVE_FAILED" || body["type"] != apiErrorConflict {
+		t.Fatalf("a replaced 4xx keeps its code and type: %v", body)
+	}
+
+	ctx := context.WithValue(context.Background(), requestIDKey{}, "storage-tool-request")
+	for _, err := range []error{storageErr, lostType} {
+		text := publicToolError(ctx, "save_issue", err).Error()
+		if !strings.Contains(text, "could not be saved") || !strings.Contains(text, "storage-tool-request") || strings.Contains(text, "AccessDenied") || strings.Contains(text, "1406") {
+			t.Fatalf("tool error = %q", text)
+		}
+	}
+	if got := publicErrorMessage(ctx, storageErr); got != internalErrorMessage {
+		t.Fatalf("socket error = %q", got)
+	}
+}
+
+func TestInternalErrorTextNamesConfiguredEndpoint(t *testing.T) {
+	previous := internalErrorHosts.Load()
+	t.Cleanup(func() { internalErrorHosts.Store(previous) })
+	if looksLikeInternalErrorText("Put to minio.storage.internal:9000 failed") {
+		t.Fatal("unregistered host matched")
+	}
+	registerInternalErrorEndpoint("https://minio.storage.internal:9000/")
+	if !looksLikeInternalErrorText("Put to MINIO.storage.internal:9000 failed") {
+		t.Fatal("registered endpoint host not matched")
+	}
+	if looksLikeInternalErrorText("title is required") {
+		t.Fatal("plain message matched")
 	}
 }

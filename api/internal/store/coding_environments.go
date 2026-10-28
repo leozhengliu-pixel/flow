@@ -545,7 +545,7 @@ func (s *SQLiteStore) CodingEnvironmentSecretValues(ctx context.Context, workspa
 	}
 	aead, err := codingCipher()
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrCodingSecretUnreadable, err)
+		return nil, fmt.Errorf("%w: %w", ErrCodingSecretUnreadable, err)
 	}
 	for _, item := range items {
 		if len(item.cipher) < aead.NonceSize() {
