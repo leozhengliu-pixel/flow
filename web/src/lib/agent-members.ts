@@ -36,8 +36,9 @@ export function assigneeUpdate(id: string): { assigneeId: string } | { delegateI
 }
 
 /** People for an assignee picker: humans, then the agents that can take the issue's team. */
+/** People who can be newly assigned: inactive ones (deactivated, or suspended in the workspace) are left out. */
 export function assigneeCandidates(users: User[], teamId?: string, { agents = true }: { agents?: boolean } = {}) {
-  return [...users.filter(user => !user.app), ...(agents ? users.filter(user => isAssignableAgent(user, teamId)) : [])]
+  return [...users.filter(user => !user.app && user.active !== false), ...(agents ? users.filter(user => isAssignableAgent(user, teamId)) : [])]
 }
 
 /** How an issue's assignee menu arranges its people (see `assigneeMenuLayout`). */

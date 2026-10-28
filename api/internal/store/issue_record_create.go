@@ -152,7 +152,9 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 			}
 		}
 		traceMark(ctx, "load")
+		metadata.FormerMembers = s.formerMemberLookup(ctx, tx, &metadata)
 		id, err := mutate(&metadata)
+		metadata.FormerMembers = nil
 		traceMark(ctx, "mutate")
 		if err != nil {
 			return err

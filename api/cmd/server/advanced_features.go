@@ -536,6 +536,9 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 			created.ContentData = nil
 		}
 		if input.SubscriberIDs != nil && validateResourceIDs(data, "user", *input.SubscriberIDs) {
+			if err := refuseNewFormerMembers(data, nil, *input.SubscriberIDs...); err != nil {
+				return "", err
+			}
 			created.SubscriberIDs = normalizedStrings(*input.SubscriberIDs)
 		}
 		if input.Favorite != nil {
@@ -653,6 +656,9 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 		if input.SubscriberIDs != nil {
 			if !validateResourceIDs(data, "user", *input.SubscriberIDs) {
 				return errInvalid
+			}
+			if err := refuseNewFormerMembers(data, document.SubscriberIDs, *input.SubscriberIDs...); err != nil {
+				return err
 			}
 			document.SubscriberIDs = normalizedStrings(*input.SubscriberIDs)
 		}
@@ -1441,6 +1447,9 @@ func applyReleaseInput(data *domain.Bootstrap, release *domain.Release, input re
 		values := normalizedStrings(*input.SubscriberIDs)
 		if !validateResourceIDs(data, "user", values) {
 			return errInvalid
+		}
+		if err := refuseNewFormerMembers(data, release.SubscriberIDs, values...); err != nil {
+			return err
 		}
 		release.SubscriberIDs = values
 	}
@@ -3953,7 +3962,7 @@ func appendProjectUpdateReminders(data *domain.Bootstrap, project domain.Project
 		recipients = []string{data.Viewer.ID}
 	}
 	for _, recipientID := range recipients {
-		if recipientID == "" || userByID(data, recipientID) == nil {
+		if recipientID == "" || userByID(data, recipientID) == nil || formerMember(data, recipientID) {
 			continue
 		}
 		kind, keyPart := "projectUpdateReminder", "update-missing"

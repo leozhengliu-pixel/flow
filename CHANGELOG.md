@@ -56,6 +56,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- People removed from or suspended in the workspace can no longer be made an
+  assignee, delegate, subscriber, project lead or member, initiative owner,
+  triage owner or template assignee: such a write is refused with 400 "This
+  person is no longer a member of the workspace" (removed people used to get a
+  403 that read like a permission problem, suspended people were accepted).
+  References a record already has stay readable, and a write that keeps them
+  goes through (keeping a removed project member used to fail with 403).
+  Former members get no new notifications, triage rotations skip them, and
+  pickers no longer offer suspended members. See
+  [People who left the workspace](docs/api.md#people-who-left-the-workspace).
 - A REST update that only repeats a resource's current values writes nothing:
   it returns 200 with the resource as it is, keeps its `version` and
   `updatedAt`, and records no history entry, event, realtime update, webhook

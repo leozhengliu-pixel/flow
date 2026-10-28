@@ -180,7 +180,7 @@ func (s *server) createTeamRecurringIssue(w http.ResponseWriter, r *http.Request
 			assignees = append(assignees, child.AssigneeID)
 		}
 		for _, assignee := range assignees {
-			if assignee != nil && *assignee != "" && !slices.ContainsFunc(metadata.Users, func(user domain.User) bool { return user.ID == *assignee }) {
+			if assignee != nil && *assignee != "" && !slices.ContainsFunc(metadata.Users, func(user domain.User) bool { return user.ID == *assignee }) && !s.formerMemberOutsideWrite(r.Context(), metadata.Workspace.URLKey, *assignee) {
 				writeError(w, http.StatusForbidden, "Assignee is outside this workspace")
 				return
 			}

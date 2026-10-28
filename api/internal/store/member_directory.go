@@ -134,6 +134,85 @@ func (s *SQLiteStore) migrateMemberDirectory(ctx context.Context) error {
 	return nil
 }
 
+// formerMembersQuery lists the workspace's former members: suspended
+// memberships, and people who left or were removed (a departure without a
+// membership; one who rejoined is a member again).
+const formerMembersQuery = `SELECT user_id FROM workspace_memberships WHERE workspace_id=? AND status<>'active'
+	UNION SELECT d.user_id FROM workspace_departures d WHERE d.workspace_id=? AND NOT EXISTS (SELECT 1 FROM workspace_memberships m WHERE m.workspace_id=d.workspace_id AND m.user_id=d.user_id)`
+
+// formerMemberLookup is Bootstrap.FormerMembers for one write. The users
+// directory keeps people after they leave (history stays readable), so a
+// write checks the people it newly references against the memberships, which
+// are authoritative. It reads on the first call only, through q: the write's
+// transaction when one is open (SQLite pools may hold one connection). A
+// workspace without memberships (development without sign-in) keeps them in
+// its snapshot, whose suspended members count. A read failure is logged and
+// treated as "no former members": the write itself is not refused for it.
+func (s *SQLiteStore) formerMemberLookup(ctx context.Context, q metadataReader, data *domain.Bootstrap) func() map[string]bool {
+	workspaceID, members := data.Workspace.ID, data.Members
+	var former map[string]bool
+	return func() map[string]bool {
+		if former == nil {
+			var err error
+			if former, err = readFormerMembers(ctx, q, workspaceID, members); err != nil {
+				slog.Warn("read former workspace members", "workspace", workspaceID, "error", err)
+			}
+		}
+		return former
+	}
+}
+
+// FormerMembers is the workspace's former members (removed or suspended),
+// read outside a write: request checks that resolve people against the
+// viewer's directory, which leaves removed people out, use it to let the
+// write answer with its own refusal.
+func (s *SQLiteStore) FormerMembers(ctx context.Context, workspaceKey string) (map[string]bool, error) {
+	data, ok := s.WorkspaceMetadataFields(workspaceKey, "workspace", "members")
+	if !ok {
+		return map[string]bool{}, nil
+	}
+	return readFormerMembers(ctx, s.db, data.Workspace.ID, data.Members)
+}
+
+// readFormerMembers reads the former members from the memberships; a
+// workspace without any (development without sign-in) keeps its members in
+// the snapshot, whose suspended ones count. It never returns nil.
+func readFormerMembers(ctx context.Context, q metadataReader, workspaceID string, snapshot []domain.WorkspaceMember) (map[string]bool, error) {
+	former := map[string]bool{}
+	if workspaceID == "" {
+		return former, nil
+	}
+	rows, err := q.QueryContext(ctx, `SELECT 1 FROM workspace_memberships WHERE workspace_id=? LIMIT 1`, workspaceID)
+	if err != nil {
+		return former, err
+	}
+	hasMemberships := rows.Next()
+	if err := rows.Close(); err != nil {
+		return former, err
+	}
+	if !hasMemberships {
+		for _, member := range snapshot {
+			if member.Status == "suspended" {
+				former[member.User.ID] = true
+			}
+		}
+		return former, nil
+	}
+	rows, err = q.QueryContext(ctx, formerMembersQuery, workspaceID, workspaceID)
+	if err != nil {
+		return former, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return former, err
+		}
+		former[id] = true
+	}
+	return former, rows.Err()
+}
+
 // loadMemberAccess gives a signed-in write that may move issues to another
 // team (see WithIssueRenumbering) the workspace's members and team
 // memberships as the database holds them. Signed in, memberships live in

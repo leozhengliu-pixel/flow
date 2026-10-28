@@ -316,8 +316,9 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 			startDates[project.ID] = optionalValue(project.StartDate)
 		}
 		traceMark(ctx, "load")
+		next.FormerMembers = s.formerMemberLookup(ctx, tx, &next)
 		aggregateID, err := mutate(&next)
-		next.ViewerRole, next.ViewerTeamIDs = originalViewerRole, nil
+		next.ViewerRole, next.ViewerTeamIDs, next.FormerMembers = originalViewerRole, nil, nil
 		current.Members, current.TeamMembers = storedMembers, storedTeamMembers
 		next.Members, next.TeamMembers = storedMembers, storedTeamMembers
 		traceMark(ctx, "mutate")
