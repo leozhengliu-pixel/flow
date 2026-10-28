@@ -206,6 +206,12 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 				actorTeams = s.actorTeamIDs(ctx, current.Workspace.ID, actor.ID)
 			}
 		}
+		// Team moves see the current memberships; the snapshot's copies are
+		// put back before the write.
+		storedMembers, storedTeamMembers := current.Members, current.TeamMembers
+		if err := s.loadMemberAccess(ctx, &current); err != nil {
+			return err
+		}
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
 			return err
@@ -312,6 +318,8 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		traceMark(ctx, "load")
 		aggregateID, err := mutate(&next)
 		next.ViewerRole, next.ViewerTeamIDs = originalViewerRole, nil
+		current.Members, current.TeamMembers = storedMembers, storedTeamMembers
+		next.Members, next.TeamMembers = storedMembers, storedTeamMembers
 		traceMark(ctx, "mutate")
 		if err != nil {
 			return err

@@ -603,6 +603,8 @@ func (s *SQLiteStore) writeSCIMUser(ctx context.Context, workspaceID, userID str
 	}
 	if !input.Active {
 		s.accountAccessChanged(userID)
+	} else {
+		s.syncMemberDirectoryByID(ctx, workspaceID, userID)
 	}
 	return s.SCIMUser(ctx, workspaceID, userID)
 }

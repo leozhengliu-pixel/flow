@@ -45,9 +45,11 @@ func metadataOnlyMutation(event string, payload any) bool {
 	switch event {
 	// Team deletion/restoration only stamps the team, detaches sub-teams and
 	// appends an audit entry; issue visibility follows the team's archivedAt at
-	// read time. Development-mode membership edits only touch member lists.
+	// read time. Development-mode membership edits only touch member lists,
+	// and a member who joined is only added to the users directory.
 	case "team.archived", "team.unarchived", "team_member.updated",
-		"workspace_member.username_updated", "workspace_member.updated", "workspace_member.suspended", "workspace_member.resumed", "workspace_member.removed":
+		"workspace_member.username_updated", "workspace_member.updated", "workspace_member.suspended", "workspace_member.resumed", "workspace_member.removed",
+		"workspace_member.joined":
 		return true
 	// Dashboards and posts live in workspace settings; asks only validate
 	// templates. None of these callbacks read issues or discussions (meetings

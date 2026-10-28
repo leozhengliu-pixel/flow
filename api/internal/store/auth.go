@@ -204,6 +204,9 @@ func (s *SQLiteStore) LoginExternal(ctx context.Context, email, name, avatarURL 
 			if err == nil && len(workspace.Teams) > 0 {
 				_, err = s.db.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`, workspace.Workspace.ID, workspace.Teams[0].ID, user.ID, "member", now.Format(time.RFC3339Nano))
 			}
+			if err == nil {
+				s.syncMemberDirectoryLogged(ctx, workspaceKey, user.ID)
+			}
 		}
 	}
 	if err != nil {
@@ -363,6 +366,9 @@ func (s *SQLiteStore) provisionExternalMemberships(ctx context.Context, userID s
 	_, err := s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING`, workspace.Workspace.ID, userID, "member", "active", now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 	if err == nil && len(workspace.Teams) > 0 {
 		_, err = s.db.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`, workspace.Workspace.ID, workspace.Teams[0].ID, userID, "member", now.Format(time.RFC3339Nano))
+	}
+	if err == nil {
+		s.syncMemberDirectoryLogged(ctx, workspaceKey, userID)
 	}
 	return err
 }
@@ -596,6 +602,9 @@ func (s *SQLiteStore) UnlinkAuthIdentity(ctx context.Context, userID, identityID
 func (s *SQLiteStore) EnsureWorkspaceMembership(ctx context.Context, workspaceID, userID string) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err := s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET status='active',last_seen_at=excluded.last_seen_at`, workspaceID, userID, "member", "active", now, now)
+	if err == nil {
+		s.syncMemberDirectoryByID(ctx, workspaceID, userID)
+	}
 	return err
 }
 
@@ -1173,6 +1182,8 @@ func (s *SQLiteStore) AcceptInvitationWithChanges(ctx context.Context, token, us
 	if err = tx.Commit(); err != nil {
 		return InvitationAcceptance{}, err
 	}
+	// After the commit: the directory write takes the workspace lock.
+	s.syncMemberDirectoryLogged(ctx, metadata.Workspace.URLKey, userID)
 	return InvitationAcceptance{Membership: domain.WorkspaceMembership{Workspace: metadata.Workspace, Role: titleRole(role), JoinedAt: now, IssueCount: len(metadata.Issues)}, InvitationID: id, InviterID: inviterID, Changes: changes}, nil
 }
 
@@ -1252,6 +1263,7 @@ func (s *SQLiteStore) ResumeMember(ctx context.Context, workspaceID, userID stri
 	if count, _ := result.RowsAffected(); count == 0 {
 		return ErrAuthForbidden
 	}
+	s.syncMemberDirectoryByID(ctx, workspaceID, userID)
 	return nil
 }
 
