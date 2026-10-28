@@ -22,6 +22,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   otherwise shown as interrupted with Retry. Loop builder conversations and
   chats with sent files still run in the API. The default
   (`FLOW_AGENT_RUNTIME=inprocess`) is unchanged.
+- Chat replies on the agent worker no longer wait forever: a reply no worker
+  takes within `FLOW_AGENT_WORKER_CLAIM_TIMEOUT` (default 2 minutes) ends with
+  "No agent worker is available; try again or contact your admin" and its run
+  is cancelled. Calls waiting for approval are rejected after 30 minutes and
+  the reply goes on, as in-process, and the step limit
+  (`FLOW_AGENT_MAX_TOOL_TURNS`) counts the whole reply, also after approvals.
 - The workspace Invite dialog (Settings → Administration → Members → Invite)
   has an **Add to team** field for every role. Pick one or more teams (a
   searchable multi-select; optional for Members and Admins, required for

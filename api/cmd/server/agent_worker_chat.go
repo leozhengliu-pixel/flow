@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	appconfig "flow/api/internal/config"
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
 	"flow/api/internal/store"
@@ -40,6 +41,10 @@ import (
 //     …/approvals/{id} Flow queues a resume run that continues the same reply.
 //   - stop: POST …/stop cancels the reply's run (a queued or awaiting run at once, a held one through the cancel
 //     long-poll); a connector question waiting in the run's call is cancelled too. The reply is saved as stopped.
+//   - limits: held calls nobody answers within agentApprovalTimeout are rejected and the reply goes on, as the
+//     in-process reply rejects them; a queued run no worker takes within FLOW_AGENT_WORKER_CLAIM_TIMEOUT is
+//     cancelled and the reply ends with workerChatNoWorker (expireWorkerChatRun). The turn budget counts the turns of
+//     every run of the reply (TurnsBefore).
 //   - end: the response finishes the reply; the run's ledger (agent_run_outcomes.go) and tool budget apply through
 //     the run guard (chat mode) and /mcp. A run whose worker died is requeued with the reply reset (nothing was
 //     written) or interrupted (the reconciler, or the live-reply sweeper once the run ended without saving it).
@@ -56,6 +61,21 @@ const (
 // workerChatDeclined is the error of a held call the person rejected.
 const workerChatDeclined = "Action declined by user"
 
+// workerChatNoWorker ends a reply whose run no agent worker took within the claim timeout.
+const workerChatNoWorker = "No agent worker is available; try again or contact your admin"
+
+// workerChatExpiryCheck is how often a request following a reply checks its run against the claim timeout and the
+// approval timeout (the live-reply sweeper checks every reply once a minute).
+const workerChatExpiryCheck = 5 * time.Second
+
+// agentWorkerClaimTimeout is how long a queued chat run may wait for a worker (FLOW_AGENT_WORKER_CLAIM_TIMEOUT).
+func (s *server) agentWorkerClaimTimeout() time.Duration {
+	if s.agent.WorkerClaimTimeout > 0 {
+		return s.agent.WorkerClaimTimeout
+	}
+	return appconfig.DefaultAgentWorkerClaimTimeout
+}
+
 // workerChatRunInfo is what a chat run's payload says about its reply (agent_runs.payload "chat").
 type workerChatRunInfo struct {
 	MessageID string `json:"messageId"`
@@ -70,6 +90,9 @@ type workerChatRunInfo struct {
 	Started int64 `json:"started"`
 	// Resume is set on a run that continues a suspended reply: the person's decision per held call id.
 	Resume *workerChatResume `json:"resume,omitempty"`
+	// TurnsBefore is how many model turns earlier runs of the reply took (a resume continues their count, so the
+	// turn budget is the reply's, as in-process, not each run's).
+	TurnsBefore int `json:"turnsBefore,omitempty"`
 }
 
 type workerChatResume struct {
@@ -181,6 +204,7 @@ func (s *server) runAgentSessionOnWorker(r *http.Request, data domain.Bootstrap,
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	settled := false
+	var expiryChecked time.Time
 	for !settled {
 		select {
 		case event := <-events:
@@ -191,9 +215,17 @@ func (s *server) runAgentSessionOnWorker(r *http.Request, data domain.Bootstrap,
 			if writer != nil {
 				_ = writer.send(event)
 			}
-		case <-ticker.C:
+		case now := <-ticker.C:
 			if _, streaming := s.workerChatStoredReply(r.Context(), workspaceKey(r), session.ID, data.Viewer.ID, info.MessageID); !streaming {
 				settled = true
+				break
+			}
+			// No worker took the run (or a resume) in time, or its held calls waited too long.
+			if now.Sub(started) >= min(s.agentWorkerClaimTimeout(), agentApprovalTimeout) && now.Sub(expiryChecked) >= workerChatExpiryCheck {
+				expiryChecked = now
+				if latest, latestInfo, ok := s.workerChatRunOf(r.Context(), workspaceKey(r), session.ID, info.MessageID); ok {
+					s.expireWorkerChatRun(r.Context(), latest, latestInfo, now)
+				}
 			}
 		case <-r.Context().Done():
 			return domain.AgentSession{}, r.Context().Err()
@@ -1127,6 +1159,9 @@ func (s *server) resumeWorkerChat(ctx context.Context, run store.AgentRun, info 
 	}
 	next := info
 	next.Resume = &workerChatResume{Decisions: decisions}
+	if _, budget := s.workerChatBudgetState(ctx, current.ID); budget.Turns > next.TurnsBefore {
+		next.TurnsBefore = budget.Turns
+	}
 	if _, err := s.enqueueWorkerChatRun(ctx, store.AgentRun{WorkspaceKey: current.WorkspaceKey, SessionID: current.SessionID, Principal: current.Principal}, next, nil, current.ID); err != nil {
 		log.Printf("resume worker chat reply %s: %v", info.MessageID, err)
 	}
@@ -1247,6 +1282,68 @@ func (c *workerChatReply) decide(ctx context.Context, approvalID, decision strin
 	workerChatPublish(c.info.MessageID, agentStreamEvent{Type: "tool.approval_resolved", MessageID: c.info.MessageID, ApprovalID: approvalID, Decision: decision, Part: &part})
 	c.changedLocked(ctx, true)
 	return true
+}
+
+// expireApprovals rejects the held calls that still wait for a decision, as the in-process reply rejects a call
+// nobody answered; it returns how many.
+func (c *workerChatReply) expireApprovals(ctx context.Context) int {
+	c.mu.Lock()
+	var waiting []string
+	for _, part := range c.message.Parts {
+		if !c.finished && part.ToolCall != nil && part.ToolCall.ApprovalID != "" && part.ToolCall.Status == "pending" {
+			waiting = append(waiting, part.ToolCall.ApprovalID)
+		}
+	}
+	c.mu.Unlock()
+	rejected := 0
+	for _, approvalID := range waiting {
+		if c.decide(ctx, approvalID, "rejected") {
+			rejected++
+		}
+	}
+	return rejected
+}
+
+// expireWorkerChatRun ends the wait of a worker reply's latest run when it is over its limit: a queued run no worker
+// took within the claim timeout is cancelled and the reply ends with workerChatNoWorker; the held calls of a run
+// awaiting decisions for agentApprovalTimeout are rejected and a resume run continues the reply. It reports whether
+// it changed the reply.
+func (s *server) expireWorkerChatRun(ctx context.Context, run store.AgentRun, info workerChatRunInfo, now time.Time) bool {
+	switch run.Status {
+	case store.AgentRunQueued:
+		canceled, ok, err := s.store.CancelUnclaimedAgentRun(ctx, run.ID, workerChatNoWorker, now.Add(-s.agentWorkerClaimTimeout()))
+		if err != nil || !ok {
+			return false
+		}
+		if info.Resume != nil {
+			// The suspended run nobody resumed.
+			_ = s.store.DeleteAgentSessionState(ctx, run.WorkspaceKey, run.SessionID)
+		}
+		reply, err := s.workerChatReplyFor(ctx, canceled, info)
+		if err != nil {
+			return false
+		}
+		reply.finishFailure(ctx, workerChatNoWorker, false)
+		reply.release()
+		return true
+	case store.AgentRunAwaiting:
+		// An awaiting run's FinishedAt is when it suspended on its held calls.
+		if run.FinishedAt == 0 || now.Sub(time.UnixMilli(run.FinishedAt)) < agentApprovalTimeout {
+			return false
+		}
+		reply, err := s.workerChatReplyFor(ctx, run, info)
+		if err != nil {
+			return false
+		}
+		rejected := reply.expireApprovals(ctx)
+		reply.release()
+		if rejected == 0 {
+			return false
+		}
+		s.resumeWorkerChat(ctx, run, info)
+		return true
+	}
+	return false
 }
 
 // workerChatElicitationPart shows (or resolves) a connector's question on the reply of the chat run it was asked in.
@@ -1376,7 +1473,7 @@ func (s *server) workerChatReplyAbandoned(ctx context.Context, workspace, sessio
 }
 
 // sweepWorkerChatReplies saves worker replies whose runs ended without saving them (stopped ones as stopped, the
-// others as interrupted); it returns how many it changed.
+// others as interrupted) and ends the waits over their limits (expireWorkerChatRun); it returns how many it changed.
 func (s *server) sweepWorkerChatReplies(ctx context.Context, now time.Time) int {
 	swept := 0
 	for _, key := range s.store.WorkspaceKeys() {
@@ -1394,6 +1491,9 @@ func (s *server) sweepWorkerChatReplies(ctx context.Context, now time.Time) int 
 				}
 				run, info, abandoned := s.workerChatReplyAbandoned(ctx, key, session.ID, message, now)
 				if !abandoned {
+					if run.ID != "" && s.expireWorkerChatRun(ctx, run, info, now) {
+						swept++
+					}
 					continue
 				}
 				if run.ID == "" {
@@ -1431,6 +1531,8 @@ type workerChatBudgetState struct {
 	TurnFailed  int               `json:"turnFailed"`
 	Stop        string            `json:"stop,omitempty"`
 	Nudged      bool              `json:"nudged,omitempty"`
+	// Turns is how many model turns the reply's runs took so far (copied to a resume with the budget).
+	Turns int `json:"turns,omitempty"`
 }
 
 var workerChatBudgetLocks sync.Map
@@ -1467,8 +1569,9 @@ func (s *server) workerChatBudgetState(ctx context.Context, runID string) (*agen
 	return budget, state
 }
 
-func (s *server) saveWorkerChatBudget(ctx context.Context, run store.AgentRun, budget *agentToolBudget, nudged bool) {
-	state := workerChatBudgetState{Calls: budget.calls, Failed: budget.failed, Repeats: budget.repeats, FailedTurns: budget.failedTurns, TurnCalls: budget.turnCalls, TurnFailed: budget.turnFailed, Stop: budget.stop, Nudged: nudged}
+// saveWorkerChatBudget saves budget with the nudge flag and the turn count of reply.
+func (s *server) saveWorkerChatBudget(ctx context.Context, run store.AgentRun, budget *agentToolBudget, reply workerChatBudgetState) {
+	state := workerChatBudgetState{Calls: budget.calls, Failed: budget.failed, Repeats: budget.repeats, FailedTurns: budget.failedTurns, TurnCalls: budget.turnCalls, TurnFailed: budget.turnFailed, Stop: budget.stop, Nudged: reply.Nudged, Turns: reply.Turns}
 	raw, err := json.Marshal(state)
 	if err == nil {
 		err = s.store.ReplaceAgentRunKey(context.WithoutCancel(ctx), run, workerChatBudgetKey, raw)
@@ -1489,7 +1592,7 @@ func (s *server) workerChatToolBefore(ctx context.Context, run store.AgentRun, n
 	budget, state := s.workerChatBudgetState(ctx, run.ID)
 	arguments, _ := json.Marshal(args)
 	content, ok = budget.before(domain.AgentToolCall{Name: name, Arguments: arguments})
-	s.saveWorkerChatBudget(ctx, run, budget, state.Nudged)
+	s.saveWorkerChatBudget(ctx, run, budget, state)
 	return content, ok
 }
 
@@ -1503,7 +1606,7 @@ func (s *server) workerChatToolAfter(ctx context.Context, run store.AgentRun, na
 	budget, state := s.workerChatBudgetState(ctx, run.ID)
 	arguments, _ := json.Marshal(args)
 	budget.after(domain.AgentToolCall{Name: name, Arguments: arguments}, content, failed)
-	s.saveWorkerChatBudget(ctx, run, budget, state.Nudged)
+	s.saveWorkerChatBudget(ctx, run, budget, state)
 }
 
 // workerChatGuardOp is the run guard of a chat run (agent_runtime_guard.go): no coding context or connector
@@ -1516,25 +1619,27 @@ func (s *server) workerChatGuardOp(ctx context.Context, run store.AgentRun, info
 	case "turn":
 		unlock := s.workerChatBudgetLock(run.ID)
 		budget, budgetState := s.workerChatBudgetState(ctx, run.ID)
-		if input.Round > 0 {
+		// The worker counts the turns of its own run; the reply's earlier runs (before a resume) took TurnsBefore.
+		round := info.TurnsBefore + input.Round
+		if round > 0 {
 			budget.endTurn()
 		}
 		maxTurns := info.MaxTurns
 		if maxTurns <= 0 {
 			maxTurns = s.agentMaxToolTurns()
 		}
-		if budget.stop == "" && input.Round >= maxTurns {
+		if budget.stop == "" && round >= maxTurns {
 			budget.stop = agentBudgetTurns
 		}
-		nudged := budgetState.Nudged
+		budgetState.Turns = max(budgetState.Turns, round+1)
 		if budget.stop != "" {
 			// The reply's last word: no more tools, what was done and what is left.
 			response.Withhold = true
-			if !nudged {
-				response.Nudge, nudged = "\n\n"+agentToolBudgetNudge(budget.stop, maxTurns, info.MaxCalls), true
+			if !budgetState.Nudged {
+				response.Nudge, budgetState.Nudged = "\n\n"+agentToolBudgetNudge(budget.stop, maxTurns, info.MaxCalls), true
 			}
 		}
-		s.saveWorkerChatBudget(ctx, run, budget, nudged)
+		s.saveWorkerChatBudget(ctx, run, budget, budgetState)
 		unlock()
 	case "finish":
 		ledger := s.agentRunLedger(ctx, run)
@@ -1556,7 +1661,7 @@ func (s *server) workerChatGuardOp(ctx context.Context, run store.AgentRun, info
 			if budget.stop == "" {
 				budget.stop = agentBudgetTurns
 			}
-			s.saveWorkerChatBudget(ctx, run, budget, budgetState.Nudged)
+			s.saveWorkerChatBudget(ctx, run, budget, budgetState)
 			unlock()
 			response.Reply = agentToolBudgetFallback(budget.stop, info.MaxTurns, info.MaxCalls, info.Chinese, -1, true)
 		default:

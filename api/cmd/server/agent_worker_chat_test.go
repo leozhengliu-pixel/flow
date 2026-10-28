@@ -619,3 +619,152 @@ func TestChatRepliesStayInProcessByDefault(t *testing.T) {
 		t.Fatal("worker eligibility")
 	}
 }
+
+// heldWorkerChatReply streams a message whose run holds one connector call and suspends on it.
+func (f workerChatFixture) heldWorkerChatReply(t *testing.T, message string) (events <-chan agentStreamEvent, sessionID string, run store.AgentRun, approvalID string) {
+	t.Helper()
+	events = f.stream("/api/agent/sessions/stream", fmt.Sprintf(`{"message":%q,"location":"page"}`, message))
+	sessionID = nextEvent(t, events, "session.started").Session.ID
+	run = f.mustClaim(t)
+	f.post(t, run, map[string]any{"type": "elicitation", "activityId": "elicitation", "elicitation": map[string]any{"kind": "approval", "calls": []map[string]any{{"callId": "c1", "name": "external_deploy", "arguments": `{}`}}}})
+	approvalID = nextEvent(t, events, "tool.approval_required").ApprovalID
+	runtimeDo(t, f.handler, runtimeCall{method: http.MethodPut, path: "/internal/agent-runtime/runs/" + run.ID + "/state", worker: "w1", bearer: testWorkerSecret, body: []byte(`{"state":"suspended-run"}`)})
+	f.complete(t, run, "awaiting")
+	return events, sessionID, run, approvalID
+}
+
+// A held call nobody answers is rejected after the in-process approval timeout, as in-process, and the reply goes
+// on: a resume run continues it with the call rejected.
+func TestWorkerChatApprovalsExpire(t *testing.T) {
+	f := newWorkerChatFixture(t)
+	ctx := context.Background()
+	events, sessionID, _, approval := f.heldWorkerChatReply(t, "Deploy it")
+	if swept := f.s.sweepWorkerChatReplies(ctx, time.Now().Add(agentApprovalTimeout-time.Minute)); swept != 0 {
+		t.Fatalf("a held call expired early (%d)", swept)
+	}
+	if _, queued := f.claim(t, 0); queued {
+		t.Fatal("a resume was queued before the approval expired")
+	}
+	if swept := f.s.sweepWorkerChatReplies(ctx, time.Now().Add(agentApprovalTimeout+time.Second)); swept != 1 {
+		t.Fatalf("swept = %d", swept)
+	}
+	resolved := nextEvent(t, events, "tool.approval_resolved")
+	if resolved.ApprovalID != approval || resolved.Decision != "rejected" {
+		t.Fatalf("expired approval event = %+v", resolved)
+	}
+	held := f.reply(t, sessionID)
+	if part := toolPart(held.Parts, "c1"); held.Status != agentMessageStreaming || part == nil || part.ToolCall.Status != "error" || part.ToolCall.Error != workerChatDeclined {
+		t.Fatalf("reply after the approval expired = %+v", held)
+	}
+	resume := f.mustClaim(t)
+	payload := f.payload(t, resume)
+	if payload.Chat.MessageID != held.ID || payload.Chat.Resume == nil || payload.Chat.Resume.Decisions["c1"] != "rejected" {
+		t.Fatalf("resume after the expiry = %+v", payload.Chat)
+	}
+	if status, _ := postAgentJSON(t, f.api.URL, "/api/agent/sessions/"+sessionID+"/approvals/"+approval, `{"decision":"approve"}`); status != http.StatusNotFound {
+		t.Fatalf("approving an expired call = %d", status)
+	}
+	f.post(t, resume, map[string]any{"type": "response", "activityId": "end", "body": "I did not deploy it."})
+	f.complete(t, resume, "done")
+	rest := drain(t, events)
+	final := lastAgentMessage(*rest[len(rest)-1].Session)
+	if part := toolPart(final.Parts, "c1"); final.Status != "" || final.Content != "I did not deploy it." || part == nil || part.ToolCall.Error != workerChatDeclined {
+		t.Fatalf("finished reply = %+v", final)
+	}
+}
+
+// With no worker running, a queued reply does not stay "working": once its run waited the claim timeout, the run
+// is cancelled and the reply ends with an error the asking stream reports. The same holds for a resume run, which
+// the live-reply sweeper ends.
+func TestWorkerChatUnclaimedRunEndsTheReply(t *testing.T) {
+	f := newWorkerChatFixture(t)
+	ctx := context.Background()
+	f.s.agent.WorkerClaimTimeout = time.Second
+	events := f.stream("/api/agent/sessions/stream", `{"message":"Anyone there?","location":"page"}`)
+	started := nextEvent(t, events, "session.started")
+	failed := nextEvent(t, events, "error")
+	if failed.Error != workerChatNoWorker {
+		t.Fatalf("stream error = %+v", failed)
+	}
+	final := f.reply(t, started.Session.ID)
+	if last := final.Parts[len(final.Parts)-1]; final.ID != started.MessageID || final.Status != "" || last.Type != "error" || last.Text != workerChatNoWorker {
+		t.Fatalf("unclaimed reply = %+v", final)
+	}
+	runs, _ := f.s.store.SessionAgentRuns(ctx, f.data.Workspace.URLKey, started.Session.ID, 5)
+	if len(runs) != 1 || runs[0].Status != store.AgentRunCanceled || runs[0].Error != workerChatNoWorker {
+		t.Fatalf("unclaimed run = %+v", runs)
+	}
+	if _, queued := f.claim(t, 0); queued {
+		t.Fatal("the cancelled run can still be claimed")
+	}
+	drain(t, events)
+
+	// A resume no worker takes: ended by the sweeper, its suspended state dropped.
+	f.s.agent.WorkerClaimTimeout = time.Hour
+	events, sessionID, _, approval := f.heldWorkerChatReply(t, "Deploy it")
+	if status, body := postAgentJSON(t, f.api.URL, "/api/agent/sessions/"+sessionID+"/approvals/"+approval, `{"decision":"approve"}`); status != http.StatusOK {
+		t.Fatalf("approve: %d %s", status, body)
+	}
+	if swept := f.s.sweepWorkerChatReplies(ctx, time.Now().Add(time.Minute)); swept != 0 {
+		t.Fatalf("a resume within the claim timeout was ended (%d)", swept)
+	}
+	if swept := f.s.sweepWorkerChatReplies(ctx, time.Now().Add(time.Hour+time.Second)); swept != 1 {
+		t.Fatalf("swept = %d", swept)
+	}
+	ended := f.reply(t, sessionID)
+	if last := ended.Parts[len(ended.Parts)-1]; ended.Status != "" || last.Text != workerChatNoWorker {
+		t.Fatalf("reply after its resume was not claimed = %+v", ended)
+	}
+	if _, err := f.s.store.AgentSessionStateFor(ctx, f.data.Workspace.URLKey, sessionID); err == nil {
+		t.Fatal("the unclaimed resume kept its suspended state")
+	}
+	if _, queued := f.claim(t, 0); queued {
+		t.Fatal("the cancelled resume can still be claimed")
+	}
+	drain(t, events)
+}
+
+// The turn budget is the reply's: a resume run continues the count of the run it resumes (as the in-process reply
+// counts its turns across an approval), so the budget ends tool turns at the same total.
+func TestWorkerChatTurnBudgetCountsAcrossResumes(t *testing.T) {
+	f := newWorkerChatFixture(t)
+	f.s.agent.MaxToolTurns = 4
+	events := f.stream("/api/agent/sessions/stream", `{"message":"Deploy and verify","location":"page"}`)
+	sessionID := nextEvent(t, events, "session.started").Session.ID
+	run := f.mustClaim(t)
+	guard := func(run store.AgentRun, request map[string]any) workerRunGuardResponse {
+		return runtimeJSON[workerRunGuardResponse](t, f.handler, runtimeCall{method: http.MethodPost, path: "/internal/agent-runtime/runs/" + run.ID + "/guard", worker: "w1", body: request}, http.StatusOK)
+	}
+	guard(run, map[string]any{"op": "start"})
+	for round := range 3 {
+		if turn := guard(run, map[string]any{"op": "turn", "round": round, "maxTurns": 6, "connectors": true}); turn.Withhold {
+			t.Fatalf("turn %d = %+v", round, turn)
+		}
+	}
+	f.post(t, run, map[string]any{"type": "elicitation", "activityId": "elicitation", "elicitation": map[string]any{"kind": "approval", "calls": []map[string]any{{"callId": "c1", "name": "external_deploy", "arguments": `{}`}}}})
+	approval := nextEvent(t, events, "tool.approval_required").ApprovalID
+	runtimeDo(t, f.handler, runtimeCall{method: http.MethodPut, path: "/internal/agent-runtime/runs/" + run.ID + "/state", worker: "w1", bearer: testWorkerSecret, body: []byte(`{"state":"s"}`)})
+	f.complete(t, run, "awaiting")
+	if status, body := postAgentJSON(t, f.api.URL, "/api/agent/sessions/"+sessionID+"/approvals/"+approval, `{"decision":"approve"}`); status != http.StatusOK {
+		t.Fatalf("approve: %d %s", status, body)
+	}
+	resume := f.mustClaim(t)
+	if payload := f.payload(t, resume); payload.Chat.TurnsBefore != 3 {
+		t.Fatalf("resume payload = %+v", payload.Chat)
+	}
+	guard(resume, map[string]any{"op": "start"})
+	if turn := guard(resume, map[string]any{"op": "turn", "round": 0, "maxTurns": 6, "connectors": true}); turn.Withhold {
+		t.Fatalf("the reply's fourth turn = %+v", turn)
+	}
+	turn := guard(resume, map[string]any{"op": "turn", "round": 1, "maxTurns": 6, "connectors": true})
+	if !turn.Withhold || !strings.Contains(turn.Nudge, "must stop now") {
+		t.Fatalf("the reply's fifth turn (over the budget of 4) = %+v", turn)
+	}
+	f.post(t, resume, map[string]any{"type": "response", "activityId": "end", "body": "Deployed; verification is left."})
+	f.complete(t, resume, "done")
+	final := f.reply(t, sessionID)
+	if final.Status != "" || final.Parts[len(final.Parts)-1].Type != "event" || !strings.Contains(final.Content, "Deployed") {
+		t.Fatalf("reply stopped by the turn budget = %+v", final)
+	}
+	drain(t, events)
+}

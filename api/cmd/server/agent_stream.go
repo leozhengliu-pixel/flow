@@ -135,6 +135,10 @@ func (s *server) answerAgentApproval(workspace, sessionID, userID, approvalID, d
 	return true
 }
 
+// agentApprovalTimeout is how long a reply waits for the person's decision on a call before the call is rejected and
+// the reply goes on without it (in-process here; a worker reply's held calls in expireWorkerChatRun).
+const agentApprovalTimeout = 30 * time.Minute
+
 func (s *server) waitForAgentApproval(ctx context.Context, approvalID string, approval *agentApproval) string {
 	defer func() {
 		// A timed-out/cancelled stream can leave an approval in the map. Removing
@@ -145,7 +149,7 @@ func (s *server) waitForAgentApproval(ctx context.Context, approvalID string, ap
 		}
 		s.agentApprovalsMu.Unlock()
 	}()
-	timer := time.NewTimer(30 * time.Minute)
+	timer := time.NewTimer(agentApprovalTimeout)
 	defer timer.Stop()
 	select {
 	case decision := <-approval.Decision:

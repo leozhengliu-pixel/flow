@@ -126,6 +126,9 @@ type AgentConfig struct {
 	// WorkspaceRunConcurrency caps the agent runs one workspace holds at a time on the worker runtime;
 	// FLOW_AGENT_WORKSPACE_CONCURRENCY.
 	WorkspaceRunConcurrency int
+	// WorkerClaimTimeout is how long a queued chat reply waits for an agent worker to take its run before the reply
+	// ends with an error and the run is cancelled; FLOW_AGENT_WORKER_CLAIM_TIMEOUT.
+	WorkerClaimTimeout time.Duration
 	// Media configures the transcribe_media chat tool for audio and video attachments.
 	Media AgentMediaConfig
 	// MaxToolTurns is how many model turns with tool calls one chat reply or built-in thread run may take
@@ -135,10 +138,11 @@ type AgentConfig struct {
 	MaxToolCalls int
 }
 
-// Defaults for AgentConfig.MaxToolTurns and AgentConfig.MaxToolCalls.
+// Defaults for AgentConfig.MaxToolTurns, AgentConfig.MaxToolCalls and AgentConfig.WorkerClaimTimeout.
 const (
-	DefaultAgentMaxToolTurns = 40
-	DefaultAgentMaxToolCalls = 150
+	DefaultAgentMaxToolTurns       = 40
+	DefaultAgentMaxToolCalls       = 150
+	DefaultAgentWorkerClaimTimeout = 2 * time.Minute
 )
 
 // AgentMediaConfig points transcribe_media at an OpenAI-compatible API. BaseURL defaults to the Agent provider's;
@@ -308,6 +312,7 @@ func Load() (Config, error) {
 			ReasoningEffort: strings.ToLower(value("FLOW_AGENT_REASONING_EFFORT", "")), NativeWebSearch: boolean("FLOW_AGENT_NATIVE_WEB_SEARCH", true),
 			Runtime: strings.ToLower(value("FLOW_AGENT_RUNTIME", AgentRuntimeInProcess)), WorkerSecret: secret("FLOW_AGENT_WORKER_SECRET"),
 			WorkspaceRunConcurrency: integer("FLOW_AGENT_WORKSPACE_CONCURRENCY", 4),
+			WorkerClaimTimeout:      duration("FLOW_AGENT_WORKER_CLAIM_TIMEOUT", DefaultAgentWorkerClaimTimeout),
 			MaxToolTurns:            integer("FLOW_AGENT_MAX_TOOL_TURNS", DefaultAgentMaxToolTurns),
 			MaxToolCalls:            integer("FLOW_AGENT_MAX_TOOL_CALLS", DefaultAgentMaxToolCalls),
 			Media: AgentMediaConfig{
@@ -559,6 +564,9 @@ func (c AgentConfig) validateRuntime() error {
 	}
 	if c.WorkspaceRunConcurrency < 0 || c.WorkspaceRunConcurrency > 1000 {
 		return fmt.Errorf("FLOW_AGENT_WORKSPACE_CONCURRENCY must be between 1 and 1000")
+	}
+	if c.WorkerClaimTimeout < 10*time.Second || c.WorkerClaimTimeout > 24*time.Hour {
+		return fmt.Errorf("FLOW_AGENT_WORKER_CLAIM_TIMEOUT must be between 10s and 24h")
 	}
 	return nil
 }

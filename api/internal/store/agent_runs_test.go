@@ -195,6 +195,27 @@ func TestAgentRunHeartbeatFinishAndCancel(t *testing.T) {
 	}
 }
 
+// A run no worker took is cancelled with its reason once it has waited long enough; a claimed one is never.
+func TestAgentRunCancelUnclaimed(t *testing.T) {
+	repo := openAgentRunStore(t)
+	ctx := t.Context()
+	queued := enqueueTestRun(t, repo, "acme", "task_1", AgentRunKindChat)
+	if _, canceled, err := repo.CancelUnclaimedAgentRun(ctx, queued.ID, "no worker", time.UnixMilli(queued.UpdatedAt).Add(-time.Second)); err != nil || canceled {
+		t.Fatalf("a run queued after the cutoff was cancelled: %v %v", canceled, err)
+	}
+	run, canceled, err := repo.CancelUnclaimedAgentRun(ctx, queued.ID, "no worker", time.Now().Add(time.Second))
+	if err != nil || !canceled || run.Status != AgentRunCanceled || run.Error != "no worker" || run.FinishedAt == 0 {
+		t.Fatalf("unclaimed run: %+v %v %v", run, canceled, err)
+	}
+	claimed := enqueueTestRun(t, repo, "acme", "task_2", AgentRunKindChat)
+	if _, err := repo.ClaimAgentRuns(ctx, AgentRunClaim{Owner: "w1", Free: map[int]int{0: 1}, Lease: time.Minute, Now: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	if run, canceled, err := repo.CancelUnclaimedAgentRun(ctx, claimed.ID, "no worker", time.Now().Add(time.Hour)); err != nil || canceled || run.Status != AgentRunLeased {
+		t.Fatalf("a claimed run was cancelled: %+v %v %v", run, canceled, err)
+	}
+}
+
 func TestAgentRunExpiredLeasesRetryOrInterrupt(t *testing.T) {
 	repo := openAgentRunStore(t)
 	ctx := t.Context()

@@ -594,6 +594,24 @@ func (s *SQLiteStore) CancelAgentRun(ctx context.Context, id string) (AgentRun, 
 	return s.AgentRun(ctx, id)
 }
 
+// CancelUnclaimedAgentRun cancels a run that is still queued and has waited
+// since queuedBefore (when it was queued or requeued, or its retry was due),
+// with reason as its error; false when a worker took it, it ended, or it has
+// not waited that long.
+func (s *SQLiteStore) CancelUnclaimedAgentRun(ctx context.Context, id, reason string, queuedBefore time.Time) (AgentRun, bool, error) {
+	at, before := millis(time.Now()), millis(queuedBefore)
+	result, err := s.db.ExecContext(ctx, `UPDATE agent_runs SET status='canceled',finished_at=?,error_text=?,updated_at=? WHERE id=? AND status='queued' AND updated_at<=? AND next_attempt_at<=?`, at, truncateText(reason, 2048), at, id, before, before)
+	if err != nil {
+		return AgentRun{}, false, err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return AgentRun{}, false, err
+	}
+	run, err := s.AgentRun(ctx, id)
+	return run, count == 1, err
+}
+
 // AgentRunCancelWake returns a channel closed the next time a run may have to
 // stop in this process: a cancel was requested or an agent session was
 // canceled. Waiters re-check with AgentRunsToCancel (other API processes do not

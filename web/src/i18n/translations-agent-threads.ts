@@ -25,6 +25,8 @@ export const agentThreadsZhCN: Record<string, string> = {
   "{name} is waiting for your input": "{name} 正在等待你的回复",
   "{name} ran into an error: {text}": "{name} 出错了：{text}",
   "{name} ran into an error": "{name} 出错了",
+  // A chat reply on the agent worker that no worker took (server error text).
+  "No agent worker is available; try again or contact your admin": "没有可用的 Agent 工作进程，请重试或联系管理员",
   // The agent chat composer and loading state.
   "Ask anything or propose changes": "随便问，或提议修改",
   "Loading conversation…": "正在加载对话…",
