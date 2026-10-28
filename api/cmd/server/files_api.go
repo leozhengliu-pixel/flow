@@ -107,7 +107,7 @@ func (s *server) createFileUpload(w http.ResponseWriter, r *http.Request) {
 	if input.ContentType == "" {
 		input.ContentType = "application/octet-stream"
 	}
-	if _, _, err := mime.ParseMediaType(input.ContentType); err != nil || len(input.ContentType) > 255 {
+	if _, _, err := mime.ParseMediaType(input.ContentType); err != nil || len(input.ContentType) > uploadContentTypeMaxLength {
 		writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "contentType must be a valid media type")
 		return
 	}

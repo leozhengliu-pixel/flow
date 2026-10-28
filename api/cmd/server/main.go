@@ -6004,7 +6004,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 	}
 	if input.Icon != nil && strings.TrimSpace(*input.Icon) != issue.Icon {
 		icon := strings.TrimSpace(*input.Icon)
-		if len(icon) > 191 {
+		if len(icon) > issueIconMaxLength {
 			return nil, fmt.Errorf("%w: icon is too long", errInvalid)
 		}
 		issue.Icon = icon

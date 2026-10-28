@@ -1358,7 +1358,7 @@ func (s *server) prepareMCPAttachmentUpload(ctx context.Context, actor mcpActor,
 			return nil, fmt.Errorf("%s must be %d characters or fewer; nothing was uploaded", field, domain.UploadTitleMaxLength)
 		}
 	}
-	if contentType := stringArg(args, "contentType"); len(contentType) > 255 {
+	if contentType := stringArg(args, "contentType"); len(contentType) > uploadContentTypeMaxLength {
 		return nil, fmt.Errorf("contentType must be a media type of at most 255 characters")
 	}
 	upload := store.FileUpload{WorkspaceKey: actor.WorkspaceKey, UserID: actor.User.ID, Filename: filename, ContentType: stringArg(args, "contentType"), ExpectedSize: size, Purpose: "issue:" + issue.ID, Title: stringArg(args, "title"), Subtitle: stringArg(args, "subtitle")}

@@ -93,6 +93,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   from any other text before PostgreSQL sees it, and keeps it out of the
   stored issue, comment and workspace JSON, where one `\u0000` used to make
   later queries that read descriptions or notifications fail.
+- The MCP tool schemas advertise the server's text limits as `maxLength`
+  (`save_issue` title 2,048, `save_template` name and title 2,048,
+  `prepare_attachment_upload` title and subtitle 512 and `contentType` 255,
+  `save_attachment` title and subtitle 255, `save_team` key 32), so MCP
+  clients and the built-in agent see them, and an over-long value is refused
+  by the schema check with an error naming the field before anything runs.
 - On MySQL, editing a document larger than about 64 KiB no longer fails with
   HTTP 500 (`Data too long for column 'previous_values'`) and no longer
   discards the edit. This affected workspaces with an enabled webhook, an
