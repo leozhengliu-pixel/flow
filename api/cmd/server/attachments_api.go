@@ -50,7 +50,7 @@ func validateLinkAttachmentInput(input *linkAttachmentInput, requireURL bool) er
 			continue
 		}
 		*value = strings.TrimSpace(*value)
-		if utf8.RuneCountInString(*value) > 255 {
+		if utf8.RuneCountInString(*value) > linkAttachmentTextMaxLength {
 			return fmt.Errorf("%s must be at most 255 characters", name)
 		}
 	}

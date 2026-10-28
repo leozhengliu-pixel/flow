@@ -604,12 +604,12 @@
       "type": "object",
       "required": ["contentType", "filename", "issue", "size"],
       "properties": {
-        "contentType": { "type": "string", "description": "MIME type, e.g. image/png or application/pdf" },
+        "contentType": { "type": "string", "maxLength": 255, "description": "MIME type, e.g. image/png or application/pdf" },
         "filename": { "type": "string", "description": "Filename for the upload, e.g. screenshot.png" },
         "issue": { "type": "string", "description": "Issue ID or identifier (e.g., LIN-123)" },
         "size": { "type": "integer", "minimum": 0, "maximum": 20971520, "description": "Exact file size in bytes. Must be at most 20 MiB." },
-        "subtitle": { "type": "string", "description": "Suggested attachment subtitle for the finalize step" },
-        "title": { "type": "string", "description": "Suggested attachment title for the finalize step" }
+        "subtitle": { "type": "string", "maxLength": 512, "description": "Suggested attachment subtitle for the finalize step" },
+        "title": { "type": "string", "maxLength": 512, "description": "Suggested attachment title for the finalize step" }
       }
     }
   },
@@ -653,7 +653,7 @@
         "slaType": { "type": ["string", "null"], "enum": ["all", "onlyBusinessDays", null] },
         "state": { "type": "string" },
         "team": { "type": "string", "description": "Team name, key or ID. On an existing issue, moves it to that team." },
-        "title": { "type": "string" }
+        "title": { "type": "string", "maxLength": 2048 }
       }
     }
   },
@@ -888,8 +888,8 @@
       "properties": {
         "issue": { "type": "string", "description": "Issue ID or identifier (e.g., ENG-123)" },
         "url": { "type": "string", "description": "http or https URL of the linked resource; the attachment's identity on this issue" },
-        "title": { "type": "string", "description": "Attachment title. Defaults to the URL host for new attachments" },
-        "subtitle": { "type": "string", "description": "Optional secondary line, e.g. status or owner" },
+        "title": { "type": "string", "maxLength": 255, "description": "Attachment title. Defaults to the URL host for new attachments" },
+        "subtitle": { "type": "string", "maxLength": 255, "description": "Optional secondary line, e.g. status or owner" },
         "iconUrl": { "type": "string", "description": "Optional http(s) icon URL shown next to the link" },
         "metadata": { "type": "object", "description": "Optional key/value metadata stored with the attachment (at most 16 KB)" }
       }
@@ -1155,7 +1155,7 @@
       "properties": {
         "id": {"type": "string", "description": "Team to update: ID, key, or name. Omit to create a team."},
         "name": {"type": "string", "description": "Team name"},
-        "key": {"type": "string", "description": "Team identifier used in issue IDs, e.g. ENG (uppercase letters/digits)"},
+        "key": {"type": "string", "maxLength": 32, "description": "Team identifier used in issue IDs, e.g. ENG (uppercase letters/digits)"},
         "description": {"type": "string", "description": "Team description"},
         "icon": {"type": "string", "description": "Team icon name"},
         "color": {"type": "string", "description": "Team color as #RRGGBB"},
@@ -1408,11 +1408,11 @@
       "properties": {
         "type": {"type": "string", "description": "Template kind", "enum": ["issue", "project", "document"]},
         "id": {"type": "string", "description": "Template ID or name to update. Omit to create."},
-        "name": {"type": "string", "description": "Template name"},
+        "name": {"type": "string", "maxLength": 2048, "description": "Template name"},
         "description": {"type": "string", "description": "Issue/document template: description shown in the template picker. Project template: the project description."},
         "templateDescription": {"type": "string", "description": "Project template: description shown in the template picker"},
         "team": {"type": "string", "description": "Team ID, key, or name (issue templates: team template; document templates: required when creating)"},
-        "title": {"type": "string", "description": "Default issue or document title"},
+        "title": {"type": "string", "maxLength": 2048, "description": "Default issue or document title"},
         "body": {"type": "string", "description": "Issue template: default issue description (Markdown)"},
         "content": {"type": "string", "description": "Document template: body as Markdown"},
         "state": {"type": "string", "description": "Issue template: status name, type, or ID (requires a team)"},
