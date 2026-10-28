@@ -40,16 +40,17 @@ var webAppConnectOrigins = []string{"https://api.github.com"}
 // keep "sandbox; default-src 'none'"); the policy only fills in what is
 // missing, right before the response header is written.
 type securityHeaderPolicy struct {
-	config             appconfig.SecurityHeadersConfig
-	forwarding         *forwardingPolicy
-	httpsApp           bool
-	frameAncestors     string
-	frameOptions       string
-	permissions        string
-	hsts               string
-	apiPolicy          string
-	reportDirectives   string
-	reportingEndpoints string
+	config         appconfig.SecurityHeadersConfig
+	forwarding     *forwardingPolicy
+	httpsApp       bool
+	frameAncestors string
+	frameOptions   string
+	permissions    string
+	hsts           string
+	apiPolicy      string
+	// reportEndpoint is FLOW_SECURITY_CSP_REPORT_URI as the browser should
+	// post to it: absolute, or still a path when FLOW_APP_URL is unset.
+	reportEndpoint string
 	// app is the web app document policy; nil when this server does not
 	// serve the built web app (FLOW_STATIC_PATH unset).
 	app *webAppPolicy
@@ -88,14 +89,31 @@ func newSecurityHeaderPolicy(config appconfig.SecurityHeadersConfig, appURL, sta
 		if strings.HasPrefix(endpoint, "/") && parsedApp != nil && parsedApp.Host != "" {
 			endpoint = parsedApp.Scheme + "://" + parsedApp.Host + endpoint
 		}
-		policy.reportDirectives = "; report-uri " + endpoint + "; report-to csp"
-		policy.reportingEndpoints = `csp="` + endpoint + `"`
+		policy.reportEndpoint = endpoint
 	}
 	policy.apiPolicy = "default-src 'none'; base-uri 'none'; form-action 'none'"
 	if staticPath != "" {
 		policy.app = &webAppPolicy{directives: webAppDirectives(config, parsedApp), index: inlineScriptHashes{path: filepath.Join(staticPath, "index.html")}}
 	}
 	return policy
+}
+
+// reporting is the report directives appended to a policy and the
+// Reporting-Endpoints value that goes with them ("" when none). report-to is
+// added only for an HTTPS endpoint: Chromium delivers Reporting API reports to
+// HTTPS endpoints only, and when a policy has both directives it uses report-to
+// alone, so an http endpoint (loopback development, an intranet without TLS)
+// would never get a report. report-uri alone is delivered over http.
+func (p *securityHeaderPolicy) reporting(r *http.Request) (directives, endpoints string) {
+	if p.reportEndpoint == "" {
+		return "", ""
+	}
+	directives = "; report-uri " + p.reportEndpoint
+	secure := strings.HasPrefix(p.reportEndpoint, "https://") || strings.HasPrefix(p.reportEndpoint, "/") && p.forwarding.scheme(r) == "https"
+	if !secure {
+		return directives, ""
+	}
+	return directives + "; report-to csp", `csp="` + p.reportEndpoint + `"`
 }
 
 func defaultPermissionsPolicy() string {
@@ -318,20 +336,21 @@ func (p *securityHeaderPolicy) apply(header http.Header, r *http.Request) {
 	if p.webAppRoute(r) {
 		policy = p.app.policy()
 	}
+	reportDirectives, reportingEndpoints := p.reporting(r)
 	switch p.config.CSP {
 	case appconfig.CSPEnforce:
-		header.Set(enforced, policy+"; "+frameAncestors+p.reportDirectives)
+		header.Set(enforced, policy+"; "+frameAncestors+reportDirectives)
 	case appconfig.CSPReportOnly:
 		// Browsers ignore frame-ancestors in a report-only policy, so framing
 		// is enforced on its own while the rest is only reported.
 		header.Set(enforced, frameAncestors)
-		header.Set(reportOnly, policy+p.reportDirectives)
+		header.Set(reportOnly, policy+reportDirectives)
 	default:
 		header.Set(enforced, frameAncestors)
 		return
 	}
-	if p.reportingEndpoints != "" {
-		set("Reporting-Endpoints", p.reportingEndpoints)
+	if reportingEndpoints != "" {
+		set("Reporting-Endpoints", reportingEndpoints)
 	}
 }
 

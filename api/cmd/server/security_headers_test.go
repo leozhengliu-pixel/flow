@@ -258,6 +258,47 @@ func TestSecurityHeadersCSPModesAndReporting(t *testing.T) {
 	}
 }
 
+// Chromium delivers report-to reports to HTTPS endpoints only and, with both directives present, ignores report-uri. An
+// endpoint that is not HTTPS therefore gets report-uri alone, which every browser delivers over http.
+func TestSecurityHeadersReportToOnlyForHTTPSEndpoints(t *testing.T) {
+	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	const base = "default-src 'none'; base-uri 'none'; form-action 'none'"
+	tests := []struct {
+		name      string
+		reportURI string
+		appURL    string
+		forwarded string
+		want      string
+		endpoints string
+	}{
+		{"https url", "https://reports.example.com/csp", "http://flow.test", "", base + "; report-uri https://reports.example.com/csp; report-to csp", `csp="https://reports.example.com/csp"`},
+		{"loopback http url", "http://127.0.0.1:9000/csp", "https://flow.example.com", "", base + "; report-uri http://127.0.0.1:9000/csp", ""},
+		{"path on an https app", "/csp-reports", "https://flow.example.com", "", base + "; report-uri https://flow.example.com/csp-reports; report-to csp", `csp="https://flow.example.com/csp-reports"`},
+		{"path on an http app", "/csp-reports", "http://flow.example.com", "", base + "; report-uri http://flow.example.com/csp-reports", ""},
+		{"path without an app url over http", "/csp-reports", "", "", base + "; report-uri /csp-reports", ""},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			config := appconfig.DefaultSecurityHeaders()
+			config.CSPReportURI = test.reportURI
+			header := securityResponse(t, withSecurityHeaders(newSecurityHeaderPolicy(config, test.appURL, ""), ok), httptest.NewRequest(http.MethodGet, "/api/health", nil)).Header()
+			if got := header.Get("Content-Security-Policy-Report-Only"); got != test.want || header.Get("Reporting-Endpoints") != test.endpoints {
+				t.Fatalf("report-only %q / Reporting-Endpoints %q, want %q / %q", got, header.Get("Reporting-Endpoints"), test.want, test.endpoints)
+			}
+		})
+	}
+	// A relative path is as secure as the page that resolves it: behind a TLS-terminating proxy that Flow trusts it is HTTPS.
+	config := appconfig.DefaultSecurityHeaders()
+	config.CSPReportURI = "/csp-reports"
+	config.TrustProxyHeaders = true
+	request := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	request.Header.Set("X-Forwarded-Proto", "https")
+	header := securityResponse(t, withSecurityHeaders(newSecurityHeaderPolicy(config, "", ""), ok), request).Header()
+	if got := header.Get("Content-Security-Policy-Report-Only"); got != base+"; report-uri /csp-reports; report-to csp" || header.Get("Reporting-Endpoints") != `csp="/csp-reports"` {
+		t.Fatalf("path behind a trusted https proxy: %q / %q", got, header.Get("Reporting-Endpoints"))
+	}
+}
+
 func TestSecurityHeadersFramingAllowListAndGatewayOverrides(t *testing.T) {
 	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
 	serve := func(config appconfig.SecurityHeadersConfig) http.Header {
