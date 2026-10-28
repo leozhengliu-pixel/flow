@@ -357,9 +357,13 @@ function OptionSubmenuRow({ option, submenu, active, checked, listboxId, multi, 
   </Popover.Root>
 }
 
-/** The 10x9 elbow that ties a sub-item to its parent row. */
+/** The reference app's gap between a menu and a hover card opened beside it (the project teams picker's team card). */
+const BESIDE_MENU_GAP = 5
+
+/** The reference app's tree elbow tying a sub-item to its parent row: a 1x8 line down from the row's top edge,
+ *  then the 10x9 curve from y7 toward the icon. */
 function TreeElbow() {
-  return <svg aria-hidden="true" className="property-command-tree-elbow" width="10" height="9" viewBox="0 0 10 9"><path d="M0 0h1.5v4a3 3 0 0 0 3 3H10v1.5H4.5A4.5 4.5 0 0 1 0 4z"/></svg>
+  return <svg aria-hidden="true" className="property-command-tree-elbow" width="10" height="16" viewBox="0 0 10 16"><path d="M0 0h1v8H0z"/><path transform="translate(0 7)" d="M0 0h1v1c0 2.5 2.212 3.546 2.212 3.546L9.737 8.06c.568.306.094 1.186-.474.88l-6.48-3.488S0 4 0 1V0Z"/></svg>
 }
 
 function OptionHover({ children, besideMenu = false, className, content, suppressed = false }: { children: ReactNode; besideMenu?: boolean; className?: string; content: ReactNode; suppressed?: boolean }) {
@@ -398,13 +402,15 @@ function OptionHover({ children, besideMenu = false, className, content, suppres
       const padding = 8
       const gap = 6
       let left = anchor.right + gap
-      if (besideMenu) {
-        // To the left of the whole menu; the right side only when there is no room.
-        const menu = anchorRef.current?.closest('.property-command-surface')?.getBoundingClientRect() ?? anchor
-        left = menu.left - card.width - gap
-        if (left < padding) left = menu.right + gap
-      } else if (left + card.width > window.innerWidth - padding) left = anchor.left - card.width - gap
       let top = anchor.top
+      if (besideMenu) {
+        // To the left of the whole menu, 5px from it with its 0.5px border just above the row; the right side only
+        // when there is no room.
+        const menu = anchorRef.current?.closest('.property-command-surface')?.getBoundingClientRect() ?? anchor
+        left = menu.left - card.width - BESIDE_MENU_GAP
+        if (left < padding) left = menu.right + BESIDE_MENU_GAP
+        top = anchor.top - 0.5
+      } else if (left + card.width > window.innerWidth - padding) left = anchor.left - card.width - gap
       left = Math.max(padding, Math.min(left, window.innerWidth - card.width - padding))
       top = Math.max(padding, Math.min(top, window.innerHeight - card.height - padding))
       setPosition({ left, top })

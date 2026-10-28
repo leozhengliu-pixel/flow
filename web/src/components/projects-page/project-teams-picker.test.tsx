@@ -88,6 +88,10 @@ describe('ProjectTeamsPicker sub-teams', () => {
     expect(rows.map(row => row.querySelector('.property-command-tree-elbow') !== null)).toEqual([false, false, true, true, false])
     expect(rows[2]).toHaveStyle({ '--option-indent': '1' })
     expect(rows[3]).toHaveStyle({ '--option-indent': '2' })
+    // The reference elbow: a 1x8 line down from the row's top edge, then the 10x9 curve from y7.
+    const elbow = rows[2].querySelector('.property-command-tree-elbow')!
+    expect(elbow.getAttribute('viewBox')).toBe('0 0 10 16')
+    expect([...elbow.querySelectorAll('path')].map(path => path.getAttribute('transform'))).toEqual([null, 'translate(0 7)'])
     // The checkbox column is the same for every level.
     expect(rows.every(row => row.querySelector('.property-command-checkbox') !== null)).toBe(true)
   })

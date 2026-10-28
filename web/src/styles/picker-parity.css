@@ -1262,16 +1262,17 @@ html:root body .property-command-surface .property-command-options [role=option]
 html:root body .property-command-surface .property-command-options [role=option].has-submenu .property-command-group-chevron { grid-column: 4; justify-self: end; color: var(--pk-muted); }
 html:root body .property-command-surface.project-teams-menu:not(#_) .property-command-search-shortcut > span { font: 450 10px/11px var(--font); }
 
-/* Sub-teams: listed under their parent; the icon and name shift 24px per level, the checkbox column stays, and a
-   10x9 elbow sits 6px right of the parent's icon column. */
+/* Sub-teams: listed under their parent; the icon and name shift 24px per level, the checkbox column stays, and the
+   elbow (a 1x8 line from the row's top edge, then a 10x9 curve from y7) starts at row x+44.25, under the middle of
+   the parent's 14px icon. */
 html:root body .property-command-surface.project-teams-menu:not(#_) .property-command-options [role=option][data-indent] {
   grid-template-columns: 16px calc(16px + var(--option-indent, 0) * 24px) minmax(0, 1fr) auto;
 }
 html:root body .property-command-surface.project-teams-menu:not(#_) .property-command-options [role=option][data-indent] .property-command-icon { justify-self: end; }
 html:root body .property-command-options [role=option] > .property-command-tree-elbow {
   position: absolute;
-  top: 8px;
-  left: calc(14px + 30px + (var(--option-indent, 1) - 1) * 24px);
+  top: 0;
+  left: calc(14px + 30.25px + (var(--option-indent, 1) - 1) * 24px);
   fill: var(--pk-tree-elbow);
   pointer-events: none;
 }
