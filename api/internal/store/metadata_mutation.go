@@ -72,7 +72,7 @@ func metadataOnlyMutation(event string, payload any) bool {
 	// member's userSettings. Through the full path they would load and
 	// replace every issue and content record, deleting records another
 	// server committed meanwhile.
-	case "audit.agent_session", "audit.agent_run_mcp", "audit.code_host_account", "audit.coding_environment",
+	case "audit.agent_session", "audit.agent_run_mcp", "audit.chat_integration", "audit.code_host_account", "audit.coding_environment",
 		"audit.coding_mcp", "audit.oauth_application_credential", "audit.personal_connection",
 		"scim.audited", "scim.token_revoked", "user_settings.scim_profile":
 		return true
