@@ -5,12 +5,18 @@ import { request, jsonRequest } from "@/lib/api-client";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import type { WorkspaceSettings } from "@/types/flow";
 import { SettingsSection, SettingsRow } from "./settings-primitives";
+import { useOptionalTranslate } from "@/i18n/i18n";
 import { ConnectorAuthorization, ConnectorDialog, ConnectorMenu } from './connector-dialog';
+import type { ConnectorPolicy } from "./connector-api";
+import { ConnectorToolAccessDialog } from "./connector-tool-access-dialog";
 
-type Policy = { id: string; name: string; kind: "mcp" | "oauth"; url?: string; ownerId?: string; shared: boolean; status: string; scopes?: string[]; codingSessions?: boolean; toolApproval?: "always" };
+type Policy = ConnectorPolicy;
 
 export function ApplicationPolicySettings({ admin }: { admin: boolean }) {
+  const t = useOptionalTranslate();
   const [items, setItems] = useState<Policy[]>([]);
+  // The connector whose tool access an admin is editing.
+  const [toolAccessOf, setToolAccessOf] = useState<Policy>();
   const [adding, setAdding] = useState<{name:string;url:string}>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(()=>new URLSearchParams(window.location.search).has('connector_error')?'Connector authorization failed. Try authorizing again.':'');
@@ -29,18 +35,23 @@ export function ApplicationPolicySettings({ admin }: { admin: boolean }) {
   };
   return <SettingsSection className="connector-settings" title={admin?"Application approvals and Agent connectors":"MCP connectors"} description={admin?undefined:"Add MCP connectors for use with Flow Agent. Workspace admins can manage available connectors in security settings."}>
     {error && <p role="alert">{error}</p>}
-    {items.map(item => <SettingsRow key={item.id} title={item.name} description={`${item.kind === "mcp" ? item.url : item.scopes?.join(", ")} · ${item.status}${item.kind === "mcp" ? item.shared ? " · Workspace" : " · Personal" : ""}${item.kind === "mcp" && item.codingSessions ? " · Coding sessions" : ""}${item.kind === "mcp" && item.toolApproval === "always" ? " · Asks before tools" : ""}`}>
+    {items.map(item => <SettingsRow key={item.id} title={item.name} description={`${item.kind === "mcp" ? item.url : item.scopes?.join(", ")} · ${item.status}${item.kind === "mcp" ? item.shared ? " · Workspace" : " · Personal" : ""}${item.kind === "mcp" && item.codingSessions ? " · Coding sessions" : ""}${item.kind === "mcp" && item.toolApproval === "always" ? " · Asks before tools" : ""}${item.kind === "mcp" && Object.keys(item.toolAccess ?? {}).length ? ` · ${toolOverrides(t, Object.keys(item.toolAccess ?? {}).length)}` : ""}`}>
         {admin && item.status !== "approved" && <button className="settings-action" disabled={busy} onClick={() => void save({ ...item, status: "approved" })}>Approve</button>}
         {admin && item.status !== "rejected" && <button className="settings-action" disabled={busy} onClick={() => void save({ ...item, status: "rejected" })}>Reject</button>}
         {admin && item.kind === "mcp" && item.shared && item.status === "approved" && <button className="settings-action" disabled={busy} title="Coding-session agents reach this server through Flow; its credentials and network stay on the server" onClick={() => void save({ ...item, codingSessions: !item.codingSessions })}>{item.codingSessions ? "Disable for coding sessions" : "Enable for coding sessions"}</button>}
         {item.kind === "mcp" && (admin || !item.shared) && <button className="settings-action" disabled={busy} title={item.toolApproval === "always" ? "Flow Agent asks before every call to this connector's tools" : "Flow Agent runs this connector's tools without asking"} onClick={() => { const { toolApproval, ...rest } = item; void save(toolApproval === "always" ? rest : { ...rest, toolApproval: "always" }); }}>{item.toolApproval === "always" ? "Run tools automatically" : "Ask before running tools"}</button>}
+        {admin && item.kind === "mcp" && <button className="settings-action" disabled={busy} title={t("Decide which of this connector's tools Flow treats as read-only")} onClick={() => setToolAccessOf(item)}>{t("Tool access…")}</button>}
         {item.kind==='mcp'&&item.status!=='rejected'&&(admin||!item.shared)&&<ConnectorAuthorization id={item.id}/>}
         {(admin||item.kind==='mcp'&&!item.shared)&&<button className="settings-action" aria-label={`Remove ${item.name}`} title={`Remove ${item.name}`} disabled={busy} onClick={() => void remove(item)}><Trash2 size={14} /></button>}
     </SettingsRow>)}
     <div className="connector-empty">{!items.length?<h3>No connectors added</h3>:<span/>}<ConnectorMenu onChoose={(name,url)=>setAdding({name,url})}/></div>
     {adding&&<ConnectorDialog initial={adding} admin={admin} onSaved={reload} onClose={()=>setAdding(undefined)}/>}
+    {toolAccessOf && <ConnectorToolAccessDialog item={toolAccessOf} onSave={save} onClose={() => setToolAccessOf(undefined)} />}
   </SettingsSection>;
 }
+
+const toolOverrides = (t: (source: string) => string, count: number) =>
+  count === 1 ? t("1 tool override") : t("{count} tool overrides").replace("{count}", String(count));
 
 export function DataPrivacyDialog({ kind, settings, onSave, onClose }: { kind: "support" | "health"; settings: WorkspaceSettings; onSave: (patch: Partial<WorkspaceSettings>) => Promise<void>; onClose: () => void }) {
   const [enabled, setEnabled] = useState(kind === "support" ? Boolean(settings.reduceSupportPersonalInfo) : Boolean(settings.hipaaCompliance));

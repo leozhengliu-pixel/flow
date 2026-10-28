@@ -16,9 +16,15 @@ export type ConnectorPolicy = {
   displayName?: string;
   /** Tool names read the last time the connector was connected (server-set). */
   tools?: string[];
+  /** The tools the connector marked read-only (readOnlyHint) the last time it was connected (server-set). */
+  readOnlyTools?: string[];
+  /** A workspace admin's override per tool name: treat it as read-only or as a write, whatever its annotation says. */
+  toolAccess?: Record<string, ConnectorToolAccess>;
   connectedAt?: string;
   updatedAt?: string;
 };
+
+export type ConnectorToolAccess = "read" | "write";
 
 export type ConnectorConnectResult = {
   connected: boolean;

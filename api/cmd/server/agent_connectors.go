@@ -23,11 +23,15 @@ type connectorTool struct {
 	Definition agentProviderTool
 	Policy     applicationPolicy
 	RemoteName string
-	// ReadOnly is the tool's MCP readOnlyHint: true only when the connector declares that the tool does not modify
-	// its environment. The MCP default (no annotations, or readOnlyHint false) is a tool that may write.
+	// ReadOnly is whether Flow treats the tool as read-only: the workspace connector policy's override for it
+	// (applicationPolicy.ToolAccess), else its MCP readOnlyHint, true only when the connector declares that the
+	// tool does not modify its environment. The MCP default (no annotations, or readOnlyHint false) is a tool that
+	// may write.
 	ReadOnly bool
 	// Annotated is true when the connector sent the tool's annotations at all.
 	Annotated bool
+	// AccessOverride is the policy's override that set ReadOnly ("read" or "write"), or "" when the annotation did.
+	AccessOverride string
 }
 type connectorToolsKey struct{}
 
@@ -303,6 +307,15 @@ func (s *server) listConnectorTools(ctx context.Context, policy applicationPolic
 			if tool.Annotations != nil {
 				item.Annotated = true
 				item.ReadOnly = tool.Annotations.ReadOnlyHint != nil && *tool.Annotations.ReadOnlyHint
+			}
+			// The workspace admin's decision wins over the connector's own annotation.
+			switch item.AccessOverride = policy.ToolAccess[tool.Name]; item.AccessOverride {
+			case connectorToolRead:
+				item.ReadOnly = true
+			case connectorToolWrite:
+				item.ReadOnly = false
+			default:
+				item.AccessOverride = ""
 			}
 			items = append(items, item)
 			if len(items) > maxConnectorTools {

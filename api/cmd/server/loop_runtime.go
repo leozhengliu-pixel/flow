@@ -1460,7 +1460,8 @@ const loopProhibitedCallPrefix = "This loop's instructions say not to"
 // loopConnectorWriteRefusal is the error of a connector tool call in a loop whose instructions forbid every change,
 // or nil when the tool may run. Only a tool its connector marks read-only (MCP readOnlyHint) runs: by the MCP spec a
 // tool without that hint may modify its environment, so one with no annotations is refused as a write too, and
-// the error says so, so the model carries on with read tools.
+// the error says so, so the model carries on with read tools. A workspace admin's override in the connector's
+// policy (treat as read-only / treat as a write) decides instead of the annotation.
 func loopConnectorWriteRefusal(ctx context.Context, call domain.AgentToolCall) error {
 	tool, ok := offeredConnectorTool(ctx, call.Name)
 	switch {
@@ -1468,6 +1469,8 @@ func loopConnectorWriteRefusal(ctx context.Context, call domain.AgentToolCall) e
 		return nil
 	case !ok:
 		return fmt.Errorf("%s change anything; this connector tool is not offered to the run, so it was not called. Use read-only tools and reply with the summary only", loopProhibitedCallPrefix)
+	case tool.AccessOverride == connectorToolWrite:
+		return fmt.Errorf("%s change anything; %s (%s) is treated as a tool that changes data by the workspace's connector settings, so it was not called. Use read-only tools and reply with the summary only", loopProhibitedCallPrefix, tool.RemoteName, tool.Policy.label())
 	case tool.Annotated:
 		return fmt.Errorf("%s change anything; %s (%s) may change data because its connector does not mark it read-only, so it was not called. Use read-only tools and reply with the summary only", loopProhibitedCallPrefix, tool.RemoteName, tool.Policy.label())
 	}

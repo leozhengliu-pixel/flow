@@ -1,0 +1,55 @@
+.connector-tool-access p {
+  margin: 0;
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.connector-tool-access-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  list-style: none;
+}
+
+.connector-tool-access-list li + li {
+  border-top: 1px solid var(--theme-border);
+}
+
+.connector-tool-access-list label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+  padding: 4px 10px;
+  color: var(--theme-text-primary);
+  font-size: 13px;
+}
+
+.connector-tool-access-list label > span {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connector-tool-access-list select {
+  flex: none;
+  max-width: 60%;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 6px;
+  background: var(--theme-surface-1);
+  color: var(--theme-text-primary);
+  font: inherit;
+  font-size: 12px;
+}

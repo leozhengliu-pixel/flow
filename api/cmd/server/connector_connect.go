@@ -45,7 +45,7 @@ func (s *server) connectConnector(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer client.close()
-	tools, err := listConnectorToolNames(ctx, client)
+	tools, readOnly, err := listConnectorToolNames(ctx, client)
 	if err != nil {
 		writeJSON(w, http.StatusOK, connectorConnectResult{Error: err.Error()})
 		return
@@ -63,7 +63,7 @@ func (s *server) connectConnector(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		now := time.Now().UTC()
-		items[index].Tools = tools
+		items[index].Tools, items[index].ReadOnlyTools = tools, readOnly
 		items[index].ConnectedAt = &now
 		if serverName != "" && len(serverName) <= 200 && items[index].Name == connectorHostName(item.URL) {
 			items[index].Name = serverName
@@ -87,9 +87,10 @@ func connectorHostName(endpoint string) string {
 	return parsed.Hostname()
 }
 
-// listConnectorToolNames pages through tools/list and returns the tool names.
-func listConnectorToolNames(ctx context.Context, client *remoteMCPClient) ([]string, error) {
-	names := []string{}
+// listConnectorToolNames pages through tools/list and returns the tool names, and those the connector marks
+// read-only (readOnlyHint true).
+func listConnectorToolNames(ctx context.Context, client *remoteMCPClient) (names, readOnly []string, err error) {
+	names = []string{}
 	cursor := ""
 	for page := 0; page < 10; page++ {
 		params := map[string]string{}
@@ -98,20 +99,26 @@ func listConnectorToolNames(ctx context.Context, client *remoteMCPClient) ([]str
 		}
 		raw, err := client.rpc(ctx, "tools/list", params, false)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		var result struct {
 			Tools []struct {
-				Name string `json:"name"`
+				Name        string `json:"name"`
+				Annotations *struct {
+					ReadOnlyHint *bool `json:"readOnlyHint"`
+				} `json:"annotations"`
 			} `json:"tools"`
 			NextCursor string `json:"nextCursor"`
 		}
 		if json.Unmarshal(raw, &result) != nil {
-			return nil, errors.New("invalid MCP tool inventory")
+			return nil, nil, errors.New("invalid MCP tool inventory")
 		}
 		for _, tool := range result.Tools {
 			if tool.Name != "" && len(tool.Name) <= 256 && len(names) < maxConnectorToolNames {
 				names = append(names, tool.Name)
+				if tool.Annotations != nil && tool.Annotations.ReadOnlyHint != nil && *tool.Annotations.ReadOnlyHint {
+					readOnly = append(readOnly, tool.Name)
+				}
 			}
 		}
 		if result.NextCursor == "" || result.NextCursor == cursor {
@@ -119,5 +126,5 @@ func listConnectorToolNames(ctx context.Context, client *remoteMCPClient) ([]str
 		}
 		cursor = result.NextCursor
 	}
-	return names, nil
+	return names, readOnly, nil
 }
