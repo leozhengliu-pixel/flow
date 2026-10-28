@@ -143,23 +143,80 @@ func (s *server) prepareLoopDocumentWrite(rec *loopRunRecorder, expectation loop
 }
 
 // loopRunOccurrence is the schedule occurrence a run of a scheduled loop is
-// for (LoopRun.Occurrence): the scheduled time of a schedule trigger, or now
-// for a manual run, as a date in the loop's timezone, with the hour for
-// hourly schedules. Event runs have none.
+// for (LoopRun.Occurrence), the key of its once-per-occurrence appends. It
+// follows the schedule's period, in the loop's timezone: the hour for hourly
+// schedules ("2026-10-27T09"), the date for daily ones ("2026-10-27"), the
+// ISO week for weekly ones ("2026-W44") and the month for monthly ones
+// ("2026-10"). A schedule trigger is for its scheduled time. A manual run of
+// a daily or hourly loop is for now; of a weekly or monthly loop, for the
+// period of the most recent scheduled occurrence (a Friday report run again
+// on Monday is still that week's), or now's before the first one. Event runs
+// have none.
 func loopRunOccurrence(loop domain.Loop, trigger loopTrigger, now time.Time) string {
 	if loop.TriggerType != "schedule" || trigger.Kind == "event" {
 		return ""
 	}
 	config := normalizeLoopTriggerConfig("schedule", loop.TriggerConfig)
+	unit, _ := config["unit"].(string)
 	at := now
-	if !trigger.ScheduledAt.IsZero() {
+	switch {
+	case !trigger.ScheduledAt.IsZero():
 		at = trigger.ScheduledAt
+	case unit == "week" || unit == "month":
+		if previous, ok := previousLoopRun(loop.TriggerConfig, loop.CreatedAt, now); ok {
+			at = previous
+		}
 	}
 	at = at.In(loopScheduleLocation(config))
-	if unit, _ := config["unit"].(string); unit == "hour" {
+	switch unit {
+	case "hour":
 		return at.Format("2006-01-02T15")
+	case "week":
+		year, week := at.ISOWeek()
+		return fmt.Sprintf("%04d-W%02d", year, week)
+	case "month":
+		return at.Format("2006-01")
 	}
 	return at.Format("2006-01-02")
+}
+
+// previousLoopRun is the most recent scheduled time at or before now, if the
+// schedule had one in the last period: occurrences are found with
+// nextLoopRun from one period (plus a week of slack) back.
+func previousLoopRun(config map[string]any, created, now time.Time) (time.Time, bool) {
+	normalized := normalizeLoopTriggerConfig("schedule", config)
+	interval := loopScheduleInterval(normalized)
+	span := time.Duration(7*interval+7) * 24 * time.Hour
+	if unit, _ := normalized["unit"].(string); unit == "month" {
+		span = time.Duration(31*interval+7) * 24 * time.Hour
+	}
+	var previous time.Time
+	probe := now.Add(-span)
+	for range 1000 {
+		next := nextLoopRun(config, created, probe)
+		if next.After(now) || !next.After(probe) {
+			break
+		}
+		previous, probe = next, next
+	}
+	return previous, !previous.IsZero()
+}
+
+// loopOccurrenceLabel names an occurrence for the run's prompt and errors:
+// a week with its dates ("week 2026-W44, 2026-10-26 to 2026-11-01"), a month
+// ("month 2026-10"); dates and hours as they are.
+func loopOccurrenceLabel(occurrence string) string {
+	var year, week int
+	if n, err := fmt.Sscanf(occurrence, "%d-W%d", &year, &week); err == nil && n == 2 && len(occurrence) == len("2026-W44") {
+		// ISO week 1 holds January 4; its Monday starts the year's weeks.
+		january4 := time.Date(year, time.January, 4, 0, 0, 0, 0, time.UTC)
+		monday := january4.AddDate(0, 0, -((int(january4.Weekday())+6)%7)+7*(week-1))
+		return fmt.Sprintf("week %s, %s to %s", occurrence, monday.Format("2006-01-02"), monday.AddDate(0, 0, 6).Format("2006-01-02"))
+	}
+	if len(occurrence) == len("2026-10") {
+		return "month " + occurrence
+	}
+	return occurrence
 }
 
 // loopScheduleLocation is the timezone of a normalized schedule (UTC when it
@@ -205,11 +262,12 @@ func (s *server) claimLoopOccurrenceAppend(rec *loopRunRecorder, prepared *loopD
 	record := prepared.record
 	record.Occurrence = rec.run.Occurrence
 	claim := store.LoopDocumentAppend{LoopID: rec.run.LoopID, Occurrence: rec.run.Occurrence, DocumentID: document.ID, RunID: rec.run.ID, TextKey: record.Key, TextProbe: loopAppendProbe(text), VersionBefore: document.Version}
+	label := loopOccurrenceLabel(claim.Occurrence)
 	ctx := context.Background()
 	for attempt := 0; attempt < 3; attempt++ {
 		existing, claimed, err := s.store.ClaimLoopDocumentAppend(ctx, rec.workspace, claim)
 		if err != nil {
-			return fmt.Errorf("Could not check whether this loop already appended to %q for %s (%v); the text was not appended. Try the call again", document.Title, claim.Occurrence, err)
+			return fmt.Errorf("Could not check whether this loop already appended to %q for %s (%v); the text was not appended. Try the call again", document.Title, label, err)
 		}
 		if claimed {
 			prepared.claim = &claim
@@ -224,13 +282,13 @@ func (s *server) claimLoopOccurrenceAppend(rec *loopRunRecorder, prepared *loopD
 		if appended || running {
 			record.ExistingRunID = existing.RunID
 			if running {
-				return fmt.Errorf("Another run of this loop (%s) is appending this loop's section for %s to %q right now, so this run did not append it again. Do not append it; finish the run and say the section for %s is written by that run", existing.RunID, claim.Occurrence, document.Title, claim.Occurrence)
+				return fmt.Errorf("Another run of this loop (%s) is appending this loop's section for %s to %q right now, so this run did not append it again. Do not append it; finish the run and say the section for %s is written by that run", existing.RunID, label, document.Title, label)
 			}
-			next := "The instructions ask to append, not to rewrite: do not append or change that section; finish the run and say the section for " + claim.Occurrence + " already exists"
+			next := "The instructions ask to append, not to rewrite: do not append or change that section; finish the run and say the section for " + label + " already exists"
 			if op == loopOpUpdate {
 				next = "If the section needs changes, update it with a patch that replaces its text (replace or replace_range) instead of appending"
 			}
-			return fmt.Errorf("This loop already appended its section for %s to %q (run %s), so it was not appended again: the document keeps one section per date. %s", claim.Occurrence, document.Title, existing.RunID, next)
+			return fmt.Errorf("This loop already appended its section for %s to %q (run %s), so it was not appended again: the document keeps one section per occurrence. %s", label, document.Title, existing.RunID, next)
 		}
 		// The claiming run ended without appending: this run takes over.
 		if ok, err := s.store.TakeOverLoopDocumentAppend(ctx, rec.workspace, claim, existing.RunID); err == nil && ok {
@@ -238,7 +296,7 @@ func (s *server) claimLoopOccurrenceAppend(rec *loopRunRecorder, prepared *loopD
 			return nil
 		}
 	}
-	return fmt.Errorf("Could not check whether this loop already appended to %q for %s; the text was not appended. Try the call again", document.Title, claim.Occurrence)
+	return fmt.Errorf("Could not check whether this loop already appended to %q for %s; the text was not appended. Try the call again", document.Title, label)
 }
 
 // loopOccurrenceAppendState reads another run's claim: whether its append is

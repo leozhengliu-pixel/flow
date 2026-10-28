@@ -1609,7 +1609,8 @@ func loopSystemPrompt(data domain.Bootstrap, loop domain.Loop, trigger loopTrigg
 	}
 	fmt.Fprintf(&prompt, "\nToday: %s\n", loopToday(loop, time.Now()))
 	if trigger.Occurrence != "" && !plan.ReadOnly && !slices.Contains(plan.Expectation.Prohibited, "document") {
-		fmt.Fprintf(&prompt, "This run is for the %s occurrence of the loop's schedule. A loop appends to a document once per occurrence: when this loop already appended to a document for %s, save_document refuses another append to it.\n", trigger.Occurrence, trigger.Occurrence)
+		label := loopOccurrenceLabel(trigger.Occurrence)
+		fmt.Fprintf(&prompt, "This run is for the %s occurrence of the loop's schedule. A loop appends to a document once per occurrence: when this loop already appended to a document for %s, save_document refuses another append to it.\n", label, label)
 	}
 	return prompt.String()
 }
@@ -1668,6 +1669,20 @@ func parseLoopClock(value string) (int, int, bool) {
 	return parsed.Hour(), parsed.Minute(), true
 }
 
+// loopScheduleInterval is a schedule's `interval` (at least 1).
+func loopScheduleInterval(config map[string]any) int {
+	interval := 1
+	switch value := config["interval"].(type) {
+	case float64:
+		interval = int(value)
+	case int:
+		interval = value
+	case string:
+		interval, _ = strconv.Atoi(value)
+	}
+	return max(interval, 1)
+}
+
 // nextLoopRun returns the first scheduled time strictly after `after`. The
 // schedule starts on startDate (legacy: starting) at `time` in `timezone` and
 // repeats every `interval` hours, days, weeks or months; `weekdays` limits
@@ -1688,18 +1703,7 @@ func nextLoopRun(config map[string]any, created, after time.Time) time.Time {
 		}
 	}
 	start = time.Date(start.Year(), start.Month(), start.Day(), hour, minute, 0, 0, location)
-	interval := 1
-	switch value := config["interval"].(type) {
-	case float64:
-		interval = int(value)
-	case int:
-		interval = value
-	case string:
-		interval, _ = strconv.Atoi(value)
-	}
-	if interval < 1 {
-		interval = 1
-	}
+	interval := loopScheduleInterval(config)
 	unit, _ := config["unit"].(string)
 	weekdays := map[time.Weekday]bool{}
 	for _, day := range loopConfigStrings(config, "weekdays") {
