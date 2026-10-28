@@ -209,6 +209,13 @@ jobs:
           FLOW_E2E_API_LOG: ${{ runner.temp }}/flow-e2e-api.log
         run: npm run test:e2e
 
+      # The response security headers in a real browser, against the production web build
+      # the API serves: passkeys, embeds, math, the collaboration socket, CSP reports and
+      # the service worker. It builds the API and the web app itself (about 30 s).
+      - name: Run security header browser tests
+        working-directory: web
+        run: npm run test:e2e:security
+
       - name: Upload API log and Playwright output
         if: failure()
         uses: actions/upload-artifact@v7
@@ -218,6 +225,8 @@ jobs:
             ${{ runner.temp }}/flow-e2e-api.log
             web/playwright-report
             web/test-results
+            web/playwright-report-security
+            web/test-results-security
           if-no-files-found: ignore
           retention-days: 7
 
