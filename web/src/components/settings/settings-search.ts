@@ -922,6 +922,31 @@ type IndexedSettingsResult = Omit<SettingsSearchResult, 'score'> & {
   scoreBonus: number
 }
 
+/** Search entries that mean "the chat platform", named `{name}` when it is Lark or Feishu. */
+const CHAT_PLATFORM_SEARCH_TITLES: Record<string, string> = {
+  Slack: '{name}',
+  'Send initiative updates to a Slack channel': 'Send initiative updates to {name} groups',
+}
+
+/**
+ * The search pages for the deployment's chat platform (FLOW_CHAT_PLATFORM).
+ * With Lark or Feishu, entries about the chat platform use `{name}`, which the
+ * caller fills after translating; Asks for Slack stays Slack.
+ */
+export function chatPlatformSearchPages(pages: SettingsSearchPage[], platform: 'slack' | 'lark' | 'feishu'): SettingsSearchPage[] {
+  if (platform === 'slack') return pages
+  const keyword = (value: string) => value.replace(/slack/gi, platform)
+  return pages.map(page => page.id !== 'notifications' && page.id !== 'initiatives' ? page : {
+    ...page,
+    groups: page.groups?.map(group => ({
+      ...group,
+      items: group.items?.map(item => CHAT_PLATFORM_SEARCH_TITLES[item.title]
+        ? { ...item, title: CHAT_PLATFORM_SEARCH_TITLES[item.title], keywords: item.keywords?.map(keyword) }
+        : item),
+    })),
+  })
+}
+
 export function createSettingsSearchIndex(
   pages: SettingsSearchPage[],
   translate: (value: string) => string = value => value,

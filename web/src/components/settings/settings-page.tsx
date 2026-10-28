@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { useI18n } from "@/i18n/i18n";
+import { useChatPlatform } from "@/lib/chat-platform";
 
 import {
   DropdownMenu,
@@ -79,10 +80,12 @@ import {
 import type { NotificationSettingsView, SettingsPageId, TeamSettingsSection } from "@/lib/app-routes";
 import { AgentCursorGlyph, AgentHistoryGlyph } from '@/components/ui/agent-glyph'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
+import { AppLink } from "@/components/ui/app-link";
 import { SettingsNavGlyph, type SettingsNavGlyphName } from './settings-nav-glyphs'
 import {
   apiKeysSettingsPath,
   identityProviderSettingsPath,
+  integrationSettingsPath,
   settingsPath,
   webhookSettingsPath,
 } from "@/lib/app-routes";
@@ -112,7 +115,7 @@ import {
 } from "./settings-primitives";
 import { SettingsReadOnlyCrumbSlot } from "./settings-read-only-context";
 import { SettingsSearchResults } from "./settings-search-results";
-import { createSettingsSearchIndex, searchTeams, SETTINGS_SEARCH_PAGES } from "./settings-search";
+import { chatPlatformSearchPages, createSettingsSearchIndex, searchTeams, SETTINGS_SEARCH_PAGES } from "./settings-search";
 
 import "./settings.css";
 import "./workflow-settings.css";
@@ -512,13 +515,17 @@ export function SettingsPage(props: SettingsPageProps) {
     () => new Set(visible.flatMap(section => section.items.map(item => item.id))),
     [visible],
   );
+  // Entries about the chat platform name Lark or Feishu when it is the deployment's platform.
+  const searchChat = useChatPlatform(props.data);
+  const searchChatName = searchChat.name;
+  const searchTranslate = useCallback((value: string) => t(value).replaceAll("{name}", searchChatName), [t, searchChatName]);
   const searchablePages = useMemo(
-    () => SETTINGS_SEARCH_PAGES.filter(page => accessiblePageIds.has(page.id)),
-    [accessiblePageIds],
+    () => chatPlatformSearchPages(SETTINGS_SEARCH_PAGES, searchChat.platform).filter(page => accessiblePageIds.has(page.id)),
+    [accessiblePageIds, searchChat.platform],
   );
   const settingsSearchIndex = useMemo(
-    () => createSettingsSearchIndex(searchablePages, t),
-    [searchablePages, t],
+    () => createSettingsSearchIndex(searchablePages, searchTranslate),
+    [searchablePages, searchTranslate],
   );
   const searchResults = useMemo(
     () => settingsSearchIndex.search(query),
@@ -550,7 +557,7 @@ export function SettingsPage(props: SettingsPageProps) {
     const scrollToTarget = (attempt = 0) => {
       window.setTimeout(() => {
         if (request !== searchTargetRequestRef.current) return;
-        const target = findSettingsSearchTarget(t(targetTitle));
+        const target = findSettingsSearchTarget(searchTranslate(targetTitle));
         if (target) {
           target.scrollIntoView({ behavior: "smooth", block: "center" });
           target.classList.add("settings-search-target");
@@ -561,7 +568,7 @@ export function SettingsPage(props: SettingsPageProps) {
       }, attempt ? 80 : 0);
     };
     scrollToTarget();
-  }, [t]);
+  }, [searchTranslate]);
   const selectSearchResult = useCallback((result: (typeof searchResults)[number]) => {
     props.onNavigate(result.page);
     if (result.targetTitle) {
@@ -691,6 +698,7 @@ export function SettingsPage(props: SettingsPageProps) {
                   query={trimmedQuery}
                   results={searchResults}
                   teamResults={teamSearchResults}
+                  format={text => text.replaceAll("{name}", searchChatName)}
                 />
               </div>
             ) : visible.map((section) => (
@@ -889,6 +897,7 @@ function SettingsBody(
   },
 ) {
   const { t } = useI18n();
+  const chat = useChatPlatform(props.data);
   const access = settingsBodyAccess(props);
   if (access.kind === "hidden" && access.team && props.teamSection === "security" && props.teamKey)
     return <TeamOverviewRedirect teamKey={props.teamKey} onNavigate={props.onNavigate} />;
@@ -907,7 +916,7 @@ function SettingsBody(
       </div>
     );
   const body = <SettingsBodyContent {...props} />;
-  return access.kind === "read" ? <ReadOnlySettings notice={access.notice} banner={props.page === "team"}>{body}</ReadOnlySettings> : body;
+  return access.kind === "read" ? <ReadOnlySettings notice={access.notice} name={chat.name} banner={props.page === "team"}>{body}</ReadOnlySettings> : body;
 }
 
 /** The reference app sends members without access to a team section back to the team overview. */
@@ -950,8 +959,10 @@ function settingsBodyAccess(props: SettingsPageProps): SettingsBodyAccess {
  * Read-only settings: every control is disabled. Workspace pages explain it on
  * hover like the reference app (AdminOnlyHint); team pages keep the notice above the fields.
  */
-function ReadOnlySettings({ notice, banner, children }: { notice: string; banner: boolean; children: ReactNode }) {
+function ReadOnlySettings({ notice, name, banner, children }: { notice: string; name: string; banner: boolean; children: ReactNode }) {
   const { t } = useI18n();
+  // Notices name the deployment's chat platform as {name}.
+  const text = t(notice).replaceAll("{name}", name);
   // A stable element (not state) so Suspense re-attaching refs cannot loop.
   const [crumbSlot] = useState(() => document.createElement("div"));
   return (
@@ -965,10 +976,10 @@ function ReadOnlySettings({ notice, banner, children }: { notice: string; banner
       {banner && (
         <p className="settings-read-only-notice" role="note">
           <Lock size={14} aria-hidden />
-          <span>{t(notice)}</span>
+          <span>{text}</span>
         </p>
       )}
-      <fieldset disabled className="settings-read-only-fields" aria-label={t(notice)} data-read-only-notice={notice}>
+      <fieldset disabled className="settings-read-only-fields" aria-label={text} data-read-only-notice={notice}>
         <SettingsReadOnlyCrumbSlot.Provider value={crumbSlot}>
           {children}
         </SettingsReadOnlyCrumbSlot.Provider>
@@ -2714,15 +2725,6 @@ const FEATURE_COPY: Partial<
     description: "Manage custom emoji available in your workspace.",
     rows: [["Custom emoji", "Allow members to add workspace emoji"]],
   },
-  integrations: {
-    title: "Integrations",
-    description: "Connect Flow with the tools your team uses.",
-    rows: [
-      ["GitHub", "Link pull requests and commits to issues"],
-      ["Slack", "Create and update issues from Slack"],
-      ["Figma", "Preview design links in issues"],
-    ],
-  },
 };
 function FeaturePage({
   page,
@@ -2778,6 +2780,8 @@ function IntegrationsSettings({
   data: BootstrapData;
   onReload: () => Promise<void>;
 }) {
+  const { t } = useI18n();
+  const chat = useChatPlatform(data);
   const update = async (provider: string, configured: boolean) => {
     try {
       if (configured) await disconnectIntegration(provider);
@@ -2799,9 +2803,17 @@ function IntegrationsSettings({
         Integrations
       </PageTitle>
       <Section>
+        {chat.provider && <Row
+          key={chat.provider}
+          title={chat.name}
+          description={chat.format(t("Create and update issues from {name} groups"))}
+        >
+          {/* Lark and Feishu are configured on their own integration page. */}
+          <AppLink className="settings-action" href={integrationSettingsPath(data.workspace.urlKey, chat.provider)}>{t("Open settings")}</AppLink>
+        </Row>}
         {[
           ["github", "Link pull requests and commits to issues"],
-          ["slack", "Create and update issues from Slack"],
+          ...(chat.provider ? [] : [["slack", "Create and update issues from Slack"]]),
           ["figma", "Preview design links in issues"],
         ].map(([provider, description]) => {
           const item = data.integrationConnections.find(

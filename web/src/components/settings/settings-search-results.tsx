@@ -22,6 +22,7 @@ export function SettingsSearchResults({
   query,
   results,
   teamResults,
+  format = text => text,
 }: {
   onSelectPage: (page: SettingsPageId) => void
   onSelectResult: (result: SettingsSearchResult) => void
@@ -30,6 +31,8 @@ export function SettingsSearchResults({
   query: string
   results: SettingsSearchResult[]
   teamResults: SettingsTeamSearchResult[]
+  /** Fills `{name}` (the chat platform) in a translated title. */
+  format?: (text: string) => string
 }) {
   const { t } = useI18n()
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
@@ -123,7 +126,7 @@ export function SettingsSearchResults({
                     onClick={() => onSelectTeam(result.teamKey, result.section, result.targetTitle)}
                     type="button"
                   >
-                    <Highlight title={t(result.title)} query={query}/>
+                    <Highlight title={format(t(result.title))} query={query}/>
                   </button>
                 ))}
               </div>
@@ -178,7 +181,7 @@ export function SettingsSearchResults({
                     onClick={() => onSelectResult(result)}
                     type="button"
                   >
-                    <Highlight title={t(result.title)} query={query}/>
+                    <Highlight title={format(t(result.title))} query={query}/>
                   </button>
                 ))}
               </div>
