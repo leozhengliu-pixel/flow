@@ -1188,7 +1188,15 @@ func (s *server) agentToolRequiresApproval(name string) bool {
 	return false
 }
 
+// executeAgentTool runs one tool call of the built-in agent, a loop, a run
+// token or an application agent. Its error text reaches the model and the
+// chat, so a database or driver error is replaced (publicToolError).
 func (s *server) executeAgentTool(r *http.Request, data domain.Bootstrap, call domain.AgentToolCall) ([]byte, error) {
+	result, err := s.runAgentToolCall(r, data, call)
+	return result, publicToolError(r.Context(), call.Name, err)
+}
+
+func (s *server) runAgentToolCall(r *http.Request, data domain.Bootstrap, call domain.AgentToolCall) ([]byte, error) {
 	if call.Name == agentProgressTool {
 		return []byte(`{"ok":true}`), nil
 	}

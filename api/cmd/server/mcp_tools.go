@@ -40,7 +40,7 @@ func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, 
 	if err != nil {
 		slog.WarnContext(ctx, "flow tool failed", "tool", name, "workspace", actor.WorkspaceKey, "actor", actor.User.ID, "args", mcpArgumentSummary(args), "duration_ms", time.Since(started).Milliseconds(), "error", err.Error())
 	}
-	return result, err
+	return result, publicToolError(ctx, name, err)
 }
 
 // mcpArgumentSummary lists the argument names with short, single-line values

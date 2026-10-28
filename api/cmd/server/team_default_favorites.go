@@ -74,7 +74,7 @@ func (s *server) replaceTeamDefaultFavorites(w http.ResponseWriter, r *http.Requ
 		items = append(items, domain.TeamDefaultFavorite{ResourceType: item.ResourceType, ResourceID: item.ResourceID})
 	}
 	if err := s.store.ReplaceTeamDefaultFavorites(r.Context(), workspace, teamID, items); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErrorFor(w, r, http.StatusBadRequest, err)
 		return
 	}
 	items, err := s.store.ListTeamDefaultFavorites(r.Context(), workspace, teamID)

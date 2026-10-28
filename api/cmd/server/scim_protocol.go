@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -85,8 +86,14 @@ func writeSCIMRequestError(w http.ResponseWriter, err error) {
 		writeSCIMError(w, http.StatusBadRequest, scimInvalidFilter, filterErr.detail)
 		return
 	}
-	log.Printf("SCIM request failed: %v", err)
-	writeSCIMError(w, http.StatusInternalServerError, "", "internal error")
+	// requestLog put the id on the response before the handler ran.
+	requestID := w.Header().Get("X-Request-ID")
+	slog.Error("SCIM request failed", "request_id", requestID, "error", err.Error())
+	detail := "internal error"
+	if requestID != "" {
+		detail += " (request id " + requestID + ")"
+	}
+	writeSCIMError(w, http.StatusInternalServerError, "", detail)
 }
 
 // decodeSCIM reads a JSON request body; malformed JSON is invalidSyntax.

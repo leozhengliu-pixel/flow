@@ -65,7 +65,7 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 			if current.Status != *input.Status {
 				posted, err := s.syncReviewStatusAs(r.Context(), data, current, statusActor, *input.Status, method)
 				if err != nil {
-					writeError(w, http.StatusBadGateway, err.Error())
+					writeErrorFor(w, r, http.StatusBadGateway, err)
 					return
 				}
 				statusPostedAs = posted
@@ -90,7 +90,7 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if err := s.markReviewReady(r.Context(), data, review); err != nil {
-				writeError(w, 502, err.Error())
+				writeErrorFor(w, r, http.StatusBadGateway, err)
 				return
 			}
 		}
@@ -205,7 +205,7 @@ func (s *server) submitReview(w http.ResponseWriter, r *http.Request) {
 	}
 	if input.Decision == "approve" && data.UserSettings[actor.ID].AutoConvertDrafts {
 		if err := s.markReviewReady(r.Context(), data, current); err != nil {
-			writeError(w, 502, err.Error())
+			writeErrorFor(w, r, http.StatusBadGateway, err)
 			return
 		}
 	}
@@ -219,7 +219,7 @@ func (s *server) submitReview(w http.ResponseWriter, r *http.Request) {
 		if code := reviewRemoteStatus(err); code == http.StatusForbidden || code == http.StatusNotFound || code == http.StatusUnprocessableEntity {
 			status = http.StatusUnprocessableEntity
 		}
-		writeError(w, status, err.Error())
+		writeErrorFor(w, r, status, err)
 		return
 	}
 	var updated domain.CodeReview

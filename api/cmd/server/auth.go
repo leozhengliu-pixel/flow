@@ -142,7 +142,7 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 			// OAuth tokens attribute what they create to "<User> via <App>".
 			via, err := s.oauthRequestAttribution(r, *apiKey)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeErrorFor(w, r, http.StatusBadRequest, err)
 				return
 			}
 			user.Via = via
@@ -1737,7 +1737,7 @@ func (s *server) register(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, store.ErrAuthConflict) {
 			status = http.StatusConflict
 		}
-		writeError(w, status, err.Error())
+		writeErrorFor(w, r, status, err)
 		return
 	}
 	response := map[string]any{"user": user, "verificationRequired": true}
@@ -1786,7 +1786,7 @@ func (s *server) verifyEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.store.VerifyEmail(r.Context(), input.Token); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErrorFor(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"verified": true})
@@ -1799,7 +1799,7 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	}
 	session, token, err := s.store.Login(r.Context(), input.Email, input.Password)
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, err.Error())
+		writeErrorFor(w, r, http.StatusUnauthorized, err)
 		return
 	}
 	setSessionCookie(w, r, token, session.ExpiresAt)
@@ -1879,7 +1879,7 @@ func (s *server) resetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.store.ResetPassword(r.Context(), input.Token, input.Password); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErrorFor(w, r, http.StatusBadRequest, err)
 		return
 	}
 	clearSessionCookie(w, r)
@@ -1901,7 +1901,7 @@ func (s *server) tokenLogin(w http.ResponseWriter, r *http.Request) {
 	_ = input.InviteLink
 	session, token, err := s.store.LoginWithAuthToken(r.Context(), input.Email, input.AuthToken, input.ForceReauth)
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, err.Error())
+		writeErrorFor(w, r, http.StatusUnauthorized, err)
 		return
 	}
 	setSessionCookie(w, r, token, session.ExpiresAt)
@@ -2012,7 +2012,7 @@ func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
 		}
 		item, err := s.store.Invite(r.Context(), data.Workspace.ID, authUser(r).ID, email, input.Role, input.TeamIDs)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeErrorFor(w, r, http.StatusBadRequest, err)
 			return
 		}
 		if s.mailer != nil {

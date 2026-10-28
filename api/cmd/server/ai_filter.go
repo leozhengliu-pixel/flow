@@ -102,7 +102,7 @@ func (s *server) aiIssueFilter(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	turn, err := s.requestAgentTurnWithoutTools(ctx, []agentProviderMessage{{Role: "system", Content: aiFilterSystemPrompt}, {Role: "user", Content: prompt}})
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		writeErrorFor(w, r, http.StatusBadGateway, err)
 		return
 	}
 	results, err := parseAIFilterReply(turn.Text, known)

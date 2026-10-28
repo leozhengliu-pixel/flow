@@ -259,7 +259,7 @@ func (s *server) callAgentRunTool(r *http.Request, grant *agentRunGrant, name st
 		single["id"] = id
 		result, ref, err := s.callAgentRunToolOnce(r, grant, name, single)
 		if err != nil {
-			failures = append(failures, map[string]string{"id": id, "error": err.Error()})
+			failures = append(failures, map[string]string{"id": id, "error": publicToolError(r.Context(), name, err).Error()})
 			continue
 		}
 		items = append(items, result)

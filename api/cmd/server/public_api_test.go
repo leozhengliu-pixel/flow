@@ -300,7 +300,7 @@ func TestAPIErrorEnvelopeNormalizesErrors(t *testing.T) {
 		t.Fatalf("conflict = %s", conflict)
 	}
 	internal := normalizeAPIErrorBody(http.StatusInternalServerError, http.Header{}, []byte("boom\n"), httptest.NewRequest(http.MethodGet, "/api/x", nil))
-	if body := decodeInto[map[string]any](t, internal); body["type"] != apiErrorInternal || body["error"] != "boom" {
+	if body := decodeInto[map[string]any](t, internal); body["type"] != apiErrorInternal || body["error"] != internalErrorMessage {
 		t.Fatalf("internal = %s", internal)
 	}
 	// OAuth keeps RFC 6749 errors.

@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
@@ -40,6 +41,12 @@ func writeOAuthRequestError(w http.ResponseWriter, err error) {
 	var typed oauthRequestError
 	if errors.As(err, &typed) {
 		writeOAuthError(w, http.StatusBadRequest, typed.Code, typed.Description)
+		return
+	}
+	if store.IsDatabaseError(err) {
+		requestID := w.Header().Get("X-Request-ID")
+		slog.Error("oauth request failed", "request_id", requestID, "error", err.Error())
+		writeOAuthError(w, http.StatusInternalServerError, "server_error", internalErrorMessage+" (request id "+requestID+")")
 		return
 	}
 	writeOAuthError(w, http.StatusBadRequest, "invalid_request", err.Error())

@@ -41,7 +41,7 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 	}
 	events, next, err := s.store.EventsPage(r.Context(), workspaceID, aggregateID, r.URL.Query().Get("cursor"), limit)
 	if errors.Is(err, store.ErrInvalidEventCursor) {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErrorFor(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if err != nil {

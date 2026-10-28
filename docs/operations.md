@@ -25,6 +25,18 @@ report leads to the log line. If the response had already started (an event
 stream or a download), the connection is cut instead, and a WebSocket is left
 to its handler. Search the logs for `http handler panic` after an incident.
 
+## Internal errors
+
+Every other `500` gets the same generic body: database and driver errors
+(table, column and SQL state names) never reach the client. Flow logs the
+real error at error level as `internal error response` with `request_id`,
+`method` and `path`. SCIM and OAuth answer in their own error formats with
+the request id in the message. When an MCP client or an agent's tool call
+fails on a database error, the tool result reads "The change could not be
+saved because of an internal server error (request id …)" and the log line
+is `flow tool internal error` with `request_id` and `tool`. Validation,
+conflict and permission errors (4xx) keep their specific messages.
+
 ## Security headers
 
 Responses carry the security headers in
