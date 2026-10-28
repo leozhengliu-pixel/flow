@@ -58,4 +58,5 @@ func TestExternalNestedIssueCounts(t *testing.T) {
 	defer repo.DeleteWorkspace(ctx, workspace)
 	now := time.Now().UTC()
 	testNestedCountParity(t, repo, workspace, data.Workspace.ID, domain.Issue{Team: data.Teams[0], State: data.States[0], Creator: data.Viewer, CreatedAt: now, UpdatedAt: now})
+	testNestedIndexMovesParity(t, repo, workspace, data.Workspace.ID, domain.Issue{Team: data.Teams[0], State: data.States[0], Creator: data.Viewer, CreatedAt: now, UpdatedAt: now})
 }

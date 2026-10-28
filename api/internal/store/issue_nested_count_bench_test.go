@@ -32,6 +32,7 @@ func TestNestedIssueCountTimings(t *testing.T) {
 	var err error
 	var workspace, workspaceID string
 	var base domain.Issue
+	keep, reused := os.Getenv("FLOW_NESTED_COUNT_KEEP") != "", false
 	if driver == "" {
 		driver = "sqlite"
 		repository, err = OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
@@ -49,18 +50,28 @@ func TestNestedIssueCountTimings(t *testing.T) {
 		// Deferred after Close, so the workspace is deleted first.
 		defer repository.Close()
 		workspace = "nested-count-timings"
-		_ = repository.DeleteWorkspace(ctx, workspace)
-		data, err := repository.CreateWorkspace(ctx, "Nested count timings", workspace, "us")
-		if err != nil {
-			t.Fatal(err)
+		data, found := repository.WorkspaceMetadata(workspace)
+		// FLOW_NESTED_COUNT_KEEP keeps the generated workspace for the next
+		// run, which reuses it.
+		if found && keep && countIssueRows(t, repository, workspace) >= n {
+			reused = true
+		} else {
+			_ = repository.DeleteWorkspace(ctx, workspace)
+			if data, err = repository.CreateWorkspace(ctx, "Nested count timings", workspace, "us"); err != nil {
+				t.Fatal(err)
+			}
 		}
-		defer repository.DeleteWorkspace(ctx, workspace)
+		if !keep {
+			defer repository.DeleteWorkspace(ctx, workspace)
+		}
 		now := time.Now().UTC()
 		workspaceID, base = data.Workspace.ID, domain.Issue{Team: data.Teams[0], State: data.States[0], Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
 	}
 	issues, shape := nestedCountIssues(rand.New(rand.NewSource(11)), base, "nct-", n)
 	started := time.Now()
-	importNestedCountIssues(t, repository, workspace, issues)
+	if !reused {
+		importNestedCountIssues(t, repository, workspace, issues)
+	}
 	nested := 0
 	for _, issue := range issues {
 		if issue.ParentID != nil {
@@ -94,6 +105,66 @@ func TestNestedIssueCountTimings(t *testing.T) {
 		{"my issues, member, status", IssueRecordQuery{Access: member, Filter: IssueFilter{Field: "assignee", Values: []string{shape.users[0]}}, GroupBy: "status"}},
 		{"team, label or priority filter", IssueRecordQuery{Access: member, TeamIDs: []string{team}, Filter: IssueFilter{Or: []IssueFilter{{Field: "priority", Values: []string{"1", "2"}}, {Field: "labels", Values: []string{shape.labels[1]}}}}, GroupBy: "status"}},
 		{"team, focus cases", IssueRecordQuery{Access: member, TeamIDs: []string{team}, GroupBy: "cases", GroupCases: []IssueGroupCase{{Value: "urgent", Filter: IssueFilter{Field: "priority", Values: []string{"1"}}}, {Value: "started", Filter: IssueFilter{Field: "statusType", Values: []string{"started"}}}}}},
+	}
+	explainPlan := func(statement string, args []any) string {
+		explain := map[string]string{"sqlite": "EXPLAIN QUERY PLAN ", "mysql": "EXPLAIN ANALYZE ", "postgres": "EXPLAIN (ANALYZE, BUFFERS) "}[driver]
+		rows, err := repository.db.QueryContext(ctx, explain+statement, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		plan := []string{}
+		columns, _ := rows.Columns()
+		for rows.Next() {
+			values := make([]sql.RawBytes, len(columns))
+			pointers := make([]any, len(columns))
+			for i := range values {
+				pointers[i] = &values[i]
+			}
+			if err := rows.Scan(pointers...); err != nil {
+				t.Fatal(err)
+			}
+			plan = append(plan, string(values[len(values)-1]))
+		}
+		return strings.Join(plan, "\n")
+	}
+	// FLOW_NESTED_COUNT_RECOMPUTE: only the uncached recompute (what the
+	// first read after a write costs), 20 samples per view, and the plan of
+	// the index read.
+	if os.Getenv("FLOW_NESTED_COUNT_RECOMPUTE") != "" {
+		lines := []string{fmt.Sprintf("%s, %d issues, uncached recompute:", driver, n), "| view | p50 ms | p95 ms | max ms |", "|---|---:|---:|---:|"}
+		for _, view := range views {
+			q := view.query
+			q.Workspace, q.Archived, q.Nested = workspace, "false", true
+			counted := withoutRedundantIssueAccess(q)
+			samples := []time.Duration{}
+			for i := 0; i < 20; i++ {
+				start := time.Now()
+				if _, err := repository.nestedIssueGroups(ctx, counted); err != nil {
+					t.Fatal(err)
+				}
+				samples = append(samples, time.Since(start))
+				if samples[0] > 2*time.Second {
+					break
+				}
+			}
+			sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
+			at := func(p float64) float64 {
+				return float64(samples[min(len(samples)-1, int(p*float64(len(samples))))].Microseconds()) / 1000
+			}
+			lines = append(lines, fmt.Sprintf("| %s | %.1f | %.1f | %.1f |", view.name, at(0.5), at(0.95), float64(samples[len(samples)-1].Microseconds())/1000))
+		}
+		t.Log(strings.Join(lines, "\n"))
+		for _, view := range []int{0, 2} {
+			q := views[view].query
+			q.Workspace, q.Archived, q.Nested = workspace, "false", true
+			if statement, args, ok, err := repository.nestedIssueMovesIndexSQL(ctx, withoutRedundantIssueAccess(q)); err != nil {
+				t.Fatal(err)
+			} else if ok {
+				t.Logf("plan of the %s index read:\n%s", views[view].name, explainPlan(statement, args))
+			}
+		}
+		return
 	}
 	// Up to five samples (fewer once they took 3s); a run over the 5s cap
 	// is reported as the cap.
@@ -156,32 +227,22 @@ func TestNestedIssueCountTimings(t *testing.T) {
 			lines = append(lines, fmt.Sprintf("| %s | %s | %s | %s | %s |", view.name, before, after, cached, plain))
 		}
 		t.Log(strings.Join(lines, "\n"))
-		q := views[2].query
-		q.Workspace, q.Archived, q.Nested = workspace, "false", true
-		statement, args, err := repository.nestedIssueMovesSQL(withoutRedundantIssueAccess(q))
-		if err != nil {
-			t.Fatal(err)
-		}
-		explain := map[string]string{"sqlite": "EXPLAIN QUERY PLAN ", "mysql": "EXPLAIN ANALYZE ", "postgres": "EXPLAIN ANALYZE "}[driver]
-		rows, err := repository.db.QueryContext(ctx, explain+statement, args...)
-		if err != nil {
-			t.Fatal(err)
-		}
-		plan := []string{}
-		columns, _ := rows.Columns()
-		for rows.Next() {
-			values := make([]sql.RawBytes, len(columns))
-			pointers := make([]any, len(columns))
-			for i := range values {
-				pointers[i] = &values[i]
+		for _, view := range []int{2, 0} {
+			q := views[view].query
+			q.Workspace, q.Archived, q.Nested = workspace, "false", true
+			counted := withoutRedundantIssueAccess(q)
+			if statement, args, ok, err := repository.nestedIssueMovesIndexSQL(ctx, counted); err != nil {
+				t.Fatal(err)
+			} else if ok {
+				t.Logf("%s plan of the %s index read:\n%s", phase, views[view].name, explainPlan(statement, args))
+				continue
 			}
-			if err := rows.Scan(pointers...); err != nil {
+			statement, args, err := repository.nestedIssueMovesSQL(counted)
+			if err != nil {
 				t.Fatal(err)
 			}
-			plan = append(plan, string(values[len(values)-1]))
+			t.Logf("%s plan of the %s moves query:\n%s", phase, views[view].name, explainPlan(statement, args))
 		}
-		rows.Close()
-		t.Logf("%s plan of the team/status moves query:\n%s", phase, strings.Join(plan, "\n"))
 	}
 	measure("fresh import, no statistics")
 	analyze := map[string]string{"sqlite": "ANALYZE", "mysql": "ANALYZE TABLE issue_records, issue_attribute_records, issue_scope_counts, issue_permission_records", "postgres": "ANALYZE"}[driver]
