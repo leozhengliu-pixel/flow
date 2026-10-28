@@ -30,14 +30,27 @@ const csvSourceIDMaxBytes = 160
 const teamKeyMaxLength = 32
 
 // uploadContentTypeMaxLength bounds a staged upload's media type
-// (file_uploads.content_type).
+// (file_uploads.content_type, VARCHAR(255): characters on MySQL utf8mb4 and
+// Postgres).
 const uploadContentTypeMaxLength = 255
 
 // linkAttachmentTextMaxLength bounds a link attachment's title and subtitle.
 const linkAttachmentTextMaxLength = 255
 
-// issueIconMaxLength bounds an issue's icon (bytes).
+// issueIconMaxLength bounds an issue's icon in characters (it is kept in the
+// issue's JSON data; the tool schema's maxLength counts characters too).
 const issueIconMaxLength = 191
+
+// checkIssueIcon is the icon limit of every issue write path.
+func checkIssueIcon(icon string) error {
+	return checkTextLength("icon", icon, issueIconMaxLength)
+}
+
+// uploadContentTypeTooLong reports a staged upload media type over its
+// limit, counted in characters like the schema's maxLength and the column.
+func uploadContentTypeTooLong(contentType string) bool {
+	return utf8.RuneCountInString(contentType) > uploadContentTypeMaxLength
+}
 
 // recurrenceRuleMaxLength bounds a recurrence preset or RRULE passed to a
 // Flow tool; the schema check enforces it.
@@ -46,13 +59,48 @@ const recurrenceRuleMaxLength = 120
 // The Flow tool schemas (flow_mcp_tools.json) advertise these limits as
 // maxLength, so MCP clients and the built-in agent's model see them and the
 // shared schema check refuses an over-long value before the handler runs;
-// flowToolLengthLimits lists them and a test keeps the two in step.
-var flowToolLengthLimits = map[string]map[string]int{
-	"save_issue":                {"title": domain.IssueTitleMaxLength, "icon": issueIconMaxLength, "recurrence": recurrenceRuleMaxLength},
-	"save_template":             {"name": domain.IssueTitleMaxLength, "title": domain.IssueTitleMaxLength},
-	"prepare_attachment_upload": {"title": domain.UploadTitleMaxLength, "subtitle": domain.UploadTitleMaxLength, "contentType": uploadContentTypeMaxLength},
-	"save_attachment":           {"title": linkAttachmentTextMaxLength, "subtitle": linkAttachmentTextMaxLength},
-	"save_team":                 {"key": teamKeyMaxLength},
+// flowToolLengthLimits lists them with the check the server runs on the same
+// value, and a test keeps the schema, the limit and the check in step: both
+// count characters (runes), so a value at the limit passes both and one
+// character over fails both. A nil check means the schema is the only check.
+var flowToolLengthLimits = map[string]map[string]textLimit{
+	"save_issue":                {"title": {domain.IssueTitleMaxLength, checkIssueTitle}, "icon": {issueIconMaxLength, checkIssueIcon}, "recurrence": {recurrenceRuleMaxLength, nil}},
+	"save_template":             {"name": {domain.IssueTitleMaxLength, checkTemplateName}, "title": {domain.IssueTitleMaxLength, checkIssueTitle}},
+	"prepare_attachment_upload": {"title": {domain.UploadTitleMaxLength, checkUploadTitle}, "subtitle": {domain.UploadTitleMaxLength, checkUploadTitle}, "contentType": {uploadContentTypeMaxLength, checkUploadContentType}},
+	"save_attachment":           {"title": {linkAttachmentTextMaxLength, checkLinkAttachmentText}, "subtitle": {linkAttachmentTextMaxLength, checkLinkAttachmentText}},
+	"save_team":                 {"key": {teamKeyMaxLength, checkNewTeamKey}},
+}
+
+// textLimit is a character limit and the server check that enforces it.
+type textLimit struct {
+	max   int
+	check func(string) error
+}
+
+func checkTemplateName(name string) error {
+	return checkTextLength("name", name, domain.IssueTitleMaxLength)
+}
+
+// checkUploadTitle bounds a staged upload's title or subtitle.
+func checkUploadTitle(value string) error {
+	return checkTextLength("title", value, domain.UploadTitleMaxLength)
+}
+
+func checkUploadContentType(contentType string) error {
+	if uploadContentTypeTooLong(contentType) {
+		return textTooLong("contentType", uploadContentTypeMaxLength)
+	}
+	return nil
+}
+
+// checkLinkAttachmentText bounds a link attachment's title or subtitle.
+func checkLinkAttachmentText(value string) error {
+	return checkTextLength("title", value, linkAttachmentTextMaxLength)
+}
+
+// checkNewTeamKey bounds a new team's key.
+func checkNewTeamKey(key string) error {
+	return checkTextLength("key", key, teamKeyMaxLength)
 }
 
 // checkIssueTitle is the issue_records.title limit for every issue write path

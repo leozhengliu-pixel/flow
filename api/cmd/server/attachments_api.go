@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
@@ -51,7 +50,7 @@ func validateLinkAttachmentInput(input *linkAttachmentInput, requireURL bool) er
 			continue
 		}
 		*value = strings.TrimSpace(*value)
-		if utf8.RuneCountInString(*value) > linkAttachmentTextMaxLength {
+		if checkLinkAttachmentText(*value) != nil {
 			return fmt.Errorf("%s must be at most 255 characters", name)
 		}
 	}

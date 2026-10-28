@@ -17,7 +17,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
@@ -1355,11 +1354,11 @@ func (s *server) prepareMCPAttachmentUpload(ctx context.Context, actor mcpActor,
 		filename = "upload"
 	}
 	for _, field := range []string{"title", "subtitle"} {
-		if utf8.RuneCountInString(stringArg(args, field)) > domain.UploadTitleMaxLength {
+		if checkUploadTitle(stringArg(args, field)) != nil {
 			return nil, fmt.Errorf("%s must be %d characters or fewer; nothing was uploaded", field, domain.UploadTitleMaxLength)
 		}
 	}
-	if contentType := stringArg(args, "contentType"); len(contentType) > uploadContentTypeMaxLength {
+	if uploadContentTypeTooLong(stringArg(args, "contentType")) {
 		return nil, fmt.Errorf("contentType must be a media type of at most 255 characters")
 	}
 	upload := store.FileUpload{WorkspaceKey: actor.WorkspaceKey, UserID: actor.User.ID, Filename: filename, ContentType: stringArg(args, "contentType"), ExpectedSize: size, Purpose: "issue:" + issue.ID, Title: stringArg(args, "title"), Subtitle: stringArg(args, "subtitle")}

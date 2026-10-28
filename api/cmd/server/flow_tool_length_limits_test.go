@@ -1,13 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
@@ -41,8 +44,8 @@ func TestFlowToolSchemasAdvertiseServerLengthLimits(t *testing.T) {
 			if !ok {
 				t.Fatalf("%s has no %s argument", name, field)
 			}
-			if got, _ := property["maxLength"].(float64); int(got) != limit {
-				t.Errorf("%s.%s maxLength = %v, want %d (the server limit)", name, field, property["maxLength"], limit)
+			if got, _ := property["maxLength"].(float64); int(got) != limit.max {
+				t.Errorf("%s.%s maxLength = %v, want %d (the server limit)", name, field, property["maxLength"], limit.max)
 			}
 		}
 	}
@@ -50,19 +53,19 @@ func TestFlowToolSchemasAdvertiseServerLengthLimits(t *testing.T) {
 	for _, tool := range flowToolContract() {
 		properties, _ := flowToolProperties(t, tool)
 		for field, property := range properties {
-			if _, has := property["maxLength"]; has && flowToolLengthLimits[tool.Name][field] == 0 {
+			if _, has := property["maxLength"]; has && flowToolLengthLimits[tool.Name][field].max == 0 {
 				t.Errorf("%s.%s advertises maxLength %v but flowToolLengthLimits has no limit for it", tool.Name, field, property["maxLength"])
 			}
 		}
 	}
-	if flowToolLengthLimits["save_issue"]["title"] != domain.IssueTitleMaxLength || flowToolLengthLimits["prepare_attachment_upload"]["title"] != domain.UploadTitleMaxLength || flowToolLengthLimits["save_team"]["key"] != teamKeyMaxLength {
+	if flowToolLengthLimits["save_issue"]["title"].max != domain.IssueTitleMaxLength || flowToolLengthLimits["save_issue"]["icon"].max != issueIconMaxLength || flowToolLengthLimits["prepare_attachment_upload"]["title"].max != domain.UploadTitleMaxLength || flowToolLengthLimits["prepare_attachment_upload"]["contentType"].max != uploadContentTypeMaxLength || flowToolLengthLimits["save_team"]["key"].max != teamKeyMaxLength {
 		t.Fatal("flowToolLengthLimits no longer uses the validators' constants")
 	}
 }
 
-// The shared schema check (/mcp and the built-in agent) refuses a value one
-// character over the limit, naming the field, and accepts the limit itself;
-// lengths are characters, as the validators count them.
+// The shared schema check (/mcp and the built-in agent) and the server's own
+// check both count characters: a multi-byte value at the limit passes both,
+// one character over fails both, the schema error naming the field.
 func TestFlowToolSchemaRefusesOverlongText(t *testing.T) {
 	for name, fields := range flowToolLengthLimits {
 		tool, _ := flowToolByName(name)
@@ -72,16 +75,77 @@ func TestFlowToolSchemaRefusesOverlongText(t *testing.T) {
 			for _, key := range required {
 				args[key] = flowToolSampleValue(properties[key])
 			}
-			args[field] = strings.Repeat("界", limit)
+			atLimit, over := strings.Repeat("界", limit.max), strings.Repeat("界", limit.max+1)
+			args[field] = atLimit
 			if err := checkFlowToolArgs(tool, args); err != nil {
-				t.Errorf("%s.%s at the limit refused: %v", name, field, err)
+				t.Errorf("%s.%s at the limit refused by the schema: %v", name, field, err)
 			}
-			args[field] = strings.Repeat("界", limit+1)
+			args[field] = over
 			err := checkFlowToolArgs(tool, args)
 			if err == nil || !strings.Contains(err.Error(), field) || !strings.Contains(err.Error(), "Invalid arguments for "+name) {
 				t.Errorf("%s.%s over the limit = %v", name, field, err)
 			}
+			if limit.check == nil {
+				continue
+			}
+			if err := limit.check(atLimit); err != nil {
+				t.Errorf("%s.%s at the limit (%d characters, %d bytes) refused by the server: %v", name, field, limit.max, len(atLimit), err)
+			}
+			if err := limit.check(over); err == nil {
+				t.Errorf("%s.%s one character over accepted by the server", name, field)
+			}
 		}
+	}
+}
+
+// The REST path runs the same checks on multi-byte values: an icon of 191
+// characters (573 bytes) is saved and 192 is a 400; a staged upload whose
+// media type is 255 characters with a non-ASCII parameter is prepared and one
+// over is refused.
+func TestMultiByteIconAndContentTypeAtTheLimit(t *testing.T) {
+	repo, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "limits.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	service := &server{store: repo, uploadPath: t.TempDir(), authDisabled: true}
+	host := httptest.NewServer(newHandler(service))
+	defer host.Close()
+	data := repo.Bootstrap()
+	issue := data.Issues[0]
+	send := func(method, path string, body any) (int, string) {
+		raw, _ := json.Marshal(body)
+		request, _ := http.NewRequest(method, host.URL+path, bytes.NewReader(raw))
+		request.Header.Set("Content-Type", "application/json")
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		text, _ := io.ReadAll(response.Body)
+		return response.StatusCode, string(text)
+	}
+	if status, body := send(http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{"icon": strings.Repeat("界", issueIconMaxLength)}); status != http.StatusOK {
+		t.Fatalf("icon at the limit = %d %s", status, body)
+	}
+	if status, body := send(http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{"icon": strings.Repeat("界", issueIconMaxLength+1)}); status != http.StatusBadRequest || !strings.Contains(body, "icon must be 191 characters or fewer") {
+		t.Fatalf("icon over the limit = %d %s", status, body)
+	}
+	prefix := `text/plain; name="`
+	contentType := func(length int) string {
+		return prefix + strings.Repeat("界", length-len(prefix)-1) + `"`
+	}
+	if got := utf8.RuneCountInString(contentType(uploadContentTypeMaxLength)); got != uploadContentTypeMaxLength {
+		t.Fatalf("content type length %d", got)
+	}
+	upload := func(contentType string) (int, string) {
+		return send(http.MethodPost, "/api/files?workspace="+data.Workspace.URLKey, map[string]any{"filename": "notes.txt", "contentType": contentType, "size": 4})
+	}
+	if status, body := upload(contentType(uploadContentTypeMaxLength)); status != http.StatusOK && status != http.StatusCreated {
+		t.Fatalf("content type at the limit = %d %s", status, body)
+	}
+	if status, body := upload(contentType(uploadContentTypeMaxLength + 1)); status != http.StatusBadRequest {
+		t.Fatalf("content type over the limit = %d %s", status, body)
 	}
 }
 

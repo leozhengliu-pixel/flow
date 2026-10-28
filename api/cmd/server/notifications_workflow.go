@@ -1238,7 +1238,7 @@ func applyIssueTemplate(data *domain.Bootstrap, template *domain.IssueTemplate, 
 			return errInvalid
 		}
 		// An issue made from a template without a title is named after it.
-		if err := checkTextLength("name", name, domain.IssueTitleMaxLength); err != nil {
+		if err := checkTemplateName(name); err != nil {
 			return err
 		}
 		template.Name = name
