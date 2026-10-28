@@ -110,12 +110,24 @@ func (s *SQLiteStore) issueRecordColumns(workspace string, issue domain.Issue) (
 // list of invited emails, an external resource id). An id over 191 bytes
 // keeps a readable prefix and a digest of the whole, so the write never fails
 // and lookups by the same id (EventsPage, Events) still match.
-func eventAggregateKey(id string) string {
-	if len(id) <= 191 && utf8.ValidString(id) && !strings.ContainsRune(id, 0) {
-		return id
+func eventAggregateKey(id string) string { return indexKey(id) }
+
+// indexKeyMaxBytes is the size of the VARCHAR(191) key columns. Bytes are
+// the safe count: a value of at most 191 bytes has at most 191 characters.
+const indexKeyMaxBytes = 191
+
+// indexKey is the value stored in a VARCHAR(191) key column for text that
+// is usually short but has no bound of its own (an id from an import, a
+// field name built from one). Text that fits, is valid UTF-8 and has no NUL
+// is stored as it is; anything else becomes a readable prefix plus a SHA-256
+// digest of the whole (120 + 1 + 64 bytes), so the write never fails and a
+// lookup that passes the same text through indexKey still matches.
+func indexKey(text string) string {
+	if len(text) <= indexKeyMaxBytes && utf8.ValidString(text) && !strings.ContainsRune(text, 0) {
+		return text
 	}
-	sum := sha256.Sum256([]byte(id))
-	return storableText(id, 120) + "#" + hex.EncodeToString(sum[:])
+	sum := sha256.Sum256([]byte(text))
+	return storableText(text, 120) + "#" + hex.EncodeToString(sum[:])
 }
 
 // TruncateRunes cuts value to at most max characters without splitting one.

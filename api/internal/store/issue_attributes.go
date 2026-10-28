@@ -28,6 +28,15 @@ var issueAttributeFields = map[string]bool{
 // ("relation:blocked_by", "suggestedLabel:<id>") so filters stay index lookups.
 // Triage Intelligence targets are indexed per target ("suggestedAssignee:<id>")
 // plus one presence row per kind ("suggested:assignee") for "Any …" filters.
+//
+// issue_attribute_records.field is VARCHAR(191) (migration 17; it was 32).
+// The named fields are at most 18 characters and "relation:<type>" and
+// "suggested:<kind>" at most 21; "suggestedDuplicate:" (19) plus an id is
+// the longest: Flow's own ids are under 40 characters, but imported ids have
+// no bound. Every field and value is written through indexKey, and every
+// lookup passes its field and equality values through it too, so an
+// over-long one is stored as a prefix plus digest instead of failing the
+// write.
 var issueAttributePrefixes = []string{"relation:", "suggestedLabel:", "suggestedAssignee:", "suggestedProject:", "suggestedTeam:", "suggestedDuplicate:", "suggestedRelated:", "suggested:"}
 
 // issueAttributeVersion is stored in issue_attribute_migrations.complete; bump it
@@ -39,7 +48,7 @@ func isIssueAttributeField(field string) bool {
 		return true
 	}
 	for _, prefix := range issueAttributePrefixes {
-		if strings.HasPrefix(field, prefix) && len(field) > len(prefix) && len(field) <= 191 {
+		if strings.HasPrefix(field, prefix) && len(field) > len(prefix) {
 			return true
 		}
 	}
@@ -113,7 +122,7 @@ func writeIssueAttributes(ctx context.Context, tx *sqlTx, workspace string, issu
 	for i, issue := range issues {
 		ids[i] = issue.ID
 		for field, value := range issueAttributes(issue) {
-			desired = append(desired, []string{issue.ID, field, value})
+			desired = append(desired, []string{issue.ID, indexKey(field), indexKey(value)})
 		}
 	}
 	return syncIssueIndexRows(ctx, tx, workspace, "issue_attribute_records", []string{"issue_id", "field", "value"}, 2, ids, desired)
@@ -216,10 +225,15 @@ func compileIssueAttribute(node IssueFilter) (string, []any, error) {
 			if node.Field == "dueDate" {
 				values[i] = date.UTC().Format("2006-01-02")
 			}
+			continue
 		}
+		// Stored values pass through indexKey (writeIssueAttributes); an
+		// equality filter on an over-long id matches the stored digest.
+		values[i] = indexKey(value)
 	}
+	field := indexKey(node.Field)
 	prefix := `SELECT 1 FROM issue_attribute_records a WHERE a.workspace_key=i.workspace_key AND a.issue_id=i.id AND a.field=?`
-	args := []any{node.Field}
+	args := []any{field}
 	var condition string
 	switch op {
 	case "isempty", "isnotempty":
@@ -234,7 +248,7 @@ func compileIssueAttribute(node IssueFilter) (string, []any, error) {
 		for _, value := range values {
 			if value == "" {
 				condition = "(" + condition + " OR NOT EXISTS (" + prefix + "))"
-				args = append(args, node.Field)
+				args = append(args, field)
 				break
 			}
 		}

@@ -178,7 +178,7 @@ func (s *SQLiteStore) MutateLabelDeletion(ctx context.Context, workspace, eventT
 						args := []any{workspace, labelID, lastID}
 						if suggested {
 							query = `SELECT issue_id FROM issue_attribute_records WHERE workspace_key=? AND field=? AND value='true' AND issue_id>? ORDER BY issue_id LIMIT 100`
-							args = []any{workspace, "suggestedLabel:" + labelID, lastID}
+							args = []any{workspace, indexKey("suggestedLabel:" + labelID), lastID}
 						}
 						rows, err := tx.QueryContext(ctx, query, args...)
 						if err != nil {

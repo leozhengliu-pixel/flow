@@ -229,6 +229,43 @@ Event retention (`FLOW_DOMAIN_EVENT_RETENTION_DAYS`, see
 [Database growth](configuration.md#database-growth)) keeps `domain_events`
 bounded.
 
+### Wider issue attribute fields (MySQL, PostgreSQL)
+
+Schema migration 17 ("wider issue attribute fields") widens
+`issue_attribute_records.field` from `VARCHAR(32)` to `VARCHAR(191)`. The
+column names the filterable property each row indexes, and Triage
+Intelligence writes one row per suggested label, assignee, project, team or
+issue (`suggestedLabel:<label id>`), which is longer than 32 characters.
+Before it, generating or refreshing triage suggestions failed with HTTP 500
+(`Data too long for column 'field'` on MySQL, `value too long for type
+character varying(32)` on PostgreSQL) and the issue's suggestions were not
+saved. SQLite does not enforce the width and does not change.
+
+The migration keeps every row, the primary key and the
+`issue_attributes_value_idx` index. Both indexes stay under MySQL's
+3,072-byte InnoDB key limit in `utf8mb4`. How it locks:
+
+- **MySQL** rebuilds the table (`ALGORITHM=COPY, LOCK=SHARED`): the length
+  prefix of a `VARCHAR` over 255 bytes grows from one byte to two, which
+  InnoDB cannot change in place. The table stays readable, but **writes to it
+  wait until the copy finishes**. Every issue change writes this table, so
+  issue edits from servers still running the old version wait too. The table
+  holds a few short rows per issue, so it is much smaller than
+  `issue_records`. Check its size first with the
+  [database size report](#database-size), or widen the column beforehand with
+  an online schema change tool (`ALTER TABLE issue_attribute_records MODIFY
+  COLUMN field VARCHAR(191) NOT NULL`).
+- **PostgreSQL** changes only the catalog (`ALTER COLUMN field TYPE
+  VARCHAR(191)`): no rewrite and no index rebuild. It takes an `ACCESS
+  EXCLUSIVE` lock for that moment, so it first waits for transactions already
+  using the table, and queries on the table wait behind it.
+
+The migration reads the column's width and leaves alone a column that is
+already as wide or wider (a fresh install, a second run, or an earlier manual
+`ALTER`). Fields longer than 191 characters (a suggestion for an imported
+label with a very long id) are stored as a prefix plus a SHA-256 digest, so
+they never fail the write and filters on them still match.
+
 ### Several servers starting at once
 
 Every server runs the migrations when it starts. There is no separate

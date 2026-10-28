@@ -74,6 +74,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   errors and chat job errors are cut on a character boundary and stored as
   valid UTF-8, so a receiver's binary or truncated response no longer fails
   the delivery on strict MySQL.
+- On MySQL and PostgreSQL, generating or refreshing Triage Intelligence
+  suggestions no longer fails with HTTP 500 (`Data too long for column
+  'field'`) when a suggested label, assignee, project or team has an id of
+  more than a few characters, and the suggestions are saved. Schema migration
+  17 widens `issue_attribute_records.field` from `VARCHAR(32)` to
+  `VARCHAR(191)` and keeps its rows; on MySQL it rebuilds that table and
+  writes to it wait until the rebuild finishes, see
+  [Wider issue attribute fields](docs/operations.md#wider-issue-attribute-fields-mysql-postgresql).
+  Longer fields are stored as a prefix plus digest, so no id length can fail
+  the write.
 - On MySQL, editing a document larger than about 64 KiB no longer fails with
   HTTP 500 (`Data too long for column 'previous_values'`) and no longer
   discards the edit. This affected workspaces with an enabled webhook, an

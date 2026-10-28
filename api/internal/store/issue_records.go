@@ -229,7 +229,7 @@ func (s *SQLiteStore) ensureIssueRecords(ctx context.Context) error {
 		`CREATE TABLE IF NOT EXISTS issue_records_migrations (workspace_key VARCHAR(191) PRIMARY KEY, migrated_at VARCHAR(40) NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS issue_collection_counts (workspace_key VARCHAR(191) PRIMARY KEY, total BIGINT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS issue_number_sequences (workspace_key VARCHAR(191) PRIMARY KEY, last_number BIGINT NOT NULL)`,
-		`CREATE TABLE IF NOT EXISTS issue_attribute_records (workspace_key VARCHAR(191) NOT NULL, issue_id VARCHAR(191) NOT NULL, field VARCHAR(32) NOT NULL, value VARCHAR(191) NOT NULL, PRIMARY KEY(workspace_key,issue_id,field))`,
+		`CREATE TABLE IF NOT EXISTS issue_attribute_records (workspace_key VARCHAR(191) NOT NULL, issue_id VARCHAR(191) NOT NULL, field VARCHAR(191) NOT NULL, value VARCHAR(191) NOT NULL, PRIMARY KEY(workspace_key,issue_id,field))`,
 		`CREATE TABLE IF NOT EXISTS issue_attribute_migrations (workspace_key VARCHAR(191) PRIMARY KEY, last_id VARCHAR(191) NOT NULL, complete INTEGER NOT NULL)`,
 	}
 	for _, statement := range statements {
