@@ -542,7 +542,8 @@ type Document struct {
 	Revisions     []DocumentRevision   `json:"revisions"`
 	Attachments   []Attachment         `json:"attachments,omitempty"`
 	Permissions   []DocumentPermission `json:"permissions,omitempty"`
-	// Version increases with every accepted write; PATCH callers may send
+	// Version increases with every write that changes the document (a PATCH
+	// that only repeats current values keeps it); PATCH callers may send
 	// expectedVersion to detect a concurrent change (409 with the current
 	// document). ContentVersion increases only when the collaborative base
 	// state (contentState) is replaced, guarding update-log compaction.

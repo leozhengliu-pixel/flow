@@ -56,6 +56,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- A REST update that only repeats a resource's current values writes nothing:
+  it returns 200 with the resource as it is, keeps its `version` and
+  `updatedAt`, and records no history entry, event, realtime update, webhook
+  or notification (documents, comments, projects, milestones, initiatives,
+  labels, label groups, teams, workflow statuses, cycles, views, customers and
+  document drafts; issues already did). A stale `expectedVersion` is still a
+  409 when the values match. Archiving an archived document or project, or
+  retiring a retired team, keeps its original date, and sending a workflow
+  status's current type no longer fails when it is the only status of that
+  type. See [Updates that change nothing](docs/api.md#updates-that-change-nothing).
 - A server error (HTTP 500) no longer shows database or driver text: the body
   is `Internal server error` with the request id, and the error is logged with
   that id. MCP clients and agents get "The change could not be saved because

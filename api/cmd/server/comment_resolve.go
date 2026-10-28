@@ -16,7 +16,12 @@ func commentUpdateIsResolveOnly(input domain.CommentUpdateInput) bool {
 	return input.Resolved != nil && !commentUpdateHasBody(input)
 }
 
-func applyCommentPatch(comment *domain.Comment, input domain.CommentUpdateInput, siblings []domain.Comment, summariesEnabled bool) {
+// applyCommentPatch applies an edit or (un)resolve and reports whether it
+// changed the comment. An edit that repeats the comment's current text and
+// state leaves it as it was (version and editedAt included); the caller then
+// writes nothing.
+func applyCommentPatch(comment *domain.Comment, input domain.CommentUpdateInput, siblings []domain.Comment, summariesEnabled bool) bool {
+	before := *comment
 	now := time.Now().UTC()
 	if commentUpdateHasBody(input) {
 		comment.Body = strings.TrimSpace(input.Body)
@@ -36,7 +41,12 @@ func applyCommentPatch(comment *domain.Comment, input domain.CommentUpdateInput,
 	if input.ThreadSummary != nil && (input.Resolved == nil || *input.Resolved) {
 		comment.ThreadSummary = input.ThreadSummary
 	}
+	if unchangedEdit(before, *comment, "EditedAt") {
+		*comment = before
+		return false
+	}
 	comment.Version++
+	return true
 }
 
 func buildResolvedThreadSummary(root domain.Comment, siblings []domain.Comment) string {

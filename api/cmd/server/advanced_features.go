@@ -557,6 +557,7 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var updated, current domain.Document
 	var compactCollaborationID, replacedCollaborationID string
+	unchanged := false
 	workspace := workspaceKey(r)
 	directory := s.documentMemberDirectory(r)
 	scope := documentMutationScope(r.Context(), id, input.IssueID)
@@ -579,6 +580,7 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 		}
 		now := time.Now().UTC()
 		before := *document
+		favoritesBefore := len(data.Favorites)
 		if input.Title != nil {
 			// An explicit empty title clears it (the editor shows its placeholder); the slug follows.
 			document.Title = strings.TrimSpace(*input.Title)
@@ -658,13 +660,19 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 			document.Favorite = *input.Favorite
 			setFavoriteRecord(data, "document", document.ID, *input.Favorite)
 		}
-		if input.Archived != nil {
+		if input.Archived != nil && *input.Archived != (document.ArchivedAt != nil) {
 			if *input.Archived {
 				document.ArchivedAt = &now
 			} else {
 				document.ArchivedAt = nil
 			}
 		}
+		if unchangedEdit(before, *document) && len(data.Favorites) == favoritesBefore {
+			// Only current values: nothing is written and the version stays.
+			updated, unchanged = before, true
+			return store.ErrNoMutation
+		}
+		unchanged = false
 		document.UpdatedAt = now
 		document.Version++
 		contentChanged := document.Title != before.Title || document.Content != before.Content || input.ContentData != nil && !jsonEqual(before.ContentData, document.ContentData)
@@ -712,7 +720,7 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 				log.Printf("clear replaced collaboration document=%s: %v", replacedCollaborationID, deleteErr)
 			}
 		}
-		if input.TeamIDs != nil || input.ProjectIDs != nil || input.IssueID != nil {
+		if !unchanged && (input.TeamIDs != nil || input.ProjectIDs != nil || input.IssueID != nil) {
 			s.realtime.invalidateDocumentAccess(workspace, updated.ID)
 		}
 		s.dispatchNotificationEmails(r.Context(), workspace)
@@ -957,8 +965,11 @@ func (s *server) updateDocumentComment(w http.ResponseWriter, r *http.Request) {
 				summaries = teamResolvedThreadSummaries(data, project.TeamIDs[0])
 			}
 		}
-		applyCommentPatch(&comments[index], input, comments, summaries)
+		changed := applyCommentPatch(&comments[index], input, comments, summaries)
 		updated = comments[index]
+		if !changed {
+			return store.ErrNoMutation
+		}
 		if updated.Resolved && !wasResolved && updated.ParentID == nil {
 			watchers, _ := documentThreadAudience(data, document.ID, comments, updated.ID)
 			appendDocumentNotifications(s, data, *document, documentNotice{directory: directory, kind: notificationDocumentThreadResolved, recipients: watchers, comment: &updated, excerpt: notificationExcerpt(updated.Body), quotedText: updated.QuotedText}, time.Now().UTC())

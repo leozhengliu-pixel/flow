@@ -2005,6 +2005,7 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 			if data.Teams[index].ID != teamID {
 				continue
 			}
+			before, settingsBefore := data.Teams[index], data.TeamSettings[teamID]
 			if input.Name != nil {
 				data.Teams[index].Name = strings.TrimSpace(*input.Name)
 			}
@@ -2035,7 +2036,8 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 					data.TeamSettings[teamID] = settings
 				}
 			}
-			if input.Retired != nil {
+			// Retiring a retired team keeps it (and its sub-teams) as they are.
+			if input.Retired != nil && !(*input.Retired && data.Teams[index].RetiredAt != nil) {
 				if *input.Retired {
 					now := time.Now().UTC()
 					descendants := teamDescendantIDs(data, teamID)
@@ -2077,6 +2079,10 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 				}
+			}
+			if unchangedEdit(before, data.Teams[index]) && unchangedEdit(settingsBefore, data.TeamSettings[teamID]) && (input.Retired == nil || input.SubTeamAction == "" || data.Teams[index].RetiredAt != nil) {
+				updated = before
+				return store.ErrNoMutation
 			}
 			now := time.Now().UTC()
 			data.Teams[index].UpdatedAt = &now
@@ -2192,6 +2198,7 @@ func (s *server) updateCustomer(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
+		before := data.Customers[index]
 		applyCustomerInput(&data.Customers[index], input)
 		if input.Status != nil {
 			status, ok := resolveCustomerStatus(data, *input.Status)
@@ -2210,6 +2217,10 @@ func (s *server) updateCustomer(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := validateCustomerIdentity(data, data.Customers[index]); err != nil {
 			return err
+		}
+		if unchangedEdit(before, data.Customers[index]) {
+			updated = before
+			return store.ErrNoMutation
 		}
 		data.Customers[index].UpdatedAt = time.Now().UTC()
 		updated = data.Customers[index]
@@ -2518,8 +2529,13 @@ func (s *server) updateSavedView(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
+		before, favoritesBefore := *view, len(data.Favorites)
 		if err := applySavedViewUpdate(data, view, input); err != nil {
 			return err
+		}
+		if unchangedEdit(before, *view) && len(data.Favorites) == favoritesBefore {
+			updated = before
+			return store.ErrNoMutation
 		}
 		view.UpdatedAt = time.Now().UTC()
 		updated = *view
@@ -2755,6 +2771,7 @@ func (s *server) updateCycle(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
+		before, favoritesBefore := *cycle, len(data.Favorites)
 		if input.Name != nil {
 			name := strings.TrimSpace(*input.Name)
 			if name == "" || len(name) > 100 {
@@ -2816,6 +2833,10 @@ func (s *server) updateCycle(w http.ResponseWriter, r *http.Request) {
 				return errInvalid
 			}
 			cycle.Insight = map[string]string{"measure": measure, "slice": slice, "segment": segment}
+		}
+		if unchangedEdit(before, *cycle) && len(data.Favorites) == favoritesBefore {
+			updated = before
+			return store.ErrNoMutation
 		}
 		cycle.UpdatedAt = time.Now().UTC()
 		updated = *cycle
@@ -3373,12 +3394,17 @@ func (s *server) updateProject(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
+		before, relationsBefore := *project, projectRelationsOf(data, id)
 		if input.Description != nil && *input.Description != project.Description {
 			project.DescriptionRevisions = append([]domain.ProjectDescriptionRevision{{ID: fmt.Sprintf("project_description_revision_%d", time.Now().UnixNano()), ProjectID: id, Description: project.Description, Author: data.Viewer, CreatedAt: time.Now().UTC()}}, project.DescriptionRevisions...)
 		}
 		previous := projectTrackedProperties(*project)
 		if err := applyProjectUpdate(data, project, input); err != nil {
 			return err
+		}
+		if unchangedEdit(before, *project) && unchangedEdit(relationsBefore, projectRelationsOf(data, id)) {
+			updated = before
+			return store.ErrNoMutation
 		}
 		project.UpdatedAt = time.Now().UTC()
 		appendProjectPropertyAudit(data, previous, *project)
@@ -3476,9 +3502,14 @@ func (s *server) updateInitiative(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		before := slices.Clone(initiative.ProjectIDs)
+		original, favoritesBefore := *initiative, len(data.Favorites)
 		previous := initiativeTrackedProperties(*initiative)
 		if err := applyInitiativeUpdate(data, initiative, input); err != nil {
 			return err
+		}
+		if unchangedEdit(original, *initiative) && len(data.Favorites) == favoritesBefore {
+			updated = original
+			return store.ErrNoMutation
 		}
 		initiative.UpdatedAt = time.Now().UTC()
 		syncInitiativeProjects(data, id, before, initiative.ProjectIDs)
@@ -3765,13 +3796,12 @@ func (s *server) updateInitiativeComment(w http.ResponseWriter, r *http.Request)
 			current = *comment
 			return errConflict
 		}
-		now := time.Now().UTC()
-		comment.Body = strings.TrimSpace(input.Body)
-		comment.BodyData = input.BodyData
-		comment.EditedAt = &now
-		comment.Version++
-		initiative.UpdatedAt = now
+		changed := applyCommentPatch(comment, domain.CommentUpdateInput{Body: input.Body, BodyData: input.BodyData}, nil, false)
 		updated = *comment
+		if !changed {
+			return store.ErrNoMutation
+		}
+		initiative.UpdatedAt = time.Now().UTC()
 		return nil
 	})
 	if errors.Is(err, errConflict) {
@@ -4213,6 +4243,7 @@ func (s *server) updateProjectMilestone(w http.ResponseWriter, r *http.Request) 
 			return errNotFound
 		}
 		milestone := &project.Milestones[index]
+		before := *milestone
 		if input.Name != nil {
 			if strings.TrimSpace(*input.Name) == "" {
 				return errInvalid
@@ -4227,6 +4258,10 @@ func (s *server) updateProjectMilestone(w http.ResponseWriter, r *http.Request) 
 				milestone.DescriptionRevisions = append([]domain.ProjectDescriptionRevision{{ID: fmt.Sprintf("milestone_description_revision_%d", time.Now().UnixNano()), ProjectID: projectID, Description: milestone.Description, Author: data.Viewer, CreatedAt: time.Now().UTC()}}, milestone.DescriptionRevisions...)
 				milestone.Description = next
 			}
+		}
+		if unchangedEdit(before, *milestone) {
+			updated = before
+			return store.ErrNoMutation
 		}
 		milestone.UpdatedAt = time.Now().UTC()
 		project.UpdatedAt = milestone.UpdatedAt
@@ -4410,13 +4445,12 @@ func (s *server) updateProjectComment(w http.ResponseWriter, r *http.Request) {
 			current = *comment
 			return errConflict
 		}
-		now := time.Now().UTC()
-		comment.Body = strings.TrimSpace(input.Body)
-		comment.BodyData = input.BodyData
-		comment.EditedAt = &now
-		comment.Version++
-		project.UpdatedAt = now
+		changed := applyCommentPatch(comment, domain.CommentUpdateInput{Body: input.Body, BodyData: input.BodyData}, nil, false)
 		updated = *comment
+		if !changed {
+			return store.ErrNoMutation
+		}
+		project.UpdatedAt = time.Now().UTC()
 		return nil
 	})
 	if errors.Is(err, errConflict) {
@@ -5081,8 +5115,11 @@ func (s *server) updateComment(w http.ResponseWriter, r *http.Request) {
 		if issueErr != nil {
 			return issueErr
 		}
-		applyCommentPatch(&data.Comments[issueID][index], input, data.Comments[issueID], teamResolvedThreadSummaries(data, issue.Team.ID))
+		changed := applyCommentPatch(&data.Comments[issueID][index], input, data.Comments[issueID], teamResolvedThreadSummaries(data, issue.Team.ID))
 		updated = data.Comments[issueID][index]
+		if !changed {
+			return store.ErrNoMutation
+		}
 		activity := appendActivity(data, issueID, eventType, data.Viewer, map[string]string{"commentId": commentID})
 		appendIssueNotifications(data, *issue, activity, &updated)
 		return nil
@@ -6485,7 +6522,7 @@ func applyProjectUpdate(data *domain.Bootstrap, project *domain.Project, input d
 			}
 		}
 	}
-	if input.Archived != nil {
+	if input.Archived != nil && *input.Archived != (project.ArchivedAt != nil) {
 		if *input.Archived {
 			now := time.Now().UTC()
 			project.ArchivedAt = &now

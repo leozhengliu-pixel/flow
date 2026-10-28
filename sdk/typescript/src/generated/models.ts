@@ -782,7 +782,7 @@ export interface Document {
   teamIds: string[]
   title: string
   updatedAt: string
-  /** Version increases with every accepted write; PATCH callers may send expectedVersion to detect a concurrent change (409 with the current document). ContentVersion increases only when the collaborative base state (contentState) is replaced, guarding update-log compaction. */
+  /** Version increases with every write that changes the document (a PATCH that only repeats current values keeps it); PATCH callers may send expectedVersion to detect a concurrent change (409 with the current document). ContentVersion increases only when the collaborative base state (contentState) is replaced, guarding update-log compaction. */
   version: number
 }
 
@@ -870,7 +870,7 @@ export interface DocumentPartial {
   teamIds?: string[]
   title?: string
   updatedAt?: string
-  /** Version increases with every accepted write; PATCH callers may send expectedVersion to detect a concurrent change (409 with the current document). ContentVersion increases only when the collaborative base state (contentState) is replaced, guarding update-log compaction. */
+  /** Version increases with every write that changes the document (a PATCH that only repeats current values keeps it); PATCH callers may send expectedVersion to detect a concurrent change (409 with the current document). ContentVersion increases only when the collaborative base state (contentState) is replaced, guarding update-log compaction. */
   version?: number
 }
 

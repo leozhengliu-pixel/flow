@@ -469,8 +469,12 @@ func (s *server) updateWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 		if !validLabelGroup(data, resource, data.Labels[index].Scope, groupID) {
 			return errInvalid
 		}
+		before := data.Labels[index]
 		applyLabelInput(&data.Labels[index], input)
 		updated = data.Labels[index]
+		if unchangedEdit(before, updated, "IssueCount") {
+			return store.ErrNoMutation
+		}
 		cascadeLabel(data, updated)
 		// issueCount is derived per read and differs between mutation paths; clients keep their own.
 		eventLabel := updated
@@ -689,6 +693,7 @@ func (s *server) updateLabelGroup(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
+		before := data.LabelGroups[index]
 		if input.Name != nil && strings.TrimSpace(*input.Name) != "" {
 			data.LabelGroups[index].Name = strings.TrimSpace(*input.Name)
 		}
@@ -709,6 +714,12 @@ func (s *server) updateLabelGroup(w http.ResponseWriter, r *http.Request) {
 				}
 				data.LabelGroups[index].ArchivedAt = &parsed
 			}
+		}
+		if unchangedEdit(before, data.LabelGroups[index]) {
+			updated = before
+			return store.ErrNoMutation
+		}
+		if input.ArchivedAt != nil {
 			for labelIndex := range data.Labels {
 				if data.Labels[labelIndex].GroupID != id {
 					continue

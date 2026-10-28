@@ -756,7 +756,8 @@ func issueUpdateIsNoop(issue domain.Issue, input domain.IssueUpdateInput) bool {
 		if issue.Estimate != nil {
 			current = *issue.Estimate
 		}
-		if current != *input.Estimate {
+		// -1 clears the estimate: on an unestimated issue it changes nothing.
+		if current != *input.Estimate && !(*input.Estimate == -1 && issue.Estimate == nil) {
 			return false
 		}
 	}
