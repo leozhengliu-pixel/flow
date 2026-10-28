@@ -26,7 +26,10 @@ export default defineConfig({
       name: 'security',
       use: {
         ...devices['Desktop Chrome'],
-        ...(process.env.CI ? {} : { channel: 'chrome' }),
+        // Locally the system Chrome; in CI Playwright's bundled Chromium in its new headless mode ('chromium' channel). The
+        // default headless shell build never delivers Reporting API reports (Reporting-Endpoints / report-to), which the CSP
+        // report test needs; the new headless mode is the full browser and does.
+        channel: process.env.CI ? 'chromium' : 'chrome',
         // Reporting API uploads are made by the browser's network service, which ignoreHTTPSErrors does not reach.
         launchOptions: { args: ['--ignore-certificate-errors'] },
       },
