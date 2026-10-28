@@ -513,7 +513,7 @@ func databaseMigrations(dialect string) []string {
 		blobType = "BYTEA"
 	}
 	if dialect == "mysql" {
-		idType, emailType, queryType, blobType, claimsType = "VARCHAR(191)", "VARCHAR(320)", "VARCHAR(300)", "LONGBLOB", "TEXT"
+		idType, emailType, queryType, blobType, claimsType = "VARCHAR(191)", "VARCHAR(320)", "VARCHAR(300)", "LONGBLOB", "LONGTEXT"
 	}
 	statements := []string{
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS workspace_state (id INTEGER PRIMARY KEY, data %s NOT NULL, updated_at VARCHAR(40) NOT NULL)`, blobType),

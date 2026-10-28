@@ -396,6 +396,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 			}
 			return s.createChatMutationReceiptsSchema(ctx)
 		}},
+		{version: 16, name: "large event and identity values", apply: s.widenLargeValueColumns},
 		// Versions from 1000 up are data migrations (runDataMigrations),
 		// which run after the workspaces are loaded.
 	}
@@ -431,7 +432,13 @@ func (s *SQLiteStore) createTeamMembershipRoleIndex(ctx context.Context) error {
 }
 
 func (s *SQLiteStore) addDomainEventPreviousValues(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `ALTER TABLE domain_events ADD COLUMN previous_values TEXT`)
+	// A document's pre-edit body does not fit MySQL TEXT (64 KiB); see
+	// largeValueColumns.
+	textType := "TEXT"
+	if s.dialect == "mysql" {
+		textType = "LONGTEXT"
+	}
+	_, err := s.db.ExecContext(ctx, `ALTER TABLE domain_events ADD COLUMN previous_values `+textType)
 	if err != nil {
 		message := strings.ToLower(err.Error())
 		if strings.Contains(message, "duplicate column") || strings.Contains(message, "already exists") {
@@ -1881,7 +1888,11 @@ func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspa
 		return err
 	}
 	if event != nil {
-		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, Payload: []byte(event.Payload), PreviousValues: []byte(event.PreviousValues), CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: data.Workspace.ID}); err != nil {
+		previous, err := storedEventPreviousValues(ctx, tx, workspaceKey, event.Type, event.AggregateID, event.PreviousValues)
+		if err != nil {
+			return err
+		}
+		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, Payload: []byte(event.Payload), PreviousValues: previous, CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: data.Workspace.ID}); err != nil {
 			return err
 		}
 	}

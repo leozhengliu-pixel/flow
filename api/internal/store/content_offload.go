@@ -869,6 +869,72 @@ func offloadRecord(ctx context.Context, tx *sqlTx, workspace, field string, raw 
 	return stored, tx.database.content.save(ctx, tx, workspace, blobs)
 }
 
+// storedEventPreviousValues returns a document event's previous values as
+// they are stored. The previous values of a content edit list every version
+// of the document the server holds in memory, each with its whole body, so
+// inline they grow with the document's history (up to 100 versions) on
+// every edit. Stored, each version body of at least revisionOffloadMinBytes
+// is an offloaded body instead: content-addressed, so a body the document's
+// own record already offloaded is not written again, and kept while the
+// event refers to it (offloadedEventReferences). The pre-edit fields of the
+// document itself stay inline. LoadOffloadedJSON returns the full values;
+// webhooks, loops and other sinks get the in-memory event, which is never
+// changed.
+func storedEventPreviousValues(ctx context.Context, tx *sqlTx, workspace, eventType, documentID string, previous []byte) ([]byte, error) {
+	if tx.database == nil || tx.database.content == nil || !strings.HasPrefix(eventType, "document.") || !bytes.Contains(previous, []byte(`"revisions"`)) {
+		return previous, nil
+	}
+	var values map[string]json.RawMessage
+	if json.Unmarshal(previous, &values) != nil {
+		return previous, nil
+	}
+	var revisions []map[string]json.RawMessage
+	if json.Unmarshal(values["revisions"], &revisions) != nil || len(revisions) == 0 {
+		return previous, nil
+	}
+	var blobs []contentBlob
+	for _, revision := range revisions {
+		if revision == nil {
+			continue
+		}
+		body := map[string]json.RawMessage{}
+		size := 0
+		for _, name := range revisionBodyFields {
+			if value, ok := revision[name]; ok {
+				body[name] = value
+				size += len(value)
+			}
+		}
+		// Short bodies stay inline; a version that is not loaded has an
+		// empty body and keeps its reference.
+		if size < revisionOffloadMinBytes {
+			continue
+		}
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		key := revisionBlobKey(documentID, jsonString(revision["id"]), encoded)
+		blobs = append(blobs, contentBlob{key: key, body: encoded})
+		for name := range body {
+			delete(revision, name)
+		}
+		revision[offloadMarker], _ = json.Marshal(map[string]domain.ContentRef{"body": {Key: key, Size: len(encoded)}})
+	}
+	if len(blobs) == 0 {
+		return previous, nil
+	}
+	if err := tx.database.content.save(ctx, tx, workspace, blobs); err != nil {
+		return nil, err
+	}
+	encoded, err := json.Marshal(revisions)
+	if err != nil {
+		return nil, err
+	}
+	values["revisions"] = encoded
+	return json.Marshal(values)
+}
+
 // storedRecordEqual reports whether stored (a row as read from the database)
 // is how raw would be stored, so an unchanged record is not rewritten.
 func storedRecordEqual(tx *sqlTx, refs issueReferences, field string, stored, raw []byte) bool {
