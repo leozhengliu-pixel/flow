@@ -81,6 +81,14 @@ export function weekdaysLeft(cycle: Cycle) {
 }
 
 /**
+ * The cycles list order: latest start first. A cycle completed on the day the next one started
+ * shares its start day, so the higher number (the later cycle) goes first.
+ */
+export function cycleListOrder<T extends Pick<Cycle, 'startsAt' | 'number'>>(cycles: T[]) {
+  return [...cycles].sort((a, b) => b.startsAt.slice(0, 10).localeCompare(a.startsAt.slice(0, 10)) || b.number - a.number)
+}
+
+/**
  * Whole weeks of cooldown between a cycle and the next one (0 when they are
  * back to back). Cycle dates are inclusive calendar days.
  */

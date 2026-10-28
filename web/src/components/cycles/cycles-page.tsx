@@ -6,7 +6,7 @@ import { useI18n } from '@/i18n/i18n'
 import { EstimateIcon } from '@/components/issue/estimate-icon'
 import { formatEstimatePoints } from '@/lib/estimates'
 import { CycleActions } from './cycle-menus'
-import { cooldownWeeksBetween, cycleStats, formatCycleDay } from './cycle-model'
+import { cooldownWeeksBetween, cycleListOrder, cycleStats, formatCycleDay } from './cycle-model'
 import { cycleSparkline } from './cycle-graph-model'
 import { useCycleGraph } from './use-cycle-graph'
 
@@ -16,7 +16,7 @@ import './cycle-graph.css'
 
 export function CyclesPage({cycles,issues,settings,estimateSettings,onOpen,onUpdateCycle,onStartCycle,onCompleteCycle,onUpdateSettings,onReload,onOpenSidebar}:{cycles:Cycle[];issues:Issue[];settings:{enabled:boolean;durationWeeks:number;cooldownWeeks:number;upcomingCount:number;favoriteView?:boolean};team:Team;estimateSettings?:TeamSettings;onOpen:(cycle:Cycle)=>void;onUpdateCycle:(cycle:Cycle,input:CycleMutationInput)=>Promise<unknown>;onStartCycle:(cycle:Cycle)=>Promise<unknown>;onCompleteCycle:(cycle:Cycle)=>Promise<unknown>;onUpdateSettings:(input:CycleSettingsMutationInput)=>Promise<unknown>;onReload:()=>Promise<void>;onOpenSidebar:()=>void}){
   const {t}=useI18n()
-  const visible=useMemo(()=>[...cycles].sort((a,b)=>b.startsAt.localeCompare(a.startsAt)),[cycles])
+  const visible=useMemo(()=>cycleListOrder(cycles),[cycles])
   const earliestUpcoming=[...visible].filter(item=>item.status==='upcoming').sort((a,b)=>a.startsAt.localeCompare(b.startsAt))[0]?.id
   return <main className="main-panel flow-cycles-page"><header className="flow-cycles-header"><button className="cycles-mobile-menu" aria-label={t('Open sidebar')} data-sidebar-trigger onClick={onOpenSidebar}><Menu/></button><h1>{t('Cycles')}</h1><button className="cycle-top-icon" role="switch" aria-label={t(settings.favoriteView?'Remove from favorites':'Add to favorites')} aria-checked={Boolean(settings.favoriteView)} onClick={()=>void onUpdateSettings({favoriteView:!settings.favoriteView})}><CycleFavoriteIcon filled={Boolean(settings.favoriteView)}/></button></header>{!settings.enabled?<div className="cycle-education flow-cycles-empty-education"><CycleEmptyMark/><strong>{t('Cycles')}</strong><p>{t('Cycles are time-based intervals to help your team focus on a predefined set of work.')}</p><p>{t('Track capacity, scope, and progress as issues are added, and as the cycle progresses.')}</p><div><button type="button" onClick={()=>void onUpdateSettings({enabled:true})}>{t('Enable cycles')}</button><a href="https://flow.app/docs/cycles" target="_blank" rel="noreferrer">{t('Documentation')}</a></div></div>:!visible.length?<div className="flow-cycles-empty"><strong>{t('This team has no cycles.')}</strong></div>:<div className="flow-cycle-list">{visible.map((cycle,index)=>{const earlier=visible[index+1],cooldown=earlier?cooldownWeeksBetween(earlier,cycle):0;return <Fragment key={cycle.id}><CycleDirectoryRow cycle={cycle} issues={issues} estimateSettings={estimateSettings} derivedStatus={cycle.status==='upcoming'&&cycle.id!==earliestUpcoming?'planned':cycle.status} onOpen={()=>onOpen(cycle)} onUpdate={input=>onUpdateCycle(cycle,input)} onStart={()=>onStartCycle(cycle)} onComplete={()=>onCompleteCycle(cycle)} onReload={onReload}/>{cooldown>0&&<div className="flow-cycle-cooldown"><span>{t(cooldown===1?'{count} week cooldown':'{count} weeks cooldown').replace('{count}',String(cooldown))}</span></div>}</Fragment>})}</div>}</main>
 }

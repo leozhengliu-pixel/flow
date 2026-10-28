@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Cycle, Issue } from '@/types/flow'
-import { cooldownWeeksBetween, cycleStats, cycleStatusLabel, formatCycleDay, formatCycleRange, weekdaysLeft } from './cycle-model'
+import { cooldownWeeksBetween, cycleListOrder, cycleStats, cycleStatusLabel, formatCycleDay, formatCycleRange, weekdaysLeft } from './cycle-model'
 
 const cycle = {
   id: 'cycle-1', name: 'Cycle 1', number: 1, capacity: 4, status: 'current',
@@ -46,6 +46,17 @@ describe('cycle model', () => {
     expect(cooldownWeeksBetween({ endsAt: '2026-11-09T00:00:00Z' }, { startsAt: '2026-11-24T00:00:00Z' })).toBe(2)
     expect(cooldownWeeksBetween({ endsAt: '2026-11-09T00:00:00Z' }, { startsAt: '2026-11-17T00:00:00Z' })).toBe(1)
     expect(cooldownWeeksBetween({ endsAt: '2026-11-09T00:00:00Z' }, { startsAt: '2026-11-10T00:00:00Z' })).toBe(0)
+    // A cycle completed early ends the day the next one starts: no cooldown between them.
+    expect(cooldownWeeksBetween({ endsAt: '2026-10-27T00:00:00Z' }, { startsAt: '2026-10-27T00:00:00Z' })).toBe(0)
+  })
+
+  it('lists the latest start first and a later cycle above one completed on its start day', () => {
+    const order = cycleListOrder([
+      { id: 'c1', number: 1, startsAt: '2026-10-27T00:00:00Z' },
+      { id: 'c3', number: 3, startsAt: '2026-12-22T00:00:00Z' },
+      { id: 'c2', number: 2, startsAt: '2026-10-27T00:00:00Z' },
+    ])
+    expect(order.map(item => item.id)).toEqual(['c3', 'c2', 'c1'])
   })
 
   it('formats dates and status labels consistently', () => {

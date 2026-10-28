@@ -2740,7 +2740,7 @@ func (s *server) updateCycleSettings(w http.ResponseWriter, r *http.Request) {
 		if settings.Enabled && settings.AutoCreate {
 			current := currentCycle(data, teamID)
 			if current != nil {
-				ensureUpcomingCycles(data, current)
+				ensureUpcomingCycles(data, teamID)
 			} else if latest := latestCycle(data, teamID); latest != nil {
 				for countUpcomingCycles(data, teamID) < settings.UpcomingCount {
 					appendFutureCycle(data, teamID, latestCycle(data, teamID))
@@ -2876,57 +2876,91 @@ func (s *server) completeCycle(w http.ResponseWriter, r *http.Request) {
 		if cycle.Status != "current" {
 			return errInvalid
 		}
-		completed = *cycle
-		next := earliestUpcomingCycle(data, cycle.TeamID)
+		teamID := cycle.TeamID
+		next := earliestUpcomingCycle(data, teamID)
 		if next == nil {
-			next = appendFutureCycle(data, cycle.TeamID, cycle)
+			next = appendFutureCycle(data, teamID, cycle)
 		}
 		if err := transitionToCycle(data, next, time.Now().UTC()); err != nil {
 			return err
 		}
-		completed.Status = "completed"
-		completed.UpdatedAt = time.Now().UTC()
+		// Generating cycles can move the slice, so the completed cycle is read again.
+		if cycle, err = cycleByID(data, id); err != nil {
+			return err
+		}
+		completed = *cycle
 		return nil
 	})
 	s.respondCycle(w, r, err, completed)
 }
 
+// cycleDay is the calendar day (UTC midnight) of a time; cycle dates are whole days.
+func cycleDay(value time.Time) time.Time {
+	value = value.UTC()
+	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+// cycleEnded reports whether a cycle's last day (EndsAt is inclusive) is over.
+func cycleEnded(cycle *domain.Cycle, now time.Time) bool {
+	return !now.Before(cycleDay(cycle.EndsAt).AddDate(0, 0, 1))
+}
+
+// transitionToCycle completes the team's current cycle and starts target today.
 func transitionToCycle(data *domain.Bootstrap, target *domain.Cycle, now time.Time) error {
-	var previous *domain.Cycle
-	for i := range data.Cycles {
-		if data.Cycles[i].TeamID == target.TeamID && data.Cycles[i].Status == "current" {
-			previous = &data.Cycles[i]
-			break
-		}
+	if previous := currentCycle(data, target.TeamID); previous != nil && previous.ID != target.ID {
+		completeCurrentCycle(data, previous, target, now)
 	}
-	if previous != nil && previous.ID != target.ID {
-		previous.Status = "completed"
-		previous.UpdatedAt = now
-		settings := data.CycleSettings[target.TeamID]
-		for i := range data.Issues {
-			issue := &data.Issues[i]
-			if settings.AutoMigrate && issue.CycleID != nil && *issue.CycleID == previous.ID && issue.State.Type != "completed" && issue.State.Type != "canceled" && issue.State.Type != "backlog" {
-				issue.CycleID = stringPointer(target.ID)
-				issue.UpdatedAt = now
-				appendActivity(data, issue.ID, "issue.updated", data.Viewer, map[string]string{"cycle": target.ID, "cycleBefore": previous.ID})
-			}
-		}
-	}
-	duration := target.EndsAt.Sub(target.StartsAt)
-	if duration < 24*time.Hour {
-		duration = 13 * 24 * time.Hour
-	}
-	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	target.StartsAt = start
-	target.EndsAt = start.Add(duration)
-	target.Status = "current"
-	target.UpdatedAt = now
-	ensureUpcomingCycles(data, target)
+	startCycleOn(target, now)
+	ensureUpcomingCycles(data, target.TeamID)
 	return nil
 }
 
-func ensureUpcomingCycles(data *domain.Bootstrap, current *domain.Cycle) {
-	teamID := current.TeamID
+// completeCurrentCycle marks a current cycle completed, ending it today when it is completed
+// before its last day (the next cycle starts today, so they do not overlap), and moves its
+// open issues to next when the team migrates them.
+func completeCurrentCycle(data *domain.Bootstrap, previous, next *domain.Cycle, now time.Time) {
+	previous.Status = "completed"
+	previous.UpdatedAt = now
+	if today := cycleDay(now); previous.EndsAt.After(today) {
+		previous.EndsAt = today
+		if previous.EndsAt.Before(previous.StartsAt) {
+			previous.EndsAt = previous.StartsAt
+		}
+	}
+	if next == nil || !data.CycleSettings[previous.TeamID].AutoMigrate {
+		return
+	}
+	for i := range data.Issues {
+		issue := &data.Issues[i]
+		if issue.CycleID != nil && *issue.CycleID == previous.ID && issue.State.Type != "completed" && issue.State.Type != "canceled" && issue.State.Type != "backlog" {
+			issue.CycleID = stringPointer(next.ID)
+			issue.UpdatedAt = now
+			appendActivity(data, issue.ID, "issue.updated", data.Viewer, map[string]string{"cycle": next.ID, "cycleBefore": previous.ID})
+		}
+	}
+}
+
+// startCycleOn makes target the current cycle. A cycle started before its planned start begins
+// today and keeps its planned end, so the cycles after it and the cooldowns between them stay
+// where they were; one whose planned days are already over runs its length from today.
+func startCycleOn(target *domain.Cycle, now time.Time) {
+	today := cycleDay(now)
+	length := cycleDay(target.EndsAt).Sub(cycleDay(target.StartsAt))
+	if length < 24*time.Hour {
+		length = 13 * 24 * time.Hour
+	}
+	if target.StartsAt.After(today) {
+		target.StartsAt = today
+	}
+	if cycleDay(target.EndsAt).Before(today) || !target.EndsAt.After(target.StartsAt) {
+		target.StartsAt = today
+		target.EndsAt = today.Add(length)
+	}
+	target.Status = "current"
+	target.UpdatedAt = now
+}
+
+func ensureUpcomingCycles(data *domain.Bootstrap, teamID string) {
 	settings := data.CycleSettings[teamID]
 	wanted := settings.UpcomingCount
 	if wanted < 1 {
@@ -2944,7 +2978,8 @@ func appendFutureCycle(data *domain.Bootstrap, teamID string, previous *domain.C
 		weeks = 2
 	}
 	cooldown := settings.CooldownWeeks
-	start := cycleWeekStart(time.Now().UTC())
+	// A team's first cycle starts today.
+	start := cycleDay(time.Now())
 	number := 1
 	if previous != nil {
 		start = previous.EndsAt.AddDate(0, 0, 1+cooldown*7)
@@ -3013,11 +3048,6 @@ func parseCycleDate(value string) (time.Time, error) {
 }
 
 func stringPointer(value string) *string { return &value }
-
-func cycleWeekStart(value time.Time) time.Time {
-	day := time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, time.UTC)
-	return day.AddDate(0, 0, -(int(day.Weekday())+6)%7)
-}
 
 func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 	var input domain.IssueCreateInput
