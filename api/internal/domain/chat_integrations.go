@@ -89,13 +89,17 @@ type ChatBinding struct {
 }
 
 type ChatIdentity struct {
-	UserID        string     `json:"userId"`
-	OpenID        string     `json:"openId"`
-	TenantKey     string     `json:"tenantKey"`
-	Name          string     `json:"name,omitempty"`
-	AuthProvider  string     `json:"-"`
-	AuthIssuer    string     `json:"-"`
-	MFAVerifiedAt *time.Time `json:"-"`
+	UserID    string `json:"userId"`
+	OpenID    string `json:"openId"`
+	TenantKey string `json:"tenantKey"`
+	Name      string `json:"name,omitempty"`
+	// PersonalDelivery is "unavailable" after the platform refused a
+	// personal notification because the app is not available to this
+	// account (its availability range); a later successful one clears it.
+	PersonalDelivery string     `json:"personalDelivery,omitempty" enum:"unavailable"`
+	AuthProvider     string     `json:"-"`
+	AuthIssuer       string     `json:"-"`
+	MFAVerifiedAt    *time.Time `json:"-"`
 	// AuthenticatedAt is when the member consented from a signed-in session.
 	// The workspace session duration is measured from it.
 	AuthenticatedAt time.Time `json:"-"`

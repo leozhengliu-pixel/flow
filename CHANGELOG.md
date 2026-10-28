@@ -29,6 +29,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   audited.
 - Lark and Feishu groups can receive initiative updates of the initiatives
   their team leads.
+- Personal Lark and Feishu notifications: a member who linked their account
+  turns them on in **Personal > Notifications**, chooses the notification
+  types as for email and desktop, and receives them as a direct message from
+  the app's bot. Messages are sent only while the integration is healthy and
+  for content the member can still open; unlinking or leaving the workspace
+  stops them, and an account outside the app's availability range is shown
+  as such on the notifications row.
 - With `FLOW_AGENT_RUNTIME=worker`, Flow Agent chat replies run on the agent
   worker (`agent-worker`) instead of inside the API. The reply is the same
   chat message as before: saved while it is written (a reload or another tab

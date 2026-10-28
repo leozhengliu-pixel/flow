@@ -97,6 +97,8 @@ import { PersonalConnectionRows } from "./personal-connection-rows";
 import { ChatConnectionRows } from "./chat-connection-rows";
 import { IntegrationBrandIcon } from "./integration-brand-icon";
 import { useChatPlatform } from "@/lib/chat-platform";
+import { useChatIntegrationSettings } from "./chat-binding-support";
+import { CHAT_PERSONAL_STATE_COPY, chatChannelPreferences, chatPersonalState } from "./chat-personal-notifications";
 
 import "./personal-settings.css";
 import {
@@ -256,7 +258,6 @@ const PERSONAL_ZH: Record<string, string> = {
   "Not available in Flow web": "Flow 网页版暂不可用",
   "Enabled for all notifications": "已为所有通知启用",
   "Not connected": "未连接",
-  "Delivered to the groups your teams connect": "发送到你的团队连接的群",
   "Updates from Flow": "Flow 更新",
   "Changelog": "更新日志",
   "Manage how notifications are organized in your inbox": "管理通知在收件箱中的组织方式",
@@ -1179,9 +1180,12 @@ function Profile({ data, onReload, onBack, p }: PersonalProps) {
   );
 }
 
-function Notifications({ data, values, setValue, onReload, p, notificationChannel, onNavigateNotification }: PersonalProps) {
+function Notifications({ data, values, setValue, onReload, onNavigate, p, notificationChannel, onNavigateNotification }: PersonalProps) {
   const { formatDate } = useI18n();
   const chat = useChatPlatform(data);
+  // Lark/Feishu personal notifications need a healthy integration and the member's linked account.
+  const chatIntegration = useChatIntegrationSettings(chat.provider);
+  const chatState = chatPersonalState(chatIntegration.settings, chatIntegration.loading);
   const initial = useMemo(
     () =>
       data.notificationPreferences?.[data.viewer.id] ??
@@ -1228,6 +1232,11 @@ function Notifications({ data, values, setValue, onReload, p, notificationChanne
       onChange={(rules) => setPriorityTypes(Object.values(rules).filter(Boolean).length)}
     />
   </>;
+  if (channel === 'chat' && chat.provider) return <NotificationChannelSettings channel="chat" name={chat.name} preferences={preferences} save={save} onBack={() => openChannel(null)} p={p}
+    locked={chatState !== "ready"}
+    notice={chatState !== "ready" && <PersonalRow title={chat.format(p(CHAT_PERSONAL_STATE_COPY[chatState]))} description={chatState === "not_linked" ? p("Linking only maps your chat account to your Flow account; messages show only what you can open in Flow.") : undefined}>
+      {chatState === "not_linked" && <Action onClick={() => onNavigate("connections")}>{p("Connected accounts")}</Action>}
+    </PersonalRow>} />;
   if (channel === 'desktop' || channel === 'email') return <>
     <NotificationChannelSettings channel={channel} preferences={preferences} save={save} onBack={()=>openChannel(null)} p={p}/>
     {channel === 'desktop' && <PersonalSection title={p('Devices')}>
@@ -1296,13 +1305,19 @@ function Notifications({ data, values, setValue, onReload, p, notificationChanne
           )}
           onClick={() => openChannel("email")}
         />
-        <NotificationChannel
-          icon={chat.provider ? <IntegrationBrandIcon provider={chat.provider} size={16} /> : <MessageCircle />}
+        {chat.provider ? <NotificationChannel
+          icon={<IntegrationBrandIcon provider={chat.provider} size={16} />}
           title={chat.name}
-          status={p(chat.provider ? "Delivered to the groups your teams connect" : "Not connected")}
+          status={chatState === "ready" ? p(chatChannelPreferences(preferences).enabled ? "Enabled" : "Disabled") : chat.format(p(CHAT_PERSONAL_STATE_COPY[chatState]))}
+          entityName
+          onClick={() => openChannel("chat")}
+        /> : <NotificationChannel
+          icon={<MessageCircle />}
+          title={chat.name}
+          status={p("Not connected")}
           entityName
           disabled
-        />
+        />}
       </PersonalSection>
       <PersonalSection
         grouped

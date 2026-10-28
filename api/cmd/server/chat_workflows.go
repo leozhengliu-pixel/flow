@@ -295,7 +295,7 @@ func chatCreateTitle(text string) (string, bool) {
 }
 
 func (s *server) processChatJobs(ctx context.Context, workspace string) error {
-	for _, kind := range []string{"inbound", "card", "notification"} {
+	for _, kind := range []string{"inbound", "card", "notification", chatPersonalJobKind} {
 		for range 4 {
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -316,9 +316,9 @@ func (s *server) processChatJobs(ctx context.Context, workspace string) error {
 			status, message, runAt := "completed", "", time.Time{}
 			if err != nil {
 				message = "Chat operation failed; check application permissions and connection health."
-				var permanent chatPermanentError
 				var platform *chatPlatformError
-				if errors.As(err, &permanent) || errors.Is(err, store.ErrAuthForbidden) || errors.As(err, &platform) && !platform.Retryable || job.Attempts >= 8 {
+				errors.As(err, &platform)
+				if chatJobFinal(err, job) {
 					status = "failed"
 				} else {
 					status = "pending"
@@ -351,6 +351,10 @@ func (s *server) processChatJob(ctx context.Context, job domain.ChatJob) error {
 	record, err := s.chatJobIntegration(ctx, job)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
+	}
+	if err == nil && job.Kind == chatPersonalJobKind && record.WorkspaceKey == job.WorkspaceKey {
+		// Ends its notification delivery with the reason, healthy or not.
+		return s.processChatPersonalNotification(ctx, record, job)
 	}
 	if errors.Is(err, sql.ErrNoRows) || !record.Connected || record.WorkspaceKey != job.WorkspaceKey {
 		return chatInvalid("chat integration disconnected")

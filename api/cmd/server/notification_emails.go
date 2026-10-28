@@ -16,8 +16,15 @@ type notificationEmailItem struct {
 
 // notificationEmailItem describes notification for email, or false when its source no longer exists.
 func (s *server) notificationEmailItem(data *domain.Bootstrap, key string, notification domain.Notification) (notificationEmailItem, error) {
-	root := s.mailer.appURL + "/" + url.PathEscape(key)
-	item := notificationEmailItem{Icon: s.mailer.notificationIcon(notification.Actor)}
+	item, err := notificationSummary(data, s.mailer.appURL+"/"+url.PathEscape(key), notification)
+	item.Icon = s.mailer.notificationIcon(notification.Actor)
+	return item, err
+}
+
+// notificationSummary is a notification's linked title and line, shared by
+// email and personal chat messages. root is the workspace's app URL.
+func notificationSummary(data *domain.Bootstrap, root string, notification domain.Notification) (notificationEmailItem, error) {
+	item := notificationEmailItem{}
 	actor := inviterDisplayName(notification.Actor)
 	switch {
 	case notification.ReviewID != "":

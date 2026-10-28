@@ -87,6 +87,14 @@ func mergeNotificationPreferences(current *domain.NotificationPreferences, input
 	current.Inbox = mergeChannelPreferences(current.Inbox, input.Inbox)
 	current.Email = mergeChannelPreferences(current.Email, input.Email)
 	current.Desktop = mergeChannelPreferences(current.Desktop, input.Desktop)
+	if input.Chat != nil {
+		base := domain.NotificationChannelPreferences{}
+		if current.Chat != nil {
+			base = *current.Chat
+		}
+		merged := mergeChannelPreferences(base, *input.Chat)
+		current.Chat = &merged
+	}
 	if input.EmailFormat != "" {
 		current.EmailFormat = input.EmailFormat
 	}
@@ -2122,6 +2130,10 @@ func enqueueNotificationDeliveries(data *domain.Bootstrap, notification domain.N
 	}
 	if preferences.Desktop.Enabled && categoryEnabled(preferences.Desktop, notification.Category) {
 		appendDelivery("desktop", "pending")
+	}
+	// Sent by the chat worker as a bot direct message (chat_personal_notifications.go).
+	if preferences.Chat != nil && preferences.Chat.Enabled && categoryEnabled(*preferences.Chat, notification.Category) {
+		appendDelivery("chat", "pending")
 	}
 	if slices.ContainsFunc(data.PushSubscriptions, func(item domain.PushSubscription) bool {
 		return item.UserID == notification.RecipientID && item.Enabled

@@ -629,6 +629,8 @@ export interface NotificationPreferences {
   inbox: NotificationChannelPreferences;
   email: NotificationChannelPreferences;
   desktop: NotificationChannelPreferences;
+  /** Personal notifications as direct messages from the Lark or Feishu app bot to the linked account. Off when absent. */
+  chat?: NotificationChannelPreferences;
   emailFormat: "immediate" | "digest";
   delayLowPriority: boolean;
   immediateUrgent: boolean;
@@ -640,7 +642,7 @@ export interface NotificationDelivery {
   id: UUID;
   notificationId: UUID;
   recipientId: UUID;
-  channel: "email" | "desktop" | "push";
+  channel: "email" | "desktop" | "push" | "chat";
   status: "pending" | "digest" | "pending-disabled" | "delivered" | "failed";
   attempts: number;
   nextAttemptAt?: string;

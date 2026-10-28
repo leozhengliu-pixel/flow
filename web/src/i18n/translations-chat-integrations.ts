@@ -186,6 +186,13 @@ export const chatIntegrationsZhCN: Record<string, string> = {
   "Add the bot to this group, then try again.": "请先将机器人添加到此群，然后重试。",
   "The group could not be checked on the chat platform. Check the bot's permissions and try again.": "无法在聊天平台上检查此群。请检查机器人权限后重试。",
   "Choose an active team, and a project and template that can be shared with the group.": "请选择一个有效团队，以及可以分享到该群的项目和模板。",
+  // Personal notifications as bot direct messages.
+  "Direct messages from the {name} app bot to your linked account": "{name} 应用机器人发送到你关联账号的私信",
+  "Enable {name} notifications": "启用 {name} 通知",
+  "{name} isn't connected to this workspace": "{name} 尚未连接到此工作区",
+  "Link your {name} account to turn this on": "关联你的 {name} 账号后即可开启",
+  "The app isn't available to your {name} account. Ask your {name} admin to add you to its availability range.": "此应用对你的 {name} 账号不可用。请联系 {name} 管理员将你加入应用的可用范围。",
+  "Linking only maps your chat account to your Flow account; messages show only what you can open in Flow.": "关联只会将你的聊天账号对应到 Flow 账号；消息只包含你在 Flow 中可以打开的内容。",
   // Chat platform entry points (FLOW_CHAT_PLATFORM).
   "{name} notifications": "{name} 通知",
   "Broadcast notifications to {name} groups": "向 {name} 群广播通知",

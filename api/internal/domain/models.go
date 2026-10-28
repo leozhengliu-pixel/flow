@@ -2627,16 +2627,20 @@ type NotificationChannelPreferences struct {
 }
 
 type NotificationPreferences struct {
-	UserID            string                         `json:"userId"`
-	Inbox             NotificationChannelPreferences `json:"inbox"`
-	Email             NotificationChannelPreferences `json:"email"`
-	Desktop           NotificationChannelPreferences `json:"desktop"`
-	EmailFormat       string                         `json:"emailFormat"`
-	DelayLowPriority  bool                           `json:"delayLowPriority"`
-	ImmediateUrgent   bool                           `json:"immediateUrgent"`
-	SoundEnabled      bool                           `json:"soundEnabled"`
-	DesktopPermission string                         `json:"desktopPermission,omitempty"`
-	UpdatedAt         time.Time                      `json:"updatedAt"`
+	UserID  string                         `json:"userId"`
+	Inbox   NotificationChannelPreferences `json:"inbox"`
+	Email   NotificationChannelPreferences `json:"email"`
+	Desktop NotificationChannelPreferences `json:"desktop"`
+	// Chat is personal notifications sent as a direct message by the Lark or
+	// Feishu app bot to the member's linked account. Off unless turned on;
+	// an update without it leaves it unchanged.
+	Chat              *NotificationChannelPreferences `json:"chat,omitempty"`
+	EmailFormat       string                          `json:"emailFormat"`
+	DelayLowPriority  bool                            `json:"delayLowPriority"`
+	ImmediateUrgent   bool                            `json:"immediateUrgent"`
+	SoundEnabled      bool                            `json:"soundEnabled"`
+	DesktopPermission string                          `json:"desktopPermission,omitempty"`
+	UpdatedAt         time.Time                       `json:"updatedAt"`
 }
 
 type NotificationDelivery struct {
