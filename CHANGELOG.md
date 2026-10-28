@@ -56,6 +56,20 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- On MySQL, editing a document larger than about 64 KiB no longer fails with
+  HTTP 500 (`Data too long for column 'previous_values'`) and no longer
+  discards the edit. This affected workspaces with an enabled webhook, an
+  event-triggered loop or a connected Feishu/Lark app, through the web app,
+  the API, `save_document` and application tokens. Schema migration 16
+  widens `domain_events.previous_values` and `auth_identities.claims_json` to
+  `LONGTEXT` and `code_host_accounts.scopes` to `MEDIUMTEXT`, and keeps their
+  rows. On MySQL it rebuilds those tables, and writes to them wait until the
+  rebuild finishes. Plan for this on a large `domain_events` table, see
+  [Large event and identity values](docs/operations.md#large-event-and-identity-values-mysql).
+  A document edit's stored event no longer repeats the body of every version
+  of the document. Those bodies are stored once, with the document's other
+  versions, and webhooks and `GET` event reads still return the full previous
+  values. Each stored row now grows with the document instead of its history.
 - `GET /api/health` answers anonymous probes with only `{"status":"ok"}`
   (`"degraded"` with `503` when Redis does not answer); the build version,
   commit and Redis mode moved to the startup log, and a coordinator outage is

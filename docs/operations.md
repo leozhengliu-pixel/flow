@@ -178,6 +178,45 @@ the number of documents, not with the number of issues. The log line
 how many documents changed. The migration only fills in what attaching the
 document today would record, so running it again changes nothing.
 
+### Large event and identity values (MySQL)
+
+Schema migration 16 ("large event and identity values") changes three MySQL
+columns that were `TEXT` (64 KiB) and can hold more:
+
+| Column | New type | Holds |
+| --- | --- | --- |
+| `domain_events.previous_values` | `LONGTEXT` | The fields an edit changed, as they were before it (a document's whole pre-edit body) |
+| `auth_identities.claims_json` | `LONGTEXT` | Identity provider claims, or a SCIM user's profile |
+| `code_host_accounts.scopes` | `MEDIUMTEXT` | The scopes a code host granted |
+
+Before it, editing a document of more than about 64 KiB failed with HTTP 500
+(`Error 1406 … Data too long for column 'previous_values'`) in workspaces with
+an enabled webhook, an event-triggered loop or a connected Feishu/Lark app,
+and nothing was saved. PostgreSQL and SQLite `TEXT` has no such limit and
+does not change.
+
+The migration keeps every row. MySQL cannot change a column type in place, so
+each table is rebuilt (`ALGORITHM=COPY, LOCK=SHARED`): the table stays
+readable, but **writes to it wait until the copy finishes**. Every change in
+Flow writes a `domain_events` row, so on a large `domain_events` table this
+migration can take a while (minutes for tens of GB), and servers still running
+the old version cannot save changes until it is done. A local test rebuilt
+about 200 MB in 2 seconds. Disk speed and table size decide the time on your
+server. Check the size first with the [database size report](#database-size).
+On a large database:
+
+- run the upgrade in a maintenance window, as described in steps 3 and 4
+  above (one new instance first), or
+- change the columns beforehand with an online schema change tool such as
+  `gh-ost` or `pt-online-schema-change` (for example
+  `ALTER TABLE domain_events MODIFY COLUMN previous_values LONGTEXT NULL`).
+  The migration reads each column's type and leaves alone any column that is
+  already large enough. It also does nothing on a second run.
+
+Event retention (`FLOW_DOMAIN_EVENT_RETENTION_DAYS`, see
+[Database growth](configuration.md#database-growth)) keeps `domain_events`
+bounded.
+
 ### Several servers starting at once
 
 Every server runs the migrations when it starts. There is no separate

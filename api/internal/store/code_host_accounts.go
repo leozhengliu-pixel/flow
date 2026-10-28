@@ -25,9 +25,11 @@ var ErrCodeHostAccountNotFound = errors.New("code host account not found")
 func CodeHostAccountSecretID(accountID string) string { return "code-host-account:" + accountID }
 
 func (s *SQLiteStore) createCodeHostAccountsSchema(ctx context.Context) error {
-	id, text := "TEXT", "TEXT"
+	id, text, scopes := "TEXT", "TEXT", "TEXT"
 	if s.dialect == "mysql" {
-		id = "VARCHAR(191)"
+		// Scopes come from the code host's response (up to 2 MiB); see
+		// largeValueColumns.
+		id, scopes = "VARCHAR(191)", "MEDIUMTEXT"
 	}
 	prefix := "CREATE INDEX IF NOT EXISTS "
 	unique := "CREATE UNIQUE INDEX IF NOT EXISTS "
@@ -35,7 +37,7 @@ func (s *SQLiteStore) createCodeHostAccountsSchema(ctx context.Context) error {
 		prefix, unique = "CREATE INDEX ", "CREATE UNIQUE INDEX "
 	}
 	return s.applyMigrationStatements(ctx, []string{
-		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS code_host_accounts (id %[1]s PRIMARY KEY, user_id %[1]s NOT NULL, code_host VARCHAR(16) NOT NULL, host_name %[1]s NOT NULL, base_url VARCHAR(512) NOT NULL, external_user_id VARCHAR(64) NOT NULL, login VARCHAR(255) NOT NULL, email VARCHAR(320) NOT NULL DEFAULT '', auth_type VARCHAR(16) NOT NULL, scopes %[2]s NOT NULL, status VARCHAR(16) NOT NULL, status_reason %[2]s NOT NULL, workspace_key %[1]s NOT NULL DEFAULT '', connection_id %[1]s NOT NULL DEFAULT '', token_expires_at VARCHAR(40) NOT NULL DEFAULT '', linked_at VARCHAR(40) NOT NULL, updated_at VARCHAR(40) NOT NULL)`, id, text),
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS code_host_accounts (id %[1]s PRIMARY KEY, user_id %[1]s NOT NULL, code_host VARCHAR(16) NOT NULL, host_name %[1]s NOT NULL, base_url VARCHAR(512) NOT NULL, external_user_id VARCHAR(64) NOT NULL, login VARCHAR(255) NOT NULL, email VARCHAR(320) NOT NULL DEFAULT '', auth_type VARCHAR(16) NOT NULL, scopes %[3]s NOT NULL, status VARCHAR(16) NOT NULL, status_reason %[2]s NOT NULL, workspace_key %[1]s NOT NULL DEFAULT '', connection_id %[1]s NOT NULL DEFAULT '', token_expires_at VARCHAR(40) NOT NULL DEFAULT '', linked_at VARCHAR(40) NOT NULL, updated_at VARCHAR(40) NOT NULL)`, id, text, scopes),
 		unique + "code_host_accounts_user_host ON code_host_accounts(user_id,code_host,host_name)",
 		prefix + "code_host_accounts_login ON code_host_accounts(code_host,host_name,login)",
 	})
