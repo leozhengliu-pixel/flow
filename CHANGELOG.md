@@ -95,17 +95,25 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
-- Lark and Feishu tenant authorization is its own step, done once by a tenant
-  administrator of the chat platform (verified on the platform, started by a
-  workspace administrator or the member they designate). Linking a personal
-  account no longer verifies the tenant, and workspace administrators list
-  and bind groups afterwards without being asked to confirm it again. The
-  integration page shows the tenant authorization (by whom, when, tenant
-  key), the workspace integration permission and the team binding
-  permission separately, and refusals name the missing one
-  (`permissionDomain`: `tenant`, `workspace` or `team`). Existing connections
-  stay authorized. Groups the bot is not in, external groups and groups of
-  another tenant are refused with their own messages.
+- Lark and Feishu tenant authorization is automatic. The tenant administrator
+  approves it on the chat platform by approving and publishing the app
+  version in the admin console; once the App ID and App Secret obtain a
+  tenant token and the bot's info is readable, Flow marks the tenant
+  authorized (recording when, the tenant key and the administrator who
+  configured the connection). Nobody signs in for it in Flow and there is no
+  tenant authorizer to designate, and the app no longer needs the tenant
+  information and contact scopes. Flow re-checks on **Test connection**,
+  periodically and after a refused token; until the app is approved the
+  integration page says so (`chat_tenant_not_approved`). Linking a personal
+  account needs only a healthy connection and never authorizes the tenant;
+  a member outside the app's availability range is told so
+  (`chat_app_unavailable_to_user`). The integration page shows the tenant,
+  the workspace integration permission and the team binding permission
+  separately, and refusals name the missing one (`permissionDomain`:
+  `tenant`, `workspace` or `team`). Existing connections become
+  automatically authorized on their next successful check. Groups the bot is
+  not in, external groups and groups of another tenant are refused with
+  their own messages.
 
 ### Fixed
 

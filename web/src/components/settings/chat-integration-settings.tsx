@@ -9,15 +9,12 @@ import {
   CHAT_ERROR_MESSAGES,
   chatErrorCodeMessage,
   chatErrorMessage,
-  chatIdentityAuthorizationURL,
-  designateChatTenantAuthorizer,
   disconnectChatIntegration,
   fetchChatIntegration,
   removeChatBinding,
   revokeChatBinding,
   saveChatBinding,
   saveChatIntegration,
-  startChatTenantAuthorization,
   testChatIntegration,
 } from "@/lib/chat-integrations-api";
 import { chatProviderName } from "@/lib/integration-catalog";
@@ -29,31 +26,15 @@ import type { BootstrapData } from "@/types/flow";
 import { confirmRemoveBinding, confirmRevokeBinding } from "./chat-binding-support";
 import { ChatBindingEditor, ChatBindingRow, FieldRow } from "./chat-group-bindings";
 import { IntegrationBrandIcon } from "./integration-brand-icon";
-import { SettingsSelect } from "./settings-primitives";
 import "./feature-settings.css";
 import "./chat-integration-settings.css";
 
-const ANY_ADMINISTRATOR = "__any__";
-
-/** Reads a tenant authorization result the platform sign-in returned with, then clears it from the address. */
-function consumeTenantResult(provider: ChatIntegrationProvider, t: (source: string) => string): string {
-  const url = new URL(window.location.href);
-  if (url.searchParams.get("chat_provider") !== provider || !url.searchParams.has("chat_auth")) return "";
-  let error = "";
-  if (url.searchParams.get("chat_auth") === "success") toast.success(t("Tenant authorized"));
-  else error = chatErrorCodeMessage(url.searchParams.get("chat_auth_error"), t) ?? t("Tenant authorization failed. Try again.");
-  for (const key of ["chat_auth", "chat_provider", "chat_auth_error", "chat_tenant"]) url.searchParams.delete(key);
-  window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-  return error;
-}
-
-function PermissionRow({ icon, title, granted, children, action }: { icon: ReactNode; title: string; granted: boolean; children: ReactNode; action?: ReactNode }) {
-  return <div className="feature-row chat-permission-row" data-granted={granted}>
+function PermissionRow({ icon, title, granted, failed, children, testId }: { icon: ReactNode; title: string; granted: boolean; failed?: boolean; children: ReactNode; testId?: string }) {
+  return <div className="feature-row chat-permission-row" data-granted={granted} data-testid={testId}>
     <div>
-      <strong>{icon}{title}<span className={`chat-status-dot is-${granted ? "connected" : "pending"}`} aria-hidden="true" /></strong>
+      <strong>{icon}{title}<span className={`chat-status-dot is-${granted ? "connected" : failed ? "error" : "pending"}`} aria-hidden="true" /></strong>
       {children}
     </div>
-    {action && <aside className="chat-actions">{action}</aside>}
   </div>;
 }
 
@@ -97,8 +78,6 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
     void load().then((next) => {
       if (!mounted.current) return;
       setAppId(next.connection?.config?.appId ?? "");
-      const returned = consumeTenantResult(provider, t);
-      if (returned) setError(returned);
     }).catch((cause: unknown) => {
       if (mounted.current) setError(chatErrorMessage(cause, t, "Could not load integration"));
     }).finally(() => {
@@ -118,7 +97,7 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
     finally { setLoading(false); }
   };
 
-  const mutate = async (action: string, operation: () => Promise<unknown>, success: string, after?: () => void) => {
+  const mutate = async (action: string, operation: () => Promise<unknown>, success: string, after?: () => void, reloadOnError = false) => {
     setBusy(action);
     setError("");
     try {
@@ -129,6 +108,8 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
       await onReload();
     } catch (cause) {
       setError(chatErrorMessage(cause, t, "Could not update integration"));
+      // A failed check still records its outcome (such as "not approved").
+      if (reloadOnError) await load().catch(() => undefined);
     } finally {
       setBusy("");
     }
@@ -164,20 +145,6 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
     });
   };
 
-  const authorizeTenant = async () => {
-    setBusy("tenant");
-    setError("");
-    try {
-      const result = await startChatTenantAuthorization(provider);
-      window.location.assign(chatIdentityAuthorizationURL(provider, result.authorizeUrl));
-    } catch (cause) {
-      setError(chatErrorMessage(cause, t, "Could not start tenant authorization"));
-      setBusy("");
-    }
-  };
-
-  const designate = (userId: string) => mutate("designate", () => designateChatTenantAuthorizer(provider, userId === ANY_ADMINISTRATOR ? "" : userId), "Tenant authorizer saved");
-
   const revokeBinding = async (binding: ChatBinding) => {
     if (!await confirmRevokeBinding(binding, t)) return;
     await mutate(`revoke:${binding.id}`, () => revokeChatBinding(provider, binding.id), "Group binding revoked");
@@ -197,13 +164,18 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
 
   const connectionError = connection?.lastError ? chatErrorCodeMessage(settings?.lastErrorCode, t) ?? t(CHAT_ERROR_MESSAGES.chat_error) : "";
   const status = t(connected ? "Connected" : connection?.status === "error" ? "Connection failed" : connection ? "Configured" : "Not connected");
-  const statusDescription = connectionError || t(connected ? "The application and workspace are linked." : settings?.credentialsConfigured ? "Waiting for the organization's tenant authorization." : "A workspace administrator needs to configure the application.");
+  const statusDescription = connectionError || t(connected ? "The application and workspace are linked." : settings?.credentialsConfigured ? "Waiting for the app to be approved in your organization." : "A workspace administrator needs to configure the application.");
   const secretPlaceholder = settings?.credentialsConfigured ? t("Leave blank to keep existing secret") : "";
-  const designatedId = tenant?.designatedAuthorizerId ?? "";
-  const designated = designatedId ? data.users.find((user) => user.id === designatedId) : undefined;
   const authorization = tenant?.authorization;
-  const authorizer = authorization?.userId ? data.users.find((user) => user.id === authorization.userId) : undefined;
-  const memberOptions = [{ value: ANY_ADMINISTRATOR, label: t("Workspace administrators") }, ...(data.members ?? []).filter((member) => member.status === "active" && member.role !== "guest").map((member) => ({ value: member.user.id, label: member.user.displayName || member.user.name, entityName: true }))];
+  const configuredBy = authorization?.configuredBy ? data.users.find((user) => user.id === authorization.configuredBy) : undefined;
+  const tenantNotApproved = tenant?.status === "not_approved";
+  const tenantMessage = tenantAuthorized
+    ? (tenant?.tenantKey
+      ? t("Connected to tenant {tenant}.").replace("{tenant}", tenant.tenantKey)
+      : t("Connected to the app's tenant. Its tenant key is recorded once the bot joins an internal group or a member links an account."))
+    : tenantNotApproved
+      ? chatErrorCodeMessage(tenant?.errorCode, t) ?? t(CHAT_ERROR_MESSAGES.chat_tenant_not_approved)
+      : t("Not checked yet. Flow checks automatically once the app is approved and published.") + (canManage ? ` ${t("Select Test connection to check now.")}` : "");
   const visibleBindings = settings?.bindings ?? [];
 
   return (
@@ -232,7 +204,7 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
                   {connection?.lastTestAt && <span>{t("Last checked")}: {formatDate(connection.lastTestAt, { dateStyle: "medium", timeStyle: "short" })}</span>}
                 </div>
                 {canManage && connection && <aside className="chat-actions">
-                  <button type="button" className="feature-button" disabled={Boolean(busy)} onClick={() => void mutate("test", () => testChatIntegration(provider), "Connection checked")}>{busy === "test" ? <GridLoader size={14} /> : <RefreshCw size={14} aria-hidden="true" />}{t("Test connection")}</button>
+                  <button type="button" className="feature-button" disabled={Boolean(busy)} onClick={() => void mutate("test", () => testChatIntegration(provider), "Connection checked", undefined, true)}>{busy === "test" ? <GridLoader size={14} /> : <RefreshCw size={14} aria-hidden="true" />}{t("Test connection")}</button>
                   <button type="button" className="feature-button danger" disabled={Boolean(busy)} onClick={() => void disconnect()}><Unplug size={14} aria-hidden="true" />{t("Disconnect")}</button>
                 </aside>}
               </div>
@@ -240,24 +212,16 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
           </section>
 
           {settings.connection && <section className="feature-section" aria-label={t("Permissions")}>
-            <header><h2>{t("Permissions")}</h2><p>{t("Each permission is granted separately. A Flow workspace role never stands in for the chat platform's tenant authorization.")}</p></header>
+            <header><h2>{t("Permissions")}</h2><p>{t("Each permission is granted separately. The tenant is approved on the chat platform, never by a Flow workspace role.")}</p></header>
             <div className="feature-card">
-              <PermissionRow icon={<KeyRound size={14} aria-hidden="true" />} title={t("Enterprise tenant authorization")} granted={tenantAuthorized}
-                action={!tenantAuthorized && tenant?.canAuthorize && settings.credentialsConfigured ? <button type="button" className="feature-button primary" disabled={Boolean(busy)} onClick={() => void authorizeTenant()}>{busy === "tenant" ? <GridLoader size={14} /> : <ShieldCheck size={14} aria-hidden="true" />}{t("Authorize tenant")}</button> : undefined}>
-                {tenantAuthorized
-                  ? <span data-testid="chat-tenant-status">{authorization?.method === "legacy" || !authorization
-                    ? t("Completed before tenant authorization was a separate step.")
-                    : t("Completed by {name} on {date}.").replace("{name}", authorizer?.displayName || authorization.name || t("a former member")).replace("{date}", formatDate(authorization.authorizedAt, { dateStyle: "medium" }))}
-                  {tenant?.tenantKey && <> {t("Tenant")}: <code data-i18n-ignore>{tenant.tenantKey}</code></>}</span>
-                  : <span data-testid="chat-tenant-status">{t("Not completed. A tenant administrator of {name} authorizes the application for the whole organization once; then nobody is asked again.").replace("{name}", name)}</span>}
-                {!tenantAuthorized && <span>{designated
-                  ? t("Designated tenant authorizer: {name}.").replace("{name}", designated.displayName || designated.name)
-                  : t("Workspace administrators can start it, or designate the member who is a tenant administrator on the chat platform.")}
-                {!tenant?.canAuthorize && ` ${t("Ask a workspace administrator or the designated tenant authorizer.")}`}</span>}
+              <PermissionRow icon={<KeyRound size={14} aria-hidden="true" />} title={t("Tenant")} granted={tenantAuthorized} failed={tenantNotApproved} testId="chat-tenant-permission">
+                <span data-testid="chat-tenant-status">{tenantMessage}</span>
+                {tenantAuthorized && authorization && <span>{(configuredBy
+                  ? t("Detected automatically on {date}. Configured by {name}.").replace("{name}", configuredBy.displayName || configuredBy.name)
+                  : t("Detected automatically on {date}.")).replace("{date}", formatDate(authorization.authorizedAt, { dateStyle: "medium" }))}</span>}
+                <span className="chat-muted">{t("Automatic: once your {name} admin approves and publishes the app version in the admin console, Flow detects it. Nobody signs in for it in Flow.").replace("{name}", name)}
+                  {!tenantAuthorized && !canManage && ` ${t("Ask a workspace administrator to test the connection.")}`}</span>
               </PermissionRow>
-              {canManage && !tenantAuthorized && <FieldRow label={t("Tenant authorizer")} description={t("The member who completes tenant authorization. Their chat account must be a tenant administrator.")}>
-                <SettingsSelect label={t("Tenant authorizer")} options={memberOptions} value={designatedId || ANY_ADMINISTRATOR} disabled={Boolean(busy)} onChange={(value) => void designate(value)} />
-              </FieldRow>}
               <PermissionRow icon={<ShieldCheck size={14} aria-hidden="true" />} title={t("Workspace integration")} granted={canManage}>
                 <span>{t(canManage ? "You manage this workspace's application settings and all group bindings." : "Only workspace administrators manage the application settings.")}</span>
               </PermissionRow>

@@ -306,8 +306,6 @@ var InternalRoutes = []string{
 	"POST /api/integrations/{provider}/chat/bindings",
 	"DELETE /api/integrations/{provider}/chat/bindings/{id}",
 	"POST /api/integrations/{provider}/chat/bindings/{id}/revoke",
-	"POST /api/integrations/{provider}/chat/tenant/start",
-	"PUT /api/integrations/{provider}/chat/tenant/authorizer",
 	"POST /api/integrations/{provider}/chat/identity/start",
 	"DELETE /api/integrations/{provider}/chat/identity",
 	"GET /api/integrations/{provider}/chat/identity/oauth/callback",

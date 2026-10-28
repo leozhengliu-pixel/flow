@@ -169,7 +169,7 @@ func (s *server) chatTenantToken(ctx context.Context, record domain.ChatIntegrat
 	}
 	cached, err = obtainChatTenantToken(ctx, record, credential)
 	if err != nil {
-		return "", err
+		return "", chatTokenError{err}
 	}
 	chatTokenCache.Lock()
 	if len(chatTokenCache.items) >= 256 {
@@ -224,27 +224,6 @@ func invalidateChatTenantToken(record domain.ChatIntegrationRecord, credential c
 	chatTokenCache.Unlock()
 }
 
-func chatProbe(ctx context.Context, record domain.ChatIntegrationRecord, credential chatCredentials) (string, string, error) {
-	token, err := obtainChatTenantToken(ctx, record, credential)
-	if err != nil {
-		return "", "", err
-	}
-	var response struct {
-		Bot struct {
-			OpenID string `json:"open_id"`
-			Name   string `json:"app_name"`
-		} `json:"bot"`
-	}
-	err = chatRequest(ctx, chatBaseURL(record.Provider)+"/open-apis/bot/v3/info/", http.MethodGet, token.Token, nil, &response)
-	if err != nil {
-		return "", "", err
-	}
-	if response.Bot.OpenID == "" {
-		return "", "", errChatBotUnpublished
-	}
-	return response.Bot.OpenID, response.Bot.Name, nil
-}
-
 func (s *server) registerChatIntegrationRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/integrations/{provider}/chat", s.chatSettings)
 	mux.HandleFunc("PUT /api/integrations/{provider}/chat", s.chatConfigurationMutation(s.saveChatIntegration))
@@ -254,8 +233,6 @@ func (s *server) registerChatIntegrationRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/integrations/{provider}/chat/bindings", s.chatConfigurationMutation(s.saveChatBinding))
 	mux.HandleFunc("DELETE /api/integrations/{provider}/chat/bindings/{id}", s.chatConfigurationMutation(s.deleteChatBinding))
 	mux.HandleFunc("POST /api/integrations/{provider}/chat/bindings/{id}/revoke", s.chatConfigurationMutation(s.revokeChatBinding))
-	mux.HandleFunc("POST /api/integrations/{provider}/chat/tenant/start", s.chatConfigurationMutation(s.startChatTenantAuthorization))
-	mux.HandleFunc("PUT /api/integrations/{provider}/chat/tenant/authorizer", s.chatConfigurationMutation(s.designateChatTenantAuthorizer))
 	mux.HandleFunc("POST /api/integrations/{provider}/chat/identity/start", s.chatConfigurationMutation(s.startChatIdentity))
 	mux.HandleFunc("DELETE /api/integrations/{provider}/chat/identity", s.chatConfigurationMutation(s.deleteChatIdentity))
 	mux.HandleFunc("GET /api/integrations/{provider}/chat/identity/oauth/callback", s.finishChatIdentity)
@@ -380,11 +357,7 @@ func (s *server) writeChatSettings(w http.ResponseWriter, r *http.Request, data 
 			}
 		}
 		if result["connection"] == nil {
-			status := "pending_authorization"
-			if record.Connected {
-				status = "connected"
-			}
-			result["connection"] = domain.IntegrationConnection{ID: record.ConnectionID, Provider: record.Provider, Name: record.Name, Status: status, UpdatedAt: record.UpdatedAt, Config: map[string]string{"appId": record.AppID, "tenantKey": record.TenantKey, "botOpenId": record.BotOpenID}, Scopes: []string{}, Channels: []string{}}
+			result["connection"] = domain.IntegrationConnection{ID: record.ConnectionID, Provider: record.Provider, Name: record.Name, Status: chatConnectionStatus(record), UpdatedAt: record.UpdatedAt, Config: map[string]string{"appId": record.AppID, "tenantKey": record.TenantKey, "botOpenId": record.BotOpenID}, Scopes: []string{}, Channels: []string{}}
 		}
 		_, credentialErr := s.chatCredentials(r.Context(), record)
 		result["credentialsConfigured"] = credentialErr == nil
@@ -486,6 +459,13 @@ func (s *server) syncChatConnection(ctx context.Context, record domain.ChatInteg
 }
 
 func (s *server) recordChatDeliveryResult(ctx context.Context, record domain.ChatIntegrationRecord, deliveryErr error) error {
+	err := s.recordChatDeliveryResultLocked(ctx, record, deliveryErr)
+	// A refused tenant token: find out whether the app is still approved.
+	s.recheckChatTenantAfterFailure(ctx, record, deliveryErr)
+	return err
+}
+
+func (s *server) recordChatDeliveryResultLocked(ctx context.Context, record domain.ChatIntegrationRecord, deliveryErr error) error {
 	return s.withChatConfigurationLock(ctx, record.WorkspaceKey, record.Provider, func() error {
 		current, err := s.store.ChatIntegrationByID(ctx, record.Provider, record.ConnectionID)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -591,16 +571,14 @@ func (s *server) saveChatIntegration(w http.ResponseWriter, r *http.Request) {
 		writeChatError(w, 400, "App Secret, Encrypt Key and Verification Token are required")
 		return
 	}
+	// Saving runs the automatic tenant check: credentials that obtain a
+	// tenant token and read the bot's info authorize the tenant.
 	botID, botName, err := chatProbe(r.Context(), record, credential)
-	if errors.Is(err, errChatBotUnpublished) {
-		writeChatError(w, 502, err.Error())
-		return
-	}
 	if err != nil {
-		writeChatError(w, 502, "Chat application check failed; verify app credentials and bot publication")
+		writeChatError(w, 502, chatCheckMessage(err))
 		return
 	}
-	record.BotOpenID = botID
+	changed := applyChatTenantCheck(&record, botID, nil, data.Viewer.ID, time.Now().UTC())
 	record.Name = firstNonEmpty(input.Name, botName, record.Provider)
 	if err = s.store.InitializeChatDomainCursor(r.Context(), record.WorkspaceKey); err != nil {
 		writeChatError(w, 500, "Could not initialize notification cursor")
@@ -615,14 +593,14 @@ func (s *server) saveChatIntegration(w http.ResponseWriter, r *http.Request) {
 		writeChatError(w, 500, "Could not save encrypted application credentials")
 		return
 	}
-	status := "pending_authorization"
-	if record.Connected {
-		status = "connected"
-	}
-	if err = s.syncChatConnection(r.Context(), record, data.Viewer.ID, status, "success", ""); err != nil {
+	if err = s.syncChatConnection(r.Context(), record, data.Viewer.ID, chatConnectionStatus(record), "success", ""); err != nil {
 		writeChatError(w, 500, "Could not save connection metadata")
 		return
 	}
+	if changed {
+		s.auditChatTenant(r.Context(), record)
+	}
+	s.learnChatTenantKey(r.Context(), &record)
 	updated, _ := s.chatSettingsMetadata(r)
 	s.writeChatSettings(w, r, updated)
 }
@@ -678,41 +656,28 @@ func (s *server) testChatIntegration(w http.ResponseWriter, r *http.Request) {
 		writeChatError(w, 404, "Chat application not configured")
 		return
 	}
-	credential, err := s.chatCredentials(r.Context(), record)
-	if err == nil {
-		record.BotOpenID, _, err = chatProbe(r.Context(), record, credential)
+	if _, err = s.chatCredentials(r.Context(), record); err != nil {
+		_ = s.syncChatConnection(r.Context(), record, data.Viewer.ID, "error", "failed", "Application credentials are unavailable; restore the encryption key or reconnect the application")
+		writeChatError(w, 500, "Application credentials unavailable")
+		return
 	}
-	if err != nil {
-		message := "Chat application check failed; verify app credentials and bot publication"
-		if errors.Is(err, errChatBotUnpublished) {
-			message = err.Error()
+	// Test connection re-runs the automatic tenant check.
+	if _, err = s.runChatTenantCheck(r.Context(), record, data.Viewer.ID); err != nil {
+		if chatTransient(err) || errors.As(err, new(chatTenantCheckError)) {
+			writeChatError(w, 502, chatCheckMessage(err))
+		} else {
+			writeChatError(w, 500, "Could not save application health")
 		}
-		_ = s.syncChatConnection(r.Context(), record, data.Viewer.ID, "error", "failed", message)
-		writeChatError(w, 502, "Chat application check failed; verify app credentials and bot publication")
-		return
-	}
-	if err = s.store.PutChatIntegration(r.Context(), record); err != nil {
-		writeChatError(w, 500, "Could not save application health")
-		return
-	}
-	status := "pending_authorization"
-	if record.Connected {
-		status = "connected"
-	}
-	if err = s.syncChatConnection(r.Context(), record, data.Viewer.ID, status, "success", ""); err != nil {
-		writeChatError(w, 500, "Could not save application health")
 		return
 	}
 	updated, _ := s.chatSettingsMetadata(r)
 	s.writeChatSettings(w, r, updated)
 }
 
-// chatOAuthState is a pending platform sign-in. Kind is "identity" (a member
-// links their own account) or "tenant" (the enterprise tenant authorization).
+// chatOAuthState is a pending sign-in of a member linking their own account.
 type chatOAuthState struct {
 	WorkspaceKey, ConnectionID, Provider, AppID, UserID, Verifier, SessionHash, RedirectURI string
 	Authentication                                                                          store.SessionAuthentication
-	Kind                                                                                    string
 }
 
 func (s *server) startChatIdentity(w http.ResponseWriter, r *http.Request) {
@@ -725,22 +690,18 @@ func (s *server) startChatIdentity(w http.ResponseWriter, r *http.Request) {
 		writeChatError(w, 400, "Configure the application first")
 		return
 	}
-	// A personal account never establishes the tenant, whatever the
-	// member's workspace role.
+	// Linking only maps the member's chat account to their Flow account; it
+	// needs a healthy connection, and never establishes the tenant.
 	if !chatTenantAuthorized(record) {
-		writeChatError(w, 409, chatTenantAuthorizationMessage)
+		writeChatError(w, 409, chatTenantNotApprovedMessage)
 		return
 	}
-	s.startChatOAuth(w, r, data, record, "identity")
-}
-
-func (s *server) startChatOAuth(w http.ResponseWriter, r *http.Request, data domain.Bootstrap, record domain.ChatIntegrationRecord, kind string) {
 	state, err := randomSecret("chat_oauth_")
 	if err != nil {
 		writeChatError(w, 500, "Could not begin authorization")
 		return
 	}
-	pending := chatOAuthState{WorkspaceKey: record.WorkspaceKey, ConnectionID: record.ConnectionID, Provider: record.Provider, AppID: record.AppID, UserID: data.Viewer.ID, Verifier: oauth2.GenerateVerifier(), RedirectURI: s.chatCallbackURL(record.Provider), Kind: kind}
+	pending := chatOAuthState{WorkspaceKey: record.WorkspaceKey, ConnectionID: record.ConnectionID, Provider: record.Provider, AppID: record.AppID, UserID: data.Viewer.ID, Verifier: oauth2.GenerateVerifier(), RedirectURI: s.chatCallbackURL(record.Provider)}
 	if !s.authDisabled {
 		cookie, _ := r.Cookie(sessionCookieName)
 		pending.SessionHash = secretHash(cookie.Value)
@@ -794,7 +755,7 @@ func (s *server) finishChatIdentity(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) finishChatIdentityLocked(w http.ResponseWriter, r *http.Request, state string, pending chatOAuthState) {
 	// The redirect carries only the stable code; the web app translates it.
-	landing := s.chatOAuthLanding(pending)
+	landing := s.chatAppOrigin() + "/" + url.PathEscape(pending.WorkspaceKey) + "/settings/account/connections"
 	failWith := func(status int, message string) {
 		if wantsHTMLRedirect(r) {
 			http.Redirect(w, r, landing+"?chat_auth=error&chat_provider="+pending.Provider+"&chat_auth_error="+url.QueryEscape(chatErrorCode(message)), http.StatusSeeOther)
@@ -803,7 +764,6 @@ func (s *server) finishChatIdentityLocked(w http.ResponseWriter, r *http.Request
 		}
 	}
 	fail := func(message string) { failWith(http.StatusBadRequest, message) }
-	workspaceAdmin := s.authDisabled
 	if !s.authDisabled {
 		cookie, e := r.Cookie(sessionCookieName)
 		if e != nil || secretHash(cookie.Value) != pending.SessionHash {
@@ -827,7 +787,6 @@ func (s *server) finishChatIdentityLocked(w http.ResponseWriter, r *http.Request
 			failWith(http.StatusForbidden, "Workspace multi-factor authentication required")
 			return
 		}
-		workspaceAdmin = workspaceAdminRole(access.ViewerRole)
 	}
 	record, err := s.store.ChatIntegrationByID(r.Context(), pending.Provider, pending.ConnectionID)
 	if err != nil || record.WorkspaceKey != pending.WorkspaceKey || record.AppID != pending.AppID {
@@ -878,7 +837,15 @@ func (s *server) finishChatIdentityLocked(w http.ResponseWriter, r *http.Request
 			Name      string `json:"name"`
 		} `json:"data"`
 	}
-	if err = chatRequest(r.Context(), chatBaseURL(record.Provider)+"/open-apis/authen/v1/user_info", http.MethodGet, token.AccessToken, nil, &profile); err != nil || profile.Data.OpenID == "" || profile.Data.TenantKey == "" {
+	err = chatRequest(r.Context(), chatBaseURL(record.Provider)+"/open-apis/authen/v1/user_info", http.MethodGet, token.AccessToken, nil, &profile)
+	var platform *chatPlatformError
+	if errors.As(err, &platform) && !platform.Retryable && (platform.Status == http.StatusForbidden || platform.Code != 0) {
+		// The platform refuses the account itself: it is outside the
+		// app's availability range, which the platform admin sets.
+		fail(chatAppUnavailableMessage)
+		return
+	}
+	if err != nil || profile.Data.OpenID == "" || profile.Data.TenantKey == "" {
 		fail("Could not verify platform identity")
 		return
 	}
@@ -886,13 +853,16 @@ func (s *server) finishChatIdentityLocked(w http.ResponseWriter, r *http.Request
 		fail("This account belongs to another tenant")
 		return
 	}
-	if pending.Kind == "tenant" {
-		s.finishChatTenantAuthorization(w, r, record, pending, chatPlatformProfile{OpenID: profile.Data.OpenID, TenantKey: profile.Data.TenantKey, Name: profile.Data.Name}, workspaceAdmin, fail)
+	// Linking needs a healthy connection; it never authorizes the tenant.
+	if !chatTenantAuthorized(record) {
+		fail(chatTenantNotApprovedMessage)
 		return
 	}
-	// Linking a personal account never establishes or changes the tenant.
-	if !chatTenantAuthorized(record) {
-		fail(chatTenantAuthorizationMessage)
+	// A custom application can only be authorized by accounts of its own
+	// tenant, so the first linked account may name the tenant when the
+	// bot's groups have not yet.
+	if err = s.adoptChatTenantKey(r.Context(), &record, profile.Data.TenantKey); err != nil {
+		fail("Application tenant is already connected to another workspace")
 		return
 	}
 	identity := domain.ChatIdentity{UserID: pending.UserID, OpenID: profile.Data.OpenID, TenantKey: record.TenantKey, Name: profile.Data.Name, AuthProvider: pending.Authentication.Provider, AuthIssuer: pending.Authentication.Issuer, MFAVerifiedAt: pending.Authentication.MFAVerifiedAt, AuthenticatedAt: time.Now().UTC()}
@@ -903,15 +873,6 @@ func (s *server) finishChatIdentityLocked(w http.ResponseWriter, r *http.Request
 	http.Redirect(w, r, landing+"?chat_auth=success&chat_provider="+record.Provider, http.StatusSeeOther)
 }
 
-// chatOAuthLanding is the page a platform sign-in returns to: Connected
-// accounts for a personal account, the integration page for the tenant.
-func (s *server) chatOAuthLanding(pending chatOAuthState) string {
-	base := s.chatAppOrigin() + "/" + url.PathEscape(pending.WorkspaceKey) + "/settings/"
-	if pending.Kind == "tenant" {
-		return base + "integrations/" + url.PathEscape(pending.Provider)
-	}
-	return base + "account/connections"
-}
 func (s *server) deleteChatIdentity(w http.ResponseWriter, r *http.Request) {
 	data, ok := s.chatSession(w, r, false)
 	if !ok {

@@ -15,36 +15,38 @@ type ChatIntegrationRecord struct {
 	TenantKey    string `json:"tenantKey"`
 	BotOpenID    string `json:"botOpenId"`
 	Name         string `json:"name"`
-	// Connected means the enterprise tenant authorization is complete.
+	// Connected means the enterprise tenant authorization is current: the
+	// application's credentials last obtained a tenant token and read the
+	// bot's info (the tenant administrator approved and published the app).
 	Connected bool      `json:"connected"`
 	UpdatedAt time.Time `json:"updatedAt"`
-	// TenantAuthorization records who completed the enterprise tenant
-	// authorization on the chat platform. Records connected before tenant
-	// authorization was a separate step have none (ChatTenantMethodLegacy).
+	// TenantAuthorization records the automatic tenant authorization.
+	// Records stored while tenant authorization was a sign-in step carry
+	// older fields, which are ignored; their next successful check rewrites
+	// it.
 	TenantAuthorization *ChatTenantAuthorization `json:"tenantAuthorization,omitempty"`
-	// TenantAuthorizerID is the Flow member a workspace administrator
-	// designated to complete the tenant authorization. Workspace
-	// administrators may also start it; the chat platform decides whether
-	// the account may authorize the tenant.
-	TenantAuthorizerID string `json:"tenantAuthorizerId,omitempty"`
+	// TenantCheck is the latest automatic tenant check.
+	TenantCheck *ChatTenantCheck `json:"tenantCheck,omitempty"`
 }
 
-const (
-	// ChatTenantMethodTenantManager: the authorizer's platform account was
-	// verified as a tenant administrator of the application's own tenant.
-	ChatTenantMethodTenantManager = "tenant_manager"
-	// ChatTenantMethodLegacy: connected by a workspace administrator's
-	// personal account before tenant authorization was a separate step.
-	ChatTenantMethodLegacy = "legacy"
-)
-
+// ChatTenantAuthorization: the tenant was authorized automatically when the
+// application's credentials obtained a tenant token and read the bot's info.
 type ChatTenantAuthorization struct {
-	UserID       string    `json:"userId,omitempty"`
-	OpenID       string    `json:"openId,omitempty"`
-	Name         string    `json:"name,omitempty"`
-	TenantKey    string    `json:"tenantKey"`
+	// TenantKey is empty until the platform names the tenant (the bot's
+	// internal groups or a member's linked account).
+	TenantKey    string    `json:"tenantKey,omitempty"`
 	AuthorizedAt time.Time `json:"authorizedAt"`
-	Method       string    `json:"method" enum:"tenant_manager,legacy"`
+	// ConfiguredBy is the workspace administrator who configured or last
+	// tested the connection, for the record.
+	ConfiguredBy string `json:"configuredBy,omitempty"`
+}
+
+// ChatTenantCheck is the outcome of the latest automatic tenant check.
+type ChatTenantCheck struct {
+	CheckedAt time.Time `json:"checkedAt"`
+	// ErrorCode is the stable code of a failed check, such as
+	// chat_tenant_not_approved.
+	ErrorCode string `json:"errorCode,omitempty"`
 }
 
 const (

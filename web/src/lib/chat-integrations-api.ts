@@ -43,16 +43,6 @@ export function revokeChatBinding(provider: ChatIntegrationProvider, id: string)
   return request(`${chatPath(provider)}/bindings/${encodeURIComponent(id)}/revoke`, { method: "POST" });
 }
 
-/** Starts the enterprise tenant authorization; a platform tenant administrator signs in. */
-export function startChatTenantAuthorization(provider: ChatIntegrationProvider): Promise<{ authorizeUrl: string }> {
-  return request(`${chatPath(provider)}/tenant/start`, { method: "POST" });
-}
-
-/** Designates the member who completes the tenant authorization (empty clears it). */
-export function designateChatTenantAuthorizer(provider: ChatIntegrationProvider, userId: string): Promise<ChatIntegrationSettings> {
-  return request(`${chatPath(provider)}/tenant/authorizer`, jsonRequest("PUT", { userId }));
-}
-
 export function startChatIdentityBinding(provider: ChatIntegrationProvider): Promise<{ authorizeUrl: string }> {
   return request(`${chatPath(provider)}/identity/start`, { method: "POST" });
 }
@@ -88,11 +78,9 @@ export const CHAT_ERROR_MESSAGES: Record<string, string> = {
   chat_team_binding_permission_required: "Only the team's owners and workspace administrators can manage this team's group bindings.",
   chat_binding_authorization_required: "Approve sharing this team with the group to save the binding.",
   chat_binding_revoked: "This binding was revoked. Add the group again to create a new binding.",
-  chat_tenant_authorization_required: "The organization hasn't authorized the application yet. A tenant administrator of the chat platform needs to complete tenant authorization.",
-  chat_tenant_authorizer_required: "Only workspace administrators or the designated tenant authorizer can start tenant authorization.",
-  chat_tenant_manager_required: "This chat account isn't a tenant administrator of the application's organization. Ask a tenant administrator to authorize.",
-  chat_tenant_verification_failed: "The application's organization could not be verified. Grant the application permission to read tenant and contact information.",
-  chat_invalid_authorizer: "Choose an active member of this workspace.",
+  chat_tenant_not_approved: "The app isn't approved or published in your organization yet, or its credentials are wrong. Ask your chat platform admin to approve the app version in the admin console.",
+  chat_platform_unreachable: "The chat platform couldn't be reached. Try again shortly.",
+  chat_app_unavailable_to_user: "This app isn't available to your chat account. Ask your chat platform admin to add you to the app's availability range.",
   chat_group_external: "Only internal groups of your organization can be bound.",
   chat_group_other_tenant: "This group belongs to another organization.",
   chat_bot_not_in_group: "Add the bot to this group, then try again.",
@@ -109,7 +97,7 @@ export const CHAT_ERROR_MESSAGES: Record<string, string> = {
   chat_bot_unpublished: "Enable and publish the application's bot, then try again.",
   chat_app_in_use: "This application is already connected to another workspace.",
   chat_not_configured: "The application isn't configured yet.",
-  chat_tenant_unverified: "The organization hasn't authorized the application yet. A tenant administrator of the chat platform needs to complete tenant authorization.",
+  chat_tenant_unverified: "The app isn't approved or published in your organization yet, or its credentials are wrong. Ask your chat platform admin to approve the app version in the admin console.",
   chat_invalid_cursor: "The group list could not be continued. Refresh and try again.",
   chat_platform_failed: "The chat platform request failed. Check the bot's permissions and try again.",
   chat_invalid_binding: "Check the group binding and try again.",
@@ -123,7 +111,7 @@ export const CHAT_ERROR_MESSAGES: Record<string, string> = {
   chat_authorization_declined: "Authorization was declined.",
   chat_platform_authorization_failed: "The platform could not verify your account. Check the application's OAuth settings.",
   chat_other_tenant: "This account belongs to another organization.",
-  chat_admin_authorization_required: "The organization hasn't authorized the application yet. A tenant administrator of the chat platform needs to complete tenant authorization.",
+  chat_admin_authorization_required: "The app isn't approved or published in your organization yet, or its credentials are wrong. Ask your chat platform admin to approve the app version in the admin console.",
   chat_identity_in_use: "This chat account is already linked to another Flow account.",
   chat_setup_incomplete: "Application setup is incomplete. Disconnect and configure it again.",
   chat_delivery_failed: "Messages could not be delivered. Check the bot's permissions, group access and application credentials.",

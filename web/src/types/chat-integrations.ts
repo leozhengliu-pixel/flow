@@ -18,28 +18,34 @@ export interface ChatBindingAuthorization {
   privateTeam: boolean;
 }
 
+/**
+ * The tenant was authorized automatically: the application's credentials
+ * obtained a tenant token and read the bot's info, so the chat platform's
+ * administrator approved and published the app.
+ */
 export interface ChatTenantAuthorization {
-  userId?: string;
-  openId?: string;
-  name?: string;
-  tenantKey: string;
+  /** Empty until the platform names the tenant (the bot's internal groups or a member's linked account). */
+  tenantKey?: string;
   authorizedAt: string;
-  /** tenant_manager: verified platform tenant administrator; legacy: connected before tenant authorization was separate. */
-  method: "tenant_manager" | "legacy";
+  /** The workspace administrator who configured or last tested the connection. */
+  configuredBy?: string;
 }
 
 /**
  * The three permission domains of a chat integration: the enterprise tenant
- * authorization on the chat platform, the workspace integration (workspace
- * administrators) and team bindings (team owners).
+ * (detected automatically from the chat platform's approval), the workspace
+ * integration (workspace administrators) and team bindings (team owners).
  */
 export interface ChatPermissions {
   tenant: {
-    status: "not_configured" | "pending" | "authorized";
-    canAuthorize: boolean;
-    designatedAuthorizerId?: string;
+    /** pending: configured but not checked yet; not_approved: the last check was refused by the platform. */
+    status: "not_configured" | "pending" | "not_approved" | "authorized";
     tenantKey?: string;
     authorization?: ChatTenantAuthorization;
+    /** When the automatic check last ran. */
+    checkedAt?: string;
+    /** Stable code of the last failed check, such as chat_tenant_not_approved. */
+    errorCode?: string;
   };
   workspace: { canManage: boolean };
   teams: { manageableTeamIds: string[]; privateTeamIds: string[] };
