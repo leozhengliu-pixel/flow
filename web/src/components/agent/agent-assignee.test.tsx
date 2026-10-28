@@ -1,9 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { User } from '@/types/flow'
 import { I18nProvider } from '@/i18n/i18n'
 import { AssigneePicker } from '@/components/issue/core-property-pickers'
+import { PeopleProvider } from '@/components/property/people-provider'
 import { MyIssuesFilterMenu } from '@/components/my-issues/my-issues-filter-menu'
 import { explorerFilterOptions, explorerPropertyOptions } from '@/components/issue-explorer/issue-explorer-model'
 import { BUILTIN_AGENT_AVATAR_URL } from '@/components/ui/agent-avatar-url'
@@ -34,12 +35,14 @@ describe('assignee picker agents', () => {
     return handlers
   }
 
-  it('lists No assignee, people, then the team\'s agents in one list with number keys, no Agents header and no pill', async () => {
+  it('numbers No assignee, the assignee and the built-in agent, then lists Team members without keys, no pill', async () => {
     const user = userEvent.setup()
     mount()
     await openPicker(user)
-    expect(names()).toEqual(['No assignee', viewer.displayName, teammate.displayName, 'Flow', 'Invite and assign…'])
-    expect(shortcuts()).toEqual(['0', '1', '2', '3', ''])
+    expect(names()).toEqual(['No assignee', viewer.displayName, 'Flow', teammate.displayName, 'Invite and assign…'])
+    expect(shortcuts()).toEqual(['0', '1', '2', '', ''])
+    expect(screen.getByText('Team members')).toBeInTheDocument()
+    expect(screen.queryByText('Other agents')).not.toBeInTheDocument()
     expect(screen.queryByText('Agents')).not.toBeInTheDocument()
     expect(document.querySelector('.property-command-options [data-agent-badge]')).toBeNull()
     expect(screen.queryByRole('option', { name: /Other agent/ })).not.toBeInTheDocument()
@@ -71,20 +74,32 @@ describe('assignee picker agents', () => {
     const user = userEvent.setup()
     const { onChange, onDelegate } = mount()
     await openPicker(user)
-    await user.keyboard('3')
+    await user.keyboard('2')
     expect(onDelegate).toHaveBeenCalledWith(flow.id)
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  it('0 picks No assignee and 2 assigns the second person', async () => {
+  it('0 picks No assignee and 1 the assignee row; team members below have no key', async () => {
     const user = userEvent.setup()
     const { onChange } = mount()
     await openPicker(user)
-    await user.keyboard('2')
-    expect(onChange).toHaveBeenCalledWith(teammate.id)
+    await user.keyboard('1')
+    expect(onChange).toHaveBeenCalledWith(viewer.id)
+    expect(onChange).toHaveBeenCalledTimes(1)
     await openPicker(user)
     await user.keyboard('0')
     expect(onChange).toHaveBeenLastCalledWith('')
+  })
+
+  it('puts the viewer on top and other agents under "Other agents" (no keys)', async () => {
+    const user = userEvent.setup()
+    const helper = { ...flow, id: 'app_helper', name: 'helper', displayName: 'Helper', builtinAgent: false } as User
+    render(<I18nProvider><PeopleProvider users={[viewer, teammate, flow, helper]} viewerId={viewer.id}><AssigneePicker value={teammate} users={[viewer, teammate, flow, helper]} teamId="team-1" onChange={vi.fn()} onDelegate={vi.fn()}/></PeopleProvider></I18nProvider>)
+    await openPicker(user)
+    expect(names()).toEqual(['No assignee', teammate.displayName, viewer.displayName, 'Flow', 'Helper', 'Invite and assign…'])
+    expect(shortcuts()).toEqual(['0', '1', '2', '3', '', ''])
+    expect(screen.getByText('Other agents')).toBeInTheDocument()
+    expect(screen.queryByText('Team members')).not.toBeInTheDocument()
   })
 
   it('a digit typed after other characters stays in the search', async () => {
@@ -107,34 +122,42 @@ describe('assignee picker agents', () => {
     expect(onDelegate).not.toHaveBeenCalled()
   })
 
-  it('shows the delegate in the trigger with both avatars, marks it selected and removes it when picked again', async () => {
+  it('shows the delegate in the trigger with both avatars; in the menu only the human is checked and the agent row opens its submenu', async () => {
     const user = userEvent.setup()
     const { onChange, onDelegate } = mount({ delegate: flow })
     const trigger = screen.getByRole('combobox', { name: /Change assignee/ })
     expect(trigger).toHaveTextContent('Flow')
     expect(trigger.querySelectorAll('.core-assignee-stack > .avatar, .core-assignee-stack > [data-agent-avatar-slot]')).toHaveLength(2)
     await openPicker(user)
-    expect(screen.getByRole('option', { name: /Flow/ })).toHaveAttribute('aria-checked', 'true')
+    expect(names()).toEqual(['No assignee', viewer.displayName, 'FlowAgent', teammate.displayName, 'Invite and assign…'])
+    expect(shortcuts()).toEqual(['0', '1', '', '', ''])
+    const agentRow = screen.getByRole('option', { name: /^Flow/ })
+    expect(agentRow).toHaveAttribute('aria-checked', 'false')
+    expect(agentRow.querySelector('.core-nested-delegate-icon')).not.toBeNull()
     expect(screen.getByRole('option', { name: new RegExp(viewer.displayName) })).toHaveAttribute('aria-checked', 'true')
-    await user.click(screen.getByRole('option', { name: /Flow/ }))
+    await user.click(agentRow)
+    await user.click(within(await screen.findByRole('listbox', { name: 'Agent' })).getByRole('option', { name: /No agent/ }))
     expect(onDelegate).toHaveBeenCalledWith('')
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  it('"No assignee" clears the assignee, or removes the delegate when only a delegate is set', async () => {
+  it('"No assignee" is the checked row when only a delegate is set, and picking it keeps the agent', async () => {
     const user = userEvent.setup()
-    const first = mount({ delegate: flow })
-    await openPicker(user)
-    await user.click(screen.getByRole('option', { name: /No assignee/ }))
-    expect(first.onChange).toHaveBeenCalledWith('')
-    expect(first.onDelegate).not.toHaveBeenCalled()
-    cleanup()
-    const second = mount({ value: undefined, delegate: flow })
+    const { onChange, onDelegate } = mount({ value: undefined, delegate: flow })
     expect(screen.getByRole('combobox', { name: 'Change assignee. Flow is delegated' })).toHaveTextContent('Flow')
     await openPicker(user)
+    expect(screen.getByRole('option', { name: /No assignee/ })).toHaveAttribute('aria-checked', 'true')
     await user.click(screen.getByRole('option', { name: /No assignee/ }))
-    expect(second.onDelegate).toHaveBeenCalledWith('')
-    expect(second.onChange).not.toHaveBeenCalled()
+    expect(onDelegate).not.toHaveBeenCalled()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('hangs the agent of an unassigned issue under the viewer', async () => {
+    const user = userEvent.setup()
+    render(<I18nProvider><PeopleProvider users={people} viewerId={viewer.id}><AssigneePicker delegate={flow} users={people} teamId="team-1" onChange={vi.fn()} onDelegate={vi.fn()}/></PeopleProvider></I18nProvider>)
+    await openPicker(user)
+    expect(names()).toEqual(['No assignee', viewer.displayName, 'FlowAgent', teammate.displayName, 'Invite and assign…'])
+    expect(screen.getByRole('option', { name: /^Flow/ }).querySelector('.core-nested-delegate-icon [data-nesting-line]')).not.toBeNull()
   })
 
   it('offers no agents when the workspace keeps guests away from them', async () => {

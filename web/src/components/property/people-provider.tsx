@@ -9,7 +9,7 @@ const EMPTY_PROJECTS: Project[] = []
 const EMPTY_DOCUMENTS: FlowDocument[] = []
 const EMPTY_SETTINGS: Record<string, Pick<TeamSettings, 'parentTeamId'>> = {}
 
-export function PeopleProvider({ users, workspaceName, children, members = EMPTY_MEMBERS, teams = EMPTY_TEAMS, teamMembers = EMPTY_TEAM_MEMBERS, projects = EMPTY_PROJECTS, documents = EMPTY_DOCUMENTS, teamSettings = EMPTY_SETTINGS }: { users: User[]; workspaceName?: string; children: ReactNode; members?: WorkspaceMember[]; teams?: Team[]; teamMembers?: TeamMember[]; projects?: Project[]; documents?: FlowDocument[]; teamSettings?: Record<string, Pick<TeamSettings, 'parentTeamId'>> }) {
+export function PeopleProvider({ users, workspaceName, children, members = EMPTY_MEMBERS, teams = EMPTY_TEAMS, teamMembers = EMPTY_TEAM_MEMBERS, projects = EMPTY_PROJECTS, documents = EMPTY_DOCUMENTS, teamSettings = EMPTY_SETTINGS, viewerId }: { users: User[]; viewerId?: string; workspaceName?: string; children: ReactNode; members?: WorkspaceMember[]; teams?: Team[]; teamMembers?: TeamMember[]; projects?: Project[]; documents?: FlowDocument[]; teamSettings?: Record<string, Pick<TeamSettings, 'parentTeamId'>> }) {
   const value = useMemo(() => {
     const teamNames = new Map(teams.map(team => [team.id, team.name]))
     const userTeams = new Map<string, string[]>()
@@ -38,7 +38,7 @@ export function PeopleProvider({ users, workspaceName, children, members = EMPTY
       if (document.archivedAt) continue
       for (const id of new Set([...(document.teamIds ?? []), ...(document.projectIds ?? []).flatMap(projectId => projectTeams.get(projectId) ?? [])])) { const entry = teamDirectory.get(id); if (entry) entry.documentCount += 1 }
     }
-    return { teamDirectory, users: new Map(users.map(user => [user.id, user])), members: new Map(members.map(member => [member.user.id, member])), teams: userTeams, teamIds: userTeamIds, projects: userProjects, workspaceName }
-  }, [users, members, teams, teamMembers, projects, documents, teamSettings, workspaceName])
+    return { teamDirectory, users: new Map(users.map(user => [user.id, user])), members: new Map(members.map(member => [member.user.id, member])), teams: userTeams, teamIds: userTeamIds, projects: userProjects, workspaceName, viewerId }
+  }, [users, members, teams, teamMembers, projects, documents, teamSettings, workspaceName, viewerId])
   return <PeopleContext.Provider value={value}>{children}</PeopleContext.Provider>
 }

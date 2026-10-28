@@ -13,12 +13,14 @@ import { displayUserName, useUserPreferences } from '@/lib/runtime-preferences'
 import { AgentHoverCard } from '@/components/agent/agent-hover-card'
 import { AGENT_HOVER_CLASS } from '@/components/agent/agent-hover-class'
 import { agentHoverProps } from '@/components/agent/agent-hover-props'
-import { ASSIGNEE_INVITE_ID, assigneeCandidates, assigneeShortcut } from '@/lib/agent-members'
+import { ASSIGNEE_INVITE_ID, assigneeCandidates, assigneeMenuLayout, assigneeShortcut } from '@/lib/agent-members'
+import { usePeopleDirectory } from '@/components/property/people-context'
 import { openMemberInvite, viewerCanInvite } from '@/lib/invite-navigation'
 import { avatarColor } from '@/components/issue/avatar-color'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { NestingLine } from '@/components/ui/nesting-line'
 import { confirmRemoveDelegate } from './confirm-remove-delegate'
+import './issue-assignee-menu.css'
 
 /** `triage` shows the reference app's orange "Triage" status for an issue still in the team's triage queue. */
 export function StatusPicker({ value, states, onChange, hoverHistory, triage = false }: { value: WorkflowState; states: WorkflowState[]; onChange: (id: string) => void | Promise<void>; hoverHistory?: { activities: ActivityEvent[]; issueCreatedAt: string; triagedAt?: string | null }; triage?: boolean }) {
@@ -216,71 +218,160 @@ function PersonAvatar({ person }: { person: PersonPickerOption }) {
   return <UserAvatar avatarUrl={person.avatarUrl} className={`avatar core-person-picker-avatar${invited ? ' is-invited' : ''}`} color={person.color ?? avatarColor(person.id)} name={person.label}/>
 }
 
+/** Row id of the delegated agent hung under the assignee; choosing it opens the agent submenu. */
+export const ASSIGNEE_DELEGATE_ROW_ID = '__delegate-row__'
+
 /**
- * The reference app's assignee picker: "No assignee" (key 0), the people (keys 1-9), then the agents that can work in
- * the issue's team, continuing the numbering, all in one list with no group header or pill (the "Agent"
- * pill is only in an agent row's hover card). Below, "New user / Invite and assign…" opens the invite flow.
- *
- * There is no separate "Delegate to agent" control, so this picker carries the delegation too:
- *  - picking a person assigns them (`onChange`); an existing delegate stays;
- *  - picking an agent delegates the issue to it (`onDelegate`, else `onChange`, which the server also turns
- *    into a delegation; with no human assignee the server makes the viewer the assignee);
- *  - both the assignee and the delegate show a check.
- *
- * Compact surfaces (mobile chips) stack the delegate's avatar after the assignee's in the trigger; there
- * picking the delegated agent again removes it and "No assignee" with only a delegate removes the delegate.
- *
- * `delegateRow` is the issue sidebar (the reference app `IssueDetailsPaneSidebar`): the delegate has its own row
- * (`DelegatePicker`) hung under the assignee on a NestingLine, so this trigger shows only the human ("Assign"
- * when none); in the menu the delegated agent sits right under the assignee on the same curve; picking it
- * again changes nothing; "No assignee" unassigns and then asks "Remove <agent> too?" (the reference app `bB`).
+ * One issue's assignee menu, shared by the issue sidebar, compact pickers, list rows and board cards (the reference
+ * app's assignee menu):
+ *  - not delegated: "No assignee" (key 0), the assignee, the viewer and the built-in agent (keys 1-9), then
+ *    "Other agents" and "Team members" without keys, and "New user / Invite and assign…";
+ *  - delegated: the same top rows with the delegated agent hung under the assignee (the viewer when nobody is
+ *    assigned) on a nesting curve, as "<agent> [Agent] ▶" with no check or key; it opens a submenu of
+ *    "No agent", the delegate (checked) and the other agents, which leave the main list (search still finds them).
+ * Only the human assignee is checked ("No assignee" when there is none). Picking a person assigns them, picking an
+ * agent delegates to it; "No assignee" unassigns and then asks "Remove <agent> too?" (the reference app `bB`).
  */
-export function AssigneePicker({ value, delegate, users, onChange, onDelegate, onInvite = openMemberInvite, teamId, hoverContext, allowAgents = true, delegateRow = false, delegateSessionActive = false }: { value?: User; delegate?: User; users: User[]; onChange: (id: string) => void | Promise<void>; onDelegate?: (id: string) => void | Promise<void>; onInvite?: () => void; teamId?: string; hoverContext?: { member?: WorkspaceMember; online?: boolean; workspaceName: string; project?: ProjectSummary }; allowAgents?: boolean; delegateRow?: boolean; delegateSessionActive?: boolean }) {
+export function IssueAssigneeMenu({ people, assignee, delegate, viewerId, trigger, triggerClassName, ariaLabel, value, hoverContent, hoverClassName, hoverPlacement, delegateSessionActive = false, onAssign, onDelegate, onRemoveAgent, onUnassignAll, onInvite = openMemberInvite }: {
+  /** The humans and agents the issue can take (see `assigneeCandidates`). */
+  people: User[]
+  assignee?: User
+  delegate?: User
+  /** Defaults to the signed-in viewer from the people directory. */
+  viewerId?: string
+  trigger: ReactNode
+  triggerClassName?: string
+  ariaLabel: string
+  value?: string
+  hoverContent?: ReactNode
+  hoverClassName?: string
+  hoverPlacement?: 'left' | 'below'
+  delegateSessionActive?: boolean
+  /** A person picked, or '' to unassign. */
+  onAssign: (id: string) => void | Promise<void>
+  /** An agent picked (delegate to it), or '' to take the delegated agent off the issue. */
+  onDelegate: (id: string) => void | Promise<void>
+  /** "No agent" in the delegate's submenu (defaults to `onDelegate('')`). */
+  onRemoveAgent?: () => void | Promise<void>
+  /** "No assignee", then "Remove agent": clear both in one update (defaults to `onAssign('')` then `onDelegate('')`). */
+  onUnassignAll?: () => void | Promise<void>
+  onInvite?: () => void
+}) {
   const { t } = useI18n()
-  const candidates = assigneeCandidates(users, teamId, { agents: allowAgents })
-  // A delegate the list no longer offers (e.g. lost team access) stays listed so it can be removed.
-  const listed = delegate && !candidates.some(user => user.id === delegate.id) ? [...candidates, delegate] : candidates
-  const nestDelegate = Boolean(delegateRow && value && delegate && listed.some(user => user.id === value.id))
-  const ordered = nestDelegate && delegate ? listed.filter(user => user.id !== delegate.id).flatMap(user => user.id === value?.id ? [user, delegate] : [user]) : listed
-  const people = ordered.map(user => ({ ...user, label: user.displayName, ...(nestDelegate && user.id === delegate?.id ? { icon: <NestedDelegateAvatar user={user}/> } : {}) }))
-  const agentIds = new Set(people.filter(person => person.app).map(person => person.id))
-  const change = async (id: string) => {
-    if (id === ASSIGNEE_INVITE_ID) { onInvite(); return }
-    if (delegateRow) {
-      if (agentIds.has(id)) return delegate?.id === id ? undefined : onDelegate ? onDelegate(id) : onChange(id)
-      if (id) return onChange(id)
-      if (!value) return
-      await onChange('')
-      if (delegate && onDelegate && await confirmRemoveDelegate(delegate, delegateSessionActive, t)) await onDelegate('')
-      return
+  useUserPreferences()
+  const directory = usePeopleDirectory()
+  // A delegate the list no longer offers (e.g. lost team access) keeps its row so it can be removed.
+  const listed = delegate && !people.some(user => user.id === delegate.id) ? [...people, { ...delegate, app: true }] : people
+  const layout = assigneeMenuLayout(listed, { assigneeId: assignee?.id, delegateId: delegate?.id, viewerId: viewerId ?? directory.viewerId })
+  const agentIds = new Set(listed.filter(user => user.app).map(user => user.id))
+  const personRow = (user: User, extra: Partial<PropertyOption> = {}): PropertyOption => {
+    const display = personDisplayName({ ...user, label: user.displayName })
+    const label = displayUserName({ displayName: display, name: user.name && user.name !== user.id ? user.name : display })
+    const person = { ...user, label }
+    return {
+      id: user.id,
+      label,
+      keywords: personSearchText(person),
+      icon: <PersonAvatar person={person}/>,
+      ...(isAwayNow(user.outOfOfficeUntil) ? { labelContent: <>{label}<span className="property-command-away">{t('Away')}</span></> } : {}),
+      ...(user.app ? agentHoverProps({ id: user.id, name: user.username || user.name || label, displayName: label, avatarUrl: user.avatarUrl }) : {}),
+      i18nIgnore: true,
+      ...extra,
     }
-    if (agentIds.has(id)) return onDelegate ? onDelegate(delegate?.id === id ? '' : id) : onChange(id)
-    if (!id && !value && delegate && onDelegate) return onDelegate('')
-    return onChange(id)
   }
-  const checked = [value?.id, delegate?.id].filter((id): id is string => Boolean(id))
+  const plainRow = (user: User) => personRow(user, { hoverContent: undefined, hoverClassName: undefined })
+  const delegateLabel = delegate ? delegate.displayName || delegate.name : ''
+  const delegateRow: PropertyOption | undefined = delegate ? {
+    id: ASSIGNEE_DELEGATE_ROW_ID,
+    label: delegateLabel,
+    keywords: personSearchText({ ...delegate, label: delegateLabel }),
+    icon: layout.delegateAnchorId ? <NestedDelegateAvatar user={delegate}/> : <PersonAvatar person={{ ...delegate, label: delegateLabel }}/>,
+    labelContent: <span className="core-delegate-row-label"><span className="core-delegate-row-name" data-i18n-ignore>{delegateLabel}</span><span className="core-delegate-row-pill">{t('Agent')}</span></span>,
+    i18nIgnore: true,
+    submenu: {
+      bare: true,
+      className: 'core-agent-submenu',
+      placeholder: 'Delegate to…',
+      heading: 'Agent',
+      selectedId: delegate.id,
+      options: [{ id: '', label: 'No agent', icon: <FlowGlyph name="noAgent" size={16}/> }, plainRow(listed.find(user => user.id === delegate.id) ?? delegate), ...layout.searchOnly.map(plainRow)],
+      onChoose: id => { if (id === delegate.id) return; void (id ? onDelegate(id) : onRemoveAgent ? onRemoveAgent() : onDelegate('')) },
+    },
+  } : undefined
+  let position = 0
+  const options: PropertyOption[] = [
+    { id: '', label: 'No assignee', icon: <NoAssigneeIcon size={16}/>, shortcut: '0' },
+    ...layout.top.flatMap(user => [personRow(user, { shortcut: assigneeShortcut(++position) }), ...(delegateRow && user.id === layout.delegateAnchorId ? [delegateRow] : [])]),
+    ...(delegateRow && !layout.delegateAnchorId ? [delegateRow] : []),
+    ...layout.otherAgents.map(user => personRow(user, { groupId: 'assignee-other-agents', groupLabel: 'Other agents' })),
+    ...layout.members.map(user => personRow(user, { groupId: 'assignee-team-members', groupLabel: 'Team members' })),
+    ...layout.searchOnly.map(user => personRow(user, { searchOnly: true, groupId: 'assignee-other-agents', groupLabel: 'Other agents' })),
+    ...(viewerCanInvite() ? [{ id: ASSIGNEE_INVITE_ID, label: 'Invite and assign…', icon: <FlowGlyph className="property-command-invite-icon" name="invitePlane" size={16}/>, groupId: 'assignee-new-user', groupLabel: 'New user', action: true }] : []),
+  ]
+  const choose = async (id: string) => {
+    if (id === ASSIGNEE_INVITE_ID) { onInvite(); return }
+    if (agentIds.has(id)) { if (id !== delegate?.id) await onDelegate(id); return }
+    if (id) { await onAssign(id); return }
+    // "No assignee" is the current row when nobody is assigned: a delegated agent stays (its submenu removes it).
+    if (!assignee) return
+    if (!delegate) { await onAssign(''); return }
+    const remove = await confirmRemoveDelegate(delegate, delegateSessionActive, t)
+    if (remove && onUnassignAll) { await onUnassignAll(); return }
+    await onAssign('')
+    if (remove) await onDelegate('')
+  }
+  return <PropertyMenu
+    ariaLabel={ariaLabel}
+    compact
+    hoverClassName={hoverClassName}
+    hoverContent={hoverContent}
+    hoverPlacement={hoverPlacement}
+    label="Assignee"
+    onChange={choose}
+    options={options}
+    searchPlaceholder={t('Assign to…')}
+    searchShortcut="A"
+    selectedId={assignee?.id ?? ''}
+    trigger={trigger}
+    triggerClassName={triggerClassName}
+    value={value}
+    valueIsEntityName={Boolean(assignee)}
+  />
+}
+
+/**
+ * The issue's assignee control on property surfaces. `delegateRow` is the issue sidebar (the reference app
+ * `IssueDetailsPaneSidebar`): the delegate also has its own row (`DelegatePicker`) hung under the assignee on a
+ * NestingLine, so this trigger shows only the human ("Assign" when none). Compact surfaces (mobile chips, peek)
+ * stack the delegate's avatar after the assignee's in the trigger. Both open `IssueAssigneeMenu`.
+ */
+export function AssigneePicker({ value, delegate, users, onChange, onDelegate, onRemoveAgent, onInvite = openMemberInvite, teamId, hoverContext, allowAgents = true, delegateRow = false, delegateSessionActive = false }: { value?: User; delegate?: User; users: User[]; onChange: (id: string) => void | Promise<void>; onDelegate?: (id: string) => void | Promise<void>; onRemoveAgent?: () => void | Promise<void>; onInvite?: () => void; teamId?: string; hoverContext?: { member?: WorkspaceMember; online?: boolean; workspaceName: string; project?: ProjectSummary }; allowAgents?: boolean; delegateRow?: boolean; delegateSessionActive?: boolean }) {
+  const { t } = useI18n()
+  useUserPreferences()
+  const candidates = assigneeCandidates(users, teamId, { agents: allowAgents })
   const avatar = (user: User) => <PersonAvatar person={{ id: user.id, label: user.displayName, name: user.name, avatarUrl: user.avatarUrl, color: avatarColor(user.id) }}/>
+  const assigneeName = value ? displayUserName({ displayName: personDisplayName({ ...value, label: value.displayName }), name: value.name && value.name !== value.id ? value.name : value.displayName }) : undefined
   const label = delegate && !value ? `Change assignee. ${delegate.displayName} is delegated` : value ? `Change assignee. ${value.displayName} is assigned` : 'Change assignee. Currently no one is assigned.'
   const personHover = Boolean(value && hoverContext)
   const stacked = Boolean(delegate && !delegateRow)
-  return <div className="core-property-picker"><PersonPicker
-    ariaLabel={label}
-    emptyOptionLabel="No assignee"
-    emptyOptionShortcut="0"
-    emptyTriggerLabel="Assign"
-    extraOptions={viewerCanInvite() ? [{ id: ASSIGNEE_INVITE_ID, label: 'Invite and assign…', icon: <FlowGlyph className="property-command-invite-icon" name="invitePlane" size={16}/>, groupLabel: 'New user', action: true }] : []}
+  const trigger = stacked && delegate
+    ? <><span className="core-assignee-stack">{value && avatar(value)}{avatar(delegate)}</span><span data-i18n-ignore>{delegate.displayName}</span></>
+    : value ? <>{avatar(value)}<span data-i18n-ignore>{assigneeName}</span></> : <><NoAssigneeIcon size={15}/><span>{t('Assign')}</span></>
+  return <div className="core-property-picker"><IssueAssigneeMenu
+    ariaLabel={t(label)}
+    assignee={value}
+    delegate={delegate}
+    delegateSessionActive={delegateSessionActive}
     hoverContent={personHover && value && hoverContext ? <AssigneeHoverPreview user={value} {...hoverContext}/> : stacked && delegate ? <AgentHoverCard agent={delegate}/> : undefined}
     hoverClassName={!personHover && stacked ? AGENT_HOVER_CLASS : 'property-rich-hover assignee-hover-surface'}
-    label="Assignee"
-    numberedOptions
-    onChange={change}
-    people={people}
-    searchPlaceholder="Assign to…"
-    searchShortcut="A"
-    selectedId={value?.id}
-    selectedIds={checked}
-    trigger={stacked && delegate ? <><span className="core-assignee-stack">{value && avatar(value)}{avatar(delegate)}</span><span data-i18n-ignore>{delegate.displayName}</span></> : delegateRow && !value ? <><NoAssigneeIcon size={15}/><span>{t('Assign')}</span></> : undefined}
+    onAssign={onChange}
+    onDelegate={onDelegate ?? onChange}
+    onRemoveAgent={onRemoveAgent}
+    onInvite={onInvite}
+    people={candidates}
+    trigger={trigger}
     triggerClassName={`core-property-trigger${value || stacked ? '' : ' muted'}`}
+    value={assigneeName ?? t('Assign')}
   /></div>
 }
 

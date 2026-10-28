@@ -60,6 +60,10 @@ export interface PropertyOptionSubmenu {
   options: PropertyOption[]
   selectedId: string
   onChoose: (id: string) => void
+  /** A plain list (no search row or heading) whose first row sits level with the parent row, and a small ▶ caret on the parent (the assignee menu's agent submenu). */
+  bare?: boolean
+  /** Extra class on the submenu surface. */
+  className?: string
 }
 
 export type PropertyMenuKind = 'standard' | 'labels' | 'project-labels' | 'project' | 'milestone'
@@ -301,6 +305,7 @@ function OptionSubmenuRow({ option, submenu, active, checked, listboxId, multi, 
   const [query, setQuery] = useState('')
   const [activeId, setActiveId] = useState<string>()
   const inputRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   const openTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const normalized = query.trim().toLocaleLowerCase()
   const filtered = normalized ? submenu.options.filter(item => `${item.label} ${item.keywords ?? ''}`.toLocaleLowerCase().includes(normalized)) : submenu.options
@@ -309,7 +314,7 @@ function OptionSubmenuRow({ option, submenu, active, checked, listboxId, multi, 
     if (!open) return
     setQuery('')
     setActiveId(submenu.selectedId || submenu.options[0]?.id)
-    requestAnimationFrame(() => inputRef.current?.focus())
+    requestAnimationFrame(() => (submenu.bare ? listRef.current : inputRef.current)?.focus())
     // Opening resets the search and highlights the current choice.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -337,13 +342,13 @@ function OptionSubmenuRow({ option, submenu, active, checked, listboxId, multi, 
   }
   return <Popover.Root open={open} onOpenChange={onOpenChange}>
     <Popover.Anchor asChild><button aria-checked={checked} aria-expanded={open} aria-haspopup="listbox" aria-selected={active} className="has-submenu" data-indent={option.indent || undefined} style={option.indent ? { '--option-indent': option.indent } as CSSProperties : undefined} id={`${listboxId}-${option.id}`} role="option" type="button" onClick={() => onOpenChange(true)} onFocus={onActive} onPointerEnter={openFromHover} onPointerLeave={cancelHoverOpen} onPointerMove={onActive}>
-      <span className="property-command-option-background"/>{multi && <span className="property-command-checkbox is-locked">{checked && <CheckboxMark/>}</span>}{Boolean(option.indent) && <TreeElbow/>}<span className="property-command-icon">{option.icon}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.labelContent ?? (option.i18nIgnore ? option.label : t(option.label))}</span><ChevronRight className="property-command-group-chevron" size={13}/>
+      <span className="property-command-option-background"/>{multi && <span className="property-command-checkbox is-locked">{checked && <CheckboxMark/>}</span>}{Boolean(option.indent) && <TreeElbow/>}<span className="property-command-icon">{option.icon}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.labelContent ?? (option.i18nIgnore ? option.label : t(option.label))}</span>{submenu.bare ? <span aria-hidden="true" className="property-command-submenu-caret">▶</span> : <ChevronRight className="property-command-group-chevron" size={13}/>}
     </button></Popover.Anchor>
-    <Popover.Portal><Popover.Content data-flow-motion="floating" className="property-command-surface property-command-option-submenu" side="right" align="start" alignOffset={-67} sideOffset={-2} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()} role="dialog" aria-label={submenu.placeholder}>
+    <Popover.Portal><Popover.Content data-flow-motion="floating" className={`property-command-surface ${submenu.bare ? 'property-command-bare-submenu' : 'property-command-option-submenu'}${submenu.className ? ` ${submenu.className}` : ''}`} side="right" align="start" alignOffset={submenu.bare ? -6 : -67} sideOffset={-2} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()} role="dialog" aria-label={submenu.placeholder}>
       <div onKeyDown={onKeyDown}>
-        <div className="property-command-search"><input ref={inputRef} value={query} onChange={event => { setQuery(event.target.value); const next = event.target.value.trim().toLocaleLowerCase(); setActiveId(submenu.options.find(item => `${item.label} ${item.keywords ?? ''}`.toLocaleLowerCase().includes(next))?.id) }} aria-label={submenu.placeholder} placeholder={submenu.placeholder} autoComplete="off" spellCheck={false}/></div>
-        <div className="property-command-options" role="listbox" aria-label={submenu.heading}>
-          {filtered.length > 0 && <div className="property-command-group">{t(submenu.heading)}</div>}
+        {!submenu.bare && <div className="property-command-search"><input ref={inputRef} value={query} onChange={event => { setQuery(event.target.value); const next = event.target.value.trim().toLocaleLowerCase(); setActiveId(submenu.options.find(item => `${item.label} ${item.keywords ?? ''}`.toLocaleLowerCase().includes(next))?.id) }} aria-label={submenu.placeholder} placeholder={submenu.placeholder} autoComplete="off" spellCheck={false}/></div>}
+        <div ref={listRef} tabIndex={submenu.bare ? -1 : undefined} className="property-command-options" role="listbox" aria-label={submenu.heading} aria-activedescendant={submenu.bare && activeId !== undefined ? `${listboxId}-submenu-${activeId || 'none'}` : undefined}>
+          {!submenu.bare && filtered.length > 0 && <div className="property-command-group">{t(submenu.heading)}</div>}
           {filtered.map(item => <CommandOption key={item.id} option={item} active={item.id === activeId} checked={item.id === submenu.selectedId} listboxId={`${listboxId}-submenu`} icon={null} onChoose={() => choose(item)} onActive={() => setActiveId(item.id)}/>)}
           {!filtered.length && <div className="core-property-empty">{t('No results')}</div>}
         </div>
