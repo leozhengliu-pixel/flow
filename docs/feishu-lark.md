@@ -15,8 +15,11 @@ not supported by this connection flow.
    or [Lark developer console](https://open.larksuite.com/app). Enable its bot
    capability, set its availability, and publish the application.
 3. Grant `im:message:send_as_bot`, `im:message.group_at_msg:readonly`, and
-   `im:chat:read`. Flow does not need access to all group messages, the full
-   contact directory, phone numbers, or email addresses.
+   `im:chat:read`, plus read access to tenant information and to a user's
+   basic contact profile (Flow reads only the tenant key and whether the
+   authorizing account is a tenant administrator). Flow does not need access
+   to all group messages, the full contact directory, phone numbers, or email
+   addresses.
 4. Register the redirect URL
    `https://flow.example.com/api/integrations/feishu/chat/identity/oauth/callback`
    (replace `feishu` with `lark` for Lark, and use your actual Flow origin).
@@ -24,29 +27,82 @@ not supported by this connection flow.
    administrator enters the App ID, App Secret, Encrypt Key, and Verification
    Token. Saving verifies the application token and published bot. Blank secret
    fields on subsequent saves preserve the existing encrypted values.
-6. Open **Personal > Connected accounts** and link the administrator's own
-   Feishu or Lark account to verify the application's tenant.
-   Follow the authorization in the same signed-in browser. The app remains
-   pending until the tenant has been verified; saving credentials alone does
-   not imply a complete connection.
+6. Complete the **enterprise tenant authorization** under **Permissions** on
+   the same page (see [Permissions](#permissions)). A workspace administrator,
+   or the member they designate as **Tenant authorizer**, selects **Authorize
+   tenant** and signs in with a chat account that is a tenant administrator of
+   the tenant the application is installed in. The app stays pending until
+   then; saving credentials alone does not complete the connection, and a
+   personal account link never authorizes the tenant.
 7. Copy Flow's callback URL into the application's HTTP event and callback
    configuration. Enable encryption using the same Encrypt Key and
    Verification Token. Subscribe to `im.message.receive_v1` and the current
    `card.action.trigger` callback; do not also subscribe to the legacy card
    callback. Publish configuration changes when required by the platform.
 8. Add the bot to an internal group and allow it to speak. Back in Flow, select
-   the group, a public team, an optional compatible project/template, and the
+   the group, a team, an optional compatible project/template, and the
    notification and issue-action options. Saving a group binding explicitly
-   approves disclosing the selected resource summaries to that group.
+   authorizes disclosing the selected resource summaries to that group; Flow
+   records who authorized it and when. Team owners do this from the team's
+   notifications page as well.
 
 Use **Test connection** to recheck credentials and bot publication. Event
 subscription, app availability, permissions, and group speech settings must
 also be configured correctly in the platform console.
 
+## Permissions
+
+A chat integration has three permission domains. Each is granted on its own,
+and the settings page shows which one is missing and who can grant it; API
+refusals carry a `permissionDomain` (`tenant`, `workspace` or `team`)
+next to the stable error `code`.
+
+- **Enterprise tenant authorization** (`tenant`). Done once per application,
+  on the chat platform, by an account that is a tenant administrator of the
+  application's own tenant. Flow checks this with the platform (the tenant the
+  application token belongs to, and the account's tenant administrator flag);
+  a Flow workspace role never stands in for it. Workspace administrators may
+  start it, or designate the member who holds that platform role. Flow records
+  who completed it, when, and the tenant key. Afterwards nobody is asked to
+  confirm the tenant again: listing groups and binding them use the
+  application's own token. Applications connected before this step existed are
+  shown as authorized (completed before tenant authorization was separate).
+- **Workspace integration** (`workspace`). Workspace administrators manage the
+  application settings, the tenant authorizer, and every group binding.
+- **Team bindings** (`team`). A team's owners (inherited from parent teams)
+  bind its groups; workspace administrators administer every team and so may
+  too. Other members cannot create, change, revoke or remove a team's
+  bindings, and see none of them.
+
+### Private teams
+
+A private team's owner may bind it to a specific internal group. The binding
+records the authorizer, the time, the group, the shared notification types and
+project, whether the group may create and update issues, and its revocation.
+It never adds team memberships or widens who can see the team in Flow: its
+notifications go to that group only, and group actions run as each member's
+own linked Flow account with that account's permissions. A private team
+binding stops as soon as its authorizer can no longer administer the team.
+Projects shared with another private team, issues with their own access
+restrictions, and initiatives with a private contributing team are never sent.
+
+Public teams keep working as before; their bindings now also record who
+authorized them. Binding a public team needs the same team binding permission,
+so the rule is the same for every team.
+
+**Revoke** stops a binding and keeps it listed (with who revoked it and when)
+until the group is bound again or the binding is removed. Authorizing,
+changing, revoking and removing bindings, designating the tenant authorizer
+and completing the tenant authorization are recorded in the audit log.
+
+Flow still refuses external groups, groups of another tenant, groups the bot
+is not in, and accounts or callbacks of another tenant.
+
 ## Notifications and issue actions
 
 Notifications can include issue creation, state and assignee changes, new
-comments, and project updates. They include an approved summary and Flow link;
+comments, project updates, and initiative updates (sent to the groups of the
+initiative's lead team). They include an approved summary and Flow link;
 comment bodies and attachments are not copied to the group.
 
 Group users link their own Flow account from **Personal > Connected accounts**.
@@ -70,9 +126,21 @@ membership, resource permissions, and authentication policy. Deactivated or
 unlinked accounts cannot continue using old cards.
 
 Only internal groups belonging to the connected tenant can be bound. Private
-or restricted teams/issues and projects involving private teams are excluded.
-Workspace policies that disable external processing also disable this path.
-Group membership itself never grants Flow read or write permissions.
+or restricted teams are included only with their owners' authorization (see
+[Private teams](#private-teams)). Workspace policies that disable external
+processing also disable this path. Group membership itself never grants Flow
+read or write permissions.
+
+## Lark or Feishu as the deployment's chat platform
+
+Set `FLOW_CHAT_PLATFORM=lark` or `feishu` (Helm `integrations.chat.platform`)
+to make it the deployment's first-class chat platform. The team home shows
+**Connect Lark group** (飞书 for Feishu in Chinese), the team's notifications
+page manages its groups, project menus and the project details sidebar open
+the project's groups, project and initiative update settings, onboarding and
+the integration catalog point to it. The default (`slack`) keeps the Slack
+entry points; the other chat integrations stay available in Settings >
+Integrations either way.
 
 ## Delivery and recovery
 

@@ -122,6 +122,8 @@ import "./issues-projects-settings.css";
 import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { AgentSkillsIcon } from '@/components/agent/agent-icons'
 import { TeamAgentGuidanceSettings } from './team-agent-guidance'
+import { chatTeamNotificationsCopy, useChatPlatform } from '@/lib/chat-platform'
+import { ChatTeamNotifications } from './chat-team-notifications'
 
 const SECTIONS: {
   id: TeamSettingsSection;
@@ -271,6 +273,8 @@ export function TeamWorkflowSettings({
   subPath?: string;
 }) {
   const { t } = useI18n();
+  const chat = useChatPlatform(data);
+  const chatCopy = chatTeamNotificationsCopy(chat.platform);
   if (section === "statuses")
     return (
       <StatusesSettings
@@ -340,11 +344,13 @@ export function TeamWorkflowSettings({
           <h1>
             {section === "overview" ? (
               <span data-i18n-ignore>{team.name}</span>
+            ) : section === "notifications" ? (
+              chat.format(t(chatCopy.label))
             ) : (
               t(TEAM_SECTION_TITLES[section] ?? SECTIONS.find((item) => item.id === section)?.label ?? "")
             )}
           </h1>
-          {section === "templates" ? <TeamTemplatesDescription workspaceSlug={data.workspace.urlKey} /> : TEAM_SECTION_DESCRIPTIONS[section] && <p>{t(TEAM_SECTION_DESCRIPTIONS[section])}</p>}
+          {section === "templates" ? <TeamTemplatesDescription workspaceSlug={data.workspace.urlKey} /> : section === "notifications" ? <p>{chat.format(t(chatCopy.page))}</p> : TEAM_SECTION_DESCRIPTIONS[section] && <p>{t(TEAM_SECTION_DESCRIPTIONS[section])}</p>}
         </div>
       </header>
       {section === "overview" && (
@@ -461,6 +467,8 @@ function TeamOverview({
   onOpenTeams?: () => void;
 }) {
   const { t } = useI18n();
+  const chat = useChatPlatform(data);
+  const chatCopy = chatTeamNotificationsCopy(chat.platform);
   const { settings, save } = useTeamSettings(data, team, onReload);
   // The reference app "dangerousOperations": hierarchy, retire and delete are team-owner only.
   const owner = viewerOwnsTeam(data, team.id);
@@ -552,11 +560,12 @@ function TeamOverview({
       <div className="team-overview-list">
         {ids.map((id) => {
           const item = SECTIONS.find((value) => value.id === id)!;
+          const notifications = item.id === "notifications";
           return (
             <button key={item.id} onClick={() => onNavigate(item.id)}>
               <span>
-                <strong>{t(item.label)}</strong>
-                <small>{t(item.description)}</small>
+                <strong>{notifications ? chat.format(t(chatCopy.label)) : t(item.label)}</strong>
+                <small>{notifications ? chat.format(t(chatCopy.description)) : t(item.description)}</small>
               </span>
               <ChevronRight size={15} />
             </button>
@@ -1197,6 +1206,7 @@ function SlackSettings({
 }) {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const chat = useChatPlatform(data);
   const { settings, setSettings, save } = useTeamSettings(data, team, onReload);
   const slack = data.integrationConnections.find(
     (item) =>
@@ -1210,6 +1220,8 @@ function SlackSettings({
     ["commentCreated", "Comments to issues"],
     ["issueTriage", "An issue is added to the triage queue"],
   ] as const;
+  // On Lark or Feishu deployments the team's groups take the place of its Slack channel.
+  if (chat.provider) return <ChatTeamNotifications provider={chat.provider} data={data} team={team} />;
   return (
     <>
       <TeamSection>

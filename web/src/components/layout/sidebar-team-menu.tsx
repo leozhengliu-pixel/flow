@@ -15,6 +15,8 @@ import { SlackIcon } from '@/components/issue/issue-icons'
 import { TeamSettingsIcon, TeamArchiveIcon } from './team-menu-icons'
 import { teamLeaveDisabledReason } from '@/lib/team-access'
 import type { BootstrapData, Team } from '@/types/flow'
+import { IntegrationBrandIcon } from '@/components/settings/integration-brand-icon'
+import { chatTeamNotificationsCopy, useChatPlatform } from '@/lib/chat-platform'
 
 const notifications = [
   ['issueAdded', 'An issue is added to the team'],
@@ -51,8 +53,11 @@ export function SidebarTeamMenu({ data, team, onReload, children }: { data: Boot
   const pulseFallback = useMemo(() => open && teamPulseSubscribed(team.id, { viewerId: data.viewer.id, subscriptions: data.subscriptions, teamMembers: data.teamMembers }), [open, team.id, data.viewer.id, data.subscriptions, data.teamMembers])
   const pulse = usePulseSubscription('team', team.id, pulseFallback, open)
   const label = favorite ? 'Unfavorite' : 'Favorite'
-  const matches = (label: string) => [label, t(label)].some(value => value.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
-  const groups = [[label], ['Team settings', 'Copy URL', 'Open archive'], ['Subscribe', 'Configure Slack notifications…'], ['Leave team…']].map(group => group.filter(matches)).filter(group => group.length)
+  const chat = useChatPlatform(data)
+  const notifyLabel = chatTeamNotificationsCopy(chat.platform).menu
+  const display = (label: string) => label === notifyLabel ? chat.format(t(label)) : t(label)
+  const matches = (label: string) => [label, display(label)].some(value => value.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+  const groups = [[label], ['Team settings', 'Copy URL', 'Open archive'], ['Subscribe', notifyLabel], ['Leave team…']].map(group => group.filter(matches)).filter(group => group.length)
   const leaveReason = useMemo(() => open ? teamLeaveDisabledReason(data, team) : undefined, [open, data, team])
   const updateEvent = async (event: string, checked: boolean) => {
     if (busy.current) return
@@ -97,7 +102,7 @@ export function SidebarTeamMenu({ data, team, onReload, children }: { data: Boot
     else if (label === 'Leave team…') void leave()
     else if (label === 'Copy URL') void navigator.clipboard.writeText(`${location.origin}${teamHomePath(data.workspace.urlKey, team.key)}`).then(() => toast.success(t('Team URL copied to clipboard'))).catch(error => toast.error(t('Could not copy URL'), { description: String(error) }))
   }
-  const icon = (label: string) => label === 'Team settings' ? <TeamSettingsIcon/> : label === 'Open archive' ? <TeamArchiveIcon/> : label === 'Configure Slack notifications…' ? <SlackIcon/> : label === 'Leave team…' ? <span className="sidebar-team-menu-icon-spacer"/> : <ViewGlyph color="currentColor" icon={label === 'Copy URL' ? 'Link' : label === 'Subscribe' ? 'Subscribe' : 'Favorite'}/>
+  const icon = (label: string) => label === 'Team settings' ? <TeamSettingsIcon/> : label === 'Open archive' ? <TeamArchiveIcon/> : label === notifyLabel ? (chat.provider ? <IntegrationBrandIcon provider={chat.provider} size={16}/> : <SlackIcon/>) : label === 'Leave team…' ? <span className="sidebar-team-menu-icon-spacer"/> : <ViewGlyph color="currentColor" icon={label === 'Copy URL' ? 'Link' : label === 'Subscribe' ? 'Subscribe' : 'Favorite'}/>
   return <DropdownMenu.Root open={open} onOpenChange={value => { setOpen(value); if (!value) setQuery('') }}>
     <DropdownMenu.Trigger asChild onPointerDown={event => {
       // Opening on pointerdown can put a menu item under the same pointerup.
@@ -123,8 +128,8 @@ export function SidebarTeamMenu({ data, team, onReload, children }: { data: Boot
         if (label === 'Subscribe') return <DropdownMenu.Sub key={label}><DropdownMenu.SubTrigger>{icon(label)}<span>{t(label)}</span><ChevronRight className="menu-chevron"/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="sidebar-popover sidebar-team-subscribe-menu" sideOffset={narrow ? -247 : -2} collisionPadding={8}>
           {notifications.map(([event, label], index) => <div className="sidebar-team-subscribe-group" key={event}>{index === 0 && <DropdownMenu.Label>{t('Inbox notifications')}</DropdownMenu.Label>}{index === 3 && <DropdownMenu.Label>{t('Pulse updates')}</DropdownMenu.Label>}<DropdownMenu.CheckboxItem disabled={pending} checked={event === PULSE_EVENT ? pulse.subscribed : events.includes(event)} onCheckedChange={checked => void (event === PULSE_EVENT ? updatePulse(checked === true) : updateEvent(event, checked === true))} onSelect={event => event.preventDefault()}><span className="sidebar-team-subscribe-check"><DropdownMenu.ItemIndicator><Check size={10}/></DropdownMenu.ItemIndicator></span><span>{t(label)}</span></DropdownMenu.CheckboxItem></div>)}
         </DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
-        const href = label === 'Team settings' ? settingsPath(data.workspace.urlKey, 'team', team.key) : label === 'Open archive' ? teamArchivePath(data.workspace.urlKey, team.key) : label === 'Configure Slack notifications…' ? settingsPath(data.workspace.urlKey, 'team', team.key, 'notifications') : undefined
-        const body = <>{icon(label)}<span>{t(label)}</span>{(label === 'Favorite' || label === 'Unfavorite') && <kbd>⌥ F</kbd>}{label === 'Copy URL' && <kbd>⌘ ⇧ ,</kbd>}</>
+        const href = label === 'Team settings' ? settingsPath(data.workspace.urlKey, 'team', team.key) : label === 'Open archive' ? teamArchivePath(data.workspace.urlKey, team.key) : label === notifyLabel ? settingsPath(data.workspace.urlKey, 'team', team.key, 'notifications') : undefined
+        const body = <>{icon(label)}<span>{display(label)}</span>{(label === 'Favorite' || label === 'Unfavorite') && <kbd>⌥ F</kbd>}{label === 'Copy URL' && <kbd>⌘ ⇧ ,</kbd>}</>
         return href ? <DropdownMenu.Item key={label} asChild><NavLink to={href}>{body}</NavLink></DropdownMenu.Item> : <DropdownMenu.Item key={label} disabled={label === 'Leave team…' && (Boolean(leaveReason) || leaving)} title={label === 'Leave team…' && leaveReason ? t(leaveReason) : undefined} onSelect={() => select(label)}>{body}</DropdownMenu.Item>
       })}</div>)}
     </DropdownMenu.Content></DropdownMenu.Portal>

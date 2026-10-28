@@ -9,6 +9,26 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- `FLOW_CHAT_PLATFORM=lark|feishu` (Helm `integrations.chat.platform`) makes
+  Lark or Feishu the deployment's first-class chat platform. The team home
+  shows **Connect Lark group** (飞书 in Chinese for Feishu), the team's
+  notifications page lists and binds its groups, project menus and the
+  project details sidebar open the project's groups, project and initiative
+  update settings, the sidebar and directory team menus, onboarding and the
+  integration catalog point to it. The default (`slack`) is unchanged.
+- Private teams can be shared with a Lark or Feishu group: the team's owner
+  authorizes a binding to one internal group, choosing the notification
+  types, project and whether the group may create or update issues. The
+  binding adds no team membership and no Flow access for anyone; updates go
+  to that group only, group actions use each member's own Flow permissions,
+  and it stops once its authorizer can no longer administer the team. Team
+  owners bind their own teams (public ones too) from the team's
+  notifications page; only they and workspace administrators can change,
+  revoke or remove a team's bindings. Every binding records who authorized
+  it and when, **Revoke** keeps it listed as revoked, and binding changes are
+  audited.
+- Lark and Feishu groups can receive initiative updates of the initiatives
+  their team leads.
 - With `FLOW_AGENT_RUNTIME=worker`, Flow Agent chat replies run on the agent
   worker (`agent-worker`) instead of inside the API. The reply is the same
   chat message as before: saved while it is written (a reload or another tab
@@ -72,6 +92,20 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   sandbox image), using the OpenAI-compatible upstream with its own model list
   `FLOW_CODING_MODELS_PI` (Helm `coding.llm.models.pi`, empty by default) and
   `contextWindow` from `FLOW_CODING_MODEL_INFO`.
+
+### Changed
+
+- Lark and Feishu tenant authorization is its own step, done once by a tenant
+  administrator of the chat platform (verified on the platform, started by a
+  workspace administrator or the member they designate). Linking a personal
+  account no longer verifies the tenant, and workspace administrators list
+  and bind groups afterwards without being asked to confirm it again. The
+  integration page shows the tenant authorization (by whom, when, tenant
+  key), the workspace integration permission and the team binding
+  permission separately, and refusals name the missing one
+  (`permissionDomain`: `tenant`, `workspace` or `team`). Existing connections
+  stay authorized. Groups the bot is not in, external groups and groups of
+  another tenant are refused with their own messages.
 
 ### Fixed
 

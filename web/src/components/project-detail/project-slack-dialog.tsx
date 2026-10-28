@@ -5,10 +5,19 @@ import { AppLink } from '@/components/ui/app-link'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { SlackIcon } from '@/components/issue/issue-icons'
 import { useI18n } from '@/i18n/i18n'
-import type { IntegrationConnection, Project } from '@/types/flow'
+import { useChatPlatform } from '@/lib/chat-platform'
+import type { BootstrapData, IntegrationConnection, Project } from '@/types/flow'
 import type { ProjectMutationInput } from '@/components/projects-page/projects-page'
+import { ProjectChatGroupDialog } from './project-chat-group-dialog'
 
-export function ProjectSlackDialog({open,onOpenChange,project,connections,onSave}:{open:boolean;onOpenChange:(open:boolean)=>void;project:Project;connections:IntegrationConnection[];onSave:(input:ProjectMutationInput)=>Promise<void>}) {
+/** The project's chat notifications: a Slack channel, or Lark/Feishu groups when the deployment chose that platform. */
+export function ProjectSlackDialog({open,onOpenChange,project,connections,onSave,data}:{open:boolean;onOpenChange:(open:boolean)=>void;project:Project;connections:IntegrationConnection[];onSave:(input:ProjectMutationInput)=>Promise<void>;data?:BootstrapData}) {
+  const chat = useChatPlatform(data)
+  if (chat.provider) return <ProjectChatGroupDialog open={open} onOpenChange={onOpenChange} provider={chat.provider} project={project} data={data}/>
+  return <ProjectSlackChannelDialog open={open} onOpenChange={onOpenChange} project={project} connections={connections} onSave={onSave}/>
+}
+
+function ProjectSlackChannelDialog({open,onOpenChange,project,connections,onSave}:{open:boolean;onOpenChange:(open:boolean)=>void;project:Project;connections:IntegrationConnection[];onSave:(input:ProjectMutationInput)=>Promise<void>}) {
   const {t} = useI18n()
   const [saving,setSaving] = useState(false)
   const channels = [...new Set(connections.filter(item => item.provider.toLowerCase() === 'slack' && item.status === 'connected').flatMap(item => item.channels))]

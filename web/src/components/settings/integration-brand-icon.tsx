@@ -1,7 +1,14 @@
 import { SlackIcon } from '@/components/issue/issue-icons'
 import { isChatProvider } from '@/lib/integration-catalog'
+import { useChatPlatform } from '@/lib/chat-platform'
 
 export type IntegrationBrand = 'github' | 'gitlab' | 'slack' | 'jira' | 'google-calendar' | 'notion' | 'feishu' | 'lark'
+
+/** The deployment's chat platform glyph: Slack, Lark or Feishu (FLOW_CHAT_PLATFORM). */
+export function ChatPlatformIcon({ size = 16 }: { size?: number }) {
+  const { platform } = useChatPlatform()
+  return <IntegrationBrandIcon provider={platform} size={size}/>
+}
 
 export function IntegrationBrandIcon({ provider, size = 25 }: { provider: IntegrationBrand; size?: number }) {
   if (isChatProvider(provider)) return <img src={`/integrations/${provider}.${provider === 'feishu' ? 'svg' : 'png'}`} alt="" aria-hidden="true" width={size} height={size} style={{ objectFit: 'contain', flexShrink: 0 }}/>

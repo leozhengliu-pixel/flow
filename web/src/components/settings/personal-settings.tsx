@@ -96,6 +96,7 @@ import { CodeHostConnectionRows, ConnectAction } from "./code-host-accounts";
 import { PersonalConnectionRows } from "./personal-connection-rows";
 import { ChatConnectionRows } from "./chat-connection-rows";
 import { IntegrationBrandIcon } from "./integration-brand-icon";
+import { useChatPlatform } from "@/lib/chat-platform";
 
 import "./personal-settings.css";
 import {
@@ -255,6 +256,7 @@ const PERSONAL_ZH: Record<string, string> = {
   "Not available in Flow web": "Flow 网页版暂不可用",
   "Enabled for all notifications": "已为所有通知启用",
   "Not connected": "未连接",
+  "Delivered to the groups your teams connect": "发送到你的团队连接的群",
   "Updates from Flow": "Flow 更新",
   "Changelog": "更新日志",
   "Manage how notifications are organized in your inbox": "管理通知在收件箱中的组织方式",
@@ -1179,6 +1181,7 @@ function Profile({ data, onReload, onBack, p }: PersonalProps) {
 
 function Notifications({ data, values, setValue, onReload, p, notificationChannel, onNavigateNotification }: PersonalProps) {
   const { formatDate } = useI18n();
+  const chat = useChatPlatform(data);
   const initial = useMemo(
     () =>
       data.notificationPreferences?.[data.viewer.id] ??
@@ -1294,9 +1297,9 @@ function Notifications({ data, values, setValue, onReload, p, notificationChanne
           onClick={() => openChannel("email")}
         />
         <NotificationChannel
-          icon={<MessageCircle />}
-          title="Slack"
-          status={p("Not connected")}
+          icon={chat.provider ? <IntegrationBrandIcon provider={chat.provider} size={16} /> : <MessageCircle />}
+          title={chat.name}
+          status={p(chat.provider ? "Delivered to the groups your teams connect" : "Not connected")}
           entityName
           disabled
         />
