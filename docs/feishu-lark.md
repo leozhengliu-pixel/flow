@@ -132,6 +132,23 @@ addresses are never used to match accounts automatically.
 
 ![Feishu and Lark in Connected accounts](media/integrations/connected-accounts.png)
 
+### Personal notifications
+
+A member who linked their account can also receive their own Flow
+notifications as a direct message from the app's bot: **Personal >
+Notifications > Lark** (or **Feishu**) turns them on and chooses the same
+notification types as email and desktop. Each message is a card with the
+notification's title, a line saying what happened and **Open in Flow**; it
+is sent through the chat outbox with its rate limit and retries.
+
+A message is sent only while the tenant is authorized, the account is still
+linked and the member is still active in the workspace, and only when they
+can still open the issue it links to; workspaces with sensitive data
+protection send none. Unlinking or leaving the workspace stops delivery,
+including messages already queued. When the platform refuses a message
+because the app isn't available to the member's account (its availability
+range), the notifications row says so; the next delivered message clears it.
+
 Mention the bot with `@Flow create issue <title>` or `@Flow 创建事项 <title>`.
 The bot sends a personal confirmation form with the bound team/project,
 title, state, priority, and assignee. After creation it replies to the source
@@ -226,7 +243,10 @@ can only fake. Confirm it once per platform on a test tenant:
 4. Remove a test member from the availability range and have them link their
    account: note how the platform refuses (the authorize page itself, the
    token exchange or `/open-apis/authen/v1/user_info`). Flow reports
-   `chat_app_unavailable_to_user` when `user_info` refuses the account.
+   `chat_app_unavailable_to_user` when `user_info` refuses the account. For a
+   member who linked before being removed from the range, turn on personal
+   notifications and confirm that the direct message is refused with code
+   `230013`, which Flow shows as "the app isn't available to your account".
 5. Withdraw or disable the app in the admin console: the next periodic
    check, or the next delivery after the token is refused, should show the app
    as not approved.

@@ -51,7 +51,7 @@ export type TeamArchiveTab =
   | "recently-deleted-documents"
   | "recently-deleted-releases";
 /** Sub-pages of account notification settings. */
-export type NotificationSettingsView = "desktop" | "mobile" | "email" | "slack" | "priority-filter";
+export type NotificationSettingsView = "desktop" | "mobile" | "email" | "slack" | "chat" | "priority-filter";
 export type SettingsPageId =
   | "preferences"
   | "shortcuts"
@@ -830,7 +830,7 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     segments.length === 4
   )
     return { kind: "settings", workspaceSlug, page: "account-security" };
-  if (section === 'settings' && third === 'account' && fourth === 'notifications' && ['desktop','mobile','email','slack','priority-filter'].includes(fifth) && segments.length === 5)
+  if (section === 'settings' && third === 'account' && fourth === 'notifications' && ['desktop','mobile','email','slack','chat','priority-filter'].includes(fifth) && segments.length === 5)
     return {kind:'settings',workspaceSlug,page:'notifications',notificationChannel:fifth as NotificationSettingsView};
   if (
     section === "settings" &&

@@ -56,6 +56,8 @@ export interface ChatIdentity {
   openId: string;
   tenantKey: string;
   name?: string;
+  /** "unavailable": the platform refused a personal notification because the app is not available to this account (its availability range). */
+  personalDelivery?: "unavailable";
 }
 
 export interface ChatBinding {
