@@ -118,7 +118,11 @@ describe('InviteMembersDialog', () => {
     expect(picker).toHaveTextContent('Select teams…')
     await user.type(within(dialog).getByRole('textbox', { name: 'Email' }), 'guest@example.com')
     await user.click(within(dialog).getByRole('button', { name: 'Send invites' }))
-    expect(screen.getByRole('alert')).toHaveTextContent('Select a team for guest access')
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('Select a team for guest access')
+    // The error belongs to the team picker: it sits right under it and the Email field stays valid.
+    expect(picker.nextElementSibling).toBe(alert)
+    expect(within(dialog).getByRole('textbox', { name: 'Email' })).not.toHaveAttribute('aria-invalid')
     expect(inviteMembers).not.toHaveBeenCalled()
     await user.click(picker)
     await user.click(screen.getAllByRole('option')[0])
