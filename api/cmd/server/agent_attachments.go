@@ -15,9 +15,9 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/objectstore"
 )
 
@@ -74,7 +74,7 @@ func (s *server) saveAgentAttachments(r *http.Request, inputs []loopRunReplyAtta
 	}
 	var storage objectstore.Store
 	saved := make([]domain.AgentMessageAttachment, 0, len(files))
-	now := time.Now().UTC().UnixNano()
+	stamp := idgen.Stamp()
 	for index, file := range files {
 		if file.content != nil {
 			if storage == nil {
@@ -89,7 +89,7 @@ func (s *server) saveAgentAttachments(r *http.Request, inputs []loopRunReplyAtta
 				s.deleteAgentAttachments(r.Context(), saved)
 				return nil, fmt.Errorf("%w: %s", errInvalid, err.Error())
 			}
-			key := fmt.Sprintf("agent_attachment_%d_%d_%s", now, index, file.attachment.Name)
+			key := fmt.Sprintf("agent_attachment_%s_%d_%s", stamp, index, file.attachment.Name)
 			if _, err := storage.Put(r.Context(), key, upload, file.attachment.ContentType); err != nil {
 				s.deleteAgentAttachments(r.Context(), saved)
 				return nil, fmt.Errorf("could not save %s", file.attachment.Name)
@@ -352,7 +352,7 @@ func (s *server) uploadAgentFile(w http.ResponseWriter, r *http.Request) {
 	if safe == "" {
 		safe = "file"
 	}
-	key := fmt.Sprintf("agent_upload_%s_%d_%s", agentUploadOwner(authUser(r).ID), time.Now().UTC().UnixNano(), safe)
+	key := fmt.Sprintf("agent_upload_%s_%s_%s", agentUploadOwner(authUser(r).ID), idgen.Stamp(), safe)
 	size, err := storage.Put(r.Context(), key, io.LimitReader(upload, limit+1), contentType)
 	if err != nil || size > limit {
 		_ = storage.Delete(context.WithoutCancel(r.Context()), key)

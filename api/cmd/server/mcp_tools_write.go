@@ -20,6 +20,7 @@ import (
 	"unicode/utf8"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -1246,7 +1247,7 @@ func (s *server) mutateAnyComment(ctx context.Context, actor mcpActor, data doma
 }
 
 func newMCPComment(user domain.User, body string, bodyData map[string]any, parentID *string) domain.Comment {
-	return domain.Comment{ID: fmt.Sprintf("comment_%d", time.Now().UnixNano()), Version: 1, Body: body, BodyData: bodyData, ParentID: parentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: user, BotActor: revisionBotActor(user)}
+	return domain.Comment{ID: idgen.New("comment_"), Version: 1, Body: body, BodyData: bodyData, ParentID: parentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: user, BotActor: revisionBotActor(user)}
 }
 
 func (s *server) updateMCPReview(ctx context.Context, _ mcpActor, data domain.Bootstrap, args map[string]any, action string) (any, error) {
@@ -1444,7 +1445,7 @@ func (s *server) createMCPAttachment(ctx context.Context, actor mcpActor, data d
 	if len(content) > 20<<20 {
 		return nil, fmt.Errorf("Flow attachments must be 20 MB or smaller")
 	}
-	key := fmt.Sprintf("mcp_%d_%s", time.Now().UnixNano(), filepath.Base(stringArg(args, "filename")))
+	key := fmt.Sprintf("mcp_%s_%s", idgen.Stamp(), filepath.Base(stringArg(args, "filename")))
 	storage, err := s.storage()
 	if err != nil {
 		return nil, err
@@ -1473,7 +1474,7 @@ func (s *server) createMCPAttachment(ctx context.Context, actor mcpActor, data d
 
 func (s *server) attachStoredObject(ctx context.Context, actor mcpActor, issueID, title, contentType, key string, size int64) (any, error) {
 	ctx = store.WithIssueRecordMutations(ctx, issueID)
-	attachment := domain.Attachment{ID: fmt.Sprintf("attachment_%d", time.Now().UnixNano()), IssueID: issueID, Title: title, URL: "/uploads/" + key, ContentType: contentType, Size: size, CreatedAt: time.Now().UTC(), Creator: actor.User, BotActor: actor.User.Via}
+	attachment := domain.Attachment{ID: idgen.New("attachment_"), IssueID: issueID, Title: title, URL: "/uploads/" + key, ContentType: contentType, Size: size, CreatedAt: time.Now().UTC(), Creator: actor.User, BotActor: actor.User.Via}
 	err := s.store.MutateWorkspace(ctx, actor.WorkspaceKey, "attachment.created", issueID, nil, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, issueID)
 		if err != nil {

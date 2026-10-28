@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/publicapi"
 )
 
@@ -119,7 +120,7 @@ func (s *server) upsertCustomer(w http.ResponseWriter, r *http.Request) {
 			if input.Name == nil || strings.TrimSpace(*input.Name) == "" {
 				return "", fmt.Errorf("%w: name is required to create a customer", errInvalid)
 			}
-			data.Customers = append(data.Customers, domain.Customer{ID: fmt.Sprintf("customer_%d", now.UnixNano()), Status: defaultCustomerStatus(data), Domains: []string{}, CreatedAt: now, UpdatedAt: now})
+			data.Customers = append(data.Customers, domain.Customer{ID: idgen.New("customer_"), Status: defaultCustomerStatus(data), Domains: []string{}, CreatedAt: now, UpdatedAt: now})
 			index = len(data.Customers) - 1
 			created = true
 		}

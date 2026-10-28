@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 type issueRecordMutationContext struct{}
@@ -232,7 +233,7 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 		if err := s.persistMetadataTx(ctx, tx, workspace, current, &metadata); err != nil {
 			return err
 		}
-		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: "issue.created", AggregateID: id, Payload: raw, CreatedAt: time.Now().UTC()}
+		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: "issue.created", AggregateID: id, Payload: raw, CreatedAt: time.Now().UTC()}
 		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: id, Payload: raw, CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: metadata.Workspace.ID}); err != nil {
 			return err
 		}

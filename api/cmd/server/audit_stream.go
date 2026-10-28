@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -109,7 +110,7 @@ func (s *server) createAuditStream(w http.ResponseWriter, r *http.Request) {
 		}
 		now := time.Now().UTC()
 		created = domain.Webhook{
-			ID: fmt.Sprintf("webhook_%d", now.UnixNano()), Name: "Audit log stream", URL: target, AuditLog: true,
+			ID: idgen.New("webhook_"), Name: "Audit log stream", URL: target, AuditLog: true,
 			ResourceTypes: []string{"audit_entries"}, TeamIDs: []string{}, TeamRestriction: "all", Enabled: true,
 			CreatorID: actor.ID, SecretPrefix: secret[:min(len(secret), 12)], AuditCursorAt: &now, CreatedAt: now, UpdatedAt: now,
 		}

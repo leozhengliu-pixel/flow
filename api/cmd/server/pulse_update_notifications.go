@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -59,7 +60,7 @@ func notifyUpdateAuthor(data *domain.Bootstrap, kind, sourceID, sourceName, upda
 		}
 	}
 	notification := domain.Notification{
-		ID: fmt.Sprintf("notification_%s_%d_%s", notificationType, now.UnixNano(), author.ID), RecipientID: author.ID, Type: notificationType,
+		ID: fmt.Sprintf("notification_%s_%s_%s", notificationType, idgen.Stamp(), author.ID), RecipientID: author.ID, Type: notificationType,
 		SourceType: kind + "Update", SourceID: updateID, CommentID: commentID, Actor: actor, Category: "updates", GroupKey: groupKey,
 		OccurrenceCount: 1, LatestActorIDs: []string{actor.ID}, Title: sourceName, Text: text, CreatedAt: now, UpdatedAt: now,
 		Payload: &domain.NotificationPayload{Updates: []domain.PulseUpdateRef{{ID: updateID, Kind: kind, SourceID: sourceID, Source: sourceName}}, UpdateIDs: []string{updateID}},

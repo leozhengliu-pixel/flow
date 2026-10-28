@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"flow/api/internal/domain"
-	"fmt"
+	"flow/api/internal/idgen"
 	"strings"
 	"time"
 )
@@ -126,7 +126,7 @@ func (s *SQLiteStore) BatchNotificationRecords(ctx context.Context, workspace, u
 			last = ids[len(ids)-1]
 		}
 		payload, _ := json.Marshal(input)
-		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: "notifications.batch_updated", AggregateID: user, Payload: payload, CreatedAt: now}
+		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: "notifications.batch_updated", AggregateID: user, Payload: payload, CreatedAt: now}
 		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, Payload: payload, CreatedAt: now.Format(time.RFC3339Nano), WorkspaceKey: workspace}); err != nil {
 			return err
 		}

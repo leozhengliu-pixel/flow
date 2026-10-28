@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // maxProjectTemplateIssues bounds the issues one project template creates.
@@ -23,7 +24,7 @@ func normalizeProjectTemplateIssues(data *domain.Bootstrap, template *domain.Pro
 	for _, milestone := range template.Milestones {
 		milestones[milestone.ID] = true
 	}
-	now := time.Now().UnixNano()
+	stamp := idgen.Stamp()
 	issues := make([]domain.ProjectTemplateIssue, 0, len(input))
 	ids := map[string]bool{}
 	for index, issue := range input {
@@ -38,7 +39,7 @@ func normalizeProjectTemplateIssues(data *domain.Bootstrap, template *domain.Pro
 			return nil, errInvalid
 		}
 		if issue.ID == "" {
-			issue.ID = fmt.Sprintf("template_issue_%d_%d", now, index)
+			issue.ID = fmt.Sprintf("template_issue_%s_%d", stamp, index)
 		}
 		if ids[issue.ID] {
 			return nil, errInvalid

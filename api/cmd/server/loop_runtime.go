@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -320,7 +321,7 @@ func (s *server) startLoopRun(workspace, loopID string, trigger loopTrigger, act
 		return domain.LoopRun{}, errConflict
 	}
 	now := time.Now().UTC()
-	run := domain.LoopRun{ID: fmt.Sprintf("loop_run_%d", now.UnixNano()), LoopID: loopID, Status: "running", Trigger: trigger.Kind, EventType: trigger.EventType, EntityType: trigger.EntityType, EntityID: trigger.EntityID, ActorID: actorID, StartedAt: now}
+	run := domain.LoopRun{ID: idgen.New("loop_run_"), LoopID: loopID, Status: "running", Trigger: trigger.Kind, EventType: trigger.EventType, EntityType: trigger.EntityType, EntityID: trigger.EntityID, ActorID: actorID, StartedAt: now}
 	if trigger.EntityType == "issue" {
 		if issue, err := s.store.IssueRecord(context.Background(), workspace, trigger.EntityID); err == nil {
 			run.EntityIdentifier = issue.Identifier

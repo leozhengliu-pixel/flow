@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // A workspace created from the app starts with a "Getting started" tour: a
@@ -77,7 +78,7 @@ func seedWorkspaceTutorial(data *domain.Bootstrap, locale string) error {
 		return fmt.Errorf("team %s has no Todo or Backlog status", team.Key)
 	}
 	label := domain.IssueLabel{
-		ID: fmt.Sprintf("label_%d_getting_started", now.UnixNano()), Name: text("Getting started", "新手入门"), Color: "#4CB782",
+		ID: fmt.Sprintf("label_%s_getting_started", idgen.Stamp()), Name: text("Getting started", "新手入门"), Color: "#4CB782",
 		Description: text("Flow's tutorial issues", "Flow 的教程事项"), Scope: "Workspace", ResourceType: "issue", CreatedAt: now,
 	}
 	data.Labels = append(data.Labels, label)
@@ -156,7 +157,7 @@ func seedWorkspaceTutorial(data *domain.Bootstrap, locale string) error {
 	}
 	for index, issue := range issues {
 		data.Activities[issue.ID] = append(data.Activities[issue.ID], domain.ActivityEvent{
-			ID: fmt.Sprintf("activity_%d_%d", now.UnixNano(), index), Type: "issue.created", CreatedAt: issue.CreatedAt, Actor: creator,
+			ID: fmt.Sprintf("activity_%s_%d", idgen.Stamp(), index), Type: "issue.created", CreatedAt: issue.CreatedAt, Actor: creator,
 			Metadata: map[string]string{"stateId": issue.State.ID, "state": issue.State.Name},
 		})
 	}

@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 type loopInput struct {
@@ -394,7 +395,7 @@ func (s *server) createLoop(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "loop.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
-		created = domain.Loop{ID: fmt.Sprintf("loop_%d", now.UnixNano()), Status: "draft", Icon: "Automation", Color: "#d9b84b", Level: "workspace", TriggerType: "schedule", TriggerConfig: defaultLoopTriggerConfig("schedule", now), ConnectorIDs: []string{}, TeamAccess: "allPublic", AllowChangesOutsideTrigger: true, CodeAccess: "disabled", OwnerID: data.Viewer.ID, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
+		created = domain.Loop{ID: idgen.New("loop_"), Status: "draft", Icon: "Automation", Color: "#d9b84b", Level: "workspace", TriggerType: "schedule", TriggerConfig: defaultLoopTriggerConfig("schedule", now), ConnectorIDs: []string{}, TeamAccess: "allPublic", AllowChangesOutsideTrigger: true, CodeAccess: "disabled", OwnerID: data.Viewer.ID, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
 		if input.TemplateID != nil && *input.TemplateID != "" {
 			template := loopTemplateByID(*input.TemplateID)
 			created.TemplateID, created.Name, created.Description, created.Icon, created.Color = template.ID, template.Name, template.Description, template.Icon, template.Color
@@ -540,7 +541,7 @@ func (s *server) duplicateLoop(w http.ResponseWriter, r *http.Request) {
 		}
 		now := time.Now().UTC()
 		created = *source
-		created.ID = fmt.Sprintf("loop_%d", now.UnixNano())
+		created.ID = idgen.New("loop_")
 		created.Name = strings.TrimSpace(source.Name + " (copy)")
 		created.Status, created.Enabled = "draft", false
 		created.TriggerConfig = normalizeLoopTriggerConfig(source.TriggerType, source.TriggerConfig)

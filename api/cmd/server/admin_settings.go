@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/publicapi"
 	"flow/api/internal/store"
 )
@@ -210,7 +211,7 @@ func (s *server) createWebhook(w http.ResponseWriter, r *http.Request) {
 		if input.TeamIDs != nil && !webhookTeamsManageable(data, actor.ID, *input.TeamIDs) {
 			return "", store.ErrAuthForbidden
 		}
-		created = domain.Webhook{ID: fmt.Sprintf("webhook_%d", now.UnixNano()), CreatorID: actor.ID, ResourceTypes: []string{}, TeamIDs: []string{}, TeamRestriction: "all", SecretHash: secretHash(secret), SecretPrefix: secret[:min(len(secret), 17)], Enabled: true, PayloadVersion: domain.WebhookPayloadVersion, SigningEnabled: true, CreatedAt: now, UpdatedAt: now}
+		created = domain.Webhook{ID: idgen.New("webhook_"), CreatorID: actor.ID, ResourceTypes: []string{}, TeamIDs: []string{}, TeamRestriction: "all", SecretHash: secretHash(secret), SecretPrefix: secret[:min(len(secret), 17)], Enabled: true, PayloadVersion: domain.WebhookPayloadVersion, SigningEnabled: true, CreatedAt: now, UpdatedAt: now}
 		if err := applyWebhookInput(data, &created, input); err != nil {
 			return "", err
 		}
@@ -582,7 +583,7 @@ func (s *server) redeliverWebhookDelivery(w http.ResponseWriter, r *http.Request
 	}
 	now := time.Now().UTC()
 	delivery := domain.WebhookDelivery{
-		ID: webhookDeliveryID(webhook.ID, fmt.Sprintf("redeliver:%s:%d", original.ID, now.UnixNano())), WorkspaceKey: workspaceKey(r), WebhookID: webhook.ID,
+		ID: webhookDeliveryID(webhook.ID, fmt.Sprintf("redeliver:%s:%s", original.ID, idgen.Stamp())), WorkspaceKey: workspaceKey(r), WebhookID: webhook.ID,
 		SecretRef: webhookSecretRef(webhook), Kind: original.Kind, EventID: original.EventID, EventType: original.EventType, Action: original.Action,
 		URL: webhook.URL, Payload: original.Payload, MaxAttempts: webhookMaxAttempts(), RedeliveryOf: original.ID, CreatedAt: now, NextAttemptAt: &now,
 	}
@@ -602,7 +603,7 @@ func (s *server) testWebhook(w http.ResponseWriter, r *http.Request) {
 	data := s.workspaceData(r)
 	actor := requestActor(s, r)
 	now := time.Now().UTC()
-	eventID := fmt.Sprintf("evt_test_%d", now.UnixNano())
+	eventID := idgen.New("evt_test_")
 	body, _ := json.Marshal(map[string]any{
 		"action": "test", "type": "WebhookTest", "createdAt": now.Format("2006-01-02T15:04:05.000Z07:00"),
 		"actor":          webhookActorFor([]domain.User{actor}, actor.ID, s.appBaseURL()+"/"+url.PathEscape(data.Workspace.URLKey)),

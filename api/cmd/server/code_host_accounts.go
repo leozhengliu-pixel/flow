@@ -22,6 +22,7 @@ import (
 	"flow/api/internal/codehost"
 	githubhost "flow/api/internal/codehost/github"
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -520,7 +521,7 @@ func (s *server) importLegacyGitHubLink(ctx context.Context, userID string) {
 func newCodeHostAccountID() string {
 	token, err := codeHostRandomToken(12)
 	if err != nil {
-		return fmt.Sprintf("cha_%d", time.Now().UnixNano())
+		return idgen.New("cha_")
 	}
 	return "cha_" + token
 }

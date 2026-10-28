@@ -3,12 +3,12 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"reflect"
 	"slices"
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // Releases and release pipelines do not mirror favorite state onto their own
@@ -158,7 +158,7 @@ func (s *SQLiteStore) mutateStandaloneFavorite(ctx context.Context, workspace, e
 			return err
 		}
 		now := time.Now().UTC()
-		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", now.UnixNano()), Type: eventType, AggregateID: resourceID, Payload: payloadRaw, CreatedAt: now}
+		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: resourceID, Payload: payloadRaw, CreatedAt: now}
 		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, Payload: []byte(event.Payload), PreviousValues: []byte(nil), CreatedAt: now.Format(time.RFC3339Nano), WorkspaceID: current.Workspace.ID}); err != nil {
 			return err
 		}

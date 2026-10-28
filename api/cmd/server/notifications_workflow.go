@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -293,7 +294,7 @@ func (s *server) createWorkflowState(w http.ResponseWriter, r *http.Request) {
 		materializeTeamStates(data, teamID)
 		states := statesForTeam(data, teamID)
 		position := float64(len(states))
-		created = domain.WorkflowState{ID: fmt.Sprintf("state_%d", time.Now().UnixNano()), TeamID: teamID, Name: strings.TrimSpace(*input.Name), Type: *input.Type, Color: "#6B6F76", Position: position}
+		created = domain.WorkflowState{ID: idgen.New("state_"), TeamID: teamID, Name: strings.TrimSpace(*input.Name), Type: *input.Type, Color: "#6B6F76", Position: position}
 		if input.Description != nil {
 			created.Description = strings.TrimSpace(*input.Description)
 		}
@@ -1011,7 +1012,7 @@ func (s *server) createIssueTemplate(w http.ResponseWriter, r *http.Request) {
 			return "", errNotFound
 		}
 		now := time.Now().UTC()
-		created = domain.IssueTemplate{ID: fmt.Sprintf("template_%d", now.UnixNano()), TeamID: teamID, LabelIDs: []string{}, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
+		created = domain.IssueTemplate{ID: idgen.New("template_"), TeamID: teamID, LabelIDs: []string{}, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
 		if err := applyIssueTemplate(data, &created, input); err != nil {
 			return "", err
 		}
@@ -1088,7 +1089,7 @@ func (s *server) createTeamLabel(w http.ResponseWriter, r *http.Request) {
 		if !teamExists(data, teamID) {
 			return "", errNotFound
 		}
-		created = domain.IssueLabel{ID: fmt.Sprintf("label_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), Color: "#5E6AD2", Scope: teamID, ResourceType: "issue", CreatedAt: time.Now().UTC()}
+		created = domain.IssueLabel{ID: idgen.New("label_"), Name: strings.TrimSpace(*input.Name), Color: "#5E6AD2", Scope: teamID, ResourceType: "issue", CreatedAt: time.Now().UTC()}
 		if input.ResourceType != nil && *input.ResourceType != "" {
 			resource := strings.TrimSpace(*input.ResourceType)
 			if resource != "issue" && resource != "project" {
@@ -1318,7 +1319,7 @@ func applyIssueTemplate(data *domain.Bootstrap, template *domain.IssueTemplate, 
 				return errInvalid
 			}
 			if item.ID == "" {
-				item.ID = fmt.Sprintf("template_sub_issue_%d_%d", time.Now().UnixNano(), index)
+				item.ID = fmt.Sprintf("template_sub_issue_%s_%d", idgen.Stamp(), index)
 			}
 		}
 		template.SubIssues = slices.Clone(*input.SubIssues)
@@ -1654,7 +1655,7 @@ func reconcileInheritedCycles(data *domain.Bootstrap, teamID, parentID string) {
 		}
 		if target < 0 {
 			clone := parent
-			clone.ID = fmt.Sprintf("cycle_%d_%d", now.UnixNano(), index)
+			clone.ID = fmt.Sprintf("cycle_%s_%d", idgen.Stamp(), index)
 			clone.TeamID = teamID
 			// The sub-team plans with its own (automatic) capacity.
 			clone.Capacity, clone.CapacityOverride = 0, nil

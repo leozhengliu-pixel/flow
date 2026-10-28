@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // MutationScope names the issue and content records a workspace mutation can
@@ -333,7 +334,7 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		if err != nil {
 			return err
 		}
-		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, PreviousValues: previousValues, CreatedAt: time.Now().UTC()}
+		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, PreviousValues: previousValues, CreatedAt: time.Now().UTC()}
 		realtimePayload = enrichRealtimePayload(payloadRaw, aggregateJSONValue(next, aggregateID), eventType)
 		written, err := s.persistScopedRecords(ctx, tx, workspaceKey, next, loaded, payloads, scope.CreateIssues, keys, loadedDeliveries)
 		if err != nil {

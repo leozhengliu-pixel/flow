@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
-	"fmt"
 	"log"
 	"net/http"
 	"slices"
@@ -40,7 +40,7 @@ func writePage[T any](w http.ResponseWriter, r *http.Request, items []T) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"nodes": items[start:end], "nextCursor": next, "total": len(items)})
 }
-func parityID(kind string) string { return fmt.Sprintf("%s_%d", kind, time.Now().UnixNano()) }
+func parityID(kind string) string { return idgen.New(kind + "_") }
 
 func (s *server) listProjectRelations(w http.ResponseWriter, r *http.Request) {
 	data := s.workspaceData(r)

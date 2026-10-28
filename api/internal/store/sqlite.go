@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 type SQLiteStore struct {
@@ -164,7 +165,7 @@ func (s *SQLiteStore) publishNotificationSignals(signals []notificationSignal) {
 	now := time.Now().UTC()
 	for index, signal := range signals {
 		payload, _ := json.Marshal(map[string]string{"id": signal.id, "recipientId": signal.recipient})
-		sink(signal.workspace, domain.RealtimeEvent{ID: fmt.Sprintf("evt_notification_%d_%d", now.UnixNano(), index), Type: "notification.created", AggregateID: signal.id, Payload: payload, CreatedAt: now})
+		sink(signal.workspace, domain.RealtimeEvent{ID: fmt.Sprintf("evt_notification_%s_%d", idgen.Stamp(), index), Type: "notification.created", AggregateID: signal.id, Payload: payload, CreatedAt: now})
 	}
 }
 
@@ -1527,7 +1528,7 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		if err != nil {
 			return err
 		}
-		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, PreviousValues: previousValues, CreatedAt: time.Now().UTC()}
+		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, PreviousValues: previousValues, CreatedAt: time.Now().UTC()}
 		// Keep the persisted domain event backward compatible while enriching the
 		// realtime envelope with the post-mutation entity. Clients can apply a
 		// delta for common entities without downloading another full bootstrap.
@@ -1968,7 +1969,7 @@ func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region 
 		}
 		normalize(&data)
 	}
-	event := &domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: "workspace.created", AggregateID: data.Workspace.ID, Payload: json.RawMessage(fmt.Sprintf(`{"urlKey":%q}`, urlKey)), CreatedAt: time.Now().UTC()}
+	event := &domain.DomainEvent{ID: idgen.New("evt_"), Type: "workspace.created", AggregateID: data.Workspace.ID, Payload: json.RawMessage(fmt.Sprintf(`{"urlKey":%q}`, urlKey)), CreatedAt: time.Now().UTC()}
 	if err := s.persistWorkspace(ctx, urlKey, data, event); err != nil {
 		return domain.Bootstrap{}, err
 	}
@@ -2067,7 +2068,7 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 		return domain.Bootstrap{}, err
 	}
 	payload, _ := json.Marshal(workspace)
-	if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: fmt.Sprintf("evt_%d", now.UnixNano()), Type: "workspace.updated", AggregateID: workspace.ID, Payload: payload, CreatedAt: now.Format(time.RFC3339Nano), WorkspaceID: workspace.ID}); err != nil {
+	if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: idgen.New("evt_"), Type: "workspace.updated", AggregateID: workspace.ID, Payload: payload, CreatedAt: now.Format(time.RFC3339Nano), WorkspaceID: workspace.ID}); err != nil {
 		return domain.Bootstrap{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -2200,7 +2201,7 @@ func (s *SQLiteStore) deleteWorkspace(ctx context.Context, workspaceKey string) 
 	if _, err := tx.ExecContext(ctx, `INSERT INTO account_state(id,last_workspace_key,viewer,updated_at) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,viewer=excluded.viewer,updated_at=excluded.updated_at`, nextWorkspaceKey, viewerRaw, now.Format(time.RFC3339Nano)); err != nil {
 		return err
 	}
-	if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: fmt.Sprintf("evt_%d", now.UnixNano()), Type: "workspace.deleted", AggregateID: data.Workspace.ID, Payload: []byte(`{}`), CreatedAt: now.Format(time.RFC3339Nano), WorkspaceID: data.Workspace.ID}); err != nil {
+	if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: idgen.New("evt_"), Type: "workspace.deleted", AggregateID: data.Workspace.ID, Payload: []byte(`{}`), CreatedAt: now.Format(time.RFC3339Nano), WorkspaceID: data.Workspace.ID}); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -2220,7 +2221,7 @@ func (s *SQLiteStore) publishWorkspaceEvent(ctx context.Context, workspaceKey, e
 	}
 	raw, _ := json.Marshal(payload)
 	actor, _ := actorFromContext(ctx)
-	sink(workspaceKey, domain.RealtimeEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: eventType, AggregateID: aggregateID, ActorID: actor.ID, ClientID: realtimeClientFromContext(ctx), Payload: raw, CreatedAt: time.Now().UTC()})
+	sink(workspaceKey, domain.RealtimeEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: aggregateID, ActorID: actor.ID, ClientID: realtimeClientFromContext(ctx), Payload: raw, CreatedAt: time.Now().UTC()})
 }
 
 func (s *SQLiteStore) Events(ctx context.Context, aggregateID string) ([]domain.DomainEvent, error) {

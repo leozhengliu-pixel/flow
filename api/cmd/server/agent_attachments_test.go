@@ -30,7 +30,7 @@ func TestAgentChatAttachmentsReachTheModelOnEveryTurn(t *testing.T) {
 		{"name": "spec.pdf", "contentType": "application/pdf", "size": 900},
 	}
 	stream := streamAgent(t, srv, host, "/api/agent/sessions/stream", map[string]any{"message": "What is wrong here?", "location": "page", "attachments": attachments}, nil)
-	sessionID := regexp.MustCompile(`"id":"(agent_session_\d+)"`).FindStringSubmatch(stream)
+	sessionID := regexp.MustCompile(`"id":"(agent_session_[0-9a-z_]+)"`).FindStringSubmatch(stream)
 	if sessionID == nil {
 		t.Fatalf("no session in stream: %s", stream)
 	}
@@ -215,7 +215,7 @@ func TestAgentChatPastedImagesReachTheModel(t *testing.T) {
 	}
 	message := "![Screen Shot 1.png](" + pasted.URL + ")\n\nWhat is wrong here?"
 	stream := streamAgent(t, srv, host, "/api/agent/sessions/stream", map[string]any{"message": message, "location": "page"}, nil)
-	sessionID := regexp.MustCompile(`"id":"(agent_session_\d+)"`).FindStringSubmatch(stream)
+	sessionID := regexp.MustCompile(`"id":"(agent_session_[0-9a-z_]+)"`).FindStringSubmatch(stream)
 	if sessionID == nil {
 		t.Fatalf("no session in stream: %s", stream)
 	}
@@ -297,7 +297,7 @@ func TestAgentChatUploadsAnyFileButAudio(t *testing.T) {
 
 	message := "![shot.png](" + image.URL + ")\n::video[demo.webm](" + video.URL + ")\n::file[spec.pdf](" + pdf.URL + `){size="13" type="application/pdf"}` + "\n::file[notes.txt](" + text.URL + ")\n\nSummarise these."
 	stream := streamAgent(t, srv, host, "/api/agent/sessions/stream", map[string]any{"message": message, "location": "page"}, nil)
-	sessionID := regexp.MustCompile(`"id":"(agent_session_\d+)"`).FindStringSubmatch(stream)
+	sessionID := regexp.MustCompile(`"id":"(agent_session_[0-9a-z_]+)"`).FindStringSubmatch(stream)
 	if sessionID == nil {
 		t.Fatalf("no session in stream: %s", stream)
 	}
@@ -404,7 +404,7 @@ func TestAgentChatUploadSizesAndEditsKeepReusedUploads(t *testing.T) {
 	second := upload("two.png", []byte("\x89PNG\r\n\x1a\nsecond-image"))
 	// The size in a ::file token is the client's claim; the stored size wins.
 	stream := streamAgent(t, srv, host, "/api/agent/sessions/stream", map[string]any{"message": "::file[one.png](" + first.URL + `){size="999999" type="image/png"}` + "\n\nFirst"}, nil)
-	sessionID := regexp.MustCompile(`"id":"(agent_session_\d+)"`).FindStringSubmatch(stream)[1]
+	sessionID := regexp.MustCompile(`"id":"(agent_session_[0-9a-z_]+)"`).FindStringSubmatch(stream)[1]
 	streamAgent(t, srv, host, "/api/agent/sessions/"+sessionID+"/messages/stream", map[string]any{"message": "![two.png](" + second.URL + ")\n\nSecond"}, nil)
 	session := requestJSON[domain.AgentSession](t, handler, http.MethodGet, "/api/agent/sessions/"+sessionID, nil, http.StatusOK)
 	if got := session.Messages[0].Attachments[0].Size; got != int64(len("\x89PNG\r\n\x1a\nfirst")) {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -144,7 +145,7 @@ func (s *server) publishIssueEntity(key, eventType string, issue domain.Issue, f
 	if err != nil {
 		return
 	}
-	s.publishRealtime(key, domain.RealtimeEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: eventType, AggregateID: issue.ID, Payload: raw, CreatedAt: time.Now().UTC()})
+	s.publishRealtime(key, domain.RealtimeEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: issue.ID, Payload: raw, CreatedAt: time.Now().UTC()})
 }
 
 // issueDueDate parses the issue's due date (a calendar date).

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 const presenceTTL = 45 * time.Second
@@ -116,7 +117,7 @@ func (h *realtimeHub) subscribeSince(workspace, sinceID string) (<-chan domain.R
 	channel := make(chan domain.RealtimeEvent, 64+len(replay))
 	h.subscribers[workspace][id] = channel
 	if sinceID != "" && index < 0 {
-		channel <- domain.RealtimeEvent{ID: fmt.Sprintf("resync_%d", time.Now().UnixNano()), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}
+		channel <- domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}
 	}
 	for _, event := range replay {
 		if !domain.RoutineCredentialEvent(event.Type) {
@@ -168,7 +169,7 @@ func (h *realtimeHub) publishInOrderLocked(workspace string, event domain.Realti
 		h.deliverLocked(workspace, event)
 		h.releaseInOrderLocked(workspace, order, false)
 	case event.Seq <= order.last:
-		h.deliverLocked(workspace, domain.RealtimeEvent{ID: fmt.Sprintf("resync_%d", time.Now().UnixNano()), Type: "workspace.resync_required", CreatedAt: event.CreatedAt})
+		h.deliverLocked(workspace, domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: event.CreatedAt})
 	default:
 		order.pending[event.Seq] = event
 		if order.timer == nil {
@@ -254,7 +255,7 @@ func (h *realtimeHub) resyncAll() {
 	}
 	now := time.Now().UTC()
 	for workspace := range workspaces {
-		h.deliverLocked(workspace, domain.RealtimeEvent{ID: fmt.Sprintf("resync_%d", now.UnixNano()), Type: "workspace.resync_required", CreatedAt: now})
+		h.deliverLocked(workspace, domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: now})
 	}
 }
 
@@ -367,7 +368,7 @@ func (h *realtimeHub) presenceLocked(workspace string, now time.Time) []domain.P
 
 func (h *realtimeHub) publishPresence(workspace string, presence []domain.Presence) {
 	payload, _ := json.Marshal(map[string]any{"presence": presence})
-	h.publish(workspace, domain.RealtimeEvent{ID: fmt.Sprintf("presence_%d", time.Now().UnixNano()), Type: "presence.updated", Payload: payload, CreatedAt: time.Now().UTC()})
+	h.publish(workspace, domain.RealtimeEvent{ID: idgen.New("presence_"), Type: "presence.updated", Payload: payload, CreatedAt: time.Now().UTC()})
 }
 
 func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
@@ -426,7 +427,7 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 	// cursor is the workspace's change-log head when the stream opened. A
 	// client advances its own cursor only from event.seq of events it applied.
 	initial, _ := json.Marshal(map[string]any{"presence": presence, "cursor": head})
-	if !writeSSE(w, domain.RealtimeEvent{ID: fmt.Sprintf("connected_%d", time.Now().UnixNano()), Type: "connected", Payload: initial, CreatedAt: time.Now().UTC()}, "") {
+	if !writeSSE(w, domain.RealtimeEvent{ID: idgen.New("connected_"), Type: "connected", Payload: initial, CreatedAt: time.Now().UTC()}, "") {
 		return
 	}
 	flusher.Flush()
@@ -733,5 +734,5 @@ func (s *server) snapshotPresence(ctx context.Context, workspace string) ([]doma
 
 func (s *server) publishPresence(workspace string, presence []domain.Presence) {
 	payload, _ := json.Marshal(map[string]any{"presence": presence})
-	s.publishRealtime(workspace, domain.RealtimeEvent{ID: fmt.Sprintf("presence_%d", time.Now().UnixNano()), Type: "presence.updated", Payload: payload, CreatedAt: time.Now().UTC()})
+	s.publishRealtime(workspace, domain.RealtimeEvent{ID: idgen.New("presence_"), Type: "presence.updated", Payload: payload, CreatedAt: time.Now().UTC()})
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 type reviewInput struct {
@@ -118,7 +119,7 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 			now := time.Now().UTC()
 			if statusPostedAs != nil && review.Status != *input.Status {
 				// Merged / closed / reopened on the code host as this identity.
-				review.Events = append(review.Events, domain.ReviewEvent{ID: fmt.Sprintf("review_event_%d", now.UnixNano()), Type: map[string]string{"merged": "merged", "closed": "closed", "open": "reopened"}[*input.Status], Actor: statusActor, PostedAs: statusPostedAs, CreatedAt: now})
+				review.Events = append(review.Events, domain.ReviewEvent{ID: idgen.New("review_event_"), Type: map[string]string{"merged": "merged", "closed": "closed", "open": "reopened"}[*input.Status], Actor: statusActor, PostedAs: statusPostedAs, CreatedAt: now})
 			}
 			review.Status = *input.Status
 			if review.Status == "merged" {
@@ -242,7 +243,7 @@ func (s *server) submitReview(w http.ResponseWriter, r *http.Request) {
 			review.Status, eventType = "inReview", "changes_requested"
 		}
 		now := time.Now().UTC()
-		review.Events = append(review.Events, domain.ReviewEvent{ID: fmt.Sprintf("review_event_%d", now.UnixNano()), Type: eventType, Body: strings.TrimSpace(input.Body), Actor: actor, PostedAs: postedAs, Remote: remoteRef, CreatedAt: now})
+		review.Events = append(review.Events, domain.ReviewEvent{ID: idgen.New("review_event_"), Type: eventType, Body: strings.TrimSpace(input.Body), Actor: actor, PostedAs: postedAs, Remote: remoteRef, CreatedAt: now})
 		review.UpdatedAt = now
 		data.Reviews[index], updated = review, review
 		return nil
@@ -295,7 +296,7 @@ func (s *server) commentOnReview(w http.ResponseWriter, r *http.Request) {
 		}
 		now := time.Now().UTC()
 		review := data.Reviews[index]
-		event := domain.ReviewEvent{ID: fmt.Sprintf("review_event_%d", now.UnixNano()), Type: "commented", Body: strings.TrimSpace(input.Body), Path: strings.TrimSpace(input.Path), Line: input.Line, Actor: actor, CreatedAt: now}
+		event := domain.ReviewEvent{ID: idgen.New("review_event_"), Type: "commented", Body: strings.TrimSpace(input.Body), Path: strings.TrimSpace(input.Path), Line: input.Line, Actor: actor, CreatedAt: now}
 		if event.Path != "" && event.Line > 0 {
 			event.Side = side
 			if input.StartLine > 0 && (input.StartLine != input.Line || startSide != side) {

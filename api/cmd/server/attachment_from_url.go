@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -80,7 +81,7 @@ func (s *server) createAttachmentFromURL(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusForbidden, policyErr.Error())
 		return
 	}
-	attachmentID := fmt.Sprintf("attachment_%d", time.Now().UnixNano())
+	attachmentID := idgen.New("attachment_")
 	safeName := attachmentID + "_" + filename
 	storage, err := s.storage()
 	if err != nil {

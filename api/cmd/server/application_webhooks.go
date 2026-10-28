@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/publicapi"
 	"flow/api/internal/store"
 )
@@ -375,7 +376,7 @@ func (s *server) reconcileApplicationWebhooksWith(ctx context.Context, workspace
 		if !change.hook.Enabled || !slices.Contains(change.hook.ResourceTypes, "permission_changes") {
 			continue
 		}
-		eventKey := fmt.Sprintf("permission:%s:%d", strings.Join(change.hook.TeamIDs, ","), time.Now().UnixNano())
+		eventKey := fmt.Sprintf("permission:%s:%s", strings.Join(change.hook.TeamIDs, ","), idgen.Stamp())
 		body, _ := json.Marshal(map[string]any{
 			"action": "teamAccessChanged", "type": "PermissionChange", "createdAt": time.Now().UTC().Format("2006-01-02T15:04:05.000Z07:00"),
 			"oauthClientId": change.hook.ApplicationClientID, "appUserId": change.appUserID, "organizationId": organizationID, "webhookId": change.hook.ID,

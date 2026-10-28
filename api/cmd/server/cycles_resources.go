@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 var cycleCapacityWeekdays = []string{"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
@@ -165,7 +166,7 @@ func (s *server) createCycleResource(w http.ResponseWriter, r *http.Request) {
 			input.Title, input.URL = documentDisplayTitle(document.Title), documentPathForResource(data.Workspace.URLKey, document.SlugID)
 		}
 		now := time.Now().UTC()
-		resource = domain.CycleResource{ID: fmt.Sprintf("cycle_resource_%d", now.UnixNano()), Type: input.Type, Title: input.Title, URL: input.URL, DocumentID: input.DocumentID, CreatedAt: now}
+		resource = domain.CycleResource{ID: idgen.New("cycle_resource_"), Type: input.Type, Title: input.Title, URL: input.URL, DocumentID: input.DocumentID, CreatedAt: now}
 		cycle.Resources = append(cycle.Resources, resource)
 		cycle.UpdatedAt = now
 		return nil

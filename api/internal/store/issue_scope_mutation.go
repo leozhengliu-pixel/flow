@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 func scopedContent[T any](ctx context.Context, tx *sqlTx, workspace, kind string, ids []string) (map[string][]T, error) {
@@ -347,7 +348,7 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		if err != nil {
 			return err
 		}
-		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: eventType, AggregateID: aggregate, Payload: payloadRaw, CreatedAt: time.Now().UTC()}
+		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: aggregate, Payload: payloadRaw, CreatedAt: time.Now().UTC()}
 		realtime = enrichRealtimePayload(payloadRaw, aggregateJSONValue(data, aggregate), eventType)
 		data = collectionMetadata(data)
 		// Issue writes rarely touch metadata; persist only the fields the

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -70,7 +71,7 @@ func (s *server) createIdentityProvider(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	now := time.Now().UTC()
-	input.ID = fmt.Sprintf("idp_%d", now.UnixNano())
+	input.ID = idgen.New("idp_")
 	input.WorkspaceID = s.workspaceData(r).Workspace.ID
 	input.CreatedAt = now
 	input.UpdatedAt = now
@@ -560,7 +561,7 @@ func (s *server) upsertGitAutomation(w http.ResponseWriter, r *http.Request) {
 		now := time.Now().UTC()
 		i := slices.IndexFunc(data.GitAutomationStates, func(v domain.GitAutomationState) bool { return v.ID == input.ID && input.ID != "" })
 		if i < 0 {
-			input.ID = fmt.Sprintf("git_automation_%d", now.UnixNano())
+			input.ID = idgen.New("git_automation_")
 			input.CreatedAt = now
 			data.GitAutomationStates = append(data.GitAutomationStates, input)
 			i = len(data.GitAutomationStates) - 1
@@ -624,7 +625,7 @@ func (s *server) upsertTargetBranch(w http.ResponseWriter, r *http.Request) {
 		}
 		i := slices.IndexFunc(data.TargetBranches, func(v domain.TargetBranch) bool { return v.ID == input.ID && input.ID != "" })
 		if i < 0 {
-			input.ID = fmt.Sprintf("target_branch_%d", now.UnixNano())
+			input.ID = idgen.New("target_branch_")
 			input.CreatedAt = now
 			data.TargetBranches = append(data.TargetBranches, input)
 			i = len(data.TargetBranches) - 1
@@ -728,7 +729,7 @@ func (s *server) createIntegrationDelivery(w http.ResponseWriter, r *http.Reques
 			}
 		}
 		now := time.Now().UTC()
-		result = domain.IntegrationDelivery{ID: fmt.Sprintf("integration_delivery_%d", now.UnixNano()), IdempotencyKey: idempotencyKey, ConnectionID: input.ConnectionID, EventType: input.EventType, ResourceID: input.ResourceID, Channel: input.Channel, Payload: append(json.RawMessage(nil), input.Payload...), PreviousValues: append(json.RawMessage(nil), input.PreviousValues...), Status: "pending", CreatedAt: now, UpdatedAt: now}
+		result = domain.IntegrationDelivery{ID: idgen.New("integration_delivery_"), IdempotencyKey: idempotencyKey, ConnectionID: input.ConnectionID, EventType: input.EventType, ResourceID: input.ResourceID, Channel: input.Channel, Payload: append(json.RawMessage(nil), input.Payload...), PreviousValues: append(json.RawMessage(nil), input.PreviousValues...), Status: "pending", CreatedAt: now, UpdatedAt: now}
 		data.IntegrationDeliveries = append(data.IntegrationDeliveries, result)
 		return nil
 	})

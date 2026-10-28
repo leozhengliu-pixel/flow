@@ -41,8 +41,8 @@ const (
 // agentPhaseTemplates lists every phase title template; the web translates titles by matching them.
 var agentPhaseTemplates = []string{phaseLookUp, phaseLookAt, phaseSearchIssues, phaseSearchDocs, phaseSearchFiles, phaseComments, phaseHistory, phaseUpdate, phaseUpdatePrio, phaseUpdateStatus, phaseUpdateLabels, phaseAssign, phaseCreateIssue, phaseCreate, phaseComment, phaseDelete, phaseUse}
 
-// agentInternalID matches stored ids (issue_16, project_1790…) that should never be shown as a subject.
-var agentInternalID = regexp.MustCompile(`^[a-z]+(?:_[a-z]+)*_[0-9a-f]{1,}$`)
+// agentInternalID matches stored ids (issue_16, project_1790…, project_1793…_k3j9x0abcd) that should never be shown as a subject.
+var agentInternalID = regexp.MustCompile(`^[a-z]+(?:_[a-z]+)*_[0-9a-f]{1,}(?:_[0-9a-z]{10})?$`)
 
 // agentPhaseCalls are the tool calls of a turn that show as tool rows.
 func agentPhaseCalls(calls []domain.AgentToolCall) []domain.AgentToolCall {

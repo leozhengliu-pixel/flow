@@ -15,6 +15,7 @@ import (
 	"unicode"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -867,7 +868,7 @@ func (plan *triageAIPlan) suggestions(settings domain.TriageIntelligenceSettings
 			metadata["score"] = pick.Score
 		}
 		suggestion := domain.IssueSuggestion{
-			ID:             fmt.Sprintf("issue_suggestion_%d_%d", now.UnixNano(), rank),
+			ID:             fmt.Sprintf("issue_suggestion_%s_%d", idgen.Stamp(), rank),
 			IssueID:        issueID,
 			Type:           pick.Kind,
 			State:          "active",

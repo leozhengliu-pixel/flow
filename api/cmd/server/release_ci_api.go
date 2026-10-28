@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -578,7 +579,7 @@ func (s *server) applyReleaseCIOperation(ctx context.Context, base, workspace, p
 		if options.source != "" {
 			metadata["source"] = options.source
 		}
-		data.ReleaseHistory = append(data.ReleaseHistory, domain.ReleaseHistory{ID: fmt.Sprintf("release_history_%d", now.UnixNano()), ReleaseID: release.ID, Actor: data.Viewer, Action: "ci_" + operation, Metadata: metadata, CreatedAt: now})
+		data.ReleaseHistory = append(data.ReleaseHistory, domain.ReleaseHistory{ID: idgen.New("release_history_"), ReleaseID: release.ID, Actor: data.Viewer, Action: "ci_" + operation, Metadata: metadata, CreatedAt: now})
 		releaseID := release.ID
 		if err := applyReleaseSettingAutomations(data, previousStatus, release, now); err != nil {
 			return err
@@ -728,7 +729,7 @@ func releaseCITarget(data *domain.Bootstrap, pipeline *domain.ReleasePipeline, i
 	if stage == "" {
 		return 0, false, ciError(http.StatusBadRequest, "pipeline has no %s stage", status)
 	}
-	release := domain.Release{ID: fmt.Sprintf("release_%d", now.UnixNano()), SlugID: uniqueReleaseSlug(data, name, now), Name: name, Version: version, PipelineID: pipeline.ID, Position: nextReleasePosition(data, pipeline.ID), ProjectIDs: []string{}, IssueIDs: []string{}, SubscriberIDs: []string{data.Viewer.ID}, Resources: []domain.ReleaseResource{}, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
+	release := domain.Release{ID: idgen.New("release_"), SlugID: uniqueReleaseSlug(data, name, now), Name: name, Version: version, PipelineID: pipeline.ID, Position: nextReleasePosition(data, pipeline.ID), ProjectIDs: []string{}, IssueIDs: []string{}, SubscriberIDs: []string{data.Viewer.ID}, Resources: []domain.ReleaseResource{}, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
 	// setReleaseCIStage sets the stage, status and their timestamps.
 	data.Releases = append(data.Releases, release)
 	index := len(data.Releases) - 1
@@ -904,7 +905,7 @@ func applyReleaseCIResources(release *domain.Release, input releaseCIInput, now 
 		if title == "" {
 			title = address
 		}
-		release.Resources = append(release.Resources, domain.ReleaseResource{ID: fmt.Sprintf("release_resource_%d_l%d", now.UnixNano(), index), Type: "link", Title: title, URL: address, CreatedAt: now})
+		release.Resources = append(release.Resources, domain.ReleaseResource{ID: fmt.Sprintf("release_resource_%s_l%d", idgen.Stamp(), index), Type: "link", Title: title, URL: address, CreatedAt: now})
 	}
 	for index, document := range input.Documents {
 		title, content := strings.TrimSpace(document.Title), document.Content
@@ -918,6 +919,6 @@ func applyReleaseCIResources(release *domain.Release, input releaseCIInput, now 
 			release.Resources[existing].Content = content
 			continue
 		}
-		release.Resources = append(release.Resources, domain.ReleaseResource{ID: fmt.Sprintf("release_resource_%d_d%d", now.UnixNano(), index), Type: "document", Title: title, Content: content, CreatedAt: now})
+		release.Resources = append(release.Resources, domain.ReleaseResource{ID: fmt.Sprintf("release_resource_%s_d%d", idgen.Stamp(), index), Type: "document", Title: title, Content: content, CreatedAt: now})
 	}
 }

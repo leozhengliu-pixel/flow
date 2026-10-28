@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -584,7 +585,7 @@ func (c *workerChatReply) finishLocked(ctx context.Context, message domain.Agent
 		c.saveTimer = nil
 	}
 	message.Status, message.UpdatedAt = "", nil
-	activity := domain.AgentActivity{ID: fmt.Sprintf("agent_activity_%d", time.Now().UnixNano()), SessionID: c.run.SessionID, Type: "response", Status: "completed", Body: message.Content, Metadata: map[string]any{"durationMs": message.DurationMS, "partCount": len(message.Parts), "runId": c.run.ID}, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+	activity := domain.AgentActivity{ID: idgen.New("agent_activity_"), SessionID: c.run.SessionID, Type: "response", Status: "completed", Body: message.Content, Metadata: map[string]any{"durationMs": message.DurationMS, "partCount": len(message.Parts), "runId": c.run.ID}, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 	err := c.replaceStored(ctx, "agent.message_completed", message, &activity)
 	if err != nil && !errors.Is(err, errAgentLiveSkip) {
 		log.Printf("save finished worker chat reply %s: %v", c.info.MessageID, err)

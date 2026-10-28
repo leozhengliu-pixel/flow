@@ -255,7 +255,7 @@ func fileCard(file domain.AgentMessageAttachment) string {
 func (c *fileToolChat) ask(t *testing.T, message string) domain.AgentSession {
 	t.Helper()
 	stream := streamAgent(t, c.srv, c.host, "/api/agent/sessions/stream", map[string]any{"message": message, "location": "page"}, nil)
-	sessionID := regexp.MustCompile(`"id":"(agent_session_\d+)"`).FindStringSubmatch(stream)
+	sessionID := regexp.MustCompile(`"id":"(agent_session_[0-9a-z_]+)"`).FindStringSubmatch(stream)
 	if sessionID == nil {
 		t.Fatalf("no session in stream: %s", stream)
 	}

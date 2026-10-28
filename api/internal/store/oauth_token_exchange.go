@@ -5,11 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"slices"
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // ExchangeOAuthGrant commits replacement credentials and consumption together.
@@ -233,7 +233,7 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 				}
 			}
 		}
-		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", now.UnixNano()), Type: "oauth_token.created", AggregateID: grant.AuthorizationID, Payload: json.RawMessage(`null`), CreatedAt: now}
+		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: "oauth_token.created", AggregateID: grant.AuthorizationID, Payload: json.RawMessage(`null`), CreatedAt: now}
 		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, Payload: []byte(event.Payload), PreviousValues: []byte(nil), CreatedAt: now.Format(time.RFC3339Nano), WorkspaceID: current.Workspace.ID}); err != nil {
 			return err
 		}

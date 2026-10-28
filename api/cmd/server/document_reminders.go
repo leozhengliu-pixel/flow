@@ -1,13 +1,13 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // createDocumentReminder backs a document's "Remind me" menu (⇧H). Like the
@@ -35,7 +35,7 @@ func (s *server) createDocumentReminder(w http.ResponseWriter, r *http.Request) 
 		}
 		now := time.Now().UTC()
 		reminder = domain.Notification{
-			ID: fmt.Sprintf("notification_document_reminder_%d", now.UnixNano()), RecipientID: data.Viewer.ID,
+			ID: idgen.New("notification_document_reminder_"), RecipientID: data.Viewer.ID,
 			Type: "documentReminder", SourceType: "document", SourceID: document.ID,
 			Actor: data.Viewer, Category: "reminders", GroupKey: "document-reminder:" + document.ID + ":" + strconv.FormatInt(remindAt.Unix(), 10),
 			OccurrenceCount: 1, LatestActorIDs: []string{data.Viewer.ID}, SnoozedUntil: &remindAt,

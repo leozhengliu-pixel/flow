@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -228,7 +229,7 @@ func appendReviewLinkbacks(data *domain.Bootstrap, provider string, review domai
 		}) {
 			continue
 		}
-		data.Issues[issueIndex].Attachments = append(data.Issues[issueIndex].Attachments, domain.Attachment{ID: fmt.Sprintf("attachment_%s_%d", provider, now.UnixNano()), IssueID: data.Issues[issueIndex].ID, Title: review.Title, URL: review.URL, ContentType: "text/uri-list", CreatedAt: now, Creator: actor, Provider: provider, ProviderID: review.ExternalID, ProviderURL: review.URL, LinkbackURL: review.URL, SyncStatus: "synced"})
+		data.Issues[issueIndex].Attachments = append(data.Issues[issueIndex].Attachments, domain.Attachment{ID: fmt.Sprintf("attachment_%s_%s", provider, idgen.Stamp()), IssueID: data.Issues[issueIndex].ID, Title: review.Title, URL: review.URL, ContentType: "text/uri-list", CreatedAt: now, Creator: actor, Provider: provider, ProviderID: review.ExternalID, ProviderURL: review.URL, LinkbackURL: review.URL, SyncStatus: "synced"})
 	}
 }
 
@@ -285,7 +286,7 @@ func (s *server) slackWebhook(w http.ResponseWriter, r *http.Request) {
 			return nil
 		}
 		actor := data.Viewer
-		data.Notifications = append(data.Notifications, domain.Notification{ID: fmt.Sprintf("notification_slack_%d", now.UnixNano()), RecipientID: actor.ID, Type: "integration", SourceType: "integration", SourceID: eventID, Actor: actor, Category: "integrations", GroupKey: "slack:" + event.TeamID, OccurrenceCount: 1, LatestActorIDs: []string{actor.ID}, CreatedAt: now, UpdatedAt: now})
+		data.Notifications = append(data.Notifications, domain.Notification{ID: idgen.New("notification_slack_"), RecipientID: actor.ID, Type: "integration", SourceType: "integration", SourceID: eventID, Actor: actor, Category: "integrations", GroupKey: "slack:" + event.TeamID, OccurrenceCount: 1, LatestActorIDs: []string{actor.ID}, CreatedAt: now, UpdatedAt: now})
 		return nil
 	})
 	if err != nil {
@@ -626,7 +627,7 @@ func (e externalCodeReviewEvent) ExternalID() string {
 }
 
 func (e externalCodeReviewEvent) toReview(provider string, actor domain.User, now time.Time) domain.CodeReview {
-	r := domain.CodeReview{ID: fmt.Sprintf("review_%d", now.UnixNano()), SlugID: fmt.Sprintf("%s-%d", provider, e.Number), Provider: provider, ExternalID: e.ExternalID(), Number: e.Number, Status: "open", RepositoryOwner: "", RepositoryName: "", URL: e.ExternalURL, Author: actor, ReviewerIDs: []string{}, TeamReviewers: []string{}, IssueIDs: []string{}, BranchState: "upToDate", Checks: []domain.ReviewCheck{}, Files: []domain.ReviewFile{}, Events: []domain.ReviewEvent{}, CreatedAt: now, UpdatedAt: now}
+	r := domain.CodeReview{ID: idgen.New("review_"), SlugID: fmt.Sprintf("%s-%d", provider, e.Number), Provider: provider, ExternalID: e.ExternalID(), Number: e.Number, Status: "open", RepositoryOwner: "", RepositoryName: "", URL: e.ExternalURL, Author: actor, ReviewerIDs: []string{}, TeamReviewers: []string{}, IssueIDs: []string{}, BranchState: "upToDate", Checks: []domain.ReviewCheck{}, Files: []domain.ReviewFile{}, Events: []domain.ReviewEvent{}, CreatedAt: now, UpdatedAt: now}
 	e.applyToReview(&r, now)
 	return r
 }
@@ -722,7 +723,7 @@ func appendCodeReviewNotifications(data *domain.Bootstrap, review domain.CodeRev
 		if !preferences.Inbox.Enabled || !categoryEnabled(preferences.Inbox, "reviews") {
 			continue
 		}
-		result = append(result, domain.Notification{ID: fmt.Sprintf("notification_review_%d_%s", now.UnixNano(), recipient), RecipientID: recipient, Type: "codeReview", SourceType: "codeReview", SourceID: eventID, ReviewID: review.ID, Actor: actor, Category: "reviews", GroupKey: "review:" + review.ID, OccurrenceCount: 1, LatestActorIDs: []string{actor.ID}, CreatedAt: now, UpdatedAt: now})
+		result = append(result, domain.Notification{ID: fmt.Sprintf("notification_review_%s_%s", idgen.Stamp(), recipient), RecipientID: recipient, Type: "codeReview", SourceType: "codeReview", SourceID: eventID, ReviewID: review.ID, Actor: actor, Category: "reviews", GroupKey: "review:" + review.ID, OccurrenceCount: 1, LatestActorIDs: []string{actor.ID}, CreatedAt: now, UpdatedAt: now})
 		enqueueNotificationDeliveries(data, result[len(result)-1], preferences)
 	}
 	return result

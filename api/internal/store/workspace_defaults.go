@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // EmptyWorkspace creates the system defaults for a newly created workspace.
@@ -14,8 +15,8 @@ import (
 func EmptyWorkspace(name, urlKey, region string, viewer domain.User) domain.Bootstrap {
 	now := time.Now().UTC()
 	key := defaultTeamKey(urlKey)
-	workspaceID := fmt.Sprintf("workspace_%d", now.UnixNano())
-	team := domain.Team{ID: fmt.Sprintf("team_%d", now.UnixNano()), Name: name, Key: key, Color: "#5E6AD2", CreatedAt: &now, UpdatedAt: &now}
+	workspaceID := idgen.New("workspace_")
+	team := domain.Team{ID: idgen.New("team_"), Name: name, Key: key, Color: "#5E6AD2", CreatedAt: &now, UpdatedAt: &now}
 	data := domain.Bootstrap{
 		Workspace: domain.Workspace{ID: workspaceID, Name: name, URLKey: urlKey, Color: "#5E6AD2", Region: region, CreatedAt: now},
 		Viewer:    viewer, Users: []domain.User{viewer}, Teams: []domain.Team{team}, Customers: []domain.Customer{}, States: canonicalWorkflowStates(), Labels: []domain.IssueLabel{}, LabelGroups: []domain.LabelGroup{},
@@ -37,7 +38,7 @@ func defaultWorkspaceLabels(now time.Time) []domain.IssueLabel {
 		{Name: "Improvement", Color: "#4EA7FC"},
 	}
 	for index := range labels {
-		labels[index].ID = fmt.Sprintf("label_%d_%d", now.UnixNano(), index)
+		labels[index].ID = fmt.Sprintf("label_%s_%d", idgen.Stamp(), index)
 		labels[index].Scope = "Workspace"
 		labels[index].ResourceType = "issue"
 		labels[index].CreatedAt = now

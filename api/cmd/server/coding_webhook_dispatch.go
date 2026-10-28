@@ -13,6 +13,7 @@ import (
 	"flow/api/internal/codehost"
 	"flow/api/internal/coding"
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -510,7 +511,7 @@ func (n *codingTriggerNotifier) SessionArchived(ctx context.Context, session dom
 				issue.UpdatedAt = now
 				changes["previousDelegate"], changes["source"] = agentID, codeHost
 				data.Activities[issueID] = append(data.Activities[issueID], domain.ActivityEvent{
-					ID: fmt.Sprintf("activity_%d", now.UnixNano()), Type: "issue.updated", CreatedAt: now, Actor: actor, Metadata: changes,
+					ID: idgen.New("activity_"), Type: "issue.updated", CreatedAt: now, Actor: actor, Metadata: changes,
 					BotActor: &domain.ActorBot{ID: codeHost, Type: actorBotTypeIntegration, UserDisplayName: hostName},
 				})
 			}

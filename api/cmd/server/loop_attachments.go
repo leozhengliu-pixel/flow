@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // Files attached to "Ask Flow to build the loop": uploaded first, then claimed
@@ -56,7 +57,7 @@ func (s *server) uploadLoopAttachment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().UTC()
-	attachmentID := fmt.Sprintf("loop_attachment_%d", now.UnixNano())
+	attachmentID := idgen.New("loop_attachment_")
 	name := filepath.Base(strings.TrimSpace(header.Filename))
 	if name == "." || name == "/" || name == "" {
 		name = "attachment"

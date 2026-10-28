@@ -274,8 +274,8 @@ func TestIssueWriteContention(t *testing.T) {
 		}()
 		waits0, millis0, deadlocks0 := lockStats()
 		latencies := make([][]time.Duration, servers)
-		var failures atomic.Int64
-		var failure atomic.Value
+		var failures, duplicates atomic.Int64
+		var failure, duplicate atomic.Value
 		var wg sync.WaitGroup
 		started := time.Now()
 		for w := 0; w < servers; w++ {
@@ -302,6 +302,10 @@ func TestIssueWriteContention(t *testing.T) {
 					if err != nil {
 						failures.Add(1)
 						failure.Store(err.Error())
+						if isCodingUniqueViolation(err) {
+							duplicates.Add(1)
+							duplicate.Store(err.Error())
+						}
 					}
 				}
 			}(w)
@@ -336,6 +340,11 @@ func TestIssueWriteContention(t *testing.T) {
 			line = append(line, fmt.Sprint(failure.Load()))
 		}
 		t.Log(strings.Join(line, " | "))
+		// An id two servers generated alike (a domain event's, say) fails
+		// the write: ids must not collide however the writes line up.
+		if duplicates.Load() > 0 {
+			t.Errorf("%s: %d writes failed on a duplicate key: %v", mode, duplicates.Load(), duplicate.Load())
+		}
 	}
 	// A warm-up round loads every store's connections and statements.
 	saved := updates

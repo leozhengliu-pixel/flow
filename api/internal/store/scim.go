@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // SCIMToken is the non-secret representation returned by token listing APIs.
@@ -219,7 +220,7 @@ func (s *SQLiteStore) CreateSCIMToken(ctx context.Context, workspaceID, name str
 		return SCIMToken{}, err
 	}
 	now := time.Now().UTC()
-	item := SCIMToken{ID: fmt.Sprintf("scim_%d", now.UnixNano()), WorkspaceID: workspaceID, Name: name, Secret: secret, CreatedAt: now}
+	item := SCIMToken{ID: idgen.New("scim_"), WorkspaceID: workspaceID, Name: name, Secret: secret, CreatedAt: now}
 	_, err = s.db.ExecContext(ctx, `INSERT INTO scim_tokens(id,workspace_id,token_hash,name,created_at) VALUES(?,?,?,?,?)`, item.ID, workspaceID, tokenHash(secret), name, now.Format(time.RFC3339Nano))
 	return item, err
 }
@@ -489,7 +490,7 @@ func (s *SQLiteStore) CreateSCIMUser(ctx context.Context, workspaceID string, in
 		}
 	}
 	if userID == "" {
-		userID = fmt.Sprintf("usr_%d", now.UnixNano())
+		userID = idgen.New("usr_")
 		_, err = s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, userID, nullableString(input.Email), scimFullName(input), scimDisplayName(input), input.AvatarURL, "", nullableTime(input.Active && input.Email != "", now), boolInt(input.Active), stamp, stamp)
 	} else {
 		_, err = s.db.ExecContext(ctx, `UPDATE auth_users SET email=?,name=?,display_name=?,active=?,updated_at=? WHERE id=?`, nullableString(input.Email), scimFullName(input), scimDisplayName(input), boolInt(input.Active), stamp, userID)
@@ -500,7 +501,7 @@ func (s *SQLiteStore) CreateSCIMUser(ctx context.Context, workspaceID string, in
 	if restored {
 		_, err = s.db.ExecContext(ctx, `UPDATE auth_identities SET provider='scim',username=?,claims_json=? WHERE provider=? AND issuer=? AND `+s.scimExactEquals("subject"), input.UserName, claims, scimDeletedProvider, workspaceID, subject)
 	} else {
-		_, err = s.db.ExecContext(ctx, `INSERT INTO auth_identities(id,user_id,provider,issuer,subject,identity_key,username,claims_json,created_at,last_login_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, fmt.Sprintf("identity_%d", now.UnixNano()), userID, "scim", workspaceID, subject, externalIdentityKey("scim", workspaceID, subject), input.UserName, claims, stamp, stamp)
+		_, err = s.db.ExecContext(ctx, `INSERT INTO auth_identities(id,user_id,provider,issuer,subject,identity_key,username,claims_json,created_at,last_login_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, idgen.New("identity_"), userID, "scim", workspaceID, subject, externalIdentityKey("scim", workspaceID, subject), input.UserName, claims, stamp, stamp)
 	}
 	if err != nil {
 		return SCIMUser{}, err
@@ -765,7 +766,7 @@ func (s *SQLiteStore) CreateSCIMGroup(ctx context.Context, workspaceID, external
 		return SCIMGroup{}, err
 	}
 	now := time.Now().UTC()
-	id := fmt.Sprintf("scimg_%d", now.UnixNano())
+	id := idgen.New("scimg_")
 	_, err := s.db.ExecContext(ctx, `INSERT INTO scim_groups(id,workspace_id,external_id,display_name,role,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`, id, workspaceID, externalID, displayName, role, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 	if err != nil {
 		return SCIMGroup{}, err

@@ -8,7 +8,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
+
+	"flow/api/internal/idgen"
 )
 
 var uploadedOAuthAppIconPattern = regexp.MustCompile(`^/uploads/oauth_app_icon_[A-Za-z0-9_-]+\.(?:png|jpe?g|webp|svg)$`)
@@ -80,7 +81,7 @@ func (s *server) uploadOAuthApplicationIcon(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusInternalServerError, "storage unavailable")
 		return
 	}
-	objectKey := fmt.Sprintf("oauth_app_icon_%d%s", time.Now().UnixNano(), extension)
+	objectKey := fmt.Sprintf("oauth_app_icon_%s%s", idgen.Stamp(), extension)
 	size, err := storage.Put(r.Context(), objectKey, bytes.NewReader(payload), contentType)
 	if err != nil || size != int64(len(payload)) {
 		_ = storage.Delete(r.Context(), objectKey)

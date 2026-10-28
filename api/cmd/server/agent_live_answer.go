@@ -3,12 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -42,7 +42,7 @@ func (s *server) forwardAgentAnswer(r *http.Request, answer agentForwardedAnswer
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
-	event := domain.RealtimeEvent{ID: fmt.Sprintf("agent_answer_%d", time.Now().UnixNano()), Type: agentAnswerEventType, Payload: payload, CreatedAt: time.Now().UTC()}
+	event := domain.RealtimeEvent{ID: idgen.New("agent_answer_"), Type: agentAnswerEventType, Payload: payload, CreatedAt: time.Now().UTC()}
 	if err := s.coordinator.Publish(ctx, workspaceKey(r), event); err != nil {
 		log.Printf("forward agent %s answer: %v", answer.Kind, err)
 		return false

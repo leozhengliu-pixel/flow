@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // userSettingsRecordMutation reports a personal settings write that only
@@ -130,7 +131,7 @@ func (s *SQLiteStore) mutateUserSettingsRecord(ctx context.Context, workspace, e
 			return err
 		}
 		now := time.Now().UTC()
-		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", now.UnixNano()), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, CreatedAt: now}
+		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, CreatedAt: now}
 		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, Payload: []byte(event.Payload), PreviousValues: []byte(nil), CreatedAt: now.Format(time.RFC3339Nano), WorkspaceID: current.Workspace.ID}); err != nil {
 			return err
 		}

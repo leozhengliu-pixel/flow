@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/outbound"
 	"flow/api/internal/store"
 )
@@ -407,7 +408,7 @@ func (s *server) connectGitLabToken(w http.ResponseWriter, r *http.Request, name
 	metadata := s.workspaceData(r)
 	workspace := metadata.Workspace.URLKey
 	now := time.Now().UTC()
-	connectionID := fmt.Sprintf("integration_gitlab_%d", now.UnixNano())
+	connectionID := idgen.New("integration_gitlab_")
 	webhookSecret := ""
 	var previous *domain.IntegrationConnection
 	if index := slices.IndexFunc(metadata.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.Provider == "gitlab" }); index >= 0 {

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"slices"
 	"strings"
@@ -12,6 +11,7 @@ import (
 
 	"flow/api/internal/coordination"
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 func (s *server) publishRealtime(workspace string, event domain.RealtimeEvent) {
@@ -170,7 +170,7 @@ func (s *server) applyRemoteEvents(workspace string) {
 			// it had the change; the next applied batch reloads it, and the
 			// resync makes them refetch then.
 			log.Printf("Redis reload workspace=%s events=%d: %v", workspace, len(batch), err)
-			s.realtime.publish(workspace, domain.RealtimeEvent{ID: fmt.Sprintf("resync_%d", time.Now().UnixNano()), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()})
+			s.realtime.publish(workspace, domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()})
 			continue
 		}
 		for _, event := range batch {

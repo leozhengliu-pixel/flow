@@ -1,12 +1,12 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	"slices"
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // Comment thread subscriptions (the reference app "Subscribe to thread"). A thread is a
@@ -84,7 +84,7 @@ func (s *server) setThreadSubscription(w http.ResponseWriter, r *http.Request) {
 			saved = data.ThreadSubscriptions[index]
 			return nil
 		}
-		saved = domain.ThreadSubscription{ID: fmt.Sprintf("thread_subscription_%d", now.UnixNano()), UserID: data.Viewer.ID, IssueID: issueID, CommentID: rootID, State: input.State, CreatedAt: now, UpdatedAt: now}
+		saved = domain.ThreadSubscription{ID: idgen.New("thread_subscription_"), UserID: data.Viewer.ID, IssueID: issueID, CommentID: rootID, State: input.State, CreatedAt: now, UpdatedAt: now}
 		data.ThreadSubscriptions = append(data.ThreadSubscriptions, saved)
 		return nil
 	})

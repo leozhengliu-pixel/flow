@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -434,9 +435,9 @@ func (s *server) beginAgentSession(r *http.Request, input agentSessionInput) (do
 	images := s.withStoredSizes(r.Context(), agentMessageUploads(r, input.Message))
 	attachments = append(attachments, images...)
 	now := time.Now().UTC()
-	sessionID := fmt.Sprintf("agent_session_%d", now.UnixNano())
+	sessionID := idgen.New("agent_session_")
 	title := agentSessionTitle(firstNonEmpty(withoutAgentUploads(input.Message, images), agentUploadsTitle(images)))
-	session := domain.AgentSession{ID: sessionID, SlugID: agentSessionSlug(title, now), Title: title, Location: input.Location, IssueIDs: uniqueAgentIDs(input.IssueIDs), ProjectIDs: uniqueAgentIDs(input.ProjectIDs), DocumentIDs: uniqueAgentIDs(input.DocumentIDs), InitiativeIDs: uniqueAgentIDs(input.InitiativeIDs), UserIDs: uniqueAgentIDs(input.UserIDs), LoopIDs: uniqueAgentIDs(input.LoopIDs), SkillIDs: uniqueAgentIDs(input.SkillIDs), Messages: []domain.AgentMessage{{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: input.Message, Mentions: input.Mentions, Attachments: attachments, CreatedAt: now}}, CreatedAt: now, UpdatedAt: now, LastReadAt: agentReadStamp(now)}
+	session := domain.AgentSession{ID: sessionID, SlugID: agentSessionSlug(title, now), Title: title, Location: input.Location, IssueIDs: uniqueAgentIDs(input.IssueIDs), ProjectIDs: uniqueAgentIDs(input.ProjectIDs), DocumentIDs: uniqueAgentIDs(input.DocumentIDs), InitiativeIDs: uniqueAgentIDs(input.InitiativeIDs), UserIDs: uniqueAgentIDs(input.UserIDs), LoopIDs: uniqueAgentIDs(input.LoopIDs), SkillIDs: uniqueAgentIDs(input.SkillIDs), Messages: []domain.AgentMessage{{ID: idgen.New("agent_message_"), Role: "user", Content: input.Message, Mentions: input.Mentions, Attachments: attachments, CreatedAt: now}}, CreatedAt: now, UpdatedAt: now, LastReadAt: agentReadStamp(now)}
 	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.session_created", sessionID, input, func(data *domain.Bootstrap) error {
 		session.UserID = data.Viewer.ID
 		if len(selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)) != len(session.SkillIDs) {
@@ -501,8 +502,8 @@ func (s *server) appendAgentSessionMessage(r *http.Request, id string, input age
 		if err != nil {
 			return err
 		}
-		session.Messages = append(session.Messages, domain.AgentMessage{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: message, Mentions: input.Mentions, Attachments: attachments, AnswerTo: answerTo, CreatedAt: now})
-		data.AgentActivities = append(data.AgentActivities, domain.AgentActivity{ID: fmt.Sprintf("agent_activity_%d", now.UnixNano()), SessionID: id, Type: "message", Status: "completed", Body: message, CreatedAt: now, UpdatedAt: now})
+		session.Messages = append(session.Messages, domain.AgentMessage{ID: idgen.New("agent_message_"), Role: "user", Content: message, Mentions: input.Mentions, Attachments: attachments, AnswerTo: answerTo, CreatedAt: now})
+		data.AgentActivities = append(data.AgentActivities, domain.AgentActivity{ID: idgen.New("agent_activity_"), SessionID: id, Type: "message", Status: "completed", Body: message, CreatedAt: now, UpdatedAt: now})
 		session.UpdatedAt = now
 		session.LastReadAt = agentReadStamp(now) // the owner is in the conversation they just wrote to
 		return nil
@@ -868,7 +869,7 @@ func (s *server) createAgentSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().UTC()
-	skill := domain.PersonalAgentSkill{ID: fmt.Sprintf("agent_skill_%d", now.UnixNano()), Name: strings.TrimSpace(input.Name), Instructions: strings.TrimSpace(input.Instructions), CreatedAt: now, UpdatedAt: now}
+	skill := domain.PersonalAgentSkill{ID: idgen.New("agent_skill_"), Name: strings.TrimSpace(input.Name), Instructions: strings.TrimSpace(input.Instructions), CreatedAt: now, UpdatedAt: now}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.skill_created", skill.ID, input, func(data *domain.Bootstrap) error {
 		skill.UserID = data.Viewer.ID
 		data.AgentSkills = append(data.AgentSkills, skill)

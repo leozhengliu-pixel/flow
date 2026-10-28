@@ -14,6 +14,7 @@ import (
 
 	appconfig "flow/api/internal/config"
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -23,6 +24,20 @@ func phaseCall(name, args, result string) domain.AgentToolCall {
 		call.Result = json.RawMessage(result)
 	}
 	return call
+}
+
+// Generated ids, older ones and those with a random tail, read as internal ids.
+func TestAgentInternalIDMatchesGeneratedIDs(t *testing.T) {
+	for _, id := range []string{"issue_16", "project_1790", "project_1793112233445566778", idgen.New("project_"), idgen.New("agent_activity_")} {
+		if !agentInternalID.MatchString(id) {
+			t.Errorf("%s is not an internal id", id)
+		}
+	}
+	for _, text := range []string{"DEV-16", "QA – Roadmap", "release_notes"} {
+		if agentInternalID.MatchString(text) {
+			t.Errorf("%q read as an internal id", text)
+		}
+	}
 }
 
 func TestAgentPhaseTitleNamesTheWorkFromToolCalls(t *testing.T) {

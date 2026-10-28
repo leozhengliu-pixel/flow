@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	"path"
 	"regexp"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -208,7 +208,7 @@ func (s *server) createReleasePipeline(w http.ResponseWriter, r *http.Request) {
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release_pipeline.created", "release_pipeline", input, func(data *domain.Bootstrap) error {
 		now := time.Now().UTC()
 		moveOpenIssues := true
-		created = domain.ReleasePipeline{ID: fmt.Sprintf("release_pipeline_%d", now.UnixNano()), SlugID: uniqueReleasePipelineSlug(data, strings.TrimSpace(*input.Name)), Type: "scheduled", Production: true, MoveOpenIssuesToNextRelease: &moveOpenIssues, Position: nextReleasePipelinePosition(data), TeamIDs: []string{}, Stages: []string{"Planned", "In Progress", "Released", "Canceled"}, StageStatuses: map[string]string{"Planned": "planned", "In Progress": "inProgress", "Released": "released", "Canceled": "canceled"}, PathFilters: []string{}, CreatedAt: now, UpdatedAt: now}
+		created = domain.ReleasePipeline{ID: idgen.New("release_pipeline_"), SlugID: uniqueReleasePipelineSlug(data, strings.TrimSpace(*input.Name)), Type: "scheduled", Production: true, MoveOpenIssuesToNextRelease: &moveOpenIssues, Position: nextReleasePipelinePosition(data), TeamIDs: []string{}, Stages: []string{"Planned", "In Progress", "Released", "Canceled"}, StageStatuses: map[string]string{"Planned": "planned", "In Progress": "inProgress", "Released": "released", "Canceled": "canceled"}, PathFilters: []string{}, CreatedAt: now, UpdatedAt: now}
 		// The reference app: continuous pipelines start with a single completed stage.
 		if input.Type != nil && *input.Type == "continuous" && input.Stages == nil {
 			created.Stages, created.StageStatuses = []string{"Released"}, map[string]string{"Released": "released"}
@@ -306,7 +306,7 @@ func (s *server) createCustomEmoji(w http.ResponseWriter, r *http.Request) {
 	var created domain.CustomEmoji
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "custom_emoji.created", "custom_emoji", map[string]any{"name": *input.Name}, func(data *domain.Bootstrap) error {
 		now := time.Now().UTC()
-		created = domain.CustomEmoji{ID: fmt.Sprintf("custom_emoji_%d", now.UnixNano()), Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
+		created = domain.CustomEmoji{ID: idgen.New("custom_emoji_"), Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
 		if err := applyCustomEmojiInput(&created, input); err != nil {
 			return err
 		}

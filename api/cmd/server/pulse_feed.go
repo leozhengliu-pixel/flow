@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"math"
 	"net/http"
 	"net/url"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -665,7 +665,7 @@ func (s *server) setPulseSubscription(subscribe bool) http.HandlerFunc {
 			})
 			if index < 0 {
 				now := time.Now().UTC()
-				data.Subscriptions = append(data.Subscriptions, domain.Subscription{ID: fmt.Sprintf("subscription_%d", now.UnixNano()), UserID: viewer.ID, ResourceType: kind, ResourceID: id, CreatedAt: now})
+				data.Subscriptions = append(data.Subscriptions, domain.Subscription{ID: idgen.New("subscription_"), UserID: viewer.ID, ResourceType: kind, ResourceID: id, CreatedAt: now})
 				index = len(data.Subscriptions) - 1
 			}
 			item := &data.Subscriptions[index]
@@ -740,7 +740,7 @@ func (s *server) setInitiativeProjectUpdatesSubscription(subscribe bool) http.Ha
 				return store.ErrNoMutation
 			}
 			now := time.Now().UTC()
-			data.Subscriptions = append(data.Subscriptions, domain.Subscription{ID: fmt.Sprintf("subscription_%d", now.UnixNano()), UserID: viewer.ID, ResourceType: pulseInitiativeProjectUpdatesType, ResourceID: id, Events: []string{pulseSubscriptionEvent}, CreatedAt: now})
+			data.Subscriptions = append(data.Subscriptions, domain.Subscription{ID: idgen.New("subscription_"), UserID: viewer.ID, ResourceType: pulseInitiativeProjectUpdatesType, ResourceID: id, Events: []string{pulseSubscriptionEvent}, CreatedAt: now})
 			return nil
 		})
 		if errors.Is(err, store.ErrNoMutation) {

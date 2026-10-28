@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/publicapi"
 	"flow/api/internal/store"
 )
@@ -493,7 +494,7 @@ func newLabel(data *domain.Bootstrap, actorID, scope string, input labelInput) (
 	if !validLabelResourceType(resource) || resource == "initiative" && !labelScopeIsWorkspace(scope) {
 		return domain.IssueLabel{}, errInvalid
 	}
-	created := domain.IssueLabel{ID: fmt.Sprintf("label_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), Color: "#5E6AD2", Scope: scope, ResourceType: resource, CreatorID: actorID, CreatedAt: time.Now().UTC()}
+	created := domain.IssueLabel{ID: idgen.New("label_"), Name: strings.TrimSpace(*input.Name), Color: "#5E6AD2", Scope: scope, ResourceType: resource, CreatorID: actorID, CreatedAt: time.Now().UTC()}
 	applyLabelInput(&created, input)
 	if !validLabelGroup(data, resource, created.Scope, created.GroupID) {
 		return domain.IssueLabel{}, errInvalid
@@ -593,7 +594,7 @@ func (s *server) moveWorkspaceLabelToTeams(w http.ResponseWriter, r *http.Reques
 				continue
 			}
 			teamLabel := source
-			teamLabel.ID = fmt.Sprintf("label_%d_%d", time.Now().UnixNano(), teamIndex)
+			teamLabel.ID = fmt.Sprintf("label_%s_%d", idgen.Stamp(), teamIndex)
 			teamLabel.Scope = team.ID
 			teamLabel.GroupID = ""
 			moved = append(moved, teamLabel)
@@ -662,7 +663,7 @@ func (s *server) createLabelGroup(w http.ResponseWriter, r *http.Request) {
 		if !validLabelResourceType(resource) {
 			return "", errInvalid
 		}
-		created = domain.LabelGroup{ID: fmt.Sprintf("label_group_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), Color: "#8b8d98", Scope: "Workspace", ResourceType: resource, CreatedAt: time.Now().UTC()}
+		created = domain.LabelGroup{ID: idgen.New("label_group_"), Name: strings.TrimSpace(*input.Name), Color: "#8b8d98", Scope: "Workspace", ResourceType: resource, CreatedAt: time.Now().UTC()}
 		if input.Scope != nil && *input.Scope != "" && *input.Scope != "Workspace" {
 			if !teamExists(data, *input.Scope) {
 				return "", errNotFound
@@ -935,7 +936,7 @@ func (s *server) createProjectStatus(w http.ResponseWriter, r *http.Request) {
 		if !slices.Contains([]string{"backlog", "planned", "started", "completed", "canceled"}, statusType) {
 			return "", errInvalid
 		}
-		created = domain.ProjectStatus{ID: fmt.Sprintf("project_status_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), Color: "#8b8d98", Type: statusType, Position: float64(len(data.ProjectStatuses))}
+		created = domain.ProjectStatus{ID: idgen.New("project_status_"), Name: strings.TrimSpace(*input.Name), Color: "#8b8d98", Type: statusType, Position: float64(len(data.ProjectStatuses))}
 		if input.Description != nil {
 			created.Description = strings.TrimSpace(*input.Description)
 		}
@@ -1109,7 +1110,7 @@ func (s *server) createWorkspaceIssueTemplate(w http.ResponseWriter, r *http.Req
 	var created domain.IssueTemplate
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "issue_template.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
-		created = domain.IssueTemplate{ID: fmt.Sprintf("template_%d", now.UnixNano()), Scope: "workspace", TemplateType: "standard", LabelIDs: []string{}, FormFields: []domain.TemplateFormField{}, Creator: actor, CreatedAt: now, UpdatedAt: now}
+		created = domain.IssueTemplate{ID: idgen.New("template_"), Scope: "workspace", TemplateType: "standard", LabelIDs: []string{}, FormFields: []domain.TemplateFormField{}, Creator: actor, CreatedAt: now, UpdatedAt: now}
 		if err := applyIssueTemplate(data, &created, input); err != nil {
 			return "", err
 		}
@@ -1388,7 +1389,7 @@ func (s *server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 				return "", parseErr
 			}
 		}
-		created = domain.APIKey{ID: fmt.Sprintf("api_key_%d", time.Now().UnixNano()), Name: input.Name, Prefix: secret[:min(len(secret), 17)], SecretHash: secretHash(secret), CreatorID: actor.ID, Scopes: scopes, TeamIDs: teamIDs, TeamRestriction: restriction, CreatedAt: time.Now().UTC(), ExpiresAt: expiresAt}
+		created = domain.APIKey{ID: idgen.New("api_key_"), Name: input.Name, Prefix: secret[:min(len(secret), 17)], SecretHash: secretHash(secret), CreatorID: actor.ID, Scopes: scopes, TeamIDs: teamIDs, TeamRestriction: restriction, CreatedAt: time.Now().UTC(), ExpiresAt: expiresAt}
 		data.APIKeys = append([]domain.APIKey{created}, data.APIKeys...)
 		return created.ID, nil
 	})
@@ -1624,7 +1625,7 @@ func (s *server) createOAuthApplication(w http.ResponseWriter, r *http.Request) 
 	actor := requestActor(s, r)
 	var created domain.OAuthApplication
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "oauth_application.created", input, func(data *domain.Bootstrap) (string, error) {
-		created = domain.OAuthApplication{ID: fmt.Sprintf("oauth_app_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), ClientID: clientID, ClientSecret: secret, CreatorID: actor.ID, CredentialsAuthorizedBy: actor.ID, RedirectURIs: []string{}, Scopes: []string{"read"}, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+		created = domain.OAuthApplication{ID: idgen.New("oauth_app_"), Name: strings.TrimSpace(*input.Name), ClientID: clientID, ClientSecret: secret, CreatorID: actor.ID, CredentialsAuthorizedBy: actor.ID, RedirectURIs: []string{}, Scopes: []string{"read"}, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 		applyOAuthInput(&created, input)
 		if err := checkGitHubUsernameAvailable(data, created.ID, created.GitHubUsername); err != nil {
 			return "", err
@@ -1844,7 +1845,7 @@ func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
 			return item.Provider == provider && (scope == "" || item.Config["organization"] == scope || item.Config["host"] == scope)
 		})
 		now := time.Now().UTC()
-		updated = domain.IntegrationConnection{ID: fmt.Sprintf("integration_%s_%d", provider, now.UnixNano()), Provider: provider, Name: strings.TrimSpace(input.Name), Status: "configured", Config: input.Config, ConnectedBy: actor.ID, CreatedAt: now, UpdatedAt: now, Scopes: uniqueLower(input.Scopes), Channels: uniqueTrimmed(input.Channels), LinkbackEnabled: input.LinkbackEnabled}
+		updated = domain.IntegrationConnection{ID: fmt.Sprintf("integration_%s_%s", provider, idgen.Stamp()), Provider: provider, Name: strings.TrimSpace(input.Name), Status: "configured", Config: input.Config, ConnectedBy: actor.ID, CreatedAt: now, UpdatedAt: now, Scopes: uniqueLower(input.Scopes), Channels: uniqueTrimmed(input.Channels), LinkbackEnabled: input.LinkbackEnabled}
 		if secret != "" {
 			updated.SecretHash = secretHash(secret)
 		}
@@ -2462,7 +2463,7 @@ func (s *server) createDocumentTemplate(w http.ResponseWriter, r *http.Request) 
 	var created domain.DocumentTemplate
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "document_template.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
-		created = domain.DocumentTemplate{ID: fmt.Sprintf("document_template_%d", now.UnixNano()), Creator: actor, ContentData: map[string]any{"type": "doc", "content": []any{}}, CreatedAt: now, UpdatedAt: now}
+		created = domain.DocumentTemplate{ID: idgen.New("document_template_"), Creator: actor, ContentData: map[string]any{"type": "doc", "content": []any{}}, CreatedAt: now, UpdatedAt: now}
 		if err := applyDocumentTemplateInput(data, &created, input); err != nil {
 			return "", err
 		}

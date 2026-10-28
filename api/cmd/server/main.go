@@ -28,6 +28,7 @@ import (
 	appconfig "flow/api/internal/config"
 	"flow/api/internal/coordination"
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/objectstore"
 	"flow/api/internal/outbound"
 	"flow/api/internal/publicapi"
@@ -1726,7 +1727,7 @@ func (s *server) uploadWorkspaceLogo(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "storage unavailable")
 		return
 	}
-	objectKey := fmt.Sprintf("workspace_logo_%s_%d%s", data.Workspace.ID, time.Now().UnixNano(), extension)
+	objectKey := fmt.Sprintf("workspace_logo_%s_%s%s", data.Workspace.ID, idgen.Stamp(), extension)
 	size, err := storage.Put(r.Context(), objectKey, bytes.NewReader(payload), contentType)
 	if err != nil {
 		_ = storage.Delete(r.Context(), objectKey)
@@ -1878,7 +1879,7 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	var developmentCreatorID string
 	now := time.Now().UTC()
-	team := domain.Team{ID: fmt.Sprintf("team_%d", now.UnixNano()), Name: input.Name, Key: input.Key, Color: input.Color, Icon: input.Icon, Private: input.Private, CreatedAt: &now, UpdatedAt: &now}
+	team := domain.Team{ID: idgen.New("team_"), Name: input.Name, Key: input.Key, Color: input.Color, Icon: input.Icon, Private: input.Private, CreatedAt: &now, UpdatedAt: &now}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey, "team.created", team.ID, input, func(data *domain.Bootstrap) error {
 		if domain.TeamKeyTaken(data, team.Key, team.ID) {
 			return errTeamKeyTaken
@@ -2155,7 +2156,7 @@ func (s *server) createCustomer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().UTC()
-	customer := domain.Customer{ID: fmt.Sprintf("customer_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), Status: "active", Domains: []string{}, CreatedAt: now, UpdatedAt: now}
+	customer := domain.Customer{ID: idgen.New("customer_"), Name: strings.TrimSpace(*input.Name), Status: "active", Domains: []string{}, CreatedAt: now, UpdatedAt: now}
 	applyCustomerInput(&customer, input)
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "customer.created", customer.ID, input, func(data *domain.Bootstrap) error {
 		if input.Status == nil {
@@ -2502,7 +2503,7 @@ func (s *server) createSavedView(w http.ResponseWriter, r *http.Request) {
 	var created domain.SavedView
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "view.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
-		createdID := fmt.Sprintf("view_%d", time.Now().UnixNano())
+		createdID := idgen.New("view_")
 		created = domain.SavedView{ID: createdID, SlugID: savedViewSlugID(*input.Name, createdID), CreatedAt: now, UpdatedAt: now}
 		if input.Resource != nil && *input.Resource == "pulse" {
 			scope, ownerID := "personal", data.Viewer.ID
@@ -2987,13 +2988,7 @@ func appendFutureCycle(data *domain.Bootstrap, teamID string, previous *domain.C
 	}
 	now := time.Now().UTC()
 	// Capacity is automatic (cycle_capacity.go) until someone overrides it.
-	// Cycles created in one loop can read the same clock value, so the id is
-	// bumped until it is unused.
-	id := fmt.Sprintf("cycle_%d", now.UnixNano())
-	for suffix := 1; slices.ContainsFunc(data.Cycles, func(item domain.Cycle) bool { return item.ID == id }); suffix++ {
-		id = fmt.Sprintf("cycle_%d_%d", now.UnixNano(), suffix)
-	}
-	cycle := domain.Cycle{ID: id, Number: number, Name: fmt.Sprintf("Cycle %d", number), TeamID: teamID, StartsAt: start, EndsAt: start.AddDate(0, 0, weeks*7-1), Status: "upcoming", Resources: []domain.CycleResource{}, CreatedAt: now, UpdatedAt: now}
+	cycle := domain.Cycle{ID: idgen.New("cycle_"), Number: number, Name: fmt.Sprintf("Cycle %d", number), TeamID: teamID, StartsAt: start, EndsAt: start.AddDate(0, 0, weeks*7-1), Status: "upcoming", Resources: []domain.CycleResource{}, CreatedAt: now, UpdatedAt: now}
 	data.Cycles = append(data.Cycles, cycle)
 	return &data.Cycles[len(data.Cycles)-1]
 }
@@ -3321,7 +3316,7 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 			return "", errInvalid
 		}
 		now := time.Now().UTC()
-		id := fmt.Sprintf("project_%d", time.Now().UnixNano())
+		id := idgen.New("project_")
 		status := defaultProjectStatus(data)
 		teamIDs := input.TeamIDs
 		if len(teamIDs) == 0 {
@@ -3347,7 +3342,7 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 			// themselves; API callers get them appended.
 			for milestoneIndex, milestone := range template.Milestones {
 				item := domain.ProjectMilestone{
-					ID: fmt.Sprintf("project_milestone_%d_%d", time.Now().UnixNano(), milestoneIndex), ProjectID: created.ID,
+					ID: fmt.Sprintf("project_milestone_%s_%d", idgen.Stamp(), milestoneIndex), ProjectID: created.ID,
 					Name: milestone.Name, Description: milestone.Description, CreatedAt: now, UpdatedAt: now,
 				}
 				templateMilestones[milestone.ID] = item.ID
@@ -3364,7 +3359,7 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			created.Milestones = append(created.Milestones, domain.ProjectMilestone{
-				ID: fmt.Sprintf("project_milestone_%d_l%d", time.Now().UnixNano(), milestoneIndex), ProjectID: created.ID,
+				ID: fmt.Sprintf("project_milestone_%s_l%d", idgen.Stamp(), milestoneIndex), ProjectID: created.ID,
 				Name: name, CreatedAt: now, UpdatedAt: now,
 			})
 		}
@@ -3373,7 +3368,7 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			item := domain.ProjectMilestone{
-				ID: fmt.Sprintf("project_milestone_%d_d%d", time.Now().UnixNano(), milestoneIndex), ProjectID: created.ID,
+				ID: fmt.Sprintf("project_milestone_%s_d%d", idgen.Stamp(), milestoneIndex), ProjectID: created.ID,
 				Name: strings.TrimSpace(*milestone.Name), CreatedAt: now, UpdatedAt: now,
 			}
 			if template != nil && milestone.TemplateMilestoneID != "" {
@@ -3427,7 +3422,7 @@ func (s *server) updateProject(w http.ResponseWriter, r *http.Request) {
 		}
 		before, relationsBefore := *project, projectRelationsOf(data, id)
 		if input.Description != nil && *input.Description != project.Description {
-			project.DescriptionRevisions = append([]domain.ProjectDescriptionRevision{{ID: fmt.Sprintf("project_description_revision_%d", time.Now().UnixNano()), ProjectID: id, Description: project.Description, Author: data.Viewer, CreatedAt: time.Now().UTC()}}, project.DescriptionRevisions...)
+			project.DescriptionRevisions = append([]domain.ProjectDescriptionRevision{{ID: idgen.New("project_description_revision_"), ProjectID: id, Description: project.Description, Author: data.Viewer, CreatedAt: time.Now().UTC()}}, project.DescriptionRevisions...)
 		}
 		previous := projectTrackedProperties(*project)
 		if err := applyProjectUpdate(data, project, input); err != nil {
@@ -3504,7 +3499,7 @@ func (s *server) createInitiative(w http.ResponseWriter, r *http.Request) {
 	var created domain.Initiative
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "initiative.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
-		created = domain.Initiative{ID: fmt.Sprintf("initiative_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), SlugID: domain.SlugWithSuffix(*input.Name, domain.NewSlugSuffix()), Icon: "Initiative", Color: "#d15f64", Status: "active", PriorityLabel: "No priority", Position: nextInitiativePosition(data.Initiatives), Health: "noUpdate", Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), ContributingTeamIDs: []string{}, LabelIDs: []string{}, ParentInitiativeIDs: []string{}, ProjectIDs: []string{}, Resources: []domain.InitiativeResource{}, Comments: []domain.Comment{}, NotificationRules: domain.InitiativeNotificationRules{DescriptionChanges: true, NewUpdate: true}, UpdateSchedule: domain.InitiativeUpdateSchedule{Cadence: "none", Weekday: 1, TimeRange: "09:00-12:00"}, DescriptionHistory: []domain.InitiativeDescriptionRevision{}, CreatedAt: now, UpdatedAt: now}
+		created = domain.Initiative{ID: idgen.New("initiative_"), Name: strings.TrimSpace(*input.Name), SlugID: domain.SlugWithSuffix(*input.Name, domain.NewSlugSuffix()), Icon: "Initiative", Color: "#d15f64", Status: "active", PriorityLabel: "No priority", Position: nextInitiativePosition(data.Initiatives), Health: "noUpdate", Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), ContributingTeamIDs: []string{}, LabelIDs: []string{}, ParentInitiativeIDs: []string{}, ProjectIDs: []string{}, Resources: []domain.InitiativeResource{}, Comments: []domain.Comment{}, NotificationRules: domain.InitiativeNotificationRules{DescriptionChanges: true, NewUpdate: true}, UpdateSchedule: domain.InitiativeUpdateSchedule{Cadence: "none", Weekday: 1, TimeRange: "09:00-12:00"}, DescriptionHistory: []domain.InitiativeDescriptionRevision{}, CreatedAt: now, UpdatedAt: now}
 		if err := applyInitiativeUpdate(data, &created, input); err != nil {
 			return "", err
 		}
@@ -3604,7 +3599,7 @@ func (s *server) createInitiativeReminder(w http.ResponseWriter, r *http.Request
 			return initiativeErr
 		}
 		now := time.Now().UTC()
-		reminder = domain.Notification{ID: fmt.Sprintf("notification_initiative_reminder_%d", now.UnixNano()), RecipientID: data.Viewer.ID, Type: "initiativeReminder", SourceType: "initiative", SourceID: id, Actor: data.Viewer, Category: "reminders", GroupKey: "initiative-reminder:" + id + ":" + strconv.FormatInt(remindAt.Unix(), 10), OccurrenceCount: 1, LatestActorIDs: []string{data.Viewer.ID}, SnoozedUntil: &remindAt, CreatedAt: now, UpdatedAt: now}
+		reminder = domain.Notification{ID: idgen.New("notification_initiative_reminder_"), RecipientID: data.Viewer.ID, Type: "initiativeReminder", SourceType: "initiative", SourceID: id, Actor: data.Viewer, Category: "reminders", GroupKey: "initiative-reminder:" + id + ":" + strconv.FormatInt(remindAt.Unix(), 10), OccurrenceCount: 1, LatestActorIDs: []string{data.Viewer.ID}, SnoozedUntil: &remindAt, CreatedAt: now, UpdatedAt: now}
 		data.Notifications = append([]domain.Notification{reminder}, data.Notifications...)
 		appendActivity(data, id, "initiative.reminder_created", data.Viewer, map[string]string{"initiativeName": initiative.Name, "remindAt": remindAt.Format(time.RFC3339)})
 		return nil
@@ -3662,7 +3657,7 @@ func (s *server) createInitiativeResource(w http.ResponseWriter, r *http.Request
 		if input.Title != nil && strings.TrimSpace(*input.Title) != "" {
 			title = strings.TrimSpace(*input.Title)
 		}
-		created = domain.InitiativeResource{ID: fmt.Sprintf("initiative_resource_%d", time.Now().UnixNano()), InitiativeID: id, Type: resourceType, Title: title, URL: resourceURL, DocumentID: documentID, CreatedAt: time.Now().UTC()}
+		created = domain.InitiativeResource{ID: idgen.New("initiative_resource_"), InitiativeID: id, Type: resourceType, Title: title, URL: resourceURL, DocumentID: documentID, CreatedAt: time.Now().UTC()}
 		initiative.Resources = append(initiative.Resources, created)
 		initiative.UpdatedAt = created.CreatedAt
 		return nil
@@ -3768,7 +3763,7 @@ func (s *server) createInitiativeComment(w http.ResponseWriter, r *http.Request)
 		if commentAnchorTaken(initiative.Comments, input.AnchorID) {
 			return errConflict
 		}
-		created = domain.Comment{ID: fmt.Sprintf("initiative_comment_%d", time.Now().UnixNano()), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: parentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), AnchorID: input.AnchorID, QuotedText: input.QuotedText}
+		created = domain.Comment{ID: idgen.New("initiative_comment_"), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: parentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), AnchorID: input.AnchorID, QuotedText: input.QuotedText}
 		initiative.Comments = append(initiative.Comments, created)
 		initiative.UpdatedAt = created.CreatedAt
 		return nil
@@ -3935,7 +3930,7 @@ func (s *server) createInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 		if health == "noUpdate" {
 			health = "onTrack"
 		}
-		created = domain.InitiativeUpdate{ID: fmt.Sprintf("initiative_update_%d", time.Now().UnixNano()), InitiativeID: id, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, Health: health, CreatedAt: time.Now().UTC(), User: data.Viewer, Comments: []domain.Comment{}, Reactions: map[string][]string{}, Attachments: []domain.Attachment{}}
+		created = domain.InitiativeUpdate{ID: idgen.New("initiative_update_"), InitiativeID: id, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, Health: health, CreatedAt: time.Now().UTC(), User: data.Viewer, Comments: []domain.Comment{}, Reactions: map[string][]string{}, Attachments: []domain.Attachment{}}
 		created.Snapshot = initiativePulseSnapshot(data, *initiative, created.CreatedAt)
 		created.Diff = pulseDiffBetween(latestInitiativeSnapshot(data.InitiativeUpdates[id]), created.Snapshot)
 		if data.InitiativeUpdates == nil {
@@ -4065,7 +4060,7 @@ func (s *server) createInitiativeUpdateComment(w http.ResponseWriter, r *http.Re
 			return errNotFound
 		}
 		now := time.Now().UTC()
-		comment := domain.Comment{ID: fmt.Sprintf("initiative_update_comment_%d", now.UnixNano()), Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: now, User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
+		comment := domain.Comment{ID: idgen.New("initiative_update_comment_"), Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: now, User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
 		updates[index].Comments = append(updates[index].Comments, comment)
 		data.InitiativeUpdates[initiativeID] = updates
 		updated = updates[index]
@@ -4147,7 +4142,7 @@ func (s *server) createProjectResource(w http.ResponseWriter, r *http.Request) {
 		if input.Title != nil && strings.TrimSpace(*input.Title) != "" {
 			title = strings.TrimSpace(*input.Title)
 		}
-		created = domain.ProjectResource{ID: fmt.Sprintf("project_resource_%d", time.Now().UnixNano()), ProjectID: projectID, Type: resourceType, Title: title, URL: strings.TrimSpace(*input.URL), PinnedTeamIDs: []string{}, CreatorID: actor.ID, CreatedAt: time.Now().UTC()}
+		created = domain.ProjectResource{ID: idgen.New("project_resource_"), ProjectID: projectID, Type: resourceType, Title: title, URL: strings.TrimSpace(*input.URL), PinnedTeamIDs: []string{}, CreatorID: actor.ID, CreatedAt: time.Now().UTC()}
 		project.Resources = append(project.Resources, created)
 		project.UpdatedAt = created.CreatedAt
 		return nil
@@ -4240,7 +4235,7 @@ func (s *server) createProjectMilestone(w http.ResponseWriter, r *http.Request) 
 			return err
 		}
 		now := time.Now().UTC()
-		created = domain.ProjectMilestone{ID: fmt.Sprintf("project_milestone_%d", time.Now().UnixNano()), ProjectID: projectID, Name: strings.TrimSpace(*input.Name), CreatedAt: now, UpdatedAt: now}
+		created = domain.ProjectMilestone{ID: idgen.New("project_milestone_"), ProjectID: projectID, Name: strings.TrimSpace(*input.Name), CreatedAt: now, UpdatedAt: now}
 		if input.Description != nil {
 			created.Description = strings.TrimSpace(*input.Description)
 		}
@@ -4286,7 +4281,7 @@ func (s *server) updateProjectMilestone(w http.ResponseWriter, r *http.Request) 
 		}
 		if input.Description != nil {
 			if next := strings.TrimSpace(*input.Description); next != milestone.Description {
-				milestone.DescriptionRevisions = append([]domain.ProjectDescriptionRevision{{ID: fmt.Sprintf("milestone_description_revision_%d", time.Now().UnixNano()), ProjectID: projectID, Description: milestone.Description, Author: data.Viewer, CreatedAt: time.Now().UTC()}}, milestone.DescriptionRevisions...)
+				milestone.DescriptionRevisions = append([]domain.ProjectDescriptionRevision{{ID: idgen.New("milestone_description_revision_"), ProjectID: projectID, Description: milestone.Description, Author: data.Viewer, CreatedAt: time.Now().UTC()}}, milestone.DescriptionRevisions...)
 				milestone.Description = next
 			}
 		}
@@ -4416,7 +4411,7 @@ func (s *server) createProjectComment(w http.ResponseWriter, r *http.Request) {
 		if commentAnchorTaken(project.Comments, input.AnchorID) {
 			return errConflict
 		}
-		created = domain.Comment{ID: fmt.Sprintf("project_comment_%d", time.Now().UnixNano()), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), AnchorID: input.AnchorID, QuotedText: input.QuotedText}
+		created = domain.Comment{ID: idgen.New("project_comment_"), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), AnchorID: input.AnchorID, QuotedText: input.QuotedText}
 		project.Comments = append(project.Comments, created)
 		project.UpdatedAt = created.CreatedAt
 		return nil
@@ -4595,7 +4590,7 @@ func (s *server) createProjectUpdate(w http.ResponseWriter, r *http.Request) {
 				health = "onTrack"
 			}
 		}
-		created = domain.ProjectUpdate{ID: fmt.Sprintf("project_update_%d", time.Now().UnixNano()), ProjectID: id, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, Health: health, CreatedAt: now, User: data.Viewer, Comments: []domain.Comment{}, Reactions: map[string][]string{}, Attachments: []domain.Attachment{}}
+		created = domain.ProjectUpdate{ID: idgen.New("project_update_"), ProjectID: id, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, Health: health, CreatedAt: now, User: data.Viewer, Comments: []domain.Comment{}, Reactions: map[string][]string{}, Attachments: []domain.Attachment{}}
 		if snapshot != nil {
 			// Status, lead, priority and dates are read again under the lock;
 			// milestone progress comes from the pre-read issue counts.
@@ -4753,7 +4748,7 @@ func (s *server) createProjectUpdateComment(w http.ResponseWriter, r *http.Reque
 			return errNotFound
 		}
 		now := time.Now().UTC()
-		comment := domain.Comment{ID: fmt.Sprintf("project_update_comment_%d", now.UnixNano()), Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: now, User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
+		comment := domain.Comment{ID: idgen.New("project_update_comment_"), Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: now, User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
 		updates[index].Comments = append(updates[index].Comments, comment)
 		data.ProjectUpdates[projectID] = updates
 		updated = updates[index]
@@ -5018,7 +5013,7 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		ctx = store.WithIssueRenumbering(ctx)
 	}
-	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "issue.batch_updated", fmt.Sprintf("issue_batch_%d", time.Now().UnixNano()), input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "issue.batch_updated", idgen.New("issue_batch_"), input, func(data *domain.Bootstrap) error {
 		changed := false
 		for _, id := range input.IssueIDs {
 			issue, err := issueByID(data, id)
@@ -5099,7 +5094,7 @@ func (s *server) createComment(w http.ResponseWriter, r *http.Request) {
 				return errNotFound
 			}
 		}
-		comment = domain.Comment{ID: fmt.Sprintf("comment_%d", time.Now().UnixNano()), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
+		comment = domain.Comment{ID: idgen.New("comment_"), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
 		if key := store.CommentCreationKey(r.Context()); key != "" {
 			comment.ID = key
 		}
@@ -5288,7 +5283,7 @@ func (s *server) createRelation(w http.ResponseWriter, r *http.Request) {
 		if input.Type == "parent_of" && issueParentCreatesCycle(data, target.ID, issue.ID) || input.Type == "sub_issue_of" && issueParentCreatesCycle(data, issue.ID, target.ID) {
 			return fmt.Errorf("%w: issue relation would create a parent cycle", errInvalid)
 		}
-		relation = domain.IssueRelation{ID: fmt.Sprintf("relation_%d", time.Now().UnixNano()), Type: input.Type, IssueID: id, RelatedIssueID: input.RelatedIssueID}
+		relation = domain.IssueRelation{ID: idgen.New("relation_"), Type: input.Type, IssueID: id, RelatedIssueID: input.RelatedIssueID}
 		issue.Relations = append(issue.Relations, relation)
 		inverse := domain.IssueRelation{ID: relation.ID, Type: inverseRelation(input.Type), IssueID: input.RelatedIssueID, RelatedIssueID: id}
 		target.Relations = append(target.Relations, inverse)
@@ -5356,7 +5351,7 @@ func (s *server) createAttachment(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 	id := r.PathValue("id")
-	attachmentID := fmt.Sprintf("attachment_%d", time.Now().UnixNano())
+	attachmentID := idgen.New("attachment_")
 	safeName := attachmentID + "_" + filepath.Base(header.Filename)
 	storage, err := s.storage()
 	if err != nil {
@@ -5421,7 +5416,7 @@ func (s *server) createIssueLink(w http.ResponseWriter, r *http.Request) {
 			return issueErr
 		}
 		now := time.Now().UTC()
-		attachment = domain.Attachment{ID: fmt.Sprintf("link_%d", now.UnixNano()), IssueID: id, Title: title, URL: parsed.String(), ContentType: "text/uri-list", CreatedAt: now, Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
+		attachment = domain.Attachment{ID: idgen.New("link_"), IssueID: id, Title: title, URL: parsed.String(), ContentType: "text/uri-list", CreatedAt: now, Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
 		issue.Attachments = append(issue.Attachments, attachment)
 		appendActivity(data, id, "issue.link_created", data.Viewer, map[string]string{"attachmentId": attachment.ID, "title": attachment.Title, "url": attachment.URL})
 		return nil
@@ -5448,7 +5443,7 @@ func (s *server) createIssueReminder(w http.ResponseWriter, r *http.Request) {
 		now := time.Now().UTC()
 		remindAt = remindAt.UTC()
 		reminder = domain.Notification{
-			ID: fmt.Sprintf("notification_%d", now.UnixNano()), RecipientID: data.Viewer.ID,
+			ID: idgen.New("notification_"), RecipientID: data.Viewer.ID,
 			Type: "issueReminder", SourceType: "issue", SourceID: id, IssueID: id,
 			Actor: data.Viewer, Category: "reminders", GroupKey: "issue-reminder:" + id,
 			OccurrenceCount: 1, LatestActorIDs: []string{data.Viewer.ID}, SnoozedUntil: &remindAt,
@@ -5481,7 +5476,7 @@ func (s *server) createProjectReminder(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		now := time.Now().UTC()
-		reminder = domain.Notification{ID: fmt.Sprintf("notification_project_reminder_%d", time.Now().UnixNano()), RecipientID: data.Viewer.ID, Type: "projectReminder", SourceType: "project", SourceID: id, ProjectID: id, Actor: data.Viewer, Category: "reminders", GroupKey: "project-reminder:" + id + ":" + strconv.FormatInt(remindAt.Unix(), 10), OccurrenceCount: 1, LatestActorIDs: []string{data.Viewer.ID}, SnoozedUntil: &remindAt, CreatedAt: now, UpdatedAt: now}
+		reminder = domain.Notification{ID: idgen.New("notification_project_reminder_"), RecipientID: data.Viewer.ID, Type: "projectReminder", SourceType: "project", SourceID: id, ProjectID: id, Actor: data.Viewer, Category: "reminders", GroupKey: "project-reminder:" + id + ":" + strconv.FormatInt(remindAt.Unix(), 10), OccurrenceCount: 1, LatestActorIDs: []string{data.Viewer.ID}, SnoozedUntil: &remindAt, CreatedAt: now, UpdatedAt: now}
 		data.Notifications = append([]domain.Notification{reminder}, data.Notifications...)
 		appendActivity(data, id, "project.reminder_created", data.Viewer, map[string]string{"projectName": project.Name, "remindAt": remindAt.Format(time.RFC3339)})
 		return nil
@@ -5507,7 +5502,7 @@ func (s *server) createIssueLoopRun(w http.ResponseWriter, r *http.Request) {
 			prompt = issue.Description
 		}
 		run = domain.Ask{
-			ID: fmt.Sprintf("loop_run_%d", now.UnixNano()), Title: "Run loop on " + issue.Identifier,
+			ID: idgen.New("loop_run_"), Title: "Run loop on " + issue.Identifier,
 			Body: prompt, Source: "loop", Requester: data.Viewer, TeamID: issue.Team.ID,
 			Status: "approved", IssueID: issue.ID, Approvals: []domain.AskApproval{}, CreatedAt: now, UpdatedAt: now,
 		}
@@ -5988,7 +5983,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		if previousDelegate != *input.DelegateID {
 			issue.AgentSessionID = ""
 			if issue.Delegate != nil {
-				issue.AgentSessionID = fmt.Sprintf("agent_task_%d", time.Now().UnixNano())
+				issue.AgentSessionID = idgen.New("agent_task_")
 				if issue.Assignee == nil && !data.Viewer.App {
 					viewer := data.Viewer
 					issue.Assignee = &viewer
@@ -6753,7 +6748,7 @@ func applyProjectDependencyUpdate(data *domain.Bootstrap, project *domain.Projec
 			continue
 		}
 		data.ProjectRelations = append(data.ProjectRelations, domain.ProjectRelation{
-			ID:               fmt.Sprintf("project_relation_%d_%d", now.UnixNano(), index),
+			ID:               fmt.Sprintf("project_relation_%s_%d", idgen.Stamp(), index),
 			ProjectID:        project.ID,
 			RelatedProjectID: relationInput.ProjectID,
 			Type:             relationInput.Type,
@@ -6778,7 +6773,7 @@ func applyInitiativeUpdate(data *domain.Bootstrap, initiative *domain.Initiative
 	if input.Description != nil {
 		if *input.Description != initiative.Description {
 			now := time.Now().UTC()
-			initiative.DescriptionHistory = append([]domain.InitiativeDescriptionRevision{{ID: fmt.Sprintf("initiative_description_revision_%d", now.UnixNano()), Description: initiative.Description, EditedAt: now, Editor: data.Viewer}}, initiative.DescriptionHistory...)
+			initiative.DescriptionHistory = append([]domain.InitiativeDescriptionRevision{{ID: idgen.New("initiative_description_revision_"), Description: initiative.Description, EditedAt: now, Editor: data.Viewer}}, initiative.DescriptionHistory...)
 		}
 		initiative.Description = *input.Description
 	}
@@ -6881,7 +6876,7 @@ func applyInitiativeUpdate(data *domain.Bootstrap, initiative *domain.Initiative
 				data.InitiativeRelations = append(data.InitiativeRelations, relation)
 			} else {
 				now := time.Now().UTC()
-				data.InitiativeRelations = append(data.InitiativeRelations, domain.InitiativeRelation{ID: fmt.Sprintf("initiative_relation_%d", now.UnixNano()), InitiativeID: initiative.ID, RelatedInitiativeID: parentID, Type: "parent", SortOrder: float64(index), CreatedAt: now, UpdatedAt: now})
+				data.InitiativeRelations = append(data.InitiativeRelations, domain.InitiativeRelation{ID: idgen.New("initiative_relation_"), InitiativeID: initiative.ID, RelatedInitiativeID: parentID, Type: "parent", SortOrder: float64(index), CreatedAt: now, UpdatedAt: now})
 			}
 		}
 	}
@@ -6999,7 +6994,7 @@ func validLabelGroupSelection(labels []domain.IssueLabel) bool {
 	return true
 }
 func appendActivity(data *domain.Bootstrap, issueID, eventType string, actor domain.User, metadata map[string]string) domain.ActivityEvent {
-	activity := domain.ActivityEvent{ID: fmt.Sprintf("activity_%d", time.Now().UnixNano()), Type: eventType, CreatedAt: time.Now().UTC(), Actor: actor, BotActor: viewerBotActor(data, actor), Metadata: metadata}
+	activity := domain.ActivityEvent{ID: idgen.New("activity_"), Type: eventType, CreatedAt: time.Now().UTC(), Actor: actor, BotActor: viewerBotActor(data, actor), Metadata: metadata}
 	data.Activities[issueID] = append(data.Activities[issueID], activity)
 	return activity
 }

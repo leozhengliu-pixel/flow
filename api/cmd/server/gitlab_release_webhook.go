@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -115,7 +116,7 @@ func reconcileReleaseSourceLinks(release *domain.Release, source string, desired
 		existing := slices.IndexFunc(release.Resources, func(item domain.ReleaseResource) bool { return item.Type == "link" && item.URL == link.URL })
 		switch {
 		case existing < 0:
-			release.Resources = append(release.Resources, domain.ReleaseResource{ID: fmt.Sprintf("release_resource_%d_g%d", now.UnixNano(), index), Type: "link", Title: link.Label, URL: link.URL, Source: source, CreatedAt: now})
+			release.Resources = append(release.Resources, domain.ReleaseResource{ID: fmt.Sprintf("release_resource_%s_g%d", idgen.Stamp(), index), Type: "link", Title: link.Label, URL: link.URL, Source: source, CreatedAt: now})
 		case release.Resources[existing].Source == source:
 			release.Resources[existing].Title = link.Label
 		}

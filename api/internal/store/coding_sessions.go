@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // Coding sessions store (track B, docs/coding-sessions-design.md §5-§6):
@@ -511,7 +512,7 @@ func (s *SQLiteStore) publishCodingSessionUpdate(workspace, eventType string, se
 		return
 	}
 	payload, _ := json.Marshal(map[string]any{"sessionId": session.ID, "agentSessionId": session.AgentSessionID, "issueId": session.IssueID, "state": session.State, "phase": session.Phase, "version": session.Version})
-	sink(workspace, domain.RealtimeEvent{ID: fmt.Sprintf("coding_%s_%d_%d", session.ID, session.Version, time.Now().UnixNano()), Type: eventType, AggregateID: session.ID, Payload: payload, CreatedAt: time.Now().UTC()})
+	sink(workspace, domain.RealtimeEvent{ID: fmt.Sprintf("coding_%s_%d_%s", session.ID, session.Version, idgen.Stamp()), Type: eventType, AggregateID: session.ID, Payload: payload, CreatedAt: time.Now().UTC()})
 }
 
 // LeaseCodingSessions leases non-terminal sessions that are due (or whose

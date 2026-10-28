@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -212,9 +213,8 @@ func (s *server) createApplicationAgentTask(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusForbidden, "The application cannot access this issue's team")
 		return
 	}
-	now := time.Now().UTC()
 	task := domain.AgentTask{
-		ID: fmt.Sprintf("agent_session_%d", now.UnixNano()), WorkspaceKey: workspace, IssueID: issue.ID, TeamID: issue.Team.ID, AppUserID: actor.ID,
+		ID: idgen.New("agent_session_"), WorkspaceKey: workspace, IssueID: issue.ID, TeamID: issue.Team.ID, AppUserID: actor.ID,
 		CreatorID: actor.ID, CommentID: input.CommentID, Prompt: issue.Title, ExternalURLs: input.ExternalURLs,
 	}
 	created, err := s.store.CreateAgentInitiatedTask(r.Context(), task)
@@ -257,7 +257,7 @@ func (s *server) sendAgentSessionEvent(ctx context.Context, app domain.Applicati
 		// Through the application's webhook: logged in its delivery log and
 		// signed with the application's webhook secret.
 		delivery := domain.WebhookDelivery{
-			ID: webhookDeliveryID(target.webhook.ID, fmt.Sprintf("%s:%d", eventID, now.UnixNano())), WorkspaceKey: app.WorkspaceKey, WebhookID: target.webhook.ID,
+			ID: webhookDeliveryID(target.webhook.ID, fmt.Sprintf("%s:%s", eventID, idgen.Stamp())), WorkspaceKey: app.WorkspaceKey, WebhookID: target.webhook.ID,
 			SecretRef: webhookSecretRef(*target.webhook), Kind: domain.WebhookDeliveryKindEvent, EventID: eventID, EventType: "AgentSessionEvent",
 			Action: agentSessionAction(task), URL: target.url, Payload: body, MaxAttempts: 1, CreatedAt: now, NextAttemptAt: &now,
 		}

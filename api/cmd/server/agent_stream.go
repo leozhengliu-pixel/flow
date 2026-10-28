@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -315,7 +316,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	s.addAgentAttachmentInputs(r.Context(), messages)
 	s.rememberAgentOrigin(r)
 	titleDone := s.startAgentSessionTitle(r, *session, mentions)
-	messageID := fmt.Sprintf("agent_message_%d", time.Now().UnixNano())
+	messageID := idgen.New("agent_message_")
 	started := time.Now()
 	parts := []domain.AgentMessagePart{}
 	partIndex := map[string]int{}
@@ -822,7 +823,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				continue
 			}
 			if agentToolNeedsApproval(r.Context(), call.Name) && !sessionLoopTool(*session, call) {
-				approvalID := fmt.Sprintf("agent_approval_%d", time.Now().UnixNano())
+				approvalID := idgen.New("agent_approval_")
 				call.ApprovalID = approvalID
 				call.Status = "pending"
 				key := "tool:" + call.ID
@@ -1456,7 +1457,7 @@ func (s *server) persistAgentCompletion(r *http.Request, session domain.AgentSes
 		} else {
 			current.Messages = append(current.Messages, message)
 		}
-		data.AgentActivities = append(data.AgentActivities, domain.AgentActivity{ID: fmt.Sprintf("agent_activity_%d", message.CreatedAt.UnixNano()), SessionID: session.ID, Type: "response", Status: "completed", Body: message.Content, Metadata: map[string]any{"durationMs": message.DurationMS, "partCount": len(message.Parts)}, CreatedAt: message.CreatedAt, UpdatedAt: message.CreatedAt})
+		data.AgentActivities = append(data.AgentActivities, domain.AgentActivity{ID: idgen.New("agent_activity_"), SessionID: session.ID, Type: "response", Status: "completed", Body: message.Content, Metadata: map[string]any{"durationMs": message.DurationMS, "partCount": len(message.Parts)}, CreatedAt: message.CreatedAt, UpdatedAt: message.CreatedAt})
 		current.UpdatedAt = message.CreatedAt
 		completed = *current
 		return nil
