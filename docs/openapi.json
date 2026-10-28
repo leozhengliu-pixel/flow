@@ -12884,6 +12884,49 @@
         "x-flow-source": "chat_integrations.go"
       }
     },
+    "/api/integrations/{provider}/chat/bindings/{id}/revoke": {
+      "post": {
+        "operationId": "post_integrations_provider_chat_bindings_id_revoke",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "POST /api/integrations/{provider}/chat/bindings/{id}/revoke",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_integrations.go"
+      }
+    },
     "/api/integrations/{provider}/chat/chats": {
       "get": {
         "operationId": "get_integrations_provider_chat_chats",
@@ -12996,6 +13039,76 @@
           "integrations"
         ],
         "summary": "POST /api/integrations/{provider}/chat/identity/start",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_integrations.go"
+      }
+    },
+    "/api/integrations/{provider}/chat/tenant/authorizer": {
+      "put": {
+        "operationId": "put_integrations_provider_chat_tenant_authorizer",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "PUT /api/integrations/{provider}/chat/tenant/authorizer",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_integrations.go"
+      }
+    },
+    "/api/integrations/{provider}/chat/tenant/start": {
+      "post": {
+        "operationId": "post_integrations_provider_chat_tenant_start",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "POST /api/integrations/{provider}/chat/tenant/start",
         "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
         "parameters": [
           {

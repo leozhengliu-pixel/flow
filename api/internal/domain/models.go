@@ -2788,6 +2788,9 @@ type Bootstrap struct {
 	// TrashRetentionDays is set on bootstrap responses only: how long deleted
 	// items stay restorable (FLOW_TRASH_RETENTION_DAYS).
 	TrashRetentionDays int `json:"trashRetentionDays,omitempty"`
+	// ChatPlatform is set on bootstrap responses only: the deployment's
+	// first-class chat platform (FLOW_CHAT_PLATFORM).
+	ChatPlatform string `json:"chatPlatform,omitempty" enum:"slack,lark,feishu"`
 }
 
 type ProviderJob struct {

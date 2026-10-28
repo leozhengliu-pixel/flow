@@ -94,7 +94,7 @@ func (s *server) queueChatDomainEvent(ctx context.Context, workspace string, eve
 			resourceLoaded = true
 		}
 		for _, binding := range bindings {
-			if !binding.Enabled || !binding.CreatedAt.IsZero() && event.CreatedAt.Before(binding.CreatedAt) || !chatBindingScopePermitted(projectMetadata, binding) {
+			if !binding.Enabled || !binding.CreatedAt.IsZero() && event.CreatedAt.Before(binding.CreatedAt) || !chatBindingScopePermitted(projectMetadata, binding) || !s.chatBindingAuthorizerValid(ctx, workspace, binding) {
 				continue
 			}
 			if issue != nil && !chatIssueMatchesBinding(*issue, binding) {
@@ -218,7 +218,7 @@ func chatProjectMatchesBinding(data domain.Bootstrap, binding domain.ChatBinding
 			continue
 		}
 		for _, teamID := range project.TeamIDs {
-			if !chatPublicTeam(data, teamID) {
+			if !chatTeamShareable(data, binding, teamID) {
 				return false
 			}
 		}

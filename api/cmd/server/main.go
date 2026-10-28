@@ -1188,6 +1188,7 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	data.ProviderJobs = nil
 	delete(data.Settings, "providerJobs")
 	data.TrashRetentionDays = trashRetentionDays()
+	data.ChatPlatform = chatPlatform()
 	availability, _ := data.Settings["calendarAvailability"].(map[string]any)
 	for i := range data.Users {
 		if raw, ok := availability[data.Users[i].ID].(string); ok {

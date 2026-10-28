@@ -414,7 +414,7 @@ func (s *server) chatBindingByID(ctx context.Context, record domain.ChatIntegrat
 		return domain.ChatBinding{}, err
 	}
 	for _, binding := range bindings {
-		if binding.ID == id && binding.Enabled {
+		if binding.ID == id && binding.Enabled && binding.RevokedAt == nil {
 			if err := s.chatBindingPermitted(ctx, record, binding); err != nil {
 				return domain.ChatBinding{}, err
 			}
@@ -431,7 +431,7 @@ func (s *server) chatBindingForChat(ctx context.Context, record domain.ChatInteg
 	}
 	var result *domain.ChatBinding
 	for _, binding := range bindings {
-		if binding.ChatID == chatID && binding.Enabled {
+		if binding.ChatID == chatID && binding.Enabled && binding.RevokedAt == nil {
 			if result != nil {
 				return domain.ChatBinding{}, chatInvalid("choose a single group create scope")
 			}
@@ -594,8 +594,11 @@ func (s *server) chatExecuteAction(ctx context.Context, record domain.ChatIntegr
 	return err
 }
 
+// chatIssueMatchesBinding: an issue of the bound team (and project), with no
+// issue-level restrictions. A private team's issues match only a binding its
+// owners authorized for the private team.
 func chatIssueMatchesBinding(issue domain.Issue, binding domain.ChatBinding) bool {
-	return issue.ID != "" && !issue.Team.Private && len(issue.Permissions) == 0 && issue.Team.ArchivedAt == nil && issue.ArchivedAt == nil && issue.Team.ID == binding.TeamID && (binding.ProjectID == "" || issue.Project != nil && issue.Project.ID == binding.ProjectID)
+	return issue.ID != "" && binding.RevokedAt == nil && (!issue.Team.Private || chatPrivateBinding(binding)) && len(issue.Permissions) == 0 && issue.Team.ArchivedAt == nil && issue.ArchivedAt == nil && issue.Team.ID == binding.TeamID && (binding.ProjectID == "" || issue.Project != nil && issue.Project.ID == binding.ProjectID)
 }
 
 func chatBindingFingerprint(binding domain.ChatBinding) string {

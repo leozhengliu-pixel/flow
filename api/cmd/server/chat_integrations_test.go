@@ -90,6 +90,15 @@ func TestChatApplicationSetupIdentityOAuthAndInternalGroupBindings(t *testing.T)
 						t.Fatal("user identity not verified with user token")
 					}
 					return chatTestResponse(200, `{"code":0,"data":{"open_id":"ou_alice","tenant_key":"tenant_a","name":"Alice"}}`), nil
+				case "/open-apis/tenant/v2/tenant/query":
+					return chatTestResponse(200, `{"code":0,"data":{"tenant":{"tenant_key":"tenant_a","name":"Tenant A"}}}`), nil
+				case "/open-apis/contact/v3/users/ou_alice":
+					if r.Header.Get("Authorization") != "Bearer tenant-token" {
+						t.Fatal("tenant administrator not checked with the application token")
+					}
+					return chatTestResponse(200, `{"code":0,"data":{"user":{"open_id":"ou_alice","is_tenant_manager":true}}}`), nil
+				case "/open-apis/im/v1/chats/oc_internal/members/is_in_chat":
+					return chatTestResponse(200, `{"code":0,"data":{"is_in_chat":true}}`), nil
 				case "/open-apis/im/v1/chats":
 					return chatTestResponse(200, `{"code":0,"data":{"has_more":true,"page_token":"next-page","items":[{"chat_id":"oc_internal","name":"Internal","tenant_key":"tenant_a","external":false},{"chat_id":"oc_external","name":"External","tenant_key":"tenant_a","external":true},{"chat_id":"oc_other","name":"Other tenant","tenant_key":"tenant_b","external":false},{"chat_id":"oc_unknown","name":"Unknown audience","tenant_key":"tenant_a"}]}}`), nil
 				case "/open-apis/im/v1/chats/oc_internal":
@@ -109,7 +118,14 @@ func TestChatApplicationSetupIdentityOAuthAndInternalGroupBindings(t *testing.T)
 			if settings["credentialsConfigured"] != true || settings["connection"].(map[string]any)["status"] != "pending_authorization" {
 				t.Fatalf("false connection health: %#v", settings)
 			}
-			started := requestJSON[map[string]string](t, handler, "POST", path+"/identity/start"+scope, nil, 200)
+			if tenant := settings["permissions"].(map[string]any)["tenant"].(map[string]any); tenant["status"] != "pending" || tenant["canAuthorize"] != true {
+				t.Fatalf("tenant authorization state: %#v", tenant)
+			}
+			// A personal account cannot establish the tenant.
+			if refused := requestJSON[map[string]any](t, handler, "POST", path+"/identity/start"+scope, nil, 409); refused["code"] != "chat_tenant_authorization_required" || refused["permissionDomain"] != "tenant" {
+				t.Fatalf("personal link before tenant authorization: %#v", refused)
+			}
+			started := requestJSON[map[string]string](t, handler, "POST", path+"/tenant/start"+scope, nil, 200)
 			authorization, err := url.Parse(started["authorizeUrl"])
 			if err != nil {
 				t.Fatal(err)
@@ -121,7 +137,7 @@ func TestChatApplicationSetupIdentityOAuthAndInternalGroupBindings(t *testing.T)
 			callback := path + "/identity/oauth/callback?state=" + url.QueryEscape(query.Get("state")) + "&code=accepted"
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, httptest.NewRequest("GET", callback, nil))
-			if rec.Code != 303 || !strings.Contains(rec.Header().Get("Location"), "chat_auth=success") {
+			if rec.Code != 303 || !strings.Contains(rec.Header().Get("Location"), "chat_tenant=authorized") || !strings.Contains(rec.Header().Get("Location"), "/settings/integrations/"+provider) {
 				t.Fatalf("callback: %d %s %s", rec.Code, rec.Body.String(), rec.Header().Get("Location"))
 			}
 			requestJSON[map[string]any](t, handler, "GET", callback, nil, 400)
@@ -129,8 +145,21 @@ func TestChatApplicationSetupIdentityOAuthAndInternalGroupBindings(t *testing.T)
 				t.Fatal("OAuth state was reused")
 			}
 			settings = requestJSON[map[string]any](t, handler, "GET", path+scope, nil, 200)
-			if settings["connection"].(map[string]any)["status"] != "connected" || settings["identity"].(map[string]any)["openId"] != "ou_alice" {
-				t.Fatalf("tenant/identity not connected: %#v", settings)
+			tenant := settings["permissions"].(map[string]any)["tenant"].(map[string]any)
+			tenantAuthorization, _ := tenant["authorization"].(map[string]any)
+			if settings["connection"].(map[string]any)["status"] != "connected" || tenant["status"] != "authorized" || tenant["tenantKey"] != "tenant_a" || tenantAuthorization["method"] != "tenant_manager" || tenantAuthorization["openId"] != "ou_alice" || tenantAuthorization["authorizedAt"] == "" || settings["identity"] != nil {
+				t.Fatalf("tenant not authorized, or a personal account was linked by it: %#v", settings)
+			}
+			started = requestJSON[map[string]string](t, handler, "POST", path+"/identity/start"+scope, nil, 200)
+			authorization2, _ := url.Parse(started["authorizeUrl"])
+			rec = httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequest("GET", path+"/identity/oauth/callback?state="+url.QueryEscape(authorization2.Query().Get("state"))+"&code=accepted", nil))
+			if rec.Code != 303 || !strings.Contains(rec.Header().Get("Location"), "/settings/account/connections?chat_auth=success") {
+				t.Fatalf("identity callback: %d %s", rec.Code, rec.Header().Get("Location"))
+			}
+			settings = requestJSON[map[string]any](t, handler, "GET", path+scope, nil, 200)
+			if settings["identity"].(map[string]any)["openId"] != "ou_alice" {
+				t.Fatalf("identity not linked: %#v", settings)
 			}
 			groups := requestJSON[struct {
 				Items     []chatGroup `json:"items"`
@@ -152,12 +181,17 @@ func TestChatApplicationSetupIdentityOAuthAndInternalGroupBindings(t *testing.T)
 				t.Fatal("fixture missing public team")
 			}
 			binding := domain.ChatBinding{ChatID: "oc_internal", ChatName: "Internal", TeamID: teamID, Events: []string{"issue.created"}, Enabled: true, AllowCreate: true, AllowUpdate: true}
-			saved := requestJSON[domain.ChatBinding](t, handler, "POST", path+"/bindings"+scope, binding, 200)
-			if saved.CreatedAt.IsZero() || saved.ConnectionID == "" {
-				t.Fatal("binding lacked lifecycle fields")
+			if refused := requestJSON[map[string]any](t, handler, "POST", path+"/bindings"+scope, binding, 400); refused["code"] != "chat_binding_authorization_required" || refused["permissionDomain"] != "team" {
+				t.Fatalf("binding saved without explicit authorization: %#v", refused)
+			}
+			saved := requestJSON[domain.ChatBinding](t, handler, "POST", path+"/bindings"+scope, chatAuthorizedBinding(binding), 200)
+			if saved.CreatedAt.IsZero() || saved.ConnectionID == "" || saved.Authorization == nil || saved.Authorization.AuthorizedAt.IsZero() || saved.Authorization.PrivateTeam {
+				t.Fatal("binding lacked lifecycle or authorization fields")
 			}
 			binding.ChatID = "oc_external"
-			requestJSON[map[string]any](t, handler, "POST", path+"/bindings"+scope, binding, 400)
+			if refused := requestJSON[map[string]any](t, handler, "POST", path+"/bindings"+scope, chatAuthorizedBinding(binding), 400); refused["code"] != "chat_group_external" {
+				t.Fatalf("external group accepted: %#v", refused)
+			}
 			requestJSON[map[string]any](t, handler, "PUT", path+scope, map[string]string{"appId": "cli_test", "name": "Updated name"}, 200)
 			record, err := s.store.ChatIntegration(t.Context(), "test-workspace", provider)
 			if err != nil {
@@ -380,13 +414,20 @@ func TestChatSettingsRecoverPartialSetupAndDisconnectStaleMetadata(t *testing.T)
 	}
 	workspace := s.store.Bootstrap()
 	bindable, _ := settings["bindableTeamIds"].([]any)
-	expected := s.chatBindableTeamIDs(record.WorkspaceKey)
+	all := []string{}
+	for _, team := range workspace.Teams {
+		all = append(all, team.ID)
+	}
+	expected := s.chatBindableTeamIDs(record.WorkspaceKey, all)
 	if len(bindable) != len(expected) || len(expected) == 0 {
 		t.Fatalf("bindable teams not reported: %v, expected %v", bindable, expected)
 	}
 	for _, team := range workspace.Teams {
-		permitted := chatBindingScopePermitted(workspace, domain.ChatBinding{TeamID: team.ID})
-		if permitted != slices.Contains(expected, team.ID) {
+		probe := domain.ChatBinding{TeamID: team.ID}
+		if _, private := chatTeamState(workspace, team.ID); private {
+			probe.Authorization = &domain.ChatBindingAuthorization{PrivateTeam: true}
+		}
+		if chatBindingScopePermitted(workspace, probe) != slices.Contains(expected, team.ID) {
 			t.Fatalf("bindable team %s disagrees with the binding rule", team.ID)
 		}
 	}
