@@ -5,7 +5,10 @@ package store
 import (
 	"context"
 	"os"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"flow/api/internal/domain"
 )
@@ -113,4 +116,54 @@ func TestExternalSearchIndexesMatchEnglishWords(t *testing.T) {
 	repo = open()
 	defer repo.Close()
 	expect(repo, "rebuilt index")
+}
+
+// A query longer than InnoDB's 128-token phrase limit (a 2,048-character CJK
+// or English title) searches issues and metadata without Error 191 and finds
+// the row that holds it.
+func TestExternalSearchLongQueries(t *testing.T) {
+	driver, databaseURL := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL")
+	if driver == "" || databaseURL == "" {
+		t.Skip("isolated external database required")
+	}
+	repo, err := OpenDatabase(DatabaseConfig{Driver: driver, URL: databaseURL, MaxOpenConns: 4, MaxIdleConns: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	ctx := context.Background()
+	workspace := "search-long-queries"
+	_ = repo.DeleteWorkspace(ctx, workspace)
+	data, err := repo.CreateWorkspace(ctx, "Long search test", workspace, "us")
+	if err != nil {
+		t.Fatal(err)
+	}
+	english := strings.TrimSpace(strings.Repeat("billing export migration dashboard staging ", 47))
+	queries := map[string]string{"cjk": longCJKText(domain.IssueTitleMaxLength), "english": english}
+	issues := []domain.Issue{}
+	for kind, text := range queries {
+		issues = append(issues, domain.Issue{ID: "long-" + kind, Identifier: "LNG-" + strconv.Itoa(len(issues)+1), Title: text, Team: data.Teams[0]})
+	}
+	if err := repo.ImportIssues(ctx, workspace, issues); err != nil {
+		t.Fatal(err)
+	}
+	project := domain.Project{ID: "long-project", Name: "Long description", Description: queries["cjk"] + "\n" + english, TeamIDs: []string{data.Teams[0].ID}, Status: domain.ProjectStatus{Type: "started"}}
+	if err := repo.MutateWorkspace(ctx, workspace, "search.integration", project.ID, nil, func(next *domain.Bootstrap) error {
+		next.Projects = append(next.Projects, project)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// InnoDB briefly leaves just-committed rows out of multi-phrase matches.
+	time.Sleep(500 * time.Millisecond)
+	for kind, text := range queries {
+		hit := false
+		if err := repo.SearchIssueCandidates(ctx, IssueRecordQuery{Workspace: workspace}, text, nil, 10, func(item domain.Issue) error { hit = hit || item.ID == "long-"+kind; return nil }); err != nil || !hit {
+			t.Fatalf("%s issue search: hit=%v err=%v", kind, hit, err)
+		}
+		result, err := repo.SearchMetadata(ctx, data, SearchMetadataQuery{Scope: IssueRecordQuery{Workspace: workspace}, Types: map[string]bool{"project": true}, Terms: []string{text}, Limit: 10})
+		if err != nil || len(result.Projects) != 1 {
+			t.Fatalf("%s global search: %d projects, err=%v", kind, len(result.Projects), err)
+		}
+	}
 }
