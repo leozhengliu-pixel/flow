@@ -102,6 +102,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Record ids Flow generates have the shape
+  `<prefix><19 digits>_<10 characters>` (a zero-padded creation time in
+  nanoseconds and a random part) instead of `<prefix><digits>`, so ids made
+  at the same instant on several servers no longer collide. Ids of one kind
+  still sort by creation time; existing ids keep their shape. Integrations
+  that match ids against a pattern such as `prefix_\d+$` must treat them as
+  opaque strings; see [Record ids](docs/api.md#record-ids). The
+  webhook-disabled notification, a document's baseline version and a reset
+  custom email intake address no longer reuse a value built from the clock
+  second or the document's save time.
 - On a Lark or Feishu deployment (`FLOW_CHAT_PLATFORM`), the remaining
   chat platform copy names it instead of Slack (飞书 in Chinese for
   Feishu): the read-only notice of a team's notifications, the initiative

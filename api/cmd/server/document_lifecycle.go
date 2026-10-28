@@ -134,7 +134,10 @@ func keepDocumentBaseline(document *domain.Document, before domain.Document) {
 	if before.Creator.ID != "" {
 		authorIDs = append(authorIDs, before.Creator.ID)
 	}
-	document.Revisions = []domain.DocumentRevision{{ID: fmt.Sprintf("revision_%d", at.UnixNano()), DocumentID: document.ID, Title: before.Title, Content: before.Content, ContentState: before.ContentState, ContentData: before.ContentData, Author: before.Creator, BotActor: botActor, AuthorIDs: authorIDs, CreatedAt: at}}
+	// The id is fresh (two documents last saved at the same instant, an
+	// import for one, used to share "revision_<their time>"); CreatedAt keeps
+	// the baseline's own time.
+	document.Revisions = []domain.DocumentRevision{{ID: idgen.New("revision_"), DocumentID: document.ID, Title: before.Title, Content: before.Content, ContentState: before.ContentState, ContentData: before.ContentData, Author: before.Creator, BotActor: botActor, AuthorIDs: authorIDs, CreatedAt: at}}
 }
 
 func recordDocumentRevision(document *domain.Document, author domain.User, now time.Time, force bool) bool {

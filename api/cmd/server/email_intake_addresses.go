@@ -8,7 +8,6 @@ import (
 	"net/mail"
 	"os"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -371,8 +370,11 @@ func (s *server) rotateEmailIntakeAddress(w http.ResponseWriter, r *http.Request
 			// A reset generates a brand-new address; the previous one is disabled.
 			item.LocalPart = randomIntakeLocalPart()
 		} else {
-			suffix := strconv.FormatInt(now.Unix()%100000, 36)
-			item.LocalPart = strings.TrimSuffix(item.LocalPart, "-"+suffix) + "-" + suffix
+			// A random suffix: one built from the clock second gave two
+			// resets in the same second the same address (the second reset
+			// kept the address it was meant to retire) and repeated every
+			// 28 hours.
+			item.LocalPart += "-" + randomIntakeLocalPart()[:6]
 		}
 		item.Address = item.LocalPart + "@" + item.Domain
 		item.InboundTokenHash = secretHash(token)
