@@ -2,6 +2,8 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './e2e',
+  // The security specs start their own servers and run from playwright.security.config.ts.
+  testIgnore: '**/security/**',
   timeout: 30_000,
   fullyParallel: false,
   workers: 1,
