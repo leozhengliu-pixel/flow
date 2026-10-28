@@ -1024,16 +1024,17 @@ func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQue
 	if err := s.applyIssueRecordScope(ctx, &query); err != nil {
 		return nil, err
 	}
-	cached, cacheKey, ok := s.cacheGetIssueGroups(ctx, query)
-	if ok {
-		return cached, nil
-	}
 	if _, _, err := issueRecordWhere(query); err != nil {
 		return nil, err
 	}
+	// Both caches are keyed by the revision read before counting.
 	revision, err := s.issueCountRevision(ctx, query.Workspace)
 	if err != nil {
 		return nil, err
+	}
+	cached, cacheKey, ok := s.cacheGetIssueGroups(ctx, query, revision)
+	if ok {
+		return cached, nil
 	}
 	key, now := issueGroupCountKey(query, revision), time.Now()
 	if groups, ok := s.issueGroupCounts.get(key, now); ok {

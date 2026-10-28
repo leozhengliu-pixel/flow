@@ -540,6 +540,9 @@ func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sq
 		return nil, tx.writeErr
 	}
 	tx.writtenBytes += bytes
+	if workspace, ok := metadataWriteWorkspace(query, args); ok {
+		tx.queueCacheRevision(workspace, cacheKindMetadata)
+	}
 	return tx.Tx.ExecContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
 }
 

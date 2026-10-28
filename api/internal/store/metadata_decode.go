@@ -167,13 +167,15 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 }
 
 func (s *SQLiteStore) loadMetadataRecordRows(ctx context.Context, workspace string, reader metadataReader, collections map[string]string) ([]metadataCacheRow, error) {
-	if cached, ok := s.metadataRecordsFromCache(ctx, workspace, collections); ok {
-		sortMetadataRecordRows(cached)
-		return cached, s.inlineOffloadedRows(ctx, workspace, reader, cached)
+	// The copy must be the metadata reader sees: the stamp is read through
+	// reader, before the rows (see metadataGenerationKey).
+	stamp, stamped := s.metadataStamp(ctx, reader, workspace)
+	if stamped {
+		if cached, ok := s.metadataRecordsFromCache(ctx, workspace, stamp, collections); ok {
+			sortMetadataRecordRows(cached)
+			return cached, s.inlineOffloadedRows(ctx, workspace, reader, cached)
+		}
 	}
-	// The cache copy is stamped with the generation before the read (see
-	// metadataGenerationKey).
-	generation := s.metadataCacheGeneration(ctx, workspace)
 	// Read in primary-key order and sort in memory: ordering by
 	// collection_order on the server sorts every record with its data
 	// (seconds at ~200k records on MySQL).
@@ -195,7 +197,9 @@ func (s *SQLiteStore) loadMetadataRecordRows(ctx context.Context, workspace stri
 	}
 	sortMetadataRecordRows(result)
 	// The shared cache keeps rows as stored; bodies are inlined per process.
-	s.fillMetadataRecordsCacheAt(ctx, workspace, result, generation)
+	if stamped {
+		s.fillMetadataRecordsCacheAt(ctx, workspace, result, stamp)
+	}
 	return result, s.inlineOffloadedRows(ctx, workspace, reader, result)
 }
 
