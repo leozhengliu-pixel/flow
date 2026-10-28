@@ -571,3 +571,40 @@ func TestChatPrivateTeamBindingDeliversOnlyToTheGroupAndKeepsActorPermissions(t 
 		t.Fatalf("create flag not enforced: %#v", f.sent)
 	}
 }
+
+// Initiative updates reach the groups of the initiative's lead team, and only
+// when no private contributing team would be disclosed.
+func TestChatInitiativeUpdatesReachTheLeadTeamGroup(t *testing.T) {
+	f := newChatWorkflowFixture(t)
+	binding := f.binding
+	binding.Events = append(binding.Events, "initiative.update_created")
+	if err := f.s.store.PutChatBinding(t.Context(), f.record.WorkspaceKey, binding); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "initiative.created", "initiative_chat", nil, func(data *domain.Bootstrap) error {
+		data.Teams = append(data.Teams, domain.Team{ID: "team_initiative_private", Private: true})
+		data.Initiatives = append(data.Initiatives,
+			domain.Initiative{ID: "initiative_chat", Name: "Launch", SlugID: "launch-1", LeadTeamID: binding.TeamID, ContributingTeamIDs: []string{binding.TeamID}},
+			domain.Initiative{ID: "initiative_mixed", Name: "Secret", SlugID: "secret-1", LeadTeamID: binding.TeamID, ContributingTeamIDs: []string{"team_initiative_private"}},
+			domain.Initiative{ID: "initiative_workspace", Name: "Company", SlugID: "company-1"})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"initiative_chat", "initiative_mixed", "initiative_workspace"} {
+		event := domain.DomainEvent{ID: "evt_" + id, Type: "initiative.update_created", AggregateID: id, CreatedAt: time.Now()}
+		if err := f.s.queueChatDomainEvent(t.Context(), f.record.WorkspaceKey, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	jobs, err := f.s.store.ClaimChatJobs(t.Context(), f.record.WorkspaceKey, "notification", 10, time.Now())
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("initiative updates queued: %d %v", len(jobs), err)
+	}
+	if err := f.s.processChatJob(t.Context(), jobs[0]); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.sent) != 1 || f.sent[0]["receive_id"] != binding.ChatID || !strings.Contains(f.sent[0]["content"].(string), "/initiative/launch-1/overview") {
+		t.Fatalf("initiative update not delivered to the group: %#v", f.sent)
+	}
+}

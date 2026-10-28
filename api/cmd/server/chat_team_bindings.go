@@ -21,6 +21,9 @@ import (
 // notifications are delivered to the group only, and group actions run with
 // the acting member's own linked Flow identity and permissions.
 
+// chatBindingEvents are the notification types a binding may share.
+var chatBindingEvents = []string{"issue.created", "issue.status_changed", "issue.assignee_changed", "comment.created", "project.update_created", "initiative.update_created"}
+
 type chatGroup struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
@@ -336,12 +339,12 @@ func (s *server) saveChatBinding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	binding := input.ChatBinding
-	if binding.ChatID == "" || len(binding.ChatID) > 191 || len(binding.ChatName) > 200 || len(binding.Events) > 5 || binding.TeamID == "" {
+	if binding.ChatID == "" || len(binding.ChatID) > 191 || len(binding.ChatName) > 200 || len(binding.Events) > len(chatBindingEvents) || binding.TeamID == "" {
 		writeChatError(w, 400, "Invalid group binding")
 		return
 	}
 	for _, event := range binding.Events {
-		if !slices.Contains([]string{"issue.created", "issue.status_changed", "issue.assignee_changed", "comment.created", "project.update_created"}, event) {
+		if !slices.Contains(chatBindingEvents, event) {
 			writeChatError(w, 400, "Unsupported notification event")
 			return
 		}

@@ -40,7 +40,7 @@ func (s *server) queueCommittedChatEvents(ctx context.Context, workspace string)
 	}
 	for _, record := range records {
 		switch record.Event.Type {
-		case "issue.created", "issue.updated", "comment.created", "project.update_created":
+		case "issue.created", "issue.updated", "comment.created", "project.update_created", "initiative.update_created":
 			if err := s.queueChatDomainEvent(ctx, workspace, record.Event); err != nil {
 				return err
 			}
