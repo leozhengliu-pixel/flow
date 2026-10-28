@@ -223,7 +223,8 @@ jobs:
 
   # The API suite is split so no single runner carries it all: cmd/server (about
   # 55 minutes under the race detector) and internal/store (about 17 minutes) are
-  # sharded by test name, and every other package runs in one job. Each job writes
+  # sharded by measured test time (scripts/ci/go-test-timings.json; see
+  # scripts/ci/go-test-shard.sh), and every other package runs in one job. Each job writes
   # its own coverage profile; api-coverage merges them and enforces the floor.
   # "API" below is the required status check that gathers everything.
   api-static:
@@ -254,12 +255,16 @@ jobs:
       - name: Check test shards cover every test once (cmd/server)
         env:
           CHECK_PATTERNS: '1'
-        run: ../scripts/ci/go-test-shard.sh check ./cmd/server 8
+        run: |
+          ../scripts/ci/go-test-shard.sh check ./cmd/server 8
+          ../scripts/ci/go-test-shard.sh plan ./cmd/server 8
 
       - name: Check test shards cover every test once (internal/store)
         env:
           CHECK_PATTERNS: '1'
-        run: ../scripts/ci/go-test-shard.sh check ./internal/store 2
+        run: |
+          ../scripts/ci/go-test-shard.sh check ./internal/store 2
+          ../scripts/ci/go-test-shard.sh plan ./internal/store 2
 
   api-test:
     name: API tests (${{ matrix.name }})
