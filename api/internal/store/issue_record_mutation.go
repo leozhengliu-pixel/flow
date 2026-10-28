@@ -57,6 +57,9 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		}
 		metadata.ViewerRole = role
 	}
+	if err := s.loadMemberAccess(ctx, &metadata); err != nil {
+		return domain.Issue{}, err
+	}
 	var result domain.Issue
 	var event domain.DomainEvent
 	var realtime json.RawMessage

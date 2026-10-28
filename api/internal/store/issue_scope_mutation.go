@@ -82,6 +82,9 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 			}
 			data.ViewerRole = role
 		}
+		if err := s.loadMemberAccess(ctx, &data); err != nil {
+			return err
+		}
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
 			return err
