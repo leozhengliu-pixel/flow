@@ -167,8 +167,18 @@ func testNestedCountParity(t *testing.T, repository *SQLiteStore, workspace, wor
 	}
 	private := shape.teams[7].ID
 	member := &IssueRecordAccess{UserID: "ncp-viewer", WorkspaceID: workspaceID, VisibleTeamIDs: visible}
-	cases := []IssueGroupCase{{Value: "urgent", Filter: IssueFilter{Field: "priority", Values: []string{"1"}}}, {Value: "started", Filter: IssueFilter{Field: "statusType", Values: []string{"started"}}}}
+	cases := []IssueGroupCase{
+		{Value: "urgent", Filter: IssueFilter{Field: "priority", Values: []string{"1"}}},
+		{Value: "started", Filter: IssueFilter{Field: "statusType", Values: []string{"started"}}},
+		{Value: "labelled or mine", Filter: IssueFilter{Or: []IssueFilter{{Field: "labels", Operator: "isNotEmpty"}, {Field: "assignee", Values: []string{shape.users[1]}}}}},
+	}
 	scopes := []IssueRecordQuery{
+		// Terms the in-memory count combines: OR and NOT of status, label,
+		// assignee and priority terms, labels without a label, and status ids.
+		{TeamIDs: []string{shape.teams[0].ID}, Filter: IssueFilter{Or: []IssueFilter{{Field: "status", Values: []string{"started"}}, {Not: &IssueFilter{Field: "labels", Values: []string{shape.labels[0], ""}}}}}},
+		{TeamIDs: []string{shape.teams[0].ID, private}, Filter: IssueFilter{And: []IssueFilter{{Field: "assigneeId", Operator: "notIn", Values: []string{shape.users[0]}}, {Field: "labels", Operator: "includesAll", Values: []string{shape.labels[1]}}}}},
+		{TeamIDs: []string{shape.teams[1].ID}, StateIDs: []string{shape.states[shape.teams[1].ID][0].ID, shape.states[shape.teams[1].ID][2].ID}, Filter: IssueFilter{Field: "labels", Operator: "isEmpty"}},
+
 		{},
 		{TeamIDs: []string{shape.teams[0].ID}},
 		{TeamIDs: []string{shape.teams[0].ID, shape.teams[3].ID}},
@@ -179,15 +189,16 @@ func testNestedCountParity(t *testing.T, repository *SQLiteStore, workspace, wor
 		{Filter: IssueFilter{Field: "labels", Operator: "notIn", Values: []string{shape.labels[0]}}},
 		{Filter: IssueFilter{Or: []IssueFilter{{Field: "priority", Values: []string{"1", "2"}}, {Field: "labels", Values: []string{shape.labels[1]}}}}},
 	}
-	groupings := []string{"status", "priority", "assignee", "team", "project", "label", "customer", "cases", "none"}
-	moved := 0
+	groupings := []string{"status", "priority", "assignee", "team", "project", "label", "estimate", "customer", "cases", "none"}
+	moved, forestCounts, memberCounts := 0, 0, 0
 	compare := func(step string, groupings []string, scopes []IssueRecordQuery) {
 		t.Helper()
-		moved = 0
+		moved, forestCounts, memberCounts = 0, 0, 0
 		defer func() {
-			// Nesting moved rows between groups in most combinations.
-			if moved < 10 {
-				t.Fatalf("%s: nested counts equal the flat ones in all but %d combinations", step, moved)
+			// Nesting moved rows between groups in most combinations, and
+			// the in-memory and member counter counts served many of them.
+			if moved < 10 || forestCounts < 10 || memberCounts < 4 {
+				t.Fatalf("%s: nested counts equal the flat ones in all but %d combinations; %d in-memory, %d member counter counts", step, moved, forestCounts, memberCounts)
 			}
 		}()
 		for _, access := range []*IssueRecordAccess{nil, member} {
@@ -222,18 +233,52 @@ func testNestedCountParity(t *testing.T, repository *SQLiteStore, workspace, wor
 								t.Fatalf("%s: corrected %s counts (access %v, %+v)\n got %v\nwant %v", step, groupBy, counted.Access != nil, scope, corrected, want)
 							}
 						}
-						// Flat counts are unchanged by dropping a redundant team restriction.
+						// The in-memory count (issue_forest_groups.go), wherever
+						// its plan covers the query, nested and flat.
+						for _, counted := range []IssueRecordQuery{q, withoutRedundantIssueAccess(q)} {
+							forest, handled, err := repository.issueForestGroups(ctx, counted, true)
+							if err != nil {
+								t.Fatal(err)
+							}
+							if handled {
+								forestCounts++
+								if !slices.Equal(forest, want) {
+									t.Fatalf("%s: in-memory nested %s counts (access %v, %+v)\n got %v\nwant %v", step, groupBy, counted.Access != nil, scope, forest, want)
+								}
+							}
+						}
+						// Flat counts (counters, member counters, in memory) match
+						// the SQL count, with or without a redundant team restriction.
 						q.Nested = false
 						flat, err := repository.QueryIssueGroups(ctx, q)
 						if err != nil {
 							t.Fatal(err)
 						}
-						reference, err := repository.flatIssueGroups(ctx, q)
+						reference, err := repository.flatIssueGroupsBySQL(ctx, q)
 						if err != nil {
 							t.Fatal(err)
 						}
 						if !slices.Equal(flat, reference) {
 							t.Fatalf("%s: flat %s counts (access %v, %+v)\n got %v\nwant %v", step, groupBy, access != nil, scope, flat, reference)
+						}
+						for _, counted := range []IssueRecordQuery{q, withoutRedundantIssueAccess(q)} {
+							forest, handled, err := repository.issueForestGroups(ctx, counted, false)
+							if err != nil {
+								t.Fatal(err)
+							}
+							if handled && !slices.Equal(forest, reference) {
+								t.Fatalf("%s: in-memory flat %s counts (access %v, %+v)\n got %v\nwant %v", step, groupBy, counted.Access != nil, scope, forest, reference)
+							}
+							member, handled, err := repository.memberIssueGroupsFromStats(ctx, counted)
+							if err != nil {
+								t.Fatal(err)
+							}
+							if handled {
+								memberCounts++
+								if !slices.Equal(member, reference) {
+									t.Fatalf("%s: member counter %s counts (%+v)\n got %v\nwant %v", step, groupBy, scope, member, reference)
+								}
+							}
 						}
 						if !slices.Equal(flat, got) {
 							moved++
@@ -273,7 +318,7 @@ func testNestedCountParity(t *testing.T, repository *SQLiteStore, workspace, wor
 		if err := repository.ImportIssues(ctx, workspace, []domain.Issue{issues[index]}); err != nil {
 			t.Fatal(err)
 		}
-		compare(step, []string{"status", "label", "customer", "cases", "priority"}, scopes[:4])
+		compare(step, []string{"status", "label", "customer", "cases", "priority", "assignee", "none"}, scopes[:7])
 	}
 	write("re-parent", func(issue *domain.Issue) { issue.ParentID = &issues[other].ID }, parent)
 	write("status change", func(issue *domain.Issue) { issue.State = shape.states[issues[other].Team.ID][1] }, other)

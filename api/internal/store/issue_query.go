@@ -409,9 +409,12 @@ func bindList(column string, values []string) (string, []any) {
 	return column + " IN (" + strings.TrimSuffix(strings.Repeat("?,", len(values)), ",") + ")", args
 }
 
+// issueFilterFieldAliases maps a filter field's other names (lower case) to
+// the name compileIssueFilter compiles.
+var issueFilterFieldAliases = map[string]string{"state": "status", "stateid": "status", "teamid": "team", "projectid": "project", "assigneeid": "assignee", "creatorid": "creator", "cycleid": "cycle", "label": "labels", "labelid": "labels", "subscriber": "subscribers", "subscriberid": "subscribers", "createdat": "createdAt", "updatedat": "updatedAt", "sortorder": "sortOrder", "myactivity": "myActivity", "statustype": "statusType"}
+
 func compileIssueFilter(node IssueFilter, depth int, remaining *int) (string, []any, error) {
-	aliases := map[string]string{"state": "status", "stateid": "status", "teamid": "team", "projectid": "project", "assigneeid": "assignee", "creatorid": "creator", "cycleid": "cycle", "label": "labels", "labelid": "labels", "subscriber": "subscribers", "subscriberid": "subscribers", "createdat": "createdAt", "updatedat": "updatedAt", "sortorder": "sortOrder", "myactivity": "myActivity", "statustype": "statusType"}
-	if field, ok := aliases[strings.ToLower(node.Field)]; ok {
+	if field, ok := issueFilterFieldAliases[strings.ToLower(node.Field)]; ok {
 		node.Field = field
 	}
 	*remaining--
@@ -1079,7 +1082,25 @@ func (s *SQLiteStore) flatIssueGroups(ctx context.Context, query IssueRecordQuer
 		if groups, handled, err := s.issueGroupsFromStats(ctx, query); handled {
 			return groups, err
 		}
+		if groups, handled, err := s.memberIssueGroupsFromStats(ctx, query); handled {
+			return groups, err
+		}
+		// Team views the counters do not serve (by assignee or label, OR
+		// and label terms, cases) count in memory (issue_forest_groups.go).
+		if len(query.TeamIDs) > 0 && preferIssueForest(query) {
+			if groups, handled, err := s.issueForestGroups(ctx, query, false); handled {
+				return groups, err
+			}
+		}
 	}
+	return s.flatIssueGroupsBySQL(ctx, query)
+}
+
+// flatIssueGroupsBySQL is flatIssueGroups counted from the rows in SQL.
+func (s *SQLiteStore) flatIssueGroupsBySQL(ctx context.Context, query IssueRecordQuery) ([]IssueRecordGroup, error) {
+	query.Cursor = ""
+	query = query.withoutGroupValue()
+	search := query.Nested && query.SearchText != ""
 	where, args, err := issueRecordWhere(query)
 	if search {
 		where, args, err = s.issueNestedBase(query)

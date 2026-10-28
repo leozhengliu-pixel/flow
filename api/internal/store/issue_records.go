@@ -260,11 +260,14 @@ func (s *SQLiteStore) ensureIssueRecords(ctx context.Context) error {
 		"issue_permissions_subject_idx ON issue_permission_records(workspace_key,subject_type,subject_id,issue_id)",
 		"issue_identifier_aliases_lookup_idx ON issue_identifier_aliases(workspace_key,identifier,issue_id)",
 		issueTreeIndex[s.dialect],
+		issueTeamTreeIndex[s.dialect],
 	}
 	for _, index := range indexes {
 		statement := "CREATE INDEX IF NOT EXISTS " + index
 		if s.dialect == "mysql" {
-			statement = "CREATE INDEX " + index
+			// Online: reads and writes go on while a new index builds
+			// (docs/operations.md, "Issue indexes added at startup").
+			statement = "CREATE INDEX " + index + " ALGORITHM=INPLACE LOCK=NONE"
 		}
 		if _, err := s.db.ExecContext(ctx, statement); err != nil && !(s.dialect == "mysql" && isDuplicateIndex(err)) {
 			return err

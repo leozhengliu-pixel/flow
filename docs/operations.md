@@ -131,7 +131,9 @@ offload settings.
 Issue lists count their groups (by status, priority, ...) on every open and
 refresh. Counts with nested sub-issues read the sub-issues and their parents
 from the `issue_records_tree_idx` index without touching the table rows: an
-index-only scan. PostgreSQL can skip the table only for pages its visibility
+index-only scan. A team's counts by assignee or label, with OR or label
+filters, or by Focus cases read `issue_records_team_tree_idx` the same way.
+PostgreSQL can skip the table only for pages its visibility
 map marks all-visible, and it marks them when it vacuums. Right after a bulk
 import or a large migration most pages are unmarked, and a workspace-wide count
 reads table pages as well, and with stale statistics the planner can fall back
@@ -304,6 +306,41 @@ already as wide or wider (a fresh install, a second run, or an earlier manual
 `ALTER`). Fields longer than 191 characters (a suggestion for an imported
 label with a very long id) are stored as a prefix plus a SHA-256 digest, so
 they never fail the write and filters on them still match.
+
+### Team tree index on issues
+
+Servers create the issue indexes they are missing when they start, after the
+schema migrations. This version adds `issue_records_team_tree_idx` (team,
+archived state, parent, and on MySQL assignee and priority; on PostgreSQL and
+SQLite also status). Issue list group counts for a team read it without
+touching the table rows. These are counts by assignee or label, filters with
+an OR or a label term, and Focus cases. It keeps every row and changes no
+column. How it locks:
+
+- **MySQL** builds it online (`CREATE INDEX … ALGORITHM=INPLACE LOCK=NONE`).
+  Reads and writes go on during the build. The build needs an exclusive
+  metadata lock for a moment at its start and end. It waits for transactions
+  already open on `issue_records`, and new statements on the table queue
+  behind it while it waits. A local test built it for 75,000 issues in
+  0.2 seconds. The index takes about 6.5 MB per 75,000 issues.
+- **PostgreSQL** builds it with `CREATE INDEX`, which **blocks writes to
+  `issue_records` for the build**. Reads go on. A local test took 0.12 seconds
+  for 75,000 issues (9 MB). On a much larger table, create it beforehand
+  without blocking writes, and the server then finds it in place:
+
+  ```sql
+  CREATE INDEX CONCURRENTLY IF NOT EXISTS issue_records_team_tree_idx
+    ON issue_records(workspace_key,team_id,archived,parent_id)
+    INCLUDE (id,state_id,state_type,priority,assignee_id);
+  ```
+
+  Like `issue_records_tree_idx`, it serves index-only scans once the table
+  is vacuumed (see [Issue group counts on PostgreSQL](#issue-group-counts-on-postgresql)).
+- **SQLite** builds it inside the startup, which holds the database's write
+  lock for the build.
+
+Until the index exists, these counts use the slower SQL count. A server of
+the previous version ignores the index, so a rollback needs no change.
 
 ### Several servers starting at once
 

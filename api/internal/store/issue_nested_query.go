@@ -171,6 +171,13 @@ func (s *SQLiteStore) nestedIssueGroups(ctx context.Context, query IssueRecordQu
 			}
 		}
 	}
+	// Groupings and filters the counters and the tree index read do not
+	// serve count in memory (issue_forest_groups.go).
+	if preferIssueForest(query) {
+		if groups, handled, err := s.issueForestGroups(ctx, query, true); handled {
+			return groups, err
+		}
+	}
 	return s.nestedIssueGroupsByMoves(ctx, query)
 }
 

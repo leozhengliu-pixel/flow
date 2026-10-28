@@ -324,3 +324,71 @@ func (s *SQLiteStore) issueGroupsFromStats(ctx context.Context, q IssueRecordQue
 	}
 	return visible, true, nil
 }
+
+// memberIssueGroupsFromStats counts a status, priority or ungrouped query
+// for a viewer who cannot see every team: the viewer's visible teams (those
+// the query names, when it names teams) from the team counters, plus the
+// issues shared with the viewer in the other teams, counted from their rows.
+// Only the shared issues are read, so a member's workspace-wide count costs
+// about what an admin's does. The filter may hold AND-ed status, status type
+// and priority terms (the counters' columns).
+func (s *SQLiteStore) memberIssueGroupsFromStats(ctx context.Context, q IssueRecordQuery) ([]IssueRecordGroup, bool, error) {
+	access := q.Access
+	if access == nil || access.Admin || access.UserID == "" || q.Text != "" || len(q.StateIDs) > 0 || q.AllowedTeamIDs != nil || q.RestrictToIssueIDs || len(q.IssueIDs) > 0 || len(q.ReleaseIDs) > 0 || len(q.ProjectIDs) > 0 {
+		return nil, false, nil
+	}
+	if q.GroupBy != "status" && q.GroupBy != "priority" && q.GroupBy != "none" || !issueFilterOnStatusAndPriority(q.Filter) {
+		return nil, false, nil
+	}
+	where, whereArgs, err := issueRecordWhere(q)
+	if err != nil {
+		return nil, false, nil
+	}
+	remaining := 100
+	condition, conditionArgs, err := compileIssueFilter(q.Filter, 0, &remaining)
+	if err != nil {
+		return nil, false, nil
+	}
+	teams := []string{}
+	for _, id := range access.VisibleTeamIDs {
+		if !slices.Contains(access.ArchivedTeamIDs, id) && (len(q.TeamIDs) == 0 || slices.Contains(q.TeamIDs, id)) {
+			teams = append(teams, id)
+		}
+	}
+	column := map[string]string{"status": "i.state_id", "priority": "i.priority", "none": "'all'"}[q.GroupBy]
+	group := " GROUP BY " + column
+	if q.GroupBy == "none" {
+		group = ""
+	}
+	scope, scopeArgs := bindList("i.scope_id", teams)
+	counters := "SELECT " + column + " AS k,SUM(i.total) AS n FROM issue_scope_counts i WHERE i.workspace_key=? AND i.scope_type='team' AND " + scope + " AND i.total>0"
+	args := append([]any{q.Workspace}, scopeArgs...)
+	if q.Archived != "all" {
+		archived := 0
+		if q.Archived == "true" {
+			archived = 1
+		}
+		counters += " AND i.archived=?"
+		args = append(args, archived)
+	}
+	counters += " AND " + condition + group
+	args = append(args, conditionArgs...)
+	visible, visibleArgs := bindList("i.team_id", access.VisibleTeamIDs)
+	shared := "SELECT " + column + " AS k,COUNT(*) AS n FROM issue_records i WHERE " + where + " AND NOT " + visible + " AND i.id IN (SELECT id FROM shared_issues)" + group
+	args = append(append(args, whereArgs...), visibleArgs...)
+	prefix, prefixArgs := issueAccessCTE(q)
+	rows, err := s.db.QueryContext(ctx, prefix+"SELECT c.k,SUM(c.n) FROM ("+counters+" UNION ALL "+shared+") c GROUP BY c.k HAVING SUM(c.n)>0 ORDER BY c.k", append(prefixArgs, args...)...)
+	if err != nil {
+		return nil, true, err
+	}
+	defer rows.Close()
+	groups := []IssueRecordGroup{}
+	for rows.Next() {
+		var group IssueRecordGroup
+		if err := rows.Scan(&group.Value, &group.Count); err != nil {
+			return nil, true, err
+		}
+		groups = append(groups, group)
+	}
+	return groups, true, rows.Err()
+}
