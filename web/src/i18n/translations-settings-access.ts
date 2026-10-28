@@ -16,7 +16,7 @@ export const settingsAccessZhCN: Record<string, string> = {
   "Only admins and team owners can modify triage settings": "只有管理员和团队所有者可以修改分诊设置",
   "Only admins and team owners can create skills for this team": "只有管理员和团队所有者可以为此团队创建技能",
   "Only admins and team owners can modify the team’s agent guidance prompts": "只有管理员和团队所有者可以修改团队的 Agent 指导提示",
-  "Only admins and team owners can enable Slack notifications": "只有管理员和团队所有者可以启用 Slack 通知",
+  "Only admins and team owners can enable {name} notifications": "只有管理员和团队所有者可以启用 {name} 通知",
   "Only admins and team owners can add or remove team members": "只有管理员和团队所有者可以添加或移除团队成员",
   "Only admins and team owners can modify this team’s settings": "只有管理员和团队所有者可以修改此团队的设置",
   "You need permission to view this team’s settings.": "你需要权限才能查看此团队的设置。",

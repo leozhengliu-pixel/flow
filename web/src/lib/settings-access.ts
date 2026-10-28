@@ -205,7 +205,7 @@ export function teamReadOnlyNotice(section: TeamSettingsSection = 'overview'): s
     case 'agents':
       return 'Only admins and team owners can modify the team’s agent guidance prompts'
     case 'notifications':
-      return 'Only admins and team owners can enable Slack notifications'
+      return 'Only admins and team owners can enable {name} notifications'
     case 'members':
       return 'Only admins and team owners can add or remove team members'
     default:

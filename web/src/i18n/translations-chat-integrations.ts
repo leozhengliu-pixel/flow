@@ -193,6 +193,9 @@ export const chatIntegrationsZhCN: Record<string, string> = {
   "Link your {name} account to turn this on": "关联你的 {name} 账号后即可开启",
   "The app isn't available to your {name} account. Ask your {name} admin to add you to its availability range.": "此应用对你的 {name} 账号不可用。请联系 {name} 管理员将你加入应用的可用范围。",
   "Linking only maps your chat account to your Flow account; messages show only what you can open in Flow.": "关联只会将你的聊天账号对应到 Flow 账号；消息只包含你在 Flow 中可以打开的内容。",
+  // Chat platform copy elsewhere in settings.
+  "Create and update issues from {name} groups": "在 {name} 群中创建和更新事项",
+  "Short status reports about the progress and health of your initiative. Updates are ideally written regularly by the owner of the initiative. Subscribers receive these updates directly in their inbox, and they are also posted to the {name} groups of the initiative's lead team.": "目标更新用于简要说明目标的进展和健康度，通常由目标负责人定期撰写。订阅者会直接在收件箱中收到这些更新，更新也会发送到目标负责团队的 {name} 群。",
   // Chat platform entry points (FLOW_CHAT_PLATFORM).
   "{name} notifications": "{name} 通知",
   "Broadcast notifications to {name} groups": "向 {name} 群广播通知",

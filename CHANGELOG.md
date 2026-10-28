@@ -102,6 +102,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- On a Lark or Feishu deployment (`FLOW_CHAT_PLATFORM`), the remaining
+  chat platform copy names it instead of Slack (飞书 in Chinese for
+  Feishu): the read-only notice of a team's notifications, the initiative
+  updates description, settings search and the legacy integrations list.
+  The custom view menu's Slack-only notifications item shows on Slack
+  deployments only.
 - Lark and Feishu tenant authorization is automatic. The tenant administrator
   approves it on the chat platform by approving and publishing the app
   version in the admin console; once the App ID and App Secret obtain a

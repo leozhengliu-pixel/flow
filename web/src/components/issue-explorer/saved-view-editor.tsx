@@ -8,6 +8,7 @@ import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { AddViewIcon, SubscriptionIcon } from '@/components/ui/view-action-icons'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { AppLink } from '@/components/ui/app-link'
+import { useChatPlatform } from '@/lib/chat-platform'
 import { DEFAULT_VIEW_COLOR, DEFAULT_VIEW_ICON, ViewGlyph, ViewIconPicker, type ViewVisual } from '@/components/views/view-icon-picker'
 import type { SavedView, SavedViewMutationInput, Team, User } from '@/types/flow'
 import styles from './saved-view-editor.module.css'
@@ -130,6 +131,8 @@ function targetKey(target: SavedViewTarget) { return `${target.scope}:${target.t
 
 export function SavedViewMenu({ view, users = [], teams = [], subscriptionEvents = [], onEdit, onDuplicate, onUpdate, onSetSubscriptionEvents, onCopy, onExport, onDelete }: { view: SavedView; users?: User[]; teams?: Team[]; subscriptionEvents?: string[]; onEdit: () => void; onDuplicate?: () => void; onUpdate?: (input: SavedViewMutationInput) => void; onSetSubscriptionEvents?: (events: string[]) => void; onCopy?: () => void; onExport?: () => void; onDelete: () => void }) {
   const { t } = useI18n()
+  // Custom view notifications are a Slack integration feature; Lark and Feishu deployments do not offer them.
+  const slackPlatform = useChatPlatform().platform === 'slack'
   const owner = users.find(user => user.id === view.ownerId) ?? users[0]
   const events = new Set(subscriptionEvents)
   const entity = view.resource === 'projects' ? 'A project' : 'An issue'
@@ -152,7 +155,7 @@ export function SavedViewMenu({ view, users = [], teams = [], subscriptionEvents
     </DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>}
     <DropdownMenu.Separator className={styles.separator}/>
     {onSetSubscriptionEvents && <DropdownMenu.Sub><DropdownMenu.SubTrigger className={styles.menuItem}><MenuRow icon={<SubscriptionIcon/>} label={t('Subscribe')} submenu/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={`${styles.menu} ${styles.subMenu}`} sideOffset={SUBMENU_SIDE_OFFSET} alignOffset={SUBMENU_ALIGN_OFFSET} collisionPadding={8}><SubscriptionItem checked={events.has('issue-added')} label={t(`${entity} is added to the view`)} onSelect={() => toggleEvent('issue-added')}/><SubscriptionItem checked={events.has('issue-completed')} label={t(`${entity} is marked completed or canceled`)} onSelect={() => toggleEvent('issue-completed')}/></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>}
-    <DropdownMenu.Item className={styles.menuItem} asChild><AppLink href={`/${workspaceSlug}/settings/integrations/slack`}><MenuRow icon={<SlackIcon/>} label={t('Configure custom view Slack notifications…')}/></AppLink></DropdownMenu.Item>
+    {slackPlatform && <DropdownMenu.Item className={styles.menuItem} asChild><AppLink href={`/${workspaceSlug}/settings/integrations/slack`}><MenuRow icon={<SlackIcon/>} label={t('Configure custom view Slack notifications…')}/></AppLink></DropdownMenu.Item>}
     {(onCopy || onExport) && <DropdownMenu.Separator className={styles.separator}/>}
     {onCopy && <DropdownMenu.Item className={styles.menuItem} onSelect={onCopy}><MenuRow icon={<IssueActionGlyph label="Copy link" fallback={null}/>} label={t('Copy link')}/></DropdownMenu.Item>}
     {onExport && <DropdownMenu.Item className={styles.menuItem} onSelect={onExport}><MenuRow icon={<FlowGlyph name="exportCsv"/>} label={t(view.resource === 'projects' ? 'Export projects as CSV…' : 'Export issues as CSV…')}/></DropdownMenu.Item>}

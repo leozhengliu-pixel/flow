@@ -50,7 +50,7 @@ import "./feature-settings.css";
 import { FeatureButton, FeatureCard, FeatureRow, FeatureSection, FeatureSelect, FeatureShell, Toggle } from "./feature-primitives";
 import { AiAgentSettings, AiSettingsHub, CodeIntelligenceSettings, InstalledAgentsSettings, ResolvedSummariesSettings, TriageIntelligenceSettings, UpdateGuidanceSettings, type AiPageProps } from "./ai-settings-pages";
 import { SlackUpdates } from "./slack-updates";
-import { chatPlatformOf } from "@/lib/chat-platform";
+import { chatPlatformOf, useChatPlatform } from "@/lib/chat-platform";
 import { AsksSettingsPage } from "./asks-settings";
 import { AgentTrustedSourcesSettings } from "./agent-trusted-sources-settings";
 import { CodingSessionsSettings } from "./coding-sessions/coding-sessions-settings";
@@ -194,6 +194,7 @@ function LoopsWebSearchSettings({busy}:{busy:boolean}) {
 
 function InitiativesFeatureSettings({data,settings,busy,setEnabled,onScheduleChange,onReload,onNavigateLabels}:{data:BootstrapData;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;onScheduleChange:(schedule:{frequency:number;weekday:number;hour:number})=>void;onReload:()=>Promise<void>;onNavigateLabels:()=>void}) {
   const { t } = useI18n();
+  const chat = useChatPlatform(data);
   const enabled = settings.featureFlags.initiatives ?? true;
   const canEditSchedule = ["owner", "admin"].includes(data.viewerRole) && !busy;
   const schedule = useMemo(() => ({
@@ -213,7 +214,9 @@ function InitiativesFeatureSettings({data,settings,busy,setEnabled,onScheduleCha
   const scheduleSummary = initiativeScheduleSummary(draftSchedule, t);
   return <FeatureShell className="feature-initiatives-settings" title="Initiatives" description={<>{t("Initiatives group multiple projects that contribute toward the same strategic effort. Use initiatives to plan and coordinate larger streams of work and monitor their progress at scale.")} <a className="feature-docs-link" href="https://flow.app/docs/initiatives" rel="noreferrer" target="_blank">{t("Docs")}<ArrowUpRight size={11}/></a></>}>
     <FeatureCard><FeatureRow title="Enable Initiatives" description="Visible to all non-guest workspace members"><Toggle checked={enabled} disabled={busy} label="Enable Initiatives" onChange={value=>setEnabled("initiatives",value)}/></FeatureRow></FeatureCard>
-    <FeatureSection title="Initiative updates" description="Short status reports about the progress and health of your initiative. Updates are ideally written regularly by the owner of the initiative. Subscribers receive these updates directly in their inbox. You can also configure a Slack channel where all initiative updates are posted.">
+    <FeatureSection title="Initiative updates" description={chat.provider
+      ? <>{chat.format(t("Short status reports about the progress and health of your initiative. Updates are ideally written regularly by the owner of the initiative. Subscribers receive these updates directly in their inbox, and they are also posted to the {name} groups of the initiative's lead team."))}</>
+      : "Short status reports about the progress and health of your initiative. Updates are ideally written regularly by the owner of the initiative. Subscribers receive these updates directly in their inbox. You can also configure a Slack channel where all initiative updates are posted."}>
       <div className={`feature-subsection${enabled ? "" : " is-disabled"}`} aria-disabled={!enabled}>
         <header><h3>{t("Update schedule")}</h3><p>{t("Configure how often updates are expected on initiatives. Initiative owners will receive reminders to post updates.")}</p></header>
         <FeatureCard>
