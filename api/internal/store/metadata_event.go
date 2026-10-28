@@ -3,10 +3,10 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // recordMetadataEvent records and publishes an event whose mutation changed
@@ -32,7 +32,7 @@ func (s *SQLiteStore) recordMetadataEvent(ctx context.Context, workspace, eventT
 	}
 	s.mu.RUnlock()
 	now := time.Now().UTC()
-	event := domain.DomainEvent{ID: fmt.Sprintf("evt_%d", now.UnixNano()), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, CreatedAt: now}
+	event := domain.DomainEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, CreatedAt: now}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err

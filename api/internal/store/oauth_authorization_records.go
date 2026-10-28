@@ -6,12 +6,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"maps"
 	"slices"
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 func oauthPolicyMetadata(ctx context.Context, tx metadataReader, workspace, lock string) (domain.Bootstrap, error) {
@@ -125,7 +125,7 @@ func ensureOAuthMetadataShape(ctx context.Context, tx *sqlTx, workspace, field, 
 
 func oauthRecordEvent(ctx context.Context, tx *sqlTx, workspaceID, eventType, id string, values ...any) (domain.DomainEvent, error) {
 	now := time.Now().UTC()
-	event := domain.DomainEvent{ID: fmt.Sprintf("evt_%d", now.UnixNano()), Type: eventType, AggregateID: id, Payload: json.RawMessage(`null`), CreatedAt: now}
+	event := domain.DomainEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: id, Payload: json.RawMessage(`null`), CreatedAt: now}
 	if len(values) > 0 {
 		payload, err := json.Marshal(values[0])
 		if err != nil {

@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -121,7 +122,7 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, status, message)
 	}
 	now := time.Now().UTC()
-	reply := domain.LoopRunReply{ID: fmt.Sprintf("loop_reply_%d", now.UnixNano()), UserID: userID, Body: body, Status: "running", CreatedAt: now, Attachments: attachments.meta}
+	reply := domain.LoopRunReply{ID: idgen.New("loop_reply_"), UserID: userID, Body: body, Status: "running", CreatedAt: now, Attachments: attachments.meta}
 	if len(skillIDs) > 0 {
 		reply.SkillIDs = skillIDs
 	}

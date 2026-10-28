@@ -187,7 +187,8 @@ func runMutationScript(t *testing.T, forceFull bool) mutationScriptResult {
 
 var (
 	mutationTimestamp = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$`)
-	mutationNanoID    = regexp.MustCompile(`\d{12,}`)
+	// The time part of a generated id and its random tail (idgen stamps).
+	mutationNanoID = regexp.MustCompile(`\d{12,}(?:_[0-9a-z]{10})?`)
 )
 
 // normalizeMutationJSON removes values that legitimately differ between two

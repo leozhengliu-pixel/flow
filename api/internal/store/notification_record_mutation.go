@@ -4,10 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 func (s *SQLiteStore) NotificationRecord(ctx context.Context, workspace, userID, id string) (domain.Notification, error) {
@@ -68,7 +68,7 @@ func (s *SQLiteStore) UpdateNotificationRecord(ctx context.Context, workspace, u
 		if err != nil {
 			return err
 		}
-		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: eventType, AggregateID: id, Payload: payload, CreatedAt: time.Now().UTC()}
+		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: id, Payload: payload, CreatedAt: time.Now().UTC()}
 		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: id, Payload: payload, CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceKey: workspace}); err != nil {
 			return err
 		}

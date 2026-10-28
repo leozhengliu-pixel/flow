@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -1705,7 +1706,7 @@ func (s *server) saveMCPAgentSkill(ctx context.Context, actor mcpActor, data dom
 				return nil, fmt.Errorf("team skill %q not found", id)
 			}
 		}
-		skill := domain.TeamAgentSkill{ID: fmt.Sprintf("skill_%d", time.Now().UnixMilli()), Enabled: true}
+		skill := domain.TeamAgentSkill{ID: idgen.New("skill_"), Enabled: true}
 		if index >= 0 {
 			skill = skills[index]
 		}

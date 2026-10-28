@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"reflect"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -46,7 +46,6 @@ func (s *server) recordSCIMAudit(r *http.Request, workspaceKey string, entries [
 	ctx := store.WithMetadataFields(context.WithoutCancel(r.Context()), "auditLog")
 	err := s.store.MutateWorkspace(ctx, workspaceKey, "scim.audited", entries[0].resourceID, map[string]any{"auditEntries": len(entries)}, func(data *domain.Bootstrap) error {
 		now := time.Now().UTC()
-		sequence := now.UnixNano()
 		built := make([]domain.AuditLogEntry, 0, len(entries))
 		for _, entry := range entries {
 			metadata := map[string]any{"source": teamMemberSourceSCIM}
@@ -56,13 +55,7 @@ func (s *server) recordSCIMAudit(r *http.Request, workspaceKey string, entries [
 			for key, value := range entry.metadata {
 				metadata[key] = value
 			}
-			id := fmt.Sprintf("audit_%d", sequence)
-			for slices.ContainsFunc(data.AuditLog, func(item domain.AuditLogEntry) bool { return item.ID == id }) {
-				sequence++
-				id = fmt.Sprintf("audit_%d", sequence)
-			}
-			sequence++
-			built = append(built, domain.AuditLogEntry{ID: id, Actor: actor.actor, BotActor: actor.bot, Action: entry.action, ResourceType: entry.resourceType, ResourceID: entry.resourceID, Metadata: metadata, CreatedAt: now})
+			built = append(built, domain.AuditLogEntry{ID: idgen.New("audit_"), Actor: actor.actor, BotActor: actor.bot, Action: entry.action, ResourceType: entry.resourceType, ResourceID: entry.resourceID, Metadata: metadata, CreatedAt: now})
 		}
 		slices.Reverse(built)
 		data.AuditLog = append(built, data.AuditLog...)

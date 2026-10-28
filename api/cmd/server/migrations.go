@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 func migrationByID(data *domain.Bootstrap, id string) (*domain.MigrationJob, error) {
@@ -88,7 +89,7 @@ func (s *server) previewMigration(w http.ResponseWriter, r *http.Request) {
 	normalizedRaw, _ := json.Marshal(bundle)
 	data := s.workspaceData(r)
 	now := time.Now().UTC()
-	job := domain.MigrationJob{ID: fmt.Sprintf("migration_%d", now.UnixNano()), UserID: data.Viewer.ID, Filename: header.Filename, Source: bundle.Source, Target: "flow", Status: "mapping", Phase: "review", Counts: migrationCounts(bundle), Mappings: buildMigrationMappings(bundle, data), Errors: []string{}, Bundle: normalizedRaw, CreatedAt: now, UpdatedAt: now}
+	job := domain.MigrationJob{ID: idgen.New("migration_"), UserID: data.Viewer.ID, Filename: header.Filename, Source: bundle.Source, Target: "flow", Status: "mapping", Phase: "review", Counts: migrationCounts(bundle), Mappings: buildMigrationMappings(bundle, data), Errors: []string{}, Bundle: normalizedRaw, CreatedAt: now, UpdatedAt: now}
 	err = s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "migration.previewed", map[string]any{"filename": header.Filename, "source": bundle.Source}, func(next *domain.Bootstrap) (string, error) {
 		next.MigrationJobs = append([]domain.MigrationJob{job}, next.MigrationJobs...)
 		appendAudit(next, "previewed", "migration", job.ID, migrationCountsMetadata(job.Counts))
@@ -117,7 +118,7 @@ func migrationCounts(bundle domain.MigrationBundle) map[string]int {
 }
 
 func migrationMapping(entityType, sourceID, sourceName, targetID, targetName, action string) domain.MigrationEntityMapping {
-	return domain.MigrationEntityMapping{ID: fmt.Sprintf("migration_mapping_%d", time.Now().UnixNano()), EntityType: entityType, SourceID: sourceID, SourceName: sourceName, TargetID: targetID, TargetName: targetName, Action: action, Status: "pending", Metadata: map[string]any{}}
+	return domain.MigrationEntityMapping{ID: idgen.New("migration_mapping_"), EntityType: entityType, SourceID: sourceID, SourceName: sourceName, TargetID: targetID, TargetName: targetName, Action: action, Status: "pending", Metadata: map[string]any{}}
 }
 
 func buildMigrationMappings(bundle domain.MigrationBundle, target domain.Bootstrap) []domain.MigrationEntityMapping {
@@ -378,7 +379,7 @@ func completeMapping(job *domain.MigrationJob, entityType, sourceID, targetID, t
 	job.Mappings[index].Status = "completed"
 }
 func migrationID(kind string) string {
-	return fmt.Sprintf("%s_migration_%d", kind, time.Now().UnixNano())
+	return fmt.Sprintf("%s_migration_%s", kind, idgen.Stamp())
 }
 
 func applyFlowMigration(data *domain.Bootstrap, job *domain.MigrationJob, bundle domain.MigrationBundle, fallbackTeamID string) error {

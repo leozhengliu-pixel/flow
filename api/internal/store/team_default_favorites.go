@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 func (s *SQLiteStore) ensureTeamDefaultFavorites(ctx context.Context) error {
@@ -84,7 +85,7 @@ func (s *SQLiteStore) ReplaceTeamDefaultFavorites(ctx context.Context, workspace
 		// IDs are server-owned. Never accept a client-supplied primary key here:
 		// the table key is global and reusing an ID from another team/workspace
 		// could otherwise overwrite that row on MySQL's duplicate-key path.
-		id := fmt.Sprintf("team_default_favorite_%d_%d", time.Now().UnixNano(), i)
+		id := fmt.Sprintf("team_default_favorite_%s_%d", idgen.Stamp(), i)
 		q := `INSERT INTO team_default_favorites(id,workspace_key,team_id,resource_type,resource_id,position,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`
 		if _, err = tx.ExecContext(ctx, q, id, workspace, teamID, item.ResourceType, item.ResourceID, float64(i), now, now); err != nil {
 			return err

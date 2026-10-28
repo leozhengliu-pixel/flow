@@ -4,13 +4,13 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 )
@@ -196,7 +196,7 @@ func (s *server) finishPasskeyRegistration(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "passkey name is too long")
 		return
 	}
-	created := domain.Passkey{ID: fmt.Sprintf("passkey_%d", time.Now().UnixNano()), UserID: actor.ID, Name: name, CredentialJSON: string(credentialJSON), CreatedAt: time.Now().UTC()}
+	created := domain.Passkey{ID: idgen.New("passkey_"), UserID: actor.ID, Name: name, CredentialJSON: string(credentialJSON), CreatedAt: time.Now().UTC()}
 	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "passkey.created", created.ID, nil, func(next *domain.Bootstrap) error {
 		index := -1
 		for i := range next.PasskeyRegistrationChallenges {

@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // Document notification types (the reference app's names). They are inbox
@@ -241,7 +242,7 @@ func appendDocumentNotifications(s *server, data *domain.Bootstrap, document dom
 			continue
 		}
 		notification := domain.Notification{
-			ID:          fmt.Sprintf("notification_%s_%d_%s", notice.kind, now.UnixNano(), recipientID),
+			ID:          fmt.Sprintf("notification_%s_%s_%s", notice.kind, idgen.Stamp(), recipientID),
 			RecipientID: recipientID, Type: notice.kind, SourceType: "document", SourceID: document.ID, CommentID: commentID,
 			Actor: actor, Category: category, GroupKey: groupKey, OccurrenceCount: 1, LatestActorIDs: []string{actor.ID},
 			Title: title, Text: text, Payload: payload, CreatedAt: now, UpdatedAt: now,

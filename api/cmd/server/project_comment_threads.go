@@ -1,12 +1,12 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	"slices"
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -47,7 +47,7 @@ func (s *server) setProjectThreadSubscription(w http.ResponseWriter, r *http.Req
 			saved = data.ThreadSubscriptions[index]
 			return nil
 		}
-		saved = domain.ThreadSubscription{ID: fmt.Sprintf("thread_subscription_%d", now.UnixNano()), UserID: data.Viewer.ID, ProjectID: projectID, CommentID: rootID, State: input.State, CreatedAt: now, UpdatedAt: now}
+		saved = domain.ThreadSubscription{ID: idgen.New("thread_subscription_"), UserID: data.Viewer.ID, ProjectID: projectID, CommentID: rootID, State: input.State, CreatedAt: now, UpdatedAt: now}
 		data.ThreadSubscriptions = append(data.ThreadSubscriptions, saved)
 		return nil
 	})

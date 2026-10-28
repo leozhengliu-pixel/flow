@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -229,7 +229,7 @@ func (s *server) decideOAuthAuthorization(w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
-	authorizationID := fmt.Sprintf("oauth_authorization_%d", time.Now().UnixNano())
+	authorizationID := idgen.New("oauth_authorization_")
 	ownWorkspace, ownApplication := s.store.OAuthApplicationHome(client.ClientID)
 	if !(ownApplication && ownWorkspace == workspace.Workspace.URLKey) && !applicationApproved(&workspace, client.ClientID, scopes) {
 		err := s.store.RequestOAuthApplicationApproval(r.Context(), workspace.Workspace.URLKey, client.ClientID, func(data *domain.Bootstrap) error {
@@ -321,7 +321,7 @@ func (s *server) issueOAuthTokens(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	expiresAt := time.Now().UTC().Add(time.Hour)
-	key := domain.APIKey{ID: fmt.Sprintf("oauth_token_%d", time.Now().UnixNano()), Name: "MCP OAuth token", Prefix: accessToken[:min(len(accessToken), 19)], SecretHash: secretHash(accessToken), TeamIDs: []string{}, CreatedAt: time.Now().UTC(), ExpiresAt: &expiresAt}
+	key := domain.APIKey{ID: idgen.New("oauth_token_"), Name: "MCP OAuth token", Prefix: accessToken[:min(len(accessToken), 19)], SecretHash: secretHash(accessToken), TeamIDs: []string{}, CreatedAt: time.Now().UTC(), ExpiresAt: &expiresAt}
 	token := r.Form.Get("refresh_token")
 	if grantType == "authorization_code" {
 		token = r.Form.Get("code")

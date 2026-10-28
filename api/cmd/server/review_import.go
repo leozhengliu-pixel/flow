@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -854,7 +855,7 @@ func (run *reviewImportRun) apply(ctx context.Context, batches []reviewImportBat
 					if createdAt.IsZero() {
 						createdAt = now
 					}
-					review := domain.CodeReview{ID: fmt.Sprintf("review_%d", now.UnixNano()+int64(position)), SlugID: fmt.Sprintf("%s-%d", repository.Provider, pull.Number), Provider: repository.Provider,
+					review := domain.CodeReview{ID: idgen.New("review_"), SlugID: fmt.Sprintf("%s-%d", repository.Provider, pull.Number), Provider: repository.Provider,
 						ExternalID: pull.ExternalID, Number: pull.Number, Status: "open", RepositoryOwner: owner, RepositoryName: name, Author: author,
 						ReviewerIDs: importedReviewerIDs(data, batch.linked, pull.Reviewers), TeamReviewers: []string{}, IssueIDs: []string{}, BranchState: "upToDate",
 						Checks: []domain.ReviewCheck{}, Files: []domain.ReviewFile{}, Events: []domain.ReviewEvent{}, CreatedAt: createdAt, UpdatedAt: now}

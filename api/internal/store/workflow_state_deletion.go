@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // DeleteWorkflowStateRecords only loads the state catalog and matching issues.
@@ -166,7 +167,7 @@ func (s *SQLiteStore) DeleteWorkflowStateRecords(ctx context.Context, workspace,
 			return err
 		}
 		now := time.Now().UTC()
-		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", now.UnixNano()), Type: "workflow_state.deleted", AggregateID: state.ID, Payload: payload, CreatedAt: now}
+		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: "workflow_state.deleted", AggregateID: state.ID, Payload: payload, CreatedAt: now}
 		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, Payload: []byte(payload), PreviousValues: []byte(nil), CreatedAt: now.Format(time.RFC3339Nano), WorkspaceID: current.Workspace.ID}); err != nil {
 			return err
 		}

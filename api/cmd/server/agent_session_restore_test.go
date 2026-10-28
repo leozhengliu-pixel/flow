@@ -21,7 +21,7 @@ func TestAgentSessionSoftDeleteRestoreAndPurge(t *testing.T) {
 	workspace := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK).Workspace.URLKey
 	attachments := []map[string]any{{"name": "notes.md", "contentType": "text/markdown", "size": 30, "content": "# Notes\nKeep me."}}
 	stream := streamAgent(t, srv, host, "/api/agent/sessions/stream", map[string]any{"message": "Hello", "location": "page", "attachments": attachments}, nil)
-	match := regexp.MustCompile(`"id":"(agent_session_\d+)"`).FindStringSubmatch(stream)
+	match := regexp.MustCompile(`"id":"(agent_session_[0-9a-z_]+)"`).FindStringSubmatch(stream)
 	if match == nil {
 		t.Fatalf("no session in stream: %s", stream)
 	}

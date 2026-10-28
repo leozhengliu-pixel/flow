@@ -18,6 +18,7 @@ import (
 	"golang.org/x/text/language"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -91,7 +92,7 @@ func opaqueID(prefix string) string {
 	if _, err := rand.Read(value[:]); err == nil {
 		return prefix + base64.RawURLEncoding.EncodeToString(value[:])
 	}
-	return fmt.Sprintf("%s%d", prefix, time.Now().UnixNano())
+	return idgen.New(prefix)
 }
 
 func contentPageBounds(r *http.Request, total int) (int, int) {

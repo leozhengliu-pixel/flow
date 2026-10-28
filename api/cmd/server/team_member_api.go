@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -185,7 +186,6 @@ func appendTeamMemberAudit(data *domain.Bootstrap, actor teamMemberAuditActor, n
 	}
 	now := time.Now().UTC()
 	entries := make([]domain.AuditLogEntry, 0, len(changes))
-	sequence := now.UnixNano()
 	for _, change := range changes {
 		metadata := map[string]any{
 			"teamId": change.TeamID,
@@ -229,13 +229,7 @@ func appendTeamMemberAudit(data *domain.Bootstrap, actor teamMemberAuditActor, n
 		for key, value := range extra {
 			metadata[key] = value
 		}
-		id := fmt.Sprintf("audit_%d", sequence)
-		for slices.ContainsFunc(data.AuditLog, func(item domain.AuditLogEntry) bool { return item.ID == id }) || slices.ContainsFunc(entries, func(item domain.AuditLogEntry) bool { return item.ID == id }) {
-			sequence++
-			id = fmt.Sprintf("audit_%d", sequence)
-		}
-		sequence++
-		entries = append(entries, domain.AuditLogEntry{ID: id, Actor: who, BotActor: actor.bot, Action: change.Action, ResourceType: teamMemberAuditResource, ResourceID: change.UserID, Metadata: metadata, CreatedAt: now})
+		entries = append(entries, domain.AuditLogEntry{ID: idgen.New("audit_"), Actor: who, BotActor: actor.bot, Action: change.Action, ResourceType: teamMemberAuditResource, ResourceID: change.UserID, Metadata: metadata, CreatedAt: now})
 	}
 	// Newest first: the last change of the batch leads.
 	slices.Reverse(entries)

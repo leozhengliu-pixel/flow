@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // appendWelcomeNotification puts the workspace welcome message in a member's
@@ -23,7 +24,7 @@ func appendWelcomeNotification(data *domain.Bootstrap, recipientID string, now t
 		actor = *author
 	}
 	data.Notifications = append(data.Notifications, domain.Notification{
-		ID:              fmt.Sprintf("notification_welcome_%d", now.UnixNano()),
+		ID:              idgen.New("notification_welcome_"),
 		RecipientID:     recipientID,
 		Type:            "welcomeMessage",
 		SourceType:      "workspace",

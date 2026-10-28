@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/publicapi"
 	"flow/api/internal/store"
 	"flow/api/internal/websearch"
@@ -385,7 +386,7 @@ func (s *server) createOAuthApplicationFromManifest(w http.ResponseWriter, r *ht
 	var created domain.OAuthApplication
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "oauth_application.created", map[string]string{"source": "manifest"}, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
-		created = domain.OAuthApplication{ID: fmt.Sprintf("oauth_app_%d", now.UnixNano()), ClientID: clientID, ClientSecret: secret, CreatorID: actor.ID, CredentialsAuthorizedBy: actor.ID, CreatedAt: now}
+		created = domain.OAuthApplication{ID: idgen.New("oauth_app_"), ClientID: clientID, ClientSecret: secret, CreatorID: actor.ID, CredentialsAuthorizedBy: actor.ID, CreatedAt: now}
 		applyOAuthAppManifest(manifest, &created, scopes, resourceTypes)
 		if err := checkGitHubUsernameAvailable(data, created.ID, created.GitHubUsername); err != nil {
 			return "", err

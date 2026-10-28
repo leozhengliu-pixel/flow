@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 var ErrIssueVersion = errors.New("issue version conflict")
@@ -338,7 +339,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		if webhookEnabled {
 			before, _ = json.Marshal(previousFields)
 		}
-		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: "issue.updated", AggregateID: id, Payload: payload, PreviousValues: before, CreatedAt: time.Now().UTC()}
+		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: "issue.updated", AggregateID: id, Payload: payload, PreviousValues: before, CreatedAt: time.Now().UTC()}
 		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: id, Payload: payload, PreviousValues: before, CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: metadata.Workspace.ID}); err != nil {
 			return err
 		}

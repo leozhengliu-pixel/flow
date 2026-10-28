@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // agentSessionNeverDue parks a session the agent created itself: the worker
@@ -69,7 +70,7 @@ func (s *SQLiteStore) publishAgentTaskUpdate(workspace string, task domain.Agent
 		resourceID = task.ResourceID
 	}
 	payload, _ := json.Marshal(map[string]any{"taskId": task.ID, "resourceId": resourceID, "resourceType": task.ResourceType, "version": task.Version})
-	sink(workspace, domain.RealtimeEvent{ID: fmt.Sprintf("agent_%s_%d_%d", task.ID, task.Version, time.Now().UnixNano()), Type: "agent_task.updated", AggregateID: resourceID, Payload: payload, CreatedAt: time.Now().UTC()})
+	sink(workspace, domain.RealtimeEvent{ID: fmt.Sprintf("agent_%s_%d_%s", task.ID, task.Version, idgen.Stamp()), Type: "agent_task.updated", AggregateID: resourceID, Payload: payload, CreatedAt: time.Now().UTC()})
 }
 
 // MarkAgentTaskDelivered records when the latest event reached the agent;

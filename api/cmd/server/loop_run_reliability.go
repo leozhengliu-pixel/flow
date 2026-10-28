@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -493,7 +494,7 @@ func (s *server) publishLoopRunEvent(workspace, eventType string, run domain.Loo
 	}
 	now := time.Now().UTC()
 	payload, _ := json.Marshal(map[string]string{"loopId": run.LoopID, "runId": run.ID, "status": run.Status})
-	s.publishRealtime(workspace, domain.RealtimeEvent{ID: fmt.Sprintf("evt_loop_run_%d", now.UnixNano()), Type: eventType, AggregateID: run.LoopID, Payload: payload, CreatedAt: now})
+	s.publishRealtime(workspace, domain.RealtimeEvent{ID: idgen.New("evt_loop_run_"), Type: eventType, AggregateID: run.LoopID, Payload: payload, CreatedAt: now})
 }
 
 // cancelLoopRun stops a running run (or the agent's answer to a reply),

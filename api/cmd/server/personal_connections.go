@@ -15,6 +15,7 @@ import (
 
 	"flow/api/internal/codehost"
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -421,7 +422,7 @@ func (s *server) finishGoogleCalendarLink(w http.ResponseWriter, r *http.Request
 func newPersonalConnectionID() string {
 	token, err := codeHostRandomToken(12)
 	if err != nil {
-		return fmt.Sprintf("pcn_%d", time.Now().UnixNano())
+		return idgen.New("pcn_")
 	}
 	return "pcn_" + token
 }

@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/publicapi"
 	"flow/api/internal/store"
 )
@@ -159,7 +160,7 @@ func (s *server) saveLinkAttachment(ctx context.Context, r *http.Request, worksp
 			return nil
 		}
 		parsed, _ := url.Parse(input.URL)
-		attachment := domain.Attachment{ID: fmt.Sprintf("attachment_%d", now.UnixNano()), IssueID: target.ID, Title: parsed.Host, URL: input.URL, ContentType: "text/uri-list", CreatedAt: now, UpdatedAt: &now, Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), IconURL: defaultIcon}
+		attachment := domain.Attachment{ID: idgen.New("attachment_"), IssueID: target.ID, Title: parsed.Host, URL: input.URL, ContentType: "text/uri-list", CreatedAt: now, UpdatedAt: &now, Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), IconURL: defaultIcon}
 		applyLinkAttachmentInput(&attachment, input)
 		if attachment.Title == "" {
 			attachment.Title = parsed.Host

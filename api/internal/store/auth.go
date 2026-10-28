@@ -17,6 +17,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 var (
@@ -140,7 +141,7 @@ func (s *SQLiteStore) Register(ctx context.Context, name, email, password string
 		return domain.User{}, "", err
 	}
 	now := time.Now().UTC()
-	user := domain.User{ID: fmt.Sprintf("usr_%d", now.UnixNano()), Name: name, DisplayName: name, Email: email, Active: true}
+	user := domain.User{ID: idgen.New("usr_"), Name: name, DisplayName: name, Email: email, Active: true}
 	_, err = s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,password_hash,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`,
 		user.ID, user.Email, user.Name, user.DisplayName, string(hash), 1, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 	if err != nil {
@@ -179,7 +180,7 @@ func (s *SQLiteStore) LoginExternal(ctx context.Context, email, name, avatarURL 
 		if !autoProvision {
 			return domain.AuthSession{}, "", ErrAuthInvalid
 		}
-		user = domain.User{ID: fmt.Sprintf("usr_%d", now.UnixNano()), Name: name, DisplayName: name, Email: email, AvatarURL: strings.TrimSpace(avatarURL), Active: true, EmailVerified: true}
+		user = domain.User{ID: idgen.New("usr_"), Name: name, DisplayName: name, Email: email, AvatarURL: strings.TrimSpace(avatarURL), Active: true, EmailVerified: true}
 		_, err = s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, user.ID, user.Email, user.Name, user.DisplayName, user.AvatarURL, "", now.Format(time.RFC3339Nano), 1, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 	} else if err == nil {
 		if !user.Active {
@@ -316,7 +317,7 @@ func (s *SQLiteStore) LoginExternalIdentity(ctx context.Context, provider, issue
 			if name == "" {
 				name = strings.Split(email, "@")[0]
 			}
-			user = domain.User{ID: fmt.Sprintf("usr_%d", now.UnixNano()), Name: name, DisplayName: name, Email: email, AvatarURL: avatarURL, Active: true, EmailVerified: true}
+			user = domain.User{ID: idgen.New("usr_"), Name: name, DisplayName: name, Email: email, AvatarURL: avatarURL, Active: true, EmailVerified: true}
 			_, err = s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, user.ID, user.Email, user.Name, user.DisplayName, user.AvatarURL, "", now.Format(time.RFC3339Nano), 1, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 			if err != nil {
 				return domain.AuthSession{}, "", err
@@ -330,7 +331,7 @@ func (s *SQLiteStore) LoginExternalIdentity(ctx context.Context, provider, issue
 			return domain.AuthSession{}, "", ErrAuthInvalid
 		}
 		now := time.Now().UTC()
-		user = domain.User{ID: fmt.Sprintf("usr_%d", now.UnixNano()), Name: name, DisplayName: name, Active: true}
+		user = domain.User{ID: idgen.New("usr_"), Name: name, DisplayName: name, Active: true}
 		_, err = s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, user.ID, nil, user.Name, user.DisplayName, avatarURL, "", nil, 1, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 		if err != nil {
 			return domain.AuthSession{}, "", err
@@ -340,7 +341,7 @@ func (s *SQLiteStore) LoginExternalIdentity(ctx context.Context, provider, issue
 		}
 	}
 	now := time.Now().UTC()
-	_, err = s.db.ExecContext(ctx, `INSERT INTO auth_identities(id,user_id,provider,issuer,subject,identity_key,username,claims_json,created_at,last_login_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, fmt.Sprintf("identity_%d", now.UnixNano()), user.ID, provider, issuer, subject, externalIdentityKey(provider, issuer, subject), username, claimsJSON, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	_, err = s.db.ExecContext(ctx, `INSERT INTO auth_identities(id,user_id,provider,issuer,subject,identity_key,username,claims_json,created_at,last_login_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, idgen.New("identity_"), user.ID, provider, issuer, subject, externalIdentityKey(provider, issuer, subject), username, claimsJSON, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 	if err != nil {
 		return domain.AuthSession{}, "", err
 	}
@@ -1105,7 +1106,7 @@ func (s *SQLiteStore) Invite(ctx context.Context, workspaceID, inviterID, email,
 		return domain.Invitation{}, err
 	}
 	now := time.Now().UTC()
-	item := domain.Invitation{ID: fmt.Sprintf("invite_%d", now.UnixNano()), WorkspaceID: workspaceID, Email: email, Role: role, TeamIDs: teamIDs, Status: "pending", InviterID: inviterID, ExpiresAt: now.Add(7 * 24 * time.Hour), CreatedAt: now, Token: token}
+	item := domain.Invitation{ID: idgen.New("invite_"), WorkspaceID: workspaceID, Email: email, Role: role, TeamIDs: teamIDs, Status: "pending", InviterID: inviterID, ExpiresAt: now.Add(7 * 24 * time.Hour), CreatedAt: now, Token: token}
 	teamRaw, _ := json.Marshal(teamIDs)
 	_, err = s.db.ExecContext(ctx, `INSERT INTO workspace_invitations(id,workspace_id,email,role,team_ids,token_hash,inviter_id,status,expires_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, item.ID, workspaceID, email, role, teamRaw, tokenHash(token), inviterID, item.Status, item.ExpiresAt.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 	return item, err

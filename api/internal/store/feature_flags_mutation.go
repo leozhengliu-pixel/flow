@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 func (s *SQLiteStore) WorkspaceSettingsMetadata(workspace string) (domain.Bootstrap, bool) {
@@ -120,7 +121,7 @@ func (s *SQLiteStore) mutateFeatureFlags(ctx context.Context, workspace string, 
 			return err
 		}
 		now := time.Now().UTC()
-		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", now.UnixNano()), Type: "workspace_preferences.updated", AggregateID: id, Payload: eventRaw, CreatedAt: now}
+		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: "workspace_preferences.updated", AggregateID: id, Payload: eventRaw, CreatedAt: now}
 		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, Payload: []byte(event.Payload), PreviousValues: []byte(event.PreviousValues), CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: current.Workspace.ID}); err != nil {
 			return err
 		}

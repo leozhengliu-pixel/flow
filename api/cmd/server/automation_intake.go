@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -83,7 +84,7 @@ func (s *server) createTriageResponsibility(w http.ResponseWriter, r *http.Reque
 		if input.Enabled != nil {
 			enabled = *input.Enabled
 		}
-		created = domain.TriageResponsibility{ID: fmt.Sprintf("triage_resp_%d", now.UnixNano()), TeamID: teamID, Name: strings.TrimSpace(input.Name), Mode: input.Mode, UserIDs: slices.Clone(input.UserIDs), Enabled: enabled, CreatedAt: now, UpdatedAt: now}
+		created = domain.TriageResponsibility{ID: idgen.New("triage_resp_"), TeamID: teamID, Name: strings.TrimSpace(input.Name), Mode: input.Mode, UserIDs: slices.Clone(input.UserIDs), Enabled: enabled, CreatedAt: now, UpdatedAt: now}
 		data.TriageResponsibilities = append(data.TriageResponsibilities, created)
 		return created.ID, nil
 	})
@@ -185,7 +186,7 @@ func (s *server) createTriageRule(w http.ResponseWriter, r *http.Request) {
 		if input.Position != nil {
 			position = *input.Position
 		}
-		created = domain.TriageRoutingRule{ID: fmt.Sprintf("triage_rule_%d", now.UnixNano()), TeamID: teamID, Name: strings.TrimSpace(input.Name), Position: position, Enabled: enabled, Conditions: input.Conditions, ResponsibilityID: input.ResponsibilityID, Priority: input.Priority, LabelIDs: slices.Clone(input.LabelIDs), CreatedAt: now, UpdatedAt: now}
+		created = domain.TriageRoutingRule{ID: idgen.New("triage_rule_"), TeamID: teamID, Name: strings.TrimSpace(input.Name), Position: position, Enabled: enabled, Conditions: input.Conditions, ResponsibilityID: input.ResponsibilityID, Priority: input.Priority, LabelIDs: slices.Clone(input.LabelIDs), CreatedAt: now, UpdatedAt: now}
 		if created.Conditions == nil {
 			created.Conditions = map[string]string{}
 		}
@@ -280,7 +281,7 @@ func applyTriageRouting(data *domain.Bootstrap, issue *domain.Issue, now time.Ti
 			issue.Priority, issue.PriorityLabel = *rule.Priority, priorityLabel(*rule.Priority)
 		}
 		issue.Labels = append(issue.Labels, labelsByID(data, rule.LabelIDs)...)
-		data.TriageAssignments = append(data.TriageAssignments, domain.TriageAssignment{ID: fmt.Sprintf("triage_assignment_%d", now.UnixNano()), IssueID: issue.ID, RuleID: rule.ID, ResponsibilityID: resp.ID, AssigneeID: userID, CreatedAt: now})
+		data.TriageAssignments = append(data.TriageAssignments, domain.TriageAssignment{ID: idgen.New("triage_assignment_"), IssueID: issue.ID, RuleID: rule.ID, ResponsibilityID: resp.ID, AssigneeID: userID, CreatedAt: now})
 		applyTriageResponsibility(data, settings, issue, now)
 		return
 	}
@@ -438,7 +439,7 @@ func (s *server) createWorkflowDefinition(w http.ResponseWriter, r *http.Request
 		if userByID(data, ownerID) == nil {
 			return "", fmt.Errorf("%w: owner not found", errInvalid)
 		}
-		created = domain.WorkflowDefinition{ID: fmt.Sprintf("workflow_%d", now.UnixNano()), Name: strings.TrimSpace(input.Name), Description: strings.TrimSpace(input.Description), TeamID: input.TeamID, Trigger: input.Trigger, Schedule: strings.TrimSpace(input.Schedule), Conditions: input.Conditions, Actions: input.Actions, Enabled: enabled, MaxAttempts: max, NextRunAt: next, CreatorID: data.Viewer.ID, OwnerID: ownerID, CreatedAt: now, UpdatedAt: now}
+		created = domain.WorkflowDefinition{ID: idgen.New("workflow_"), Name: strings.TrimSpace(input.Name), Description: strings.TrimSpace(input.Description), TeamID: input.TeamID, Trigger: input.Trigger, Schedule: strings.TrimSpace(input.Schedule), Conditions: input.Conditions, Actions: input.Actions, Enabled: enabled, MaxAttempts: max, NextRunAt: next, CreatorID: data.Viewer.ID, OwnerID: ownerID, CreatedAt: now, UpdatedAt: now}
 		if input.TrustedSourceKeys != nil {
 			created.TrustedSourceKeys = slices.Clone(*input.TrustedSourceKeys)
 		}
@@ -560,7 +561,7 @@ func (s *server) runWorkflow(ctx context.Context, key, id, trigger, resourceType
 				break
 			}
 		}
-		run = domain.WorkflowRun{ID: fmt.Sprintf("workflow_run_%d", now.UnixNano()), WorkflowID: id, Trigger: trigger, ResourceType: resourceType, ResourceID: resourceID, Status: "running", Attempt: attempt, Output: map[string]string{}, ScheduledAt: now, StartedAt: now}
+		run = domain.WorkflowRun{ID: idgen.New("workflow_run_"), WorkflowID: id, Trigger: trigger, ResourceType: resourceType, ResourceID: resourceID, Status: "running", Attempt: attempt, Output: map[string]string{}, ScheduledAt: now, StartedAt: now}
 		execErr := applyWorkflowActions(data, *definition, &run)
 		done := time.Now().UTC()
 		run.CompletedAt = &done
@@ -610,7 +611,7 @@ func applyWorkflowActions(data *domain.Bootstrap, definition domain.WorkflowDefi
 				return fmt.Errorf("notification recipient no longer exists")
 			}
 			now := time.Now().UTC()
-			data.Notifications = append(data.Notifications, domain.Notification{ID: fmt.Sprintf("notification_workflow_%d", now.UnixNano()), RecipientID: recipient, Type: "workflow", SourceType: "workflow", SourceID: definition.ID, IssueID: run.ResourceID, Actor: data.Viewer, Category: "loops", GroupKey: "workflow:" + definition.ID, OccurrenceCount: 1, LatestActorIDs: []string{data.Viewer.ID}, CreatedAt: now, UpdatedAt: now})
+			data.Notifications = append(data.Notifications, domain.Notification{ID: idgen.New("notification_workflow_"), RecipientID: recipient, Type: "workflow", SourceType: "workflow", SourceID: definition.ID, IssueID: run.ResourceID, Actor: data.Viewer, Category: "loops", GroupKey: "workflow:" + definition.ID, OccurrenceCount: 1, LatestActorIDs: []string{data.Viewer.ID}, CreatedAt: now, UpdatedAt: now})
 		case "assignIssue":
 			if issue == nil {
 				return fmt.Errorf("assignIssue requires an issue trigger")
@@ -682,7 +683,7 @@ func applyTriggeredWorkflows(data *domain.Bootstrap, trigger, resourceType, reso
 			continue
 		}
 		now := time.Now().UTC()
-		run := domain.WorkflowRun{ID: fmt.Sprintf("workflow_run_%d_%d", now.UnixNano(), index), WorkflowID: definition.ID, Trigger: trigger, ResourceType: resourceType, ResourceID: resourceID, Status: "running", Attempt: 1, Output: map[string]string{}, ScheduledAt: now, StartedAt: now}
+		run := domain.WorkflowRun{ID: fmt.Sprintf("workflow_run_%s_%d", idgen.Stamp(), index), WorkflowID: definition.ID, Trigger: trigger, ResourceType: resourceType, ResourceID: resourceID, Status: "running", Attempt: 1, Output: map[string]string{}, ScheduledAt: now, StartedAt: now}
 		err := applyWorkflowActions(data, *definition, &run)
 		done := time.Now().UTC()
 		run.CompletedAt = &done
@@ -998,7 +999,7 @@ func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {
 		}
 		applyTriageRouting(data, &created, now)
 		data.Issues = append([]domain.Issue{created}, data.Issues...)
-		data.EmailIntakeMessages = append(data.EmailIntakeMessages, domain.EmailIntakeMessage{ID: fmt.Sprintf("email_message_%d", now.UnixNano()), AddressID: address.ID, MessageID: input.MessageID, From: input.From, Subject: input.Subject, IssueID: created.ID, Status: "processed", ReceivedAt: now, ProcessedAt: &now})
+		data.EmailIntakeMessages = append(data.EmailIntakeMessages, domain.EmailIntakeMessage{ID: idgen.New("email_message_"), AddressID: address.ID, MessageID: input.MessageID, From: input.From, Subject: input.Subject, IssueID: created.ID, Status: "processed", ReceivedAt: now, ProcessedAt: &now})
 		requester := domain.User{ID: "email_requester", Name: "Email requester", DisplayName: "Email requester"}
 		if !data.WorkspaceSettings.ReduceSupportPersonalInfo && !data.WorkspaceSettings.HIPAACompliance && input.From != "" {
 			if sender, err := mail.ParseAddress(input.From); err == nil {
@@ -1011,13 +1012,13 @@ func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if address.Type == "asks" || slices.ContainsFunc(data.WorkspaceSettings.FeatureSettings.AsksEmailAddresses, func(value string) bool { return strings.EqualFold(value, address.Address) }) {
-			data.Asks = append(data.Asks, domain.Ask{ID: fmt.Sprintf("ask_email_%d", now.UnixNano()), Title: created.Title, Body: created.Description, Source: "email", TeamID: teamID, TemplateID: address.TemplateID, Requester: requester, Status: "approved", IssueID: created.ID, Approvals: []domain.AskApproval{}, CreatedAt: now, UpdatedAt: now})
+			data.Asks = append(data.Asks, domain.Ask{ID: idgen.New("ask_email_"), Title: created.Title, Body: created.Description, Source: "email", TeamID: teamID, TemplateID: address.TemplateID, Requester: requester, Status: "approved", IssueID: created.ID, Approvals: []domain.AskApproval{}, CreatedAt: now, UpdatedAt: now})
 		}
 		// "Link incoming emails as customer requests": attach the email to the
 		// customer whose domain matches the sender.
 		if address.CustomerRequestsEnabled && customerRequestsFeatureEnabled(data) && senderEmail != "" {
 			if customer, ok := customerForEmailSender(data, senderEmail); ok {
-				data.CustomerRequests = append([]domain.CustomerRequest{{ID: fmt.Sprintf("customer_request_email_%d", now.UnixNano()), CustomerID: customer.ID, Body: created.Description, Source: "email", Creator: requester, IssueID: created.ID, Attachments: []domain.Attachment{}, CreatedAt: now, UpdatedAt: now}}, data.CustomerRequests...)
+				data.CustomerRequests = append([]domain.CustomerRequest{{ID: idgen.New("customer_request_email_"), CustomerID: customer.ID, Body: created.Description, Source: "email", Creator: requester, IssueID: created.ID, Attachments: []domain.Attachment{}, CreatedAt: now, UpdatedAt: now}}, data.CustomerRequests...)
 			}
 		}
 		return created.ID, nil
@@ -1070,7 +1071,7 @@ func (s *server) createPushSubscription(w http.ResponseWriter, r *http.Request) 
 			created = *item
 			return item.ID, nil
 		}
-		created = domain.PushSubscription{ID: fmt.Sprintf("push_subscription_%d", now.UnixNano()), UserID: viewerID, Endpoint: input.Endpoint, P256DH: input.P256DH, Auth: input.Auth, UserAgent: r.UserAgent(), Enabled: true, CreatedAt: now, UpdatedAt: now}
+		created = domain.PushSubscription{ID: idgen.New("push_subscription_"), UserID: viewerID, Endpoint: input.Endpoint, P256DH: input.P256DH, Auth: input.Auth, UserAgent: r.UserAgent(), Enabled: true, CreatedAt: now, UpdatedAt: now}
 		data.PushSubscriptions = append(data.PushSubscriptions, created)
 		return created.ID, nil
 	})

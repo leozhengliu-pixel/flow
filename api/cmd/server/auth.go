@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -2003,7 +2004,7 @@ func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
 			now := time.Now().UTC()
 			for _, rawEmail := range input.Emails {
 				email := strings.ToLower(strings.TrimSpace(rawEmail))
-				invitation := domain.Invitation{ID: fmt.Sprintf("invite_%d", time.Now().UnixNano()), WorkspaceID: workspace.Workspace.ID, Email: email, Role: input.Role, TeamIDs: slices.Clone(input.TeamIDs), Status: "pending", InviterID: workspace.Viewer.ID, Token: randomURLToken(24), ExpiresAt: now.Add(7 * 24 * time.Hour), CreatedAt: now}
+				invitation := domain.Invitation{ID: idgen.New("invite_"), WorkspaceID: workspace.Workspace.ID, Email: email, Role: input.Role, TeamIDs: slices.Clone(input.TeamIDs), Status: "pending", InviterID: workspace.Viewer.ID, Token: randomURLToken(24), ExpiresAt: now.Add(7 * 24 * time.Hour), CreatedAt: now}
 				workspace.Invitations = append(workspace.Invitations, invitation)
 				created = append(created, invitation)
 			}
@@ -2181,7 +2182,7 @@ func (s *server) acceptInvitation(w http.ResponseWriter, r *http.Request) {
 					user = workspace.Users[userIndex]
 				} else {
 					name := strings.Split(invitation.Email, "@")[0]
-					user = domain.User{ID: fmt.Sprintf("user_%d", time.Now().UnixNano()), Name: name, DisplayName: name, Email: invitation.Email, Active: true, EmailVerified: true}
+					user = domain.User{ID: idgen.New("user_"), Name: name, DisplayName: name, Email: invitation.Email, Active: true, EmailVerified: true}
 					workspace.Users = append(workspace.Users, user)
 				}
 				now := time.Now().UTC()

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // emailIntakeInput creates an intake address. Without a local part and domain
@@ -189,7 +190,7 @@ func (s *server) createEmailIntakeAddress(w http.ResponseWriter, r *http.Request
 			return "", errConflict
 		}
 		inboundToken = randomURLToken(24)
-		created = domain.EmailIntakeAddress{ID: fmt.Sprintf("email_intake_%d", now.UnixNano()), TeamID: teamID, LocalPart: localPart, Domain: intakeDomain, Address: address, InboundTokenHash: secretHash(inboundToken), VerificationToken: randomURLToken(18), VerificationState: "pending", Aliases: []domain.EmailIntakeAlias{}, Enabled: true, Type: input.Type, System: system, TemplateID: input.TemplateID, SenderName: strings.TrimSpace(input.SenderName), ForwardingEmailAddress: forwarding, CreatedAt: now, UpdatedAt: now}
+		created = domain.EmailIntakeAddress{ID: idgen.New("email_intake_"), TeamID: teamID, LocalPart: localPart, Domain: intakeDomain, Address: address, InboundTokenHash: secretHash(inboundToken), VerificationToken: randomURLToken(18), VerificationState: "pending", Aliases: []domain.EmailIntakeAlias{}, Enabled: true, Type: input.Type, System: system, TemplateID: input.TemplateID, SenderName: strings.TrimSpace(input.SenderName), ForwardingEmailAddress: forwarding, CreatedAt: now, UpdatedAt: now}
 		if system {
 			// Flow owns the intake domain, so the address receives immediately.
 			created.VerificationState = "verified"

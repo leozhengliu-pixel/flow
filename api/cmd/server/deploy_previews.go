@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // Deploy previews: preview environments deployed from a pull request's head
@@ -104,7 +105,7 @@ func upsertDeployPreview(review *domain.CodeReview, preview domain.DeployPreview
 		return strings.EqualFold(item.Environment, preview.Environment)
 	})
 	if index < 0 {
-		preview.ID, preview.CreatedAt, preview.UpdatedAt = fmt.Sprintf("preview_%d", now.UnixNano()), now, now
+		preview.ID, preview.CreatedAt, preview.UpdatedAt = idgen.New("preview_"), now, now
 		review.Previews = append(review.Previews, preview)
 		return state == "ready", nil
 	}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/publicapi"
 	"flow/api/internal/store"
 )
@@ -117,7 +118,7 @@ func (s *server) issueApplicationToken(w http.ResponseWriter, r *http.Request, w
 	}
 	now := time.Now().UTC()
 	expires := now.Add(duration)
-	key := domain.APIKey{ID: fmt.Sprintf("oauth_token_%d", now.UnixNano()), Name: "Application access token", Prefix: secret[:19], SecretHash: secretHash(secret), GrantType: grantType, CreatedAt: now, ExpiresAt: &expires}
+	key := domain.APIKey{ID: idgen.New("oauth_token_"), Name: "Application access token", Prefix: secret[:19], SecretHash: secretHash(secret), GrantType: grantType, CreatedAt: now, ExpiresAt: &expires}
 	key, err = s.store.IssueApplicationCredential(r.Context(), workspace, clientID, clientSecret, issuer, actor, scopes, key, applicationApproved)
 	if err != nil {
 		switch {

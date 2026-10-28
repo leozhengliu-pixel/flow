@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -157,7 +158,7 @@ func recordDocumentRevision(document *domain.Document, author domain.User, now t
 		}
 	}
 	started := now
-	revision := domain.DocumentRevision{ID: fmt.Sprintf("revision_%d", now.UnixNano()), DocumentID: document.ID, Title: document.Title, Content: document.Content, ContentState: document.ContentState, ContentData: document.ContentData, Author: author, BotActor: revisionBotActor(author), AuthorIDs: []string{author.ID}, CreatedAt: now, StartedAt: &started}
+	revision := domain.DocumentRevision{ID: idgen.New("revision_"), DocumentID: document.ID, Title: document.Title, Content: document.Content, ContentState: document.ContentState, ContentData: document.ContentData, Author: author, BotActor: revisionBotActor(author), AuthorIDs: []string{author.ID}, CreatedAt: now, StartedAt: &started}
 	document.Revisions = append([]domain.DocumentRevision{revision}, document.Revisions...)
 	if len(document.Revisions) > maxDocumentRevisions {
 		document.Revisions = document.Revisions[:maxDocumentRevisions]
@@ -475,7 +476,7 @@ func (s *server) setDocumentThreadSubscription(w http.ResponseWriter, r *http.Re
 			saved = data.ThreadSubscriptions[index]
 			return nil
 		}
-		saved = domain.ThreadSubscription{ID: fmt.Sprintf("thread_subscription_%d", now.UnixNano()), UserID: data.Viewer.ID, IssueID: document.ID, CommentID: rootID, State: input.State, CreatedAt: now, UpdatedAt: now}
+		saved = domain.ThreadSubscription{ID: idgen.New("thread_subscription_"), UserID: data.Viewer.ID, IssueID: document.ID, CommentID: rootID, State: input.State, CreatedAt: now, UpdatedAt: now}
 		data.ThreadSubscriptions = append(data.ThreadSubscriptions, saved)
 		return nil
 	})

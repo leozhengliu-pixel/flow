@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 type jiraRemoteProject struct {
@@ -87,7 +88,7 @@ func (s *server) createJiraLink(w http.ResponseWriter, r *http.Request) {
 		}
 		now := time.Now().UTC()
 		created = domain.JiraLink{
-			ID:              fmt.Sprintf("jira_link_%d", now.UnixNano()),
+			ID:              idgen.New("jira_link_"),
 			JiraProjectID:   input.JiraProjectID,
 			JiraProjectKey:  strings.TrimSpace(input.JiraProjectKey),
 			JiraProjectName: strings.TrimSpace(input.JiraProjectName),

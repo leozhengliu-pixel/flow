@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -337,7 +338,7 @@ func generateIssueSuggestions(data *domain.Bootstrap, issue *domain.Issue, now t
 			"source":  triageSourceHeuristic,
 		}
 		suggestion := domain.IssueSuggestion{
-			ID:             fmt.Sprintf("issue_suggestion_%d_%d", now.UnixNano(), rank),
+			ID:             fmt.Sprintf("issue_suggestion_%s_%d", idgen.Stamp(), rank),
 			IssueID:        issue.ID,
 			Type:           kind,
 			State:          "active",
@@ -860,7 +861,7 @@ func addBidirectionalIssueRelation(data *domain.Bootstrap, issue, target *domain
 		return
 	}
 	relation := domain.IssueRelation{
-		ID:             fmt.Sprintf("relation_%d", now.UnixNano()),
+		ID:             idgen.New("relation_"),
 		Type:           relationType,
 		IssueID:        issue.ID,
 		RelatedIssueID: target.ID,

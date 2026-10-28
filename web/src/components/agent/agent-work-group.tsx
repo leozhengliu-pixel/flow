@@ -86,7 +86,8 @@ function readableToolDetail(value: Record<string, unknown> | undefined, result?:
   // Read file <name>; "Transcribed media" carries no name, like the reference app.
   if (tool === "transcribe_media") return "";
   if (tool === "read_file") return readFileName(value?.file, attachments);
-  const internalId = /^[a-z]+(?:_[a-z]+)*_\d{6,}$/;
+  // project_1790…, or project_1793…_k3j9x0abcd (time digits plus a random tail).
+  const internalId = /^[a-z]+(?:_[a-z]+)*_\d{6,}(?:_[0-9a-z]{10})?$/;
   if (result && typeof result === "object" && !Array.isArray(result)) {
     const record = result as Record<string, unknown>;
     for (const key of ["identifier", "name", "title"]) {

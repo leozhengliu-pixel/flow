@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -1204,7 +1205,7 @@ func (s *server) recordWebhookFailure(workspace string, webhook domain.Webhook, 
 	}
 	now := time.Now().UTC()
 	failure := domain.WebhookFailureEvent{
-		ID:              fmt.Sprintf("whfail_%d", now.UnixNano()),
+		ID:              idgen.New("whfail_"),
 		WebhookID:       webhook.ID,
 		ExecutionID:     envelope.ID,
 		URL:             webhook.URL,

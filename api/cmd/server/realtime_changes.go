@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 const (
@@ -120,7 +121,7 @@ const maxReplayPages = 20
 func (s *server) replayChanges(w http.ResponseWriter, r *http.Request, workspaceID string, since int64, flusher http.Flusher) (int64, bool) {
 	cursor := since
 	resync := func() (int64, bool) {
-		ok := writeSSE(w, domain.RealtimeEvent{ID: "resync_" + strconv.FormatInt(time.Now().UnixNano(), 10), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}, s.realtime.node)
+		ok := writeSSE(w, domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}, s.realtime.node)
 		flusher.Flush()
 		return cursor, ok
 	}

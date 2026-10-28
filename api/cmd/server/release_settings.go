@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // Run only on the completion edge. Replayed CI events and later metadata edits
@@ -118,7 +119,7 @@ func rolloverOpenReleaseIssues(data *domain.Bootstrap, pipeline *domain.ReleaseP
 		return releaseLess(a, b)
 	})
 	history := func(releaseID, action string, metadata map[string]any) {
-		data.ReleaseHistory = append(data.ReleaseHistory, domain.ReleaseHistory{ID: fmt.Sprintf("release_history_%d_%s", now.UnixNano(), action), ReleaseID: releaseID, Actor: data.Viewer, Action: action, Metadata: metadata, CreatedAt: now})
+		data.ReleaseHistory = append(data.ReleaseHistory, domain.ReleaseHistory{ID: fmt.Sprintf("release_history_%s_%s", idgen.Stamp(), action), ReleaseID: releaseID, Actor: data.Viewer, Action: action, Metadata: metadata, CreatedAt: now})
 	}
 	if len(candidates) > 0 {
 		next := &data.Releases[candidates[0]]
@@ -142,7 +143,7 @@ func rolloverOpenReleaseIssues(data *domain.Bootstrap, pipeline *domain.ReleaseP
 	if name == "" || completedName != completedVersion {
 		name = strings.TrimSpace(completedName + " (next)")
 	}
-	created := domain.Release{ID: fmt.Sprintf("release_%d_next", now.UnixNano()), SlugID: uniqueReleaseSlug(data, name, now), Name: name, Version: version, PipelineID: pipeline.ID, Stage: stage, Status: status, Position: nextReleasePosition(data, pipeline.ID), ProjectIDs: []string{}, IssueIDs: open, SubscriberIDs: []string{data.Viewer.ID}, Resources: []domain.ReleaseResource{}, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
+	created := domain.Release{ID: fmt.Sprintf("release_%s_next", idgen.Stamp()), SlugID: uniqueReleaseSlug(data, name, now), Name: name, Version: version, PipelineID: pipeline.ID, Stage: stage, Status: status, Position: nextReleasePosition(data, pipeline.ID), ProjectIDs: []string{}, IssueIDs: open, SubscriberIDs: []string{data.Viewer.ID}, Resources: []domain.ReleaseResource{}, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
 	if status == "inProgress" {
 		created.StartedAt = &now
 	}
@@ -222,9 +223,9 @@ func setReleaseNotes(data *domain.Bootstrap, release *domain.Release, body strin
 		data.ReleaseNotes[index].Body, data.ReleaseNotes[index].BodyData, data.ReleaseNotes[index].UpdatedAt = body, nil, now
 		noteID = data.ReleaseNotes[index].ID
 	} else {
-		note := domain.ReleaseNote{ID: fmt.Sprintf("release_note_%d", now.UnixNano()), ReleaseID: release.ID, Title: release.Name, Body: body, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
+		note := domain.ReleaseNote{ID: idgen.New("release_note_"), ReleaseID: release.ID, Title: release.Name, Body: body, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
 		data.ReleaseNotes = append(data.ReleaseNotes, note)
 		noteID = note.ID
 	}
-	data.ReleaseHistory = append(data.ReleaseHistory, domain.ReleaseHistory{ID: fmt.Sprintf("release_history_%d_%s", now.UnixNano(), action), ReleaseID: release.ID, Actor: data.Viewer, Action: action, Metadata: map[string]any{"noteId": noteID}, CreatedAt: now})
+	data.ReleaseHistory = append(data.ReleaseHistory, domain.ReleaseHistory{ID: fmt.Sprintf("release_history_%s_%s", idgen.Stamp(), action), ReleaseID: release.ID, Actor: data.Viewer, Action: action, Metadata: map[string]any{"noteId": noteID}, CreatedAt: now})
 }
