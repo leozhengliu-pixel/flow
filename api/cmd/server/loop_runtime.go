@@ -949,6 +949,9 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 			} else if name := strings.TrimPrefix(call.Name, "mcp__flow."); callErr == nil && !rec.answering && expectation.NoWrites && !readOnly[name] && loopWriteToolName(name) && !strings.HasPrefix(name, "external_") {
 				// "只回复总结文本即可，不要…写入内容": no change of any kind.
 				callErr = fmt.Errorf("%s change anything in Flow; reply with the summary only. The call was not made", loopProhibitedCallPrefix)
+			} else if callErr == nil && !rec.answering && expectation.NoWrites && strings.HasPrefix(call.Name, "external_") {
+				// The same refusal covers connector tools, which can change data outside Flow.
+				callErr = loopConnectorWriteRefusal(request.Context(), call)
 			}
 			var document *loopDocumentWrite
 			if callErr == nil && strings.TrimPrefix(call.Name, "mcp__flow.") == "save_document" {
@@ -1450,6 +1453,23 @@ var loopDocumentPrompts = map[string]string{
 // loop's instructions forbid it.
 const loopProhibitedCallPrefix = "This loop's instructions say not to"
 
+// loopConnectorWriteRefusal is the error of a connector tool call in a loop whose instructions forbid every change,
+// or nil when the tool may run. Only a tool its connector marks read-only (MCP readOnlyHint) runs: by the MCP spec a
+// tool without that hint may modify its environment, so one with no annotations is refused as a write too, and
+// the error says so, so the model carries on with read tools.
+func loopConnectorWriteRefusal(ctx context.Context, call domain.AgentToolCall) error {
+	tool, ok := offeredConnectorTool(ctx, call.Name)
+	switch {
+	case ok && tool.ReadOnly:
+		return nil
+	case !ok:
+		return fmt.Errorf("%s change anything; this connector tool is not offered to the run, so it was not called. Use read-only tools and reply with the summary only", loopProhibitedCallPrefix)
+	case tool.Annotated:
+		return fmt.Errorf("%s change anything; %s (%s) may change data because its connector does not mark it read-only, so it was not called. Use read-only tools and reply with the summary only", loopProhibitedCallPrefix, tool.RemoteName, tool.Policy.label())
+	}
+	return fmt.Errorf("%s change anything; %s (%s) does not say whether it changes data, so it is treated as a write and was not called. Use read-only tools and reply with the summary only", loopProhibitedCallPrefix, tool.RemoteName, tool.Policy.label())
+}
+
 // loopProhibitedLabels name the writes a loop's instructions forbid.
 var loopProhibitedLabels = map[string]string{
 	"statusUpdate": "post status updates",
@@ -1486,7 +1506,7 @@ func loopOutputPlanPrompt(prompt *strings.Builder, plan loopRunPlan) {
 		prompt.WriteString("\nThis loop reads and reports: its instructions mention status updates, issues, comments or documents only as things to check, read or summarize. Do not post status updates or create issues, comments or documents, and do not look for a place to publish. Put the complete report in finish_run's summary (status done, or nothing_to_do when there is nothing new, worded the way the instructions ask).\n")
 	}
 	if expectation.NoWrites {
-		prompt.WriteString("The instructions forbid every change: do not create, change or delete anything in Flow (such calls are refused). The text reply in finish_run's summary is the run's only output.\n")
+		prompt.WriteString("The instructions forbid every change: do not create, change or delete anything in Flow or through a connector tool (such calls are refused; only connector tools their connector marks read-only run). The text reply in finish_run's summary is the run's only output.\n")
 	}
 	if !expectation.Explicit && len(expectation.Prohibited) > 0 && !plan.ReadOnly {
 		refused := []string{}

@@ -229,7 +229,7 @@ func (s *server) agentRunListedConnectors(r *http.Request, grant *agentRunGrant,
 		if tool.needsApproval() {
 			meta[agentRunApprovalMeta] = connectorToolApprovalAlways
 		}
-		listed = append(listed, map[string]any{"name": tool.Definition.Name, "description": tool.Definition.Description, "inputSchema": tool.Definition.Parameters, "annotations": map[string]any{"readOnlyHint": false}, "_meta": meta})
+		listed = append(listed, map[string]any{"name": tool.Definition.Name, "description": tool.Definition.Description, "inputSchema": tool.Definition.Parameters, "annotations": map[string]any{"readOnlyHint": tool.ReadOnly}, "_meta": meta})
 	}
 	return listed
 }
