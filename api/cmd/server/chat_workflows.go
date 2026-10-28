@@ -20,8 +20,6 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
-	larkevent "github.com/larksuite/oapi-sdk-go/v3/event"
-	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
 )
 
 // Incoming payloads are deliberately bounded and never written to application logs.
@@ -145,13 +143,6 @@ func (s *server) chatJobIntegration(ctx context.Context, job domain.ChatJob) (do
 	return record, err
 }
 
-type chatSilentLogger struct{}
-
-func (chatSilentLogger) Debug(context.Context, ...interface{}) {}
-func (chatSilentLogger) Info(context.Context, ...interface{})  {}
-func (chatSilentLogger) Warn(context.Context, ...interface{})  {}
-func (chatSilentLogger) Error(context.Context, ...interface{}) {}
-
 func chatKey(parts ...string) string {
 	hash := sha256.New()
 	for _, part := range parts {
@@ -160,8 +151,9 @@ func chatKey(parts ...string) string {
 	return hex.EncodeToString(hash.Sum(nil))
 }
 
-// The SDK handles the platform's signature and encryption formats. The service
-// additionally binds every authenticated event to this exact app and tenant.
+// chat_callback.go handles the platform's signature and encryption formats. The
+// service additionally binds every authenticated event to this exact app and
+// tenant.
 func (s *server) handleChatWebhook(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2500*time.Millisecond)
 	defer cancel()
@@ -180,17 +172,9 @@ func (s *server) handleChatWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusRequestEntityTooLarge, "chat callback too large")
 		return
 	}
-	d := dispatcher.NewEventDispatcher(credentials.VerificationToken, credentials.EncryptKey)
-	d.Config.Logger = chatSilentLogger{}
-	req := &larkevent.EventReq{Header: r.Header, Body: body, RequestURI: r.URL.RequestURI()}
-	ciphertext, err := d.ParseReq(ctx, req)
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, "invalid chat callback")
-		return
-	}
-	plaintext, err := d.DecryptEvent(ctx, ciphertext)
+	plaintext, err := chatCallbackPlaintext(body, credentials.EncryptKey)
 	var envelope chatWebhookEnvelope
-	if err != nil || json.Unmarshal([]byte(plaintext), &envelope) != nil {
+	if err != nil || json.Unmarshal(plaintext, &envelope) != nil {
 		writeError(w, http.StatusUnauthorized, "invalid chat callback")
 		return
 	}
@@ -206,8 +190,8 @@ func (s *server) handleChatWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "chat integration is not connected")
 		return
 	}
-	timestamp, err := strconv.ParseInt(r.Header.Get("X-Lark-Request-Timestamp"), 10, 64)
-	if err != nil || time.Since(time.Unix(timestamp, 0)) > 5*time.Minute || time.Until(time.Unix(timestamp, 0)) > 5*time.Minute || r.Header.Get("X-Lark-Request-Nonce") == "" || d.VerifySign(ctx, req) != nil || subtle.ConstantTimeCompare([]byte(envelope.Header.Token), []byte(credentials.VerificationToken)) != 1 {
+	timestamp, err := strconv.ParseInt(r.Header.Get(chatCallbackTimestampHeader), 10, 64)
+	if err != nil || time.Since(time.Unix(timestamp, 0)) > 5*time.Minute || time.Until(time.Unix(timestamp, 0)) > 5*time.Minute || r.Header.Get(chatCallbackNonceHeader) == "" || !chatCallbackSignatureValid(r.Header, body, credentials.EncryptKey) || subtle.ConstantTimeCompare([]byte(envelope.Header.Token), []byte(credentials.VerificationToken)) != 1 {
 		writeError(w, http.StatusUnauthorized, "invalid chat signature")
 		return
 	}
