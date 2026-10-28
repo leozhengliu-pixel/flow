@@ -182,7 +182,12 @@ func (s *SQLiteStore) nestedIssueGroupsByMoves(ctx context.Context, query IssueR
 		// Ungrouped, every row counts once whether it is nested or not.
 		return groups, err
 	}
-	moves, err := s.nestedIssueMoves(ctx, query)
+	// Status and priority counts on index columns only read the tree index
+	// (issue_nested_forest.go); the others walk the nested rows in SQL.
+	moves, handled, err := s.nestedIssueMovesFromIndex(ctx, query)
+	if !handled {
+		moves, err = s.nestedIssueMoves(ctx, query)
+	}
 	if err != nil || len(moves) == 0 {
 		return groups, err
 	}

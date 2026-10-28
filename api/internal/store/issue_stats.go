@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -179,7 +180,7 @@ func (s *SQLiteStore) issueGroupsFromStats(ctx context.Context, q IssueRecordQue
 	}
 	var addFilter func(IssueFilter) bool
 	addFilter = func(f IssueFilter) bool {
-		if len(f.Or) > 0 {
+		if len(f.Or) > 0 || f.Not != nil {
 			return false
 		}
 		for _, child := range f.And {
@@ -239,21 +240,6 @@ func (s *SQLiteStore) issueGroupsFromStats(ctx context.Context, q IssueRecordQue
 	if !addFilter(q.Filter) {
 		return nil, false, nil
 	}
-	base, baseArgs := bindList("i.scope_id", ids)
-	where := `i.workspace_key=? AND i.scope_type=? AND ` + base + ` AND i.total>0`
-	values := append([]any{q.Workspace, scope}, baseArgs...)
-	if q.Archived != "all" {
-		archived := 0
-		if q.Archived == "true" {
-			archived = 1
-		}
-		where += " AND i.archived=?"
-		values = append(values, archived)
-	}
-	if len(clauses) > 0 {
-		where += " AND " + strings.Join(clauses, " AND ")
-		values = append(values, args...)
-	}
 	column := "state_id"
 	if q.GroupBy == "priority" {
 		column = "priority"
@@ -265,24 +251,76 @@ func (s *SQLiteStore) issueGroupsFromStats(ctx context.Context, q IssueRecordQue
 	if q.GroupBy == "none" {
 		selectColumn = column
 	}
-	statement := fmt.Sprintf("SELECT %s,SUM(i.total) FROM issue_scope_counts i WHERE %s GROUP BY %s ORDER BY %s", selectColumn, where, selectColumn, selectColumn)
-	if q.GroupBy == "none" {
-		statement = "SELECT 'all',COALESCE(SUM(i.total),0) FROM issue_scope_counts i WHERE " + where
+	count := func(scope string, ids []string) ([]IssueRecordGroup, error) {
+		base, baseArgs := bindList("i.scope_id", ids)
+		where := `i.workspace_key=? AND i.scope_type=? AND ` + base + ` AND i.total>0`
+		values := append([]any{q.Workspace, scope}, baseArgs...)
+		if q.Archived != "all" {
+			archived := 0
+			if q.Archived == "true" {
+				archived = 1
+			}
+			where += " AND i.archived=?"
+			values = append(values, archived)
+		}
+		if len(clauses) > 0 {
+			where += " AND " + strings.Join(clauses, " AND ")
+			values = append(values, args...)
+		}
+		statement := fmt.Sprintf("SELECT %s,SUM(i.total) FROM issue_scope_counts i WHERE %s GROUP BY %s ORDER BY %s", selectColumn, where, selectColumn, selectColumn)
+		if q.GroupBy == "none" {
+			statement = "SELECT 'all',COALESCE(SUM(i.total),0) FROM issue_scope_counts i WHERE " + where
+		}
+		rows, err := s.db.QueryContext(ctx, statement, values...)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		groups := []IssueRecordGroup{}
+		for rows.Next() {
+			var group IssueRecordGroup
+			if err := rows.Scan(&group.Value, &group.Count); err != nil {
+				return nil, err
+			}
+			if group.Count > 0 {
+				groups = append(groups, group)
+			}
+		}
+		return groups, rows.Err()
 	}
-	rows, err := s.db.QueryContext(ctx, statement, values...)
+	// Deleted teams in their restoration window are hidden from every
+	// viewer: a team scope leaves them out, the workspace scope subtracts
+	// their team counters, and other scopes have no counters by team.
+	var hidden []string
+	if q.Access != nil {
+		hidden = q.Access.ArchivedTeamIDs
+	}
+	if len(hidden) > 0 {
+		switch scope {
+		case "team":
+			ids = slices.DeleteFunc(slices.Clone(ids), func(id string) bool { return slices.Contains(hidden, id) })
+		case "workspace":
+		default:
+			return nil, false, nil
+		}
+	}
+	groups, err := count(scope, ids)
+	if err != nil || scope != "workspace" || len(hidden) == 0 {
+		return groups, true, err
+	}
+	subtract, err := count("team", hidden)
 	if err != nil {
 		return nil, true, err
 	}
-	defer rows.Close()
-	groups := []IssueRecordGroup{}
-	for rows.Next() {
-		var group IssueRecordGroup
-		if err := rows.Scan(&group.Value, &group.Count); err != nil {
-			return nil, true, err
-		}
-		if group.Count > 0 {
-			groups = append(groups, group)
+	remove := map[string]int64{}
+	for _, group := range subtract {
+		remove[group.Value] += group.Count
+	}
+	visible := groups[:0]
+	for _, group := range groups {
+		if group.Count -= remove[group.Value]; group.Count > 0 {
+			visible = append(visible, group)
 		}
 	}
-	return groups, true, rows.Err()
+	return visible, true, nil
 }

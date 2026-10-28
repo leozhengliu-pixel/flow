@@ -119,6 +119,38 @@ sqlite3 -box data/flow.db < scripts/db-size-report/sqlite.sql
 See [Database growth](configuration.md#database-growth) for the retention and
 offload settings.
 
+## Issue group counts on PostgreSQL
+
+Issue lists count their groups (by status, priority, ...) on every open and
+refresh. Counts with nested sub-issues read the sub-issues and their parents
+from the `issue_records_tree_idx` index without touching the table rows: an
+index-only scan. PostgreSQL can skip the table only for pages its visibility
+map marks all-visible, and it marks them when it vacuums. Right after a bulk
+import or a large migration most pages are unmarked, and a workspace-wide count
+reads table pages as well, and with stale statistics the planner can fall back
+to a sequential scan of the table. On 75,000 issues the workspace-wide read
+took 20 ms once vacuumed, 30 ms with a fifth of the rows on unmarked pages,
+and 70 ms as a sequential scan.
+
+- Keep autovacuum on. Since PostgreSQL 13 it also vacuums tables that only
+  receive inserts, so the visibility map catches up by itself.
+- After a large import (an importer run, a restore, a migration that rewrote
+  `issue_records`), vacuum and analyze the issue table once:
+
+  ```sql
+  VACUUM (ANALYZE) issue_records;
+  ```
+
+  Flow analyzes the issue tables after its own imports (statistics), but it
+  does not vacuum.
+- On SSD storage, set `random_page_cost` to about `1.1` (the default `4` is
+  meant for spinning disks); it makes the planner prefer the index scans these
+  counts are built for.
+
+To check, run `EXPLAIN (ANALYZE, BUFFERS)` on a count. The scans on
+`issue_records_tree_idx` should be `Index Only Scan` with `Heap Fetches` close
+to zero.
+
 ## Restore drill
 
 1. Restore SQL and attachments into an isolated environment.
