@@ -557,6 +557,12 @@ func TestLoopRunBudgets(t *testing.T) {
 	setLoopLimits(srv, func(l *loopRunLimits) { l.MaxConcurrentPerWorkspace = 1 })
 	provider.replies = []string{"block"}
 	slow, first := startTestRun(t, handler, "Slow", "Wait.", nil)
+	// The run is registered here before it is returned as running, so the
+	// cancel below stops it in this process (200) rather than only flagging
+	// it for a heartbeat (202).
+	if srv.loopRunRegistry().get(first.ID) == nil {
+		t.Fatal("a started run is not registered for cancellation")
+	}
 	_, second2 := startTestRun(t, handler, "Other", "Wait too.", nil)
 	if second2.Status != "failed" || second2.FailureReason != "budget_exhausted" || !strings.Contains(second2.Error, "limit 1") {
 		t.Fatalf("over-budget run = %+v", second2)

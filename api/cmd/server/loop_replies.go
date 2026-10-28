@@ -144,6 +144,9 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 		abort(http.StatusConflict, errLoopReplyBusy.Error())
 		return
 	}
+	// Registered before the reply is stored as running: a cancel that reads
+	// the run finds the answer in this process.
+	work := s.registerLoopWork(workspace, runID, limits)
 	run, err := s.store.UpdateLoopRun(r.Context(), workspace, runID, []store.LoopRunEvent{loopRunEvent("reply_created", map[string]string{"replyId": reply.ID, "userId": userID})}, func(stored *domain.LoopRun) error {
 		if stored.LoopID != id {
 			return store.ErrLoopRunNotFound
@@ -156,13 +159,16 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		_ = s.store.ReleaseLoopRunLease(context.Background(), workspace, runID, owner)
+		// abandon frees the reserved slot, so the reply is refused without abort.
+		work.abandon()
+		loopGuards.release(guardKey)
 		switch {
 		case errors.Is(err, store.ErrLoopRunNotFound):
-			abort(http.StatusNotFound, "loop run not found")
+			writeError(w, http.StatusNotFound, "loop run not found")
 		case errors.Is(err, errLoopReplyBusy):
-			abort(http.StatusConflict, err.Error())
+			writeError(w, http.StatusConflict, err.Error())
 		default:
-			abort(http.StatusInternalServerError, "Could not save the reply")
+			writeError(w, http.StatusInternalServerError, "Could not save the reply")
 		}
 		return
 	}
@@ -184,7 +190,7 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 		answer := reply
 		recorder := &loopRunRecorder{s: s, workspace: workspace, run: run, reply: &answer, skills: skills, answering: intent != loopReplyContinue, noTools: intent == loopReplyStatus, contextPrompt: contextPrompt, completedWrites: completedWrites}
 		recorder.logEvent("reply_intent", map[string]string{"replyId": reply.ID, "intent": intent})
-		s.runLoopWork(workspace, run.ID, limits, func(ctx context.Context) error {
+		s.runLoopWork(work, workspace, limits, func(ctx context.Context) error {
 			return s.executeLoopRun(ctx, workspace, current, trigger, recorder, history...)
 		}, func(ctx context.Context, runErr error) {
 			s.finishLoopRunReply(ctx, workspace, recorder, runErr)

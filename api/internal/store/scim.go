@@ -377,9 +377,9 @@ func scimUserOrder(sortBy string, descending bool) (string, error) {
 	case "id":
 		columns = []string{"u.id"}
 	case "created":
-		columns = []string{"u.created_at"}
+		columns = []string{scimTimestampOrder("u.created_at")}
 	case "lastModified":
-		columns = []string{"u.updated_at"}
+		columns = []string{scimTimestampOrder("u.updated_at")}
 	default:
 		return "", fmt.Errorf("unsupported SCIM user sort %q", sortBy)
 	}
@@ -387,6 +387,15 @@ func scimUserOrder(sortBy string, descending bool) (string, error) {
 		columns[index] += direction
 	}
 	return strings.Join(append(columns, "i.subject"+direction), ","), nil
+}
+
+// scimTimestampOrder sorts a UTC RFC3339Nano column in time order. The format
+// drops trailing zeros of the fraction, so the text compares "05.21272Z" after
+// "05.212721Z" ('Z' sorts after the digits); without the 'Z' a shorter
+// fraction is a prefix of the longer one and sorts first, which matches time
+// order for every stored value.
+func scimTimestampOrder(column string) string {
+	return "REPLACE(" + column + ",'Z','')"
 }
 
 // scimExactEquals compares column with a bound value byte for byte: externalId is case-exact in SCIM, and MySQL's

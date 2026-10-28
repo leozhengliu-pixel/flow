@@ -165,7 +165,14 @@ export function NewProjectDialog({
   }
   useEffect(() => {
     if (resetKey === undefined) return
-    requestAnimationFrame(() => nameRef.current?.focus())
+    // The name takes focus once the dialog shows, unless the person already
+    // moved into another of its fields: a late frame (or a reset while the
+    // dialog is open) never takes the keys typed there.
+    const from = document.activeElement
+    requestAnimationFrame(() => {
+      const active = document.activeElement
+      if (!active || active === document.body || active === from || !panelRef.current?.contains(active)) nameRef.current?.focus()
+    })
   }, [resetKey])
 
   useEffect(() => {
