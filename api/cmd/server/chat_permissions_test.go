@@ -30,9 +30,8 @@ type chatPermissionActor struct {
 }
 
 // chatPermissionFixture: authentication on, a configured application whose
-// tenant is not yet authorized, a private team with an owner and a plain
-// member, a workspace member outside the team, and a member who holds tenant
-// administration on the (fake) chat platform.
+// tenant has not been checked yet, a private team with an owner and a plain
+// member, and workspace members outside the team.
 type chatPermissionFixture struct {
 	t                                    *testing.T
 	s                                    *server
@@ -41,18 +40,24 @@ type chatPermissionFixture struct {
 	admin, lead, member, outsider, owner chatPermissionActor
 	privateTeam, publicTeam              string
 	// platform state
-	openIDs        map[string]string // session token -> platform open id
-	tenantManagers map[string]bool
-	userTenant     map[string]string
-	groups         map[string]string // chat id -> JSON of /im/v1/chats/{id}
-	botIn          map[string]bool
+	openIDs    map[string]string // session token -> platform open id
+	userTenant map[string]string
+	groups     map[string]string // chat id -> JSON of /im/v1/chats/{id}
+	botIn      map[string]bool
+	// tokenStatus and botStatus answer the token and bot info requests:
+	// 0 is success; another HTTP status is a refusal.
+	tokenStatus, botStatus int
+	botMissing             bool
+	userSignIns            int
+	// outsideRange: open ids outside the app's availability range.
+	outsideRange map[string]bool
 }
 
 func newChatPermissionFixture(t *testing.T, provider string) *chatPermissionFixture {
 	t.Helper()
 	s, handler := chatTestServer(t)
 	s.authDisabled = false
-	f := &chatPermissionFixture{t: t, s: s, handler: handler, openIDs: map[string]string{}, tenantManagers: map[string]bool{}, userTenant: map[string]string{}, groups: map[string]string{}, botIn: map[string]bool{}}
+	f := &chatPermissionFixture{t: t, s: s, handler: handler, openIDs: map[string]string{}, userTenant: map[string]string{}, groups: map[string]string{}, botIn: map[string]bool{}, outsideRange: map[string]bool{}}
 	metadata, _ := s.store.WorkspaceMetadata("test-workspace")
 	f.workspaceID = metadata.Workspace.ID
 	session, token, err := s.store.Login(t.Context(), "admin@example.test", "test-password")
@@ -84,8 +89,7 @@ func newChatPermissionFixture(t *testing.T, provider string) *chatPermissionFixt
 	if err := s.store.SetTeamMembership(t.Context(), f.workspaceID, f.privateTeam, f.member.user.ID, "member", true); err != nil {
 		t.Fatal(err)
 	}
-	f.openIDs[f.admin.token], f.openIDs[f.owner.token], f.openIDs[f.lead.token] = "ou_admin", "ou_owner", "ou_lead"
-	f.tenantManagers["ou_owner"] = true
+	f.openIDs[f.admin.token], f.openIDs[f.owner.token], f.openIDs[f.lead.token], f.openIDs[f.outsider.token] = "ou_admin", "ou_owner", "ou_lead", "ou_outsider"
 	f.groups["oc_internal"] = `{"code":0,"data":{"name":"Vault room","tenant_key":"tenant_a","external":false,"chat_mode":"group"}}`
 	f.groups["oc_external"] = `{"code":0,"data":{"name":"Partners","tenant_key":"tenant_a","external":true,"chat_mode":"group"}}`
 	f.groups["oc_foreign"] = `{"code":0,"data":{"name":"Other company","tenant_key":"tenant_b","external":false,"chat_mode":"group"}}`
@@ -130,8 +134,22 @@ func (f *chatPermissionFixture) platform(r *http.Request) (*http.Response, error
 	path := r.URL.Path
 	switch {
 	case path == "/open-apis/auth/v3/tenant_access_token/internal":
+		if f.tokenStatus != 0 {
+			// The platform's answer while the app version is not approved,
+			// or the credentials are wrong.
+			return chatTestResponse(f.tokenStatus, `{"code":10003,"msg":"invalid param"}`), nil
+		}
 		return chatTestResponse(200, `{"code":0,"tenant_access_token":"tenant-token","expire":3600}`), nil
+	case path == "/open-apis/bot/v3/info/":
+		if f.botStatus != 0 {
+			return chatTestResponse(f.botStatus, `{"code":99991672,"msg":"app not available"}`), nil
+		}
+		if f.botMissing {
+			return chatTestResponse(200, `{"code":0,"bot":{}}`), nil
+		}
+		return chatTestResponse(200, `{"code":0,"bot":{"open_id":"ou_bot","app_name":"Flow bot"}}`), nil
 	case path == "/oauth/v3/token" || path == "/open-apis/authen/v2/oauth/token":
+		f.userSignIns++
 		code := ""
 		if strings.Contains(r.Header.Get("Content-Type"), "form") {
 			_ = r.ParseForm()
@@ -144,20 +162,14 @@ func (f *chatPermissionFixture) platform(r *http.Request) (*http.Response, error
 		return chatTestResponse(200, `{"code":0,"access_token":"user:`+code+`"}`), nil
 	case path == "/open-apis/authen/v1/user_info":
 		openID := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer user:")
+		if f.outsideRange[openID] {
+			return chatTestResponse(403, `{"code":20027,"msg":"the user is not in the app's availability range"}`), nil
+		}
 		tenant := f.userTenant[openID]
 		if tenant == "" {
 			tenant = "tenant_a"
 		}
 		return chatTestResponse(200, `{"code":0,"data":{"open_id":"`+openID+`","tenant_key":"`+tenant+`","name":"`+openID+`"}}`), nil
-	case path == "/open-apis/tenant/v2/tenant/query":
-		return chatTestResponse(200, `{"code":0,"data":{"tenant":{"tenant_key":"tenant_a"}}}`), nil
-	case strings.HasPrefix(path, "/open-apis/contact/v3/users/"):
-		openID := strings.TrimPrefix(path, "/open-apis/contact/v3/users/")
-		manager := "false"
-		if f.tenantManagers[openID] {
-			manager = "true"
-		}
-		return chatTestResponse(200, `{"code":0,"data":{"user":{"open_id":"`+openID+`","is_tenant_manager":`+manager+`}}}`), nil
 	case path == "/open-apis/im/v1/chats":
 		return chatTestResponse(200, `{"code":0,"data":{"items":[{"chat_id":"oc_internal","name":"Vault room","tenant_key":"tenant_a","external":false}]}}`), nil
 	case strings.HasSuffix(path, "/members/is_in_chat"):
@@ -220,11 +232,11 @@ func (f *chatPermissionFixture) refusal(actor chatPermissionActor, method, path 
 	}
 }
 
-// oauth runs a platform sign-in started by actor; the platform account that
-// signs in is the actor's.
-func (f *chatPermissionFixture) oauth(actor chatPermissionActor, provider, kind string) string {
+// link runs a personal account link started by actor; the platform account
+// that signs in is the actor's.
+func (f *chatPermissionFixture) link(actor chatPermissionActor, provider string) string {
 	f.t.Helper()
-	started := f.expect(actor, "POST", "/api/integrations/"+provider+"/chat/"+kind+"/start", nil, 200)
+	started := f.expect(actor, "POST", "/api/integrations/"+provider+"/chat/identity/start", nil, 200)
 	authorize, _ := url.Parse(started["authorizeUrl"].(string))
 	callback := "/api/integrations/" + provider + "/chat/identity/oauth/callback?state=" + url.QueryEscape(authorize.Query().Get("state")) + "&code=" + f.openIDs[actor.token]
 	req := httptest.NewRequest("GET", callback, nil)
@@ -250,103 +262,261 @@ func chatTenantPermissions(settings map[string]any) map[string]any {
 	return settings["permissions"].(map[string]any)["tenant"].(map[string]any)
 }
 
-// Acceptance (1), (2) and (6): the tenant is authorized once by the designated
-// platform tenant administrator; workspace administrators then list groups
-// without being asked to confirm the tenant, and a workspace administrator is
-// never treated as a platform administrator.
-func TestChatTenantAuthorizationIsSeparateFromWorkspaceAdministration(t *testing.T) {
+func (f *chatPermissionFixture) audited(action string, match func(domain.AuditLogEntry) bool) bool {
+	entries, _ := f.s.store.WorkspaceMetadataFields("test-workspace", "auditLog")
+	return slices.ContainsFunc(entries.AuditLog, func(entry domain.AuditLogEntry) bool {
+		return entry.Action == action && (match == nil || match(entry))
+	})
+}
+
+// recheck runs the periodic tenant check now.
+func (f *chatPermissionFixture) recheck(provider string) {
+	f.t.Helper()
+	if err := f.s.recheckChatTenant(f.t.Context(), "test-workspace", provider, func(domain.ChatIntegrationRecord) bool { return true }); err != nil {
+		f.t.Fatal(err)
+	}
+}
+
+// Acceptance (1), (2) and (6): the tenant is authorized automatically once the
+// application's credentials obtain a tenant token and read the bot's info (the
+// platform's own approval); nobody signs in for it, workspace administrators
+// then list groups, and a workspace role never stands in for it.
+func TestChatTenantAuthorizationIsAutomaticAndSeparateFromWorkspaceAdministration(t *testing.T) {
 	for _, provider := range []string{"lark", "feishu"} {
 		t.Run(provider, func(t *testing.T) {
 			f := newChatPermissionFixture(t, provider)
 			base := "/api/integrations/" + provider + "/chat"
-			// Before authorization each domain answers separately.
+			// Configured but not checked yet: each domain answers separately.
 			settings := f.expect(f.admin, "GET", base, nil, 200)
-			if tenant := chatTenantPermissions(settings); tenant["status"] != "pending" || tenant["canAuthorize"] != true {
+			if tenant := chatTenantPermissions(settings); tenant["status"] != "pending" || tenant["canAuthorize"] != nil || tenant["designatedAuthorizerId"] != nil {
 				t.Fatalf("admin tenant state: %v", tenant)
 			}
-			f.refusal(f.admin, "GET", base+"/chats", nil, 409, "chat_tenant_authorization_required", "tenant")
-			f.refusal(f.admin, "POST", base+"/identity/start", nil, 409, "chat_tenant_authorization_required", "tenant")
-			f.refusal(f.owner, "POST", base+"/tenant/start", nil, 403, "chat_tenant_authorizer_required", "tenant")
-			f.refusal(f.owner, "PUT", base+"/tenant/authorizer", map[string]string{"userId": f.owner.user.ID}, 403, "chat_workspace_permission_required", "workspace")
+			f.refusal(f.admin, "GET", base+"/chats", nil, 409, "chat_tenant_not_approved", "tenant")
+			f.refusal(f.admin, "POST", base+"/identity/start", nil, 409, "chat_tenant_not_approved", "tenant")
 			f.refusal(f.outsider, "GET", base+"/chats", nil, 403, "chat_team_binding_permission_required", "team")
+			// The tenant administrator sign-in and the designated authorizer
+			// are gone.
+			f.expect(f.admin, "POST", base+"/tenant/start", nil, 404)
+			f.expect(f.admin, "PUT", base+"/tenant/authorizer", map[string]string{"userId": f.owner.user.ID}, 404)
 
-			// A workspace administrator whose platform account is not a tenant
-			// administrator cannot authorize the tenant.
-			if location := f.oauth(f.admin, provider, "tenant"); !strings.Contains(location, "chat_auth_error=chat_tenant_manager_required") || !strings.Contains(location, "/settings/integrations/"+provider) {
-				t.Fatalf("workspace admin treated as platform tenant admin: %s", location)
+			// The app version is not approved yet: no tenant token.
+			f.tokenStatus = 400
+			f.refusal(f.admin, "POST", base+"/test", nil, 502, "chat_tenant_not_approved", "tenant")
+			settings = f.expect(f.admin, "GET", base, nil, 200)
+			if tenant := chatTenantPermissions(settings); tenant["status"] != "not_approved" || tenant["errorCode"] != "chat_tenant_not_approved" || tenant["checkedAt"] == nil || settings["lastErrorCode"] != "chat_tenant_not_approved" {
+				t.Fatalf("not approved state: %v %v", tenant, settings["lastErrorCode"])
 			}
-			if record := f.record(provider); chatTenantAuthorized(record) {
-				t.Fatal("tenant authorized by a non-tenant-administrator")
+			f.refusal(f.admin, "GET", base+"/chats", nil, 409, "chat_tenant_not_approved", "tenant")
+			if f.audited("chat_tenant.authorized", nil) {
+				t.Fatal("tenant authorized without a token")
 			}
 
-			// The administrator designates the member who is a platform
-			// tenant administrator; that member completes it.
-			designated := f.expect(f.admin, "PUT", base+"/tenant/authorizer", map[string]string{"userId": f.owner.user.ID}, 200)
-			if chatTenantPermissions(designated)["designatedAuthorizerId"] != f.owner.user.ID {
-				t.Fatalf("designation not reported: %v", designated)
+			// A token, but the bot's info is not readable (the version with
+			// the bot is not live), or the bot is not enabled.
+			f.tokenStatus, f.botStatus = 0, 403
+			f.refusal(f.admin, "POST", base+"/test", nil, 502, "chat_tenant_not_approved", "tenant")
+			f.botStatus, f.botMissing = 0, true
+			f.refusal(f.admin, "POST", base+"/test", nil, 502, "chat_bot_unpublished", "tenant")
+			if tenant := chatTenantPermissions(f.expect(f.admin, "GET", base, nil, 200)); tenant["status"] != "not_approved" || tenant["errorCode"] != "chat_bot_unpublished" {
+				t.Fatalf("bot info failure state: %v", tenant)
 			}
-			if tenant := chatTenantPermissions(f.expect(f.owner, "GET", base, nil, 200)); tenant["canAuthorize"] != true {
-				t.Fatalf("designated member cannot authorize: %v", tenant)
+			if chatTenantAuthorized(f.record(provider)) {
+				t.Fatal("tenant authorized without bot info")
 			}
-			f.userTenant["ou_owner"] = "tenant_b"
-			if location := f.oauth(f.owner, provider, "tenant"); !strings.Contains(location, "chat_auth_error=chat_other_tenant") {
-				t.Fatalf("tenant mismatch accepted: %s", location)
-			}
-			delete(f.userTenant, "ou_owner")
-			if location := f.oauth(f.owner, provider, "tenant"); !strings.Contains(location, "chat_tenant=authorized") {
-				t.Fatalf("designated tenant administrator refused: %s", location)
+
+			// Approved and published: Test connection authorizes the tenant.
+			f.botMissing = false
+			settings = f.expect(f.admin, "POST", base+"/test", nil, 200)
+			tenant := chatTenantPermissions(settings)
+			authorization, _ := tenant["authorization"].(map[string]any)
+			if tenant["status"] != "authorized" || tenant["tenantKey"] != "tenant_a" || tenant["errorCode"] != nil || authorization["configuredBy"] != f.admin.user.ID || authorization["authorizedAt"] == "" || authorization["method"] != nil || settings["connection"].(map[string]any)["status"] != "connected" {
+				t.Fatalf("tenant not authorized automatically: %v", settings)
 			}
 			record := f.record(provider)
-			if !chatTenantAuthorized(record) || record.TenantKey != "tenant_a" || record.TenantAuthorization == nil || record.TenantAuthorization.UserID != f.owner.user.ID || record.TenantAuthorization.OpenID != "ou_owner" || record.TenantAuthorization.Method != domain.ChatTenantMethodTenantManager || record.TenantAuthorization.AuthorizedAt.IsZero() {
+			if !record.Connected || record.TenantKey != "tenant_a" || record.TenantAuthorization == nil || record.TenantAuthorization.ConfiguredBy != f.admin.user.ID || record.TenantAuthorization.AuthorizedAt.IsZero() || record.TenantCheck == nil || record.TenantCheck.ErrorCode != "" {
 				t.Fatalf("tenant authorization not recorded: %+v", record)
 			}
-			if _, err := f.s.store.ChatIdentityForUser(t.Context(), "test-workspace", record.ConnectionID, f.owner.user.ID); err == nil {
-				t.Fatal("tenant authorization linked a personal account")
+			if !f.audited("chat_tenant.authorized", func(entry domain.AuditLogEntry) bool {
+				return entry.Metadata["configuredBy"] == f.admin.user.ID && entry.Metadata["method"] == "automatic"
+			}) || !f.audited("chat_tenant.key_recorded", func(entry domain.AuditLogEntry) bool { return entry.Metadata["tenantKey"] == "tenant_a" }) {
+				t.Fatal("tenant authorization not audited")
 			}
 
-			// (1) The workspace administrator lists groups; (2) nobody is asked
-			// to authorize the tenant again.
-			settings = f.expect(f.admin, "GET", base, nil, 200)
-			tenant := chatTenantPermissions(settings)
-			authorization := tenant["authorization"].(map[string]any)
-			if tenant["status"] != "authorized" || tenant["tenantKey"] != "tenant_a" || authorization["userId"] != f.owner.user.ID || authorization["name"] != "ou_owner" {
-				t.Fatalf("tenant authorization not reported: %v", tenant)
-			}
-			if settings["permissions"].(map[string]any)["workspace"].(map[string]any)["canManage"] != true {
-				t.Fatal("workspace permission not reported")
-			}
+			// (1) The workspace administrator lists groups with no sign-in.
 			groups := f.expect(f.admin, "GET", base+"/chats", nil, 200)
-			if items, _ := groups["items"].([]any); len(items) != 1 {
-				t.Fatalf("admin could not list groups after tenant authorization: %v", groups)
+			if items, _ := groups["items"].([]any); len(items) != 1 || f.userSignIns != 0 {
+				t.Fatalf("admin could not list groups without signing in: %v (%d sign-ins)", groups, f.userSignIns)
 			}
-			if location := f.oauth(f.admin, provider, "identity"); !strings.Contains(location, "chat_auth=success") {
-				t.Fatalf("personal link after tenant authorization: %s", location)
+			// Linking a personal account needs no tenant step and never
+			// changes the tenant authorization.
+			if location := f.link(f.outsider, provider); !strings.Contains(location, "chat_auth=success") || !strings.Contains(location, "/settings/account/connections") {
+				t.Fatalf("member link: %s", location)
 			}
-			if after := f.record(provider); after.TenantAuthorization == nil || after.TenantAuthorization.UserID != f.owner.user.ID {
+			if identity, err := f.s.store.ChatIdentityForUser(t.Context(), "test-workspace", record.ConnectionID, f.outsider.user.ID); err != nil || identity.TenantKey != "tenant_a" {
+				t.Fatalf("member link not saved: %+v %v", identity, err)
+			}
+			f.userTenant["ou_lead"] = "tenant_b"
+			if location := f.link(f.lead, provider); !strings.Contains(location, "chat_auth_error=chat_other_tenant") {
+				t.Fatalf("account of another tenant linked: %s", location)
+			}
+			// Approved in the tenant, but not available to this person.
+			delete(f.userTenant, "ou_lead")
+			f.outsideRange["ou_lead"] = true
+			if location := f.link(f.lead, provider); !strings.Contains(location, "chat_auth_error=chat_app_unavailable_to_user") {
+				t.Fatalf("account outside the availability range: %s", location)
+			}
+			if after := f.record(provider); after.TenantAuthorization.ConfiguredBy != f.admin.user.ID || after.TenantKey != "tenant_a" {
 				t.Fatal("a personal link changed the tenant authorization")
 			}
 			// (6) Members see the tenant state but not the workspace permission.
 			memberSettings := f.expect(f.outsider, "GET", base, nil, 200)
-			if chatTenantPermissions(memberSettings)["status"] != "authorized" || memberSettings["permissions"].(map[string]any)["workspace"].(map[string]any)["canManage"] != false || chatTenantPermissions(memberSettings)["canAuthorize"] != false {
+			if chatTenantPermissions(memberSettings)["status"] != "authorized" || memberSettings["permissions"].(map[string]any)["workspace"].(map[string]any)["canManage"] != false {
 				t.Fatalf("member permission view: %v", memberSettings["permissions"])
 			}
 			f.refusal(f.outsider, "POST", base+"/test", nil, 403, "chat_workspace_permission_required", "workspace")
 
-			entries, _ := f.s.store.WorkspaceMetadataFields("test-workspace", "auditLog")
-			if !slices.ContainsFunc(entries.AuditLog, func(entry domain.AuditLogEntry) bool {
-				return entry.Action == "chat_tenant.authorized" && entry.Metadata["authorizedBy"] == f.owner.user.ID && entry.Metadata["tenantKey"] == "tenant_a"
-			}) {
-				t.Fatal("tenant authorization not audited")
+			// An unreachable platform never withdraws the authorization.
+			f.tokenStatus = 503
+			f.refusal(f.admin, "POST", base+"/test", nil, 502, "chat_platform_unreachable", "")
+			if !chatTenantAuthorized(f.record(provider)) {
+				t.Fatal("a transient failure withdrew the tenant authorization")
+			}
+			// The app is withdrawn in the admin console: the periodic check
+			// says so; once approved again, it is authorized again.
+			f.tokenStatus = 400
+			f.recheck(provider)
+			if record := f.record(provider); record.Connected || record.TenantCheck.ErrorCode != "chat_tenant_not_approved" || !f.audited("chat_tenant.not_approved", nil) {
+				t.Fatalf("withdrawn app still authorized: %+v", record)
+			}
+			f.tokenStatus = 0
+			f.recheck(provider)
+			if record := f.record(provider); !record.Connected || record.TenantKey != "tenant_a" || record.TenantAuthorization.ConfiguredBy != f.admin.user.ID {
+				t.Fatalf("approved app not authorized again: %+v", record)
 			}
 		})
+	}
+}
+
+// A refused tenant token during delivery re-checks the tenant at once, and
+// the periodic check waits for its interval.
+func TestChatTenantRecheckRunsPeriodicallyAndAfterTokenFailure(t *testing.T) {
+	provider := "lark"
+	f := newChatPermissionFixture(t, provider)
+	f.authorizeTenant(provider)
+	record := f.record(provider)
+	f.tokenStatus = 400
+	if err := f.s.recheckChatTenants(t.Context(), "test-workspace"); err != nil {
+		t.Fatal(err)
+	}
+	if !f.record(provider).Connected {
+		t.Fatal("periodic check ran before its interval")
+	}
+	refused := chatTokenError{&chatPlatformError{Code: 10003, Status: 400}}
+	f.s.recheckChatTenantAfterFailure(t.Context(), record, &chatPlatformError{Status: 400})
+	if !f.record(provider).Connected {
+		t.Fatal("a failure other than the token re-checked the tenant")
+	}
+	// Checked moments ago: a token failure waits a minute.
+	f.s.recheckChatTenantAfterFailure(t.Context(), record, refused)
+	if !f.record(provider).Connected {
+		t.Fatal("token failure re-checked the tenant within a minute of the last check")
+	}
+	f.checkedAgo(provider, chatTenantFailureRecheckInterval+time.Second)
+	f.s.recheckChatTenantAfterFailure(t.Context(), record, refused)
+	if f.record(provider).Connected {
+		t.Fatal("token failure did not re-check the tenant")
+	}
+	// Not approved: the periodic check retries sooner than for an
+	// authorized tenant.
+	f.tokenStatus = 0
+	f.checkedAgo(provider, chatTenantPendingRecheckInterval-time.Minute)
+	if err := f.s.recheckChatTenants(t.Context(), "test-workspace"); err != nil {
+		t.Fatal(err)
+	}
+	if f.record(provider).Connected {
+		t.Fatal("periodic check ran before its interval")
+	}
+	f.checkedAgo(provider, chatTenantPendingRecheckInterval+time.Minute)
+	if err := f.s.recheckChatTenants(t.Context(), "test-workspace"); err != nil {
+		t.Fatal(err)
+	}
+	if !f.record(provider).Connected {
+		t.Fatal("periodic check did not authorize the approved app")
+	}
+}
+
+// Connections stored while tenant authorization was a sign-in step: those
+// authorized (by a tenant administrator, or completed before that step
+// existed) stay authorized and become automatically authorized on their next
+// successful check; those still waiting for the sign-in are authorized by it.
+func TestChatTenantAuthorizationMigratesStoredStates(t *testing.T) {
+	stored := map[string]string{
+		"tenant_manager": `{"workspaceKey":"test-workspace","provider":"lark","connectionId":"perm_conn_lark","appId":"cli_perm","tenantKey":"tenant_a","botOpenId":"ou_bot","connected":true,"tenantAuthorization":{"userId":"user_owner","openId":"ou_owner","name":"Owner","tenantKey":"tenant_a","authorizedAt":"2026-10-01T00:00:00Z","method":"tenant_manager"},"tenantAuthorizerId":"user_owner"}`,
+		"legacy":         `{"workspaceKey":"test-workspace","provider":"lark","connectionId":"perm_conn_lark","appId":"cli_perm","tenantKey":"tenant_a","botOpenId":"ou_bot","connected":true}`,
+		"pending":        `{"workspaceKey":"test-workspace","provider":"lark","connectionId":"perm_conn_lark","appId":"cli_perm","tenantKey":"","botOpenId":"ou_bot","connected":false,"tenantAuthorizerId":"user_owner"}`,
+	}
+	for name, payload := range stored {
+		t.Run(name, func(t *testing.T) {
+			provider := "lark"
+			f := newChatPermissionFixture(t, provider)
+			var record domain.ChatIntegrationRecord
+			if err := json.Unmarshal([]byte(payload), &record); err != nil {
+				t.Fatal(err)
+			}
+			if err := f.s.store.PutChatIntegration(t.Context(), record); err != nil {
+				t.Fatal(err)
+			}
+			if raw, _ := json.Marshal(f.record(provider)); strings.Contains(string(raw), "tenantAuthorizerId") || strings.Contains(string(raw), "tenant_manager") || strings.Contains(string(raw), "openId") {
+				t.Fatalf("old tenant sign-in fields kept: %s", raw)
+			}
+			base := "/api/integrations/" + provider + "/chat"
+			tenant := chatTenantPermissions(f.expect(f.admin, "GET", base, nil, 200))
+			authorization, _ := tenant["authorization"].(map[string]any)
+			switch name {
+			case "pending":
+				if tenant["status"] != "pending" {
+					t.Fatalf("pending state: %v", tenant)
+				}
+			default:
+				if tenant["status"] != "authorized" || tenant["tenantKey"] != "tenant_a" || authorization["authorizedAt"] == nil || authorization["method"] != nil {
+					t.Fatalf("authorized state: %v", tenant)
+				}
+				f.expect(f.admin, "GET", base+"/chats", nil, 200)
+			}
+			// Never checked: the periodic check is due at once.
+			if err := f.s.recheckChatTenants(t.Context(), "test-workspace"); err != nil {
+				t.Fatal(err)
+			}
+			after := f.record(provider)
+			if !after.Connected || after.TenantKey != "tenant_a" || after.TenantAuthorization == nil || after.TenantCheck == nil || after.TenantCheck.ErrorCode != "" {
+				t.Fatalf("not automatically authorized after a successful check: %+v", after)
+			}
+			if name == "tenant_manager" && !after.TenantAuthorization.AuthorizedAt.Equal(time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)) {
+				t.Fatalf("original authorization time lost: %v", after.TenantAuthorization.AuthorizedAt)
+			}
+			if location := f.link(f.outsider, provider); !strings.Contains(location, "chat_auth=success") {
+				t.Fatalf("member link after migration: %s", location)
+			}
+		})
+	}
+}
+
+func (f *chatPermissionFixture) checkedAgo(provider string, age time.Duration) {
+	f.t.Helper()
+	record := f.record(provider)
+	record.TenantCheck.CheckedAt = time.Now().Add(-age)
+	if err := f.s.store.PutChatIntegration(f.t.Context(), record); err != nil {
+		f.t.Fatal(err)
 	}
 }
 
 func (f *chatPermissionFixture) authorizeTenant(provider string) {
 	f.t.Helper()
 	record := f.record(provider)
+	now := time.Now().UTC()
 	record.TenantKey, record.Connected = "tenant_a", true
-	record.TenantAuthorization = &domain.ChatTenantAuthorization{UserID: f.owner.user.ID, OpenID: "ou_owner", TenantKey: "tenant_a", AuthorizedAt: time.Now().UTC(), Method: domain.ChatTenantMethodTenantManager}
+	record.TenantAuthorization = &domain.ChatTenantAuthorization{TenantKey: "tenant_a", AuthorizedAt: now, ConfiguredBy: f.admin.user.ID}
+	record.TenantCheck = &domain.ChatTenantCheck{CheckedAt: now}
 	if err := f.s.store.PutChatIntegration(f.t.Context(), record); err != nil {
 		f.t.Fatal(err)
 	}

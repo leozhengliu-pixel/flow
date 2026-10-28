@@ -58,7 +58,7 @@ export function ChatTeamNotifications({ provider, data, team }: { provider: Chat
   let state: { description: string; action?: ReactNode };
   if (loading && !settings) state = { description: t("Loading integration…"), action: <GridLoader size={14} /> };
   else if (!settings?.connection) state = { description: t("Connect {name} to your workspace to broadcast notifications from this team").replace("{name}", name), action: <button type="button" className="settings-action" onClick={() => navigate(settingsHref)}>{t("Connect")}</button> };
-  else if (!tenantAuthorized) state = { description: t("The organization hasn't authorized {name} yet. A tenant administrator completes it in the integration settings.").replace("{name}", name), action: <button type="button" className="settings-action" onClick={() => navigate(settingsHref)}>{t("Open settings")}</button> };
+  else if (!tenantAuthorized) state = { description: t("{name} hasn't approved the app in your organization yet. Your {name} admin approves the app version in the admin console; Flow then connects automatically.").replaceAll("{name}", name), action: <button type="button" className="settings-action" onClick={() => navigate(settingsHref)}>{t("Open settings")}</button> };
   else if (sharingBlocked) state = { description: t("Workspace policy prevents sharing updates with chat applications.") };
   else if (!canManage) state = { description: t("Only the team's owners and workspace administrators can connect groups to this team.") };
   else if (!bindable) state = { description: t("This team can't be shared with a group right now.") };

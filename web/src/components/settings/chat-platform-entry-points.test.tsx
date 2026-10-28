@@ -48,7 +48,7 @@ function workspace(platform: Platform | undefined, overrides: Partial<BootstrapD
 const chatSettings = (overrides: Partial<ChatIntegrationSettings> = {}): ChatIntegrationSettings => ({
   connection: { id: 'connection-1', provider: 'lark', name: 'Lark', status: 'connected', config: { appId: 'app-1', tenantKey: 'tenant-1' }, scopes: [], channels: [], linkbackEnabled: false, deliveryAttempts: 0, connectedBy: viewer.id, createdAt: '2026-10-26T00:00:00Z', updatedAt: '2026-10-26T00:00:00Z' },
   identity: null, bindings: [], bindableTeamIds: ['team-1'], credentialsConfigured: true, webhookURL: '', canManage: false,
-  permissions: { tenant: { status: 'authorized', canAuthorize: false, tenantKey: 'tenant-1' }, workspace: { canManage: false }, teams: { manageableTeamIds: ['team-1'], privateTeamIds: [] } },
+  permissions: { tenant: { status: 'authorized', tenantKey: 'tenant-1' }, workspace: { canManage: false }, teams: { manageableTeamIds: ['team-1'], privateTeamIds: [] } },
   ...overrides,
 })
 
@@ -122,16 +122,16 @@ describe('chat platform entry points', () => {
   })
 
   it('tells members without team binding permission who can connect groups', async () => {
-    vi.mocked(chatApi.fetchChatIntegration).mockResolvedValue(chatSettings({ bindableTeamIds: [], permissions: { tenant: { status: 'authorized', canAuthorize: false }, workspace: { canManage: false }, teams: { manageableTeamIds: [], privateTeamIds: [] } } }))
+    vi.mocked(chatApi.fetchChatIntegration).mockResolvedValue(chatSettings({ bindableTeamIds: [], permissions: { tenant: { status: 'authorized' }, workspace: { canManage: false }, teams: { manageableTeamIds: [], privateTeamIds: [] } } }))
     teamNotifications(workspace('feishu', { teamMembers: [] }))
     expect(await screen.findByText("Only the team's owners and workspace administrators can connect groups to this team.")).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Connect Feishu group' })).not.toBeInTheDocument()
   })
 
   it('points to the integration until the tenant is authorized', async () => {
-    vi.mocked(chatApi.fetchChatIntegration).mockResolvedValue(chatSettings({ permissions: { tenant: { status: 'pending', canAuthorize: false }, workspace: { canManage: false }, teams: { manageableTeamIds: ['team-1'], privateTeamIds: [] } } }))
+    vi.mocked(chatApi.fetchChatIntegration).mockResolvedValue(chatSettings({ permissions: { tenant: { status: 'pending' }, workspace: { canManage: false }, teams: { manageableTeamIds: ['team-1'], privateTeamIds: [] } } }))
     teamNotifications(workspace('lark'))
-    expect(await screen.findByText("The organization hasn't authorized Lark yet. A tenant administrator completes it in the integration settings.")).toBeInTheDocument()
+    expect(await screen.findByText("Lark hasn't approved the app in your organization yet. Your Lark admin approves the app version in the admin console; Flow then connects automatically.")).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open settings' })).toBeInTheDocument()
   })
 

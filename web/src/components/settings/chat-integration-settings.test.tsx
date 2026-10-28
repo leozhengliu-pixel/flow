@@ -22,8 +22,6 @@ vi.mock("@/lib/chat-integrations-api", async (importOriginal) => ({
   removeChatBinding: vi.fn(),
   startChatIdentityBinding: vi.fn(),
   removeChatIdentity: vi.fn(),
-  startChatTenantAuthorization: vi.fn(),
-  designateChatTenantAuthorizer: vi.fn(),
   revokeChatBinding: vi.fn(),
 }));
 vi.mock("@/components/ui/action-dialog-service", () => ({ confirmAction: vi.fn().mockResolvedValue(true) }));
@@ -110,69 +108,93 @@ it("keeps personal account controls out of workspace integration settings", asyn
 });
 
 const tenantPending = (overrides: Partial<ChatPermissions["tenant"]> = {}, workspace = true, teams: Partial<ChatPermissions["teams"]> = {}): ChatPermissions => ({
-  tenant: { status: "pending", canAuthorize: workspace, ...overrides },
+  tenant: { status: "pending", ...overrides },
   workspace: { canManage: workspace },
   teams: { manageableTeamIds: workspace ? ["team-1"] : [], privateTeamIds: [], ...teams },
 });
 
-it.each(["feishu", "lark"] as const)("asks for %s tenant authorization separately and never through a personal account", async (provider) => {
+it.each(["feishu", "lark"] as const)("shows the %s tenant as automatic, with no sign-in or designated authorizer", async (provider) => {
   const pending = settings({ identity: null, permissions: tenantPending() });
   pending.connection!.status = "pending_authorization";
   vi.mocked(api.fetchChatIntegration).mockResolvedValue(pending);
-  vi.mocked(api.startChatTenantAuthorization).mockResolvedValue({ authorizeUrl: "https://untrusted.example/oauth" });
   render(<MemoryRouter><I18nProvider><ChatSettings provider={provider} data={makeBootstrap({ viewerRole: "admin", integrationConnections: [] })} onBack={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)} /></I18nProvider></MemoryRouter>);
   const permissions = await screen.findByRole("region", { name: "Permissions" });
-  expect(within(permissions).getByText("Enterprise tenant authorization")).toBeInTheDocument();
-  expect(within(permissions).getByTestId("chat-tenant-status")).toHaveTextContent(`A tenant administrator of ${provider === "feishu" ? "Feishu" : "Lark"} authorizes the application`);
+  expect(within(permissions).getByText("Tenant")).toBeInTheDocument();
+  expect(within(permissions).getByTestId("chat-tenant-status")).toHaveTextContent("Not checked yet. Flow checks automatically once the app is approved and published. Select Test connection to check now.");
+  expect(within(permissions).getByText(`Automatic: once your ${provider === "feishu" ? "Feishu" : "Lark"} admin approves and publishes the app version in the admin console`, { exact: false })).toBeInTheDocument();
   expect(within(permissions).getByText("Workspace integration")).toBeInTheDocument();
   expect(within(permissions).getByText("Team group bindings")).toBeInTheDocument();
-  expect(screen.queryByRole("link", { name: "Verify workspace" })).not.toBeInTheDocument();
-  await userEvent.setup().click(within(permissions).getByRole("button", { name: "Authorize tenant" }));
-  expect(api.startChatTenantAuthorization).toHaveBeenCalledWith(provider);
-  expect(api.startChatIdentityBinding).not.toHaveBeenCalled();
-  expect(await screen.findByRole("alert")).toHaveTextContent("Invalid authorization address");
+  expect(within(permissions).queryByRole("button")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Authorize tenant" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("combobox", { name: "Tenant authorizer" })).not.toBeInTheDocument();
+  expect(screen.queryByText(/completed before tenant authorization/i)).not.toBeInTheDocument();
 });
 
-it("lets administrators designate the member who completes tenant authorization", async () => {
-  const pending = settings({ identity: null, permissions: tenantPending() });
-  pending.connection!.status = "pending_authorization";
-  vi.mocked(api.fetchChatIntegration).mockResolvedValue(pending);
-  vi.mocked(api.designateChatTenantAuthorizer).mockResolvedValue(pending);
-  const data = makeBootstrap({ viewerRole: "admin", integrationConnections: [] });
-  show({ members: [{ user: viewer, role: "admin", status: "active" }, { user: data.users[1], role: "member", status: "active" }] as never });
-  const user = userEvent.setup();
-  await user.click(await screen.findByRole("combobox", { name: "Tenant authorizer" }));
-  await user.click(screen.getByRole("option", { name: "Teammate" }));
-  await waitFor(() => expect(api.designateChatTenantAuthorizer).toHaveBeenCalledWith("feishu", "user-2"));
+it("shows the not-approved state with its reason after a failed check", async () => {
+  const failed = settings({ identity: null, lastErrorCode: "chat_tenant_not_approved", permissions: tenantPending({ status: "not_approved", errorCode: "chat_tenant_not_approved", checkedAt: "2026-10-27T00:00:00Z" }) });
+  failed.connection!.status = "error";
+  failed.connection!.lastError = "not approved";
+  vi.mocked(api.fetchChatIntegration).mockResolvedValueOnce(settings({ identity: null, permissions: tenantPending() })).mockResolvedValue(failed);
+  vi.mocked(api.testChatIntegration).mockRejectedValue(new ApiError("The app isn't approved", 502, "chat_tenant_not_approved"));
+  show();
+  await screen.findByRole("region", { name: "Permissions" });
+  await userEvent.setup().click(screen.getByRole("button", { name: "Test connection" }));
+  const permissions = await screen.findByRole("region", { name: "Permissions" });
+  await waitFor(() => expect(within(permissions).getByTestId("chat-tenant-status")).toHaveTextContent("The app isn't approved or published in your organization yet, or its credentials are wrong. Ask your chat platform admin to approve the app version in the admin console."));
+  expect(within(permissions).getByTestId("chat-tenant-permission")).toHaveAttribute("data-granted", "false");
+  expect(screen.getByRole("button", { name: "Add group" })).toBeDisabled();
 });
 
-it("shows a completed tenant authorization and who completed it, without asking again", async () => {
-  vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ permissions: { ...tenantPending(), tenant: { status: "authorized", canAuthorize: true, tenantKey: "tenant-1", authorization: { userId: "user-2", openId: "ou_owner", name: "Owner", tenantKey: "tenant-1", authorizedAt: "2026-10-20T00:00:00Z", method: "tenant_manager" } } } }));
+it("shows the bot-unavailable reason separately", async () => {
+  vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ permissions: tenantPending({ status: "not_approved", errorCode: "chat_bot_unpublished" }) }));
   show();
   const permissions = await screen.findByRole("region", { name: "Permissions" });
-  expect(within(permissions).getByTestId("chat-tenant-status")).toHaveTextContent("Completed by Teammate on");
-  expect(within(permissions).getByTestId("chat-tenant-status")).toHaveTextContent("tenant-1");
-  expect(within(permissions).queryByRole("button", { name: "Authorize tenant" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("combobox", { name: "Tenant authorizer" })).not.toBeInTheDocument();
+  expect(within(permissions).getByTestId("chat-tenant-status")).toHaveTextContent("Enable and publish the application's bot, then try again.");
+});
+
+it("shows the automatically authorized tenant and who configured it", async () => {
+  vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ permissions: { ...tenantPending(), tenant: { status: "authorized", tenantKey: "tenant-1", authorization: { tenantKey: "tenant-1", authorizedAt: "2026-10-20T00:00:00Z", configuredBy: "user-2" } } } }));
+  show();
+  const permissions = await screen.findByRole("region", { name: "Permissions" });
+  expect(within(permissions).getByTestId("chat-tenant-status")).toHaveTextContent("Connected to tenant tenant-1.");
+  expect(within(permissions).getByText(/Detected automatically on .*Configured by Teammate\./)).toBeInTheDocument();
+  expect(within(permissions).getByTestId("chat-tenant-permission")).toHaveAttribute("data-granted", "true");
   expect(screen.getByRole("button", { name: "Add group" })).toBeEnabled();
 });
 
+it("says when the tenant key is not known yet", async () => {
+  vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ permissions: { ...tenantPending(), tenant: { status: "authorized", authorization: { authorizedAt: "2026-10-20T00:00:00Z" } } } }));
+  show();
+  const permissions = await screen.findByRole("region", { name: "Permissions" });
+  expect(within(permissions).getByTestId("chat-tenant-status")).toHaveTextContent("Its tenant key is recorded once the bot joins an internal group or a member links an account.");
+});
+
 it("explains which permission a member lacks and who can grant it", async () => {
-  vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ canManage: false, permissions: tenantPending({ canAuthorize: false }, false) }));
+  vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ canManage: false, permissions: tenantPending({}, false) }));
   show({ viewerRole: "member" });
   const permissions = await screen.findByRole("region", { name: "Permissions" });
-  expect(within(permissions).getByText("Ask a workspace administrator or the designated tenant authorizer.", { exact: false })).toBeInTheDocument();
+  expect(within(permissions).getByText("Ask a workspace administrator to test the connection.", { exact: false })).toBeInTheDocument();
+  expect(within(permissions).getByTestId("chat-tenant-status")).not.toHaveTextContent("Select Test connection");
   expect(within(permissions).getByText("Only workspace administrators manage the application settings.")).toBeInTheDocument();
   expect(within(permissions).getByText("A team's owners bind its groups. Ask a team owner or a workspace administrator.")).toBeInTheDocument();
-  expect(within(permissions).queryByRole("button", { name: "Authorize tenant" })).not.toBeInTheDocument();
   expect(screen.queryByRole("region", { name: "Group bindings" })).not.toBeInTheDocument();
+});
+
+it("shows the tenant states in Chinese with 飞书 for Feishu", async () => {
+  localStorage.setItem("flow:locale", "zh-CN");
+  vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ permissions: tenantPending({ status: "not_approved", errorCode: "chat_tenant_not_approved" }) }));
+  show();
+  const permissions = await screen.findByRole("region", { name: "权限" });
+  expect(within(permissions).getByText("租户")).toBeInTheDocument();
+  expect(within(permissions).getByTestId("chat-tenant-status")).toHaveTextContent("应用尚未在你的组织中审批或发布");
+  expect(within(permissions).getByText(/飞书 管理员在管理后台审批并发布应用版本后/)).toBeInTheDocument();
 });
 
 it("lets a private team owner bind only their team, with explicit authorization", async () => {
   const privateBinding: ChatBinding = { ...binding, id: "binding-private", teamId: "private-team", chatName: "Vault room", authorization: { userId: viewer.id, role: "team_owner", authorizedAt: "2026-10-21T00:00:00Z", privateTeam: true } };
   vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({
     canManage: false, bindings: [privateBinding], bindableTeamIds: ["private-team"],
-    permissions: { ...tenantPending({}, false, { manageableTeamIds: ["private-team"], privateTeamIds: ["private-team"] }), tenant: { status: "authorized", canAuthorize: false, tenantKey: "tenant-1" } },
+    permissions: { ...tenantPending({}, false, { manageableTeamIds: ["private-team"], privateTeamIds: ["private-team"] }), tenant: { status: "authorized", tenantKey: "tenant-1" } },
   }));
   show({ viewerRole: "member", teams: [makeBootstrap().teams[0], { id: "private-team", name: "Private team", key: "PVT", color: "", private: true }] });
   const bindings = await screen.findByRole("region", { name: "Group bindings" });

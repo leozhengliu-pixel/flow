@@ -248,7 +248,7 @@ export function WelcomeOnboarding({
         skipLabel="Finish"
       >
         <p className="welcome-integration-copy">
-          {chat.format(t("A workspace administrator adds the application; a tenant administrator of {name} then authorizes it once. You can finish setup now and connect it later from Settings → Integrations."))}
+          {chat.format(t("A workspace administrator adds the application once your {name} admin has approved and published it. You can finish setup now and connect it later from Settings → Integrations."))}
         </p>
       </OnboardingStepLayout>
     );

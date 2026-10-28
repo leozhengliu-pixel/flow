@@ -22,7 +22,7 @@ func (s *server) processChatIntegrationTick(ctx context.Context, workspace strin
 		defer cancel()
 		_ = s.store.ReleaseChatWorker(releaseCtx, workspace, lease)
 	}()
-	return errors.Join(s.queueCommittedChatEvents(ctx, workspace), s.processChatJobs(ctx, workspace))
+	return errors.Join(s.recheckChatTenants(ctx, workspace), s.queueCommittedChatEvents(ctx, workspace), s.processChatJobs(ctx, workspace))
 }
 
 func (s *server) queueCommittedChatEvents(ctx context.Context, workspace string) error {

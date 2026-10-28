@@ -97,7 +97,7 @@ function ChatConnectionRow({ provider, data }: { provider: ChatIntegrationProvid
 
   const identity = settings?.identity;
   const admin = isWorkspaceAdmin(data) && settings?.canManage === true;
-  // A personal account never authorizes the organization; it links only after the tenant authorization.
+  // Linking only maps the member's chat account; it needs a healthy connection (the tenant is authorized automatically).
   const tenantAuthorized = settings?.permissions ? settings.permissions.tenant.status === "authorized" : settings?.connection?.status === "connected";
   const ready = Boolean(settings?.credentialsConfigured && tenantAuthorized);
   const description = t("Create and update issues from group chats in {workspace}").replace("{workspace}", data.workspace.name);
@@ -105,7 +105,7 @@ function ChatConnectionRow({ provider, data }: { provider: ChatIntegrationProvid
   if (loading) control = <span role="status" aria-label={`${t("Loading account")}: ${name}`}><GridLoader size={14} /></span>;
   else if (identity) control = <ConnectionStatusMenu name={name} reconnect={Boolean(settings?.identityExpired)} disabled={busy} onReconnect={() => void connect()} onDisconnect={() => setConfirming(true)} />;
   else if (ready) control = <ConnectAction disabled={busy} onClick={() => void connect()} />;
-  else control = <span className="personal-connection-soon">{t(settings?.connection ? "Waiting for tenant authorization" : "Not configured")}</span>;
+  else control = <span className="personal-connection-soon">{t(settings?.connection ? "Waiting for the app to be approved" : "Not configured")}</span>;
 
   return <>
     <section className="settings-card" aria-label={t("{name} account").replace("{name}", name)} data-testid={`${provider}-account-row`}>

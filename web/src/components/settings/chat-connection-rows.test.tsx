@@ -65,7 +65,7 @@ it("lists only the chat applications the workspace has configured", async () => 
 it("shows the workspace setup link to administrators only", async () => {
   vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ connection: { id: "connection-1", status: "pending_authorization" } as never, credentialsConfigured: false, canManage: true }));
   const member = show({ viewerRole: "member" });
-  expect(await screen.findAllByText("Waiting for tenant authorization")).toHaveLength(2);
+  expect(await screen.findAllByText("Waiting for the app to be approved")).toHaveLength(2);
   expect(screen.queryByRole("link", { name: "Set up workspace integration" })).not.toBeInTheDocument();
   member.unmount();
   show({ viewerRole: "admin" });
@@ -100,12 +100,12 @@ it("waits for the tenant authorization for members and administrators alike", as
   const pending = settings({ connection: { id: "connection-1", status: "pending_authorization" } as never });
   vi.mocked(api.fetchChatIntegration).mockResolvedValue(pending);
   const member = show();
-  expect(await screen.findAllByText("Waiting for tenant authorization")).toHaveLength(2);
+  expect(await screen.findAllByText("Waiting for the app to be approved")).toHaveLength(2);
   expect(screen.queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
   member.unmount();
   vi.mocked(api.fetchChatIntegration).mockResolvedValue({ ...pending, canManage: true });
   show({ viewerRole: "admin" });
-  expect(await screen.findAllByText("Waiting for tenant authorization")).toHaveLength(2);
+  expect(await screen.findAllByText("Waiting for the app to be approved")).toHaveLength(2);
   expect(screen.queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
 });
 

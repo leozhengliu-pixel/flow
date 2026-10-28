@@ -207,27 +207,20 @@ func (s *server) chatManageableTeamIDs(r *http.Request, data domain.Bootstrap) [
 	return ids
 }
 
+// chatTenantAuthorized: the automatic tenant check last succeeded.
 func chatTenantAuthorized(record domain.ChatIntegrationRecord) bool {
-	return record.Connected && record.TenantKey != ""
+	return record.Connected
 }
 
 // chatPermissions describes the three permission domains for the viewer.
 func (s *server) chatPermissions(r *http.Request, data domain.Bootstrap, record domain.ChatIntegrationRecord, exists, canManage bool, manageable []string) map[string]any {
-	tenant := map[string]any{"status": "not_configured", "canAuthorize": false}
-	if exists {
-		tenant["status"] = "pending"
-		tenant["designatedAuthorizerId"] = record.TenantAuthorizerID
-		tenant["canAuthorize"] = canManage || (record.TenantAuthorizerID != "" && record.TenantAuthorizerID == data.Viewer.ID)
-		if chatTenantAuthorized(record) {
-			tenant["status"] = "authorized"
-			tenant["tenantKey"] = record.TenantKey
-			authorization := domain.ChatTenantAuthorization{TenantKey: record.TenantKey, AuthorizedAt: record.UpdatedAt, Method: domain.ChatTenantMethodLegacy}
-			if record.TenantAuthorization != nil {
-				authorization = *record.TenantAuthorization
-			}
-			tenant["authorization"] = authorization
+	connectedBy := ""
+	for _, item := range data.IntegrationConnections {
+		if item.ID == record.ConnectionID {
+			connectedBy = item.ConnectedBy
 		}
 	}
+	tenant := chatTenantPermission(record, exists, connectedBy)
 	privateTeams := []string{}
 	if len(manageable) > 0 {
 		if teams, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "teams", "teamSettings"); ok {
@@ -263,7 +256,7 @@ func (s *server) chatBindingSession(w http.ResponseWriter, r *http.Request) (dom
 		return data, record, false
 	}
 	if !chatTenantAuthorized(record) {
-		writeChatError(w, 409, chatTenantAuthorizationMessage)
+		writeChatError(w, 409, chatTenantNotApprovedMessage)
 		return data, record, false
 	}
 	return data, record, true
@@ -283,27 +276,25 @@ func (s *server) listChatGroups(w http.ResponseWriter, r *http.Request) {
 	if cursor != "" {
 		query.Set("page_token", cursor)
 	}
-	var response struct {
-		Data struct {
-			Items []struct {
-				ChatID    string `json:"chat_id"`
-				Name      string `json:"name"`
-				TenantKey string `json:"tenant_key"`
-				External  *bool  `json:"external"`
-			} `json:"items"`
-			PageToken string `json:"page_token"`
-			HasMore   bool   `json:"has_more"`
-		} `json:"data"`
-	}
-	// The list uses the application's tenant token: no member, including a
-	// workspace administrator, is asked to confirm the tenant again.
+	var response chatPlatformGroupPage
+	// The list uses the application's tenant token: nobody signs in for it.
 	if err := s.chatPlatformRequest(r.Context(), record, http.MethodGet, "/open-apis/im/v1/chats?"+query.Encode(), nil, &response); err != nil {
 		writeChatError(w, 502, "The chat platform request failed; check the bot's permissions and retry")
 		return
 	}
+	if record.TenantKey == "" {
+		if key := chatInternalTenantKey(response.Data.Items); key != "" {
+			if err := s.withChatConfigurationLock(r.Context(), record.WorkspaceKey, record.Provider, func() error {
+				return s.adoptChatTenantKey(r.Context(), &record, key)
+			}); err != nil {
+				writeChatError(w, 500, "Could not read chat integration")
+				return
+			}
+		}
+	}
 	items := []chatGroup{}
 	for _, item := range response.Data.Items {
-		if item.TenantKey == record.TenantKey && item.External != nil && !*item.External {
+		if record.TenantKey != "" && item.TenantKey == record.TenantKey && item.External != nil && !*item.External {
 			items = append(items, chatGroup{ID: item.ChatID, Name: item.Name})
 		}
 	}
@@ -392,6 +383,8 @@ func (s *server) saveChatBinding(w http.ResponseWriter, r *http.Request) {
 		role = domain.ChatBindingRoleWorkspaceAdmin
 	}
 	binding.Authorization = &domain.ChatBindingAuthorization{UserID: data.Viewer.ID, Role: role, AuthorizedAt: time.Now().UTC(), PrivateTeam: private}
+	// Groups are compared with the application's tenant, so it must be known.
+	s.learnChatTenantKey(r.Context(), &record)
 	if err := s.chatBindingPermitted(r.Context(), record, binding, true); err != nil {
 		var refusal chatGroupRefusal
 		var platform *chatPlatformError
@@ -508,7 +501,11 @@ func (s *server) auditChatBinding(r *http.Request, record domain.ChatIntegration
 }
 
 func (s *server) auditChatIntegration(r *http.Request, workspace, action, resourceType, resourceID string, metadata map[string]any) {
-	ctx := store.WithMetadataFields(context.WithoutCancel(r.Context()), "auditLog")
+	s.auditChatIntegrationContext(r.Context(), workspace, action, resourceType, resourceID, metadata)
+}
+
+func (s *server) auditChatIntegrationContext(ctx context.Context, workspace, action, resourceType, resourceID string, metadata map[string]any) {
+	ctx = store.WithMetadataFields(context.WithoutCancel(ctx), "auditLog")
 	if err := s.store.MutateWorkspace(ctx, workspace, "audit.chat_integration", resourceID, map[string]any{"action": action}, func(data *domain.Bootstrap) error {
 		appendAudit(data, action, resourceType, resourceID, metadata)
 		return nil
