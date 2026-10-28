@@ -89,7 +89,7 @@ func (s *SQLiteStore) migrateWorkspaceCycleCapacity(ctx context.Context, key str
 		return 0, err
 	}
 	defer tx.Rollback()
-	if err := s.persistMetadataTx(ctx, tx, key, before, after); err != nil {
+	if err := s.persistMetadataTx(ctx, tx, key, before, &after); err != nil {
 		return 0, err
 	}
 	if err := tx.Commit(); err != nil {

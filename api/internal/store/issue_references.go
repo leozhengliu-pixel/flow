@@ -103,30 +103,32 @@ func (r issueReferences) equalDisplayData(previous, next []byte) bool {
 	if len(previous) == 0 {
 		return false
 	}
-	var canonical func([]byte) []byte
-	canonical = func(raw []byte) []byte {
-		var fields map[string]json.RawMessage
-		if json.Unmarshal(raw, &fields) != nil || fields == nil {
-			return raw
-		}
-		for _, field := range []string{"user", "actor", "lead", "creator", "owner"} {
-			var user domain.User
-			if json.Unmarshal(fields[field], &user) == nil {
-				if current, ok := r.users[user.ID]; ok {
-					fields[field], _ = json.Marshal(current)
-				}
+	return bytes.Equal(r.canonicalDisplayData(previous), r.canonicalDisplayData(next))
+}
+
+// canonicalDisplayData re-encodes a record with its people (user, actor,
+// lead, creator, owner) as the directory shows them now.
+func (r issueReferences) canonicalDisplayData(raw []byte) []byte {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil || fields == nil {
+		return raw
+	}
+	for _, field := range []string{"user", "actor", "lead", "creator", "owner"} {
+		var user domain.User
+		if json.Unmarshal(fields[field], &user) == nil {
+			if current, ok := r.users[user.ID]; ok {
+				fields[field], _ = json.Marshal(current)
 			}
 		}
-		if _, wrapped := fields["parent"]; wrapped && len(fields["item"]) > 0 {
-			fields["item"] = canonical(fields["item"])
-		}
-		out, err := json.Marshal(fields)
-		if err != nil {
-			return raw
-		}
-		return out
 	}
-	return bytes.Equal(canonical(previous), canonical(next))
+	if _, wrapped := fields["parent"]; wrapped && len(fields["item"]) > 0 {
+		fields["item"] = r.canonicalDisplayData(fields["item"])
+	}
+	out, err := json.Marshal(fields)
+	if err != nil {
+		return raw
+	}
+	return out
 }
 
 func refreshDisplayReferences(data *domain.Bootstrap) {

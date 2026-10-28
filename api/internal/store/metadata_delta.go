@@ -206,13 +206,29 @@ func metadataValueEqual(a, b reflect.Value) bool {
 	}
 }
 
-// writeWorkspaceMetadataDelta persists after as the workspace metadata when
-// before is the stored state. It produces the same rows and root document as
-// writeWorkspaceMetadata(after) but only encodes, reads and rewrites the
-// top-level fields that differ. It reports whether anything was written.
-func (s *SQLiteStore) writeWorkspaceMetadataDelta(ctx context.Context, tx *sqlTx, workspace string, before, after domain.Bootstrap) (bool, error) {
-	before, after = compactImportInputs(collectionMetadata(before)), compactImportInputs(collectionMetadata(after))
+// writeWorkspaceMetadataDelta persists target as the workspace metadata when
+// before is the state it was changed from. It produces the same rows and
+// root document as writeWorkspaceMetadata(target) but only encodes, reads and
+// rewrites the top-level fields that differ. A record another write changed
+// since before was read gets only target's change (see rebaseMetadata);
+// target then holds the merged record. It reports whether anything was
+// written.
+func (s *SQLiteStore) writeWorkspaceMetadataDelta(ctx context.Context, tx *sqlTx, workspace string, before domain.Bootstrap, target *domain.Bootstrap) (bool, error) {
+	before, after := compactImportInputs(collectionMetadata(before)), compactImportInputs(collectionMetadata(*target))
 	changed := changedMetadataFields(before, after)
+	if len(changed) > 0 {
+		replaced, touched, err := s.rebaseMetadata(ctx, tx, workspace, &before, &after, changed, nil)
+		if err != nil {
+			return false, err
+		}
+		source, destination := reflect.ValueOf(&after).Elem(), reflect.ValueOf(target).Elem()
+		for _, field := range replaced {
+			destination.Field(field.index).Set(source.Field(field.index))
+		}
+		if touched {
+			changed = changedMetadataFields(before, after)
+		}
+	}
 	var previousID string
 	var previousRoot []byte
 	err := tx.QueryRowContext(ctx, `SELECT workspace_id,data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&previousID, &previousRoot)
@@ -313,24 +329,53 @@ func (s *SQLiteStore) writeWorkspaceMetadataDelta(ctx context.Context, tx *sqlTx
 	if err := syncMetadataRecords(ctx, tx, workspace, refs, shapes, wanted, names, knownRecords); err != nil {
 		return false, err
 	}
-	for _, name := range names {
-		if value, ok := partRoot[name]; ok {
-			root[name] = value
-		} else {
-			delete(root, name)
+	patchRoot := func(root map[string]json.RawMessage, storedShapes map[string]string) ([]byte, error) {
+		for _, name := range names {
+			if value, ok := partRoot[name]; ok {
+				root[name] = value
+			} else {
+				delete(root, name)
+			}
+			if shape, ok := shapes[name]; ok {
+				storedShapes[name] = shape
+			} else {
+				delete(storedShapes, name)
+			}
 		}
-		if shape, ok := shapes[name]; ok {
-			storedShapes[name] = shape
-		} else {
-			delete(storedShapes, name)
+		manifest, err := json.Marshal(storedShapes)
+		if err != nil {
+			return nil, err
 		}
+		root[metadataCollectionsKey] = manifest
+		return json.Marshal(root)
 	}
-	root[metadataCollectionsKey], err = json.Marshal(storedShapes)
+	raw, err := patchRoot(root, storedShapes)
 	if err != nil {
 		return false, err
 	}
-	raw, err := json.Marshal(root)
-	if err != nil {
+	if previousID == after.Workspace.ID && bytes.Equal(previousRoot, raw) {
+		return true, nil
+	}
+	// Another write may have changed other fields of the document since it
+	// was read: patch only these fields onto the document as stored, locked
+	// after the records (the order full writes take them in).
+	lock := ""
+	if tx.dialect != "sqlite" {
+		lock = " FOR UPDATE"
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT workspace_id,data FROM workspace_states WHERE workspace_key=?`+lock, workspace).Scan(&previousID, &previousRoot); err != nil {
+		return false, err
+	}
+	root, storedShapes = map[string]json.RawMessage{}, map[string]string{}
+	if err := json.Unmarshal(previousRoot, &root); err != nil {
+		return false, err
+	}
+	if manifest, ok := root[metadataCollectionsKey]; ok {
+		if err := json.Unmarshal(manifest, &storedShapes); err != nil {
+			return false, err
+		}
+	}
+	if raw, err = patchRoot(root, storedShapes); err != nil {
 		return false, err
 	}
 	if len(raw) > s.maxStateBytes {
@@ -339,6 +384,7 @@ func (s *SQLiteStore) writeWorkspaceMetadataDelta(ctx context.Context, tx *sqlTx
 	if previousID == after.Workspace.ID && bytes.Equal(previousRoot, raw) {
 		return true, nil
 	}
+	tx.metadataWritten = true
 	_, err = tx.ExecContext(ctx, `UPDATE workspace_states SET workspace_id=?,data=?,updated_at=? WHERE workspace_key=?`, after.Workspace.ID, raw, time.Now().UTC().Format(time.RFC3339Nano), workspace)
 	return true, err
 }
@@ -346,12 +392,13 @@ func (s *SQLiteStore) writeWorkspaceMetadataDelta(ctx context.Context, tx *sqlTx
 // persistMetadataTx writes after's metadata as a delta from before (the
 // stored state). ForceFullMutationsForTesting switches it to the full write so
 // tests can compare both.
-func (s *SQLiteStore) persistMetadataTx(ctx context.Context, tx *sqlTx, workspace string, before, after domain.Bootstrap) error {
+func (s *SQLiteStore) persistMetadataTx(ctx context.Context, tx *sqlTx, workspace string, before domain.Bootstrap, after *domain.Bootstrap) error {
 	if fullMutationsForced.Load() {
-		raw, err := s.encodeWorkspaceMetadata(after)
+		raw, err := s.encodeWorkspaceMetadata(*after)
 		if err != nil {
 			return err
 		}
+		tx.metadataWritten = true
 		return writeWorkspaceMetadata(ctx, tx, workspace, after.Workspace.ID, raw)
 	}
 	_, err := s.writeWorkspaceMetadataDelta(ctx, tx, workspace, before, after)
@@ -618,5 +665,5 @@ func writeUpdatesFieldDelta(ctx context.Context, tx *sqlTx, workspace string, re
 			return false, nil
 		}
 	}
-	return true, applyMetadataRecords(ctx, tx, workspace, refs, map[string]string{field.name: "updates"}, wanted, previous)
+	return true, applyMetadataRecords(ctx, tx, workspace, refs, map[string]string{field.name: "updates"}, wanted, previous, nil)
 }

@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"slices"
 	"strings"
 
@@ -59,36 +58,29 @@ func (scope *DocumentLinkScope) Open(document domain.Document, readable func(tea
 	return len(closed) == 0 || slices.ContainsFunc(closed, readable)
 }
 
-// persistDocumentScopes writes the inherited teams a bounded issue write gave
-// the documents attached to the issue. That path otherwise persists only
-// issue records, so only the derived scope fields are taken from documents;
-// it returns the snapshot to install, or nil when nothing changed.
-func (s *SQLiteStore) persistDocumentScopes(ctx context.Context, tx *sqlTx, workspace string, stored domain.Bootstrap, documents []domain.Document) (*domain.Bootstrap, error) {
+// documentScopes returns stored with the inherited scope fields (the only
+// ones a bounded issue write changes on documents) taken from documents, and
+// whether any changed. Stored is not modified.
+func documentScopes(stored, documents []domain.Document) ([]domain.Document, bool) {
 	updated := make(map[string]domain.Document, len(documents))
 	for _, document := range documents {
 		updated[document.ID] = document
 	}
-	next := stored
+	result := stored
 	changed := false
-	for index, document := range stored.Documents {
+	for index, document := range stored {
 		value, ok := updated[document.ID]
 		if !ok || slices.Equal(value.InheritedTeamIDs, document.InheritedTeamIDs) && value.IssueTeamID == document.IssueTeamID {
 			continue
 		}
 		if !changed {
-			next.Documents = slices.Clone(stored.Documents)
+			result = slices.Clone(stored)
 			changed = true
 		}
-		next.Documents[index].InheritedTeamIDs = slices.Clone(value.InheritedTeamIDs)
-		next.Documents[index].IssueTeamID = value.IssueTeamID
+		result[index].InheritedTeamIDs = slices.Clone(value.InheritedTeamIDs)
+		result[index].IssueTeamID = value.IssueTeamID
 	}
-	if !changed {
-		return nil, nil
-	}
-	if _, err := s.writeWorkspaceMetadataDelta(ctx, tx, workspace, stored, next); err != nil {
-		return nil, err
-	}
-	return &next, nil
+	return result, changed
 }
 
 func (scope *DocumentLinkScope) teamClosed(teamID string) bool {

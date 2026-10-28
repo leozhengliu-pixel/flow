@@ -239,7 +239,7 @@ func (s *SQLiteStore) migrateDocumentScopeBatch(ctx context.Context, key string,
 		return 0, 0, err
 	}
 	defer tx.Rollback()
-	if err := s.persistMetadataTx(ctx, tx, key, before, after); err != nil {
+	if err := s.persistMetadataTx(ctx, tx, key, before, &after); err != nil {
 		return 0, 0, err
 	}
 	if err := tx.Commit(); err != nil {

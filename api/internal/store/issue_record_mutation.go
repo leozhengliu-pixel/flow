@@ -64,6 +64,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 	var event domain.DomainEvent
 	var realtime json.RawMessage
 	var progressMetadata *domain.Bootstrap
+	metadataWritten := false
 	// written: the issues this write changed (the target and its family).
 	var written []string
 	err := func() error {
@@ -72,7 +73,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		// while the transaction runs (see SQLiteStore.writeMu).
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
-		tx, err := s.db.BeginTx(ctx, nil)
+		tx, err := s.db.BeginTx(ctx, s.recordTxOptions())
 		if err != nil {
 			return err
 		}
@@ -293,33 +294,21 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			}
 		}
 		// Issue edits only touch issue records, except the progress history
-		// of the projects whose scope or completion they changed.
+		// of the projects whose scope or completion they changed and the
+		// scope documents attached to an issue inherit from its team
+		// (domain.Document.InheritedTeamIDs) when it moved team.
 		loadedIssues := make([]domain.Issue, 0, len(previous))
 		for _, issue := range previous {
 			loadedIssues = append(loadedIssues, issue)
 		}
-		if progressMetadata, err = s.persistIssueProjectProgress(ctx, tx, workspace, loadedIssues, metadata.Issues); err != nil {
+		var documents []domain.Document
+		if original.Team.ID != result.Team.ID {
+			documents = metadata.Documents
+		}
+		if progressMetadata, err = s.persistIssueMetadata(ctx, tx, workspace, loadedIssues, metadata.Issues, documents); err != nil {
 			return err
 		}
-		// ... and the scope documents attached to an issue inherit from its
-		// team (domain.Document.InheritedTeamIDs) when it moved team.
-		if original.Team.ID != result.Team.ID {
-			base := progressMetadata
-			if base == nil {
-				if stored, ok := s.workspaces[workspace]; ok {
-					base = &stored
-				}
-			}
-			if base != nil {
-				scoped, err := s.persistDocumentScopes(ctx, tx, workspace, *base, metadata.Documents)
-				if err != nil {
-					return err
-				}
-				if scoped != nil {
-					progressMetadata = scoped
-				}
-			}
-		}
+		metadataWritten = tx.metadataWritten
 		oldRaw, _ := json.Marshal(original)
 		newRaw, _ := json.Marshal(result)
 		var oldFields, newFields map[string]json.RawMessage
@@ -364,6 +353,8 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		}
 		if progressMetadata != nil {
 			s.installWorkspace(workspace, *progressMetadata, false)
+		}
+		if metadataWritten {
 			s.dropMetadataCache(ctx, workspace)
 		}
 		return nil

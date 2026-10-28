@@ -262,7 +262,7 @@ func TestDocumentDefaultAccessMigrationDropsSharedMetadataCache(t *testing.T) {
 	if err := repo.ReloadWorkspace(t.Context(), accessWorkspace); err != nil {
 		t.Fatal(err)
 	}
-	if ready, _ := repo.hotCache().CacheGet(t.Context(), repo.metadataReadyKey(accessWorkspace)); string(ready) != "1" {
+	if ready, _ := repo.hotCache().CacheGet(t.Context(), repo.metadataReadyKey(accessWorkspace)); len(ready) == 0 {
 		t.Fatal("metadata cache was not filled")
 	}
 	if err := repo.Close(); err != nil {
