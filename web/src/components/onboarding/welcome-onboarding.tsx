@@ -14,6 +14,10 @@ import {
 } from "./onboarding-step-layout";
 import { WELCOME_STEPS, type WelcomeStepId } from "./welcome-steps";
 import "./welcome-onboarding.css";
+import { IntegrationBrandIcon } from "@/components/settings/integration-brand-icon";
+import { useI18n } from "@/i18n/i18n";
+import { integrationSettingsPath } from "@/lib/app-routes";
+import { useChatPlatform } from "@/lib/chat-platform";
 
 const STEP_LABELS = ["Profile", "Invite", "GitHub", "Slack"];
 
@@ -44,6 +48,8 @@ export function WelcomeOnboarding({
   onNavigateState,
 }: Props) {
   const location = useLocation();
+  const { t } = useI18n();
+  const chat = useChatPlatform(account);
   const [stepId, setStepId] = useState<WelcomeStepId>(() =>
     readStep(location.state),
   );
@@ -229,6 +235,23 @@ export function WelcomeOnboarding({
         {error ? <div className="onboarding-step-error">{error}</div> : null}
       </OnboardingStepLayout>
     );
+  } else if (chat.provider) {
+    // Lark and Feishu connect with application credentials in the
+    // integration settings, not an OAuth redirect from here.
+    stepBody = (
+      <OnboardingStepLayout
+        icon={<IntegrationBrandIcon provider={chat.provider} size={18} />}
+        title={chat.format(t("Connect {name}"))}
+        description={chat.format(t("Get issue updates and manage issues from {name} groups."))}
+        primaryLabel={chat.format(t("Set up {name}"))}
+        onPrimary={() => window.location.assign(integrationSettingsPath(workspace.urlKey, chat.provider!))}
+        skipLabel="Finish"
+      >
+        <p className="welcome-integration-copy">
+          {chat.format(t("A workspace administrator adds the application; a tenant administrator of {name} then authorizes it once. You can finish setup now and connect it later from Settings → Integrations."))}
+        </p>
+      </OnboardingStepLayout>
+    );
   } else {
     stepBody = (
       <OnboardingStepLayout
@@ -258,7 +281,7 @@ export function WelcomeOnboarding({
       <OnboardingNavigationProvider
         step={step}
         count={WELCOME_STEPS.length}
-        stepLabels={STEP_LABELS}
+        stepLabels={[...STEP_LABELS.slice(0, 3), chat.name]}
         goToStep={goToStep}
         nextStep={nextStep}
         skipStep={skipStep}

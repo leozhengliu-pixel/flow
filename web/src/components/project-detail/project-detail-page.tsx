@@ -515,7 +515,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
           pulseSubscribed={pulseSubscribed}
         />
       </header>
-      <ProjectSlackDialog open={slackOpen} onOpenChange={setSlackOpen} project={project} connections={props.integrationConnections} onSave={save}/>
+      <ProjectSlackDialog open={slackOpen} onOpenChange={setSlackOpen} project={project} connections={props.integrationConnections} onSave={save} data={props.issueData}/>
 
       <div className="project-detail-page__toolbar">
         <nav aria-label="Project views" className="project-detail-page__tabs">
@@ -783,6 +783,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
         </div>
         {detailsOpen && (
           <ProjectDetailsSidebar
+            data={props.issueData}
             featureFlags={props.issueData?.workspaceSettings.featureFlags}
             issueSummary={issueSummary}
             availableIssueLabels={issueLabels}

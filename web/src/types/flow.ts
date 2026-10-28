@@ -44,6 +44,8 @@ export interface AccountBootstrap {
   lastWorkspaceKey?: string;
   workspaceRegionSelectorEnabled: boolean;
   workspaceDefaultRegion: string;
+  /** The deployment's first-class chat platform (FLOW_CHAT_PLATFORM); Slack when absent. */
+  chatPlatform?: "slack" | "lark" | "feishu";
 }
 export interface AuthSession {
   user: User;
@@ -2524,6 +2526,8 @@ export interface BootstrapData {
   resourceDetailsOmitted?: boolean;
   /** Days deleted items stay restorable before they are deleted permanently. */
   trashRetentionDays?: number;
+  /** The deployment's first-class chat platform (FLOW_CHAT_PLATFORM); Slack when absent. */
+  chatPlatform?: "slack" | "lark" | "feishu";
   issueCollectionPaged?: boolean;
   issueCollectionRevision?: number;
   issueHistoryCursors?: Record<string, { commentsCursor?: string; activitiesCursor?: string }>;

@@ -172,6 +172,20 @@
             }
           }
         },
+        "chat": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "platform": {
+              "enum": [
+                "",
+                "slack",
+                "lark",
+                "feishu"
+              ]
+            }
+          }
+        },
         "reviewImport": {
           "type": "object",
           "additionalProperties": false,

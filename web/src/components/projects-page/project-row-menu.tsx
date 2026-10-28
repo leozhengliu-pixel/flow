@@ -2,7 +2,9 @@ import { useRef, useState, type MouseEvent, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from '@/lib/toast'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
-import { NoAssigneeIcon, PriorityIcon, SlackIcon } from '@/components/issue/issue-icons'
+import { NoAssigneeIcon, PriorityIcon } from '@/components/issue/issue-icons'
+import { ChatPlatformIcon } from '@/components/settings/integration-brand-icon'
+import { chatTeamNotificationsCopy, useChatPlatform } from '@/lib/chat-platform'
 import { ProjectLabelMenuContent } from '@/components/property/project-label-menu-content'
 import { FlowContextMenuPortal, FlowContextMenuRoot, FlowContextMenuTrigger, FlowMenuContent, FlowMenuItem, FlowMenuOptions, FlowMenuSeparator, FlowSubmenu, type FlowMenuOption } from '@/components/ui/row-context-menu'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
@@ -139,7 +141,7 @@ function ProjectRowMenuContent({ project, options, integration, manualOrdering, 
       <FlowMenuItem icon={<FlowGlyph name="dependencies"/>} label="Dependencies" onSelect={() => onAction('dependencies')}/>
       <FlowMenuItem icon={<IssueActionGlyph label="Add customer request…" fallback={null}/>} label="Add customer request…" shortcut={mac ? 'Ctrl R' : 'Ctrl ⌥ R'} onSelect={() => onAction('customerRequest')}/>
       <FlowMenuItem icon={<ViewGlyph icon="ClockOutline" color="currentColor"/>} label="Change update schedule…" onSelect={() => onAction('schedule')}/>
-      <FlowMenuItem icon={<SlackIcon size={16}/>} label="Configure Slack notifications…" href={slackSettingsPath()}/>
+      <ChatNotificationsMenuItem/>
       <FlowMenuItem icon={<IssueActionGlyph label="Rename…" fallback={null}/>} label="Rename…" shortcut="⇧ R" onSelect={() => onAction('rename')}/>
     </FlowSubmenu>
     <FlowMenuSeparator/>
@@ -183,5 +185,9 @@ function atNine(value: string) {
   return Number.isFinite(date.getTime()) ? date : new Date(Date.now() + 86_400_000)
 }
 
-/** Flow's Slack integration settings (where project channels are connected), as the saved-view menu links. */
-function slackSettingsPath() { return `/${location.pathname.split('/').filter(Boolean)[0] ?? ''}/settings/integrations/slack` }
+/** The deployment chat platform's integration settings (where project channels and groups are connected), as the saved-view menu links. */
+function ChatNotificationsMenuItem() {
+  const { t } = useI18n()
+  const chat = useChatPlatform()
+  return <FlowMenuItem icon={<ChatPlatformIcon size={16}/>} label={chat.format(t(chatTeamNotificationsCopy(chat.platform).menu))} href={`/${location.pathname.split("/").filter(Boolean)[0] ?? ""}/settings/integrations/${chat.settingsSlug}`}/>
+}

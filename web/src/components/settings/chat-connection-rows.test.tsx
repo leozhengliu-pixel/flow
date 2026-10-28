@@ -65,7 +65,7 @@ it("lists only the chat applications the workspace has configured", async () => 
 it("shows the workspace setup link to administrators only", async () => {
   vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ connection: { id: "connection-1", status: "pending_authorization" } as never, credentialsConfigured: false, canManage: true }));
   const member = show({ viewerRole: "member" });
-  expect(await screen.findAllByText("Waiting for workspace setup")).toHaveLength(2);
+  expect(await screen.findAllByText("Waiting for tenant authorization")).toHaveLength(2);
   expect(screen.queryByRole("link", { name: "Set up workspace integration" })).not.toBeInTheDocument();
   member.unmount();
   show({ viewerRole: "admin" });
@@ -96,16 +96,17 @@ it.each(["feishu", "lark"] as const)("starts %s identity authorization and safel
   expect(within(row).getByRole("button", { name: "Connect" })).toBeEnabled();
 });
 
-it("waits for workspace setup for members and lets administrators verify a pending tenant", async () => {
+it("waits for the tenant authorization for members and administrators alike", async () => {
   const pending = settings({ connection: { id: "connection-1", status: "pending_authorization" } as never });
   vi.mocked(api.fetchChatIntegration).mockResolvedValue(pending);
   const member = show();
-  expect(await screen.findAllByText("Waiting for workspace setup")).toHaveLength(2);
+  expect(await screen.findAllByText("Waiting for tenant authorization")).toHaveLength(2);
   expect(screen.queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
   member.unmount();
   vi.mocked(api.fetchChatIntegration).mockResolvedValue({ ...pending, canManage: true });
   show({ viewerRole: "admin" });
-  expect(await screen.findAllByRole("button", { name: "Connect" })).toHaveLength(2);
+  expect(await screen.findAllByText("Waiting for tenant authorization")).toHaveLength(2);
+  expect(screen.queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
 });
 
 it("confirms personal unlink without disconnecting the workspace application", async () => {

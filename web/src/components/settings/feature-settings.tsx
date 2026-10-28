@@ -50,6 +50,7 @@ import "./feature-settings.css";
 import { FeatureButton, FeatureCard, FeatureRow, FeatureSection, FeatureSelect, FeatureShell, Toggle } from "./feature-primitives";
 import { AiAgentSettings, AiSettingsHub, CodeIntelligenceSettings, InstalledAgentsSettings, ResolvedSummariesSettings, TriageIntelligenceSettings, UpdateGuidanceSettings, type AiPageProps } from "./ai-settings-pages";
 import { SlackUpdates } from "./slack-updates";
+import { chatPlatformOf } from "@/lib/chat-platform";
 import { AsksSettingsPage } from "./asks-settings";
 import { AgentTrustedSourcesSettings } from "./agent-trusted-sources-settings";
 import { CodingSessionsSettings } from "./coding-sessions/coding-sessions-settings";
@@ -359,7 +360,7 @@ function IntegrationsPage({data,onOpen}:{data:BootstrapData;onOpen:(provider:Int
   const {t}=useI18n();
   const [query,setQuery]=useState("");
   // Only integrations with a working backend are listed; placeholders are not.
-  const catalog = primaryIntegrations().filter(item => item.availability === "supported");
+  const catalog = primaryIntegrations(chatPlatformOf(data)).filter(item => item.availability === "supported");
   const normalized = query.trim().toLowerCase();
   const list = catalog.filter(item => !normalized || `${item.name} ${integrationDisplayName(item, t)} ${item.description} ${t(item.description)}`.toLowerCase().includes(normalized));
   const sections = integrationCategories(list).map(category => ({ category, items: list.filter(item => item.category === category) }));

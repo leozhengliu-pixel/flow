@@ -30,6 +30,7 @@ import { toggleFavoriteFor } from "@/lib/favorites";
 import { addSubscription, removeSubscription, setTeamMembership } from "@/lib/api";
 import { ContentViewHeaderSearch } from '@/components/content-view/content-view-header-search'
 import { useI18n } from "@/i18n/i18n";
+import { chatTeamNotificationsCopy, useChatPlatform } from "@/lib/chat-platform";
 
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
@@ -918,6 +919,8 @@ function TeamRowMenu({
   favorite:boolean;
   subscribed:boolean;
 }) {
+  const { t } = useI18n();
+  const chat = useChatPlatform(data);
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
@@ -947,7 +950,7 @@ function TeamRowMenu({
           <DropdownMenu.Item asChild><AppLink href={`/${encodeURIComponent(workspaceKey)}/team/${encodeURIComponent(team.key)}/archive/issues`}>Open archive</AppLink></DropdownMenu.Item>
           <DropdownMenu.Separator />
           <DropdownMenu.Item onSelect={()=>void (subscribed?removeSubscription('team',team.id):addSubscription('team',team.id)).then(()=>refreshResourcePreferences())}>{subscribed?'Unsubscribe':'Subscribe'}</DropdownMenu.Item>
-          <DropdownMenu.Item asChild><AppLink href={`/${encodeURIComponent(workspaceKey)}/settings/teams/${encodeURIComponent(team.key)}/notifications`}>Configure Slack notifications…</AppLink></DropdownMenu.Item>
+          <DropdownMenu.Item asChild><AppLink href={`/${encodeURIComponent(workspaceKey)}/settings/teams/${encodeURIComponent(team.key)}/notifications`}>{chat.format(t(chatTeamNotificationsCopy(chat.platform).menu))}</AppLink></DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>

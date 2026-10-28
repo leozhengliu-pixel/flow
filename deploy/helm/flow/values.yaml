@@ -236,6 +236,12 @@ integrations:
   notion:
     # HTTPS address of the Notion connection page members are sent to.
     connectionUrl: ""
+  # The deployment's first-class chat platform (FLOW_CHAT_PLATFORM): the team
+  # channel, project/initiative update, notification and onboarding entry
+  # points use it. "" keeps the server default (slack) | slack | lark | feishu.
+  # Other chat integrations stay available in Settings > Integrations.
+  chat:
+    platform: ""
   # Pull-request/merge-request import for approved repositories.
   reviewImport:
     # "" keeps the server default (off) | on | off

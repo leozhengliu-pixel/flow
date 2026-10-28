@@ -1,0 +1,3 @@
+integrations:
+  chat:
+    platform: teams

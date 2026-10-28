@@ -19,10 +19,11 @@ import { ProjectMenuItem, ProjectSubmenu } from './project-menu-primitives'
 import { ProjectUpdateScheduleDialog } from './project-update-schedule-dialog'
 import { projectScheduleLabel } from './project-schedule'
 import { SubscriptionIcon } from '@/components/ui/view-action-icons'
-import { SlackIcon } from '@/components/issue/issue-icons'
 import { FlowTooltip } from '@/components/ui/tooltip'
 import { PULSE_EVENT, usePulseSubscription } from '@/lib/pulse-subscriptions'
 import { MentionBody } from '@/components/editor/mentions/mention-body'
+import { ChatPlatformIcon } from '@/components/settings/integration-brand-icon'
+import { chatTeamNotificationsCopy, useChatPlatform } from '@/lib/chat-platform'
 
 const EVENT_OPTIONS = [
   ['issueAdded', 'An issue is added to the project'],
@@ -49,6 +50,7 @@ function useProjectPulse(project: Project, events: string[], pulseSubscribed: bo
 
 export function ProjectNotificationMenu({ onOpenChange, open, project, subscription, pulseSubscribed, onSetEvents, onUpdate, onShowSlack }: { open: boolean; onOpenChange: (open: boolean) => void; project: Project; subscription?: Subscription; /** The viewer's Pulse subscription derived from loaded data (explicit choice + default rules). */ pulseSubscribed?: boolean; onSetEvents: (events: string[]) => Promise<void>; onShowSlack?: () => void; onUpdate: (input: { updateSchedule?: ProjectUpdateSchedule }) => Promise<void> }) {
   const { t } = useI18n()
+  const chat = useChatPlatform()
   const [scheduleOpen,setScheduleOpen] = useState(false)
   const [events,setEvents] = useState(subscription?.events ?? [])
   const [saving,setSaving] = useState(false)
@@ -71,7 +73,7 @@ export function ProjectNotificationMenu({ onOpenChange, open, project, subscript
         <NotificationOptionSection className="project-notifications__section" title={<><span>{t('Send inbox notifications for')}</span> <span data-i18n-ignore>{project.name}</span></>}>{EVENT_OPTIONS.map(([eventName,label]) => <NotificationCheckbox disabled={saving} checked={events.includes(eventName)} key={eventName} label={t(label)} onChange={checked => void changeEvent(eventName,checked)}/>)}</NotificationOptionSection>
         <NotificationOptionSection className="project-notifications__section" title={t('Pulse updates')}><NotificationCheckbox disabled={pulse.saving} checked={pulse.subscribed} label={t('Subscribe to project updates')} onChange={checked => void pulse.change(checked)}/></NotificationOptionSection>
         <section className="project-notifications__schedule"><div><strong>{t('Update schedule')}</strong><span>{t(projectScheduleLabel(project))}</span></div><button type="button" onClick={() => { onOpenChange(false); setScheduleOpen(true) }}>{t('Change')}</button></section>
-        {onShowSlack && <section className="project-notifications__slack"><strong>{t('Slack notifications')}</strong><button type="button" onClick={onShowSlack}>{t(project.slackChannelId ? 'Change' : 'Connect')}</button></section>}
+        {onShowSlack && <section className="project-notifications__slack"><strong>{chat.format(t(chatTeamNotificationsCopy(chat.platform).label))}</strong><button type="button" onClick={onShowSlack}>{t(!chat.provider && project.slackChannelId ? 'Change' : 'Connect')}</button></section>}
       </Popover.Content></Popover.Portal>
     </Popover.Root>
     <ProjectUpdateScheduleDialog open={scheduleOpen} onOpenChange={setScheduleOpen} project={project} onSave={updateSchedule => onUpdate({updateSchedule})}/>
@@ -80,6 +82,8 @@ export function ProjectNotificationMenu({ onOpenChange, open, project, subscript
 
 export function ProjectActionsMenu({ project, favorited, onDelete, onFavorite, onRemind, onShowActivity, onShowHistory, onShowNotifications, onSetEvents, subscription, pulseSubscribed, onUpdateSchedule, onShowSlack }: { project: Project; favorited: boolean; onDelete: () => void; onFavorite: () => void; onRemind: (remindAt: string) => Promise<void>; onShowActivity: () => void; onShowHistory: () => void; onShowNotifications: () => void; onSetEvents: (events: string[]) => Promise<void>; subscription?: Subscription; pulseSubscribed?: boolean; onUpdateSchedule?: (schedule: ProjectUpdateSchedule) => Promise<void>; onShowSlack?: () => void }) {
   const { t } = useI18n()
+  const chat = useChatPlatform()
+  const notifyLabel = chat.format(t(chatTeamNotificationsCopy(chat.platform).menu))
   const [query, setQuery] = useState('')
   const [customReminder, setCustomReminder] = useState(false)
   const [reminderAt, setReminderAt] = useState('')
@@ -112,7 +116,7 @@ export function ProjectActionsMenu({ project, favorited, onDelete, onFavorite, o
   const favoriteLabel = favorited ? 'Unfavorite' : 'Favorite'
   const groupVisible = (labels: string[]) => labels.some(visible)
   const groups = [
-    ['Copy'], [favoriteLabel,'Subscribe','Remind me'], ['Change update schedule…',...(onShowSlack ? ['Configure Slack notifications…'] : [])],
+    ['Copy'], [favoriteLabel,'Subscribe','Remind me'], ['Change update schedule…',...(onShowSlack ? [notifyLabel] : [])],
     ['Show description history','Show updates and activity'], ['Delete'],
   ]
   const separator = (index: number) => groupVisible(groups[index]) && groups.slice(0,index).some(groupVisible) ? <DropdownMenu.Separator/> : null
@@ -146,7 +150,7 @@ export function ProjectActionsMenu({ project, favorited, onDelete, onFavorite, o
         {visible('Remind me') && <ProjectSubmenu label="Remind me" icon={<Clock3 size={16}/>} shortcut="⇧ H" searchable>{close => <ReminderChoices onChoose={date => { close(); void remind(date.toISOString()) }} onCustom={() => { close(); setCustomReminder(true) }}/>}</ProjectSubmenu>}
         {separator(2)}
         {visible('Change update schedule…') && <ProjectMenuItem label="Change update schedule…" icon={<ViewGlyph icon="ClockOutline" color="currentColor"/>} onSelect={() => { if (!onUpdateSchedule) { onShowNotifications(); return }; setScheduleOpen(true) }}/>}
-        {onShowSlack && visible('Configure Slack notifications…') && <ProjectMenuItem label="Configure Slack notifications…" icon={<SlackIcon size={16}/>} onSelect={onShowSlack}/>}
+        {onShowSlack && visible(notifyLabel) && <ProjectMenuItem label={notifyLabel} icon={<ChatPlatformIcon size={16}/>} onSelect={onShowSlack}/>}
         {separator(3)}
         {visible('Show description history') && <ProjectMenuItem label="Show description history" icon={<History size={16}/>} onSelect={onShowHistory}/>}
         {visible('Show updates and activity') && <ProjectMenuItem label="Show updates and activity" icon={<MessageSquareText size={16}/>} shortcut="⌘ U" onSelect={onShowActivity}/>}

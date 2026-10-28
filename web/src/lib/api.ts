@@ -112,6 +112,7 @@ import type {
 } from "@/types/flow";
 import type { ApplicationInstallation } from "@/lib/application-agents";
 import { rememberTrashRetention } from "@/lib/trash-retention";
+import { rememberChatPlatform } from "@/lib/chat-platform";
 import { markSuspendedMembersInactive } from "@/lib/people";
 import { apiFetch, ApiError as PulseApiError, jsonRequest, request } from "@/lib/api-client";
 
@@ -151,7 +152,7 @@ import type {
 } from "@/types/flow";
 
 export function fetchAccountBootstrap(): Promise<AccountBootstrap> {
-  return request("/api/account/bootstrap");
+  return request<AccountBootstrap>("/api/account/bootstrap").then(rememberChatPlatform);
 }
 export function setLastWorkspace(workspaceKey: string): Promise<void> {
   return request(
@@ -410,14 +411,14 @@ export function fetchBootstrap(workspaceKey?: string, projection?: BootstrapProj
   return request<BootstrapData>(
     "/api/bootstrap",
     { headers, signal, quiet },
-  ).then(normalizeBootstrapData).then(rememberTrashRetention);
+  ).then(normalizeBootstrapData).then(rememberTrashRetention).then(rememberChatPlatform);
 }
 
 export function fetchPagedBootstrap(workspaceKey?: string, projection?: BootstrapProjection, signal?: AbortSignal, quiet?: boolean): Promise<BootstrapData> {
   const headers: Record<string, string> = {}
   if (workspaceKey) headers['X-Workspace-Key'] = workspaceKey
   if (projection) headers['X-Flow-Projection'] = projection
-  return request<BootstrapData>('/api/issue-records/bootstrap', {headers, signal, quiet}).then(normalizeBootstrapData).then(rememberTrashRetention)
+  return request<BootstrapData>('/api/issue-records/bootstrap', {headers, signal, quiet}).then(normalizeBootstrapData).then(rememberTrashRetention).then(rememberChatPlatform)
 }
 export type IssueQueryInput = {
   q?: string;

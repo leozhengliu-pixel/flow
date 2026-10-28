@@ -17,6 +17,8 @@ import type { ProjectDetailProps } from './project-detail-types'
 import { initiativeStatusLabel, inviteProjectMember } from './project-detail-helpers'
 import { ProjectMenuItem, ProjectMenuSearch, ProjectSubmenu } from './project-menu-primitives'
 import { ProjectSlackDialog } from './project-slack-dialog'
+import { ChatPlatformIcon } from '@/components/settings/integration-brand-icon'
+import { useChatPlatform } from '@/lib/chat-platform'
 
 function initiativePropertyOptions(initiatives: Initiative[], selectedIds: string[]): PropertyOption[] {
   return [...initiatives].sort((a,b) => Number(selectedIds.includes(b.id)) - Number(selectedIds.includes(a.id)) || a.name.localeCompare(b.name)).map(item => ({
@@ -27,6 +29,7 @@ function initiativePropertyOptions(initiatives: Initiative[], selectedIds: strin
 
 type Props = Pick<ProjectDetailProps, 'initiatives'|'labels'|'labelGroups'|'project'|'projectRelations'|'projects'|'users'|'viewer'|'onCreateLabel'> & {
   featureFlags?: Record<string, boolean>
+  data?: import('@/types/flow').BootstrapData
   integrationConnections?: ProjectDetailProps['integrationConnections']
   save: (input: ProjectMutationInput) => Promise<void>
   onUpdateProject: ProjectDetailProps['onUpdate']
@@ -38,11 +41,13 @@ type Props = Pick<ProjectDetailProps, 'initiatives'|'labels'|'labelGroups'|'proj
  * while the project has none). The Customers row is always on the overview. Dates and dependencies live
  * in the details sidebar.
  */
-export function ProjectPropertiesMenu({ featureFlags, initiatives, labels, labelGroups, project, users, save, onCreateLabel, integrationConnections = [] }: Props) {
+export function ProjectPropertiesMenu({ data, featureFlags, initiatives, labels, labelGroups, project, users, save, onCreateLabel, integrationConnections = [] }: Props) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [query,setQuery] = useState('')
   const [slackOpen,setSlackOpen] = useState(false)
+  const chat = useChatPlatform(data)
+  const connectLabel = chat.provider ? chat.format(t('Connect {name} group…')) : 'Connect existing Slack channel…'
   const visible = (label:string) => !query || `${label} ${t(label)}`.toLocaleLowerCase().includes(query.toLocaleLowerCase())
   const labelIds = (project.labelIds ?? []).filter(id => labels.some(label => label.id === id))
   const memberIds = [...new Set([...(project.memberIds ?? []), ...(project.lead ? [project.lead.id] : [])])]
@@ -63,10 +68,10 @@ export function ProjectPropertiesMenu({ featureFlags, initiatives, labels, label
         {visible('Members') && !memberIds.some(id => id !== project.lead?.id) && <ProjectSubmenu label="Members" icon={<MembersIcon size={16}/>} shortcut="P then M" searchable className="property-command-surface property-command-standard project-property-submenu is-members">{close => <PropertyMenu embedded multiple label="Members" options={memberOptions} selectedIds={memberIds} searchPlaceholder="Change members…" searchShortcut="P, then M" onChange={updateMember} onOpenChange={next => { if (!next) close() }}/>}</ProjectSubmenu>}
         {visible('Labels') && !labelIds.length && <ProjectSubmenu label="Labels" icon={<LabelIcon size={16}/>} shortcut="P then L" searchable className="property-command-surface property-command-project-labels project-property-submenu"><ProjectLabelMenuContent options={projectLabelOptions(labels,labelGroups)} selectedIds={labelIds} onChoose={id => void save({labelIds:toggleGroupedLabelIds(labelIds,id,labels)})} onCreate={onCreateLabel ? async (name,groupId) => { const created = await onCreateLabel(name,groupId); await save({labelIds:toggleGroupedLabelIds(labelIds,created.id,[...labels,created])}) } : undefined} onClose={() => setOpen(false)}/></ProjectSubmenu>}
         {featureFlags?.initiatives !== false && visible('Initiatives') && initiatives.length > 0 && <ProjectSubmenu label="Initiatives" icon={<ViewGlyph icon="Initiative" color="currentColor"/>} shortcut="P then N" alignOffset={-30.5} className="property-command-surface property-command-standard project-property-submenu is-initiatives">{close => <PropertyMenu embedded hideSearch multiple label="Initiatives" options={initiativePropertyOptions(initiatives, project.initiatives ?? [])} selectedIds={project.initiatives ?? []} searchPlaceholder="Change initiatives…" searchShortcut="P, then N" onChange={id => void save({initiatives:toggle(project.initiatives ?? [],id)})} onOpenChange={next => { if (!next) close() }}/>}</ProjectSubmenu>}
-        {!project.slackChannelId && visible('Connect existing Slack channel…') && <ProjectMenuItem label="Connect existing Slack channel…" icon={<SlackIcon size={16}/>} onSelect={()=>setSlackOpen(true)}/>}
+        {(chat.provider || !project.slackChannelId) && visible(connectLabel) && <ProjectMenuItem label={connectLabel} icon={chat.provider ? <ChatPlatformIcon size={16}/> : <SlackIcon size={16}/>} onSelect={()=>setSlackOpen(true)}/>}
       </DropdownMenu.Content></DropdownMenu.Portal>
     </DropdownMenu.Root>
-    <ProjectSlackDialog open={slackOpen} onOpenChange={setSlackOpen} project={project} connections={integrationConnections} onSave={save}/>
+    <ProjectSlackDialog open={slackOpen} onOpenChange={setSlackOpen} project={project} connections={integrationConnections} onSave={save} data={data}/>
   </>
 }
 

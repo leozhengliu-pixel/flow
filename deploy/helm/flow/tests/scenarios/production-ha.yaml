@@ -31,6 +31,8 @@ integrations:
     syncInterval: 30m
   notion:
     connectionUrl: https://www.notion.com/connections/flow
+  chat:
+    platform: lark
   reviewImport:
     mode: "on"
     interval: 15m

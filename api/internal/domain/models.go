@@ -419,6 +419,8 @@ type AccountBootstrap struct {
 	LastWorkspaceKey               string                `json:"lastWorkspaceKey,omitempty"`
 	WorkspaceRegionSelectorEnabled bool                  `json:"workspaceRegionSelectorEnabled"`
 	WorkspaceDefaultRegion         string                `json:"workspaceDefaultRegion"`
+	// ChatPlatform is the deployment's first-class chat platform (FLOW_CHAT_PLATFORM).
+	ChatPlatform string `json:"chatPlatform,omitempty" enum:"slack,lark,feishu"`
 }
 
 type Team struct {

@@ -34,6 +34,17 @@
 .chat-connection-row { flex-wrap: wrap; padding-block: 12px; }
 .chat-connection-row > div { flex: 1 1 260px; }
 .chat-connection-row > aside { margin-left: auto; }
+.chat-permission-row { flex-wrap: wrap; padding-block: 12px; }
+.chat-permission-row > div { flex: 1 1 320px; }
+.chat-permission-row strong { gap: 6px; }
+.chat-permission-row strong > svg { flex: none; color: var(--theme-text-secondary); }
+.chat-permission-row code { font-size: 12px; overflow-wrap: anywhere; }
+.chat-binding-badge { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px; border: 1px solid var(--theme-border); border-radius: 9px; color: var(--theme-text-secondary); font-size: 11px; font-weight: 500; line-height: 16px; }
+.chat-binding-badge.is-revoked { color: var(--semantic-danger); border-color: color-mix(in srgb, var(--semantic-danger) 40%, var(--theme-border)); }
+.chat-binding-row[data-revoked] .chat-binding-name { color: var(--theme-text-secondary); text-decoration: line-through; }
+.chat-binding-authorization { color: var(--theme-text-tertiary); font-size: 12px; }
+.chat-private-notice strong { display: inline-flex; align-items: center; gap: 6px; }
+.chat-fixed-value { color: var(--theme-text-secondary); font-size: 13px; }
 @media (max-width: 760px) {
   .chat-integration-settings .feature-row.chat-inline { flex-wrap: nowrap; align-items: center; }
   .chat-integration-settings .feature-row.chat-inline aside { width: auto; }

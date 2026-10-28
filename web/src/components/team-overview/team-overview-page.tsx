@@ -92,6 +92,8 @@ import type {
 import { resourceDisplayTitle, resourceLinkName } from "@/components/project-detail/project-resource-link-name";
 import "./team-overview-page.css";
 import { TeamDocuments } from './team-documents';
+import { IntegrationBrandIcon } from '@/components/settings/integration-brand-icon';
+import { chatTeamNotificationsCopy, useChatPlatform } from '@/lib/chat-platform';
 
 type View = "overview" | "documents" | "loops" | "members";
 
@@ -118,6 +120,7 @@ export function TeamOverviewPage({
   onLoopsReload?: (changed?: import("@/types/flow").Loop) => Promise<void>;
 }) {
   const {t}=useI18n();
+  const chat = useChatPlatform(data);
   const loopsEnabled = workspaceFeatureEnabled(
     data.workspaceSettings?.featureFlags,
     "loops",
@@ -570,8 +573,8 @@ export function TeamOverviewPage({
                     );
                   }}
                 >
-                  <SlackIcon />
-                  {t("Connect channel")}
+                  {chat.provider ? <IntegrationBrandIcon provider={chat.provider} size={16} /> : <SlackIcon />}
+                  {chat.format(t(chatTeamNotificationsCopy(chat.platform).connect))}
                   <ChevronHomeIcon />
                 </a>
                 <TeamShortcut

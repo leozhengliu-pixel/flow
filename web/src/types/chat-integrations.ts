@@ -7,7 +7,43 @@ export type ChatIntegrationEvent =
   | "issue.status_changed"
   | "issue.assignee_changed"
   | "comment.created"
-  | "project.update_created";
+  | "project.update_created"
+  | "initiative.update_created";
+
+/** Who authorized sharing a team with a group, recorded by the server. */
+export interface ChatBindingAuthorization {
+  userId: string;
+  role: "workspace_admin" | "team_owner";
+  authorizedAt: string;
+  privateTeam: boolean;
+}
+
+export interface ChatTenantAuthorization {
+  userId?: string;
+  openId?: string;
+  name?: string;
+  tenantKey: string;
+  authorizedAt: string;
+  /** tenant_manager: verified platform tenant administrator; legacy: connected before tenant authorization was separate. */
+  method: "tenant_manager" | "legacy";
+}
+
+/**
+ * The three permission domains of a chat integration: the enterprise tenant
+ * authorization on the chat platform, the workspace integration (workspace
+ * administrators) and team bindings (team owners).
+ */
+export interface ChatPermissions {
+  tenant: {
+    status: "not_configured" | "pending" | "authorized";
+    canAuthorize: boolean;
+    designatedAuthorizerId?: string;
+    tenantKey?: string;
+    authorization?: ChatTenantAuthorization;
+  };
+  workspace: { canManage: boolean };
+  teams: { manageableTeamIds: string[]; privateTeamIds: string[] };
+}
 
 export interface ChatIdentity {
   userId: string;
@@ -28,9 +64,14 @@ export interface ChatBinding {
   enabled: boolean;
   allowCreate: boolean;
   allowUpdate: boolean;
+  createdAt?: string;
+  authorization?: ChatBindingAuthorization;
+  revokedAt?: string;
+  revokedBy?: string;
 }
 
 export interface ChatIntegrationSettings {
+  permissions?: ChatPermissions;
   connection: IntegrationConnection | null;
   /** Stable code for connection.lastError; the web app translates it. */
   lastErrorCode?: string;
@@ -53,7 +94,11 @@ export interface ChatIntegrationCredentials {
   verificationToken?: string;
 }
 
-export type ChatBindingInput = Omit<ChatBinding, "id" | "connectionId"> & { id?: string };
+export type ChatBindingInput = Omit<ChatBinding, "id" | "connectionId" | "authorization" | "revokedAt" | "revokedBy" | "createdAt"> & {
+  id?: string;
+  /** Explicit consent to share the team's selected updates and actions with everyone in the group. */
+  authorize: true;
+};
 
 export interface BotChat {
   id: string;

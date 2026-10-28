@@ -1,7 +1,6 @@
-import { ArrowLeft, Check, Copy, ExternalLink, Link2, Pencil, Plus, RefreshCw, Save, Trash2, Unplug } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, KeyRound, Plus, RefreshCw, Save, ShieldCheck, Unplug, UsersRound } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
-import { NavLink } from "react-router-dom";
 
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { GridLoader } from "@/components/ui/grid-loader";
@@ -10,41 +9,51 @@ import {
   CHAT_ERROR_MESSAGES,
   chatErrorCodeMessage,
   chatErrorMessage,
+  chatIdentityAuthorizationURL,
+  designateChatTenantAuthorizer,
   disconnectChatIntegration,
   fetchChatIntegration,
-  fetchChatIntegrationChats,
   removeChatBinding,
+  revokeChatBinding,
   saveChatBinding,
   saveChatIntegration,
+  startChatTenantAuthorization,
   testChatIntegration,
 } from "@/lib/chat-integrations-api";
 import { chatProviderName } from "@/lib/integration-catalog";
 import { isWorkspaceAdmin } from "@/lib/settings-access";
-import { settingsPath } from "@/lib/app-routes";
 import { toast } from "@/lib/toast";
-import type { BotChat, ChatBinding, ChatBindingInput, ChatIntegrationEvent, ChatIntegrationProvider, ChatIntegrationSettings as Settings } from "@/types/chat-integrations";
+import type { ChatBinding, ChatIntegrationProvider, ChatIntegrationSettings as Settings } from "@/types/chat-integrations";
 import type { BootstrapData } from "@/types/flow";
 
+import { confirmRemoveBinding, confirmRevokeBinding } from "./chat-binding-support";
+import { ChatBindingEditor, ChatBindingRow, FieldRow } from "./chat-group-bindings";
 import { IntegrationBrandIcon } from "./integration-brand-icon";
-import { SettingsSelect, SettingsToggle } from "./settings-primitives";
+import { SettingsSelect } from "./settings-primitives";
 import "./feature-settings.css";
 import "./chat-integration-settings.css";
 
-const EVENTS: { value: ChatIntegrationEvent; label: string }[] = [
-  { value: "issue.created", label: "Issue created" },
-  { value: "issue.status_changed", label: "Status changed" },
-  { value: "issue.assignee_changed", label: "Assignee changed" },
-  { value: "comment.created", label: "Comment added" },
-  { value: "project.update_created", label: "Project update published" },
-];
-// Radix Select shows its trigger text only for a non-empty value; this one matches no option.
-const NO_SELECTION = "__none__";
+const ANY_ADMINISTRATOR = "__any__";
 
-/** A settings row: copy on the left, the control on the right (shared feature-row layout). */
-function FieldRow({ id, label, description, inline, children }: { id?: string; label: ReactNode; description?: ReactNode; inline?: boolean; children?: ReactNode }) {
-  return <div className={`feature-row${inline ? " chat-inline" : ""}`}>
-    <div><strong>{id ? <label htmlFor={id}>{label}</label> : label}</strong>{description && <span>{description}</span>}</div>
-    {children && <aside>{children}</aside>}
+/** Reads a tenant authorization result the platform sign-in returned with, then clears it from the address. */
+function consumeTenantResult(provider: ChatIntegrationProvider, t: (source: string) => string): string {
+  const url = new URL(window.location.href);
+  if (url.searchParams.get("chat_provider") !== provider || !url.searchParams.has("chat_auth")) return "";
+  let error = "";
+  if (url.searchParams.get("chat_auth") === "success") toast.success(t("Tenant authorized"));
+  else error = chatErrorCodeMessage(url.searchParams.get("chat_auth_error"), t) ?? t("Tenant authorization failed. Try again.");
+  for (const key of ["chat_auth", "chat_provider", "chat_auth_error", "chat_tenant"]) url.searchParams.delete(key);
+  window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  return error;
+}
+
+function PermissionRow({ icon, title, granted, children, action }: { icon: ReactNode; title: string; granted: boolean; children: ReactNode; action?: ReactNode }) {
+  return <div className="feature-row chat-permission-row" data-granted={granted}>
+    <div>
+      <strong>{icon}{title}<span className={`chat-status-dot is-${granted ? "connected" : "pending"}`} aria-hidden="true" /></strong>
+      {children}
+    </div>
+    {action && <aside className="chat-actions">{action}</aside>}
   </div>;
 }
 
@@ -71,6 +80,11 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
   const connection = settings?.connection;
   const connected = connection?.status === "connected";
   const sharingBlocked = Boolean(data.workspaceSettings.hipaaCompliance);
+  const permissions = settings?.permissions;
+  const manageableTeamIds = permissions?.teams.manageableTeamIds ?? (canManage ? data.teams.map((team) => team.id) : []);
+  const canBind = canManage || manageableTeamIds.length > 0;
+  const tenant = permissions?.tenant;
+  const tenantAuthorized = tenant ? tenant.status === "authorized" : connected;
 
   const load = useCallback(async () => {
     const next = await fetchChatIntegration(provider);
@@ -83,13 +97,15 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
     void load().then((next) => {
       if (!mounted.current) return;
       setAppId(next.connection?.config?.appId ?? "");
+      const returned = consumeTenantResult(provider, t);
+      if (returned) setError(returned);
     }).catch((cause: unknown) => {
       if (mounted.current) setError(chatErrorMessage(cause, t, "Could not load integration"));
     }).finally(() => {
       if (mounted.current) setLoading(false);
     });
     return () => { mounted.current = false; };
-  }, [load, t]);
+  }, [load, provider, t]);
 
   const reload = async () => {
     setLoading(true);
@@ -148,11 +164,27 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
     });
   };
 
+  const authorizeTenant = async () => {
+    setBusy("tenant");
+    setError("");
+    try {
+      const result = await startChatTenantAuthorization(provider);
+      window.location.assign(chatIdentityAuthorizationURL(provider, result.authorizeUrl));
+    } catch (cause) {
+      setError(chatErrorMessage(cause, t, "Could not start tenant authorization"));
+      setBusy("");
+    }
+  };
+
+  const designate = (userId: string) => mutate("designate", () => designateChatTenantAuthorizer(provider, userId === ANY_ADMINISTRATOR ? "" : userId), "Tenant authorizer saved");
+
+  const revokeBinding = async (binding: ChatBinding) => {
+    if (!await confirmRevokeBinding(binding, t)) return;
+    await mutate(`revoke:${binding.id}`, () => revokeChatBinding(provider, binding.id), "Group binding revoked");
+  };
+
   const removeBinding = async (binding: ChatBinding) => {
-    if (!await confirmAction(t("Remove group binding?"), {
-      description: binding.chatName,
-      confirmLabel: t("Remove"), danger: true,
-    })) return;
+    if (!await confirmRemoveBinding(binding, t)) return;
     await mutate(`remove:${binding.id}`, () => removeChatBinding(provider, binding.id), "Group binding removed");
   };
 
@@ -165,8 +197,14 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
 
   const connectionError = connection?.lastError ? chatErrorCodeMessage(settings?.lastErrorCode, t) ?? t(CHAT_ERROR_MESSAGES.chat_error) : "";
   const status = t(connected ? "Connected" : connection?.status === "error" ? "Connection failed" : connection ? "Configured" : "Not connected");
-  const statusDescription = connectionError || t(connected ? "The application and workspace are linked." : settings?.credentialsConfigured ? "Link an administrator account in Connected accounts to verify the workspace tenant." : "A workspace administrator needs to configure the application.");
+  const statusDescription = connectionError || t(connected ? "The application and workspace are linked." : settings?.credentialsConfigured ? "Waiting for the organization's tenant authorization." : "A workspace administrator needs to configure the application.");
   const secretPlaceholder = settings?.credentialsConfigured ? t("Leave blank to keep existing secret") : "";
+  const designatedId = tenant?.designatedAuthorizerId ?? "";
+  const designated = designatedId ? data.users.find((user) => user.id === designatedId) : undefined;
+  const authorization = tenant?.authorization;
+  const authorizer = authorization?.userId ? data.users.find((user) => user.id === authorization.userId) : undefined;
+  const memberOptions = [{ value: ANY_ADMINISTRATOR, label: t("Workspace administrators") }, ...(data.members ?? []).filter((member) => member.status === "active" && member.role !== "guest").map((member) => ({ value: member.user.id, label: member.user.displayName || member.user.name, entityName: true }))];
+  const visibleBindings = settings?.bindings ?? [];
 
   return (
     <div className="feature-integrations chat-integration-settings">
@@ -194,13 +232,44 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
                   {connection?.lastTestAt && <span>{t("Last checked")}: {formatDate(connection.lastTestAt, { dateStyle: "medium", timeStyle: "short" })}</span>}
                 </div>
                 {canManage && connection && <aside className="chat-actions">
-                  {!connected && settings.credentialsConfigured && <NavLink className="feature-button" to={settingsPath(data.workspace.urlKey, "connections")}><Link2 size={14} aria-hidden="true" />{t("Verify workspace")}</NavLink>}
                   <button type="button" className="feature-button" disabled={Boolean(busy)} onClick={() => void mutate("test", () => testChatIntegration(provider), "Connection checked")}>{busy === "test" ? <GridLoader size={14} /> : <RefreshCw size={14} aria-hidden="true" />}{t("Test connection")}</button>
                   <button type="button" className="feature-button danger" disabled={Boolean(busy)} onClick={() => void disconnect()}><Unplug size={14} aria-hidden="true" />{t("Disconnect")}</button>
                 </aside>}
               </div>
             </div>
           </section>
+
+          {settings.connection && <section className="feature-section" aria-label={t("Permissions")}>
+            <header><h2>{t("Permissions")}</h2><p>{t("Each permission is granted separately. A Flow workspace role never stands in for the chat platform's tenant authorization.")}</p></header>
+            <div className="feature-card">
+              <PermissionRow icon={<KeyRound size={14} aria-hidden="true" />} title={t("Enterprise tenant authorization")} granted={tenantAuthorized}
+                action={!tenantAuthorized && tenant?.canAuthorize && settings.credentialsConfigured ? <button type="button" className="feature-button primary" disabled={Boolean(busy)} onClick={() => void authorizeTenant()}>{busy === "tenant" ? <GridLoader size={14} /> : <ShieldCheck size={14} aria-hidden="true" />}{t("Authorize tenant")}</button> : undefined}>
+                {tenantAuthorized
+                  ? <span data-testid="chat-tenant-status">{authorization?.method === "legacy" || !authorization
+                    ? t("Completed before tenant authorization was a separate step.")
+                    : t("Completed by {name} on {date}.").replace("{name}", authorizer?.displayName || authorization.name || t("a former member")).replace("{date}", formatDate(authorization.authorizedAt, { dateStyle: "medium" }))}
+                  {tenant?.tenantKey && <> {t("Tenant")}: <code data-i18n-ignore>{tenant.tenantKey}</code></>}</span>
+                  : <span data-testid="chat-tenant-status">{t("Not completed. A tenant administrator of {name} authorizes the application for the whole organization once; then nobody is asked again.").replace("{name}", name)}</span>}
+                {!tenantAuthorized && <span>{designated
+                  ? t("Designated tenant authorizer: {name}.").replace("{name}", designated.displayName || designated.name)
+                  : t("Workspace administrators can start it, or designate the member who is a tenant administrator on the chat platform.")}
+                {!tenant?.canAuthorize && ` ${t("Ask a workspace administrator or the designated tenant authorizer.")}`}</span>}
+              </PermissionRow>
+              {canManage && !tenantAuthorized && <FieldRow label={t("Tenant authorizer")} description={t("The member who completes tenant authorization. Their chat account must be a tenant administrator.")}>
+                <SettingsSelect label={t("Tenant authorizer")} options={memberOptions} value={designatedId || ANY_ADMINISTRATOR} disabled={Boolean(busy)} onChange={(value) => void designate(value)} />
+              </FieldRow>}
+              <PermissionRow icon={<ShieldCheck size={14} aria-hidden="true" />} title={t("Workspace integration")} granted={canManage}>
+                <span>{t(canManage ? "You manage this workspace's application settings and all group bindings." : "Only workspace administrators manage the application settings.")}</span>
+              </PermissionRow>
+              <PermissionRow icon={<UsersRound size={14} aria-hidden="true" />} title={t("Team group bindings")} granted={canBind}>
+                <span>{canManage
+                  ? t("You can bind groups for every team.")
+                  : manageableTeamIds.length
+                    ? (manageableTeamIds.length === 1 ? t("You can bind groups for 1 team you own.") : t("You can bind groups for {count} teams you own.").replace("{count}", String(manageableTeamIds.length)))
+                    : t("A team's owners bind its groups. Ask a team owner or a workspace administrator.")}</span>
+              </PermissionRow>
+            </div>
+          </section>}
 
           {canManage && <section className="feature-section" aria-label={t("Application settings")}>
             <header>
@@ -224,144 +293,18 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
             </form>
           </section>}
 
-          {canManage && <section className="feature-section" aria-label={t("Group bindings")}>
-            <header><h2>{t("Group bindings")}</h2><p>{t(sharingBlocked ? "Workspace policy prevents sharing updates with chat applications." : "Share selected public team updates with approved internal groups.")}</p></header>
+          {canBind && <section className="feature-section" aria-label={t("Group bindings")}>
+            <header><h2>{t("Group bindings")}</h2><p>{t(sharingBlocked ? "Workspace policy prevents sharing updates with chat applications." : canManage ? "Share selected team updates with approved internal groups. Private teams are shared only with their owners' authorization." : "Share selected updates of the teams you own with approved internal groups.")}</p></header>
             <div className="feature-card">
-              {settings.bindings.length === 0 && <FieldRow label={<span className="chat-muted">{t(connected ? "No groups are bound." : "Connect the application before adding groups.")}</span>} />}
-              {settings.bindings.map((binding) => {
-                const team = data.teams.find((item) => item.id === binding.teamId);
-                const project = binding.projectId ? data.projects.find((item) => item.id === binding.projectId) : undefined;
-                return <div className="feature-row chat-inline" key={binding.id}>
-                  <div>
-                    <strong><span className="chat-binding-name" title={binding.chatName} data-i18n-ignore>{binding.chatName}</span>{!binding.enabled && <small>{t("Paused")}</small>}</strong>
-                    <span className="chat-binding-scope">
-                      {team ? <span data-i18n-ignore>{team.name}</span> : t("Team unavailable")}
-                      {binding.projectId && <> / {project ? <span data-i18n-ignore>{project.name}</span> : t("Project unavailable")}</>}
-                      {` · ${binding.events.length === 1 ? t("1 notification type") : t("{count} notification types").replace("{count}", String(binding.events.length))}`}
-                    </span>
-                  </div>
-                  <aside>
-                    <button type="button" className="feature-button chat-icon-button" aria-label={`${t("Edit group binding")}: ${binding.chatName}`} title={t("Edit group binding")} disabled={Boolean(busy) || editing !== null || !connected || sharingBlocked} onClick={() => setEditing(binding)}><Pencil size={14} aria-hidden="true" /></button>
-                    <button type="button" className="feature-button danger chat-icon-button" aria-label={`${t("Remove group binding")}: ${binding.chatName}`} title={t("Remove group binding")} disabled={Boolean(busy) || editing !== null} onClick={() => void removeBinding(binding)}>{busy === `remove:${binding.id}` ? <GridLoader size={14} /> : <Trash2 size={14} aria-hidden="true" />}</button>
-                  </aside>
-                </div>;
-              })}
+              {visibleBindings.length === 0 && <FieldRow label={<span className="chat-muted">{t(connected ? "No groups are bound." : "Connect the application before adding groups.")}</span>} />}
+              {visibleBindings.map((binding) => <ChatBindingRow key={binding.id} binding={binding} data={data} busy={busy} canEdit={editing === null && connected && !sharingBlocked} onEdit={() => setEditing(binding)} onRevoke={() => void revokeBinding(binding)} onRemove={() => void removeBinding(binding)} />)}
             </div>
             {!editing && <div className="feature-section-action"><button type="button" className="feature-button" disabled={!connected || Boolean(busy) || sharingBlocked} onClick={() => setEditing("new")}><Plus size={14} aria-hidden="true" />{t("Add group")}</button></div>}
           </section>}
 
-          {canManage && editing && !sharingBlocked && <ChatBindingEditor key={editing === "new" ? "new" : editing.id} provider={provider} data={data} bindableTeamIds={settings.bindableTeamIds ?? []} binding={editing === "new" ? undefined : editing} busy={Boolean(busy)} onCancel={() => setEditing(null)} onSave={(input) => mutate("binding", () => saveChatBinding(provider, input), "Group binding saved", () => setEditing(null))} />}
+          {canBind && editing && !sharingBlocked && <ChatBindingEditor key={editing === "new" ? "new" : editing.id} provider={provider} data={data} bindableTeamIds={settings.bindableTeamIds ?? []} privateTeamIds={permissions?.teams.privateTeamIds} binding={editing === "new" ? undefined : editing} busy={Boolean(busy)} onCancel={() => setEditing(null)} onSave={(input) => mutate("binding", () => saveChatBinding(provider, input), "Group binding saved", () => setEditing(null))} />}
         </>}
       </div>
     </div>
   );
-}
-
-function ChatBindingEditor({ provider, data, bindableTeamIds, binding, busy, onCancel, onSave }: {
-  provider: ChatIntegrationProvider;
-  data: BootstrapData;
-  bindableTeamIds: string[];
-  binding?: ChatBinding;
-  busy: boolean;
-  onCancel: () => void;
-  onSave: (input: ChatBindingInput) => Promise<void>;
-}) {
-  const { t } = useI18n();
-  const [chats, setChats] = useState<BotChat[]>([]);
-  const [cursor, setCursor] = useState<string>();
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [chatId, setChatId] = useState(binding?.chatId ?? "");
-  const [teamId, setTeamId] = useState(binding?.teamId ?? "");
-  const [projectId, setProjectId] = useState(binding?.projectId ?? "");
-  const [templateId, setTemplateId] = useState(binding?.templateId ?? "");
-  const [events, setEvents] = useState<ChatIntegrationEvent[]>(binding?.events ?? ["issue.created", "issue.status_changed", "issue.assignee_changed"]);
-  const [enabled, setEnabled] = useState(binding?.enabled ?? true);
-  const [allowCreate, setAllowCreate] = useState(binding?.allowCreate ?? true);
-  const [allowUpdate, setAllowUpdate] = useState(binding?.allowUpdate ?? true);
-  const [approved, setApproved] = useState(false);
-  const mounted = useRef(true);
-  // The server decides which teams may be shared; see chatBindingScopePermitted.
-  const bindable = new Set(bindableTeamIds);
-  const teams = data.teams.filter((team) => bindable.has(team.id));
-  const projects = data.projects.filter((project) => !project.archivedAt && project.teamIds.includes(teamId) && project.teamIds.every((id) => bindable.has(id)));
-  const templates = data.issueTemplates.filter((template) => template.templateType !== "customForm" && !template.formFields?.length && (!template.teamId || template.teamId === teamId) && (!template.visibilityTeamId || template.visibilityTeamId === teamId) && (!template.projectId || template.projectId === projectId));
-  const selectedChat = chats.find((chat) => chat.id === chatId);
-  const chatOptions = chats.map((chat) => ({ value: chat.id, label: chat.external ? `${chat.name} (${t("External group")})` : chat.name, disabled: chat.external, entityName: true }));
-  if (binding && !chatOptions.some((item) => item.value === binding.chatId)) chatOptions.unshift({ value: binding.chatId, label: binding.chatName, disabled: false, entityName: true });
-
-  const loadChats = useCallback(async (nextCursor?: string) => {
-    setLoading(true);
-    setError("");
-    try {
-      const page = await fetchChatIntegrationChats(provider, nextCursor);
-      if (!mounted.current) return;
-      setChats((current) => {
-        const unique = new Map((nextCursor ? current : []).map((chat) => [chat.id, chat]));
-        for (const chat of page.items) unique.set(chat.id, chat);
-        return [...unique.values()];
-      });
-      setHasMore(page.hasMore);
-      setCursor(page.pageToken);
-      if (page.hasMore && !page.pageToken) setError(t("The group list could not be continued. Refresh and try again."));
-    } catch (cause) {
-      if (mounted.current) setError(chatErrorMessage(cause, t, "Could not load groups"));
-    } finally { if (mounted.current) setLoading(false); }
-  }, [provider, t]);
-
-  useEffect(() => {
-    mounted.current = true;
-    // load() flips the loading state up front; start it from a microtask so the effect itself never sets state.
-    queueMicrotask(() => { if (mounted.current) void loadChats(); });
-    return () => { mounted.current = false; };
-  }, [loadChats]);
-
-  const valid = Boolean(chatId && teamId && teams.some((team) => team.id === teamId) && (!projectId || projects.some((project) => project.id === projectId)) && (!templateId || templates.some((template) => template.id === templateId)) && selectedChat?.external !== true && (selectedChat || binding?.chatId === chatId) && (events.length > 0 || allowCreate || allowUpdate) && approved);
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    if (!valid) return;
-    void onSave({
-      ...(binding ? { id: binding.id } : {}),
-      chatId, chatName: selectedChat?.name ?? binding?.chatName ?? "", teamId,
-      ...(projectId ? { projectId } : {}), ...(templateId ? { templateId } : {}),
-      events, enabled, allowCreate, allowUpdate,
-    });
-  };
-  const title = t(binding ? "Edit group binding" : "Add group binding");
-  const groupStatus = loading ? t("Loading groups…") : !chats.length && !error ? t("No groups found. Add the bot to an internal group and refresh.") : t("Only internal groups can be bound.");
-
-  return <form className="feature-section chat-binding-editor" onSubmit={submit} aria-label={title}>
-    <header><h2>{title}</h2><p role="status">{groupStatus}</p></header>
-    <fieldset className="chat-fieldset" disabled={busy}>
-      {error && <div className="feature-card chat-integration-alert" role="alert"><div className="feature-row"><div><span>{error}</span></div><aside><button type="button" className="feature-button" disabled={loading} onClick={() => void loadChats(cursor)}><RefreshCw size={14} aria-hidden="true" />{t("Retry")}</button></aside></div></div>}
-      <div className="feature-card">
-        <FieldRow label={t("Group")}>
-          <SettingsSelect label={t("Group")} options={chatOptions} value={chatId || NO_SELECTION} placeholder={t("Select group")} disabled={loading || !chatOptions.length} onChange={(value) => { setChatId(value); setApproved(false); }} />
-          <button type="button" className="feature-button chat-icon-button" aria-label={t("Refresh groups")} title={t("Refresh groups")} disabled={loading} onClick={() => void loadChats()}>{loading ? <GridLoader size={14} /> : <RefreshCw size={14} aria-hidden="true" />}</button>
-        </FieldRow>
-        {hasMore && <FieldRow label={<span className="chat-muted">{t("More groups are available.")}</span>}><button type="button" className="feature-button" disabled={loading || !cursor} onClick={() => void loadChats(cursor)}>{t("Load more groups")}</button></FieldRow>}
-        <FieldRow label={t("Team")} description={!teams.length ? t("No public teams can be shared.") : undefined}><SettingsSelect label={t("Team")} options={teams.map((team) => ({ value: team.id, label: team.name, entityName: true }))} value={teamId || NO_SELECTION} placeholder={t("Select team")} disabled={!teams.length} onChange={(value) => { setTeamId(value); setProjectId(""); setTemplateId(""); setApproved(false); }} /></FieldRow>
-        <FieldRow label={t("Project")}><SettingsSelect label={t("Project")} options={[{ value: NO_SELECTION, label: t("All team projects") }, ...projects.map((project) => ({ value: project.id, label: project.name, entityName: true }))]} value={projectId || NO_SELECTION} disabled={!teamId} onChange={(value) => { setProjectId(value === NO_SELECTION ? "" : value); setTemplateId(""); setApproved(false); }} /></FieldRow>
-        <FieldRow label={t("Default template")}><SettingsSelect label={t("Default template")} options={[{ value: NO_SELECTION, label: t("No template") }, ...templates.map((template) => ({ value: template.id, label: template.name, entityName: true }))]} value={templateId || NO_SELECTION} disabled={!teamId || !allowCreate} onChange={(value) => setTemplateId(value === NO_SELECTION ? "" : value)} /></FieldRow>
-      </div>
-      <h3 className="chat-subheading">{t("Notifications")}</h3>
-      <div className="feature-card">
-        {EVENTS.map((item) => <FieldRow key={item.value} inline label={t(item.label)}><SettingsToggle label={t(item.label)} checked={events.includes(item.value)} onChange={(checked) => setEvents((current) => checked ? [...current, item.value] : current.filter((value) => value !== item.value))} /></FieldRow>)}
-      </div>
-      <h3 className="chat-subheading">{t("Group actions")}</h3>
-      <div className="feature-card">
-        <FieldRow inline label={t("Binding enabled")}><SettingsToggle label={t("Binding enabled")} checked={enabled} onChange={setEnabled} /></FieldRow>
-        <FieldRow inline label={t("Allow creating issues")}><SettingsToggle label={t("Allow creating issues")} checked={allowCreate} onChange={setAllowCreate} /></FieldRow>
-        <FieldRow inline label={t("Allow updating issues")}><SettingsToggle label={t("Allow updating issues")} checked={allowUpdate} onChange={setAllowUpdate} /></FieldRow>
-      </div>
-      <div className="feature-card chat-approval">
-        <FieldRow inline label={t("Share with this group")} description={t("I approve sharing this team's selected updates with everyone in this group.")}><SettingsToggle label={t("I approve sharing this team's selected updates with everyone in this group.")} checked={approved} onChange={setApproved} /></FieldRow>
-      </div>
-      <div className="feature-section-action chat-actions">
-        <button type="button" className="feature-button" disabled={busy} onClick={onCancel}>{t("Cancel")}</button>
-        <button type="submit" className="feature-button primary" disabled={busy || !valid}>{busy ? <GridLoader size={14} /> : <Check size={14} aria-hidden="true" />}{t("Save group binding")}</button>
-      </div>
-    </fieldset>
-  </form>;
 }

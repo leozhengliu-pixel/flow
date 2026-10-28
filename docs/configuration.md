@@ -9,6 +9,15 @@ takes precedence over `VARIABLE`.
 For application bot setup, permissions, account linking, and group bindings,
 see [Feishu and Lark integrations](feishu-lark.md).
 
+## Chat platform
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FLOW_CHAT_PLATFORM` | `slack` | The deployment's first-class chat platform: `slack`, `lark` or `feishu`. The web app routes its chat entry points to it: the team home's connect action ("Connect Lark group"), the team's notifications page, project channel/group menus, project and initiative update settings, onboarding and the integration catalog order. Other values are logged and treated as `slack`. It does not turn any integration off. |
+
+With the Helm chart this is `integrations.chat.platform` (`""` keeps the
+server default).
+
 ## Logging
 
 The API writes startup, request, integration, and error logs to stdout so

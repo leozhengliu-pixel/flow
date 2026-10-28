@@ -1096,12 +1096,14 @@ func (s *server) accountBootstrap(w http.ResponseWriter, r *http.Request) {
 		account := s.store.Account()
 		account.WorkspaceRegionSelectorEnabled = s.regionSelectorEnabled()
 		account.WorkspaceDefaultRegion = s.defaultWorkspaceRegion()
+		account.ChatPlatform = chatPlatform()
 		writeJSON(w, http.StatusOK, account)
 		return
 	}
 	account, err := s.store.AccountForUser(r.Context(), authUser(r).ID)
 	account.WorkspaceRegionSelectorEnabled = s.regionSelectorEnabled()
 	account.WorkspaceDefaultRegion = s.defaultWorkspaceRegion()
+	account.ChatPlatform = chatPlatform()
 	respondMutation(w, err, http.StatusOK, account)
 }
 

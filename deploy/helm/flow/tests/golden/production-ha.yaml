@@ -426,6 +426,7 @@ data:
   FLOW_GOOGLE_OAUTH_CLIENT_ID: "google-client.apps.example.com"
   FLOW_GOOGLE_CALENDAR_SYNC_INTERVAL: "30m"
   FLOW_NOTION_CONNECTION_URL: "https://www.notion.com/connections/flow"
+  FLOW_CHAT_PLATFORM: "lark"
   FLOW_REVIEW_IMPORT: "on"
   FLOW_REVIEW_IMPORT_INTERVAL: "15m"
   # Operator-trusted private endpoints (docs/configuration.md).

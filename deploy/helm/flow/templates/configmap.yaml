@@ -79,6 +79,9 @@ data:
   {{- with .notion.connectionUrl }}
   FLOW_NOTION_CONNECTION_URL: {{ . | quote }}
   {{- end }}
+  {{- with .chat.platform }}
+  FLOW_CHAT_PLATFORM: {{ . | quote }}
+  {{- end }}
   {{- with .reviewImport.mode }}
   FLOW_REVIEW_IMPORT: {{ . | quote }}
   {{- end }}

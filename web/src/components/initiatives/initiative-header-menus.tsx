@@ -17,7 +17,9 @@ import { FlowDropdownMenuContent, FlowMenuItem, FlowMenuSeparator } from '@/comp
 import { queueFlowMenuShortcut, useFlowHotkeys } from '@/components/ui/menu-shortcuts'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
-import { SlackIcon } from '@/components/issue/issue-icons'
+import { ChatPlatformIcon } from '@/components/settings/integration-brand-icon'
+import { AppLink } from '@/components/ui/app-link'
+import { chatTeamNotificationsCopy, useChatPlatform } from '@/lib/chat-platform'
 import { InitiativeCopySubmenu, InitiativeHierarchySubmenus, InitiativeRemindSubmenu, InitiativeSubscribeSubmenu } from './initiative-row-menu'
 import { initiativeGraph } from './initiative-hierarchy'
 import { childOptions, directChildIds, parentOptions, saveInitiativeRelation, showNestingLimitError, toggleChild, toggleId } from './initiative-hierarchy-actions'
@@ -47,6 +49,7 @@ export function InitiativeNotificationMenu({ initiative, pulseSubscribed, onUpda
   const [open, setOpen] = useState(false)
   const pulse = useInitiativePulse(initiative, pulseSubscribed, open)
   const { t } = useI18n()
+  const chat = useChatPlatform()
   const rules = initiative.notificationRules ?? DEFAULT_RULES
   const changeRule = (field: keyof typeof rules, value: boolean) => void onUpdate({ notificationRules: { ...rules, [field]: value } })
   return <>
@@ -54,7 +57,9 @@ export function InitiativeNotificationMenu({ initiative, pulseSubscribed, onUpda
       <NotificationOptionSection className="li-notifications__section" title="Send inbox notifications for"><NotificationCheckbox checked={rules.descriptionChanges} label="Comments and changes to initiative description" onChange={value => changeRule('descriptionChanges', value)}/><NotificationCheckbox checked={rules.newUpdate} label="New initiative update is posted" onChange={value => changeRule('newUpdate', value)}/></NotificationOptionSection>
       <NotificationOptionSection className="li-notifications__section" title={t('Pulse updates')}><NotificationCheckbox disabled={pulse.saving} checked={pulse.subscribed} label={t('Subscribe to initiative updates')} onChange={value => void pulse.change(value)}/></NotificationOptionSection>
       <section className="li-notifications__schedule"><div><strong>Update schedule</strong><span>{scheduleLabel(initiative.updateSchedule ?? DEFAULT_SCHEDULE)}</span></div><button onClick={() => setScheduleOpen(true)} type="button">Change</button></section>
-      <section className="li-notifications__slack"><ViewGlyph color="currentColor" icon="Slack"/><strong>Slack notifications</strong><button disabled title="Connect Slack from workspace integrations first" type="button">Connect</button></section>
+      {chat.provider
+        ? <section className="li-notifications__slack"><ChatPlatformIcon size={14}/><strong>{chat.format(t(chatTeamNotificationsCopy(chat.platform).label))}</strong><AppLink className="li-notifications__chat-link" href={`/${location.pathname.split("/").filter(Boolean)[0] ?? ""}/settings/integrations/${chat.settingsSlug}`} title={chat.format(t("Initiative updates are posted to the groups of the lead team that share initiative updates."))}>{t("Connect")}</AppLink></section>
+        : <section className="li-notifications__slack"><ViewGlyph color="currentColor" icon="Slack"/><strong>Slack notifications</strong><button disabled title="Connect Slack from workspace integrations first" type="button">Connect</button></section>}
     </Popover.Content></Popover.Portal></Popover.Root>
     <UpdateScheduleDialog initiative={initiative} onOpenChange={setScheduleOpen} onUpdate={onUpdate} open={scheduleOpen}/>
   </>
@@ -86,6 +91,7 @@ export type InitiativeActionsMenuProps = {
  */
 export function InitiativeActionsMenu({ initiative, initiatives, users, teams, labels, viewer, pulseSubscribed, onCreateInitiative, onCreateLabel, onCreateReminder, onCreateSubInitiative, onDelete, onNewUpdate, onShowActivity, onUpdate, onUpdateInitiative }: InitiativeActionsMenuProps) {
   const { t } = useI18n()
+  const chat = useChatPlatform()
   const [menuOpen, setMenuOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [scheduleOpen, setScheduleOpen] = useState(false)
@@ -118,7 +124,7 @@ export function InitiativeActionsMenu({ initiative, initiatives, users, teams, l
         <FlowMenuSeparator/>
         <FlowMenuItem icon={<FlowGlyph name="initiativeUpdate"/>} label="New initiative update" shortcut="N then U" onSelect={onNewUpdate}/>
         <FlowMenuItem icon={<ViewGlyph icon="ClockOutline" color="currentColor"/>} label="Change update schedule…" onSelect={() => setScheduleOpen(true)}/>
-        <FlowMenuItem icon={<SlackIcon size={16}/>} label="Configure Slack notifications…" href={`/${location.pathname.split('/').filter(Boolean)[0] ?? ''}/settings/integrations/slack`}/>
+        <FlowMenuItem icon={<ChatPlatformIcon size={16}/>} label={chat.format(t(chatTeamNotificationsCopy(chat.platform).menu))} href={`/${location.pathname.split("/").filter(Boolean)[0] ?? ""}/settings/integrations/${chat.settingsSlug}`}/>
         <FlowMenuSeparator/>
         <FlowMenuItem icon={<IssueActionGlyph label="Show description history" fallback={null}/>} label="Show description history" onSelect={() => setHistoryOpen(true)}/>
         <FlowMenuItem icon={<FlowGlyph name="initiativeUpdate"/>} label="Show updates and activity" shortcut="⌘ U" onSelect={onShowActivity}/>

@@ -334,8 +334,18 @@ export function isIntegrationCatalogSlug(slug: string): boolean {
   return BY_SLUG.has(slug);
 }
 
-export function primaryIntegrations(): IntegrationCatalogEntry[] {
-  return INTEGRATION_CATALOG.filter((entry) => !entry.subtype);
+/**
+ * Primary catalog entries. On a Lark or Feishu deployment (FLOW_CHAT_PLATFORM)
+ * that platform takes Slack's place in the list, followed by Slack.
+ */
+export function primaryIntegrations(chatPlatform: "slack" | ChatProvider = "slack"): IntegrationCatalogEntry[] {
+  const entries = INTEGRATION_CATALOG.filter((entry) => !entry.subtype);
+  if (chatPlatform === "slack") return entries;
+  const chosen = entries.find((entry) => entry.slug === chatPlatform);
+  if (!chosen) return entries;
+  const rest = entries.filter((entry) => entry !== chosen);
+  rest.splice(rest.findIndex((entry) => entry.slug === "slack"), 0, chosen);
+  return rest;
 }
 
 export function integrationCategories(entries: IntegrationCatalogEntry[] = primaryIntegrations()): IntegrationCategory[] {
