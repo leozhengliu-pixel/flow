@@ -476,7 +476,7 @@ func TestGitHubReviewWebhooksUpdateCommentsIncrementally(t *testing.T) {
 	eventsBefore := len(review.Events)
 
 	signedGitHubWebhook(t, handler, "pull_request_review_comment", "d-new", map[string]any{"action": "created", "repository": repository, "pull_request": pull,
-		"comment": map[string]any{"id": 555, "in_reply_to_id": 4320909416, "path": "src/geometry.js", "line": 12, "side": "RIGHT", "body": "Done", "user": map[string]any{"login": "octocat"}, "created_at": time.Now().UTC().Format(time.RFC3339)}})
+		"comment": map[string]any{"id": 555, "in_reply_to_id": int64(4320909416), "path": "src/geometry.js", "line": 12, "side": "RIGHT", "body": "Done", "user": map[string]any{"login": "octocat"}, "created_at": time.Now().UTC().Format(time.RFC3339)}})
 	review = requestJSON[domain.CodeReview](t, handler, http.MethodGet, "/api/reviews/review-1", nil, http.StatusOK)
 	added := findReviewEvent(t, review, "github-review_comment-555")
 	if added.ParentID != "github-review_comment-4320909416" || added.Body != "Done" {
@@ -488,8 +488,8 @@ func TestGitHubReviewWebhooksUpdateCommentsIncrementally(t *testing.T) {
 	}
 
 	signedGitHubWebhook(t, handler, "pull_request_review_comment", "d-edit", map[string]any{"action": "edited", "repository": repository, "pull_request": pull,
-		"comment": map[string]any{"id": 555, "in_reply_to_id": 4320909416, "path": "src/geometry.js", "line": 12, "side": "RIGHT", "body": "Done, thanks", "user": map[string]any{"login": "octocat"}}})
-	signedGitHubWebhook(t, handler, "pull_request_review_comment", "d-delete", map[string]any{"action": "deleted", "repository": repository, "pull_request": pull, "comment": map[string]any{"id": 4320909410}})
+		"comment": map[string]any{"id": 555, "in_reply_to_id": int64(4320909416), "path": "src/geometry.js", "line": 12, "side": "RIGHT", "body": "Done, thanks", "user": map[string]any{"login": "octocat"}}})
+	signedGitHubWebhook(t, handler, "pull_request_review_comment", "d-delete", map[string]any{"action": "deleted", "repository": repository, "pull_request": pull, "comment": map[string]any{"id": int64(4320909410)}})
 	signedGitHubWebhook(t, handler, "issue_comment", "d-issue", map[string]any{"action": "created", "repository": repository, "issue": map[string]any{"number": 7, "pull_request": map[string]any{"url": "x"}},
 		"comment": map[string]any{"id": 777, "body": "Ship it", "user": map[string]any{"login": "octocat"}, "created_at": time.Now().UTC().Format(time.RFC3339)}})
 	review = requestJSON[domain.CodeReview](t, handler, http.MethodGet, "/api/reviews/review-1", nil, http.StatusOK)
