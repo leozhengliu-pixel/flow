@@ -103,11 +103,16 @@ type loopOutputMarker struct {
 }
 
 var loopOutputMarkers = []loopOutputMarker{
-	{"statusUpdate", regexp.MustCompile(`status updates?|project updates?|initiative updates?|weekly updates?|周更新|项目更新|状态更新|进展更新|周报`), regexp.MustCompile(`\bpost (an |the )?updates?\b|发布更新`), true},
+	{"statusUpdate", regexp.MustCompile(`status updates?|project updates?|initiative updates?|weekly updates?|周更新|项目更新|状态更新|进展更新`), regexp.MustCompile(`\bpost (an |the )?updates?\b|发布更新`), true},
 	{"issue", nil, regexp.MustCompile(`\b(create|creates|creating|file|files|filing|raise|raises|log|logs)\s+(an?\s+|one\s+|the\s+)?(new\s+)?([\w-]+\s+)?issues?\b|\bopen(s|ing)?\s+(an?|one|new)\s+(new\s+)?([\w-]+\s+)?issues?\b|(创建|新建|新增|提交|开)\s*(一个|一条|一些|新的|新)?\s*(issue|事项|问题|任务|工单)`), false},
 	{"comment", regexp.MustCompile(`\bcomment(s|ing|ed)?\b|评论|留言`), regexp.MustCompile(`\bcomment(s|ing)? on\b|\b(leave|leaves|leaving|add|adds|adding|post|posts|posting|write|writes|writing|send|sends|reply with|drop)\s+(a |an |one |the |short |brief |\w+ ){0,2}comments?\b|\breply to\b|(上|中|里|下|并|进行)\s*(评论|留言)\s*$|(为|给|对|向)[^，,。；;]*?(评论|留言)\s*$|(发布|发表|添加|写|发|留下|留|回复)\s*(一条|一个|条|个)?\s*(评论|留言)`), false},
 	{"document", regexp.MustCompile(`\bdocs?\b|\bdocuments?\b|文档`), regexp.MustCompile(`\b(create|creates|creating|write|writes|writing|draft|drafts|drafting|start)\s+(a |an |one )(new )?([\w'-]+ )?(doc|document)\b|(创建|撰写|新建|起草)\s*(一篇|一份|一个)?\s*(新的)?[^，,。；;]{0,8}文档`), true},
 }
+
+// loopReportNouns name a report by its period ("周报", "日报", "weekly digest"). A report is not an output kind of
+// its own: written or appended to a document it is a document ("把周报追加到团队文档"), posted as a project or
+// initiative update it is a status update ("将周报发布为项目更新"); otherwise it is the run's reply ("每周五写周报").
+var loopReportNouns = regexp.MustCompile(`周报|日报|月报|周总结|月总结|日总结|\b(?:weekly|daily|monthly)\s+(?:reports?|digests?|summar(?:y|ies))\b|\bdigests?\b`)
 
 var (
 	// Operation verbs, matched with the output nouns taken out of the clause
@@ -389,6 +394,9 @@ type loopIntentState struct {
 	skips     []string
 	// reads and writes: the instructions use any read or write verb.
 	reads, writes bool
+	// reply: a report named by its period is written without a document or update to put it in ("写周报"):
+	// the run's reply is the report.
+	reply bool
 	// alternatives are kinds a clause offers as a choice.
 	alternatives [][]string
 }
@@ -559,6 +567,11 @@ func (state *loopIntentState) sentence(sentence string, title bool) {
 				}
 			}
 		}
+		if !named && loopReportNouns.MatchString(positive) && !loopChangeVerbs.MatchString(loopReportNouns.ReplaceAllString(positive, " ")) {
+			// "每周五写周报", "Send the weekly digest": a report with no document or update to put it in is the
+			// run's reply, not a change.
+			named, state.reply = true, true
+		}
 		if !named && !title && !conditional && cue < 0 && (loopWriteVerbs.MatchString(positive) || loopUpdateVerbs.MatchString(positive) || loopChangeVerbs.MatchString(positive)) {
 			state.changes = true
 		}
@@ -632,7 +645,7 @@ func (state *loopIntentState) expectation() loopOutputExpectation {
 		// Outputs named only to read, refused, or no output named and only
 		// reading verbs ("count open issues per team and summarise"): the
 		// report is the output.
-		result.ReadOnly = len(state.read) > 0 || len(result.Prohibited) > 0 || state.blanket || state.reads && !state.writes
+		result.ReadOnly = len(state.read) > 0 || len(result.Prohibited) > 0 || state.blanket || state.reads && !state.writes || state.reply
 	}
 	// Every write refused: the reply is the output, whatever the text's
 	// other verbs ("回复", "写") say.
