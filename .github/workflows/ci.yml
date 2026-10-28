@@ -204,7 +204,22 @@ jobs:
 
       - name: Run browser tests
         working-directory: web
+        env:
+          # The API's log (the detail behind any 500) goes to this file.
+          FLOW_E2E_API_LOG: ${{ runner.temp }}/flow-e2e-api.log
         run: npm run test:e2e
+
+      - name: Upload API log and Playwright output
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-failure
+          path: |
+            ${{ runner.temp }}/flow-e2e-api.log
+            web/playwright-report
+            web/test-results
+          if-no-files-found: ignore
+          retention-days: 7
 
   # The API suite is split so no single runner carries it all: cmd/server (about
   # 55 minutes under the race detector) and internal/store (about 17 minutes) are

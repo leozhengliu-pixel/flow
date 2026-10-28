@@ -7123,6 +7123,10 @@ func respondMutation(w http.ResponseWriter, err error, success int, value any) {
 		writeError(w, http.StatusConflict, err.Error())
 		return
 	}
+	if errors.Is(err, store.ErrWorkspaceKeyTaken) {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
 	if errors.Is(err, errNotFound) {
 		writeError(w, http.StatusNotFound, "resource not found")
 		return
