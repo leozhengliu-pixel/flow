@@ -17,5 +17,4 @@ export const documentsPageZhCN: Record<string, string> = {
   'Document restored': '文档已恢复',
   'Document actions': '文档操作',
   'Could not restore document': '无法恢复文档',
-  'Entity agent panel': '资源 Agent 面板',
 }

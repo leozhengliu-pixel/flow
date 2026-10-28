@@ -4,8 +4,6 @@ import { issueCustomerRowData } from '@/components/issue-explorer/customer-filte
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { IssueAgentTasks, IssueAgentTasksProvider } from '@/components/agent/issue-agent-tasks'
-import { EntityAgentPanel } from '@/components/agent/entity-agent-panel'
-import { issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import { useDescriptionSelectionActions } from './description-selection-actions'
 import { fetchIssueRecord, setThreadSubscription } from '@/lib/api'
 import { reloadIssueAfterRevocation } from '@/lib/issue-access-reload'
@@ -69,7 +67,7 @@ import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import { TriageIntelligenceSuggestions } from '@/components/issue/triage-intelligence-suggestions'
 import './issue-code-reviews.css'
 import './issue-history-state.css'
-import './issue-agent-rail.css'
+import './issue-properties-rail.css'
 import { useIssuesById } from '@/components/issue/use-issues-by-id'
 import { IssueRelationSections } from '@/components/issue/issue-relation-sections'
 import { useRegisterCommandContext } from '@/components/command/command-context'
@@ -78,8 +76,6 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
   const{t}=useI18n(),[title,setTitle]=useState(issue.title),[subOpen,setSubOpen]=useState(false),[subEditorKey,setSubEditorKey]=useState(0),[linkOpen,setLinkOpen]=useState(false),[subCollapsed,setSubCollapsed]=useState(false),[subSelected,setSubSelected]=useState(new Set<string>()),[subDisplay,setSubDisplay]=useState<SubIssueDisplay>({ordering:'priority',direction:'asc',completed:'all',nested:true,properties:new Set(['status','labels','assignee'])}),[relationType,setRelationType]=useState<IssueRelationType|null>(null),[uploadState,setUploadState]=useState<AttachmentUploadState>()
   const peoplePresence=workspacePresence??presence
   useRegisterCommandContext({kind:'issues',source:'detail',issues:[issue],onUpdate,onDelete,onRelation})
-  // Like the reference app, the issue page has no docked agent: a rail left open by an older build is not restored.
-  const [agentOpen, setAgentOpen] = useState(false)
   const fileRef=useRef<HTMLInputElement>(null)
   const uploadCommentFile=async(file:File)=>{const attachment=await onUpload(file,{embed:false});if(!attachment?.url)throw new Error('Upload failed');return attachment.url}
   const threadSummariesEnabled=Boolean(resolvedTeamSettings(data.teamSettings,issue.team.id)?.resolvedThreadSummaries)
@@ -188,17 +184,9 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
         <div className="detail-pane__activity"><ClientEditorProvider issueId={issue.id} onUploadFile={onUpload}><PagedActivityTimeline issueId={issue.id} parentId={issue.id} parentType="issue" cursors={data.issueHistoryCursors?.[issue.id]} highlightTarget={highlightTarget} events={activities} comments={comments} viewerId={data.viewer.id} context={data} threadSummariesEnabled={threadSummariesEnabled} renderAgentThread={(_comment,controls,threadIds)=><IssueAgentTasks issue={issue} data={data} commentId={threadIds} threadControls={controls} teamId={issue.team.id}/>} renderAgentSession={taskId=><IssueAgentTasks issue={issue} data={data} taskId={taskId} teamId={issue.team.id}/>} onReply={(body,bodyData,parentId)=>onComment(body,bodyData,parentId)} onEdit={onEditComment} onDelete={onDeleteComment} onReaction={onReactComment} onResolve={onResolveComment} onUpload={uploadCommentFile} threadSubscriptions={data.threadSubscriptions} onThreadSubscription={async (commentId, state) => { await setThreadSubscription(issue.id, commentId, state); toast.success(state === 'muted' ? t('Thread muted') : state ? t('Subscribed to thread') : t('Thread subscription removed')) }}/></ClientEditorProvider></div><Composer drafts={data.drafts} draftMetadata={{ resourceType: 'issue' }} draftResourceId={issue.id} draftTitle={issue.title} draftType="comment" onSubmit={onComment} onUpload={uploadCommentFile}/>
         </SelectionIssueProvider>
       </article></IssueAgentTasksProvider>
-      <div className="issue-agent-rail">
-        {agentOpen ? (
-          <EntityAgentPanel
-            contextIssues={[issueToExplorerRow(issue, data.workspace.urlKey, data.issues, data)]}
-            onRequestClose={() => setAgentOpen(false)}
-            open={agentOpen}
-            target={{ type: 'issue', id: issue.id, title: issue.title, identifier: issue.identifier, issueIds: [issue.id] }}
-          />
-        ) : (
-          <IssueProperties issue={issue} data={data} activities={activities} onOpenIssue={openIssue} onDeleteRelation={onDeleteRelation} presence={peoplePresence} releasesEnabled={releasesEnabled} onCreateMilestone={onCreateProjectMilestone} onCreateProject={onCreateProject} onCreateLabel={createLabel} onUpdate={onUpdate} onToggleLabel={toggleLabel}/>
-        )}
+      {/* The issue page has no docked agent: the floating chat (⌘J) is the agent, with this issue as context. */}
+      <div className="issue-properties-rail">
+        <IssueProperties issue={issue} data={data} activities={activities} onOpenIssue={openIssue} onDeleteRelation={onDeleteRelation} presence={peoplePresence} releasesEnabled={releasesEnabled} onCreateMilestone={onCreateProjectMilestone} onCreateProject={onCreateProject} onCreateLabel={createLabel} onUpdate={onUpdate} onToggleLabel={toggleLabel}/>
       </div>
     </div></div>
     {relationType&&<RelationPicker open onOpenChange={open=>!open&&setRelationType(null)} type={relationType} issueId={issue.id} issues={data.issues} onSelect={id=>onRelation(relationType,id)}/>}

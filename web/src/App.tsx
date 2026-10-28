@@ -192,7 +192,6 @@ import type {
 import type { NewProjectDraft } from "@/components/projects-page/new-project-dialog";
 import { LabelActions } from "@/components/workspace/label-page-toolbar";
 import { WorkspaceOnboarding, WelcomeOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, AuthTokenPage, AuthErrorPage, AuthGoogleCallbackPage, MobileAuthPage, InviteLinkAccept, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, CodingSessionPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
-import { AGENT_SESSION_DOCKED_EVENT } from "@/components/agent/agent-docked-sessions";
 import { AgentChatHistoryPopover } from "@/components/agent/agent-chat-history-popover";
 import { FlowTooltip } from "@/components/ui/tooltip";
 import { OPEN_FLOATING_AGENT_EVENT, type FloatingAgentRequest } from "@/components/agent/agent-floating-request";
@@ -506,15 +505,6 @@ function App() {
   useEffect(() => {
     try { localStorage.setItem("flow:closed-agent-sessions", JSON.stringify([...closedAgentSessionIds].slice(-200))); } catch { /* storage is best-effort */ }
   }, [closedAgentSessionIds]);
-  // Chats docked in a page's agent sidebar never also open as the floating toolbar chat.
-  useEffect(() => {
-    const listener = (event: Event) => {
-      const id = (event as CustomEvent<{ id: string }>).detail?.id;
-      if (id) setClosedAgentSessionIds((current) => (current.has(id) ? current : new Set(current).add(id)));
-    };
-    window.addEventListener(AGENT_SESSION_DOCKED_EVENT, listener);
-    return () => window.removeEventListener(AGENT_SESSION_DOCKED_EVENT, listener);
-  }, []);
   const [selected, setSelected] = useState(new Set<string>()),
     [commandOpen, setCommandOpen] = useState(false),
     // "O then Q" opens the command menu on its "Open customer…" picker.
