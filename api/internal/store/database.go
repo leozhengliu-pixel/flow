@@ -66,6 +66,18 @@ type sqlDatabase struct {
 	// searchMaxChars caps the text indexed per issue and per document; 0
 	// indexes everything.
 	searchMaxChars int
+	// commitHooks lets tests pause a transaction around its commit
+	// (change_cursor_test.go); nil in production.
+	commitHooks atomic.Pointer[commitHooks]
+}
+
+// commitHooks run inside sqlTx.Commit: beforeCommit once the transaction's
+// events have their sequencing rows (before the rows every writer shares),
+// afterCommit once it committed (before its events are numbered),
+// afterSequence when Commit is about to return, which is before the writer
+// drops any cached copy of what it changed.
+type commitHooks struct {
+	beforeCommit, afterCommit, afterSequence func(tx *sqlTx)
 }
 
 type sqlTx struct {
@@ -85,6 +97,17 @@ type sqlTx struct {
 	// metadataWritten: a metadata record or the workspace document changed,
 	// so the shared metadata cache must be dropped after commit.
 	metadataWritten bool
+	// sequencing: the change-log events this transaction inserted without a
+	// cursor; they are queued at commit and numbered after it
+	// (event_sequencer.go).
+	sequencing []pendingEventSequence
+	// cacheRevisions: the workspace cache revisions this transaction
+	// advances as its last statements (cache_revisions.go).
+	cacheRevisions map[cacheRevisionKey]bool
+	ctx            context.Context
+	// numbering: this transaction assigns change-log cursors
+	// (sequenceWorkspaceBatch); commit hooks skip it.
+	numbering bool
 }
 
 // notificationSignal names a notification that is news to its recipient.
@@ -94,17 +117,42 @@ type notificationSignal struct {
 
 var ErrTransactionWriteBudget = errors.New("transaction write budget exceeded")
 
+// Commit writes what the transaction queued for its end, commits, and numbers
+// the change-log events it inserted. Statement order matters: the events'
+// sequencing rows come after every read and write the events describe
+// (event_sequencer.go), and the rows every writer of a workspace shares (issue
+// counters, cache revisions) come last, so a writer holds them only while it
+// commits.
 func (tx *sqlTx) Commit() error {
 	if tx.writeErr != nil {
 		_ = tx.Tx.Rollback()
 		return tx.writeErr
 	}
+	if err := tx.queueEventSequencing(); err != nil {
+		_ = tx.Tx.Rollback()
+		return err
+	}
+	hooks := tx.hooks()
+	if hooks != nil && hooks.beforeCommit != nil {
+		hooks.beforeCommit(tx)
+	}
 	if err := tx.flushIssueCounts(); err != nil {
+		_ = tx.Tx.Rollback()
+		return err
+	}
+	if err := tx.flushCacheRevisions(); err != nil {
 		_ = tx.Tx.Rollback()
 		return err
 	}
 	if err := tx.Tx.Commit(); err != nil {
 		return err
+	}
+	if hooks != nil && hooks.afterCommit != nil {
+		hooks.afterCommit(tx)
+	}
+	tx.sequenceCommittedEvents()
+	if hooks != nil && hooks.afterSequence != nil {
+		hooks.afterSequence(tx)
 	}
 	if len(tx.signals) > 0 && tx.database != nil {
 		if sink := tx.database.notified.Load(); sink != nil {
@@ -113,6 +161,22 @@ func (tx *sqlTx) Commit() error {
 	}
 	tx.signals = nil
 	return nil
+}
+
+func (tx *sqlTx) hooks() *commitHooks {
+	if tx.database == nil || tx.numbering {
+		return nil
+	}
+	return tx.database.commitHooks.Load()
+}
+
+// context is the context of the transaction's first statement, for the
+// statements Commit writes on its behalf.
+func (tx *sqlTx) context() context.Context {
+	if tx.ctx == nil {
+		return context.Background()
+	}
+	return tx.ctx
 }
 
 // noteNotificationRow records a written notification row that is news for
@@ -451,7 +515,7 @@ func (d *sqlDatabase) BeginTx(ctx context.Context, options *sql.TxOptions) (*sql
 	if err != nil {
 		return nil, err
 	}
-	return &sqlTx{Tx: tx, dialect: d.dialect, maxTransactionBytes: d.maxTransactionBytes, database: d}, nil
+	return &sqlTx{Tx: tx, dialect: d.dialect, maxTransactionBytes: d.maxTransactionBytes, database: d, ctx: ctx}, nil
 }
 
 func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {

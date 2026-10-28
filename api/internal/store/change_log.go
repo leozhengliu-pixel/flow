@@ -11,13 +11,14 @@ import (
 	"flow/api/internal/domain"
 )
 
-// The change log is domain_events with a per-workspace cursor. Every domain
-// event row carries seq, allocated from workspace_event_seq in the same
-// transaction as the insert: the UPDATE takes the workspace's counter row, so
-// concurrent writers of one workspace serialize on it and sequence order is
-// commit order, gap-free. The counter is persisted, so it survives restarts,
-// and multi-node deployments share it through the database (workspace writes
-// are already serialized by the coordinator's workspace lock).
+// The change log is domain_events with a per-workspace cursor, seq, counted
+// by the workspace's workspace_event_seq row. Seqs are gap-free, follow commit
+// order, and a reader that sees seq S sees every lower one. On MySQL and
+// PostgreSQL a writer's events are numbered right after it commits, so
+// concurrent writers do not hold the counter row through their transactions
+// (event_sequencer.go); SQLite numbers them in the writing transaction, which
+// runs alone anyway. The counter is persisted, so it survives restarts, and
+// multi-node deployments share it through the database.
 //
 // Not in the log (they keep their own channels): presence, agent task and
 // session streaming (agent_task.*), coding session state (coding_session.*),
@@ -52,8 +53,9 @@ type domainEventRow struct {
 }
 
 // insertDomainEvent appends the event and assigns its change-log cursor. It
-// must run inside the mutation's transaction so the cursor and the change
-// commit together.
+// must run inside the mutation's transaction so the event and the change
+// commit together; through an *sqlTx on MySQL or PostgreSQL the cursor is
+// assigned once it commits.
 func insertDomainEvent(ctx context.Context, db domainEventExecer, row domainEventRow) (sql.Result, error) {
 	var workspace any = row.WorkspaceID
 	if row.WorkspaceID == "" && row.WorkspaceKey != "" {
@@ -70,11 +72,15 @@ func insertDomainEvent(ctx context.Context, db domainEventExecer, row domainEven
 	}
 	var seq, actor any
 	if row.WorkspaceID != "" {
-		next, err := nextWorkspaceSeq(ctx, db, row.WorkspaceID)
-		if err != nil {
-			return nil, err
+		if tx, after := sequencesAfterCommit(db); after {
+			tx.sequencing = append(tx.sequencing, pendingEventSequence{workspaceID: row.WorkspaceID, eventID: row.ID})
+		} else {
+			next, err := nextWorkspaceSeq(ctx, db, row.WorkspaceID)
+			if err != nil {
+				return nil, err
+			}
+			seq = next
 		}
-		seq = next
 		if user, ok := actorFromContext(ctx); ok {
 			actor = user.ID
 		}
@@ -138,6 +144,9 @@ type ChangePage struct {
 func (s *SQLiteStore) WorkspaceChanges(ctx context.Context, workspaceID string, since int64, limit int) (ChangePage, error) {
 	if limit <= 0 {
 		limit = 200
+	}
+	if err := s.rescueStaleSequencing(ctx, workspaceID); err != nil {
+		return ChangePage{}, err
 	}
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {

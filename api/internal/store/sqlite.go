@@ -400,6 +400,12 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		{version: 16, name: "large event and identity values", apply: s.widenLargeValueColumns},
 		{version: 17, name: "wider issue attribute fields", apply: s.widenKeyColumns},
 		{version: 18, name: "agent run tool calls, states and activities", apply: s.createAgentRunStateSchema},
+		{version: 19, name: "change log numbering after commit and cache revisions", apply: func(ctx context.Context) error {
+			if err := s.createEventSequencingSchema(ctx); err != nil {
+				return err
+			}
+			return s.createCacheRevisionSchema(ctx)
+		}},
 		// Versions from 1000 up are data migrations (runDataMigrations),
 		// which run after the workspaces are loaded.
 	}

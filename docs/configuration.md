@@ -81,9 +81,12 @@ Flow keeps history it no longer serves out of the database, or bounded:
 | `FLOW_SEARCH_INDEX_MAX_CHARS` | `20000` | Characters of each issue and document indexed for full-text search. Text past the limit is still stored and shown but is not found by search. `0` indexes everything. |
 
 - **Domain events and the change log.** Every persisted change gets a
-  per-workspace cursor (`seq`), allocated in the same transaction as the change
-  from a counter row, so cursors are gap-free, ordered by commit and survive
-  restarts; multi-node deployments share the counter through the database.
+  per-workspace cursor (`seq`) from a counter row in the database, so cursors
+  are gap-free, ordered by commit and survive restarts, and multi-node
+  deployments share them. On MySQL and PostgreSQL a change is numbered right
+  after it commits, before the write's response and realtime push (concurrent
+  writers then do not wait on the counter for each other's whole
+  transactions); a reader that has seen a cursor never later finds a lower one.
   `GET /api/realtime/changes?since=<cursor>&limit=N` returns the changes after a
   cursor (`events`, `next`, `head`, `hasMore`), filtered and projected for the
   caller exactly like the SSE stream. `resyncRequired: true` means the cursor is

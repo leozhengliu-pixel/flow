@@ -34,13 +34,16 @@ func (s *SQLiteStore) ChatDomainEventPage(ctx context.Context, workspace string,
 	if limit < 1 || limit > 500 {
 		limit = 200
 	}
+	var workspaceID string
+	// After the read: events whose writer failed to number them are
+	// numbered for a later tick (event_sequencer.go).
+	defer func() { _ = s.rescueStaleSequencing(ctx, workspaceID) }()
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
 	var since, head, pruned int64
-	var workspaceID string
 	err = tx.QueryRowContext(ctx, `SELECT c.seq,COALESCE(e.head,0),COALESCE(e.pruned,0),w.workspace_id FROM chat_domain_cursors c JOIN workspace_states w ON w.workspace_key=c.workspace_key LEFT JOIN workspace_event_seq e ON e.workspace_id=w.workspace_id WHERE c.workspace_key=?`, workspace).Scan(&since, &head, &pruned, &workspaceID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
