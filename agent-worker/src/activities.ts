@@ -6,8 +6,11 @@
 import type { ModelCallRecord } from './models.js'
 
 export type Elicitation =
-  | { kind: 'select'; callId: string; body: string; options: { label: string; value: string }[]; allowFreeText: boolean }
-  | { kind: 'approval'; approval: 'connector'; callIds: string[]; body: string; options: { label: string; value: string }[] }
+  | { kind: 'select'; callId: string; arguments?: string; body: string; options: { label: string; value: string }[]; allowFreeText: boolean }
+  | { kind: 'approval'; approval: 'connector'; callIds: string[]; calls?: HeldCall[]; body: string; options: { label: string; value: string }[] }
+
+/** A call held for the person's approval. */
+export type HeldCall = { callId: string; name: string; arguments: string }
 
 /**
  * A question a connector asks the person in the middle of a call (MCP elicitation). Flow holds it while the call
@@ -39,7 +42,8 @@ export type FlowActivity =
   /** ask_user's question while the model writes it: a running question part under the call id the finished
    *  elicitation (status pending, with options) replaces. */
   | { type: 'question.delta'; at: number; activityId: string; body: string; status: 'running'; ephemeral: true }
-  | { type: 'response'; at: number; body: string; usage: TurnUsage }
+  /** `canceled`: the run was stopped (the body is the worker's "Stopped." note, not an answer). */
+  | { type: 'response'; at: number; body: string; usage: TurnUsage; canceled?: boolean }
   | { type: 'error'; at: number; body: string; usage?: TurnUsage }
 
 export type TurnUsage = {

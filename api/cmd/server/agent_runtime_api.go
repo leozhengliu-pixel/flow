@@ -45,7 +45,8 @@ const (
 )
 
 // agentRuntimeWorker reports whether built-in agent runs are meant to execute on the worker runtime
-// (FLOW_AGENT_RUNTIME=worker). Nothing enqueues runs yet: the in-process agent still runs every surface.
+// (FLOW_AGENT_RUNTIME=worker). Chat replies are queued for it (agent_worker_chat.go); threads, delegation and loops
+// still run in-process.
 func (s *server) agentRuntimeWorker() bool {
 	return s.agent.Runtime == appconfig.AgentRuntimeWorker
 }
@@ -284,10 +285,20 @@ func (s *server) completeAgentRun(w http.ResponseWriter, r *http.Request, caller
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	chat, isChat := workerChatInfo(run)
+	if isChat && slices.Contains([]string{store.AgentRunDone, store.AgentRunFailed, store.AgentRunCanceled, store.AgentRunAwaiting, store.AgentRunInterrupted}, input.Status) {
+		// The reply is saved in its final form before the run ends (a reply the worker did not finish).
+		s.settleWorkerChatRun(r.Context(), run, chat, input.Status, input.Error)
+	}
 	run, err := s.store.FinishAgentRun(r.Context(), run.ID, caller.worker, store.AgentRunResult{Status: input.Status, Error: input.Error, Usage: input.Usage}, time.Now())
 	if err == nil {
 		agentRunElicitationLogs.Delete(run.ID)
 		forgetAgentRunLedgerLock(run.ID)
+		workerChatBudgetLocks.Delete(run.ID)
+		if isChat && run.Status == store.AgentRunAwaiting {
+			// Decisions given before the run suspended resume it now.
+			s.resumeWorkerChat(r.Context(), run, chat)
+		}
 	}
 	if err == nil && (input.Status == "done" || input.Status == "failed") {
 		// A finished run that should have entered Coding and did not is moved into it (or reports the blocker).
@@ -315,10 +326,22 @@ func (s *server) createAgentRunToken(w http.ResponseWriter, r *http.Request, _ a
 	writeJSON(w, http.StatusCreated, map[string]any{"token": token, "expiresAt": expires.UnixMilli(), "mcpPath": "/mcp"})
 }
 
-// agentRunPromptMessage is one message of the conversation a run starts from.
+// agentRunPromptMessage is one message of the conversation a run starts from. A chat run's conversation also
+// carries the latest replies' tool calls (assistant) and their results (role tool), as the in-process reply sends
+// them to the model.
 type agentRunPromptMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string                   `json:"role"`
+	Content    string                   `json:"content"`
+	ToolCalls  []agentRunPromptToolCall `json:"toolCalls,omitempty"`
+	ToolCallID string                   `json:"toolCallId,omitempty"`
+	IsError    bool                     `json:"isError,omitempty"`
+}
+
+// agentRunPromptToolCall is a tool call of an earlier reply (arguments as JSON text).
+type agentRunPromptToolCall struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
 }
 
 // agentRunPromptContext is the prompt context Flow renders for a run, as the in-process agent builds it.
@@ -366,6 +389,17 @@ func (s *server) agentRunPayload(w http.ResponseWriter, r *http.Request, _ agent
 	} else if !store.IsAgentTaskMissing(err) {
 		writeError(w, http.StatusInternalServerError, "the run's session could not be read")
 		return
+	} else if info, ok := workerChatInfo(run); ok {
+		// A chat reply: the prompt was rendered when the message was sent, in the owner's request
+		// (agent_worker_chat.go); a resume continues from the suspended state instead.
+		response["chat"] = info
+		if raw, found, err := s.store.AgentRunKey(r.Context(), run.ID, workerChatContextKey); err == nil && found {
+			var prompt agentRunPromptContext
+			if json.Unmarshal(raw, &prompt) == nil {
+				prompt.System += agentRunConnectorNote(grant, discoveryErr)
+				response["context"] = prompt
+			}
+		}
 	}
 	writeJSON(w, http.StatusOK, response)
 }
@@ -490,6 +524,11 @@ func (s *server) agentRunReferencedIssues(ctx context.Context, actor mcpActor, i
 var agentRunActivityTypes = []string{"thought", "action", "output", "response", "error", "elicitation"}
 
 func (s *server) postAgentRunActivity(w http.ResponseWriter, r *http.Request, _ agentRuntimeCaller, run store.AgentRun) {
+	if info, ok := workerChatInfo(run); ok {
+		// A chat run writes its reply in the conversation (agent_worker_chat.go).
+		s.postWorkerChatActivity(w, r, run, info)
+		return
+	}
 	var input struct {
 		// ActivityID is the worker's id for the activity: posting it again returns the first result.
 		ActivityID     string                `json:"activityId"`
@@ -676,7 +715,14 @@ func (s *server) reconcileAgentRuns(ctx context.Context, now time.Time) (requeue
 		}
 		return len(retried), len(stopped)
 	}
+	for _, run := range retried {
+		// A chat reply starts over with the new attempt.
+		s.recoverWorkerChatRun(ctx, run, true)
+	}
 	for _, run := range stopped {
+		if s.recoverWorkerChatRun(ctx, run, false) {
+			continue
+		}
 		task, err := s.store.AgentTask(ctx, run.WorkspaceKey, run.SessionID)
 		if err != nil || task.Status == "complete" || task.Status == "error" || task.Status == "canceled" {
 			continue

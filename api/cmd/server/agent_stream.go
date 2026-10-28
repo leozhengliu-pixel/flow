@@ -99,6 +99,15 @@ func (s *server) resolveAgentApproval(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"approvalId": approvalID, "decision": decision})
 		return
 	}
+	// A call a reply on the agent worker holds (agent_worker_chat.go): the decision resumes the run.
+	if handled, err := s.answerWorkerChatApproval(r, *session, approvalID, decision); handled {
+		if err != nil {
+			writeError(w, http.StatusNotFound, "agent approval not found")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"approvalId": approvalID, "decision": decision})
+		return
+	}
 	// The reply may be running on another server: its saved copy shows the approval waiting (agent_live_answer.go).
 	if _, waiting := s.storedAgentLivePart(r, *session, approvalID); waiting && s.coordinator != nil {
 		if s.forwardAgentAnswer(r, agentForwardedAnswer{Kind: "approval", ID: approvalID, SessionID: session.ID, UserID: data.Viewer.ID, Decision: decision}) {
@@ -273,6 +282,10 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	if err != nil {
 		return domain.AgentSession{}, err
 	}
+	if s.agentChatOnWorker(*session) {
+		// FLOW_AGENT_RUNTIME=worker: the reply runs on the agent worker and is saved here (agent_worker_chat.go).
+		return s.runAgentSessionOnWorker(r, data, session, writer)
+	}
 	// Like the reference app, a reply keeps going when the page that asked goes away
 	// (navigating, reloading, closing the tab) and is saved when it finishes;
 	// only an explicit stop (POST …/stop) ends it early.
@@ -284,32 +297,17 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	if writer != nil {
 		writer.lenient = true
 	}
-	contextData, err := s.agentAvailableIssueContext(r, session.IssueIDs)
+	prompt, err := s.buildAgentChatPrompt(r, &data, *session)
 	if err != nil {
 		return domain.AgentSession{}, err
 	}
-	data.Issues = contextData.Issues
-	issues := selectedAgentIssues(data.Issues, session.IssueIDs)
-	skills := selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)
-	initiatives := selectedAgentInitiatives(data.Initiatives, session.InitiativeIDs)
-	mentions := agentMentionPrompt(selectedAgentProjects(data.Projects, session.ProjectIDs), selectedAgentDocuments(data.Documents, session.DocumentIDs), selectedAgentUsers(data.Users, session.UserIDs)) + agentInitiativeTitleContext(initiatives)
-	webNote := ""
-	if agentWebAccess(data.WorkspaceSettings) {
+	mentions, messages := prompt.mentions, prompt.messages
+	if prompt.web {
 		r = r.WithContext(withAgentWebTools(r.Context()))
-		webNote = s.agentWebNote()
 	}
-	// Resources the request names in plain text are loaded up front, so a simple question needs one model call.
-	refs := findAgentMessageReferences(data, agentLatestUserMessage(*session))
-	contextIssues := append(slices.Clone(issues), s.agentReferencedIssues(r, refs.IssueIdentifiers, issues)...)
-	contextMentions := agentMentionPrompt(mergeAgentProjects(selectedAgentProjects(data.Projects, session.ProjectIDs), refs.Projects), mergeAgentDocuments(selectedAgentDocuments(data.Documents, session.DocumentIDs), refs.Documents), selectedAgentUsers(data.Users, session.UserIDs))
 	// Chat offers a tool subset picked for this request (see agent_chat_tools.go) and shares a prompt cache per user.
 	r = r.WithContext(withAgentChatToolset(r.Context(), newAgentChatToolset(*session)))
 	r = r.WithContext(context.WithValue(r.Context(), agentPromptCacheKey{}, agentChatCacheKey(workspaceKey(r), data.Viewer.ID)))
-	contextMentions += agentInitiativePrompt(data, initiatives)
-	contextTeams := append(agentProjectTeamIDs(mergeAgentProjects(selectedAgentProjects(data.Projects, session.ProjectIDs), refs.Projects)), agentInitiativeTeamIDs(initiatives)...)
-	system := buildWorkspaceAgentPrompt(data, contextIssues, skills, agentChatToolRule, s.agentWriteAccessNote()+webNote, contextMentions+loopBuilderPrompt(data, *session), contextTeams...)
-	// Replayed replies need their offloaded text and tool results.
-	messages := agentProviderHistory(s.withAgentBodies(r, *session), system, agentIssueTitles(contextIssues))
 	// What the user has seen so far; this run's own assistant text does not ground a write (see agentUngroundedIssueTarget).
 	historyEnd := len(messages)
 	s.addLoopAttachmentInputs(r.Context(), data, *session, messages)
@@ -1032,6 +1030,45 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	return s.persistAgentCompletion(r, *session, domain.AgentMessage{ID: messageID, Role: "assistant", Content: strings.TrimSpace(finalText), Parts: parts, DurationMS: time.Since(started).Milliseconds(), CreatedAt: time.Now().UTC()})
 }
 
+// agentChatPrompt is what a chat reply starts from: the system prompt and the conversation so far (with the latest
+// replies' tool calls and results), as both runtimes send it to the model.
+type agentChatPrompt struct {
+	system   string
+	messages []agentProviderMessage
+	// mentions describes the session's resources for the generated title.
+	mentions string
+	// web is set when the workspace gives the agent web access.
+	web bool
+}
+
+// buildAgentChatPrompt renders a chat session's prompt for its next reply. data gets the issues the reply may see.
+func (s *server) buildAgentChatPrompt(r *http.Request, data *domain.Bootstrap, session domain.AgentSession) (agentChatPrompt, error) {
+	contextData, err := s.agentAvailableIssueContext(r, session.IssueIDs)
+	if err != nil {
+		return agentChatPrompt{}, err
+	}
+	data.Issues = contextData.Issues
+	issues := selectedAgentIssues(data.Issues, session.IssueIDs)
+	skills := selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)
+	initiatives := selectedAgentInitiatives(data.Initiatives, session.InitiativeIDs)
+	prompt := agentChatPrompt{web: agentWebAccess(data.WorkspaceSettings)}
+	prompt.mentions = agentMentionPrompt(selectedAgentProjects(data.Projects, session.ProjectIDs), selectedAgentDocuments(data.Documents, session.DocumentIDs), selectedAgentUsers(data.Users, session.UserIDs)) + agentInitiativeTitleContext(initiatives)
+	webNote := ""
+	if prompt.web {
+		webNote = s.agentWebNote()
+	}
+	// Resources the request names in plain text are loaded up front, so a simple question needs one model call.
+	refs := findAgentMessageReferences(*data, agentLatestUserMessage(session))
+	contextIssues := append(slices.Clone(issues), s.agentReferencedIssues(r, refs.IssueIdentifiers, issues)...)
+	contextMentions := agentMentionPrompt(mergeAgentProjects(selectedAgentProjects(data.Projects, session.ProjectIDs), refs.Projects), mergeAgentDocuments(selectedAgentDocuments(data.Documents, session.DocumentIDs), refs.Documents), selectedAgentUsers(data.Users, session.UserIDs))
+	contextMentions += agentInitiativePrompt(*data, initiatives)
+	contextTeams := append(agentProjectTeamIDs(mergeAgentProjects(selectedAgentProjects(data.Projects, session.ProjectIDs), refs.Projects)), agentInitiativeTeamIDs(initiatives)...)
+	prompt.system = buildWorkspaceAgentPrompt(*data, contextIssues, skills, agentChatToolRule, s.agentWriteAccessNote()+webNote, contextMentions+loopBuilderPrompt(*data, session), contextTeams...)
+	// Replayed replies need their offloaded text and tool results.
+	prompt.messages = agentProviderHistory(s.withAgentBodies(r, session), prompt.system, agentIssueTitles(contextIssues))
+	return prompt, nil
+}
+
 // agentChatCacheKey groups one user's chat requests in a workspace for provider prompt caching: they share the
 // static instructions and, mostly, the tool list.
 func agentChatCacheKey(workspace, userID string) string {
@@ -1555,7 +1592,16 @@ func (s *server) stopAgentSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	session, _ := ownedAgentSession(&data, id)
-	if !s.stopAgentRun(workspaceKey(r), session.ID) && slices.ContainsFunc(session.Messages, func(message domain.AgentMessage) bool { return message.Status == agentMessageStreaming }) {
+	if s.stopAgentRun(workspaceKey(r), session.ID) {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if s.stopWorkerChat(r.Context(), *session, workspaceKey(r)) {
+		// The reply runs on the agent worker (agent_worker_chat.go).
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if slices.ContainsFunc(session.Messages, func(message domain.AgentMessage) bool { return message.Status == agentMessageStreaming }) {
 		// The reply may be running on another server.
 		s.forwardAgentAnswer(r, agentForwardedAnswer{Kind: "stop", SessionID: session.ID, UserID: data.Viewer.ID})
 	}
