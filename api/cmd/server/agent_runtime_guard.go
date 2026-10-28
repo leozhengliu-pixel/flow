@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"sync"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
@@ -29,11 +28,8 @@ import (
 // The worker enforces what Flow answers (it removes the tools, short-circuits the call, appends the nudge, posts
 // the reply); every rule and every text lives here, so both runtimes behave the same.
 
-// workerRunGuardKey is where a run's guard state is kept (agent_run_keys).
+// workerRunGuardKey is where a run's guard state is kept (agent_run_states, versioned: workerRunGuardOp).
 const workerRunGuardKey = "guard:state"
-
-// workerRunGuardLocks serializes the guard operations of one run in this process (parallel tool calls of a turn).
-var workerRunGuardLocks sync.Map
 
 // workerRunGuardState is a builtinRunGuard as stored between the worker's calls.
 type workerRunGuardState struct {
@@ -130,9 +126,6 @@ func (s *server) agentRunGuard(w http.ResponseWriter, r *http.Request, _ agentRu
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	lock, _ := workerRunGuardLocks.LoadOrStore(run.ID, &sync.Mutex{})
-	lock.(*sync.Mutex).Lock()
-	defer lock.(*sync.Mutex).Unlock()
 	response, err := s.workerRunGuardOp(r, run, input)
 	switch {
 	case errors.Is(err, store.ErrAgentRunInput):
@@ -144,31 +137,30 @@ func (s *server) agentRunGuard(w http.ResponseWriter, r *http.Request, _ agentRu
 	}
 }
 
+// workerRunGuardStateOf is a run's stored guard; found is false when the run never started one.
+func (s *server) workerRunGuardStateOf(ctx context.Context, runID string) (state workerRunGuardState, found bool) {
+	raw, _, found, err := s.agentRunStateOf(ctx, runID, workerRunGuardKey)
+	if err != nil || !found || json.Unmarshal(raw, &state) != nil {
+		return workerRunGuardState{}, false
+	}
+	return state, true
+}
+
+// workerRunGuardOp runs one guard operation. The guard is a versioned state (agent_run_states): the parallel
+// connector calls of a turn send their before and after at once, possibly to different API servers, so each
+// operation reads the stored guard, applies itself and stores the result only if nobody stored first, and applies
+// itself again on the newer guard otherwise. What an operation does besides changing the guard (a skipped call's
+// activity and ledger entry) is done once, after its guard was stored; the last word (finish), which may move the
+// run into Coding, runs once and merges its outcome onto a guard changed meanwhile.
 func (s *server) workerRunGuardOp(r *http.Request, run store.AgentRun, input workerRunGuardRequest) (workerRunGuardResponse, error) {
 	ctx := r.Context()
 	disabled := workerRunGuardResponse{DecisionRound: -1}
-	var state workerRunGuardState
 	if info, chat := workerChatInfo(run); chat {
 		// A chat reply's guard: its tool budget and outcome check (agent_worker_chat.go).
-		if input.Op != "start" {
-			if raw, found, err := s.store.AgentRunKey(ctx, run.ID, workerRunGuardKey); err == nil && found {
-				_ = json.Unmarshal(raw, &state)
-			}
-		}
-		response, err := s.workerChatGuardOp(ctx, run, info, &state, input)
-		if err != nil {
-			return disabled, err
-		}
-		raw, err := json.Marshal(state)
-		if err == nil {
-			err = s.store.ReplaceAgentRunKey(ctx, run, workerRunGuardKey, raw)
-		}
-		if input.Op == "finish" && state.Finished {
-			workerRunGuardLocks.Delete(run.ID)
-		}
-		return response, err
+		return s.workerChatGuardOp(ctx, run, info, input)
 	}
-	if input.Op == "start" {
+	switch input.Op {
+	case "start":
 		task, err := s.store.AgentTask(ctx, run.WorkspaceKey, run.SessionID)
 		if err != nil {
 			return disabled, nil // a chat run: no thread, no guard
@@ -183,39 +175,85 @@ func (s *server) workerRunGuardOp(r *http.Request, run store.AgentRun, input wor
 			environments = append(environments, domain.CodingEnvironment{ID: environment.ID, Name: environment.Name, Repository: environment.Repository})
 		}
 		coding.Environments = environments
-		state = workerRunGuardState{Coding: coding, DecisionRound: -1, HadSession: task.CodingSessionID != ""}
+		state := workerRunGuardState{Coding: coding, DecisionRound: -1, HadSession: task.CodingSessionID != ""}
 		if len(data.Issues) == 1 {
 			state.IssueTitle = data.Issues[0].Title
 		}
-	} else {
-		raw, found, err := s.store.AgentRunKey(ctx, run.ID, workerRunGuardKey)
+		raw, err := json.Marshal(state)
 		if err != nil {
 			return disabled, err
 		}
+		if err := s.store.ReplaceAgentRunState(ctx, run, workerRunGuardKey, raw); err != nil {
+			return disabled, err
+		}
+		g := state.guard()
+		return workerRunGuardResponse{Enabled: true, CodingDue: g.codingDue(), DecisionRound: state.DecisionRound}, nil
+	case "finish":
+		return s.workerRunGuardFinishOp(r, run, input)
+	case "turn", "before", "after", "coding":
+	default:
+		return disabled, store.ErrAgentRunInput
+	}
+	// What the step reads besides the guard, read once.
+	failed := false
+	if input.Op == "after" {
+		// A failed call or one that found nothing is a call without progress. A call that ran through /mcp failed
+		// when Flow saw an error or an isError result (agent_runtime_connectors.go), whatever its text says.
+		failed = input.Failed || s.agentRunConnectorFailed(ctx, run, input.Tool, input.Arguments)
+	}
+	var task domain.AgentTask
+	if input.Op == "coding" {
+		var err error
+		if task, err = s.store.AgentTask(ctx, run.WorkspaceKey, run.SessionID); err != nil {
+			return disabled, err
+		}
+	}
+	call := domain.AgentToolCall{Name: input.Tool, Arguments: json.RawMessage(input.Arguments)}
+	for attempt := range agentRunStateAttempts {
+		raw, version, found, err := s.agentRunStateOf(ctx, run.ID, workerRunGuardKey)
+		if err != nil {
+			return disabled, err
+		}
+		var state workerRunGuardState
 		if !found || json.Unmarshal(raw, &state) != nil {
 			return disabled, nil // the run never started its guard (a chat run)
 		}
-	}
-	g := state.guard()
-	response := workerRunGuardResponse{Enabled: true}
-	call := domain.AgentToolCall{Name: input.Tool, Arguments: json.RawMessage(input.Arguments)}
-	switch input.Op {
-	case "start":
-	case "turn":
-		maxTurns := input.MaxTurns
-		if maxTurns <= 0 {
-			maxTurns = s.agentMaxToolTurns()
-		}
-		if input.Connectors && g.mustDecideWithin(input.Round, maxTurns) {
-			response.MustDecide = true
-			if !g.decided {
-				g.decided, state.DecisionRound = true, input.Round
-				response.Nudge = g.decisionNudge()
+		g := state.guard()
+		response := workerRunGuardResponse{Enabled: true}
+		switch input.Op {
+		case "turn":
+			maxTurns := input.MaxTurns
+			if maxTurns <= 0 {
+				maxTurns = s.agentMaxToolTurns()
 			}
+			if input.Connectors && g.mustDecideWithin(input.Round, maxTurns) {
+				response.MustDecide = true
+				if !g.decided {
+					g.decided, state.DecisionRound = true, input.Round
+					response.Nudge = g.decisionNudge()
+				}
+			}
+		case "before":
+			response.Content, response.Failed, response.Handled = g.before(call)
+		case "after":
+			g.after(call, input.Content, failed || connectorFoundNothing([]byte(input.Content)))
+		case "coding":
+			response.Content = s.recordCodingStart(ctx, task.WorkspaceKey, g, input.Content, input.Failed)
 		}
-	case "before":
-		response.Content, response.Failed, response.Handled = g.before(call)
-		if response.Handled {
+		state.update(g)
+		next, err := json.Marshal(state)
+		if err != nil {
+			return disabled, err
+		}
+		swapped, err := s.store.SwapAgentRunState(ctx, run, workerRunGuardKey, version, next)
+		if err != nil {
+			return disabled, err
+		}
+		if !swapped {
+			agentRunStateBackoff(attempt)
+			continue
+		}
+		if input.Op == "before" && response.Handled {
 			// Not run: logged so the thread shows it was skipped, as for an in-process run.
 			if tool, ok := s.agentRunConnectorTool(ctx, run, input.Tool); ok {
 				metadata := connectorActionMetadata(tool, call)
@@ -226,45 +264,73 @@ func (s *server) workerRunGuardOp(r *http.Request, run store.AgentRun, input wor
 				s.recordAgentRunConnectorWrite(ctx, run, tool, args, agentWriteNotRun, response.Content)
 			}
 		}
-	case "after":
-		// A failed call or one that found nothing is a call without progress. A call that ran through /mcp failed
-		// when Flow saw an error or an isError result (agent_runtime_connectors.go), whatever its text says.
-		failed := input.Failed || s.agentRunConnectorFailed(ctx, run, input.Tool, input.Arguments)
-		g.after(call, input.Content, failed || connectorFoundNothing([]byte(input.Content)))
-	case "coding":
-		task, err := s.store.AgentTask(ctx, run.WorkspaceKey, run.SessionID)
-		if err != nil {
-			return disabled, err
-		}
-		response.Content = s.recordCodingStart(ctx, task.WorkspaceKey, g, input.Content, input.Failed)
-	case "finish":
-		reply, transferred, failure, err := s.workerRunFinish(r, run, &state, g, input)
-		if err != nil {
-			return disabled, err
-		}
-		if reply == agentUngroundedOutcomeNudge {
-			// Not the last word yet: the model is told once that nothing ran.
-			response.Nudge, state.OutcomeNudged = reply, true
-			break
-		}
-		response.Reply, response.Transferred, response.Error = reply, transferred, failure
-		state.Finished = true
-	default:
-		return disabled, store.ErrAgentRunInput
+		response.CodingDue, response.DecisionRound = g.codingDue(), state.DecisionRound
+		return response, nil
 	}
-	state.update(g)
-	raw, err := json.Marshal(state)
+	return disabled, errAgentRunStateBusy
+}
+
+// workerRunGuardFinishOp is the run's last word (workerRunFinish), run once on the stored guard. The outcome (the
+// run finished, was nudged, or entered Coding) is then stored; when another server changed the guard meanwhile,
+// the outcome is merged onto the newer guard, whose call counts and results it keeps.
+func (s *server) workerRunGuardFinishOp(r *http.Request, run store.AgentRun, input workerRunGuardRequest) (workerRunGuardResponse, error) {
+	ctx := r.Context()
+	disabled := workerRunGuardResponse{DecisionRound: -1}
+	raw, version, found, err := s.agentRunStateOf(ctx, run.ID, workerRunGuardKey)
 	if err != nil {
 		return disabled, err
 	}
-	if err := s.store.ReplaceAgentRunKey(ctx, run, workerRunGuardKey, raw); err != nil {
+	var state workerRunGuardState
+	if !found || json.Unmarshal(raw, &state) != nil {
+		return disabled, nil
+	}
+	g := state.guard()
+	response := workerRunGuardResponse{Enabled: true}
+	reply, transferred, failure, err := s.workerRunFinish(r, run, &state, g, input)
+	if err != nil {
 		return disabled, err
 	}
-	if input.Op == "finish" && state.Finished {
-		workerRunGuardLocks.Delete(run.ID)
+	if reply == agentUngroundedOutcomeNudge {
+		// Not the last word yet: the model is told once that nothing ran.
+		response.Nudge, state.OutcomeNudged = reply, true
+	} else {
+		response.Reply, response.Transferred, response.Error = reply, transferred, failure
+		state.Finished = true
 	}
-	response.CodingDue, response.DecisionRound = g.codingDue(), state.DecisionRound
-	return response, nil
+	state.update(g)
+	outcome := state
+	for attempt := range agentRunStateAttempts {
+		next, err := json.Marshal(state)
+		if err != nil {
+			return disabled, err
+		}
+		swapped, err := s.store.SwapAgentRunState(ctx, run, workerRunGuardKey, version, next)
+		if err != nil {
+			return disabled, err
+		}
+		if swapped {
+			g = state.guard()
+			response.CodingDue, response.DecisionRound = g.codingDue(), state.DecisionRound
+			return response, nil
+		}
+		agentRunStateBackoff(attempt)
+		raw, version, _, err = s.agentRunStateOf(ctx, run.ID, workerRunGuardKey)
+		if err != nil {
+			return disabled, err
+		}
+		var latest workerRunGuardState
+		if json.Unmarshal(raw, &latest) != nil {
+			return disabled, errAgentRunStateBusy
+		}
+		latest.Finished = latest.Finished || outcome.Finished
+		latest.OutcomeNudged = latest.OutcomeNudged || outcome.OutcomeNudged
+		latest.Decided = latest.Decided || outcome.Decided
+		if outcome.Started != nil {
+			latest.Started = outcome.Started
+		}
+		state = latest
+	}
+	return disabled, errAgentRunStateBusy
 }
 
 // workerRunFinish is the last word of a worker run, as executeBuiltinApplication ends a run: a development run
@@ -345,10 +411,6 @@ func (s *server) workerRunGuardFinished(ctx context.Context, run store.AgentRun)
 	if run.ID == "" {
 		return false
 	}
-	raw, found, err := s.store.AgentRunKey(ctx, run.ID, workerRunGuardKey)
-	if err != nil || !found {
-		return false
-	}
-	var state workerRunGuardState
-	return json.Unmarshal(raw, &state) == nil && (state.Finished || state.Started != nil)
+	state, found := s.workerRunGuardStateOf(ctx, run.ID)
+	return found && (state.Finished || state.Started != nil)
 }

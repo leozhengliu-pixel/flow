@@ -151,7 +151,7 @@ const agentRunNoticesKey = "run:notices"
 
 // agentRunNotices are the notices recorded on a run so far.
 func (s *server) agentRunNotices(ctx context.Context, runID string) []string {
-	raw, found, err := s.store.AgentRunKey(ctx, runID, agentRunNoticesKey)
+	raw, _, found, err := s.agentRunStateOf(ctx, runID, agentRunNoticesKey)
 	if err != nil || !found {
 		return nil
 	}
@@ -161,23 +161,30 @@ func (s *server) agentRunNotices(ctx context.Context, runID string) []string {
 }
 
 // addAgentRunNotices records notices on a worker run as the in-process loop run records them (loopRunRecorder.addNotice):
-// on the run (its payload lists them) and, for a loop run whose session is a running loop run record, on that
-// record with a "notice" event, so the run page shows them.
+// on the run (its payload lists them; a versioned state, so two servers discovering at once both keep theirs) and,
+// for a loop run whose session is a running loop run record, on that record with a "notice" event, so the run page
+// shows them.
 func (s *server) addAgentRunNotices(ctx context.Context, run store.AgentRun, notices []string) {
 	ctx = context.WithoutCancel(ctx)
-	current := s.agentRunNotices(ctx, run.ID)
-	added := []string{}
-	for _, notice := range notices {
-		if !slices.Contains(current, notice) && !slices.Contains(added, notice) {
-			added = append(added, notice)
+	var added []string
+	err := s.updateAgentRunState(ctx, run, agentRunNoticesKey, func(raw []byte, found bool) ([]byte, error) {
+		var current []string
+		if found {
+			_ = json.Unmarshal(raw, &current)
 		}
+		added = []string{}
+		for _, notice := range notices {
+			if !slices.Contains(current, notice) && !slices.Contains(added, notice) {
+				added = append(added, notice)
+			}
+		}
+		return json.Marshal(append(current, added...))
+	})
+	if err != nil {
+		log.Printf("agent run %s: notices not recorded: %v", run.ID, err)
 	}
 	if len(added) == 0 {
 		return
-	}
-	raw, _ := json.Marshal(append(current, added...))
-	if err := s.store.ReplaceAgentRunKey(ctx, run, agentRunNoticesKey, raw); err != nil {
-		log.Printf("agent run %s: notices not recorded: %v", run.ID, err)
 	}
 	for _, notice := range added {
 		log.Printf("agent run %s: %s", run.ID, notice)
@@ -283,6 +290,8 @@ func (s *server) callMCPRunConnector(w http.ResponseWriter, r *http.Request, id 
 			writeJSON(w, http.StatusOK, mcpRPCResponse{JSONRPC: "2.0", ID: id, Result: json.RawMessage(cached)})
 			return
 		}
+		// The call's ledger entry is kept under its key: a retry replaces it (agent_run_outcomes.go).
+		r = r.WithContext(withAgentRunCallKey(r.Context(), key))
 	}
 	arguments, err := json.Marshal(args)
 	if err != nil {

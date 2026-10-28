@@ -12,6 +12,7 @@ import { ScriptedModel, assistantMessage, functionCall } from '@openai/agents/te
 import { ChatActivityPoster, chatConversation, type ChatActivity } from '../src/chat-run.js'
 import type { WorkerConfig } from '../src/config.js'
 import type { GuardRequest, GuardResponse } from '../src/run-guard.js'
+import { RuntimeApiError } from '../src/runtime-client.js'
 import { MemorySession, type SuspendedStore } from '../src/session-store.js'
 import { FlowAgentWorker } from '../src/worker.js'
 
@@ -54,14 +55,36 @@ test('the poster coalesces text, keeps order, and ends a stopped run as stopped'
   poster.push({ type: 'response', at: 0, body: 'Stopped.', usage: {} as never, canceled: true })
   await poster.drain()
   assert.deepEqual(posted, [
-    { type: 'thought', body: 'Working…' },
-    { type: 'text.delta', body: 'Let me look.' },
-    { type: 'action', activityId: 'c1:call', callId: 'c1', content: { action: 'list_issues', parameter: { limit: 5 } } },
-    { type: 'action.result', activityId: 'c1:result', callId: 'c1', content: { action: 'list_issues', result: '{}' }, isError: false, change: { runId: 'r', seq: 1 } },
-    { type: 'question.delta', callId: 'ask', body: 'Which team?' },
-    { type: 'error', activityId: 'end', body: 'Generation stopped' },
+    { seq: 1, type: 'thought', body: 'Working…' },
+    { seq: 2, type: 'text.delta', body: 'Let me look.' },
+    { seq: 3, type: 'action', activityId: 'c1:call', callId: 'c1', content: { action: 'list_issues', parameter: { limit: 5 } } },
+    { seq: 4, type: 'action.result', activityId: 'c1:result', callId: 'c1', content: { action: 'list_issues', result: '{}' }, isError: false, change: { runId: 'r', seq: 1 } },
+    { seq: 5, type: 'question.delta', callId: 'ask', body: 'Which team?' },
+    { seq: 6, type: 'error', activityId: 'end', body: 'Generation stopped' },
   ])
   assert.equal(settled, 1, 'a reply settled on Flow before the run ended stops the run once')
+})
+
+test('a post that fails in transit or with a server error is sent again with its number; a refusal is not', async () => {
+  const attempts: ChatActivity[] = []
+  const errors: unknown[] = []
+  const failures = new Map<number, unknown[]>([
+    [1, [new TypeError('fetch failed'), new RuntimeApiError(503, 'unavailable')]],
+    [2, [new RuntimeApiError(409, 'This worker does not hold the run')]],
+  ])
+  const poster = new ChatActivityPoster(async activity => {
+    attempts.push(activity)
+    const failure = failures.get(activity.seq!)?.shift()
+    if (failure) throw failure
+    return {}
+  }, { retryDelaysMs: [1, 1, 1], onError: error => errors.push(error) })
+  poster.push({ type: 'action', at: 0, activityId: 'c1', action: 'list_issues', parameter: {} })
+  poster.push({ type: 'action.result', at: 0, activityId: 'c1', action: 'list_issues', result: '{}', isError: false })
+  poster.push({ type: 'response', at: 0, body: 'Done.', usage: {} as never })
+  await poster.drain()
+  assert.deepEqual(attempts.map(activity => `${activity.seq}:${activity.type}`), ['1:action', '1:action', '1:action', '2:action.result', '3:response'])
+  assert.equal(errors.length, 1, 'the refused post is reported, and the next one still goes out')
+  assert.equal((errors[0] as RuntimeApiError).status, 409)
 })
 
 test('a chat run starts from the conversation, suspends held calls in Flow and resumes with per-call decisions', async () => {

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -203,10 +202,9 @@ func TestWorkerRunResponseActivityIsChecked(t *testing.T) {
 	run, token, task := workerOutcomeRun(t, h, "Rename "+target.Identifier+" and NOPE-404 to Renamed")
 	callRunTool(t, h.handler, token, "save_issue", map[string]any{"id": target.Identifier, "title": "Renamed"}, nil)
 	callRunTool(t, h.handler, token, "save_issue", map[string]any{"id": "NOPE-404", "title": "Renamed"}, nil)
-	raw, _, _ := h.s.store.AgentRunKey(t.Context(), run.ID, agentRunLedgerKey)
-	var outcomes []agentWriteOutcome
-	if err := json.Unmarshal(raw, &outcomes); err != nil || len(outcomes) != 2 || outcomes[0].Status != agentWriteSucceeded || outcomes[1].Status != agentWriteFailed || outcomes[1].Target != "NOPE-404" {
-		t.Fatalf("the run's ledger: %+v %v", outcomes, err)
+	outcomes := h.s.agentRunLedger(t.Context(), run).outcomes
+	if len(outcomes) != 2 || outcomes[0].Status != agentWriteSucceeded || outcomes[1].Status != agentWriteFailed || outcomes[1].Target != "NOPE-404" {
+		t.Fatalf("the run's ledger: %+v", outcomes)
 	}
 	runtimeJSON[map[string]any](t, h.handler, runtimeCall{method: http.MethodPost, path: "/internal/agent-runtime/runs/" + run.ID + "/activities", worker: "w1", body: map[string]any{"type": "response", "body": "Both updates failed."}}, http.StatusOK)
 	bodies := workerResponses(t, h, task)

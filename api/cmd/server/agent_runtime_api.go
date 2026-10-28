@@ -293,8 +293,6 @@ func (s *server) completeAgentRun(w http.ResponseWriter, r *http.Request, caller
 	run, err := s.store.FinishAgentRun(r.Context(), run.ID, caller.worker, store.AgentRunResult{Status: input.Status, Error: input.Error, Usage: input.Usage}, time.Now())
 	if err == nil {
 		agentRunElicitationLogs.Delete(run.ID)
-		forgetAgentRunLedgerLock(run.ID)
-		workerChatBudgetLocks.Delete(run.ID)
 		if isChat && run.Status == store.AgentRunAwaiting {
 			// Decisions given before the run suspended resume it now.
 			s.resumeWorkerChat(r.Context(), run, chat)

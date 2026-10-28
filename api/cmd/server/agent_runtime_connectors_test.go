@@ -235,9 +235,7 @@ func TestWorkerRunConnectorCallRecordsActivityAndIsError(t *testing.T) {
 		t.Fatal("the delegated run has no guard")
 	}
 	noProgress := func() int {
-		raw, _, _ := f.s.store.AgentRunKey(t.Context(), run.ID, workerRunGuardKey)
-		var state workerRunGuardState
-		_ = json.Unmarshal(raw, &state)
+		state, _ := f.s.workerRunGuardStateOf(t.Context(), run.ID)
 		return state.NoProgress
 	}
 

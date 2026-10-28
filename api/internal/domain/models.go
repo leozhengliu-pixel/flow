@@ -176,9 +176,20 @@ type AgentMessage struct {
 	Status string `json:"status,omitempty"`
 	// UpdatedAt is when a streaming reply was last saved; the running server refreshes it while the reply waits.
 	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
+	// WorkerCursor is how far a streaming reply written by an agent worker run has applied the run's activities
+	// (set only while it streams).
+	WorkerCursor *AgentWorkerCursor `json:"workerCursor,omitempty"`
 	// Offloaded names fields stored outside the workspace record and not
 	// loaded yet (see OffloadedContent).
 	Offloaded OffloadedContent `json:"_offloaded,omitempty"`
+}
+
+// AgentWorkerCursor names the last activity of an agent worker run a reply holds: the run, its attempt and the
+// activity's sequence number.
+type AgentWorkerCursor struct {
+	Run     string `json:"run"`
+	Attempt int    `json:"attempt"`
+	Seq     int64  `json:"seq"`
 }
 
 // AgentMessageAttachment is a file sent with an agent chat message. URL is empty for a file sent by name only (a type
