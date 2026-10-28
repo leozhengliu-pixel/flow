@@ -502,7 +502,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			parts = append(parts, domain.AgentMessagePart{ID: fmt.Sprintf("%s_tool_%d", messageID, index), Type: "toolCall", Status: call.Status, ToolCall: cloneToolCall(&call)})
 		}
 		messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: message, IsError: true}})
-		ledger.record(call, agentWriteNotRun, message)
+		ledger.record(r.Context(), call, agentWriteNotRun, message)
 		if writer != nil {
 			part := parts[index]
 			return send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part})
@@ -911,9 +911,9 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			}
 			budget.after(call, content, callErr != nil)
 			if callErr != nil {
-				ledger.record(call, agentWriteFailed, content)
+				ledger.record(r.Context(), call, agentWriteFailed, content)
 			} else {
-				ledger.record(call, agentWriteSucceeded, "")
+				ledger.record(r.Context(), call, agentWriteSucceeded, "")
 			}
 			messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: content, IsError: callErr != nil}})
 			executed = append(executed, call)
@@ -957,6 +957,22 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			finalText += fallback
 		}
 		parts = append(parts, domain.AgentMessagePart{ID: messageID + "_budget", Type: "event", Text: agentToolBudgetNotice(stopped, maxTurns, maxCalls, chinese), Status: "completed"})
+	}
+	// A sentence that says every change failed (or succeeded) against the tool results is rewritten into Flow's
+	// count of them; the streamed text is replaced.
+	if textIndex, ok := partIndex["text"]; ok && textIndex < len(parts) {
+		if corrected := ledger.correct(parts[textIndex].Text, chinese); corrected != parts[textIndex].Text {
+			finalText = ledger.correct(finalText, chinese)
+			builder := &strings.Builder{}
+			builder.WriteString(corrected)
+			partText["text"] = builder
+			parts[textIndex].Text = corrected
+			if writer != nil {
+				if err := send(agentStreamEvent{Type: "text.replaced", MessageID: messageID, Delta: corrected}); err != nil {
+					return domain.AgentSession{}, err
+				}
+			}
+		}
 	}
 	// When the writes did not all succeed, or the answer claims failures they did not have, the reply ends with
 	// Flow's own count of them, taken from the tool results.

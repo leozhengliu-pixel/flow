@@ -20,7 +20,9 @@ import {
  *  - a start_coding_session result (`coding`) is annotated with the delivery state;
  *  - the run's last word (`finish`): a reply without Coding, a forced-decision turn that kept searching (its calls
  *    are not run), or the turn limit — Flow starts Coding through the same tool path, or replaces a "done" claim
- *    with the session's real state.
+ *    with the session's real state; a reply that reports change outcomes the run's write calls did not produce is
+ *    sent back once (`nudge`), then replaced by Flow's statement, and Flow's count of the run's writes follows a
+ *    reply they did not all succeed for.
  *
  * Shared test vectors: api/cmd/server/testdata/worker_run_guard/*.json (Go replays the requests against Flow, the
  * worker test drives this loop and checks it sends exactly them).
@@ -172,6 +174,8 @@ export class RunGuard {
   round = 0
   /** Set when the forced-decision turn's calls were dropped: the run ends with finish('decision'). */
   decisionCut = false
+  /** Set once Flow sent the model back with the outcome nudge (it is sent at most once per run). */
+  outcomeNudged = false
   private view: GuardResponse = { enabled: false, codingDue: false, decisionRound: -1 }
   private queue: Promise<unknown> = Promise.resolve()
   private turnAsked = -1
@@ -258,12 +262,21 @@ export class RunGuard {
     return kept
   }
 
-  /** The run's last word: the reply to post (Flow's when it answers one), or the error the run ends with. */
-  async finish(phase: FinishPhase, text: string): Promise<{ reply: string; error?: string; transferred: boolean }> {
+  /**
+   * The run's last word: the reply to post (Flow's when it answers one), or the error the run ends with. When the
+   * reply reports change outcomes no write of the run produced (Flow keeps the run's write calls from /mcp,
+   * api/cmd/server/agent_run_outcomes.go), Flow answers once with `nudge` instead: the loop sends it to the model
+   * and asks again with the new answer.
+   */
+  async finish(phase: FinishPhase, text: string): Promise<{ reply: string; error?: string; transferred: boolean; nudge?: string }> {
     if (!this.enabled) return phase === 'turnLimit' ? { reply: '', error: undefined, transferred: false } : { reply: text, transferred: false }
     const answer = await this.call({ op: 'finish', phase, text }).catch(() => undefined)
     if (!answer) return { reply: text, transferred: false }
     if (answer.error) return { reply: '', error: answer.error, transferred: false }
+    if (phase === 'reply' && answer.nudge && !answer.reply && !this.outcomeNudged) {
+      this.outcomeNudged = true
+      return { reply: '', transferred: false, nudge: answer.nudge }
+    }
     return { reply: answer.reply || text, transferred: Boolean(answer.transferred) }
   }
 }

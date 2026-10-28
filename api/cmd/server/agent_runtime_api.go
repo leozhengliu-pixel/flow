@@ -287,6 +287,7 @@ func (s *server) completeAgentRun(w http.ResponseWriter, r *http.Request, caller
 	run, err := s.store.FinishAgentRun(r.Context(), run.ID, caller.worker, store.AgentRunResult{Status: input.Status, Error: input.Error, Usage: input.Usage}, time.Now())
 	if err == nil {
 		agentRunElicitationLogs.Delete(run.ID)
+		forgetAgentRunLedgerLock(run.ID)
 	}
 	if err == nil && (input.Status == "done" || input.Status == "failed") {
 		// A finished run that should have entered Coding and did not is moved into it (or reports the blocker).
@@ -546,6 +547,10 @@ func (s *server) postAgentRunActivity(w http.ResponseWriter, r *http.Request, _ 
 	if err != nil || !app.Active || !slices.Contains(app.AccessTeamIDs(), task.TeamID) {
 		writeError(w, http.StatusForbidden, "The application no longer has access to this session")
 		return
+	}
+	if input.Type == "response" {
+		// What the run says it changed comes from its tool calls (agent_run_outcomes.go).
+		input.Body = s.agentRunCheckedResponse(r, run, task, input.Body)
 	}
 	activity := domain.AgentActivity{ActorID: task.AppUserID, Type: input.Type, Body: input.Body, Signal: input.Signal, SignalMetadata: input.SignalMetadata, Ephemeral: input.Ephemeral, ToolCall: input.ToolCall}
 	if input.Content != nil && input.Type == "action" {

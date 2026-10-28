@@ -271,6 +271,11 @@ export class FlowAgentSession {
         // The run's last word goes through Flow: Coding when the run must enter it, a "done" claim replaced by the
         // session's real state.
         const last = await guard.finish(guard.decisionCut ? 'decision' : 'reply', guard.decisionCut ? '' : body)
+        if (last.nudge) {
+          // The reply reported change outcomes (failures, permission errors, successes) no write of the run produced:
+          // the model is told so once, as the person's next message, and its new answer is the run's last word.
+          return await this.execute(last.nudge, context, sink, retries, outcome, guard)
+        }
         body = last.reply
       }
       outcome.usage = summarizeUsage(outcome.modelCalls)

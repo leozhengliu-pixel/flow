@@ -490,7 +490,9 @@ func mcpStructuredContent(raw json.RawMessage, extra map[string]any) any {
 // "<runId>:<toolUseId>") makes a retried write return the first result instead of writing twice.
 func (s *server) callMCPRunTool(w http.ResponseWriter, r *http.Request, id any, grant *agentRunGrant, tool flowMCPTool, args map[string]any, readonly bool) {
 	if !grant.allows(s, tool, readonly) {
-		s.writeMCPToolResult(w, r, id, nil, fmt.Errorf("%s is not available to this agent run", tool.Name))
+		err := fmt.Errorf("%s is not available to this agent run", tool.Name)
+		s.recordAgentRunFlowWrite(r.Context(), grant.run, tool.Name, nil, nil, agentWriteNotRun, err.Error())
+		s.writeMCPToolResult(w, r, id, nil, err)
 		return
 	}
 	if err := checkFlowToolArgs(tool, args); err != nil {
