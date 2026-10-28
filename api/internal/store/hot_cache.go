@@ -178,24 +178,33 @@ func accessTeams(access *IssueRecordAccess) []string {
 	return access.VisibleTeamIDs
 }
 
-func (s *SQLiteStore) cacheGetIssueQuery(ctx context.Context, query IssueRecordQuery) (IssueRecordPage, bool) {
+// The query page and group count caches are keyed by the workspace's cache
+// generation, which writers advance after they commit. A reader that misses
+// stores what it then reads under the key it missed, the generation it saw
+// before reading: if a write commits meanwhile, the result (which may predate
+// it) lands under the old generation, which readers after the write no
+// longer use.
+
+// cacheGetIssueQuery returns a cached page, or on a miss the key to store
+// the page read next under (cacheSetIssueQuery).
+func (s *SQLiteStore) cacheGetIssueQuery(ctx context.Context, query IssueRecordQuery) (IssueRecordPage, string, bool) {
 	cache := s.hotCache()
 	key := s.issueQueryCacheKey(ctx, query)
 	if cache == nil || key == "" {
-		return IssueRecordPage{}, false
+		return IssueRecordPage{}, "", false
 	}
 	raw, err := cache.CacheGet(ctx, key)
 	if err != nil || len(raw) == 0 {
-		return IssueRecordPage{}, false
+		return IssueRecordPage{}, key, false
 	}
 	var page IssueRecordPage
 	if json.Unmarshal(raw, &page) != nil {
-		return IssueRecordPage{}, false
+		return IssueRecordPage{}, key, false
 	}
 	if page.Items == nil {
 		page.Items = []domain.Issue{}
 	}
-	return page, true
+	return page, key, true
 }
 
 func (s *SQLiteStore) issueGroupCacheKey(ctx context.Context, query IssueRecordQuery) string {
@@ -217,29 +226,30 @@ func (s *SQLiteStore) issueGroupCacheKey(ctx context.Context, query IssueRecordQ
 	return cache.CacheKey(query.Workspace, "ig", fmt.Sprintf("%d:%x", gen, sum[:16]))
 }
 
-func (s *SQLiteStore) cacheGetIssueGroups(ctx context.Context, query IssueRecordQuery) ([]IssueRecordGroup, bool) {
+// cacheGetIssueGroups returns cached counts, or on a miss the key to store
+// the counts read next under (cacheSetIssueGroups).
+func (s *SQLiteStore) cacheGetIssueGroups(ctx context.Context, query IssueRecordQuery) ([]IssueRecordGroup, string, bool) {
 	cache := s.hotCache()
 	key := s.issueGroupCacheKey(ctx, query)
 	if cache == nil || key == "" {
-		return nil, false
+		return nil, "", false
 	}
 	raw, err := cache.CacheGet(ctx, key)
 	if err != nil || len(raw) == 0 {
-		return nil, false
+		return nil, key, false
 	}
 	var groups []IssueRecordGroup
 	if json.Unmarshal(raw, &groups) != nil {
-		return nil, false
+		return nil, key, false
 	}
 	if groups == nil {
 		groups = []IssueRecordGroup{}
 	}
-	return groups, true
+	return groups, key, true
 }
 
-func (s *SQLiteStore) cacheSetIssueGroups(ctx context.Context, query IssueRecordQuery, groups []IssueRecordGroup) {
+func (s *SQLiteStore) cacheSetIssueGroups(ctx context.Context, key string, groups []IssueRecordGroup) {
 	cache := s.hotCache()
-	key := s.issueGroupCacheKey(ctx, query)
 	if cache == nil || key == "" {
 		return
 	}
@@ -250,9 +260,8 @@ func (s *SQLiteStore) cacheSetIssueGroups(ctx context.Context, query IssueRecord
 	_ = cache.CacheSet(ctx, key, raw, 60*time.Second)
 }
 
-func (s *SQLiteStore) cacheSetIssueQuery(ctx context.Context, query IssueRecordQuery, page IssueRecordPage) {
+func (s *SQLiteStore) cacheSetIssueQuery(ctx context.Context, key string, page IssueRecordPage) {
 	cache := s.hotCache()
-	key := s.issueQueryCacheKey(ctx, query)
 	if cache == nil || key == "" {
 		return
 	}

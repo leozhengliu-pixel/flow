@@ -45,9 +45,7 @@ func writeCustomerFilterRecord(ctx context.Context, tx *sqlTx, workspace, field,
 	switch field {
 	case "customers", "customerRequests", customerRequestImportanceMigration:
 		// Customer groups and filters read these rows.
-		if err := advanceIssueCountRevision(ctx, tx, workspace); err != nil {
-			return err
-		}
+		queueIssueCountRevision(ctx, tx, workspace)
 	}
 	switch field {
 	case "customers":
