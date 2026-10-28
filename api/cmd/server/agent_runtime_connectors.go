@@ -245,7 +245,7 @@ func agentRunConnectorNote(grant *agentRunGrant, err error) string {
 
 // callMCPRunConnector answers tools/call of a connector tool for a run token.
 func (s *server) callMCPRunConnector(w http.ResponseWriter, r *http.Request, id any, grant *agentRunGrant, name string, args map[string]any, meta map[string]any, readonly bool) {
-	fail := func(err error) { s.writeMCPToolResult(w, id, nil, err) }
+	fail := func(err error) { s.writeMCPToolResult(w, r, id, nil, err) }
 	if readonly || !grant.allowsConnectors() || !s.agent.WriteTools {
 		fail(fmt.Errorf("%s is not available to this agent run", name))
 		return

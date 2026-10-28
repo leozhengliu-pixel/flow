@@ -215,7 +215,7 @@ func (s *server) startConnectorOAuth(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	config, resource, err := s.discoverConnectorOAuth(ctx, item.URL)
 	if err != nil {
-		writeError(w, 502, err.Error())
+		writeErrorFor(w, r, http.StatusBadGateway, err)
 		return
 	}
 	config.RedirectURL = s.connectorCallbackURL()

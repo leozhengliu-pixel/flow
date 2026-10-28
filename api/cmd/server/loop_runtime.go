@@ -223,7 +223,7 @@ func (s *server) runLoopNow(w http.ResponseWriter, r *http.Request) {
 		}
 		entityID, issue, err := s.resolveLoopEntity(r.Context(), data.Workspace.URLKey, data, entityType, strings.TrimSpace(input.EntityID))
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeErrorFor(w, r, http.StatusBadRequest, err)
 			return
 		}
 		if !loopScopeMatches(data, *loop, loopEntityTeams(data, entityType, entityID, issue)) {
@@ -990,6 +990,7 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 				// A write that was not repeated changes nothing now.
 				write = write && (document.applied == "" || record.Changed)
 			}
+			callErr = publicToolError(ctx, call.Name, callErr)
 			rec.finishTool(index, status, callErr, write, loopToolArgs(call), record)
 			if fingerprint := loopWriteFingerprint(call.Name, loopToolArgs(call)); write && status == "completed" && rec.completedWrites != nil && fingerprint != "" {
 				rec.completedWrites[fingerprint] = loopToolLabel(call.Name, loopToolArgs(call))

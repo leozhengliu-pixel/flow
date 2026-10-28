@@ -1024,9 +1024,10 @@ func (s *server) builtinThreadHistory(r *http.Request, task domain.AgentTask, is
 	return messages
 }
 
-// agentToolErrorContent is a failed tool's result for the model: the real reason, so it can report it.
+// agentToolErrorContent is a failed tool's result for the model: the real reason, so it can report it (never a
+// database error's text; executeAgentTool already replaced it, this is the last line).
 func agentToolErrorContent(err error) string {
-	raw, _ := json.Marshal(map[string]string{"error": err.Error()})
+	raw, _ := json.Marshal(map[string]string{"error": publicToolError(context.Background(), "", err).Error()})
 	return string(raw)
 }
 

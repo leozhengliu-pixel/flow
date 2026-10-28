@@ -506,7 +506,7 @@ func agentToolFailureText(result []byte, err error) string {
 	if text, ok := connectorFailureText(result, err); ok {
 		return text
 	}
-	return err.Error()
+	return publicToolError(context.Background(), "", err).Error()
 }
 
 // connectorActionMetadata is the action activity of a connector call (connector, tool and arguments), shared by the

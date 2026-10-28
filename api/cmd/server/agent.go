@@ -306,7 +306,7 @@ func agentSessionSummary(session domain.AgentSession) domain.AgentSession {
 func (s *server) completeAgentSessionResponse(w http.ResponseWriter, r *http.Request, id string, status int) {
 	completed, err := s.completeAgentSession(r, id)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		writeErrorFor(w, r, http.StatusBadGateway, err)
 		return
 	}
 	writeJSON(w, status, s.withAgentBodies(r, completed))
@@ -337,7 +337,7 @@ func (s *server) agentChat(w http.ResponseWriter, r *http.Request) {
 	}
 	data, contextErr := s.agentIssueContext(r, input.IssueIDs)
 	if contextErr != nil {
-		writeError(w, 400, contextErr.Error())
+		writeErrorFor(w, r, http.StatusBadRequest, contextErr)
 		return
 	}
 	if data.Workspace.ID == "" {
@@ -363,7 +363,7 @@ func (s *server) agentChat(w http.ResponseWriter, r *http.Request) {
 	messages = append(messages, agentChatMessage{Role: "user", Content: input.Message})
 	reply, err := s.requestAgent(r, messages)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		writeErrorFor(w, r, http.StatusBadGateway, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"message": reply, "model": s.agent.Model})

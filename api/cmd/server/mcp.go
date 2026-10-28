@@ -5,8 +5,10 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"math"
 	"net/http"
@@ -165,11 +167,11 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 				return
 			}
 			if !mcpToolAllowed(tool, actor.APIKey, readonly, params.Arguments) {
-				s.writeMCPToolResult(w, request.ID, nil, fmt.Errorf("write scope is required"))
+				s.writeMCPToolResult(w, r, request.ID, nil, fmt.Errorf("write scope is required"))
 				return
 			}
 			if err := checkFlowToolArgs(tool, params.Arguments); err != nil {
-				s.writeMCPToolResult(w, request.ID, nil, err)
+				s.writeMCPToolResult(w, r, request.ID, nil, err)
 				return
 			}
 			ctx := context.WithValue(r.Context(), authUserContextKey{}, actor.User)
@@ -178,7 +180,7 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 			ctx = store.ContextWithActor(ctx, actor.User)
 			params.Arguments["__flowBaseURL"] = externalBaseURL(r)
 			result, err := s.callFlowTool(ctx, actor, tool.Name, params.Arguments)
-			s.writeMCPToolResult(w, request.ID, result, err)
+			s.writeMCPToolResult(w, r, request.ID, result, publicToolError(ctx, tool.Name, err))
 		default:
 			s.writeMCPError(w, request.ID, -32601, "Method not found", nil)
 		}
@@ -391,8 +393,43 @@ func (s *server) writeMCPError(w http.ResponseWriter, id any, code int, message 
 	writeJSON(w, http.StatusOK, mcpRPCResponse{JSONRPC: "2.0", ID: id, Error: &mcpRPCError{Code: code, Message: message, Data: data}})
 }
 
-func (s *server) writeMCPToolResult(w http.ResponseWriter, id any, result any, err error) {
-	body, ok := mcpToolCallResult(result, err, nil)
+// toolInternalError replaces a database or driver error in a tool result: the
+// MCP client or agent model gets a generic sentence with the request id, the
+// log has the error.
+type toolInternalError struct {
+	requestID string
+	read      bool
+}
+
+func (e *toolInternalError) Error() string {
+	if e.read {
+		return fmt.Sprintf("Flow could not read this data because of an internal server error (request id %s). Try again later.", e.requestID)
+	}
+	return fmt.Sprintf("The change could not be saved because of an internal server error (request id %s). Try again later.", e.requestID)
+}
+
+// publicToolError is the error a tool call reports to an MCP client or an
+// agent model. Tool errors are written for the caller ("issue not found",
+// "title is required"), except database and driver errors: their text names
+// tables, columns and SQL states, so they are logged with the request id and
+// replaced, as is a 500 from a REST handler the tool ran in process. A call
+// outside an HTTP request gets a fresh id for the log line.
+func publicToolError(ctx context.Context, tool string, err error) error {
+	var handlerErr *internalHandlerError
+	if err == nil || !store.IsDatabaseError(err) && !errors.As(err, &handlerErr) {
+		return err
+	}
+	requestID := requestIDFrom(ctx)
+	if requestID == "" {
+		requestID = newRequestID()
+	}
+	tool = strings.TrimPrefix(tool, "mcp__flow.")
+	slog.ErrorContext(ctx, "flow tool internal error", "request_id", requestID, "tool", tool, "error", err.Error())
+	return &toolInternalError{requestID: requestID, read: agentChangeToolAccess()[tool] == "read"}
+}
+
+func (s *server) writeMCPToolResult(w http.ResponseWriter, r *http.Request, id any, result any, err error) {
+	body, ok := mcpToolCallResult(result, publicToolError(r.Context(), "", err), nil)
 	if !ok {
 		s.writeMCPError(w, id, -32603, "Internal error", nil)
 		return
@@ -452,11 +489,11 @@ func mcpStructuredContent(raw json.RawMessage, extra map[string]any) any {
 // "<runId>:<toolUseId>") makes a retried write return the first result instead of writing twice.
 func (s *server) callMCPRunTool(w http.ResponseWriter, r *http.Request, id any, grant *agentRunGrant, tool flowMCPTool, args map[string]any, readonly bool) {
 	if !grant.allows(s, tool, readonly) {
-		s.writeMCPToolResult(w, id, nil, fmt.Errorf("%s is not available to this agent run", tool.Name))
+		s.writeMCPToolResult(w, r, id, nil, fmt.Errorf("%s is not available to this agent run", tool.Name))
 		return
 	}
 	if err := checkFlowToolArgs(tool, args); err != nil {
-		s.writeMCPToolResult(w, id, nil, err)
+		s.writeMCPToolResult(w, r, id, nil, err)
 		return
 	}
 	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
@@ -478,6 +515,7 @@ func (s *server) callMCPRunTool(w http.ResponseWriter, r *http.Request, id any, 
 	case len(changes) > 1:
 		extra = map[string]any{"changes": changes}
 	}
+	err = publicToolError(r.Context(), tool.Name, err)
 	body, ok := mcpToolCallResult(result, err, extra)
 	if !ok {
 		s.writeMCPError(w, id, -32603, "Internal error", nil)

@@ -276,11 +276,11 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 		switch messageType {
 		case websocket.MessageText:
 			if err := s.handleCollaborationCommand(r, client, message); err != nil {
-				sendSocketJSON(client, map[string]any{"type": "error", "message": err.Error()})
+				sendSocketJSON(client, map[string]any{"type": "error", "message": publicErrorMessage(r.Context(), err)})
 			}
 		case websocket.MessageBinary:
 			if err := s.handleCollaborationFrame(r, client, message); err != nil {
-				sendSocketJSON(client, map[string]any{"type": "error", "message": err.Error()})
+				sendSocketJSON(client, map[string]any{"type": "error", "message": publicErrorMessage(r.Context(), err)})
 			}
 		}
 	}

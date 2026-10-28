@@ -3,12 +3,15 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
 
 	"flow/api/internal/publicapi"
+	"flow/api/internal/store"
 )
 
 // Public API error categories. Every JSON error response under /api/ carries
@@ -64,8 +67,49 @@ func apiErrorTypeFor(status int, message string) string {
 	return apiErrorType(status)
 }
 
+// internalErrorMessage is the only message a 500 response carries. The error
+// behind it (often database or driver text naming tables, columns and SQL
+// states) is logged with the request id instead.
+const internalErrorMessage = "Internal server error"
+
+// requestIDFrom returns the id requestLog gave this request, or "".
+func requestIDFrom(ctx context.Context) string {
+	id, _ := ctx.Value(requestIDKey{}).(string)
+	return id
+}
+
+// writeErrorFor writes err's message with status: the message of a typed
+// request error (validation, conflict, permission) is written for the person
+// who sent the request. A database or driver error never is: it becomes a
+// logged 500 with the generic message and the request id.
+func writeErrorFor(w http.ResponseWriter, r *http.Request, status int, err error) {
+	if store.IsDatabaseError(err) {
+		writeInternalError(w, r, err)
+		return
+	}
+	writeError(w, status, err.Error())
+}
+
+// publicErrorMessage is err's text for a protocol that has no 500 of its own
+// (a WebSocket error frame): a database or driver error is logged with the
+// request id and becomes the generic message.
+func publicErrorMessage(ctx context.Context, err error) string {
+	if !store.IsDatabaseError(err) {
+		return err.Error()
+	}
+	slog.ErrorContext(ctx, "internal error", "request_id", requestIDFrom(ctx), "error", err.Error())
+	return internalErrorMessage
+}
+
+// writeInternalError logs err with the request id and writes the generic 500.
+func writeInternalError(w http.ResponseWriter, r *http.Request, err error) {
+	requestID := requestIDFrom(r.Context())
+	slog.ErrorContext(r.Context(), "internal error response", "request_id", requestID, "method", r.Method, "path", r.URL.Path, "error", err.Error())
+	writeJSON(w, http.StatusInternalServerError, apiErrorBody{Error: internalErrorMessage, Code: apiErrorInternal, Type: apiErrorInternal, RequestID: requestID})
+}
+
 // writeAPIError writes an error with an explicit machine code; the envelope
-// middleware adds `type`, `userError` and `requestId`.
+// middleware adds `type` and `requestId`.
 func writeAPIError(w http.ResponseWriter, status int, code, message string) {
 	if code == "" {
 		code = apiErrorTypeFor(status, message)
@@ -211,13 +255,27 @@ func normalizeAPIErrorBody(status int, header http.Header, raw []byte, r *http.R
 	if message == "" {
 		message = http.StatusText(status)
 	}
+	requestID := requestIDFrom(r.Context())
+	if status == http.StatusInternalServerError {
+		// A 500 is never a message written for the client: whatever the
+		// handler put in the body is logged and replaced, extra fields too.
+		if message != internalErrorMessage {
+			slog.ErrorContext(r.Context(), "internal error response", "request_id", requestID, "method", r.Method, "path", r.URL.Path, "error", message)
+		}
+		code, _ := fields["code"].(string)
+		fields = map[string]any{}
+		if code = strings.TrimSpace(code); code != "" && code != apiErrorInternal && len(code) <= 64 && !strings.ContainsAny(code, " :") {
+			fields["code"] = code
+		}
+		message = internalErrorMessage
+	}
 	category := apiErrorTypeFor(status, message)
 	fields["error"] = message
 	fields["type"] = category
 	if code, ok := fields["code"].(string); !ok || strings.TrimSpace(code) == "" {
 		fields["code"] = category
 	}
-	if requestID, ok := r.Context().Value(requestIDKey{}).(string); ok && requestID != "" {
+	if requestID != "" {
 		fields["requestId"] = requestID
 	}
 	encoded, err := json.Marshal(fields)

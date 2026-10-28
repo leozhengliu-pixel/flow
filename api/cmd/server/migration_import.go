@@ -127,7 +127,7 @@ func (s *server) scanLinearMigrationTarget(w http.ResponseWriter, r *http.Reques
 	var snapshot linearTargetSnapshot
 	query := `query MigrationTarget($teamId:String!){viewer{id} team(id:$teamId){id name key members{nodes{id name email}} states{nodes{id name type}} labels{nodes{id name}} projects{nodes{id name}}}}`
 	if err := client.call(r.Context(), query, map[string]any{"teamId": input.TargetTeamID}, &snapshot); err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		writeErrorFor(w, r, http.StatusBadGateway, err)
 		return
 	}
 	for _, source := range bundle.Users {
@@ -192,7 +192,7 @@ func (s *server) executeLinearMigration(w http.ResponseWriter, r *http.Request, 
 	scanQuery := `query MigrationTarget($teamId:String!){viewer{id} team(id:$teamId){id name key members{nodes{id name email}} states{nodes{id name type}} labels{nodes{id name}} projects{nodes{id name}}}}`
 	if err := client.call(ctx, scanQuery, map[string]any{"teamId": targetTeamID}, &snapshot); err != nil {
 		s.failLinearMigration(r, job.ID, err)
-		writeError(w, http.StatusBadGateway, err.Error())
+		writeErrorFor(w, r, http.StatusBadGateway, err)
 		return
 	}
 	linearMappingsPrepared := job.Target == "linear"

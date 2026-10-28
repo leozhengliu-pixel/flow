@@ -442,7 +442,7 @@ func (s *server) testIntegrationConnection(w http.ResponseWriter, r *http.Reques
 				writeJSON(w, http.StatusBadGateway, payload)
 				return
 			}
-			writeError(w, http.StatusBadGateway, err.Error())
+			writeErrorFor(w, r, http.StatusBadGateway, err)
 			return
 		}
 		now := time.Now().UTC()
