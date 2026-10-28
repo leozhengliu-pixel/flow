@@ -76,6 +76,9 @@ type sqlTx struct {
 	writeErr            error
 	database            *sqlDatabase
 	signals             []notificationSignal
+	// issueCounts: the issue counter deltas and revisions this transaction
+	// applies when it commits (issue_stats.go).
+	issueCounts *pendingIssueCounts
 }
 
 // notificationSignal names a notification that is news to its recipient.
@@ -89,6 +92,10 @@ func (tx *sqlTx) Commit() error {
 	if tx.writeErr != nil {
 		_ = tx.Tx.Rollback()
 		return tx.writeErr
+	}
+	if err := tx.flushIssueCounts(); err != nil {
+		_ = tx.Tx.Rollback()
+		return err
 	}
 	if err := tx.Tx.Commit(); err != nil {
 		return err

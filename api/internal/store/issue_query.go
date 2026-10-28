@@ -808,7 +808,8 @@ func (s *SQLiteStore) QueryIssueRecords(ctx context.Context, query IssueRecordQu
 	if err := s.applyIssueRecordScope(ctx, &query); err != nil {
 		return page, err
 	}
-	if cached, ok := s.cacheGetIssueQuery(ctx, query); ok {
+	cached, cacheKey, ok := s.cacheGetIssueQuery(ctx, query)
+	if ok {
 		if err := s.resolveIssueReferences(ctx, query.Workspace, cached.Items); err != nil {
 			return cached, err
 		}
@@ -819,7 +820,7 @@ func (s *SQLiteStore) QueryIssueRecords(ctx context.Context, query IssueRecordQu
 	}
 	page, err := s.queryIssueRecordsSQL(ctx, query)
 	if err == nil {
-		s.cacheSetIssueQuery(ctx, query, page)
+		s.cacheSetIssueQuery(ctx, cacheKey, page)
 	}
 	if err != nil {
 		return page, err
@@ -1020,7 +1021,8 @@ func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQue
 	if err := s.applyIssueRecordScope(ctx, &query); err != nil {
 		return nil, err
 	}
-	if cached, ok := s.cacheGetIssueGroups(ctx, query); ok {
+	cached, cacheKey, ok := s.cacheGetIssueGroups(ctx, query)
+	if ok {
 		return cached, nil
 	}
 	if _, _, err := issueRecordWhere(query); err != nil {
@@ -1043,7 +1045,7 @@ func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQue
 	}
 	if err == nil {
 		s.issueGroupCounts.put(key, query.Workspace, groups, now)
-		s.cacheSetIssueGroups(ctx, query, groups)
+		s.cacheSetIssueGroups(ctx, cacheKey, groups)
 	}
 	return groups, err
 }

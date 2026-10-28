@@ -106,13 +106,30 @@ func addIssueStats(deltas map[issueStatsKey]int64, d *issueStatsDimensions, delt
 	}
 }
 
-// writeIssueStats applies counter deltas. Every transaction that writes issue
-// records calls it (with no deltas when no counted dimension changed), so it
-// also advances the workspace's issue revision.
+// writeIssueStats queues counter deltas for the transaction's commit. Every
+// transaction that writes issue records calls it (with no deltas when no
+// counted dimension changed), so it also advances the workspace's issue
+// revision. A status or priority change updates the workspace's counter rows,
+// which every such writer shares, so like the revision they are written last
+// (flushIssueCounts), all of them at once in key order: a writer holds them
+// only while it commits, and waits for nothing but the revision row then.
 func writeIssueStats(ctx context.Context, tx *sqlTx, workspace string, deltas map[issueStatsKey]int64) error {
-	if err := advanceIssueCountRevision(ctx, tx, workspace); err != nil {
-		return err
+	queueIssueCountRevision(ctx, tx, workspace)
+	pending := tx.issueCounts
+	for key, delta := range deltas {
+		if delta == 0 {
+			continue
+		}
+		if pending.deltas[workspace] == nil {
+			pending.deltas[workspace] = map[issueStatsKey]int64{}
+		}
+		pending.deltas[workspace][key] += delta
 	}
+	return nil
+}
+
+// applyIssueStats adds deltas to the counter rows, in key order.
+func applyIssueStats(ctx context.Context, tx *sqlTx, workspace string, deltas map[issueStatsKey]int64) error {
 	type entry struct {
 		key   issueStatsKey
 		order string

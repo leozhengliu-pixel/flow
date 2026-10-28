@@ -17,9 +17,12 @@ import (
 // and the workspace's issue revision: a counter in the database that every
 // transaction writing issue records, their label, attribute and permission
 // indexes, or the customer request index advances (writeIssueStats,
-// writeCustomerFilterRecord). Reading it is one primary-key lookup, and every
-// server sees a write once it commits, so a cached count is never served after
-// the data it counts changed; the TTL only bounds memory.
+// writeCustomerFilterRecord), as its last statement. Reading it is one
+// primary-key lookup, and every server sees a write once it commits, so a
+// cached count is never served after the data it counts changed; the TTL only
+// bounds memory. A reader reads the revision before it counts: a write that
+// commits in between leaves its counts under the older revision, which no
+// later reader asks for.
 
 const (
 	issueGroupCountTTL     = 30 * time.Second
@@ -103,9 +106,53 @@ func (s *SQLiteStore) issueCountRevision(ctx context.Context, workspace string) 
 	return revision, err
 }
 
-// advanceIssueCountRevision moves the workspace's issue revision on inside the
-// writing transaction, so the new data and its revision commit together.
-func advanceIssueCountRevision(ctx context.Context, tx *sqlTx, workspace string) error {
-	_, err := tx.ExecContext(ctx, `INSERT INTO issue_count_revisions(workspace_key,revision) VALUES(?,1) ON CONFLICT(workspace_key) DO UPDATE SET revision=issue_count_revisions.revision+1`, workspace)
-	return err
+// queueIssueCountRevision advances the workspace's issue revision when the
+// writing transaction commits, so the new data and its revision commit
+// together. Every writer in the workspace updates the same revision row, so
+// it is the transaction's last statement (flushIssueCounts): writers queue on
+// it only while its holder commits, and a holder waits for nothing else, so
+// the row cannot take part in a deadlock.
+func queueIssueCountRevision(ctx context.Context, tx *sqlTx, workspace string) {
+	pending := tx.pendingIssueCounts(ctx)
+	pending.revisions[workspace] = true
+}
+
+type pendingIssueCounts struct {
+	ctx       context.Context
+	revisions map[string]bool
+	// deltas: counter deltas by workspace (writeIssueStats).
+	deltas map[string]map[issueStatsKey]int64
+}
+
+func (tx *sqlTx) pendingIssueCounts(ctx context.Context) *pendingIssueCounts {
+	if tx.issueCounts == nil {
+		tx.issueCounts = &pendingIssueCounts{ctx: ctx, revisions: map[string]bool{}, deltas: map[string]map[issueStatsKey]int64{}}
+	}
+	return tx.issueCounts
+}
+
+// flushIssueCounts writes what the transaction queued; Commit calls it just
+// before committing.
+func (tx *sqlTx) flushIssueCounts() error {
+	pending := tx.issueCounts
+	if pending == nil {
+		return nil
+	}
+	tx.issueCounts = nil
+	workspaces := make([]string, 0, len(pending.revisions))
+	for workspace := range pending.revisions {
+		workspaces = append(workspaces, workspace)
+	}
+	slices.Sort(workspaces)
+	for _, workspace := range workspaces {
+		if err := applyIssueStats(pending.ctx, tx, workspace, pending.deltas[workspace]); err != nil {
+			return err
+		}
+	}
+	for _, workspace := range workspaces {
+		if _, err := tx.ExecContext(pending.ctx, `INSERT INTO issue_count_revisions(workspace_key,revision) VALUES(?,1) ON CONFLICT(workspace_key) DO UPDATE SET revision=issue_count_revisions.revision+1`, workspace); err != nil {
+			return err
+		}
+	}
+	return nil
 }
