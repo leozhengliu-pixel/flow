@@ -800,7 +800,9 @@ func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey stri
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
-	s.cacheMetadataUpserts(ctx, workspaceKey, upserts)
+	// The commit moved the metadata revision on, so the copy is stale even
+	// with these records patched in: readers refill it.
+	s.dropMetadataCache(ctx, workspaceKey)
 	return removedIssues, nil
 }
 

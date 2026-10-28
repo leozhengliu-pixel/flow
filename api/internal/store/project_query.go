@@ -265,15 +265,18 @@ func (s *SQLiteStore) QueryProjectDirectory(ctx context.Context, query ProjectRe
 	}
 	// Customer filters read live request summaries, which the query cache key does not cover.
 	cacheable := !slices.ContainsFunc(query.Filters, func(filter ProjectDirectoryFilter) bool { return filter.Field == "customers" })
-	if cached, ok := s.cacheGetProjectQuery(ctx, query); cacheable && ok {
-		return cached, nil
-	}
-	if projects, ok := s.projectSnapshot(query.Workspace); ok {
-		page = filterProjectDirectory(projects, query)
-		if cacheable {
-			s.cacheSetProjectQuery(ctx, query, page)
+	cacheKey := ""
+	if cacheable {
+		var cached ProjectRecordPage
+		var ok bool
+		if cached, cacheKey, ok = s.cacheGetProjectQuery(ctx, query); ok {
+			return cached, nil
 		}
-		return page, nil
+	}
+	// A page filtered from this server's copy of the projects is not shared:
+	// the copy can lag the metadata revision the cache key names.
+	if projects, ok := s.projectSnapshot(query.Workspace); ok {
+		return filterProjectDirectory(projects, query), nil
 	}
 	limit := query.Limit
 	if limit <= 0 || limit > 100 {
@@ -364,7 +367,7 @@ func (s *SQLiteStore) QueryProjectDirectory(ctx context.Context, query ProjectRe
 		page.NextCursor = encodeProjectCursor(offset + len(page.Items))
 	}
 	if cacheable {
-		s.cacheSetProjectQuery(ctx, query, page)
+		s.cacheSetProjectQuery(ctx, cacheKey, page)
 	}
 	return page, nil
 }

@@ -1140,7 +1140,8 @@ func (s *SQLiteStore) migrateOffloadedRecord(ctx context.Context, workspace, fie
 	if err := tx.Commit(); err != nil {
 		return false, err
 	}
-	s.cacheMetadataUpserts(ctx, workspace, []metadataRecordChange{{field: field, key: key, order: order, raw: stored}})
+	// The commit moved the metadata revision on (cache_revisions.go).
+	s.dropMetadataCache(ctx, workspace)
 	return true, nil
 }
 

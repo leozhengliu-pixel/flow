@@ -255,9 +255,13 @@ locks, **and a hot cache**:
 - Workspace metadata collections (teams, projects, states, …) are stored as
   Redis hashes so replica reloads do not scan every SQL metadata row.
 
-Writes bump a per-workspace generation so list caches drop immediately; the
-mutated issue key is deleted so the next detail read refills from SQL. Cache
-failures never fail the request: the store falls back to SQL.
+List pages, group counts, directory pages and the metadata copy are keyed by a
+per-workspace revision that the writing transaction advances in the database,
+so no replica serves them from before a committed write, even before the
+writer has dropped them. Writes also bump a per-workspace generation so list
+caches drop immediately; the mutated issue key is deleted so the next detail
+read refills from SQL (a cached issue is served only while its version matches
+the row). Cache failures never fail the request: the store falls back to SQL.
 
 A replica reloads the latest workspace metadata from Redis (and SQL on miss)
 inside the distributed lock before applying a mutation, preventing one process

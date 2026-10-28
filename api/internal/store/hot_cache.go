@@ -141,23 +141,43 @@ func (s *SQLiteStore) cacheGeneration(ctx context.Context, key string) int64 {
 	return n
 }
 
-func (s *SQLiteStore) issueQueryCacheKey(ctx context.Context, query IssueRecordQuery) string {
+// The query page, group count and project directory caches are keyed by a
+// workspace cache revision (cache_revisions.go) as well as the Redis
+// generation writers advance after they commit. The revision moves on inside
+// the writing transaction, so a reader that reads it after a write committed
+// never uses an entry made before the write, even in the moment before the
+// writer advances the generation; the generation retires entries for the
+// writes that move no revision on. A reader that misses stores what it then
+// reads under the key it missed, read before it read the data: if a write
+// commits meanwhile, the result (which may predate it) lands under a key
+// readers after the write no longer use.
+
+// issueQueryScope is what identifies an issue query in a cache key: the query
+// without its access, which is named by user, role and visible teams.
+func issueQueryScope(query IssueRecordQuery, gen, revision int64) []byte {
+	scope := query
+	scope.Access = nil
+	raw, _ := json.Marshal(struct {
+		Query    IssueRecordQuery `json:"q"`
+		User     string           `json:"u,omitempty"`
+		Admin    bool             `json:"a,omitempty"`
+		Teams    []string         `json:"t,omitempty"`
+		Gen      int64            `json:"g"`
+		Revision int64            `json:"r"`
+	}{Query: scope, User: accessUser(query.Access), Admin: accessAdmin(query.Access), Teams: accessTeams(query.Access), Gen: gen, Revision: revision})
+	return raw
+}
+
+// issueQueryCacheKey is the page cache key of query at the workspace's issue
+// revision; "" when there is no shared cache.
+func (s *SQLiteStore) issueQueryCacheKey(ctx context.Context, query IssueRecordQuery, revision int64) string {
 	cache := s.hotCache()
 	if cache == nil {
 		return ""
 	}
 	gen := s.cacheGeneration(ctx, s.issueQueryGenKey(query.Workspace))
-	scope := query
-	scope.Access = nil
-	raw, _ := json.Marshal(struct {
-		Query IssueRecordQuery `json:"q"`
-		User  string           `json:"u,omitempty"`
-		Admin bool             `json:"a,omitempty"`
-		Teams []string         `json:"t,omitempty"`
-		Gen   int64            `json:"g"`
-	}{Query: scope, User: accessUser(query.Access), Admin: accessAdmin(query.Access), Teams: accessTeams(query.Access), Gen: gen})
-	sum := sha256.Sum256(raw)
-	return cache.CacheKey(query.Workspace, "iq", fmt.Sprintf("%d:%x", gen, sum[:16]))
+	sum := sha256.Sum256(issueQueryScope(query, gen, revision))
+	return cache.CacheKey(query.Workspace, "iq", fmt.Sprintf("%d:%d:%x", gen, revision, sum[:16]))
 }
 
 func accessUser(access *IssueRecordAccess) string {
@@ -178,19 +198,19 @@ func accessTeams(access *IssueRecordAccess) []string {
 	return access.VisibleTeamIDs
 }
 
-// The query page and group count caches are keyed by the workspace's cache
-// generation, which writers advance after they commit. A reader that misses
-// stores what it then reads under the key it missed, the generation it saw
-// before reading: if a write commits meanwhile, the result (which may predate
-// it) lands under the old generation, which readers after the write no
-// longer use.
-
 // cacheGetIssueQuery returns a cached page, or on a miss the key to store
 // the page read next under (cacheSetIssueQuery).
 func (s *SQLiteStore) cacheGetIssueQuery(ctx context.Context, query IssueRecordQuery) (IssueRecordPage, string, bool) {
 	cache := s.hotCache()
-	key := s.issueQueryCacheKey(ctx, query)
-	if cache == nil || key == "" {
+	if cache == nil {
+		return IssueRecordPage{}, "", false
+	}
+	revision, err := s.issueCountRevision(ctx, query.Workspace)
+	if err != nil {
+		return IssueRecordPage{}, "", false
+	}
+	key := s.issueQueryCacheKey(ctx, query, revision)
+	if key == "" {
 		return IssueRecordPage{}, "", false
 	}
 	raw, err := cache.CacheGet(ctx, key)
@@ -207,30 +227,24 @@ func (s *SQLiteStore) cacheGetIssueQuery(ctx context.Context, query IssueRecordQ
 	return page, key, true
 }
 
-func (s *SQLiteStore) issueGroupCacheKey(ctx context.Context, query IssueRecordQuery) string {
+// issueGroupCacheKey is the group count cache key of query at the
+// workspace's issue revision; "" when there is no shared cache.
+func (s *SQLiteStore) issueGroupCacheKey(ctx context.Context, query IssueRecordQuery, revision int64) string {
 	cache := s.hotCache()
 	if cache == nil {
 		return ""
 	}
 	gen := s.cacheGeneration(ctx, s.issueQueryGenKey(query.Workspace))
-	scope := query
-	scope.Access = nil
-	raw, _ := json.Marshal(struct {
-		Query IssueRecordQuery `json:"q"`
-		User  string           `json:"u,omitempty"`
-		Admin bool             `json:"a,omitempty"`
-		Teams []string         `json:"t,omitempty"`
-		Gen   int64            `json:"g"`
-	}{Query: scope, User: accessUser(query.Access), Admin: accessAdmin(query.Access), Teams: accessTeams(query.Access), Gen: gen})
-	sum := sha256.Sum256(raw)
-	return cache.CacheKey(query.Workspace, "ig", fmt.Sprintf("%d:%x", gen, sum[:16]))
+	sum := sha256.Sum256(issueQueryScope(query, gen, revision))
+	return cache.CacheKey(query.Workspace, "ig", fmt.Sprintf("%d:%d:%x", gen, revision, sum[:16]))
 }
 
-// cacheGetIssueGroups returns cached counts, or on a miss the key to store
-// the counts read next under (cacheSetIssueGroups).
-func (s *SQLiteStore) cacheGetIssueGroups(ctx context.Context, query IssueRecordQuery) ([]IssueRecordGroup, string, bool) {
+// cacheGetIssueGroups returns cached counts of query at the workspace's issue
+// revision, or on a miss the key to store the counts read next under
+// (cacheSetIssueGroups).
+func (s *SQLiteStore) cacheGetIssueGroups(ctx context.Context, query IssueRecordQuery, revision int64) ([]IssueRecordGroup, string, bool) {
 	cache := s.hotCache()
-	key := s.issueGroupCacheKey(ctx, query)
+	key := s.issueGroupCacheKey(ctx, query, revision)
 	if cache == nil || key == "" {
 		return nil, "", false
 	}
@@ -272,43 +286,54 @@ func (s *SQLiteStore) cacheSetIssueQuery(ctx context.Context, key string, page I
 	_ = cache.CacheSet(ctx, key, raw, 60*time.Second)
 }
 
-func (s *SQLiteStore) projectQueryCacheKey(query ProjectRecordQuery) string {
+// projectQueryCacheKey is the project directory cache key of query at the
+// workspace's metadata revision (projects are metadata records).
+func (s *SQLiteStore) projectQueryCacheKey(ctx context.Context, query ProjectRecordQuery, revision int64) string {
 	cache := s.hotCache()
 	if cache == nil {
 		return ""
 	}
-	gen := s.cacheGeneration(context.Background(), s.projectQueryGenKey(query.Workspace))
+	gen := s.cacheGeneration(ctx, s.projectQueryGenKey(query.Workspace))
 	raw, _ := json.Marshal(struct {
-		Query ProjectRecordQuery `json:"q"`
-		Gen   int64              `json:"g"`
-	}{Query: query, Gen: gen})
+		Query    ProjectRecordQuery `json:"q"`
+		Gen      int64              `json:"g"`
+		Revision int64              `json:"r"`
+	}{Query: query, Gen: gen, Revision: revision})
 	sum := sha256.Sum256(raw)
-	return cache.CacheKey(query.Workspace, "pq", fmt.Sprintf("%d:%x", gen, sum[:16]))
+	return cache.CacheKey(query.Workspace, "pq", fmt.Sprintf("%d:%d:%x", gen, revision, sum[:16]))
 }
 
-func (s *SQLiteStore) cacheGetProjectQuery(ctx context.Context, query ProjectRecordQuery) (ProjectRecordPage, bool) {
+// cacheGetProjectQuery returns a cached directory page, or on a miss the key
+// to store the page read next under (cacheSetProjectQuery).
+func (s *SQLiteStore) cacheGetProjectQuery(ctx context.Context, query ProjectRecordQuery) (ProjectRecordPage, string, bool) {
 	cache := s.hotCache()
-	key := s.projectQueryCacheKey(query)
-	if cache == nil || key == "" {
-		return ProjectRecordPage{}, false
+	if cache == nil {
+		return ProjectRecordPage{}, "", false
+	}
+	revision, err := s.cacheRevision(ctx, s.db, query.Workspace, cacheKindMetadata)
+	if err != nil {
+		return ProjectRecordPage{}, "", false
+	}
+	key := s.projectQueryCacheKey(ctx, query, revision)
+	if key == "" {
+		return ProjectRecordPage{}, "", false
 	}
 	raw, err := cache.CacheGet(ctx, key)
 	if err != nil || len(raw) == 0 {
-		return ProjectRecordPage{}, false
+		return ProjectRecordPage{}, key, false
 	}
 	var page ProjectRecordPage
 	if json.Unmarshal(raw, &page) != nil {
-		return ProjectRecordPage{}, false
+		return ProjectRecordPage{}, key, false
 	}
 	if page.Items == nil {
 		page.Items = []domain.Project{}
 	}
-	return page, true
+	return page, key, true
 }
 
-func (s *SQLiteStore) cacheSetProjectQuery(ctx context.Context, query ProjectRecordQuery, page ProjectRecordPage) {
+func (s *SQLiteStore) cacheSetProjectQuery(ctx context.Context, key string, page ProjectRecordPage) {
 	cache := s.hotCache()
-	key := s.projectQueryCacheKey(query)
 	if cache == nil || key == "" {
 		return
 	}
@@ -339,13 +364,16 @@ func decodeMetadataCacheValue(raw string) (int, []byte) {
 	return n, []byte(rest)
 }
 
-// The metadata record cache holds a copy of the workspace's metadata rows.
-// A writer drops it after its commit and moves the workspace's metadata
-// generation on; a filler stamps the copy with the generation it read the
-// database at. A copy filled from rows read before a write committed carries
-// the older generation and is never used, even when the fill finishes after
-// the writer dropped the cache (it would otherwise hold some fields from
-// before the write and lack the ones the drop removed).
+// The metadata record cache holds a copy of the workspace's metadata rows,
+// stamped with the workspace's metadata revision (cache_revisions.go) and
+// metadata generation it was read at. The revision moves on inside every
+// transaction that writes the workspace document or a metadata record, so a
+// reader whose read (or read snapshot) sees a write never uses a copy read
+// before it, even before the writer drops the copy after commit. The
+// generation, which the writer moves on when it drops the copy, retires a
+// copy a filler that read before the drop is still writing (it would
+// otherwise hold some fields from before the write and lack the ones the drop
+// removed).
 func (s *SQLiteStore) metadataGenerationKey(workspace string) string {
 	if cache := s.hotCache(); cache != nil {
 		return cache.CacheKey(workspace, "mgen", "")
@@ -358,14 +386,33 @@ func (s *SQLiteStore) metadataCacheGeneration(ctx context.Context, workspace str
 	return s.cacheGeneration(ctx, s.metadataGenerationKey(workspace))
 }
 
-func (s *SQLiteStore) metadataRecordsFromCache(ctx context.Context, workspace string, fields map[string]string) ([]metadataCacheRow, bool) {
+// metadataCacheStamp identifies the metadata a copy holds.
+type metadataCacheStamp struct {
+	generation, revision int64
+}
+
+func (stamp metadataCacheStamp) String() string {
+	return strconv.FormatInt(stamp.generation, 10) + ":" + strconv.FormatInt(stamp.revision, 10)
+}
+
+// metadataStamp is the stamp of the metadata reader sees: the current
+// generation and the revision in reader's snapshot. Read it before the rows.
+func (s *SQLiteStore) metadataStamp(ctx context.Context, reader metadataReader, workspace string) (metadataCacheStamp, bool) {
+	if s.hotCache() == nil || workspace == "" {
+		return metadataCacheStamp{}, false
+	}
+	generation := s.metadataCacheGeneration(ctx, workspace)
+	revision, err := s.cacheRevision(ctx, reader, workspace, cacheKindMetadata)
+	return metadataCacheStamp{generation, revision}, err == nil
+}
+
+func (s *SQLiteStore) metadataRecordsFromCache(ctx context.Context, workspace string, stamp metadataCacheStamp, fields map[string]string) ([]metadataCacheRow, bool) {
 	cache := s.hotCache()
 	if cache == nil || workspace == "" || len(fields) == 0 {
 		return nil, false
 	}
-	generation := strconv.FormatInt(s.metadataCacheGeneration(ctx, workspace), 10)
 	ready, err := cache.CacheGet(ctx, s.metadataReadyKey(workspace))
-	if err != nil || string(ready) != generation {
+	if err != nil || string(ready) != stamp.String() {
 		return nil, false
 	}
 	rows := []metadataCacheRow{}
@@ -380,7 +427,7 @@ func (s *SQLiteStore) metadataRecordsFromCache(ctx context.Context, workspace st
 		}
 	}
 	// A write dropped the copy while it was read: some fields may be gone.
-	if strconv.FormatInt(s.metadataCacheGeneration(ctx, workspace), 10) != generation {
+	if s.metadataCacheGeneration(ctx, workspace) != stamp.generation {
 		return nil, false
 	}
 	return rows, true
@@ -421,17 +468,18 @@ func (s *SQLiteStore) deleteMetadataCache(ctx context.Context, workspace string)
 }
 
 func (s *SQLiteStore) fillMetadataRecordsCache(ctx context.Context, workspace string, rows []metadataCacheRow) {
-	s.fillMetadataRecordsCacheAt(ctx, workspace, rows, s.metadataCacheGeneration(ctx, workspace))
+	if stamp, ok := s.metadataStamp(ctx, s.db, workspace); ok {
+		s.fillMetadataRecordsCacheAt(ctx, workspace, rows, stamp)
+	}
 }
 
-// fillMetadataRecordsCacheAt caches rows, read from the database while the
-// workspace's metadata generation was generation.
-func (s *SQLiteStore) fillMetadataRecordsCacheAt(ctx context.Context, workspace string, rows []metadataCacheRow, generation int64) {
+// fillMetadataRecordsCacheAt caches rows, read from the database at stamp.
+func (s *SQLiteStore) fillMetadataRecordsCacheAt(ctx context.Context, workspace string, rows []metadataCacheRow, stamp metadataCacheStamp) {
 	cache := s.hotCache()
 	if cache == nil || workspace == "" {
 		return
 	}
-	if s.metadataCacheGeneration(ctx, workspace) != generation {
+	if s.metadataCacheGeneration(ctx, workspace) != stamp.generation {
 		return
 	}
 	s.deleteMetadataCache(ctx, workspace)
@@ -450,25 +498,7 @@ func (s *SQLiteStore) fillMetadataRecordsCacheAt(ctx context.Context, workspace 
 	if listed, err := json.Marshal(fields); err == nil {
 		_ = cache.CacheSet(ctx, s.metadataFieldsListKey(workspace), listed, 24*time.Hour)
 	}
-	_ = cache.CacheSet(ctx, s.metadataReadyKey(workspace), []byte(strconv.FormatInt(generation, 10)), 24*time.Hour)
-}
-
-func (s *SQLiteStore) cacheMetadataUpserts(ctx context.Context, workspace string, changes []metadataRecordChange) {
-	cache := s.hotCache()
-	if cache == nil || workspace == "" {
-		return
-	}
-	dropped := map[string][]string{}
-	for _, change := range changes {
-		if change.drop {
-			dropped[change.field] = append(dropped[change.field], change.key)
-			continue
-		}
-		_ = cache.CacheHSet(ctx, s.metadataFieldKey(workspace, change.field), change.key, encodeMetadataCacheValue(change.order, change.raw))
-	}
-	for field, keys := range dropped {
-		_ = cache.CacheHDel(ctx, s.metadataFieldKey(workspace, field), keys...)
-	}
+	_ = cache.CacheSet(ctx, s.metadataReadyKey(workspace), []byte(stamp.String()), 24*time.Hour)
 }
 
 func (s *SQLiteStore) invalidateDeletedTeamCache(ctx context.Context, workspace string, issues, projects bool) {
