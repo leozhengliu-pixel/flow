@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -221,9 +222,18 @@ func (s *SQLiteStore) writeWorkspaceMetadataDelta(ctx context.Context, tx *sqlTx
 		if err != nil {
 			return false, err
 		}
+		if touched {
+			// Compacted jobs are copies of target's: merges made in them in
+			// place go back too.
+			for _, field := range changed {
+				if (field.name == "importJobs" || field.name == "migrationJobs") && !slices.Contains(replaced, field) {
+					replaced = append(replaced, field)
+				}
+			}
+		}
 		source, destination := reflect.ValueOf(&after).Elem(), reflect.ValueOf(target).Elem()
 		for _, field := range replaced {
-			destination.Field(field.index).Set(source.Field(field.index))
+			setRebasedField(field, destination.Field(field.index), source.Field(field.index))
 		}
 		if touched {
 			changed = changedMetadataFields(before, after)
@@ -387,6 +397,25 @@ func (s *SQLiteStore) writeWorkspaceMetadataDelta(ctx context.Context, tx *sqlTx
 	tx.metadataWritten = true
 	_, err = tx.ExecContext(ctx, `UPDATE workspace_states SET workspace_id=?,data=?,updated_at=? WHERE workspace_key=?`, after.Workspace.ID, raw, time.Now().UTC().Format(time.RFC3339Nano), workspace)
 	return true, err
+}
+
+// setRebasedField sets a target's field to its rebased (compacted) value.
+// Import and migration jobs keep the target's inputs (compactImportInputs).
+func setRebasedField(field metadataField, destination, source reflect.Value) {
+	if field.name != "importJobs" && field.name != "migrationJobs" {
+		destination.Set(source)
+		return
+	}
+	merged := cloneMetadataContainer(source)
+	old := newMetadataCollection(field, destination)
+	rebased := newMetadataCollection(field, merged)
+	for key := range rebased.ids {
+		if record, ok := old.record(key); ok {
+			current, _ := rebased.record(key)
+			keepImportInputs(field.name, current, record)
+		}
+	}
+	destination.Set(merged)
 }
 
 // persistMetadataTx writes after's metadata as a delta from before (the

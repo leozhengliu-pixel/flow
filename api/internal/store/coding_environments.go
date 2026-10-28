@@ -1101,7 +1101,11 @@ const codingEnvironmentsMigrationVersion = 1100
 func (s *SQLiteStore) migrateLegacyCodingEnvironments(ctx context.Context) error {
 	migrated := 0
 	for _, key := range s.WorkspaceKeys() {
-		count, err := s.migrateWorkspaceCodingEnvironments(ctx, key)
+		var count int
+		err := s.rerunBackgroundWrite(ctx, "coding environment migration", key, func() (err error) {
+			count, err = s.migrateWorkspaceCodingEnvironments(ctx, key)
+			return err
+		})
 		if err != nil {
 			return fmt.Errorf("workspace %q: %w", key, err)
 		}

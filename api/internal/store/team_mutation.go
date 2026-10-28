@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"sort"
 	"time"
 
 	"flow/api/internal/domain"
@@ -101,6 +102,7 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		defer s.unlockWorkspaceWrites()
 		traceLocked(ctx)
 		defer traceUnlocked(ctx)
+		event, realtimePayload = domain.DomainEvent{}, nil
 		if s.coordinator != nil {
 			latest, err := s.loadWorkspaceState(ctx, workspaceKey)
 			if err != nil {
@@ -189,6 +191,18 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 			}
 		}
 		traceMark(ctx, "persist")
+		// Records merged with another server's change are installed as written.
+		merged := map[metadataRecordKey][]byte{}
+		for _, change := range upserts {
+			if change.merged {
+				merged[metadataRecordKey{change.field, change.key}] = change.raw
+			}
+		}
+		if len(merged) > 0 {
+			if err := setMetadataRecords(&next, merged); err != nil {
+				return err
+			}
+		}
 		noteTeamMutationIndexes(eventType, aggregateID, &snap, &next)
 		if snap.deletion != nil {
 			deletedIssues = snap.deletion.removedIssues > 0
@@ -199,12 +213,15 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		s.lastWorkspaceKey = workspaceKey
 		return nil
 	}
-	var err error
-	if s.coordinator != nil {
-		err = s.coordinator.WithWorkspaceLock(ctx, workspaceKey, apply)
-	} else {
-		err = apply()
-	}
+	// A record the write changes was changed on another server since the
+	// reload (an issue write's triage cursor, a project's progress): rerun on
+	// fresh records.
+	err := mutationAttempts(ctx, fullMutationAttempts, func(context.Context) error {
+		if s.coordinator != nil {
+			return s.coordinator.WithWorkspaceLock(ctx, workspaceKey, apply)
+		}
+		return apply()
+	}, s.refreshConflictedMetadata(ctx, workspaceKey))
 	if err != nil {
 		if errors.Is(err, ErrNoMutation) {
 			return nil
@@ -500,17 +517,25 @@ func cloneMutationTeamSettings(settings domain.TeamSettings) domain.TeamSettings
 
 func collectDirtyTeamRecords(eventType, aggregateID string, snap *teamMutationSnapshot, next domain.Bootstrap) ([]metadataRecordChange, error) {
 	var upserts []metadataRecordChange
-	appendRecord := func(field, key string, insert bool, value any) error {
+	// base is the record as the mutation loaded it (nil: a new record), so
+	// the write applies only this change onto the row as stored.
+	appendRecord := func(field, key string, base, value any) error {
 		raw, err := json.Marshal(value)
 		if err != nil {
 			return err
 		}
-		upserts = append(upserts, metadataRecordChange{field: field, key: key, insert: insert, raw: raw})
+		var baseRaw json.RawMessage
+		if base != nil {
+			if baseRaw, err = json.Marshal(base); err != nil {
+				return err
+			}
+		}
+		upserts = append(upserts, metadataRecordChange{field: field, key: key, insert: base == nil, base: baseRaw, raw: raw})
 		return nil
 	}
 	appendRange := func(field string, start int, idOf func(int) string, valueOf func(int) any) error {
 		for i := start; i < lenForField(next, field); i++ {
-			if err := appendRecord(field, idOf(i), true, valueOf(i)); err != nil {
+			if err := appendRecord(field, idOf(i), nil, valueOf(i)); err != nil {
 				return err
 			}
 		}
@@ -528,16 +553,16 @@ func collectDirtyTeamRecords(eventType, aggregateID string, snap *teamMutationSn
 			if eventType == "team.created" && aggregateID != "" && team.ID != aggregateID {
 				continue
 			}
-			if err := appendRecord("teams", team.ID, true, team); err != nil {
+			if err := appendRecord("teams", team.ID, nil, team); err != nil {
 				return nil, err
 			}
 			if settings, ok := next.TeamSettings[team.ID]; ok {
-				if err := appendRecord("teamSettings", team.ID, false, settings); err != nil {
+				if err := appendRecord("teamSettings", team.ID, nil, settings); err != nil {
 					return nil, err
 				}
 			}
 			if settings, ok := next.CycleSettings[team.ID]; ok {
-				if err := appendRecord("cycleSettings", team.ID, false, settings); err != nil {
+				if err := appendRecord("cycleSettings", team.ID, nil, settings); err != nil {
 					return nil, err
 				}
 			}
@@ -572,13 +597,21 @@ func collectDirtyTeamRecords(eventType, aggregateID string, snap *teamMutationSn
 		}
 		if index >= 0 && index < len(next.Teams) {
 			team := next.Teams[index]
-			if err := appendRecord("teams", team.ID, false, team); err != nil {
+			var base any
+			if index == snap.teamIndex {
+				base = snap.oldTeam
+			}
+			if err := appendRecord("teams", team.ID, base, team); err != nil {
 				return nil, err
 			}
 		}
 		if settings, ok := next.TeamSettings[aggregateID]; ok {
 			if !snap.hadSettings || !metadataTeamSettingsEqual(snap.oldSettings, settings) {
-				if err := appendRecord("teamSettings", aggregateID, false, settings); err != nil {
+				var base any
+				if snap.hadSettings {
+					base = snap.oldSettings
+				}
+				if err := appendRecord("teamSettings", aggregateID, base, settings); err != nil {
 					return nil, err
 				}
 			}
@@ -586,7 +619,11 @@ func collectDirtyTeamRecords(eventType, aggregateID string, snap *teamMutationSn
 	default:
 		if settings, ok := next.TeamSettings[aggregateID]; ok {
 			if !snap.hadSettings || !metadataTeamSettingsEqual(snap.oldSettings, settings) {
-				if err := appendRecord("teamSettings", aggregateID, false, settings); err != nil {
+				var base any
+				if snap.hadSettings {
+					base = snap.oldSettings
+				}
+				if err := appendRecord("teamSettings", aggregateID, base, settings); err != nil {
 					return nil, err
 				}
 			}
@@ -597,14 +634,14 @@ func collectDirtyTeamRecords(eventType, aggregateID string, snap *teamMutationSn
 		index := snap.teamIndex
 		if index >= 0 && index < len(next.Teams) && !metadataTeamEqual(snap.oldTeam, next.Teams[index]) {
 			team := next.Teams[index]
-			if err := appendRecord("teams", team.ID, false, team); err != nil {
+			if err := appendRecord("teams", team.ID, snap.oldTeam, team); err != nil {
 				return nil, err
 			}
 		}
 		for i, old := range snap.oldLabels {
 			if i >= 0 && i < len(next.Labels) && !metadataLabelEqual(old, next.Labels[i]) {
 				label := next.Labels[i]
-				if err := appendRecord("labels", label.ID, false, label); err != nil {
+				if err := appendRecord("labels", label.ID, old, label); err != nil {
 					return nil, err
 				}
 			}
@@ -629,7 +666,11 @@ func collectDirtyTeamRecords(eventType, aggregateID string, snap *teamMutationSn
 			if existed && old == settings {
 				continue
 			}
-			if err := appendRecord("cycleSettings", id, false, settings); err != nil {
+			var base any
+			if existed {
+				base = old
+			}
+			if err := appendRecord("cycleSettings", id, base, settings); err != nil {
 				return nil, err
 			}
 		}
@@ -637,7 +678,7 @@ func collectDirtyTeamRecords(eventType, aggregateID string, snap *teamMutationSn
 	return upserts, nil
 }
 
-func collectExistingTeamImportUpdates(snap *teamMutationSnapshot, next domain.Bootstrap, appendRecord func(string, string, bool, any) error) error {
+func collectExistingTeamImportUpdates(snap *teamMutationSnapshot, next domain.Bootstrap, appendRecord func(string, string, any, any) error) error {
 	if len(snap.oldTeams) == 0 {
 		return nil
 	}
@@ -656,14 +697,18 @@ func collectExistingTeamImportUpdates(snap *teamMutationSnapshot, next domain.Bo
 			continue
 		}
 		if !metadataTeamEqual(old, team) {
-			if err := appendRecord("teams", team.ID, false, team); err != nil {
+			if err := appendRecord("teams", team.ID, old, team); err != nil {
 				return err
 			}
 		}
 		settings, hasSettings := next.TeamSettings[team.ID]
 		oldSettings, hadSettings := snap.oldImportSettings[team.ID]
 		if hasSettings && (!hadSettings || !metadataTeamSettingsEqual(oldSettings, settings)) {
-			if err := appendRecord("teamSettings", team.ID, false, settings); err != nil {
+			var base any
+			if hadSettings {
+				base = oldSettings
+			}
+			if err := appendRecord("teamSettings", team.ID, base, settings); err != nil {
 				return err
 			}
 		}
@@ -671,7 +716,7 @@ func collectExistingTeamImportUpdates(snap *teamMutationSnapshot, next domain.Bo
 	return nil
 }
 
-func collectExistingUserImportUpdates(snap *teamMutationSnapshot, next domain.Bootstrap, appendRecord func(string, string, bool, any) error) error {
+func collectExistingUserImportUpdates(snap *teamMutationSnapshot, next domain.Bootstrap, appendRecord func(string, string, any, any) error) error {
 	if len(snap.oldUsers) == 0 {
 		return nil
 	}
@@ -689,14 +734,14 @@ func collectExistingUserImportUpdates(snap *teamMutationSnapshot, next domain.Bo
 		if !ok || metadataUserEqual(old, user) {
 			continue
 		}
-		if err := appendRecord("users", user.ID, false, user); err != nil {
+		if err := appendRecord("users", user.ID, old, user); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func collectExistingProjectImportUpdates(snap *teamMutationSnapshot, next domain.Bootstrap, appendRecord func(string, string, bool, any) error) error {
+func collectExistingProjectImportUpdates(snap *teamMutationSnapshot, next domain.Bootstrap, appendRecord func(string, string, any, any) error) error {
 	if len(snap.oldProjects) == 0 {
 		return nil
 	}
@@ -714,7 +759,7 @@ func collectExistingProjectImportUpdates(snap *teamMutationSnapshot, next domain
 		if !ok || metadataProjectEqual(old, project) {
 			continue
 		}
-		if err := appendRecord("projects", project.ID, false, project); err != nil {
+		if err := appendRecord("projects", project.ID, old, project); err != nil {
 			return err
 		}
 	}
@@ -752,7 +797,7 @@ func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey stri
 			}
 		}
 	}
-	if err := writeMetadataRecordChanges(ctx, tx, workspaceKey, upserts); err != nil {
+	if err := writeMetadataRecordChanges(ctx, tx, workspaceKey, newIssueReferences(domain.Bootstrap{Users: next.Users}), upserts); err != nil {
 		return 0, err
 	}
 	var removedIssues int64
@@ -813,14 +858,59 @@ type metadataRecordChange struct {
 	drop   bool
 	order  int
 	raw    json.RawMessage
+	// base is the record the writer loaded and changed into raw (nil: it saw
+	// none). writeMetadataRecordChanges merges raw's change onto the row when
+	// another write changed it since (rebaseMetadataRecordWrite).
+	base json.RawMessage
+	// merged: raw is a merge with another write's change, so the writer's
+	// in-memory record must be replaced with it.
+	merged bool
+	// skipped: another write deleted the record meanwhile; it was not
+	// written.
+	skipped bool
 }
 
 // writeMetadataRecordChanges applies changes inside tx and records each
-// upsert's collection order in changes, so the hot cache can mirror it.
-func writeMetadataRecordChanges(ctx context.Context, tx *sqlTx, workspace string, changes []metadataRecordChange) error {
+// upsert's collection order in changes, so the hot cache can mirror it. Each
+// upsert is first rebased onto its row as stored (rebaseMetadataRecordWrite),
+// in field then key order: changes then holds the merged records (merged), a
+// record another write deleted meanwhile is left out, and a value both
+// changed fails the write with a *metadataConflictError.
+func writeMetadataRecordChanges(ctx context.Context, tx *sqlTx, workspace string, refs issueReferences, changes []metadataRecordChange) error {
+	order := make([]int, 0, len(changes))
+	for index, change := range changes {
+		if !change.drop {
+			order = append(order, index)
+		}
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		a, b := changes[order[i]], changes[order[j]]
+		if a.field != b.field {
+			return a.field < b.field
+		}
+		return a.key < b.key
+	})
+	skipped := map[int]bool{}
+	for _, index := range order {
+		change := &changes[index]
+		raw, write, err := rebaseMetadataRecordWrite(ctx, tx, workspace, refs, change.field, change.key, change.base, change.raw)
+		if err != nil {
+			return err
+		}
+		if !write {
+			skipped[index], change.skipped = true, true
+			continue
+		}
+		if !bytes.Equal(raw, change.raw) {
+			change.raw, change.merged = raw, true
+		}
+	}
 	upserts := make([]metadataRecordChange, 0, len(changes))
 	positions := make([]int, 0, len(changes))
 	for index, change := range changes {
+		if skipped[index] {
+			continue
+		}
 		if !change.drop {
 			upserts = append(upserts, change)
 			positions = append(positions, index)

@@ -1526,7 +1526,14 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 			previousValues = aggregatePreviousValues(current, next, aggregateID)
 		}
 		if !metadataOnly && progressEvent(eventType) {
-			refreshProjectProgressHistories(&next, time.Now().UTC())
+			if fullMutationsForced.Load() {
+				refreshProjectProgressHistories(&next, time.Now().UTC())
+			} else {
+				// Progress is computed in the write transaction from the
+				// committed issue rows (persistWorkspaceTx); here only the
+				// projects it changes are found.
+				base.progressProjects = progressChangedProjects(next, time.Now().UTC())
+			}
 		}
 		if !metadataOnly {
 			refreshResourceCounts(&next)
@@ -1556,7 +1563,7 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 			return s.coordinator.WithWorkspaceLock(ctx, workspaceKey, func() error { return apply(ctx) })
 		}
 		return apply(ctx)
-	}, nil)
+	}, s.refreshConflictedMetadata(ctx, workspaceKey))
 	if err != nil {
 		if errors.Is(err, ErrNoMutation) {
 			return nil
@@ -1755,7 +1762,13 @@ func (s *SQLiteStore) persistWorkspaceOnto(ctx context.Context, workspaceKey str
 			return err
 		}
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	var options *sql.TxOptions
+	if base != nil && len(base.progressProjects) > 0 {
+		// Progress rebuilt in the transaction counts issue rows other servers
+		// commit while it runs (see recordWriteTxOptions).
+		options = s.recordTxOptions()
+	}
+	tx, err := s.db.BeginTx(ctx, options)
 	if err != nil {
 		return err
 	}
@@ -1879,16 +1892,21 @@ func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspa
 		}
 	}
 	if before != nil {
-		if _, err := s.writeWorkspaceMetadataDelta(ctx, tx, workspaceKey, *before, &data); err != nil {
+		stored := *before
+		if base != nil && len(base.progressProjects) > 0 {
+			var err error
+			if stored, err = s.rebuildProgressTx(ctx, tx, workspaceKey, stored, &data, base.progressProjects); err != nil {
+				return err
+			}
+		}
+		if _, err := s.writeWorkspaceMetadataDelta(ctx, tx, workspaceKey, stored, &data); err != nil {
 			return err
 		}
 		// Records merged with another write's change go back to the caller,
 		// which installs them (import inputs stay as the caller has them).
 		source, destination := reflect.ValueOf(&data).Elem(), reflect.ValueOf(target).Elem()
 		for _, field := range persistedMetadataFields() {
-			if field.name != "importJobs" {
-				destination.Field(field.index).Set(source.Field(field.index))
-			}
+			setRebasedField(field, destination.Field(field.index), source.Field(field.index))
 		}
 	} else if err := writeWorkspaceMetadata(ctx, tx, workspaceKey, data.Workspace.ID, raw); err != nil {
 		return err

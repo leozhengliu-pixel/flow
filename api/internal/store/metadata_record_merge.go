@@ -3,10 +3,13 @@ package store
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"math/rand/v2"
 	"reflect"
 	"slices"
 	"sort"
@@ -28,38 +31,37 @@ import (
 // So a writer that changes a record first locks its row (rebaseMetadata),
 // and when the row no longer matches the copy the change was made on, it
 // applies only its own change to the row: the record's top-level fields it
-// changed, with lists of ids and of id'd entries merged by entry (its
-// additions and removals on top of theirs). The copy's record becomes the row
-// as stored, and the written record the merged one, so the rest of the write
-// (and the snapshot installed afterwards) carries both changes. updatedAt
-// takes the later time. A field both writes changed to different values, or a
-// number both moved (a round-robin cursor both advanced from the same value),
-// is a conflict: writers that can rerun on fresh records (see
-// withStrictMetadataMerge) get ErrConcurrentWrite and rerun; the others keep
-// their own value for that field.
+// changed, with nested objects merged key by key, lists of ids merged as sets
+// and lists of id'd entries merged by entry (its additions and removals on
+// top of theirs; an entry both changed merges key by key). The copy's record
+// becomes the row as stored, and the written record the merged one, so the
+// rest of the write (and the snapshot installed afterwards) carries both
+// changes. updatedAt takes the later time. A value both writes changed
+// differently where they cannot be combined (a string, a number both moved,
+// say a round-robin cursor both advanced from the same value, a list without
+// ids) is a conflict: the write fails with ErrConcurrentWrite, and every
+// writer reruns on fresh records (concurrentWriteAttempts, with jittered
+// backoff) before it reports the 409. No writer keeps its own value over
+// another's.
+//
+// What still merges as a whole: scalars (strings, numbers, booleans), lists
+// whose entries have no "id" (progress history points, lists of lists), and
+// an entry or value one side removed while the other changed it (a
+// conflict). A record another write deleted is not brought back.
+//
+// Writers that replace records whole from a copy (team writers, user
+// settings, team deletion) go through the same merge per record
+// (rebaseMetadataRecordWrite), as do project and initiative updates, which
+// are stored one update per row.
 //
 // Derived values are not merged but recomputed on the locked row: an issue
 // write locks the rows of the projects whose progress it changes before it
 // computes the progress (rebaseIssueMetadata), so two issue writes in one
 // project add up instead of the later one replacing the earlier one's history.
+// Full mutations do the same inside their transaction (persistWorkspaceTx).
 //
 // Rows are locked in one order: issue number sequence, issue rows, content
 // rows, metadata rows by field then key, then the workspace document.
-
-type strictMetadataMergeKey struct{}
-
-// withStrictMetadataMerge makes metadata merges in ctx report a field both
-// writes changed as a conflict instead of keeping the writer's value. Only
-// mutations that rerun on ErrConcurrentWrite set it, and only before their
-// last attempt.
-func withStrictMetadataMerge(ctx context.Context, strict bool) context.Context {
-	return context.WithValue(ctx, strictMetadataMergeKey{}, strict)
-}
-
-func strictMetadataMerge(ctx context.Context) bool {
-	strict, _ := ctx.Value(strictMetadataMergeKey{}).(bool)
-	return strict
-}
 
 // metadataConflictError is ErrConcurrentWrite for metadata records another
 // write changed in the same field. Keys names them, so a writer working from
@@ -129,16 +131,7 @@ func mergeMetadataRecord(base, ours, theirs, loaded []byte) ([]byte, bool, error
 				continue
 			}
 		}
-		if jsonEqual(theirValue, ourValue) {
-			// Both moved a number (a cursor, a count) from the same value:
-			// each counted one step, so the result is not their agreement.
-			if number := bytes.TrimSpace(ourValue); len(number) > 0 && (number[0] == '-' || number[0] >= '0' && number[0] <= '9') {
-				conflict = true
-			}
-			setMember(merged, name, ourValue)
-			continue
-		}
-		value, ok := mergeMetadataLists(baseValue, ourValue, theirValue)
+		value, ok := mergeMetadataValues(baseValue, ourValue, theirValue)
 		if !ok {
 			conflict = true
 			value = ourValue
@@ -147,6 +140,110 @@ func mergeMetadataRecord(base, ours, theirs, loaded []byte) ([]byte, bool, error
 	}
 	encoded, err := json.Marshal(merged)
 	return encoded, conflict, err
+}
+
+// mergeMetadataValues merges a value both sides changed from base: objects
+// key by key (recursively), lists by entry (mergeMetadataLists). Anything
+// else, and a number both moved to the same value (each counted one step from
+// base, so the result is not their agreement), does not merge.
+func mergeMetadataValues(base, ours, theirs json.RawMessage) (json.RawMessage, bool) {
+	if jsonEqual(ours, base) {
+		return theirs, true
+	}
+	if jsonEqual(theirs, base) {
+		return ours, true
+	}
+	if jsonEqual(theirs, ours) {
+		if number := bytes.TrimSpace(ours); len(number) > 0 && (number[0] == '-' || number[0] >= '0' && number[0] <= '9') {
+			return nil, false
+		}
+		return ours, true
+	}
+	switch jsonKind(ours) | jsonKind(theirs) | jsonKind(base) {
+	case jsonObject, jsonObject | jsonAbsent:
+		return mergeMetadataObjects(base, ours, theirs)
+	case jsonArray, jsonArray | jsonAbsent:
+		return mergeMetadataLists(base, ours, theirs)
+	}
+	return nil, false
+}
+
+const (
+	jsonAbsent = 1 << iota
+	jsonObject
+	jsonArray
+	jsonScalar
+)
+
+// jsonKind classifies a member value; an absent, null or empty value merges
+// with either container shape.
+func jsonKind(value json.RawMessage) int {
+	trimmed := bytes.TrimSpace(value)
+	switch {
+	case emptyJSONValue(trimmed), bytes.Equal(trimmed, []byte("{}")), bytes.Equal(trimmed, []byte("[]")):
+		return jsonAbsent
+	case trimmed[0] == '{':
+		return jsonObject
+	case trimmed[0] == '[':
+		return jsonArray
+	}
+	return jsonScalar
+}
+
+// mergeMetadataObjects merges two changes to a JSON object key by key: keys
+// one side added, removed or changed apply on top of the other's, and a key
+// both changed merges its values (mergeMetadataValues).
+func mergeMetadataObjects(base, ours, theirs json.RawMessage) (json.RawMessage, bool) {
+	var baseKeys, ourKeys, theirKeys map[string]json.RawMessage
+	for _, part := range []struct {
+		raw  json.RawMessage
+		keys *map[string]json.RawMessage
+	}{{base, &baseKeys}, {ours, &ourKeys}, {theirs, &theirKeys}} {
+		if emptyJSONValue(bytes.TrimSpace(part.raw)) {
+			continue
+		}
+		if json.Unmarshal(part.raw, part.keys) != nil {
+			return nil, false
+		}
+	}
+	merged := make(map[string]json.RawMessage, len(theirKeys)+len(ourKeys))
+	for key, value := range theirKeys {
+		merged[key] = value
+	}
+	keys := map[string]bool{}
+	for key := range baseKeys {
+		keys[key] = true
+	}
+	for key := range ourKeys {
+		keys[key] = true
+	}
+	for key := range keys {
+		baseValue, ourValue, theirValue := baseKeys[key], ourKeys[key], theirKeys[key]
+		_, inBase := baseKeys[key]
+		_, inOurs := ourKeys[key]
+		_, inTheirs := theirKeys[key]
+		switch {
+		case inBase && inOurs && bytes.Equal(bytes.TrimSpace(baseValue), bytes.TrimSpace(ourValue)):
+			continue
+		case inBase && !inOurs:
+			// Ours removed the key: theirs must not have changed it.
+			if inTheirs && !bytes.Equal(bytes.TrimSpace(theirValue), bytes.TrimSpace(baseValue)) {
+				return nil, false
+			}
+			delete(merged, key)
+			continue
+		case inBase && !inTheirs:
+			// Theirs removed a key ours changed.
+			return nil, false
+		}
+		value, ok := mergeMetadataValues(baseValue, ourValue, theirValue)
+		if !ok {
+			return nil, false
+		}
+		merged[key] = value
+	}
+	encoded, err := json.Marshal(merged)
+	return encoded, err == nil
 }
 
 // normalizedMetadataRecord returns a stored record of field as loading
@@ -268,10 +365,23 @@ func mergeMetadataLists(base, ours, theirs json.RawMessage) (json.RawMessage, bo
 			}
 			continue
 		case inOurs && inBase && !jsonEqual(ourItem, baseItem) && !jsonEqual(theirItem, ourItem):
-			if !jsonEqual(theirItem, baseItem) {
+			if jsonEqual(theirItem, baseItem) {
+				theirItem = ourItem
+				break
+			}
+			// Both changed the entry: merge it key by key.
+			merged, ok := mergeMetadataValues(baseItem, ourItem, theirItem)
+			if !ok {
 				return nil, false
 			}
-			theirItem = ourItem
+			theirItem = merged
+		case inOurs && !inBase && !jsonEqual(ourItem, theirItem):
+			// Both added an entry with this id: merge the two.
+			merged, ok := mergeMetadataValues(nil, ourItem, theirItem)
+			if !ok {
+				return nil, false
+			}
+			theirItem = merged
 		}
 		result = append(result, theirItem)
 	}
@@ -305,12 +415,13 @@ func (collection metadataCollection) isMap() bool { return collection.value.Kind
 
 // rebaseableMetadataField reports whether field's records can be rebased: a
 // slice of structs with a string ID, or a map with string keys. Project and
-// initiative updates (a dictionary of lists) and import jobs (compacted on
-// write) are only written under the workspace lock and keep whole-record
-// writes.
+// initiative updates (a dictionary of lists) are rebased per update
+// (rebaseUpdateRecords). Import and migration jobs are rebased as stored,
+// without their inputs (compactImportInputs), which stay as the writer has
+// them (keepImportInputs).
 func rebaseableMetadataField(field metadataField, kind reflect.Type) bool {
 	switch field.name {
-	case "projectUpdates", "initiativeUpdates", "importJobs", "workspace", "viewer":
+	case "projectUpdates", "initiativeUpdates", "workspace", "viewer":
 		return false
 	}
 	switch kind.Kind() {
@@ -476,10 +587,25 @@ func (s *SQLiteStore) rebaseMetadata(ctx context.Context, tx *sqlTx, workspace s
 	var refs *issueReferences
 	replaced := []metadataField{}
 	var conflicts []metadataRecordKey
-	strict := strictMetadataMerge(ctx)
 	for _, name := range names {
 		field := fields[name]
 		beforeValue, afterValue := beforeRoot.Field(field.index), afterRoot.Field(field.index)
+		if updateMetadataField(field.name) {
+			if refs == nil {
+				current := newIssueReferences(domain.Bootstrap{Users: after.Users})
+				refs = &current
+			}
+			result, err := rebaseUpdateRecords(ctx, tx, workspace, *refs, field, beforeValue, afterValue)
+			if err != nil {
+				return nil, false, err
+			}
+			conflicts = append(conflicts, result.conflicts...)
+			touched = touched || result.touched
+			if result.replacedAfter {
+				replaced = append(replaced, field)
+			}
+			continue
+		}
 		if !rebaseableMetadataField(field, beforeValue.Type()) {
 			continue
 		}
@@ -558,40 +684,24 @@ func (s *SQLiteStore) rebaseMetadata(ctx context.Context, tx *sqlTx, workspace s
 				replacedAfter = true
 				continue
 			}
-			resolved, err := resolveDocumentMarkers(name, row)
-			if err != nil {
-				return nil, false, err
-			}
-			storedValue, err := decodeMetadataRecord(kind, resolved, reflect.Value{})
-			if err != nil {
-				return nil, false, fmt.Errorf("rebase %s record %s: %w", name, key, err)
-			}
-			theirs, err := json.Marshal(storedValue.Interface())
-			if err != nil {
-				return nil, false, err
-			}
-			loaded, err := normalizedMetadataRecord(field, key, storedValue)
-			if err != nil {
-				return nil, false, err
-			}
-			loaded = refs.canonicalDisplayData(loaded)
-			if refs.equalDisplayData(loaded, base) {
-				// The row only lacks what the load fills in: no other write
-				// changed it.
-				continue
-			}
 			ours, err := json.Marshal(mine.Interface())
 			if err != nil {
 				return nil, false, err
 			}
-			merged, conflict, err := mergeMetadataRecord(base, ours, theirs, loaded)
+			result, err := mergeWithStoredRecord(*refs, field, kind, key, base, ours, row)
 			if err != nil {
 				return nil, false, err
 			}
-			if conflict && strict {
+			if result.unchanged {
+				// The row only lacks what the load fills in: no other write
+				// changed it.
+				continue
+			}
+			if result.conflict {
 				conflicts = append(conflicts, recordKey)
 				continue
 			}
+			theirs, merged := result.theirs, result.merged
 			theirValue, err := decodeMetadataRecord(kind, theirs, old)
 			if err != nil {
 				return nil, false, err
@@ -611,6 +721,351 @@ func (s *SQLiteStore) rebaseMetadata(ctx context.Context, tx *sqlTx, workspace s
 		return nil, false, &metadataConflictError{keys: conflicts}
 	}
 	return replaced, touched, nil
+}
+
+// updateMetadataField reports a per-parent update collection (parent id ->
+// updates), stored one update per row (splitUpdateMetadata).
+func updateMetadataField(name string) bool {
+	return name == "projectUpdates" || name == "initiativeUpdates"
+}
+
+// updateRecordKey is the row key of one update of parent.
+func updateRecordKey(parent, id string) string {
+	key, _ := json.Marshal([]string{parent, id})
+	return fmt.Sprintf("%x", sha256.Sum256(key))
+}
+
+type updateRebase struct {
+	conflicts     []metadataRecordKey
+	touched       bool
+	replacedAfter bool
+}
+
+// rebaseUpdateRecords is rebaseMetadata for a per-parent update collection
+// (a project's or initiative's status updates): every update after changed
+// from before is a record of its own. It locks their rows and, where another
+// write changed one since before was read (a comment, a reaction, an edit),
+// makes before's update the stored one and after's the merge of both
+// changes; an update deleted meanwhile is left out of both. Updates another
+// write added are rows the delta writer does not touch, so they are kept.
+func rebaseUpdateRecords(ctx context.Context, tx *sqlTx, workspace string, refs issueReferences, field metadataField, beforeValue, afterValue reflect.Value) (updateRebase, error) {
+	var result updateRebase
+	if beforeValue.Kind() != reflect.Map || afterValue.Kind() != reflect.Map || beforeValue.IsNil() || afterValue.IsNil() {
+		return result, nil
+	}
+	listType := afterValue.Type().Elem()
+	if listType.Kind() != reflect.Slice || listType.Elem().Kind() != reflect.Struct {
+		return result, nil
+	}
+	kind := listType.Elem()
+	idIndex := idFieldIndex(kind)
+	type position struct {
+		parent        string
+		before, after int
+	}
+	positions := map[string]position{}
+	keys := []string{}
+	iter := afterValue.MapRange()
+	for iter.Next() {
+		parent := iter.Key().String()
+		previous := beforeValue.MapIndex(iter.Key())
+		if !previous.IsValid() || metadataValueEqual(addressable(previous), addressable(iter.Value())) {
+			continue
+		}
+		index := map[string]int{}
+		for i := 0; i < previous.Len(); i++ {
+			index[previous.Index(i).Field(idIndex).String()] = i
+		}
+		list := iter.Value()
+		for i := 0; i < list.Len(); i++ {
+			id := list.Index(i).Field(idIndex).String()
+			old, existed := index[id]
+			if !existed || metadataValueEqual(addressable(previous.Index(old)), addressable(list.Index(i))) {
+				continue
+			}
+			key := updateRecordKey(parent, id)
+			if tx.rebasedMetadata[metadataRecordKey{field.name, key}] {
+				continue
+			}
+			positions[key] = position{parent, old, i}
+			keys = append(keys, key)
+		}
+	}
+	if len(keys) == 0 {
+		return result, nil
+	}
+	sort.Strings(keys)
+	stored, err := lockMetadataRecords(ctx, tx, workspace, field.name, keys)
+	if err != nil {
+		return result, err
+	}
+	if tx.rebasedMetadata == nil {
+		tx.rebasedMetadata = map[metadataRecordKey]bool{}
+	}
+	// Lists are replaced, never changed in place: before's are readers'
+	// snapshot, and after's may share their backing arrays.
+	beforeLists, afterLists := map[string]reflect.Value{}, map[string]reflect.Value{}
+	list := func(lists map[string]reflect.Value, value reflect.Value, parent string) reflect.Value {
+		if copied, ok := lists[parent]; ok {
+			return copied
+		}
+		original := value.MapIndex(reflect.ValueOf(parent).Convert(value.Type().Key()))
+		copied := reflect.MakeSlice(original.Type(), original.Len(), original.Len())
+		reflect.Copy(copied, original)
+		lists[parent] = copied
+		return copied
+	}
+	removed := map[string]map[string]bool{}
+	for _, key := range keys {
+		tx.rebasedMetadata[metadataRecordKey{field.name, key}] = true
+		at := positions[key]
+		old := beforeValue.MapIndex(reflect.ValueOf(at.parent).Convert(beforeValue.Type().Key())).Index(at.before)
+		mine := afterValue.MapIndex(reflect.ValueOf(at.parent).Convert(afterValue.Type().Key())).Index(at.after)
+		id := old.Field(idIndex).String()
+		row, exists := stored[key]
+		if !exists {
+			// Deleted by another write: ours does not bring it back.
+			if removed[at.parent] == nil {
+				removed[at.parent] = map[string]bool{}
+			}
+			removed[at.parent][id] = true
+			result.touched = true
+			continue
+		}
+		var update metadataUpdate
+		if err := json.Unmarshal(row, &update); err != nil {
+			return result, err
+		}
+		base, err := json.Marshal(old.Interface())
+		if err != nil {
+			return result, err
+		}
+		if len(update.Item) == 0 || refs.equalDisplayData(update.Item, base) {
+			continue
+		}
+		storedValue, err := decodeMetadataRecord(kind, update.Item, old)
+		if err != nil {
+			return result, fmt.Errorf("rebase %s record %s: %w", field.name, key, err)
+		}
+		theirs, err := json.Marshal(storedValue.Interface())
+		if err != nil {
+			return result, err
+		}
+		if refs.equalDisplayData(refs.canonicalDisplayData(theirs), base) {
+			continue
+		}
+		ours, err := json.Marshal(mine.Interface())
+		if err != nil {
+			return result, err
+		}
+		merged, conflict, err := mergeMetadataRecord(base, ours, theirs, theirs)
+		if err != nil {
+			return result, err
+		}
+		if conflict {
+			result.conflicts = append(result.conflicts, metadataRecordKey{field.name, key})
+			continue
+		}
+		mergedValue, err := decodeMetadataRecord(kind, merged, mine)
+		if err != nil {
+			return result, err
+		}
+		result.touched = true
+		list(beforeLists, beforeValue, at.parent).Index(at.before).Set(storedValue)
+		list(afterLists, afterValue, at.parent).Index(at.after).Set(mergedValue)
+	}
+	if !result.touched {
+		return result, nil
+	}
+	drop := func(lists map[string]reflect.Value, value reflect.Value) {
+		for parent, ids := range removed {
+			current := list(lists, value, parent)
+			kept := reflect.MakeSlice(current.Type(), 0, current.Len())
+			for i := 0; i < current.Len(); i++ {
+				if !ids[current.Index(i).Field(idIndex).String()] {
+					kept = reflect.Append(kept, current.Index(i))
+				}
+			}
+			lists[parent] = kept
+		}
+	}
+	drop(beforeLists, beforeValue)
+	drop(afterLists, afterValue)
+	install := func(lists map[string]reflect.Value, value reflect.Value) {
+		copied := cloneMetadataContainer(value)
+		for parent, items := range lists {
+			copied.SetMapIndex(reflect.ValueOf(parent).Convert(value.Type().Key()), items)
+		}
+		value.Set(copied)
+	}
+	install(beforeLists, beforeValue)
+	install(afterLists, afterValue)
+	result.replacedAfter = true
+	return result, nil
+}
+
+// storedMerge is a writer's change merged onto a record as stored.
+type storedMerge struct {
+	// theirs is the stored record re-encoded from its type; merged is ours'
+	// change applied to it.
+	theirs, merged []byte
+	// unchanged: no other write changed the record since base.
+	unchanged bool
+	// conflict: both changed a value that does not merge.
+	conflict bool
+}
+
+// mergeWithStoredRecord compares row (a record of field as stored) with base
+// (the record the writer changed into ours) and, when another write changed
+// the row since, merges both changes (mergeMetadataRecord).
+func mergeWithStoredRecord(refs issueReferences, field metadataField, kind reflect.Type, key string, base, ours, row []byte) (storedMerge, error) {
+	resolved, err := resolveDocumentMarkers(field.name, row)
+	if err != nil {
+		return storedMerge{}, err
+	}
+	storedValue, err := decodeMetadataRecord(kind, resolved, reflect.Value{})
+	if err != nil {
+		return storedMerge{}, fmt.Errorf("rebase %s record %s: %w", field.name, key, err)
+	}
+	theirs, err := json.Marshal(storedValue.Interface())
+	if err != nil {
+		return storedMerge{}, err
+	}
+	loaded, err := normalizedMetadataRecord(field, key, storedValue)
+	if err != nil {
+		return storedMerge{}, err
+	}
+	loaded = refs.canonicalDisplayData(loaded)
+	if refs.equalDisplayData(loaded, base) {
+		return storedMerge{theirs: theirs, merged: ours, unchanged: true}, nil
+	}
+	merged, conflict, err := mergeMetadataRecord(base, ours, theirs, loaded)
+	if err != nil {
+		return storedMerge{}, err
+	}
+	return storedMerge{theirs: theirs, merged: merged, conflict: conflict}, nil
+}
+
+// keepImportInputs gives an import or migration job decoded from its stored
+// row (which lacks the job's input rows or bundle, stored apart; see
+// compactImportInputs) the input of old, the copy's record.
+func keepImportInputs(field string, record, old reflect.Value) {
+	if !old.IsValid() || !record.CanSet() {
+		return
+	}
+	var input string
+	switch field {
+	case "importJobs":
+		input = "Rows"
+	case "migrationJobs":
+		input = "Bundle"
+	default:
+		return
+	}
+	if value := record.FieldByName(input); value.IsValid() && value.IsNil() {
+		value.Set(old.FieldByName(input))
+	}
+}
+
+// metadataRecordType returns the record type of a record-backed metadata
+// field (the element of a list, the value of a dictionary) and whether its
+// records merge field by field.
+func metadataRecordType(name string) (metadataField, reflect.Type, bool) {
+	field, ok := metadataFieldByName(name)
+	if !ok {
+		return field, nil, false
+	}
+	container := reflect.TypeFor[domain.Bootstrap]().Field(field.index).Type
+	if !rebaseableMetadataField(field, container) {
+		return field, nil, false
+	}
+	return field, container.Elem(), true
+}
+
+// rebaseMetadataRecordWrite prepares a whole-record write (ours) of a writer
+// that read the record as base (nil: it saw no record) from its copy. It
+// locks the record's row and returns what to write: ours when the row is
+// still base, ours' change merged onto the row when another write changed it
+// since, and write false when another write deleted it meanwhile (the write
+// must not bring it back). A value both changed that does not merge, and a
+// record both created differently, is a conflict (*metadataConflictError).
+func rebaseMetadataRecordWrite(ctx context.Context, tx *sqlTx, workspace string, refs issueReferences, name, key string, base, ours []byte) (result []byte, write bool, err error) {
+	field, kind, ok := metadataRecordType(name)
+	if !ok {
+		return ours, true, nil
+	}
+	stored, err := lockMetadataRecords(ctx, tx, workspace, name, []string{key})
+	if err != nil {
+		return nil, false, err
+	}
+	row, exists := stored[key]
+	conflict := &metadataConflictError{keys: []metadataRecordKey{{name, key}}}
+	switch {
+	case !exists && base != nil:
+		return nil, false, nil
+	case !exists:
+		return ours, true, nil
+	case base == nil:
+		if storedRecordEqual(tx, refs, name, row, ours) {
+			return ours, true, nil
+		}
+		// Created on both sides: merge the two records from nothing.
+		result, err := mergeWithStoredRecord(refs, field, kind, key, []byte("{}"), ours, row)
+		if err != nil {
+			return nil, false, err
+		}
+		if result.conflict {
+			return nil, false, conflict
+		}
+		return result.merged, true, nil
+	case storedRecordEqual(tx, refs, name, row, base):
+		return ours, true, nil
+	}
+	result, err = func() ([]byte, error) {
+		merge, err := mergeWithStoredRecord(refs, field, kind, key, base, ours, row)
+		if err != nil {
+			return nil, err
+		}
+		if merge.conflict {
+			return nil, conflict
+		}
+		return merge.merged, nil
+	}()
+	return result, err == nil, err
+}
+
+// setMetadataRecords installs records (JSON as stored) into data's
+// collections in place, replacing the records with the same keys and adding
+// the others. Writers use it to keep the copy they install equal to what a
+// merge wrote.
+func setMetadataRecords(data *domain.Bootstrap, records map[metadataRecordKey][]byte) error {
+	root := reflect.ValueOf(data).Elem()
+	for key, raw := range records {
+		field, kind, ok := metadataRecordType(key.field)
+		if !ok {
+			continue
+		}
+		value := root.Field(field.index)
+		if value.Kind() == reflect.Map && value.IsNil() {
+			value.Set(reflect.MakeMap(value.Type()))
+		}
+		collection := newMetadataCollection(field, value)
+		old, _ := collection.record(key.key)
+		record, err := decodeMetadataRecord(kind, raw, old)
+		if err != nil {
+			return err
+		}
+		keepImportInputs(key.field, record, old)
+		switch {
+		case value.Kind() == reflect.Map:
+			value.SetMapIndex(reflect.ValueOf(key.key).Convert(value.Type().Key()), record)
+		case old.IsValid():
+			collection.set(key.key, record)
+		default:
+			value.Set(reflect.Append(value, record))
+		}
+	}
+	return nil
 }
 
 // lockMetadataRecords reads (and on MySQL and PostgreSQL locks) the stored
@@ -643,6 +1098,14 @@ func lockMetadataRecords(ctx context.Context, tx *sqlTx, workspace, field string
 		}
 	}
 	return stored, nil
+}
+
+// RefreshMetadataRecord replaces one record of the workspace's in-memory
+// copy (field by its JSON name, such as "agentSessions") with the stored one,
+// for a request that must act on what another server committed rather than
+// on a copy its peer event has not updated yet.
+func (s *SQLiteStore) RefreshMetadataRecord(ctx context.Context, workspace, field, key string) error {
+	return s.refreshMetadataRecords(ctx, workspace, []metadataRecordKey{{field, key}})
 }
 
 // refreshMetadataRecords replaces the named records of the workspace's
@@ -721,6 +1184,7 @@ func (s *SQLiteStore) refreshMetadataRecords(ctx context.Context, workspace stri
 			if err != nil {
 				return err
 			}
+			keepImportInputs(records.field.name, record, old)
 			if _, held := collection.ids[key]; held {
 				collection.set(key, record)
 			} else if value.Kind() == reflect.Map {
@@ -735,13 +1199,15 @@ func (s *SQLiteStore) refreshMetadataRecords(ctx context.Context, workspace stri
 }
 
 // mutationAttempts runs attempt until it succeeds, fails with something
-// other than a concurrent write, or runs out of attempts. Each attempt but
-// the last reports conflicting metadata fields (withStrictMetadataMerge);
-// before rerunning, refresh brings the conflicting records up to date.
+// other than a concurrent write, or runs out of attempts; then the concurrent
+// write is the error (a 409 to API clients), never a silent overwrite.
+// Before rerunning it waits a jittered, growing backoff (so two servers
+// racing on one record do not collide again in step), and refresh brings the
+// conflicting records up to date.
 func mutationAttempts(ctx context.Context, attempts int, attempt func(context.Context) error, refresh func(error) error) error {
 	var err error
 	for number := 1; ; number++ {
-		err = attempt(withStrictMetadataMerge(ctx, number < attempts))
+		err = attempt(ctx)
 		if !errors.Is(err, ErrConcurrentWrite) || number >= attempts {
 			return err
 		}
@@ -751,7 +1217,55 @@ func mutationAttempts(ctx context.Context, attempts int, attempt func(context.Co
 			}
 		}
 		traceMark(ctx, "retry")
+		if waitErr := concurrentWriteBackoff(ctx, number); waitErr != nil {
+			return err
+		}
 	}
+}
+
+// concurrentWriteBackoff waits before rerun number+1 of a write that lost a
+// race: about 5ms doubling per rerun up to 160ms, each between half and one
+// and a half times that.
+func concurrentWriteBackoff(ctx context.Context, number int) error {
+	step := 5 * time.Millisecond << min(number-1, 5)
+	timer := time.NewTimer(step/2 + time.Duration(rand.Int64N(int64(step))))
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+// refreshConflictedMetadata is the refresh for mutationAttempts: it reloads
+// the records a metadata conflict names into the workspace's copy.
+func (s *SQLiteStore) refreshConflictedMetadata(ctx context.Context, workspace string) func(error) error {
+	return func(err error) error {
+		if keys, ok := conflictedMetadataKeys(err); ok {
+			return s.refreshMetadataRecords(ctx, workspace, keys)
+		}
+		return nil
+	}
+}
+
+// backgroundWriteAttempts bounds the reruns of a background write (a startup
+// migration, a progress backfill) that keeps losing races to other servers.
+const backgroundWriteAttempts = 25
+
+// rerunBackgroundWrite runs a background write until it no longer loses a
+// race (bounded), refreshing the records it conflicted on and logging each
+// rerun. Background writes have no client to report a 409 to.
+func (s *SQLiteStore) rerunBackgroundWrite(ctx context.Context, name, workspace string, write func() error) error {
+	refresh := s.refreshConflictedMetadata(ctx, workspace)
+	attempt := 0
+	return mutationAttempts(ctx, backgroundWriteAttempts, func(context.Context) error {
+		attempt++
+		if attempt > 1 {
+			slog.Info("rerunning a background write that raced another server", "write", name, "workspace", workspace, "attempt", attempt)
+		}
+		return write()
+	}, refresh)
 }
 
 // recordWriteTxOptions is the isolation of record transactions that write

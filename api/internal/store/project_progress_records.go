@@ -391,19 +391,80 @@ func (s *SQLiteStore) persistIssueMetadata(ctx context.Context, tx *sqlTx, works
 	return &next, nil
 }
 
+// progressChangedProjects lists the projects whose progress history a full
+// mutation's issues change (what refreshProjectProgressHistories would
+// rewrite), without changing data.
+func progressChangedProjects(data domain.Bootstrap, now time.Time) []string {
+	issuesByProject := make(map[string][]progressIssue, len(data.Projects))
+	for _, issue := range data.Issues {
+		if issue.Project != nil {
+			issuesByProject[issue.Project.ID] = append(issuesByProject[issue.Project.ID], progressIssueOf(issue))
+		}
+	}
+	states := progressStates(data)
+	ids := []string{}
+	for _, project := range data.Projects {
+		if refreshProjectProgress(&project, issuesByProject[project.ID], states, data.Activities, data.TeamSettings, now) {
+			ids = append(ids, project.ID)
+		}
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+// rebuildProgressTx computes the progress of a full mutation's projects
+// inside its write transaction, after its issue rows are written: it locks
+// the projects' rows and rebases data onto them (with the rest of data's
+// metadata changes, see rebaseMetadata), then rebuilds each history from the
+// issue and activity rows as committed, so an issue another server wrote
+// meanwhile counts. It returns the stored state the metadata delta is then
+// written against.
+func (s *SQLiteStore) rebuildProgressTx(ctx context.Context, tx *sqlTx, workspace string, before domain.Bootstrap, data *domain.Bootstrap, projects []string) (domain.Bootstrap, error) {
+	stored := compactImportInputs(collectionMetadata(before))
+	if _, _, err := s.rebaseMetadata(ctx, tx, workspace, &stored, data, nil, map[string][]string{"projects": projects}); err != nil {
+		return stored, err
+	}
+	states := progressStates(*data)
+	now := time.Now().UTC()
+	data.Projects = slices.Clone(data.Projects)
+	for _, id := range projects {
+		index := slices.IndexFunc(data.Projects, func(project domain.Project) bool { return project.ID == id })
+		if index < 0 {
+			continue
+		}
+		if _, err := rebuildProjectProgress(ctx, tx, workspace, data, &data.Projects[index], states, now); err != nil {
+			return stored, err
+		}
+	}
+	return stored, nil
+}
+
 // backfillAllProjectProgress builds the history of projects that have none
 // yet: record-backed workspaces never ran the snapshot refresh, so projects
 // from older builds would otherwise never show a progress graph. It runs after
 // the record migrations and reads one project's rows at a time, so memory stays
 // bounded by the largest project; later issue writes keep histories current.
 func (s *SQLiteStore) backfillAllProjectProgress(ctx context.Context) error {
-	now := time.Now().UTC()
 	for _, workspace := range s.WorkspaceKeys() {
+		// Another server's issue write can change a project's progress
+		// meanwhile: rerun the backfill on the stored records.
+		if err := s.rerunBackgroundWrite(ctx, "project progress backfill", workspace, func() error {
+			return s.backfillWorkspaceProjectProgress(ctx, workspace)
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *SQLiteStore) backfillWorkspaceProjectProgress(ctx context.Context, workspace string) error {
+	now := time.Now().UTC()
+	{
 		s.lockWorkspaceWrites()
 		data, ok := s.workspaces[workspace]
 		if !ok || !slices.ContainsFunc(data.Projects, func(project domain.Project) bool { return len(project.ProgressHistory) == 0 }) {
 			s.unlockWorkspaceWrites()
-			continue
+			return nil
 		}
 		before := data
 		data.Projects = slices.Clone(data.Projects)

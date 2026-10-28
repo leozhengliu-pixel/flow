@@ -37,7 +37,11 @@ func (s *SQLiteStore) migrateAgentWebAccess(ctx context.Context) error {
 	}
 	kept := 0
 	for _, key := range s.WorkspaceKeys() {
-		changed, off, err := s.migrateWorkspaceAgentWebAccess(ctx, key, enabledAt)
+		var changed, off bool
+		err := s.rerunBackgroundWrite(ctx, "agent web access migration", key, func() (err error) {
+			changed, off, err = s.migrateWorkspaceAgentWebAccess(ctx, key, enabledAt)
+			return err
+		})
 		if err != nil {
 			return fmt.Errorf("workspace %q: %w", key, err)
 		}

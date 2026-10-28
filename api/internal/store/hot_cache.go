@@ -482,6 +482,17 @@ func (s *SQLiteStore) fillMetadataRecordsCacheAt(ctx context.Context, workspace 
 	if s.metadataCacheGeneration(ctx, workspace) != stamp.generation {
 		return
 	}
+	// Two fills at one stamp must not interleave: the second's delete would
+	// remove fields the first already wrote, and readers would take the
+	// first's ready mark for a whole copy. One fill per stamp claims it (the
+	// claim is not released: rows read at one stamp are the same copy, and a
+	// later fill at it has nothing to add).
+	if claimer, ok := cache.(hotCacheClaimer); ok {
+		claimed, err := claimer.CacheSetNX(ctx, s.metadataFillKey(workspace, stamp), []byte("1"), metadataFillClaimTTL)
+		if err != nil || !claimed {
+			return
+		}
+	}
 	s.deleteMetadataCache(ctx, workspace)
 	byField := map[string]map[string][]byte{}
 	for _, row := range rows {
@@ -498,7 +509,25 @@ func (s *SQLiteStore) fillMetadataRecordsCacheAt(ctx context.Context, workspace 
 	if listed, err := json.Marshal(fields); err == nil {
 		_ = cache.CacheSet(ctx, s.metadataFieldsListKey(workspace), listed, 24*time.Hour)
 	}
+	// A write committed while the copy was stored: it is already stale.
+	if s.metadataCacheGeneration(ctx, workspace) != stamp.generation {
+		return
+	}
 	_ = cache.CacheSet(ctx, s.metadataReadyKey(workspace), []byte(stamp.String()), 24*time.Hour)
+}
+
+// hotCacheClaimer is a hot cache that can claim a key (Redis SET NX).
+type hotCacheClaimer interface {
+	CacheSetNX(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error)
+}
+
+// metadataFillClaimTTL bounds how long a fill that died midway keeps other
+// fills at its stamp out.
+const metadataFillClaimTTL = time.Minute
+
+// metadataFillKey is the claim of the metadata cache fill at stamp.
+func (s *SQLiteStore) metadataFillKey(workspace string, stamp metadataCacheStamp) string {
+	return s.hotCache().CacheKey(workspace, "mfill", stamp.String())
 }
 
 func (s *SQLiteStore) invalidateDeletedTeamCache(ctx context.Context, workspace string, issues, projects bool) {

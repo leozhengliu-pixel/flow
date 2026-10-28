@@ -27,6 +27,15 @@ func (r *Redis) CacheSet(ctx context.Context, key string, value []byte, ttl time
 	return r.client.Set(ctx, key, value, ttl).Err()
 }
 
+// CacheSetNX stores value under key only when the key does not exist and
+// reports whether it did, so one of several callers can claim a piece of work.
+func (r *Redis) CacheSetNX(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
+	if ttl <= 0 {
+		ttl = issueCacheTTL
+	}
+	return r.client.SetNX(ctx, key, value, ttl).Result()
+}
+
 func (r *Redis) CacheDel(ctx context.Context, keys ...string) error {
 	if len(keys) == 0 {
 		return nil

@@ -394,7 +394,7 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 			return s.coordinator.WithWorkspaceLock(ctx, workspaceKey, func() error { return apply(ctx) })
 		}
 		return apply(ctx)
-	}, nil)
+	}, s.refreshConflictedMetadata(ctx, workspaceKey))
 	if errors.Is(err, errScopeTooLarge) {
 		return s.mutateFull(ctx, workspaceKey, eventType, payload, mutate)
 	}

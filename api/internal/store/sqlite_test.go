@@ -121,7 +121,14 @@ func TestProjectProgressHistoriesPersistAndRefreshOnIssueMutation(t *testing.T) 
 			return errors.New("issue not found")
 		}
 		completedAt := time.Now().UTC()
-		data.Issues[index].State.Type = "completed"
+		// Progress counts the issue's workflow state as the catalog has it.
+		state := slices.IndexFunc(data.States, func(state domain.WorkflowState) bool {
+			return state.Type == "completed" && (state.TeamID == "" || state.TeamID == data.Issues[index].Team.ID)
+		})
+		if state < 0 {
+			return errors.New("no completed state")
+		}
+		data.Issues[index].State = data.States[state]
 		data.Issues[index].CompletedAt = &completedAt
 		data.Issues[index].UpdatedAt = completedAt
 		return nil

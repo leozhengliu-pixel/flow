@@ -91,7 +91,11 @@ func (s *SQLiteStore) migrationApplied(ctx context.Context, version int) (bool, 
 func (s *SQLiteStore) migrateDocumentDefaultAccess(ctx context.Context) error {
 	documents, deleted := 0, 0
 	for _, key := range s.WorkspaceKeys() {
-		live, trashed, err := s.migrateWorkspaceDocumentAccess(ctx, key)
+		var live, trashed int
+		err := s.rerunBackgroundWrite(ctx, "document access migration", key, func() (err error) {
+			live, trashed, err = s.migrateWorkspaceDocumentAccess(ctx, key)
+			return err
+		})
 		if err != nil {
 			return fmt.Errorf("workspace %q: %w", key, err)
 		}
