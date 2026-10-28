@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -180,6 +181,71 @@ describe('sidebar assignee picker data flow (delegateRow)', () => {
     await user.click(screen.getByRole('option', { name: /No assignee/ }))
     expect(onChange).toHaveBeenCalledWith('')
     expect(confirmAction).not.toHaveBeenCalled()
+  })
+})
+
+/** CSS selector specificity as [ids, classes/attributes/pseudo-classes, types]; :is/:not/:has take their most specific argument. */
+function specificity(selector: string): [number, number, number] {
+  const score: [number, number, number] = [0, 0, 0]
+  let rest = selector
+  for (let match = /:(is|not|has|where)\(/.exec(rest); match; match = /:(is|not|has|where)\(/.exec(rest)) {
+    let depth = 1
+    let end = match.index + match[0].length
+    for (; depth && end < rest.length; end++) depth += rest[end] === '(' ? 1 : rest[end] === ')' ? -1 : 0
+    const args = rest.slice(match.index + match[0].length, end - 1)
+    if (match[1] !== 'where') {
+      const best = splitSelectorList(args).map(specificity).sort((a, b) => b[0] - a[0] || b[1] - a[1] || b[2] - a[2])[0]
+      score[0] += best[0]; score[1] += best[1]; score[2] += best[2]
+    }
+    rest = rest.slice(0, match.index) + ' ' + rest.slice(end)
+  }
+  score[0] += rest.match(/#[\w-]+/g)?.length ?? 0
+  score[1] += (rest.match(/\.[\w-]+/g)?.length ?? 0) + (rest.match(/\[[^\]]+\]/g)?.length ?? 0) + (rest.match(/(?<!:):[\w-]+/g)?.length ?? 0)
+  score[2] += rest.replace(/\[[^\]]+\]/g, ' ').match(/(?:^|[\s>+~])([a-z][\w-]*)/gi)?.length ?? 0
+  return score
+}
+function splitSelectorList(list: string) {
+  const parts: string[] = []
+  let depth = 0
+  let start = 0
+  for (let index = 0; index < list.length; index++) {
+    if (list[index] === '(') depth++
+    else if (list[index] === ')') depth--
+    else if (list[index] === ',' && !depth) { parts.push(list.slice(start, index).trim()); start = index + 1 }
+  }
+  return [...parts, list.slice(start).trim()].filter(Boolean)
+}
+const safeMatches = (element: Element, selector: string) => { try { return element.matches(selector) } catch { return false } }
+const outranks = (a: [number, number, number], b: [number, number, number]) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]
+/** The selectors of every rule in `css` whose body sets `declaration`. */
+function selectorsSetting(css: string, declaration: RegExp) {
+  return [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, , body]) => declaration.test(body)).flatMap(([, selectors]) => splitSelectorList(selectors.trim()))
+}
+
+describe('assignee menu nested delegate row layout', () => {
+  it('lets the avatar wrapper of the nested agent grow past the 16px avatar slot (it overlapped the agent name)', async () => {
+    const user = userEvent.setup()
+    // The issue sidebar menu: the property menu wraps each person icon in span[aria-hidden], which picker-parity.css
+    // pins to 16px; the nested agent's wrapper must take its 40px (24px indent + avatar) or the avatar covers the name.
+    mount({ assignee: viewer, delegate: coder })
+    await user.click(assigneeTrigger())
+    const listbox = await screen.findByRole('listbox', { name: 'Assignee' })
+    const wrapper = within(listbox).getByRole('option', { name: /Code Agent/ }).querySelector('.core-nested-delegate-icon')!.parentElement!
+    expect(wrapper.matches('.property-command-icon > span[aria-hidden]')).toBe(true)
+    const parity = readFileSync('src/styles/picker-parity.css', 'utf8')
+    const own = readFileSync('src/components/issue/issue-assignee-property.css', 'utf8')
+    const pinned = selectorsSetting(parity, /(^|;|\s)width:\s*16px/).filter(selector => safeMatches(wrapper, selector))
+    const grown = selectorsSetting(own, /(^|;|\s)width:\s*auto/).filter(selector => safeMatches(wrapper, selector))
+    expect(pinned.length).toBeGreaterThan(0)
+    expect(grown.length).toBeGreaterThan(0)
+    const strongestGrown = grown.map(specificity).sort((a, b) => outranks(b, a))[0]
+    for (const selector of pinned) expect(outranks(strongestGrown, specificity(selector)), `${grown.join(', ')} must outrank ${selector}`).toBeGreaterThan(0)
+  })
+
+  it('computes selector specificity like the browser', () => {
+    expect(specificity('html:root body .property-command-surface .property-command-icon > span[aria-hidden]')).toEqual([0, 4, 3])
+    expect(specificity('html:root body .property-command-surface .property-command-icon > :has(> .core-nested-delegate-icon)')).toEqual([0, 4, 2])
+    expect(specificity('a:not(#x, .y):where(.z) b')).toEqual([1, 0, 2])
   })
 })
 
