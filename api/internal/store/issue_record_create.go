@@ -59,16 +59,18 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 	}
 	var event domain.DomainEvent
 	var realtime json.RawMessage
-	progressChanged := false
+	metadataWritten := false
 	traceStart(ctx, "issue_create")
-	err = func() error {
+	actor := metadata.Viewer
+	// A metadata record the callback changed was changed on another server
+	// in the same field: refresh it and run the creation again.
+	err = mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
 		// The callback edits a metadata clone; readers keep the committed
 		// snapshot while the transaction runs (see SQLiteStore.writeMu).
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
 		traceLocked(ctx)
 		defer traceUnlocked(ctx)
-		actor := metadata.Viewer
 		current, ok := s.storedWorkspace(workspace)
 		if !ok {
 			return fmt.Errorf("workspace not found")
@@ -88,7 +90,7 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 		metadata.Comments = map[string][]domain.Comment{}
 		metadata.Notifications = []domain.Notification{}
 		metadata.NotificationDeliveries = []domain.NotificationDelivery{}
-		tx, err := s.db.BeginTx(ctx, nil)
+		tx, err := s.db.BeginTx(ctx, s.recordTxOptions())
 		if err != nil {
 			return err
 		}
@@ -215,13 +217,19 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 		for _, issue := range previous {
 			before = append(before, issue)
 		}
-		if progressChanged, err = refreshIssueProjectProgress(ctx, tx, workspace, &metadata, before, metadata.Issues, time.Now().UTC()); err != nil {
-			return err
-		}
+		// Metadata is written from this server's copy, which can be behind:
+		// rebase the changed records (and the projects whose progress the
+		// issue changes) onto their stored rows first.
 		metadata.ViewerRole = originalRole
 		metadata.Viewer = current.Viewer
+		if err := s.rebaseIssueMetadata(ctx, tx, workspace, &current, &metadata, before, metadata.Issues); err != nil {
+			return err
+		}
+		if _, err = refreshIssueProjectProgress(ctx, tx, workspace, &metadata, before, metadata.Issues, time.Now().UTC()); err != nil {
+			return err
+		}
 		metadata = collectionMetadata(metadata)
-		if err := s.persistMetadataTx(ctx, tx, workspace, current, metadata); err != nil {
+		if err := s.persistMetadataTx(ctx, tx, workspace, current, &metadata); err != nil {
 			return err
 		}
 		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: "issue.created", AggregateID: id, Payload: raw, CreatedAt: time.Now().UTC()}
@@ -234,11 +242,17 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 		}
 		traceMark(ctx, "persist")
 		s.installWorkspace(workspace, metadata, false)
-		if progressChanged {
-			s.dropMetadataCache(ctx, workspace)
+		metadataWritten = tx.metadataWritten
+		return nil
+	}, func(err error) error {
+		if keys, ok := conflictedMetadataKeys(err); ok {
+			return s.refreshMetadataRecords(ctx, workspace, keys)
 		}
 		return nil
-	}()
+	})
+	if metadataWritten {
+		s.dropMetadataCache(ctx, workspace)
+	}
 	if errors.Is(err, ErrNoMutation) {
 		return nil
 	}

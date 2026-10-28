@@ -79,6 +79,12 @@ type sqlTx struct {
 	// issueCounts: the issue counter deltas and revisions this transaction
 	// applies when it commits (issue_stats.go).
 	issueCounts *pendingIssueCounts
+	// rebasedMetadata: the metadata records this transaction locked and
+	// compared with the writer's copy (metadata_record_merge.go).
+	rebasedMetadata map[metadataRecordKey]bool
+	// metadataWritten: a metadata record or the workspace document changed,
+	// so the shared metadata cache must be dropped after commit.
+	metadataWritten bool
 }
 
 // notificationSignal names a notification that is news to its recipient.

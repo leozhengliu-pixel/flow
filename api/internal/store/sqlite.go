@@ -1410,7 +1410,7 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 	var event domain.DomainEvent
 	var realtimePayload json.RawMessage
 	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(ctx, workspaceKey)
-	apply := func() error {
+	apply := func(ctx context.Context) error {
 		// Every callback works on a copy of the snapshot (cloneBootstrap or
 		// a field snapshot), so only writers are serialized while the
 		// transaction runs; readers keep reading the committed snapshot.
@@ -1532,7 +1532,7 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		// realtime envelope with the post-mutation entity. Clients can apply a
 		// delta for common entities without downloading another full bootstrap.
 		realtimePayload = enrichRealtimePayload(payloadRaw, aggregateJSONValue(next, aggregateID), eventType)
-		if err := s.persistWorkspaceOnto(ctx, workspaceKey, &stored, next, &event, base); err != nil {
+		if err := s.persistWorkspaceOnto(ctx, workspaceKey, &stored, &next, &event, base); err != nil {
 			return err
 		}
 		traceMark(ctx, "persist")
@@ -1541,20 +1541,14 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		s.installWorkspace(workspaceKey, next, true)
 		return nil
 	}
-	var err error
 	// A record the callback changed was changed on another server after the
 	// load: run the callback again on fresh records.
-	for attempt := 1; ; attempt++ {
+	err := mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
 		if s.coordinator != nil {
-			err = s.coordinator.WithWorkspaceLock(ctx, workspaceKey, apply)
-		} else {
-			err = apply()
+			return s.coordinator.WithWorkspaceLock(ctx, workspaceKey, func() error { return apply(ctx) })
 		}
-		if !errors.Is(err, ErrConcurrentWrite) || attempt == fullMutationAttempts {
-			break
-		}
-		traceMark(ctx, "retry")
-	}
+		return apply(ctx)
+	}, nil)
 	if err != nil {
 		if errors.Is(err, ErrNoMutation) {
 			return nil
@@ -1736,20 +1730,20 @@ func (s *SQLiteStore) persistWorkspace(ctx context.Context, workspaceKey string,
 // state, only the metadata fields that differ from it are encoded and written;
 // otherwise the whole metadata document is compared against the stored rows.
 func (s *SQLiteStore) persistWorkspaceFrom(ctx context.Context, workspaceKey string, before *domain.Bootstrap, data domain.Bootstrap, event *domain.DomainEvent) error {
-	return s.persistWorkspaceOnto(ctx, workspaceKey, before, data, event, nil)
+	return s.persistWorkspaceOnto(ctx, workspaceKey, before, &data, event, nil)
 }
 
 // persistWorkspaceOnto persists data like persistWorkspaceFrom. base, when
 // set, names the records data's collections were loaded from (see
 // recordBase): records committed elsewhere since are kept.
-func (s *SQLiteStore) persistWorkspaceOnto(ctx context.Context, workspaceKey string, before *domain.Bootstrap, data domain.Bootstrap, event *domain.DomainEvent, base *recordBase) error {
+func (s *SQLiteStore) persistWorkspaceOnto(ctx context.Context, workspaceKey string, before *domain.Bootstrap, data *domain.Bootstrap, event *domain.DomainEvent, base *recordBase) error {
 	if fullMutationsForced.Load() {
 		before = nil
 	}
 	var raw []byte
 	if before == nil {
 		var err error
-		if raw, err = s.encodeWorkspaceMetadata(data); err != nil {
+		if raw, err = s.encodeWorkspaceMetadata(*data); err != nil {
 			return err
 		}
 	}
@@ -1791,7 +1785,8 @@ func (s *SQLiteStore) encodeWorkspaceMetadata(data domain.Bootstrap) ([]byte, er
 // collections and the domain event inside tx. A nil collection is left as
 // stored. With before (the stored metadata state) the metadata document is
 // written as a delta and raw is unused.
-func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspaceKey string, before *domain.Bootstrap, inputData domain.Bootstrap, raw []byte, event *domain.DomainEvent, base *recordBase) error {
+func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspaceKey string, before *domain.Bootstrap, target *domain.Bootstrap, raw []byte, event *domain.DomainEvent, base *recordBase) error {
+	inputData := *target
 	data := compactImportInputs(inputData)
 	issues := data.Issues
 	activities, comments := data.Activities, data.Comments
@@ -1876,8 +1871,16 @@ func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspa
 		}
 	}
 	if before != nil {
-		if _, err := s.writeWorkspaceMetadataDelta(ctx, tx, workspaceKey, *before, data); err != nil {
+		if _, err := s.writeWorkspaceMetadataDelta(ctx, tx, workspaceKey, *before, &data); err != nil {
 			return err
+		}
+		// Records merged with another write's change go back to the caller,
+		// which installs them (import inputs stay as the caller has them).
+		source, destination := reflect.ValueOf(&data).Elem(), reflect.ValueOf(target).Elem()
+		for _, field := range persistedMetadataFields() {
+			if field.name != "importJobs" {
+				destination.Field(field.index).Set(source.Field(field.index))
+			}
 		}
 	} else if err := writeWorkspaceMetadata(ctx, tx, workspaceKey, data.Workspace.ID, raw); err != nil {
 		return err

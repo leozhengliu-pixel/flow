@@ -27,6 +27,7 @@ func writeWorkspaceMetadata(ctx context.Context, tx *sqlTx, key, id string, raw 
 	if err == nil && previousID == id && bytes.Equal(previous, raw) {
 		return nil
 	}
+	tx.metadataWritten = true
 	_, err = tx.ExecContext(ctx, `INSERT INTO workspace_states(workspace_key,workspace_id,data,updated_at) VALUES(?,?,?,?) ON CONFLICT(workspace_key) DO UPDATE SET workspace_id=excluded.workspace_id,data=excluded.data,updated_at=excluded.updated_at`, key, id, raw, time.Now().UTC().Format(time.RFC3339Nano))
 	return err
 }

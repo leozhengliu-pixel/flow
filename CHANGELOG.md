@@ -66,6 +66,21 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Former members get no new notifications, triage rotations skip them, and
   pickers no longer offer suspended members. See
   [People who left the workspace](docs/api.md#people-who-left-the-workspace).
+- With several API servers, an issue write no longer undoes a workspace
+  change another server made at the same time. Creating, editing or deleting
+  an issue (and commenting, attaching, or adding it to a release) writes
+  the project, document, release, subscription and triage records it touches
+  from the server's in-memory copy, which can be behind: a project renamed
+  on another server got its old name back, the progress another server's new
+  issue added to a project was lost, a release lost an issue added elsewhere,
+  a removed subscription came back while a new one was deleted, and two
+  round-robin triage assignments went to the same person. Each changed
+  record is now locked and only the fields the write changed are applied to
+  it as stored (lists of ids and entries are merged), project progress is
+  computed from the stored history, and a write whose field another server
+  changed too runs again on the fresh record. Writes on other servers also
+  stop reading a stale copy of the workspace from the shared cache after an
+  issue write changed it.
 - A REST update that only repeats a resource's current values writes nothing:
   it returns 200 with the resource as it is, keeps its `version` and
   `updatedAt`, and records no history entry, event, realtime update, webhook

@@ -1156,7 +1156,7 @@ func (s *SQLiteStore) migrateWorkspaceCodingEnvironments(ctx context.Context, ke
 		return migrated, err
 	}
 	defer tx.Rollback()
-	if err := s.persistMetadataTx(ctx, tx, key, before, after); err != nil {
+	if err := s.persistMetadataTx(ctx, tx, key, before, &after); err != nil {
 		return migrated, err
 	}
 	if err := tx.Commit(); err != nil {

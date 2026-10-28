@@ -170,7 +170,7 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 	var changedIssues []string
 	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(ctx, workspaceKey)
 	traceStart(ctx, "scoped")
-	apply := func() error {
+	apply := func(ctx context.Context) error {
 		// The callback works on a clone; readers keep the committed snapshot
 		// while the transaction runs (see SQLiteStore.writeMu).
 		s.writeMu.Lock()
@@ -212,7 +212,7 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		if err := s.loadMemberAccess(ctx, &current); err != nil {
 			return err
 		}
-		tx, err := s.db.BeginTx(ctx, nil)
+		tx, err := s.db.BeginTx(ctx, s.recordTxOptions())
 		if err != nil {
 			return err
 		}
@@ -353,6 +353,12 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		for _, id := range order {
 			before = append(before, loaded[id])
 		}
+		// Record transactions on other servers commit without the workspace
+		// lock: rebase the changed records (and the projects whose progress
+		// this write changes) onto their stored rows first.
+		if err := s.rebaseIssueMetadata(ctx, tx, workspaceKey, &stored, &next, before, next.Issues); err != nil {
+			return err
+		}
 		if _, err := refreshIssueProjectProgress(ctx, tx, workspaceKey, &next, before, next.Issues, now); err != nil {
 			return err
 		}
@@ -367,7 +373,7 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		}
 		traceMark(ctx, "progress")
 		metadata := collectionMetadata(next)
-		if err := s.persistWorkspaceTx(ctx, tx, workspaceKey, &stored, metadata, nil, &event, nil); err != nil {
+		if err := s.persistWorkspaceTx(ctx, tx, workspaceKey, &stored, &metadata, nil, &event, nil); err != nil {
 			return err
 		}
 		traceMark(ctx, "metadata")
@@ -380,12 +386,14 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		s.installWorkspace(workspaceKey, metadata, true)
 		return nil
 	}
-	var err error
-	if s.coordinator != nil {
-		err = s.coordinator.WithWorkspaceLock(ctx, workspaceKey, apply)
-	} else {
-		err = apply()
-	}
+	// A metadata record the callback changed was changed in the same field
+	// by a record transaction on another server: run it again on fresh records.
+	err := mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
+		if s.coordinator != nil {
+			return s.coordinator.WithWorkspaceLock(ctx, workspaceKey, func() error { return apply(ctx) })
+		}
+		return apply(ctx)
+	}, nil)
 	if errors.Is(err, errScopeTooLarge) {
 		return s.mutateFull(ctx, workspaceKey, eventType, payload, mutate)
 	}

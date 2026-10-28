@@ -225,7 +225,7 @@ func TestWorkspaceMetadataDeltaMatchesFullWrite(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := delta.writeWorkspaceMetadataDelta(ctx, tx, workspace, base, after); err != nil {
+			if _, err := delta.writeWorkspaceMetadataDelta(ctx, tx, workspace, base, &after); err != nil {
 				t.Fatal(err)
 			}
 			if err := tx.Commit(); err != nil {
@@ -244,8 +244,17 @@ func TestWorkspaceMetadataDeltaMatchesFullWrite(t *testing.T) {
 			if len(got.records) != len(want.records) {
 				t.Fatalf("record count %d, want %d", len(got.records), len(want.records))
 			}
-			if !reflect.DeepEqual(got.search, want.search) {
-				t.Fatal("metadata search documents differ")
+			// A record the change only moved keeps its row, and so its search
+			// document, as stored (the full write re-encodes every row).
+			if len(got.search) != len(want.search) {
+				t.Fatalf("search document count %d, want %d", len(got.search), len(want.search))
+			}
+			data := func(record string) string { _, value, _ := strings.Cut(record, ":"); return value }
+			for key, value := range want.search {
+				moved := got.search[key] == initial.search[key] && data(initial.records[key]) == data(want.records[key])
+				if got.search[key] != value && !moved {
+					t.Fatalf("search document %s differs:\ndelta %q\nfull  %q", key, got.search[key], value)
+				}
 			}
 			if unchanged := reflect.DeepEqual(got, initial); unchanged != (name == "no change" || name == "next issue") {
 				t.Fatalf("case changed stored metadata = %v", !unchanged)
@@ -373,7 +382,7 @@ func TestUpdatesDeltaTouchesOnlyChangedParentAndStaysReference(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer tx.Rollback()
-		if _, err := repo.writeWorkspaceMetadataDelta(context.Background(), tx, workspace, before, after); err != nil {
+		if _, err := repo.writeWorkspaceMetadataDelta(context.Background(), tx, workspace, before, &after); err != nil {
 			t.Fatal(err)
 		}
 		if err := tx.Commit(); err != nil {

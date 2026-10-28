@@ -58,10 +58,12 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 			return err
 		}
 	}
-	progressChanged := false
+	metadataWritten := false
 	needsFamily := eventType == "issue.deleted" || eventType == "issue.batch_updated" && (batch.Update.StateID != nil || batch.Update.ParentID != nil)
 	traceStart(ctx, "issue")
-	err := func() error {
+	// A metadata record the callback changed was changed on another server
+	// in the same field: refresh it and run the write again.
+	err := mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
 		// The callback works on a clone; readers keep the committed snapshot
 		// while the transaction runs (see SQLiteStore.writeMu).
 		s.writeMu.Lock()
@@ -82,10 +84,13 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 			}
 			data.ViewerRole = role
 		}
+		// Team moves see the current memberships; the snapshot's copies are
+		// put back before the write.
+		storedMembers, storedTeamMembers := data.Members, data.TeamMembers
 		if err := s.loadMemberAccess(ctx, &data); err != nil {
 			return err
 		}
-		tx, err := s.db.BeginTx(ctx, nil)
+		tx, err := s.db.BeginTx(ctx, s.recordTxOptions())
 		if err != nil {
 			return err
 		}
@@ -250,6 +255,7 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		aggregate, err := mutate(&data)
 		data.FormerMembers = nil
 		traceMark(ctx, "mutate")
+		data.Members, data.TeamMembers = storedMembers, storedTeamMembers
 		if err != nil {
 			return err
 		}
@@ -316,12 +322,24 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 				return err
 			}
 		}
+		// Metadata is written from this server's copy, which can be behind:
+		// rebase the changed records (and the projects whose progress the
+		// write changes) onto their stored rows first.
+		data.ViewerRole = originalRole
+		data.Viewer = current.Viewer
+		var before, after []domain.Issue
 		if progressEvent(eventType) {
-			before := make([]domain.Issue, 0, len(loaded))
+			before = make([]domain.Issue, 0, len(loaded))
 			for _, issue := range loaded {
 				before = append(before, issue)
 			}
-			if progressChanged, err = refreshIssueProjectProgress(ctx, tx, workspace, &data, before, data.Issues, time.Now().UTC()); err != nil {
+			after = data.Issues
+		}
+		if err := s.rebaseIssueMetadata(ctx, tx, workspace, &current, &data, before, after); err != nil {
+			return err
+		}
+		if progressEvent(eventType) {
+			if _, err = refreshIssueProjectProgress(ctx, tx, workspace, &data, before, after, time.Now().UTC()); err != nil {
 				return err
 			}
 		}
@@ -331,12 +349,10 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		}
 		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: eventType, AggregateID: aggregate, Payload: payloadRaw, CreatedAt: time.Now().UTC()}
 		realtime = enrichRealtimePayload(payloadRaw, aggregateJSONValue(data, aggregate), eventType)
-		data.ViewerRole = originalRole
-		data.Viewer = current.Viewer
 		data = collectionMetadata(data)
 		// Issue writes rarely touch metadata; persist only the fields the
 		// callback changed instead of re-encoding every metadata record.
-		if err := s.persistMetadataTx(ctx, tx, workspace, current, data); err != nil {
+		if err := s.persistMetadataTx(ctx, tx, workspace, current, &data); err != nil {
 			return err
 		}
 		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: aggregate, Payload: payloadRaw, CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: current.Workspace.ID}); err != nil {
@@ -347,11 +363,17 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		}
 		traceMark(ctx, "persist")
 		s.installWorkspace(workspace, data, false)
-		if progressChanged {
-			s.dropMetadataCache(ctx, workspace)
+		metadataWritten = tx.metadataWritten
+		return nil
+	}, func(err error) error {
+		if keys, ok := conflictedMetadataKeys(err); ok {
+			return s.refreshMetadataRecords(ctx, workspace, keys)
 		}
 		return nil
-	}()
+	})
+	if metadataWritten {
+		s.dropMetadataCache(ctx, workspace)
+	}
 	if err != nil {
 		if errors.Is(err, ErrNoMutation) {
 			return nil

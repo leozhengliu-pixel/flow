@@ -264,7 +264,7 @@ func syncMetadataRecords(ctx context.Context, tx *sqlTx, workspace string, refs 
 		}
 		previous[key] = value
 	}
-	return applyMetadataRecords(ctx, tx, workspace, refs, shapes, wanted, previous)
+	return applyMetadataRecords(ctx, tx, workspace, refs, shapes, wanted, previous, known)
 }
 
 // metadataRecordGroup names the ordered collection a record belongs to: the
@@ -314,7 +314,13 @@ func metadataUpdateParent(data []byte) (string, bool) {
 // upserts rows whose order or data changed and deletes rows wanted lacks.
 // Each record's group is computed once, so the cost is linear in the number
 // of records.
-func applyMetadataRecords(ctx context.Context, tx *sqlTx, workspace string, refs issueReferences, shapes map[string]string, wanted, previous map[metadataRecordKey]metadataRecord) error {
+//
+// With known (the writer's copy of the records, rebased by rebaseMetadata),
+// wanted is a change from known rather than the whole truth: a stored row the
+// copy does not know was added by another write and is kept, a known record
+// no longer stored was deleted by one and is not written again, and a record
+// whose data the writer did not change gets only its new position.
+func applyMetadataRecords(ctx context.Context, tx *sqlTx, workspace string, refs issueReferences, shapes map[string]string, wanted, previous, known map[metadataRecordKey]metadataRecord) error {
 	groups := map[string][]metadataRecordKey{}
 	for key, value := range wanted {
 		if name := metadataRecordGroup(shapes, key, value.data); name != "" {
@@ -357,14 +363,34 @@ func applyMetadataRecords(ctx context.Context, tx *sqlTx, workspace string, refs
 	}
 	for key, value := range wanted {
 		old, exists := previous[key]
-		if !exists || old.order != value.order || !storedRecordEqual(tx, refs, key.field, old.data, value.data) {
-			if err := writeMetadataRecordRow(ctx, tx, workspace, key, value, old.data); err != nil {
-				return err
+		delete(previous, key)
+		if known != nil && !exists {
+			if _, wasKnown := known[key]; wasKnown {
+				continue
 			}
 		}
-		delete(previous, key)
+		if exists && storedRecordEqual(tx, refs, key.field, old.data, value.data) {
+			if old.order == value.order {
+				continue
+			}
+			if known != nil {
+				if _, err := tx.ExecContext(ctx, `UPDATE workspace_metadata_records SET collection_order=? WHERE workspace_key=? AND field=? AND record_key=?`, value.order, workspace, key.field, key.key); err != nil {
+					return err
+				}
+				tx.metadataWritten = true
+				continue
+			}
+		}
+		if err := writeMetadataRecordRow(ctx, tx, workspace, key, value, old.data); err != nil {
+			return err
+		}
 	}
 	for key := range previous {
+		if known != nil {
+			if _, wasKnown := known[key]; !wasKnown {
+				continue
+			}
+		}
 		if err := deleteMetadataRecordRow(ctx, tx, workspace, key); err != nil {
 			return err
 		}
@@ -379,6 +405,7 @@ func writeMetadataRecordRow(ctx context.Context, tx *sqlTx, workspace string, ke
 	// Metadata JSON is parsed in SQL (search, API keys, access), where
 	// PostgreSQL refuses \u0000: names, titles and bodies lose NUL.
 	value.data = StripJSONNUL(value.data)
+	tx.metadataWritten = true
 	stored, err := offloadRecord(ctx, tx, workspace, key.field, value.data)
 	if err != nil {
 		return err
@@ -458,6 +485,7 @@ func syncNewCommentMentions(ctx context.Context, tx *sqlTx, workspace, resource 
 }
 
 func deleteMetadataRecordRow(ctx context.Context, tx *sqlTx, workspace string, key metadataRecordKey) error {
+	tx.metadataWritten = true
 	if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, workspace, key.field, key.key); err != nil {
 		return err
 	}

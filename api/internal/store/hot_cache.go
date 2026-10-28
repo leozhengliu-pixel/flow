@@ -339,13 +339,33 @@ func decodeMetadataCacheValue(raw string) (int, []byte) {
 	return n, []byte(rest)
 }
 
+// The metadata record cache holds a copy of the workspace's metadata rows.
+// A writer drops it after its commit and moves the workspace's metadata
+// generation on; a filler stamps the copy with the generation it read the
+// database at. A copy filled from rows read before a write committed carries
+// the older generation and is never used, even when the fill finishes after
+// the writer dropped the cache (it would otherwise hold some fields from
+// before the write and lack the ones the drop removed).
+func (s *SQLiteStore) metadataGenerationKey(workspace string) string {
+	if cache := s.hotCache(); cache != nil {
+		return cache.CacheKey(workspace, "mgen", "")
+	}
+	return ""
+}
+
+// metadataCacheGeneration is the generation a metadata cache fill starts at.
+func (s *SQLiteStore) metadataCacheGeneration(ctx context.Context, workspace string) int64 {
+	return s.cacheGeneration(ctx, s.metadataGenerationKey(workspace))
+}
+
 func (s *SQLiteStore) metadataRecordsFromCache(ctx context.Context, workspace string, fields map[string]string) ([]metadataCacheRow, bool) {
 	cache := s.hotCache()
 	if cache == nil || workspace == "" || len(fields) == 0 {
 		return nil, false
 	}
+	generation := strconv.FormatInt(s.metadataCacheGeneration(ctx, workspace), 10)
 	ready, err := cache.CacheGet(ctx, s.metadataReadyKey(workspace))
-	if err != nil || string(ready) != "1" {
+	if err != nil || string(ready) != generation {
 		return nil, false
 	}
 	rows := []metadataCacheRow{}
@@ -359,6 +379,10 @@ func (s *SQLiteStore) metadataRecordsFromCache(ctx context.Context, workspace st
 			rows = append(rows, metadataCacheRow{Field: field, Key: key, Order: order, Data: data})
 		}
 	}
+	// A write dropped the copy while it was read: some fields may be gone.
+	if strconv.FormatInt(s.metadataCacheGeneration(ctx, workspace), 10) != generation {
+		return nil, false
+	}
 	return rows, true
 }
 
@@ -369,11 +393,19 @@ func (s *SQLiteStore) metadataFieldsListKey(workspace string) string {
 	return ""
 }
 
+// dropMetadataCache discards the workspace's metadata record cache after a
+// write committed, and retires copies being filled from earlier reads.
 func (s *SQLiteStore) dropMetadataCache(ctx context.Context, workspace string) {
 	cache := s.hotCache()
 	if cache == nil || workspace == "" {
 		return
 	}
+	_, _ = cache.CacheIncr(ctx, s.metadataGenerationKey(workspace))
+	s.deleteMetadataCache(ctx, workspace)
+}
+
+func (s *SQLiteStore) deleteMetadataCache(ctx context.Context, workspace string) {
+	cache := s.hotCache()
 	fields := []string{"teams", "teamSettings", "cycleSettings", "states", "labels", "cycles", "projects", "users"}
 	if raw, err := cache.CacheGet(ctx, s.metadataFieldsListKey(workspace)); err == nil && len(raw) > 0 {
 		var listed []string
@@ -389,11 +421,20 @@ func (s *SQLiteStore) dropMetadataCache(ctx context.Context, workspace string) {
 }
 
 func (s *SQLiteStore) fillMetadataRecordsCache(ctx context.Context, workspace string, rows []metadataCacheRow) {
+	s.fillMetadataRecordsCacheAt(ctx, workspace, rows, s.metadataCacheGeneration(ctx, workspace))
+}
+
+// fillMetadataRecordsCacheAt caches rows, read from the database while the
+// workspace's metadata generation was generation.
+func (s *SQLiteStore) fillMetadataRecordsCacheAt(ctx context.Context, workspace string, rows []metadataCacheRow, generation int64) {
 	cache := s.hotCache()
 	if cache == nil || workspace == "" {
 		return
 	}
-	s.dropMetadataCache(ctx, workspace)
+	if s.metadataCacheGeneration(ctx, workspace) != generation {
+		return
+	}
+	s.deleteMetadataCache(ctx, workspace)
 	byField := map[string]map[string][]byte{}
 	for _, row := range rows {
 		if byField[row.Field] == nil {
@@ -409,7 +450,7 @@ func (s *SQLiteStore) fillMetadataRecordsCache(ctx context.Context, workspace st
 	if listed, err := json.Marshal(fields); err == nil {
 		_ = cache.CacheSet(ctx, s.metadataFieldsListKey(workspace), listed, 24*time.Hour)
 	}
-	_ = cache.CacheSet(ctx, s.metadataReadyKey(workspace), []byte("1"), 24*time.Hour)
+	_ = cache.CacheSet(ctx, s.metadataReadyKey(workspace), []byte(strconv.FormatInt(generation, 10)), 24*time.Hour)
 }
 
 func (s *SQLiteStore) cacheMetadataUpserts(ctx context.Context, workspace string, changes []metadataRecordChange) {

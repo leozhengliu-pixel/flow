@@ -226,15 +226,14 @@ func issueProgressContribution(issue domain.Issue, teamSettings map[string]domai
 	return progressContribution{day: utcDay(issue.CreatedAt), state: issue.State.Type, estimate: issueEstimate(issue, unestimatedPoints(teamSettings, issue.Team.ID))}
 }
 
-// refreshIssueProjectProgress updates the histories of the projects whose
-// issues changed between before and after. It reads the database through
-// reader (the write transaction, so it sees the new issue rows).
-func refreshIssueProjectProgress(ctx context.Context, reader progressReader, workspace string, data *domain.Bootstrap, before, after []domain.Issue, now time.Time) (bool, error) {
-	type change struct{ before, after []domain.Issue }
-	changes := map[string]*change{}
-	entry := func(id string) *change {
+// issueProgressChanges groups the issues of a write by the projects whose
+// progress it changes: those an issue entered, left or changed its creation
+// day, state or estimate in, and those without a history yet.
+func issueProgressChanges(data domain.Bootstrap, before, after []domain.Issue) map[string]*issueProgressChange {
+	changes := map[string]*issueProgressChange{}
+	entry := func(id string) *issueProgressChange {
 		if changes[id] == nil {
-			changes[id] = &change{}
+			changes[id] = &issueProgressChange{}
 		}
 		return changes[id]
 	}
@@ -248,44 +247,72 @@ func refreshIssueProjectProgress(ctx context.Context, reader progressReader, wor
 			entry(issue.Project.ID).after = append(entry(issue.Project.ID).after, issue)
 		}
 	}
+	contributions := func(issues []domain.Issue) []progressContribution {
+		result := make([]progressContribution, 0, len(issues))
+		for _, issue := range issues {
+			result = append(result, issueProgressContribution(issue, data.TeamSettings))
+		}
+		sort.Slice(result, func(i, j int) bool {
+			a, b := result[i], result[j]
+			if !a.day.Equal(b.day) {
+				return a.day.Before(b.day)
+			}
+			if a.state != b.state {
+				return a.state < b.state
+			}
+			return a.estimate < b.estimate
+		})
+		return result
+	}
+	for projectID, change := range changes {
+		index := slices.IndexFunc(data.Projects, func(project domain.Project) bool { return project.ID == projectID })
+		if index < 0 || len(data.Projects[index].ProgressHistory) > 0 && slices.Equal(contributions(change.before), contributions(change.after)) {
+			delete(changes, projectID)
+		}
+	}
+	return changes
+}
+
+type issueProgressChange struct{ before, after []domain.Issue }
+
+// issueProgressProjects lists the projects whose progress an issue write
+// changes (see issueProgressChanges), in id order.
+func issueProgressProjects(data domain.Bootstrap, before, after []domain.Issue) []string {
+	return sortedKeys(issueProgressChanges(data, before, after))
+}
+
+// rebaseIssueMetadata prepares the metadata part of a record transaction:
+// it locks the rows of the records the write's callback changed and of the
+// projects whose progress the write changes (issueProgressProjects), and
+// rebases before and after onto them (rebaseMetadata). Progress is then
+// computed from the histories as stored, so another server's issue write in
+// the same project is not undone.
+func (s *SQLiteStore) rebaseIssueMetadata(ctx context.Context, tx *sqlTx, workspace string, before, after *domain.Bootstrap, loaded, issues []domain.Issue) error {
+	var extra map[string][]string
+	if projects := issueProgressProjects(*after, loaded, issues); len(projects) > 0 {
+		extra = map[string][]string{"projects": projects}
+	}
+	_, _, err := s.rebaseMetadata(ctx, tx, workspace, before, after, nil, extra)
+	return err
+}
+
+// refreshIssueProjectProgress updates the histories of the projects whose
+// issues changed between before and after. It reads the database through
+// reader (the write transaction, so it sees the new issue rows).
+func refreshIssueProjectProgress(ctx context.Context, reader progressReader, workspace string, data *domain.Bootstrap, before, after []domain.Issue, now time.Time) (bool, error) {
+	changes := issueProgressChanges(*data, before, after)
 	if len(changes) == 0 {
 		return false, nil
 	}
 	states := progressStates(*data)
 	changed := false
-	projectIDs := make([]string, 0, len(changes))
-	for id := range changes {
-		projectIDs = append(projectIDs, id)
-	}
-	sort.Strings(projectIDs)
-	for _, projectID := range projectIDs {
+	for _, projectID := range sortedKeys(changes) {
 		index := slices.IndexFunc(data.Projects, func(project domain.Project) bool { return project.ID == projectID })
 		if index < 0 {
 			continue
 		}
-		project := &data.Projects[index]
 		change := changes[projectID]
-		contributions := func(issues []domain.Issue) []progressContribution {
-			result := make([]progressContribution, 0, len(issues))
-			for _, issue := range issues {
-				result = append(result, issueProgressContribution(issue, data.TeamSettings))
-			}
-			sort.Slice(result, func(i, j int) bool {
-				a, b := result[i], result[j]
-				if !a.day.Equal(b.day) {
-					return a.day.Before(b.day)
-				}
-				if a.state != b.state {
-					return a.state < b.state
-				}
-				return a.estimate < b.estimate
-			})
-			return result
-		}
-		if len(project.ProgressHistory) > 0 && slices.Equal(contributions(change.before), contributions(change.after)) {
-			continue
-		}
-		updated, err := updateProjectProgress(ctx, reader, workspace, data, project, change.before, change.after, states, now)
+		updated, err := updateProjectProgress(ctx, reader, workspace, data, &data.Projects[index], change.before, change.after, states, now)
 		if err != nil {
 			return changed, err
 		}
@@ -330,24 +357,35 @@ func updateProjectProgress(ctx context.Context, reader progressReader, workspace
 	return rebuildProjectProgress(ctx, reader, workspace, data, project, states, now)
 }
 
-// persistIssueProjectProgress refreshes the progress of projects touched by
-// an issue write on the stored metadata and writes it in tx when a history
-// changed. The caller holds s.writeMu and installs the returned snapshot after the
-// transaction commits.
-func (s *SQLiteStore) persistIssueProjectProgress(ctx context.Context, tx *sqlTx, workspace string, before, after []domain.Issue) (*domain.Bootstrap, error) {
+// persistIssueMetadata writes the metadata a bounded issue write changes:
+// the progress of the projects whose scope or completion it changed and,
+// when documents is set (the issue moved team), the inherited scopes of the
+// documents attached to it. It rebases onto the stored records first (see
+// rebaseIssueMetadata). The caller holds s.writeMu and installs the returned
+// snapshot after the transaction commits; it is nil when nothing changed.
+func (s *SQLiteStore) persistIssueMetadata(ctx context.Context, tx *sqlTx, workspace string, before, after []domain.Issue, documents []domain.Document) (*domain.Bootstrap, error) {
 	stored, ok := s.workspaces[workspace]
 	if !ok {
 		return nil, nil
 	}
-	next := stored
+	base, next := stored, stored
+	scoped := false
+	if documents != nil {
+		next.Documents, scoped = documentScopes(stored.Documents, documents)
+	}
+	if !scoped && len(issueProgressProjects(next, before, after)) == 0 {
+		return nil, nil
+	}
 	next.Projects = slices.Clone(stored.Projects)
-	changed, err := refreshIssueProjectProgress(ctx, tx, workspace, &next, before, after, time.Now().UTC())
-	if err != nil || !changed {
+	if err := s.rebaseIssueMetadata(ctx, tx, workspace, &base, &next, before, after); err != nil {
 		return nil, err
 	}
-	// Only the projects changed: write their records, not the whole
+	if _, err := refreshIssueProjectProgress(ctx, tx, workspace, &next, before, after, time.Now().UTC()); err != nil {
+		return nil, err
+	}
+	// Only the changed projects and documents are written, not the whole
 	// workspace metadata (a full rewrite takes seconds at ~200k records).
-	if _, err := s.writeWorkspaceMetadataDelta(ctx, tx, workspace, stored, next); err != nil {
+	if _, err := s.writeWorkspaceMetadataDelta(ctx, tx, workspace, base, &next); err != nil {
 		return nil, err
 	}
 	return &next, nil

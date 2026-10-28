@@ -125,7 +125,7 @@ func (s *SQLiteStore) migrateWorkspaceAgentWebAccess(ctx context.Context, key st
 		return false, false, err
 	}
 	defer tx.Rollback()
-	if err := s.persistMetadataTx(ctx, tx, key, before, after); err != nil {
+	if err := s.persistMetadataTx(ctx, tx, key, before, &after); err != nil {
 		return false, false, err
 	}
 	if err := tx.Commit(); err != nil {
