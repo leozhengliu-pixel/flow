@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test'
 
 test('loads the workspace shell and core planning route without console errors', async ({ page, request }, testInfo) => {
-  const workspaceKey = `e2e-${testInfo.project.name}`
+  // A retry reuses the server and its database, so the key carries the retry number.
+  const workspaceKey = `e2e-${testInfo.project.name}-r${testInfo.retry}`
   const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
     data: { name: 'E2E Workspace', urlKey: workspaceKey, region: 'us' },
   })
@@ -25,8 +26,11 @@ test('keeps the onboarding route functional', async ({ page }) => {
 })
 
 test('renders core workspace workflows without runtime or viewport failures', async ({ page, request }, testInfo) => {
+  // Nine cold dev-server route compiles in one test: CI runners have taken over
+  // the default 30s here, and a retry must not collide with the first attempt.
+  test.setTimeout(120_000)
   const device = testInfo.project.name === 'chromium' ? 'desktop' : 'mobile'
-  const workspaceKey = `e2e-core-${device}`
+  const workspaceKey = `e2e-core-${device}-r${testInfo.retry}`
   const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
     data: { name: 'Core workflow workspace', urlKey: workspaceKey, region: 'us' },
   })

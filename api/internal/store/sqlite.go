@@ -1952,7 +1952,7 @@ func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region 
 	s.lockWorkspaceWrites()
 	defer s.unlockWorkspaceWrites()
 	if _, exists := s.workspaces[urlKey]; exists {
-		return domain.Bootstrap{}, fmt.Errorf("workspace key already exists")
+		return domain.Bootstrap{}, ErrWorkspaceKeyTaken
 	}
 	viewer := s.viewer
 	if actor, ok := actorFromContext(ctx); ok {
@@ -2024,7 +2024,7 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 	}
 	if workspace.URLKey != workspaceKey {
 		if _, exists := s.workspaces[workspace.URLKey]; exists {
-			return domain.Bootstrap{}, fmt.Errorf("workspace key already exists")
+			return domain.Bootstrap{}, ErrWorkspaceKeyTaken
 		}
 	}
 	workspace.ID = data.Workspace.ID

@@ -29,6 +29,9 @@ var (
 	ErrLastTeamOwner            = errors.New("a team needs at least one owner")
 	ErrManagedTeamMembership    = errors.New("team membership is managed by SCIM")
 	ErrTeamHasSubteamMembership = errors.New("remove sub-team memberships before removing the parent team membership")
+	// ErrWorkspaceKeyTaken is returned when a workspace is created or renamed to a
+	// URL key another workspace already uses; the API reports it as a conflict.
+	ErrWorkspaceKeyTaken = errors.New("workspace key already exists")
 )
 
 type actorContextKey struct{}
