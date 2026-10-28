@@ -1886,12 +1886,7 @@ func (s *server) maintainCycleSchedule(ctx context.Context, key string) {
 	now := time.Now().UTC()
 	needed := false
 	for _, team := range data.Teams {
-		settings := data.CycleSettings[team.ID]
-		if !settings.Enabled || !settings.AutoCreate {
-			continue
-		}
-		current := currentCycle(&data, team.ID)
-		if current == nil || current.EndsAt.Before(now) || countUpcomingCycles(&data, team.ID) < max(1, settings.UpcomingCount) {
+		if cycleScheduleDue(&data, team.ID, now) {
 			needed = true
 			break
 		}
@@ -1904,7 +1899,7 @@ func (s *server) maintainCycleSchedule(ctx context.Context, key string) {
 		teams := []string{}
 		for _, team := range data.Teams {
 			settings := data.CycleSettings[team.ID]
-			if current := currentCycle(&data, team.ID); settings.Enabled && settings.AutoCreate && current != nil && current.EndsAt.Before(now) {
+			if current := currentCycle(&data, team.ID); settings.Enabled && settings.AutoCreate && current != nil && cycleEnded(current, now) {
 				teams = append(teams, team.ID)
 			}
 		}
@@ -1912,33 +1907,52 @@ func (s *server) maintainCycleSchedule(ctx context.Context, key string) {
 	})
 	_ = s.store.MutateWorkspace(ctx, key, "cycles.automatically_maintained", "cycles", nil, func(next *domain.Bootstrap) error {
 		for _, team := range next.Teams {
-			settings := next.CycleSettings[team.ID]
-			if !settings.Enabled || !settings.AutoCreate {
-				continue
-			}
-			current := currentCycle(next, team.ID)
-			if current == nil {
-				target := earliestUpcomingCycle(next, team.ID)
-				if target == nil {
-					target = appendFutureCycle(next, team.ID, latestCycle(next, team.ID))
-				}
-				if err := transitionToCycle(next, target, now); err != nil {
-					return err
-				}
-			} else if current.EndsAt.Before(now) {
-				target := earliestUpcomingCycle(next, team.ID)
-				if target == nil {
-					target = appendFutureCycle(next, team.ID, current)
-				}
-				if err := transitionToCycle(next, target, now); err != nil {
-					return err
-				}
-			} else {
-				ensureUpcomingCycles(next, current)
+			if cycleScheduleDue(next, team.ID, now) {
+				advanceCycleSchedule(next, team.ID, now)
 			}
 		}
 		return nil
 	})
+}
+
+// cycleScheduleDue reports whether automatic cycles need maintenance: the current cycle's last
+// day is over, the next cycle's start day has come (after a cooldown), or upcoming cycles are missing.
+func cycleScheduleDue(data *domain.Bootstrap, teamID string, now time.Time) bool {
+	settings := data.CycleSettings[teamID]
+	if !settings.Enabled || !settings.AutoCreate {
+		return false
+	}
+	if countUpcomingCycles(data, teamID) < max(1, settings.UpcomingCount) {
+		return true
+	}
+	if current := currentCycle(data, teamID); current != nil {
+		return cycleEnded(current, now)
+	}
+	next := earliestUpcomingCycle(data, teamID)
+	return next == nil || !next.StartsAt.After(now)
+}
+
+// advanceCycleSchedule completes a current cycle whose last day is over and starts the next one
+// on its start day: with a cooldown the team has no current cycle until then.
+func advanceCycleSchedule(data *domain.Bootstrap, teamID string, now time.Time) {
+	current := currentCycle(data, teamID)
+	if current != nil && !cycleEnded(current, now) {
+		ensureUpcomingCycles(data, teamID)
+		return
+	}
+	next := earliestUpcomingCycle(data, teamID)
+	if next == nil {
+		next = appendFutureCycle(data, teamID, latestCycle(data, teamID))
+		// Appending can move the slice: the current cycle is looked up again.
+		current = currentCycle(data, teamID)
+	}
+	if current != nil {
+		completeCurrentCycle(data, current, next, now)
+	}
+	if !next.StartsAt.After(now) {
+		startCycleOn(next, now)
+	}
+	ensureUpcomingCycles(data, teamID)
 }
 
 func appendIssueNotifications(data *domain.Bootstrap, issue domain.Issue, activity domain.ActivityEvent, comment *domain.Comment) {
