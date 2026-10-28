@@ -137,3 +137,6 @@
 .flow-cycle-dialog .cycle-capacity-field > span > input { flex: 1 1 auto; min-width: 0; }
 .flow-cycle-dialog .cycle-capacity-field > span > button { flex: none; height: 30px; padding: 0 10px; border: .5px solid var(--theme-border); border-radius: 7px; background: var(--theme-surface-1); color: var(--theme-text-primary); font: 500 12px inherit; white-space: nowrap; }
 .flow-cycle-dialog .cycle-capacity-field > small { color: var(--theme-text-tertiary); font-size: 11px; line-height: 15px; }
+.flow-cycle-dialog .cycle-date-choices { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 0; }
+.flow-cycle-dialog .cycle-date-choices label { display: flex; align-items: center; gap: 8px; color: var(--theme-text-primary); font-size: 13px; }
+.flow-cycle-dialog .cycle-date-choices input { width: 14px; height: 14px; margin: 0; padding: 0; accent-color: var(--accent-primary); }

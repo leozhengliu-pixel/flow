@@ -2787,19 +2787,30 @@ func (s *server) updateCycle(w http.ResponseWriter, r *http.Request) {
 		if input.Description != nil {
 			cycle.Description = strings.TrimSpace(*input.Description)
 		}
+		var startsAt, endsAt *time.Time
 		if input.StartsAt != nil {
 			parsed, err := parseCycleDate(*input.StartsAt)
 			if err != nil {
 				return errInvalid
 			}
-			cycle.StartsAt = parsed
+			startsAt = &parsed
 		}
 		if input.EndsAt != nil {
 			parsed, err := parseCycleDate(*input.EndsAt)
 			if err != nil {
 				return errInvalid
 			}
-			cycle.EndsAt = parsed
+			endsAt = &parsed
+		}
+		if cycle.Status == "completed" {
+			if startsAt != nil {
+				cycle.StartsAt = *startsAt
+			}
+			if endsAt != nil {
+				cycle.EndsAt = *endsAt
+			}
+		} else if err := moveCycleDates(data, cycle, startsAt, endsAt, input.ShiftFollowing != nil && *input.ShiftFollowing, time.Now().UTC()); err != nil {
+			return err
 		}
 		if !cycle.EndsAt.After(cycle.StartsAt) {
 			return errInvalid
@@ -2870,6 +2881,8 @@ func (s *server) startCycle(w http.ResponseWriter, r *http.Request) {
 	s.respondCycle(w, r, err, started)
 }
 
+// completeCycle is API only: the app ends a cycle by moving its end date (cycle_dates.go), and
+// offers "Start cycle today…" only while no cycle is current.
 func (s *server) completeCycle(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var completed domain.Cycle
@@ -2951,13 +2964,14 @@ func completeCurrentCycle(data *domain.Bootstrap, previous, next *domain.Cycle, 
 func startCycleOn(target *domain.Cycle, now time.Time) {
 	today := cycleDay(now)
 	length := cycleDay(target.EndsAt).Sub(cycleDay(target.StartsAt))
-	if length < 24*time.Hour {
+	if length < 0 {
 		length = 13 * 24 * time.Hour
 	}
 	if target.StartsAt.After(today) {
 		target.StartsAt = today
 	}
-	if cycleDay(target.EndsAt).Before(today) || !target.EndsAt.After(target.StartsAt) {
+	// A cycle shrunk to a single day (start and end on the same day) keeps that end.
+	if cycleDay(target.EndsAt).Before(today) || target.EndsAt.Before(target.StartsAt) {
 		target.StartsAt = today
 		target.EndsAt = today.Add(length)
 	}

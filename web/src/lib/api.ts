@@ -2856,9 +2856,6 @@ export function updateCycleCapacity(
 export function startCycle(id: string): Promise<Cycle> {
   return request(`/api/cycles/${id}/start`, { method: "POST" });
 }
-export function completeCycle(id: string): Promise<Cycle> {
-  return request(`/api/cycles/${id}/complete`, { method: "POST" });
-}
 export function createCycleResource(
   id: string,
   input: {

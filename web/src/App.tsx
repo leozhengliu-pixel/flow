@@ -18,7 +18,6 @@ import { AuthenticationPolicyPage } from '@/components/auth/authentication-polic
 import {
   addSubscription,
   batchUpdateIssues,
-  completeCycle as completeCycleRequest,
   createComment,
   createCustomer,
   createCustomerRequest,
@@ -3618,8 +3617,8 @@ function App() {
     );
     return cycle;
   };
-  // Starting or completing a cycle transitions the team's cycles and rolls
-  // unfinished issues forward: refresh the metadata, then refetch only the
+  // Starting a cycle changes the team's cycles (and the server can roll
+  // unfinished issues forward): refresh the metadata, then refetch only the
   // issues of the cycles whose status changed.
   const refreshCycleTransition = async (teamId: string) => {
     if (!data) return;
@@ -3633,10 +3632,6 @@ function App() {
   };
   const startCycle = async (cycle: Cycle) => {
     await run(() => startCycleRequest(cycle.id), "Could not start cycle");
-    await refreshCycleTransition(cycle.teamId);
-  };
-  const finishCycle = async (cycle: Cycle) => {
-    await run(() => completeCycleRequest(cycle.id), "Could not complete cycle");
     await refreshCycleTransition(cycle.teamId);
   };
   const changeCycleSettings = async (
@@ -5735,7 +5730,6 @@ function App() {
             onOpen={openCycle}
             onUpdateCycle={(cycle, input) => changeCycle(cycle.id, input)}
             onStartCycle={startCycle}
-            onCompleteCycle={finishCycle}
             onUpdateSettings={(input) =>
               changeCycleSettings(cycleTeam.id, input)
             }
@@ -5757,7 +5751,6 @@ function App() {
               }
               onUpdateCycle={(input) => changeCycle(selectedCycle.id, input)}
               onStartCycle={() => startCycle(selectedCycle)}
-              onCompleteCycle={() => finishCycle(selectedCycle)}
               onUpdateIssue={updateIssueById}
               renderIssuePreview={renderIssuePreview}
               onOpenSidebar={() => setMobileSidebarOpen(true)}
