@@ -242,6 +242,10 @@ func (s *server) createIssueRecord(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "invalid issue input")
 		return
 	}
+	if err := checkIssueTitle(strings.TrimSpace(input.Title)); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	metadata, query, err := s.issueRecordsQuery(r)
 	if err != nil {
 		issueRecordsError(w, err)
@@ -394,6 +398,12 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 	if len(input.DocumentUpdateIDs) > 10_000 || slices.ContainsFunc(input.DocumentUpdateIDs, func(id string) bool { return len(id) > 191 }) {
 		writeError(w, http.StatusBadRequest, "Too many document updates")
 		return
+	}
+	if input.Title != nil {
+		if err := checkIssueTitle(strings.TrimSpace(*input.Title)); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	}
 	metadata, query, err := s.issueRecordsQuery(r)
 	if err != nil {

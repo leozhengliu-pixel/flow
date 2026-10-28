@@ -79,7 +79,7 @@ func insertDomainEvent(ctx context.Context, db domainEventExecer, row domainEven
 			actor = user.ID
 		}
 	}
-	return db.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at,workspace_id,seq,actor_id) VALUES(?,?,?,?,?,?,?,?,?)`, row.ID, row.Type, row.AggregateID, row.Payload, row.PreviousValues, row.CreatedAt, workspace, seq, actor)
+	return db.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at,workspace_id,seq,actor_id) VALUES(?,?,?,?,?,?,?,?,?)`, row.ID, row.Type, eventAggregateKey(row.AggregateID), row.Payload, row.PreviousValues, row.CreatedAt, workspace, seq, actor)
 }
 
 func nextWorkspaceSeq(ctx context.Context, db domainEventExecer, workspaceID string) (int64, error) {

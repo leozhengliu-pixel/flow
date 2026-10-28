@@ -425,6 +425,9 @@ func (s *SQLiteStore) ProvisionSCIMUser(ctx context.Context, workspaceID, extern
 // through SCIM earlier restores that account.
 func (s *SQLiteStore) CreateSCIMUser(ctx context.Context, workspaceID string, input SCIMUserInput) (SCIMUser, error) {
 	input = normalizeSCIMUserInput(input)
+	if err := checkSCIMUserLengths(input); err != nil {
+		return SCIMUser{}, err
+	}
 	if input.UserName == "" {
 		return SCIMUser{}, fmt.Errorf("%w: userName is required", ErrSCIMInvalid)
 	}
@@ -504,6 +507,9 @@ func (s *SQLiteStore) CreateSCIMUser(ctx context.Context, workspaceID string, in
 // PATCH). Taking another member's userName or email is ErrSCIMUniqueness.
 func (s *SQLiteStore) UpdateSCIMUser(ctx context.Context, workspaceID, userID string, input SCIMUserInput) (SCIMUser, error) {
 	input = normalizeSCIMUserInput(input)
+	if err := checkSCIMUserLengths(input); err != nil {
+		return SCIMUser{}, err
+	}
 	current, err := s.SCIMUser(ctx, workspaceID, userID)
 	if err != nil {
 		return SCIMUser{}, err
@@ -735,6 +741,9 @@ var ErrSCIMMemberNotFound = errors.New("SCIM group member not found")
 // ErrSCIMUniqueness.
 func (s *SQLiteStore) CreateSCIMGroup(ctx context.Context, workspaceID, externalID, displayName, role string) (SCIMGroup, error) {
 	externalID, displayName, role = strings.TrimSpace(externalID), strings.TrimSpace(displayName), strings.ToLower(strings.TrimSpace(role))
+	if err := checkSCIMGroupLengths(externalID, displayName); err != nil {
+		return SCIMGroup{}, err
+	}
 	if displayName == "" {
 		return SCIMGroup{}, fmt.Errorf("%w: SCIM group displayName is required", ErrSCIMInvalid)
 	}
@@ -843,6 +852,9 @@ func (s *SQLiteStore) ListSCIMGroups(ctx context.Context, workspaceID string, wi
 // UpdateSCIMGroup sets a group's externalId (kept when empty), displayName
 // (kept when empty) and role ("" clears it), then recomputes members' roles.
 func (s *SQLiteStore) UpdateSCIMGroup(ctx context.Context, workspaceID, id, externalID, displayName, role string) (SCIMGroup, error) {
+	if err := checkSCIMGroupLengths(externalID, displayName); err != nil {
+		return SCIMGroup{}, err
+	}
 	group, err := s.SCIMGroup(ctx, workspaceID, id)
 	if err != nil {
 		return SCIMGroup{}, err

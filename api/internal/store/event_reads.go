@@ -29,7 +29,7 @@ type eventCursor struct {
 // the stored text can misorder events within the same second).
 func (s *SQLiteStore) EventsPage(ctx context.Context, workspaceID, aggregateID, cursor string, limit int) (events []domain.DomainEvent, next string, err error) {
 	query := `SELECT id,event_type,aggregate_id,payload,previous_values,created_at FROM domain_events WHERE aggregate_id = ? AND workspace_id = ?`
-	args := []any{aggregateID, workspaceID}
+	args := []any{eventAggregateKey(aggregateID), workspaceID}
 	if cursor != "" {
 		raw, err := base64.RawURLEncoding.DecodeString(cursor)
 		var after eventCursor

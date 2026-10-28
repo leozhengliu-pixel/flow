@@ -8,6 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"unicode/utf8"
+
+	"flow/api/internal/domain"
 )
 
 // File uploads prepared through the REST API (POST /api/files) or the MCP
@@ -99,6 +102,12 @@ const fileUploadColumns = "id,workspace_key,user_id,object_key,filename,content_
 func (s *SQLiteStore) CreateFileUpload(ctx context.Context, upload FileUpload, quota FileUploadQuota, now time.Time) error {
 	if len(upload.ObjectKey) > 191 || len(upload.Filename) > 512 || len(upload.ContentType) > 255 || len(upload.Purpose) > 255 {
 		return fmt.Errorf("upload metadata exceeds limit")
+	}
+	if utf8.RuneCountInString(upload.Title) > domain.UploadTitleMaxLength {
+		return &ValueTooLongError{Field: "title", Max: domain.UploadTitleMaxLength}
+	}
+	if utf8.RuneCountInString(upload.Subtitle) > domain.UploadTitleMaxLength {
+		return &ValueTooLongError{Field: "subtitle", Max: domain.UploadTitleMaxLength}
 	}
 	var userPending int
 	var workspaceBytes sql.NullInt64

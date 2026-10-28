@@ -56,6 +56,24 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- A server error (HTTP 500) no longer shows database or driver text: the body
+  is `Internal server error` with the request id, and the error is logged with
+  that id. MCP clients and agents get "The change could not be saved because
+  of an internal server error (request id …)" instead of the database error.
+  SCIM and OAuth errors carry the request id in their own formats.
+- Over-long values are refused with a 400 that names the field and limit
+  instead of failing with a 500 on MySQL and Postgres: issue titles over 2,048
+  characters (REST, MCP `save_issue`, batch updates, templates, recurring
+  issues, migrations; a CSV row is reported and skipped), SCIM `userName`,
+  `externalId`, names and group `displayName`/`externalId` over 320 characters
+  (SCIM `invalidValue`), MCP upload `title`/`subtitle` over 512 characters,
+  account and member names over 320, emails over 254, avatar URLs over 2,048,
+  team keys over 32, customer tier and owner over 191 and CSV source ids over
+  160 bytes. Lengths count characters, not bytes. Long search queries are kept
+  in search history cut to 300 characters. Webhook response bodies, agent run
+  errors and chat job errors are cut on a character boundary and stored as
+  valid UTF-8, so a receiver's binary or truncated response no longer fails
+  the delivery on strict MySQL.
 - On MySQL, editing a document larger than about 64 KiB no longer fails with
   HTTP 500 (`Data too long for column 'previous_values'`) and no longer
   discards the edit. This affected workspaces with an enabled webhook, an

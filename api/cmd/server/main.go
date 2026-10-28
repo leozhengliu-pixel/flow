@@ -1864,6 +1864,11 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "name and key are required")
 		return
 	}
+	// The key starts every issue identifier (issue_records.identifier is a VARCHAR(191)).
+	if err := checkTextLength("key", input.Key, teamKeyMaxLength); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if input.Color == "" {
 		input.Color = "#5E6AD2"
 	}
@@ -2139,6 +2144,10 @@ func (s *server) createCustomer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
+	if err := checkCustomerInput(input); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	now := time.Now().UTC()
 	customer := domain.Customer{ID: fmt.Sprintf("customer_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), Status: "active", Domains: []string{}, CreatedAt: now, UpdatedAt: now}
 	applyCustomerInput(&customer, input)
@@ -2171,6 +2180,10 @@ func (s *server) updateCustomer(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var input customerInput
 	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if err := checkCustomerInput(input); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	var updated domain.Customer
@@ -2265,6 +2278,22 @@ func defaultCustomerStatus(data *domain.Bootstrap) string {
 		return "active"
 	}
 	return first.ID
+}
+
+// checkCustomerInput bounds the customer fields copied into the
+// customer_filter_records VARCHAR(191) columns (tier, owner).
+func checkCustomerInput(input customerInput) error {
+	if input.Tier != nil {
+		if err := checkTextLength("tier", strings.TrimSpace(*input.Tier), 191); err != nil {
+			return err
+		}
+	}
+	if input.OwnerID != nil {
+		if err := checkTextLength("ownerId", strings.TrimSpace(*input.OwnerID), 191); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func applyCustomerInput(customer *domain.Customer, input customerInput) {
@@ -2978,6 +3007,10 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "title is required")
 		return
 	}
+	if err := checkIssueTitle(strings.TrimSpace(input.Title)); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	var created domain.Issue
 	var templateSubIssues []domain.TemplateSubIssue
 	if !s.authDisabled && input.TeamID == "" {
@@ -3048,6 +3081,9 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		if strings.TrimSpace(input.Title) == "" {
 			return "", errInvalid
 		}
+		if err := checkIssueTitle(strings.TrimSpace(input.Title)); err != nil {
+			return "", err // a template's title
+		}
 		number := data.NextIssueNumber
 		if number == 0 {
 			number = nextIssueNumber(data.Issues)
@@ -3103,6 +3139,9 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		}
 		children := make([]domain.Issue, 0, len(templateSubIssues))
 		for childIndex, templateChild := range templateSubIssues {
+			if err := checkIssueTitle(strings.TrimSpace(templateChild.Title)); err != nil {
+				return "", err
+			}
 			childTeam := team
 			if templateChild.TeamID != "" {
 				teamIndex := slices.IndexFunc(data.Teams, func(item domain.Team) bool { return item.ID == templateChild.TeamID })
@@ -4713,6 +4752,12 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Too many document updates")
 		return
 	}
+	if input.Title != nil {
+		if err := checkIssueTitle(strings.TrimSpace(*input.Title)); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
 	id := r.PathValue("id")
 	workspace := workspaceKey(r)
 	if workspace == "" {
@@ -4876,6 +4921,12 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 	if len(input.IssueIDs) > 1000 {
 		writeError(w, http.StatusBadRequest, "batch updates are limited to 1000 issues")
 		return
+	}
+	if input.Update.Title != nil {
+		if err := checkIssueTitle(strings.TrimSpace(*input.Update.Title)); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	}
 	seenIDs := make(map[string]bool, len(input.IssueIDs))
 	input.IssueIDs = slices.DeleteFunc(input.IssueIDs, func(id string) bool {
@@ -6993,7 +7044,7 @@ func respondMutation(w http.ResponseWriter, err error, success int, value any) {
 		writeError(w, http.StatusConflict, store.ErrConcurrentWrite.Error())
 		return
 	}
-	if errors.Is(err, errInvalid) {
+	if errors.Is(err, errInvalid) || errors.Is(err, store.ErrInvalidValue) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}

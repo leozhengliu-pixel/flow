@@ -97,6 +97,10 @@ func (s *server) upsertCustomer(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "Provide id, externalId(s) or domains to match a customer")
 		return
 	}
+	if err := checkCustomerInput(input.CustomerInput); err != nil {
+		writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, err.Error())
+		return
+	}
 	var saved domain.Customer
 	created := false
 	// The event type is decided inside the write; the snapshot is checked

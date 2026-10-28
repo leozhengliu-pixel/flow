@@ -48,7 +48,9 @@ func (s *SQLiteStore) MatchingIssueSearchLabels(ctx context.Context, q IssueReco
 }
 
 func (s *SQLiteStore) RecordSearch(ctx context.Context, workspaceID, userID, query string) error {
-	query = strings.TrimSpace(query)
+	// History, not content: a long query is kept cut to its column
+	// (VARCHAR(300) on MySQL) on a character boundary, as valid UTF-8.
+	query = strings.TrimSpace(TruncateRunes(storableText(query, 4*domain.SearchQueryMaxLength), domain.SearchQueryMaxLength))
 	if query == "" {
 		return nil
 	}

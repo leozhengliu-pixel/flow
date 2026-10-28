@@ -145,9 +145,17 @@ func (s *server) createTeamRecurringIssue(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if err := checkIssueTitle(input.Title); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	for _, child := range input.SubIssues {
 		if strings.TrimSpace(child.Title) == "" {
 			writeError(w, http.StatusBadRequest, "sub-issue title is required")
+			return
+		}
+		if err := checkTextLength("sub-issue title", strings.TrimSpace(child.Title), domain.IssueTitleMaxLength); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 	}

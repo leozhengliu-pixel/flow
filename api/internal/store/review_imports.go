@@ -231,9 +231,7 @@ func (s *SQLiteStore) ReviewImportBackoffs(ctx context.Context, workspaceKey str
 
 // SaveReviewImportItem writes one item.
 func (s *SQLiteStore) SaveReviewImportItem(ctx context.Context, workspaceKey string, item ReviewImportItem) error {
-	if len(item.LastError) > 1000 {
-		item.LastError = item.LastError[:1000]
-	}
+	item.LastError = storableText(item.LastError, 1000)
 	if len(item.Fingerprint) > 255 {
 		item.Fingerprint = item.Fingerprint[:255]
 	}

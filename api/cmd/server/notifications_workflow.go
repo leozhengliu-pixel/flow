@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
@@ -1216,11 +1217,18 @@ func applyIssueTemplate(data *domain.Bootstrap, template *domain.IssueTemplate, 
 		if name == "" {
 			return errInvalid
 		}
+		// An issue made from a template without a title is named after it.
+		if err := checkTextLength("name", name, domain.IssueTitleMaxLength); err != nil {
+			return err
+		}
 		template.Name = name
 	}
 	if input.Title != nil {
 		// Keep a trailing space: a template title is often a prefix ("Bug: ") the author completes when composing.
 		template.Title = strings.TrimRight(strings.TrimLeftFunc(*input.Title, unicode.IsSpace), "\r\n\t")
+		if err := checkIssueTitle(template.Title); err != nil {
+			return err
+		}
 	}
 	if input.Description != nil {
 		template.Description = strings.TrimSpace(*input.Description)
@@ -1281,6 +1289,9 @@ func applyIssueTemplate(data *domain.Bootstrap, template *domain.IssueTemplate, 
 			item := &(*input.SubIssues)[index]
 			if strings.TrimSpace(item.Title) == "" || item.Priority < 0 || item.Priority > 4 {
 				return errInvalid
+			}
+			if utf8.RuneCountInString(strings.TrimSpace(item.Title)) > domain.IssueTitleMaxLength {
+				return textTooLong("sub-issue title", domain.IssueTitleMaxLength)
 			}
 			if item.TeamID != "" && !teamExists(data, item.TeamID) {
 				return errInvalid
