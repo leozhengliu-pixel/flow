@@ -34,8 +34,15 @@ real error at error level as `internal error response` with `request_id`,
 the request id in the message. When an MCP client or an agent's tool call
 fails on a database error, the tool result reads "The change could not be
 saved because of an internal server error (request id …)" and the log line
-is `flow tool internal error` with `request_id` and `tool`. Validation,
-conflict and permission errors (4xx) keep their specific messages.
+is `flow tool internal error` with `request_id` and `tool`. Object-storage
+errors (S3 and S3-compatible stores, local upload files) are treated the same
+way. Validation, conflict and permission errors (4xx) keep their specific
+messages. As a last line, a 4xx whose message or fields read like database,
+driver or storage text (SQL states, MySQL `Error 1xxx`, `duplicate key`,
+SQLite constraint text, S3 request errors, the configured storage endpoint,
+file paths) answers "The request could not be completed (request id …)."
+instead, and the original is logged as `client error response carried
+backend error text`.
 
 ## Security headers
 

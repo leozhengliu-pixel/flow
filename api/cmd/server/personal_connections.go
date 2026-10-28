@@ -261,7 +261,7 @@ func (s *server) googleCalendarTokens(ctx context.Context, connection domain.Per
 	for {
 		claimed, err := s.store.ClaimPersonalConnectionRefresh(ctx, connection.ID, owner, codeHostRefreshLease)
 		if err != nil {
-			return codeHostAccountTokens{}, fmt.Errorf("%w: refresh lease: %v", codehost.ErrTransient, err)
+			return codeHostAccountTokens{}, fmt.Errorf("%w: refresh lease: %w", codehost.ErrTransient, err)
 		}
 		if claimed {
 			break

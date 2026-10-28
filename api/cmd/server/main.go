@@ -162,6 +162,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	registerInternalErrorEndpoint(applicationConfig.Storage.Endpoint)
 	trashRetention = applicationConfig.Retention.Trash
 	repository.SetChangeLogMinRows(applicationConfig.Retention.ChangeLogMinRows)
 	redisCoordinator, err := coordination.Open(context.Background(), applicationConfig.Redis)

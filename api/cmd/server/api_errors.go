@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"flow/api/internal/publicapi"
-	"flow/api/internal/store"
 )
 
 // Public API error categories. Every JSON error response under /api/ carries
@@ -80,10 +79,11 @@ func requestIDFrom(ctx context.Context) string {
 
 // writeErrorFor writes err's message with status: the message of a typed
 // request error (validation, conflict, permission) is written for the person
-// who sent the request. A database or driver error never is: it becomes a
-// logged 500 with the generic message and the request id.
+// who sent the request. A database, driver or object-storage error never is
+// (isInternalError): it becomes a logged 500 with the generic message and the
+// request id.
 func writeErrorFor(w http.ResponseWriter, r *http.Request, status int, err error) {
-	if store.IsDatabaseError(err) {
+	if isInternalError(err) {
 		writeInternalError(w, r, err)
 		return
 	}
@@ -92,9 +92,9 @@ func writeErrorFor(w http.ResponseWriter, r *http.Request, status int, err error
 
 // publicErrorMessage is err's text for a protocol that has no 500 of its own
 // (a WebSocket error frame): a database or driver error is logged with the
-// request id and becomes the generic message.
+// request id and becomes the generic message, as does an object-storage error.
 func publicErrorMessage(ctx context.Context, err error) string {
-	if !store.IsDatabaseError(err) {
+	if !isInternalError(err) {
 		return err.Error()
 	}
 	slog.ErrorContext(ctx, "internal error", "request_id", requestIDFrom(ctx), "error", err.Error())
@@ -268,6 +268,16 @@ func normalizeAPIErrorBody(status int, header http.Header, raw []byte, r *http.R
 			fields["code"] = code
 		}
 		message = internalErrorMessage
+	} else if status >= 400 && status < 500 && hideInternalClientError(r, status, message, fields) {
+		// The last line for a 4xx: a database, driver or storage error
+		// passed on as a client message (wrapped with %v, so writeErrorFor
+		// could not see its type) is logged and replaced, extra fields too.
+		code, _ := fields["code"].(string)
+		fields = map[string]any{}
+		if code = strings.TrimSpace(code); code != "" && len(code) <= 64 && !strings.ContainsAny(code, " :") {
+			fields["code"] = code
+		}
+		message = clientErrorFallback(requestID)
 	}
 	category := apiErrorTypeFor(status, message)
 	fields["error"] = message

@@ -43,7 +43,7 @@ func writeOAuthRequestError(w http.ResponseWriter, err error) {
 		writeOAuthError(w, http.StatusBadRequest, typed.Code, typed.Description)
 		return
 	}
-	if store.IsDatabaseError(err) {
+	if isInternalError(err) {
 		requestID := w.Header().Get("X-Request-ID")
 		slog.Error("oauth request failed", "request_id", requestID, "error", err.Error())
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", internalErrorMessage+" (request id "+requestID+")")
