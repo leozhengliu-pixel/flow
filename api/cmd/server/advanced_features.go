@@ -3169,7 +3169,7 @@ func parseImportFile(filename string, reader io.Reader) (string, []string, []map
 				if !slices.Contains(headers, key) {
 					headers = append(headers, key)
 				}
-				row[key] = fmt.Sprint(value)
+				row[key] = store.StripNUL(fmt.Sprint(value))
 			}
 			rows = append(rows, row)
 		}
@@ -3199,7 +3199,7 @@ func parseImportFile(filename string, reader io.Reader) (string, []string, []map
 		row := map[string]string{}
 		for index, header := range headers {
 			if index < len(record) {
-				row[header] = record[index]
+				row[header] = store.StripNUL(record[index])
 			}
 		}
 		rows = append(rows, row)

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -186,5 +187,79 @@ func TestSCIMValueLimits(t *testing.T) {
 				t.Fatalf("a refused SCIM user was written (%d rows)", users)
 			}
 		})
+	}
+}
+
+// Text with NUL that reaches the store without passing a JSON API body (a
+// CSV cell, a query string, an external payload) is stored without it on
+// PostgreSQL instead of failing with SQLSTATE 22021, and the JSON columns
+// that SQL parses (issue descriptions) carry no \u0000 on any dialect.
+func TestNULTextReachesTheStore(t *testing.T) {
+	for name, repo := range textLimitStores(t) {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			data := repo.Bootstrap()
+			workspace := data.Workspace.URLKey
+			issueID := data.Issues[0].ID
+			suffix := fmt.Sprint(time.Now().UnixNano())
+			if err := repo.MutateWorkspace(WithIssueRecordMutations(ctx, issueID), workspace, "test.nul_text", issueID, nil, func(next *domain.Bootstrap) error {
+				for i := range next.Issues {
+					if next.Issues[i].ID == issueID {
+						next.Issues[i].Title = "Nul\x00 title " + suffix
+						next.Issues[i].Description = "nul\x00 description"
+						next.Issues[i].Version++
+					}
+				}
+				return nil
+			}); err != nil {
+				t.Fatalf("write an issue with NUL: %v", err)
+			}
+			var title string
+			var raw []byte
+			if err := repo.db.QueryRowContext(ctx, `SELECT title,data FROM issue_records WHERE workspace_key=? AND id=?`, workspace, issueID).Scan(&title, &raw); err != nil {
+				t.Fatal(err)
+			}
+			if title != "Nul title "+suffix || bytes.Contains(raw, []byte(`\u0000`)) {
+				t.Fatalf("stored title %q, data has \\u0000: %v", title, bytes.Contains(raw, []byte(`\u0000`)))
+			}
+			// The description is read from the issue JSON in SQL.
+			page, err := repo.QueryIssueRecords(ctx, IssueRecordQuery{Workspace: workspace, Summary: true, IncludeDescription: true, Limit: 500, Archived: "all"})
+			if err != nil {
+				t.Fatalf("query with descriptions: %v", err)
+			}
+			if len(page.Items) == 0 {
+				t.Fatal("no issues")
+			}
+			if err := repo.RecordSearch(ctx, data.Workspace.ID, data.Viewer.ID, "nul\x00 query "+suffix); err != nil {
+				t.Fatalf("record a search with NUL: %v", err)
+			}
+			// A lookup by a value with NUL is a miss, not an error.
+			var count int
+			if err := repo.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM issue_records WHERE workspace_key=? AND title=?`, workspace, "no\x00such"+suffix).Scan(&count); err != nil || count != 0 {
+				t.Fatalf("lookup with NUL = %d, %v", count, err)
+			}
+			if _, err := repo.CreateSCIMUser(ctx, data.Workspace.ID, SCIMUserInput{UserName: "nul\x00-" + suffix, DisplayName: "Nul\x00 Person", Active: true}); err != nil {
+				t.Fatalf("SCIM user with NUL: %v", err)
+			}
+		})
+	}
+}
+
+func TestStripJSONNUL(t *testing.T) {
+	for _, test := range []struct{ in, want string }{
+		{`{"a":"x\u0000y"}`, `{"a":"xy"}`},
+		{`{"a":"\\u0000"}`, `{"a":"\\u0000"}`},
+		{`{"a":"\\\u0000","b":"\"\u0000"}`, `{"a":"\\","b":"\""}`},
+		{`{"a":"plain"}`, `{"a":"plain"}`},
+	} {
+		if got := string(StripJSONNUL([]byte(test.in))); got != test.want {
+			t.Errorf("StripJSONNUL(%s) = %s, want %s", test.in, got, test.want)
+		}
+	}
+	if args := textArgs("postgres", []any{"a\x00b", []byte("c\x00d"), 3}); args[0] != "ab" || string(args[1].([]byte)) != "c\x00d" {
+		t.Errorf("textArgs = %q", args)
+	}
+	if args := textArgs("mysql", []any{"a\x00b"}); args[0] != "a\x00b" {
+		t.Errorf("textArgs on MySQL = %q", args)
 	}
 }

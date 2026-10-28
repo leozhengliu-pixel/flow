@@ -376,6 +376,9 @@ func applyMetadataRecords(ctx context.Context, tx *sqlTx, workspace string, refs
 // (API key lookup, application mentions, customer filters, search index).
 // previous is the stored payload, when the record existed.
 func writeMetadataRecordRow(ctx context.Context, tx *sqlTx, workspace string, key metadataRecordKey, value metadataRecord, previous []byte) error {
+	// Metadata JSON is parsed in SQL (search, API keys, access), where
+	// PostgreSQL refuses \u0000: names, titles and bodies lose NUL.
+	value.data = StripJSONNUL(value.data)
 	stored, err := offloadRecord(ctx, tx, workspace, key.field, value.data)
 	if err != nil {
 		return err

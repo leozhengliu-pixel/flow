@@ -99,6 +99,7 @@ func writeSCIMRequestError(w http.ResponseWriter, err error) {
 // decodeSCIM reads a JSON request body; malformed JSON is invalidSyntax.
 func decodeSCIM(w http.ResponseWriter, r *http.Request, target any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, maxJSONRequestBytes)
+	stripRequestJSONNUL(r)
 	if err := json.NewDecoder(r.Body).Decode(target); err != nil {
 		writeSCIMError(w, http.StatusBadRequest, scimInvalidSyntax, "request body is not valid JSON: "+err.Error())
 		return false

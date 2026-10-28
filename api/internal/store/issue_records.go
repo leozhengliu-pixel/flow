@@ -307,6 +307,9 @@ func issueRecordValues(workspace string, issue domain.Issue) ([]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Issue JSON is parsed in SQL (descriptions, attachments), where
+	// PostgreSQL refuses \u0000; title, description and the rest lose NUL.
+	raw = StripJSONNUL(raw)
 	project, assignee, parent, cycle := "", "", "", ""
 	if issue.Project != nil {
 		project = issue.Project.ID
@@ -328,7 +331,8 @@ func issueRecordValues(workspace string, issue domain.Issue) ([]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []any{workspace, issue.ID, issue.Identifier, issue.Team.ID, issue.State.ID, issue.State.Type, project, assignee, issue.Creator.ID, cycle, parent, issue.Priority, issue.SortOrder, issue.Title, issue.CreatedAt.UTC().Format(issueRecordTimestamp), issue.UpdatedAt.UTC().Format(issueRecordTimestamp), archived, issue.Version, list, raw}, nil
+	list = StripJSONNUL(list)
+	return []any{workspace, issue.ID, issue.Identifier, issue.Team.ID, issue.State.ID, issue.State.Type, project, assignee, issue.Creator.ID, cycle, parent, issue.Priority, issue.SortOrder, StripNUL(issue.Title), issue.CreatedAt.UTC().Format(issueRecordTimestamp), issue.UpdatedAt.UTC().Format(issueRecordTimestamp), archived, issue.Version, list, raw}, nil
 }
 
 func (s *SQLiteStore) writeIssueRecord(ctx context.Context, tx *sqlTx, workspace string, issue domain.Issue, metadata ...domain.Bootstrap) error {

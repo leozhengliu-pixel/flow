@@ -16,6 +16,8 @@ func writeWorkspaceMetadata(ctx context.Context, tx *sqlTx, key, id string, raw 
 	if err != nil {
 		return err
 	}
+	// The workspace JSON is parsed in SQL, where PostgreSQL refuses \u0000.
+	raw = StripJSONNUL(raw)
 	var previous []byte
 	var previousID string
 	err = tx.QueryRowContext(ctx, "SELECT workspace_id,data FROM workspace_states WHERE workspace_key=?", key).Scan(&previousID, &previous)

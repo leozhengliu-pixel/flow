@@ -84,6 +84,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   [Wider issue attribute fields](docs/operations.md#wider-issue-attribute-fields-mysql-postgresql).
   Longer fields are stored as a prefix plus digest, so no id length can fail
   the write.
+- On PostgreSQL, text containing a NUL character (U+0000) no longer fails
+  with HTTP 500 (`invalid byte sequence for encoding "UTF8": 0x00`). NUL is
+  removed from JSON request bodies (REST, MCP, SCIM), Flow tool arguments
+  (MCP clients and the built-in agent), query strings and CSV/JSON import
+  cells on every database, so issue titles, descriptions, comments, names,
+  keys, documents and searches are saved without it. The store also drops it
+  from any other text before PostgreSQL sees it, and keeps it out of the
+  stored issue, comment and workspace JSON, where one `\u0000` used to make
+  later queries that read descriptions or notifications fail.
 - On MySQL, editing a document larger than about 64 KiB no longer fails with
   HTTP 500 (`Data too long for column 'previous_values'`) and no longer
   discards the edit. This affected workspaces with an enabled webhook, an
