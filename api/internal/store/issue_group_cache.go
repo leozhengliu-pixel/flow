@@ -3,9 +3,7 @@ package store
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"slices"
 	"sync"
 	"time"
@@ -17,10 +15,10 @@ import (
 // and the workspace's issue revision: a counter in the database that every
 // transaction writing issue records, their label, attribute and permission
 // indexes, or the customer request index advances (writeIssueStats,
-// writeCustomerFilterRecord), as its last statement. Reading it is one
-// primary-key lookup, and every server sees a write once it commits, so a
-// cached count is never served after the data it counts changed; the TTL only
-// bounds memory. A reader reads the revision before it counts: a write that
+// writeCustomerFilterRecord), among its last statements (cache_revisions.go).
+// Reading it is one indexed read, and every server sees a write once it
+// commits, so a cached count is never served after the data it counts
+// changed; the TTL only bounds memory. A reader reads the revision before it counts: a write that
 // commits in between leaves its counts under the older revision, which no
 // later reader asks for.
 
@@ -96,25 +94,21 @@ func issueGroupCountKey(query IssueRecordQuery, revision int64) [32]byte {
 }
 
 // issueCountRevision reads the workspace's issue revision (0 before its first
-// issue write).
+// issue write; cache_revisions.go).
 func (s *SQLiteStore) issueCountRevision(ctx context.Context, workspace string) (int64, error) {
-	var revision int64
-	err := s.db.QueryRowContext(ctx, `SELECT revision FROM issue_count_revisions WHERE workspace_key=?`, workspace).Scan(&revision)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, nil
-	}
-	return revision, err
+	return s.cacheRevision(ctx, s.db, workspace, cacheKindIssues)
 }
 
 // queueIssueCountRevision advances the workspace's issue revision when the
 // writing transaction commits, so the new data and its revision commit
-// together. Every writer in the workspace updates the same revision row, so
-// it is the transaction's last statement (flushIssueCounts): writers queue on
-// it only while its holder commits, and a holder waits for nothing else, so
-// the row cannot take part in a deadlock.
+// together. Every writer in the workspace advances it, so it is among the
+// transaction's last statements (sqlTx.Commit) and split into shards
+// (cache_revisions.go): writers rarely share a row, and one that does waits
+// only while its holder commits, which waits for nothing else then.
 func queueIssueCountRevision(ctx context.Context, tx *sqlTx, workspace string) {
 	pending := tx.pendingIssueCounts(ctx)
 	pending.revisions[workspace] = true
+	tx.queueCacheRevision(workspace, cacheKindIssues)
 }
 
 type pendingIssueCounts struct {
@@ -131,8 +125,8 @@ func (tx *sqlTx) pendingIssueCounts(ctx context.Context) *pendingIssueCounts {
 	return tx.issueCounts
 }
 
-// flushIssueCounts writes what the transaction queued; Commit calls it just
-// before committing.
+// flushIssueCounts writes the queued counter deltas; Commit calls it just
+// before it advances the revisions (flushCacheRevisions) and commits.
 func (tx *sqlTx) flushIssueCounts() error {
 	pending := tx.issueCounts
 	if pending == nil {
@@ -146,11 +140,6 @@ func (tx *sqlTx) flushIssueCounts() error {
 	slices.Sort(workspaces)
 	for _, workspace := range workspaces {
 		if err := applyIssueStats(pending.ctx, tx, workspace, pending.deltas[workspace]); err != nil {
-			return err
-		}
-	}
-	for _, workspace := range workspaces {
-		if _, err := tx.ExecContext(pending.ctx, `INSERT INTO issue_count_revisions(workspace_key,revision) VALUES(?,1) ON CONFLICT(workspace_key) DO UPDATE SET revision=issue_count_revisions.revision+1`, workspace); err != nil {
 			return err
 		}
 	}

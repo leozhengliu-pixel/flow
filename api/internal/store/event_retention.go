@@ -28,6 +28,11 @@ const DomainEventPruneBatch = 1000
 // it deletes fewer than DomainEventPruneBatch, so no single statement holds
 // locks for long.
 func (s *SQLiteStore) PruneDomainEvents(ctx context.Context, cutoff time.Time) (int, error) {
+	// Number events their writers left unnumbered first (event_sequencer.go):
+	// one without a seq would otherwise count as an old, unlogged event.
+	if err := s.rescueAllStaleSequencing(ctx); err != nil {
+		return 0, err
+	}
 	args := []any{cutoff.UTC().Format(time.RFC3339Nano)}
 	for _, kind := range retainedDomainEventTypes {
 		args = append(args, kind)
