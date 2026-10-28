@@ -250,15 +250,15 @@ func (registry *loopRunRegistry) register(runID, workspace string, cancel contex
 	return entry
 }
 
-// finish removes a run and frees its slot.
-func (registry *loopRunRegistry) finish(runID string) {
+// finish removes a registered run and frees its slot. Only that entry is
+// removed: a reply registered under the same run id after this run stored its
+// result stays registered.
+func (registry *loopRunRegistry) finish(runID string, entry *activeLoopRun) {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
-	entry, ok := registry.active[runID]
-	if !ok {
-		return
+	if registry.active[runID] == entry {
+		delete(registry.active, runID)
 	}
-	delete(registry.active, runID)
 	registry.perWorkspace[entry.workspace]--
 	registry.total--
 	close(entry.done)
@@ -307,19 +307,46 @@ func loopInstanceHost(instance string) string {
 	return host
 }
 
-// runLoopWork executes work for a run under its lease: it registers the run
-// for cancellation, renews the lease until work returns, cancels the work when
-// the lease is lost or another process asks to cancel, and calls finish with
-// the work's context (whose cause says why it ended) before the run leaves
-// the registry. The caller has reserved a concurrency slot.
-func (s *server) runLoopWork(workspace, runID string, limits loopRunLimits, work func(context.Context) error, finish func(context.Context, error)) {
+// loopWork is a run (or a reply's answer) registered for cancellation in this
+// process. It is registered before the run is stored as running, so a cancel
+// request that reads the run as running always finds it here and waits for it
+// to stop, instead of only flagging it for a heartbeat that has not started.
+type loopWork struct {
+	registry  *loopRunRegistry
+	runID     string
+	entry     *activeLoopRun
+	ctx       context.Context
+	cancel    context.CancelCauseFunc
+	stop      context.CancelFunc
+	abandoned sync.Once
+}
+
+// registerLoopWork registers a run that holds a reserved concurrency slot. The
+// caller runs it with runLoopWork or, when it is never stored, abandons it.
+func (s *server) registerLoopWork(workspace, runID string, limits loopRunLimits) *loopWork {
 	registry := s.loopRunRegistry()
 	ctx, cancel := context.WithCancelCause(context.Background())
 	ctx, stop := context.WithTimeoutCause(ctx, limits.Timeout, errLoopRunTimedOut)
-	registry.register(runID, workspace, cancel)
-	defer registry.finish(runID)
-	defer cancel(nil)
-	defer stop()
+	return &loopWork{registry: registry, runID: runID, entry: registry.register(runID, workspace, cancel), ctx: ctx, cancel: cancel, stop: stop}
+}
+
+// abandon releases the work's context, removes it from the registry and frees
+// its slot.
+func (lw *loopWork) abandon() {
+	lw.abandoned.Do(func() {
+		lw.stop()
+		lw.cancel(nil)
+		lw.registry.finish(lw.runID, lw.entry)
+	})
+}
+
+// runLoopWork executes registered work for a run under its lease: it renews
+// the lease until work returns, cancels the work when the lease is lost or
+// another process asks to cancel, and calls finish with the work's context
+// (whose cause says why it ended) before the run leaves the registry.
+func (s *server) runLoopWork(lw *loopWork, workspace string, limits loopRunLimits, work func(context.Context) error, finish func(context.Context, error)) {
+	defer lw.abandon()
+	ctx, cancel, runID := lw.ctx, lw.cancel, lw.runID
 	done := make(chan struct{})
 	heartbeatDone := make(chan struct{})
 	go func() {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type RefObject } from "react";
 import { Check, ChevronRight, Plus, Search, X } from "lucide-react";
 import { fetchAgentStatus } from "@/lib/api";
 import {
@@ -44,6 +44,16 @@ type ProjectCreationAgentMessage = AgentMessage & { pending?: boolean };
 /** Monotonic clock for timing a stream; only read from the send handler, never while rendering. */
 const monotonicNow = () => performance.now();
 
+// Focuses the message box on the next frame while focus is nowhere, inside
+// the assistant, or still on `from`. A field the person moved to keeps focus,
+// so a late frame never takes the keys they are typing there.
+function focusNextFrame(input: RefObject<HTMLTextAreaElement | null>, panel: RefObject<HTMLElement | null>, from: Element | null = null) {
+  requestAnimationFrame(() => {
+    const active = document.activeElement;
+    if (!active || active === document.body || active === from || panel.current?.contains(active)) input.current?.focus();
+  });
+}
+
 const SUGGESTIONS = [
   ["Outline the scope", "Outline the scope"],
   ["Research customer requests", "Research customer requests"],
@@ -80,6 +90,7 @@ export function ProjectCreationAgent({
   const abortRef = useRef<AbortController | undefined>(undefined);
   const conversationRef = useRef<HTMLDivElement>(null);
   const streamStartedAtRef = useRef<number | undefined>(undefined);
+  const panelRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (hidden) return;
@@ -92,7 +103,7 @@ export function ProjectCreationAgent({
         // The assistant remains usable as a draft composer when no provider is configured.
         if (active) setStatus({ enabled: false, model: "" });
       });
-    requestAnimationFrame(() => inputRef.current?.focus());
+    focusNextFrame(inputRef, panelRef, document.activeElement);
     return () => {
       active = false;
       abortRef.current?.abort();
@@ -260,7 +271,7 @@ export function ProjectCreationAgent({
     } finally {
       abortRef.current = undefined;
       setBusy(false);
-      requestAnimationFrame(() => inputRef.current?.focus());
+      focusNextFrame(inputRef, panelRef);
     }
   };
 
@@ -277,6 +288,7 @@ export function ProjectCreationAgent({
       aria-label={t("Project creation assistant")}
       className="project-creation-agent"
       data-hidden={hidden || undefined}
+      ref={panelRef}
       onKeyDown={(event) => {
         if (event.key === "Escape" && skillsOpen) {
           event.preventDefault();

@@ -368,8 +368,11 @@ func (s *server) startLoopRun(workspace, loopID string, trigger loopTrigger, act
 		return run, nil
 	}
 	run.HeartbeatAt = &now
+	// Registered before it is stored as running: a cancel that reads the run
+	// finds it in this process.
+	work := s.registerLoopWork(workspace, run.ID, limits)
 	if err := s.store.CreateLoopRun(context.Background(), workspace, run, store.LoopRunLease{Owner: s.loopInstanceID(), ExpiresAt: now.Add(limits.LeaseTTL)}); err != nil {
-		registry.unreserve(workspace)
+		work.abandon()
 		loopGuards.release(guardKey)
 		return domain.LoopRun{}, err
 	}
@@ -377,7 +380,7 @@ func (s *server) startLoopRun(workspace, loopID string, trigger loopTrigger, act
 	go func() {
 		defer loopGuards.release(guardKey)
 		recorder := &loopRunRecorder{s: s, workspace: workspace, run: run}
-		s.runLoopWork(workspace, run.ID, limits, func(ctx context.Context) error {
+		s.runLoopWork(work, workspace, limits, func(ctx context.Context) error {
 			return s.executeLoopRun(ctx, workspace, current, trigger, recorder)
 		}, func(ctx context.Context, runErr error) {
 			s.finishLoopRun(ctx, workspace, current, recorder, runErr)

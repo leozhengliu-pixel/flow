@@ -35,10 +35,18 @@ class FakeTerminal {
 vi.mock("@xterm/xterm", () => ({ Terminal: FakeTerminal }));
 vi.mock("@xterm/addon-fit", () => ({ FitAddon: class { fit() {} } }));
 vi.mock("@xterm/xterm/css/xterm.css", () => ({}));
+// The theme change event repaints only when the resolved theme changes, so
+// the test controls what the event resolves to.
+const resolvedTheme = vi.hoisted(() => ({ current: "light" as "light" | "dark" }));
+vi.mock("@/lib/theme", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/theme")>()),
+  getResolvedTheme: () => resolvedTheme.current,
+}));
 
 beforeEach(() => {
   terminals.length = 0;
   failLoad = false;
+  resolvedTheme.current = "light";
   document.documentElement.style.removeProperty("--theme-text-primary");
 });
 
@@ -74,8 +82,13 @@ describe("SnapshotLogTerminal", () => {
     render(<SnapshotLogTerminal text="ok" placeholder="Loading…" />);
     await waitFor(() => expect(terminals).toHaveLength(1));
     await waitFor(() => expect(screen.getByTestId("snapshot-logs")).toHaveAttribute("data-ready"));
+    // Let the repaint scheduled on ready land first, so only the theme change
+    // below can bring in the new token value.
+    await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    expect((terminals[0].options.theme as Record<string, string>).foreground).toBeUndefined();
     document.documentElement.style.setProperty("--theme-text-primary", "rgb(9, 9, 9)");
     await act(async () => {
+      resolvedTheme.current = "dark";
       window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT, { detail: "dark" }));
       await new Promise((resolve) => requestAnimationFrame(resolve));
     });

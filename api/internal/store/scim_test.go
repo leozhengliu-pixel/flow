@@ -195,6 +195,24 @@ func checkSCIMProfileAndSort(t *testing.T, repository *SQLiteStore, workspaceID 
 			t.Errorf("sort %s desc=%v = %q, want %q", item.sortBy, item.descending, got, item.want)
 		}
 	}
+	// Stored stamps drop trailing zeros of the fraction; the sort still follows
+	// time order ("05.2127Z" is earlier than "05.21271Z" though it compares
+	// after it as text).
+	for subject, stamp := range map[string]string{"ext-b": "2026-01-02T03:04:05.2127Z", "c@example.test": "2026-01-02T03:04:05.21271Z", "ext-a": "2026-01-02T03:04:05.21272Z"} {
+		user, err := repository.SCIMUser(ctx, workspaceID, subject)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repository.db.ExecContext(ctx, `UPDATE auth_users SET created_at=?,updated_at=? WHERE id=?`, stamp, stamp, user.User.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := initials("created", false); got != "bca" {
+		t.Errorf("sort created over trimmed stamps = %q, want bca", got)
+	}
+	if got := initials("lastModified", true); got != "acb" {
+		t.Errorf("sort lastModified desc over trimmed stamps = %q, want acb", got)
+	}
 	if _, _, err := repository.ListSCIMUsers(ctx, workspaceID, SCIMUserQuery{SortBy: "title", Limit: 1}); err == nil {
 		t.Fatal("unsupported SQL sort accepted")
 	}

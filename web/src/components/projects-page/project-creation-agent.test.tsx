@@ -122,6 +122,9 @@ describe('ProjectCreationAgent', () => {
       onEvent({ type: 'session.completed', session: completed })
       return completed
     })
+    // Frames land late, as under load: the assistant's refocus after its reply
+    // must not take the keys typed into the project name meanwhile.
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 80))
     const user = userEvent.setup()
     const onCreate = vi.fn().mockResolvedValue(undefined)
     render(<I18nProvider><NewProjectDialog open onClose={vi.fn()} onCreate={onCreate} teams={[{ id: 'team-1', label: 'Team', color: '#5e6ad2' }]}/></I18nProvider>)
@@ -137,6 +140,8 @@ describe('ProjectCreationAgent', () => {
 
     await waitFor(() => expect(screen.getByText('General availability')).toBeVisible())
     await user.type(screen.getByRole('textbox', { name: 'Project name' }), 'Mixed milestone project')
+    expect(screen.getByRole('textbox', { name: 'Project name' })).toHaveValue('Mixed milestone project')
+    expect(screen.getByRole('textbox', { name: 'Send a message to Flow Agent' })).toHaveValue('')
     await user.click(screen.getByRole('button', { name: 'Create project' }))
     expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({
       milestones: ['Beta', 'General availability'],
