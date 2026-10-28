@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"flow/api/internal/publicapi"
 	"flow/api/internal/store"
@@ -79,9 +80,14 @@ func cleanUploadFilename(name string) string {
 		name = ""
 	}
 	if len(name) > 255 {
-		name = name[len(name)-255:]
+		// Keep the end (the extension), starting on a character boundary.
+		start := len(name) - 255
+		for start < len(name) && !utf8.RuneStart(name[start]) {
+			start++
+		}
+		name = name[start:]
 	}
-	return name
+	return strings.ToValidUTF8(name, "�")
 }
 
 func (s *server) createFileUpload(w http.ResponseWriter, r *http.Request) {

@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
@@ -176,6 +177,9 @@ func (s *server) createMCPLabel(ctx context.Context, actor mcpActor, data domain
 }
 
 func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
+	if err := checkIssueTitle(strings.TrimSpace(stringArg(args, "title"))); err != nil {
+		return nil, fmt.Errorf("title must be %d characters or fewer; nothing was saved", domain.IssueTitleMaxLength)
+	}
 	id := stringArg(args, "id")
 	var current domain.Issue
 	var err error
@@ -1348,6 +1352,14 @@ func (s *server) prepareMCPAttachmentUpload(ctx context.Context, actor mcpActor,
 	filename := cleanUploadFilename(stringArg(args, "filename"))
 	if filename == "" {
 		filename = "upload"
+	}
+	for _, field := range []string{"title", "subtitle"} {
+		if utf8.RuneCountInString(stringArg(args, field)) > domain.UploadTitleMaxLength {
+			return nil, fmt.Errorf("%s must be %d characters or fewer; nothing was uploaded", field, domain.UploadTitleMaxLength)
+		}
+	}
+	if contentType := stringArg(args, "contentType"); len(contentType) > 255 {
+		return nil, fmt.Errorf("contentType must be a media type of at most 255 characters")
 	}
 	upload := store.FileUpload{WorkspaceKey: actor.WorkspaceKey, UserID: actor.User.ID, Filename: filename, ContentType: stringArg(args, "contentType"), ExpectedSize: size, Purpose: "issue:" + issue.ID, Title: stringArg(args, "title"), Subtitle: stringArg(args, "subtitle")}
 	payload, err := s.prepareFileUpload(ctx, upload, stringArg(args, "__flowBaseURL"), "/api/mcp/uploads/")

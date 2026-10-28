@@ -611,6 +611,12 @@ func applyFlowMigration(data *domain.Bootstrap, job *domain.MigrationJob, bundle
 	nextNumber := nextIssueNumber(data.Issues)
 	for _, source := range bundle.Issues {
 		oldID := source.ID
+		if err := checkIssueTitle(source.Title); err != nil {
+			return fmt.Errorf("%w (issue %.64q)", err, oldID)
+		}
+		if len("migration:"+job.ID+":"+oldID) > 191 {
+			return fmt.Errorf("%w: issue id %.64q is longer than %d bytes", errInvalid, oldID, 191-len("migration:"+job.ID+":"))
+		}
 		source.ID = migrationID("issue")
 		source.Team = teamForMigration(data, mapOne(source.Team.ID, teamMap, fallbackTeamID))
 		source.Number = nextNumber

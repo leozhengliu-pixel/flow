@@ -1951,6 +1951,13 @@ func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
 	if input.Role == "" {
 		input.Role = "member"
 	}
+	// Every address is checked before the first invitation is written.
+	for _, email := range input.Emails {
+		if err := checkTextLength("email", strings.TrimSpace(email), domain.EmailMaxLength); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
 	if strings.EqualFold(input.Role, "owner") && !s.authDisabled {
 		role, _, _ := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, authUser(r).ID)
 		if !workspaceAdminRole(role) {

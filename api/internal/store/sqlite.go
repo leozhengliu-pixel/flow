@@ -2223,7 +2223,7 @@ func (s *SQLiteStore) Events(ctx context.Context, aggregateID string) ([]domain.
 	args := []any{}
 	if aggregateID != "" {
 		query += ` WHERE aggregate_id = ?`
-		args = append(args, aggregateID)
+		args = append(args, eventAggregateKey(aggregateID))
 	}
 	query += ` ORDER BY created_at ASC`
 	rows, err := s.db.QueryContext(ctx, query, args...)

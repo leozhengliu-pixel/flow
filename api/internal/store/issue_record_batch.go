@@ -112,7 +112,7 @@ func (s *SQLiteStore) writeIssueRecordBatch(ctx context.Context, tx *sqlTx, work
 	changed := []domain.Issue{}
 	written := []string{}
 	for _, issue := range issues {
-		values, err := issueRecordValues(workspace, issue)
+		values, err := s.issueRecordColumns(workspace, issue)
 		if err != nil {
 			return nil, err
 		}

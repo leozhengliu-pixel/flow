@@ -547,9 +547,7 @@ func (s *SQLiteStore) FinishChatJob(ctx context.Context, item domain.ChatJob, st
 	if status != "pending" {
 		runAt = time.Now().UTC()
 	}
-	if len(lastError) > 1000 {
-		lastError = lastError[:1000]
-	}
+	lastError = storableText(lastError, 1000) // VARCHAR(1000); bytes <= characters
 	result, err := s.db.ExecContext(ctx, `UPDATE chat_jobs SET status=?,run_at=?,lease_until=0,last_error=? WHERE id=? AND workspace_key=? AND connection_id=? AND status='processing' AND lease_until=? AND attempts=?`, status, runAt.UnixMilli(), lastError, item.ID, item.WorkspaceKey, item.ConnectionID, item.LeaseUntil.UnixMilli(), item.Attempts)
 	if err != nil {
 		return err

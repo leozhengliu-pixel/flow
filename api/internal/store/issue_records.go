@@ -101,7 +101,7 @@ func (s *SQLiteStore) replaceIssueRecords(ctx context.Context, tx *sqlTx, worksp
 		changed := []domain.Issue{}
 		for _, issue := range batch {
 			position := order[issue.ID]
-			values, err := issueRecordValues(workspace, issue)
+			values, err := s.issueRecordColumns(workspace, issue)
 			if err != nil {
 				return err
 			}
@@ -332,7 +332,7 @@ func issueRecordValues(workspace string, issue domain.Issue) ([]any, error) {
 }
 
 func (s *SQLiteStore) writeIssueRecord(ctx context.Context, tx *sqlTx, workspace string, issue domain.Issue, metadata ...domain.Bootstrap) error {
-	values, err := issueRecordValues(workspace, issue)
+	values, err := s.issueRecordColumns(workspace, issue)
 	if err != nil {
 		return err
 	}
@@ -478,7 +478,7 @@ func (s *SQLiteStore) ImportIssues(ctx context.Context, workspace string, issues
 		if issue.ID == "" {
 			return fmt.Errorf("issue import requires non-empty IDs")
 		}
-		values, err := issueRecordValues(workspace, issue)
+		values, err := s.issueRecordColumns(workspace, issue)
 		if err != nil {
 			return err
 		}
@@ -637,7 +637,7 @@ func (s *SQLiteStore) importIssueRecordBatch(ctx context.Context, tx *sqlTx, wor
 		var args []any
 		var tuples []string
 		for end < len(issues) && end-start < 100 {
-			values, err := issueRecordValues(workspace, issues[end])
+			values, err := s.issueRecordColumns(workspace, issues[end])
 			if err != nil {
 				return err
 			}

@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -131,6 +132,9 @@ func (s *SQLiteStore) Register(ctx context.Context, name, email, password string
 	if name == "" || !strings.Contains(email, "@") || len(password) < 8 {
 		return domain.User{}, "", fmt.Errorf("invalid registration")
 	}
+	if err := checkTextFields(textField{"name", name, domain.UserNameMaxLength}, textField{"email", email, domain.EmailMaxLength}); err != nil {
+		return domain.User{}, "", err
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return domain.User{}, "", err
@@ -218,6 +222,15 @@ func (s *SQLiteStore) LoginExternalIdentity(ctx context.Context, provider, issue
 	}
 	email = normalizeEmail(email)
 	name, username, avatarURL = strings.TrimSpace(name), strings.TrimSpace(username), strings.TrimSpace(avatarURL)
+	// Identity provider claims fit their columns: the key fields or they are
+	// refused, profile fields are cut (a long picture URL is dropped).
+	if checkTextFields(textField{"subject", subject, domain.SCIMValueMaxLength}, textField{"issuer", issuer, 2048}, textField{"email", email, domain.EmailMaxLength}) != nil {
+		return domain.AuthSession{}, "", ErrAuthInvalid
+	}
+	name, username = TruncateRunes(name, domain.UserNameMaxLength), TruncateRunes(username, domain.SCIMValueMaxLength)
+	if utf8.RuneCountInString(avatarURL) > domain.AvatarURLMaxLength {
+		avatarURL = ""
+	}
 	if strings.TrimSpace(claimsJSON) == "" {
 		claimsJSON = "{}"
 	}
@@ -440,7 +453,10 @@ func (s *SQLiteStore) Logout(ctx context.Context, token string) error {
 func (s *SQLiteStore) UpdateProfile(ctx context.Context, userID, displayName, username, avatarURL string) (domain.User, error) {
 	displayName, username = strings.TrimSpace(displayName), strings.TrimSpace(username)
 	if displayName == "" || username == "" {
-		return domain.User{}, errors.New("name and username are required")
+		return domain.User{}, invalidValue("name and username are required")
+	}
+	if err := checkTextFields(textField{"displayName", displayName, domain.UserNameMaxLength}, textField{"username", username, domain.UserNameMaxLength}, textField{"avatarUrl", strings.TrimSpace(avatarURL), domain.AvatarURLMaxLength}); err != nil {
+		return domain.User{}, err
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := s.db.ExecContext(ctx, `UPDATE auth_users SET name=?,display_name=?,avatar_url=?,updated_at=? WHERE id=?`, username, displayName, strings.TrimSpace(avatarURL), now, userID); err != nil {
@@ -452,7 +468,10 @@ func (s *SQLiteStore) UpdateProfile(ctx context.Context, userID, displayName, us
 func (s *SQLiteStore) UpdateMemberIdentity(ctx context.Context, userID, displayName, username, email string) (domain.User, error) {
 	displayName, username, email = strings.TrimSpace(displayName), strings.TrimSpace(username), normalizeEmail(email)
 	if displayName == "" || username == "" || !strings.Contains(email, "@") {
-		return domain.User{}, fmt.Errorf("invalid member identity")
+		return domain.User{}, invalidValue("invalid member identity")
+	}
+	if err := checkTextFields(textField{"displayName", displayName, domain.UserNameMaxLength}, textField{"username", username, domain.UserNameMaxLength}, textField{"email", email, domain.EmailMaxLength}); err != nil {
+		return domain.User{}, err
 	}
 	result, err := s.db.ExecContext(ctx, `UPDATE auth_users SET display_name=?,name=?,email=?,updated_at=? WHERE id=?`, displayName, username, email, time.Now().UTC().Format(time.RFC3339Nano), userID)
 	if err != nil {
@@ -1062,6 +1081,9 @@ func (s *SQLiteStore) Invite(ctx context.Context, workspaceID, inviterID, email,
 	email = normalizeEmail(email)
 	if !validWorkspaceRole(role) || !strings.Contains(email, "@") || role == "guest" && len(teamIDs) == 0 {
 		return domain.Invitation{}, fmt.Errorf("invalid invitation")
+	}
+	if err := checkTextFields(textField{"email", email, domain.EmailMaxLength}); err != nil {
+		return domain.Invitation{}, err
 	}
 	data, _, ok := s.workspaceByID(workspaceID)
 	if !ok || slices.ContainsFunc(teamIDs, func(teamID string) bool {

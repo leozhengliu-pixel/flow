@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/publicapi"
@@ -3366,7 +3367,16 @@ func (s *server) commitImportSync(w http.ResponseWriter, r *http.Request) {
 				job.Errors = append(job.Errors, fmt.Sprintf("Row %d: title is empty", rowIndex+2))
 				continue
 			}
+			if utf8.RuneCountInString(stripSpreadsheetQuote(title)) > domain.IssueTitleMaxLength {
+				job.Errors = append(job.Errors, fmt.Sprintf("Row %d: title is longer than %d characters", rowIndex+2, domain.IssueTitleMaxLength))
+				continue
+			}
 			sourceID := strings.TrimSpace(row[input.Mapping["sourceId"]])
+			// "csv:"+sourceID is indexed in a VARCHAR(191) column.
+			if len(sourceID) > csvSourceIDMaxBytes {
+				job.Errors = append(job.Errors, fmt.Sprintf("Row %d: source id is longer than %d bytes", rowIndex+2, csvSourceIDMaxBytes))
+				continue
+			}
 			if sourceID != "" {
 				if _, exists := sourceToIssueID[sourceID]; exists {
 					job.Errors = append(job.Errors, fmt.Sprintf("Row %d: source issue %q was already imported", rowIndex+2, sourceID))

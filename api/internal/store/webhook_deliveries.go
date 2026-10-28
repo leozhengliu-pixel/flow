@@ -189,12 +189,10 @@ func (s *SQLiteStore) EnqueueWebhookDelivery(ctx context.Context, delivery domai
 	return count == 1, err
 }
 
-func truncateText(value string, limit int) string {
-	if len(value) <= limit {
-		return value
-	}
-	return value[:limit]
-}
+// truncateText is storableText: external text (a receiver's response, a
+// worker's error) cut to limit bytes on a character boundary, as valid UTF-8,
+// so strict MySQL (error 1366) and Postgres accept it.
+func truncateText(value string, limit int) string { return storableText(value, limit) }
 
 func scanWebhookDelivery(scan func(...any) error, withPayload bool) (domain.WebhookDelivery, error) {
 	var d domain.WebhookDelivery

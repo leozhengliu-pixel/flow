@@ -34,6 +34,10 @@ func (s *server) createSCIMToken(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	if err := checkTextLength("name", strings.TrimSpace(input.Name), 191); err != nil { // scim_tokens.name
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	data := s.workspaceData(r)
 	item, err := s.store.CreateSCIMToken(r.Context(), data.Workspace.ID, input.Name)
 	if err == nil {
