@@ -289,7 +289,7 @@ jobs:
       - name: Test with race detector and coverage
         run: |
           set -euo pipefail
-          mkdir -p "$GITHUB_WORKSPACE/coverage"
+          mkdir -p "$GITHUB_WORKSPACE/coverage" "$GITHUB_WORKSPACE/timings"
           if [ "$PACKAGE" = others ]; then
             # Everything the sharded jobs do not cover.
             mapfile -t packages < <(go list ./... | grep -vE '/cmd/server$|/internal/store$')
@@ -300,15 +300,40 @@ jobs:
             echo "Shard $SHARD/$SHARDS of $PACKAGE: $(( $(printf '%s' "$pattern" | tr -cd '|' | wc -c) + 1 )) tests"
             selection=(-run "$pattern")
           fi
-          go test -race -timeout 30m -covermode=atomic \
+          # -json gives every test's duration; go-test-json.sh log prints what
+          # plain `go test` would, and the failing tests' output follows a failure.
+          events="$GITHUB_WORKSPACE/timings/$PROFILE.jsonl"
+          status=0
+          go test -json -race -timeout 30m -covermode=atomic \
             -coverprofile="$GITHUB_WORKSPACE/coverage/$PROFILE.out" \
-            "${selection[@]}" "${packages[@]}"
+            "${selection[@]}" "${packages[@]}" 2>&1 |
+            tee "$events" | ../scripts/ci/go-test-json.sh log || status=$?
+          if [ "$status" -ne 0 ]; then
+            ../scripts/ci/go-test-json.sh failures "$events" || true
+            exit "$status"
+          fi
+          if [ "$PACKAGE" = others ]; then
+            # Only the sharded packages need timings.
+            echo '{}' > "$GITHUB_WORKSPACE/timings/$PROFILE.json"
+          else
+            ../scripts/ci/go-test-json.sh timings "$(go list -m)" \
+              "$GITHUB_WORKSPACE/timings/$PROFILE.json" "$events"
+          fi
 
       - name: Upload coverage profile
         uses: actions/upload-artifact@v7
         with:
           name: go-coverage-${{ matrix.profile }}
           path: coverage/${{ matrix.profile }}.out
+          if-no-files-found: error
+          retention-days: 3
+
+      # Per-test durations (name to seconds) of this shard, merged by api-timings.
+      - name: Upload test timings
+        uses: actions/upload-artifact@v7
+        with:
+          name: go-test-timings-${{ matrix.profile }}
+          path: timings/${{ matrix.profile }}.json
           if-no-files-found: error
           retention-days: 3
 
@@ -351,6 +376,38 @@ jobs:
             go tool cover -func=coverage.out | tail -n 1
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # On main, merge the shards' per-test durations into one file. The shard
+  # assignment reads scripts/ci/go-test-timings.json; scripts/ci/update-go-test-timings.sh
+  # downloads this artifact when someone wants to refresh it. Not part of the "API"
+  # gate: a missing timings file must never fail a build.
+  api-timings:
+    name: API test timings
+    needs: [api-test]
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Download shard timings
+        uses: actions/download-artifact@v8
+        with:
+          pattern: go-test-timings-*
+          path: ${{ github.workspace }}/timings
+          merge-multiple: true
+
+      - name: Merge timings
+        run: ./scripts/ci/go-test-json.sh merge go-test-timings.json "$GITHUB_WORKSPACE"/timings/*.json
+
+      - name: Upload merged timings
+        uses: actions/upload-artifact@v7
+        with:
+          name: go-test-timings
+          path: go-test-timings.json
+          if-no-files-found: error
+          retention-days: 30
 
   api:
     name: API
