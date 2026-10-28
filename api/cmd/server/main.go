@@ -1018,7 +1018,7 @@ func newHandler(s *server) http.Handler {
 	if s.securityHeaders != nil {
 		forwarding = forwardingPolicyFromConfig(securityConfig, s.allowedOrigin)
 	}
-	return withForwardingPolicy(forwarding, withSecurityHeaders(security, recoverPanics(requestLog(s.cors(compressAPIResponses(s.signedFileURLs(apiErrorEnvelope(requestBodyBudget(handler)))))))))
+	return withForwardingPolicy(forwarding, withSecurityHeaders(security, recoverPanics(requestLog(s.cors(compressAPIResponses(s.signedFileURLs(apiErrorEnvelope(requestBodyBudget(stripQueryNUL(handler))))))))))
 }
 
 // serverRoute reports whether path is answered by the API rather than the
@@ -6961,6 +6961,7 @@ func priorityLabel(priority int) string {
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, target any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, maxJSONRequestBytes)
+	stripRequestJSONNUL(r)
 	if err := json.NewDecoder(r.Body).Decode(target); err != nil {
 		requestDecodeError(w, err)
 		return false
@@ -6973,6 +6974,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, target any) bool {
 // client never sees success for a change that was not made.
 func decodeStrictJSON(w http.ResponseWriter, r *http.Request, target any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, maxJSONRequestBytes)
+	stripRequestJSONNUL(r)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {

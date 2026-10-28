@@ -1,10 +1,12 @@
 package store
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -146,6 +148,79 @@ func TruncateRunes(value string, max int) string {
 		count++
 	}
 	return value
+}
+
+// jsonNULEscape is how JSON writes U+0000 inside a string.
+var jsonNULEscape = []byte(`\u0000`)
+
+// StripJSONNUL removes U+0000 (\u0000 escapes) from the strings of a JSON
+// document; every other byte is kept, and an escaped backslash followed by
+// the text "u0000" is text, not NUL. PostgreSQL refuses \u0000 when it parses
+// JSON (unsupported Unicode escape sequence), so one stored row carrying it
+// would fail every query that reads that column as JSON. raw must be JSON;
+// it is returned as it is when it has no \u0000.
+func StripJSONNUL(raw []byte) []byte {
+	if !bytes.Contains(raw, jsonNULEscape) {
+		return raw
+	}
+	out := make([]byte, 0, len(raw))
+	inString := false
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		switch {
+		case !inString:
+			inString = c == '"'
+		case c == '"':
+			inString = false
+		case c == '\\' && i+1 < len(raw):
+			if bytes.HasPrefix(raw[i:], jsonNULEscape) {
+				i += len(jsonNULEscape) - 1
+				continue
+			}
+			out = append(out, c, raw[i+1])
+			i++
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
+// StripNUL removes U+0000 from text. PostgreSQL refuses it in text and
+// varchar values (invalid byte sequence for encoding "UTF8": 0x00), and it
+// has no meaning in names, titles or bodies.
+func StripNUL(text string) string {
+	if strings.IndexByte(text, 0) < 0 {
+		return text
+	}
+	return strings.ReplaceAll(text, "\x00", "")
+}
+
+// textArgs drops NUL from the string arguments of a PostgreSQL statement,
+// the last line for text that did not come through a JSON API body (CSV
+// cells, query strings, mail, external payloads): PostgreSQL refuses NUL in
+// any text or varchar value, a query's parameters included, so one NUL
+// would fail the statement with SQLSTATE 22021. MySQL and SQLite store NUL
+// and are left alone. Bytes ([]byte, BYTEA columns) are never changed.
+func textArgs(dialect string, args []any) []any {
+	if dialect != "postgres" {
+		return args
+	}
+	var cleaned []any
+	for i, arg := range args {
+		text, ok := arg.(string)
+		if !ok || strings.IndexByte(text, 0) < 0 {
+			continue
+		}
+		if cleaned == nil {
+			cleaned = slices.Clone(args)
+		}
+		cleaned[i] = StripNUL(text)
+	}
+	if cleaned == nil {
+		return args
+	}
+	return cleaned
 }
 
 // storableText makes text read from an external system (a webhook

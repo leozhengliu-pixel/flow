@@ -406,21 +406,21 @@ func (d *sqlDatabase) ExecContext(ctx context.Context, query string, args ...any
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == d {
 		return nil, errors.New("cannot write inside a workspace read snapshot")
 	}
-	return d.DB.ExecContext(ctx, rewriteSQL(query, d.dialect), args...)
+	return d.DB.ExecContext(ctx, rewriteSQL(query, d.dialect), textArgs(d.dialect, args)...)
 }
 
 func (d *sqlDatabase) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == d {
 		return snapshot.reader.QueryContext(ctx, query, args...)
 	}
-	return d.DB.QueryContext(ctx, rewriteSQL(query, d.dialect), args...)
+	return d.DB.QueryContext(ctx, rewriteSQL(query, d.dialect), textArgs(d.dialect, args)...)
 }
 
 func (d *sqlDatabase) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == d {
 		return snapshot.reader.QueryRowContext(ctx, query, args...)
 	}
-	return d.DB.QueryRowContext(ctx, rewriteSQL(query, d.dialect), args...)
+	return d.DB.QueryRowContext(ctx, rewriteSQL(query, d.dialect), textArgs(d.dialect, args)...)
 }
 
 // claimTxOptions is the isolation for lease/claim transactions that select
@@ -463,15 +463,15 @@ func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sq
 		return nil, tx.writeErr
 	}
 	tx.writtenBytes += bytes
-	return tx.Tx.ExecContext(ctx, rewriteSQL(query, tx.dialect), args...)
+	return tx.Tx.ExecContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
 }
 
 func (tx *sqlTx) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	return tx.Tx.QueryContext(ctx, rewriteSQL(query, tx.dialect), args...)
+	return tx.Tx.QueryContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
 }
 
 func (tx *sqlTx) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
-	return tx.Tx.QueryRowContext(ctx, rewriteSQL(query, tx.dialect), args...)
+	return tx.Tx.QueryRowContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
 }
 
 var excludedColumn = regexp.MustCompile(`excluded\.([a-zA-Z_][a-zA-Z0-9_]*)`)

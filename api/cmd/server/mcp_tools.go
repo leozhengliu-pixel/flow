@@ -20,6 +20,8 @@ import (
 // callFlowTool runs a Flow tool for MCP clients and the built-in agent, and
 // logs failures (they don't go through an HTTP route of their own).
 func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, args map[string]any) (any, error) {
+	// A model or client can send NUL in any text argument (see json_nul.go).
+	stripArgumentNUL(args)
 	if mcpPatchNotAList(args) {
 		// /mcp and executeAgentTool refuse it by the tool's schema first
 		// (checkFlowToolArgs); this covers server-side calls that skip that

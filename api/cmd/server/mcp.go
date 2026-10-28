@@ -77,6 +77,7 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 		}
 		var request mcpRPCRequest
 		r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
+		stripRequestJSONNUL(r)
 		decoder := json.NewDecoder(r.Body)
 		var envelope json.RawMessage
 		if err := decoder.Decode(&envelope); err != nil {

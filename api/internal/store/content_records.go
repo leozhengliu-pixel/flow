@@ -150,6 +150,7 @@ func writeContentRecord[T any](ctx context.Context, tx *sqlTx, workspace, kind, 
 	if err != nil {
 		return err
 	}
+	raw = StripJSONNUL(raw) // as stored (buildContentRecordRow), for the comparison below
 	id, _, err := contentRecordIdentity(item)
 	if err != nil {
 		return err
@@ -204,6 +205,9 @@ func (row contentRecordRow) args() []any {
 }
 
 func buildContentRecordRow(workspace, kind, resource string, raw []byte) (contentRecordRow, error) {
+	// Content JSON is parsed in SQL (notification state), where PostgreSQL
+	// refuses \u0000: comments and other bodies lose NUL.
+	raw = StripJSONNUL(raw)
 	row := contentRecordRow{workspace: workspace, kind: kind, resource: resource, raw: raw}
 	var identity struct {
 		ID             string      `json:"id"`
