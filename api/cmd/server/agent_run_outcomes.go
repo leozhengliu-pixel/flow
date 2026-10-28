@@ -2,20 +2,23 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
-	"sync"
+	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
 // A worker run (agent-worker) makes its tool calls through /mcp with its run token, so Flow sees every write the
-// run makes and keeps the run's ledger itself (agent_action_outcomes.go), under agentRunLedgerKey: each Flow write
-// call and each connector call that may write, with how it ended. The run's final answer is checked against it at
-// two points:
+// run makes and keeps the run's ledger itself (agent_action_outcomes.go): each Flow write call and each connector
+// call that may write, with how it ended, one row per call (agent_run_tool_calls). The run's final answer is
+// checked against the stored entries at two points:
 //
 //   - its last word (the guard's finish, agent_runtime_guard.go): an answer that reports change outcomes while the
 //     run made no write is answered with the nudge, once (the worker sends it to the model and asks again); a second
@@ -24,29 +27,27 @@ import (
 //   - the response activity it posts (POST /internal/agent-runtime/runs/{id}/activities), for a run that did not
 //     ask for its last word: the same checks without the nudge.
 
-// agentRunLedgerKey is where a worker run's ledger is kept (agent_run_keys).
+// agentRunLedgerKey is where an earlier version of Flow kept a worker run's whole ledger (agent_run_keys); it is
+// still read for a run that started then.
 const agentRunLedgerKey = "outcome:ledger"
 
 // agentRunLedgerMax bounds the entries a run's ledger keeps (the tool budget stops a run well before).
-const agentRunLedgerMax = 500
+const agentRunLedgerMax = store.AgentRunToolCallsMax
 
-// agentRunLedgerLocks serializes the ledger updates of one run in this process (parallel tool calls of a turn).
-var agentRunLedgerLocks sync.Map
-
-// recordAgentRunWrite adds a write call's outcome to the run's ledger.
+// recordAgentRunWrite adds a write call's outcome to the run's ledger: its own row (agent_run_tool_calls), keyed by
+// the request's Idempotency-Key with the entry's tool and target when the request has one (a retried call updates
+// its entries; a bulk call keeps one per target) and by a new id otherwise. Parallel calls of a turn may be served
+// by different API servers at once; each adds only its own rows, so no entry is lost and the counts are exact.
 func (s *server) recordAgentRunWrite(ctx context.Context, run store.AgentRun, outcome agentWriteOutcome) {
-	lock, _ := agentRunLedgerLocks.LoadOrStore(run.ID, &sync.Mutex{})
-	mu := lock.(*sync.Mutex)
-	mu.Lock()
-	defer mu.Unlock()
 	ctx = context.WithoutCancel(ctx)
-	ledger := s.agentRunLedger(ctx, run)
-	if len(ledger.outcomes) >= agentRunLedgerMax {
-		return
+	key := idgen.New("call_")
+	if call := agentRunCallKeyFrom(ctx); call != "" {
+		sum := sha256.Sum256([]byte(call + "\x00" + outcome.Tool + "\x00" + outcome.Target))
+		key = "mcp:" + hex.EncodeToString(sum[:20])
 	}
-	raw, err := json.Marshal(append(ledger.outcomes, outcome))
+	raw, err := json.Marshal(outcome)
 	if err == nil {
-		err = s.store.ReplaceAgentRunKey(ctx, run, agentRunLedgerKey, raw)
+		err = s.store.RecordAgentRunToolCall(ctx, run, key, time.Now().UnixNano(), raw)
 	}
 	if err != nil {
 		log.Printf("agent run %s: write outcome not recorded: %v", run.ID, err)
@@ -70,18 +71,27 @@ func (s *server) recordAgentRunConnectorWrite(ctx context.Context, run store.Age
 	s.recordAgentRunWrite(ctx, run, agentWriteOutcomeFor(agentConnectorLedgerName(tool), domain.AgentToolCall{Name: tool.Definition.Name, Arguments: arguments}, status, reason))
 }
 
-// agentRunLedger is the run's ledger as recorded so far.
+// agentRunLedger is the run's ledger as recorded so far, read from the stored entries when the decision is made
+// (whichever servers recorded them).
 func (s *server) agentRunLedger(ctx context.Context, run store.AgentRun) *agentWriteLedger {
 	ledger := &agentWriteLedger{}
 	if raw, found, err := s.store.AgentRunKey(ctx, run.ID, agentRunLedgerKey); err == nil && found {
 		_ = json.Unmarshal(raw, &ledger.outcomes)
 	}
+	rows, err := s.store.AgentRunToolCalls(ctx, run.ID)
+	if err != nil {
+		log.Printf("agent run %s: ledger not read: %v", run.ID, err)
+	}
+	for _, raw := range rows {
+		if len(ledger.outcomes) >= agentRunLedgerMax {
+			break
+		}
+		var outcome agentWriteOutcome
+		if json.Unmarshal(raw, &outcome) == nil {
+			ledger.outcomes = append(ledger.outcomes, outcome)
+		}
+	}
 	return ledger
-}
-
-// forgetAgentRunLedgerLock drops a finished run's lock.
-func forgetAgentRunLedgerLock(runID string) {
-	agentRunLedgerLocks.Delete(runID)
 }
 
 // builtinOutcomeRequest is what a thread run was asked to do, for the outcome check: the person's latest message
@@ -99,14 +109,11 @@ func builtinOutcomeRequest(task domain.AgentTask, data domain.Bootstrap) string 
 func (s *server) agentRunCheckedResponse(r *http.Request, run store.AgentRun, task domain.AgentTask, body string) string {
 	ctx := r.Context()
 	started := false
-	if raw, found, err := s.store.AgentRunKey(ctx, run.ID, workerRunGuardKey); err == nil && found {
-		var state workerRunGuardState
-		if json.Unmarshal(raw, &state) == nil {
-			if state.Finished {
-				return body
-			}
-			started = state.Started != nil
+	if state, found := s.workerRunGuardStateOf(ctx, run.ID); found {
+		if state.Finished {
+			return body
 		}
+		started = state.Started != nil
 	}
 	if body == agentNothingExecutedText(true) || body == agentNothingExecutedText(false) {
 		return body

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"slices"
 	"strings"
@@ -31,10 +32,11 @@ import (
 //     workerChatContextKey) and served by GET …/payload. The request that asked follows the reply (SSE events while
 //     the worker posts here, the finished session at the end), so the stream and non-stream routes answer as before.
 //   - activities: the worker posts text deltas, tool calls and results, ask_user's question, approvals, the
-//     response and errors to POST …/runs/{id}/activities; Flow turns them into the reply's parts in this process
-//     (workerChatReply) and saves them (part boundaries at once, text at most once per agentLiveSaveInterval), so
-//     the agent.message_* realtime events, a reloaded page and use-agent-reply-follow see the reply as they see an
-//     in-process one. A connector's question (MCP elicitation) is attached by the API process that holds it.
+//     response and errors to POST …/runs/{id}/activities, numbered (seq); any API process stores each one and
+//     applies the stored ones to the saved reply in their order (workerChatReply; part boundaries at once, text at
+//     most once per agentLiveSaveInterval), so the agent.message_* realtime events, a reloaded page and
+//     use-agent-reply-follow see the reply as they see an in-process one. A connector's question (MCP elicitation)
+//     is attached by the API process that holds the connector call.
 //   - waiting: ask_user ends the reply with its question, as in-process; the next message is a new run. A connector
 //     set to always ask holds its calls: the reply keeps them pending with approval ids, the worker suspends the
 //     run (RunState in agent_session_states, status awaiting), and once every held call is answered through POST
@@ -52,7 +54,7 @@ import (
 // workerChatMessagePrefix starts the id of a reply that runs on the worker: agent_message_ plus its first run's id.
 const workerChatMessagePrefix = "agent_message_run_"
 
-// Run keys of a chat run (agent_run_keys).
+// Keys of a chat run: its rendered prompt (agent_run_keys) and its tool budget (agent_run_states).
 const (
 	workerChatContextKey = "chat:context"
 	workerChatBudgetKey  = "chat:budget"
@@ -295,11 +297,7 @@ func (s *server) enqueueWorkerChatRun(ctx context.Context, run store.AgentRun, i
 		}
 	}
 	if copyFrom != "" {
-		for _, key := range []string{agentRunLedgerKey, workerChatBudgetKey} {
-			if raw, found, err := s.store.AgentRunKey(ctx, copyFrom, key); err == nil && found {
-				_ = s.store.ReplaceAgentRunKey(ctx, run, key, raw)
-			}
-		}
+		s.copyAgentRunState(ctx, copyFrom, run, workerChatBudgetKey)
 	}
 	payload, err := json.Marshal(map[string]any{"chat": info})
 	if err != nil {
@@ -378,35 +376,40 @@ func workerChatPublish(messageID string, events ...agentStreamEvent) {
 
 // ---------------------------------------------------------------- the reply
 
-// workerChatReply is a worker chat reply as this process writes it while a run posts to it: the parts in memory
-// (as the in-process run keeps them) and saved as a full snapshot.
+// workerChatReply is a worker chat reply as its run writes it. The conversation's saved copy is the reply's only
+// copy, so any API process can take any post of any run:
+//
+//   - a post is stored first: a row of agent_run_activities under the run's attempt and the worker's sequence
+//     number (seq), with what Flow resolved when it arrived (the connector of a call, the change it made, the
+//     approval ids of held calls, how a response ends the reply). Storing is insert-if-absent, so a repeated post
+//     (a retry, on this server or another) is a no-op;
+//   - then the stored activities the saved reply does not hold yet are applied to it in seq order, each once and
+//     only after the ones before it (a post that arrives early waits, up to workerChatGapWait, for the ones it
+//     follows), and the result is saved in place of the saved reply — provided the saved reply is still the one
+//     that was read (its UpdatedAt and WorkerCursor, the last activity it holds), else it is read again. So posts
+//     handled by several servers at once, repeated or out of order give the same reply as one server in order.
+//
+// Every other change (an approval, a connector's question, a stop, the end of the run) is made on the saved reply
+// the same way (update).
 type workerChatReply struct {
 	s     *server
 	run   store.AgentRun
 	info  workerChatRunInfo
 	owner domain.User
-
-	mu        sync.Mutex
-	message   domain.AgentMessage
-	finished  bool
-	dirty     bool
-	saveTimer *time.Timer
-	narration int
 }
 
-// workerChatReplies holds the replies runs post to in this process (message id → *workerChatReply).
-var workerChatReplies sync.Map
+// workerChatGapWait is how long applying waits for a missing activity (a post that has not arrived yet) before it
+// goes on without it (the worker gave up on that post).
+const workerChatGapWait = 10 * time.Second
 
-// workerChatReplyFor is the reply run posts to, read from the conversation when this process does not hold it yet
-// (another process, or an earlier run of the reply, wrote it). errAgentLiveSkip: the reply is no longer streaming.
+// workerChatUpdateAttempts bounds the rounds of one update (another server saved the reply first).
+const workerChatUpdateAttempts = 20
+
+// errWorkerChatStale: the saved reply changed after it was read.
+var errWorkerChatStale = errors.New("the worker chat reply kept changing while it was updated")
+
+// workerChatReplyFor is the reply run writes. errAgentLiveSkip: the conversation no longer holds it streaming.
 func (s *server) workerChatReplyFor(ctx context.Context, run store.AgentRun, info workerChatRunInfo) (*workerChatReply, error) {
-	if value, ok := workerChatReplies.Load(info.MessageID); ok {
-		reply := value.(*workerChatReply)
-		if reply.run.ID == run.ID {
-			return reply, nil
-		}
-		reply.release()
-	}
 	principal, err := decodeAgentRunPrincipal(run)
 	if err != nil {
 		return nil, err
@@ -415,41 +418,10 @@ func (s *server) workerChatReplyFor(ctx context.Context, run store.AgentRun, inf
 	if err != nil {
 		return nil, err
 	}
-	data, ok := s.store.WorkspaceMetadataFields(run.WorkspaceKey, "agentSessions")
-	if !ok {
-		return nil, errNotFound
-	}
-	var stored *domain.AgentSession
-	for index := range data.AgentSessions {
-		if data.AgentSessions[index].ID == run.SessionID && data.AgentSessions[index].UserID == owner.ID {
-			stored = &data.AgentSessions[index]
-		}
-	}
-	if stored == nil {
+	if _, streaming := s.workerChatStoredReply(ctx, run.WorkspaceKey, run.SessionID, owner.ID, info.MessageID); !streaming {
 		return nil, errAgentLiveSkip
 	}
-	index := slices.IndexFunc(stored.Messages, func(message domain.AgentMessage) bool { return message.ID == info.MessageID })
-	if index < 0 || stored.Messages[index].Status != agentMessageStreaming {
-		return nil, errAgentLiveSkip
-	}
-	// Offloaded text and results are loaded: the reply is saved whole.
-	one := *stored
-	one.Messages = []domain.AgentMessage{stored.Messages[index]}
-	if loaded, err := s.store.LoadAgentSessionBodies(ctx, run.WorkspaceKey, one); err == nil && len(loaded.Messages) == 1 {
-		one = loaded
-	}
-	message, err := cloneAgentMessage(one.Messages[0])
-	if err != nil {
-		return nil, err
-	}
-	reply := &workerChatReply{s: s, run: run, info: info, owner: owner, message: message}
-	for _, part := range message.Parts {
-		if part.Type == "reasoning" {
-			reply.narration++
-		}
-	}
-	actual, _ := workerChatReplies.LoadOrStore(info.MessageID, reply)
-	return actual.(*workerChatReply), nil
+	return &workerChatReply{s: s, run: run, info: info, owner: owner}, nil
 }
 
 func cloneAgentMessage(message domain.AgentMessage) (domain.AgentMessage, error) {
@@ -470,163 +442,7 @@ func (c *workerChatReply) ctx(parent context.Context) context.Context {
 	return store.WithMetadataFields(store.ContextWithActor(context.WithoutCancel(parent), c.owner), "agentSessions")
 }
 
-// release stops tracking the reply in this process (its run ended); unsaved text is saved first.
-func (c *workerChatReply) release() {
-	c.mu.Lock()
-	if c.saveTimer != nil {
-		c.saveTimer.Stop()
-		c.saveTimer = nil
-	}
-	if c.dirty && !c.finished {
-		_ = c.saveLocked(context.Background())
-	}
-	c.mu.Unlock()
-	workerChatReplies.CompareAndDelete(c.info.MessageID, c)
-}
-
-// saveLocked saves the reply as it is now (still streaming).
-func (c *workerChatReply) saveLocked(parent context.Context) error {
-	if c.finished {
-		return errAgentLiveSkip
-	}
-	c.dirty = false
-	message, err := cloneAgentMessage(c.message)
-	if err != nil {
-		return err
-	}
-	now := time.Now().UTC()
-	message.Status, message.UpdatedAt, message.Content = agentMessageStreaming, &now, agentLiveText(message.Parts)
-	err = c.replaceStored(parent, "agent.message_updated", message, nil)
-	if errors.Is(err, errAgentLiveSkip) {
-		// The conversation no longer holds the reply as streaming (edited, deleted, or finished elsewhere).
-		c.finished = true
-	} else if err != nil {
-		log.Printf("save worker chat reply %s: %v", c.info.MessageID, err)
-	}
-	return err
-}
-
-// replaceStored puts message in place of the streaming reply; activity (the finished reply) is logged with it.
-func (c *workerChatReply) replaceStored(parent context.Context, event string, message domain.AgentMessage, activity *domain.AgentActivity) error {
-	return c.s.store.MutateWorkspace(c.ctx(parent), c.run.WorkspaceKey, event, c.run.SessionID, nil, func(data *domain.Bootstrap) error {
-		session, err := ownedAgentSession(data, c.run.SessionID)
-		if err != nil {
-			return errAgentLiveSkip
-		}
-		index := slices.IndexFunc(session.Messages, func(item domain.AgentMessage) bool { return item.ID == message.ID })
-		if index < 0 || session.Messages[index].Status != agentMessageStreaming {
-			return errAgentLiveSkip
-		}
-		session.Messages[index] = message
-		if activity != nil {
-			data.AgentActivities = append(data.AgentActivities, *activity)
-			session.UpdatedAt = message.CreatedAt
-			if message.UpdatedAt == nil {
-				session.UpdatedAt = time.Now().UTC()
-			}
-		}
-		return nil
-	})
-}
-
-// changed records a change: a part boundary saves at once, streamed text within agentLiveSaveInterval.
-func (c *workerChatReply) changedLocked(ctx context.Context, force bool) {
-	if force {
-		if c.saveTimer != nil {
-			c.saveTimer.Stop()
-			c.saveTimer = nil
-		}
-		_ = c.saveLocked(ctx)
-		return
-	}
-	c.dirty = true
-	if c.saveTimer == nil {
-		c.saveTimer = time.AfterFunc(agentLiveSaveInterval, func() {
-			c.mu.Lock()
-			defer c.mu.Unlock()
-			c.saveTimer = nil
-			if c.dirty {
-				_ = c.saveLocked(context.Background())
-			}
-		})
-	}
-}
-
-func (c *workerChatReply) partIndex(id string) int {
-	return slices.IndexFunc(c.message.Parts, func(part domain.AgentMessagePart) bool { return part.ID == id })
-}
-
-func (c *workerChatReply) callIndex(callID string) int {
-	return slices.IndexFunc(c.message.Parts, func(part domain.AgentMessagePart) bool {
-		return part.ToolCall != nil && part.ToolCall.ID == callID && (part.Type == "toolCall" || part.Type == "question")
-	})
-}
-
 func (c *workerChatReply) textID() string { return c.info.MessageID + "_text" }
-
-func (c *workerChatReply) textLocked() string {
-	if index := c.partIndex(c.textID()); index >= 0 {
-		return c.message.Parts[index].Text
-	}
-	return ""
-}
-
-// foldNarrationLocked turns the text streamed before a tool call into a step of the work, as the in-process reply
-// keeps mid-task narration inside the work group: only the last turn's text is the answer.
-func (c *workerChatReply) foldNarrationLocked() []agentStreamEvent {
-	index := c.partIndex(c.textID())
-	if index < 0 {
-		return nil
-	}
-	narration := strings.TrimSpace(c.message.Parts[index].Text)
-	if narration == "" {
-		c.message.Parts = slices.Delete(c.message.Parts, index, index+1)
-	} else {
-		c.narration++
-		c.message.Parts[index] = domain.AgentMessagePart{ID: fmt.Sprintf("%s_narration_%d", c.info.MessageID, c.narration), Type: "reasoning", Text: narration, Status: "completed"}
-	}
-	return []agentStreamEvent{{Type: "text.replaced", MessageID: c.info.MessageID, Delta: ""}}
-}
-
-// annotate names a connector call's connector and tool, as the in-process reply shows them.
-func (c *workerChatReply) annotate(ctx context.Context, call *domain.AgentToolCall) {
-	if !strings.HasPrefix(call.Name, "external_") {
-		return
-	}
-	if tool, ok := c.s.agentRunConnectorTool(ctx, c.run, call.Name); ok {
-		call.Connector, call.RemoteTool = tool.Policy.label(), tool.RemoteName
-	}
-}
-
-// workerChatResultJSON is a tool result as a reply part stores it: the tool's JSON, or the text as a JSON string.
-func workerChatResultJSON(result string) json.RawMessage {
-	if trimmed := strings.TrimSpace(result); trimmed != "" && json.Valid([]byte(trimmed)) {
-		return json.RawMessage(trimmed)
-	}
-	raw, _ := json.Marshal(result)
-	return raw
-}
-
-// finishLocked saves message as the reply's final form and tells the followers.
-func (c *workerChatReply) finishLocked(ctx context.Context, message domain.AgentMessage) {
-	if c.finished {
-		return
-	}
-	if c.saveTimer != nil {
-		c.saveTimer.Stop()
-		c.saveTimer = nil
-	}
-	message.Status, message.UpdatedAt = "", nil
-	activity := domain.AgentActivity{ID: idgen.New("agent_activity_"), SessionID: c.run.SessionID, Type: "response", Status: "completed", Body: message.Content, Metadata: map[string]any{"durationMs": message.DurationMS, "partCount": len(message.Parts), "runId": c.run.ID}, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
-	err := c.replaceStored(ctx, "agent.message_completed", message, &activity)
-	if err != nil && !errors.Is(err, errAgentLiveSkip) {
-		log.Printf("save finished worker chat reply %s: %v", c.info.MessageID, err)
-		return
-	}
-	c.finished, c.dirty = true, false
-	c.message = message
-	workerChatPublish(c.info.MessageID, agentStreamEvent{Type: workerChatSettledEvent, MessageID: c.info.MessageID})
-}
 
 func (c *workerChatReply) durationMS() int64 {
 	if c.info.Started > 0 {
@@ -635,22 +451,259 @@ func (c *workerChatReply) durationMS() int64 {
 	return 0
 }
 
-// completeLocked finishes the reply with its answer, as persistAgentCompletion saves an in-process one.
-func (c *workerChatReply) completeLocked(ctx context.Context, answer string, extra ...domain.AgentMessagePart) {
-	message, err := cloneAgentMessage(c.message)
+// cursorStart is where the run's activities start for a saved reply whose last applied activity is cursor; false
+// when none of them apply any more (the reply moved on to a later run of it, or to a later attempt of this run).
+func (c *workerChatReply) cursorStart(cursor *domain.AgentWorkerCursor) (int64, bool) {
+	switch {
+	case cursor == nil || cursor.Run == "":
+		return 0, true
+	case cursor.Run == c.run.ID && cursor.Attempt == c.run.Attempts:
+		return cursor.Seq, true
+	case cursor.Run == c.run.ID:
+		return 0, cursor.Attempt < c.run.Attempts
+	default:
+		// Run ids grow with time (newWorkerChatRunID): a later run continues the reply (a resume).
+		return 0, cursor.Run < c.run.ID
+	}
+}
+
+// update applies the run's stored activities the saved reply does not hold yet (final: all of them, without
+// waiting for missing ones — the run ended, so none can still arrive), then change (nil: none) unless the reply
+// finished, and saves the result in place of the saved reply. change may run more than once (when another server
+// saved the reply first), each time on a fresh draft. It reports whether the reply is finished; errAgentLiveSkip
+// when the conversation no longer holds it streaming (finished, stopped or edited away).
+func (c *workerChatReply) update(ctx context.Context, final bool, change func(*workerChatDraft)) (bool, error) {
+	for range workerChatUpdateAttempts {
+		stored, streaming := c.s.workerChatStoredReply(ctx, c.run.WorkspaceKey, c.run.SessionID, c.owner.ID, c.info.MessageID)
+		if !streaming {
+			return true, errAgentLiveSkip
+		}
+		draft, err := c.draft(ctx, stored)
+		if err != nil {
+			return false, err
+		}
+		waiting, err := draft.applyStored(ctx, final)
+		if err != nil {
+			return false, err
+		}
+		if change != nil && !draft.finished {
+			change(draft)
+		}
+		if waiting {
+			c.updateLater("gap", workerChatGapWait)
+		}
+		if !draft.changed {
+			return draft.finished, nil
+		}
+		err = c.save(ctx, stored, draft)
+		if errors.Is(err, errWorkerChatStale) {
+			continue
+		}
+		if err != nil {
+			return false, err
+		}
+		workerChatPublish(c.info.MessageID, draft.events...)
+		return draft.finished, nil
+	}
+	return false, errWorkerChatStale
+}
+
+// draft is the saved reply with its offloaded text and results loaded, to change and save whole.
+func (c *workerChatReply) draft(ctx context.Context, stored domain.AgentMessage) (*workerChatDraft, error) {
+	one := domain.AgentSession{ID: c.run.SessionID, UserID: c.owner.ID, Messages: []domain.AgentMessage{stored}}
+	if loaded, err := c.s.store.LoadAgentSessionBodies(ctx, c.run.WorkspaceKey, one); err == nil && len(loaded.Messages) == 1 {
+		one = loaded
+	}
+	message, err := cloneAgentMessage(one.Messages[0])
+	if err != nil {
+		return nil, err
+	}
+	return &workerChatDraft{c: c, message: message}, nil
+}
+
+// save puts the draft in place of the saved reply if the saved reply is still stored (errWorkerChatStale
+// otherwise); a finished reply is logged with its response activity.
+func (c *workerChatReply) save(ctx context.Context, stored domain.AgentMessage, draft *workerChatDraft) error {
+	message := draft.message
+	event := "agent.message_updated"
+	if draft.finished {
+		event = "agent.message_completed"
+	} else {
+		now := time.Now().UTC()
+		if stored.UpdatedAt != nil && !now.After(*stored.UpdatedAt) {
+			now = stored.UpdatedAt.Add(time.Nanosecond)
+		}
+		message.Status, message.UpdatedAt, message.Content = agentMessageStreaming, &now, agentLiveText(message.Parts)
+	}
+	err := c.s.store.MutateWorkspace(c.ctx(ctx), c.run.WorkspaceKey, event, c.run.SessionID, nil, func(data *domain.Bootstrap) error {
+		session, err := ownedAgentSession(data, c.run.SessionID)
+		if err != nil {
+			return errAgentLiveSkip
+		}
+		index := slices.IndexFunc(session.Messages, func(item domain.AgentMessage) bool { return item.ID == message.ID })
+		if index < 0 || session.Messages[index].Status != agentMessageStreaming {
+			return errAgentLiveSkip
+		}
+		if !sameWorkerChatReply(session.Messages[index], stored) {
+			return errWorkerChatStale
+		}
+		session.Messages[index] = message
+		if draft.activity != nil {
+			data.AgentActivities = append(data.AgentActivities, *draft.activity)
+			session.UpdatedAt = message.CreatedAt
+			if message.UpdatedAt == nil {
+				session.UpdatedAt = time.Now().UTC()
+			}
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errAgentLiveSkip) && !errors.Is(err, errWorkerChatStale) {
+		log.Printf("save worker chat reply %s: %v", c.info.MessageID, err)
+	}
+	return err
+}
+
+// sameWorkerChatReply reports whether the saved reply is still the one read: every save of a streaming reply moves
+// its UpdatedAt on, and applying activities moves its cursor.
+func sameWorkerChatReply(current, read domain.AgentMessage) bool {
+	if current.UpdatedAt == nil || read.UpdatedAt == nil || !current.UpdatedAt.Equal(*read.UpdatedAt) || len(current.Parts) != len(read.Parts) {
+		return false
+	}
+	if current.WorkerCursor == nil || read.WorkerCursor == nil {
+		return current.WorkerCursor == nil && read.WorkerCursor == nil
+	}
+	return *current.WorkerCursor == *read.WorkerCursor
+}
+
+// workerChatLater holds the updates this process scheduled (message id and reason): streamed text is saved at most
+// once per agentLiveSaveInterval, and an update waiting for a missing activity looks again after workerChatGapWait.
+// Only a schedule: any later post or change, or the run's end, applies the same activities.
+var workerChatLater sync.Map
+
+func (c *workerChatReply) updateLater(reason string, delay time.Duration) {
+	key := c.info.MessageID + "\x00" + reason
+	if _, scheduled := workerChatLater.LoadOrStore(key, true); scheduled {
+		return
+	}
+	time.AfterFunc(delay, func() {
+		workerChatLater.Delete(key)
+		if _, err := c.update(context.Background(), false, nil); err != nil && !errors.Is(err, errAgentLiveSkip) {
+			log.Printf("update worker chat reply %s: %v", c.info.MessageID, err)
+		}
+	})
+}
+
+// workerChatDraft is the reply while one update changes it; events are sent to this process's followers once it
+// is saved.
+type workerChatDraft struct {
+	c        *workerChatReply
+	message  domain.AgentMessage
+	changed  bool
+	finished bool
+	events   []agentStreamEvent
+	activity *domain.AgentActivity
+}
+
+// applyStored applies the run's stored activities after the draft's cursor in seq order; waiting is set when it
+// stopped at a missing activity that may still arrive.
+func (d *workerChatDraft) applyStored(ctx context.Context, final bool) (waiting bool, err error) {
+	after, ok := d.c.cursorStart(d.message.WorkerCursor)
+	if !ok {
+		return false, nil
+	}
+	run, attempt := d.c.run.ID, d.c.run.Attempts
+	for {
+		rows, err := d.c.s.store.AgentRunActivities(ctx, run, attempt, after)
+		if err != nil {
+			return false, err
+		}
+		for _, row := range rows {
+			if row.Seq != after+1 && !final && time.Since(time.UnixMilli(row.CreatedAt)) < workerChatGapWait {
+				return true, nil
+			}
+			var activity workerChatStoredActivity
+			if err := json.Unmarshal(row.Data, &activity); err != nil {
+				log.Printf("worker chat run %s: activity %d unreadable: %v", run, row.Seq, err)
+			}
+			// An activity that shows nothing (a thought) moves the cursor with the next change saved; applying it
+			// again changes nothing.
+			d.message.WorkerCursor = &domain.AgentWorkerCursor{Run: run, Attempt: attempt, Seq: row.Seq}
+			d.apply(activity)
+			after = row.Seq
+			if d.finished {
+				return false, nil
+			}
+		}
+		if len(rows) < store.AgentRunActivitiesMax {
+			return false, nil
+		}
+	}
+}
+
+func (d *workerChatDraft) partIndex(id string) int {
+	return slices.IndexFunc(d.message.Parts, func(part domain.AgentMessagePart) bool { return part.ID == id })
+}
+
+func (d *workerChatDraft) callIndex(callID string) int {
+	return slices.IndexFunc(d.message.Parts, func(part domain.AgentMessagePart) bool {
+		return part.ToolCall != nil && part.ToolCall.ID == callID && (part.Type == "toolCall" || part.Type == "question")
+	})
+}
+
+func (d *workerChatDraft) text() string {
+	if index := d.partIndex(d.c.textID()); index >= 0 {
+		return d.message.Parts[index].Text
+	}
+	return ""
+}
+
+func (d *workerChatDraft) publish(events ...agentStreamEvent) { d.events = append(d.events, events...) }
+
+// foldNarration turns the text streamed before a tool call into a step of the work, as the in-process reply keeps
+// mid-task narration inside the work group: only the last turn's text is the answer.
+func (d *workerChatDraft) foldNarration() {
+	index := d.partIndex(d.c.textID())
+	if index < 0 {
+		return
+	}
+	narration := strings.TrimSpace(d.message.Parts[index].Text)
+	if narration == "" {
+		d.message.Parts = slices.Delete(d.message.Parts, index, index+1)
+	} else {
+		count := 0
+		for _, part := range d.message.Parts {
+			if part.Type == "reasoning" {
+				count++
+			}
+		}
+		d.message.Parts[index] = domain.AgentMessagePart{ID: fmt.Sprintf("%s_narration_%d", d.c.info.MessageID, count+1), Type: "reasoning", Text: narration, Status: "completed"}
+	}
+	d.publish(agentStreamEvent{Type: "text.replaced", MessageID: d.c.info.MessageID, Delta: ""})
+}
+
+// finish makes message the reply's final form.
+func (d *workerChatDraft) finish(message domain.AgentMessage) {
+	message.Status, message.UpdatedAt, message.WorkerCursor = "", nil, nil
+	d.activity = &domain.AgentActivity{ID: idgen.New("agent_activity_"), SessionID: d.c.run.SessionID, Type: "response", Status: "completed", Body: message.Content, Metadata: map[string]any{"durationMs": message.DurationMS, "partCount": len(message.Parts), "runId": d.c.run.ID}, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+	d.message, d.finished, d.changed = message, true, true
+	d.publish(agentStreamEvent{Type: workerChatSettledEvent, MessageID: d.c.info.MessageID})
+}
+
+// complete finishes the reply with its answer, as persistAgentCompletion saves an in-process one.
+func (d *workerChatDraft) complete(answer string, durationMS int64, extra ...domain.AgentMessagePart) {
+	message, err := cloneAgentMessage(d.message)
 	if err != nil {
 		return
 	}
-	workspace := c.run.WorkspaceKey
-	answer = rebaseAgentWorkspaceLinks(strings.TrimSpace(answer), workspace, c.info.LinkBase)
-	index := slices.IndexFunc(message.Parts, func(part domain.AgentMessagePart) bool { return part.ID == c.textID() })
+	answer = rebaseAgentWorkspaceLinks(strings.TrimSpace(answer), d.c.run.WorkspaceKey, d.c.info.LinkBase)
+	index := slices.IndexFunc(message.Parts, func(part domain.AgentMessagePart) bool { return part.ID == d.c.textID() })
 	switch {
 	case index >= 0 && answer == "":
 		message.Parts = slices.Delete(message.Parts, index, index+1)
 	case index >= 0:
 		message.Parts[index].Text, message.Parts[index].Status = answer, "completed"
 	case answer != "":
-		message.Parts = append(message.Parts, domain.AgentMessagePart{ID: c.textID(), Type: "text", Text: answer, Status: "completed"})
+		message.Parts = append(message.Parts, domain.AgentMessagePart{ID: d.c.textID(), Type: "text", Text: answer, Status: "completed"})
 	}
 	for index := range message.Parts {
 		part := &message.Parts[index]
@@ -664,20 +717,14 @@ func (c *workerChatReply) completeLocked(ctx context.Context, answer string, ext
 		}
 	}
 	message.Parts = append(message.Parts, extra...)
-	message.Content, message.DurationMS = answer, c.durationMS()
-	workerChatPublish(c.info.MessageID, agentStreamEvent{Type: "text.replaced", MessageID: c.info.MessageID, Delta: answer})
-	c.finishLocked(ctx, message)
+	message.Content, message.DurationMS = answer, durationMS
+	d.publish(agentStreamEvent{Type: "text.replaced", MessageID: d.c.info.MessageID, Delta: answer})
+	d.finish(message)
 }
 
-// finishFailure saves the reply as failed (or stopped), as persistAgentFailure saves an in-process one.
-func (c *workerChatReply) finishFailure(ctx context.Context, reason string, stopped bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.failLocked(ctx, reason, stopped)
-}
-
-func (c *workerChatReply) failLocked(ctx context.Context, reason string, stopped bool) {
-	message, err := cloneAgentMessage(c.message)
+// fail finishes the reply as failed (or stopped), as persistAgentFailure saves an in-process one.
+func (d *workerChatDraft) fail(reason string, stopped bool, durationMS int64) {
+	message, err := cloneAgentMessage(d.message)
 	if err != nil {
 		return
 	}
@@ -700,30 +747,54 @@ func (c *workerChatReply) failLocked(ctx context.Context, reason string, stopped
 		reason = "Flow Agent is unavailable"
 	}
 	message.Parts = append(message.Parts, domain.AgentMessagePart{ID: message.ID + "_error", Type: "error", Text: agentClip(reason, 2000), Status: "error"})
-	message.Content, message.DurationMS = strings.TrimSpace(c.textLocked()), c.durationMS()
-	c.finishLocked(ctx, message)
+	message.Content, message.DurationMS = strings.TrimSpace(d.text()), durationMS
+	d.finish(message)
 }
 
-// interrupt saves the reply as interrupted (its run's worker went away), as the live-reply sweeper does.
-func (c *workerChatReply) interrupt(ctx context.Context) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	message, err := cloneAgentMessage(c.message)
+// interrupt finishes the reply as interrupted (its run's worker went away), as the live-reply sweeper does.
+func (d *workerChatDraft) interrupt(durationMS int64) {
+	message, err := cloneAgentMessage(d.message)
 	if err != nil {
 		return
 	}
 	interruptAgentLiveMessage(&message)
-	message.DurationMS = c.durationMS()
-	c.finishLocked(ctx, message)
+	message.DurationMS = durationMS
+	d.finish(message)
 }
 
-// reset empties the reply for a new attempt of its run (the previous one wrote nothing).
+// holdsApprovals reports whether held calls wait for the person's decision.
+func (d *workerChatDraft) holdsApprovals() bool {
+	return slices.ContainsFunc(d.message.Parts, func(part domain.AgentMessagePart) bool {
+		return part.ToolCall != nil && part.ToolCall.ApprovalID != "" && part.ToolCall.Status == "pending"
+	})
+}
+
+// finishFailure saves the reply as failed (or stopped).
+func (c *workerChatReply) finishFailure(ctx context.Context, reason string, stopped bool) {
+	if _, err := c.update(ctx, false, func(d *workerChatDraft) { d.fail(reason, stopped, c.durationMS()) }); err != nil && !errors.Is(err, errAgentLiveSkip) {
+		log.Printf("finish worker chat reply %s: %v", c.info.MessageID, err)
+	}
+}
+
+// interrupt saves the reply as interrupted, with every activity its run stored.
+func (c *workerChatReply) interrupt(ctx context.Context) {
+	if _, err := c.update(ctx, true, func(d *workerChatDraft) { d.interrupt(c.durationMS()) }); err != nil && !errors.Is(err, errAgentLiveSkip) {
+		log.Printf("interrupt worker chat reply %s: %v", c.info.MessageID, err)
+	}
+}
+
+// reset empties the reply for a new attempt of its run (the previous one wrote nothing): the previous attempt's
+// activities no longer apply.
 func (c *workerChatReply) reset(ctx context.Context) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.message.Parts, c.narration = []domain.AgentMessagePart{}, 0
-	c.changedLocked(ctx, true)
-	workerChatPublish(c.info.MessageID, agentStreamEvent{Type: "text.replaced", MessageID: c.info.MessageID, Delta: ""})
+	_, err := c.update(ctx, false, func(d *workerChatDraft) {
+		d.message.Parts = []domain.AgentMessagePart{}
+		d.message.WorkerCursor = &domain.AgentWorkerCursor{Run: c.run.ID, Attempt: c.run.Attempts, Seq: math.MaxInt64}
+		d.changed = true
+		d.publish(agentStreamEvent{Type: "text.replaced", MessageID: c.info.MessageID, Delta: ""})
+	})
+	if err != nil && !errors.Is(err, errAgentLiveSkip) {
+		log.Printf("reset worker chat reply %s: %v", c.info.MessageID, err)
+	}
 }
 
 // ---------------------------------------------------------------- activities
@@ -731,6 +802,9 @@ func (c *workerChatReply) reset(ctx context.Context) {
 // workerChatActivity is an activity a chat run posts (the worker's FlowActivity, design doc §5).
 type workerChatActivity struct {
 	ActivityID string `json:"activityId"`
+	// Seq numbers the run's posts (1, 2, …, per run attempt, in the order the worker makes them): a post repeated
+	// with its seq is stored once, and posts apply in seq order. A post without one is numbered on arrival.
+	Seq int64 `json:"seq,omitempty"`
 	// Type: thought, text.delta, question.delta, action, action.result, elicitation, response, error.
 	Type string `json:"type"`
 	Body string `json:"body"`
@@ -762,9 +836,42 @@ type workerChatElicitation struct {
 	} `json:"calls"`
 }
 
+// workerChatStoredActivity is an activity as stored for its run (agent_run_activities): the worker's activity with
+// what Flow resolved when it arrived, so applying it gives the same reply on every server and every time.
+type workerChatStoredActivity struct {
+	workerChatActivity
+	// Connector and RemoteTool name a connector call's connector and tool, as the in-process reply shows them.
+	Connector  string `json:"connector,omitempty"`
+	RemoteTool string `json:"remoteTool,omitempty"`
+	// ChangeData is the change a call's result made (its card and Undo).
+	ChangeData *domain.AgentChange `json:"changeData,omitempty"`
+	// Approvals are the held calls' approvals (by call id).
+	Approvals map[string]workerChatApproval `json:"approvals,omitempty"`
+	// End is how a response or an error ends the reply: complete (with Answer, the checked answer, and BudgetStop
+	// when the tool budget was spent), fail or stop.
+	End        string `json:"end,omitempty"`
+	Answer     string `json:"answer,omitempty"`
+	BudgetStop string `json:"budgetStop,omitempty"`
+	DurationMS int64  `json:"durationMs,omitempty"`
+}
+
+// workerChatApproval is a held call's approval id, and its connector and tool.
+type workerChatApproval struct {
+	ID         string `json:"id"`
+	Connector  string `json:"connector,omitempty"`
+	RemoteTool string `json:"remoteTool,omitempty"`
+}
+
 var workerChatActivityTypes = []string{"thought", "text.delta", "question.delta", "action", "action.result", "elicitation", "response", "error"}
 
-// postWorkerChatActivity applies one activity of a chat run to its reply.
+// workerChatActivitySeqMax bounds an activity's seq.
+const workerChatActivitySeqMax = 1 << 40
+
+// workerChatDeferred are the activities saved with the next change (streamed text at most once per
+// agentLiveSaveInterval): their stream events go to this process's followers at once.
+var workerChatDeferred = []string{"thought", "text.delta", "question.delta"}
+
+// postWorkerChatActivity stores one activity of a chat run and brings its reply up to date.
 func (s *server) postWorkerChatActivity(w http.ResponseWriter, r *http.Request, run store.AgentRun, info workerChatRunInfo) {
 	var input workerChatActivity
 	r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
@@ -773,6 +880,10 @@ func (s *server) postWorkerChatActivity(w http.ResponseWriter, r *http.Request, 
 	}
 	if len(input.ActivityID) > 128 || len(input.CallID) > 256 {
 		writeError(w, http.StatusBadRequest, "activityId or callId is too long")
+		return
+	}
+	if input.Seq < 0 || input.Seq > workerChatActivitySeqMax {
+		writeError(w, http.StatusBadRequest, "seq must be a positive number")
 		return
 	}
 	if !slices.Contains(workerChatActivityTypes, input.Type) {
@@ -787,16 +898,18 @@ func (s *server) postWorkerChatActivity(w http.ResponseWriter, r *http.Request, 
 		writeError(w, http.StatusBadRequest, "an elicitation is a select or an approval")
 		return
 	}
+	ctx := r.Context()
 	key := ""
-	if input.ActivityID != "" {
+	if input.ActivityID != "" && input.Seq == 0 {
+		// A post without seq is repeated by its activity id.
 		key = "activity:" + input.ActivityID
-		if cached, found, err := s.store.AgentRunKey(r.Context(), run.ID, key); err == nil && found {
+		if cached, found, err := s.store.AgentRunKey(ctx, run.ID, key); err == nil && found {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			_, _ = w.Write(cached)
 			return
 		}
 	}
-	reply, err := s.workerChatReplyFor(r.Context(), run, info)
+	reply, err := s.workerChatReplyFor(ctx, run, info)
 	if errors.Is(err, errAgentLiveSkip) {
 		// The reply finished (stopped, edited away): nothing more is saved.
 		writeJSON(w, http.StatusOK, map[string]any{"messageId": info.MessageID, "settled": true})
@@ -806,26 +919,125 @@ func (s *server) postWorkerChatActivity(w http.ResponseWriter, r *http.Request, 
 		writeError(w, http.StatusConflict, "the run's reply cannot be written")
 		return
 	}
-	settled := reply.apply(r.Context(), input)
-	if settled {
-		reply.release()
+	stored, err := reply.resolve(ctx, input)
+	var data []byte
+	if err == nil {
+		data, err = json.Marshal(stored)
+	}
+	fresh := true
+	if err == nil {
+		if input.Seq > 0 {
+			fresh, err = s.store.SaveAgentRunActivity(ctx, run, run.Attempts, input.Seq, data)
+		} else {
+			_, err = s.store.AppendAgentRunActivity(ctx, run, run.Attempts, data)
+		}
+	}
+	if err != nil {
+		log.Printf("worker chat run %s: activity not stored: %v", run.ID, err)
+		writeError(w, http.StatusInternalServerError, "the activity could not be stored")
+		return
+	}
+	settled := false
+	if slices.Contains(workerChatDeferred, input.Type) {
+		if fresh {
+			reply.publishDelta(input)
+		}
+		reply.updateLater("save", agentLiveSaveInterval)
+	} else {
+		settled, err = reply.update(ctx, false, nil)
+		if errors.Is(err, errAgentLiveSkip) {
+			settled, err = true, nil
+		}
+		if err != nil {
+			log.Printf("worker chat run %s: reply not updated: %v", run.ID, err)
+		}
 	}
 	body, _ := json.Marshal(map[string]any{"messageId": info.MessageID, "settled": settled})
 	if key != "" {
-		_ = s.store.SaveAgentRunKey(r.Context(), run, key, body)
+		_ = s.store.SaveAgentRunKey(ctx, run, key, body)
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, _ = w.Write(body)
 }
 
-// apply changes the reply by one activity and reports whether the reply is finished.
-func (c *workerChatReply) apply(ctx context.Context, input workerChatActivity) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.finished {
-		return true
-	}
+// publishDelta sends a streamed delta to this process's followers as it arrives (the reply saves it with its next
+// change).
+func (c *workerChatReply) publishDelta(input workerChatActivity) {
 	messageID := c.info.MessageID
+	switch input.Type {
+	case "text.delta":
+		if input.Body != "" {
+			part := domain.AgentMessagePart{ID: c.textID(), Type: "text", Status: "running"}
+			workerChatPublish(messageID, agentStreamEvent{Type: "text.delta", MessageID: messageID, Delta: input.Body, Part: &part})
+		}
+	case "question.delta":
+		part := workerChatQuestionDelta(messageID, input)
+		workerChatPublish(messageID, agentStreamEvent{Type: "tool.delta", MessageID: messageID, Part: &part})
+	}
+}
+
+// workerChatQuestionDelta is ask_user's question while the model writes it: a running question part the finished
+// question replaces.
+func workerChatQuestionDelta(messageID string, input workerChatActivity) domain.AgentMessagePart {
+	return domain.AgentMessagePart{ID: fmt.Sprintf("%s_question_%s", messageID, input.CallID), Type: "question", Status: "running", Text: input.Body, Question: &domain.AgentQuestion{Options: []domain.AgentQuestionOption{}}}
+}
+
+// resolve is the activity as stored: with what applying it needs from Flow at the time it arrived.
+func (c *workerChatReply) resolve(ctx context.Context, input workerChatActivity) (workerChatStoredActivity, error) {
+	stored := workerChatStoredActivity{workerChatActivity: input}
+	switch input.Type {
+	case "action", "action.result":
+		stored.Connector, stored.RemoteTool = c.connectorOf(ctx, input.Content.Action)
+		if input.Type == "action.result" {
+			stored.ChangeData = c.s.workerChatChange(ctx, c.run, input.Change)
+		}
+	case "elicitation":
+		stored.DurationMS = c.durationMS()
+		if input.Elicitation.Kind == "approval" {
+			stored.Approvals = map[string]workerChatApproval{}
+			for _, held := range input.Elicitation.Calls {
+				approvalID, err := randomSecret("agent_approval_")
+				if err != nil {
+					return stored, err
+				}
+				approval := workerChatApproval{ID: approvalID}
+				approval.Connector, approval.RemoteTool = c.connectorOf(ctx, held.Name)
+				stored.Approvals[held.CallID] = approval
+			}
+		}
+	case "response":
+		stored.DurationMS = c.durationMS()
+		if c.s.workerChatCancelRequested(ctx, c.run.ID) {
+			stored.End = "stop"
+			break
+		}
+		stored.End, stored.Answer = "complete", c.s.workerChatCheckedAnswer(ctx, c.run, c.info, input.Body)
+		stored.BudgetStop = c.s.workerChatBudget(ctx, c.run).stop
+	case "error":
+		stored.DurationMS, stored.End = c.durationMS(), "fail"
+		if c.s.workerChatCancelRequested(ctx, c.run.ID) {
+			stored.End = "stop"
+		}
+	}
+	return stored, nil
+}
+
+// connectorOf names a connector call's connector and tool, as the in-process reply shows them ("" for Flow's
+// tools).
+func (c *workerChatReply) connectorOf(ctx context.Context, name string) (connector, remoteTool string) {
+	name = agentToolBaseName(name)
+	if !strings.HasPrefix(name, "external_") {
+		return "", ""
+	}
+	if tool, ok := c.s.agentRunConnectorTool(ctx, c.run, name); ok {
+		return tool.Policy.label(), tool.RemoteName
+	}
+	return "", ""
+}
+
+// apply changes the draft by one stored activity.
+func (d *workerChatDraft) apply(input workerChatStoredActivity) {
+	messageID := d.c.info.MessageID
 	switch input.Type {
 	case "thought":
 		// The ack and reasoning: the person sees "Thinking…" and the running step instead (not saved, as in-process).
@@ -833,64 +1045,59 @@ func (c *workerChatReply) apply(ctx context.Context, input workerChatActivity) b
 		if input.Body == "" {
 			break
 		}
-		index := c.partIndex(c.textID())
-		created := index < 0
-		if created {
-			index = len(c.message.Parts)
-			c.message.Parts = append(c.message.Parts, domain.AgentMessagePart{ID: c.textID(), Type: "text", Status: "running"})
-		}
-		c.message.Parts[index].Text += input.Body
-		part := c.message.Parts[index]
-		part.Text = ""
-		workerChatPublish(messageID, agentStreamEvent{Type: "text.delta", MessageID: messageID, Delta: input.Body, Part: &part})
-		c.changedLocked(ctx, created)
-	case "question.delta":
-		// ask_user's question while the model writes it: a running question part the finished question replaces.
-		id := fmt.Sprintf("%s_question_%s", messageID, input.CallID)
-		part := domain.AgentMessagePart{ID: id, Type: "question", Status: "running", Text: input.Body, Question: &domain.AgentQuestion{Options: []domain.AgentQuestionOption{}}}
-		index := c.partIndex(id)
+		index := d.partIndex(d.c.textID())
 		if index < 0 {
-			c.message.Parts = append(c.message.Parts, part)
-		} else {
-			c.message.Parts[index] = part
+			index = len(d.message.Parts)
+			d.message.Parts = append(d.message.Parts, domain.AgentMessagePart{ID: d.c.textID(), Type: "text", Status: "running"})
 		}
-		workerChatPublish(messageID, agentStreamEvent{Type: "tool.delta", MessageID: messageID, Part: &part})
-		c.changedLocked(ctx, index < 0)
+		d.message.Parts[index].Text += input.Body
+		d.changed = true
+	case "question.delta":
+		part := workerChatQuestionDelta(messageID, input.workerChatActivity)
+		if index := d.partIndex(part.ID); index < 0 {
+			d.message.Parts = append(d.message.Parts, part)
+		} else {
+			d.message.Parts[index] = part
+		}
+		d.changed = true
 	case "action":
+		if input.Content == nil {
+			break
+		}
 		name := agentToolBaseName(input.Content.Action)
 		if name == agentLoadToolsTool || name == askUserTool {
 			// Bookkeeping, or the question (question.delta and the elicitation show it).
 			break
 		}
-		events := c.foldNarrationLocked()
-		call := domain.AgentToolCall{ID: input.CallID, Name: name, Arguments: workerChatArguments(input.Content.Parameter), Status: "running"}
-		c.annotate(ctx, &call)
-		index := c.callIndex(input.CallID)
+		d.foldNarration()
+		call := domain.AgentToolCall{ID: input.CallID, Name: name, Arguments: workerChatArguments(input.Content.Parameter), Status: "running", Connector: input.Connector, RemoteTool: input.RemoteTool}
+		index := d.callIndex(input.CallID)
 		if index < 0 {
-			index = len(c.message.Parts)
-			c.message.Parts = append(c.message.Parts, domain.AgentMessagePart{ID: fmt.Sprintf("%s_tool_%d", messageID, index), Type: "toolCall", Status: "running", ToolCall: &call})
+			index = len(d.message.Parts)
+			d.message.Parts = append(d.message.Parts, domain.AgentMessagePart{ID: fmt.Sprintf("%s_tool_%d", messageID, index), Type: "toolCall", Status: "running", ToolCall: &call})
 		} else {
-			c.message.Parts[index].Status, c.message.Parts[index].ToolCall = "running", &call
+			d.message.Parts[index].Status, d.message.Parts[index].ToolCall = "running", &call
 		}
-		part := c.message.Parts[index]
-		workerChatPublish(messageID, append(events, agentStreamEvent{Type: "tool.started", MessageID: messageID, Part: &part})...)
-		c.changedLocked(ctx, true)
+		part := d.message.Parts[index]
+		d.publish(agentStreamEvent{Type: "tool.started", MessageID: messageID, Part: &part})
+		d.changed = true
 	case "action.result":
+		if input.Content == nil {
+			break
+		}
 		name := agentToolBaseName(input.Content.Action)
 		if name == agentLoadToolsTool || name == askUserTool {
 			break
 		}
-		index := c.callIndex(input.CallID)
+		index := d.callIndex(input.CallID)
 		if index < 0 {
 			// A held call the person approved runs on resume without a new call activity.
-			events := c.foldNarrationLocked()
-			call := domain.AgentToolCall{ID: input.CallID, Name: name, Status: "running"}
-			c.annotate(ctx, &call)
-			index = len(c.message.Parts)
-			c.message.Parts = append(c.message.Parts, domain.AgentMessagePart{ID: fmt.Sprintf("%s_tool_%d", messageID, index), Type: "toolCall", Status: "running", ToolCall: &call})
-			workerChatPublish(messageID, events...)
+			d.foldNarration()
+			call := domain.AgentToolCall{ID: input.CallID, Name: name, Status: "running", Connector: input.Connector, RemoteTool: input.RemoteTool}
+			index = len(d.message.Parts)
+			d.message.Parts = append(d.message.Parts, domain.AgentMessagePart{ID: fmt.Sprintf("%s_tool_%d", messageID, index), Type: "toolCall", Status: "running", ToolCall: &call})
 		}
-		current := c.message.Parts[index].ToolCall
+		current := d.message.Parts[index].ToolCall
 		if current != nil && current.Error == workerChatDeclined {
 			// The rejected call's result is the rejection the model was told.
 			break
@@ -907,46 +1114,50 @@ func (c *workerChatReply) apply(ctx context.Context, input workerChatActivity) b
 		} else {
 			call.Status, call.Error, call.Result = "completed", "", workerChatResultJSON(input.Content.Result)
 		}
-		if change := c.s.workerChatChange(ctx, c.run, input.Change); change != nil {
-			call.Change = change
+		if input.ChangeData != nil {
+			change := *input.ChangeData
+			call.Change = &change
 		}
-		c.message.Parts[index].Status, c.message.Parts[index].ToolCall = call.Status, &call
-		part := c.message.Parts[index]
-		workerChatPublish(messageID, agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part})
-		c.changedLocked(ctx, true)
+		d.message.Parts[index].Status, d.message.Parts[index].ToolCall = call.Status, &call
+		part := d.message.Parts[index]
+		d.publish(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part})
+		d.changed = true
 	case "elicitation":
+		if input.Elicitation == nil {
+			break
+		}
 		if input.Elicitation.Kind == "select" {
-			c.askLocked(ctx, *input.Elicitation)
+			d.ask(*input.Elicitation, input.DurationMS)
 			break
 		}
-		c.holdLocked(ctx, *input.Elicitation)
+		d.hold(*input.Elicitation, input.Approvals)
 	case "response":
-		if c.s.workerChatCancelRequested(ctx, c.run.ID) {
-			c.failLocked(ctx, "", true)
+		if input.End == "stop" {
+			d.fail("", true, input.DurationMS)
 			break
 		}
-		answer := c.s.workerChatCheckedAnswer(ctx, c.run, c.info, input.Body)
+		answer := input.Answer
 		extra := []domain.AgentMessagePart{}
-		if budget := c.s.workerChatBudget(ctx, c.run.ID); budget.stop != "" {
+		if input.BudgetStop != "" {
+			info := d.c.info
 			if strings.TrimSpace(answer) == "" {
-				answer = agentToolBudgetFallback(budget.stop, c.info.MaxTurns, c.info.MaxCalls, c.info.Chinese, c.changesLocked(), true)
+				answer = agentToolBudgetFallback(input.BudgetStop, info.MaxTurns, info.MaxCalls, info.Chinese, d.changes(), true)
 			}
-			extra = append(extra, domain.AgentMessagePart{ID: messageID + "_budget", Type: "event", Text: agentToolBudgetNotice(budget.stop, c.info.MaxTurns, c.info.MaxCalls, c.info.Chinese), Status: "completed"})
+			extra = append(extra, domain.AgentMessagePart{ID: messageID + "_budget", Type: "event", Text: agentToolBudgetNotice(input.BudgetStop, info.MaxTurns, info.MaxCalls, info.Chinese), Status: "completed"})
 		}
 		if strings.TrimSpace(answer) == "" {
-			c.failLocked(ctx, "Flow Agent provider returned an empty response", false)
+			d.fail("Flow Agent provider returned an empty response", false, input.DurationMS)
 			break
 		}
-		c.completeLocked(ctx, answer, extra...)
+		d.complete(answer, input.DurationMS, extra...)
 	case "error":
-		c.failLocked(ctx, input.Body, c.s.workerChatCancelRequested(ctx, c.run.ID))
+		d.fail(input.Body, input.End == "stop", input.DurationMS)
 	}
-	return c.finished
 }
 
-func (c *workerChatReply) changesLocked() int {
+func (d *workerChatDraft) changes() int {
 	changes := 0
-	for _, part := range c.message.Parts {
+	for _, part := range d.message.Parts {
 		if part.ToolCall != nil && part.ToolCall.Change != nil {
 			changes++
 		}
@@ -954,10 +1165,10 @@ func (c *workerChatReply) changesLocked() int {
 	return changes
 }
 
-// askLocked ends the reply with ask_user's question, as the in-process reply ends on one: the person answers with
-// their next message.
-func (c *workerChatReply) askLocked(ctx context.Context, elicitation workerChatElicitation) {
-	messageID := c.info.MessageID
+// ask ends the reply with ask_user's question, as the in-process reply ends on one: the person answers with their
+// next message.
+func (d *workerChatDraft) ask(elicitation workerChatElicitation, durationMS int64) {
+	messageID := d.c.info.MessageID
 	arguments := workerChatArguments(json.RawMessage(elicitation.Arguments))
 	call := domain.AgentToolCall{ID: elicitation.CallID, Name: askUserTool, Arguments: arguments, Status: "pending"}
 	question, options, err := parseAskUser(call)
@@ -970,13 +1181,13 @@ func (c *workerChatReply) askLocked(ctx context.Context, elicitation workerChatE
 	}
 	id := fmt.Sprintf("%s_question_%s", messageID, elicitation.CallID)
 	part := domain.AgentMessagePart{ID: id, Type: "question", Text: question, Status: "pending", ToolCall: &call, Question: &options}
-	if index := c.partIndex(id); index >= 0 {
-		c.message.Parts[index] = part
+	if index := d.partIndex(id); index >= 0 {
+		d.message.Parts[index] = part
 	} else {
-		c.message.Parts = append(c.message.Parts, part)
+		d.message.Parts = append(d.message.Parts, part)
 	}
-	workerChatPublish(messageID, agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part})
-	message, err := cloneAgentMessage(c.message)
+	d.publish(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part})
+	message, err := cloneAgentMessage(d.message)
 	if err != nil {
 		return
 	}
@@ -985,37 +1196,37 @@ func (c *workerChatReply) askLocked(ctx context.Context, elicitation workerChatE
 			message.Parts[index].Status = "completed"
 		}
 	}
-	text := rebaseAgentWorkspaceLinks(strings.TrimSpace(c.textLocked()), c.run.WorkspaceKey, c.info.LinkBase)
-	if index := slices.IndexFunc(message.Parts, func(part domain.AgentMessagePart) bool { return part.ID == c.textID() }); index >= 0 {
+	text := rebaseAgentWorkspaceLinks(strings.TrimSpace(d.text()), d.c.run.WorkspaceKey, d.c.info.LinkBase)
+	if index := slices.IndexFunc(message.Parts, func(part domain.AgentMessagePart) bool { return part.ID == d.c.textID() }); index >= 0 {
 		message.Parts[index].Text = text
 	}
 	// The reply's text (and what the model sees of it later) ends with the question; the part draws its options.
-	message.Content, message.DurationMS = strings.TrimSpace(text+"\n\n"+question), c.durationMS()
-	c.finishLocked(ctx, message)
+	message.Content, message.DurationMS = strings.TrimSpace(text+"\n\n"+question), durationMS
+	d.finish(message)
 }
 
-// holdLocked shows the calls a connector set to always ask holds, each waiting for the person's decision.
-func (c *workerChatReply) holdLocked(ctx context.Context, elicitation workerChatElicitation) {
-	messageID := c.info.MessageID
-	events := c.foldNarrationLocked()
+// hold shows the calls a connector set to always ask holds, each waiting for the person's decision under the
+// approval id stored with the activity.
+func (d *workerChatDraft) hold(elicitation workerChatElicitation, approvals map[string]workerChatApproval) {
+	messageID := d.c.info.MessageID
+	d.foldNarration()
 	for _, held := range elicitation.Calls {
-		approvalID, err := randomSecret("agent_approval_")
-		if err != nil {
+		approval := approvals[held.CallID]
+		if approval.ID == "" {
 			continue
 		}
-		call := domain.AgentToolCall{ID: held.CallID, Name: agentToolBaseName(held.Name), Arguments: workerChatArguments(json.RawMessage(held.Arguments)), Status: "pending", ApprovalID: approvalID}
-		c.annotate(ctx, &call)
-		index := c.callIndex(held.CallID)
+		approvalID := approval.ID
+		call := domain.AgentToolCall{ID: held.CallID, Name: agentToolBaseName(held.Name), Arguments: workerChatArguments(json.RawMessage(held.Arguments)), Status: "pending", ApprovalID: approvalID, Connector: approval.Connector, RemoteTool: approval.RemoteTool}
+		index := d.callIndex(held.CallID)
 		if index < 0 {
-			index = len(c.message.Parts)
-			c.message.Parts = append(c.message.Parts, domain.AgentMessagePart{ID: fmt.Sprintf("%s_tool_%d", messageID, index), Type: "toolCall"})
+			index = len(d.message.Parts)
+			d.message.Parts = append(d.message.Parts, domain.AgentMessagePart{ID: fmt.Sprintf("%s_tool_%d", messageID, index), Type: "toolCall"})
 		}
-		c.message.Parts[index].Status, c.message.Parts[index].ToolCall = "pending", &call
-		part := c.message.Parts[index]
-		events = append(events, agentStreamEvent{Type: "tool.approval_required", MessageID: messageID, ApprovalID: approvalID, Part: &part})
+		d.message.Parts[index].Status, d.message.Parts[index].ToolCall = "pending", &call
+		part := d.message.Parts[index]
+		d.publish(agentStreamEvent{Type: "tool.approval_required", MessageID: messageID, ApprovalID: approvalID, Part: &part})
 	}
-	workerChatPublish(messageID, events...)
-	c.changedLocked(ctx, true)
+	d.changed = true
 }
 
 // workerChatArguments is a call's arguments as a part keeps them (a JSON object).
@@ -1034,6 +1245,15 @@ func workerChatArguments(raw json.RawMessage) json.RawMessage {
 		return encoded
 	}
 	return json.RawMessage(trimmed)
+}
+
+// workerChatResultJSON is a tool result as a reply part stores it: the tool's JSON, or the text as a JSON string.
+func workerChatResultJSON(result string) json.RawMessage {
+	if trimmed := strings.TrimSpace(result); trimmed != "" && json.Valid([]byte(trimmed)) {
+		return json.RawMessage(trimmed)
+	}
+	raw, _ := json.Marshal(result)
+	return raw
 }
 
 // workerChatChange is the change /mcp recorded for a call of the reply's runs, for the result card and Undo.
@@ -1068,17 +1288,14 @@ func (s *server) workerChatCancelRequested(ctx context.Context, runID string) bo
 // workerChatCheckedAnswer is the response a chat run posts, checked against the run's ledger when the run did not
 // have its last word through the guard (which checked it then), as agentRunCheckedResponse checks a thread run's.
 func (s *server) workerChatCheckedAnswer(ctx context.Context, run store.AgentRun, info workerChatRunInfo, body string) string {
-	if raw, found, err := s.store.AgentRunKey(ctx, run.ID, workerRunGuardKey); err == nil && found {
-		var state workerRunGuardState
-		if json.Unmarshal(raw, &state) == nil && state.Finished {
-			return body
-		}
+	if state, found := s.workerRunGuardStateOf(ctx, run.ID); found && state.Finished {
+		return body
 	}
 	if body == agentNothingExecutedText(true) || body == agentNothingExecutedText(false) {
 		return body
 	}
 	ledger := s.agentRunLedger(ctx, run)
-	if info.Resume == nil && s.workerChatBudget(ctx, run.ID).stop == "" && s.agentUngroundedText(info.Request, body, ledger) {
+	if info.Resume == nil && s.workerChatBudget(ctx, run).stop == "" && s.agentUngroundedText(info.Request, body, ledger) {
 		return agentNothingExecutedText(info.Chinese)
 	}
 	return ledger.report(body, info.Chinese)
@@ -1086,46 +1303,37 @@ func (s *server) workerChatCheckedAnswer(ctx context.Context, run store.AgentRun
 
 // ---------------------------------------------------------------- run end, stop, approvals
 
-// settleWorkerChatRun saves a chat run's reply when the worker finishes the run without having finished the reply.
+// settleWorkerChatRun saves a chat run's reply when the worker finishes the run without having finished the reply:
+// with every activity the run stored, then as its status says.
 func (s *server) settleWorkerChatRun(ctx context.Context, run store.AgentRun, info workerChatRunInfo, status, failure string) {
 	reply, err := s.workerChatReplyFor(ctx, run, info)
 	if err != nil {
 		return
 	}
-	defer reply.release()
-	reply.mu.Lock()
-	defer reply.mu.Unlock()
-	if reply.finished {
-		return
-	}
-	switch status {
-	case store.AgentRunAwaiting:
-		// Held calls wait for the person (the reply stays streaming); anything else is an unfinished reply.
-		if slices.ContainsFunc(reply.message.Parts, func(part domain.AgentMessagePart) bool {
-			return part.ToolCall != nil && part.ToolCall.ApprovalID != "" && part.ToolCall.Status == "pending"
-		}) {
-			if reply.dirty {
-				_ = reply.saveLocked(ctx)
+	_, err = reply.update(ctx, true, func(d *workerChatDraft) {
+		duration := reply.durationMS()
+		switch status {
+		case store.AgentRunAwaiting:
+			// Held calls wait for the person (the reply stays streaming); anything else is an unfinished reply.
+			if !d.holdsApprovals() {
+				d.fail("The reply stopped waiting for an answer it never asked for.", false, duration)
 			}
-			return
+		case store.AgentRunDone:
+			if text := d.text(); strings.TrimSpace(text) != "" {
+				d.complete(s.workerChatCheckedAnswer(ctx, run, info, text), duration)
+				return
+			}
+			d.fail("Flow Agent provider returned an empty response", false, duration)
+		case store.AgentRunCanceled:
+			d.fail("", true, duration)
+		case store.AgentRunInterrupted:
+			d.interrupt(duration)
+		default:
+			d.fail(firstNonEmpty(strings.TrimSpace(failure), "The agent run failed."), false, duration)
 		}
-		reply.failLocked(ctx, "The reply stopped waiting for an answer it never asked for.", false)
-	case store.AgentRunDone:
-		if text := reply.textLocked(); strings.TrimSpace(text) != "" {
-			reply.completeLocked(ctx, s.workerChatCheckedAnswer(ctx, run, info, text))
-			return
-		}
-		reply.failLocked(ctx, "Flow Agent provider returned an empty response", false)
-	case store.AgentRunCanceled:
-		reply.failLocked(ctx, "", true)
-	case store.AgentRunInterrupted:
-		message, err := cloneAgentMessage(reply.message)
-		if err == nil {
-			interruptAgentLiveMessage(&message)
-			reply.finishLocked(ctx, message)
-		}
-	default:
-		reply.failLocked(ctx, firstNonEmpty(strings.TrimSpace(failure), "The agent run failed."), false)
+	})
+	if err != nil && !errors.Is(err, errAgentLiveSkip) {
+		log.Printf("settle worker chat reply %s: %v", info.MessageID, err)
 	}
 }
 
@@ -1159,7 +1367,7 @@ func (s *server) resumeWorkerChat(ctx context.Context, run store.AgentRun, info 
 	}
 	next := info
 	next.Resume = &workerChatResume{Decisions: decisions}
-	if _, budget := s.workerChatBudgetState(ctx, current.ID); budget.Turns > next.TurnsBefore {
+	if _, budget := s.workerChatBudgetState(ctx, current); budget.Turns > next.TurnsBefore {
 		next.TurnsBefore = budget.Turns
 	}
 	if _, err := s.enqueueWorkerChatRun(ctx, store.AgentRun{WorkspaceKey: current.WorkspaceKey, SessionID: current.SessionID, Principal: current.Principal}, next, nil, current.ID); err != nil {
@@ -1213,7 +1421,6 @@ func (s *server) stopWorkerChat(ctx context.Context, session domain.AgentSession
 		_ = s.store.DeleteAgentSessionState(ctx, workspace, session.ID)
 		if reply, err := s.workerChatReplyFor(ctx, canceled, info); err == nil {
 			reply.finishFailure(ctx, "", true)
-			reply.release()
 		}
 	}
 	return stopped
@@ -1241,12 +1448,7 @@ func (s *server) answerWorkerChatApproval(r *http.Request, session domain.AgentS
 		if err != nil {
 			return true, errNotFound
 		}
-		answered := reply.decide(ctx, approvalID, decision)
-		if !store.AgentRunHeld(run.Status) {
-			// The awaiting run is done with this process; its resume rebuilds the reply.
-			reply.release()
-		}
-		if !answered {
+		if !reply.decide(ctx, approvalID, decision) {
 			return true, errNotFound
 		}
 		s.resumeWorkerChat(ctx, run, info)
@@ -1257,49 +1459,54 @@ func (s *server) answerWorkerChatApproval(r *http.Request, session domain.AgentS
 
 // decide applies a decision to the held call; false when it no longer waits.
 func (c *workerChatReply) decide(ctx context.Context, approvalID, decision string) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.finished {
-		return false
-	}
-	index := slices.IndexFunc(c.message.Parts, func(part domain.AgentMessagePart) bool {
+	answered := false
+	_, err := c.update(ctx, false, func(d *workerChatDraft) { answered = d.decide(approvalID, decision) })
+	return err == nil && answered
+}
+
+func (d *workerChatDraft) decide(approvalID, decision string) bool {
+	index := slices.IndexFunc(d.message.Parts, func(part domain.AgentMessagePart) bool {
 		return part.ToolCall != nil && part.ToolCall.ApprovalID == approvalID && part.ToolCall.Status == "pending"
 	})
 	if index < 0 {
 		return false
 	}
-	call := *c.message.Parts[index].ToolCall
+	call := *d.message.Parts[index].ToolCall
 	if decision == "approved" {
 		call.Status = "running"
-		c.message.Parts[index].Status = "running"
+		d.message.Parts[index].Status = "running"
 	} else {
 		call.Status, call.Error = "error", workerChatDeclined
 		call.Result = json.RawMessage(`{"error":"Action declined by user"}`)
-		c.message.Parts[index].Status = "error"
+		d.message.Parts[index].Status = "error"
 	}
-	c.message.Parts[index].ToolCall = &call
-	part := c.message.Parts[index]
-	workerChatPublish(c.info.MessageID, agentStreamEvent{Type: "tool.approval_resolved", MessageID: c.info.MessageID, ApprovalID: approvalID, Decision: decision, Part: &part})
-	c.changedLocked(ctx, true)
+	d.message.Parts[index].ToolCall = &call
+	part := d.message.Parts[index]
+	d.publish(agentStreamEvent{Type: "tool.approval_resolved", MessageID: d.c.info.MessageID, ApprovalID: approvalID, Decision: decision, Part: &part})
+	d.changed = true
 	return true
 }
 
 // expireApprovals rejects the held calls that still wait for a decision, as the in-process reply rejects a call
 // nobody answered; it returns how many.
 func (c *workerChatReply) expireApprovals(ctx context.Context) int {
-	c.mu.Lock()
-	var waiting []string
-	for _, part := range c.message.Parts {
-		if !c.finished && part.ToolCall != nil && part.ToolCall.ApprovalID != "" && part.ToolCall.Status == "pending" {
-			waiting = append(waiting, part.ToolCall.ApprovalID)
-		}
-	}
-	c.mu.Unlock()
 	rejected := 0
-	for _, approvalID := range waiting {
-		if c.decide(ctx, approvalID, "rejected") {
-			rejected++
+	_, err := c.update(ctx, false, func(d *workerChatDraft) {
+		rejected = 0
+		var waiting []string
+		for _, part := range d.message.Parts {
+			if part.ToolCall != nil && part.ToolCall.ApprovalID != "" && part.ToolCall.Status == "pending" {
+				waiting = append(waiting, part.ToolCall.ApprovalID)
+			}
 		}
+		for _, approvalID := range waiting {
+			if d.decide(approvalID, "rejected") {
+				rejected++
+			}
+		}
+	})
+	if err != nil {
+		return 0
 	}
 	return rejected
 }
@@ -1324,7 +1531,6 @@ func (s *server) expireWorkerChatRun(ctx context.Context, run store.AgentRun, in
 			return false
 		}
 		reply.finishFailure(ctx, workerChatNoWorker, false)
-		reply.release()
 		return true
 	case store.AgentRunAwaiting:
 		// An awaiting run's FinishedAt is when it suspended on its held calls.
@@ -1335,9 +1541,7 @@ func (s *server) expireWorkerChatRun(ctx context.Context, run store.AgentRun, in
 		if err != nil {
 			return false
 		}
-		rejected := reply.expireApprovals(ctx)
-		reply.release()
-		if rejected == 0 {
+		if reply.expireApprovals(ctx) == 0 {
 			return false
 		}
 		s.resumeWorkerChat(ctx, run, info)
@@ -1356,18 +1560,19 @@ func (s *server) workerChatElicitationPart(ctx context.Context, run store.AgentR
 	if err != nil {
 		return
 	}
-	reply.mu.Lock()
-	defer reply.mu.Unlock()
-	if reply.finished {
-		return
+	_, err = reply.update(ctx, false, func(d *workerChatDraft) {
+		if index := d.partIndex(part.ID); index >= 0 {
+			d.message.Parts[index] = part
+		} else {
+			d.message.Parts = append(d.message.Parts, part)
+		}
+		shown := part
+		d.publish(agentStreamEvent{Type: kind, MessageID: info.MessageID, Part: &shown})
+		d.changed = true
+	})
+	if err != nil && !errors.Is(err, errAgentLiveSkip) {
+		log.Printf("show connector question on worker chat reply %s: %v", info.MessageID, err)
 	}
-	if index := reply.partIndex(part.ID); index >= 0 {
-		reply.message.Parts[index] = part
-	} else {
-		reply.message.Parts = append(reply.message.Parts, part)
-	}
-	workerChatPublish(info.MessageID, agentStreamEvent{Type: kind, MessageID: info.MessageID, Part: &part})
-	reply.changedLocked(ctx, true)
 }
 
 // workerRunCallStops cancels the connector questions waiting in a run's calls in this process (run id →
@@ -1444,17 +1649,11 @@ func (s *server) recoverWorkerChatRun(ctx context.Context, run store.AgentRun, r
 	}
 	if requeued {
 		// The new attempt starts over: its ledger and budget too (what was recorded was not written).
-		for _, key := range []string{agentRunLedgerKey, workerChatBudgetKey, workerRunGuardKey} {
-			if _, found, err := s.store.AgentRunKey(ctx, run.ID, key); err == nil && found {
-				_ = s.store.ReplaceAgentRunKey(ctx, run, key, []byte(`null`))
-			}
-		}
+		s.resetAgentRunState(ctx, run, workerChatBudgetKey, workerRunGuardKey)
 		reply.reset(ctx)
-		reply.release()
 		return true
 	}
 	reply.interrupt(ctx)
-	reply.release()
 	return true
 }
 
@@ -1506,13 +1705,16 @@ func (s *server) sweepWorkerChatReplies(ctx context.Context, now time.Time) int 
 				if err != nil {
 					continue
 				}
-				if run.Status == store.AgentRunCanceled {
-					reply.finishFailure(ctx, "", true)
-				} else {
-					reply.interrupt(ctx)
+				canceled := run.Status == store.AgentRunCanceled
+				if _, err := reply.update(ctx, true, func(d *workerChatDraft) {
+					if canceled {
+						d.fail("", true, reply.durationMS())
+					} else {
+						d.interrupt(reply.durationMS())
+					}
+				}); err == nil {
+					swept++
 				}
-				reply.release()
-				swept++
 			}
 		}
 	}
@@ -1535,32 +1737,17 @@ type workerChatBudgetState struct {
 	Turns int `json:"turns,omitempty"`
 }
 
-var workerChatBudgetLocks sync.Map
-
-func (s *server) workerChatBudgetLock(runID string) func() {
-	lock, _ := workerChatBudgetLocks.LoadOrStore(runID, &sync.Mutex{})
-	mu := lock.(*sync.Mutex)
-	mu.Lock()
-	return mu.Unlock
+// workerChatBudgetMax is a chat run's call budget: its payload's, else Flow's.
+func (s *server) workerChatBudgetMax(run store.AgentRun) int {
+	if info, ok := workerChatInfo(run); ok && info.MaxCalls > 0 {
+		return info.MaxCalls
+	}
+	return s.agentMaxToolCalls()
 }
 
-// workerChatBudget reads a chat run's tool budget.
-func (s *server) workerChatBudget(ctx context.Context, runID string) *agentToolBudget {
-	budget, _ := s.workerChatBudgetState(ctx, runID)
-	return budget
-}
-
-func (s *server) workerChatBudgetState(ctx context.Context, runID string) (*agentToolBudget, workerChatBudgetState) {
-	maxCalls := s.agentMaxToolCalls()
+func workerChatBudgetDecode(raw []byte, maxCalls int) (*agentToolBudget, workerChatBudgetState) {
 	var state workerChatBudgetState
-	if raw, found, err := s.store.AgentRunKey(ctx, runID, workerChatBudgetKey); err == nil && found {
-		_ = json.Unmarshal(raw, &state)
-	}
-	if run, err := s.store.AgentRun(ctx, runID); err == nil {
-		if info, ok := workerChatInfo(run); ok && info.MaxCalls > 0 {
-			maxCalls = info.MaxCalls
-		}
-	}
+	_ = json.Unmarshal(raw, &state)
 	budget := newAgentToolBudget(maxCalls)
 	budget.calls, budget.repeats, budget.failedTurns, budget.turnCalls, budget.turnFailed, budget.stop = state.Calls, state.Repeats, state.FailedTurns, state.TurnCalls, state.TurnFailed, state.Stop
 	for key, value := range state.Failed {
@@ -1569,30 +1756,50 @@ func (s *server) workerChatBudgetState(ctx context.Context, runID string) (*agen
 	return budget, state
 }
 
-// saveWorkerChatBudget saves budget with the nudge flag and the turn count of reply.
-func (s *server) saveWorkerChatBudget(ctx context.Context, run store.AgentRun, budget *agentToolBudget, reply workerChatBudgetState) {
-	state := workerChatBudgetState{Calls: budget.calls, Failed: budget.failed, Repeats: budget.repeats, FailedTurns: budget.failedTurns, TurnCalls: budget.turnCalls, TurnFailed: budget.turnFailed, Stop: budget.stop, Nudged: reply.Nudged, Turns: reply.Turns}
-	raw, err := json.Marshal(state)
-	if err == nil {
-		err = s.store.ReplaceAgentRunKey(context.WithoutCancel(ctx), run, workerChatBudgetKey, raw)
+func workerChatBudgetEncode(budget *agentToolBudget, reply workerChatBudgetState) ([]byte, error) {
+	return json.Marshal(workerChatBudgetState{Calls: budget.calls, Failed: budget.failed, Repeats: budget.repeats, FailedTurns: budget.failedTurns, TurnCalls: budget.turnCalls, TurnFailed: budget.turnFailed, Stop: budget.stop, Nudged: reply.Nudged, Turns: reply.Turns})
+}
+
+// workerChatBudget reads a chat run's tool budget.
+func (s *server) workerChatBudget(ctx context.Context, run store.AgentRun) *agentToolBudget {
+	budget, _ := s.workerChatBudgetState(ctx, run)
+	return budget
+}
+
+func (s *server) workerChatBudgetState(ctx context.Context, run store.AgentRun) (*agentToolBudget, workerChatBudgetState) {
+	raw, _, found, err := s.agentRunStateOf(ctx, run.ID, workerChatBudgetKey)
+	if err != nil || !found {
+		raw = nil
 	}
+	return workerChatBudgetDecode(raw, s.workerChatBudgetMax(run))
+}
+
+// updateWorkerChatBudget changes a chat run's tool budget atomically across API servers: the parallel /mcp calls of
+// a turn may reach different servers at once, and each counts against the one budget (a versioned state, so change
+// runs again on the newer budget when another server stored first).
+func (s *server) updateWorkerChatBudget(ctx context.Context, run store.AgentRun, change func(*agentToolBudget, *workerChatBudgetState)) {
+	maxCalls := s.workerChatBudgetMax(run)
+	err := s.updateAgentRunState(ctx, run, workerChatBudgetKey, func(raw []byte, _ bool) ([]byte, error) {
+		budget, state := workerChatBudgetDecode(raw, maxCalls)
+		change(budget, &state)
+		return workerChatBudgetEncode(budget, state)
+	})
 	if err != nil {
 		log.Printf("agent run %s: tool budget not saved: %v", run.ID, err)
 	}
 }
 
 // workerChatToolBefore applies a chat run's tool budget to a /mcp call, as the in-process reply does before each
-// call: run is false when the call is not run, content its result (an error).
+// call: ok is false when the call is not run, content its result (an error).
 func (s *server) workerChatToolBefore(ctx context.Context, run store.AgentRun, name string, args map[string]any) (content string, ok bool) {
 	if _, chat := workerChatInfo(run); !chat {
 		return "", true
 	}
-	unlock := s.workerChatBudgetLock(run.ID)
-	defer unlock()
-	budget, state := s.workerChatBudgetState(ctx, run.ID)
 	arguments, _ := json.Marshal(args)
-	content, ok = budget.before(domain.AgentToolCall{Name: name, Arguments: arguments})
-	s.saveWorkerChatBudget(ctx, run, budget, state)
+	ok = true
+	s.updateWorkerChatBudget(ctx, run, func(budget *agentToolBudget, _ *workerChatBudgetState) {
+		content, ok = budget.before(domain.AgentToolCall{Name: name, Arguments: arguments})
+	})
 	return content, ok
 }
 
@@ -1601,75 +1808,93 @@ func (s *server) workerChatToolAfter(ctx context.Context, run store.AgentRun, na
 	if _, chat := workerChatInfo(run); !chat {
 		return
 	}
-	unlock := s.workerChatBudgetLock(run.ID)
-	defer unlock()
-	budget, state := s.workerChatBudgetState(ctx, run.ID)
 	arguments, _ := json.Marshal(args)
-	budget.after(domain.AgentToolCall{Name: name, Arguments: arguments}, content, failed)
-	s.saveWorkerChatBudget(ctx, run, budget, state)
+	s.updateWorkerChatBudget(ctx, run, func(budget *agentToolBudget, _ *workerChatBudgetState) {
+		budget.after(domain.AgentToolCall{Name: name, Arguments: arguments}, content, failed)
+	})
 }
 
 // workerChatGuardOp is the run guard of a chat run (agent_runtime_guard.go): no coding context or connector
 // budget, but the reply's tool budget at each model turn and the outcome check at its last word, as the in-process
-// reply applies them.
-func (s *server) workerChatGuardOp(ctx context.Context, run store.AgentRun, info workerChatRunInfo, state *workerRunGuardState, input workerRunGuardRequest) (workerRunGuardResponse, error) {
+// reply applies them. The guard state keeps only whether the last word was nudged and given.
+func (s *server) workerChatGuardOp(ctx context.Context, run store.AgentRun, info workerChatRunInfo, input workerRunGuardRequest) (workerRunGuardResponse, error) {
 	response := workerRunGuardResponse{Enabled: true, DecisionRound: -1}
+	maxTurns := info.MaxTurns
+	if maxTurns <= 0 {
+		maxTurns = s.agentMaxToolTurns()
+	}
 	switch input.Op {
-	case "start", "before", "after", "coding":
+	case "start":
+		raw, err := json.Marshal(workerRunGuardState{})
+		if err == nil {
+			err = s.store.ReplaceAgentRunState(ctx, run, workerRunGuardKey, raw)
+		}
+		return response, err
+	case "before", "after", "coding":
+		return response, nil
 	case "turn":
-		unlock := s.workerChatBudgetLock(run.ID)
-		budget, budgetState := s.workerChatBudgetState(ctx, run.ID)
 		// The worker counts the turns of its own run; the reply's earlier runs (before a resume) took TurnsBefore.
 		round := info.TurnsBefore + input.Round
-		if round > 0 {
-			budget.endTurn()
-		}
-		maxTurns := info.MaxTurns
-		if maxTurns <= 0 {
-			maxTurns = s.agentMaxToolTurns()
-		}
-		if budget.stop == "" && round >= maxTurns {
-			budget.stop = agentBudgetTurns
-		}
-		budgetState.Turns = max(budgetState.Turns, round+1)
-		if budget.stop != "" {
-			// The reply's last word: no more tools, what was done and what is left.
-			response.Withhold = true
-			if !budgetState.Nudged {
-				response.Nudge, budgetState.Nudged = "\n\n"+agentToolBudgetNudge(budget.stop, maxTurns, info.MaxCalls), true
+		s.updateWorkerChatBudget(ctx, run, func(budget *agentToolBudget, state *workerChatBudgetState) {
+			response.Withhold, response.Nudge = false, ""
+			if round > 0 {
+				budget.endTurn()
 			}
-		}
-		s.saveWorkerChatBudget(ctx, run, budget, budgetState)
-		unlock()
-	case "finish":
-		ledger := s.agentRunLedger(ctx, run)
-		stopped := s.workerChatBudget(ctx, run.ID).stop
-		switch input.Phase {
-		case "reply":
-			if info.Resume == nil && stopped == "" && s.agentUngroundedText(info.Request, input.Text, ledger) {
-				if !state.OutcomeNudged {
-					response.Nudge, state.OutcomeNudged = agentUngroundedOutcomeNudge, true
-					return response, nil
+			if budget.stop == "" && round >= maxTurns {
+				budget.stop = agentBudgetTurns
+			}
+			state.Turns = max(state.Turns, round+1)
+			if budget.stop != "" {
+				// The reply's last word: no more tools, what was done and what is left.
+				response.Withhold = true
+				if !state.Nudged {
+					response.Nudge, state.Nudged = "\n\n"+agentToolBudgetNudge(budget.stop, maxTurns, info.MaxCalls), true
 				}
-				response.Reply = agentNothingExecutedText(info.Chinese)
-			} else {
-				response.Reply = ledger.report(input.Text, info.Chinese)
 			}
-		case "turnLimit":
-			unlock := s.workerChatBudgetLock(run.ID)
-			budget, budgetState := s.workerChatBudgetState(ctx, run.ID)
+		})
+		return response, nil
+	case "finish":
+	default:
+		return response, store.ErrAgentRunInput
+	}
+	ledger := s.agentRunLedger(ctx, run)
+	stopped := ""
+	if input.Phase == "turnLimit" {
+		s.updateWorkerChatBudget(ctx, run, func(budget *agentToolBudget, _ *workerChatBudgetState) {
 			if budget.stop == "" {
 				budget.stop = agentBudgetTurns
 			}
-			s.saveWorkerChatBudget(ctx, run, budget, budgetState)
-			unlock()
-			response.Reply = agentToolBudgetFallback(budget.stop, info.MaxTurns, info.MaxCalls, info.Chinese, -1, true)
+			stopped = budget.stop
+		})
+	} else {
+		stopped = s.workerChatBudget(ctx, run).stop
+	}
+	ungrounded := input.Phase == "reply" && info.Resume == nil && stopped == "" && s.agentUngroundedText(info.Request, input.Text, ledger)
+	err := s.updateAgentRunState(ctx, run, workerRunGuardKey, func(raw []byte, found bool) ([]byte, error) {
+		var state workerRunGuardState
+		if found {
+			_ = json.Unmarshal(raw, &state)
+		}
+		response = workerRunGuardResponse{Enabled: true, DecisionRound: -1}
+		switch input.Phase {
+		case "reply":
+			switch {
+			case ungrounded && !state.OutcomeNudged:
+				// Not the last word yet: the model is told once that nothing ran.
+				response.Nudge, state.OutcomeNudged = agentUngroundedOutcomeNudge, true
+				return json.Marshal(state)
+			case ungrounded:
+				response.Reply = agentNothingExecutedText(info.Chinese)
+			default:
+				response.Reply = ledger.report(input.Text, info.Chinese)
+			}
+		case "turnLimit":
+			response.Reply = agentToolBudgetFallback(stopped, info.MaxTurns, info.MaxCalls, info.Chinese, -1, true)
 		default:
 			response.Reply = input.Text
 		}
 		state.Finished = true
-	default:
-		return response, store.ErrAgentRunInput
-	}
-	return response, nil
+		return json.Marshal(state)
+	})
+	return response, err
 }

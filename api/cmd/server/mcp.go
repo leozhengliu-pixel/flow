@@ -510,6 +510,8 @@ func (s *server) callMCPRunTool(w http.ResponseWriter, r *http.Request, id any, 
 			writeJSON(w, http.StatusOK, mcpRPCResponse{JSONRPC: "2.0", ID: id, Result: json.RawMessage(cached)})
 			return
 		}
+		// The call's ledger entries are kept under its key: a retry replaces them (agent_run_outcomes.go).
+		r = r.WithContext(withAgentRunCallKey(r.Context(), key))
 	}
 	// A chat reply's tool budget (agent_worker_chat.go): a call over it, or a repeat of a failed one, is not run.
 	if content, run := s.workerChatToolBefore(r.Context(), grant.run, tool.Name, args); !run {

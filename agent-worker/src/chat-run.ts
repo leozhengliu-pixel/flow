@@ -11,6 +11,9 @@
  *    person's decisions on Flow (the RunState is kept in Flow, so any worker resumes it);
  *  - the response or the error that ends the reply; a stopped run ends it as stopped.
  *
+ * Each post carries its number in the run (`seq`): any of Flow's API servers may take it, a retry is stored once,
+ * and Flow applies the posts in number order.
+ *
  * Connector questions (MCP elicitation) are shown by Flow itself, which holds them; the worker does not post them.
  */
 import type { AgentInputItem } from '@openai/agents'
@@ -49,6 +52,12 @@ export function chatConversation(messages: PromptMessage[]): { history: AgentInp
 
 /** One activity as Flow takes it for a chat run (POST /internal/agent-runtime/runs/{id}/activities). */
 export type ChatActivity = {
+  /**
+   * The post's number in the run (1, 2, …, in the order the poster sends them). Flow stores each number once and
+   * applies the posts in number order, so a retried post (on any API server) is a no-op and posts that arrive out of
+   * order still make the reply they make in order.
+   */
+  seq?: number
   activityId?: string
   type: 'thought' | 'text.delta' | 'question.delta' | 'action' | 'action.result' | 'elicitation' | 'response' | 'error'
   body?: string
@@ -61,10 +70,20 @@ export type ChatActivity = {
 
 export type ChatPost = (activity: ChatActivity) => Promise<{ settled?: boolean } | undefined>
 
+/** Waits before the retries of a post that failed in transit or with a server error (429, 5xx). */
+export const chatPostRetryDelaysMs = [250, 1_000, 3_000]
+
+/** Whether a failed post may succeed when sent again: no answer, or a server error (not a refusal such as 409). */
+export function retryablePostError(error: unknown) {
+  const status = (error as { status?: unknown })?.status
+  return typeof status !== 'number' || status === 429 || status >= 500
+}
+
 /**
- * Turns a run's activities into Flow's chat activities and posts them one at a time, in order. Text and the
- * question being written are coalesced; anything else first sends what is pending. When Flow answers that the reply
- * is settled before the run ended it (stopped, or edited away), `onSettled` is called once.
+ * Turns a run's activities into Flow's chat activities and posts them one at a time, in order, each with its number
+ * (`seq`). Text and the question being written are coalesced; anything else first sends what is pending. A post that
+ * fails in transit or with a server error is sent again with the same number (Flow stores it once). When Flow
+ * answers that the reply is settled before the run ended it (stopped, or edited away), `onSettled` is called once.
  */
 export class ChatActivityPoster {
   private queue: Promise<unknown> = Promise.resolve()
@@ -73,10 +92,11 @@ export class ChatActivityPoster {
   private timer?: ReturnType<typeof setTimeout>
   private ended = false
   private settledCalled = false
+  private seq = 0
 
   constructor(
     private readonly post: ChatPost,
-    private readonly options: { intervalMs?: number; onError?: (error: unknown) => void; onSettled?: () => void } = {},
+    private readonly options: { intervalMs?: number; retryDelaysMs?: number[]; onError?: (error: unknown) => void; onSettled?: () => void } = {},
   ) {}
 
   push(activity: FlowActivity) {
@@ -149,8 +169,9 @@ export class ChatActivityPoster {
 
   private enqueue(activity: ChatActivity) {
     const final = this.ended
+    const numbered: ChatActivity = { seq: ++this.seq, ...activity }
     this.queue = this.queue
-      .then(() => this.post(activity))
+      .then(() => this.deliver(numbered))
       .then(answer => {
         if (answer?.settled && !final && !this.settledCalled) {
           this.settledCalled = true
@@ -158,5 +179,18 @@ export class ChatActivityPoster {
         }
       })
       .catch(error => this.options.onError?.(error))
+  }
+
+  /** Posts one numbered activity, again with the same number while it fails in a way a retry may fix. */
+  private async deliver(activity: ChatActivity) {
+    const delays = this.options.retryDelaysMs ?? chatPostRetryDelaysMs
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.post(activity)
+      } catch (error) {
+        if (attempt >= delays.length || !retryablePostError(error)) throw error
+        await new Promise(resolve => setTimeout(resolve, delays[attempt]))
+      }
+    }
   }
 }
