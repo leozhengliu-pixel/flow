@@ -165,6 +165,9 @@ func loopContractInput(loop domain.Loop, teams []domain.Team) string {
 // loopContractLive set still asks its model.
 var loopContractStub func(loop domain.Loop) (*domain.LoopOutputContract, error)
 
+// errLoopContractNotJSON: the model's arguments are not a JSON object.
+var errLoopContractNotJSON = errors.New("the arguments are not a JSON object")
+
 // errLoopContractNoModel: no model is configured to read the contract.
 var errLoopContractNoModel = errors.New("no model is configured to read the loop's outputs")
 
@@ -178,7 +181,7 @@ func parseLoopContractArguments(raw string) (*domain.LoopOutputContract, error) 
 	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
-		return nil, fmt.Errorf("the arguments are not a JSON object: %v", err)
+		return nil, fmt.Errorf("%w: %v", errLoopContractNotJSON, err)
 	}
 	missing := []string{}
 	for _, key := range []string{"readOnly", "outputs", "always", "skipConditions"} {
@@ -250,6 +253,11 @@ func (s *server) requestLoopContract(ctx context.Context, loop domain.Loop, team
 			return contract, nil
 		}
 		lastErr = fmt.Errorf("invalid contract: %w", err)
+		if errors.Is(err, errLoopContractNotJSON) {
+			// Unreadable arguments (tool-call markup leaked into them): ask afresh rather than echo them back.
+			messages = append(messages[:2:2], agentProviderMessage{Role: "user", Content: fmt.Sprintf("Answer only by calling %s once; its arguments are one JSON object that follows the schema, with no other text or markup.", loopContractToolName)})
+			continue
+		}
 		messages = append(messages, agentProviderMessage{Role: "user", Content: fmt.Sprintf("Your contract was not valid: %s.\nYour answer was:\n%s\nCall %s again with the complete, corrected contract: its arguments are one JSON object that follows the schema, with no other text or markup.", err.Error(), truncateSettingsText(raw, 6000), loopContractToolName)})
 	}
 	return nil, lastErr
