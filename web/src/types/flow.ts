@@ -302,7 +302,7 @@ export interface FlowDocument {
   updatedAt: string;
   revisions: DocumentRevision[];
   permissions?: DocumentPermission[];
-  /** Increases with every write; send as `expectedVersion` to detect concurrent changes (409). */
+  /** Increases with every write that changes the document (repeating current values keeps it); send as `expectedVersion` to detect concurrent changes (409). */
   version?: number;
   /** Version of the collaborative base state (`contentState`), guarding update-log compaction. */
   contentVersion?: number;

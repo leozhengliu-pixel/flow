@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // Inline (anchored) comment threads on project and initiative descriptions.
@@ -95,7 +96,9 @@ func resolveInitiativeComment(initiative *domain.Initiative, commentID string, i
 	if input.ExpectedVersion != nil && comment.Version != *input.ExpectedVersion {
 		return *comment, errConflict
 	}
-	applyCommentPatch(comment, domain.CommentUpdateInput{Resolved: input.Resolved, ThreadSummary: input.ThreadSummary}, initiative.Comments, false)
+	if !applyCommentPatch(comment, domain.CommentUpdateInput{Resolved: input.Resolved, ThreadSummary: input.ThreadSummary}, initiative.Comments, false) {
+		return *comment, store.ErrNoMutation
+	}
 	initiative.UpdatedAt = time.Now().UTC()
 	return *comment, nil
 }

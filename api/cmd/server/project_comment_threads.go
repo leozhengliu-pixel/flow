@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // Project comment threads mirror issue comment threads (the reference app "Subscribe to
@@ -89,7 +90,9 @@ func resolveProjectComment(data *domain.Bootstrap, project *domain.Project, comm
 		return *comment, errConflict
 	}
 	summaries := len(project.TeamIDs) > 0 && teamResolvedThreadSummaries(data, project.TeamIDs[0])
-	applyCommentPatch(comment, domain.CommentUpdateInput{Resolved: input.Resolved, ThreadSummary: input.ThreadSummary}, project.Comments, summaries)
+	if !applyCommentPatch(comment, domain.CommentUpdateInput{Resolved: input.Resolved, ThreadSummary: input.ThreadSummary}, project.Comments, summaries) {
+		return *comment, store.ErrNoMutation
+	}
 	project.UpdatedAt = time.Now().UTC()
 	return *comment, nil
 }

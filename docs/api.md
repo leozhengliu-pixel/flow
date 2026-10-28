@@ -172,6 +172,20 @@ more specific (for example `VERSION_CONFLICT` with the current resource in
 include it when reporting a problem. OAuth endpoints (`/oauth/*`) keep RFC 6749
 errors (`error`, `error_description`) and MCP keeps JSON-RPC errors.
 
+## Updates that change nothing
+
+A `PATCH` (or `PUT`) whose values all equal the resource's current values is
+accepted and writes nothing: the response is `200` with the resource as it is,
+its `version` and `updatedAt` stay the same, and no history entry, domain
+event, realtime update, webhook delivery or notification is produced. This
+covers issues, documents, comments (issue, document, project and initiative),
+projects, project milestones, initiatives, labels and label groups, teams,
+workflow statuses, cycles, views, customers and document drafts, so retrying a
+write or syncing the same state again is safe.
+
+Optimistic locking is checked first: a stale `expectedVersion` is refused with
+`409 VERSION_CONFLICT` (and the current resource) even when the values match.
+
 ## Rate limits
 
 Flow uses a leaky-bucket model: each budget refills continuously at

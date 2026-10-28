@@ -348,6 +348,7 @@ func (s *server) updateWorkflowState(w http.ResponseWriter, r *http.Request) {
 		if teamSettings(data, teamID).InheritWorkflowStatuses {
 			return fmt.Errorf("%w: issue statuses are inherited from the parent team", errInvalid)
 		}
+		statesBefore, settingsBefore := slices.Clone(data.States), data.TeamSettings[teamID]
 		materializeTeamStates(data, teamID)
 		state := stateForTeam(data, teamID, stateID)
 		if state == nil {
@@ -372,7 +373,7 @@ func (s *server) updateWorkflowState(w http.ResponseWriter, r *http.Request) {
 		if input.Color != nil {
 			state.Color = *input.Color
 		}
-		if input.Type != nil {
+		if input.Type != nil && *input.Type != state.Type {
 			if !validWorkflowType(*input.Type) {
 				return errInvalid
 			}
@@ -392,6 +393,9 @@ func (s *server) updateWorkflowState(w http.ResponseWriter, r *http.Request) {
 			data.TeamSettings[teamID] = settings
 		}
 		updated = *state
+		if unchangedEdit(statesBefore, data.States) && unchangedEdit(settingsBefore, data.TeamSettings[teamID]) {
+			return store.ErrNoMutation
+		}
 		for index := range data.Issues {
 			if data.Issues[index].Team.ID == teamID && data.Issues[index].State.ID == updated.ID {
 				data.Issues[index].State = updated
@@ -1124,6 +1128,7 @@ func (s *server) updateTeamLabel(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
+		before := data.Labels[index]
 		if input.Name != nil {
 			name := strings.TrimSpace(*input.Name)
 			if name == "" {
@@ -1148,6 +1153,9 @@ func (s *server) updateTeamLabel(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		updated = data.Labels[index]
+		if unchangedEdit(before, updated, "IssueCount") {
+			return store.ErrNoMutation
+		}
 		for issueIndex := range data.Issues {
 			for issueLabelIndex := range data.Issues[issueIndex].Labels {
 				if data.Issues[issueIndex].Labels[issueLabelIndex].ID == labelID {

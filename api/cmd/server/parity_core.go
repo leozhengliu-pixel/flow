@@ -333,6 +333,7 @@ func (s *server) updateDocumentDraft(w http.ResponseWriter, r *http.Request) {
 		if input.ExpectedVersion != nil && *input.ExpectedVersion != draft.Version {
 			return errConflict
 		}
+		before := *draft
 		if input.Content != nil {
 			draft.Content = *input.Content
 		}
@@ -341,6 +342,10 @@ func (s *server) updateDocumentDraft(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.ContentData != nil {
 			draft.ContentData = input.ContentData
+		}
+		if unchangedEdit(before, *draft) {
+			result = before
+			return store.ErrNoMutation
 		}
 		draft.Version++
 		draft.UpdatedAt = time.Now().UTC()
