@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -11,7 +13,75 @@ import (
 
 	appconfig "flow/api/internal/config"
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
+
+// loopContractEvalAgent is the real model the evaluation and the end-to-end
+// run use.
+func loopContractEvalAgent() appconfig.AgentConfig {
+	env := func(key, fallback string) string {
+		if value := os.Getenv(key); value != "" {
+			return value
+		}
+		return fallback
+	}
+	return appconfig.AgentConfig{
+		Enabled: true, Protocol: env("FLOW_LOOP_CONTRACT_EVAL_PROTOCOL", "openai-chat-completions"), BaseURL: env("FLOW_LOOP_CONTRACT_EVAL_URL", "http://127.0.0.1:8787/v1"),
+		APIKey: env("FLOW_LOOP_CONTRACT_EVAL_KEY", "local-go-proxy"), Model: env("FLOW_LOOP_CONTRACT_EVAL_MODEL", "deepseek-v4.1-flash"), MaxOutputTokens: 4096, Timeout: 3 * time.Minute,
+		ToolsEnabled: true, WriteTools: true,
+	}
+}
+
+// The reproduction end to end with the real model, against an isolated
+// scratch API and database (a fixture workspace in a temporary SQLite file):
+// the loop's contract is read by the model, the run creates a new document
+// titled 每日总结-<today> in the team, the unrelated document stays
+// byte-identical, and the run completes. FLOW_LOOP_CONTRACT_E2E=1 runs it.
+func TestLoopDailyDocumentEndToEnd(t *testing.T) {
+	if os.Getenv("FLOW_LOOP_CONTRACT_E2E") != "1" {
+		t.Skip("set FLOW_LOOP_CONTRACT_E2E=1 to run the loop end to end against a real model")
+	}
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { repository.Close() })
+	srv := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true, loopContractLive: true, agent: loopContractEvalAgent()}
+	handler := newHandler(srv)
+	team := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK).Teams[0]
+	unrelated := loopTestDocument(t, handler, map[string]any{"title": "发布验证记录", "content": "原始发布验证内容"})
+	before := requestJSON[domain.Document](t, handler, http.MethodGet, "/api/documents/"+unrelated.ID, nil, http.StatusOK)
+	loop := requestJSON[domain.Loop](t, handler, http.MethodPost, "/api/loops", map[string]any{"name": "每日总结", "instructions": loopDailyDocumentZH, "status": "published", "level": "team", "teamId": team.ID}, http.StatusCreated)
+	analyzed := requestJSON[domain.Loop](t, handler, http.MethodPost, "/api/loops/"+loop.ID+"/output-contract", map[string]any{}, http.StatusOK)
+	t.Logf("contract: %+v", analyzed.OutputContract)
+	started := requestJSON[domain.LoopRun](t, handler, http.MethodPost, "/api/loops/"+loop.ID+"/runs", nil, http.StatusAccepted)
+	var run domain.LoopRun
+	for deadline := time.Now().Add(15 * time.Minute); ; time.Sleep(2 * time.Second) {
+		run = requestJSON[domain.LoopRun](t, handler, http.MethodGet, "/api/loops/"+loop.ID+"/runs/"+started.ID, nil, http.StatusOK)
+		if run.Status != "running" || time.Now().After(deadline) {
+			break
+		}
+	}
+	for _, call := range run.ToolCalls {
+		t.Logf("tool %s %s %s %s", call.Name, call.Status, call.Args, call.Error)
+	}
+	t.Logf("run %s %s %q summary %+v", run.Status, run.FailureReason, run.Error, run.Summary)
+	title := "每日总结-" + time.Now().UTC().Format("2006-01-02")
+	created := 0
+	for _, document := range requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK).Documents {
+		if document.Title == title && slices.Contains(document.TeamIDs, team.ID) && strings.TrimSpace(document.Content) != "" {
+			created++
+			t.Logf("new document %q teams %v: %.200s", document.Title, document.TeamIDs, document.Content)
+		}
+	}
+	after := requestJSON[domain.Document](t, handler, http.MethodGet, "/api/documents/"+unrelated.ID, nil, http.StatusOK)
+	if after.Content != before.Content || after.Title != before.Title || after.Version != before.Version {
+		t.Fatalf("the unrelated document changed: %q v%d (was %q v%d)", after.Content, after.Version, before.Content, before.Version)
+	}
+	if created != 1 || run.Status != "completed" {
+		t.Fatalf("%d documents titled %q in the team; run %s %s %q", created, title, run.Status, run.FailureReason, run.Error)
+	}
+}
 
 // An evaluation of the output contract extractor against a real model: the
 // instructions earlier inference misread and new ones, in Chinese and
@@ -113,16 +183,7 @@ func TestLoopContractEvaluation(t *testing.T) {
 	if os.Getenv("FLOW_LOOP_CONTRACT_EVAL") != "1" {
 		t.Skip("set FLOW_LOOP_CONTRACT_EVAL=1 to evaluate the extractor against a real model")
 	}
-	env := func(key, fallback string) string {
-		if value := os.Getenv(key); value != "" {
-			return value
-		}
-		return fallback
-	}
-	srv := &server{loopContractLive: true, agent: appconfig.AgentConfig{
-		Enabled: true, Protocol: env("FLOW_LOOP_CONTRACT_EVAL_PROTOCOL", "openai-chat-completions"), BaseURL: env("FLOW_LOOP_CONTRACT_EVAL_URL", "http://127.0.0.1:8787/v1"),
-		APIKey: env("FLOW_LOOP_CONTRACT_EVAL_KEY", "local-go-proxy"), Model: env("FLOW_LOOP_CONTRACT_EVAL_MODEL", "deepseek-v4.1-flash"), MaxOutputTokens: 4096, Timeout: 3 * time.Minute,
-	}}
+	srv := &server{loopContractLive: true, agent: loopContractEvalAgent()}
 	teams := []domain.Team{{ID: "team_mobile", Key: "MOB", Name: "Mobile"}, {ID: "team_dev", Key: "DEV", Name: "开发团队"}}
 	only := os.Getenv("FLOW_LOOP_CONTRACT_EVAL_ONLY")
 	fields := []string{"readOnly", "writes", "required", "target", "always", "skips", "group"}
