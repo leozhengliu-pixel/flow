@@ -1,13 +1,17 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	appconfig "flow/api/internal/config"
 	"flow/api/internal/domain"
 )
 
@@ -506,6 +510,44 @@ func TestLoopContractWithoutModel(t *testing.T) {
 	analyzed := requestJSON[domain.Loop](t, handler, http.MethodPost, "/api/loops/"+loop.ID+"/output-contract", nil, http.StatusOK)
 	if analyzed.OutputContract == nil || analyzed.OutputContract.Source != loopContractFallback || !strings.Contains(analyzed.OutputContract.Error, "no model") {
 		t.Fatalf("contract without a model = %+v", analyzed.OutputContract)
+	}
+}
+
+// A structured request forces its tool at temperature 0; a provider that
+// cannot force a tool choice (a thinking model) is asked again offering only
+// the tool, and is not asked to force it again.
+func TestAgentStructuredTurnFallsBackWithoutForcedToolChoice(t *testing.T) {
+	var mu sync.Mutex
+	payloads := []map[string]any{}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&payload)
+		mu.Lock()
+		payloads = append(payloads, payload)
+		mu.Unlock()
+		if payload["tool_choice"] != nil {
+			http.Error(w, `{"error":{"message":"Thinking mode does not support this tool_choice"}}`, http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","content":"","tool_calls":[{"id":"call_1","type":"function","function":{"name":"` + loopContractToolName + `","arguments":"{\"readOnly\":true,\"outputs\":[],\"always\":false,\"skipConditions\":[]}"}}]}}]}`))
+	}))
+	defer upstream.Close()
+	srv := &server{loopContractLive: true, agent: appconfig.AgentConfig{Enabled: true, Protocol: "openai-chat-completions", BaseURL: upstream.URL, Model: "thinking", MaxOutputTokens: 256}, agentClient: upstream.Client()}
+	for range 2 {
+		contract, err := srv.requestLoopContract(context.Background(), domain.Loop{ID: "loop_1", Name: "x", Instructions: "Summarize open bugs."}, nil)
+		if err != nil || contract == nil || !contract.ReadOnly || contract.Source != loopContractModel {
+			t.Fatalf("contract = %+v, %v", contract, err)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(payloads) != 3 || payloads[0]["tool_choice"] == nil || payloads[1]["tool_choice"] != nil || payloads[2]["tool_choice"] != nil || payloads[1]["temperature"] != float64(0) || !srv.agentForcedToolChoiceOff.Load() {
+		t.Fatalf("requests = %v", payloads)
+	}
+	tools, _ := payloads[1]["tools"].([]any)
+	if len(tools) != 1 {
+		t.Fatalf("offered tools = %v", tools)
 	}
 }
 

@@ -225,7 +225,10 @@ func (s *server) requestLoopContract(ctx context.Context, loop domain.Loop, team
 	ctx = withAgentMaxOutputTokens(ctx, 8192)
 	var lastErr error
 	for attempt := 0; attempt < 2; attempt++ {
-		turn, err := s.requestAgentStructuredTurn(ctx, messages, loopContractTool)
+		// A stalled attempt leaves time for the second one.
+		attemptCtx, cancel := context.WithTimeout(ctx, loopContractAttemptTimeout)
+		turn, err := s.requestAgentStructuredTurn(attemptCtx, messages, loopContractTool)
+		cancel()
 		if err != nil {
 			lastErr = err
 			if ctx.Err() != nil {
@@ -247,10 +250,17 @@ func (s *server) requestLoopContract(ctx context.Context, loop domain.Loop, team
 			return contract, nil
 		}
 		lastErr = fmt.Errorf("invalid contract: %w", err)
-		messages = append(messages, agentProviderMessage{Role: "user", Content: fmt.Sprintf("Your contract was not valid: %s.\nYour answer was:\n%s\nCall %s again with the complete, corrected contract.", err.Error(), truncateSettingsText(raw, 6000), loopContractToolName)})
+		messages = append(messages, agentProviderMessage{Role: "user", Content: fmt.Sprintf("Your contract was not valid: %s.\nYour answer was:\n%s\nCall %s again with the complete, corrected contract: its arguments are one JSON object that follows the schema, with no other text or markup.", err.Error(), truncateSettingsText(raw, 6000), loopContractToolName)})
 	}
 	return nil, lastErr
 }
+
+// loopContractAttemptTimeout bounds one model call of an extraction; two
+// attempts fit in loopContractReadTimeout.
+const (
+	loopContractAttemptTimeout = 110 * time.Second
+	loopContractReadTimeout    = 4 * time.Minute
+)
 
 // loopContractFlights runs one extraction per loop text at a time.
 var loopContractFlights = struct {
@@ -280,18 +290,28 @@ func (s *server) loopContractFor(ctx context.Context, workspace string, loop dom
 	}
 	key := workspace + "|" + loop.ID + "|" + hash
 	loopContractFlights.mu.Lock()
-	if flight, ok := loopContractFlights.running[key]; ok {
-		loopContractFlights.mu.Unlock()
-		select {
-		case <-flight.done:
-			return flight.contract
-		case <-ctx.Done():
-			return loopFallbackContract(hash, ctx.Err().Error())
-		}
+	flight, ok := loopContractFlights.running[key]
+	if !ok {
+		flight = &loopContractFlight{done: make(chan struct{})}
+		loopContractFlights.running[key] = flight
+		// The read outlives the request or run that asked for it (an editor
+		// that navigates away, a cancelled run): others may be waiting on it,
+		// and a cancelled read must not leave a fallback behind.
+		go s.readLoopContract(context.WithoutCancel(ctx), workspace, loop, hash, key, flight)
 	}
-	flight := &loopContractFlight{done: make(chan struct{})}
-	loopContractFlights.running[key] = flight
 	loopContractFlights.mu.Unlock()
+	select {
+	case <-flight.done:
+		return flight.contract
+	case <-ctx.Done():
+		// This caller stops waiting; the contract it gets is never stored.
+		return loopFallbackContract(hash, ctx.Err().Error())
+	}
+}
+
+// readLoopContract is one flight's model read: it stores the result (the
+// fallback when the read fails) and hands it to every waiter.
+func (s *server) readLoopContract(ctx context.Context, workspace string, loop domain.Loop, hash, key string, flight *loopContractFlight) {
 	defer func() {
 		loopContractFlights.mu.Lock()
 		delete(loopContractFlights.running, key)
@@ -302,7 +322,7 @@ func (s *server) loopContractFor(ctx context.Context, workspace string, loop dom
 	if data, ok := s.store.WorkspaceMetadataFields(workspace, "teams"); ok {
 		teams = data.Teams
 	}
-	callCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	callCtx, cancel := context.WithTimeout(ctx, loopContractReadTimeout)
 	defer cancel()
 	contract, err := s.requestLoopContract(callCtx, loop, teams)
 	if err != nil {
@@ -313,9 +333,8 @@ func (s *server) loopContractFor(ctx context.Context, workspace string, loop dom
 		}
 		contract = loopFallbackContract(hash, reason)
 	}
-	flight.contract = contract
 	s.storeLoopContract(workspace, loop.ID, hash, contract)
-	return contract
+	flight.contract = contract
 }
 
 // storeLoopContract caches a read contract on the loop, when its text is
