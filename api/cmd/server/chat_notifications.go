@@ -20,6 +20,7 @@ type chatNotificationJob struct {
 	BindingScope    string `json:"bindingScope"`
 	IssueID         string `json:"issueId,omitempty"`
 	ProjectID       string `json:"projectId,omitempty"`
+	InitiativeID    string `json:"initiativeId,omitempty"`
 	SourceMessageID string `json:"sourceMessageId,omitempty"`
 	Kind            string `json:"kind"`
 	Operation       string `json:"operation,omitempty"`
@@ -28,7 +29,7 @@ type chatNotificationJob struct {
 
 func chatEventKinds(event domain.DomainEvent) []string {
 	switch event.Type {
-	case "issue.created", "issue.status_changed", "issue.assignee_changed", "comment.created", "project.update_created":
+	case "issue.created", "issue.status_changed", "issue.assignee_changed", "comment.created", "project.update_created", "initiative.update_created":
 		return []string{event.Type}
 	case "issue.updated":
 		var before map[string]json.RawMessage
@@ -77,11 +78,11 @@ func (s *server) queueChatDomainEvent(ctx context.Context, workspace string, eve
 		}
 		if !resourceLoaded {
 			var ok bool
-			projectMetadata, ok = s.store.WorkspaceMetadataFields(workspace, "projects", "teams", "teamSettings", "issueTemplates", "workspaceSettings")
+			projectMetadata, ok = s.store.WorkspaceMetadataFields(workspace, "projects", "initiatives", "teams", "teamSettings", "issueTemplates", "workspaceSettings")
 			if !ok {
 				return chatInvalid("chat notification metadata unavailable")
 			}
-			if event.Type != "project.update_created" {
+			if event.Type != "project.update_created" && event.Type != "initiative.update_created" {
 				current, err := s.store.IssueRecord(ctx, workspace, event.AggregateID)
 				if errors.Is(err, sql.ErrNoRows) {
 					return nil
@@ -100,7 +101,10 @@ func (s *server) queueChatDomainEvent(ctx context.Context, workspace string, eve
 			if issue != nil && !chatIssueMatchesBinding(*issue, binding) {
 				continue
 			}
-			if issue == nil && !chatProjectMatchesBinding(projectMetadata, binding, event.AggregateID) {
+			if event.Type == "project.update_created" && !chatProjectMatchesBinding(projectMetadata, binding, event.AggregateID) {
+				continue
+			}
+			if event.Type == "initiative.update_created" && !chatInitiativeMatchesBinding(projectMetadata, binding, event.AggregateID) {
 				continue
 			}
 			for _, kind := range kinds {
@@ -113,6 +117,9 @@ func (s *server) queueChatDomainEvent(ctx context.Context, workspace string, eve
 				payload := chatNotificationJob{BindingID: binding.ID, BindingScope: chatBindingFingerprint(binding), IssueID: event.AggregateID, Kind: kind}
 				if kind == "project.update_created" {
 					payload.ProjectID, payload.IssueID = event.AggregateID, ""
+				}
+				if kind == "initiative.update_created" {
+					payload.InitiativeID, payload.IssueID = event.AggregateID, ""
 				}
 				key := chatKey(record.ConnectionID, binding.ID, event.ID, kind)
 				raw, _ := json.Marshal(payload)
@@ -142,6 +149,9 @@ func (s *server) processChatNotification(ctx context.Context, record domain.Chat
 	}
 	if payload.Kind == "project.update_created" {
 		return s.chatSendProjectUpdate(ctx, record, binding, job, payload.ProjectID)
+	}
+	if payload.Kind == "initiative.update_created" {
+		return s.chatSendInitiativeUpdate(ctx, record, binding, job, payload.InitiativeID)
 	}
 	issue, err := s.store.IssueRecord(ctx, record.WorkspaceKey, payload.IssueID)
 	if err != nil {
@@ -225,6 +235,51 @@ func chatProjectMatchesBinding(data domain.Bootstrap, binding domain.ChatBinding
 		return true
 	}
 	return false
+}
+
+// chatInitiativeMatchesBinding: an initiative update reaches the groups of the
+// initiative's lead team, when every contributing team may be shared with them.
+// Workspace-level initiatives (no lead team) have no team group.
+func chatInitiativeMatchesBinding(data domain.Bootstrap, binding domain.ChatBinding, initiativeID string) bool {
+	if data.WorkspaceSettings.HIPAACompliance || binding.ProjectID != "" {
+		return false
+	}
+	for _, initiative := range data.Initiatives {
+		if initiative.ID != initiativeID || initiative.LeadTeamID == "" || initiative.LeadTeamID != binding.TeamID {
+			continue
+		}
+		for _, teamID := range initiative.ContributingTeamIDs {
+			if !chatTeamShareable(data, binding, teamID) {
+				return false
+			}
+		}
+		return chatTeamShareable(data, binding, initiative.LeadTeamID)
+	}
+	return false
+}
+
+func (s *server) chatSendInitiativeUpdate(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, job domain.ChatJob, initiativeID string) error {
+	data, ok := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "initiatives", "teams", "teamSettings", "workspaceSettings")
+	if !ok {
+		return chatInvalid("initiative metadata unavailable")
+	}
+	if !chatInitiativeMatchesBinding(data, binding, initiativeID) {
+		return nil
+	}
+	for _, initiative := range data.Initiatives {
+		if initiative.ID != initiativeID {
+			continue
+		}
+		slug := initiative.SlugID
+		if slug == "" {
+			slug = initiative.ID
+		}
+		link := fmt.Sprintf("%s/%s/initiative/%s/overview", s.chatAppOrigin(), url.PathEscape(record.WorkspaceKey), url.PathEscape(slug))
+		card := chatCard("Initiative update", chatCardText(initiative.Name), map[string]any{"tag": "action", "actions": []map[string]any{{"tag": "button", "text": chatPlain("Open in Flow"), "url": link}}})
+		content, _ := json.Marshal(card)
+		return s.chatWorkflowRequest(ctx, record, http.MethodPost, "/open-apis/im/v1/messages?receive_id_type=chat_id", map[string]any{"receive_id": binding.ChatID, "msg_type": "interactive", "content": string(content), "uuid": chatKey(job.DedupKey, "initiative")[:32]}, nil)
+	}
+	return nil
 }
 
 func chatNotificationLabel(kind string) string {
