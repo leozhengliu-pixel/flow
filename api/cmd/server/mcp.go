@@ -28,6 +28,8 @@ type flowMCPTool struct {
 	Description string          `json:"description"`
 	InputSchema json.RawMessage `json:"input_schema"`
 	validator   *jsonschema.Resolved
+	// scalars are the top-level arguments typed only integer, number or boolean (normalizeFlowToolArgs).
+	scalars map[string]string
 }
 
 type mcpRPCRequest struct {
@@ -60,32 +62,7 @@ type mcpActor struct {
 }
 
 func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
-	var tools []flowMCPTool
-	if err := json.Unmarshal(flowMCPToolInventory, &tools); err != nil {
-		panic(fmt.Sprintf("parse Flow MCP tool inventory: %v", err))
-	}
-	for index := range tools {
-		tools[index].Name = strings.TrimPrefix(tools[index].Name, "mcp__flow.")
-		var raw map[string]any
-		if err := json.Unmarshal(tools[index].InputSchema, &raw); err != nil {
-			panic(err)
-		}
-		raw["additionalProperties"] = false
-		if mcpBatchDeleteTools()[tools[index].Name] {
-			mcpBatchDeleteSchema(raw)
-			tools[index].Description += " To delete several items in one call, pass `ids` instead of `id`."
-		}
-		tools[index].InputSchema, _ = json.Marshal(raw)
-		var schema jsonschema.Schema
-		if err := json.Unmarshal(tools[index].InputSchema, &schema); err != nil {
-			panic(err)
-		}
-		resolved, err := schema.Resolve(nil)
-		if err != nil {
-			panic(fmt.Sprintf("invalid MCP schema %s: %v", tools[index].Name, err))
-		}
-		tools[index].validator = resolved
-	}
+	tools := flowToolContract()
 	return func(w http.ResponseWriter, r *http.Request) {
 		actor, ok := s.authenticateMCP(w, r)
 		if !ok {
@@ -191,8 +168,8 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 				s.writeMCPToolResult(w, request.ID, nil, fmt.Errorf("write scope is required"))
 				return
 			}
-			if err := tool.validator.Validate(params.Arguments); err != nil {
-				s.writeMCPToolResult(w, request.ID, nil, mcpInvalidArguments(tool, params.Arguments, err))
+			if err := checkFlowToolArgs(tool, params.Arguments); err != nil {
+				s.writeMCPToolResult(w, request.ID, nil, err)
 				return
 			}
 			ctx := context.WithValue(r.Context(), authUserContextKey{}, actor.User)
@@ -478,8 +455,8 @@ func (s *server) callMCPRunTool(w http.ResponseWriter, r *http.Request, id any, 
 		s.writeMCPToolResult(w, id, nil, fmt.Errorf("%s is not available to this agent run", tool.Name))
 		return
 	}
-	if err := tool.validator.Validate(args); err != nil {
-		s.writeMCPToolResult(w, id, nil, mcpInvalidArguments(tool, args, err))
+	if err := checkFlowToolArgs(tool, args); err != nil {
+		s.writeMCPToolResult(w, id, nil, err)
 		return
 	}
 	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
