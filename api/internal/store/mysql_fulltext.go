@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // The search indexes are rebuilt once without stopwords. Versions in the
@@ -77,6 +79,95 @@ func (s *SQLiteStore) ensureMySQLNgramIndex(ctx context.Context, table, index st
 		return err
 	}
 	return nil
+}
+
+// InnoDB refuses a full-text phrase of more than 128 tokens with Error 191
+// "Too many words in a FTS phrase or proximity search"; with the ngram parser
+// a CJK run of n characters is n-1 tokens, so a 130-character title is
+// already too long. A phrase here holds at most mysqlPhraseMaxRunes
+// characters that are not spaces (an upper bound on its tokens for every
+// ngram_token_size), and a longer text is searched as at most
+// mysqlPhraseMaxParts such phrases that must all match.
+const (
+	mysqlPhraseMaxRunes = 64
+	mysqlPhraseMaxParts = 16
+)
+
+// mysqlBooleanPhrase is the BOOLEAN MODE query that finds text: the quoted
+// phrase when it fits, otherwise its first mysqlPhraseMaxParts distinct
+// pieces, cut at spaces where it can and inside long words (a CJK run)
+// where it must, each required (+"…" +"…"). Every row holding the whole text
+// still matches; the pieces need not be adjacent.
+func mysqlBooleanPhrase(text string) string {
+	text = strings.TrimSpace(strings.ReplaceAll(text, "\"", " "))
+	parts := mysqlPhraseParts(text)
+	if len(parts) == 1 {
+		return "\"" + parts[0] + "\""
+	}
+	quoted := make([]string, len(parts))
+	for index, part := range parts {
+		quoted[index] = "+\"" + part + "\""
+	}
+	return strings.Join(quoted, " ")
+}
+
+// mysqlPhraseParts splits text into distinct pieces of at most
+// mysqlPhraseMaxRunes non-space characters (at most mysqlPhraseMaxParts of
+// them); a text that fits is one piece, unchanged.
+func mysqlPhraseParts(text string) []string {
+	words := strings.Fields(text)
+	total := 0
+	for _, word := range words {
+		total += utf8.RuneCountInString(word)
+	}
+	if total <= mysqlPhraseMaxRunes {
+		return []string{text}
+	}
+	parts := []string{}
+	var current []string
+	size := 0
+	flush := func() {
+		if len(current) == 0 {
+			return
+		}
+		part := strings.Join(current, " ")
+		current, size = nil, 0
+		if !slices.Contains(parts, part) {
+			parts = append(parts, part)
+		}
+	}
+	for _, word := range words {
+		runes := []rune(word)
+		for len(runes) > 0 && len(parts) < mysqlPhraseMaxParts {
+			room := mysqlPhraseMaxRunes - size
+			if len(runes) <= room {
+				current, size = append(current, string(runes)), size+len(runes)
+				break
+			}
+			if size > 0 && len(runes) <= mysqlPhraseMaxRunes {
+				// The word fits a piece of its own.
+				flush()
+				continue
+			}
+			// A word longer than a piece (a CJK run) fills this one.
+			current = append(current, string(runes[:room]))
+			runes = runes[room:]
+			size = mysqlPhraseMaxRunes
+			flush()
+		}
+		if len(parts) >= mysqlPhraseMaxParts {
+			break
+		}
+	}
+	if len(parts) < mysqlPhraseMaxParts {
+		flush()
+	}
+	// A last piece of one character is shorter than an ngram token and
+	// could match nothing; it is dropped (the pieces before it remain).
+	if last := parts[len(parts)-1]; len(parts) > 1 && utf8.RuneCountInString(strings.ReplaceAll(last, " ", "")) < 2 {
+		parts = parts[:len(parts)-1]
+	}
+	return parts
 }
 
 func isMissingIndex(err error) bool {

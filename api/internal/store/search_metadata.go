@@ -230,7 +230,7 @@ func (s *SQLiteStore) metadataTermSelection(term string) (string, string) {
 	}
 	if s.dialect == "mysql" && utf8.RuneCountInString(term) >= 2 {
 		selection = "SELECT s.record_key FROM metadata_search_documents s WHERE s.workspace_key=? AND s.field=? AND MATCH(s.content) AGAINST (? IN BOOLEAN MODE)"
-		value = "\"" + strings.ReplaceAll(term, "\"", " ") + "\""
+		value = mysqlBooleanPhrase(term)
 	}
 	if s.dialect == "postgres" {
 		selection = "SELECT s.record_key FROM metadata_search_documents s WHERE s.workspace_key=? AND s.field=? AND s.content ILIKE ? ESCAPE '!'"

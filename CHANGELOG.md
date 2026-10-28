@@ -130,6 +130,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- On MySQL, a long issue title (more than about 128 characters of CJK text,
+  or a long English title) no longer fails the full-text search with Error
+  191 "Too many words in a FTS phrase", which left triage suggestions,
+  similar-issue lookups and search empty for that issue. A long query is
+  searched as at most 16 required pieces of at most 64 characters each.
 - 4xx responses, MCP tool errors and collaboration socket errors no longer
   carry raw database or object-storage text. Store errors keep their driver
   type through every wrap, object-storage (S3 and local file) errors are

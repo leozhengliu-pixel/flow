@@ -148,7 +148,7 @@ func (s *SQLiteStore) issueTextSelection(workspace, term string) (string, []any)
 	}
 	if s.dialect == "mysql" && utf8.RuneCountInString(term) >= 2 {
 		match = "MATCH(s.content) AGAINST (? IN BOOLEAN MODE)"
-		value = "\"" + strings.ReplaceAll(term, "\"", " ") + "\""
+		value = mysqlBooleanPhrase(term)
 	}
 	if s.dialect == "postgres" {
 		match = "s.content ILIKE ? ESCAPE '!'"
