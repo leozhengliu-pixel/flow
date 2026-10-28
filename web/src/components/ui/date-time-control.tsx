@@ -14,6 +14,7 @@ export function DateTimeControl({
   format,
   label,
   locale,
+  max,
   min,
   mode = 'date',
   onChange,
@@ -24,6 +25,8 @@ export function DateTimeControl({
   format?: (value: string) => string
   label: string
   locale?: AppLocale
+  /** Last selectable day (YYYY-MM-DD…), inclusive. */
+  max?: string
   min?: string
   mode?: Mode
   onChange: (value: string) => void
@@ -70,7 +73,7 @@ export function DateTimeControl({
         <div className="date-time-grid">{days.map(day => {
           const iso = formatDate(day)
           const outside = day.getMonth() !== view.getMonth()
-          const disabled = Boolean(min && iso < min.slice(0, 10))
+          const disabled = Boolean(min && iso < min.slice(0, 10) || max && iso > max.slice(0, 10))
           return <button aria-label={day.toLocaleDateString(locale)} data-outside={outside || undefined} data-selected={iso === draftDate || undefined} disabled={disabled} key={iso} onClick={() => choose(iso)}>{day.getDate()}</button>
         })}</div>
         {mode === 'datetime' && <footer><TimeControl label={t('Time')} value={draftTime} onChange={setDraftTime}/><button className="date-time-apply" disabled={!draftDate} onClick={apply}>{t('Apply')}</button></footer>}

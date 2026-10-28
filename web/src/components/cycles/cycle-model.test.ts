@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Cycle, Issue } from '@/types/flow'
-import { cooldownWeeksBetween, cycleListOrder, cycleStats, cycleStatusLabel, formatCycleDay, formatCycleRange, weekdaysLeft } from './cycle-model'
+import { canStartCycleToday, cooldownWeeksBetween, cycleDateBounds, cycleDateMoveAffects, cycleListOrder, cycleNeighbors, cycleStats, cycleStatusLabel, formatCycleDay, formatCycleRange, weekdaysLeft } from './cycle-model'
 
 const cycle = {
   id: 'cycle-1', name: 'Cycle 1', number: 1, capacity: 4, status: 'current',
@@ -50,6 +50,16 @@ describe('cycle model', () => {
     expect(cooldownWeeksBetween({ endsAt: '2026-10-27T00:00:00Z' }, { startsAt: '2026-10-27T00:00:00Z' })).toBe(0)
   })
 
+  it('counts cooldown weeks as Sunday-to-Saturday calendar weeks, like the reference cycles list', () => {
+    const weeks = (lastDay: string, nextStart: string) => cooldownWeeksBetween({ endsAt: `${lastDay}T00:00:00Z` }, { startsAt: `${nextStart}T00:00:00Z` })
+    expect(weeks('2026-11-15', '2026-11-30')).toBe(2) // 14 days, Monday to Monday
+    expect(weeks('2026-10-29', '2026-11-30')).toBe(5) // 31 days, Friday to Monday
+    expect(weeks('2026-11-29', '2026-12-07')).toBe(1) // 7 days
+    expect(weeks('2026-11-29', '2026-12-09')).toBe(1) // 9 days, Monday to Wednesday
+    expect(weeks('2026-11-29', '2026-12-06')).toBe(1) // 6 days, Monday to Sunday
+    expect(weeks('2026-11-15', '2026-12-06')).toBe(3) // 20 days, Monday to Sunday
+  })
+
   it('lists the latest start first and a later cycle above one completed on its start day', () => {
     const order = cycleListOrder([
       { id: 'c1', number: 1, startsAt: '2026-10-27T00:00:00Z' },
@@ -57,6 +67,43 @@ describe('cycle model', () => {
       { id: 'c2', number: 2, startsAt: '2026-10-27T00:00:00Z' },
     ])
     expect(order.map(item => item.id)).toEqual(['c3', 'c2', 'c1'])
+  })
+
+  describe('date moves', () => {
+    const scheduled = (id: string, number: number, status: Cycle['status'], start: string, end: string) => ({ id, number, status, startsAt: `${start}T00:00:00Z`, endsAt: `${end}T00:00:00Z` })
+    const c1 = scheduled('c1', 1, 'current', '2026-10-28', '2026-11-15')
+    const c2 = scheduled('c2', 2, 'upcoming', '2026-11-30', '2026-12-13')
+    const c3 = scheduled('c3', 3, 'upcoming', '2026-12-28', '2027-01-10')
+    const cycles = [c3, c1, c2]
+
+    it('finds the neighbouring cycles', () => {
+      expect(cycleNeighbors(cycles, c2)).toEqual({ previous: c1, next: c3 })
+      expect(cycleNeighbors(cycles, c1)).toEqual({ previous: undefined, next: c2 })
+    })
+
+    it('offers "Start cycle today" on the next upcoming cycle only while no cycle is current', () => {
+      expect(canStartCycleToday(cycles, c2)).toBe(false)
+      const cooldown = [{ ...c1, status: 'completed' as const }, c2, c3]
+      expect(canStartCycleToday(cooldown, c2)).toBe(true)
+      expect(canStartCycleToday(cooldown, c3)).toBe(false)
+    })
+
+    it('limits a moved end to two days and to before the next cycle\'s last day', () => {
+      expect(cycleDateBounds(cycles, c1, 'end', '2026-10-28')).toEqual({ min: '2026-10-29', max: '2026-12-12' })
+      expect(cycleDateBounds(cycles, c3, 'end', '2026-10-28')).toEqual({ min: '2026-12-29', max: undefined })
+    })
+
+    it('limits a moved start to two days of the previous cycle and to today', () => {
+      expect(cycleDateBounds(cycles, c2, 'start', '2026-10-28')).toEqual({ min: '2026-10-30', max: undefined })
+      expect(cycleDateBounds([{ ...c1, status: 'completed' as const }, c2], c2, 'start', '2026-10-28')).toEqual({ min: '2026-11-16', max: undefined })
+    })
+
+    it('names the neighbour a move pushes', () => {
+      expect(cycleDateMoveAffects(cycles, c1, 'end', '2026-11-29')).toBeUndefined()
+      expect(cycleDateMoveAffects(cycles, c1, 'end', '2026-12-04')).toBe(c2)
+      expect(cycleDateMoveAffects(cycles, c2, 'start', '2026-11-16')).toBeUndefined()
+      expect(cycleDateMoveAffects(cycles, c2, 'start', '2026-11-15')).toBe(c1)
+    })
   })
 
   it('formats dates and status labels consistently', () => {

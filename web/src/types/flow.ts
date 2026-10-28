@@ -484,6 +484,8 @@ export interface CycleMutationInput {
   description?: string;
   startsAt?: string;
   endsAt?: string;
+  /** With startsAt on an upcoming cycle: keep its length and move every later upcoming cycle by the same days. */
+  shiftFollowing?: boolean;
   /** Capacity override; null returns the cycle to the automatic capacity. */
   capacity?: number | null;
   capacityByMember?: Record<UUID, Record<string, number>>;

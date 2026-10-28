@@ -21,7 +21,7 @@ const cycle2 = cycle('c2', 2, '2026-11-30T00:00:00Z', '2026-12-13T00:00:00Z')
 const issues = [makeIssue({ id: 'a', estimate: 3, cycleId: 'c1', assignee: undefined }), makeIssue({ id: 'b', estimate: 5, cycleId: 'c1', assignee: undefined })]
 
 function page(estimateSettings?: TeamSettings) {
-  return render(<I18nProvider><CyclesPage cycles={[cycle1, cycle2]} issues={issues} team={team} estimateSettings={estimateSettings} settings={{ enabled: true, durationWeeks: 2, cooldownWeeks: 2, upcomingCount: 2 }} onOpen={vi.fn()} onUpdateCycle={vi.fn()} onStartCycle={vi.fn()} onCompleteCycle={vi.fn()} onUpdateSettings={vi.fn()} onReload={vi.fn()} onOpenSidebar={vi.fn()}/></I18nProvider>)
+  return render(<I18nProvider><CyclesPage cycles={[cycle1, cycle2]} issues={issues} team={team} estimateSettings={estimateSettings} settings={{ enabled: true, durationWeeks: 2, cooldownWeeks: 2, upcomingCount: 2 }} onOpen={vi.fn()} onUpdateCycle={vi.fn()} onStartCycle={vi.fn()} onUpdateSettings={vi.fn()} onReload={vi.fn()} onOpenSidebar={vi.fn()}/></I18nProvider>)
 }
 
 describe('cycle capacity and scope', () => {
@@ -75,7 +75,7 @@ describe('cycle capacity and scope', () => {
     try {
       const current = { ...cycle1, status: 'current' as const }
       const metrics = (settings: TeamSettings) => {
-        const { container, unmount } = render(<I18nProvider><CyclesPage cycles={[current]} issues={issues} team={team} estimateSettings={settings} settings={{ enabled: true, durationWeeks: 2, cooldownWeeks: 0, upcomingCount: 2 }} onOpen={vi.fn()} onUpdateCycle={vi.fn()} onStartCycle={vi.fn()} onCompleteCycle={vi.fn()} onUpdateSettings={vi.fn()} onReload={vi.fn()} onOpenSidebar={vi.fn()}/></I18nProvider>)
+        const { container, unmount } = render(<I18nProvider><CyclesPage cycles={[current]} issues={issues} team={team} estimateSettings={settings} settings={{ enabled: true, durationWeeks: 2, cooldownWeeks: 0, upcomingCount: 2 }} onOpen={vi.fn()} onUpdateCycle={vi.fn()} onStartCycle={vi.fn()} onUpdateSettings={vi.fn()} onReload={vi.fn()} onOpenSidebar={vi.fn()}/></I18nProvider>)
         const values = [...container.querySelectorAll('.flow-cycle-current-metrics > span')].map(item => `${item.querySelector('small')?.textContent}=${item.querySelector('strong')?.textContent}${item.querySelector('em')?.textContent ?? ''}`)
         unmount()
         return values

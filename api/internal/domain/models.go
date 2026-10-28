@@ -3061,6 +3061,10 @@ type CycleMutationInput struct {
 	Description *string `json:"description,omitempty"`
 	StartsAt    *string `json:"startsAt,omitempty"`
 	EndsAt      *string `json:"endsAt,omitempty"`
+	// ShiftFollowing moves an upcoming cycle's start with its length kept and
+	// moves every later upcoming cycle by the same number of days. Without it
+	// only the start moves and the end stays.
+	ShiftFollowing *bool `json:"shiftFollowing,omitempty"`
 	// Capacity sets the cycle's capacity override; null or 0 returns it to
 	// the automatic capacity.
 	Capacity         OptionalInt               `json:"capacity,omitzero"`

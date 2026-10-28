@@ -88,16 +88,74 @@ export function cycleListOrder<T extends Pick<Cycle, 'startsAt' | 'number'>>(cyc
   return [...cycles].sort((a, b) => b.startsAt.slice(0, 10).localeCompare(a.startsAt.slice(0, 10)) || b.number - a.number)
 }
 
+const DAY = 86_400_000
+
 /**
- * Whole weeks of cooldown between a cycle and the next one (0 when they are
- * back to back). Cycle dates are inclusive calendar days.
+ * The cooldown row between a cycle and the next one, in weeks (0: no row). It counts the
+ * Sunday-to-Saturday calendar weeks from the day after the earlier cycle's last day to the
+ * later cycle's first day, so 6 days from a Monday to a Sunday is 1 week and 31 days from a
+ * Friday to a Monday is 5. Cycle dates are inclusive calendar days.
  */
 export function cooldownWeeksBetween(earlier: Pick<Cycle, 'endsAt'>, later: Pick<Cycle, 'startsAt'>) {
-  const day = 86_400_000
   const end = Date.parse(earlier.endsAt.slice(0, 10)), start = Date.parse(later.startsAt.slice(0, 10))
   if (!Number.isFinite(end) || !Number.isFinite(start)) return 0
-  const gapDays = Math.round((start - end) / day) - 1
-  return gapDays >= 7 ? Math.round(gapDays / 7) : 0
+  const after = end + DAY
+  if (start <= after) return 0
+  const sunday = (time: number) => time - new Date(time).getUTCDay() * DAY
+  return Math.round((sunday(start) - sunday(after)) / (7 * DAY))
+}
+
+/** An ISO calendar day (YYYY-MM-DD) moved by a number of days. */
+export function addCycleDays(value: string, days: number) {
+  return new Date(Date.parse(value.slice(0, 10)) + days * DAY).toISOString().slice(0, 10)
+}
+
+/** Today as a cycle day: the server dates cycles in UTC days. */
+export function cycleToday(now = new Date()) {
+  return now.toISOString().slice(0, 10)
+}
+
+type ScheduledCycle = Pick<Cycle, 'id' | 'number' | 'status' | 'startsAt' | 'endsAt'>
+
+/** The team's cycles just before and just after a cycle (by start day, then number). */
+export function cycleNeighbors<T extends ScheduledCycle>(cycles: T[], cycle: ScheduledCycle) {
+  const ordered = [...cycles].sort((a, b) => a.startsAt.slice(0, 10).localeCompare(b.startsAt.slice(0, 10)) || a.number - b.number)
+  const index = ordered.findIndex(item => item.id === cycle.id)
+  return { previous: index > 0 ? ordered[index - 1] : undefined, next: index >= 0 ? ordered[index + 1] : undefined }
+}
+
+/** "Start cycle today…" is offered on the team's next upcoming cycle while no cycle is current. */
+export function canStartCycleToday(cycles: ScheduledCycle[], cycle: ScheduledCycle) {
+  if (cycle.status !== 'upcoming' || cycles.some(item => item.status === 'current')) return false
+  const next = cycles.filter(item => item.status === 'upcoming').sort((a, b) => a.startsAt.localeCompare(b.startsAt) || a.number - b.number)[0]
+  return next?.id === cycle.id
+}
+
+/**
+ * The days a cycle's start or end can move to (inclusive ISO days; max undefined: no limit).
+ * The cycle keeps at least two days; the next cycle keeps its last day; the previous cycle keeps
+ * two days; nothing starts before today and the current cycle does not end before today. Mirrors
+ * api/cmd/server/cycle_dates.go.
+ */
+export function cycleDateBounds(cycles: ScheduledCycle[], cycle: ScheduledCycle, mode: 'start' | 'end', today = cycleToday()) {
+  const { previous, next } = cycleNeighbors(cycles, cycle)
+  const later = (a: string, b: string) => a > b ? a : b
+  if (mode === 'end') {
+    let min = addCycleDays(cycle.startsAt, 1)
+    if (cycle.status === 'current') min = later(min, today)
+    const max = next && next.status !== 'completed' ? addCycleDays(next.endsAt, -1) : undefined
+    return { min, max }
+  }
+  let min = today
+  if (previous) min = later(min, previous.status === 'completed' ? addCycleDays(previous.endsAt, 1) : addCycleDays(previous.startsAt, 2))
+  return { min, max: undefined }
+}
+
+/** The neighbour a date move also changes: the next cycle's start, or the previous cycle's end. */
+export function cycleDateMoveAffects<T extends ScheduledCycle>(cycles: T[], cycle: ScheduledCycle, mode: 'start' | 'end', value: string): T | undefined {
+  const { previous, next } = cycleNeighbors(cycles, cycle)
+  if (mode === 'end') return next && next.status !== 'completed' && value >= next.startsAt.slice(0, 10) ? next : undefined
+  return previous && previous.status !== 'completed' && value <= previous.endsAt.slice(0, 10) ? previous : undefined
 }
 
 export function cycleStatusLabel(status: Cycle['status']) {
