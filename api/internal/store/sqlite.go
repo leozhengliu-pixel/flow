@@ -397,6 +397,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 			return s.createChatMutationReceiptsSchema(ctx)
 		}},
 		{version: 16, name: "large event and identity values", apply: s.widenLargeValueColumns},
+		{version: 17, name: "wider issue attribute fields", apply: s.widenKeyColumns},
 		// Versions from 1000 up are data migrations (runDataMigrations),
 		// which run after the workspaces are loaded.
 	}

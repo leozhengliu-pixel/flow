@@ -474,8 +474,12 @@ func (s *SQLiteStore) loadScopedIssues(ctx context.Context, tx *sqlTx, workspace
 			return nil, nil, fmt.Errorf("unsupported scoped issue attribute %q", attribute.Column)
 		}
 		if err := chunks(attribute.Values, func(values []string) error {
-			clause, args := bindList("value", values)
-			return collect(&filtered, `SELECT issue_id FROM issue_attribute_records WHERE workspace_key=? AND field=? AND `+clause, append([]any{workspace, attribute.Column}, args...)...)
+			keys := make([]string, len(values))
+			for i, value := range values {
+				keys[i] = indexKey(value)
+			}
+			clause, args := bindList("value", keys)
+			return collect(&filtered, `SELECT issue_id FROM issue_attribute_records WHERE workspace_key=? AND field=? AND `+clause, append([]any{workspace, indexKey(attribute.Column)}, args...)...)
 		}); err != nil {
 			return nil, nil, err
 		}
