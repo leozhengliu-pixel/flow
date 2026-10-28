@@ -30,7 +30,7 @@ export function IssueAssigneeProperty({ issue, users, teamId, workspaceKey, allo
   const entering = useEnteringDelegate(delegate?.id)
   return <div className="issue-assignee-group">
     <div className="issue-assignee-property">
-      <AssigneePicker delegateRow value={assignee} delegate={delegate} delegateSessionActive={ACTIVE_SESSION_STATES.has(issue.agentSessionState)} allowAgents={allowAgents} users={users} teamId={teamId} hoverContext={hoverContext} onChange={assigneeId => onUpdate({ assigneeId })} onDelegate={delegateId => onUpdate({ delegateId })}/>
+      <AssigneePicker delegateRow value={assignee} delegate={delegate} delegateSessionActive={ACTIVE_SESSION_STATES.has(issue.agentSessionState)} allowAgents={allowAgents} users={users} teamId={teamId} hoverContext={hoverContext} onChange={assigneeId => onUpdate({ assigneeId })} onDelegate={delegateId => onUpdate({ delegateId })} onRemoveAgent={() => onUpdate({ delegateId: '', promptArchive: true })}/>
       {assignee && <a className="issue-assignee-profile" href={`/${workspaceKey}/members`} aria-label={t('Go to user')}><ChevronRight size={15}/></a>}
     </div>
     {delegate && <div className="issue-delegate-row" data-entering={entering || undefined}>

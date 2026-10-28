@@ -1,0 +1,79 @@
+/* An issue's assignee menu (IssueAssigneeMenu): the issue sidebar, compact pickers, list rows and board cards. */
+
+/* The delegated agent sits under the assignee, avatar 24px in, on a NestingLine
+   (the reference app: icon wrapper flex + relative, line left 7px / top -8px / 9px stem). */
+.core-nested-delegate-icon {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+.core-nested-delegate-icon > .avatar {
+  margin-left: 24px;
+}
+.core-nested-delegate-line {
+  top: -8px;
+  left: 7px;
+}
+/* The nested row's icon cell grows past 16px so the 24px indent pushes the name right. A person-avatar wrapper
+   (`span[aria-hidden]`) is pinned to 16px by picker-parity.css, so the override names the same element and adds
+   `:has()` to outrank it: a 16px wrapper centred in the 40px cell let the 40px nest overflow 12px to the right,
+   detaching the curve from the assignee's avatar and drawing the agent's avatar over its name. */
+html:root body .property-command-surface .property-command-icon:has(.core-nested-delegate-icon),
+html:root body .property-command-surface .property-command-icon > span[aria-hidden]:has(> .core-nested-delegate-icon) {
+  width: auto;
+  flex: none;
+  justify-self: start;
+}
+html:root body .property-command-surface:not(.property-command-labels):not(.property-command-project):not(.property-command-milestone):not(.property-command-project-labels) .property-command-options [role=option]:not(:has(.property-command-checkbox)):has(.core-nested-delegate-icon) {
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+}
+
+/* "<agent> [Agent]": the name, then the reference app's pill 8px after it (44x16, 0.5px pill border, 6px radius,
+   500 11px/16px in the muted text colour). */
+.core-delegate-row-label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+.core-delegate-row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.core-delegate-row-pill {
+  box-sizing: border-box;
+  display: inline-flex;
+  height: 16px;
+  flex: none;
+  align-items: center;
+  padding: 0 6px;
+  border: .5px solid var(--pk-pill-border);
+  border-radius: 6px;
+  color: var(--pk-muted);
+  font: 500 11px/16px var(--font);
+}
+/* The submenu caret: a 6px ▶ centred in a 16px cell at the row's right edge, in the faint text colour. */
+html:root body .property-command-surface .property-command-options [role=option].has-submenu > .property-command-submenu-caret {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  justify-self: end;
+  color: var(--pk-faint);
+  font: 450 6px/1 var(--font);
+}
+
+/* The agent submenu: 176px, overlapping the menu's right edge, its first row level with the agent row. */
+html:root body .property-command-surface.property-command-bare-submenu.core-agent-submenu:not(#_) {
+  box-sizing: border-box;
+  z-index: 1001;
+  width: 176px;
+  min-width: 176px;
+  max-width: calc(100vw - 20px);
+}
+html:root body .property-command-surface.property-command-bare-submenu:not(#_) .property-command-options {
+  outline: none;
+}

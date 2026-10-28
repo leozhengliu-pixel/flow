@@ -87,16 +87,45 @@ describe('issue sidebar assignee + delegate (the reference app IssueDetailsPaneS
     expect(onUpdate).toHaveBeenCalledWith({ delegateId: coder.id })
   })
 
-  it('nests the delegated agent under the assignee in the assignee menu', async () => {
+  it('nests the delegated agent under the assignee as "<agent> [Agent] ▶" with no check or key', async () => {
     const user = userEvent.setup()
     mount({ assignee: viewer, delegate: flow })
     await user.click(assigneeTrigger())
     const listbox = await screen.findByRole('listbox', { name: 'Assignee' })
-    const labels = within(listbox).getAllByRole('option').map(option => option.querySelector('.property-command-label')?.textContent)
-    expect(labels.indexOf('Flow')).toBe(labels.indexOf(viewer.displayName) + 1)
-    const nested = within(listbox).getByRole('option', { name: /^Flow/ })
+    const rows = within(listbox).getAllByRole('option')
+    // The other agents leave the list while the issue is delegated (they are in the agent submenu).
+    expect(rows.map(row => (row.querySelector('.core-delegate-row-name') ?? row.querySelector('.property-command-label'))?.textContent)).toEqual(['No assignee', viewer.displayName, 'Flow', teammate.displayName, 'Invite and assign…'])
+    expect(rows.map(row => row.querySelector('kbd')?.textContent ?? '')).toEqual(['0', '1', '', '', ''])
+    expect(rows.map(row => row.getAttribute('aria-checked'))).toEqual(['false', 'true', 'false', 'false', 'false'])
+    const nested = rows[2]
     expect(nested.querySelector('.core-nested-delegate-icon [data-nesting-line]')).not.toBeNull()
-    expect(nested).toHaveAttribute('aria-selected')
+    expect(nested.querySelector('.core-delegate-row-pill')).toHaveTextContent('Agent')
+    expect(nested.querySelector('.property-command-submenu-caret')).toHaveTextContent('▶')
+    expect(nested.querySelector('.property-command-check')).toBeNull()
+    expect(nested).toHaveAttribute('aria-haspopup', 'listbox')
+    expect(screen.getByText('Team members')).toBeInTheDocument()
+    expect(screen.queryByText('Other agents')).not.toBeInTheDocument()
+  })
+
+  it("the agent row's submenu lists No agent, the delegate (checked) and the other agents, and re-delegates or removes", async () => {
+    const user = userEvent.setup()
+    const { onUpdate } = mount({ assignee: viewer, delegate: flow })
+    await user.click(assigneeTrigger())
+    await user.click(await screen.findByRole('option', { name: /^Flow/ }))
+    const submenu = await screen.findByRole('listbox', { name: 'Agent' })
+    expect(submenu.closest('.property-command-surface')).toHaveClass('core-agent-submenu')
+    expect(screen.queryByRole('textbox', { name: 'Delegate to…' })).toBeNull()
+    const rows = within(submenu).getAllByRole('option')
+    expect(rows.map(row => row.querySelector('.property-command-label')?.textContent)).toEqual(['No agent', 'Flow', 'Code Agent'])
+    expect(rows.map(row => row.getAttribute('aria-checked'))).toEqual(['false', 'true', 'false'])
+    expect(rows.every(row => !row.querySelector('kbd'))).toBe(true)
+    await user.click(rows[2])
+    expect(onUpdate).toHaveBeenLastCalledWith({ delegateId: coder.id })
+    await user.click(assigneeTrigger())
+    await user.click(await screen.findByRole('option', { name: /^Flow/ }))
+    await user.click(within(await screen.findByRole('listbox', { name: 'Agent' })).getByRole('option', { name: /No agent/ }))
+    // Like "No agent" on the delegate row: the wrapper offers to archive the agent's session.
+    expect(onUpdate).toHaveBeenLastCalledWith({ delegateId: '', promptArchive: true })
   })
 
   it('animates a delegate that arrives while open, not one present on mount', () => {
@@ -223,23 +252,39 @@ function selectorsSetting(css: string, declaration: RegExp) {
 }
 
 describe('assignee menu nested delegate row layout', () => {
-  it('lets the avatar wrapper of the nested agent grow past the 16px avatar slot (it overlapped the agent name)', async () => {
+  it('lets every box around the nested agent grow past the 16px avatar slot (it overlapped the agent name)', async () => {
     const user = userEvent.setup()
-    // The issue sidebar menu: the property menu wraps each person icon in span[aria-hidden], which picker-parity.css
-    // pins to 16px; the nested agent's wrapper must take its 40px (24px indent + avatar) or the avatar covers the name.
+    // picker-parity.css pins the icon cell and a person-avatar wrapper (span[aria-hidden]) to 16px; the nested
+    // agent needs 40px (24px indent + avatar), or the avatar covers the name and the curve leaves the assignee.
     mount({ assignee: viewer, delegate: coder })
     await user.click(assigneeTrigger())
     const listbox = await screen.findByRole('listbox', { name: 'Assignee' })
-    const wrapper = within(listbox).getByRole('option', { name: /Code Agent/ }).querySelector('.core-nested-delegate-icon')!.parentElement!
-    expect(wrapper.matches('.property-command-icon > span[aria-hidden]')).toBe(true)
+    const nest = within(listbox).getByRole('option', { name: /Code Agent/ }).querySelector('.core-nested-delegate-icon')!
     const parity = readFileSync('src/styles/picker-parity.css', 'utf8')
-    const own = readFileSync('src/components/issue/issue-assignee-property.css', 'utf8')
-    const pinned = selectorsSetting(parity, /(^|;|\s)width:\s*16px/).filter(selector => safeMatches(wrapper, selector))
-    const grown = selectorsSetting(own, /(^|;|\s)width:\s*auto/).filter(selector => safeMatches(wrapper, selector))
-    expect(pinned.length).toBeGreaterThan(0)
-    expect(grown.length).toBeGreaterThan(0)
-    const strongestGrown = grown.map(specificity).sort((a, b) => outranks(b, a))[0]
-    for (const selector of pinned) expect(outranks(strongestGrown, specificity(selector)), `${grown.join(', ')} must outrank ${selector}`).toBeGreaterThan(0)
+    const own = readFileSync('src/components/issue/issue-assignee-menu.css', 'utf8')
+    const boxes: Element[] = []
+    for (let box = nest.parentElement; box; box = box.parentElement) { boxes.push(box); if (box.classList.contains('property-command-icon')) break }
+    expect(boxes.at(-1)).toHaveClass('property-command-icon')
+    let checked = 0
+    for (const box of boxes) {
+      const pinned = selectorsSetting(parity, /(^|;|\s)width:\s*16px/).filter(selector => safeMatches(box, selector))
+      if (!pinned.length) continue
+      const grown = selectorsSetting(own, /(^|;|\s)width:\s*auto/).filter(selector => safeMatches(box, selector))
+      expect(grown.length, `nothing grows ${box.className || box.tagName}`).toBeGreaterThan(0)
+      const strongestGrown = grown.map(specificity).sort((a, b) => outranks(b, a))[0]
+      for (const selector of pinned) expect(outranks(strongestGrown, specificity(selector)), `${grown.join(', ')} must outrank ${selector}`).toBeGreaterThan(0)
+      checked++
+    }
+    expect(checked).toBeGreaterThan(0)
+  })
+
+  it('the agent pill and caret take the reference measurements', () => {
+    const css = readFileSync('src/components/issue/issue-assignee-menu.css', 'utf8')
+    const pill = css.match(/\.core-delegate-row-pill \{([^}]*)\}/)?.[1] ?? ''
+    for (const declaration of ['height: 16px', 'padding: 0 6px', 'border: .5px solid var(--pk-pill-border)', 'border-radius: 6px', 'color: var(--pk-muted)', 'font: 500 11px/16px var(--font)']) expect(pill).toContain(declaration)
+    const caret = css.match(/\.property-command-submenu-caret \{([^}]*)\}/)?.[1] ?? ''
+    for (const declaration of ['width: 16px', 'color: var(--pk-faint)', 'font: 450 6px/1 var(--font)']) expect(caret).toContain(declaration)
+    expect(css).toMatch(/\.core-agent-submenu:not\(#_\) \{[^}]*width: 176px/)
   })
 
   it('computes selector specificity like the browser', () => {

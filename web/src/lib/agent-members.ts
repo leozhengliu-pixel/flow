@@ -40,6 +40,42 @@ export function assigneeCandidates(users: User[], teamId?: string, { agents = tr
   return [...users.filter(user => !user.app), ...(agents ? users.filter(user => isAssignableAgent(user, teamId)) : [])]
 }
 
+/** How an issue's assignee menu arranges its people (see `assigneeMenuLayout`). */
+export interface AssigneeMenuLayout<T> {
+  /** Numbered after "No assignee" (keys 1-9): the assignee, the viewer and, with no delegate, the built-in agent. */
+  top: T[]
+  /** The delegated agent hangs under this top row (the assignee, else the viewer); undefined without a delegate. */
+  delegateAnchorId?: string
+  /** "Other agents": the agents left once the built-in one is on top; empty while the issue is delegated. */
+  otherAgents: T[]
+  /** "Team members": everyone else. */
+  members: T[]
+  /** Agents found only by searching (a delegated issue changes its agent from the delegate's submenu). */
+  searchOnly: T[]
+}
+
+/**
+ * The reference app's assignee menu for one issue. Not delegated: "No assignee", then the assignee, the viewer
+ * and the built-in agent (numbered), then "Other agents" and "Team members" (no keys). Delegated: the agents
+ * leave the list for the delegate's own row, which hangs under the assignee (or the viewer when nobody is
+ * assigned) and opens a submenu of agents.
+ */
+export function assigneeMenuLayout<T extends { id: string; app?: boolean; builtinAgent?: boolean }>(people: T[], { assigneeId, delegateId, viewerId }: { assigneeId?: string; delegateId?: string; viewerId?: string }): AssigneeMenuLayout<T> {
+  const humans = people.filter(person => !person.app)
+  const agents = people.filter(person => person.app && person.id !== delegateId)
+  const topHumans = [...new Set([assigneeId, viewerId])].flatMap(id => humans.filter(person => id && person.id === id))
+  const builtin = delegateId ? undefined : agents.find(person => person.builtinAgent)
+  const top = builtin ? [...topHumans, builtin] : topHumans
+  const onTop = new Set(top.map(person => person.id))
+  return {
+    top,
+    delegateAnchorId: delegateId ? topHumans[0]?.id : undefined,
+    otherAgents: delegateId ? [] : agents.filter(person => !onTop.has(person.id)),
+    members: humans.filter(person => !onTop.has(person.id)),
+    searchOnly: delegateId ? agents : [],
+  }
+}
+
 export type AgentSessionState = NonNullable<Issue['agentSessionState']>
 
 /**
