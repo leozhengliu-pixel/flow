@@ -9,6 +9,19 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- With `FLOW_AGENT_RUNTIME=worker`, Flow Agent chat replies run on the agent
+  worker (`agent-worker`) instead of inside the API. The reply is the same
+  chat message as before: saved while it is written (a reload or another tab
+  shows it streaming), with its tool calls, results and change cards, and
+  saved in its final form when the run ends. Tools set to always ask wait on
+  the reply for approval and the run continues once every call is answered;
+  questions with options end the reply as before; Stop ends the run, a
+  connector question waiting in it included. The reply keeps the tool budget
+  and the check that reported outcomes come from real tool results. A reply
+  whose worker stopped responding is restarted when nothing was written, and
+  otherwise shown as interrupted with Retry. Loop builder conversations and
+  chats with sent files still run in the API. The default
+  (`FLOW_AGENT_RUNTIME=inprocess`) is unchanged.
 - The workspace Invite dialog (Settings → Administration → Members → Invite)
   has an **Add to team** field for every role. Pick one or more teams (a
   searchable multi-select; optional for Members and Admins, required for
