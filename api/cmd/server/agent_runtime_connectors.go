@@ -267,7 +267,9 @@ func (s *server) callMCPRunConnector(w http.ResponseWriter, r *http.Request, id 
 	}
 	tool := tools[index]
 	if tool.needsApproval() && meta[agentRunApprovedMeta] != true {
-		fail(fmt.Errorf("%s: %s waits for the user's approval (its connection is set to always ask); it was not run", tool.Policy.label(), tool.RemoteName))
+		err := fmt.Errorf("%s: %s waits for the user's approval (its connection is set to always ask); it was not run", tool.Policy.label(), tool.RemoteName)
+		s.recordAgentRunConnectorWrite(r.Context(), grant.run, tool, args, agentWriteNotRun, err.Error())
+		fail(err)
 		return
 	}
 	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
@@ -305,6 +307,11 @@ func (s *server) callMCPRunConnector(w http.ResponseWriter, r *http.Request, id 
 	started := time.Now()
 	result, callErr := s.executeAgentTool(request.WithContext(ctx), data, call)
 	s.recordAgentRunConnectorOutcome(r.Context(), grant.run, name, args, callErr != nil)
+	if callErr != nil {
+		s.recordAgentRunConnectorWrite(r.Context(), grant.run, tool, args, agentWriteFailed, agentToolFailureText(result, callErr))
+	} else {
+		s.recordAgentRunConnectorWrite(r.Context(), grant.run, tool, args, agentWriteSucceeded, "")
+	}
 	s.auditAgentRunConnectorCall(grant, tool, result, callErr, time.Since(started))
 	metadata["result"] = connectorActionResult(result, callErr)
 	_ = appendActivity(domain.AgentActivity{Type: "action", Body: tool.RemoteName, Metadata: metadata})

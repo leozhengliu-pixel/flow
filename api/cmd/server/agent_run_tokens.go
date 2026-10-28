@@ -299,9 +299,12 @@ func (s *server) callAgentRunToolOnce(r *http.Request, grant *agentRunGrant, nam
 	}
 	call := domain.AgentToolCall{ID: "run_" + grant.run.ID, Name: name, Arguments: arguments}
 	raw, err := s.executeAgentToolRecordingChange(request, data, &call)
+	// The run's ledger: what the run's final answer may say it changed (agent_run_outcomes.go).
 	if err != nil {
+		s.recordAgentRunFlowWrite(request.Context(), grant.run, name, arguments, nil, agentWriteFailed, publicToolError(request.Context(), name, err).Error())
 		return nil, nil, err
 	}
+	s.recordAgentRunFlowWrite(request.Context(), grant.run, name, arguments, raw, agentWriteSucceeded, "")
 	var ref *agentRunChangeRef
 	if call.Change != nil {
 		seq, err := s.store.AppendAgentRunChange(request.Context(), grant.run, name, arguments, *call.Change)

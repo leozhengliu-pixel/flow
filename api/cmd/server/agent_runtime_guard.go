@@ -49,6 +49,9 @@ type workerRunGuardState struct {
 	Started       *workerRunCodingStart `json:"started,omitempty"`
 	// Finished is set once the worker asked for the run's last word: the completion check leaves the run alone.
 	Finished bool `json:"finished,omitempty"`
+	// OutcomeNudged is set once a last word that reported change outcomes no write produced was answered with the
+	// nudge (agent_run_outcomes.go).
+	OutcomeNudged bool `json:"outcomeNudged,omitempty"`
 }
 
 // workerRunCodingStart is a stored codingStartOutcome.
@@ -111,7 +114,9 @@ type workerRunGuardResponse struct {
 	Handled bool   `json:"handled,omitempty"`
 	Content string `json:"content,omitempty"`
 	Failed  bool   `json:"failed,omitempty"`
-	// finish: the reply to post (empty: keep the model's own), whether Flow started Coding, or the run's error.
+	// finish: the reply to post (empty: keep the model's own), whether Flow started Coding, or the run's error. A
+	// finish answered with Nudge (and nothing else) is not the last word: the worker sends the nudge to the model as
+	// the person's message, once, and asks for the last word again with the new answer.
 	Reply       string `json:"reply,omitempty"`
 	Transferred bool   `json:"transferred,omitempty"`
 	Error       string `json:"error,omitempty"`
@@ -194,6 +199,9 @@ func (s *server) workerRunGuardOp(r *http.Request, run store.AgentRun, input wor
 				metadata := connectorActionMetadata(tool, call)
 				metadata["result"] = connectorNotRunResult(response.Content)
 				_ = s.agentRunActivityAppender(ctx, run)(domain.AgentActivity{Type: "action", Body: tool.RemoteName, Metadata: metadata})
+				var args map[string]any
+				_ = json.Unmarshal([]byte(input.Arguments), &args)
+				s.recordAgentRunConnectorWrite(ctx, run, tool, args, agentWriteNotRun, response.Content)
 			}
 		}
 	case "after":
@@ -212,6 +220,11 @@ func (s *server) workerRunGuardOp(r *http.Request, run store.AgentRun, input wor
 		if err != nil {
 			return disabled, err
 		}
+		if reply == agentUngroundedOutcomeNudge {
+			// Not the last word yet: the model is told once that nothing ran.
+			response.Nudge, state.OutcomeNudged = reply, true
+			break
+		}
 		response.Reply, response.Transferred, response.Error = reply, transferred, failure
 		state.Finished = true
 	default:
@@ -225,7 +238,7 @@ func (s *server) workerRunGuardOp(r *http.Request, run store.AgentRun, input wor
 	if err := s.store.ReplaceAgentRunKey(ctx, run, workerRunGuardKey, raw); err != nil {
 		return disabled, err
 	}
-	if input.Op == "finish" {
+	if input.Op == "finish" && state.Finished {
 		workerRunGuardLocks.Delete(run.ID)
 	}
 	response.CodingDue, response.DecisionRound = g.codingDue(), state.DecisionRound
@@ -273,7 +286,16 @@ func (s *server) workerRunFinish(r *http.Request, run store.AgentRun, state *wor
 			reply, transferred = transfer("the agent replied without starting Coding", input.Text)
 			return reply, transferred, "", nil
 		}
-		return rebase(s.builtinFinalReply(ctx, task, g, input.Text)), false, "", nil
+		// Outcomes are reported from the run's tool results (agent_run_outcomes.go): an answer that reports
+		// outcomes no write produced is sent back once (the nudge), then replaced by Flow's statement.
+		ledger := s.agentRunLedger(ctx, run)
+		if g.started == nil && task.CodingSessionID == "" && s.agentUngroundedText(builtinOutcomeRequest(task, data), input.Text, ledger) {
+			if !state.OutcomeNudged {
+				return agentUngroundedOutcomeNudge, false, "", nil
+			}
+			return agentNothingExecutedText(g.coding.Chinese), false, "", nil
+		}
+		return rebase(ledger.report(s.builtinFinalReply(ctx, task, g, input.Text), g.coding.Chinese)), false, "", nil
 	case "decision":
 		if g.codingDue() {
 			// The forced-decision turn passed without Coding: Flow starts it instead of running the turn's calls.

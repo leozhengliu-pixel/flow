@@ -636,6 +636,12 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 	guard.maxTurns = maxTurns
 	// budget bounds the run's tool calls like a chat reply's (agent_tool_budget.go).
 	budget := newAgentToolBudget(maxCalls)
+	// The run's write calls and their outcomes, checked against its final answer like a chat reply's
+	// (agent_action_outcomes.go); outcomeNudged is set once an answer reporting outcomes no tool produced was sent
+	// back.
+	ledger := &agentWriteLedger{}
+	outcomeNudged := false
+	outcomeRequest := builtinOutcomeRequest(task, data)
 	issueTitle := ""
 	if len(data.Issues) == 1 {
 		issueTitle = data.Issues[0].Title
@@ -661,6 +667,9 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 			if failed {
 				// The model reports what failed, so it needs the real reason.
 				content = agentToolErrorContent(err)
+				ledger.record(r.Context(), call, agentWriteFailed, err.Error())
+			} else {
+				ledger.record(r.Context(), domain.AgentToolCall{Name: call.Name, Arguments: call.Arguments, Result: result}, agentWriteSucceeded, "")
 			}
 			if call.Name == startCodingSessionTool {
 				content = s.recordCodingStart(r.Context(), task.WorkspaceKey, guard, content, failed)
@@ -674,6 +683,7 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 			if appendAgentActivity(domain.AgentActivity{Type: "action", Body: connector.RemoteName, Metadata: metadata}) != nil {
 				return "", false, false
 			}
+			ledger.record(r.Context(), call, agentWriteNotRun, content)
 			return content, failed, true
 		}
 		if err := appendAgentActivity(domain.AgentActivity{Type: "action", Body: connector.RemoteName, Ephemeral: true, Metadata: maps.Clone(metadata)}); err != nil {
@@ -689,6 +699,11 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 		}
 		// A failed call or one that found nothing is a call without progress.
 		guard.after(call, content, err != nil || connectorFoundNothing(result))
+		if err != nil {
+			ledger.record(r.Context(), call, agentWriteFailed, content)
+		} else {
+			ledger.record(r.Context(), call, agentWriteSucceeded, "")
+		}
 		metadata["result"] = logged
 		if appendAgentActivity(domain.AgentActivity{Type: "action", Body: connector.RemoteName, Metadata: metadata}) != nil {
 			return "", false, false
@@ -750,6 +765,7 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 			_ = appendActivity("action", "Action rejected: "+agentHeldCallNames(r.Context(), held))
 			for _, item := range held {
 				results = append(results, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: item.ID, Content: `{"error":"The user rejected this action; nothing was changed. Do not retry it unless they ask again."}`, IsError: true}})
+				ledger.record(r.Context(), item, agentWriteNotRun, "rejected by the user")
 			}
 		} else {
 			if err := appendActivity("action", "Approved action: "+agentHeldCallNames(r.Context(), held)); err != nil {
@@ -827,9 +843,25 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 				transfer("the agent replied without starting Coding", turn.Text)
 				return
 			}
+			// An answer that reports change outcomes while the run ran no write is sent back once; a second such
+			// answer becomes Flow's statement that nothing was executed (like a chat reply).
+			if guard.started == nil && s.agentUngroundedOutcome(outcomeRequest, turn, ledger) {
+				pending.Reset()
+				slog.WarnContext(r.Context(), "agent reported change outcomes without a write call", "task", task.ID, "model", s.agent.Model, "retried", outcomeNudged, "text_bytes", len(turn.Text))
+				if !outcomeNudged {
+					outcomeNudged = true
+					messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, Reasoning: turn.Reasoning}, agentProviderMessage{Role: "user", Content: agentUngroundedOutcomeNudge})
+					continue
+				}
+				if err := appendActivity("response", agentNothingExecutedText(guard.coding.Chinese)); err != nil {
+					slog.ErrorContext(r.Context(), "agent run could not record its reply", "task", task.ID, "error", err)
+				}
+				return
+			}
 			// Links to this workspace's pages under a made-up host point at the app instead.
-			// "Done" is only said with the coding session's evidence; otherwise its real state is posted.
-			reply := s.builtinFinalReply(r.Context(), task, guard, turn.Text)
+			// "Done" is only said with the coding session's evidence; otherwise its real state is posted. Outcomes
+			// the answer gets wrong are corrected from the run's tool results.
+			reply := ledger.report(s.builtinFinalReply(r.Context(), task, guard, turn.Text), guard.coding.Chinese)
 			if err := appendActivity("response", rebaseAgentWorkspaceLinks(reply, data.Workspace.URLKey, agentLinkBaseURL(r))); err != nil {
 				slog.ErrorContext(r.Context(), "agent run could not record its reply", "task", task.ID, "reply_bytes", len(reply), "error", err)
 			}
@@ -889,6 +921,7 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 			}
 			if message, run := check(); !run {
 				messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: message, IsError: true}})
+				ledger.record(r.Context(), call, agentWriteNotRun, message)
 				continue
 			}
 			content, failed, ok := runTool(call)
@@ -953,7 +986,7 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 	if reply == "" {
 		reply = agentToolBudgetFallback(stopped, maxTurns, maxCalls, guard.coding.Chinese, -1, false)
 	}
-	reply = s.builtinFinalReply(r.Context(), task, guard, reply)
+	reply = ledger.report(s.builtinFinalReply(r.Context(), task, guard, reply), guard.coding.Chinese)
 	if err := appendActivity("response", rebaseAgentWorkspaceLinks(reply, data.Workspace.URLKey, agentLinkBaseURL(r))); err != nil {
 		slog.ErrorContext(r.Context(), "agent run could not record its budget summary", "task", task.ID, "reason", stopped, "error", err)
 	}
