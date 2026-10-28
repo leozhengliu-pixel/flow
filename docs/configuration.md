@@ -920,7 +920,7 @@ credentials to the browser.
 | `FLOW_AGENT_MODEL` | `gpt-5-mini` | Provider model identifier. |
 | `FLOW_AGENT_TIMEOUT` | `60s` | Provider request timeout: how long a request may wait for the provider's first byte, or between two chunks of a streamed answer. A streamed answer may run longer than this as long as the provider keeps sending. |
 | `FLOW_AGENT_MAX_OUTPUT_TOKENS` | `4096` | Maximum output tokens per provider turn. |
-| `FLOW_AGENT_MAX_TOOL_TURNS` | `40` | Model turns with tool calls one Agent chat reply or built-in agent thread run may take (4–200). When a reply reaches it, the Agent stops calling tools and answers with what it did and what is left; saying "Continue" picks up from there. The agent-worker runtime keeps its own `FLOW_WORKER_MAX_TURNS`. |
+| `FLOW_AGENT_MAX_TOOL_TURNS` | `40` | Model turns with tool calls one Agent chat reply or built-in agent thread run may take (4–200). When a reply reaches it, the Agent stops calling tools and answers with what it did and what is left; saying "Continue" picks up from there. Chat replies on the agent worker (`FLOW_AGENT_RUNTIME=worker`) get this budget and `FLOW_AGENT_MAX_TOOL_CALLS` from Flow; other agent-worker runs keep their own `FLOW_WORKER_MAX_TURNS`. |
 | `FLOW_AGENT_MAX_TOOL_CALLS` | `150` | Tool calls one Agent chat reply or built-in agent thread run may run across all its turns (at least `FLOW_AGENT_MAX_TOOL_TURNS`, at most 2000), so a model that sends many calls per turn stops at the same kind of summary. Identical calls that already failed are not run again, and a reply that keeps repeating them stops early. |
 | `FLOW_AGENT_ANTHROPIC_VERSION` | `2023-06-01` | Anthropic API version header. |
 | `FLOW_AGENT_TOOLS_ENABLED` | `true` | Expose Flow MCP read tools to the Agent. |
