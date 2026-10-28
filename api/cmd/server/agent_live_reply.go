@@ -335,7 +335,8 @@ func (s *server) startAgentLiveReplySweeper() {
 // agentLiveReplyAbandoned reports whether a stored streaming reply has no server writing it. A single server knows
 // all its runs; with several servers (Redis coordination) a reply belongs to a peer until its heartbeat goes stale.
 func (s *server) agentLiveReplyAbandoned(message domain.AgentMessage, now time.Time) bool {
-	if message.Status != agentMessageStreaming {
+	if message.Status != agentMessageStreaming || workerChatMessage(message.ID) {
+		// A reply on the agent worker lives as long as its run (sweepWorkerChatReplies).
 		return false
 	}
 	if _, local := s.agentLiveReplies.Load(message.ID); local {
@@ -349,7 +350,7 @@ func (s *server) agentLiveReplyAbandoned(message domain.AgentMessage, now time.T
 
 // sweepAgentLiveReplies saves abandoned streaming replies as interrupted; it returns how many it changed.
 func (s *server) sweepAgentLiveReplies(ctx context.Context, now time.Time) int {
-	swept := 0
+	swept := s.sweepWorkerChatReplies(ctx, now)
 	for _, key := range s.store.WorkspaceKeys() {
 		if ctx.Err() != nil {
 			return swept

@@ -22,6 +22,32 @@ export type AgentRun = {
 
 export type RunStatus = 'done' | 'failed' | 'canceled' | 'awaiting' | 'interrupted'
 
+/** One message of the conversation Flow renders for a run (a chat run's carries the latest tool calls). */
+export type PromptMessage = {
+  role: 'user' | 'assistant' | 'tool' | 'system'
+  content: string
+  toolCalls?: { id: string; name: string; arguments: string }[]
+  toolCallId?: string
+  isError?: boolean
+}
+
+/** What a chat run's payload says about its reply (api/cmd/server/agent_worker_chat.go workerChatRunInfo). */
+export type ChatRunInfo = {
+  messageId: string
+  maxTurns: number
+  maxCalls: number
+  request?: string
+  resume?: { decisions: Record<string, string> }
+}
+
+export type RunPayload = {
+  run: AgentRun
+  principal: { mode: string; userId: string; tools?: string[] }
+  context?: { system: string; latestPrompt: string; messages?: PromptMessage[] }
+  chat?: ChatRunInfo
+  notices?: string[]
+}
+
 export class FlowRuntimeClient {
   constructor(private readonly baseUrl: string, private readonly secret: string, readonly workerId: string) {}
 
@@ -64,7 +90,35 @@ export class FlowRuntimeClient {
    * selected connector that was skipped), as an in-process loop run records them.
    */
   payload(runId: string) {
-    return this.call<{ run: AgentRun; principal: { mode: string; userId: string; tools?: string[] }; context?: { system: string; latestPrompt: string }; notices?: string[] }>('GET', `/runs/${encodeURIComponent(runId)}/payload`)
+    return this.call<RunPayload>('GET', `/runs/${encodeURIComponent(runId)}/payload`)
+  }
+
+  /** Posts one activity of the run (a chat run's reply part: chat-run.ts). */
+  activity(runId: string, activity: unknown) {
+    return this.call<{ messageId?: string; settled?: boolean }>('POST', `/runs/${encodeURIComponent(runId)}/activities`, activity)
+  }
+
+  /** The session's suspended harness state (agent_session_states), or undefined when none is stored. */
+  async getState(runId: string): Promise<string | undefined> {
+    const response = await fetch(`${this.baseUrl.replace(/\/$/, '')}/internal/agent-runtime/runs/${encodeURIComponent(runId)}/state`, { headers: this.headers() })
+    if (response.status === 404) return undefined
+    const text = await response.text()
+    if (!response.ok) throw new RuntimeApiError(response.status, `GET state: ${response.status} ${text.slice(0, 200)}`)
+    return text
+  }
+
+  async putState(runId: string, state: string) {
+    const response = await fetch(`${this.baseUrl.replace(/\/$/, '')}/internal/agent-runtime/runs/${encodeURIComponent(runId)}/state`, { method: 'PUT', headers: { ...this.headers(), 'content-type': 'application/json' }, body: state })
+    if (!response.ok) throw new RuntimeApiError(response.status, `PUT state: ${response.status} ${(await response.text()).slice(0, 200)}`)
+  }
+
+  async deleteState(runId: string) {
+    const response = await fetch(`${this.baseUrl.replace(/\/$/, '')}/internal/agent-runtime/runs/${encodeURIComponent(runId)}/state`, { method: 'DELETE', headers: this.headers() })
+    if (!response.ok) throw new RuntimeApiError(response.status, `DELETE state: ${response.status}`)
+  }
+
+  private headers() {
+    return { Authorization: `Bearer ${this.secret}`, 'Flow-Worker-Id': this.workerId }
   }
 
   /** Long-polls up to `waitMs` (≤ 20 s) until the run's connector questions move past `after` (connector-elicitation.ts). */

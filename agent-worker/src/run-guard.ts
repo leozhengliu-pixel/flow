@@ -43,6 +43,8 @@ export type GuardResponse = {
   decisionRound: number
   mustDecide?: boolean
   nudge?: string
+  /** A chat reply whose tool budget is spent: the turn is offered no tools (its last word). */
+  withhold?: boolean
   handled?: boolean
   content?: string
   failed?: boolean
@@ -180,6 +182,7 @@ export class RunGuard {
   private queue: Promise<unknown> = Promise.resolve()
   private turnAsked = -1
   private withdraw = false
+  private withhold = false
   private nudge?: string
 
   constructor(private readonly api: GuardApi, readonly maxTurns: number, readonly toolErrors?: ToolErrorFlags) {}
@@ -212,10 +215,12 @@ export class RunGuard {
       const connectors = tools.some(tool => tool.type === 'function' && isConnectorTool(tool.name))
       const answer = await this.call({ op: 'turn', round: this.round, maxTurns: this.maxTurns, connectors }).catch(() => undefined)
       this.withdraw = Boolean(answer?.mustDecide)
+      this.withhold = Boolean(answer?.withhold)
       if (answer?.nudge) this.nudge = answer.nudge
     }
     const offered: Tool<any>[] = []
     for (const tool of tools) {
+      if (this.withhold && tool.type === 'function') continue
       if (tool.type !== 'function') {
         offered.push(tool)
         continue

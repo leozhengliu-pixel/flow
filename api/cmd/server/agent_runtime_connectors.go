@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"maps"
@@ -288,6 +289,12 @@ func (s *server) callMCPRunConnector(w http.ResponseWriter, r *http.Request, id 
 		fail(fmt.Errorf("invalid MCP tool arguments"))
 		return
 	}
+	// A chat reply's tool budget (agent_worker_chat.go).
+	if content, run := s.workerChatToolBefore(r.Context(), grant.run, name, args); !run {
+		s.recordAgentRunConnectorWrite(r.Context(), grant.run, tool, args, agentWriteNotRun, content)
+		fail(errors.New(content))
+		return
+	}
 	call := domain.AgentToolCall{ID: "run_" + grant.run.ID, Name: name, Arguments: arguments}
 	appendActivity := s.agentRunActivityAppender(request.Context(), grant.run)
 	metadata := connectorActionMetadata(tool, call)
@@ -307,6 +314,11 @@ func (s *server) callMCPRunConnector(w http.ResponseWriter, r *http.Request, id 
 	started := time.Now()
 	result, callErr := s.executeAgentTool(request.WithContext(ctx), data, call)
 	s.recordAgentRunConnectorOutcome(r.Context(), grant.run, name, args, callErr != nil)
+	if callErr != nil {
+		s.workerChatToolAfter(r.Context(), grant.run, name, args, agentToolFailureText(result, callErr), true)
+	} else {
+		s.workerChatToolAfter(r.Context(), grant.run, name, args, string(result), false)
+	}
 	if callErr != nil {
 		s.recordAgentRunConnectorWrite(r.Context(), grant.run, tool, args, agentWriteFailed, agentToolFailureText(result, callErr))
 	} else {

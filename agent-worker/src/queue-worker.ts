@@ -7,13 +7,17 @@
  *
  *   FLOW_WORKER_SECRET_FILE=… FLOW_WORKER_ID=w1 FLOW_WORKER_SLOTS=8 npx tsx src/queue-worker.ts
  *
- * Spike payload (written by Flow when it enqueues a run): { prompt, systemPrompt? }. History stays in the
- * worker's session store, keyed by the run's session id.
+ * A chat run (payload `chat`, queued by Flow for a chat message when FLOW_AGENT_RUNTIME=worker) runs from the
+ * conversation Flow serves with the run and writes its reply on Flow (chat-run.ts); a run suspended on held calls
+ * keeps its state in Flow and is continued by a resume run. Other runs (spike payload { prompt, systemPrompt? })
+ * keep their history in the worker's session store, keyed by the run's session id.
  */
-import { formatActivity } from './activities.js'
+import { formatActivity, type FlowActivity } from './activities.js'
+import { ChatActivityPoster, chatConversation } from './chat-run.js'
 import { loadConfig, secret } from './config.js'
 import { flowSystemPrompt } from './prompt.js'
 import { CancelWatcher, FlowRuntimeClient, type AgentRun, type RunStatus } from './runtime-client.js'
+import { MemorySession, type SuspendedStore } from './session-store.js'
 import { FlowAgentWorker, type FlowAgentSession, type TurnStatus } from './worker.js'
 
 const config = loadConfig({ flowToken: 'unused: each run mints its own token' })
@@ -32,18 +36,52 @@ let stopping = false
 
 const statusOf: Record<TurnStatus, RunStatus> = { response: 'done', awaiting: 'awaiting', canceled: 'canceled', error: 'failed' }
 
+/** A chat run's suspended RunState lives in Flow (agent_session_states), so any worker resumes it. */
+function flowSuspendedStore(runId: string): SuspendedStore {
+  return {
+    save: async (state, meta) => client.putState(runId, JSON.stringify({ ...meta, savedAt: Date.now(), state })),
+    load: async () => {
+      const raw = await client.getState(runId)
+      return raw ? JSON.parse(raw) : undefined
+    },
+    clear: async () => client.deleteState(runId).catch(() => {}),
+  }
+}
+
 async function execute(run: AgentRun) {
   const payload = (run.payload ?? {}) as { prompt?: string; systemPrompt?: string }
   const { token } = await client.token(run.id)
   // Reading the payload discovers the run's connector tools; a skipped selected connector comes back as a notice.
   const details = await client.payload(run.id).catch(error => { log(`${run.id} payload failed: ${(error as Error).message}`); return undefined })
   for (const notice of details?.notices ?? []) log(`${run.id} notice: ${notice}`)
-  const session = worker.session({
+  // A chat reply (chat-run.ts): its conversation comes from Flow, and its activities write the reply on Flow.
+  const chat = run.kind === 'chat' ? details?.chat : undefined
+  if (run.kind === 'chat' && (run.payload as { chat?: unknown } | undefined)?.chat && !chat) {
+    await client.complete(run.id, 'failed', { error: 'The chat run payload could not be read.' }).catch(() => {})
+    return
+  }
+  const conversation = chat ? chatConversation(details?.context?.messages ?? []) : undefined
+  let session: FlowAgentSession | undefined
+  const poster = chat
+    ? new ChatActivityPoster(activity => client.activity(run.id, activity), {
+      onError: error => log(`${run.id} activity failed: ${(error as Error).message}`),
+      // The reply was settled on Flow (stopped, edited away): the run stops too.
+      onSettled: () => session?.stop(),
+    })
+    : undefined
+  session = worker.session({
     sessionId: run.sessionId,
     flowToken: token,
     guard: request => client.guard(run.id, request),
-    elicitations: (after, waitMs, signal) => client.elicitations(run.id, after, waitMs, signal),
-    systemPrompt: payload.systemPrompt ?? flowSystemPrompt({ workspace: run.workspaceKey, userName: 'the requester', today: new Date().toISOString().slice(0, 10) }),
+    // Flow shows a chat run's connector questions itself.
+    elicitations: chat ? undefined : (after, waitMs, signal) => client.elicitations(run.id, after, waitMs, signal),
+    systemPrompt: details?.context?.system ?? payload.systemPrompt ?? flowSystemPrompt({ workspace: run.workspaceKey, userName: 'the requester', today: new Date().toISOString().slice(0, 10) }),
+    ...(chat ? {
+      // The reply's tool turns, plus the turn that gives its last word once the budget is spent.
+      maxTurns: Math.max(chat.maxTurns, 1) + 2,
+      history: new MemorySession(run.sessionId, conversation?.history ?? []),
+      suspended: flowSuspendedStore(run.id),
+    } : {}),
   })
   sessions.set(run.id, session)
   cancels.started()
@@ -59,12 +97,24 @@ async function execute(run: AgentRun) {
   }, 15_000)
   const t0 = Date.now()
   try {
-    log(`${run.id} start (attempt ${run.attempts}, session ${run.sessionId})`)
-    const outcome = await session.send(payload.prompt ?? '', activity => { if (activity.type !== 'text.delta' && !(activity.type === 'thought' && activity.ephemeral)) log(`${run.id} ${formatActivity(activity, t0).trim()}`) })
-    await client.complete(run.id, statusOf[outcome.status], { usage: outcome.usage, ...(outcome.status === 'error' ? { error: outcome.body.slice(0, 2000) } : {}) })
+    log(`${run.id} start (attempt ${run.attempts}, session ${run.sessionId}${chat ? `, chat reply ${chat.messageId}${chat.resume ? ' resumed' : ''}` : ''})`)
+    const sink = (activity: FlowActivity) => {
+      poster?.push(activity)
+      if (activity.type !== 'text.delta' && !(activity.type === 'thought' && activity.ephemeral)) log(`${run.id} ${formatActivity(activity, t0).trim()}`)
+    }
+    const outcome = chat?.resume ? await session.resumeWith(chat.resume.decisions, sink) : await session.send(conversation ? conversation.request : payload.prompt ?? '', sink)
+    await poster?.drain()
+    let status = statusOf[outcome.status]
+    if (chat && outcome.status === 'awaiting' && outcome.elicitation?.kind === 'select') {
+      // ask_user ends a chat reply with its question; the answer is the person's next message (a new run).
+      await flowSuspendedStore(run.id).clear()
+      status = 'done'
+    }
+    await client.complete(run.id, status, { usage: outcome.usage, ...(outcome.status === 'error' ? { error: outcome.body.slice(0, 2000) } : {}) })
     log(`${run.id} ${outcome.status} in ${Date.now() - t0} ms`)
   } catch (error) {
     log(`${run.id} failed: ${(error as Error).message}`)
+    await poster?.drain()
     await client.complete(run.id, 'failed', { error: String(error).slice(0, 2000) }).catch(() => {})
   } finally {
     clearInterval(heartbeat)

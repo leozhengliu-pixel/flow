@@ -21,7 +21,7 @@ import { askUserTool, loadToolsTool, parseAskUser } from './host-tools.js'
 import { compactHistory, defaultCompaction } from './history.js'
 import { createModel, modelSettings, ObservedModel, type ModelCallRecord, type ModelFactoryOptions } from './models.js'
 import { approvalKind, approvalPreview, isApprovalWord, type ApprovalKind } from './policy.js'
-import { FileSessionStore } from './session-store.js'
+import { FileSessionStore, type RepairableSession, type SuspendedStore } from './session-store.js'
 import { QuestionStreamer } from './question-stream.js'
 import { outputText, RunGuard, ToolErrorFlags, type GuardApi } from './run-guard.js'
 import { initialGroups } from './tool-groups.js'
@@ -94,6 +94,13 @@ export type SessionOptions = {
    * on Flow; other runs have none).
    */
   elicitations?: ElicitationApi
+  /**
+   * The session's history for this run (default: the worker's session store). A chat reply's conversation comes
+   * from Flow with the run (MemorySession seeded from the payload), so any worker can run any reply.
+   */
+  history?: RepairableSession
+  /** Where a suspended run is kept (default: the worker's session store); a chat run keeps it in Flow. */
+  suspended?: SuspendedStore
 }
 
 export type ActivitySink = (activity: FlowActivity) => void
@@ -152,9 +159,17 @@ export class FlowAgentSession {
     return this.options.sessionId
   }
 
+  private history(): RepairableSession {
+    return this.options.history ?? this.worker.store.session(this.sessionId)
+  }
+
+  private suspendedStore(): SuspendedStore {
+    return this.options.suspended ?? this.worker.store.suspendedFor(this.sessionId)
+  }
+
   /** A new user prompt. */
   async send(message: string, sink: ActivitySink = () => {}): Promise<TurnOutcome> {
-    const history = await this.worker.store.session(this.sessionId).getItems()
+    const history = await this.history().getItems()
     const context = newRunContext(this.sessionId, message, initialGroups(message, previousTools(history)), this.options.allowlist)
     return this.execute(message, context, sink)
   }
@@ -165,26 +180,38 @@ export class FlowAgentSession {
    * one that suspended the run.
    */
   async resume(answer: string, sink: ActivitySink = () => {}): Promise<TurnOutcome> {
-    const suspended = this.worker.store.loadSuspended(this.sessionId)
+    return this.resumeSuspended(sink, (item, elicitation, context) => {
+      // A clicked option arrives as its label or value; the model gets the value.
+      const picked = elicitation?.options.find(option => option.value === answer || option.label.toLowerCase() === answer.trim().toLowerCase())
+      if (item.name === 'ask_user') {
+        context.answers[item.rawItem.type === 'function_call' ? item.rawItem.callId : ''] = picked?.value ?? answer
+        return true
+      }
+      return (picked?.value ?? answer) === 'approve' || isApprovalWord(answer)
+    })
+  }
+
+  /**
+   * Continues a suspended run whose held calls the person answered one by one (a chat reply's approvals on Flow):
+   * `decisions` maps each call id to approved or rejected; a call without a decision is rejected.
+   */
+  async resumeWith(decisions: Record<string, string>, sink: ActivitySink = () => {}): Promise<TurnOutcome> {
+    return this.resumeSuspended(sink, item => decisions[item.rawItem.type === 'function_call' ? item.rawItem.callId : ''] === 'approved')
+  }
+
+  private async resumeSuspended(sink: ActivitySink, approves: (item: RunToolApprovalItem, elicitation: Elicitation | undefined, context: FlowRunContext) => boolean): Promise<TurnOutcome> {
+    const store = this.suspendedStore()
+    const suspended = await store.load()
     if (!suspended) throw new Error(`session ${this.sessionId} has no suspended run`)
     await this.connect() // restoring a RunState re-resolves the agent's tools, MCP ones included
     const state = await RunState.fromString<FlowRunContext, FlowAgent>(this.agent, suspended.state)
     const elicitation = suspended.elicitation as Elicitation | undefined
-    // A clicked option arrives as its label or value; the model gets the value.
-    const picked = elicitation?.options.find(option => option.value === answer || option.label.toLowerCase() === answer.trim().toLowerCase())
     const context = (state as unknown as { _context: RunContext<FlowRunContext> })._context.context
-    const approve = (picked?.value ?? answer) === 'approve' || isApprovalWord(answer)
     for (const item of state.getInterruptions()) {
-      if (item.name === 'ask_user') {
-        context.answers[item.rawItem.type === 'function_call' ? item.rawItem.callId : ''] = picked?.value ?? answer
-        state.approve(item)
-      } else if (approve) {
-        state.approve(item)
-      } else {
-        state.reject(item, { message: 'The user rejected this action; nothing was changed. Do not retry it unless the user asks again.' })
-      }
+      if (approves(item, elicitation, context)) state.approve(item)
+      else state.reject(item, { message: 'The user rejected this action; nothing was changed. Do not retry it unless the user asks again.' })
     }
-    this.worker.store.clearSuspended(this.sessionId)
+    await store.clear()
     return this.execute(state, context, sink)
   }
 
@@ -203,7 +230,7 @@ export class FlowAgentSession {
   }
 
   private async execute(input: string | RunState<FlowRunContext, FlowAgent>, context: FlowRunContext, sink: ActivitySink, retries = 1, previous?: TurnOutcome, previousGuard?: RunGuard): Promise<TurnOutcome> {
-    const session = this.worker.store.session(this.sessionId)
+    const session = this.history()
     const maxTurns = this.options.maxTurns ?? this.worker.config.maxTurns
     const outcome: TurnOutcome = { status: 'error', body: '', startedAt: previous?.startedAt ?? Date.now(), endedAt: 0, usage: summarizeUsage([]), modelCalls: [...(previous?.modelCalls ?? [])], toolCalls: [] }
     const emit = (activity: FlowActivity) => {
@@ -262,7 +289,7 @@ export class FlowAgentSession {
       if (interruptions.length) {
         const elicitation = toElicitation(interruptions)
         // Long waits must not hold the process: the run is serialized and dropped; resume() can run anywhere.
-        this.worker.store.saveSuspended(this.sessionId, result.state.toString(), { elicitation })
+        await this.suspendedStore().save(result.state.toString(), { elicitation })
         emit({ type: 'elicitation', at: Date.now(), elicitation })
         return this.finish(outcome, 'awaiting', elicitation.body, elicitation)
       }
@@ -324,11 +351,11 @@ export class FlowAgentSession {
   }
 
   private async canceled(outcome: TurnOutcome, emit: ActivitySink, produced: AgentInputItem[]) {
-    const session = this.worker.store.session(this.sessionId)
+    const session = this.history()
     await session.addMissing(produced)
     const closed = await session.closeDanglingCalls()
     const body = closed ? `Stopped. ${closed} pending tool call(s) were cancelled.` : 'Stopped.'
-    emit({ type: 'response', at: Date.now(), body, usage: summarizeUsage(outcome.modelCalls) })
+    emit({ type: 'response', at: Date.now(), body, usage: summarizeUsage(outcome.modelCalls), canceled: true })
     return this.finish(outcome, 'canceled', body)
   }
 
@@ -391,7 +418,7 @@ function toElicitation(items: RunToolApprovalItem[]): Elicitation {
   const ask = calls.find(call => call.name === 'ask_user')
   if (ask) {
     const request = parseAskUser(ask.arguments)
-    return { kind: 'select', callId: ask.callId, body: request.question, options: request.options, allowFreeText: request.allowFreeText }
+    return { kind: 'select', callId: ask.callId, arguments: ask.arguments, body: request.question, options: request.options, allowFreeText: request.allowFreeText }
   }
   // Only connector tools set to always ask are held (see policy.ts).
   const kind: ApprovalKind = 'connector'
@@ -399,6 +426,7 @@ function toElicitation(items: RunToolApprovalItem[]): Elicitation {
     kind: 'approval',
     approval: kind,
     callIds: calls.map(call => call.callId),
+    calls,
     body: approvalPreview(kind, calls),
     options: [{ label: 'Approve', value: 'approve' }, { label: 'Reject', value: 'reject' }],
   }

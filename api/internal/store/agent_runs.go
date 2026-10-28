@@ -579,11 +579,12 @@ func (s *SQLiteStore) FinishAgentRun(ctx context.Context, id, owner string, outc
 	return s.AgentRun(ctx, id)
 }
 
-// CancelAgentRun cancels a queued run at once and asks the worker holding a
-// leased or running one to stop (heartbeats report CancelRequested).
+// CancelAgentRun cancels a queued run, or one suspended waiting for a person
+// (awaiting), at once and asks the worker holding a leased or running one to
+// stop (heartbeats report CancelRequested).
 func (s *SQLiteStore) CancelAgentRun(ctx context.Context, id string) (AgentRun, error) {
 	at := millis(time.Now())
-	if _, err := s.db.ExecContext(ctx, `UPDATE agent_runs SET status='canceled',finished_at=?,updated_at=? WHERE id=? AND status='queued'`, at, at, id); err != nil {
+	if _, err := s.db.ExecContext(ctx, `UPDATE agent_runs SET status='canceled',finished_at=?,updated_at=? WHERE id=? AND status IN ('queued','awaiting')`, at, at, id); err != nil {
 		return AgentRun{}, err
 	}
 	if _, err := s.db.ExecContext(ctx, `UPDATE agent_runs SET cancel_requested=1,updated_at=? WHERE id=? AND status IN ('leased','running')`, at, id); err != nil {

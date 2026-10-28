@@ -510,7 +510,18 @@ func (s *server) callMCPRunTool(w http.ResponseWriter, r *http.Request, id any, 
 			return
 		}
 	}
+	// A chat reply's tool budget (agent_worker_chat.go): a call over it, or a repeat of a failed one, is not run.
+	if content, run := s.workerChatToolBefore(r.Context(), grant.run, tool.Name, args); !run {
+		s.recordAgentRunFlowWrite(r.Context(), grant.run, tool.Name, nil, nil, agentWriteNotRun, content)
+		s.writeMCPToolResult(w, r, id, nil, errors.New(content))
+		return
+	}
 	result, changes, err := s.callAgentRunTool(r, grant, tool.Name, args)
+	if err != nil {
+		s.workerChatToolAfter(r.Context(), grant.run, tool.Name, args, publicToolError(r.Context(), tool.Name, err).Error(), true)
+	} else {
+		s.workerChatToolAfter(r.Context(), grant.run, tool.Name, args, "", false)
+	}
 	var extra map[string]any
 	switch {
 	case len(changes) == 1:

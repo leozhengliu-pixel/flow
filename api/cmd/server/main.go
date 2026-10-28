@@ -247,7 +247,7 @@ func main() {
 		_ = httpServer.Shutdown(shutdownCtx)
 	}()
 	if s.agentRuntimeWorker() {
-		log.Printf("FLOW_AGENT_RUNTIME=worker: the internal runtime API is on; built-in agent runs still execute in-process until the worker runtime takes them over")
+		log.Printf("FLOW_AGENT_RUNTIME=worker: the internal runtime API is on; chat replies run on the agent worker, other built-in agent runs still execute in-process")
 	}
 	log.Printf("Flow API %s (commit %s) listening on %s using database=%s storage=%s redis=%s", version, commit, httpServer.Addr, applicationConfig.Database.Driver, applicationConfig.Storage.Driver, applicationConfig.Redis.Mode)
 	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

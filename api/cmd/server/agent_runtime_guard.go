@@ -110,6 +110,8 @@ type workerRunGuardResponse struct {
 	// turn
 	MustDecide bool   `json:"mustDecide,omitempty"`
 	Nudge      string `json:"nudge,omitempty"`
+	// Withhold (a chat reply whose tool budget is spent): the turn is offered no tools, so it gives the last word.
+	Withhold bool `json:"withhold,omitempty"`
 	// before: handled means the call is not run; content (failed: as an error) is its result.
 	Handled bool   `json:"handled,omitempty"`
 	Content string `json:"content,omitempty"`
@@ -146,6 +148,26 @@ func (s *server) workerRunGuardOp(r *http.Request, run store.AgentRun, input wor
 	ctx := r.Context()
 	disabled := workerRunGuardResponse{DecisionRound: -1}
 	var state workerRunGuardState
+	if info, chat := workerChatInfo(run); chat {
+		// A chat reply's guard: its tool budget and outcome check (agent_worker_chat.go).
+		if input.Op != "start" {
+			if raw, found, err := s.store.AgentRunKey(ctx, run.ID, workerRunGuardKey); err == nil && found {
+				_ = json.Unmarshal(raw, &state)
+			}
+		}
+		response, err := s.workerChatGuardOp(ctx, run, info, &state, input)
+		if err != nil {
+			return disabled, err
+		}
+		raw, err := json.Marshal(state)
+		if err == nil {
+			err = s.store.ReplaceAgentRunKey(ctx, run, workerRunGuardKey, raw)
+		}
+		if input.Op == "finish" && state.Finished {
+			workerRunGuardLocks.Delete(run.ID)
+		}
+		return response, err
+	}
 	if input.Op == "start" {
 		task, err := s.store.AgentTask(ctx, run.WorkspaceKey, run.SessionID)
 		if err != nil {

@@ -120,8 +120,14 @@ func (s *server) agentRunElicit(grant *agentRunGrant) func(context.Context, appl
 	return func(ctx context.Context, item applicationPolicy, params *mcp.ElicitParams) (*mcp.ElicitResult, error) {
 		log.ask.Lock()
 		defer log.ask.Unlock()
-		return s.requestAgentElicitation(ctx, grant.run.WorkspaceKey, grant.run.SessionID, grant.principal.UserID, item, params, func(part domain.AgentMessagePart, _ string) error {
+		// The MCP SDK hands the handler its connection's context, which a Stop does not end: the question also
+		// waits on the run, so stopping the reply cancels it (as agentElicitationContext does in-process).
+		ctx, cancel := s.agentRunStopContext(ctx, grant.run.ID)
+		defer cancel()
+		return s.requestAgentElicitation(ctx, grant.run.WorkspaceKey, grant.run.SessionID, grant.principal.UserID, item, params, func(part domain.AgentMessagePart, kind string) error {
 			log.record(part)
+			// The question is shown on the chat reply the run writes (agent_worker_chat.go).
+			s.workerChatElicitationPart(context.WithoutCancel(ctx), grant.run, part, kind)
 			return nil
 		})
 	}
