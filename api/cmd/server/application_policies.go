@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -33,9 +34,19 @@ type applicationPolicy struct {
 	// Tools are the tool names the connector offered the last time its owner
 	// connected to it (POST /api/application-policies/{id}/connect). Only the
 	// server sets them.
-	Tools       []string   `json:"tools,omitempty"`
-	ConnectedAt *time.Time `json:"connectedAt,omitempty"`
-	UpdatedAt   time.Time  `json:"updatedAt"`
+	Tools []string `json:"tools,omitempty"`
+	// ReadOnlyTools are the tools the connector marked read-only (MCP
+	// readOnlyHint) the last time it was connected. Only the server sets them.
+	ReadOnlyTools []string `json:"readOnlyTools,omitempty"`
+	// ToolAccess overrides, per tool name, whether Flow treats a connector
+	// tool as read-only ("read") or as a tool that may change data ("write"),
+	// whatever its readOnlyHint says: the annotation is the connector's own
+	// claim. A tool not listed follows its annotation. It decides whether a
+	// loop that may not change anything runs the tool, and whether an agent's
+	// answer counts the call as a change. Only workspace admins set it.
+	ToolAccess  map[string]string `json:"toolAccess,omitempty"`
+	ConnectedAt *time.Time        `json:"connectedAt,omitempty"`
+	UpdatedAt   time.Time         `json:"updatedAt"`
 }
 
 // label is the connector's name as people see it.
@@ -47,6 +58,28 @@ func (p applicationPolicy) label() string {
 }
 
 const connectorToolApprovalAlways = "always"
+
+// The ToolAccess values: treat the tool as read-only, or as a write.
+const (
+	connectorToolRead  = "read"
+	connectorToolWrite = "write"
+)
+
+// maxConnectorToolAccess bounds the overrides one connector keeps.
+const maxConnectorToolAccess = maxConnectorToolNames
+
+// validConnectorToolAccess reports whether overrides name tools and say read or write.
+func validConnectorToolAccess(access map[string]string) bool {
+	if len(access) > maxConnectorToolAccess {
+		return false
+	}
+	for name, value := range access {
+		if strings.TrimSpace(name) == "" || len(name) > 256 || value != connectorToolRead && value != connectorToolWrite {
+			return false
+		}
+	}
+	return true
+}
 
 func applicationPolicies(data *domain.Bootstrap) []applicationPolicy {
 	items := []applicationPolicy{}
@@ -126,7 +159,14 @@ func (s *server) saveApplicationPolicy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "invalid application")
 		return
 	}
-	input.Tools, input.ConnectedAt = nil, nil
+	input.Tools, input.ReadOnlyTools, input.ConnectedAt = nil, nil, nil
+	if input.Kind != "mcp" || len(input.ToolAccess) == 0 {
+		input.ToolAccess = nil
+	}
+	if admin && !validConnectorToolAccess(input.ToolAccess) {
+		writeError(w, 400, `toolAccess must map tool names to "read" or "write"`)
+		return
+	}
 	if input.Kind == "mcp" {
 		input.URL = strings.TrimSpace(input.URL)
 		if err := integrationEndpointError(r.Context(), input.URL, s.authDisabled, outboundTrustedPrivate); err != nil {
@@ -158,6 +198,7 @@ func (s *server) saveApplicationPolicy(w http.ResponseWriter, r *http.Request) {
 		items := applicationPolicies(data)
 		index := slices.IndexFunc(items, func(item applicationPolicy) bool { return item.ID == input.ID })
 		input.OwnerID = view.Viewer.ID
+		previousAccess := map[string]string(nil)
 		if index >= 0 {
 			previous := items[index]
 			if previous.Kind != input.Kind || !admin && previous.OwnerID != view.Viewer.ID {
@@ -166,11 +207,17 @@ func (s *server) saveApplicationPolicy(w http.ResponseWriter, r *http.Request) {
 			input.OwnerID = previous.OwnerID
 			// The tool inventory belongs to the endpoint it was read from.
 			if previous.URL == input.URL {
-				input.Tools, input.ConnectedAt = previous.Tools, previous.ConnectedAt
+				input.Tools, input.ReadOnlyTools, input.ConnectedAt = previous.Tools, previous.ReadOnlyTools, previous.ConnectedAt
+				previousAccess = previous.ToolAccess
 			}
+		}
+		if !admin {
+			// Only an admin decides how Flow treats a connector's tools: an owner's save keeps the admin's
+			// decision (dropped with the tool inventory when the owner points the connector elsewhere).
+			input.ToolAccess = maps.Clone(previousAccess)
 			// Approvals cannot be carried over to another endpoint by its owner.
-			if !admin && previous.URL == input.URL {
-				input.Status = previous.Status
+			if index >= 0 && items[index].URL == input.URL {
+				input.Status = items[index].Status
 			}
 		}
 		if !slices.Contains([]string{"approved", "rejected", "pending"}, input.Status) {

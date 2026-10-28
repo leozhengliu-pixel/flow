@@ -79,6 +79,38 @@ describe('application settings behavior', () => {
     await screen.findByText('Workspace tools');
     expect(screen.queryByRole('button', { name: 'Ask before running tools' })).not.toBeInTheDocument();
   });
+  it('lets an administrator treat a connector tool as read-only or as a write', async () => {
+    const policy = { id: 'notes', name: 'Notes', kind: 'mcp', status: 'approved', shared: true, url: 'https://example.test/mcp', tools: ['read_notes', 'post_note', 'tidy_notes'], readOnlyTools: ['read_notes'], toolAccess: { tidy_notes: 'read' } };
+    request.mockResolvedValue([policy]);
+    render(<ApplicationPolicySettings admin />);
+    expect(await screen.findByText(/1 tool override/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Tool access…' }));
+    const read = screen.getByRole('combobox', { name: 'Access of read_notes' });
+    expect(read).toHaveValue('');
+    expect(screen.getByRole('option', { name: 'Follow connector: read-only' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Access of post_note' })).toHaveDisplayValue('Follow connector: may change data');
+    expect(screen.getByRole('combobox', { name: 'Access of tidy_notes' })).toHaveValue('read');
+    fireEvent.change(read, { target: { value: 'write' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Access of tidy_notes' }), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(request).toHaveBeenCalledWith('/api/application-policies', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ ...policy, toolAccess: { read_notes: 'write' } }) })));
+  });
+  it('clears every override when all tools follow the connector again', async () => {
+    const policy = { id: 'notes', name: 'Notes', kind: 'mcp', status: 'approved', shared: true, url: 'https://example.test/mcp', tools: ['post_note'], toolAccess: { post_note: 'read' } };
+    request.mockResolvedValue([policy]);
+    render(<ApplicationPolicySettings admin />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Tool access…' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Access of post_note' }), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const cleared = { id: 'notes', name: 'Notes', kind: 'mcp', status: 'approved', shared: true, url: 'https://example.test/mcp', tools: ['post_note'] };
+    await waitFor(() => expect(request).toHaveBeenCalledWith('/api/application-policies', expect.objectContaining({ method: 'PUT', body: JSON.stringify(cleared) })));
+  });
+  it('does not offer tool access to members', async () => {
+    request.mockResolvedValue([{ id: 'mcp', name: 'Personal connector', kind: 'mcp', status: 'approved', shared: false, url: 'https://example.test/mcp', tools: ['post_note'] }]);
+    render(<ApplicationPolicySettings admin={false} />);
+    await screen.findByText('Personal connector');
+    expect(screen.queryByRole('button', { name: 'Tool access…' })).not.toBeInTheDocument();
+  });
   it('keeps the privacy editor open when persistence fails', async () => {
     const save = vi.fn().mockRejectedValue(new Error('Save failed'));
     const close = vi.fn();

@@ -27,4 +27,18 @@ export const mcpConnectorsZhCN: Record<string, string> = {
   "Connector authorization failed. Try authorizing again.": "连接器授权失败，请重新授权。",
   "Rejected by an admin": "已被管理员拒绝",
   "Pending approval": "等待审批",
+  // Security › Agent connectors › Tool access (workspace admins).
+  "Tool access": "工具访问",
+  "Tool access…": "工具访问…",
+  "Decide which of this connector's tools Flow treats as read-only": "决定 Flow 将此连接器的哪些工具视为只读",
+  "Connectors say themselves which of their tools only read data. Override that for a tool here: loops that may not change anything refuse the tools treated as writes, and Flow Agent counts their calls as changes when it reports what it did.":
+    "哪些工具只读取数据由连接器自行声明。可在此为单个工具覆盖该声明：不允许做任何更改的 Loop 会拒绝被视为写入的工具，Flow Agent 在报告执行结果时也会将这些工具的调用计为更改。",
+  "Connect the connector to list its tools.": "连接此连接器后即可列出其工具。",
+  "Access of {tool}": "{tool} 的访问方式",
+  "Follow connector: read-only": "按连接器声明：只读",
+  "Follow connector: may change data": "按连接器声明：可能更改数据",
+  "Treat as read-only": "视为只读",
+  "Treat as write": "视为写入",
+  "1 tool override": "1 个工具覆盖",
+  "{count} tool overrides": "{count} 个工具覆盖",
 };
