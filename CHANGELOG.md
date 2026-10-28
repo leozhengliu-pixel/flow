@@ -130,6 +130,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   treated like database errors (a logged 500 with the request id), and a 4xx
   whose message still reads like driver or storage text answers "The request
   could not be completed (request id …)." with the original logged.
+- Issue icons (191) and staged upload media types (255) and filenames (512)
+  are limited in characters, as the tool schemas' `maxLength` and the
+  database columns count them; a non-ASCII value at the limit used to be
+  refused because the server counted bytes.
 - People removed from or suspended in the workspace can no longer be made an
   assignee, delegate, subscriber, project lead or member, initiative owner,
   triage owner or template assignee: such a write is refused with 400 "This

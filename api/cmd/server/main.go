@@ -1870,7 +1870,7 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// The key starts every issue identifier (issue_records.identifier is a VARCHAR(191)).
-	if err := checkTextLength("key", input.Key, teamKeyMaxLength); err != nil {
+	if err := checkNewTeamKey(input.Key); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -6077,8 +6077,8 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 	}
 	if input.Icon != nil && strings.TrimSpace(*input.Icon) != issue.Icon {
 		icon := strings.TrimSpace(*input.Icon)
-		if len(icon) > issueIconMaxLength {
-			return nil, fmt.Errorf("%w: icon is too long", errInvalid)
+		if err := checkIssueIcon(icon); err != nil {
+			return nil, err
 		}
 		issue.Icon = icon
 		changes["icon"] = icon

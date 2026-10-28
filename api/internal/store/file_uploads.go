@@ -100,7 +100,9 @@ const fileUploadColumns = "id,workspace_key,user_id,object_key,filename,content_
 // CreateFileUpload records a prepared upload after checking the pending quota
 // of the user and workspace.
 func (s *SQLiteStore) CreateFileUpload(ctx context.Context, upload FileUpload, quota FileUploadQuota, now time.Time) error {
-	if len(upload.ObjectKey) > 191 || len(upload.Filename) > 512 || len(upload.ContentType) > 255 || len(upload.Purpose) > 255 {
+	// Ids and keys are ASCII; filename and content type count characters,
+	// as their VARCHAR columns do on MySQL utf8mb4 and Postgres.
+	if len(upload.ObjectKey) > 191 || utf8.RuneCountInString(upload.Filename) > 512 || utf8.RuneCountInString(upload.ContentType) > 255 || len(upload.Purpose) > 255 {
 		return fmt.Errorf("upload metadata exceeds limit")
 	}
 	if utf8.RuneCountInString(upload.Title) > domain.UploadTitleMaxLength {
