@@ -1260,6 +1260,13 @@ func (s *server) executeAgentTool(r *http.Request, data domain.Bootstrap, call d
 	}
 	// "DEV-42 Fix login", "[DEV-42](…/issue/DEV-42)" and app URLs in id arguments become the reference they name.
 	normalizeAgentToolArgs(call.Name, args)
+	// The same argument check as /mcp (flow_tool_contract.go): a call the schema rejects is a tool error that names
+	// the field and the shape it needs, and nothing runs.
+	if tool, ok := flowToolByName(call.Name); ok {
+		if err := checkFlowToolArgs(tool, args); err != nil {
+			return nil, err
+		}
+	}
 	args["__flowBaseURL"] = agentLinkBaseURL(r)
 	// History reads "Flow <did X> on behalf of <User>" for what the tool writes.
 	withAgentAttribution(r, &data)

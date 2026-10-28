@@ -21,9 +21,10 @@ import (
 // logs failures (they don't go through an HTTP route of their own).
 func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, args map[string]any) (any, error) {
 	if mcpPatchNotAList(args) {
-		// /mcp refuses it by the tool's schema; in-process agent calls are not
-		// schema-checked, and the tools would otherwise ignore the patch and
-		// report a save that changed nothing.
+		// /mcp and executeAgentTool refuse it by the tool's schema first
+		// (checkFlowToolArgs); this covers server-side calls that skip that
+		// check (replaying a recorded change), where the tools would otherwise
+		// ignore the patch and report a save that changed nothing.
 		return nil, fmt.Errorf("Invalid arguments for %s: %s; nothing was saved. Call it again with corrected arguments.", strings.TrimPrefix(name, "mcp__flow."), mcpPatchShapeHint)
 	}
 	if _, batch := args["ids"]; batch && mcpBatchDeleteTools()[name] {
