@@ -4,6 +4,7 @@ import { defineConfig, devices } from '@playwright/test'
  * Browser checks of the response security headers (Content Security Policy, Permissions-Policy) against the production
  * build served by the Go API: passkeys, embeds, math, the collaboration socket, CSP reports and the service worker.
  * Each spec starts the API it needs (e2e/security/harness.ts), so this config has no webServer. Run: npm run test:e2e:security
+ * Real providers are opt-in with FLOW_SECURITY_LIVE_EMBEDS=1 (see e2e/security/README.md); offline checks use fixtures.
  */
 export default defineConfig({
   testDir: './e2e/security',

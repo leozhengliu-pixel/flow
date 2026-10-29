@@ -54,10 +54,11 @@ var (
 		client.CheckRedirect = filePreviewSameHostRedirect
 		return client
 	}
-	filePreviewLineRange   = regexp.MustCompile(`^L(\d{1,7})(?:C\d{1,7})?(?:-L?(\d{1,7})(?:C\d{1,7})?)?$`)
-	githubOwnerPattern     = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$`)
-	githubRepoPattern      = regexp.MustCompile(`^[A-Za-z0-9._-]{1,100}$`)
-	gitlabNamespacePattern = regexp.MustCompile(`^[A-Za-z0-9_.+][A-Za-z0-9_.+-]{0,254}$`)
+	gitlabFilePreviewHTTPClient = (*server).gitlabClient
+	filePreviewLineRange        = regexp.MustCompile(`^L(\d{1,7})(?:C\d{1,7})?(?:-L?(\d{1,7})(?:C\d{1,7})?)?$`)
+	githubOwnerPattern          = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$`)
+	githubRepoPattern           = regexp.MustCompile(`^[A-Za-z0-9._-]{1,100}$`)
+	gitlabNamespacePattern      = regexp.MustCompile(`^[A-Za-z0-9_.+][A-Za-z0-9_.+-]{0,254}$`)
 )
 
 func filePreviewSameHostRedirect(req *http.Request, via []*http.Request) error {
@@ -529,7 +530,7 @@ func fetchGitHubFilePreview(ctx context.Context, target filePreviewTarget, crede
 }
 
 func (s *server) fetchGitLabFilePreview(ctx context.Context, target filePreviewTarget, credential filePreviewCredential, project string) filePreviewFile {
-	client, err := s.gitlabClient(ctx, credential.base)
+	client, err := gitlabFilePreviewHTTPClient(s, ctx, credential.base)
 	if err != nil {
 		return filePreviewFile{err: errFilePreviewUpstream}
 	}
