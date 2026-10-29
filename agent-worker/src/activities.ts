@@ -44,7 +44,8 @@ export type FlowActivity =
   | { type: 'question.delta'; at: number; activityId: string; body: string; status: 'running'; ephemeral: true }
   /** `canceled`: the run was stopped (the body is the worker's "Stopped." note, not an answer). */
   | { type: 'response'; at: number; body: string; usage: TurnUsage; canceled?: boolean }
-  | { type: 'error'; at: number; body: string; usage?: TurnUsage }
+  /** `flow`: the error is Flow's own word for the run's end (the run guard's), shown as it is. */
+  | { type: 'error'; at: number; body: string; usage?: TurnUsage; flow?: boolean }
 
 export type TurnUsage = {
   modelCalls: number

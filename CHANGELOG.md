@@ -80,6 +80,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   chip questions show on the reply and wait for the answer (Stop cancels
   them), the words before a question stay in the reply, and `save_loop` rows
   read "Updated workflow definition draft" or "Created automation" as before.
+- Flow Agent mentions in comment threads run on the agent worker
+  (`FLOW_AGENT_RUNTIME=worker`). The thread shows the same activities as
+  before (the first look at the issue at once, each tool call, the streamed
+  text and the answer); questions with options and calls waiting for approval
+  end the run and the answer continues it, with the same tool and step
+  budgets, connector budget and checks of what the answer reports. A run no
+  worker takes within `FLOW_AGENT_WORKER_CLAIM_TIMEOUT` ends the session with
+  "No agent worker is available".
 - The workspace Invite dialog (Settings → Administration → Members → Invite)
   has an **Add to team** field for every role. Pick one or more teams (a
   searchable multi-select; optional for Members and Admins, required for

@@ -308,6 +308,11 @@ export class FlowAgentSession {
           // the model is told so once, as the person's next message, and its new answer is the run's last word.
           return await this.execute(last.nudge, context, sink, retries, outcome, guard)
         }
+        if (last.error) {
+          // Flow ends the run with its own error (a reply that stayed empty, or kept asking for approval in text).
+          emit({ type: 'error', at: Date.now(), body: last.error, usage: summarizeUsage(outcome.modelCalls), flow: true })
+          return this.finish(outcome, 'error', last.error)
+        }
         body = last.reply
       }
       outcome.usage = summarizeUsage(outcome.modelCalls)
@@ -339,7 +344,7 @@ export class FlowAgentSession {
           return this.finish(outcome, 'response', last.reply)
         }
         if (last.error) {
-          emit({ type: 'error', at: Date.now(), body: last.error, usage: summarizeUsage(outcome.modelCalls) })
+          emit({ type: 'error', at: Date.now(), body: last.error, usage: summarizeUsage(outcome.modelCalls), flow: true })
           return this.finish(outcome, 'error', last.error)
         }
       }
