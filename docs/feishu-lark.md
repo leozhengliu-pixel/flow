@@ -249,7 +249,8 @@ app capability:
 1. In the developer console, add the **Web app** (网页应用) capability. Set
    its desktop and mobile homepage to
    `https://flow.example.com/api/integrations/feishu/<connection id>/chat/message-action`
-   (`lark` for Lark; the connection id is the one in Flow's callback URL).
+   (`lark` for Lark): Flow's callback URL from the settings page with its
+   final `webhook` replaced by `message-action`.
 2. In the web app's configuration, add the **Message shortcut**
    (消息快捷操作) scenario, name it 创建事项 (Create issue) and enter the
    web app's AppLink in sidebar mode, for example
