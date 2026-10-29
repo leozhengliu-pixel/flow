@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -151,15 +152,25 @@ func parseLoopQuestion(call domain.AgentToolCall) (string, []string, error) {
 // tool result for the model. The answered part keeps the tool call so later
 // turns still see the question and answer.
 func (s *server) askLoopQuestion(r *http.Request, session *domain.AgentSession, call domain.AgentToolCall, emit func(domain.AgentMessagePart, string) error) (string, bool) {
+	if _, ok := r.Context().Value(agentExtraToolsKey{}).([]agentProviderTool); !ok {
+		if _, _, err := parseLoopQuestion(call); err != nil {
+			return err.Error(), true
+		}
+		return "Questions are not available in this conversation; choose the first option and continue.", true
+	}
+	return s.askLoopQuestionIn(r.Context(), workspaceKey(r), session.ID, session.UserID, call, emit)
+}
+
+// askLoopQuestionIn shows a chip question in the conversation sessionID of userID and waits for the answer (ctx ends
+// the wait, as a cancel): askLoopQuestion for a reply running here, and the ask_question session tool of a worker
+// run (agent_runtime_session_tools.go).
+func (s *server) askLoopQuestionIn(ctx context.Context, workspace, sessionID, userID string, call domain.AgentToolCall, emit func(domain.AgentMessagePart, string) error) (string, bool) {
 	question, options, err := parseLoopQuestion(call)
 	if err != nil {
 		return err.Error(), true
 	}
-	if _, ok := r.Context().Value(agentExtraToolsKey{}).([]agentProviderTool); !ok {
-		return "Questions are not available in this conversation; choose the first option and continue.", true
-	}
 	var answered domain.AgentMessagePart
-	result, err := s.requestAgentElicitation(r.Context(), workspaceKey(r), session.ID, session.UserID, applicationPolicy{Name: "Flow Agent"}, &mcp.ElicitParams{Mode: "form", Message: question, RequestedSchema: loopQuestionSchema(question, options)}, func(part domain.AgentMessagePart, kind string) error {
+	result, err := s.requestAgentElicitation(ctx, workspace, sessionID, userID, applicationPolicy{Name: "Flow Agent"}, &mcp.ElicitParams{Mode: "form", Message: question, RequestedSchema: loopQuestionSchema(question, options)}, func(part domain.AgentMessagePart, kind string) error {
 		answered = part
 		return emit(part, kind)
 	})
