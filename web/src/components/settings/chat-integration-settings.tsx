@@ -168,11 +168,20 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
   const secretPlaceholder = settings?.credentialsConfigured ? t("Leave blank to keep existing secret") : "";
   const authorization = tenant?.authorization;
   const configuredBy = authorization?.configuredBy ? data.users.find((user) => user.id === authorization.configuredBy) : undefined;
-  const tenantNotApproved = tenant?.status === "not_approved";
+  const tenantMismatch = tenant?.status === "mismatch";
+  const tenantNotApproved = tenant?.status === "not_approved" || tenantMismatch;
+  const tenantInfoMissing = tenant?.tenantInfoErrorCode === "chat_tenant_info_permission_missing";
+  const tenantInfoHint = tenantAuthorized ? chatErrorCodeMessage(tenant?.tenantInfoErrorCode, t) : undefined;
   const tenantMessage = tenantAuthorized
     ? (tenant?.tenantKey
-      ? t("Connected to tenant {tenant}.").replace("{tenant}", tenant.tenantKey)
-      : t("Connected to the app's tenant. Its tenant key is recorded once the bot joins an internal group or a member links an account."))
+      ? (tenant.tenantName
+        ? t("Connected to tenant {name} ({tenant}).").replace("{name}", tenant.tenantName)
+        : t("Connected to tenant {tenant}.")).replace("{tenant}", tenant.tenantKey)
+      : t(tenantInfoMissing
+        ? "Connected to the app's tenant. Its tenant key is recorded once the bot joins an internal group or a member links an account."
+        : "Connected to the app's tenant. Flow reads its tenant key on the next check."))
+    : tenantMismatch
+      ? `${t(CHAT_ERROR_MESSAGES.chat_tenant_mismatch)} ${t("Recorded tenant: {recorded}. Reported by the platform: {reported}.").replace("{recorded}", tenant?.tenantKey || "—").replace("{reported}", tenant?.reportedTenantKey || "—")}`
     : tenantNotApproved
       ? chatErrorCodeMessage(tenant?.errorCode, t) ?? t(CHAT_ERROR_MESSAGES.chat_tenant_not_approved)
       : t("Not checked yet. Flow checks automatically once the app is approved and published.") + (canManage ? ` ${t("Select Test connection to check now.")}` : "");
@@ -216,6 +225,8 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
             <div className="feature-card">
               <PermissionRow icon={<KeyRound size={14} aria-hidden="true" />} title={t("Tenant")} granted={tenantAuthorized} failed={tenantNotApproved} testId="chat-tenant-permission">
                 <span data-testid="chat-tenant-status">{tenantMessage}</span>
+                {tenantAuthorized && tenant?.tenantKey && tenant.tenantKeySource === "observed" && <span className="chat-muted">{t("The tenant key was first seen in an internal group or a linked account.")}</span>}
+                {tenantInfoHint && <span data-testid="chat-tenant-info-hint">{tenantInfoHint}</span>}
                 {tenantAuthorized && authorization && <span>{(configuredBy
                   ? t("Detected automatically on {date}. Configured by {name}.").replace("{name}", configuredBy.displayName || configuredBy.name)
                   : t("Detected automatically on {date}.")).replace("{date}", formatDate(authorization.authorizedAt, { dateStyle: "medium" }))}</span>}

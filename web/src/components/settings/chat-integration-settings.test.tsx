@@ -162,11 +162,50 @@ it("shows the automatically authorized tenant and who configured it", async () =
   expect(screen.getByRole("button", { name: "Add group" })).toBeEnabled();
 });
 
+it("shows the tenant name and key read from the platform", async () => {
+  vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ permissions: { ...tenantPending(), tenant: { status: "authorized", tenantKey: "tenant-1", tenantName: "Acme", tenantKeySource: "platform", authorization: { tenantKey: "tenant-1", authorizedAt: "2026-10-20T00:00:00Z" } } } }));
+  show();
+  const permissions = await screen.findByRole("region", { name: "Permissions" });
+  expect(within(permissions).getByTestId("chat-tenant-status")).toHaveTextContent("Connected to tenant Acme (tenant-1).");
+  expect(within(permissions).queryByTestId("chat-tenant-info-hint")).not.toBeInTheDocument();
+  expect(within(permissions).queryByText("The tenant key was first seen in an internal group or a linked account.")).not.toBeInTheDocument();
+});
+
+it("asks for the tenant information permission and says where the key came from meanwhile", async () => {
+  vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ permissions: { ...tenantPending(), tenant: { status: "authorized", tenantInfoErrorCode: "chat_tenant_info_permission_missing", authorization: { authorizedAt: "2026-10-20T00:00:00Z" } } } }));
+  const { unmount } = show();
+  let permissions = await screen.findByRole("region", { name: "Permissions" });
+  expect(within(permissions).getByTestId("chat-tenant-status")).toHaveTextContent("Its tenant key is recorded once the bot joins an internal group or a member links an account.");
+  expect(within(permissions).getByTestId("chat-tenant-info-hint")).toHaveTextContent("Grant the app the 「获取企业信息」 permission (tenant:tenant:readonly) and publish a new version so Flow can show the tenant.");
+  expect(within(permissions).getByTestId("chat-tenant-permission")).toHaveAttribute("data-granted", "true");
+  unmount();
+
+  vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ permissions: { ...tenantPending(), tenant: { status: "authorized", tenantKey: "tenant-1", tenantKeySource: "observed", tenantInfoErrorCode: "chat_tenant_info_permission_missing" } } }));
+  show();
+  permissions = await screen.findByRole("region", { name: "Permissions" });
+  expect(within(permissions).getByTestId("chat-tenant-status")).toHaveTextContent("Connected to tenant tenant-1.");
+  expect(within(permissions).getByText("The tenant key was first seen in an internal group or a linked account.")).toBeInTheDocument();
+  expect(within(permissions).getByTestId("chat-tenant-info-hint")).toBeInTheDocument();
+});
+
 it("says when the tenant key is not known yet", async () => {
   vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ permissions: { ...tenantPending(), tenant: { status: "authorized", authorization: { authorizedAt: "2026-10-20T00:00:00Z" } } } }));
   show();
   const permissions = await screen.findByRole("region", { name: "Permissions" });
-  expect(within(permissions).getByTestId("chat-tenant-status")).toHaveTextContent("Its tenant key is recorded once the bot joins an internal group or a member links an account.");
+  expect(within(permissions).getByTestId("chat-tenant-status")).toHaveTextContent("Connected to the app's tenant. Flow reads its tenant key on the next check.");
+});
+
+it("flags a tenant other than the recorded one", async () => {
+  const mismatch = settings({ lastErrorCode: "chat_tenant_mismatch", permissions: tenantPending({ status: "mismatch", errorCode: "chat_tenant_mismatch", tenantKey: "tenant-1", reportedTenantKey: "tenant-2" }) });
+  mismatch.connection!.status = "error";
+  mismatch.connection!.lastError = "tenant mismatch";
+  vi.mocked(api.fetchChatIntegration).mockResolvedValue(mismatch);
+  show();
+  expect(await screen.findByText("Connection failed")).toBeInTheDocument();
+  const permissions = await screen.findByRole("region", { name: "Permissions" });
+  expect(within(permissions).getByTestId("chat-tenant-status")).toHaveTextContent("The chat platform reports a different tenant than the one this connection recorded. Disconnect the application and connect it again. Recorded tenant: tenant-1. Reported by the platform: tenant-2.");
+  expect(within(permissions).getByTestId("chat-tenant-permission")).toHaveAttribute("data-granted", "false");
+  expect(screen.getByRole("button", { name: "Add group" })).toBeDisabled();
 });
 
 it("explains which permission a member lacks and who can grant it", async () => {
@@ -188,6 +227,15 @@ it("shows the tenant states in Chinese with 飞书 for Feishu", async () => {
   expect(within(permissions).getByText("租户")).toBeInTheDocument();
   expect(within(permissions).getByTestId("chat-tenant-status")).toHaveTextContent("应用尚未在你的组织中审批或发布");
   expect(within(permissions).getByText(/飞书 管理员在管理后台审批并发布应用版本后/)).toBeInTheDocument();
+});
+
+it("asks for the tenant information permission in Chinese", async () => {
+  localStorage.setItem("flow:locale", "zh-CN");
+  vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ permissions: { ...tenantPending(), tenant: { status: "authorized", tenantKey: "tenant-1", tenantName: "示例公司", tenantInfoErrorCode: "chat_tenant_info_permission_missing" } } }));
+  show();
+  const permissions = await screen.findByRole("region", { name: "权限" });
+  expect(within(permissions).getByTestId("chat-tenant-status")).toHaveTextContent("已连接到租户 示例公司（tenant-1）。");
+  expect(within(permissions).getByTestId("chat-tenant-info-hint")).toHaveTextContent("请为应用开通「获取企业信息」权限（tenant:tenant:readonly）并发布新版本");
 });
 
 it("lets a private team owner bind only their team, with explicit authorization", async () => {

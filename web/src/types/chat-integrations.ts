@@ -24,7 +24,7 @@ export interface ChatBindingAuthorization {
  * administrator approved and published the app.
  */
 export interface ChatTenantAuthorization {
-  /** Empty until the platform names the tenant (the bot's internal groups or a member's linked account). */
+  /** Empty until the platform names the tenant (its tenant information, or while that is not readable the bot's internal groups or a member's linked account). */
   tenantKey?: string;
   authorizedAt: string;
   /** The workspace administrator who configured or last tested the connection. */
@@ -38,9 +38,20 @@ export interface ChatTenantAuthorization {
  */
 export interface ChatPermissions {
   tenant: {
-    /** pending: configured but not checked yet; not_approved: the last check was refused by the platform. */
-    status: "not_configured" | "pending" | "not_approved" | "authorized";
+    /**
+     * pending: configured but not checked yet; not_approved: the last check was refused by the platform;
+     * mismatch: the platform's tenant information names another tenant than the recorded one.
+     */
+    status: "not_configured" | "pending" | "not_approved" | "mismatch" | "authorized";
     tenantKey?: string;
+    /** The tenant's name from its tenant information. */
+    tenantName?: string;
+    /** platform: read from the tenant information; observed: first seen in an internal group or linked account. */
+    tenantKeySource?: "platform" | "observed";
+    /** Why the tenant information was not readable, such as chat_tenant_info_permission_missing. */
+    tenantInfoErrorCode?: string;
+    /** On mismatch, the tenant key the platform reported. */
+    reportedTenantKey?: string;
     authorization?: ChatTenantAuthorization;
     /** When the automatic check last ran. */
     checkedAt?: string;

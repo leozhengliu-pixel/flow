@@ -124,8 +124,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   tenant token and the bot's info is readable, Flow marks the tenant
   authorized (recording when, the tenant key and the administrator who
   configured the connection). Nobody signs in for it in Flow and there is no
-  tenant authorizer to designate, and the app no longer needs the tenant
-  information and contact scopes. Flow re-checks on **Test connection**,
+  tenant authorizer to designate, and the app no longer needs the contact
+  scopes. Flow re-checks on **Test connection**,
   periodically and after a refused token; until the app is approved the
   integration page says so (`chat_tenant_not_approved`). Linking a personal
   account needs only a healthy connection and never authorizes the tenant;
@@ -137,6 +137,19 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   automatically authorized on their next successful check. Groups the bot is
   not in, external groups and groups of another tenant are refused with
   their own messages.
+- Lark and Feishu connections record the tenant at once: every connection
+  check (saving, **Test connection** and the periodic check) reads the
+  tenant's information with the app's tenant token, and the integration
+  page shows the tenant's name and key. This needs the app permission
+  获取企业信息 (`tenant:tenant:readonly`), granted with the app version.
+  Without it the connection stays authorized, the page asks to grant it
+  and publish a new version (`chat_tenant_info_permission_missing`), and
+  only then is the key taken from the bot's internal groups or the first
+  linked account, marked as first seen. A recorded key is never replaced:
+  when the platform names another tenant, the connection shows a tenant
+  mismatch with both keys (`chat_tenant_mismatch`) and stops until it is
+  reconnected. Existing connections get the key and name on their next
+  check.
 
 ### Fixed
 

@@ -64,6 +64,9 @@ func TestChatApplicationSetupIdentityOAuthAndInternalGroupBindings(t *testing.T)
 					return chatTestResponse(200, `{"code":0,"tenant_access_token":"tenant-token","expire":3600}`), nil
 				case "/open-apis/bot/v3/info/":
 					return chatTestResponse(200, `{"code":0,"bot":{"open_id":"ou_bot","app_name":"Flow bot"}}`), nil
+				case "/open-apis/tenant/v2/tenant/query":
+					// The app lacks 「获取企业信息」 (tenant:tenant:readonly).
+					return chatTestResponse(400, `{"code":99991672,"msg":"Access denied. One of the following scopes is required: [tenant:tenant:readonly]"}`), nil
 				case "/oauth/v3/token", "/open-apis/authen/v2/oauth/token":
 					tokenExchanges++
 					input := map[string]string{}
@@ -109,10 +112,13 @@ func TestChatApplicationSetupIdentityOAuthAndInternalGroupBindings(t *testing.T)
 				t.Fatal("secret leaked in settings")
 			}
 			// Saving obtained a tenant token and read the bot: the tenant is
-			// authorized automatically. The bot's groups name two tenants, so
-			// the tenant key waits for a more certain source.
+			// authorized automatically. The app may not read the tenant
+			// information, so the page asks for that permission, and the
+			// tenant key falls back to the first platform answer naming it.
+			// The bot's groups name two tenants, so it waits for a more
+			// certain source.
 			tenant := settings["permissions"].(map[string]any)["tenant"].(map[string]any)
-			if settings["credentialsConfigured"] != true || settings["connection"].(map[string]any)["status"] != "connected" || tenant["status"] != "authorized" || tenant["tenantKey"] != nil || settings["identity"] != nil {
+			if settings["credentialsConfigured"] != true || settings["connection"].(map[string]any)["status"] != "connected" || tenant["status"] != "authorized" || tenant["tenantKey"] != nil || tenant["tenantInfoErrorCode"] != "chat_tenant_info_permission_missing" || settings["identity"] != nil {
 				t.Fatalf("tenant not authorized automatically: %#v", settings)
 			}
 			// A member links their own account; it names the tenant.
@@ -137,7 +143,7 @@ func TestChatApplicationSetupIdentityOAuthAndInternalGroupBindings(t *testing.T)
 			}
 			settings = requestJSON[map[string]any](t, handler, "GET", path+scope, nil, 200)
 			tenant = settings["permissions"].(map[string]any)["tenant"].(map[string]any)
-			if settings["identity"].(map[string]any)["openId"] != "ou_alice" || tenant["tenantKey"] != "tenant_a" {
+			if settings["identity"].(map[string]any)["openId"] != "ou_alice" || tenant["tenantKey"] != "tenant_a" || tenant["tenantKeySource"] != "observed" || tenant["tenantInfoErrorCode"] != "chat_tenant_info_permission_missing" {
 				t.Fatalf("identity not linked: %#v", settings)
 			}
 			groups := requestJSON[struct {

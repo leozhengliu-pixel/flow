@@ -94,7 +94,7 @@ func (s *server) queueChatPersonalNotification(ctx context.Context, key string, 
 			continue
 		}
 		if !record.Connected {
-			code = chatErrorCode(chatTenantNotApprovedMessage)
+			code = chatErrorCode(chatTenantRefusal(record))
 			continue
 		}
 		dedup := chatKey(record.ConnectionID, delivery.ID)
@@ -154,7 +154,7 @@ func (s *server) processChatPersonalNotification(ctx context.Context, record dom
 		return nil
 	}
 	if !record.Connected {
-		return fail(chatErrorCode(chatTenantNotApprovedMessage))
+		return fail(chatErrorCode(chatTenantRefusal(record)))
 	}
 	// Unlinking (or linking another account) stops delivery.
 	identity, err := s.store.ChatIdentityForUser(ctx, record.WorkspaceKey, record.ConnectionID, payload.UserID)
