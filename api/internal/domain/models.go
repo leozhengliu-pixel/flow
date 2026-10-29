@@ -1277,24 +1277,52 @@ type LoopContractOutput struct {
 
 // LoopContractTarget is where an output goes.
 type LoopContractTarget struct {
-	// Mode: new (a new one each time) | existing (an existing one) |
-	// triggering (the run's triggering entity) | any.
+	// Mode: new (a new one each time) | existing (an existing one, named by
+	// title, document, project or initiative) | triggering (the run's
+	// triggering entity) | matching (issues in a set the instructions
+	// describe, Match) | any.
 	Mode string `json:"mode,omitempty"`
-	// TitleTemplate is a new document's title, with {date}, {week},
-	// {month} or {year} for the run's period.
+	// TitleTemplate is a new document's or issue's title, with {date},
+	// {week}, {month}, {year}, {team} or {project} filled by the runtime and
+	// the Placeholders the run fills.
 	TitleTemplate string `json:"titleTemplate,omitempty"`
+	// Placeholders are the title template's placeholders the run's model
+	// fills ("{topic}"), each with what it is filled from.
+	Placeholders []LoopContractPlaceholder `json:"placeholders,omitempty"`
 	// Title and DocumentID name an existing document; a person picks the
 	// document by id in the editor.
 	Title      string `json:"title,omitempty"`
 	DocumentID string `json:"documentId,omitempty"`
+	// Ambiguous: the instructions refer to an existing document without
+	// saying which ("the team doc"); until a person picks it (DocumentID),
+	// runs write to no existing document for the output.
+	Ambiguous bool `json:"ambiguous,omitempty"`
 	// Team is the team named in the instructions; TeamID the resolved one.
 	Team   string `json:"team,omitempty"`
 	TeamID string `json:"teamId,omitempty"`
+	// Project and Initiative name the project or initiative an output is
+	// on (a comment or status update) or in (a new issue); ProjectID and
+	// InitiativeID are the resolved or picked ones.
+	Project      string `json:"project,omitempty"`
+	ProjectID    string `json:"projectId,omitempty"`
+	Initiative   string `json:"initiative,omitempty"`
+	InitiativeID string `json:"initiativeId,omitempty"`
+	// Match describes the set of issues a matching target covers ("bugs
+	// without repro steps").
+	Match string `json:"match,omitempty"`
 	// Description says the target in words.
 	Description string `json:"description,omitempty"`
 	// RenderedTitle is the title template for a run's period (on a run's
 	// contract only).
 	RenderedTitle string `json:"renderedTitle,omitempty"`
+}
+
+// LoopContractPlaceholder is a title placeholder the run's model fills.
+type LoopContractPlaceholder struct {
+	// Name is the placeholder without braces ("topic").
+	Name string `json:"name"`
+	// Source says what the run fills it from ("the error's subject").
+	Source string `json:"source,omitempty"`
 }
 
 // LoopContractCondition is a condition quoted from the instructions.
@@ -1401,7 +1429,8 @@ type LoopRun struct {
 	Replies []LoopRunReply `json:"replies,omitempty"`
 	// FailureReason classifies a run that did not complete: cancelled,
 	// interrupted, timeout, provider_timeout, provider_error, empty_response,
-	// tool_error, budget_exhausted, no_output, incomplete or unavailable.
+	// tool_error, budget_exhausted, no_output, incomplete, needs_target (the
+	// output's existing document is not chosen) or unavailable.
 	FailureReason string `json:"failureReason,omitempty"`
 	// Summary is the agent's structured final report (the finish_run tool).
 	Summary *LoopRunSummary `json:"summary,omitempty"`
@@ -1487,6 +1516,29 @@ type LoopRunToolCall struct {
 	FinishedAt *time.Time `json:"finishedAt,omitempty"`
 	// Document is what a save_document call did to the stored document.
 	Document *LoopRunDocumentWrite `json:"document,omitempty"`
+	// Output is what an issue, comment or status update write was for.
+	Output *LoopRunOutputWrite `json:"output,omitempty"`
+}
+
+// LoopRunOutputWrite records a loop run's issue, comment or status update
+// write as checked against the run's output contract: the item, where it
+// went, and the contract outputs whose target it is on (only those count as
+// produced).
+type LoopRunOutputWrite struct {
+	// Kind: issue | comment | statusUpdate; Operation: create | update.
+	Kind      string `json:"kind"`
+	Operation string `json:"operation"`
+	// ID is the issue, comment or status update made or changed.
+	ID string `json:"id,omitempty"`
+	// ParentType and ParentID are what a comment or status update is on
+	// (issue, project, initiative, document) or the issue changed.
+	ParentType string `json:"parentType,omitempty"`
+	ParentID   string `json:"parentId,omitempty"`
+	// Title is a new issue's title.
+	Title string `json:"title,omitempty"`
+	// Outputs are the indexes of the run contract's outputs the write is on
+	// target for.
+	Outputs []int `json:"outputs,omitempty"`
 }
 
 // LoopRunDocumentWrite records a loop run's document write as the stored

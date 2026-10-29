@@ -775,6 +775,13 @@ func acceptLoopRun(run *domain.LoopRun, ending *loopRunEnding) (string, string, 
 	if ending != nil {
 		return "needs_review", ending.reason, ending.message
 	}
+	skippedByCondition := run.Summary != nil && run.Summary.Status == "skipped" && contract != nil && len(contract.SkipConditions) > 0
+	if unchosen := loopContractUnchosen(contract); unchosen != nil && !skippedByCondition && (unchosen.Required || slices.ContainsFunc(run.ToolCalls, func(call domain.LoopRunToolCall) bool {
+		return call.Status == "blocked" && strings.HasPrefix(call.Error, loopChooseTargetPrefix)
+	})) {
+		// The run could not write where the instructions say: a person picks the document.
+		return "needs_review", "needs_target", loopChooseTargetNotice
+	}
 	if run.Summary != nil && run.Summary.Status == "incomplete" {
 		message := "The agent reported unfinished work"
 		if len(run.Summary.NotDone) > 0 {

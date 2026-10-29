@@ -103,10 +103,20 @@ type loopContractEvalCase struct {
 	// written.
 	writes   map[string]string
 	required []string
-	// title is a new document's title template; docTitle an existing
-	// document's title; team the team a new document goes to.
+	// title is a new document's (or issue's) title template; docTitle an
+	// existing document's title (none: the target is ambiguous); team the
+	// team a new document goes to.
 	title, docTitle, team string
 	always, skips, group  bool
+	// targets are the expected targets of a kind's write outputs: the mode,
+	// then field=value pairs (team, project, initiative; match=* for any
+	// description), e.g. "existing project=Mobile App".
+	targets map[string]string
+	// placeholders is how many model-filled placeholders a new document's or
+	// issue's title has; titlePrefix checks the start of a title template
+	// whose placeholder names the model picks.
+	placeholders int
+	titlePrefix  string
 }
 
 var loopContractEvalCases = []loopContractEvalCase{
@@ -161,6 +171,63 @@ var loopContractEvalCases = []loopContractEvalCase{
 	{text: "Count open issues per team and summarize.", readOnly: true},
 	{text: "统计每个团队的未完成事项数量并汇总", readOnly: true},
 	{text: "Read the team document and summarize it.", readOnly: true},
+	// Targets of comments, status updates and issues.
+	{text: "When a bug is reported, comment on it asking for repro steps.", trigger: "issue", writes: map[string]string{"comment": "create"}, required: []string{"comment"}, targets: map[string]string{"comment": "triggering"}},
+	{text: "Post a comment on the Q4 Launch project summarizing this week's progress.", writes: map[string]string{"comment": "create"}, required: []string{"comment"}, targets: map[string]string{"comment": "existing project=Q4 Launch"}},
+	{text: "Comment on every open bug that has no repro steps, asking for them.", writes: map[string]string{"comment": "create"}, targets: map[string]string{"comment": "matching match=*"}},
+	{text: "Every Friday post a status update on the Mobile App project.", writes: map[string]string{"statusUpdate": "create"}, required: []string{"statusUpdate"}, targets: map[string]string{"statusUpdate": "existing project=Mobile App"}},
+	{text: "每周五在「增长计划」目标上发布进展更新。", writes: map[string]string{"statusUpdate": "create"}, required: []string{"statusUpdate"}, targets: map[string]string{"statusUpdate": "existing initiative=增长计划"}},
+	{text: "Set the priority of issues labeled customer in the Support team.", writes: map[string]string{"issue": "update"}, required: []string{"issue"}, targets: map[string]string{"issue": "matching match=* team=Support"}},
+	{text: "Triage: set the priority of the issue that triggered this run; do not change other issues.", trigger: "issue", writes: map[string]string{"issue": "update"}, required: []string{"issue"}, targets: map[string]string{"issue": "triggering"}},
+	{text: "每周一在开发团队新建一个事项，标题为'设计评审-YYYY-MM-DD'。", writes: map[string]string{"issue": "create"}, required: []string{"issue"}, title: "设计评审-{date}", targets: map[string]string{"issue": "new team=开发团队"}},
+	// Title placeholders the run fills.
+	{text: "For each new error, open an issue in the Mobile team's Reliability project titled \"Error: <error message>\".", writes: map[string]string{"issue": "create"}, targets: map[string]string{"issue": "new team=Mobile project=Reliability"}, placeholders: 1, titlePrefix: "Error: {"},
+	{text: "为每条新的客户反馈创建一篇文档，标题为'反馈-{客户名}-YYYY-MM-DD'。", writes: map[string]string{"document": "create"}, title: "反馈-{客户名}-{date}", placeholders: 1},
+	{text: "Every Monday create a doc titled \"{topic} plan {week}\", where the topic is the week's main theme.", writes: map[string]string{"document": "create"}, required: []string{"document"}, title: "{topic} plan {week}", placeholders: 1},
+	// Existing documents named only by description.
+	{text: "Update our wiki page with the latest release notes.", writes: map[string]string{"document": "update"}, required: []string{"document"}},
+	{text: "把本周总结追加到团队的周报文档。", writes: map[string]string{"document": "append"}, required: []string{"document"}},
+}
+
+// loopContractEvalTarget checks a kind's write outputs against a target
+// spec ("existing project=Mobile App") and describes what it found.
+func loopContractEvalTarget(contract *domain.LoopOutputContract, kind, spec string) (bool, string) {
+	fields := strings.Fields(spec)
+	want := map[string]string{}
+	mode := ""
+	for index, field := range fields {
+		if key, value, ok := strings.Cut(field, "="); ok {
+			// Values may contain spaces: the rest of the spec up to the next key.
+			for _, more := range fields[index+1:] {
+				if strings.Contains(more, "=") {
+					break
+				}
+				value += " " + more
+			}
+			want[key] = value
+		} else if index == 0 {
+			mode = field
+		}
+	}
+	found, ok := "", false
+	for _, output := range loopContractOutputs(contract, kind) {
+		if !loopOpWrites(output.Operation) {
+			continue
+		}
+		target := output.Target
+		found += fmt.Sprintf("mode=%s team=%q project=%q initiative=%q match=%q; ", target.Mode, target.Team, target.Project, target.Initiative, target.Match)
+		match := target.Mode == mode
+		for key, value := range want {
+			got := map[string]string{"team": target.Team, "project": target.Project, "initiative": target.Initiative, "match": target.Match}[key]
+			if value == "*" {
+				match = match && got != ""
+			} else {
+				match = match && strings.EqualFold(strings.Trim(got, "「」\"' "), value)
+			}
+		}
+		ok = ok || match
+	}
+	return ok, found
 }
 
 // loopContractWrites lists a contract's write operations per kind.
@@ -233,19 +300,28 @@ func TestLoopContractEvaluation(t *testing.T) {
 		slices.Sort(gotRequired)
 		check("required", slices.Equal(gotRequired, wantRequired), gotRequired, wantRequired)
 		targetOK, target := true, ""
-		for _, output := range loopContractOutputs(contract, "document") {
+		titled := func(output domain.LoopContractOutput) bool {
+			placeholders := len(loopModelPlaceholders(output.Target.TitleTemplate))
+			return (item.title == "" || output.Target.TitleTemplate == item.title) && (item.titlePrefix == "" || strings.HasPrefix(output.Target.TitleTemplate, item.titlePrefix)) && placeholders == item.placeholders && len(output.Target.Placeholders) == placeholders
+		}
+		for _, output := range append(loopContractOutputs(contract, "document"), loopContractOutputs(contract, "issue")...) {
 			if !loopOpWrites(output.Operation) {
 				continue
 			}
-			target += fmt.Sprintf("%s mode=%s template=%q title=%q team=%q; ", output.Operation, output.Target.Mode, output.Target.TitleTemplate, output.Target.Title, output.Target.Team)
-			if output.Operation == loopOpCreate && (output.Target.Mode != "new" || item.title != "" && output.Target.TitleTemplate != item.title || item.team != "" && !strings.EqualFold(output.Target.Team, item.team)) {
+			target += fmt.Sprintf("%s %s mode=%s template=%q placeholders=%v title=%q ambiguous=%v team=%q; ", output.Kind, output.Operation, output.Target.Mode, output.Target.TitleTemplate, output.Target.Placeholders, output.Target.Title, output.Target.Ambiguous, output.Target.Team)
+			if output.Operation == loopOpCreate && (output.Target.Mode != "new" || !titled(output) || output.Kind == "document" && item.team != "" && !strings.EqualFold(output.Target.Team, item.team)) {
 				targetOK = false
 			}
-			if (output.Operation == loopOpAppend || output.Operation == loopOpUpdate) && (output.Target.Mode != "existing" || !strings.EqualFold(output.Target.Title, item.docTitle)) {
+			if output.Kind == "document" && (output.Operation == loopOpAppend || output.Operation == loopOpUpdate) && (output.Target.Mode != "existing" || !strings.EqualFold(output.Target.Title, item.docTitle) || output.Target.Ambiguous != (item.docTitle == "")) {
 				targetOK = false
 			}
 		}
-		check("target", targetOK, target, fmt.Sprintf("template=%q title=%q team=%q", item.title, item.docTitle, item.team))
+		for kind, spec := range item.targets {
+			ok, found := loopContractEvalTarget(contract, kind, spec)
+			targetOK = targetOK && ok
+			target += fmt.Sprintf("%s: %s", kind, found)
+		}
+		check("target", targetOK, target, fmt.Sprintf("template=%q prefix=%q placeholders=%d title=%q team=%q targets=%v", item.title, item.titlePrefix, item.placeholders, item.docTitle, item.team, item.targets))
 		check("always", contract.Always == item.always, contract.Always, item.always)
 		check("skips", (len(contract.SkipConditions) > 0) == item.skips, contract.SkipConditions, item.skips)
 		groups := 0

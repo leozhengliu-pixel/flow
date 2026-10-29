@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -43,7 +44,7 @@ const (
 
 var (
 	loopContractOperations    = []string{loopOpCreate, loopOpUpdate, loopOpAppend, loopOpWrite, loopOpRead, loopOpForbidden}
-	loopContractTargetModes   = []string{"new", "existing", "triggering", "any"}
+	loopContractTargetModes   = []string{"new", "existing", "triggering", "matching", "any"}
 	loopContractCardinalities = []string{"onePerRun", "perItem", "any"}
 )
 
@@ -114,7 +115,8 @@ func normalizeLoopContract(contract *domain.LoopOutputContract) error {
 		}
 		target.TitleTemplate, target.Title, target.DocumentID = clip(target.TitleTemplate, 200), clip(target.Title, 200), clip(target.DocumentID, 120)
 		target.Team, target.TeamID, target.Description = clip(target.Team, 120), clip(target.TeamID, 120), clip(target.Description, 300)
-		target.RenderedTitle = clip(target.RenderedTitle, 200)
+		target.Project, target.ProjectID, target.Initiative, target.InitiativeID = clip(target.Project, 120), clip(target.ProjectID, 120), clip(target.Initiative, 120), clip(target.InitiativeID, 120)
+		target.Match, target.RenderedTitle = clip(target.Match, 300), clip(target.RenderedTitle, 200)
 		if output.Kind == "document" && output.Operation == loopOpCreate && target.Mode == "existing" {
 			problems = append(problems, fmt.Sprintf("%s: a created document is new; use target.mode new (or operation update/append for an existing document)", where))
 			continue
@@ -123,8 +125,9 @@ func normalizeLoopContract(contract *domain.LoopOutputContract) error {
 			problems = append(problems, fmt.Sprintf("%s: update and append change an existing document; give its title in target.title, or use operation create for a new document", where))
 			continue
 		}
-		if output.Kind != "document" {
-			target.TitleTemplate, target.Title, target.DocumentID, target.RenderedTitle = "", "", "", ""
+		if problem := normalizeLoopContractTarget(output.Kind, output.Operation, target, clip); problem != "" {
+			problems = append(problems, where+": "+problem)
+			continue
 		}
 		output.Cardinality = strings.TrimSpace(output.Cardinality)
 		if output.Cardinality == "" {
@@ -311,15 +314,42 @@ func resolveLoopContract(data domain.Bootstrap, documents []domain.Document, loo
 				target.TeamID = loop.TeamID
 			}
 		}
-		if output.Kind != "document" {
+		// A named project or initiative is found by id, name or slug; one
+		// that is not there limits nothing.
+		if target.ProjectID != "" || target.Project != "" {
+			target.ProjectID = ""
+			if project, err := mcpFindProject(data, firstNonEmpty(contract.Outputs[index].Target.ProjectID, target.Project)); err == nil {
+				target.ProjectID, target.Project = project.ID, project.Name
+			}
+		}
+		if target.InitiativeID != "" || target.Initiative != "" {
+			target.InitiativeID = ""
+			if initiative, err := mcpFindInitiative(data, firstNonEmpty(contract.Outputs[index].Target.InitiativeID, target.Initiative)); err == nil {
+				target.InitiativeID, target.Initiative = initiative.ID, initiative.Name
+			}
+		}
+		target.Placeholders = slices.Clone(target.Placeholders)
+		if output.Kind != "document" && output.Kind != "issue" {
 			continue
 		}
-		if target.TeamID == "" && target.Team == "" && output.Operation == loopOpCreate && loop.TeamID != "" {
+		if output.Kind == "document" && target.TeamID == "" && target.Team == "" && output.Operation == loopOpCreate && loop.TeamID != "" {
 			// A team loop's new documents are its team's unless the text names another.
 			target.TeamID = loop.TeamID
 		}
 		if target.TitleTemplate != "" {
-			target.RenderedTitle = renderLoopTitle(target.TitleTemplate, at, trigger.Occurrence)
+			team, project := "", target.Project
+			if found, ok := loopFindTeam(data, firstNonEmpty(target.TeamID, loop.TeamID)); ok {
+				team = found.Name
+			}
+			if project == "" && trigger.EntityType == "project" {
+				if found, err := mcpFindProject(data, trigger.EntityID); err == nil {
+					project = found.Name
+				}
+			}
+			target.RenderedTitle = renderLoopTitleNames(renderLoopTitle(target.TitleTemplate, at, trigger.Occurrence), team, project)
+		}
+		if output.Kind != "document" {
+			continue
 		}
 		if target.DocumentID == "" && target.Title != "" && target.Mode != "new" {
 			matches := []string{}
@@ -394,6 +424,8 @@ func loopCallOutput(name string, args map[string]any) (string, string) {
 		return "statusUpdate", op
 	case "save_issue":
 		return "issue", op
+	case "triage_issue":
+		return "issue", loopOpUpdate
 	case "save_comment":
 		return "comment", op
 	case "save_document":
@@ -416,43 +448,34 @@ var loopKindNouns = map[string]string{
 
 // loopContractCallRefusal checks a write call that is not a save_document
 // against the run's contract (save_document is checked by
-// prepareLoopDocumentWrite, which reads the document). A create needs an
-// output of its kind that creates; a forbidden kind is refused; updates of
-// issues, comments and status updates, and other changes, are allowed unless
-// the contract forbids them.
-func (s *server) loopContractCallRefusal(rec *loopRunRecorder, contract *domain.LoopOutputContract, call domain.AgentToolCall) error {
+// prepareLoopDocumentWrite, which reads the document). Issue, comment and
+// status update writes are checked against their outputs' targets
+// (checkLoopOutputCall), which also gives their record; a forbidden kind is
+// refused; other changes are allowed unless the contract forbids them.
+func (s *server) loopContractCallRefusal(ctx context.Context, rec *loopRunRecorder, data domain.Bootstrap, contract *domain.LoopOutputContract, call domain.AgentToolCall) (*loopOutputCall, error) {
 	if contract == nil || rec.answering {
-		return nil
+		return nil, nil
 	}
 	args := loopToolArgs(call)
-	kind, op := loopCallOutput(call.Name, args)
-	if kind == "document" {
+	kind, _ := loopCallOutput(call.Name, args)
+	switch kind {
+	case "document":
 		if strings.TrimPrefix(call.Name, "mcp__flow.") == "save_document" {
-			return nil
+			return nil, nil
 		}
 		document, found := s.loopFindDocument(rec.workspace, loopStringArg(args, "id"))
 		if !found {
-			return nil
+			return nil, nil
 		}
 		_, err := loopContractDocumentTarget(rec, contract, document)
-		return err
-	}
-	if kind != "change" && op == loopOpCreate {
-		outputs := loopContractOutputs(contract, kind)
-		if slices.ContainsFunc(outputs, func(output domain.LoopContractOutput) bool {
-			return output.Operation == loopOpCreate || output.Operation == loopOpWrite
-		}) {
-			return nil
-		}
-		if loopContractForbids(contract, kind) {
-			return fmt.Errorf("%s %s; the call was not made", loopProhibitedCallPrefix, loopProhibitedLabels[kind])
-		}
-		return fmt.Errorf("%s: this loop's outputs do not include creating %s, so the call was not made. Make only the outputs the loop lists", loopContractRefusalPrefix, loopKindNouns[kind])
+		return nil, err
+	case "issue", "comment", "statusUpdate":
+		return s.checkLoopOutputCall(ctx, rec, data, contract, call, kind)
 	}
 	if loopContractForbids(contract, "change") {
-		return fmt.Errorf("%s make other changes in Flow; the call was not made", loopProhibitedCallPrefix)
+		return nil, fmt.Errorf("%s make other changes in Flow; the call was not made", loopProhibitedCallPrefix)
 	}
-	return nil
+	return nil, nil
 }
 
 // loopContractRefusalPrefix starts the error of a call outside the contract.
@@ -467,8 +490,9 @@ func loopDocumentCreatedInRun(rec *loopRunRecorder, id string) bool {
 }
 
 // loopContractTargetMatches reports whether a document is an existing-
-// document output's target: by id, else by title, else (a target named only
-// in words, "the team document") any document in its team.
+// document output's target: by id, else by title; a target the instructions
+// name only in words ("the team doc") is none until a person picks it, and
+// one a person left as "any existing document" is any document in its team.
 func loopContractTargetMatches(output domain.LoopContractOutput, document domain.Document) bool {
 	target := output.Target
 	switch {
@@ -476,7 +500,7 @@ func loopContractTargetMatches(output domain.LoopContractOutput, document domain
 		return target.DocumentID == document.ID
 	case target.Title != "":
 		return strings.EqualFold(strings.TrimSpace(document.Title), target.Title) || target.RenderedTitle != "" && strings.EqualFold(document.Title, target.RenderedTitle)
-	case target.Mode == "new":
+	case target.Mode == "new" || target.Ambiguous:
 		return false
 	case target.TeamID != "":
 		return len(document.TeamIDs) == 0 || slices.Contains(document.TeamIDs, target.TeamID)
@@ -503,8 +527,14 @@ func loopContractDocumentTarget(rec *loopRunRecorder, contract *domain.LoopOutpu
 			return &outputs[index], nil
 		}
 	}
+	if unchosen := loopContractUnchosen(contract); unchosen != nil {
+		return nil, loopChooseTargetError(*unchosen)
+	}
+	changes := slices.ContainsFunc(outputs, func(output domain.LoopContractOutput) bool {
+		return output.Operation == loopOpUpdate || output.Operation == loopOpAppend || output.Operation == loopOpWrite
+	})
 	for _, output := range outputs {
-		if output.Operation == loopOpCreate && output.Target.Mode == "new" {
+		if output.Operation == loopOpCreate && output.Target.Mode == "new" && !changes {
 			title := firstNonEmpty(output.Target.RenderedTitle, output.Target.TitleTemplate)
 			named := ""
 			if title != "" {
@@ -526,6 +556,16 @@ func loopContractDocumentTarget(rec *loopRunRecorder, contract *domain.LoopOutpu
 		return nil, fmt.Errorf("%s: this loop writes to %s, not to %q, so the call was not made", loopContractRefusalPrefix, strings.Join(targets, " or "), document.Title)
 	}
 	return nil, fmt.Errorf("%s: this loop's outputs do not include changing documents, so the call was not made", loopContractRefusalPrefix)
+}
+
+// loopChooseTargetError refuses a write to an existing document while the
+// output's document is not chosen.
+func loopChooseTargetError(output domain.LoopContractOutput) error {
+	described := ""
+	if text := firstNonEmpty(output.Target.Description, output.Evidence); text != "" {
+		described = fmt.Sprintf(" (%q)", text)
+	}
+	return fmt.Errorf("%s: this loop's instructions refer to an existing document%s without saying which one, and nobody has picked it in the loop's outputs yet, so the run writes to no existing document and the call was not made. Read what you need, put the content in finish_run's summary, and say that the target document must be chosen", loopChooseTargetPrefix, described)
 }
 
 // loopContractDocumentName names an output's document for messages.
@@ -559,6 +599,8 @@ func loopContractCreate(rec *loopRunRecorder, data domain.Bootstrap, contract *d
 	}
 	if len(creates) == 0 {
 		switch {
+		case loopContractUnchosen(contract) != nil:
+			return nil, nil, loopChooseTargetError(*loopContractUnchosen(contract))
 		case slices.ContainsFunc(outputs, func(output domain.LoopContractOutput) bool {
 			return output.Operation == loopOpUpdate || output.Operation == loopOpAppend
 		}):
@@ -588,15 +630,15 @@ func loopContractCreate(rec *loopRunRecorder, data domain.Bootstrap, contract *d
 		next[key] = value
 	}
 	if rendered := output.Target.RenderedTitle; rendered != "" {
-		title := loopStringArg(args, "title")
-		switch {
-		case !loopUnknownPlaceholder.MatchString(rendered):
-			// The contract names the title: the run's date goes in, whatever the model wrote.
-			next["title"] = rendered
-		case !loopTitleMatches(rendered, title):
-			return nil, nil, fmt.Errorf("%s: this loop's new document is titled %q (fill in the {…} parts), not %q; the call was not made", loopContractRefusalPrefix, rendered, title)
+		// The contract names the title: the run's period goes in, whatever the
+		// model wrote, and the run fills only the placeholders it owns.
+		title, err := loopFillTitle(rendered, output.Target, args, "document")
+		if err != nil {
+			return nil, nil, err
 		}
+		next["title"] = title
 	}
+	delete(next, loopTitleFieldsArg)
 	if teamID := output.Target.TeamID; teamID != "" {
 		team, _ := loopFindTeam(data, teamID)
 		given := loopStringArg(args, "team", "teamId")
@@ -609,15 +651,20 @@ func loopContractCreate(rec *loopRunRecorder, data domain.Bootstrap, contract *d
 	return &output, next, nil
 }
 
-// loopContractOutputDone reports whether a run produced a required output,
-// as its tool records and the stored documents show it. A refused or failed
-// call never counts.
-func loopContractOutputDone(run *domain.LoopRun, output domain.LoopContractOutput) bool {
+// loopContractOutputDone reports whether a run produced a required output
+// (the contract's index-th), as its tool records and the stored documents
+// show it: an issue, comment or status update write on the output's target,
+// a document write that changed the document. A refused or failed call
+// never counts.
+func loopContractOutputDone(run *domain.LoopRun, index int, output domain.LoopContractOutput) bool {
+	if output.Kind == "change" {
+		return run.Produced["change"] > 0
+	}
 	if output.Kind != "document" {
-		if output.Kind == "change" || output.Operation == loopOpUpdate {
-			return run.Produced["change"] > 0
-		}
-		return run.Produced[output.Kind] > 0
+		return slices.ContainsFunc(run.ToolCalls, func(call domain.LoopRunToolCall) bool {
+			// A legacy "issue" output is a new issue.
+			return call.Status == "completed" && call.Output != nil && slices.Contains(call.Output.Outputs, index) && !(output.Kind == "issue" && output.Operation == loopOpWrite && call.Output.Operation != loopOpCreate)
+		})
 	}
 	for _, call := range run.ToolCalls {
 		record := call.Document
@@ -650,10 +697,20 @@ func loopContractOutputDone(run *domain.LoopRun, output domain.LoopContractOutpu
 // loopContractOutputLabel names a missing output.
 func loopContractOutputLabel(output domain.LoopContractOutput) string {
 	if output.Kind != "document" {
+		label := loopOutputLabels[output.Kind]
 		if output.Operation == loopOpUpdate && output.Kind != "change" {
-			return "an update to " + strings.TrimSuffix(loopKindNouns[output.Kind], "s")
+			label = "an update to " + strings.TrimSuffix(loopKindNouns[output.Kind], "s")
 		}
-		return loopOutputLabels[output.Kind]
+		if output.Kind != "change" && loopTargetConstrained(output.Kind, output.Target) {
+			if where := loopTargetName(domain.Bootstrap{}, output.Kind, output.Target, "", ""); where != "" {
+				joiner := " on "
+				if strings.HasPrefix(where, "in ") {
+					joiner = " "
+				}
+				label += joiner + where
+			}
+		}
+		return label
 	}
 	switch output.Operation {
 	case loopOpCreate:
@@ -683,13 +740,15 @@ func loopContractMissing(run *domain.LoopRun, contract *domain.LoopOutputContrac
 	if contract == nil || contract.ReadOnly {
 		return missing
 	}
-	for _, output := range contract.Outputs {
-		if !output.Required || !loopOpWrites(output.Operation) || loopContractOutputDone(run, output) {
+	for index, output := range contract.Outputs {
+		if !output.Required || !loopOpWrites(output.Operation) || loopContractOutputDone(run, index, output) {
 			continue
 		}
-		if output.Group != "" && slices.ContainsFunc(contract.Outputs, func(other domain.LoopContractOutput) bool {
-			return other.Group == output.Group && loopOpWrites(other.Operation) && loopContractOutputDone(run, other)
-		}) {
+		alternative := false
+		for other, item := range contract.Outputs {
+			alternative = alternative || output.Group != "" && item.Group == output.Group && loopOpWrites(item.Operation) && loopContractOutputDone(run, other, item)
+		}
+		if alternative {
 			continue
 		}
 		missing = append(missing, output)
@@ -732,9 +791,7 @@ func loopContractOutputPrompt(output domain.LoopContractOutput) string {
 		line.WriteString(text)
 		target := output.Target
 		if output.Operation == loopOpCreate || output.Operation == loopOpWrite {
-			if title := firstNonEmpty(target.RenderedTitle, target.TitleTemplate); title != "" {
-				fmt.Fprintf(&line, ", titled exactly %q", title)
-			}
+			loopTitlePrompt(&line, target, "save_document")
 		}
 		if target.TeamID != "" || target.Team != "" {
 			fmt.Fprintf(&line, ", in the team %s", firstNonEmpty(target.Team, target.TeamID))
@@ -747,8 +804,13 @@ func loopContractOutputPrompt(output domain.LoopContractOutput) string {
 		}
 	case output.Operation == loopOpUpdate && loopUpdatePrompts[output.Kind] != "":
 		line.WriteString(loopUpdatePrompts[output.Kind])
+		loopTargetPrompt(&line, output)
 	default:
 		line.WriteString(loopOutputPrompts[output.Kind])
+		if output.Kind == "issue" && (output.Operation == loopOpCreate || output.Operation == loopOpWrite) {
+			loopTitlePrompt(&line, output.Target, "save_issue")
+		}
+		loopTargetPrompt(&line, output)
 	}
 	switch output.Cardinality {
 	case "onePerRun":
@@ -760,6 +822,48 @@ func loopContractOutputPrompt(output domain.LoopContractOutput) string {
 		fmt.Fprintf(&line, " (when: %s)", strings.Join(output.Conditions, "; "))
 	}
 	return line.String()
+}
+
+// loopTitlePrompt asks for a new document's or issue's title: exactly the
+// rendered template, with titleFields for the placeholders the run fills.
+func loopTitlePrompt(line *strings.Builder, target domain.LoopContractTarget, tool string) {
+	title := firstNonEmpty(target.RenderedTitle, target.TitleTemplate)
+	if title == "" {
+		return
+	}
+	fmt.Fprintf(line, ", titled exactly %q", title)
+	if names := loopModelPlaceholders(title); len(names) > 0 {
+		fmt.Fprintf(line, " (pass %s %s to %s for the {…} parts; Flow builds the title)", loopTitleFieldsArg, loopTitleFieldsHint(target, names), tool)
+	}
+}
+
+// loopTargetPrompt says where an issue, comment or status update output
+// goes; writes elsewhere are refused.
+func loopTargetPrompt(line *strings.Builder, output domain.LoopContractOutput) {
+	if output.Kind == "change" || !loopTargetConstrained(output.Kind, output.Target) {
+		return
+	}
+	if where := loopTargetName(domain.Bootstrap{}, output.Kind, output.Target, "", ""); where != "" {
+		target := output.Target
+		ids := []string{}
+		for _, id := range []string{target.ProjectID, target.InitiativeID} {
+			if id != "" {
+				ids = append(ids, id)
+			}
+		}
+		if output.Kind == "issue" && target.TeamID != "" {
+			ids = append(ids, "team "+target.TeamID)
+		}
+		suffix := ""
+		if len(ids) > 0 {
+			suffix = " (" + strings.Join(ids, ", ") + ")"
+		}
+		joiner := " on "
+		if strings.HasPrefix(where, "in ") {
+			joiner = " "
+		}
+		fmt.Fprintf(line, ",%s%s%s only; calls on anything else are refused", joiner, where, suffix)
+	}
 }
 
 // loopContractPrompt tells the run's model what its contract asks for and
@@ -774,8 +878,12 @@ func loopContractPrompt(prompt *strings.Builder, contract *domain.LoopOutputCont
 		prompt.WriteString("The instructions forbid every change: do not create, change or delete anything in Flow or through a connector tool (such calls are refused; only connector tools their connector marks read-only run). The text reply in finish_run's summary is the run's only output.\n")
 	} else {
 		required, optional := []string{}, []string{}
+		unchosen := loopContractUnchosen(contract)
+		if unchosen != nil {
+			fmt.Fprintf(prompt, "\nThe instructions ask to write to an existing document (%s) without saying which one, and it has not been chosen in the loop's outputs yet: do not write to any existing document (such calls are refused). Read what you need, put the content in finish_run's summary, and say that the target document must be chosen.\n", firstNonEmpty(unchosen.Target.Description, unchosen.Evidence, "the document"))
+		}
 		for _, output := range contract.Outputs {
-			if !loopOpWrites(output.Operation) {
+			if !loopOpWrites(output.Operation) || output.Kind == "document" && output.Target.Ambiguous && output.Target.DocumentID == "" && output.Operation != loopOpCreate {
 				continue
 			}
 			if output.Required {

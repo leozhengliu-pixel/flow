@@ -529,12 +529,16 @@ func (rec *loopRunRecorder) startTool(ctx context.Context, call domain.AgentTool
 }
 
 // finishTool records a tool call's outcome; a successful change counts
-// toward the run's produced outputs.
-func (rec *loopRunRecorder) finishTool(index int, status string, callErr error, write bool, args map[string]any, document *domain.LoopRunDocumentWrite) {
+// toward the run's produced outputs (an issue, comment or status update only
+// when it is on the target of one of the contract's outputs).
+func (rec *loopRunRecorder) finishTool(index int, status string, callErr error, write bool, args map[string]any, document *domain.LoopRunDocumentWrite, output ...*domain.LoopRunOutputWrite) {
 	now := time.Now().UTC()
 	_, calls, _ := rec.parts()
 	record := &(*calls)[index]
 	record.Status, record.FinishedAt, record.Document = status, &now, document
+	if len(output) > 0 {
+		record.Output = output[0]
+	}
 	if args != nil {
 		// The arguments the call ran with (the contract may set a new document's title and team).
 		record.Args = loopToolArgsSummary(args)
@@ -548,7 +552,7 @@ func (rec *loopRunRecorder) finishTool(index int, status string, callErr error, 
 		}
 		rec.run.Produced["change"]++
 		// A document write counts once the stored document shows it.
-		if kind := loopOutputKind(record.Name, args); kind != "" && (kind != "document" || document != nil && document.Changed) {
+		if kind := loopOutputKind(record.Name, args); kind != "" && (kind != "document" || document != nil && document.Changed) && (record.Output == nil || len(record.Output.Outputs) > 0) {
 			rec.run.Produced[kind]++
 		}
 	}
@@ -810,6 +814,9 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 		}
 	}
 	plan := loopRunPlan{Tools: toolNames, Limits: limits, Contract: contract}
+	if loopModelFilledTitles(contract, "document") || loopModelFilledTitles(contract, "issue") {
+		request = request.WithContext(context.WithValue(request.Context(), agentToolRewriteKey{}, loopTitleFieldsTools(contract)))
+	}
 
 	entity := s.loopEntityContext(ctx, workspace, data, trigger)
 	messages := []agentProviderMessage{
@@ -983,6 +990,7 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 			// replying on the run page may still ask for anything.
 			name := strings.TrimPrefix(call.Name, "mcp__flow.")
 			external := strings.HasPrefix(name, "external_")
+			var output *loopOutputCall
 			switch {
 			case callErr != nil || rec.answering || contract == nil || readOnly[name]:
 			case contract.ReadOnly && external:
@@ -992,7 +1000,13 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 				// "只回复总结文本即可，不要…写入内容": no change of any kind.
 				callErr = fmt.Errorf("%s change anything in Flow; reply with the summary only. The call was not made", loopProhibitedCallPrefix)
 			case !external:
-				callErr = s.loopContractCallRefusal(rec, contract, call)
+				output, callErr = s.loopContractCallRefusal(ctx, rec, data, contract, call)
+				if callErr == nil && output != nil && output.arguments != nil {
+					// A new issue's title, team and project from the contract;
+					// the team must still be one the loop can use.
+					call.Arguments = output.arguments
+					callErr = scope.check(ctx, call)
+				}
 			}
 			var document *loopDocumentWrite
 			if callErr == nil && name == "save_document" {
@@ -1003,6 +1017,10 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 					call.Arguments = document.arguments
 					callErr = scope.check(ctx, call)
 				}
+			}
+			if callErr == nil {
+				// titleFields is the loop's own argument: the tools do not take it.
+				call.Arguments = loopWithoutTitleFields(call.Arguments)
 			}
 			if callErr != nil {
 				status = "blocked"
@@ -1024,6 +1042,8 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 					status = "error"
 				} else if document != nil {
 					s.verifyLoopDocumentWrite(workspace, document, result)
+				} else if output != nil && output.record.ID == "" {
+					output.record.ID = loopOutputResultID(result)
 				}
 				if document != nil {
 					s.settleLoopDocumentClaim(workspace, document, callErr)
@@ -1038,7 +1058,11 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 				write = write && (document.applied == "" || record.Changed)
 			}
 			callErr = publicToolError(ctx, call.Name, callErr)
-			rec.finishTool(index, status, callErr, write, loopToolArgs(call), record)
+			var written *domain.LoopRunOutputWrite
+			if output != nil {
+				written = output.record
+			}
+			rec.finishTool(index, status, callErr, write, loopToolArgs(call), record, written)
 			if fingerprint := loopWriteFingerprint(call.Name, loopToolArgs(call)); write && status == "completed" && rec.completedWrites != nil && fingerprint != "" {
 				rec.completedWrites[fingerprint] = loopToolLabel(call.Name, loopToolArgs(call))
 			}
