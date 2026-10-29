@@ -1,6 +1,7 @@
 /* Invite members dialog — parity: 562px wide, 16.5px from the card edge to the fields, the close
    button and the send button. */
 .dialog-content.invite-members-dialog {
+  --invite-dialog-error: var(--semantic-danger);
   top: 154px;
   width: min(562px, calc(100vw - 32px));
   padding: 0 0 12.5px;
@@ -110,12 +111,12 @@ html[lang|="zh"] .invite-members-dialog__optional {
   box-shadow: 0 0 0 0.5px var(--accent-primary);
 }
 .invite-members-dialog__field textarea[aria-invalid="true"] {
-  border-color: var(--semantic-danger);
+  border-color: var(--invite-dialog-error);
   box-shadow: none;
 }
 .invite-members-dialog__error {
   margin: -1px 0 0;
-  color: var(--semantic-danger);
+  color: var(--invite-dialog-error);
   font-size: 12px;
   line-height: 16px;
 }

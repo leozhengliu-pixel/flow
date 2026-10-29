@@ -329,6 +329,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   sensitive-data and private-team restrictions.
 - Issue assignee menus sort the remaining team members by display name in the active language
   (pinyin for Chinese), keeping the viewer and current assignee in the numbered section only.
+- Invite dialogs use the existing light error color and retain focus and invalid field borders
+  in light mode; surfaces, controls and placeholders continue to use their light theme tokens.
 - Every other stored `PATCH` and `PUT` now also writes nothing when it only
   repeats the current values (no `version` or `updatedAt` change, event,
   realtime update, webhook or notification): releases, release pipelines and
