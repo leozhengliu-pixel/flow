@@ -160,6 +160,66 @@ To check, run `EXPLAIN (ANALYZE, BUFFERS)` on a count. The scans on
 `issue_records_tree_idx` should be `Index Only Scan` with `Heap Fetches` close
 to zero.
 
+## Extended issue count paths
+
+Nested counts by project, creator, cycle and customer join the tree entries
+with the existing secondary indexes in memory. Project, subscriber and sparse
+attribute filters read matching ids once from their indexes, including OR,
+NOT, missing values and numeric estimate comparisons. Full-text search reads
+its matching ids first and returns immediately for no hits. Title/identifier
+substring filters still need table columns (there is no covering index for
+the full title); they scan the query's team/archive scope once, without
+decoding issue payloads or rechecking every parent.
+
+No new physical index or schema migration is required. Small project and
+assignee results keep their cheaper SQL walk. Unsupported filters, ambiguous
+status types and plans exceeding 62 filter bits still use the SQL fallback.
+
+Reproduce the paired comparison on a throwaway MySQL 8.4 database:
+
+```bash
+cd api
+~/.flow-local/heavy.sh env GOMAXPROCS=2 \
+  FLOW_TEST_DATABASE_DRIVER=mysql FLOW_TEST_DATABASE_URL="$SCRATCH_MYSQL_URL" \
+  FLOW_NESTED_COUNT_ISSUES=75000 FLOW_NESTED_COUNT_COMPARE=1 \
+  go test -p 1 ./internal/store -run '^TestNestedIssueCountTimings$' \
+  -v -count=1 -timeout=10m
+```
+
+The test generates 75,000 issues with 21,215 sub-issues, varied creators,
+cycles, subscribers, estimates and customer requests. It alternates five
+uncached samples of the previous SQL count/subtree-walk path and the new
+path, checking count parity for each sample. The reported p95 is the maximum
+of five samples, not a production latency estimate. Unless
+`FLOW_NESTED_COUNT_KEEP=1` is set, the generated workspace is deleted on exit.
+
+On a local MySQL 8.4 container, an earlier paired run measured these
+p50 / p95 values in milliseconds (five samples):
+
+| View | Previous SQL path | Index forest |
+|---|---:|---:|
+| Project groups | 294.9 / 372.2 | 46.0 / 52.9 |
+| Creator groups | 359.3 / 363.1 | 59.5 / 67.9 |
+| Cycle groups | 361.3 / 367.2 | 46.9 / 49.7 |
+| Customer groups | 33572.7 / 34506.2 | 56.1 / 95.8 |
+| Project filter | 363.7 / 456.6 | 103.4 / 173.4 |
+| Subscriber filter | 293.8 / 432.1 | 56.7 / 126.3 |
+| Estimate filter | 313.5 / 507.2 | 52.6 / 144.6 |
+
+These are development measurements, not service-level targets. A later run
+with a broad full-text term timed out in the previous recursive SQL path
+while MySQL reported `FULLTEXT initialization`; no p50/p95 is claimed for
+that comparison. The initial substring comparison was 347.7 / 405.2 ms
+versus 287.6 / 300.8 ms, before further narrowing the substring scan to the
+team/archive scope.
+
+PostgreSQL numbering now assigns the batch, advances the head and retires
+the queue in one statement after acquiring its advisory lock. In
+`TestIssueWriteContention`, eight stores with 100 updates each measured
+title-write p50 20.4 to 17.9 ms and status-write p50 20.4 to 18.3 ms, with
+no errors or deadlocks. This did not recover the entire previously observed
+5 ms median increase: the extra durable commit still exists.
+
 ## Restore drill
 
 1. Restore SQL and attachments into an isolated environment.
