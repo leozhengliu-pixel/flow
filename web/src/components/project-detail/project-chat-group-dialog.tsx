@@ -2,7 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { useState } from 'react'
 
 import { ChatBindingEditor, ChatBindingRow } from '@/components/settings/chat-group-bindings'
-import { confirmRemoveBinding, confirmRevokeBinding, useChatIntegrationSettings } from '@/components/settings/chat-binding-support'
+import { bindingProjectIds, confirmRemoveBinding, confirmRevokeBinding, useChatIntegrationSettings } from '@/components/settings/chat-binding-support'
 import { IntegrationBrandIcon } from '@/components/settings/integration-brand-icon'
 import { AppLink } from '@/components/ui/app-link'
 import { useI18n } from '@/i18n/i18n'
@@ -42,7 +42,7 @@ function ProjectChatGroups({ provider, project, data }: { provider: ChatIntegrat
   const workspace = data?.workspace.urlKey ?? location.pathname.split('/').filter(Boolean)[0] ?? ''
   const tenantAuthorized = settings?.permissions ? settings.permissions.tenant.status === 'authorized' : settings?.connection?.status === 'connected'
   const teamIds = (settings?.bindableTeamIds ?? []).filter(id => project.teamIds.includes(id))
-  const bindings = (settings?.bindings ?? []).filter(binding => binding.projectId === project.id)
+  const bindings = (settings?.bindings ?? []).filter(binding => bindingProjectIds(binding)?.includes(project.id))
   const mutate = async (action: string, operation: () => Promise<unknown>, success: string, after?: () => void) => {
     setBusy(action)
     setError('')

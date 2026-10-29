@@ -2,6 +2,9 @@ import { ApiError, jsonRequest, request } from "@/lib/api-client";
 import type {
   BotChatsPage,
   ChatBindingInput,
+  ChatInitiativeBinding,
+  ChatInitiativeBindingInput,
+  ChatInitiativeBindings,
   ChatIntegrationCredentials,
   ChatIntegrationProvider,
   ChatIntegrationSettings,
@@ -25,9 +28,30 @@ export function testChatIntegration(provider: ChatIntegrationProvider): Promise<
   return request(`${chatPath(provider)}/test`, { method: "POST" });
 }
 
-export function fetchChatIntegrationChats(provider: ChatIntegrationProvider, cursor?: string): Promise<BotChatsPage> {
-  const query = cursor ? `?${new URLSearchParams({ cursor })}` : "";
+/** The bot's groups; initiativeId lets that initiative's owner list them. */
+export function fetchChatIntegrationChats(provider: ChatIntegrationProvider, cursor?: string, initiativeId?: string): Promise<BotChatsPage> {
+  const params = new URLSearchParams();
+  if (cursor) params.set("cursor", cursor);
+  if (initiativeId) params.set("initiativeId", initiativeId);
+  const query = params.size ? `?${params}` : "";
   return request(`${chatPath(provider)}/chats${query}`);
+}
+
+export function fetchChatInitiativeBindings(provider: ChatIntegrationProvider, initiativeId: string): Promise<ChatInitiativeBindings> {
+  return request(`${chatPath(provider)}/initiatives/${encodeURIComponent(initiativeId)}/bindings`);
+}
+
+export function saveChatInitiativeBinding(provider: ChatIntegrationProvider, input: ChatInitiativeBindingInput): Promise<ChatInitiativeBinding> {
+  return request(`${chatPath(provider)}/initiative-bindings`, jsonRequest("POST", input));
+}
+
+/** Revokes an initiative's group binding: it stops delivering and stays listed as a record. */
+export function revokeChatInitiativeBinding(provider: ChatIntegrationProvider, id: string): Promise<ChatInitiativeBinding> {
+  return request(`${chatPath(provider)}/initiative-bindings/${encodeURIComponent(id)}/revoke`, { method: "POST" });
+}
+
+export function removeChatInitiativeBinding(provider: ChatIntegrationProvider, id: string): Promise<void> {
+  return request(`${chatPath(provider)}/initiative-bindings/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 export function saveChatBinding(provider: ChatIntegrationProvider, input: ChatBindingInput): Promise<unknown> {
@@ -120,6 +144,10 @@ export const CHAT_ERROR_MESSAGES: Record<string, string> = {
   chat_delivery_failed: "Messages could not be delivered. Check the bot's permissions, group access and application credentials.",
   chat_identity_expired: "Your linked chat account has expired. Reconnect it in Settings > Connected accounts.",
   chat_error: "The connection reported an error. Test the connection for details.",
+  chat_initiative_binding_permission_required: "Only the initiative's owner and workspace administrators can connect it to groups.",
+  chat_initiative_binding_authorization_required: "Approve sharing this initiative's updates with the group to save the binding.",
+  chat_initiative_binding_scope: "Initiatives led by a private team can't be connected to a group.",
+  chat_initiative_not_found: "This initiative no longer exists.",
 };
 
 const CHAT_CLIENT_ERRORS = new Set(["Invalid authorization address"]);

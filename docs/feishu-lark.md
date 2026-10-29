@@ -37,6 +37,11 @@ not supported by this connection flow.
    (获取群组中所有消息). Without them the shortcut still works, but its result
    goes to the member's bot conversation instead of the group.
 
+   For replies in [issue threads](#issue-threads) to become comments
+   without mentioning the bot, grant `im:message.group_msg` (获取群组中所有消息)
+   as well; with only `im:message.group_at_msg:readonly`, a reply becomes a
+   comment when it mentions the bot.
+
    Flow needs no contact scopes, the contact directory, phone numbers, or
    email addresses.
 4. Register the redirect URL
@@ -174,8 +179,76 @@ app's availability range who tries to link their account is told so
 
 Notifications can include issue creation, state and assignee changes, new
 comments, project updates, and initiative updates (sent to the groups of the
-initiative's lead team). They include an approved summary and Flow link;
-comment bodies and attachments are not copied to the group.
+initiative's lead team, and to the groups connected to the initiative
+itself). They include an approved summary and Flow link; attachments are not
+copied to the group, and comment text reaches a group only in the issue's
+thread (below).
+
+### Project scope
+
+A team's binding covers all of the team's projects, one project, or a chosen
+set of projects (**Projects** in the binding editor, up to 50). Every project
+in the set must belong to the bound team, be active, and be shared only with
+teams the binding may disclose; Flow checks this when saving and again before
+each delivery. Issue notifications, project updates and group actions stay
+inside the set (an issue without a project is outside it), a binding limited
+to projects receives no initiative updates, and an issue created from the
+group picks one of the set's projects on its form. Bindings saved with a
+single project read as a one-project set (`projectIds`; `projectId` still
+names the project when there is exactly one), and their cards and queued
+notifications stay valid.
+
+### Initiative groups
+
+An initiative, with or without a lead team, can be connected directly to an
+internal group: **Connect** in the initiative's notifications menu (or
+**Configure Lark notifications…** in its actions menu). Its owner or a
+workspace administrator connects it, with the same refusals as team bindings
+(external groups, groups of another tenant, groups the bot is not in) and an
+explicit approval; the binding records who authorized it, in which capacity
+(`initiative_owner` or `workspace_admin`) and when, and authorizing,
+changing, revoking and removing it are audited
+(`chat_initiative_binding.*`). The group receives the initiative's updates
+as a card with the initiative's name, health and link, and nothing of its
+contributing teams: an initiative with a private contributing team still
+posts no content of that team, and while a private team leads the
+initiative nothing is posted (or connectable). A binding stops once its
+authorizer is neither the initiative's owner nor a workspace administrator;
+the new owner can authorize it again. Initiative bindings never accept group
+actions, and a group can follow initiatives and be bound to a team at the
+same time.
+
+### Issue threads
+
+Everything a group hears about one issue goes into one message thread. The
+first card about the issue (or, for an issue created from a group command,
+the member's command message it answered) is the thread's root; later
+notifications about the issue reply to it. If the root is recalled or
+deleted, the next notification starts a new thread with a new root.
+
+When the binding shares new comments, Flow comments on the issue are posted
+into its thread as cards with the author and text; editing a comment in Flow
+updates its card (marked *Edited in Flow*), and deleting it replaces the
+card's text with a note. Comments go only where the issue may go (the
+binding's team and projects, no issue-level restrictions), and nothing is
+posted with sensitive data protection on.
+
+A reply in the thread (text or rich text, with or without mentioning the
+bot) becomes a Flow comment on the issue, written as the replying member's
+linked Flow account, with their own permissions, and only when the binding
+allows updating issues; with updates off, replies stay in the group. A
+member who hasn't linked an account gets one card in the thread with a link
+to connect it; a member without access to the issue is told privately. A
+reply imported as a comment is never posted back into its thread, and the
+bot's own messages are never imported; other groups following the issue get
+the comment in their own threads. Editing a reply in the chat does not change
+its comment; editing that comment in Flow posts the new text into the
+thread.
+
+The mapping between a Flow resource and its thread (`chat_threads`), and
+between a thread item and its message (`chat_thread_items`), is generic:
+other resources can be carried in threads the same way. Threads are kept for
+180 days; after that the next message starts a new thread.
 
 Group users link their own Flow account from **Personal > Connected accounts**.
 Linking does not grant workspace or team membership, and names or email
@@ -265,7 +338,8 @@ The bot sends a personal confirmation form with the bound team/project,
 title, state, priority, and assignee. After creation it replies to the source
 message with an issue card. Shared issue cards open personal forms for state,
 assignee, and comment changes, so other group members cannot see a person's
-drafts. Ordinary group messages are not synchronized as comments.
+drafts. Group messages outside an issue's thread are not synchronized as
+comments.
 
 ### Card actions
 

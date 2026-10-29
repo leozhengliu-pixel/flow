@@ -77,7 +77,10 @@ export interface ChatBinding {
   chatId: string;
   chatName: string;
   teamId: string;
+  /** The binding's project when it covers exactly one (the single-project form). */
   projectId?: string;
+  /** The projects the binding covers; empty or absent covers all of the team's projects. */
+  projectIds?: string[];
   templateId?: string;
   events: ChatIntegrationEvent[];
   enabled: boolean;
@@ -118,6 +121,46 @@ export type ChatBindingInput = Omit<ChatBinding, "id" | "connectionId" | "author
   /** Explicit consent to share the team's selected updates and actions with everyone in the group. */
   authorize: true;
 };
+
+/** Who connected an initiative to a group, recorded by the server. */
+export interface ChatInitiativeBindingAuthorization {
+  userId: string;
+  role: "initiative_owner" | "workspace_admin";
+  authorizedAt: string;
+}
+
+/** An initiative connected directly to a group: the group receives the initiative's updates. */
+export interface ChatInitiativeBinding {
+  id: string;
+  connectionId: string;
+  chatId: string;
+  chatName: string;
+  initiativeId: string;
+  enabled: boolean;
+  createdAt?: string;
+  authorization?: ChatInitiativeBindingAuthorization;
+  revokedAt?: string;
+  revokedBy?: string;
+}
+
+export interface ChatInitiativeBindings {
+  bindings: ChatInitiativeBinding[];
+  /** The viewer is the initiative's owner or a workspace administrator. */
+  canManage: boolean;
+  /** The initiative's updates may be shared: it has no lead team, or a public team leads it. */
+  shareable: boolean;
+  tenantAuthorized: boolean;
+}
+
+export interface ChatInitiativeBindingInput {
+  id?: string;
+  initiativeId: string;
+  chatId: string;
+  chatName: string;
+  enabled: boolean;
+  /** Explicit consent to share the initiative's updates with everyone in the group. */
+  authorize: true;
+}
 
 export interface BotChat {
   id: string;

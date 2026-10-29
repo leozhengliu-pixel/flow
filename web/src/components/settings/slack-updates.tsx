@@ -49,9 +49,9 @@ function ChatGroupUpdates({ data, kind, disabled = false, variant = "card", prov
   const heading = format(t("{name} notifications"));
   const hint = format(t(kind === "project"
     ? "Project updates are posted to the {name} groups of the project's teams that share project updates, and never when a private team would be disclosed"
-    : "Initiative updates are posted to the {name} groups of the initiative's lead team that share initiative updates"));
+    : "Initiative updates are posted to the {name} groups connected to the initiative and to its lead team's groups that share initiative updates, and never with a private team's content"));
   const title = format(t(kind === "project" ? "Send project updates to {name} groups" : "Send initiative updates to {name} groups"));
-  const description = format(t("Team owners choose the groups in each team's {name} notifications"));
+  const description = format(t(kind === "project" ? "Team owners choose the groups in each team's {name} notifications" : "An initiative's owner connects its groups from the initiative's notifications; team owners choose their teams' groups"));
   const href = integrationSettingsPath(data.workspace.urlKey, provider);
   const action = <AppLink className={variant === "row" ? "iu-slack-action" : "feature-button"} href={href} aria-disabled={disabled || undefined}>{t("Open settings")}<ArrowUpRight size={variant === "row" ? 14 : 11} /></AppLink>;
   if (variant === "row") {

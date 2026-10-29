@@ -18,8 +18,8 @@ import { queueFlowMenuShortcut, useFlowHotkeys } from '@/components/ui/menu-shor
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { ChatPlatformIcon } from '@/components/settings/integration-brand-icon'
-import { AppLink } from '@/components/ui/app-link'
 import { chatTeamNotificationsCopy, useChatPlatform } from '@/lib/chat-platform'
+import { InitiativeChatGroupDialog } from './initiative-chat-group-dialog'
 import { InitiativeCopySubmenu, InitiativeHierarchySubmenus, InitiativeRemindSubmenu, InitiativeSubscribeSubmenu } from './initiative-row-menu'
 import { initiativeGraph } from './initiative-hierarchy'
 import { childOptions, directChildIds, parentOptions, saveInitiativeRelation, showNestingLimitError, toggleChild, toggleId } from './initiative-hierarchy-actions'
@@ -46,6 +46,7 @@ function useInitiativePulse(initiative: Initiative, pulseSubscribed: boolean | u
 
 export function InitiativeNotificationMenu({ initiative, pulseSubscribed, onUpdate }: { initiative: Initiative; /** Derived from loaded data (explicit choice + default rules). */ pulseSubscribed?: boolean; onUpdate: Update }) {
   const [scheduleOpen, setScheduleOpen] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
   const [open, setOpen] = useState(false)
   const pulse = useInitiativePulse(initiative, pulseSubscribed, open)
   const { t } = useI18n()
@@ -58,10 +59,11 @@ export function InitiativeNotificationMenu({ initiative, pulseSubscribed, onUpda
       <NotificationOptionSection className="li-notifications__section" title={t('Pulse updates')}><NotificationCheckbox disabled={pulse.saving} checked={pulse.subscribed} label={t('Subscribe to initiative updates')} onChange={value => void pulse.change(value)}/></NotificationOptionSection>
       <section className="li-notifications__schedule"><div><strong>Update schedule</strong><span>{scheduleLabel(initiative.updateSchedule ?? DEFAULT_SCHEDULE)}</span></div><button onClick={() => setScheduleOpen(true)} type="button">Change</button></section>
       {chat.provider
-        ? <section className="li-notifications__slack"><ChatPlatformIcon size={14}/><strong>{chat.format(t(chatTeamNotificationsCopy(chat.platform).label))}</strong><AppLink className="li-notifications__chat-link" href={`/${location.pathname.split("/").filter(Boolean)[0] ?? ""}/settings/integrations/${chat.settingsSlug}`} title={chat.format(t("Initiative updates are posted to the groups of the lead team that share initiative updates."))}>{t("Connect")}</AppLink></section>
+        ? <section className="li-notifications__slack"><ChatPlatformIcon size={14}/><strong>{chat.format(t(chatTeamNotificationsCopy(chat.platform).label))}</strong><button className="li-notifications__chat-link" type="button" title={t("Connect groups that receive this initiative's updates.")} onClick={() => { setOpen(false); setChatOpen(true) }}>{t("Connect")}</button></section>
         : <section className="li-notifications__slack"><ViewGlyph color="currentColor" icon="Slack"/><strong>Slack notifications</strong><button disabled title="Connect Slack from workspace integrations first" type="button">Connect</button></section>}
     </Popover.Content></Popover.Portal></Popover.Root>
     <UpdateScheduleDialog initiative={initiative} onOpenChange={setScheduleOpen} onUpdate={onUpdate} open={scheduleOpen}/>
+    {chat.provider && <InitiativeChatGroupDialog open={chatOpen} onOpenChange={setChatOpen} provider={chat.provider} initiative={initiative}/>}
   </>
 }
 
@@ -95,6 +97,7 @@ export function InitiativeActionsMenu({ initiative, initiatives, users, teams, l
   const [menuOpen, setMenuOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [scheduleOpen, setScheduleOpen] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
   const [reminderOpen, setReminderOpen] = useState(false)
   const [creatingChild, setCreatingChild] = useState(false)
   const graph = useMemo(() => initiativeGraph(initiatives), [initiatives])
@@ -124,7 +127,9 @@ export function InitiativeActionsMenu({ initiative, initiatives, users, teams, l
         <FlowMenuSeparator/>
         <FlowMenuItem icon={<FlowGlyph name="initiativeUpdate"/>} label="New initiative update" shortcut="N then U" onSelect={onNewUpdate}/>
         <FlowMenuItem icon={<ViewGlyph icon="ClockOutline" color="currentColor"/>} label="Change update schedule…" onSelect={() => setScheduleOpen(true)}/>
-        <FlowMenuItem icon={<ChatPlatformIcon size={16}/>} label={chat.format(t(chatTeamNotificationsCopy(chat.platform).menu))} href={`/${location.pathname.split("/").filter(Boolean)[0] ?? ""}/settings/integrations/${chat.settingsSlug}`}/>
+        {chat.provider
+          ? <FlowMenuItem icon={<ChatPlatformIcon size={16}/>} label={chat.format(t(chatTeamNotificationsCopy(chat.platform).menu))} onSelect={() => setChatOpen(true)}/>
+          : <FlowMenuItem icon={<ChatPlatformIcon size={16}/>} label={chat.format(t(chatTeamNotificationsCopy(chat.platform).menu))} href={`/${location.pathname.split("/").filter(Boolean)[0] ?? ""}/settings/integrations/${chat.settingsSlug}`}/>}
         <FlowMenuSeparator/>
         <FlowMenuItem icon={<IssueActionGlyph label="Show description history" fallback={null}/>} label="Show description history" onSelect={() => setHistoryOpen(true)}/>
         <FlowMenuItem icon={<FlowGlyph name="initiativeUpdate"/>} label="Show updates and activity" shortcut="⌘ U" onSelect={onShowActivity}/>
@@ -136,6 +141,7 @@ export function InitiativeActionsMenu({ initiative, initiatives, users, teams, l
     <InitiativeDescriptionHistoryDialog initiative={initiative} onOpenChange={setHistoryOpen} onUpdate={onUpdate} open={historyOpen}/>
     <UpdateScheduleDialog initiative={initiative} onOpenChange={setScheduleOpen} onUpdate={onUpdate} open={scheduleOpen}/>
     <ReminderDialog onCreate={onCreateReminder} onOpenChange={setReminderOpen} open={reminderOpen}/>
+    {chat.provider && <InitiativeChatGroupDialog open={chatOpen} onOpenChange={setChatOpen} provider={chat.provider} initiative={initiative} users={users}/>}
     <Dialog.Root open={creatingChild} onOpenChange={setCreatingChild}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="li-dialog-overlay"/><Dialog.Content data-flow-motion="dialog" aria-describedby={undefined} className="li-subinitiative-dialog"><Dialog.Title>{t('New sub-initiative')}</Dialog.Title>
       <InitiativeCreateRow initialLeadTeamId={initiative.leadTeamId} labels={labels} teams={teams} users={users} viewer={viewer} view="planned" onCancel={() => setCreatingChild(false)} onCreateLabel={onCreateLabel} onCreate={async input => { try { await onCreateInitiative({ ...input, parentInitiativeIds: [initiative.id] }); setCreatingChild(false) } catch (error) { toast.error(error instanceof Error ? error.message : t('Could not create initiative')) } }}/>
     </Dialog.Content></Dialog.Portal></Dialog.Root>
