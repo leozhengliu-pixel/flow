@@ -13068,6 +13068,170 @@
         "x-flow-source": "chat_integrations.go"
       }
     },
+    "/api/integrations/{provider}/chat/initiative-bindings": {
+      "post": {
+        "operationId": "post_integrations_provider_chat_initiative_bindings",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "POST /api/integrations/{provider}/chat/initiative-bindings",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_initiative_bindings.go"
+      }
+    },
+    "/api/integrations/{provider}/chat/initiative-bindings/{id}": {
+      "delete": {
+        "operationId": "delete_integrations_provider_chat_initiative_bindings_id",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "DELETE /api/integrations/{provider}/chat/initiative-bindings/{id}",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_initiative_bindings.go"
+      }
+    },
+    "/api/integrations/{provider}/chat/initiative-bindings/{id}/revoke": {
+      "post": {
+        "operationId": "post_integrations_provider_chat_initiative_bindings_id_revoke",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "POST /api/integrations/{provider}/chat/initiative-bindings/{id}/revoke",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_initiative_bindings.go"
+      }
+    },
+    "/api/integrations/{provider}/chat/initiatives/{initiativeId}/bindings": {
+      "get": {
+        "operationId": "get_integrations_provider_chat_initiatives_initiativeId_bindings",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "GET /api/integrations/{provider}/chat/initiatives/{initiativeId}/bindings",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "initiativeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_initiative_bindings.go"
+      }
+    },
     "/api/integrations/{provider}/chat/test": {
       "post": {
         "operationId": "post_integrations_provider_chat_test",

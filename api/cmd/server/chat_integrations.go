@@ -236,6 +236,7 @@ func (s *server) registerChatIntegrationRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/integrations/{provider}/chat/identity/start", s.chatConfigurationMutation(s.startChatIdentity))
 	mux.HandleFunc("DELETE /api/integrations/{provider}/chat/identity", s.chatConfigurationMutation(s.deleteChatIdentity))
 	mux.HandleFunc("GET /api/integrations/{provider}/chat/identity/oauth/callback", s.finishChatIdentity)
+	s.registerChatInitiativeBindingRoutes(mux)
 }
 func (s *server) withChatConfigurationLock(ctx context.Context, workspace, provider string, action func() error) error {
 	digest := sha256.Sum256([]byte(workspace + "\x00" + provider))

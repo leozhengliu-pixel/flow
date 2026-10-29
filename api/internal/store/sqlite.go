@@ -406,6 +406,13 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 			}
 			return s.createCacheRevisionSchema(ctx)
 		}},
+		{version: 20, name: "chat binding project sets", apply: s.migrateChatBindingProjectSets},
+		{version: 21, name: "chat initiative bindings and message threads", apply: func(ctx context.Context) error {
+			if err := s.createChatInitiativeBindingSchema(ctx); err != nil {
+				return err
+			}
+			return s.createChatThreadSchema(ctx)
+		}},
 		// Versions from 1000 up are data migrations (runDataMigrations),
 		// which run after the workspaces are loaded.
 	}

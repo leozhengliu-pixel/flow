@@ -25,12 +25,22 @@ type chatNotificationJob struct {
 	Kind            string `json:"kind"`
 	Operation       string `json:"operation,omitempty"`
 	PersonalOpenID  string `json:"personalOpenId,omitempty"`
+	// InitiativeBindingID names an initiative's own group binding
+	// (chat_initiative_bindings.go) instead of a team binding.
+	InitiativeBindingID string `json:"initiativeBindingId,omitempty"`
+	// Event and EventAt are the domain event a comment sync runs for
+	// (chat_issue_threads.go).
+	Event   string    `json:"event,omitempty"`
+	EventAt time.Time `json:"eventAt,omitzero"`
 }
 
 func chatEventKinds(event domain.DomainEvent) []string {
 	switch event.Type {
 	case "issue.created", "issue.status_changed", "issue.assignee_changed", "comment.created", "project.update_created", "initiative.update_created":
 		return []string{event.Type}
+	case "comment.updated", "comment.deleted":
+		// Reflected in the issue's thread by the groups that share comments.
+		return []string{"comment.created"}
 	case "issue.updated":
 		var before map[string]json.RawMessage
 		if json.Unmarshal(event.PreviousValues, &before) != nil {
@@ -68,6 +78,9 @@ func (s *server) queueChatDomainEvent(ctx context.Context, workspace string, eve
 		}
 		if !record.Connected {
 			continue
+		}
+		if err := s.queueChatInitiativeBindingEvent(ctx, workspace, record, event); err != nil {
+			return err
 		}
 		bindings, err := s.store.ChatBindings(ctx, workspace, record.ConnectionID)
 		if err != nil {
@@ -115,6 +128,9 @@ func (s *server) queueChatDomainEvent(ctx context.Context, workspace string, eve
 					continue
 				}
 				payload := chatNotificationJob{BindingID: binding.ID, BindingScope: chatBindingFingerprint(binding), IssueID: event.AggregateID, Kind: kind}
+				if kind == "comment.created" {
+					payload.Event, payload.EventAt = event.Type, event.CreatedAt
+				}
 				if kind == "project.update_created" {
 					payload.ProjectID, payload.IssueID = event.AggregateID, ""
 				}
@@ -136,6 +152,9 @@ func (s *server) processChatNotification(ctx context.Context, record domain.Chat
 	var payload chatNotificationJob
 	if json.Unmarshal(job.Payload, &payload) != nil {
 		return chatInvalid("invalid stored notification")
+	}
+	if payload.InitiativeBindingID != "" {
+		return s.chatSendInitiativeBindingUpdate(ctx, record, job, payload)
 	}
 	binding, err := s.chatBindingByID(ctx, record, payload.BindingID)
 	if err != nil {
@@ -159,6 +178,9 @@ func (s *server) processChatNotification(ctx context.Context, record domain.Chat
 	}
 	if !chatIssueMatchesBinding(issue, binding) {
 		return nil
+	}
+	if payload.Kind == "comment.created" {
+		return s.chatSyncIssueComments(ctx, record, binding, issue, job, payload)
 	}
 	if payload.Kind == "issue.created" {
 		messages, err := s.store.ChatMessagesForIssue(ctx, record.WorkspaceKey, record.ConnectionID, issue.ID)
@@ -204,7 +226,7 @@ func (s *server) chatSendProjectUpdate(ctx context.Context, record domain.ChatIn
 		return nil
 	}
 	for _, project := range data.Projects {
-		if project.ID != projectID || project.ArchivedAt != nil || !slices.Contains(project.TeamIDs, binding.TeamID) || binding.ProjectID != "" && binding.ProjectID != project.ID {
+		if project.ID != projectID || project.ArchivedAt != nil || !slices.Contains(project.TeamIDs, binding.TeamID) || !binding.CoversProject(project.ID) {
 			continue
 		}
 		slug := project.SlugID
@@ -224,7 +246,7 @@ func chatProjectMatchesBinding(data domain.Bootstrap, binding domain.ChatBinding
 		return false
 	}
 	for _, project := range data.Projects {
-		if project.ID != projectID || project.ArchivedAt != nil || !slices.Contains(project.TeamIDs, binding.TeamID) || binding.ProjectID != "" && binding.ProjectID != project.ID {
+		if project.ID != projectID || project.ArchivedAt != nil || !slices.Contains(project.TeamIDs, binding.TeamID) || !binding.CoversProject(project.ID) {
 			continue
 		}
 		for _, teamID := range project.TeamIDs {
@@ -241,7 +263,7 @@ func chatProjectMatchesBinding(data domain.Bootstrap, binding domain.ChatBinding
 // initiative's lead team, when every contributing team may be shared with them.
 // Workspace-level initiatives (no lead team) have no team group.
 func chatInitiativeMatchesBinding(data domain.Bootstrap, binding domain.ChatBinding, initiativeID string) bool {
-	if data.WorkspaceSettings.HIPAACompliance || binding.ProjectID != "" {
+	if data.WorkspaceSettings.HIPAACompliance || chatBindingProjectScoped(binding) {
 		return false
 	}
 	for _, initiative := range data.Initiatives {
@@ -298,39 +320,34 @@ func chatNotificationLabel(kind string) string {
 }
 
 func (s *server) chatSendIssueCard(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, issue domain.Issue, key, sourceMessage, kind string) error {
+	return s.chatSendIssueCardFrom(ctx, record, binding, issue, key, sourceMessage, kind, time.Time{})
+}
+
+// chatSendIssueCardFrom posts the card into the issue's thread in the group
+// (chat_issue_threads.go); a thread it starts mirrors comments from syncFrom.
+func (s *server) chatSendIssueCardFrom(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, issue domain.Issue, key, sourceMessage, kind string, syncFrom time.Time) error {
 	card, actions, err := s.chatIssueCard(ctx, record, binding, issue, key, "", sourceMessage)
 	if err != nil {
 		return err
 	}
 	elements := card["elements"].([]map[string]any)
 	card["elements"] = append([]map[string]any{chatCardText(chatNotificationLabel(kind))}, elements...)
-	content, _ := json.Marshal(card)
-	body := map[string]any{"receive_id": binding.ChatID, "msg_type": "interactive", "content": string(content), "uuid": chatKey(key, "send")[:32]}
-	path := "/open-apis/im/v1/messages?receive_id_type=chat_id"
-	if sourceMessage != "" {
-		path = "/open-apis/im/v1/messages/" + url.PathEscape(sourceMessage) + "/reply"
-		delete(body, "receive_id")
-		body["reply_in_thread"] = true
-	}
-	var result chatMessageResult
-	if err := s.chatWorkflowRequest(ctx, record, http.MethodPost, path, body, &result); err != nil {
+	messageID, err := s.chatSendInIssueThread(ctx, record, binding, issue.ID, key, sourceMessage, chatInteractive(card), syncFrom)
+	if err != nil {
 		return err
-	}
-	if result.Data.MessageID == "" {
-		return errorsChatResponse()
 	}
 	for _, stored := range actions {
 		var action chatCardAction
 		if json.Unmarshal(stored.Payload, &action) != nil {
 			return chatInvalid("invalid card action")
 		}
-		action.MessageID = result.Data.MessageID
+		action.MessageID = messageID
 		stored.Payload, _ = json.Marshal(action)
 		if err := s.store.UpdateChatAction(ctx, stored); err != nil {
 			return err
 		}
 	}
-	return s.store.PutChatMessage(ctx, domain.ChatMessage{ID: "chat_message_" + chatKey(record.ConnectionID, result.Data.MessageID), WorkspaceKey: record.WorkspaceKey, ConnectionID: record.ConnectionID, ChatID: binding.ChatID, MessageID: result.Data.MessageID, IssueID: issue.ID, SourceMessageID: sourceMessage, Version: strconv.FormatInt(issue.Version, 10), UpdatedAt: time.Now().UTC()})
+	return s.store.PutChatMessage(ctx, domain.ChatMessage{ID: "chat_message_" + chatKey(record.ConnectionID, messageID), WorkspaceKey: record.WorkspaceKey, ConnectionID: record.ConnectionID, ChatID: binding.ChatID, MessageID: messageID, IssueID: issue.ID, SourceMessageID: sourceMessage, Version: strconv.FormatInt(issue.Version, 10), UpdatedAt: time.Now().UTC()})
 }
 
 func (s *server) chatRefreshIssueCards(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, issue domain.Issue) error {

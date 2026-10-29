@@ -44,14 +44,19 @@ type chatWebhookEnvelope struct {
 			} `json:"sender_id"`
 		} `json:"sender"`
 		Message struct {
-			MessageID   string `json:"message_id"`
+			MessageID string `json:"message_id"`
+			// RootID and ThreadID are set on a reply in a thread
+			// (chat_issue_threads.go).
+			RootID      string `json:"root_id"`
+			ThreadID    string `json:"thread_id"`
 			ChatID      string `json:"chat_id"`
 			ChatType    string `json:"chat_type"`
 			MessageType string `json:"message_type"`
 			Content     string `json:"content"`
 			Mentions    []struct {
-				Key string `json:"key"`
-				ID  struct {
+				Key  string `json:"key"`
+				Name string `json:"name"`
+				ID   struct {
 					OpenID string `json:"open_id"`
 				} `json:"id"`
 			} `json:"mentions"`
@@ -79,6 +84,9 @@ type chatInboundCommand struct {
 	ActionID  string                     `json:"actionId,omitempty"`
 	Title     string                     `json:"title,omitempty"`
 	Values    map[string]json.RawMessage `json:"values,omitempty"`
+	// RootMessageID and Text carry a reply in an issue thread.
+	RootMessageID string `json:"rootMessageId,omitempty"`
+	Text          string `json:"text,omitempty"`
 }
 
 type chatCardAction struct {
@@ -96,6 +104,8 @@ type chatCardAction struct {
 	Title           string   `json:"title,omitempty"`
 	StateIDs        []string `json:"stateIds,omitempty"`
 	AssigneeIDs     []string `json:"assigneeIds,omitempty"`
+	// ProjectIDs are the projects a create form offers (a binding's set).
+	ProjectIDs []string `json:"projectIds,omitempty"`
 }
 
 type chatPermanentError struct{ message string }
@@ -225,6 +235,9 @@ func (s *server) chatCommandForEnvelope(ctx context.Context, record domain.ChatI
 	event := envelope.Event
 	switch envelope.Header.EventType {
 	case "im.message.receive_v1":
+		if command, dedup, ok := s.chatThreadReplyCommand(ctx, record, envelope); ok {
+			return command, dedup, true, nil
+		}
 		if event.Sender.SenderType != "user" || event.Sender.TenantKey != record.TenantKey || event.Sender.SenderID.OpenID == "" || event.Sender.SenderID.OpenID == record.BotOpenID || event.Message.MessageID == "" || event.Message.ChatID == "" || event.Message.ChatType != "group" || event.Message.MessageType != "text" {
 			return chatInboundCommand{}, "", false, nil
 		}
@@ -366,6 +379,9 @@ func (s *server) processChatJob(ctx context.Context, job domain.ChatJob) error {
 	if json.Unmarshal(job.Payload, &command) != nil {
 		return chatInvalid("invalid stored chat command")
 	}
+	if command.Kind == chatThreadReplyKind {
+		return s.processChatThreadReply(ctx, record, job, command)
+	}
 	identity, err := s.store.ChatIdentityForOpenID(ctx, record.WorkspaceKey, record.ConnectionID, command.OpenID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
@@ -498,8 +514,9 @@ func chatCreateInput(binding domain.ChatBinding, action chatCardAction, values m
 		return domain.IssueCreateInput{}, chatInvalid("a title is required")
 	}
 	input := domain.IssueCreateInput{Title: title, TeamID: binding.TeamID, TemplateID: binding.TemplateID}
-	if binding.ProjectID != "" {
-		projectID := binding.ProjectID
+	if projectID, err := chatCreateProject(binding, action, values); err != nil {
+		return input, err
+	} else if projectID != "" {
 		input.ProjectID = &projectID
 	}
 	stateID := chatString(values, "stateId")
@@ -602,9 +619,9 @@ func (s *server) chatExecuteAction(ctx context.Context, record domain.ChatIntegr
 // issue-level restrictions. A private team's issues match only a binding its
 // owners authorized for the private team.
 func chatIssueMatchesBinding(issue domain.Issue, binding domain.ChatBinding) bool {
-	return issue.ID != "" && binding.RevokedAt == nil && (!issue.Team.Private || chatPrivateBinding(binding)) && len(issue.Permissions) == 0 && issue.Team.ArchivedAt == nil && issue.ArchivedAt == nil && issue.Team.ID == binding.TeamID && (binding.ProjectID == "" || issue.Project != nil && issue.Project.ID == binding.ProjectID)
+	return issue.ID != "" && binding.RevokedAt == nil && (!issue.Team.Private || chatPrivateBinding(binding)) && len(issue.Permissions) == 0 && issue.Team.ArchivedAt == nil && issue.ArchivedAt == nil && issue.Team.ID == binding.TeamID && binding.CoversProject(chatIssueProjectID(issue))
 }
 
 func chatBindingFingerprint(binding domain.ChatBinding) string {
-	return chatKey(binding.ID, binding.ChatID, binding.TeamID, binding.ProjectID, binding.TemplateID)
+	return chatKey(binding.ID, binding.ChatID, binding.TeamID, chatBindingProjectKey(binding), binding.TemplateID)
 }

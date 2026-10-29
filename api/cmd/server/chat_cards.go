@@ -140,10 +140,12 @@ func chatCreateDefaults(metadata domain.Bootstrap, binding domain.ChatBinding, t
 	if len(action.StateIDs) == 0 {
 		return action, chatInvalid("team workflow unavailable")
 	}
-	if binding.ProjectID != "" && !slices.ContainsFunc(metadata.Projects, func(project domain.Project) bool {
-		return project.ID == binding.ProjectID && slices.Contains(project.TeamIDs, binding.TeamID)
-	}) {
-		return action, chatInvalid("target project unavailable")
+	for _, projectID := range chatBindingProjects(binding) {
+		if !slices.ContainsFunc(metadata.Projects, func(project domain.Project) bool {
+			return project.ID == projectID && slices.Contains(project.TeamIDs, binding.TeamID)
+		}) {
+			return action, chatInvalid("target project unavailable")
+		}
 	}
 	if binding.TemplateID != "" {
 		index := slices.IndexFunc(metadata.IssueTemplates, func(template domain.IssueTemplate) bool { return template.ID == binding.TemplateID })
@@ -152,7 +154,7 @@ func chatCreateDefaults(metadata domain.Bootstrap, binding domain.ChatBinding, t
 		}
 		template := metadata.IssueTemplates[index]
 		_, action.AssigneeIDs = chatAssigneeOptions(metadata, template.AssigneeID)
-		if template.TeamID != "" && template.TeamID != binding.TeamID || template.StateID != "" && !slices.Contains(action.StateIDs, template.StateID) || template.AssigneeID != "" && !slices.Contains(action.AssigneeIDs, template.AssigneeID) || template.ProjectID != "" && binding.ProjectID != "" && template.ProjectID != binding.ProjectID {
+		if template.TeamID != "" && template.TeamID != binding.TeamID || template.StateID != "" && !slices.Contains(action.StateIDs, template.StateID) || template.AssigneeID != "" && !slices.Contains(action.AssigneeIDs, template.AssigneeID) || template.ProjectID != "" && chatBindingProjectScoped(binding) && !chatBindingLimitedToProject(binding, template.ProjectID) {
 			return action, chatInvalid("template does not match the target team workflow")
 		}
 		if action.Title == "" {
@@ -172,9 +174,10 @@ func (s *server) chatSendCreateForm(ctx context.Context, record domain.ChatInteg
 	}
 	action.OpenID, action.SourceMessageID = command.OpenID, command.MessageID
 	options, _, stateID := chatStateOptions(metadata, binding.TeamID)
-	priority, assigneeID := teamSettings(&metadata, binding.TeamID).DefaultPriority, "__unassigned"
+	priority, assigneeID, templateProject := teamSettings(&metadata, binding.TeamID).DefaultPriority, "__unassigned", ""
 	for _, template := range metadata.IssueTemplates {
 		if template.ID == binding.TemplateID {
+			templateProject = template.ProjectID
 			if template.StateID != "" {
 				stateID = template.StateID
 			}
@@ -188,7 +191,14 @@ func (s *server) chatSendCreateForm(ctx context.Context, record domain.ChatInteg
 	action.AssigneeIDs = assigneeIDs
 	actionID := "chat_action_" + chatKey(record.ConnectionID, job.DedupKey, "create")
 	priorities := []map[string]any{chatOption("0", "No priority"), chatOption("1", "Urgent"), chatOption("2", "High"), chatOption("3", "Medium"), chatOption("4", "Low")}
-	card := chatCard("Create Flow issue", chatCardText("Team: "+chatTeamName(metadata, binding.TeamID)+chatProjectName(metadata, binding.ProjectID)), chatForm(chatInput("title", "Issue title", action.Title, 1000), chatSelect("stateId", "State", stateID, options), chatSelect("priority", "Priority", strconv.Itoa(priority), priorities), chatSelect("assigneeId", "Assignee", assigneeID, assignees), chatSubmit(actionID, "Create issue")))
+	fields := []map[string]any{chatInput("title", "Issue title", action.Title, 1000)}
+	// A binding with several projects asks which one the issue belongs to.
+	if projectSelect, offered := chatCreateProjectSelect(metadata, binding, templateProject); projectSelect != nil {
+		action.ProjectIDs = offered
+		fields = append(fields, projectSelect)
+	}
+	fields = append(fields, chatSelect("stateId", "State", stateID, options), chatSelect("priority", "Priority", strconv.Itoa(priority), priorities), chatSelect("assigneeId", "Assignee", assigneeID, assignees), chatSubmit(actionID, "Create issue"))
+	card := chatCard("Create Flow issue", chatCardText("Team: "+chatTeamName(metadata, binding.TeamID)+chatProjectsLabel(metadata, binding)), chatForm(fields...))
 	return s.chatSendPersonalForm(ctx, record, identity, job, actionID, action, card)
 }
 
@@ -199,15 +209,6 @@ func chatTeamName(metadata domain.Bootstrap, teamID string) string {
 		}
 	}
 	return "Flow"
-}
-
-func chatProjectName(metadata domain.Bootstrap, projectID string) string {
-	for _, project := range metadata.Projects {
-		if project.ID == projectID {
-			return "\nProject: " + project.Name
-		}
-	}
-	return ""
 }
 
 func (s *server) chatSendUpdateForm(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, identity domain.ChatIdentity, metadata domain.Bootstrap, job domain.ChatJob, command chatInboundCommand, original chatCardAction) error {
