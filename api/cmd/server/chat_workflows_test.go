@@ -411,10 +411,20 @@ func TestChatPrivateUpdateFormPreservesConcurrentWebChanges(t *testing.T) {
 	}
 	ctx := withChatIdentityAuthentication(t.Context(), f.identity)
 	var changed domain.Issue
-	if err := f.s.chatAuthorizedMutation(ctx, f.record.WorkspaceKey, f.identity.UserID, http.MethodPatch, "/api/issue-records/"+issue.ID, map[string]any{"title": "Changed on the web", "expectedVersion": issue.Version}, &changed); err != nil {
+	stateID := action.StateIDs[len(action.StateIDs)-1]
+	concurrentState := ""
+	for _, id := range action.StateIDs {
+		if id != issue.State.ID && id != stateID {
+			concurrentState = id
+			break
+		}
+	}
+	if concurrentState == "" {
+		t.Fatal("fixture needs a distinct concurrent status")
+	}
+	if err := f.s.chatAuthorizedMutation(ctx, f.record.WorkspaceKey, f.identity.UserID, http.MethodPatch, "/api/issue-records/"+issue.ID, map[string]any{"title": "Changed on the web", "stateId": concurrentState, "expectedVersion": issue.Version}, &changed); err != nil {
 		t.Fatal(err)
 	}
-	stateID := action.StateIDs[len(action.StateIDs)-1]
 	command = chatInboundCommand{Kind: "card_action", OpenID: f.identity.OpenID, ChatID: action.PersonalChatID, MessageID: action.PersonalMessage, ActionID: id, Values: map[string]json.RawMessage{"stateId": json.RawMessage(strconv.Quote(stateID))}}
 	job.ID, job.DedupKey = "submit_state_job", "submit_state"
 	job.Payload, _ = json.Marshal(command)
