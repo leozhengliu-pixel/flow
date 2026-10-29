@@ -1946,7 +1946,7 @@ func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspa
 		if err != nil {
 			return err
 		}
-		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, Payload: []byte(event.Payload), PreviousValues: previous, CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: data.Workspace.ID}); err != nil {
+		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, Payload: []byte(event.Payload), PreviousValues: previous, CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: data.Workspace.ID, WorkspaceKey: workspaceKey}); err != nil {
 			return err
 		}
 	}

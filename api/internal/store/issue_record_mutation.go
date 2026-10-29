@@ -363,7 +363,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			before, _ = json.Marshal(previousFields)
 		}
 		event = domain.DomainEvent{ID: idgen.New("evt_"), Type: "issue.updated", AggregateID: id, Payload: payload, PreviousValues: before, CreatedAt: time.Now().UTC()}
-		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: id, Payload: payload, PreviousValues: before, CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: metadata.Workspace.ID}); err != nil {
+		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: id, Payload: payload, PreviousValues: before, CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: metadata.Workspace.ID, WorkspaceKey: workspace}); err != nil {
 			return err
 		}
 		realtime = enrichRealtimePayload(payload, result, event.Type)

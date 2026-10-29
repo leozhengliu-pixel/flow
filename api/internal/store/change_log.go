@@ -57,6 +57,11 @@ type domainEventRow struct {
 // commit together; through an *sqlTx on MySQL or PostgreSQL the cursor is
 // assigned once it commits.
 func insertDomainEvent(ctx context.Context, db domainEventExecer, row domainEventRow) (sql.Result, error) {
+	if tx, ok := db.(*sqlTx); ok {
+		if err := tx.queueEventCacheRevisions(ctx, row); err != nil {
+			return nil, err
+		}
+	}
 	var workspace any = row.WorkspaceID
 	if row.WorkspaceID == "" && row.WorkspaceKey != "" {
 		var id string

@@ -358,7 +358,7 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		if err := s.persistMetadataTx(ctx, tx, workspace, current, &data); err != nil {
 			return err
 		}
-		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: aggregate, Payload: payloadRaw, CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: current.Workspace.ID}); err != nil {
+		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: aggregate, Payload: payloadRaw, CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: current.Workspace.ID, WorkspaceKey: workspace}); err != nil {
 			return err
 		}
 		if err := tx.Commit(); err != nil {
