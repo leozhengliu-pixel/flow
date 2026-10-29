@@ -572,14 +572,16 @@ func (s *server) saveChatIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Saving runs the automatic tenant check: credentials that obtain a
-	// tenant token and read the bot's info authorize the tenant.
-	botID, botName, err := chatProbe(r.Context(), record, credential)
+	// tenant token and read the bot's info authorize the tenant, and the
+	// tenant information names it.
+	probe, err := chatProbe(r.Context(), record, credential)
 	if err != nil {
-		writeChatError(w, 502, chatCheckMessage(err))
+		writeChatError(w, chatCheckStatus(err), chatCheckMessage(err))
 		return
 	}
-	changed := applyChatTenantCheck(&record, botID, nil, data.Viewer.ID, time.Now().UTC())
-	record.Name = firstNonEmpty(input.Name, botName, record.Provider)
+	keyBefore := record.TenantKey
+	changed := applyChatTenantCheck(&record, probe, nil, data.Viewer.ID, time.Now().UTC())
+	record.Name = firstNonEmpty(input.Name, probe.BotName, record.Provider)
 	if err = s.store.InitializeChatDomainCursor(r.Context(), record.WorkspaceKey); err != nil {
 		writeChatError(w, 500, "Could not initialize notification cursor")
 		return
@@ -599,6 +601,9 @@ func (s *server) saveChatIntegration(w http.ResponseWriter, r *http.Request) {
 	}
 	if changed {
 		s.auditChatTenant(r.Context(), record)
+	}
+	if record.TenantKey != keyBefore {
+		s.auditChatTenantKey(r.Context(), record)
 	}
 	s.learnChatTenantKey(r.Context(), &record)
 	updated, _ := s.chatSettingsMetadata(r)
@@ -664,7 +669,7 @@ func (s *server) testChatIntegration(w http.ResponseWriter, r *http.Request) {
 	// Test connection re-runs the automatic tenant check.
 	if _, err = s.runChatTenantCheck(r.Context(), record, data.Viewer.ID); err != nil {
 		if chatTransient(err) || errors.As(err, new(chatTenantCheckError)) {
-			writeChatError(w, 502, chatCheckMessage(err))
+			writeChatError(w, chatCheckStatus(err), chatCheckMessage(err))
 		} else {
 			writeChatError(w, 500, "Could not save application health")
 		}
@@ -693,7 +698,7 @@ func (s *server) startChatIdentity(w http.ResponseWriter, r *http.Request) {
 	// Linking only maps the member's chat account to their Flow account; it
 	// needs a healthy connection, and never establishes the tenant.
 	if !chatTenantAuthorized(record) {
-		writeChatError(w, 409, chatTenantNotApprovedMessage)
+		writeChatError(w, 409, chatTenantRefusal(record))
 		return
 	}
 	state, err := randomSecret("chat_oauth_")
@@ -855,14 +860,24 @@ func (s *server) finishChatIdentityLocked(w http.ResponseWriter, r *http.Request
 	}
 	// Linking needs a healthy connection; it never authorizes the tenant.
 	if !chatTenantAuthorized(record) {
-		fail(chatTenantNotApprovedMessage)
+		fail(chatTenantRefusal(record))
 		return
 	}
-	// A custom application can only be authorized by accounts of its own
-	// tenant, so the first linked account may name the tenant when the
-	// bot's groups have not yet.
+	// The account is compared with the application's tenant, so it must be
+	// known: read from the tenant information, or, while the app lacks that
+	// permission, named by the first linked account (a custom application
+	// can only be authorized by accounts of its own tenant).
+	s.learnChatTenantKey(r.Context(), &record)
 	if err = s.adoptChatTenantKey(r.Context(), &record, profile.Data.TenantKey); err != nil {
 		fail("Application tenant is already connected to another workspace")
+		return
+	}
+	if record.TenantKey == "" {
+		fail(chatTenantInfoUnavailableMessage)
+		return
+	}
+	if record.TenantKey != profile.Data.TenantKey {
+		fail("This account belongs to another tenant")
 		return
 	}
 	identity := domain.ChatIdentity{UserID: pending.UserID, OpenID: profile.Data.OpenID, TenantKey: record.TenantKey, Name: profile.Data.Name, AuthProvider: pending.Authentication.Provider, AuthIssuer: pending.Authentication.Issuer, MFAVerifiedAt: pending.Authentication.MFAVerifiedAt, AuthenticatedAt: time.Now().UTC()}

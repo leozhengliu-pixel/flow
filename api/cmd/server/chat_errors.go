@@ -54,6 +54,9 @@ var chatErrorCodes = map[string]string{
 	"Authorize sharing this team with the group to save the binding":                                   "chat_binding_authorization_required",
 	"This binding was revoked; create a new binding instead":                                           "chat_binding_revoked",
 	chatTenantNotApprovedMessage:                                                                       "chat_tenant_not_approved",
+	chatTenantMismatchMessage:                                                                          chatTenantMismatchCode,
+	chatTenantInfoPermissionMessage:                                                                    "chat_tenant_info_permission_missing",
+	chatTenantInfoUnavailableMessage:                                                                   "chat_tenant_info_unavailable",
 	chatPlatformUnreachable:                                                                            "chat_platform_unreachable",
 	chatAppUnavailableMessage:                                                                          "chat_app_unavailable_to_user",
 	"Could not save binding; the group may already be bound":                                           "chat_binding_conflict",
@@ -110,6 +113,7 @@ const (
 var chatPermissionDomains = map[string]string{
 	"chat_tenant_not_approved":              "tenant",
 	"chat_bot_unpublished":                  "tenant",
+	chatTenantMismatchCode:                  "tenant",
 	"chat_other_tenant":                     "tenant",
 	"chat_workspace_permission_required":    "workspace",
 	"chat_team_binding_permission_required": "team",

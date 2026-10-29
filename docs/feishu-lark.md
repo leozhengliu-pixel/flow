@@ -16,10 +16,19 @@ not supported by this connection flow.
    capability, set its availability range, and create a version. The
    tenant administrator approves and publishes that version in the admin
    console; this is the tenant authorization (see [Permissions](#permissions)).
-3. Grant `im:message:send_as_bot`, `im:message.group_at_msg:readonly`, and
-   `im:chat:read`. Flow needs no tenant information or contact scopes, no
-   access to all group messages, the contact directory, phone numbers, or
-   email addresses.
+3. Grant these app permissions:
+   - `im:message:send_as_bot` (send messages as the bot);
+   - `im:message.group_at_msg:readonly` (read group messages that mention
+     the bot);
+   - `im:chat:read` (read the bot's groups);
+   - `tenant:tenant:readonly` (获取企业信息, obtain the tenant's
+     information), so Flow reads the tenant's key and name with the app's
+     tenant token on every connection check. It is an ordinary app
+     permission, granted when the version is approved; nobody signs in
+     for it.
+
+   Flow needs no contact scopes, no access to all group messages, the
+   contact directory, phone numbers, or email addresses.
 4. Register the redirect URL
    `https://flow.example.com/api/integrations/feishu/chat/identity/oauth/callback`
    (replace `feishu` with `lark` for Lark, and use your actual Flow origin).
@@ -30,7 +39,8 @@ not supported by this connection flow.
    approved yet, saving reports that and nothing is stored. Blank secret
    fields on subsequent saves preserve the existing encrypted values.
 6. Check **Permissions** on the same page: **Tenant** shows the tenant the
-   app is connected to, or that the app is not approved yet.
+   app is connected to (its name and tenant key), or that the app is not
+   approved yet.
 7. Copy Flow's callback URL into the application's HTTP event and callback
    configuration. Enable encryption using the same Encrypt Key and
    Verification Token. Subscribe to `im.message.receive_v1` and the current
@@ -73,17 +83,44 @@ next to the stable error `code`.
   between are not sent later). An unreachable
   platform (`chat_platform_unreachable`) never withdraws the authorization.
 
-  The tenant token and bot info do not name the tenant, so the tenant key is
-  recorded from the first platform answer under the app's credentials that
-  does: the bot's internal groups (only groups of the app's tenant can be
-  internal for a custom app's bot), or a member's linked account (only
-  accounts of that tenant can authorize a custom app). Once recorded it never
-  changes, and every group, account and callback must match it.
+  The tenant token and bot info do not name the tenant, so every check then
+  reads the tenant's information with the same token
+  (`GET /open-apis/tenant/v2/tenant/query`, permission
+  `tenant:tenant:readonly`) and records its `tenant_key` and name at once;
+  the page shows both. Every group, account and callback must match that
+  key.
+
+  - If the app lacks the permission (the platform answers `99991672`, or
+    the endpoint's own `1184001`), the tenant stays authorized and the page
+    asks to "Grant the app the 「获取企业信息」 permission
+    (tenant:tenant:readonly) and publish a new version so Flow can show the
+    tenant" (`chat_tenant_info_permission_missing`). Only then is the key
+    taken from the first platform answer under the app's credentials that
+    names it: the bot's internal groups (only groups of the app's tenant can
+    be internal for a custom app's bot) or a member's linked account (only
+    accounts of that tenant can authorize a custom app). The page marks
+    such a key as first seen. Checks run every few minutes until the
+    permission is granted, and the next one records the key and name from
+    the tenant information.
+  - Another refusal of the tenant information
+    (`chat_tenant_info_unavailable`) keeps the tenant authorized without
+    that fallback; Flow reads it again on the next check, or when a member
+    links an account or the group list is opened, and linking waits for it.
+  - A recorded key is never replaced. If the tenant information names
+    another tenant than the recorded one (for example a key first seen
+    earlier), the check withdraws the authorization and shows the mismatch
+    with both keys (`chat_tenant_mismatch`, permission domain `tenant`);
+    notifications, group actions and linking stop. Disconnect the
+    application and connect it again to start over with the platform's
+    tenant.
 
   Connections set up while tenant authorization was a sign-in step need
   nothing: authorized ones stay authorized and are rewritten as
   automatically authorized on their next successful check, and ones still
   waiting for the sign-in are authorized by the first successful check.
+  Connections stored without a tenant key, or with a first-seen one, get
+  the key and name from the tenant information on their next check (which
+  is due at once for connections never checked).
 - **Workspace integration** (`workspace`). Workspace administrators manage the
   application settings and every group binding.
 - **Team bindings** (`team`). A team's owners (inherited from parent teams)
@@ -110,7 +147,8 @@ so the rule is the same for every team.
 **Revoke** stops a binding and keeps it listed (with who revoked it and when)
 until the group is bound again or the binding is removed. Authorizing,
 changing, revoking and removing bindings, the tenant being authorized or
-reported as not approved, and the tenant key being recorded are in the audit
+reported as not approved, the tenant key being recorded (with its source:
+`platform` or first seen, `observed`) and a tenant mismatch are in the audit
 log. Entries of the former tenant sign-in and authorizer designation stay
 readable there.
 
@@ -237,21 +275,33 @@ can only fake. Confirm it once per platform on a test tenant:
    with it and note how the group read fails (status and `code`); Flow lists
    groups only after the tenant check succeeds.
 3. Approve and publish the version in the admin console, then select **Test
-   connection**: the tenant should show as connected, and the tenant key
-   should appear once the bot is in an internal group or a member links an
-   account.
-4. Remove a test member from the availability range and have them link their
+   connection**: the tenant should show as connected, with the tenant's
+   name and key from `GET /open-apis/tenant/v2/tenant/query`. Compare the
+   key with the `tenant_key` of an internal group the bot is in, or of a
+   linked account.
+4. Create a version without the 「获取企业信息」 permission
+   (`tenant:tenant:readonly`), publish it and select **Test connection**:
+   note the HTTP status and `code` of the tenant information request (Flow
+   expects `99991672`, or `1184001`, and then asks for the permission). The
+   tenant should stay connected, and the tenant key should appear once the
+   bot is in an internal group or a member links an account, marked as
+   first seen. Grant the permission in a new version: the next check should
+   show the tenant's name and keep the same key.
+5. Remove a test member from the availability range and have them link their
    account: note how the platform refuses (the authorize page itself, the
    token exchange or `/open-apis/authen/v1/user_info`). Flow reports
    `chat_app_unavailable_to_user` when `user_info` refuses the account. For a
    member who linked before being removed from the range, turn on personal
    notifications and confirm that the direct message is refused with code
    `230013`, which Flow shows as "the app isn't available to your account".
-5. Withdraw or disable the app in the admin console: the next periodic
+6. Withdraw or disable the app in the admin console: the next periodic
    check, or the next delivery after the token is refused, should show the app
    as not approved.
 
 Platform references: [message events](https://open.feishu.cn/document/server-docs/im-v1/message/events/receive),
 [sending messages](https://open.feishu.cn/document/server-docs/im-v1/message/create),
 [card callbacks](https://open.feishu.cn/document/feishu-cards/card-callback-communication),
-[updating cards](https://open.feishu.cn/document/server-docs/im-v1/message-card/patch).
+[updating cards](https://open.feishu.cn/document/server-docs/im-v1/message-card/patch),
+[tenant information](https://open.feishu.cn/document/server-docs/tenant-v2/query)
+(Lark: [tenant information](https://open.larksuite.com/document/server-docs/tenant-v2/query)),
+[generic error codes](https://open.feishu.cn/document/server-docs/api-call-guide/generic-error-code).

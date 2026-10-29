@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -48,7 +49,13 @@ type chatPermissionFixture struct {
 	// 0 is success; another HTTP status is a refusal.
 	tokenStatus, botStatus int
 	botMissing             bool
-	userSignIns            int
+	// tenantInfoCode refuses the tenant information with that platform code
+	// (99991672: the app lacks tenant:tenant:readonly); tenantInfoKey is the
+	// tenant it names otherwise (tenant_a by default).
+	tenantInfoCode     int
+	tenantInfoKey      string
+	tenantInfoRequests int
+	userSignIns        int
 	// outsideRange: open ids outside the app's availability range.
 	outsideRange map[string]bool
 }
@@ -148,6 +155,19 @@ func (f *chatPermissionFixture) platform(r *http.Request) (*http.Response, error
 			return chatTestResponse(200, `{"code":0,"bot":{}}`), nil
 		}
 		return chatTestResponse(200, `{"code":0,"bot":{"open_id":"ou_bot","app_name":"Flow bot"}}`), nil
+	case path == "/open-apis/tenant/v2/tenant/query":
+		f.tenantInfoRequests++
+		if r.Method != http.MethodGet || r.Header.Get("Authorization") != "Bearer tenant-token" {
+			f.t.Errorf("tenant information read without the tenant token: %s %s", r.Method, r.Header.Get("Authorization"))
+		}
+		if f.tenantInfoCode != 0 {
+			return chatTestResponse(400, fmt.Sprintf(`{"code":%d,"msg":"Access denied. One of the following scopes is required: [tenant:tenant:readonly]"}`, f.tenantInfoCode)), nil
+		}
+		key := f.tenantInfoKey
+		if key == "" {
+			key = "tenant_a"
+		}
+		return chatTestResponse(200, `{"code":0,"msg":"success","data":{"tenant":{"name":"Acme `+key+`","display_id":"F123","tenant_tag":0,"tenant_key":"`+key+`","avatar":{}}}}`), nil
 	case path == "/oauth/v3/token" || path == "/open-apis/authen/v2/oauth/token":
 		f.userSignIns++
 		code := ""
@@ -329,7 +349,7 @@ func TestChatTenantAuthorizationIsAutomaticAndSeparateFromWorkspaceAdministratio
 			settings = f.expect(f.admin, "POST", base+"/test", nil, 200)
 			tenant := chatTenantPermissions(settings)
 			authorization, _ := tenant["authorization"].(map[string]any)
-			if tenant["status"] != "authorized" || tenant["tenantKey"] != "tenant_a" || tenant["errorCode"] != nil || authorization["configuredBy"] != f.admin.user.ID || authorization["authorizedAt"] == "" || authorization["method"] != nil || settings["connection"].(map[string]any)["status"] != "connected" {
+			if tenant["status"] != "authorized" || tenant["tenantKey"] != "tenant_a" || tenant["tenantName"] != "Acme tenant_a" || tenant["tenantKeySource"] != "platform" || tenant["tenantInfoErrorCode"] != nil || tenant["errorCode"] != nil || authorization["configuredBy"] != f.admin.user.ID || authorization["authorizedAt"] == "" || authorization["method"] != nil || settings["connection"].(map[string]any)["status"] != "connected" {
 				t.Fatalf("tenant not authorized automatically: %v", settings)
 			}
 			record := f.record(provider)
@@ -338,7 +358,9 @@ func TestChatTenantAuthorizationIsAutomaticAndSeparateFromWorkspaceAdministratio
 			}
 			if !f.audited("chat_tenant.authorized", func(entry domain.AuditLogEntry) bool {
 				return entry.Metadata["configuredBy"] == f.admin.user.ID && entry.Metadata["method"] == "automatic"
-			}) || !f.audited("chat_tenant.key_recorded", func(entry domain.AuditLogEntry) bool { return entry.Metadata["tenantKey"] == "tenant_a" }) {
+			}) || !f.audited("chat_tenant.key_recorded", func(entry domain.AuditLogEntry) bool {
+				return entry.Metadata["tenantKey"] == "tenant_a" && entry.Metadata["source"] == "platform"
+			}) {
 				t.Fatal("tenant authorization not audited")
 			}
 
@@ -488,7 +510,7 @@ func TestChatTenantAuthorizationMigratesStoredStates(t *testing.T) {
 				t.Fatal(err)
 			}
 			after := f.record(provider)
-			if !after.Connected || after.TenantKey != "tenant_a" || after.TenantAuthorization == nil || after.TenantCheck == nil || after.TenantCheck.ErrorCode != "" {
+			if !after.Connected || after.TenantKey != "tenant_a" || after.TenantKeySource != "platform" || after.TenantName != "Acme tenant_a" || after.TenantAuthorization == nil || after.TenantAuthorization.TenantKey != "tenant_a" || after.TenantCheck == nil || after.TenantCheck.ErrorCode != "" {
 				t.Fatalf("not automatically authorized after a successful check: %+v", after)
 			}
 			if name == "tenant_manager" && !after.TenantAuthorization.AuthorizedAt.Equal(time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)) {
@@ -499,6 +521,94 @@ func TestChatTenantAuthorizationMigratesStoredStates(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The tenant key comes from the tenant information read on every check.
+// Without the 「获取企业信息」 permission the connection stays authorized, the
+// page asks for the permission, and only then is the key taken from the
+// bot's internal groups; granting the permission later records it from the
+// platform.
+func TestChatTenantKeyIsReadFromTheTenantInformation(t *testing.T) {
+	provider := "feishu"
+	base := "/api/integrations/" + provider + "/chat"
+
+	t.Run("permission missing", func(t *testing.T) {
+		f := newChatPermissionFixture(t, provider)
+		f.tenantInfoCode = 99991672
+		tenant := chatTenantPermissions(f.expect(f.admin, "POST", base+"/test", nil, 200))
+		if tenant["status"] != "authorized" || tenant["tenantInfoErrorCode"] != "chat_tenant_info_permission_missing" || tenant["tenantKey"] != "tenant_a" || tenant["tenantKeySource"] != "observed" || tenant["tenantName"] != nil {
+			t.Fatalf("missing permission state: %v", tenant)
+		}
+		if !f.audited("chat_tenant.key_recorded", func(entry domain.AuditLogEntry) bool { return entry.Metadata["source"] == "observed" }) {
+			t.Fatal("fallback tenant key not audited")
+		}
+		// Still checked often, so the granted permission shows up soon.
+		f.checkedAgo(provider, chatTenantPendingRecheckInterval+time.Minute)
+		if record := f.record(provider); !chatTenantRecheckDue(time.Now())(record) || record.TenantCheck.TenantInfoErrorCode != "chat_tenant_info_permission_missing" {
+			t.Fatal("a connection without the tenant information is not re-checked soon")
+		}
+		// The permission is granted in a new app version.
+		f.tenantInfoCode = 0
+		f.recheck(provider)
+		record := f.record(provider)
+		if record.TenantKey != "tenant_a" || record.TenantKeySource != "platform" || record.TenantName != "Acme tenant_a" || record.TenantCheck.TenantInfoErrorCode != "" || !record.Connected {
+			t.Fatalf("granted permission not used: %+v", record)
+		}
+		if tenant := chatTenantPermissions(f.expect(f.admin, "GET", base, nil, 200)); tenant["tenantName"] != "Acme tenant_a" || tenant["tenantInfoErrorCode"] != nil {
+			t.Fatalf("tenant name not shown: %v", tenant)
+		}
+	})
+
+	t.Run("other refusal has no fallback", func(t *testing.T) {
+		f := newChatPermissionFixture(t, provider)
+		f.tenantInfoCode = 1184000
+		tenant := chatTenantPermissions(f.expect(f.admin, "POST", base+"/test", nil, 200))
+		if tenant["status"] != "authorized" || tenant["tenantInfoErrorCode"] != "chat_tenant_info_unavailable" || tenant["tenantKey"] != nil {
+			t.Fatalf("groups named the tenant although the permission is granted: %v", tenant)
+		}
+		if location := f.link(f.outsider, provider); !strings.Contains(location, "chat_auth_error=chat_tenant_info_unavailable") {
+			t.Fatalf("account linked without a known tenant: %s", location)
+		}
+		// Readable again: linking reads the tenant at once.
+		f.tenantInfoCode = 0
+		if location := f.link(f.outsider, provider); !strings.Contains(location, "chat_auth=success") {
+			t.Fatalf("link after the tenant became readable: %s", location)
+		}
+		if record := f.record(provider); record.TenantKey != "tenant_a" || record.TenantKeySource != "platform" {
+			t.Fatalf("tenant not read while linking: %+v", record)
+		}
+	})
+
+	t.Run("mismatch is flagged", func(t *testing.T) {
+		f := newChatPermissionFixture(t, provider)
+		f.tenantInfoCode = 99991672
+		f.expect(f.admin, "POST", base+"/test", nil, 200)
+		if record := f.record(provider); record.TenantKey != "tenant_a" || record.TenantKeySource != "observed" {
+			t.Fatalf("fallback key not recorded: %+v", record)
+		}
+		// The platform names another tenant than the first-seen one.
+		f.tenantInfoCode, f.tenantInfoKey = 0, "tenant_b"
+		f.refusal(f.admin, "POST", base+"/test", nil, 409, "chat_tenant_mismatch", "tenant")
+		record := f.record(provider)
+		if record.TenantKey != "tenant_a" || record.Connected || record.TenantCheck.ErrorCode != "chat_tenant_mismatch" || record.TenantCheck.ReportedTenantKey != "tenant_b" {
+			t.Fatalf("mismatch not flagged, or the key overwritten: %+v", record)
+		}
+		settings := f.expect(f.admin, "GET", base, nil, 200)
+		if tenant := chatTenantPermissions(settings); tenant["status"] != "mismatch" || tenant["tenantKey"] != "tenant_a" || tenant["reportedTenantKey"] != "tenant_b" || settings["lastErrorCode"] != "chat_tenant_mismatch" {
+			t.Fatalf("mismatch state: %v %v", tenant, settings["lastErrorCode"])
+		}
+		if !f.audited("chat_tenant.mismatch", func(entry domain.AuditLogEntry) bool { return entry.Metadata["reportedTenantKey"] == "tenant_b" }) {
+			t.Fatal("mismatch not audited")
+		}
+		f.refusal(f.admin, "GET", base+"/chats", nil, 409, "chat_tenant_mismatch", "tenant")
+		f.refusal(f.admin, "POST", base+"/identity/start", nil, 409, "chat_tenant_mismatch", "tenant")
+		// Saving again does not adopt the other tenant either.
+		f.refusal(f.admin, "PUT", base, map[string]string{"appId": "cli_perm"}, 409, "chat_tenant_mismatch", "tenant")
+		f.recheck(provider)
+		if record := f.record(provider); record.TenantKey != "tenant_a" || record.Connected {
+			t.Fatalf("periodic check overwrote the recorded tenant: %+v", record)
+		}
+	})
 }
 
 func (f *chatPermissionFixture) checkedAgo(provider string, age time.Duration) {

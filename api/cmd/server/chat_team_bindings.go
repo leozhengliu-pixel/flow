@@ -256,7 +256,7 @@ func (s *server) chatBindingSession(w http.ResponseWriter, r *http.Request) (dom
 		return data, record, false
 	}
 	if !chatTenantAuthorized(record) {
-		writeChatError(w, 409, chatTenantNotApprovedMessage)
+		writeChatError(w, 409, chatTenantRefusal(record))
 		return data, record, false
 	}
 	return data, record, true
@@ -282,14 +282,18 @@ func (s *server) listChatGroups(w http.ResponseWriter, r *http.Request) {
 		writeChatError(w, 502, "The chat platform request failed; check the bot's permissions and retry")
 		return
 	}
+	// Groups are filtered by the application's tenant: read it now if the
+	// last check could not, or, while the app lacks the tenant information
+	// permission, take it from the bot's internal groups.
 	if record.TenantKey == "" {
-		if key := chatInternalTenantKey(response.Data.Items); key != "" {
-			if err := s.withChatConfigurationLock(r.Context(), record.WorkspaceKey, record.Provider, func() error {
-				return s.adoptChatTenantKey(r.Context(), &record, key)
-			}); err != nil {
-				writeChatError(w, 500, "Could not read chat integration")
-				return
+		if err := s.withChatConfigurationLock(r.Context(), record.WorkspaceKey, record.Provider, func() error {
+			if !chatTenantKeyFallback(record) {
+				s.readChatTenantKey(r.Context(), &record)
 			}
+			return s.adoptChatTenantKey(r.Context(), &record, chatInternalTenantKey(response.Data.Items))
+		}); err != nil {
+			writeChatError(w, 500, "Could not read chat integration")
+			return
 		}
 	}
 	items := []chatGroup{}

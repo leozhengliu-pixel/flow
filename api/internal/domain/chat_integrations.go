@@ -13,8 +13,17 @@ type ChatIntegrationRecord struct {
 	ConnectionID string `json:"connectionId"`
 	AppID        string `json:"appId"`
 	TenantKey    string `json:"tenantKey"`
-	BotOpenID    string `json:"botOpenId"`
-	Name         string `json:"name"`
+	// TenantName is the tenant's name as the platform's tenant information
+	// names it, for display.
+	TenantName string `json:"tenantName,omitempty"`
+	// TenantKeySource says where TenantKey came from: "platform" (the
+	// tenant information read with the app's tenant token on a connection
+	// check) or "observed" (first seen in the bot's internal groups or a
+	// linked account, while the app lacks the tenant information
+	// permission). Empty for keys recorded before the source was kept.
+	TenantKeySource string `json:"tenantKeySource,omitempty" enum:"platform,observed"`
+	BotOpenID       string `json:"botOpenId"`
+	Name            string `json:"name"`
 	// Connected means the enterprise tenant authorization is current: the
 	// application's credentials last obtained a tenant token and read the
 	// bot's info (the tenant administrator approved and published the app).
@@ -32,8 +41,9 @@ type ChatIntegrationRecord struct {
 // ChatTenantAuthorization: the tenant was authorized automatically when the
 // application's credentials obtained a tenant token and read the bot's info.
 type ChatTenantAuthorization struct {
-	// TenantKey is empty until the platform names the tenant (the bot's
-	// internal groups or a member's linked account).
+	// TenantKey is empty until the platform names the tenant (its tenant
+	// information, or while that is not readable the bot's internal groups
+	// or a member's linked account).
 	TenantKey    string    `json:"tenantKey,omitempty"`
 	AuthorizedAt time.Time `json:"authorizedAt"`
 	// ConfiguredBy is the workspace administrator who configured or last
@@ -45,8 +55,16 @@ type ChatTenantAuthorization struct {
 type ChatTenantCheck struct {
 	CheckedAt time.Time `json:"checkedAt"`
 	// ErrorCode is the stable code of a failed check, such as
-	// chat_tenant_not_approved.
+	// chat_tenant_not_approved or chat_tenant_mismatch.
 	ErrorCode string `json:"errorCode,omitempty"`
+	// TenantInfoErrorCode is set when a successful check could not read the
+	// tenant's information: chat_tenant_info_permission_missing (the app
+	// lacks the tenant information permission) or
+	// chat_tenant_info_unavailable.
+	TenantInfoErrorCode string `json:"tenantInfoErrorCode,omitempty"`
+	// ReportedTenantKey is, on chat_tenant_mismatch, the tenant key the
+	// platform reported instead of the recorded one.
+	ReportedTenantKey string `json:"reportedTenantKey,omitempty"`
 }
 
 const (
