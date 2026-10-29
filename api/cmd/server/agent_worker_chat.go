@@ -98,6 +98,11 @@ type workerChatRunInfo struct {
 	// Groups are the tool groups the in-process reply would start with (newAgentChatToolset: the request, the surface
 	// the chat was opened on, the tools earlier replies used); the worker offers them besides the core tools.
 	Groups []string `json:"groups,omitempty"`
+	// LoopBuilder: the conversation builds loops (its text before a chip question stays in the reply, as
+	// in-process); LoopQuestions: the run may ask chip questions (ask_question), as an in-process reply streamed to
+	// the person may while the conversation holds a draft.
+	LoopBuilder   bool `json:"loopBuilder,omitempty"`
+	LoopQuestions bool `json:"loopQuestions,omitempty"`
 }
 
 type workerChatResume struct {
@@ -119,10 +124,10 @@ func workerChatInfo(run store.AgentRun) (workerChatRunInfo, bool) {
 
 func workerChatMessage(id string) bool { return strings.HasPrefix(id, workerChatMessagePrefix) }
 
-// agentChatOnWorker reports whether a chat reply runs on the agent worker. Loop builder conversations (their own
-// question tool and drafts) and approvals saved by earlier versions stay in-process.
+// agentChatOnWorker reports whether a chat reply runs on the agent worker. Approvals saved by earlier versions stay
+// in-process.
 func (s *server) agentChatOnWorker(session domain.AgentSession) bool {
-	if !s.agentRuntimeWorker() || !s.agentRuntimeEnabled() || len(session.LoopIDs) > 0 {
+	if !s.agentRuntimeWorker() || !s.agentRuntimeEnabled() {
 		return false
 	}
 	_, _, _, _, legacy := pendingAgentApproval(&session)
@@ -171,13 +176,15 @@ func (s *server) runAgentSessionOnWorker(r *http.Request, data domain.Bootstrap,
 	if err != nil {
 		return domain.AgentSession{}, err
 	}
-	// Files sent with the conversation's messages reach the model as the in-process reply gives them: the newest
-	// images as image inputs, every other file as a note the file tools (served through /mcp) read.
+	// Files sent with the conversation's messages reach the model as the in-process reply gives them: a loop draft's
+	// files with the first message, the newest images as image inputs, every other file as a note the file tools
+	// (served through /mcp) read.
+	s.addLoopAttachmentInputs(r.Context(), data, *session, prompt.messages)
 	s.addAgentAttachmentInputs(r.Context(), prompt.messages)
 	latest := agentLatestUserMessage(*session)
 	runID := newWorkerChatRunID()
 	started := time.Now().UTC()
-	info := workerChatRunInfo{MessageID: "agent_message_" + runID, LinkBase: agentLinkBaseURL(r), MaxTurns: s.agentMaxToolTurns(), MaxCalls: s.agentMaxToolCalls(), Request: latest, Chinese: containsHan(latest), Started: started.UnixMilli(), Groups: newAgentChatToolset(*session).names()}
+	info := workerChatRunInfo{MessageID: "agent_message_" + runID, LinkBase: agentLinkBaseURL(r), MaxTurns: s.agentMaxToolTurns(), MaxCalls: s.agentMaxToolCalls(), Request: latest, Chinese: containsHan(latest), Started: started.UnixMilli(), Groups: newAgentChatToolset(*session).names(), LoopBuilder: len(session.LoopIDs) > 0, LoopQuestions: writer != nil && sessionHasDraftLoop(data, *session)}
 	promptContext := agentRunPromptContext{System: prompt.system, Messages: workerRunPromptMessages(prompt.messages), LatestPrompt: latest, WebAccess: prompt.web}
 	snapshot := s.withAgentBodies(r, *session)
 	// The reply exists before the run is queued, so a reloaded page or another tab sees it working at once.
@@ -659,10 +666,79 @@ func (d *workerChatDraft) callIndex(callID string) int {
 }
 
 func (d *workerChatDraft) text() string {
+	texts := d.keptTexts(d.message)
 	if index := d.partIndex(d.c.textID()); index >= 0 {
-		return d.message.Parts[index].Text
+		texts = append(texts, d.message.Parts[index].Text)
 	}
-	return ""
+	return joinAgentTexts(texts)
+}
+
+// workerChatKeptPart marks the text a loop builder reply wrote before a chip question: it stays in the reply (as
+// in-process, where it is not folded into the work log) and the reply's later text follows it.
+const workerChatKeptPart = "_text_kept_"
+
+func (d *workerChatDraft) keptTexts(message domain.AgentMessage) []string {
+	var texts []string
+	for _, part := range message.Parts {
+		if strings.HasPrefix(part.ID, d.c.info.MessageID+workerChatKeptPart) {
+			texts = append(texts, part.Text)
+		}
+	}
+	return texts
+}
+
+// keepText keeps the text streamed so far in the reply (a loop builder's words before its question).
+func (d *workerChatDraft) keepText() {
+	index := d.partIndex(d.c.textID())
+	if index < 0 {
+		return
+	}
+	if strings.TrimSpace(d.message.Parts[index].Text) == "" {
+		d.message.Parts = slices.Delete(d.message.Parts, index, index+1)
+	} else {
+		d.message.Parts[index].ID = fmt.Sprintf("%s%s%d", d.c.info.MessageID, workerChatKeptPart, len(d.keptTexts(d.message))+1)
+		d.message.Parts[index].Status = "completed"
+	}
+	d.changed = true
+}
+
+// mergeKept makes the kept texts and last (the final turn's text) the reply's one text part, where the first kept
+// text was (the in-process reply keeps one text part); it returns the reply's text.
+func (d *workerChatDraft) mergeKept(message *domain.AgentMessage, last string) string {
+	texts := d.keptTexts(*message)
+	if len(texts) == 0 {
+		return last
+	}
+	combined := joinAgentTexts(append(texts, last))
+	parts := make([]domain.AgentMessagePart, 0, len(message.Parts))
+	first := -1
+	for _, part := range message.Parts {
+		switch {
+		case part.ID == d.c.textID():
+			continue
+		case strings.HasPrefix(part.ID, d.c.info.MessageID+workerChatKeptPart):
+			if first >= 0 {
+				continue
+			}
+			first = len(parts)
+			part.ID = d.c.textID()
+		}
+		parts = append(parts, part)
+	}
+	parts[first].Text = combined
+	message.Parts = parts
+	return combined
+}
+
+// joinAgentTexts joins a reply's paragraphs (blank ones dropped), as the in-process loop builder separates its turns.
+func joinAgentTexts(texts []string) string {
+	kept := []string{}
+	for _, text := range texts {
+		if text = strings.TrimSpace(text); text != "" {
+			kept = append(kept, text)
+		}
+	}
+	return strings.Join(kept, "\n\n")
 }
 
 func (d *workerChatDraft) publish(events ...agentStreamEvent) { d.events = append(d.events, events...) }
@@ -703,7 +779,7 @@ func (d *workerChatDraft) complete(answer string, durationMS int64, extra ...dom
 	if err != nil {
 		return
 	}
-	answer = rebaseAgentWorkspaceLinks(strings.TrimSpace(answer), d.c.run.WorkspaceKey, d.c.info.LinkBase)
+	answer = rebaseAgentWorkspaceLinks(d.mergeKept(&message, strings.TrimSpace(answer)), d.c.run.WorkspaceKey, d.c.info.LinkBase)
 	index := slices.IndexFunc(message.Parts, func(part domain.AgentMessagePart) bool { return part.ID == d.c.textID() })
 	switch {
 	case index >= 0 && answer == "":
@@ -1053,8 +1129,21 @@ func (c *workerChatReply) connectorOf(ctx context.Context, name string) (connect
 func (c *workerChatReply) toolTitle(ctx context.Context, name string, parameter json.RawMessage, result string) string {
 	name = agentToolBaseName(name)
 	call := domain.AgentToolCall{Name: name, Arguments: workerChatArguments(parameter), Result: workerChatResultJSON(result)}
-	if isAgentFileTool(name) {
+	switch {
+	case isAgentFileTool(name):
 		return agentFileToolTitle(c.s.agentRunSessionToolContext(ctx, c.run), call)
+	case name == "save_loop":
+		// As the in-process reply labels a save_loop row.
+		title := saveLoopToolTitle(call.Result)
+		var saveArgs struct {
+			Publish bool `json:"publish"`
+		}
+		if _ = json.Unmarshal(call.Arguments, &saveArgs); saveArgs.Publish {
+			title = "Created automation"
+		} else if title == "" {
+			title = "Updated workflow definition draft"
+		}
+		return title
 	}
 	return ""
 }
@@ -1089,6 +1178,13 @@ func (d *workerChatDraft) apply(input workerChatStoredActivity) {
 			break
 		}
 		name := agentToolBaseName(input.Content.Action)
+		if name == loopQuestionTool {
+			// The chip question shows as its elicitation; the loop builder's words before it stay in the reply.
+			if d.c.info.LoopBuilder {
+				d.keepText()
+			}
+			break
+		}
 		if name == agentLoadToolsTool || name == askUserTool {
 			// Bookkeeping, or the question (question.delta and the elicitation show it).
 			break
@@ -1110,7 +1206,7 @@ func (d *workerChatDraft) apply(input workerChatStoredActivity) {
 			break
 		}
 		name := agentToolBaseName(input.Content.Action)
-		if name == agentLoadToolsTool || name == askUserTool {
+		if name == agentLoadToolsTool || name == askUserTool || name == loopQuestionTool {
 			break
 		}
 		index := d.callIndex(input.CallID)
@@ -1223,7 +1319,11 @@ func (d *workerChatDraft) ask(elicitation workerChatElicitation, durationMS int6
 			message.Parts[index].Status = "completed"
 		}
 	}
-	text := rebaseAgentWorkspaceLinks(strings.TrimSpace(d.text()), d.c.run.WorkspaceKey, d.c.info.LinkBase)
+	current := ""
+	if index := slices.IndexFunc(message.Parts, func(part domain.AgentMessagePart) bool { return part.ID == d.c.textID() }); index >= 0 {
+		current = message.Parts[index].Text
+	}
+	text := rebaseAgentWorkspaceLinks(strings.TrimSpace(d.mergeKept(&message, current)), d.c.run.WorkspaceKey, d.c.info.LinkBase)
 	if index := slices.IndexFunc(message.Parts, func(part domain.AgentMessagePart) bool { return part.ID == d.c.textID() }); index >= 0 {
 		message.Parts[index].Text = text
 	}

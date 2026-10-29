@@ -1,7 +1,7 @@
 import { MCPServerStreamableHttp, type MCPToolFilterCallable } from '@openai/agents'
 import type { FlowRunContext } from './context.js'
 import { isConnectorTool, ToolErrorFlags } from './run-guard.js'
-import { toolOffered } from './tool-groups.js'
+import { toolOffered, waitingTools } from './tool-groups.js'
 
 /** MCP `_meta` keys of connector tools (api/cmd/server/agent_runtime_connectors.go). */
 export const approvalMeta = 'flow/approval'
@@ -49,6 +49,8 @@ class FlowMcpServer extends MCPServerStreamableHttp {
 
   override async callToolResult(...args: CallArgs) {
     const [name, input] = args
+    // A chip question waits for the person on Flow (as long as a connector's question).
+    if (waitingTools.has(name)) return this.callWithin(this.flow.connectorTimeoutMs, args)
     if (!isConnectorTool(name)) return this.callWithin(this.flow.timeoutMs, args)
     const ended = this.flow.onConnectorCall?.()
     try {

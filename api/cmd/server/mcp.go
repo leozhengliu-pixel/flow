@@ -165,6 +165,15 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 			}
 			if actor.Run != nil {
 				if tool, ok := s.agentRunSessionTool(r.Context(), actor.Run.run, params.Name); ok {
+					if tool.Name == loopQuestionTool {
+						// A question to the person, not a tool call: outside the reply's tool budget, as in-process.
+						if err := checkFlowToolArgs(tool, params.Arguments); err != nil {
+							s.writeMCPToolResult(w, r, request.ID, nil, err)
+							return
+						}
+						s.callMCPRunLoopQuestion(w, r, request.ID, actor.Run, params.Arguments)
+						return
+					}
 					s.callMCPRunTool(w, r, request.ID, actor.Run, tool, params.Arguments, readonly)
 					return
 				}

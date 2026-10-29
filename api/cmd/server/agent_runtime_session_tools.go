@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -22,13 +23,15 @@ import (
 //
 //   - read_file and transcribe_media, while the conversation holds a stored file (agent_file_tools.go): they open
 //     only the files sent with the conversation's messages.
+//   - ask_question, while a loop builder conversation holds a draft and the person follows the reply (loop_builder.go):
+//     the call shows the chip question on the reply and waits for the answer (or a Stop), outside the tool budget.
 //
 // The worker offers whatever /mcp lists of these, so Flow alone decides when a run has them.
 
 // agentRunSessionToolDefinitions are the session tools as /mcp publishes them, schemas resolved for checking.
 var agentRunSessionToolDefinitions = sync.OnceValue(func() map[string]flowMCPTool {
 	tools := map[string]flowMCPTool{}
-	for _, definition := range []agentProviderTool{agentFileToolDefinitions[readFileTool], agentFileToolDefinitions[transcribeMediaTool]} {
+	for _, definition := range []agentProviderTool{agentFileToolDefinitions[readFileTool], agentFileToolDefinitions[transcribeMediaTool], loopQuestionToolDefinition} {
 		var schema jsonschema.Schema
 		if err := json.Unmarshal(definition.Parameters, &schema); err != nil {
 			panic(fmt.Sprintf("session tool %s: %v", definition.Name, err))
@@ -60,7 +63,50 @@ func (s *server) agentRunSessionTools(ctx context.Context, run store.AgentRun) [
 			tools = append(tools, definition)
 		}
 	}
+	if s.workerChatAsksLoopQuestions(run) {
+		tools = append(tools, definitions[loopQuestionTool])
+	}
 	return tools
+}
+
+// workerChatAsksLoopQuestions reports whether a chat run may ask the loop builder's chip questions: its reply was
+// asked for by a request that follows it (as in-process, only a streamed reply asks) and the conversation still
+// builds a draft loop.
+func (s *server) workerChatAsksLoopQuestions(run store.AgentRun) bool {
+	info, chat := workerChatInfo(run)
+	if !chat || !info.LoopQuestions {
+		return false
+	}
+	session, ok := s.workerChatSession(run)
+	if !ok || len(session.LoopIDs) == 0 {
+		return false
+	}
+	data, ok := s.store.WorkspaceMetadataFields(run.WorkspaceKey, "loops")
+	return ok && sessionHasDraftLoop(data, session)
+}
+
+// callMCPRunLoopQuestion answers an ask_question call of a chat run: the question is shown on the reply (as a
+// connector's question is) and the call returns the answer, a skip, or a cancel when the reply is stopped.
+func (s *server) callMCPRunLoopQuestion(w http.ResponseWriter, r *http.Request, id any, grant *agentRunGrant, args map[string]any) {
+	arguments, err := json.Marshal(args)
+	if err != nil {
+		s.writeMCPToolResult(w, r, id, nil, fmt.Errorf("invalid arguments"))
+		return
+	}
+	ctx, cancel := s.agentRunStopContext(r.Context(), grant.run.ID)
+	defer cancel()
+	call := domain.AgentToolCall{ID: "run_" + grant.run.ID, Name: loopQuestionTool, Arguments: arguments}
+	content, isError := s.askLoopQuestionIn(ctx, grant.run.WorkspaceKey, grant.run.SessionID, grant.principal.UserID, call, func(part domain.AgentMessagePart, kind string) error {
+		s.workerChatElicitationPart(context.WithoutCancel(ctx), grant.run, part, kind)
+		return nil
+	})
+	if isError {
+		s.writeMCPToolResult(w, r, id, nil, errors.New(content))
+		return
+	}
+	var result any = content
+	_ = json.Unmarshal([]byte(content), &result)
+	s.writeMCPToolResult(w, r, id, result, nil)
 }
 
 // agentRunSessionTool is the session tool name names, when the run has it now.
