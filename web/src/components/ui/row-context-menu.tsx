@@ -152,7 +152,13 @@ export function FlowSubmenu({ icon, label, detail, shortcut, children, className
   // A submenu with a filter field takes focus there's pickers.
   useEffect(() => {
     if (!container) return
-    const frame = requestAnimationFrame(() => container.querySelector<HTMLInputElement>('.flow-menu__search input, input')?.focus({ preventScroll: true }))
+    const frame = requestAnimationFrame(() => {
+      // Something inside the picker already took focus (an earlier frame's own effect, or a nested
+      // group popover the pointer opened first): moving focus back would dismiss that popover.
+      const active = document.activeElement
+      if (active && active !== container && container.contains(active)) return
+      container.querySelector<HTMLInputElement>('.flow-menu__search input, input')?.focus({ preventScroll: true })
+    })
     return () => cancelAnimationFrame(frame)
   }, [container])
   return <Kit.Sub open={open} onOpenChange={setOpen}>
