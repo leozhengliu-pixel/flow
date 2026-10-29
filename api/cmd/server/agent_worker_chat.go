@@ -1560,6 +1560,11 @@ func (s *server) workerChatElicitationPart(ctx context.Context, run store.AgentR
 	if err != nil {
 		return
 	}
+	if part.Elicitation != nil {
+		// The reply keeps its own copy of the question: the caller's may still change.
+		question := *part.Elicitation
+		part.Elicitation = &question
+	}
 	_, err = reply.update(ctx, false, func(d *workerChatDraft) {
 		if index := d.partIndex(part.ID); index >= 0 {
 			d.message.Parts[index] = part

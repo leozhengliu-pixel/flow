@@ -172,7 +172,11 @@ func (s *server) requestAgentElicitation(ctx context.Context, workspace, session
 	case <-ctx.Done():
 	case <-timer.C:
 	}
-	prompt.Action = result.Action
+	// The answered question is a new value: the asked one was handed to emit, which may keep it (a saved reply, a
+	// cached copy a later save is compared with), so changing it in place would change what was saved before.
+	answered := *prompt
+	answered.Action = result.Action
+	part.Elicitation = &answered
 	part.Status = "completed"
 	if result.Action == "cancel" {
 		part.Status = "error"
