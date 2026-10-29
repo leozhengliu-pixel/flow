@@ -284,6 +284,8 @@ export interface DocumentPermission {
   updatedAt: string;
 }
 export interface FlowDocument {
+  searchSnippet?: string;
+  matchedTerms?: string[];
   id: UUID;
   slugId: string;
   title: string;
@@ -1060,6 +1062,7 @@ export interface Loop {
   expectedOutputs?: string[];
   /** What the loop's runs produce, read from the instructions by the model or set by a person. */
   outputContract?: LoopOutputContract;
+  suggestedOutputContract?: LoopOutputContract;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;

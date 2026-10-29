@@ -494,11 +494,26 @@ func (s *server) listDocumentsConnection(w http.ResponseWriter, r *http.Request)
 		document.ContentState, document.ContentData, document.Revisions, document.Permissions = "", nil, nil, nil
 		items = append(items, document)
 	}
+	if query := strings.TrimSpace(r.URL.Query().Get("query")); query != "" {
+		matches, err := s.rankDocumentMatches(r.Context(), data.Workspace.URLKey, items, query, false)
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not search documents")
+			return
+		}
+		items = []domain.Document{}
+		for _, match := range matches {
+			document := match.document
+			document.SearchSnippet, document.MatchedTerms = match.snippet, match.terms
+			items = append(items, document)
+		}
+	}
 	writeConnection(w, r, items, map[string]func(domain.Document) any{
-		"id":      func(d domain.Document) any { return d.ID },
-		"title":   func(d domain.Document) any { return d.Title },
-		"slugId":  func(d domain.Document) any { return d.SlugID },
-		"creator": func(d domain.Document) any { return userRelation(&d.Creator) },
+		"id":            func(d domain.Document) any { return d.ID },
+		"title":         func(d domain.Document) any { return d.Title },
+		"searchSnippet": func(d domain.Document) any { return d.SearchSnippet },
+		"matchedTerms":  func(d domain.Document) any { return d.MatchedTerms },
+		"slugId":        func(d domain.Document) any { return d.SlugID },
+		"creator":       func(d domain.Document) any { return userRelation(&d.Creator) },
 		"teams": func(d domain.Document) any {
 			return relationList(d.TeamIDs, func(id string) any { return teamRelation(teams, id) })
 		},

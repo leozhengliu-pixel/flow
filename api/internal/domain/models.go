@@ -526,19 +526,21 @@ type DocumentContent struct {
 }
 
 type Document struct {
-	ID           string         `json:"id"`
-	SlugID       string         `json:"slugId"`
-	Title        string         `json:"title"`
-	Icon         string         `json:"icon,omitempty"`
-	Color        string         `json:"color,omitempty"`
-	Content      string         `json:"content"`
-	ContentState string         `json:"contentState,omitempty"`
-	ContentData  map[string]any `json:"contentData,omitempty"`
-	Creator      User           `json:"creator"`
-	BotActor     *ActorBot      `json:"botActor,omitempty"`
-	ProjectIDs   []string       `json:"projectIds"`
-	TeamIDs      []string       `json:"teamIds"`
-	IssueID      string         `json:"issueId,omitempty"`
+	ID            string         `json:"id"`
+	SlugID        string         `json:"slugId"`
+	Title         string         `json:"title"`
+	SearchSnippet string         `json:"searchSnippet,omitempty"`
+	MatchedTerms  []string       `json:"matchedTerms,omitempty"`
+	Icon          string         `json:"icon,omitempty"`
+	Color         string         `json:"color,omitempty"`
+	Content       string         `json:"content"`
+	ContentState  string         `json:"contentState,omitempty"`
+	ContentData   map[string]any `json:"contentData,omitempty"`
+	Creator       User           `json:"creator"`
+	BotActor      *ActorBot      `json:"botActor,omitempty"`
+	ProjectIDs    []string       `json:"projectIds"`
+	TeamIDs       []string       `json:"teamIds"`
+	IssueID       string         `json:"issueId,omitempty"`
 	// InheritedTeamIDs are the teams of the issue and projects the document
 	// is attached to. Read-only: Flow updates them when the document is
 	// attached or detached, the issue moves to another team, or a project's
@@ -1230,6 +1232,9 @@ type Loop struct {
 	// editor (source person, authoritative), or the conservative report-only
 	// contract used when it could not be determined (source fallback).
 	OutputContract *LoopOutputContract `json:"outputContract,omitempty"`
+	// SuggestedOutputContract is a fresh model read for changed instructions;
+	// the person's OutputContract remains authoritative until they review it.
+	SuggestedOutputContract *LoopOutputContract `json:"suggestedOutputContract,omitempty"`
 }
 
 // LoopOutputContract says, for each output kind, what a loop's runs make:

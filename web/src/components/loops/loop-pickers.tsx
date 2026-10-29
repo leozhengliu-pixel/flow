@@ -20,6 +20,7 @@ export type PickerItem = {
   disabled?: boolean;
   hint?: string;
   keywords?: string;
+	preview?: ReactNode;
 };
 
 /** Command-style picker dialog shared by "Where should the loop be created?" and "Run loop on…". */
@@ -83,10 +84,12 @@ export function LoopCommandPicker({
                   className={item.disabled ? "loops-picker-item is-disabled" : "loops-picker-item"}
                 >
                   {item.icon && <span className="command-item-icon">{item.icon}</span>}
-                  <span className="loops-picker-copy">
+                  <span className={item.preview ? "loops-picker-content" : "loops-picker-copy"}>
+                    {item.preview ? <><span className="loops-picker-copy" data-i18n-ignore><span>{item.label}</span>{item.detail && <small>{item.detail}</small>}</span><small className="loops-picker-snippet" data-i18n-ignore>{item.preview}</small></> : <>
                     {item.detail && item.detailPosition !== "after" && <small data-i18n-ignore>{item.detail}</small>}
                     <span data-i18n-ignore={item.entity || undefined}>{item.entity ? item.label : t(item.label)}</span>
                     {item.detail && item.detailPosition === "after" && <small data-i18n-ignore>{item.detail}</small>}
+                    </>}
                   </span>
                   {item.hint && <small className="loops-picker-hint">{t(item.hint)}</small>}
                 </Command.Item>

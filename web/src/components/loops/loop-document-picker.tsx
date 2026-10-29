@@ -12,7 +12,7 @@ const MORE = "__more__";
 const CREATE = "__create__";
 
 /**
- * "Choose document…": the workspace's documents searched on the server (title, most recently updated first, a page
+ * "Choose document…": the workspace's documents searched on the server (title and content, a page
  * at a time, optionally in one team), as the loop's other command pickers look, with "Create a new document" for an
  * output whose document does not exist yet.
  */
@@ -107,7 +107,7 @@ export function LoopDocumentPicker({
   const teamKey = (ids: string[] | undefined) => (ids ?? []).map((id) => data.teams.find((item) => item.id === id)?.key).filter(Boolean).join(", ");
   const typed = query.trim();
   const items: PickerItem[] = [
-    ...documents.map((document) => ({ id: document.id, label: document.title || t("Untitled"), entity: true, icon: <FileText size={14} />, detail: teamKey(document.teamIds) || undefined, detailPosition: "after" as const })),
+    ...documents.map((document) => ({ id: document.id, label: document.title || t("Untitled"), entity: true, icon: <FileText size={14} />, detail: teamKey(document.teamIds) || undefined, detailPosition: "after" as const, preview: typed && document.searchSnippet ? <DocumentMatchSnippet text={document.searchSnippet} terms={document.matchedTerms ?? [typed]} /> : undefined })),
     ...(cursor ? [{ id: MORE, label: "Load more", disabled: loading }] : []),
     {
       id: CREATE,
@@ -150,4 +150,11 @@ export function LoopDocumentPicker({
       }
     />
   );
+}
+
+function DocumentMatchSnippet({ text, terms }: { text: string; terms: string[] }) {
+  const escaped = terms.filter(Boolean).map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  if (!escaped.length) return <>{text}</>;
+  const pattern = new RegExp(`(${escaped.join("|")})`, "gi");
+  return <>{text.split(pattern).map((part, index) => index % 2 ? <mark key={index}>{part}</mark> : part)}</>;
 }

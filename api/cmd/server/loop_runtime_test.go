@@ -31,8 +31,10 @@ type fakeLoopProvider struct {
 	// loopContractLive), in order; when none is left the extraction gets
 	// the instructions' fixture. extractions are those requests, apart
 	// from inputs.
-	contracts   []string
-	extractions []string
+	contracts     []string
+	extractions   []string
+	matchReplies  []string
+	matchRequests []map[string]any
 }
 
 // fakeContractReply answers an extraction request: its scripted reply, else
@@ -79,6 +81,12 @@ func (p *fakeLoopProvider) serve(w http.ResponseWriter, r *http.Request) {
 	if slices.Contains(names, loopContractToolName) {
 		p.extractions = append(p.extractions, string(raw))
 		reply = p.fakeContractReply(string(raw))
+	} else if slices.Contains(names, loopIssueMatchToolName) {
+		p.matchRequests = append(p.matchRequests, payload)
+		reply = `tool:record_issue_match {"matches":true,"reason":"The issue satisfies the target."}`
+		if len(p.matchReplies) > 0 {
+			reply, p.matchReplies = p.matchReplies[0], p.matchReplies[1:]
+		}
 	} else {
 		p.tools, p.inputs = append(p.tools, names), append(p.inputs, string(raw))
 		reply = "Nothing to do."

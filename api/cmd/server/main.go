@@ -116,6 +116,7 @@ type server struct {
 	loopContractDebounce  time.Duration
 	// loopContractLive asks the model for output contracts even in tests (see loopContractStub).
 	loopContractLive bool
+	loopIssueMatches loopIssueMatchCache
 	// agentRunReconcilerStarted guards the agent runtime's lease reconciler (agent_runtime_api.go).
 	agentRunReconcilerStarted atomic.Bool
 	// agentLiveReplies holds the replies this process is writing, by message id (agent_live_reply.go).

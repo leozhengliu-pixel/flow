@@ -86,6 +86,7 @@ func applyLoopInputContract(loop *domain.Loop, input loopInput, viewerID string)
 		return
 	}
 	loop.ExpectedOutputs = nil
+	loop.SuggestedOutputContract = nil
 	if contract == nil {
 		if loop.OutputContract != nil && loop.OutputContract.Source == loopContractPerson {
 			loop.OutputContract = nil
@@ -370,6 +371,9 @@ func presentLoop(counts map[string]int, loop domain.Loop) domain.Loop {
 		contract := *loop.OutputContract
 		contract.Stale = loopContractStale(loop)
 		loop.OutputContract = &contract
+	}
+	if loop.SuggestedOutputContract != nil && (loop.SuggestedOutputContract.InstructionsHash != loopContractHashOf(loop) || !loopContractStale(loop)) {
+		loop.SuggestedOutputContract = nil
 	}
 	return loop
 }

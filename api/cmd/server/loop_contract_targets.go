@@ -373,6 +373,9 @@ func (s *server) loopWriteSubjectOf(ctx context.Context, workspace string, data 
 // comment or status update is on, or a new or changed issue is in; a team is
 // a new or changed issue's.
 func loopTargetHolds(kind string, target domain.LoopContractTarget, subject loopWriteSubject, entityType, entityID string) bool {
+	if target.Project != "" && target.ProjectID == "" || target.Initiative != "" && target.InitiativeID == "" {
+		return false
+	}
 	createdIssue := kind == "issue" && subject.op == loopOpCreate
 	switch target.Mode {
 	case "triggering":
@@ -511,7 +514,22 @@ func (s *server) checkLoopOutputCall(ctx context.Context, rec *loopRunRecorder, 
 	subject := s.loopWriteSubjectOf(ctx, rec.workspace, data, name, args)
 	record := &domain.LoopRunOutputWrite{Kind: kind, Operation: subject.op, ID: subject.itemID, ParentType: subject.parentType, ParentID: subject.parentID}
 	prepared := &loopOutputCall{record: record}
+	var matchErr error
+	onTarget := func(index int) bool {
+		target := contract.Outputs[index].Target
+		if !loopTargetHolds(kind, target, subject, entityType, entityID) {
+			return false
+		}
+		if err := s.checkLoopIssueMatch(ctx, rec, data, contract, target, subject); err != nil {
+			matchErr = err
+			return false
+		}
+		return true
+	}
 	refuse := func(candidates []int) error {
+		if matchErr != nil {
+			return matchErr
+		}
 		targets := []string{}
 		for _, index := range candidates {
 			if label := loopTargetName(data, kind, contract.Outputs[index].Target, entityType, entityLabel); label != "" && !slices.Contains(targets, label) {
@@ -552,7 +570,7 @@ func (s *server) checkLoopOutputCall(ctx context.Context, rec *loopRunRecorder, 
 		}
 		matched := []int{}
 		for _, index := range creates {
-			if !subject.found || loopTargetHolds(kind, contract.Outputs[index].Target, subject, entityType, entityID) {
+			if !subject.found && !loopTargetConstrained(kind, contract.Outputs[index].Target) || subject.found && onTarget(index) {
 				matched = append(matched, index)
 			}
 		}
@@ -607,17 +625,22 @@ func (s *server) checkLoopOutputCall(ctx context.Context, rec *loopRunRecorder, 
 		}
 	}
 	updates := loopContractIndexes(contract, kind, loopOpUpdate, loopOpWrite)
+	if kind == "statusUpdate" && len(updates) == 0 {
+		// Editing an older update stays on the same named target as posting
+		// one, even when the instructions only ask to create updates.
+		updates = loopContractIndexes(contract, kind, loopOpCreate)
+	}
 	if len(updates) == 0 {
 		// The loop's outputs do not change items of this kind: the change is
 		// allowed, as other changes are, but is not one of its outputs.
 		return prepared, nil
 	}
 	for _, index := range updates {
-		if !subject.found && !loopTargetConstrained(kind, contract.Outputs[index].Target) || subject.found && loopTargetHolds(kind, contract.Outputs[index].Target, subject, entityType, entityID) {
+		if !subject.found && !loopTargetConstrained(kind, contract.Outputs[index].Target) || subject.found && onTarget(index) {
 			record.Outputs = append(record.Outputs, index)
 		}
 	}
-	if len(record.Outputs) == 0 && subject.found {
+	if len(record.Outputs) == 0 {
 		return nil, refuse(updates)
 	}
 	return prepared, nil

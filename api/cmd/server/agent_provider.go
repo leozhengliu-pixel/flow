@@ -170,6 +170,7 @@ func agentToolsWithheld(ctx context.Context) bool {
 }
 
 type agentMaxOutputTokensKey struct{}
+type agentOutputTokenCapKey struct{}
 
 // withAgentMaxOutputTokens raises the output budget for one call. Reasoning
 // models spend part of it thinking, so structured replies can otherwise be cut off.
@@ -178,6 +179,9 @@ func withAgentMaxOutputTokens(ctx context.Context, tokens int) context.Context {
 }
 
 func (s *server) agentMaxOutputTokens(ctx context.Context) int {
+	if tokens, ok := ctx.Value(agentOutputTokenCapKey{}).(int); ok && tokens > 0 {
+		return tokens
+	}
 	if tokens, ok := ctx.Value(agentMaxOutputTokensKey{}).(int); ok && tokens > s.agent.MaxOutputTokens {
 		return tokens
 	}

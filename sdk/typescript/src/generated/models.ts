@@ -772,11 +772,13 @@ export interface Document {
   issueId?: string
   /** IssueTeamID is the team of the issue the document is attached to. Read-only. */
   issueTeamId?: string
+  matchedTerms?: string[]
   permissions?: DocumentPermission[]
   /** PreviousSlugIDs keeps the slugs a renamed document used before, so old links keep resolving (and the web app redirects to slugId). */
   previousSlugIds?: string[]
   projectIds: string[]
   revisions: DocumentRevision[]
+  searchSnippet?: string
   slugId: string
   subscriberIds: string[]
   teamIds: string[]
@@ -860,11 +862,13 @@ export interface DocumentPartial {
   issueId?: string
   /** IssueTeamID is the team of the issue the document is attached to. Read-only. */
   issueTeamId?: string
+  matchedTerms?: string[]
   permissions?: DocumentPermissionPartial[]
   /** PreviousSlugIDs keeps the slugs a renamed document used before, so old links keep resolving (and the web app redirects to slugId). */
   previousSlugIds?: string[]
   projectIds?: string[]
   revisions?: DocumentRevisionPartial[]
+  searchSnippet?: string
   slugId?: string
   subscriberIds?: string[]
   teamIds?: string[]
