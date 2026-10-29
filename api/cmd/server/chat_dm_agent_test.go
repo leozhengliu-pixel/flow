@@ -468,6 +468,7 @@ func TestChatDirectMessageAttachmentsBecomeChatAttachments(t *testing.T) {
 	// Larger than 2 MB: refused like the composer refuses it.
 	big, _ := json.Marshal(map[string]string{"file_key": "file_key_big", "file_name": "dump.log"})
 	f.send(t, f.identity.OpenID, "om_user_3", "file", string(big), "", "")
+	chatDMReplies.Wait()
 	sent := f.sent()
 	if last := sent[len(sent)-1]; !strings.Contains(last.Raw, "dump.log") || !strings.Contains(last.Raw, "2 MB") || len(f.sessions(t)) != 1 {
 		t.Fatalf("oversized file: %+v", last)
@@ -832,6 +833,7 @@ func TestChatDirectMessageRateLimitAndAvailability(t *testing.T) {
 	})
 	t.Cleanup(func() { http.DefaultTransport = previous })
 	f.text(t, "om_user_4", "Fourth question")
+	chatDMReplies.Wait()
 	if identity, _ := f.s.store.ChatIdentityForUser(t.Context(), f.record.WorkspaceKey, f.record.ConnectionID, f.identity.UserID); identity.PersonalDelivery != chatPersonalStateUnavailable {
 		t.Fatalf("unavailable state not recorded: %+v", identity)
 	}

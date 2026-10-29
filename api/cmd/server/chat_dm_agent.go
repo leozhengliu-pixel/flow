@@ -69,12 +69,8 @@ var (
 	chatDMLinkCheckEvery = 5 * time.Second
 )
 
-// chatDMReplies counts replies running in this process (tests wait on it),
-// and chatDMActive holds the chats they answer.
-var (
-	chatDMReplies sync.WaitGroup
-	chatDMActive  sync.Map
-)
+// chatDMReplies counts replies running in this process (tests wait on it).
+var chatDMReplies sync.WaitGroup
 
 type chatDMOriginKey struct{}
 
@@ -105,6 +101,7 @@ type chatDMAction struct {
 	PersonalMessage string              `json:"personalMessage,omitempty"`
 	WorkspaceKey    string              `json:"workspaceKey,omitempty"`
 	SessionID       string              `json:"sessionId,omitempty"`
+	ReplyJobID      string              `json:"replyJobId,omitempty"`
 	ApprovalID      string              `json:"approvalId,omitempty"`
 	Decision        string              `json:"decision,omitempty"`
 	Sibling         string              `json:"sibling,omitempty"`
@@ -286,7 +283,7 @@ func (s *server) chatDMMessage(ctx context.Context, record domain.ChatIntegratio
 	if thread != nil {
 		sessionID = thread.SessionID
 	}
-	return s.chatDMStartReply(ctx, dm, sessionID, text, resources)
+	return s.chatDMStartReply(ctx, dm, sessionID)
 }
 
 // chatDMAuthorize checks the member may still act in the target workspace,
@@ -539,6 +536,25 @@ func (s *server) chatDMCardAction(ctx context.Context, record domain.ChatIntegra
 		return s.chatDMAnswerApproval(ctx, dm, action)
 	case "dm_create":
 		return s.chatDMCreateIssue(ctx, dm, action)
+	case "dm_retry":
+		raw, err := s.store.ChatReplyJobPayload(ctx, record.WorkspaceKey, record.ConnectionID, action.ReplyJobID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		var reply chatDMReplyJob
+		if json.Unmarshal(raw, &reply) != nil || reply.UserID != identity.UserID || reply.Command.OpenID != command.OpenID || reply.Workspace != target.Workspace || reply.SessionID != action.SessionID || reply.Final == nil || reply.Final.Retry != command.ActionID {
+			return nil
+		}
+		if handled, err := s.chatDMAuthorize(ctx, &dm); handled {
+			return err
+		}
+		// The action ID, not the click event, deduplicates repeated clicks.
+		dm.job.DedupKey = chatKey(record.ConnectionID, command.ActionID, "retry")
+		dm.command = reply.Command
+		return s.chatDMStartReply(ctx, dm, action.SessionID)
 	}
 	return nil
 }
@@ -573,50 +589,14 @@ func (s *server) chatDMAnswerApproval(ctx context.Context, dm chatDMRequest, act
 // Agent replies.
 
 // chatDMStartReply answers with the Flow Agent: a new chat, or the next
-// message of sessionID. The reply runs in the background; its card follows it.
-func (s *server) chatDMStartReply(ctx context.Context, dm chatDMRequest, sessionID, text string, resources []chatDMResource) error {
-	if sessionID != "" {
-		if _, busy := chatDMActive.LoadOrStore(sessionID, struct{}{}); busy {
-			return s.chatDMNotice(ctx, dm, chatDMText(dm.zh, "Flow is still answering your previous message in this conversation. Reply again when it has finished.", "Flow 还在回复这段对话中的上一条消息，请等它完成后再回复。"))
-		}
-	}
-	started := false
-	defer func() {
-		if !started && sessionID != "" {
-			chatDMActive.Delete(sessionID)
-		}
-	}()
-	attachments, problem, err := s.chatDMAttachments(ctx, dm.record, dm.command.MessageID, resources, dm.zh)
+// message of sessionID. Only the durable queue starts the reply or its card.
+func (s *server) chatDMStartReply(ctx context.Context, dm chatDMRequest, sessionID string) error {
+	payload, err := json.Marshal(chatDMReplyJob{Command: dm.command, UserID: dm.identity.UserID, Workspace: dm.target.Workspace, SessionID: sessionID, ThreadKey: chatDMReplyThreadKey(dm, sessionID), Chinese: dm.zh})
 	if err != nil {
 		return err
 	}
-	if problem != "" {
-		return s.chatDMNotice(ctx, dm, problem)
-	}
-	message := text
-	if strings.TrimSpace(message) == "" {
-		message = chatDMText(dm.zh, "See the attached file.", "请看附件。")
-	}
-	cardID, _, err := s.chatDMSend(ctx, dm.record, dm.command.OpenID, dm.command.MessageID, dm.job.DedupKey+":reply", chatDMReplyCard(chatDMReplyView{Status: "working"}, dm.zh))
-	if err != nil {
-		return err
-	}
-	method, path := http.MethodPost, "/api/agent/sessions/stream"
-	var body any = agentSessionInput{Message: message, Location: "page", Attachments: attachments}
-	if sessionID != "" {
-		path = "/api/agent/sessions/" + url.PathEscape(sessionID) + "/messages/stream"
-		body = agentMessageInput{Message: message, Attachments: attachments}
-	}
-	reply := &chatDMReply{s: s, dm: dm, cardID: cardID, sessionID: sessionID, wake: make(chan struct{}, 1), approvalCards: map[string]chatDMApprovalCardState{}, resolved: map[string]string{}}
-	runCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), chatDMRunLimit)
-	chatDMReplies.Add(1)
-	started = true
-	go func() {
-		defer chatDMReplies.Done()
-		defer cancel()
-		reply.run(runCtx, method, path, body)
-	}()
-	return nil
+	_, err = s.store.EnqueueChatJob(ctx, domain.ChatJob{ID: "chat_dm_reply_" + dm.job.DedupKey, WorkspaceKey: dm.record.WorkspaceKey, ConnectionID: dm.record.ConnectionID, Kind: chatDMReplyJobKind, DedupKey: dm.job.DedupKey, Payload: payload})
+	return err
 }
 
 // chatDMAgentCall runs an Agent route as the member in the target workspace,
@@ -684,10 +664,10 @@ type chatDMStream struct {
 	stream  bool
 	body    bytes.Buffer
 	pending []byte
-	observe func(agentStreamEvent)
+	observe func(agentStreamEvent) error
 }
 
-func newChatDMStream(observe func(agentStreamEvent)) *chatDMStream {
+func newChatDMStream(observe func(agentStreamEvent) error) *chatDMStream {
 	return &chatDMStream{header: http.Header{}, observe: observe}
 }
 
@@ -725,7 +705,9 @@ func (w *chatDMStream) Write(data []byte) (int, error) {
 			}
 			var event agentStreamEvent
 			if json.Unmarshal(payload, &event) == nil && w.observe != nil {
-				w.observe(event)
+				if err := w.observe(event); err != nil {
+					return 0, err
+				}
 			}
 		}
 	}
@@ -780,6 +762,7 @@ type chatDMReply struct {
 	dm     chatDMRequest
 	cardID string
 	wake   chan struct{}
+	lease  *chatDMReplyLease
 
 	mu            sync.Mutex
 	sessionID     string
@@ -793,6 +776,7 @@ type chatDMReply struct {
 	final         *domain.AgentSession
 	failure       string
 	finished      bool
+	deliveryErr   error
 }
 
 func (r *chatDMReply) poke() {
@@ -802,7 +786,12 @@ func (r *chatDMReply) poke() {
 	}
 }
 
-func (r *chatDMReply) observe(event agentStreamEvent) {
+func (r *chatDMReply) observe(event agentStreamEvent) error {
+	if event.Type == "session.started" && event.Session != nil {
+		if err := r.lease.sessionStarted(event.Session.ID, event.MessageID); err != nil {
+			return err
+		}
+	}
 	r.mu.Lock()
 	defer r.poke()
 	defer r.mu.Unlock()
@@ -810,7 +799,6 @@ func (r *chatDMReply) observe(event agentStreamEvent) {
 	case "session.started":
 		if event.Session != nil {
 			r.sessionID, r.slug = event.Session.ID, event.Session.SlugID
-			chatDMActive.Store(r.sessionID, struct{}{})
 		}
 	case "text.delta":
 		r.text += event.Delta
@@ -818,7 +806,7 @@ func (r *chatDMReply) observe(event agentStreamEvent) {
 		r.text = event.Delta
 	case "tool.started", "tool.delta", "tool.completed", "tool.approval_required", "tool.approval_resolved":
 		if event.Part == nil || event.Part.ToolCall == nil {
-			return
+			return nil
 		}
 		step := chatDMStep{ID: event.Part.ID, Label: chatDMToolLabel(event.Part.ToolCall), Status: firstNonEmpty(event.Part.Status, event.Part.ToolCall.Status)}
 		if index := slices.IndexFunc(r.steps, func(item chatDMStep) bool { return item.ID == step.ID }); index >= 0 {
@@ -837,6 +825,7 @@ func (r *chatDMReply) observe(event agentStreamEvent) {
 	case "error":
 		r.failure = event.Error
 	}
+	return nil
 }
 
 func (r *chatDMReply) run(ctx context.Context, method, path string, body any) {
@@ -863,11 +852,6 @@ func (r *chatDMReply) run(ctx context.Context, method, path string, body any) {
 	r.mu.Unlock()
 	r.poke()
 	<-done
-	r.mu.Lock()
-	if r.sessionID != "" {
-		chatDMActive.Delete(r.sessionID)
-	}
-	r.mu.Unlock()
 }
 
 // view is what the card shows now.
@@ -951,11 +935,12 @@ func (r *chatDMReply) follow(ctx context.Context, done chan struct{}) {
 	lastCheck := time.Now()
 	check := time.NewTicker(chatDMLinkCheckEvery)
 	defer check.Stop()
-	// The reply ends on its own (an in-process reply outlives its request;
-	// a worker reply's request ends with ctx), so this waits for it rather
-	// than for ctx.
+	// The queue owns this stream, not the inbound webhook request. Losing
+	// its lease ends delivery even while an agent handler is unwinding.
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case <-r.wake:
 		case <-check.C:
 		}
@@ -975,13 +960,20 @@ func (r *chatDMReply) follow(ctx context.Context, done chan struct{}) {
 		r.mu.Lock()
 		finished = r.finished
 		view := r.view()
+		if finished {
+			view.Text = chatTruncateText(view.Text, 12000)
+		}
 		sessionID, threaded := r.sessionID, r.threaded
 		approvals := r.approvals
 		r.approvals = nil
 		resolved := r.resolved
 		r.resolved = map[string]string{}
 		r.mu.Unlock()
-		persist := context.WithoutCancel(ctx)
+		persist := ctx
+		if err := r.lease.update(nil, "", nil); err != nil {
+			r.deliveryErr = err
+			return
+		}
 		if sessionID != "" && !threaded {
 			thread := chatDMThread{Kind: "session", OpenID: r.dm.command.OpenID, WorkspaceKey: r.dm.target.Workspace, SessionID: sessionID}
 			r.s.chatDMRememberThread(persist, record, r.dm.identity.UserID, r.dm.command.MessageID, thread)
@@ -990,22 +982,37 @@ func (r *chatDMReply) follow(ctx context.Context, done chan struct{}) {
 			r.threaded = true
 			r.mu.Unlock()
 		}
-		for _, approval := range approvals {
-			r.sendApproval(persist, sessionID, approval)
-		}
-		for approvalID, decision := range resolved {
-			if card, ok := r.approvalCards[approvalID]; ok {
-				if err := r.s.chatDMUpdate(persist, record, card.MessageID, chatDMApprovalCard(card.Label, card.Preview, "", "", decision, zh)); err != nil {
-					log.Printf("Chat direct message workspace=%s: %v", record.WorkspaceKey, err)
+		if err := r.lease.update(nil, "", func(deliveryCtx context.Context) error {
+			for _, approval := range approvals {
+				r.sendApproval(deliveryCtx, sessionID, approval)
+			}
+			for approvalID, decision := range resolved {
+				if card, ok := r.approvalCards[approvalID]; ok {
+					if err := r.s.chatDMUpdate(deliveryCtx, record, card.MessageID, chatDMApprovalCard(card.Label, card.Preview, "", "", decision, zh)); err != nil {
+						return err
+					}
 				}
 			}
+			return nil
+		}); err != nil {
+			r.deliveryErr = err
+			return
 		}
 		raw, _ := json.Marshal(chatDMReplyCard(view, zh))
 		shown := bytes.Equal(raw, last)
-		if !shown {
-			if err := r.s.chatDMUpdate(persist, record, r.cardID, chatDMReplyCard(view, zh)); err != nil {
+		if !shown || finished {
+			err := r.lease.update(func(p *chatDMReplyJob) {
+				if finished {
+					p.Final = &view
+				}
+			}, "", func(deliveryCtx context.Context) error {
+				return r.s.chatDMUpdate(deliveryCtx, record, r.cardID, chatDMReplyCard(view, zh))
+			})
+			if err != nil {
+				r.deliveryErr = err
 				log.Printf("Chat direct message workspace=%s: %v", record.WorkspaceKey, err)
 			} else {
+				r.deliveryErr = nil
 				last, shown = raw, true
 			}
 			lastAt = time.Now()
@@ -1065,7 +1072,6 @@ func (r *chatDMReply) stillLinked(ctx context.Context) bool {
 // stopForUnlink ends the reply of an account that was unlinked, and says so
 // on its card.
 func (r *chatDMReply) stopForUnlink(ctx context.Context) {
-	ctx = context.WithoutCancel(ctx)
 	r.mu.Lock()
 	sessionID := r.sessionID
 	r.mu.Unlock()
@@ -1079,7 +1085,8 @@ func (r *chatDMReply) stopForUnlink(ctx context.Context) {
 		}
 	}
 	view := chatDMReplyView{Status: "stopped", Failure: chatDMText(r.dm.zh, "Stopped: this chat account is no longer linked to Flow.", "已停止：这个聊天账号已不再关联 Flow。")}
-	if err := r.s.chatDMUpdate(ctx, r.dm.record, r.cardID, chatDMReplyCard(view, r.dm.zh)); err != nil {
+	if err := r.s.chatDMDeliverReplyFinal(r.lease, r.dm, view); err != nil {
+		r.deliveryErr = err
 		log.Printf("Chat direct message workspace=%s: %v", r.dm.record.WorkspaceKey, err)
 	}
 }

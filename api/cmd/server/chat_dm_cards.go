@@ -421,10 +421,11 @@ func extensionOf(name string) string {
 type chatDMReplyView struct {
 	Text      string
 	Steps     []chatDMStep
-	Status    string // working, waiting, done, failed, stopped
+	Status    string // working, waiting, done, failed, stopped, interrupted
 	Failure   string
 	Questions []string
 	Link      string
+	Retry     string
 }
 
 type chatDMStep struct {
@@ -507,6 +508,9 @@ func chatDMReplyCard(view chatDMReplyView, zh bool) map[string]any {
 			text += "\n\n"
 		}
 		text += chatDMMarkdownEscape(firstNonEmpty(view.Failure, chatDMText(zh, "Stopped.", "已停止。")))
+	case "interrupted":
+		template = "grey"
+		text = chatDMText(zh, "This reply was interrupted. Retry to answer again. Actions already completed are not undone.", "这条回复已中断。请重试以重新回答，已完成的操作不会撤销。")
 	}
 	if text != "" {
 		elements = append(elements, chatDMMarkdown(text))
@@ -522,6 +526,9 @@ func chatDMReplyCard(view chatDMReplyView, zh bool) map[string]any {
 	}
 	if view.Link != "" {
 		elements = append(elements, chatDMButtons(chatDMLinkButton(chatDMText(zh, "Open in Flow", "在 Flow 中打开"), view.Link, false)))
+	}
+	if view.Retry != "" {
+		elements = append(elements, chatDMButtons(chatDMActionButton(chatDMText(zh, "Retry", "重试"), view.Retry, "primary")))
 	}
 	if view.Status == "done" || view.Status == "failed" || view.Status == "stopped" {
 		elements = append(elements, chatDMNote(chatDMText(zh, "Reply to this message to continue the conversation.", "回复这条消息即可继续对话。")))
