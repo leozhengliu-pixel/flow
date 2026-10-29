@@ -517,3 +517,30 @@ workspace. MCP calls count against the same rate limits as REST calls. Files
 are uploaded with `prepare_attachment_upload` (a durable upload URL, see
 [Files](#files)) and `create_attachment_from_upload`; link attachments with
 `save_attachment`.
+
+### Attaching files to issues and documents over MCP
+
+The attachment tools (`prepare_attachment_upload`,
+`create_attachment_from_upload`, `create_attachment`, `save_attachment`) take
+exactly one target: `issue` or `document`. A document must be one you can edit
+(the same rule as uploading in the editor, including the access a document
+inherits from a private team).
+
+1. `prepare_attachment_upload` returns `uploadUrl` (send the bytes there with
+   one `PUT` and the returned `headers`, within 15 minutes; no `Authorization`)
+   and `assetUrl`, the file's stable URL. `url` is the same file as a path
+   (`/uploads/asset_….png`), the form the editor stores.
+2. `create_attachment_from_upload` with the same target and `assetUrl` (the
+   `uploadUrl` is accepted too) attaches the file and returns its `id`, `url`,
+   `assetUrl`, `markdown` and `inserted`.
+3. `insert` decides the body: `"append"` adds an image, video or file card at
+   the end, `"none"` only records the attachment. Issues default to
+   `"append"` (as before); documents default to `"none"`, so you place the
+   returned `markdown` yourself with `save_document`: `![title](url)` for
+   images, `[title](url)` for other files. In a document, a line holding only
+   an image shows it inline.
+
+The asset URL serves nothing until the attachment is created, and afterwards
+only to people who can see the issue or document. Images, PDF, audio and video
+open in place; every other type downloads. `delete_attachment` removes an
+issue's or a document's attachment, and the file with it.

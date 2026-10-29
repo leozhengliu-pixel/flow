@@ -9,6 +9,20 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- The MCP attachment tools (`prepare_attachment_upload`,
+  `create_attachment_from_upload`, `create_attachment`, `save_attachment`)
+  attach files and links to a document as well as an issue: pass exactly one
+  of `issue` or `document` (a document you can edit). Document files are
+  recorded on the document and served to everyone who can see it; the body
+  is left alone unless `insert: "append"` adds the file at the end. Every
+  result includes a ready `markdown` snippet (`![title](url)` for images,
+  `[title](url)` otherwise) to place with `save_document`, and
+  `delete_attachment` also removes a document's attachment. On issues,
+  `insert: "none"` keeps a file out of the description (the default still
+  embeds it).
+- `save_document` content turns a line that holds only an image
+  (`![alt](url)`), a video (`::video[title](url)`) or a file card
+  (`::file[title](url)`) into that block in the editor.
 - `FLOW_CHAT_PLATFORM=lark|feishu` (Helm `integrations.chat.platform`) makes
   Lark or Feishu the deployment's first-class chat platform. The team home
   shows **Connect Lark group** (飞书 in Chinese for Feishu), the team's
@@ -113,6 +127,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- `prepare_attachment_upload` returns the file's stable URL as `assetUrl`
+  (`…/uploads/asset_…`) and its path as `url`, next to the one-time
+  `uploadUrl` for the `PUT`. Before, `assetUrl` repeated the upload URL.
+  `create_attachment_from_upload` accepts either value, so clients that pass
+  the old `assetUrl` keep working; clients that sent the `PUT` to `assetUrl`
+  must use `uploadUrl`.
 - Record ids Flow generates have the shape
   `<prefix><19 digits>_<10 characters>` (a zero-padded creation time in
   nanoseconds and a random part) instead of `<prefix><digits>`, so ids made

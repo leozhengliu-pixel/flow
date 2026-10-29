@@ -14,7 +14,8 @@ import (
 // Markdown text, so saving Markdown alone would leave an empty or stale editor
 // document behind. It covers the StarterKit blocks the editor offers:
 // headings (1-4), paragraphs, bullet/ordered/task lists, quotes, code blocks,
-// dividers and GFM tables, plus bold, italic, strike, inline code and links.
+// dividers and GFM tables, the description editor's image, video and file
+// card blocks, plus bold, italic, strike, inline code and links.
 func mcpMarkdownDocument(markdown string) map[string]any {
 	lines := strings.Split(strings.ReplaceAll(markdown, "\r\n", "\n"), "\n")
 	content := mcpMarkdownBlocks(lines)
@@ -31,7 +32,12 @@ var (
 	mcpMarkdownTask         = regexp.MustCompile(`^\[([ xX])\]\s+(.*)$`)
 	mcpMarkdownRule         = regexp.MustCompile(`^\s*(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$`)
 	mcpMarkdownTableDivider = regexp.MustCompile(`^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$`)
-	mcpMarkdownInline       = regexp.MustCompile("`([^`]+)`|\\*\\*([^*]+)\\*\\*|__([^_]+)__|~~([^~]+)~~|\\*([^*\\s][^*]*)\\*|_([^_\\s][^_]*)_|\\[([^\\]]+)\\]\\(([^)\\s]+)\\)")
+	// A line that is only an image, video or file card is that block, as the
+	// editor's Markdown tokenizers read it (image-extension.ts, file-extension.ts).
+	mcpMarkdownImage  = regexp.MustCompile(`^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)$`)
+	mcpMarkdownVideo  = regexp.MustCompile(`^::video\[([^\]]*)\]\(([^)\s]+)\)$`)
+	mcpMarkdownFile   = regexp.MustCompile(`^::file\[([^\]]*)\]\(([^)\s]+)\)(?:\{size="([^"]*)" type="([^"]*)"\})?$`)
+	mcpMarkdownInline = regexp.MustCompile("`([^`]+)`|\\*\\*([^*]+)\\*\\*|__([^_]+)__|~~([^~]+)~~|\\*([^*\\s][^*]*)\\*|_([^_\\s][^_]*)_|\\[([^\\]]+)\\]\\(([^)\\s]+)\\)")
 )
 
 func mcpMarkdownBlocks(lines []string) []any {
@@ -68,6 +74,9 @@ func mcpMarkdownBlocks(lines []string) []any {
 				index++
 			}
 			blocks = append(blocks, map[string]any{"type": "table", "content": rows})
+		case mcpMarkdownMediaBlock(trimmed) != nil:
+			blocks = append(blocks, mcpMarkdownMediaBlock(trimmed))
+			index++
 		case mcpMarkdownRule.MatchString(trimmed):
 			blocks = append(blocks, map[string]any{"type": "horizontalRule"})
 			index++
@@ -186,7 +195,38 @@ func mcpMarkdownTableRow(cellType string, cells []string, columns int) map[strin
 
 func mcpMarkdownParagraphLine(line string) bool {
 	trimmed := strings.TrimSpace(line)
-	return trimmed != "" && !strings.HasPrefix(trimmed, "```") && !strings.HasPrefix(trimmed, ">") && !mcpMarkdownHeading.MatchString(trimmed) && !mcpMarkdownRule.MatchString(trimmed) && !mcpMarkdownBullet.MatchString(line) && !mcpMarkdownOrdered.MatchString(line)
+	return trimmed != "" && !strings.HasPrefix(trimmed, "```") && !strings.HasPrefix(trimmed, ">") && !mcpMarkdownHeading.MatchString(trimmed) && !mcpMarkdownRule.MatchString(trimmed) && !mcpMarkdownBullet.MatchString(line) && !mcpMarkdownOrdered.MatchString(line) && mcpMarkdownMediaBlock(trimmed) == nil
+}
+
+// mcpMarkdownMediaBlock is the image, video or file node of a line that holds
+// only ![alt](src "title"), ::video[title](src) or
+// ::file[title](src){size="" type=""}, or nil. Sources are http(s) URLs or
+// paths on this server (such as /uploads/…); anything else stays text.
+func mcpMarkdownMediaBlock(trimmed string) map[string]any {
+	source := func(value string) bool {
+		return strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "/") && !strings.HasPrefix(value, "//")
+	}
+	if match := mcpMarkdownImage.FindStringSubmatch(trimmed); match != nil && source(match[2]) {
+		var title any
+		if match[3] != "" {
+			title = match[3]
+		}
+		return map[string]any{"type": "image", "attrs": map[string]any{"src": match[2], "alt": match[1], "title": title}}
+	}
+	if match := mcpMarkdownVideo.FindStringSubmatch(trimmed); match != nil && source(match[2]) {
+		return map[string]any{"type": "video", "attrs": map[string]any{"src": match[2], "title": match[1]}}
+	}
+	if match := mcpMarkdownFile.FindStringSubmatch(trimmed); match != nil && source(match[2]) {
+		var size, contentType any
+		if number, err := strconv.ParseInt(match[3], 10, 64); err == nil {
+			size = number
+		}
+		if match[4] != "" {
+			contentType = match[4]
+		}
+		return map[string]any{"type": "file", "attrs": map[string]any{"src": match[2], "title": firstNonEmpty(match[1], "File"), "size": size, "contentType": contentType}}
+	}
+	return nil
 }
 
 func mcpMarkdownNonEmpty(blocks []any) []any {

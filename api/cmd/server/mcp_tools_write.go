@@ -3,17 +3,12 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -1336,169 +1331,6 @@ func mcpReviewEvent(data domain.Bootstrap, id string) (string, domain.ReviewEven
 		}
 	}
 	return "", domain.ReviewEvent{}, errNotFound
-}
-
-// MCP uploads share the durable REST upload records (files_api.go), so the
-// PUT and the finalizing tool call may reach different API instances.
-func (s *server) prepareMCPAttachmentUpload(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
-	issue, err := mcpFindIssue(data, stringArg(args, "issue"))
-	if err != nil {
-		return nil, err
-	}
-	size := int64(intArg(args, "size", 0))
-	if size < 0 || size > maxUploadBytes {
-		return nil, fmt.Errorf("Flow attachments must be 20 MB or smaller")
-	}
-	filename := cleanUploadFilename(stringArg(args, "filename"))
-	if filename == "" {
-		filename = "upload"
-	}
-	for _, field := range []string{"title", "subtitle"} {
-		if checkUploadTitle(stringArg(args, field)) != nil {
-			return nil, fmt.Errorf("%s must be %d characters or fewer; nothing was uploaded", field, domain.UploadTitleMaxLength)
-		}
-	}
-	if uploadContentTypeTooLong(stringArg(args, "contentType")) {
-		return nil, fmt.Errorf("contentType must be a media type of at most 255 characters")
-	}
-	upload := store.FileUpload{WorkspaceKey: actor.WorkspaceKey, UserID: actor.User.ID, Filename: filename, ContentType: stringArg(args, "contentType"), ExpectedSize: size, Purpose: "issue:" + issue.ID, Title: stringArg(args, "title"), Subtitle: stringArg(args, "subtitle")}
-	payload, err := s.prepareFileUpload(ctx, upload, stringArg(args, "__flowBaseURL"), "/api/mcp/uploads/")
-	if errors.Is(err, store.ErrFileUploadQuota) {
-		return nil, err
-	}
-	if err != nil {
-		return nil, fmt.Errorf("could not prepare the upload: %w", err)
-	}
-	headers := map[string]string{"Content-Type": upload.ContentType}
-	return map[string]any{"uploadUrl": payload.UploadURL, "assetUrl": payload.UploadURL, "headers": headers, "expiresAt": payload.ExpiresAt}, nil
-}
-
-func (s *server) cleanupMCPUploads(ctx context.Context) { s.cleanupFileUploads(ctx) }
-
-func (s *server) putMCPUpload(w http.ResponseWriter, r *http.Request) {
-	s.receiveFileUpload(w, r, r.PathValue("token"), "issue")
-}
-
-func (s *server) finalizeMCPAttachmentUpload(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
-	assetURL := stringArg(args, "assetUrl")
-	parsed, err := url.Parse(assetURL)
-	if err != nil {
-		return nil, fmt.Errorf("invalid assetUrl")
-	}
-	token := filepath.Base(parsed.Path)
-	issue, err := mcpFindIssue(data, stringArg(args, "issue"))
-	if err != nil {
-		return nil, err
-	}
-	id := secretHash(token)
-	pending, err := s.store.FileUpload(ctx, id)
-	now := fileUploadNow()
-	if err != nil || pending.Status != store.FileUploadCompleted || !pending.ExpiresAt.After(now) || pending.WorkspaceKey != actor.WorkspaceKey || pending.UserID != actor.User.ID {
-		if err != nil && !errors.Is(err, store.ErrFileUploadNotFound) {
-			return nil, err
-		}
-		return nil, fmt.Errorf("assetUrl is not a completed Flow upload")
-	}
-	if pending.Purpose != "issue:"+issue.ID {
-		return nil, fmt.Errorf("upload was prepared for a different issue")
-	}
-	claimed, err := s.store.ClaimCompletedFileUpload(ctx, id, now)
-	if err != nil {
-		return nil, err
-	}
-	if !claimed {
-		return nil, fmt.Errorf("assetUrl is not a completed Flow upload")
-	}
-	title := stringArg(args, "title")
-	if title == "" {
-		title = pending.Title
-	}
-	if title == "" {
-		title = pending.Filename
-	}
-	result, err := s.attachStoredObject(ctx, actor, issue.ID, title, pending.ContentType, pending.ObjectKey, pending.ActualSize)
-	if err != nil {
-		_ = s.store.ReleaseFileUpload(context.WithoutCancel(ctx), id, fileUploadNow())
-		return nil, err
-	}
-	_ = s.store.DeleteFileUpload(context.WithoutCancel(ctx), id)
-	return result, nil
-}
-
-func (s *server) createMCPAttachment(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
-	issue, err := mcpFindIssue(data, stringArg(args, "issue"))
-	if err != nil {
-		return nil, err
-	}
-	content, err := base64.StdEncoding.DecodeString(stringArg(args, "base64Content"))
-	if err != nil {
-		return nil, fmt.Errorf("base64Content is invalid")
-	}
-	digest := sha256.Sum256(content)
-	if !strings.EqualFold(hex.EncodeToString(digest[:]), stringArg(args, "sha256")) {
-		return nil, fmt.Errorf("sha256 checksum mismatch")
-	}
-	if expected := intArg(args, "size", 0); hasNumberArg(args, "size") && expected != len(content) {
-		return nil, fmt.Errorf("attachment size mismatch")
-	}
-	if len(content) > 20<<20 {
-		return nil, fmt.Errorf("Flow attachments must be 20 MB or smaller")
-	}
-	key := fmt.Sprintf("mcp_%s_%s", idgen.Stamp(), filepath.Base(stringArg(args, "filename")))
-	storage, err := s.storage()
-	if err != nil {
-		return nil, err
-	}
-	upload, policyErr := s.checkUploadPolicy(actor.WorkspaceKey, stringArg(args, "filename"), bytes.NewReader(content))
-	if policyErr != nil {
-		return nil, policyErr
-	}
-	size, err := storage.Put(ctx, key, upload, stringArg(args, "contentType"))
-	if err != nil {
-		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		_ = storage.Delete(cleanup, key)
-		return nil, err
-	}
-	title := stringArg(args, "title")
-	if title == "" {
-		title = filepath.Base(stringArg(args, "filename"))
-	}
-	result, err := s.attachStoredObject(ctx, actor, issue.ID, title, stringArg(args, "contentType"), key, size)
-	if err != nil {
-		_ = storage.Delete(context.WithoutCancel(ctx), key)
-	}
-	return result, err
-}
-
-func (s *server) attachStoredObject(ctx context.Context, actor mcpActor, issueID, title, contentType, key string, size int64) (any, error) {
-	ctx = store.WithIssueRecordMutations(ctx, issueID)
-	attachment := domain.Attachment{ID: idgen.New("attachment_"), IssueID: issueID, Title: title, URL: "/uploads/" + key, ContentType: contentType, Size: size, CreatedAt: time.Now().UTC(), Creator: actor.User, BotActor: actor.User.Via}
-	err := s.store.MutateWorkspace(ctx, actor.WorkspaceKey, "attachment.created", issueID, nil, func(data *domain.Bootstrap) error {
-		issue, err := issueByID(data, issueID)
-		if err != nil {
-			return err
-		}
-		issue.Attachments = append(issue.Attachments, attachment)
-		return applyIssueAttachmentEmbed(data, issue, attachment)
-	})
-	return attachment, err
-}
-
-func (s *server) deleteMCPAttachment(ctx context.Context, actor mcpActor, data domain.Bootstrap, id string) (any, error) {
-	q, err := s.mcpIssueQuery(ctx, actor)
-	if err != nil {
-		return nil, err
-	}
-	issueID, err := s.store.IssueAttachmentParent(ctx, q, id)
-	if err != nil {
-		return nil, fmt.Errorf("attachment not found")
-	}
-	_, err = invokeJSONHandler(ctx, http.MethodDelete, map[string]string{"id": issueID, "attachmentId": id}, nil, s.deleteAttachment)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"deleted": true, "id": id}, nil
 }
 
 func invokeJSONHandler(ctx context.Context, method string, pathValues map[string]string, input any, handler http.HandlerFunc) (any, error) {

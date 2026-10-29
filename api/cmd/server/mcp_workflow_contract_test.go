@@ -251,8 +251,12 @@ func TestMCPUploadOwnershipRetryExpiryAndConcurrency(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		url := value.(map[string]any)["assetUrl"].(string)
-		return url, filepath.Base(url)
+		prepared := value.(map[string]any)
+		url := prepared["assetUrl"].(string)
+		if upload := prepared["uploadUrl"].(string); upload == url || !strings.HasPrefix(url, "/uploads/asset_") {
+			t.Fatalf("assetUrl %q must be the stable file URL, not the upload URL %q", url, upload)
+		}
+		return url, filepath.Base(prepared["uploadUrl"].(string))
 	}
 	put := func(token, body string) int {
 		r := httptest.NewRequest("PUT", "/", strings.NewReader(body))
@@ -320,7 +324,7 @@ func TestMCPUploadOwnershipRetryExpiryAndConcurrency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	token = filepath.Base(emptyUpload.(map[string]any)["assetUrl"].(string))
+	token = filepath.Base(emptyUpload.(map[string]any)["uploadUrl"].(string))
 	if put(token, body) != 400 {
 		t.Fatal("nonempty content accepted for zero-byte upload")
 	}

@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -169,13 +170,14 @@ func (s *server) putFileUpload(w http.ResponseWriter, r *http.Request) {
 	s.receiveFileUpload(w, r, r.PathValue("token"), "asset")
 }
 
-// receiveFileUpload stores the PUT body for one prepared upload. Concurrent
-// PUTs for the same token (on any instance) get 409 except the first.
-func (s *server) receiveFileUpload(w http.ResponseWriter, r *http.Request, token, purpose string) {
+// receiveFileUpload stores the PUT body for one prepared upload whose purpose
+// is one of kinds. Concurrent PUTs for the same token (on any instance) get
+// 409 except the first.
+func (s *server) receiveFileUpload(w http.ResponseWriter, r *http.Request, token string, kinds ...string) {
 	id := secretHash(token)
 	now := fileUploadNow()
 	upload, err := s.store.BeginFileUpload(r.Context(), id, now)
-	if errors.Is(err, store.ErrFileUploadNotFound) || err == nil && purposeKind(upload.Purpose) != purpose {
+	if errors.Is(err, store.ErrFileUploadNotFound) || err == nil && !slices.Contains(kinds, purposeKind(upload.Purpose)) {
 		if err == nil {
 			_ = s.store.FinishFileUpload(context.WithoutCancel(r.Context()), id, false, 0, now)
 		}

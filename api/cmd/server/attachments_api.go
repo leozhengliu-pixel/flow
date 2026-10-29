@@ -327,9 +327,10 @@ func (s *server) getAttachment(w http.ResponseWriter, r *http.Request) {
 	writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "attachment not found")
 }
 
-// saveMCPLinkAttachment is the MCP save_attachment tool.
+// saveMCPLinkAttachment is the MCP save_attachment tool: a link on an issue
+// or on a document the actor can edit.
 func (s *server) saveMCPLinkAttachment(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
-	issue, err := mcpFindIssue(data, stringArg(args, "issue"))
+	target, err := s.mcpAttachmentTarget(data, "save_attachment", args)
 	if err != nil {
 		return nil, err
 	}
@@ -345,9 +346,20 @@ func (s *server) saveMCPLinkAttachment(ctx context.Context, actor mcpActor, data
 	if err := validateLinkAttachmentInput(&input, true); err != nil {
 		return nil, err
 	}
+	if target.onDocument() {
+		attachment, err := s.saveDocumentLinkAttachment(ctx, actor.WorkspaceKey, target.document.ID, input, actor.User)
+		if err != nil {
+			return nil, target.writeError(err)
+		}
+		return mcpAttachmentResult(args, attachment, target, false), nil
+	}
+	issue := target.issue
 	if current, err := s.store.IssueRecord(ctx, actor.WorkspaceKey, issue.ID); err == nil {
 		issue = current
 	}
 	attachment, _, err := s.saveLinkAttachment(ctx, nil, actor.WorkspaceKey, issue, input)
-	return attachment, err
+	if err != nil {
+		return nil, err
+	}
+	return mcpAttachmentResult(args, attachment, target, false), nil
 }
