@@ -11,6 +11,7 @@ const sources = import.meta.glob(
     '../components/issue/editor/slash-command-menu.tsx',
     '../components/issue/editor/selection-toolbar.tsx',
     '../components/issue/editor/empty-line-hint.ts',
+    '../components/issue/editor/math-block-view.tsx',
     '../components/editor/code-block/code-block-view.tsx',
     '../components/editor/table/table-chrome.tsx',
     '../components/editor/table/table-commands.ts',
@@ -40,7 +41,7 @@ describe('editor chrome translations', () => {
           const text = match[1]
           if (!/[A-Za-z]{2,}/.test(text)) continue
           const zh = (zhCN as Record<string, string>)[text] ?? translateToChinese(text)
-          if (/[A-Za-z]{3,}/.test(zh.replace(/\{[a-zA-Z]+\}/g, '').replace(/\b(?:URL|ID|CSV|Markdown|Slack|Pulse|Agent|GitHub|GitLab|Figma|Miro|Tella|Loom|YouTube|Descript)\b/g, ''))) missing.push(`${path.split('/').pop()}: ${text} -> ${zh}`)
+          if (/[A-Za-z]{3,}/.test(zh.replace(/\{[a-zA-Z]+\}/g, '').replace(/\b(?:URL|ID|CSV|Markdown|LaTeX|Slack|Pulse|Agent|GitHub|GitLab|Figma|Miro|Tella|Loom|YouTube|Descript)\b/g, ''))) missing.push(`${path.split('/').pop()}: ${text} -> ${zh}`)
         }
       }
     }
@@ -48,6 +49,7 @@ describe('editor chrome translations', () => {
   })
 
   it('translates the slash menu, placeholders and toolbar menu', () => {
+    expect(zhCN['LaTeX math block']).toBe('LaTeX 数学公式块')
     for (const key of ['Heading 4', 'Loading file preview…', 'No access to this file', 'Connect {provider} to preview this file', 'Type / for commands…', 'Start writing…', 'No results found', 'Dismiss', 'Heading 1', 'Collapsible section', 'Insert media…', 'Attach files…', 'Regular text', 'Callout', 'Divider', 'Table']) {
       expect(/[一-鿿]/.test((zhCN as Record<string, string>)[key] ?? translateToChinese(key)), key).toBe(true)
     }

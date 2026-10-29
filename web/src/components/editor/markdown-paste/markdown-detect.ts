@@ -57,6 +57,7 @@ export function looksLikeMarkdown(input: string) {
 
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index]
+    if (line.trim() === '$$' && lines.slice(index + 1).some(next => next.trim() === '$$')) return true
     if (FENCE.test(line)) {
       // An opening fence only counts when something closes it later; otherwise it is stray backticks.
       const marker = FENCE.exec(line)?.[1] ?? '```'

@@ -59,6 +59,16 @@ function parseBlocks(lines: string[]): PMNode[] {
   while (index < lines.length) {
     const line = lines[index]
     if (!line.trim()) { index++; continue }
+    if (line.trim() === '$$') {
+      let end = index + 1
+      while (end < lines.length && lines[end].trim() !== '$$') end++
+      if (end < lines.length) {
+        const source = lines.slice(index + 1, end).join('\n')
+        blocks.push({ type: 'mathBlock', ...(source ? { content: [text(source)] } : {}) })
+        index = end + 1
+        continue
+      }
+    }
     const fence = FENCE.exec(line)
     if (fence) {
       const body: string[] = []
@@ -103,7 +113,7 @@ function parseBlocks(lines: string[]): PMNode[] {
       continue
     }
     const paragraphLines: string[] = []
-    while (index < lines.length && lines[index].trim() && !FENCE.test(lines[index]) && !/^(#{1,6})\s/.test(lines[index]) && !/^\s{0,3}>/.test(lines[index]) && !BULLET.test(lines[index]) && !ORDERED.test(lines[index])) paragraphLines.push(lines[index++])
+    while (index < lines.length && lines[index].trim() && !(paragraphLines.length && lines[index].trim() === '$$') && !FENCE.test(lines[index]) && !/^(#{1,6})\s/.test(lines[index]) && !/^\s{0,3}>/.test(lines[index]) && !BULLET.test(lines[index]) && !ORDERED.test(lines[index])) paragraphLines.push(lines[index++])
     blocks.push(paragraph(inlineLines(paragraphLines)))
   }
   return blocks

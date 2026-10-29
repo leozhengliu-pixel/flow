@@ -103,6 +103,7 @@ func TestSecurityHeadersWebAppPolicyHashesInlineScripts(t *testing.T) {
 		"img-src 'self' data: blob: https:", "connect-src 'self' wss://flow.example.com https://api.github.com",
 		"frame-src blob: https://www.youtube-nocookie.com", "worker-src 'self'", "object-src 'none'", "base-uri 'self'",
 		"form-action 'self'", "frame-ancestors 'self'",
+		"font-src 'self';",
 	} {
 		if !strings.Contains(policy, want) {
 			t.Fatalf("web app policy lacks %q: %s", want, policy)

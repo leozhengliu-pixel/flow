@@ -8,6 +8,9 @@ import { SelectionToolbar } from '@/components/issue/editor/selection-toolbar'
 import { showsSelectionToolbar } from '@/components/issue/editor/selection-toolbar-visibility'
 import { handleSelectionShortcut } from '@/components/issue/editor/selection-shortcuts'
 import { structuredBlocks } from '@/components/issue/editor/structured-blocks'
+import { isMathInput, MathBlock } from '@/components/issue/editor/math-extension'
+import { Markdown } from '@tiptap/markdown'
+import { MarkdownPaste } from './markdown-paste'
 import { useComposerSelectionActions } from './selection-issue'
 import { Button } from '@/components/ui/button'
 import { createDraft, deleteDraft, updateDraft } from '@/lib/api'
@@ -45,7 +48,7 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
   const [getEntityData]=useState(()=>()=>entityDataRef.current)
   const mentionOptionList=useMentionOptions({active:Boolean(mention),query:mention?.query??'',users:mentionUsers})
   const optionsRef=useLatestRef(mentionOptionList)
-  const updateMention=(editor:Editor)=>{const {$from,empty}=editor.state.selection;const match=empty&&$from.parent.type.name!=='codeBlock'?$from.parent.textBetween(0,$from.parentOffset,' ',' ').match(/(?:^|\s)@([^\s@]*)$/):null;const next=match?{query:match[1],from:$from.pos-match[1].length-1,to:$from.pos,index:0}:undefined;mentionRef.current=next;setMention(next)}
+  const updateMention=(editor:Editor)=>{const {$from,empty}=editor.state.selection;const match=empty&&!$from.parent.type.spec.code?$from.parent.textBetween(0,$from.parentOffset,' ',' ').match(/(?:^|\s)@([^\s@]*)$/):null;const next=match?{query:match[1],from:$from.pos-match[1].length-1,to:$from.pos,index:0}:undefined;mentionRef.current=next;setMention(next)}
   const insertMention=(editor:Editor,option:MentionOption)=>{const range=mentionRef.current;if(!range)return;insertMentionOption(editor.view,range,option);editor.commands.focus();mentionRef.current=undefined;setMention(undefined)}
   const persistedDraft = useMemo(() => draftType && draftResourceId ? drafts.find(item => item.type === draftType && item.resourceId === draftResourceId) ?? readComposerDraft(draftType, draftResourceId) : undefined, [draftResourceId, draftType, drafts])
   const initialBody = persistedDraft?.body ?? initialValue
@@ -66,9 +69,10 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
   const editor = useEditor({
     immediatelyRender: false,
     // Headings, collapsible sections and checklists back the selection toolbar's text-style, collapse and list menus.
-    extensions: [FlowStarterKit.configure({ heading: { levels: [1, 2, 3, 4] }, link: { openOnClick: false, autolink: true, linkOnPaste: true } }), LinkBehavior, ClipboardOrigin, ...structuredBlocks, EmbedPasteNode, MentionChipNode, MentionLinksExtension.configure({ getData: getEntityData }), DescriptionImage, DescriptionFile, DescriptionVideo, Placeholder.configure({ placeholder: t(placeholder) })],
-    content: initialDocument?.type === 'doc' ? initialDocument : initialBody || { type: 'doc', content: [{ type: 'paragraph' }] },
-    editorProps: { handleTextInput: handleEmoticonInput, attributes: { class: 'comment-prosemirror', role: 'textbox', 'aria-label': t(placeholder), 'aria-multiline': 'true' }, handleKeyDown: (_view, event) => { const current=mentionRef.current;if(current&&!event.isComposing){const options=optionsRef.current;if(event.key==='Escape'){setMention(undefined);mentionRef.current=undefined;return true}if(options.length&&(event.key==='ArrowDown'||event.key==='ArrowUp')){const next={...current,index:(current.index+(event.key==='ArrowDown'?1:-1)+options.length)%options.length};mentionRef.current=next;setMention(next);event.preventDefault();return true}if(options.length&&(event.key==='Enter'||event.key==='Tab')&&editor){event.preventDefault();insertMention(editor,options[current.index]??options[0]);return true}} if (!event.isComposing && commentShortcutMatches(event)) { event.preventDefault(); void submit(); return true } if (handleSelectionShortcut(event, _view.state.selection, _view.state.doc, selectionActionsRef.current, editorRef.current)) return true; if (event.key === 'Escape' && onCancel) { event.preventDefault(); onCancel(); return true } return false } },
+    extensions: [FlowStarterKit.configure({ heading: { levels: [1, 2, 3, 4] }, link: { openOnClick: false, autolink: true, linkOnPaste: true } }), LinkBehavior, ClipboardOrigin, MathBlock, Markdown, MarkdownPaste, ...structuredBlocks, EmbedPasteNode, MentionChipNode, MentionLinksExtension.configure({ getData: getEntityData }), DescriptionImage, DescriptionFile, DescriptionVideo, Placeholder.configure({ placeholder: t(placeholder) })],
+    content: initialDocument?.type === 'doc' ? initialDocument : initialBody,
+    contentType: initialDocument?.type === 'doc' ? 'json' : 'markdown',
+    editorProps: { handleTextInput: handleEmoticonInput, attributes: { class: 'comment-prosemirror', role: 'textbox', 'aria-label': t(placeholder), 'aria-multiline': 'true' }, handleKeyDown: (_view, event) => { const current=mentionRef.current;if(current&&!event.isComposing){const options=optionsRef.current;if(event.key==='Escape'){setMention(undefined);mentionRef.current=undefined;return true}if(options.length&&(event.key==='ArrowDown'||event.key==='ArrowUp')){const next={...current,index:(current.index+(event.key==='ArrowDown'?1:-1)+options.length)%options.length};mentionRef.current=next;setMention(next);event.preventDefault();return true}if(options.length&&(event.key==='Enter'||event.key==='Tab')&&editor){event.preventDefault();insertMention(editor,options[current.index]??options[0]);return true}} if (!event.isComposing && !isMathInput(_view.state) && commentShortcutMatches(event)) { event.preventDefault(); void submit(); return true } if (handleSelectionShortcut(event, _view.state.selection, _view.state.doc, selectionActionsRef.current, editorRef.current)) return true; if (event.key === 'Escape' && onCancel) { event.preventDefault(); onCancel(); return true } return false } },
     onUpdate: ({editor}) => { const json = editor.getJSON() as Record<string, unknown>; draftDocument.current = json; const text = commentText(editor); setEmpty(!commentSendable(text, json)); setDraftBody(text);updateMention(editor) },
     onSelectionUpdate:({editor})=>updateMention(editor),
   })
@@ -195,5 +199,5 @@ function caretAnchor(editor: Editor, position: number) {
 
 /** The comment's text body: plain text, with each mention as `@name` (people) or `[label](path)` (other resources) so agents and exports keep the references. */
 function commentText(editor: Editor) {
-  return editor.getText({ blockSeparator: '\n', textSerializers: { mention: ({ node }) => mentionMarkdown(node.attrs) } })
+  return editor.getText({ blockSeparator: '\n', textSerializers: { mention: ({ node }) => mentionMarkdown(node.attrs), mathBlock: ({ node }) => `$$\n${node.textContent}\n$$` } })
 }

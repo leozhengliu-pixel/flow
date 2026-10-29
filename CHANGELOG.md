@@ -13,6 +13,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   request, and builds the browser-test API before the server readiness timeout.
 - Security browser coverage for server-fetched X/Figma and GitHub/GitLab cards,
   service worker updates and kill switches, plus opt-in real-provider embeds.
+- Block LaTeX formulas in shared issue, document and comment editors, with
+  source editing, KaTeX previews, formula actions and Markdown/collaborative
+  history support. Inline dollar-delimited text stays literal.
 - Requests from Lark and Feishu group messages: in a group bound to a team
   whose binding takes requests (**Requests** in the binding editor, with the
   reaction, request template and priority), a member turns a message into a

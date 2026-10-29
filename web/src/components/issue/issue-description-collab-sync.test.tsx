@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { viewer } from '@/test/fixtures'
 import { IssueDescriptionEditor } from './issue-description-editor'
 
-vi.mock('@/i18n/i18n', () => ({ useI18n: () => ({ t: (value: string) => value }) }))
+vi.mock('@/i18n/i18n', () => ({ useI18n: () => ({ t: (value: string) => value }), useOptionalTranslate: () => (value: string) => value }))
 vi.mock('@/lib/api', () => ({ realtimeClientId: () => 'collab-sync-test' }))
 
 /** An in-memory relay: every Yjs update frame one editor sends is held until `deliver()` hands it to the other editors. */
@@ -78,6 +78,23 @@ describe('collaborative description: rewrites appended to a local text edit', ()
     vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { errors.push(args) })
   })
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
+
+  it('seeds math in both schemas, merges concurrent source edits and undoes only the local edit', async () => {
+    const [first, second] = await mountPair('$$\nx+y\n$$')
+    expect(first.state.doc.firstChild?.type.name).toBe('mathBlock')
+    expect(second.getJSON()).toEqual(first.getJSON())
+    act(() => {
+      first.chain().setTextSelection(2).insertContent('^2').run()
+      second.chain().setTextSelection(4).insertContent('^3').run()
+      Socket.deliver()
+    })
+    expect(first.getMarkdown()).toContain('$$\nx^2+y^3\n$$')
+    expect(second.getJSON()).toEqual(first.getJSON())
+    act(() => { first.commands.undo(); Socket.deliver() })
+    expect(first.getMarkdown()).toContain('$$\nx+y^3\n$$')
+    expect(second.getJSON()).toEqual(first.getJSON())
+    expect(errors).toEqual([])
+  })
 
   it('pastes a URL into a new empty paragraph: the link paste rule runs, nothing is lost, and both editors converge', async () => {
     const [first, second] = await mountPair('Intro text')

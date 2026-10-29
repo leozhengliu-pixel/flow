@@ -15,7 +15,7 @@ import (
 // document behind. It covers the StarterKit blocks the editor offers:
 // headings (1-4), paragraphs, bullet/ordered/task lists, quotes, code blocks,
 // dividers and GFM tables, the description editor's image, video and file
-// card blocks, plus bold, italic, strike, inline code and links.
+// card blocks, display math, plus bold, italic, strike, inline code and links.
 func mcpMarkdownDocument(markdown string) map[string]any {
 	lines := strings.Split(strings.ReplaceAll(markdown, "\r\n", "\n"), "\n")
 	content := mcpMarkdownBlocks(lines)
@@ -48,6 +48,14 @@ func mcpMarkdownBlocks(lines []string) []any {
 		switch {
 		case trimmed == "":
 			index++
+		case trimmed == "$$" && mcpMarkdownMathEnd(lines, index) > index:
+			end := mcpMarkdownMathEnd(lines, index)
+			block := map[string]any{"type": "mathBlock"}
+			if source := strings.Join(lines[index+1:end], "\n"); source != "" {
+				block["content"] = []any{map[string]any{"type": "text", "text": source}}
+			}
+			blocks = append(blocks, block)
+			index = end + 1
 		case strings.HasPrefix(trimmed, "```"):
 			language := strings.TrimSpace(strings.TrimPrefix(trimmed, "```"))
 			code := []string{}
@@ -123,7 +131,7 @@ func mcpMarkdownBlocks(lines []string) []any {
 			blocks = append(blocks, map[string]any{"type": "orderedList", "attrs": map[string]any{"start": max(startNumber, 1)}, "content": items})
 		default:
 			paragraph := []string{}
-			for index < len(lines) && mcpMarkdownParagraphLine(lines[index]) && (len(paragraph) == 0 || !mcpMarkdownTableStart(lines, index)) {
+			for index < len(lines) && mcpMarkdownParagraphLine(lines[index]) && (len(paragraph) == 0 || !mcpMarkdownTableStart(lines, index) && !(strings.TrimSpace(lines[index]) == "$$" && mcpMarkdownMathEnd(lines, index) > index)) {
 				paragraph = append(paragraph, strings.TrimSpace(lines[index]))
 				index++
 			}
@@ -131,6 +139,15 @@ func mcpMarkdownBlocks(lines []string) []any {
 		}
 	}
 	return blocks
+}
+
+func mcpMarkdownMathEnd(lines []string, start int) int {
+	for index := start + 1; index < len(lines); index++ {
+		if strings.TrimSpace(lines[index]) == "$$" {
+			return index
+		}
+	}
+	return -1
 }
 
 // mcpMarkdownTableStart reports whether lines[index] opens a GFM table: a

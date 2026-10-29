@@ -1,0 +1,38 @@
+.math-block-container {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  margin: 12px 0;
+  border: .5px solid var(--description-math-border);
+  border-radius: 6px;
+  color: var(--issue-fg);
+  background: transparent;
+}
+.math-block-container[data-editing] { background: var(--bg-sidebar); }
+.math-block-container .math-block-source {
+  margin: 0;
+  padding: 16px;
+  min-height: 52px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: 400 13px / 20px var(--font-monospace);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.math-block-container:not([data-editing]) .math-block-source { display: none; }
+.math-block-source code { padding: 0; background: none; color: inherit; font: inherit; }
+.math-block-render { min-height: 52px; padding: 16px; overflow-x: auto; font-size: 15px; text-align: center; }
+.math-block-render .katex-display { margin: 0; }
+.math-block-actions { position: absolute; top: 14px; left: -28px; width: 28px; opacity: 0; }
+.math-block-container:hover .math-block-actions,
+.math-block-container:focus-within .math-block-actions,
+.math-block-container[data-menu-open] .math-block-actions { opacity: 1; }
+.math-block-actions button { display: flex; align-items: center; justify-content: center; width: 20px; height: 24px; border: 0; border-radius: 4px; background: transparent; color: var(--theme-text-secondary); cursor: pointer; }
+.math-block-actions button:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
+.math-block-fullscreen-overlay { position: fixed; z-index: 1400; inset: 0; background: var(--theme-overlay); }
+.math-block-fullscreen { position: fixed; z-index: 1401; inset: 8%; display: flex; align-items: center; justify-content: center; border: .5px solid var(--theme-border); border-radius: 6px; background: var(--theme-surface-0); color: var(--theme-text-primary); }
+.math-block-fullscreen > button { position: absolute; right: 12px; top: 12px; display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 4px; background: transparent; color: inherit; cursor: pointer; }
+.math-block-fullscreen .math-block-render { max-width: 100%; }
+@media (max-width: 600px) { .math-block-actions { left: -20px; width: 20px; } .math-block-fullscreen { inset: 4%; } }

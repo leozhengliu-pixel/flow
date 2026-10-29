@@ -160,6 +160,7 @@ function fixBlocks(nodes: JSONContent[] | undefined, ctx: Context): JSONContent[
 function fixBlock(node: JSONContent, ctx: Context): JSONContent[] {
   switch (node.type) {
     case 'codeBlock':
+    case 'mathBlock':
     case 'horizontalRule':
     case 'image':
       return [node]

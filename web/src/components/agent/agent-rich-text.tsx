@@ -6,6 +6,7 @@ import { FlowStarterKit } from '@/components/editor/flow-starter-kit'
 import { LinkBehavior } from '@/components/editor/link-behavior'
 import { FlowCodeBlock } from '@/components/editor/code-block/code-block-extension'
 import { structuredBlocks } from '@/components/issue/editor/structured-blocks'
+import { MathBlock } from '@/components/issue/editor/math-extension'
 import { AgentEntityNode } from './agent-entity-node'
 import styles from './agent-rich-text.module.css'
 import './agent-chat-document.css'
@@ -17,7 +18,7 @@ export function AgentRichText({ ariaLabel = 'AI message', className = 'agent-ric
     immediatelyRender: false,
     editable: false,
     // Code blocks use the editor's node view: line numbers, hover header (language, settings, copy) and syntax highlighting.
-    extensions: [FlowStarterKit.configure({ codeBlock: false, link: { openOnClick: false } }), LinkBehavior, FlowCodeBlock, Markdown, ...structuredBlocks, TableKit.configure({ table: { resizable: false } }), AgentEntityNode],
+    extensions: [FlowStarterKit.configure({ codeBlock: false, link: { openOnClick: false } }), LinkBehavior, FlowCodeBlock, Markdown, MathBlock, ...structuredBlocks, TableKit.configure({ table: { resizable: false } }), AgentEntityNode],
     content: content || ' ',
     contentType: 'markdown',
     editorProps: { attributes: { class: `${className} ${styles.richText}`, role: 'document', 'aria-label': ariaLabel } },

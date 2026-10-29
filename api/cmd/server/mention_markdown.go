@@ -118,7 +118,7 @@ var mentionBareURL = regexp.MustCompile(`https?://[^\s<>()\[\]]+`)
 func linkBareURLs(document map[string]any) map[string]any {
 	var walk func(node map[string]any)
 	walk = func(node map[string]any) {
-		if kind, _ := node["type"].(string); kind == "codeBlock" || kind == "diagram" || kind == "mention" {
+		if kind, _ := node["type"].(string); kind == "codeBlock" || kind == "mathBlock" || kind == "diagram" || kind == "mention" {
 			return
 		}
 		children, _ := node["content"].([]any)
@@ -239,7 +239,7 @@ func (m *mentionResolver) convert(document map[string]any) map[string]any {
 	var walk func(node map[string]any)
 	walk = func(node map[string]any) {
 		kind, _ := node["type"].(string)
-		if kind == "codeBlock" || kind == "diagram" || kind == "mention" {
+		if kind == "codeBlock" || kind == "mathBlock" || kind == "diagram" || kind == "mention" {
 			return
 		}
 		children, _ := node["content"].([]any)
