@@ -37,6 +37,10 @@ not supported by this connection flow.
    (获取群组中所有消息). Without them the shortcut still works, but its result
    goes to the member's bot conversation instead of the group.
 
+   For [requests from group messages](#requests-from-group-messages) by
+   reaction, also grant `im:message.reactions:read` (查看消息表情回复) with
+   the two message permissions above.
+
    For replies in [issue threads](#issue-threads) to become comments
    without mentioning the bot, grant `im:message.group_msg` (获取群组中所有消息)
    as well; with only `im:message.group_at_msg:readonly`, a reply becomes a
@@ -62,7 +66,8 @@ not supported by this connection flow.
    group mentions and, with `im:message.p2p_msg:readonly`, direct messages)
    and the current `card.action.trigger` callback; do not also subscribe to
    the legacy card callback. For [link previews](#link-previews), also
-   subscribe to the `url.preview.get` callback. Publish configuration changes
+   subscribe to the `url.preview.get` callback; for requests by reaction,
+   to `im.message.reaction.created_v1`. Publish configuration changes
    when required by the platform.
 8. Add the bot to an internal group and allow it to speak. Back in Flow, select
    the group, a team, an optional compatible project/template, and the
@@ -222,7 +227,9 @@ same time.
 
 Everything a group hears about one issue goes into one message thread. The
 first card about the issue (or, for an issue created from a group command,
-the member's command message it answered) is the thread's root; later
+the member's command message it answered; for an issue created with the
+message shortcut or a [request](#requests-from-group-messages), the
+member's message) is the thread's root; later
 notifications about the issue reply to it. If the root is recalled or
 deleted, the next notification starts a new thread with a new root.
 
@@ -310,7 +317,13 @@ capability, the `im.message.receive_v1` event subscription, the
   `my issues` / `我的事项` lists the member's open assigned issues and
   `inbox` / `收件箱` their latest notifications, as cards with links; a
   pasted Flow issue or project link shows a preview, only when the member
-  can open it. Anything else goes to the agent.
+  can open it. Once the platform asks Flow for
+  [link previews](#link-previews) (the app's link preview is configured),
+  the platform's preview already shows the link and the bot sends no card of
+  its own. Anything else goes to the agent.
+- **Read state**: the member wrote the message and saw the reply in the
+  chat, so once the reply's card shows the final answer the Agent chat is
+  marked read for them and does not appear unread on the Agent page.
 - **Several workspaces**: a member who linked their account in several
   workspaces of the same tenant (each workspace connects its own app) is
   asked on their first message which one to use; the choice is remembered,
@@ -412,7 +425,13 @@ the issue card.
 
 - In a bound group, the binding's **create issues** option applies and the
   team is the group's bound team (with its project and template); the reply
-  is the binding's issue card with its controls.
+  is the binding's issue card with its controls. The message's thread
+  becomes the issue's thread in the group (see [Issue threads](#issue-threads)):
+  the reply and every later notification about the issue continue it, and
+  the binding's *issue created* notification posts no separate card.
+- In a bound group that takes [requests](#requests-from-group-messages), the
+  form also has **Submit as request** (提交为需求); with creating issues off
+  it submits requests only.
 - In another group or chat, the form offers the teams the member can create
   issues in. The reply under the message appears only for an issue of a
   public team; otherwise the issue card goes to the member's bot
@@ -426,6 +445,76 @@ the issue card.
 
 The platform's AppLink opens a chat, not a single message, so the link in the
 description opens the source message's chat.
+
+### Requests from group messages
+
+A group bound to a team can take requests: members turn the group's
+messages into requests in the team's triage, and the message's thread
+follows the request. A team owner (or a workspace administrator) turns this
+on in the group binding under **Requests**: **Take requests**, the
+**Request reaction**, the **Request template** and the **Request
+priority** (empty uses the template's or the team's default). The settings
+are saved, authorized and audited with the binding (`requests` in the API:
+`enabled`, `emoji`, `templateId`, `priority`).
+
+A member makes a request in any of three ways:
+
+- **Mention the bot**: `@Flow 提需求 <text>` (also `需求` or
+  `request`). In a group that takes requests, any other mention of the bot
+  is a request too, except `@Flow 创建事项` / `create issue`, which opens the
+  create form as before. A bare `@Flow 提需求` in reply to a message makes
+  the request from that message.
+- **React** to a message with the binding's reaction (the platform's emoji
+  type, such as `OK`, `THUMBSUP`, `DONE` or `JIAYI`).
+- **The message shortcut**: **Submit as request** in the
+  [create form](#create-an-issue-from-a-message).
+
+The request is the same record as Flow's other requests: an Ask with the
+source `feishu` or `lark`, and its issue in the team's triage (the team's
+triage when it uses triage, otherwise the template's or the team's default
+state), created as the member's linked Flow account with their own
+permissions, from the binding's request template and priority. The title is
+the message's first line and the description its text with a link back to
+the group. A project-scoped binding puts the request in the template's
+project when the binding covers it, otherwise in the binding's first
+project.
+
+- Unlinked members get a card to link their account; nothing is created.
+- A member who cannot create issues in the team is told privately (code
+  `chat_request_forbidden`), and the message stays free for someone else.
+- In a group that does not take requests, an explicit `提需求` is refused
+  privately (`chat_requests_disabled`); plain mentions and reactions are
+  ignored.
+- One message carries one request, whoever asks and however: a second
+  mention or the shortcut answers privately with the existing request, a
+  second reaction does nothing. The records are kept per connection
+  (`chat_intake_requests`) and removed with the connection or workspace.
+- With sensitive data protection on, the group's binding is inactive and no
+  request is made.
+
+The message's thread becomes the request's [issue thread](#issue-threads):
+
+- the bot confirms in the thread with the request's card (*Request
+  received*);
+- replies in the thread become comments written as the replying member, when
+  the binding allows updating issues;
+- Flow comments are posted into the thread, whatever the binding's
+  notification choices;
+- status changes post a short note (*Status changed to In Progress*), in
+  place of the binding's status card;
+- when the request is completed or canceled, the thread gets a reply with
+  the outcome and a link; reopening it says so, and closing it again replies
+  again.
+
+A message that is itself inside another issue's thread cannot give the
+request a thread of its own: the confirmation then starts a new thread in the
+group.
+
+Reactions need the `im.message.reaction.created_v1` event subscription and
+the `im:message.reactions:read` permission; reading the reacted message (the
+event names only the message) needs `im:message:readonly` and
+`im:message.group_msg`, which also let the bot read the message a bare
+`@Flow 提需求` reply answers.
 
 ### Link previews
 

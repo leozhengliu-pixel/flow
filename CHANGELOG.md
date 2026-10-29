@@ -9,6 +9,19 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Requests from Lark and Feishu group messages: in a group bound to a team
+  whose binding takes requests (**Requests** in the binding editor, with the
+  reaction, request template and priority), a member turns a message into a
+  request by mentioning the bot (`@Flow 提需求 …`, or any other mention
+  there), adding the binding's reaction, or **Submit as request** in the
+  message shortcut's form. The request is an Ask (source `feishu` or
+  `lark`) with its issue in the team's triage, created as the member's
+  linked Flow account with their permissions; unlinked members get the link
+  card and members who cannot create issues in the team are told privately.
+  One message carries one request (`chat_intake_requests`, migration 22).
+  The message's thread follows the request: the confirmation card, replies
+  as comments (when the binding allows updates), Flow comments, a note on
+  status changes and a reply with the outcome when the request is closed.
 - Chat with the Flow Agent in a direct message with the workspace's Lark or
   Feishu bot. It runs as the linked member with exactly their Flow
   permissions, rate limits, tool budget and approvals, on either agent
@@ -216,6 +229,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- An issue created with the Lark or Feishu message shortcut in a bound group
+  keeps the source message as its thread root, so the creation reply and
+  later notifications continue that thread (and *issue created* posts no
+  separate card). In direct messages, a pasted Flow link gets no bot preview
+  card once the platform previews links for the app, and an Agent chat held
+  in a direct message is marked read for the member, so it no longer shows
+  as unread on the Agent page.
 - `prepare_attachment_upload` returns the file's stable URL as `assetUrl`
   (`…/uploads/asset_…`) and its path as `url`, next to the one-time
   `uploadUrl` for the `PUT`. Before, `assetUrl` repeated the upload URL.
