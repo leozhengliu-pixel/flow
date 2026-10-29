@@ -44,6 +44,8 @@ type workerThreadRunInfo struct {
 	MaxCalls    int   `json:"maxCalls"`
 	// Resume is set on a run that continues a suspended run: the person's decision per held call id.
 	Resume *workerChatResume `json:"resume,omitempty"`
+	// HostedWebSearch: the run searches with the model provider's hosted search (workerChatRunInfo.HostedWebSearch).
+	HostedWebSearch bool `json:"hostedWebSearch,omitempty"`
 }
 
 func workerThreadInfo(run store.AgentRun) (workerThreadRunInfo, bool) {
@@ -102,7 +104,7 @@ func (s *server) deliverBuiltinTaskToWorker(ctx context.Context, task domain.Age
 		_, _ = s.store.AppendAgentActivity(ctx, task.WorkspaceKey, task.ID, task.Version, domain.AgentActivity{ActorID: task.AppUserID, Type: "error", Body: "Execution was interrupted. Inspect previous tool results before retrying."})
 		return true
 	}
-	info := workerThreadRunInfo{TaskVersion: task.Version, MaxTurns: s.agentMaxToolTurns(), MaxCalls: s.agentMaxToolCalls()}
+	info := workerThreadRunInfo{TaskVersion: task.Version, MaxTurns: s.agentMaxToolTurns(), MaxCalls: s.agentMaxToolCalls(), HostedWebSearch: s.agentRunHostedWebSearch(agentWebAccess(data.WorkspaceSettings))}
 	if task.PendingTool != nil {
 		// The person answered held calls: the suspended run continues with the decision, when there is one.
 		state, err := s.store.AgentSessionStateFor(ctx, task.WorkspaceKey, task.ID)

@@ -106,6 +106,7 @@ async function execute(run: AgentRun) {
     } : {}),
     // A loop run's calls run one at a time, as in-process, and finish_run ends it.
     ...(loop ? { allTools: true, serialCalls: true, stopAtTools: ['finish_run'], elicitations: undefined } : {}),
+    hostedWebSearch: Boolean(chat?.hostedWebSearch ?? thread?.hostedWebSearch),
   })
   sessions.set(run.id, session)
   cancels.started()

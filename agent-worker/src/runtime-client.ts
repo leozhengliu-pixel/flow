@@ -42,6 +42,8 @@ export type ChatRunInfo = {
   resume?: { decisions: Record<string, string> }
   /** Tool groups the reply starts with besides the ones its request picks (the chat's surface, earlier tools). */
   groups?: string[]
+  /** Search with the provider's hosted search tool (Flow has no search provider). */
+  hostedWebSearch?: boolean
 }
 
 /** What a built-in session run's payload says (api/cmd/server/agent_worker_thread.go workerThreadRunInfo). */
@@ -50,6 +52,7 @@ export type ThreadRunInfo = {
   maxTurns: number
   maxCalls: number
   resume?: { decisions: Record<string, string> }
+  hostedWebSearch?: boolean
 }
 
 /** What a loop run's payload says (api/cmd/server/agent_worker_loop.go workerLoopRunInfo). */
