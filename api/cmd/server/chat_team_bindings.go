@@ -77,33 +77,14 @@ func chatBindingScopePermitted(data domain.Bootstrap, binding domain.ChatBinding
 	if data.WorkspaceSettings.HIPAACompliance || binding.RevokedAt != nil || binding.TeamID == "" || !chatTeamShareable(data, binding, binding.TeamID) {
 		return false
 	}
-	if binding.ProjectID != "" {
-		found := false
-		for _, project := range data.Projects {
-			if project.ID != binding.ProjectID {
-				continue
-			}
-			if project.ArchivedAt != nil || !slices.Contains(project.TeamIDs, binding.TeamID) {
-				return false
-			}
-			// A project shared with another private team would disclose
-			// that team's work; only public teams may join the bound one.
-			for _, teamID := range project.TeamIDs {
-				if !chatTeamShareable(data, binding, teamID) {
-					return false
-				}
-			}
-			found = true
-		}
-		if !found {
-			return false
-		}
+	if !chatBindingProjectsPermitted(data, binding) {
+		return false
 	}
 	if binding.TemplateID != "" {
 		found := false
 		for _, template := range data.IssueTemplates {
 			if template.ID == binding.TemplateID {
-				if template.TemplateType == "form" || len(template.FormFields) > 0 || (template.TeamID != "" && template.TeamID != binding.TeamID) || (template.VisibilityTeamID != "" && template.VisibilityTeamID != binding.TeamID) || (template.ProjectID != "" && template.ProjectID != binding.ProjectID) {
+				if template.TemplateType == "form" || len(template.FormFields) > 0 || (template.TeamID != "" && template.TeamID != binding.TeamID) || (template.VisibilityTeamID != "" && template.VisibilityTeamID != binding.TeamID) || (template.ProjectID != "" && !chatBindingLimitedToProject(binding, template.ProjectID)) {
 					return false
 				}
 				found = true
@@ -144,6 +125,13 @@ func (s *server) chatBindingPermitted(ctx context.Context, record domain.ChatInt
 	if !ok || !chatBindingScopePermitted(data, binding) || !s.chatBindingAuthorizerValid(ctx, record.WorkspaceKey, binding) {
 		return store.ErrAuthForbidden
 	}
+	return s.chatGroupPermitted(ctx, record, binding.ChatID, len(checkMembership) > 0 && checkMembership[0])
+}
+
+// chatGroupPermitted asks the chat platform whether the group is an internal
+// group of the application's tenant and, when checkMembership is set, whether
+// the bot is in it. Team and initiative bindings share it.
+func (s *server) chatGroupPermitted(ctx context.Context, record domain.ChatIntegrationRecord, chatID string, checkMembership bool) error {
 	var response struct {
 		Data struct {
 			Name      string `json:"name"`
@@ -152,7 +140,7 @@ func (s *server) chatBindingPermitted(ctx context.Context, record domain.ChatInt
 			ChatMode  string `json:"chat_mode"`
 		} `json:"data"`
 	}
-	if err := s.chatPlatformRequest(ctx, record, http.MethodGet, "/open-apis/im/v1/chats/"+url.PathEscape(binding.ChatID), nil, &response); err != nil {
+	if err := s.chatPlatformRequest(ctx, record, http.MethodGet, "/open-apis/im/v1/chats/"+url.PathEscape(chatID), nil, &response); err != nil {
 		return err
 	}
 	if response.Data.TenantKey != record.TenantKey {
@@ -161,13 +149,13 @@ func (s *server) chatBindingPermitted(ctx context.Context, record domain.ChatInt
 	if response.Data.External == nil || *response.Data.External || (response.Data.ChatMode != "group" && response.Data.ChatMode != "topic") {
 		return chatGroupRefusal{"Only internal groups of the application's tenant can be bound"}
 	}
-	if len(checkMembership) > 0 && checkMembership[0] {
+	if checkMembership {
 		var member struct {
 			Data struct {
 				IsInChat bool `json:"is_in_chat"`
 			} `json:"data"`
 		}
-		if err := s.chatPlatformRequest(ctx, record, http.MethodGet, "/open-apis/im/v1/chats/"+url.PathEscape(binding.ChatID)+"/members/is_in_chat", nil, &member); err != nil || !member.Data.IsInChat {
+		if err := s.chatPlatformRequest(ctx, record, http.MethodGet, "/open-apis/im/v1/chats/"+url.PathEscape(chatID)+"/members/is_in_chat", nil, &member); err != nil || !member.Data.IsInChat {
 			return chatGroupRefusal{"Add the bot to this group before binding it"}
 		}
 	}
@@ -251,7 +239,7 @@ func (s *server) chatBindingSession(w http.ResponseWriter, r *http.Request) (dom
 		writeChatError(w, 404, "Chat application not configured")
 		return data, record, false
 	}
-	if !s.applicationPolicyAdmin(r, data) && len(s.chatManageableTeamIDs(r, data)) == 0 {
+	if !s.applicationPolicyAdmin(r, data) && len(s.chatManageableTeamIDs(r, data)) == 0 && !s.chatInitiativeOwnerRequest(r, data) {
 		writeChatError(w, 403, chatTeamBindingPermissionMessage)
 		return data, record, false
 	}
@@ -334,7 +322,8 @@ func (s *server) saveChatBinding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	binding := input.ChatBinding
-	if binding.ChatID == "" || len(binding.ChatID) > 191 || len(binding.ChatName) > 200 || len(binding.Events) > len(chatBindingEvents) || binding.TeamID == "" {
+	binding.NormalizeProjects()
+	if binding.ChatID == "" || len(binding.ChatID) > 191 || len(binding.ChatName) > 200 || len(binding.Events) > len(chatBindingEvents) || binding.TeamID == "" || len(binding.ProjectIDs) > chatBindingMaxProjects {
 		writeChatError(w, 400, "Invalid group binding")
 		return
 	}
@@ -490,6 +479,9 @@ func (s *server) auditChatBinding(r *http.Request, record domain.ChatIntegration
 	metadata := map[string]any{"provider": record.Provider, "connectionId": record.ConnectionID, "chatId": binding.ChatID, "chatName": binding.ChatName, "teamId": binding.TeamID, "events": binding.Events, "allowCreate": binding.AllowCreate, "allowUpdate": binding.AllowUpdate, "enabled": binding.Enabled}
 	if binding.ProjectID != "" {
 		metadata["projectId"] = binding.ProjectID
+	}
+	if len(binding.ProjectIDs) > 0 {
+		metadata["projectIds"] = binding.ProjectIDs
 	}
 	if binding.Authorization != nil {
 		metadata["authorizedBy"] = binding.Authorization.UserID

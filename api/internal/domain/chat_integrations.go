@@ -85,18 +85,23 @@ type ChatBindingAuthorization struct {
 }
 
 type ChatBinding struct {
-	ID           string    `json:"id"`
-	ConnectionID string    `json:"connectionId"`
-	ChatID       string    `json:"chatId"`
-	ChatName     string    `json:"chatName"`
-	TeamID       string    `json:"teamId"`
-	ProjectID    string    `json:"projectId,omitempty"`
-	TemplateID   string    `json:"templateId,omitempty"`
-	Events       []string  `json:"events"`
-	Enabled      bool      `json:"enabled"`
-	AllowCreate  bool      `json:"allowCreate"`
-	AllowUpdate  bool      `json:"allowUpdate"`
-	CreatedAt    time.Time `json:"createdAt"`
+	ID           string `json:"id"`
+	ConnectionID string `json:"connectionId"`
+	ChatID       string `json:"chatId"`
+	ChatName     string `json:"chatName"`
+	TeamID       string `json:"teamId"`
+	// ProjectID is the binding's project when it covers exactly one; kept
+	// for readers of the single-project form. ProjectIDs is the scope.
+	ProjectID string `json:"projectId,omitempty"`
+	// ProjectIDs limits the binding to these projects of the team; empty
+	// covers all of the team's issues and projects.
+	ProjectIDs  []string  `json:"projectIds,omitempty"`
+	TemplateID  string    `json:"templateId,omitempty"`
+	Events      []string  `json:"events"`
+	Enabled     bool      `json:"enabled"`
+	AllowCreate bool      `json:"allowCreate"`
+	AllowUpdate bool      `json:"allowUpdate"`
+	CreatedAt   time.Time `json:"createdAt"`
 	// Authorization is recorded by the server whenever the binding is
 	// created or its scope changes.
 	Authorization *ChatBindingAuthorization `json:"authorization,omitempty"`
