@@ -201,9 +201,11 @@ await client.updateProject(project.id, { statusId })
 await client.createInitiative({ name: 'Q4 reliability' })
 ```
 
-Updates accept `expectedVersion` for optimistic concurrency; a stale version is
-a `ConflictFlowError` with `code === 'VERSION_CONFLICT'` and the server's
-`current` resource.
+Updates accept `expectedVersion` for optimistic concurrency. Issue updates
+accept a stale version when change history proves the patched fields stayed
+unchanged. Same-field changes, missing history, and stale versions on other
+resources raise `ConflictFlowError` with `code === 'VERSION_CONFLICT'` and the
+server's `current` resource.
 
 ### Link attachments
 

@@ -782,9 +782,9 @@ func TestSearchHistoryRecentResourcesAndConcurrentIssuePatches(t *testing.T) {
 	if updated.Version != issue.Version+1 {
 		t.Fatalf("issue version = %d, want %d", updated.Version, issue.Version+1)
 	}
-	// A stale expectedVersion is a 409 on the legacy route too; a patch
-	// without one merges by field.
-	requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{"title": "Stale writer", "expectedVersion": issue.Version}, http.StatusConflict)
+	// A stale write to the same field is a 409 on the legacy route too;
+	// a patch without a precondition applies to the current issue.
+	requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{"priority": 2, "expectedVersion": issue.Version}, http.StatusConflict)
 	merged := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{"title": "Stale writer"}, http.StatusOK)
 	if merged.Title != "Stale writer" || merged.Priority != 1 || merged.Version != issue.Version+2 {
 		t.Fatalf("an unversioned issue patch did not merge by field: %#v", merged)
