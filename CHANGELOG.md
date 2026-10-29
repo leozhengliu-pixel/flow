@@ -236,6 +236,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- PostgreSQL change-log numbering assigns a committed batch, advances its
+  cursor and retires the queue in one statement after acquiring the numbering
+  lock. Multi-event writers also enqueue their events in bounded batches.
+
 - An issue created with the Lark or Feishu message shortcut in a bound group
   keeps the source message as its thread root, so the creation reply and
   later notifications continue that thread (and *issue created* posts no

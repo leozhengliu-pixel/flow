@@ -366,3 +366,72 @@ func TestChangeCursorRescuesEventsLeftUnnumbered(t *testing.T) {
 		})
 	}
 }
+
+func TestChangeCursorNumberingDrainsBatchesAndRetiredRows(t *testing.T) {
+	for name, repos := range changeCursorStores(t, 2) {
+		if name == "sqlite" {
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			ctx := t.Context()
+			db := repos[0].db
+			workspace := idgen.New("numbering_")
+			defer db.ExecContext(ctx, `DELETE FROM domain_event_sequencing WHERE workspace_id=?`, workspace)
+			defer db.ExecContext(ctx, `DELETE FROM domain_events WHERE workspace_id=?`, workspace)
+			defer db.ExecContext(ctx, `DELETE FROM workspace_event_seq WHERE workspace_id=?`, workspace)
+			tx, err := db.BeginTx(ctx, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback()
+			first := ""
+			const total = sequencingBatch + 3
+			for i := 0; i < total; i++ {
+				id := idgen.New("evt_")
+				if i == 0 {
+					first = id
+				}
+				if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,created_at,workspace_id) VALUES(?,'test.numbering','batch',?,'',?)`, id, []byte(`{}`), workspace); err != nil {
+					t.Fatal(err)
+				}
+				tx.sequencing = append(tx.sequencing, pendingEventSequence{workspaceID: workspace, eventID: id})
+			}
+			if err := tx.queueEventSequencing(); err != nil {
+				t.Fatal(err)
+			}
+			// Leave numbering to the other server, as if the writer died.
+			tx.sequencing = nil
+			if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+			if err := repos[1].db.sequenceWorkspaceEvents(ctx, workspace, nil); err != nil {
+				t.Fatal(err)
+			}
+			var count, distinct, min, max int
+			if err := db.QueryRowContext(ctx, `SELECT COUNT(*),COUNT(DISTINCT seq),MIN(seq),MAX(seq) FROM domain_events WHERE workspace_id=?`, workspace).Scan(&count, &distinct, &min, &max); err != nil {
+				t.Fatal(err)
+			}
+			if count != total || distinct != total || min != 1 || max != total {
+				t.Fatalf("numbered batch: %d rows, %d seqs, %d..%d", count, distinct, min, max)
+			}
+			for _, id := range []string{first, "missing-" + workspace} {
+				if _, err := db.ExecContext(ctx, `INSERT INTO domain_event_sequencing(workspace_id,event_id,created_ms) VALUES(?,?,0)`, workspace, id); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := repos[1].db.sequenceWorkspaceEvents(ctx, workspace, nil); err != nil {
+				t.Fatal(err)
+			}
+			var head, remaining int
+			if err := db.QueryRowContext(ctx, `SELECT head FROM workspace_event_seq WHERE workspace_id=?`, workspace).Scan(&head); err != nil {
+				t.Fatal(err)
+			}
+			if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM domain_event_sequencing WHERE workspace_id=?`, workspace).Scan(&remaining); err != nil {
+				t.Fatal(err)
+			}
+			if head != total || remaining != 0 {
+				t.Fatalf("retired rows advanced head or remained: head %d, queued %d", head, remaining)
+			}
+		})
+	}
+}

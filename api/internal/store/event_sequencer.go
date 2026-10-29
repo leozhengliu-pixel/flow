@@ -113,8 +113,14 @@ func (tx *sqlTx) queueEventSequencing() error {
 	}
 	ctx := tx.context()
 	now := time.Now().UnixMilli()
-	for _, pending := range tx.sequencing {
-		if _, err := tx.Tx.ExecContext(ctx, rewriteSQL(`INSERT INTO domain_event_sequencing(workspace_id,event_id,created_ms) VALUES(?,?,?)`, tx.dialect), pending.workspaceID, pending.eventID, now); err != nil {
+	for start := 0; start < len(tx.sequencing); start += sequencingBatch {
+		batch := tx.sequencing[start:min(start+sequencingBatch, len(tx.sequencing))]
+		values := strings.TrimSuffix(strings.Repeat("(?,?,?),", len(batch)), ",")
+		args := make([]any, 0, len(batch)*3)
+		for _, pending := range batch {
+			args = append(args, pending.workspaceID, pending.eventID, now)
+		}
+		if _, err := tx.Tx.ExecContext(ctx, rewriteSQL(`INSERT INTO domain_event_sequencing(workspace_id,event_id,created_ms) VALUES`+values, tx.dialect), args...); err != nil {
 			return err
 		}
 	}
@@ -152,7 +158,7 @@ func (tx *sqlTx) sequenceCommittedEvents() {
 // by its own numbering or another's; without ids (rescues) it numbers
 // everything committed so far.
 //
-// The writer first tries the numbering lock without waiting. When another
+// On MySQL the writer first tries the numbering lock without waiting. When another
 // numbering holds it, the writer waits for that one to commit in shared mode
 // (every writer waiting so is released at once) and returns if it covered
 // the writer's events. Only a writer it did not cover (one that committed
@@ -160,14 +166,17 @@ func (tx *sqlTx) sequenceCommittedEvents() {
 // in that queue covered leaves without numbering events committed since,
 // which are their own writers' to number. Writers queued behind one
 // numbering thus do not take empty turns at the lock one after another.
+// PostgreSQL queues directly: its single batch statement does no durable
+// write on an empty queue, so preflight reads and shared-lock turns cost
+// more than simply checking the queue after the exclusive lock is held.
 func (d *sqlDatabase) sequenceWorkspaceEvents(ctx context.Context, workspaceID string, ids []string) error {
-	if len(ids) > 0 {
+	if len(ids) > 0 && d.dialect != "postgres" {
 		if numbered, err := eventsNumbered(ctx, d, ids); err != nil || numbered {
 			return err
 		}
 	}
 	mode := numberingTry
-	if len(ids) == 0 {
+	if len(ids) == 0 || d.dialect == "postgres" {
 		mode = numberingWait
 	}
 	for {
@@ -227,6 +236,9 @@ func (d *sqlDatabase) sequenceWorkspaceBatch(ctx context.Context, workspaceID st
 			return 0, false, err
 		}
 		return 0, covered, tx.Commit()
+	}
+	if d.dialect == "postgres" {
+		return tx.sequencePostgresBatch(ctx, workspaceID)
 	}
 	if mode == numberingWait && len(ids) > 0 {
 		if covered, err := eventsNumbered(ctx, tx, ids); err != nil || covered {
@@ -307,6 +319,38 @@ func (d *sqlDatabase) sequenceWorkspaceBatch(ctx context.Context, workspaceID st
 		return 0, false, err
 	}
 	return len(orders), false, nil
+}
+
+// sequencePostgresBatch assigns and retires a batch in one round trip. The
+// advisory lock was taken by a separate statement, so this statement's
+// snapshot includes the previous numbering's commit even if we waited for
+// it. Taking the lock inside this CTE would reuse an older snapshot.
+func (tx *sqlTx) sequencePostgresBatch(ctx context.Context, workspaceID string) (int, bool, error) {
+	var consumed, assigned, expected int
+	err := tx.QueryRowContext(ctx, `WITH queued AS MATERIALIZED (
+		SELECT order_id,event_id FROM domain_event_sequencing WHERE workspace_id=? ORDER BY order_id LIMIT ?
+	), pending AS MATERIALIZED (
+		SELECT e.id,row_number() OVER (ORDER BY q.order_id) AS position
+		FROM queued q JOIN domain_events e ON e.id=q.event_id WHERE e.seq IS NULL
+	), advanced AS (
+		INSERT INTO workspace_event_seq(workspace_id,head,pruned)
+		SELECT ?,COUNT(*),0 FROM pending HAVING COUNT(*)>0
+		ON CONFLICT(workspace_id) DO UPDATE SET head=workspace_event_seq.head+excluded.head
+		RETURNING head
+	), numbered AS (
+		UPDATE domain_events e SET seq=h.head-(SELECT COUNT(*) FROM pending)+p.position
+		FROM pending p CROSS JOIN advanced h WHERE e.id=p.id AND e.seq IS NULL RETURNING e.id
+	), retired AS (
+		DELETE FROM domain_event_sequencing WHERE order_id IN (SELECT order_id FROM queued) RETURNING order_id
+	)
+	SELECT (SELECT COUNT(*) FROM retired),(SELECT COUNT(*) FROM numbered),(SELECT COUNT(*) FROM pending)`, workspaceID, sequencingBatch, workspaceID).Scan(&consumed, &assigned, &expected)
+	if err != nil {
+		return 0, false, err
+	}
+	if assigned != expected {
+		return 0, false, fmt.Errorf("numbered %d of %d change log events", assigned, expected)
+	}
+	return consumed, false, tx.Commit()
 }
 
 // lockNumbering takes the workspace's numbering lock, which serialises the
