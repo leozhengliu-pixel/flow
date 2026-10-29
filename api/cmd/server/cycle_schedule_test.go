@@ -39,43 +39,6 @@ func expectCycle(t *testing.T, data *domain.Bootstrap, id, status, start, end st
 	}
 }
 
-// POST /api/cycles/{id}/complete (an API call; the app has no complete action) ends the cycle
-// today and starts the next one today with its planned end, so the cycles after it keep their
-// dates and the 2 week cooldown stays between them.
-func TestCompletingCycleEarlyKeepsCooldowns(t *testing.T) {
-	data := scheduleFixture(
-		scheduledCycle("c1", 1, "current", "2026-10-19", "2026-11-01"),
-		scheduledCycle("c2", 2, "upcoming", "2026-11-16", "2026-11-29"),
-		scheduledCycle("c3", 3, "upcoming", "2026-12-14", "2026-12-27"),
-	)
-	now := day("2026-10-27").Add(15 * time.Hour)
-	if err := transitionToCycle(data, &data.Cycles[1], now); err != nil {
-		t.Fatal(err)
-	}
-	expectCycle(t, data, "c1", "completed", "2026-10-19", "2026-10-27")
-	expectCycle(t, data, "c2", "current", "2026-10-27", "2026-11-29")
-	expectCycle(t, data, "c3", "upcoming", "2026-12-14", "2026-12-27")
-	if len(data.Cycles) != 4 {
-		t.Fatalf("cycles = %d, want a new upcoming cycle", len(data.Cycles))
-	}
-	expectCycle(t, data, data.Cycles[3].ID, "upcoming", "2027-01-11", "2027-01-24")
-}
-
-// A cycle completed on the day it started covers that day; the next one starts the same day.
-func TestCompletingCycleOnItsFirstDay(t *testing.T) {
-	data := scheduleFixture(
-		scheduledCycle("c1", 1, "current", "2026-10-27", "2026-11-09"),
-		scheduledCycle("c2", 2, "upcoming", "2026-11-24", "2026-12-07"),
-		scheduledCycle("c3", 3, "upcoming", "2026-12-22", "2027-01-04"),
-	)
-	if err := transitionToCycle(data, &data.Cycles[1], day("2026-10-27").Add(time.Hour)); err != nil {
-		t.Fatal(err)
-	}
-	expectCycle(t, data, "c1", "completed", "2026-10-27", "2026-10-27")
-	expectCycle(t, data, "c2", "current", "2026-10-27", "2026-12-07")
-	expectCycle(t, data, "c3", "upcoming", "2026-12-22", "2027-01-04")
-}
-
 // Automatic maintenance ends a cycle after its last day, leaves the cooldown without a current
 // cycle and starts the next cycle on its planned start day.
 func TestCycleMaintenanceHonorsCooldown(t *testing.T) {
@@ -160,11 +123,101 @@ func TestStartCycleTodayKeepsItsEnd(t *testing.T) {
 		scheduledCycle("c1", 1, "upcoming", "2026-11-02", "2026-11-15"),
 		scheduledCycle("c2", 2, "upcoming", "2026-11-30", "2026-12-13"),
 	)
-	if err := transitionToCycle(data, &data.Cycles[0], referenceNow); err != nil {
-		t.Fatal(err)
-	}
+	startCycleOn(&data.Cycles[0], referenceNow)
 	expectCycle(t, data, "c1", "current", "2026-10-28", "2026-11-15")
 	expectCycle(t, data, "c2", "upcoming", "2026-11-30", "2026-12-13")
+	if cycleScheduleDue(data, "team_a", referenceNow) || cycleScheduleDue(data, "team_a", day("2026-11-02")) {
+		t.Fatal("starting early made the schedule due before the current cycle ended")
+	}
+	advanceCycleSchedule(data, "team_a", referenceNow)
+	if len(data.Cycles) != 2 {
+		t.Fatalf("starting early generated cycles: %#v", data.Cycles)
+	}
+	if !cycleScheduleDue(data, "team_a", day("2026-11-16")) {
+		t.Fatal("the ended cycle was not due for maintenance")
+	}
+	advanceCycleSchedule(data, "team_a", day("2026-11-16"))
+	if countUpcomingCycles(data, "team_a") != 2 {
+		t.Fatal("scheduled maintenance did not restore the configured upcoming count")
+	}
+}
+
+// expireCurrentCycle advances a fixture to the day after its current cycle ended.
+func expireCurrentCycle(t *testing.T, repository *store.SQLiteStore, workspace, teamID string) {
+	t.Helper()
+	if err := repository.MutateWorkspace(t.Context(), workspace, "test.cycle_elapsed", teamID, nil, func(data *domain.Bootstrap) error {
+		cycle := currentCycle(data, teamID)
+		if cycle == nil {
+			return errNotFound
+		}
+		cycle.EndsAt = cycleDay(time.Now()).AddDate(0, 0, -1)
+		cycle.StartsAt = cycle.EndsAt.AddDate(0, 0, -13)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestStartCycleTodayDoesNotTopUpOverHTTP(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	api := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true}
+	handler := newHandler(api)
+	workspace := repository.Bootstrap().Workspace.URLKey
+	expireCurrentCycle(t, repository, workspace, "team_test")
+	api.maintainCycleSchedule(t.Context(), workspace)
+	before := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if currentCycle(&before, "team_test") != nil || countUpcomingCycles(&before, "team_test") != 2 {
+		t.Fatalf("expected a cooldown with two upcoming cycles: %#v", before.Cycles)
+	}
+	next := *earliestUpcomingCycle(&before, "team_test")
+	started := requestJSON[domain.Cycle](t, handler, http.MethodPost, "/api/cycles/"+next.ID+"/start", nil, http.StatusOK)
+	if started.Status != "current" || !started.StartsAt.Equal(cycleDay(time.Now())) || !started.EndsAt.Equal(next.EndsAt) {
+		t.Fatalf("started cycle = %#v", started)
+	}
+	for range 2 {
+		after := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+		if len(after.Cycles) != len(before.Cycles) || countUpcomingCycles(&after, "team_test") != 1 {
+			t.Fatalf("starting early topped up cycles: %#v", after.Cycles)
+		}
+		for _, original := range before.Cycles {
+			cycle, err := cycleByID(&after, original.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cycle.ID != next.ID && !unchangedEdit(original, *cycle) {
+				t.Fatalf("starting early changed another cycle: before=%#v after=%#v", original, *cycle)
+			}
+		}
+	}
+}
+
+func TestStartCycleRequiresNextUpcomingAndNoCurrent(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	api := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true}
+	handler := newHandler(api)
+	before := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	next := earliestUpcomingCycle(&before, "team_test")
+	requestJSON[any](t, handler, http.MethodPost, "/api/cycles/"+next.ID+"/start", nil, http.StatusBadRequest)
+	requestJSON[any](t, handler, http.MethodPatch, "/api/cycles/"+next.ID, map[string]any{"status": "current"}, http.StatusBadRequest)
+	after := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if !unchangedEdit(before.Cycles, after.Cycles) {
+		t.Fatal("rejected start changed the team's cycles")
+	}
+	expireCurrentCycle(t, repository, before.Workspace.URLKey, "team_test")
+	api.maintainCycleSchedule(t.Context(), before.Workspace.URLKey)
+	for _, cycle := range before.Cycles {
+		if cycle.TeamID == "team_test" && cycle.ID != next.ID {
+			requestJSON[any](t, handler, http.MethodPost, "/api/cycles/"+cycle.ID+"/start", nil, http.StatusBadRequest)
+		}
+	}
 }
 
 // Moving the current cycle's end earlier changes only that cycle; it stays current and the

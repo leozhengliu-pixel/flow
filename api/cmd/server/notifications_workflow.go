@@ -1946,14 +1946,12 @@ func (s *server) maintainCycleSchedule(ctx context.Context, key string) {
 }
 
 // cycleScheduleDue reports whether automatic cycles need maintenance: the current cycle's last
-// day is over, the next cycle's start day has come (after a cooldown), or upcoming cycles are missing.
+// day is over or the next cycle's start day has come (after a cooldown).
+// An early start's upcoming shortfall waits for a boundary, not the next bootstrap read.
 func cycleScheduleDue(data *domain.Bootstrap, teamID string, now time.Time) bool {
 	settings := data.CycleSettings[teamID]
 	if !settings.Enabled || !settings.AutoCreate {
 		return false
-	}
-	if countUpcomingCycles(data, teamID) < max(1, settings.UpcomingCount) {
-		return true
 	}
 	if current := currentCycle(data, teamID); current != nil {
 		return cycleEnded(current, now)
@@ -1967,7 +1965,6 @@ func cycleScheduleDue(data *domain.Bootstrap, teamID string, now time.Time) bool
 func advanceCycleSchedule(data *domain.Bootstrap, teamID string, now time.Time) {
 	current := currentCycle(data, teamID)
 	if current != nil && !cycleEnded(current, now) {
-		ensureUpcomingCycles(data, teamID)
 		return
 	}
 	next := earliestUpcomingCycle(data, teamID)

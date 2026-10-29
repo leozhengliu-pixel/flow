@@ -23,7 +23,7 @@ import (
 
 // TestIssueCascadeScopesMatchFullPath runs the writes that cascade into a
 // bounded set of issues — project and milestone deletion, cycle start,
-// completion, settings, maintenance and deletion, SLA rules, label archive
+// settings, maintenance and deletion, SLA rules, label archive
 // and move-to-team, workflow status create/edit/reorder, recurring issues,
 // trash restore, asks, email intake, code review and Slack webhooks, and
 // project templates — once through their issue scopes and once forced
@@ -143,7 +143,7 @@ func runIssueCascadeScript(t *testing.T, forceFull bool) cascadeScriptResult {
 	call(http.MethodDelete, "/api/projects/"+project.ID+"/milestones/"+id(milestone), nil, http.StatusNoContent)
 	check(issueByID(withMilestone).ProjectMilestoneID == nil, "milestone deletion left the issue on the milestone")
 
-	// Cycles: enabling creates a current cycle; completing it migrates open
+	// Cycles: enabling creates a current cycle; scheduled completion migrates open
 	// issues; maintenance and inherited settings reconcile; deletion detaches.
 	call(http.MethodPatch, "/api/teams/"+team.ID+"/cycle-settings", map[string]any{"enabled": true, "autoCreate": true, "autoMigrate": true, "upcomingCount": 2}, http.StatusOK)
 	cycles := func() (current domain.Cycle, upcoming []domain.Cycle) {
@@ -164,9 +164,10 @@ func runIssueCascadeScript(t *testing.T, forceFull bool) cascadeScriptResult {
 	current, _ := cycles()
 	check(current.ID != "", "enabling cycles created no current cycle")
 	inCycle := newIssue("In cycle", map[string]any{"cycleId": current.ID, "stateId": startedState})
-	call(http.MethodPost, "/api/cycles/"+current.ID+"/complete", nil, http.StatusOK)
-	next, upcoming := cycles()
-	check(issueByID(inCycle).CycleID != nil && *issueByID(inCycle).CycleID == next.ID, "completing the cycle did not migrate the open issue")
+	expireCurrentCycle(t, repository, workspace, team.ID)
+	api.maintainCycleSchedule(context.Background(), workspace)
+	_, upcoming := cycles()
+	check(len(upcoming) > 0 && issueByID(inCycle).CycleID != nil && *issueByID(inCycle).CycleID == upcoming[0].ID, "scheduled completion did not migrate the open issue")
 	if len(upcoming) > 0 {
 		call(http.MethodPost, "/api/cycles/"+upcoming[0].ID+"/start", nil, http.StatusOK)
 	}

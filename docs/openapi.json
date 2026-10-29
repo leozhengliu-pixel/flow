@@ -7051,41 +7051,6 @@
         "x-flow-source": "main.go"
       }
     },
-    "/api/cycles/{id}/complete": {
-      "post": {
-        "operationId": "post_cycles_id_complete",
-        "tags": [
-          "cycles"
-        ],
-        "summary": "POST /api/cycles/{id}/complete",
-        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "2XX": {
-            "description": "Success. The response is not described by this document.",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-flow-internal": true,
-        "x-flow-source": "main.go"
-      }
-    },
     "/api/cycles/{id}/graph": {
       "get": {
         "operationId": "get_cycles_id_graph",

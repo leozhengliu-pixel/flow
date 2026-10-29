@@ -157,7 +157,7 @@ func TestCycleCapacityOverrideAndVelocityHTTP(t *testing.T) {
 		input["teamId"] = teamID
 		requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", input, http.StatusCreated)
 	}
-	requestJSON[domain.Cycle](t, handler, http.MethodPost, "/api/cycles/"+current.ID+"/complete", nil, http.StatusOK)
+	expireCurrentCycle(t, repository, bootstrap.Workspace.URLKey, teamID)
 	after := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	next := upcomingOf(after)
 	if next.Capacity != 8 || next.CapacitySource != "velocity" {

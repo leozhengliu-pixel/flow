@@ -177,7 +177,6 @@ var InternalRoutes = []string{
 	"GET /api/cycles/{id}/graph",
 	"PATCH /api/cycles/{id}",
 	"POST /api/cycles/{id}/calendar-token",
-	"POST /api/cycles/{id}/complete",
 	"POST /api/cycles/{id}/resources",
 	"POST /api/cycles/{id}/start",
 	"PUT /api/cycles/{id}/capacity",

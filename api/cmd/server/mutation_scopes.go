@@ -118,17 +118,6 @@ func cycleIssueScope(ctx context.Context, allCycles bool, teams func(domain.Boot
 	}})
 }
 
-func cycleTeam(id string) func(domain.Bootstrap) []string {
-	return func(data domain.Bootstrap) []string {
-		for _, cycle := range data.Cycles {
-			if cycle.ID == id {
-				return []string{cycle.TeamID}
-			}
-		}
-		return nil
-	}
-}
-
 func teamAndDescendants(teamID string) func(domain.Bootstrap) []string {
 	return func(data domain.Bootstrap) []string {
 		return append([]string{teamID}, teamDescendantIDs(&data, teamID)...)

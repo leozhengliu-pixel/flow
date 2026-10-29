@@ -1046,6 +1046,11 @@ func TestCyclePlanningAndRollover(t *testing.T) {
 	if issue.CycleID == nil || *issue.CycleID != current.ID {
 		t.Fatalf("issue cycle assignment failed: %#v", issue.CycleID)
 	}
+	expireCurrentCycle(t, repository, bootstrap.Workspace.URLKey, current.TeamID)
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if currentCycle(&bootstrap, current.TeamID) != nil {
+		t.Fatal("maintenance started the next cycle during the cooldown")
+	}
 	started := requestJSON[domain.Cycle](t, handler, http.MethodPost, "/api/cycles/"+upcoming.ID+"/start", nil, http.StatusOK)
 	if started.Status != "current" {
 		t.Fatalf("started cycle = %#v", started)
@@ -1059,7 +1064,6 @@ func TestCyclePlanningAndRollover(t *testing.T) {
 	if settings.DurationWeeks != 3 || settings.UpcomingCount != 3 || !settings.AutoAddStarted {
 		t.Fatalf("cycle settings update failed: %#v", settings)
 	}
-	requestJSON[domain.Cycle](t, handler, http.MethodPost, "/api/cycles/"+upcoming.ID+"/complete", nil, http.StatusOK)
 	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	currentCount, upcomingCount := 0, 0
 	for _, cycle := range bootstrap.Cycles {
@@ -1074,7 +1078,7 @@ func TestCyclePlanningAndRollover(t *testing.T) {
 		t.Fatalf("cycle recurrence failed: current=%d upcoming=%d cycles=%#v", currentCount, upcomingCount, bootstrap.Cycles)
 	}
 	events := requestJSON[[]domain.DomainEvent](t, handler, http.MethodGet, "/api/events?aggregateId="+upcoming.ID, nil, http.StatusOK)
-	if len(events) < 3 || events[0].Type != "cycle.updated" || events[1].Type != "cycle.started" || events[2].Type != "cycle.completed" {
+	if len(events) != 2 || events[0].Type != "cycle.updated" || events[1].Type != "cycle.started" {
 		t.Fatalf("cycle events = %#v", events)
 	}
 }

@@ -258,6 +258,16 @@ Responsibilities:
 - Capacity, scope, and completion statistics
 - Rollover and auto-close behavior
 
+Automatic maintenance completes cycles after their inclusive end day, starts
+the next cycle on its scheduled start day, and replenishes the configured
+upcoming count at those boundaries. Starting the next cycle today is only
+allowed while no cycle is current; it keeps the planned end and does not
+generate another cycle, including on subsequent bootstrap reads. Changing
+cycle settings can still replenish the configured upcoming count.
+
+There is no manual cycle-completion endpoint. Move the current cycle's end
+date with `PATCH /api/cycles/{id}`; maintenance completes it after that day.
+
 Core entity: `Cycle`
 
 Depends on: M04, M05, M08, M17
