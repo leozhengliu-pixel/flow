@@ -181,13 +181,13 @@ func TestChatApplicationSetupIdentityOAuthAndInternalGroupBindings(t *testing.T)
 				binding.Requests = &refused
 				requestJSON[map[string]any](t, handler, "POST", path+"/bindings"+scope, chatAuthorizedBinding(binding), 400)
 			}
-			binding.Requests = &domain.ChatBindingRequests{Enabled: true, Emoji: "OK", Priority: &priority}
+			binding.Requests = &domain.ChatBindingRequests{Enabled: true, EveryMention: true, Emoji: "OK", Priority: &priority}
 			saved = requestJSON[domain.ChatBinding](t, handler, "POST", path+"/bindings"+scope, chatAuthorizedBinding(binding), 200)
-			if !saved.RequestsEnabled() || saved.Requests.Emoji != "OK" || saved.Requests.Priority == nil || *saved.Requests.Priority != 2 {
+			if !saved.RequestsEnabled() || !saved.Requests.EveryMention || saved.Requests.Emoji != "OK" || saved.Requests.Priority == nil || *saved.Requests.Priority != 2 {
 				t.Fatalf("request settings not saved: %+v", saved.Requests)
 			}
 			audit, _ := s.store.WorkspaceMetadataFields("test-workspace", "auditLog")
-			if len(audit.AuditLog) == 0 || audit.AuditLog[0].Action != "chat_binding.updated" || fmt.Sprint(audit.AuditLog[0].Metadata["requests"]) != fmt.Sprint(map[string]any{"enabled": true, "emoji": "OK", "templateId": "", "priority": 2}) {
+			if len(audit.AuditLog) == 0 || audit.AuditLog[0].Action != "chat_binding.updated" || fmt.Sprint(audit.AuditLog[0].Metadata["requests"]) != fmt.Sprint(map[string]any{"enabled": true, "everyMention": true, "emoji": "OK", "templateId": "", "priority": 2}) {
 				t.Fatalf("request settings not audited: %+v", audit.AuditLog[:min(len(audit.AuditLog), 1)])
 			}
 			binding.ID, binding.Requests = "", nil

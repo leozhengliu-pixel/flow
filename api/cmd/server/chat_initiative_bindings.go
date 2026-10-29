@@ -382,7 +382,8 @@ func (s *server) queueChatInitiativeBindingEvent(ctx context.Context, workspace 
 			continue
 		}
 		key := chatKey(record.ConnectionID, "initiative-binding", binding.ID, event.ID)
-		raw, _ := json.Marshal(chatNotificationJob{InitiativeBindingID: binding.ID, InitiativeID: initiative.ID, Kind: "initiative.update_created"})
+		child, _, _ := webhookChildOf(event.Payload)
+		raw, _ := json.Marshal(chatNotificationJob{InitiativeBindingID: binding.ID, InitiativeID: initiative.ID, UpdateID: child.ID, EventAt: event.CreatedAt, Kind: "initiative.update_created"})
 		if _, err := s.store.EnqueueChatJob(ctx, domain.ChatJob{ID: "chat_job_" + key, WorkspaceKey: workspace, ConnectionID: record.ConnectionID, Kind: "notification", DedupKey: key, Payload: raw, RunAt: time.Now().UTC()}); err != nil {
 			return err
 		}
@@ -423,13 +424,28 @@ func (s *server) chatSendInitiativeBindingUpdate(ctx context.Context, record dom
 		slug = initiative.ID
 	}
 	link := fmt.Sprintf("%s/%s/initiative/%s/overview", s.chatAppOrigin(), url.PathEscape(record.WorkspaceKey), url.PathEscape(slug))
+	content, _ := json.Marshal(s.chatInitiativeUpdateCard(record, initiative, link, payload))
+	return s.chatWorkflowRequest(ctx, record, http.MethodPost, "/open-apis/im/v1/messages?receive_id_type=chat_id", map[string]any{"receive_id": binding.ChatID, "msg_type": "interactive", "content": string(content), "uuid": chatKey(job.DedupKey, "initiative-binding")[:32]}, nil)
+}
+
+func (s *server) chatInitiativeUpdateCard(record domain.ChatIntegrationRecord, initiative domain.Initiative, link string, payload chatNotificationJob) map[string]any {
 	elements := []map[string]any{chatCardText(initiative.Name)}
-	if health := chatInitiativeHealthLabel(initiative.Health); health != "" {
-		elements = append(elements, chatCardText("Health: "+health))
+	health := initiative.Health
+	if feed, ok := s.store.PulseFeed(record.WorkspaceKey); ok {
+		for _, update := range feed.InitiativeUpdates[initiative.ID] {
+			if payload.UpdateID != "" && update.ID != payload.UpdateID || payload.UpdateID == "" && !payload.EventAt.IsZero() && update.CreatedAt.After(payload.EventAt) {
+				continue
+			}
+			health = update.Health
+			elements = append(elements, chatCardText(chatTruncateText(strings.TrimSpace(update.Body), 2000)))
+			break
+		}
+	}
+	if label := chatInitiativeHealthLabel(health); label != "" {
+		elements = append(elements, chatCardText("Health: "+label))
 	}
 	elements = append(elements, map[string]any{"tag": "action", "actions": []map[string]any{{"tag": "button", "text": chatPlain("Open in Flow"), "url": link}}})
-	content, _ := json.Marshal(chatCard("Initiative update", elements...))
-	return s.chatWorkflowRequest(ctx, record, http.MethodPost, "/open-apis/im/v1/messages?receive_id_type=chat_id", map[string]any{"receive_id": binding.ChatID, "msg_type": "interactive", "content": string(content), "uuid": chatKey(job.DedupKey, "initiative-binding")[:32]}, nil)
+	return chatCard("Initiative update", elements...)
 }
 
 func chatInitiativeHealthLabel(health string) string {

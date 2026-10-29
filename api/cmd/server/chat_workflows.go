@@ -287,7 +287,10 @@ func (s *server) chatCommandForEnvelope(ctx context.Context, record domain.ChatI
 			return chatInboundCommand{}, "", false, nil
 		}
 		command, dedup, ok := s.chatRequestMentionCommand(ctx, record, envelope, text)
-		return command, dedup, ok, nil
+		if ok {
+			return command, dedup, true, nil
+		}
+		return chatInboundCommand{Kind: "group_help", OpenID: event.Sender.SenderID.OpenID, ChatID: event.Message.ChatID, MessageID: event.Message.MessageID}, chatKey(record.ConnectionID, "message", event.Message.MessageID), true, nil
 	case "im.message.reaction.created_v1":
 		command, dedup, ok := s.chatRequestReactionCommand(ctx, record, envelope)
 		return command, dedup, ok, nil
@@ -417,6 +420,9 @@ func (s *server) processChatJob(ctx context.Context, job domain.ChatJob) error {
 	}
 	if command.Kind == chatRequestKind {
 		return s.processChatRequest(ctx, record, job, command)
+	}
+	if command.Kind == "group_help" {
+		return s.chatSendGroupHelp(ctx, record, job, command)
 	}
 	// Direct messages with the bot and their cards (chat_dm_agent.go).
 	if handled, err := s.processChatDirectMessage(ctx, record, job, command); handled {

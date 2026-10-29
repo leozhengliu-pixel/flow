@@ -81,10 +81,13 @@ func TestChatGroupCardControlsRunAsClickerAndRedrawTheCard(t *testing.T) {
 	}
 	content := f.sent[0]["content"].(string)
 	ids := chatCardActionIDs(t, f, content)
-	for _, kind := range []string{chatQuickAssign, chatQuickState, chatQuickPriority, "open_state", "open_assignee", "open_comment"} {
+	for _, kind := range []string{chatQuickAssign, chatQuickState, chatQuickPriority, "open_comment"} {
 		if ids[kind] == "" {
 			t.Fatalf("card lacks %s: %s", kind, content)
 		}
+	}
+	if ids["open_state"] != "" || ids["open_assignee"] != "" || len(ids) != 4 {
+		t.Fatalf("duplicated legacy controls: %v", ids)
 	}
 	if !strings.Contains(content, "Open in Flow") || !strings.Contains(content, `"zh_cn":"分配给我"`) {
 		t.Fatalf("card controls not labelled: %s", content)

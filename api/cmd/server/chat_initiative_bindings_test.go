@@ -28,9 +28,13 @@ func (f *chatPermissionFixture) sentMessages() *[]map[string]any {
 	return sent
 }
 
-func (f *chatPermissionFixture) deliverInitiativeUpdate(id string) {
+func (f *chatPermissionFixture) deliverInitiativeUpdate(id string, updateID ...string) {
 	f.t.Helper()
-	if err := f.s.queueChatDomainEvent(f.t.Context(), "test-workspace", domain.DomainEvent{ID: "evt_" + id + "_" + time.Now().Format(time.RFC3339Nano), Type: "initiative.update_created", AggregateID: id, CreatedAt: time.Now()}); err != nil {
+	var payload json.RawMessage
+	if len(updateID) > 0 {
+		payload, _ = json.Marshal(childEventPayload{Child: &webhookChild{ID: updateID[0]}})
+	}
+	if err := f.s.queueChatDomainEvent(f.t.Context(), "test-workspace", domain.DomainEvent{ID: "evt_" + id + "_" + time.Now().Format(time.RFC3339Nano), Type: "initiative.update_created", AggregateID: id, Payload: payload, CreatedAt: time.Now()}); err != nil {
 		f.t.Fatal(err)
 	}
 	jobs, err := f.s.store.ClaimChatJobs(f.t.Context(), "test-workspace", "notification", 10, time.Now().Add(time.Second))
@@ -63,6 +67,10 @@ func TestChatInitiativeBindingsConnectInitiativesWithoutALeadTeam(t *testing.T) 
 			domain.Initiative{ID: "initiative_direct", Name: "Company launch", SlugID: "company-launch-1", Health: "atRisk", Owner: &owner, ContributingTeamIDs: []string{f.privateTeam, f.publicTeam}},
 			domain.Initiative{ID: "initiative_private_lead", Name: "Vault plan", SlugID: "vault-plan-1", Owner: &owner, LeadTeamID: f.privateTeam},
 		)
+		data.InitiativeUpdates["initiative_direct"] = []domain.InitiativeUpdate{
+			{ID: "update_newer", InitiativeID: "initiative_direct", Body: "A later update must not replace this event", Health: "offTrack", CreatedAt: time.Now().Add(-time.Minute)},
+			{ID: "update_posted", InitiativeID: "initiative_direct", Body: "Launch checklist complete.\nNext: customer rollout.", Health: "atRisk", CreatedAt: time.Now().Add(-2 * time.Minute)},
+		}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -117,12 +125,12 @@ func TestChatInitiativeBindingsConnectInitiativesWithoutALeadTeam(t *testing.T) 
 
 	// Delivery: the update card names the initiative only, never the private
 	// contributing team.
-	f.deliverInitiativeUpdate("initiative_direct")
+	f.deliverInitiativeUpdate("initiative_direct", "update_posted")
 	if len(*sent) != 1 || (*sent)[0]["receive_id"] != "oc_internal" {
 		t.Fatalf("initiative update not delivered: %#v", *sent)
 	}
 	content := (*sent)[0]["content"].(string)
-	if !strings.Contains(content, "Company launch") || !strings.Contains(content, "/initiative/company-launch-1/overview") || !strings.Contains(content, "At risk") || strings.Contains(content, "Vault") {
+	if !strings.Contains(content, "Company launch") || !strings.Contains(content, "/initiative/company-launch-1/overview") || !strings.Contains(content, "At risk") || !strings.Contains(content, "Launch checklist complete.") || !strings.Contains(content, "Next: customer rollout.") || strings.Contains(content, "A later update") || strings.Contains(content, "Vault") {
 		t.Fatalf("initiative card: %s", content)
 	}
 	// Once a private team leads it, nothing more is posted.
@@ -195,5 +203,46 @@ func TestChatInitiativeBindingsConnectInitiativesWithoutALeadTeam(t *testing.T) 
 	}
 	if items, err := f.s.store.ChatInitiativeBindings(t.Context(), "test-workspace", record.ConnectionID, ""); err != nil || len(items) != 0 {
 		t.Fatalf("initiative bindings survived disconnect: %v %v", items, err)
+	}
+}
+
+func TestChatInitiativeTeamGroupCardsIncludeTheUpdateAndRespectProtection(t *testing.T) {
+	f := newChatWorkflowFixture(t)
+	platform := f.threadPlatform(t)
+	f.binding.Events = []string{"initiative.update_created"}
+	if err := f.s.store.PutChatBinding(t.Context(), f.record.WorkspaceKey, f.binding); err != nil {
+		t.Fatal(err)
+	}
+	body := "Shipping the launch plan.\n" + strings.Repeat("x", 2300) + "not-in-preview"
+	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "test.initiative", "initiative_group", nil, func(data *domain.Bootstrap) error {
+		data.Initiatives = append(data.Initiatives, domain.Initiative{ID: "initiative_group", Name: "Launch", LeadTeamID: f.binding.TeamID, Health: "offTrack"})
+		data.InitiativeUpdates["initiative_group"] = []domain.InitiativeUpdate{
+			{ID: "update_latest", Body: "Newer update", Health: "offTrack", CreatedAt: time.Now().Add(-time.Minute)},
+			{ID: "update_event", Body: body, Health: "onTrack", CreatedAt: time.Now().Add(-2 * time.Minute)},
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	payload, _ := json.Marshal(childEventPayload{Child: &webhookChild{ID: "update_event"}})
+	event := domain.DomainEvent{ID: "evt_initiative_body", Type: "initiative.update_created", AggregateID: "initiative_group", Payload: payload}
+	f.deliver(t, event)
+	if len(platform.calls) != 1 {
+		t.Fatalf("initiative group delivery: %+v", platform.calls)
+	}
+	content := platform.calls[0].body["content"].(string)
+	if !strings.Contains(content, "Shipping the launch plan.") || !strings.Contains(content, "On track") || strings.Contains(content, "Newer update") || strings.Contains(content, "not-in-preview") {
+		t.Fatalf("wrong update or unbounded preview: %s", content)
+	}
+	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "test.protection", "", nil, func(data *domain.Bootstrap) error {
+		data.WorkspaceSettings.HIPAACompliance = true
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	event.ID = "evt_initiative_protected"
+	f.deliver(t, event)
+	if len(platform.calls) != 1 {
+		t.Fatal("initiative update leaked with sensitive data protection")
 	}
 }

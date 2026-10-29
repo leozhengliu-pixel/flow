@@ -21,6 +21,7 @@ type chatNotificationJob struct {
 	IssueID         string `json:"issueId,omitempty"`
 	ProjectID       string `json:"projectId,omitempty"`
 	InitiativeID    string `json:"initiativeId,omitempty"`
+	UpdateID        string `json:"updateId,omitempty"`
 	SourceMessageID string `json:"sourceMessageId,omitempty"`
 	Kind            string `json:"kind"`
 	Operation       string `json:"operation,omitempty"`
@@ -45,6 +46,8 @@ func chatEventKinds(event domain.DomainEvent) []string {
 	case "comment.updated", "comment.deleted":
 		// Reflected in the issue's thread by the groups that share comments.
 		return []string{"comment.created"}
+	case "ask.decided":
+		return []string{chatRequestStatusKind}
 	case "issue.updated":
 		var before map[string]json.RawMessage
 		if json.Unmarshal(event.PreviousValues, &before) != nil {
@@ -68,6 +71,17 @@ func (s *server) queueChatDomainEvent(ctx context.Context, workspace string, eve
 	kinds := chatEventKinds(event)
 	if len(kinds) == 0 {
 		return nil
+	}
+	if event.Type == "ask.decided" {
+		data, ok := s.store.WorkspaceMetadataFields(workspace, "asks")
+		if !ok {
+			return chatInvalid("request metadata unavailable")
+		}
+		index := slices.IndexFunc(data.Asks, func(ask domain.Ask) bool { return ask.ID == event.AggregateID })
+		if index < 0 || data.Asks[index].IssueID == "" {
+			return nil
+		}
+		event.AggregateID = data.Asks[index].IssueID
 	}
 	var issue *domain.Issue
 	var projectMetadata domain.Bootstrap
@@ -144,6 +158,9 @@ func (s *server) queueChatDomainEvent(ctx context.Context, workspace string, eve
 				case requested && kind == "issue.status_changed":
 					kind = chatRequestStatusKind
 				case requested && kind == "comment.created":
+				case kind == chatRequestStatusKind && !requested:
+					continue
+				case requested && kind == chatRequestStatusKind:
 				case kind != "refresh" && !slices.Contains(binding.Events, kind):
 					continue
 				}
@@ -159,6 +176,8 @@ func (s *server) queueChatDomainEvent(ctx context.Context, workspace string, eve
 				}
 				if kind == "initiative.update_created" {
 					payload.InitiativeID, payload.IssueID = event.AggregateID, ""
+					child, _, _ := webhookChildOf(event.Payload)
+					payload.UpdateID, payload.EventAt = child.ID, event.CreatedAt
 				}
 				key := chatKey(record.ConnectionID, binding.ID, event.ID, kind)
 				raw, _ := json.Marshal(payload)
@@ -197,7 +216,7 @@ func (s *server) processChatNotification(ctx context.Context, record domain.Chat
 		return s.chatSendProjectUpdate(ctx, record, binding, job, payload.ProjectID)
 	}
 	if payload.Kind == "initiative.update_created" {
-		return s.chatSendInitiativeUpdate(ctx, record, binding, job, payload.InitiativeID)
+		return s.chatSendInitiativeUpdate(ctx, record, binding, job, payload)
 	}
 	issue, err := s.store.IssueRecord(ctx, record.WorkspaceKey, payload.IssueID)
 	if err != nil {
@@ -320,7 +339,8 @@ func chatInitiativeMatchesBinding(data domain.Bootstrap, binding domain.ChatBind
 	return false
 }
 
-func (s *server) chatSendInitiativeUpdate(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, job domain.ChatJob, initiativeID string) error {
+func (s *server) chatSendInitiativeUpdate(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, job domain.ChatJob, payload chatNotificationJob) error {
+	initiativeID := payload.InitiativeID
 	data, ok := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "initiatives", "teams", "teamSettings", "workspaceSettings")
 	if !ok {
 		return chatInvalid("initiative metadata unavailable")
@@ -337,7 +357,7 @@ func (s *server) chatSendInitiativeUpdate(ctx context.Context, record domain.Cha
 			slug = initiative.ID
 		}
 		link := fmt.Sprintf("%s/%s/initiative/%s/overview", s.chatAppOrigin(), url.PathEscape(record.WorkspaceKey), url.PathEscape(slug))
-		card := chatCard("Initiative update", chatCardText(initiative.Name), map[string]any{"tag": "action", "actions": []map[string]any{{"tag": "button", "text": chatPlain("Open in Flow"), "url": link}}})
+		card := s.chatInitiativeUpdateCard(record, initiative, link, payload)
 		content, _ := json.Marshal(card)
 		return s.chatWorkflowRequest(ctx, record, http.MethodPost, "/open-apis/im/v1/messages?receive_id_type=chat_id", map[string]any{"receive_id": binding.ChatID, "msg_type": "interactive", "content": string(content), "uuid": chatKey(job.DedupKey, "initiative")[:32]}, nil)
 	}

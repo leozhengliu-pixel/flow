@@ -214,7 +214,8 @@ explicit approval; the binding records who authorized it, in which capacity
 (`initiative_owner` or `workspace_admin`) and when, and authorizing,
 changing, revoking and removing it are audited
 (`chat_initiative_binding.*`). The group receives the initiative's updates
-as a card with the initiative's name, health and link, and nothing of its
+as a card with the initiative's name, a short preview of its update text,
+health and link, and nothing of its
 contributing teams: an initiative with a private contributing team still
 posts no content of that team, and while a private team leads the
 initiative nothing is posted (or connectable). A binding stops once its
@@ -249,8 +250,8 @@ to connect it; a member without access to the issue is told privately. A
 reply imported as a comment is never posted back into its thread, and the
 bot's own messages are never imported; other groups following the issue get
 the comment in their own threads. Editing a reply in the chat does not change
-its comment; editing that comment in Flow posts the new text into the
-thread.
+its comment because the platform sends no message-edit event; editing that
+comment in Flow posts the new text into the thread.
 
 The mapping between a Flow resource and its thread (`chat_threads`), and
 between a thread item and its message (`chat_thread_items`), is generic:
@@ -349,8 +350,8 @@ kept with the linked account for 30 days.
 Mention the bot with `@Flow create issue <title>` or `@Flow 创建事项 <title>`.
 The bot sends a personal confirmation form with the bound team/project,
 title, state, priority, and assignee. After creation it replies to the source
-message with an issue card. Shared issue cards open personal forms for state,
-assignee, and comment changes, so other group members cannot see a person's
+message with an issue card. Shared issue cards open personal forms for
+comments, so other group members cannot see a person's
 drafts. Group messages outside an issue's thread are not synchronized as
 comments.
 
@@ -358,7 +359,7 @@ comments.
 
 Issue cards in a group and personal notification cards about an issue carry
 **Assign to me**, a status select, a priority select and **Open in Flow**
-(group cards also keep the private State, Assignee and Comment forms). The
+(group cards also keep the private Comment form). The
 platform sends each click to the `card.action.trigger` callback. Flow
 answers at once with a short toast and runs the change in its chat outbox:
 
@@ -431,7 +432,10 @@ the issue card.
   the binding's *issue created* notification posts no separate card.
 - In a bound group that takes [requests](#requests-from-group-messages), the
   form also has **Submit as request** (提交为需求); with creating issues off
-  it submits requests only.
+  it submits requests only. These choices are mutually exclusive per message:
+  after either succeeds, the form shows the result. A later attempt through
+  the other choice is refused privately with a link to the existing item
+  (only if the member can still open it).
 - In another group or chat, the form offers the teams the member can create
   issues in. The reply under the message appears only for an issue of a
   public team; otherwise the issue card goes to the member's bot
@@ -451,18 +455,23 @@ description opens the source message's chat.
 A group bound to a team can take requests: members turn the group's
 messages into requests in the team's triage, and the message's thread
 follows the request. A team owner (or a workspace administrator) turns this
-on in the group binding under **Requests**: **Take requests**, the
+on in the group binding under **Requests**: **Take requests**,
+**Treat every mention as a request** (default off), the
 **Request reaction**, the **Request template** and the **Request
 priority** (empty uses the template's or the team's default). The settings
 are saved, authorized and audited with the binding (`requests` in the API:
-`enabled`, `emoji`, `templateId`, `priority`).
+`enabled`, `everyMention`, `emoji`, `templateId`, `priority`). Existing
+bindings also default to `everyMention: false`; no existing binding is
+automatically opted in.
 
 A member makes a request in any of three ways:
 
-- **Mention the bot**: `@Flow 提需求 <text>` (also `需求` or
-  `request`). In a group that takes requests, any other mention of the bot
-  is a request too, except `@Flow 创建事项` / `create issue`, which opens the
-  create form as before. A bare `@Flow 提需求` in reply to a message makes
+- **Explicitly ask the bot**: `@Flow 提需求 <text>` (also `需求` or
+  `request`). Outside issue threads, plain mentions get a short private help card with the group's
+  available actions, not a request. Only opting into **Treat every mention
+  as a request** makes other non-command mentions requests.
+  `@Flow 创建事项` / `create issue` still opens the create form.
+  A bare `@Flow 提需求` in reply to a message makes
   the request from that message.
 - **React** to a message with the binding's reaction (the platform's emoji
   type, such as `OK`, `THUMBSUP`, `DONE` or `JIAYI`).
@@ -483,10 +492,10 @@ project.
 - A member who cannot create issues in the team is told privately (code
   `chat_request_forbidden`), and the message stays free for someone else.
 - In a group that does not take requests, an explicit `提需求` is refused
-  privately (`chat_requests_disabled`); plain mentions and reactions are
-  ignored.
-- One message carries one request, whoever asks and however: a second
-  mention or the shortcut answers privately with the existing request, a
+  privately (`chat_requests_disabled`); plain mentions get the help card and
+  unrelated reactions are ignored.
+- One message creates one item, either an issue or a request, whoever asks
+  and however: a second mention or the shortcut answers privately with the existing item, a
   second reaction does nothing. The records are kept per connection
   (`chat_intake_requests`) and removed with the connection or workspace.
 - With sensitive data protection on, the group's binding is inactive and no
@@ -502,8 +511,9 @@ The message's thread becomes the request's [issue thread](#issue-threads):
   notification choices;
 - status changes post a short note (*Status changed to In Progress*), in
   place of the binding's status card;
-- when the request is completed or canceled, the thread gets a reply with
-  the outcome and a link; reopening it says so, and closing it again replies
+- when the request is completed, canceled, or its Ask is rejected, the thread
+  gets a reply with the outcome and a link. Rejection includes the optional
+  reason. Reopening it says so, and closing it again replies
   again.
 
 A message that is itself inside another issue's thread cannot give the

@@ -205,11 +205,17 @@ func TestChatRequestFromAMentionLandsInTriageAndRepliesInTheThread(t *testing.T)
 		t.Fatal("second request recorded for the same message")
 	}
 
-	// Any other mention becomes a request in a group that takes requests; a
-	// create command keeps its meaning.
+	// Plain mentions get help by default, including existing bindings that
+	// have no everyMention field. A create command keeps its meaning.
 	command, _, accepted, err := f.s.chatCommandForEnvelope(t.Context(), f.record, f.mentionEnvelope(f.identity.OpenID, "om_implicit", "the login page is slow", ""))
-	if err != nil || !accepted || command.Kind != chatRequestKind || chatString(command.Values, "text") != "the login page is slow" {
+	if err != nil || !accepted || command.Kind != "group_help" {
 		t.Fatalf("implicit request: %+v %v %v", command, accepted, err)
+	}
+	f.binding.Requests.EveryMention = true
+	f.enableRequests(t, f.binding.Requests, nil)
+	command, _, accepted, err = f.s.chatCommandForEnvelope(t.Context(), f.record, f.mentionEnvelope(f.identity.OpenID, "om_implicit_opt_in", "the login page is slow", ""))
+	if err != nil || !accepted || command.Kind != chatRequestKind || chatString(command.Values, "text") != "the login page is slow" {
+		t.Fatalf("opt-in request: %+v %v %v", command, accepted, err)
 	}
 	command, _, accepted, _ = f.s.chatCommandForEnvelope(t.Context(), f.record, f.mentionEnvelope(f.identity.OpenID, "om_create", "创建事项 Fix export", ""))
 	if !accepted || command.Kind != "create_form" {
@@ -296,8 +302,12 @@ func TestChatRequestRefusalsFlagOffAndPermission(t *testing.T) {
 	if text := f.lastText(t); !strings.Contains(text, "chat_requests_disabled") || f.sent[len(f.sent)-1]["receive_id"] != f.identity.OpenID {
 		t.Fatalf("requests-off refusal: %s", text)
 	}
-	if f.accept(t, f.mentionEnvelope(f.identity.OpenID, "om_plain_off", "hello there", "")) || f.accept(t, f.reactionEnvelope(f.identity.OpenID, "om_flag_off", "OK")) {
-		t.Fatal("a mention or reaction became a request with requests off")
+	if !f.accept(t, f.mentionEnvelope(f.identity.OpenID, "om_plain_off", "hello there", "")) || f.accept(t, f.reactionEnvelope(f.identity.OpenID, "om_flag_off", "OK")) {
+		t.Fatal("plain mention help or ignored reaction not handled with requests off")
+	}
+	f.runJobs(t, "inbound")
+	if !strings.Contains(f.sent[len(f.sent)-1]["content"].(string), "此群中的 Flow") {
+		t.Fatal("plain mention did not receive help")
 	}
 	// A binding that names an emoji but is disabled takes no reaction.
 	f.enableRequests(t, &domain.ChatBindingRequests{Enabled: false, Emoji: "OK"}, nil)
@@ -508,6 +518,141 @@ func chatFormRequestAction(t *testing.T, f *chatWorkflowFixture, content string)
 	}
 	t.Fatalf("form has no request action: %s", content)
 	return ""
+}
+
+func TestChatMessageShortcutChoicesAreExclusivePerMessage(t *testing.T) {
+	for _, requestFirst := range []bool{true, false} {
+		t.Run(map[bool]string{true: "request first", false: "issue first"}[requestFirst], func(t *testing.T) {
+			f := newChatWorkflowFixture(t)
+			threads := f.threadPlatform(t)
+			platform := newChatShortcutPlatform(t, f)
+			platform.codes["code_actor"] = f.identity.OpenID
+			platform.messages["om_exclusive"] = f.binding.ChatID
+			platform.text = "Fix billing export"
+			f.enableRequests(t, &domain.ChatBindingRequests{Enabled: true}, nil)
+			before := len(f.s.store.Bootstrap().Issues)
+			f.shortcut(t, map[string]string{"code": "code_actor", "messageId": "om_exclusive", "chatId": f.binding.ChatID})
+			f.runChatJobs(t)
+			createID, _, content := f.formAction(t)
+			requestID := chatFormRequestAction(t, f, content)
+			first, second := createID, requestID
+			if requestFirst {
+				first, second = requestID, createID
+			}
+			values := map[string]string{"teamId": f.binding.TeamID, "title": "Fix billing export"}
+			f.submitForm(t, first, values)
+			f.runChatJobs(t)
+			intake, err := f.s.store.ChatIntakeRequestForMessage(t.Context(), f.record.WorkspaceKey, f.record.ConnectionID, "om_exclusive")
+			if err != nil {
+				t.Fatal(err)
+			}
+			issue, _ := f.s.store.IssueRecord(t.Context(), f.record.WorkspaceKey, intake.IssueID)
+			if !slices.ContainsFunc(threads.calls, func(call chatThreadCall) bool {
+				return call.method == http.MethodPatch && strings.Contains(call.body["content"].(string), issue.Identifier) && !strings.Contains(call.body["content"].(string), "form_submit")
+			}) {
+				t.Fatal("successful form was not replaced with its result")
+			}
+			calls := len(threads.calls)
+			f.submitForm(t, second, values)
+			if text := f.lastText(t); !strings.Contains(text, issue.Identifier) || !strings.Contains(text, "/issue/"+issue.Identifier) {
+				t.Fatalf("other choice did not point to existing item: %s", text)
+			}
+			f.runChatJobs(t)
+			if len(f.s.store.Bootstrap().Issues) != before+1 || len(f.asksFor(t, issue.ID)) != map[bool]int{true: 1, false: 0}[requestFirst] {
+				t.Fatal("both choices created an item")
+			}
+			for _, call := range threads.since(calls) {
+				if call.method == http.MethodPost && call.body["receive_id"] != f.identity.OpenID {
+					t.Fatalf("duplicate refusal was not private: %+v", call)
+				}
+			}
+			// Another shortcut form for the same message shares the result too.
+			stored, _ := f.s.store.GetChatAction(t.Context(), f.record.WorkspaceKey, f.record.ConnectionID, second)
+			stored.ID += "_another_form"
+			if err := f.s.store.PutChatAction(t.Context(), stored); err != nil {
+				t.Fatal(err)
+			}
+			f.submitForm(t, stored.ID, values)
+			if len(f.s.store.Bootstrap().Issues) != before+1 {
+				t.Fatal("another form created another issue")
+			}
+		})
+	}
+}
+
+func TestChatPlainMentionsGetPrivateGroupHelpWithoutCreatingRequests(t *testing.T) {
+	f := newChatWorkflowFixture(t)
+	platform, _ := f.requestPlatform(t)
+	f.enableRequests(t, &domain.ChatBindingRequests{Enabled: true, Emoji: "DONE"}, nil)
+	for _, text := range []string{"What's new?", "", "requested access yesterday"} {
+		messageID := "om_help_" + chatKey(text)[:8]
+		calls := len(platform.calls)
+		if !f.accept(t, f.mentionEnvelope(f.identity.OpenID, messageID, text, "")) {
+			t.Fatal("plain mention not handled")
+		}
+		f.runJobs(t, "inbound")
+		help := chatCallsMention(platform.since(calls), "此群中的 Flow")
+		if len(help) != 1 || help[0].body["receive_id"] != f.identity.OpenID || !strings.Contains(help[0].body["content"].(string), "DONE") || !strings.Contains(help[0].body["content"].(string), "request") {
+			t.Fatalf("group help: %+v", platform.since(calls))
+		}
+		if _, err := f.s.store.ChatIntakeRequestForMessage(t.Context(), f.record.WorkspaceKey, f.record.ConnectionID, messageID); !errors.Is(err, sql.ErrNoRows) {
+			t.Fatalf("casual mention reserved a request: %v", err)
+		}
+	}
+	for _, prefix := range []string{"提需求", "需求", "request"} {
+		command, _, accepted, err := f.s.chatCommandForEnvelope(t.Context(), f.record, f.mentionEnvelope(f.identity.OpenID, "om_explicit", prefix+" Export CSV", ""))
+		if err != nil || !accepted || command.Kind != chatRequestKind {
+			t.Fatalf("explicit phrase %s not a request: %+v %v", prefix, command, err)
+		}
+	}
+}
+
+func TestChatAskRejectionAndReopeningReplyInRequestThread(t *testing.T) {
+	f := newChatWorkflowFixture(t)
+	platform, _ := f.requestPlatform(t)
+	f.enableRequests(t, &domain.ChatBindingRequests{Enabled: true}, func(binding *domain.ChatBinding) { binding.Events = nil })
+	f.accept(t, f.mentionEnvelope(f.identity.OpenID, "om_reject_request", "提需求 Billing export", ""))
+	f.runJobs(t, "inbound")
+	f.runJobs(t, "card")
+	ask := f.asksFor(t, chatRequestIssueID(f, "om_reject_request"))[0]
+	f.s.store.SetWebhookSink(func(string, domain.DomainEvent) {})
+	if err := f.s.store.InitializeChatDomainCursor(t.Context(), f.record.WorkspaceKey); err != nil {
+		t.Fatal(err)
+	}
+	decide := func(decision, note string) {
+		t.Helper()
+		requestJSON[domain.Ask](t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.SetPathValue("id", ask.ID)
+			r.Header.Set("X-Workspace-Key", f.record.WorkspaceKey)
+			f.s.decideAsk(w, r)
+		}), http.MethodPost, "/api/asks/"+ask.ID+"/decision", map[string]string{"decision": decision, "note": note}, http.StatusOK)
+		if err := f.s.queueCommittedChatEvents(t.Context(), f.record.WorkspaceKey); err != nil {
+			t.Fatal(err)
+		}
+		f.runJobs(t, "notification")
+	}
+	calls := len(platform.calls)
+	decide("rejected", "  Already covered by the new export  ")
+	replies := chatCallsMention(platform.since(calls), "需求已拒绝")
+	if len(replies) != 1 || chatThreadReplyTo(replies[0]) != "om_reject_request" || !strings.Contains(replies[0].body["content"].(string), "原因：Already covered by the new export") {
+		t.Fatalf("rejection outcome missing: %+v", platform.since(calls))
+	}
+	calls = len(platform.calls)
+	f.deliver(t, domain.DomainEvent{ID: "evt_rejected_replay", Type: "ask.decided", AggregateID: ask.ID})
+	if len(platform.since(calls)) != 0 {
+		t.Fatal("rejection outcome repeated")
+	}
+	decide("approved", "")
+	replies = chatCallsMention(platform.since(calls), "需求已重新打开")
+	if len(replies) != 1 || chatThreadReplyTo(replies[0]) != "om_reject_request" {
+		t.Fatalf("reopen missing: %+v", platform.since(calls))
+	}
+	calls = len(platform.calls)
+	decide("rejected", "")
+	replies = chatCallsMention(platform.since(calls), "需求已拒绝")
+	if len(replies) != 1 || strings.Contains(replies[0].body["content"].(string), "原因：") || strings.Contains(replies[0].body["content"].(string), "Already covered") {
+		t.Fatalf("empty rejection reason reused an old reason: %+v", platform.since(calls))
+	}
 }
 
 // An issue created with the message shortcut in a bound group keeps the

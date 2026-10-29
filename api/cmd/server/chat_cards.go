@@ -297,7 +297,7 @@ func (s *server) chatIssueCard(ctx context.Context, record domain.ChatIntegratio
 	buttons := []map[string]any{{"tag": "button", "text": chatPlain("Open in Flow"), "url": link, "type": "default"}}
 	actions := []domain.ChatAction{}
 	if binding.AllowUpdate {
-		for _, option := range []struct{ kind, label string }{{"open_state", "State"}, {"open_assignee", "Assignee"}, {"open_comment", "Comment"}} {
+		for _, option := range []struct{ kind, label string }{{"open_comment", "Comment"}} {
 			id := chatSharedActionID(record, binding, issue, key, option.kind)
 			payload, _ := json.Marshal(chatCardAction{Kind: option.kind, BindingID: binding.ID, BindingScope: chatBindingFingerprint(binding), ChatID: binding.ChatID, MessageID: messageID, IssueID: issue.ID, ExpectedVersion: issue.Version, SourceMessageID: sourceMessage})
 			action := domain.ChatAction{ID: id, WorkspaceKey: record.WorkspaceKey, ConnectionID: record.ConnectionID, Payload: payload, ExpiresAt: time.Now().UTC().Add(14 * 24 * time.Hour)}

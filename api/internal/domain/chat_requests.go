@@ -4,10 +4,12 @@ import "time"
 
 // ChatBindingRequests configures request intake for a group binding: a
 // member turns a message of the group into a request in the bound team's
-// triage by mentioning the bot, adding the configured reaction, or using the
-// message shortcut.
+// triage by explicitly asking the bot, adding the configured reaction, or
+// using the message shortcut.
 type ChatBindingRequests struct {
 	Enabled bool `json:"enabled"`
+	// EveryMention opts into treating non-command mentions as requests.
+	EveryMention bool `json:"everyMention,omitempty"`
 	// Emoji is the reaction (the platform's emoji type, such as "OK") that
 	// turns a message into a request; empty leaves reactions alone.
 	Emoji string `json:"emoji,omitempty"`
@@ -36,11 +38,14 @@ const (
 	ChatRequestCreated = "created"
 )
 
-// ChatIntakeRequest records the request made from one chat message: the
-// message can carry one request only, whoever asks and however often. The
+// ChatIntakeRequest reserves one chat message for a request or shortcut issue:
+// the message can create one item only, whoever asks and however often. The
 // record also routes the request's status changes and its outcome back to
 // the message's thread.
 type ChatIntakeRequest struct {
+	// Kind is "issue" for a shortcut issue; absent means a request. Both
+	// reserve the same message so it cannot be submitted both ways.
+	Kind         string `json:"kind,omitempty" enum:"issue"`
 	ID           string `json:"id"`
 	ConnectionID string `json:"connectionId"`
 	ChatID       string `json:"chatId"`
@@ -55,8 +60,8 @@ type ChatIntakeRequest struct {
 	RequesterOpenID string `json:"requesterOpenId"`
 	Source          string `json:"source" enum:"mention,reaction,shortcut"`
 	Status          string `json:"status" enum:"pending,created"`
-	// Outcome is the closed state type (completed or canceled) the thread
-	// was last told about; empty while the request is open.
+	// Outcome is the closed state type (completed, canceled or rejected)
+	// the thread was last told about; empty while the request is open.
 	Outcome   string    `json:"outcome,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
