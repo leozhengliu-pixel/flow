@@ -218,11 +218,15 @@ secret), saving a connector's encrypted headers, and editing an agent chat
 message (which runs the reply again). SCIM provisioning writes no events and
 audits only attributes that changed.
 
-Optimistic locking is checked first: a stale `expectedVersion` is refused with
-`409 VERSION_CONFLICT` (and the current resource) even when the values match.
-This applies to `PATCH /api/issues/{id}` as well: without `expectedVersion`
-the given fields are applied to the current issue, with a stale one the write
-is refused.
+Optimistic locking is checked first. For issues, a stale `expectedVersion`
+is accepted only when stored change history proves none of the patched fields
+changed since that version. A child write that auto-closes a parent therefore
+does not block a stale priority or title edit on the parent. Editing a field
+that changed (even if changed back), a future version, or a version without
+sufficient history returns `409 VERSION_CONFLICT` with the current issue.
+Without `expectedVersion`, the given fields apply to the current issue.
+Other versioned resources still refuse every stale version, even when values
+match. The collaborative description's `expectedDocumentVersion` remains strict.
 
 ## People who left the workspace
 

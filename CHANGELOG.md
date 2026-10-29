@@ -310,6 +310,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Chat retries empty and text-approval replies; saved approval decisions without
   a harness state also execute on the worker. Web prompts use the worker's protocol.
 
+- Issue PATCH accepts a stale `expectedVersion` when its fields have not
+  changed since that version, including parent edits after a child auto-closes
+  it. Same-field edits and versions without sufficient history still return
+  409; responses return the new issue version.
 - Concurrent metadata writes apply additive counter increments, membership
   changes and id-based appends as operations. Writers immediately discard a
   peer-deleted record instead of retaining it in their installed snapshot;
@@ -326,7 +330,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   reviews and deploy previews among them. Favoriting a favorite, archiving an
   archived release or post and publishing a published release note keep the
   original date. `PATCH /api/issues/{id}` now honours `expectedVersion` when
-  it is sent (409 on a stale version), as `/api/issue-records/{id}` does; a
+  it is sent (409 on conflicting fields), as `/api/issue-records/{id}` does; a
   patch without it still applies its fields to the current issue. Uploads,
   connecting integrations, reinstalling applications and similar actions still
   always run; see [Updates that change nothing](docs/api.md#updates-that-change-nothing).

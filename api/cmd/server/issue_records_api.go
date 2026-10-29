@@ -390,8 +390,8 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 	if !decodeStrictJSON(w, r, &input) {
 		return
 	}
-	// The legacy /api/issues route shares this contract: a patch without
-	// expectedVersion merges by field, one with a stale version is a 409.
+	// The legacy route shares the field-level precondition, checked against
+	// change history under the issue lock in UpdateIssueRecord.
 	if len(input.DocumentUpdateIDs) > 10_000 || slices.ContainsFunc(input.DocumentUpdateIDs, func(id string) bool { return len(id) > 191 }) {
 		writeError(w, http.StatusBadRequest, "Too many document updates")
 		return
@@ -432,15 +432,11 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "issue not found")
 		return
 	}
-	if input.ExpectedVersion != nil && page.Items[0].Version != *input.ExpectedVersion {
-		writeVersionConflict(w, page.Items[0])
-		return
-	}
 	if !s.authDisabled && issuePermissionRank(issueRole(s, metadata, page.Items[0])) < issuePermissionRank("editor") {
 		writeError(w, http.StatusForbidden, issueEditForbiddenMessage)
 		return
 	}
-	if issueUpdateIsNoop(page.Items[0], input) && store.ChatMutationKey(r.Context()) == "" {
+	if input.ExpectedVersion == nil && issueUpdateIsNoop(page.Items[0], input) && store.ChatMutationKey(r.Context()) == "" {
 		projected, projectionErr := s.projectIssueRecordReferences(r, metadata, query, []domain.Issue{page.Items[0]})
 		if projectionErr != nil {
 			issueRecordsError(w, projectionErr)
@@ -525,6 +521,9 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 			if version != *input.ExpectedDocumentVersion {
 				return store.ErrIssueVersion
 			}
+		}
+		if issueUpdateIsNoop(*issue, input) {
+			return store.ErrNoMutation
 		}
 		if issue.DocumentContent != nil {
 			previousDocumentID = issue.DocumentContent.ID

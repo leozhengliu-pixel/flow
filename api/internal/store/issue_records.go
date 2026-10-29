@@ -354,6 +354,9 @@ func (s *SQLiteStore) writeIssueRecord(ctx context.Context, tx *sqlTx, workspace
 	if len(raw) > 0 && len(metadata) > 0 && newIssueReferences(metadata[0]).equalOwned(raw, issue) {
 		return nil
 	}
+	if err := s.recordIssueFieldHistory(ctx, tx, workspace, []domain.Issue{issue}, map[string][]byte{issue.ID: raw}); err != nil {
+		return err
+	}
 	var old *issueStatsDimensions
 	if len(raw) > 0 {
 		var previous domain.Issue
@@ -632,6 +635,9 @@ func (s *SQLiteStore) migrateIssueSequences(ctx context.Context) error {
 }
 
 func (s *SQLiteStore) importIssueRecordBatch(ctx context.Context, tx *sqlTx, workspace string, issues []domain.Issue, orders ...map[string]int) error {
+	if err := s.recordIssueFieldHistory(ctx, tx, workspace, issues, nil); err != nil {
+		return err
+	}
 	insert, tuple, update := issueRecordInsert, issueRecordValuesSQL, issueRecordUpdate
 	if len(orders) > 0 {
 		insert = strings.TrimSuffix(insert, ") VALUES ") + ",collection_order) VALUES "

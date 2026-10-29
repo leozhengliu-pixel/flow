@@ -130,8 +130,10 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 				return ErrNoMutation
 			}
 		}
-		if expected != nil && original.Version != *expected {
-			return ErrIssueVersion
+		if expected != nil {
+			if err := checkIssueFieldVersion(ctx, tx, workspace, original, *expected, scope.Payload); err != nil {
+				return err
+			}
 		}
 		ids := append([]string{id}, scope.RelatedIDs...)
 		if original.ParentID != nil {

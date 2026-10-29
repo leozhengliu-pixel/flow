@@ -14,8 +14,8 @@ import (
 // mutation callback returns store.ErrNoMutation, so the store commits no
 // domain event, history entry, realtime push, webhook or notification, and
 // the resource keeps its version and updatedAt. The handler answers 200 with
-// the resource as it is. Optimistic locking is checked before the comparison,
-// so a stale expectedVersion is still a 409 even when the values match.
+// the resource as it is. Optimistic locking is checked before the comparison;
+// issues allow stale versions only when the patched fields stayed unchanged.
 
 // bookkeepingFields are set by every write itself, so they never make an edit
 // a change.
