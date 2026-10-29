@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"reflect"
 	"slices"
 	"sort"
 	"time"
@@ -124,7 +125,7 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 				next.ViewerRole = role
 			}
 			if index := slices.IndexFunc(next.Users, func(user domain.User) bool { return user.ID == actor.ID }); index >= 0 {
-				snap.oldActor = next.Users[index]
+				snap.oldActor = cloneSnapshotValue(reflect.ValueOf(next.Users[index])).Interface().(domain.User)
 				snap.actorIndex = index
 				next.Users[index] = actor
 			} else {
@@ -193,8 +194,12 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		traceMark(ctx, "persist")
 		// Records merged with another server's change are installed as written.
 		merged := map[metadataRecordKey][]byte{}
+		droppedIndexes := false
 		for _, change := range upserts {
-			if change.merged {
+			if change.skipped {
+				merged[metadataRecordKey{change.field, change.key}] = nil
+				droppedIndexes = droppedIndexes || change.field == "teams" || change.field == "teamSettings" || change.field == "labels"
+			} else if change.merged {
 				merged[metadataRecordKey{change.field, change.key}] = change.raw
 			}
 		}
@@ -204,6 +209,9 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 			}
 		}
 		noteTeamMutationIndexes(eventType, aggregateID, &snap, &next)
+		if droppedIndexes {
+			domain.RebuildTeamDirectory(&next)
+		}
 		if snap.deletion != nil {
 			deletedIssues = snap.deletion.removedIssues > 0
 			deletedProjectRefs = snap.deletion.projectsTouched
@@ -277,7 +285,7 @@ func snapshotTeamMutation(eventType, hintID string, data *domain.Bootstrap) team
 	if eventType == "team.updated" || eventType == "team.settings_updated" {
 		if index := domain.TeamIndex(data, hintID); index >= 0 {
 			snap.teamIndex = index
-			snap.oldTeam = data.Teams[index]
+			snap.oldTeam = cloneSnapshotValue(reflect.ValueOf(data.Teams[index])).Interface().(domain.Team)
 			snap.oldTeamKey = data.Teams[index].Key
 		}
 	}
@@ -307,17 +315,17 @@ func snapshotTeamMutation(eventType, hintID string, data *domain.Bootstrap) team
 func snapshotImportCatalog(snap *teamMutationSnapshot, eventType string, data *domain.Bootstrap) {
 	switch eventType {
 	case "alm.org_teams_imported":
-		snap.oldTeams = slices.Clone(data.Teams)
+		snap.oldTeams = cloneSnapshotValue(reflect.ValueOf(data.Teams)).Interface().([]domain.Team)
 		if len(data.TeamSettings) > 0 {
 			snap.oldImportSettings = make(map[string]domain.TeamSettings, len(data.TeamSettings))
 			for id, settings := range data.TeamSettings {
-				snap.oldImportSettings[id] = settings
+				snap.oldImportSettings[id] = cloneMutationTeamSettings(settings)
 			}
 		}
 	case "alm.users_imported":
-		snap.oldUsers = slices.Clone(data.Users)
+		snap.oldUsers = cloneSnapshotValue(reflect.ValueOf(data.Users)).Interface().([]domain.User)
 	case "alm.projects_imported":
-		snap.oldProjects = slices.Clone(data.Projects)
+		snap.oldProjects = cloneSnapshotValue(reflect.ValueOf(data.Projects)).Interface().([]domain.Project)
 	}
 }
 
@@ -329,7 +337,7 @@ func snapshotScopedLabels(data *domain.Bootstrap, scopes []string) map[int]domai
 	for _, scope := range scopes {
 		for _, index := range data.LabelIndex[scope] {
 			if index >= 0 && index < len(data.Labels) {
-				result[index] = data.Labels[index]
+				result[index] = cloneSnapshotValue(reflect.ValueOf(data.Labels[index])).Interface().(domain.IssueLabel)
 			}
 		}
 	}
@@ -491,28 +499,7 @@ func teamMutationPreviousValues(eventType, aggregateID string, snap *teamMutatio
 }
 
 func cloneMutationTeamSettings(settings domain.TeamSettings) domain.TeamSettings {
-	if len(settings.SlackNotifications) > 0 {
-		settings.SlackNotifications = maps.Clone(settings.SlackNotifications)
-	}
-	if len(settings.PRAutomations) > 0 {
-		settings.PRAutomations = maps.Clone(settings.PRAutomations)
-	}
-	if len(settings.ReleaseAutomations) > 0 {
-		settings.ReleaseAutomations = slices.Clone(settings.ReleaseAutomations)
-	}
-	if len(settings.TriageRules) > 0 {
-		settings.TriageRules = slices.Clone(settings.TriageRules)
-	}
-	if len(settings.AgentSkills) > 0 {
-		settings.AgentSkills = slices.Clone(settings.AgentSkills)
-	}
-	if len(settings.IssueViewDefaults) > 0 {
-		settings.IssueViewDefaults = maps.Clone(settings.IssueViewDefaults)
-	}
-	if len(settings.IssueViewInsights) > 0 {
-		settings.IssueViewInsights = maps.Clone(settings.IssueViewInsights)
-	}
-	return settings
+	return cloneSnapshotValue(reflect.ValueOf(settings)).Interface().(domain.TeamSettings)
 }
 
 func collectDirtyTeamRecords(eventType, aggregateID string, snap *teamMutationSnapshot, next domain.Bootstrap) ([]metadataRecordChange, error) {

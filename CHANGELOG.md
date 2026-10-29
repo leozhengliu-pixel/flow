@@ -310,6 +310,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Chat retries empty and text-approval replies; saved approval decisions without
   a harness state also execute on the worker. Web prompts use the worker's protocol.
 
+- Concurrent metadata writes apply additive counter increments, membership
+  changes and id-based appends as operations. Writers immediately discard a
+  peer-deleted record instead of retaining it in their installed snapshot;
+  team writer bases deep-copy nested slices and maps.
 - Every other stored `PATCH` and `PUT` now also writes nothing when it only
   repeats the current values (no `version` or `updatedAt` change, event,
   realtime update, webhook or notification): releases, release pipelines and
