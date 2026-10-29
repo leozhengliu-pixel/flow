@@ -171,7 +171,10 @@ func (s *server) processChatPersonalNotification(ctx context.Context, record dom
 	if code != "" {
 		return fail(code)
 	}
-	card := chatCard(item.Title, chatCardText(item.Line), map[string]any{"tag": "action", "actions": []map[string]any{{"tag": "button", "text": chatPlain("Open in Flow"), "url": item.URL}}})
+	card, actions, err := s.chatPersonalNotificationCard(ctx, record, identity, payload, item, job)
+	if err != nil {
+		return err
+	}
 	content, _ := json.Marshal(card)
 	var result chatMessageResult
 	err = s.chatWorkflowRequest(ctx, record, http.MethodPost, "/open-apis/im/v1/messages?receive_id_type=open_id", map[string]any{"receive_id": identity.OpenID, "msg_type": "interactive", "content": string(content), "uuid": chatKey(job.DedupKey, "personal")[:32]}, &result)
@@ -185,6 +188,9 @@ func (s *server) processChatPersonalNotification(ctx context.Context, record dom
 		if chatJobFinal(err, job) {
 			s.finishChatPersonalDelivery(ctx, record.WorkspaceKey, payload.DeliveryID, "failed", chatPersonalDeliveryFailure)
 		}
+		return err
+	}
+	if err := s.chatAttachPersonalActions(ctx, actions, result); err != nil {
 		return err
 	}
 	s.setChatPersonalDeliveryState(ctx, record, identity, "")

@@ -27,8 +27,14 @@ not supported by this connection flow.
      permission, granted when the version is approved; nobody signs in
      for it.
 
-   Flow needs no contact scopes, no access to all group messages, the
-   contact directory, phone numbers, or email addresses.
+   For [creating issues from messages](#create-an-issue-from-a-message),
+   also grant `im:message:readonly` (读取单聊、群组消息) and, so the bot can
+   confirm a group message before replying under it, `im:message.group_msg`
+   (获取群组中所有消息). Without them the shortcut still works, but its result
+   goes to the member's bot conversation instead of the group.
+
+   Flow needs no contact scopes, the contact directory, phone numbers, or
+   email addresses.
 4. Register the redirect URL
    `https://flow.example.com/api/integrations/feishu/chat/identity/oauth/callback`
    (replace `feishu` with `lark` for Lark, and use your actual Flow origin).
@@ -45,7 +51,9 @@ not supported by this connection flow.
    configuration. Enable encryption using the same Encrypt Key and
    Verification Token. Subscribe to `im.message.receive_v1` and the current
    `card.action.trigger` callback; do not also subscribe to the legacy card
-   callback. Publish configuration changes when required by the platform.
+   callback. For [link previews](#link-previews), also subscribe to the
+   `url.preview.get` callback. Publish configuration changes when required
+   by the platform.
 8. Add the bot to an internal group and allow it to speak. Back in Flow, select
    the group, a team, an optional compatible project/template, and the
    notification and issue-action options. Saving a group binding explicitly
@@ -194,6 +202,124 @@ message with an issue card. Shared issue cards open personal forms for state,
 assignee, and comment changes, so other group members cannot see a person's
 drafts. Ordinary group messages are not synchronized as comments.
 
+### Card actions
+
+Issue cards in a group and personal notification cards about an issue carry
+**Assign to me**, a status select, a priority select and **Open in Flow**
+(group cards also keep the private State, Assignee and Comment forms). The
+platform sends each click to the `card.action.trigger` callback. Flow
+answers at once with a short toast and runs the change in its chat outbox:
+
+- as the clicking member's linked Flow account and with its permissions (a
+  viewer of the issue is refused; an unlinked member is asked to link their
+  account);
+- on a group card, only while the group's binding still allows updates and
+  the issue is still in its scope;
+- on a personal card, only for its recipient (clicks by anyone else are
+  rejected).
+
+Each click is its own change, on the issue's current state; a repeated
+callback is applied once. The card is then redrawn in place with the new
+status, priority and assignee (group cards in every bound group that shows
+the issue). A refusal reaches the member privately in their Flow language
+(Chinese or English; without a choice, Chinese on Feishu and English on
+Lark) with a stable code:
+
+| Code | Meaning |
+| --- | --- |
+| `chat_binding_updates_disabled` | The group's binding does not allow updating issues. |
+| `chat_binding_create_disabled` | The group's binding does not allow creating issues. |
+| `chat_binding_unavailable`, `chat_binding_scope_changed` | The binding was revoked, removed or changed after the card was sent. |
+| `chat_issue_unavailable`, `chat_issue_outside_binding` | The member can no longer open the issue, or it left the group's scope. |
+| `chat_action_forbidden` | The member's Flow account may not make this change. |
+| `chat_action_invalid`, `chat_form_invalid` | The value or form is no longer valid (for example a status of another team). |
+| `chat_action_conflict` | The issue changed at the same moment; try again. |
+| `chat_reconnect_required` | The linked chat account expired; link it again. |
+| `chat_team_unavailable` | No team the member can create issues in is available here. |
+| `chat_message_unavailable` | Flow could not read the message the shortcut was used on. |
+| `chat_action_expired`, `chat_action_failed` | The card is too old, or Flow could not apply the change. |
+
+### Create an issue from a message
+
+Members create an issue from any message with the message shortcut
+**创建事项** / **Create issue** (in the message's **More** menu). The
+platform opens a message shortcut in a web app, so the app needs the web
+app capability:
+
+1. In the developer console, add the **Web app** (网页应用) capability. Set
+   its desktop and mobile homepage to
+   `https://flow.example.com/api/integrations/feishu/<connection id>/chat/message-action`
+   (`lark` for Lark; the connection id is the one in Flow's callback URL).
+2. In the web app's configuration, add the **Message shortcut**
+   (消息快捷操作) scenario, name it 创建事项 (Create issue) and enter the
+   web app's AppLink in sidebar mode, for example
+   `https://applink.feishu.cn/client/web_app/open?appId=<App ID>&mode=sidebar`
+   (`applink.larksuite.com` for Lark).
+3. Add Flow's origin to the web app's trusted domains (H5 可信域名), grant
+   the message permissions listed in
+   [Connect an application](#connect-an-application) and publish a version.
+
+The page reads the selected message with the client API
+`getBlockActionSourceDetail` (signed with the app's JSAPI ticket) and signs
+the member in with a one-time code (`requestAccess`); it needs no Flow
+session. Flow resolves the code to the member's platform account, which must
+belong to the app's tenant and be linked to a Flow account; an unlinked
+member gets a card to link their account. The bot then sends a private form:
+team, title and description prefilled from the message (with a link back to
+its chat), assignee and priority. Submitting creates the issue as that
+member, with their permissions, and replies under the original message with
+the issue card.
+
+- In a bound group, the binding's **create issues** option applies and the
+  team is the group's bound team (with its project and template); the reply
+  is the binding's issue card with its controls.
+- In another group or chat, the form offers the teams the member can create
+  issues in. The reply under the message appears only for an issue of a
+  public team; otherwise the issue card goes to the member's bot
+  conversation.
+- Flow reads the message again with the bot. When the bot cannot read it
+  (it is not in the chat, or lacks the message permissions), the form still
+  opens and a bound group's option still applies, but the result goes to
+  the member's bot conversation only.
+- With sensitive data protection on, the result is only a Flow link in the
+  member's bot conversation.
+
+The platform's AppLink opens a chat, not a single message, so the link in the
+description opens the source message's chat.
+
+### Link previews
+
+Flow links to issues, projects, documents and initiatives posted in a chat
+expand into a preview card: status, assignee, priority and team for issues;
+status, lead, priority and teams for projects; status, owner and teams for
+initiatives; title and the beginning of the text for documents. To turn them
+on:
+
+1. In the developer console, add the **Link preview** (链接预览) capability
+   and register Flow's URL rules, for example `flow.example.com/*/issue/**`,
+   `flow.example.com/*/project/**`, `flow.example.com/*/document/**` and
+   `flow.example.com/*/initiative/**` (no scheme; at most 10 rules).
+2. Subscribe to the `url.preview.get` callback at Flow's callback URL (same
+   encryption and verification token). The callback needs no extra
+   permission; Flow does not ask for `user_id`.
+3. Publish a version. Previews work only with a published version and for
+   members in the app's availability range.
+
+The platform asks for a preview once per viewer and shows it to that viewer
+only, so each preview is filtered by the viewer's linked Flow account:
+
+- content the viewer cannot open in Flow is not expanded, and viewers who
+  have not linked an account only see a hint to link it;
+- in a group (and whenever Flow cannot confirm that a chat is a direct
+  conversation), content of private or restricted teams, issues with their
+  own access lists and documents shared with specific people are expanded
+  only when the group is bound to that team with its owner's authorization;
+- with sensitive data protection on, nothing is expanded.
+
+Flow answers within the platform's three-second limit and does not push
+preview updates; a preview shows the state when the viewer's client fetched
+it.
+
 Creation uses the target team's effective workflow and default state,
 including inherited workflows. A template must be compatible with that
 team. Updates carry an expected issue version; stale cards cannot overwrite
@@ -259,6 +385,10 @@ defaults, stale updates, durable creation, and retry/lease behavior. Before
 production use, complete a live acceptance run with a published test app and
 internal group on each platform: connect, link a member, receive a real
 notification, create an issue, change its state/assignee, and add a comment.
+Also create an issue with the message shortcut in a bound group and in a
+direct conversation, use the card controls on a group card and on a personal
+notification card, and post an issue link in a bound and an unbound group as
+a member of a private team and as one outside it.
 
 ### Verify with a test tenant
 
@@ -299,6 +429,12 @@ can only fake. Confirm it once per platform on a test tenant:
    as not approved.
 
 Platform references: [message events](https://open.feishu.cn/document/server-docs/im-v1/message/events/receive),
+[message shortcut](https://open.feishu.cn/document/client-docs/extensions/message-shortcut),
+[getBlockActionSourceDetail](https://open.feishu.cn/document/getBlockActionSourceDetail),
+[reading a message](https://open.feishu.cn/document/server-docs/im-v1/message/get),
+[link preview](https://open.feishu.cn/document/uAjLw4CM/ukzMukzMukzM/development-link-preview/link-preview-development-guide),
+[url.preview.get callback](https://open.feishu.cn/document/uAjLw4CM/ukzMukzMukzM/development-link-preview/pull-link-preview-data-callback-structure),
+[chat AppLink](https://open.feishu.cn/document/uAjLw4CM/uYjL24iN/applink-protocol/supported-protocol/open-a-chat-page),
 [sending messages](https://open.feishu.cn/document/server-docs/im-v1/message/create),
 [card callbacks](https://open.feishu.cn/document/feishu-cards/card-callback-communication),
 [updating cards](https://open.feishu.cn/document/server-docs/im-v1/message-card/patch),

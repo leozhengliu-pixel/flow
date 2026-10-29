@@ -309,5 +309,12 @@ func (s *server) chatIssueCard(ctx context.Context, record domain.ChatIntegratio
 		}
 	}
 	elements = append(elements, map[string]any{"tag": "action", "actions": buttons})
+	if binding.AllowUpdate {
+		controls, quick, err := s.chatGroupQuickControls(ctx, record, binding, issue, key, messageID, sourceMessage)
+		if err != nil {
+			return nil, nil, err
+		}
+		elements, actions = append(elements, controls...), append(actions, quick...)
+	}
 	return chatCard(issue.Identifier, elements...), actions, nil
 }
