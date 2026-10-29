@@ -46,9 +46,10 @@ type chatWebhookEnvelope struct {
 		Message struct {
 			MessageID string `json:"message_id"`
 			// RootID and ThreadID are set on a reply in a thread
-			// (chat_issue_threads.go).
+			// (chat_issue_threads.go); ParentID on a reply (chat_dm_agent.go).
 			RootID      string `json:"root_id"`
 			ThreadID    string `json:"thread_id"`
+			ParentID    string `json:"parent_id"`
 			ChatID      string `json:"chat_id"`
 			ChatType    string `json:"chat_type"`
 			MessageType string `json:"message_type"`
@@ -240,6 +241,9 @@ func (s *server) chatCommandForEnvelope(ctx context.Context, record domain.ChatI
 	event := envelope.Event
 	switch envelope.Header.EventType {
 	case "im.message.receive_v1":
+		if event.Message.ChatType == "p2p" {
+			return chatDirectMessageCommand(record, envelope) // chat_dm_agent.go
+		}
 		if command, dedup, ok := s.chatThreadReplyCommand(ctx, record, envelope); ok {
 			return command, dedup, true, nil
 		}
@@ -390,6 +394,10 @@ func (s *server) processChatJob(ctx context.Context, job domain.ChatJob) error {
 	}
 	if command.Kind == chatThreadReplyKind {
 		return s.processChatThreadReply(ctx, record, job, command)
+	}
+	// Direct messages with the bot and their cards (chat_dm_agent.go).
+	if handled, err := s.processChatDirectMessage(ctx, record, job, command); handled {
+		return err
 	}
 	identity, err := s.store.ChatIdentityForOpenID(ctx, record.WorkspaceKey, record.ConnectionID, command.OpenID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {

@@ -194,6 +194,8 @@ func (s *server) processChatPersonalNotification(ctx context.Context, record dom
 		return err
 	}
 	s.setChatPersonalDeliveryState(ctx, record, identity, "")
+	// A reply to the card comments on its issue (chat_dm_agent.go).
+	s.rememberChatNotificationCard(ctx, record, identity, payload.NotificationID, result.Data.MessageID)
 	s.finishChatPersonalDelivery(ctx, record.WorkspaceKey, payload.DeliveryID, "delivered", "")
 	return nil
 }
