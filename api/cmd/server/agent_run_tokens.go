@@ -286,6 +286,10 @@ func (s *server) callAgentRunToolOnce(r *http.Request, grant *agentRunGrant, nam
 	if err != nil {
 		return nil, nil, fmt.Errorf("the run's user or application no longer has access")
 	}
+	if _, session := agentRunSessionToolDefinitions()[name]; session {
+		// A session tool runs with what the session gives it (agent_runtime_session_tools.go).
+		request = request.WithContext(s.agentRunSessionToolContext(request.Context(), grant.run))
+	}
 	arguments, err := json.Marshal(args)
 	if err != nil {
 		return nil, nil, err

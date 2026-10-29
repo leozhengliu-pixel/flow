@@ -155,6 +155,20 @@ func agentToolGroupOf(name string) string {
 	return ""
 }
 
+// names lists the toolset's groups (sorted).
+func (t *agentChatToolset) names() []string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	names := make([]string, 0, len(t.groups))
+	for name, on := range t.groups {
+		if on {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
 func (t *agentChatToolset) loaded(name string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()

@@ -95,6 +95,9 @@ type workerChatRunInfo struct {
 	// TurnsBefore is how many model turns earlier runs of the reply took (a resume continues their count, so the
 	// turn budget is the reply's, as in-process, not each run's).
 	TurnsBefore int `json:"turnsBefore,omitempty"`
+	// Groups are the tool groups the in-process reply would start with (newAgentChatToolset: the request, the surface
+	// the chat was opened on, the tools earlier replies used); the worker offers them besides the core tools.
+	Groups []string `json:"groups,omitempty"`
 }
 
 type workerChatResume struct {
@@ -117,16 +120,13 @@ func workerChatInfo(run store.AgentRun) (workerChatRunInfo, bool) {
 func workerChatMessage(id string) bool { return strings.HasPrefix(id, workerChatMessagePrefix) }
 
 // agentChatOnWorker reports whether a chat reply runs on the agent worker. Loop builder conversations (their own
-// question tool and drafts), conversations with sent files (read in-process) and approvals saved by earlier
-// versions stay in-process.
+// question tool and drafts) and approvals saved by earlier versions stay in-process.
 func (s *server) agentChatOnWorker(session domain.AgentSession) bool {
 	if !s.agentRuntimeWorker() || !s.agentRuntimeEnabled() || len(session.LoopIDs) > 0 {
 		return false
 	}
-	if _, _, _, _, legacy := pendingAgentApproval(&session); legacy {
-		return false
-	}
-	return !slices.ContainsFunc(session.Messages, func(message domain.AgentMessage) bool { return len(message.Attachments) > 0 })
+	_, _, _, _, legacy := pendingAgentApproval(&session)
+	return !legacy
 }
 
 func newWorkerChatRunID() string {
@@ -143,6 +143,11 @@ func workerRunPromptMessages(messages []agentProviderMessage) []agentRunPromptMe
 			continue
 		}
 		item := agentRunPromptMessage{Role: message.Role, Content: message.Content}
+		if message.Role == "user" {
+			for _, image := range message.Images {
+				item.Images = append(item.Images, agentRunPromptImage{Name: image.Name, MediaType: image.MediaType, Source: image.Source, MaxBytes: image.MaxBytes, Sniffed: image.Sniffed})
+			}
+		}
 		for _, call := range message.ToolCalls {
 			arguments := string(call.Arguments)
 			if arguments == "" {
@@ -166,10 +171,13 @@ func (s *server) runAgentSessionOnWorker(r *http.Request, data domain.Bootstrap,
 	if err != nil {
 		return domain.AgentSession{}, err
 	}
+	// Files sent with the conversation's messages reach the model as the in-process reply gives them: the newest
+	// images as image inputs, every other file as a note the file tools (served through /mcp) read.
+	s.addAgentAttachmentInputs(r.Context(), prompt.messages)
 	latest := agentLatestUserMessage(*session)
 	runID := newWorkerChatRunID()
 	started := time.Now().UTC()
-	info := workerChatRunInfo{MessageID: "agent_message_" + runID, LinkBase: agentLinkBaseURL(r), MaxTurns: s.agentMaxToolTurns(), MaxCalls: s.agentMaxToolCalls(), Request: latest, Chinese: containsHan(latest), Started: started.UnixMilli()}
+	info := workerChatRunInfo{MessageID: "agent_message_" + runID, LinkBase: agentLinkBaseURL(r), MaxTurns: s.agentMaxToolTurns(), MaxCalls: s.agentMaxToolCalls(), Request: latest, Chinese: containsHan(latest), Started: started.UnixMilli(), Groups: newAgentChatToolset(*session).names()}
 	promptContext := agentRunPromptContext{System: prompt.system, Messages: workerRunPromptMessages(prompt.messages), LatestPrompt: latest, WebAccess: prompt.web}
 	snapshot := s.withAgentBodies(r, *session)
 	// The reply exists before the run is queued, so a reloaded page or another tab sees it working at once.
@@ -845,6 +853,8 @@ type workerChatStoredActivity struct {
 	RemoteTool string `json:"remoteTool,omitempty"`
 	// ChangeData is the change a call's result made (its card and Undo).
 	ChangeData *domain.AgentChange `json:"changeData,omitempty"`
+	// Title is the work-log label of a finished call, as the in-process reply names it ("Read file notes.pdf").
+	Title string `json:"title,omitempty"`
 	// Approvals are the held calls' approvals (by call id).
 	Approvals map[string]workerChatApproval `json:"approvals,omitempty"`
 	// End is how a response or an error ends the reply: complete (with Answer, the checked answer, and BudgetStop
@@ -990,6 +1000,9 @@ func (c *workerChatReply) resolve(ctx context.Context, input workerChatActivity)
 		stored.Connector, stored.RemoteTool = c.connectorOf(ctx, input.Content.Action)
 		if input.Type == "action.result" {
 			stored.ChangeData = c.s.workerChatChange(ctx, c.run, input.Change)
+			if !input.IsError {
+				stored.Title = c.toolTitle(ctx, input.Content.Action, input.Content.Parameter, input.Content.Result)
+			}
 		}
 	case "elicitation":
 		stored.DurationMS = c.durationMS()
@@ -1033,6 +1046,17 @@ func (c *workerChatReply) connectorOf(ctx context.Context, name string) (connect
 		return tool.Policy.label(), tool.RemoteName
 	}
 	return "", ""
+}
+
+// toolTitle is the label the in-process reply gives a finished call (a file tool's), "" for the others. parameter is
+// the call's arguments, which the worker repeats with the result.
+func (c *workerChatReply) toolTitle(ctx context.Context, name string, parameter json.RawMessage, result string) string {
+	name = agentToolBaseName(name)
+	call := domain.AgentToolCall{Name: name, Arguments: workerChatArguments(parameter), Result: workerChatResultJSON(result)}
+	if isAgentFileTool(name) {
+		return agentFileToolTitle(c.s.agentRunSessionToolContext(ctx, c.run), call)
+	}
+	return ""
 }
 
 // apply changes the draft by one stored activity.
@@ -1117,6 +1141,9 @@ func (d *workerChatDraft) apply(input workerChatStoredActivity) {
 		if input.ChangeData != nil {
 			change := *input.ChangeData
 			call.Change = &change
+		}
+		if input.Title != "" && !input.IsError {
+			call.Title = input.Title
 		}
 		d.message.Parts[index].Status, d.message.Parts[index].ToolCall = call.Status, &call
 		part := d.message.Parts[index]

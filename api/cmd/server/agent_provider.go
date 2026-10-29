@@ -39,6 +39,12 @@ type agentProviderImage struct {
 	MediaType string // image/png | image/jpeg | image/gif | image/webp
 	Data      string // base64
 	Name      string
+	// Source is the stored file the image was read from, MaxBytes the limit it was read with and Sniffed whether its
+	// bytes had to match MediaType: a worker run is sent the reference and reads the file again when it starts
+	// (agentRunPromptImage), rather than keeping the bytes with the run.
+	Source   string
+	MaxBytes int64
+	Sniffed  bool
 }
 
 func (image agentProviderImage) dataURL() string {

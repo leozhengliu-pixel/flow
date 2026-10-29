@@ -36,6 +36,20 @@ test('the run conversation becomes SDK items, the last user message the request'
   assert.deepEqual(history[3], { type: 'function_call_result', callId: 'c1', name: 'list_issues', status: 'completed', output: { type: 'text', text: '{"items":[]}' } })
 })
 
+test('images sent with a message become image inputs; the last message is run as an item', () => {
+  const image = { name: 'screen.png', mediaType: 'image/png', data: 'iVBORw0K' }
+  const { history, request, input } = chatConversation([
+    { role: 'user', content: 'Earlier screenshot', images: [image] },
+    { role: 'assistant', content: 'Seen.' },
+    { role: 'user', content: 'What is wrong here?\n\nAttached image screen.png (shown below).', images: [image] },
+  ])
+  assert.equal(request, 'What is wrong here?\n\nAttached image screen.png (shown below).')
+  const parts = [{ type: 'input_text', text: 'Earlier screenshot' }, { type: 'input_image', image: 'data:image/png;base64,iVBORw0K' }]
+  assert.deepEqual(history[0], { role: 'user', content: parts })
+  assert.deepEqual(input, [{ role: 'user', content: [{ type: 'input_text', text: request }, { type: 'input_image', image: 'data:image/png;base64,iVBORw0K' }] }])
+  assert.equal(chatConversation([{ role: 'user', content: 'Plain' }]).input, undefined)
+})
+
 test('the poster coalesces text, keeps order, and ends a stopped run as stopped', async () => {
   const posted: ChatActivity[] = []
   let settled = 0
@@ -58,7 +72,7 @@ test('the poster coalesces text, keeps order, and ends a stopped run as stopped'
     { seq: 1, type: 'thought', body: 'Working…' },
     { seq: 2, type: 'text.delta', body: 'Let me look.' },
     { seq: 3, type: 'action', activityId: 'c1:call', callId: 'c1', content: { action: 'list_issues', parameter: { limit: 5 } } },
-    { seq: 4, type: 'action.result', activityId: 'c1:result', callId: 'c1', content: { action: 'list_issues', result: '{}' }, isError: false, change: { runId: 'r', seq: 1 } },
+    { seq: 4, type: 'action.result', activityId: 'c1:result', callId: 'c1', content: { action: 'list_issues', parameter: { limit: 5 }, result: '{}' }, isError: false, change: { runId: 'r', seq: 1 } },
     { seq: 5, type: 'question.delta', callId: 'ask', body: 'Which team?' },
     { seq: 6, type: 'error', activityId: 'end', body: 'Generation stopped' },
   ])
@@ -140,4 +154,14 @@ test('a spent tool budget withholds every tool from the last turn', async () => 
   assert.ok((model.calls[0]!.request.tools ?? []).length > 0, 'the first turn has tools')
   assert.deepEqual(model.calls[1]!.request.tools ?? [], [], 'the last turn has none')
   assert.ok(JSON.stringify(model.calls[1]!.request.input).includes('[Flow] stop now'), 'the last turn reads the nudge')
+})
+
+test('a message with images runs as an image input', async () => {
+  const model = new ScriptedModel([[assistantMessage('The header overlaps.')]])
+  const worker = new FlowAgentWorker(config(), { model })
+  const { history, request, input } = chatConversation([{ role: 'user', content: 'What is wrong here?', images: [{ name: 's.png', mediaType: 'image/png', data: 'iVBORw0K' }] }])
+  const outcome = await worker.session({ sessionId: 'chat-image', systemPrompt: 'test', mcpServers: [], history: new MemorySession('chat-image', history) }).send(request, () => {}, input)
+  assert.equal(outcome.body, 'The header overlaps.')
+  const sent = JSON.stringify(model.calls[0]!.request.input)
+  assert.ok(sent.includes('input_image') && sent.includes('data:image/png;base64,iVBORw0K') && sent.includes('What is wrong here?'), sent)
 })

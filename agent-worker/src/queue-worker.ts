@@ -79,6 +79,7 @@ async function execute(run: AgentRun) {
     ...(chat ? {
       // The reply's tool turns, plus the turn that gives its last word once the budget is spent.
       maxTurns: Math.max(chat.maxTurns, 1) + 2,
+      groups: chat.groups,
       history: new MemorySession(run.sessionId, conversation?.history ?? []),
       suspended: flowSuspendedStore(run.id),
     } : {}),
@@ -102,7 +103,7 @@ async function execute(run: AgentRun) {
       poster?.push(activity)
       if (activity.type !== 'text.delta' && !(activity.type === 'thought' && activity.ephemeral)) log(`${run.id} ${formatActivity(activity, t0).trim()}`)
     }
-    const outcome = chat?.resume ? await session.resumeWith(chat.resume.decisions, sink) : await session.send(conversation ? conversation.request : payload.prompt ?? '', sink)
+    const outcome = chat?.resume ? await session.resumeWith(chat.resume.decisions, sink) : await session.send(conversation ? conversation.request : payload.prompt ?? '', sink, conversation?.input)
     await poster?.drain()
     let status = statusOf[outcome.status]
     if (chat && outcome.status === 'awaiting' && outcome.elicitation?.kind === 'select') {

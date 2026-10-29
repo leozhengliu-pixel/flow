@@ -211,7 +211,7 @@ func (s *server) addLoopAttachmentInputs(ctx context.Context, data domain.Bootst
 		}
 		if imageType := loopAttachmentImageType(attachment.ContentType); imageType != "" && attachment.Size <= loopAttachmentImageBytes && len(messages[target].Images) < loopAttachmentImages {
 			if content, complete := read(loopAttachmentImageBytes); complete {
-				messages[target].Images = append(messages[target].Images, agentProviderImage{MediaType: imageType, Data: base64.StdEncoding.EncodeToString(content), Name: attachment.Name})
+				messages[target].Images = append(messages[target].Images, agentProviderImage{MediaType: imageType, Data: base64.StdEncoding.EncodeToString(content), Name: attachment.Name, Source: attachment.URL, MaxBytes: loopAttachmentImageBytes})
 				fmt.Fprintf(&notes, "\n\nAttached image %s (shown below).", attachment.Name)
 				continue
 			}

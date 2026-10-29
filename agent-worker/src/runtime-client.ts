@@ -29,6 +29,8 @@ export type PromptMessage = {
   toolCalls?: { id: string; name: string; arguments: string }[]
   toolCallId?: string
   isError?: boolean
+  /** A user message's image inputs (files sent with it), the bytes base64 as the in-process reply sends them. */
+  images?: { name: string; mediaType: string; data: string }[]
 }
 
 /** What a chat run's payload says about its reply (api/cmd/server/agent_worker_chat.go workerChatRunInfo). */
@@ -38,6 +40,8 @@ export type ChatRunInfo = {
   maxCalls: number
   request?: string
   resume?: { decisions: Record<string, string> }
+  /** Tool groups the reply starts with besides the ones its request picks (the chat's surface, earlier tools). */
+  groups?: string[]
 }
 
 export type RunPayload = {

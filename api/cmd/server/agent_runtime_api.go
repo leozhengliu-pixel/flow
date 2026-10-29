@@ -333,6 +333,21 @@ type agentRunPromptMessage struct {
 	ToolCalls  []agentRunPromptToolCall `json:"toolCalls,omitempty"`
 	ToolCallID string                   `json:"toolCallId,omitempty"`
 	IsError    bool                     `json:"isError,omitempty"`
+	// Images are a user message's image inputs (files sent with it, a loop draft's images), as the in-process reply
+	// sends them: kept with the run as references and read again into Data when the payload is served.
+	Images []agentRunPromptImage `json:"images,omitempty"`
+}
+
+// agentRunPromptImage is an image input of a run's conversation. Stored with the run it names the stored file
+// (Source, read with MaxBytes and, when Sniffed, only if its bytes are that image type); the payload carries the
+// bytes (Data, base64) instead.
+type agentRunPromptImage struct {
+	Name      string `json:"name"`
+	MediaType string `json:"mediaType"`
+	Data      string `json:"data,omitempty"`
+	Source    string `json:"source,omitempty"`
+	MaxBytes  int64  `json:"maxBytes,omitempty"`
+	Sniffed   bool   `json:"sniffed,omitempty"`
 }
 
 // agentRunPromptToolCall is a tool call of an earlier reply (arguments as JSON text).
@@ -394,6 +409,7 @@ func (s *server) agentRunPayload(w http.ResponseWriter, r *http.Request, _ agent
 		if raw, found, err := s.store.AgentRunKey(r.Context(), run.ID, workerChatContextKey); err == nil && found {
 			var prompt agentRunPromptContext
 			if json.Unmarshal(raw, &prompt) == nil {
+				s.inlineAgentRunImages(r.Context(), &prompt)
 				prompt.System += agentRunConnectorNote(grant, discoveryErr)
 				response["context"] = prompt
 			}

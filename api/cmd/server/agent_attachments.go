@@ -218,7 +218,7 @@ func (s *server) addAgentAttachmentInputs(ctx context.Context, messages []agentP
 				}
 				// The token's type is client-supplied: only send bytes that really are that image.
 				if content, complete := read(attachment.URL, agentAttachmentMaxBytes); complete && loopAttachmentImageType(http.DetectContentType(content)) == imageType {
-					message.Images = append(message.Images, agentProviderImage{MediaType: imageType, Data: base64.StdEncoding.EncodeToString(content), Name: attachment.Name})
+					message.Images = append(message.Images, agentProviderImage{MediaType: imageType, Data: base64.StdEncoding.EncodeToString(content), Name: attachment.Name, Source: attachment.URL, MaxBytes: agentAttachmentMaxBytes, Sniffed: true})
 					images++
 					fmt.Fprintf(&notes, "\n\nAttached image %s (shown below).", attachment.Name)
 					continue

@@ -615,7 +615,7 @@ func TestChatRepliesStayInProcessByDefault(t *testing.T) {
 		t.Fatal("chat runs on the worker without FLOW_AGENT_RUNTIME=worker")
 	}
 	f.s.agent.Runtime = appconfig.AgentRuntimeWorker
-	if !f.s.agentChatOnWorker(domain.AgentSession{}) || f.s.agentChatOnWorker(domain.AgentSession{LoopIDs: []string{"loop"}}) || f.s.agentChatOnWorker(domain.AgentSession{Messages: []domain.AgentMessage{{Role: "user", Attachments: []domain.AgentMessageAttachment{{Name: "a.png"}}}}}) {
+	if !f.s.agentChatOnWorker(domain.AgentSession{}) || f.s.agentChatOnWorker(domain.AgentSession{LoopIDs: []string{"loop"}}) || !f.s.agentChatOnWorker(domain.AgentSession{Messages: []domain.AgentMessage{{Role: "user", Attachments: []domain.AgentMessageAttachment{{Name: "a.png"}}}}}) {
 		t.Fatal("worker eligibility")
 	}
 }
