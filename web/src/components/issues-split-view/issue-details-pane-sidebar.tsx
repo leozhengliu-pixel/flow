@@ -1,13 +1,9 @@
-import type { ReactNode } from 'react'
-
 import { PriorityIcon, StatusIcon } from '@/components/issue/issue-icons'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import styles from './issues-split-view.module.css'
 
 export interface IssueDetailsPaneSidebarProps {
   issue?: MyIssuesRowData
-  /** Optional host content shown under the properties. */
-  agentPanel?: ReactNode
   /**
    * @deprecated the reference app's issue properties sidebar has no customers section (requests live in the
    * issue's Customers section), so these rows are no longer rendered.
@@ -18,11 +14,10 @@ export interface IssueDetailsPaneSidebarProps {
 
 /**
  * LS-0346 — IssueDetailsPaneSidebar.
- * Property sidebar for split/detail hosts, with an optional slot for host content.
+ * Property sidebar for split/detail hosts.
  */
 export function IssueDetailsPaneSidebar({
   issue,
-  agentPanel,
   className,
 }: IssueDetailsPaneSidebarProps) {
   return (
@@ -33,13 +28,6 @@ export function IssueDetailsPaneSidebar({
     >
       <h3 className={styles.sidebarTitle}>Properties</h3>
       {issue ? <PropertyList issue={issue} /> : <p className={styles.sidebarEmpty}>No issue selected</p>}
-      {agentPanel ? (
-        <div className={styles.agentSlot} data-agent-panel-slot="">
-          {agentPanel}
-        </div>
-      ) : (
-        <div className={styles.agentSlot} data-agent-panel-slot="ready" hidden aria-hidden="true" />
-      )}
     </div>
   )
 }

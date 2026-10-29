@@ -669,6 +669,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   current. Move a cycle's end date instead; scheduled maintenance completes it
   after its last day. Starting today is limited to the next upcoming cycle
   while the team has no current cycle.
+- Unused entity activity shell and split-view agent slot, including their styles and tests.
 - Coding sandboxes no longer set the older duplicate sandbox and snapshot
   variables. Setup and prepare scripts detect the sandbox with
   `FLOW_SANDBOX=1` and a snapshot build with `FLOW_SNAPSHOT=1`.

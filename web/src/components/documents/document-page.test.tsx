@@ -100,7 +100,7 @@ describe('DocumentPage header', () => {
 
   it('has no Activity panel and, no docked agent rail or header chat button', () => {
     const { container } = renderPage()
-    expect(container.querySelector('.entity-activity-panel')).toBeNull()
+    expect(screen.queryByRole('complementary', { name: 'Activity' })).not.toBeInTheDocument()
     expect(container.querySelector('.document-agent-rail')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Agent chat' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Open chat|打开聊天/ })).not.toBeInTheDocument()
@@ -456,7 +456,6 @@ describe('DocumentPage mobile header and print', () => {
     expect(documentPrintCss).toMatch(/\.document-page \.document-header[\s\S]*display:\s*none\s*!important/)
     expect(documentPrintCss).toMatch(/\.document-comments[\s\S]*display:\s*none\s*!important/)
     expect(documentPrintCss).toMatch(/\.document-agent-rail[\s\S]*display:\s*none\s*!important/)
-    expect(documentPrintCss).toMatch(/\.entity-activity-panel[\s\S]*display:\s*none\s*!important/)
     expect(documentPrintCss).toMatch(/\.app:has\(\.document-page\)\s*>\s*:not\(\.document-page\)\s*\{\s*display:\s*none/)
     expect(documentPrintCss).not.toMatch(/#[0-9a-f]{3,8}\b/i)
   })

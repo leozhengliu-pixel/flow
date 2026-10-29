@@ -14,7 +14,6 @@ export interface IssueViewSplitPageProps {
   preview?: ReactNode
   summary?: MyIssuesDetailsSummary
   sidebar?: ReactNode
-  agentPanel?: ReactNode
   onClose?: () => void
   onSummaryItemSelect?: (tab: MyIssuesSummaryTab, item: MyIssuesSummaryItem) => void
 }
@@ -30,7 +29,6 @@ export function IssueViewSplitPage({
   preview,
   summary,
   sidebar,
-  agentPanel,
   onClose,
   onSummaryItemSelect,
 }: IssueViewSplitPageProps) {
@@ -42,7 +40,6 @@ export function IssueViewSplitPage({
       preview={preview}
       summary={summary}
       sidebar={sidebar}
-      agentPanel={agentPanel}
       onClose={onClose}
       onSummaryItemSelect={onSummaryItemSelect}
     />
