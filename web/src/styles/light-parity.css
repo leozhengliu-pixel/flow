@@ -149,6 +149,15 @@ html:root[data-theme="light"] body .dialog-content input:not([type="checkbox"]):
   border-radius: 8px;
   background: var(--lx-surface);
 }
+html:root[data-theme="light"] body .dialog-content.invite-members-dialog {
+  --invite-dialog-error: var(--connector-dialog-error);
+}
+html:root[data-theme="light"] body .dialog-content.invite-members-dialog textarea:focus {
+  border-color: var(--accent-primary);
+}
+html:root[data-theme="light"] body .dialog-content.invite-members-dialog textarea[aria-invalid="true"] {
+  border-color: var(--invite-dialog-error);
+}
 
 /* Tooltips take their light colours from the --tooltip-* tokens (components/ui/tooltip.css). */
 

@@ -6,6 +6,12 @@ import { inviteMembers } from '@/lib/api'
 import { makeBootstrap } from '@/test/fixtures'
 import { InviteMembersDialog } from './invite-members-dialog'
 
+const fs = await import('node:' + 'fs') as { readFileSync: (path: string, encoding: 'utf8') => string }
+const here = import.meta.url
+const readStyles = (name: string) => fs.readFileSync(decodeURIComponent(new URL(name, here).pathname), 'utf8')
+const inviteCss = readStyles('invite-members-dialog.css')
+const lightCss = readStyles('../../styles/light-parity.css')
+
 vi.mock('@/lib/api', () => ({ inviteMembers: vi.fn() }))
 vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
@@ -32,6 +38,19 @@ function renderDialog(props: Partial<Parameters<typeof InviteMembersDialog>[0]> 
 }
 
 describe('InviteMembersDialog', () => {
+  it('uses theme tokens for its surface, fields, placeholders and errors, retaining light focus and invalid borders', () => {
+    expect(inviteCss).toMatch(/\.dialog-content\.invite-members-dialog\s*\{[^}]*background: var\(--invite-dialog-bg\)/)
+    expect(inviteCss).toMatch(/textarea\s*\{[^}]*border: 0\.5px solid var\(--invite-dialog-field-border\)[^}]*background: var\(--invite-dialog-bg\)[^}]*color: var\(--theme-text-primary\)/)
+    expect(inviteCss).toMatch(/textarea::placeholder\s*\{\s*color: var\(--theme-text-tertiary\)/)
+    expect(inviteCss).toMatch(/\.invite-members-role-trigger\s*\{[^}]*background: var\(--invite-dialog-control-bg\)/)
+    expect(inviteCss).toMatch(/span\.is-placeholder\s*\{\s*color: var\(--theme-text-secondary\)/)
+    expect(inviteCss).toMatch(/\.invite-members-dialog__error\s*\{[^}]*color: var\(--invite-dialog-error\)/)
+    expect(lightCss).toMatch(/html:root\[data-theme="light"\] body \.dialog-content\.invite-members-dialog\s*\{\s*--invite-dialog-error: var\(--connector-dialog-error\)/)
+    expect(lightCss).toMatch(/\.dialog-content\.invite-members-dialog textarea:focus\s*\{\s*border-color: var\(--accent-primary\)/)
+    expect(lightCss).toMatch(/\.dialog-content\.invite-members-dialog textarea\[aria-invalid="true"\]\s*\{\s*border-color: var\(--invite-dialog-error\)/)
+    expect(inviteCss).not.toMatch(/#[\da-f]{3,8}\b|\b(?:rgb|rgba|hsl|hsla|lch|oklch)\(/i)
+  })
+
   it('matches the reference app layout and keeps Send invites disabled until an email is valid', async () => {
     const user = userEvent.setup()
     const { onClose, onInvited } = renderDialog()
