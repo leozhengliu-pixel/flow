@@ -5,7 +5,7 @@ import type { FormEvent, ReactNode } from "react";
 import { PropertyMenu } from "@/components/property/property-menu";
 import { GridLoader } from "@/components/ui/grid-loader";
 import { useI18n } from "@/i18n/i18n";
-import type { ChatBinding, ChatBindingInput, ChatIntegrationEvent, ChatIntegrationProvider } from "@/types/chat-integrations";
+import type { ChatBinding, ChatBindingInput, ChatBindingRequests, ChatIntegrationEvent, ChatIntegrationProvider } from "@/types/chat-integrations";
 import type { BootstrapData, Project } from "@/types/flow";
 
 import { bindingProjectIds, CHAT_BINDING_EVENTS, useBotChats } from "./chat-binding-support";
@@ -23,6 +23,17 @@ export function FieldRow({ id, label, description, inline, children }: { id?: st
 }
 
 const ALL_PROJECTS = "__all_projects";
+
+/** Reactions a binding can take as a request (the platform's emoji types). */
+const REQUEST_EMOJIS: { value: string; label: string }[] = [
+  { value: "OK", label: "👌 OK" },
+  { value: "THUMBSUP", label: "👍 Thumbs up" },
+  { value: "DONE", label: "✅ Done" },
+  { value: "JIAYI", label: "+1" },
+];
+const NO_EMOJI = "__no_emoji";
+const DEFAULT_PRIORITY = "__default_priority";
+const REQUEST_PRIORITIES = [{ value: "0", label: "No priority" }, { value: "1", label: "Urgent" }, { value: "2", label: "High" }, { value: "3", label: "Medium" }, { value: "4", label: "Low" }];
 
 /** The binding's projects: all of the team's, or a chosen set, in the shared multi-select picker. */
 function ChatProjectsPicker({ projects, selectedIds, onChange }: { projects: Project[]; selectedIds: string[]; onChange: (ids: string[]) => void }) {
@@ -76,6 +87,7 @@ export function ChatBindingRow({ binding, data, busy, canEdit, onEdit, onRevoke,
         {projectIds.length > 1 && <> / <span title={projectIds.map((id) => data.projects.find((item) => item.id === id)?.name ?? t("Project unavailable")).join(", ")}>{t("{count} projects").replace("{count}", String(projectIds.length))}</span></>}
         {` · ${binding.events.length === 1 ? t("1 notification type") : t("{count} notification types").replace("{count}", String(binding.events.length))}`}
         {` · ${t(binding.allowCreate ? "Creating issues allowed" : "Creating issues off")} · ${t(binding.allowUpdate ? "Updating issues allowed" : "Updating issues off")}`}
+        {binding.requests?.enabled && ` · ${t("Requests on")}`}
       </span>
       {binding.authorization && <span className="chat-binding-authorization">
         {t("Authorized by {name} on {date}").replace("{name}", authorizer?.displayName || authorizer?.name || t("a former member")).replace("{date}", formatDate(binding.authorization.authorizedAt, { dateStyle: "medium" }))}
@@ -115,6 +127,10 @@ export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeam
   const [enabled, setEnabled] = useState(binding?.enabled ?? true);
   const [allowCreate, setAllowCreate] = useState(binding?.allowCreate ?? true);
   const [allowUpdate, setAllowUpdate] = useState(binding?.allowUpdate ?? true);
+  const [requestsEnabled, setRequestsEnabled] = useState(binding?.requests?.enabled ?? false);
+  const [requestEmoji, setRequestEmoji] = useState(binding?.requests?.emoji ?? "");
+  const [requestTemplateId, setRequestTemplateId] = useState(binding?.requests?.templateId ?? "");
+  const [requestPriority, setRequestPriority] = useState(binding?.requests?.priority === undefined ? "" : String(binding.requests.priority));
   const [approved, setApproved] = useState(false);
   // The server decides which teams may be shared; see chatBindingScopePermitted.
   const bindable = new Set(bindableTeamIds);
@@ -126,7 +142,16 @@ export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeam
   const chatOptions = chats.map((chat) => ({ value: chat.id, label: chat.external ? `${chat.name} (${t("External group")})` : chat.name, disabled: chat.external, entityName: true }));
   if (binding && !chatOptions.some((item) => item.value === binding.chatId)) chatOptions.unshift({ value: binding.chatId, label: binding.chatName, disabled: false, entityName: true });
 
-  const valid = Boolean(chatId && teamId && teams.some((team) => team.id === teamId) && projectIds.every((id) => projects.some((project) => project.id === id)) && (!templateId || templates.some((template) => template.id === templateId)) && selectedChat?.external !== true && (selectedChat || binding?.chatId === chatId) && (events.length > 0 || allowCreate || allowUpdate) && approved);
+  const emojiOptions = [{ value: NO_EMOJI, label: t("No reaction") }, ...REQUEST_EMOJIS.map((item) => ({ value: item.value, label: t(item.label) }))];
+  if (requestEmoji && !REQUEST_EMOJIS.some((item) => item.value === requestEmoji)) emojiOptions.push({ value: requestEmoji, label: requestEmoji });
+  const valid = Boolean(chatId && teamId && teams.some((team) => team.id === teamId) && projectIds.every((id) => projects.some((project) => project.id === id)) && (!templateId || templates.some((template) => template.id === templateId)) && (!requestsEnabled || !requestTemplateId || templates.some((template) => template.id === requestTemplateId)) && selectedChat?.external !== true && (selectedChat || binding?.chatId === chatId) && (events.length > 0 || allowCreate || allowUpdate || requestsEnabled) && approved);
+  // Saved when turned on, or to turn off what the binding had.
+  const requests: ChatBindingRequests | undefined = requestsEnabled || binding?.requests ? {
+    enabled: requestsEnabled,
+    ...(requestEmoji ? { emoji: requestEmoji } : {}),
+    ...(requestTemplateId ? { templateId: requestTemplateId } : {}),
+    ...(requestPriority ? { priority: Number(requestPriority) } : {}),
+  } : undefined;
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!valid) return;
@@ -134,7 +159,7 @@ export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeam
       ...(binding ? { id: binding.id } : {}),
       chatId, chatName: selectedChat?.name ?? binding?.chatName ?? "", teamId,
       ...(projectIds.length ? { projectIds } : {}), ...(templateId ? { templateId } : {}),
-      events, enabled, allowCreate, allowUpdate, authorize: true,
+      events, enabled, allowCreate, allowUpdate, ...(requests ? { requests } : {}), authorize: true,
     });
   };
   const title = t(binding ? "Edit group binding" : "Add group binding");
@@ -154,10 +179,10 @@ export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeam
         {hasMore && <FieldRow label={<span className="chat-muted">{t("More groups are available.")}</span>}><button type="button" className="feature-button" disabled={loading || !cursor} onClick={() => void loadChats(cursor)}>{t("Load more groups")}</button></FieldRow>}
         {fixedTeamId
           ? <FieldRow label={t("Team")} description={!teams.length ? t("You can't bind groups for this team.") : undefined}><span className="chat-fixed-value" data-i18n-ignore>{fixedTeam?.name}</span></FieldRow>
-          : <FieldRow label={t("Team")} description={!teams.length ? t("No teams you manage can be shared.") : undefined}><SettingsSelect label={t("Team")} options={teams.map((team) => ({ value: team.id, label: team.name, entityName: true }))} value={teamId || NO_SELECTION} placeholder={t("Select team")} disabled={!teams.length} onChange={(value) => { setTeamId(value); setProjectIds([]); setTemplateId(""); setApproved(false); }} /></FieldRow>}
+          : <FieldRow label={t("Team")} description={!teams.length ? t("No teams you manage can be shared.") : undefined}><SettingsSelect label={t("Team")} options={teams.map((team) => ({ value: team.id, label: team.name, entityName: true }))} value={teamId || NO_SELECTION} placeholder={t("Select team")} disabled={!teams.length} onChange={(value) => { setTeamId(value); setProjectIds([]); setTemplateId(""); setRequestTemplateId(""); setApproved(false); }} /></FieldRow>}
         {fixedProjectId
           ? <FieldRow label={t("Project")}><span className="chat-fixed-value" data-i18n-ignore>{fixedProject?.name}</span></FieldRow>
-          : <FieldRow label={t("Projects")} description={t("Updates and group actions cover the issues of these projects only.")}><ChatProjectsPicker projects={projects} selectedIds={projectIds} onChange={(ids) => { setProjectIds(ids); setTemplateId(""); setApproved(false); }} /></FieldRow>}
+          : <FieldRow label={t("Projects")} description={t("Updates and group actions cover the issues of these projects only.")}><ChatProjectsPicker projects={projects} selectedIds={projectIds} onChange={(ids) => { setProjectIds(ids); setTemplateId(""); setRequestTemplateId(""); setApproved(false); }} /></FieldRow>}
         <FieldRow label={t("Default template")}><SettingsSelect label={t("Default template")} options={[{ value: NO_SELECTION, label: t("No template") }, ...templates.map((template) => ({ value: template.id, label: template.name, entityName: true }))]} value={templateId || NO_SELECTION} disabled={!teamId || !allowCreate} onChange={(value) => setTemplateId(value === NO_SELECTION ? "" : value)} /></FieldRow>
       </div>
       <h3 className="chat-subheading">{t("Notifications")}</h3>
@@ -169,6 +194,15 @@ export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeam
         <FieldRow inline label={t("Binding enabled")}><SettingsToggle label={t("Binding enabled")} checked={enabled} onChange={setEnabled} /></FieldRow>
         <FieldRow inline label={t("Allow creating issues")}><SettingsToggle label={t("Allow creating issues")} checked={allowCreate} onChange={(value) => { setAllowCreate(value); setApproved(false); }} /></FieldRow>
         <FieldRow inline label={t("Allow updating issues")}><SettingsToggle label={t("Allow updating issues")} checked={allowUpdate} onChange={(value) => { setAllowUpdate(value); setApproved(false); }} /></FieldRow>
+      </div>
+      <h3 className="chat-subheading">{t("Requests")}</h3>
+      <div className="feature-card">
+        <FieldRow inline label={t("Take requests")} description={t("Members turn a message into a request in the team's triage: mention the bot, add the reaction below, or use the message shortcut. The request follows its message's thread.")}><SettingsToggle label={t("Take requests")} checked={requestsEnabled} onChange={(value) => { setRequestsEnabled(value); setApproved(false); }} /></FieldRow>
+        {requestsEnabled && <>
+          <FieldRow label={t("Request reaction")} description={t("Adding this reaction to a message submits it as a request.")}><SettingsSelect label={t("Request reaction")} options={emojiOptions} value={requestEmoji || NO_EMOJI} onChange={(value) => setRequestEmoji(value === NO_EMOJI ? "" : value)} /></FieldRow>
+          <FieldRow label={t("Request template")}><SettingsSelect label={t("Request template")} options={[{ value: NO_SELECTION, label: t("No template") }, ...templates.map((template) => ({ value: template.id, label: template.name, entityName: true }))]} value={requestTemplateId || NO_SELECTION} disabled={!teamId} onChange={(value) => setRequestTemplateId(value === NO_SELECTION ? "" : value)} /></FieldRow>
+          <FieldRow label={t("Request priority")}><SettingsSelect label={t("Request priority")} options={[{ value: DEFAULT_PRIORITY, label: t("Team default") }, ...REQUEST_PRIORITIES.map((item) => ({ value: item.value, label: t(item.label) }))]} value={requestPriority || DEFAULT_PRIORITY} onChange={(value) => setRequestPriority(value === DEFAULT_PRIORITY ? "" : value)} /></FieldRow>
+        </>}
       </div>
       <div className="feature-card chat-approval">
         {privateTeam && <div className="feature-row chat-private-notice" role="note"><div><strong><Lock size={13} aria-hidden="true" />{t("This team is private")}</strong><span>{t("Binding doesn't add anyone to the team or change who can see it in Flow. Everyone in the group sees the selected updates; group actions still use each member's own Flow permissions.")}</span></div></div>}

@@ -71,6 +71,19 @@ export interface ChatIdentity {
   personalDelivery?: "unavailable";
 }
 
+/**
+ * A binding's request intake: a mention of the bot, the reaction or the
+ * message shortcut turns a message into a request in the team's triage.
+ */
+export interface ChatBindingRequests {
+  enabled: boolean;
+  /** The reaction (the platform's emoji type, such as "OK") that makes a request; absent leaves reactions alone. */
+  emoji?: string;
+  templateId?: string;
+  /** 0 (no priority) to 4 (low); absent uses the template's or the team's default. */
+  priority?: number;
+}
+
 export interface ChatBinding {
   id: string;
   connectionId: string;
@@ -86,6 +99,8 @@ export interface ChatBinding {
   enabled: boolean;
   allowCreate: boolean;
   allowUpdate: boolean;
+  /** Request intake: members turn the group's messages into requests in the team's triage. */
+  requests?: ChatBindingRequests;
   createdAt?: string;
   authorization?: ChatBindingAuthorization;
   revokedAt?: string;
