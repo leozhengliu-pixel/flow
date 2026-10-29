@@ -475,10 +475,14 @@ func (s *server) scimUser(w http.ResponseWriter, r *http.Request) {
 		action := "suspended"
 		if removed {
 			action = "removed"
+		} else {
+			// A removal publishes its own notice (RemoveMemberWithChanges).
+			s.store.PublishMemberStatus(r.Context(), workspaceID, item.User.ID, "suspended")
 		}
 		entries = append(entries, scimUserAudit(action, item, map[string]any{"deprovisionAction": mode}))
 	case !current.Active() && item.Active():
 		entries = append(entries, scimUserAudit("restored", item, map[string]any{"role": item.Role}))
+		s.store.PublishMemberStatus(r.Context(), workspaceID, item.User.ID, "active")
 		if _, wasMember := before[item.User.ID]; !wasMember {
 			// Removed on deprovisioning: rejoin the teams linked to their groups.
 			if err := s.resyncSCIMUserTeams(r, workspaceKey, workspaceID, item.User.ID); err != nil {
@@ -520,6 +524,8 @@ func (s *server) deprovisionSCIMUser(r *http.Request, workspaceKey, workspaceID 
 			return err
 		}
 		metadata["removedFromWorkspace"] = removed
+	} else {
+		s.store.PublishMemberStatus(r.Context(), workspaceID, current.User.ID, "suspended")
 	}
 	s.recordSCIMAudit(r, workspaceKey, []scimAuditEntry{scimUserAudit("deprovisioned", current, metadata)})
 	return nil

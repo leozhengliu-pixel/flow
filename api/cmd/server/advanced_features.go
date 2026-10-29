@@ -524,6 +524,9 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 			created.ContentState = *input.ContentState
 		}
 		if input.ContentData != nil {
+			if err := refuseNewFormerMemberMentions(data, nil, input.ContentData); err != nil {
+				return "", err
+			}
 			created.ContentData = input.ContentData
 		} else if input.Content != nil {
 			// Markdown-only content: the editor parses it (an empty editor
@@ -612,6 +615,9 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if input.ContentData != nil {
+			if err := refuseNewFormerMemberMentions(data, before.ContentData, input.ContentData); err != nil {
+				return err
+			}
 			document.ContentData = input.ContentData
 		} else if input.Content != nil && input.ContentState == nil && *input.Content != before.Content {
 			// A Markdown-only replacement (API, MCP) cannot merge into the
@@ -882,6 +888,9 @@ func (s *server) createDocumentComment(w http.ResponseWriter, r *http.Request) {
 		if input.AnchorID != "" && slices.ContainsFunc(comments, func(item domain.Comment) bool { return item.AnchorID == input.AnchorID }) {
 			return errConflict
 		}
+		if err := refuseNewFormerMemberMentions(data, nil, input.BodyData); err != nil {
+			return err
+		}
 		now := time.Now().UTC()
 		created = domain.Comment{ID: idgen.New("document_comment_"), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: now, User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), AnchorID: input.AnchorID, QuotedText: input.QuotedText}
 		data.Comments[document.ID] = append(comments, created)
@@ -965,6 +974,9 @@ func (s *server) updateDocumentComment(w http.ResponseWriter, r *http.Request) {
 			if project, projectErr := fullProjectByID(data, document.ProjectIDs[0]); projectErr == nil && len(project.TeamIDs) > 0 {
 				summaries = teamResolvedThreadSummaries(data, project.TeamIDs[0])
 			}
+		}
+		if err := refuseNewFormerMemberMentions(data, comments[index].BodyData, input.BodyData); err != nil {
+			return err
 		}
 		changed := applyCommentPatch(&comments[index], input, comments, summaries)
 		updated = comments[index]

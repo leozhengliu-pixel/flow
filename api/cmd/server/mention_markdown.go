@@ -84,7 +84,8 @@ func newMentionResolver(data *domain.Bootstrap, issues []domain.Issue) *mentionR
 			resolver.addApp(user)
 			continue
 		}
-		if suspended[user.ID] {
+		// Former members stay text: a new mention of one is refused.
+		if suspended[user.ID] || formerMember(data, user.ID) {
 			continue
 		}
 		for _, name := range []string{user.DisplayName, user.Name, resolver.usernames[user.ID]} {

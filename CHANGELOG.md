@@ -266,6 +266,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Former members get no new notifications, triage rotations skip them, and
   pickers no longer offer suspended members. See
   [People who left the workspace](docs/api.md#people-who-left-the-workspace).
+- A new mention of someone removed from or suspended in the workspace is
+  refused with 400 "This person is no longer a member of the workspace and
+  can't be mentioned" (it used to be saved silently and notify nobody); their
+  existing mentions stay and edits that keep them save. The "@" menu leaves
+  them out, and Markdown written through MCP keeps their name as text.
+  Suspending, removing or resuming a member, in settings or through SCIM, now
+  sends a realtime `workspace_member.*` event: other open sessions mark the
+  person inactive (or active again) at once instead of offering them in
+  pickers until a reload.
 - With several API servers, an issue write no longer undoes a workspace
   change another server made at the same time. Creating, editing or deleting
   an issue (and commenting, attaching, or adding it to a release) writes

@@ -238,6 +238,21 @@ pass over them, and a template whose default assignee left creates issues
 unassigned. Membership is read from the workspace's memberships at write
 time, so a resumed member can be assigned again at once.
 
+Mentions follow the same rule. A mention of a former member stays in the text
+it was written in (comments, documents, descriptions and updates render it as
+before, and an edit that keeps it saves), but rich text (`bodyData`,
+`contentData` or `descriptionData`) that adds a mention node of one is refused
+with `400` and `This person is no longer a member of the workspace and can't
+be mentioned`. A plain-text `@name` is kept as text; Markdown written through
+MCP does not turn a former member's name into a mention.
+
+Suspending, removing or resuming a member sends a realtime
+`workspace_member.suspended`, `workspace_member.removed` or
+`workspace_member.resumed` event (`aggregateId` and `payload.userId` are the
+member, `payload.status` is `suspended`, `removed` or `active`), including when
+SCIM provisioning makes the change, so open sessions update their people
+pickers without a reload.
+
 ## Rate limits
 
 Flow uses a leaky-bucket model: each budget refills continuously at

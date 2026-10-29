@@ -328,6 +328,7 @@ import { PeopleProvider } from '@/components/property/people-provider'
 import { WorkspaceStoreProvider } from '@/store/application-store-context'
 import { applyLabelStateRename, applyRealtimePatch, canApplyRealtimePatch, isLabelStateRenameEvent } from '@/store/apply-realtime-patch'
 import { classifyRealtimeEvent } from '@/lib/realtime-dispatch'
+import { applyMemberStatusChange, memberStatusChange } from '@/lib/member-status-realtime'
 import { ActiveTeamProvider } from '@/lib/active-team'
 import { TeamPagesLayout } from '@/components/team/team-pages-layout'
 import { isTeamPagesRoute } from '@/components/team/team-pages-routes'
@@ -1308,6 +1309,14 @@ function App() {
         // The Pulse feed and sidebar badge read the feed API, not the bootstrap.
         pulseUnread.schedule(workspace);
         window.dispatchEvent(new CustomEvent('flow:pulse-activity', { detail: event }));
+      }
+      const memberChange = memberStatusChange(event);
+      if (memberChange) {
+        // Pickers and the "@" menu stop offering a suspended or removed person at once.
+        setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? applyMemberStatusChange(current, memberChange) : current);
+        // A suspension or resumption changes only who is active; a removal also
+        // drops team memberships, which the reload below brings.
+        if (memberChange.status !== 'departed') return;
       }
       if (event.type === 'workspace_preferences.updated') {
         const settings = await fetchWorkspacePreferences(workspace);

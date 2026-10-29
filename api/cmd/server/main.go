@@ -3211,6 +3211,9 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		if len(input.LabelIDs) > 0 {
 			createUpdate.LabelIDs = &input.LabelIDs
 		}
+		if err := refuseNewFormerMemberDescriptionMentions(data, nil, createUpdate); err != nil {
+			return "", err
+		}
 		if _, err := applyUpdate(data, &created, createUpdate); err != nil {
 			return "", err
 		}
@@ -3807,6 +3810,9 @@ func (s *server) createInitiativeComment(w http.ResponseWriter, r *http.Request)
 		if commentAnchorTaken(initiative.Comments, input.AnchorID) {
 			return errConflict
 		}
+		if err := refuseNewFormerMemberMentions(data, nil, input.BodyData); err != nil {
+			return err
+		}
 		created = domain.Comment{ID: idgen.New("initiative_comment_"), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: parentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), AnchorID: input.AnchorID, QuotedText: input.QuotedText}
 		initiative.Comments = append(initiative.Comments, created)
 		initiative.UpdatedAt = created.CreatedAt
@@ -3865,6 +3871,9 @@ func (s *server) updateInitiativeComment(w http.ResponseWriter, r *http.Request)
 		if input.ExpectedVersion != nil && comment.Version != *input.ExpectedVersion {
 			current = *comment
 			return errConflict
+		}
+		if err := refuseNewFormerMemberMentions(data, comment.BodyData, input.BodyData); err != nil {
+			return err
 		}
 		changed := applyCommentPatch(comment, domain.CommentUpdateInput{Body: input.Body, BodyData: input.BodyData}, nil, false)
 		updated = *comment
@@ -3974,6 +3983,9 @@ func (s *server) createInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 		if health == "noUpdate" {
 			health = "onTrack"
 		}
+		if err := refuseNewFormerMemberMentions(data, nil, input.BodyData); err != nil {
+			return err
+		}
 		created = domain.InitiativeUpdate{ID: idgen.New("initiative_update_"), InitiativeID: id, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, Health: health, CreatedAt: time.Now().UTC(), User: data.Viewer, Comments: []domain.Comment{}, Reactions: map[string][]string{}, Attachments: []domain.Attachment{}}
 		created.Snapshot = initiativePulseSnapshot(data, *initiative, created.CreatedAt)
 		created.Diff = pulseDiffBetween(latestInitiativeSnapshot(data.InitiativeUpdates[id]), created.Snapshot)
@@ -4019,6 +4031,9 @@ func (s *server) updateInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 			updates[index].Body = strings.TrimSpace(*input.Body)
 		}
 		if input.BodyData != nil {
+			if err := refuseNewFormerMemberMentions(data, updates[index].BodyData, input.BodyData); err != nil {
+				return err
+			}
 			updates[index].BodyData = input.BodyData
 		}
 		if input.Health != nil {
@@ -4109,6 +4124,9 @@ func (s *server) createInitiativeUpdateComment(w http.ResponseWriter, r *http.Re
 			return errNotFound
 		}
 		now := time.Now().UTC()
+		if err := refuseNewFormerMemberMentions(data, nil, input.BodyData); err != nil {
+			return err
+		}
 		comment := domain.Comment{ID: idgen.New("initiative_update_comment_"), Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: now, User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
 		updates[index].Comments = append(updates[index].Comments, comment)
 		data.InitiativeUpdates[initiativeID] = updates
@@ -4464,6 +4482,9 @@ func (s *server) createProjectComment(w http.ResponseWriter, r *http.Request) {
 		if commentAnchorTaken(project.Comments, input.AnchorID) {
 			return errConflict
 		}
+		if err := refuseNewFormerMemberMentions(data, nil, input.BodyData); err != nil {
+			return err
+		}
 		created = domain.Comment{ID: idgen.New("project_comment_"), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), AnchorID: input.AnchorID, QuotedText: input.QuotedText}
 		project.Comments = append(project.Comments, created)
 		project.UpdatedAt = created.CreatedAt
@@ -4523,6 +4544,9 @@ func (s *server) updateProjectComment(w http.ResponseWriter, r *http.Request) {
 		if input.ExpectedVersion != nil && comment.Version != *input.ExpectedVersion {
 			current = *comment
 			return errConflict
+		}
+		if err := refuseNewFormerMemberMentions(data, comment.BodyData, input.BodyData); err != nil {
+			return err
 		}
 		changed := applyCommentPatch(comment, domain.CommentUpdateInput{Body: input.Body, BodyData: input.BodyData}, nil, false)
 		updated = *comment
@@ -4642,6 +4666,9 @@ func (s *server) createProjectUpdate(w http.ResponseWriter, r *http.Request) {
 			if health == "noUpdate" {
 				health = "onTrack"
 			}
+		}
+		if err := refuseNewFormerMemberMentions(data, nil, input.BodyData); err != nil {
+			return "", err
 		}
 		created = domain.ProjectUpdate{ID: idgen.New("project_update_"), ProjectID: id, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, Health: health, CreatedAt: now, User: data.Viewer, Comments: []domain.Comment{}, Reactions: map[string][]string{}, Attachments: []domain.Attachment{}}
 		if snapshot != nil {
@@ -4763,6 +4790,9 @@ func (s *server) updateProjectUpdate(w http.ResponseWriter, r *http.Request) {
 			updates[index].Body = strings.TrimSpace(*input.Body)
 		}
 		if input.BodyData != nil {
+			if err := refuseNewFormerMemberMentions(data, updates[index].BodyData, input.BodyData); err != nil {
+				return err
+			}
 			updates[index].BodyData = input.BodyData
 		}
 		if input.Health != nil {
@@ -4806,6 +4836,9 @@ func (s *server) createProjectUpdateComment(w http.ResponseWriter, r *http.Reque
 			return errNotFound
 		}
 		now := time.Now().UTC()
+		if err := refuseNewFormerMemberMentions(data, nil, input.BodyData); err != nil {
+			return err
+		}
 		comment := domain.Comment{ID: idgen.New("project_update_comment_"), Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: now, User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
 		updates[index].Comments = append(updates[index].Comments, comment)
 		data.ProjectUpdates[projectID] = updates
@@ -4910,6 +4943,9 @@ func (s *server) updateIssue(w http.ResponseWriter, r *http.Request) {
 				current = *issue
 				return errConflict
 			}
+		}
+		if err := refuseNewFormerMemberDescriptionMentions(data, issue, input); err != nil {
+			return err
 		}
 		changes, err := applyUpdate(data, issue, input)
 		if err != nil {
@@ -5079,6 +5115,9 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			before, _ := json.Marshal(issue)
+			if err := refuseNewFormerMemberDescriptionMentions(data, issue, input.Update); err != nil {
+				return err
+			}
 			changes, err := applyUpdate(data, issue, input.Update)
 			if err != nil {
 				return err
@@ -5152,6 +5191,9 @@ func (s *server) createComment(w http.ResponseWriter, r *http.Request) {
 				return errNotFound
 			}
 		}
+		if err := refuseNewFormerMemberMentions(data, nil, input.BodyData); err != nil {
+			return err
+		}
 		comment = domain.Comment{ID: idgen.New("comment_"), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
 		if key := store.CommentCreationKey(r.Context()); key != "" {
 			comment.ID = key
@@ -5198,6 +5240,9 @@ func (s *server) updateComment(w http.ResponseWriter, r *http.Request) {
 		issue, issueErr := issueByID(data, issueID)
 		if issueErr != nil {
 			return issueErr
+		}
+		if err := refuseNewFormerMemberMentions(data, data.Comments[issueID][index].BodyData, input.BodyData); err != nil {
+			return err
 		}
 		changed := applyCommentPatch(&data.Comments[issueID][index], input, data.Comments[issueID], teamResolvedThreadSummaries(data, issue.Team.ID))
 		updated = data.Comments[issueID][index]

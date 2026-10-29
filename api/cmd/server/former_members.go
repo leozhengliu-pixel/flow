@@ -43,6 +43,51 @@ func (s *server) formerMemberOutsideWrite(ctx context.Context, workspace, id str
 	return err == nil && former[id]
 }
 
+// errFormerMemberMention is the 400 a write gets for content that newly
+// mentions a former member.
+var errFormerMemberMention error = formerMemberMentionError{}
+
+type formerMemberMentionError struct{}
+
+func (formerMemberMentionError) Error() string {
+	return "This person is no longer a member of the workspace and can't be mentioned"
+}
+func (formerMemberMentionError) Unwrap() error { return errInvalid }
+
+// refuseNewFormerMemberMentions refuses editor content (after) that adds a
+// mention node of a former member. Mentions the content already had (before)
+// stay, so history and an edit that keeps them render and save as they are;
+// a plain-text @handle is text and never refused.
+func refuseNewFormerMemberMentions(data *domain.Bootstrap, before, after any) error {
+	mentioned := []string{}
+	collectMentionIDs(after, &mentioned)
+	if len(mentioned) == 0 {
+		return nil
+	}
+	kept := []string{}
+	collectMentionIDs(before, &kept)
+	for _, id := range mentioned {
+		if !slices.Contains(kept, id) && formerMember(data, id) {
+			return errFormerMemberMention
+		}
+	}
+	return nil
+}
+
+// refuseNewFormerMemberDescriptionMentions applies the mention rule to an
+// issue write that replaces the description. Only request writes check it:
+// templates, recurring issues and automations copy stored content as it is.
+func refuseNewFormerMemberDescriptionMentions(data *domain.Bootstrap, issue *domain.Issue, input domain.IssueUpdateInput) error {
+	if input.DescriptionData == nil {
+		return nil
+	}
+	var previous map[string]any
+	if issue != nil && issue.DocumentContent != nil {
+		previous = issue.DocumentContent.ContentData
+	}
+	return refuseNewFormerMemberMentions(data, previous, input.DescriptionData)
+}
+
 // refuseNewFormerMembers refuses ids that name a former member, except the
 // ones already referenced (kept): a write that leaves an existing reference
 // as it is never fails for it.
