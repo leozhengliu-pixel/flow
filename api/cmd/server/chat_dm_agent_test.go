@@ -659,6 +659,11 @@ func TestChatDirectMessageRedactsSensitiveContent(t *testing.T) {
 			t.Errorf("redact %q = %q", keep, got)
 		}
 	}
+	// The app's suggestion chips become a note.
+	raw, _ := json.Marshal(chatDMReplyCard(chatDMReplyView{Status: "done", Text: "Three issues.\n\n```suggestions\nList my issues\nShow urgent ones\n```"}, false))
+	if strings.Contains(string(raw), "```") || !strings.Contains(string(raw), "You could also ask: List my issues · Show urgent ones") {
+		t.Fatalf("suggestions: %s", raw)
+	}
 	// An answer with a secret reaches the card redacted; the chat keeps it.
 	f := newChatDMFixture(t, func(int, string) string {
 		return chatDMTextTurn("The deploy key is ghp_abcdefghijklmnopqrstuvwxyz0123 and password: s3cr3t!")

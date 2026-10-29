@@ -463,10 +463,28 @@ func chatDMStepSummary(steps []chatDMStep, zh bool) string {
 	return summary
 }
 
+// chatDMSuggestions is the follow-up suggestions block an answer may end with
+// (the app shows it as chips).
+var chatDMSuggestions = regexp.MustCompile("(?s)```suggestions[^\n]*\n(.*?)(?:```|$)")
+
+func chatDMSplitSuggestions(text string) (string, []string) {
+	suggestions := []string{}
+	text = chatDMSuggestions.ReplaceAllStringFunc(text, func(block string) string {
+		for line := range strings.SplitSeq(chatDMSuggestions.FindStringSubmatch(block)[1], "\n") {
+			if line = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(line), "-*")); line != "" {
+				suggestions = append(suggestions, line)
+			}
+		}
+		return ""
+	})
+	return strings.TrimSpace(text), suggestions
+}
+
 func chatDMReplyCard(view chatDMReplyView, zh bool) map[string]any {
 	title, template := chatDMText(zh, "Flow Agent", "Flow Agent"), "blue"
 	elements := []map[string]any{}
-	text := chatDMRedact(strings.TrimSpace(view.Text), zh)
+	answer, suggestions := chatDMSplitSuggestions(view.Text)
+	text := chatDMRedact(answer, zh)
 	switch view.Status {
 	case "working":
 		if text == "" {
@@ -498,6 +516,9 @@ func chatDMReplyCard(view chatDMReplyView, zh bool) map[string]any {
 	}
 	if summary := chatDMStepSummary(view.Steps, zh); summary != "" {
 		elements = append(elements, chatDMNote(summary))
+	}
+	if len(suggestions) > 0 && view.Status == "done" {
+		elements = append(elements, chatDMNote(chatDMRedact(chatDMText(zh, "You could also ask: ", "你还可以问：")+strings.Join(suggestions, chatDMText(zh, " · ", " · ")), zh)))
 	}
 	if view.Link != "" {
 		elements = append(elements, chatDMButtons(chatDMLinkButton(chatDMText(zh, "Open in Flow", "在 Flow 中打开"), view.Link, false)))
