@@ -13,6 +13,8 @@ type Logged = { method: string; path: string; body: Record<string, unknown> }
 function fakeServer() {
   const issues = new Map<string, StoredIssue>()
   const log: Logged[] = []
+  // Other issues a write changes as a side effect (closing the last sub-issue closes its parent).
+  const sideEffects = new Map<string, string>()
   const view = (issue: StoredIssue) => ({ id: issue.id, version: issue.version, ...issue.fields }) as unknown as Issue
   const apply = (issue: StoredIssue, input: IssueUpdateInput) => {
     const { expectedVersion: _expected, documentUpdateIds: _updates, expectedDocumentVersion: _documentVersion, ...fields } = input
@@ -34,8 +36,17 @@ function fakeServer() {
       const issue = issues.get(decodeURIComponent(single[1]))
       if (!issue) return reply({ error: 'issue not found' }, 404)
       if (body.expectedVersion !== undefined && body.expectedVersion !== issue.version) return reply({ error: 'This item changed in another session', code: 'VERSION_CONFLICT', current: view(issue) }, 409)
+      const before = issue.version
       apply(issue, body)
-      return reply(view(issue))
+      const result = view(issue) as Issue & { affectedIssues?: Array<{ id: string; version: number }> }
+      const affected = sideEffects.get(issue.id)
+      if (affected && issue.version > before && body.stateId === 'done') {
+        const other = issues.get(affected)!
+        other.fields = { ...other.fields, stateId: 'done' }
+        other.version += 1
+        result.affectedIssues = [{ id: other.id, version: other.version }]
+      }
+      return reply(result)
     }
     if (method === 'POST' && /^\/api\/(?:issues|issue-records)\/batch$/.test(path)) {
       const updated = (body.issueIds as string[]).map(id => { const issue = issues.get(id)!; apply(issue, body.update); return view(issue) })
@@ -56,6 +67,8 @@ function fakeServer() {
     log,
     fetch: vi.fn(handle),
     seed(id: string, fields: Record<string, unknown> = {}) { issues.set(id, { id, version: 1, fields }) },
+    /** Closing `id` also closes `parentId`, which raises the parent's version. */
+    closesParent(id: string, parentId: string) { sideEffects.set(id, parentId) },
     /** A change made by another session. */
     foreign(id: string, fields: Record<string, unknown>) { apply(issues.get(id)!, fields) },
     patches(id: string) { return log.filter(entry => entry.method === 'PATCH' && entry.path.endsWith(`/${id}`)) },
@@ -202,5 +215,55 @@ describe('issue writes from one tab', () => {
     await expect(Promise.all([repeat, edit])).resolves.toHaveLength(2)
     expect(server.patches('issue-1').map(entry => entry.body.expectedVersion)).toEqual([1, 1])
     expect(server.issues.get('issue-1')?.version).toBe(2)
+  })
+
+  it('edits a parent right after closing its last sub-issue, before any realtime update', async () => {
+    server.seed('parent', { stateId: 'todo' })
+    server.seed('child', { stateId: 'todo' })
+    server.closesParent('child', 'parent')
+    // Both screens still show version 1 of each issue.
+    const closed = await updateIssue('child', { stateId: 'done', expectedVersion: 1 })
+    expect(closed).not.toHaveProperty('affectedIssues')
+    expect(server.issues.get('parent')?.version).toBe(2)
+    await expect(updateIssue('parent', { priority: 2, expectedVersion: 1 })).resolves.toMatchObject({ version: 3, priority: 2 })
+    expect(server.patches('parent').map(entry => entry.body.expectedVersion)).toEqual([2])
+    expect(server.issues.get('parent')).toMatchObject({ version: 3, fields: { stateId: 'done', priority: 2 } })
+  })
+
+  it('chains several quick edits of the parent after the side effect', async () => {
+    server.seed('parent', { stateId: 'todo' })
+    server.seed('child', { stateId: 'todo' })
+    server.closesParent('child', 'parent')
+    await updateIssue('child', { stateId: 'done', expectedVersion: 1 })
+    const quick = [updateIssue('parent', { priority: 1, expectedVersion: 1 }), updateIssue('parent', { labelIds: ['bug'], expectedVersion: 1 })]
+    await expect(Promise.all(quick)).resolves.toHaveLength(2)
+    expect(server.patches('parent').map(entry => entry.body.expectedVersion)).toEqual([2, 3])
+    expect(server.issues.get('parent')?.version).toBe(4)
+  })
+
+  it('still refuses an edit of an affected issue from a version no write of ours produced', async () => {
+    server.seed('parent', { stateId: 'todo' })
+    server.seed('child', { stateId: 'todo' })
+    server.closesParent('child', 'parent')
+    server.foreign('parent', { title: 'Elsewhere' })
+    await updateIssue('child', { stateId: 'done', expectedVersion: 1 })
+    // The parent moved to 2 elsewhere and to 3 by the side effect: version 1 is stale.
+    await expect(updateIssue('parent', { priority: 2, expectedVersion: 1 })).rejects.toMatchObject({ status: 409 })
+  })
+
+  it('records the issues a bulk edit changed outside the bulk edit', async () => {
+    server.seed('parent', { stateId: 'todo' })
+    server.seed('child', { stateId: 'todo' })
+    const batch = vi.fn((url: string, init?: RequestInit) => {
+      if (init?.method === 'POST' && new URL(url, 'http://flow.local').pathname === '/api/issues/batch') {
+        return Promise.resolve({ ok: true, status: 200, clone() { return this }, json: async () => [{ id: 'child', version: 2, stateId: 'done', affectedIssues: [{ id: 'parent', version: 2 }] }] } as unknown as Response)
+      }
+      return server.fetch(url, init)
+    })
+    vi.stubGlobal('fetch', batch)
+    server.issues.get('parent')!.version = 2
+    await batchUpdateIssues(['child'], { stateId: 'done' })
+    await expect(updateIssue('parent', { priority: 2, expectedVersion: 1 })).resolves.toMatchObject({ version: 3 })
+    expect(server.patches('parent').map(entry => entry.body.expectedVersion)).toEqual([2])
   })
 })

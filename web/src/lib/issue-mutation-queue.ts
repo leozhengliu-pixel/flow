@@ -15,6 +15,12 @@ import type { Issue, IssueUpdateInput } from '@/types/flow'
  * writes have moved past, so it is sent with the newest version instead. Any
  * other expected version is sent as given: a change from another session still
  * answers 409.
+ *
+ * A write can also change other issues as a side effect (closing the last
+ * sub-issue closes its parent, closing a parent closes its sub-issues). The
+ * server lists them with their new versions in the response (`affectedIssues`),
+ * and they are recorded the same way, as versions our own write produced, so an
+ * edit of the parent made before the realtime update arrives is not a 409.
  */
 
 type Lineage = { from: number; to: number }
@@ -53,8 +59,20 @@ function versionOf(value: unknown) {
   return typeof version === 'number' && Number.isFinite(version) ? version : undefined
 }
 
+/** Records the versions of the other issues a successful write of this tab changed. */
+function recordAffected(result: unknown) {
+  const written = result as Partial<Issue> | null | undefined
+  const affected = written?.affectedIssues
+  if (!written || !Array.isArray(affected)) return
+  // Each was raised by this write, from the version just below.
+  for (const issue of affected) if (issue?.id) recordWrite(issue.id, undefined, issue)
+  // Only the queue reads it; the issue the caller gets is the issue.
+  delete written.affectedIssues
+}
+
 /** Records the version a successful write of this tab produced. */
 function recordWrite(id: string, sent: number | undefined, result: unknown) {
+  recordAffected(result)
   const version = versionOf(result)
   if (version === undefined) return
   const lineage = lineages.get(id)

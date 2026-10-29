@@ -565,6 +565,7 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 	}
 	if err == nil && triageIntelligenceWorkspaceEnabled(s, query.Workspace) {
 		if generated, generationErr := s.generateTriageIntelligenceForIssue(store.WithoutIssueRecordMutations(r.Context()), query.Workspace, id); generationErr == nil {
+			generated.AffectedIssues = updated.AffectedIssues
 			updated = generated
 		} else if !errors.Is(generationErr, store.ErrNoMutation) {
 			log.Printf("generate triage intelligence issue=%s: %v", id, generationErr)

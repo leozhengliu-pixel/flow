@@ -73,6 +73,9 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 	metadataWritten := false
 	// written: the issues this write changed (the target and its family).
 	var written []string
+	// affected: the other issues whose version this write raised (an
+	// auto-closed parent, sub-issues moved with their parent).
+	var affected []domain.IssueVersion
 	// A metadata record the write changes (a project's progress, a document's
 	// scope) was changed on another server in the same field: refresh it and
 	// rerun the write; after the last attempt the conflict is the error.
@@ -81,7 +84,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		if metadata, err = loadMetadata(); err != nil {
 			return err
 		}
-		progressMetadata, metadataWritten, written = nil, false, nil
+		progressMetadata, metadataWritten, written, affected = nil, false, nil, nil
 		// The callback edits a metadata clone and progress refreshes copy
 		// the projects they change, so readers keep the committed snapshot
 		// while the transaction runs (see SQLiteStore.writeMu).
@@ -281,6 +284,9 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 					return err
 				}
 				written = append(written, issue.ID)
+				if issue.ID != id && issue.Version != previous[issue.ID].Version {
+					affected = append(affected, domain.IssueVersion{ID: issue.ID, Version: issue.Version})
+				}
 			}
 		}
 		if issueRenumbering(ctx) {
@@ -382,6 +388,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 	// Servers sharing the hot cache must not serve the records or query pages
 	// from before this write (a re-parented issue's old parent, say).
 	s.invalidateIssueRecords(ctx, workspace, written)
+	result.AffectedIssues = affected
 	if sink := s.webhook(); sink != nil {
 		sink(workspace, webhookEvent(ctx, event, realtime))
 	}
