@@ -14,7 +14,8 @@ import (
 )
 
 // Built-in agent sessions on the agent worker (FLOW_AGENT_RUNTIME=worker, docs/agent-runtime-design.md §6.7, §7.2):
-// a comment-thread mention runs as an agent run of kind thread instead of executeBuiltinApplication in the API.
+// a comment-thread mention runs as an agent run of kind thread, a delegated issue as one of kind delegation (its
+// Coding transfer through the run guard), instead of executeBuiltinApplication in the API.
 // The session, its activities and its delivery are unchanged; only who runs the model loop moves:
 //
 //   - delivery: the application worker claims the pending task as before, posts the same first activity (the
@@ -58,10 +59,10 @@ func workerThreadInfo(run store.AgentRun) (workerThreadRunInfo, bool) {
 	return *payload.Thread, true
 }
 
-// agentTaskOnWorker reports whether a built-in agent session's runs execute on the agent worker: a comment-thread
-// mention (delegations stay in-process).
-func (s *server) agentTaskOnWorker(task domain.AgentTask) bool {
-	return s.agentRuntimeWorker() && s.agentRuntimeEnabled() && task.Trigger != "delegation"
+// agentTaskOnWorker reports whether a built-in agent session's runs execute on the agent worker: comment-thread
+// mentions and delegated issues alike.
+func (s *server) agentTaskOnWorker(domain.AgentTask) bool {
+	return s.agentRuntimeWorker() && s.agentRuntimeEnabled()
 }
 
 // workerTaskRun is the session's latest built-in run on the worker, if any.

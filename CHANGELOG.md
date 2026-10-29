@@ -80,8 +80,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   chip questions show on the reply and wait for the answer (Stop cancels
   them), the words before a question stay in the reply, and `save_loop` rows
   read "Updated workflow definition draft" or "Created automation" as before.
-- Flow Agent mentions in comment threads run on the agent worker
-  (`FLOW_AGENT_RUNTIME=worker`). The thread shows the same activities as
+- Flow Agent mentions in comment threads and issues delegated to Flow Agent
+  run on the agent worker (`FLOW_AGENT_RUNTIME=worker`). A delegated issue
+  that asks for code changes still enters Coding (in the environment its
+  repository names) or reports the blocker, as in-process. The thread shows
+  the same activities as
   before (the first look at the issue at once, each tool call, the streamed
   text and the answer); questions with options and calls waiting for approval
   end the run and the answer continues it, with the same tool and step
