@@ -5,6 +5,9 @@ export const agentHistoryZhCN: Record<string, string> = {
   "Open in toolbar": "在工具栏中打开",
   "Open past agent chat…": "打开过往 Agent 对话…",
   "Agent chat": "Agent 对话",
+  // A chat started in a direct message with the workspace's chat bot
+  "Started in a Lark direct message": "在 Lark 私聊中发起",
+  "Started in a Feishu direct message": "在飞书私聊中发起",
   // Bottom-right chat history popover
   "Chat history…": "对话历史…",
   "Related to this issue": "与此事项相关",

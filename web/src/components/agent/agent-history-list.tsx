@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/row-context-menu";
 import { useI18n } from "@/i18n/i18n";
 import type { AgentSession } from "@/types/flow";
+import { AgentOriginBadge } from "./agent-origin-badge";
 import { agentSessionUnread, formatAgentHistoryTime } from "./agent-read-state";
 import styles from "./agent-page.module.css";
 
@@ -75,6 +76,7 @@ export function AgentHistoryList({
                         <span className="sr-only">{t("Unread")}: </span>
                       </>}
                       <span className={styles.historyTitle} data-i18n-ignore>{session.title}</span>
+                      <AgentOriginBadge origin={session.origin} />
                       <time className={styles.historyTime} dateTime={session.updatedAt}>{formatAgentHistoryTime(session.updatedAt, t)}</time>
                     </a>
                   </FlowContextMenuTrigger>

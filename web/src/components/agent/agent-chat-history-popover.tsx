@@ -21,6 +21,7 @@ import {
   type ChatHistoryEntity,
   type ChatHistorySection,
 } from "./agent-chat-history-model";
+import { AgentOriginBadge } from "./agent-origin-badge";
 import { agentSessionUnread, formatAgentHistoryTime } from "./agent-read-state";
 import styles from "./agent-chat-history-popover.module.css";
 
@@ -237,6 +238,7 @@ function ChatHistoryDialog({
           {unread && <span aria-hidden="true" className={styles.dot} />}
           {unread && <span className="sr-only">{t("Unread")}: </span>}
           <span className={styles.rowTitleText} data-i18n-ignore>{chatHistoryTitle(session, newChat)}</span>
+          <AgentOriginBadge origin={session.origin} />
         </span>
         <span className={styles.rowMeta}>
           {toolbarIds.has(session.id) && <span>{t("Toolbar")}</span>}

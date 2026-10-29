@@ -21,6 +21,10 @@ not supported by this connection flow.
    - `im:message.group_at_msg:readonly` (read group messages that mention
      the bot);
    - `im:chat:read` (read the bot's groups);
+   - for [direct messages with the bot](#direct-messages-with-the-bot):
+     `im:message` (reply to and update the bot's messages),
+     `im:message.p2p_msg:readonly` (read direct messages sent to the bot)
+     and `im:resource` (download the images and files members send it);
    - `tenant:tenant:readonly` (获取企业信息, obtain the tenant's
      information), so Flow reads the tenant's key and name with the app's
      tenant token on every connection check. It is an ordinary app
@@ -49,11 +53,12 @@ not supported by this connection flow.
    approved yet.
 7. Copy Flow's callback URL into the application's HTTP event and callback
    configuration. Enable encryption using the same Encrypt Key and
-   Verification Token. Subscribe to `im.message.receive_v1` and the current
-   `card.action.trigger` callback; do not also subscribe to the legacy card
-   callback. For [link previews](#link-previews), also subscribe to the
-   `url.preview.get` callback. Publish configuration changes when required
-   by the platform.
+   Verification Token. Subscribe to `im.message.receive_v1` (it delivers
+   group mentions and, with `im:message.p2p_msg:readonly`, direct messages)
+   and the current `card.action.trigger` callback; do not also subscribe to
+   the legacy card callback. For [link previews](#link-previews), also
+   subscribe to the `url.preview.get` callback. Publish configuration changes
+   when required by the platform.
 8. Add the bot to an internal group and allow it to speak. Back in Flow, select
    the group, a team, an optional compatible project/template, and the
    notification and issue-action options. Saving a group binding explicitly
@@ -194,6 +199,66 @@ protection send none. Unlinking or leaving the workspace stops delivery,
 including messages already queued. When the platform refuses a message
 because the app isn't available to the member's account (its availability
 range), the notifications row says so; the next delivered message clears it.
+
+### Direct messages with the bot
+
+A direct message to the app's bot is the Flow Agent. It needs the bot
+capability, the `im.message.receive_v1` event subscription, the
+`card.action.trigger` callback and the `im:message`,
+`im:message.p2p_msg:readonly` and `im:resource` permissions (see
+[Connect an application](#connect-an-application)).
+
+- **Unlinked accounts** get a card that links the chat account to Flow
+  (**Personal > Connected accounts**), explaining that replies run with the
+  member's own Flow permissions. Nothing else happens until they link it.
+- **Linked members** use the Flow Agent as they would in the app: it runs as
+  them, with exactly their permissions (private content reaches only their
+  own conversation), the same request rate limits, tool budget, approvals
+  and write ledger, on either agent runtime (in process or
+  `FLOW_AGENT_RUNTIME=worker`). Each conversation is an Agent chat listed on
+  the Agent page, marked **Lark** or **飞书**. The answer streams into one
+  card the bot updates as it goes (at most about once a second, with a final
+  update at the end), with the steps it ran (done, failed, waiting) and
+  **Open in Flow**. What it says it did comes from its tool calls: a write
+  that failed is counted and listed.
+- **Replies** to the bot's card (or to the member's first message) continue
+  the same chat; a new message starts a new one.
+- **Approvals**: a call of a connector set to always ask gets its own card
+  with **Approve** and **Reject**; the answer resumes the reply. The card
+  names the step and shows its arguments with secrets hidden.
+- **Images and files** sent in the message (or in rich text) become the chat
+  message's attachments with the composer's limits: up to 8 files of at most
+  2 MB; images reach the model, text files are read, other files are named.
+- **A reply to a personal notification card** adds the reply as a comment on
+  its issue, as the member.
+- **Quick commands** answer without the agent: `new issue` / `新建事项`
+  (optionally followed by a title) opens a form with team, title,
+  description, assignee and priority that creates the issue;
+  `my issues` / `我的事项` lists the member's open assigned issues and
+  `inbox` / `收件箱` their latest notifications, as cards with links; a
+  pasted Flow issue or project link shows a preview, only when the member
+  can open it. Anything else goes to the agent.
+- **Several workspaces**: a member who linked their account in several
+  workspaces of the same tenant (each workspace connects its own app) is
+  asked on their first message which one to use; the choice is remembered,
+  and `switch workspace` / `切换工作区` changes it. Each workspace runs with
+  the member's account linked there.
+
+Workspaces with sensitive data protection answer direct messages with a link
+to Flow and send no content. Elsewhere, secrets (keys, tokens, passwords,
+private keys), payment card numbers and national ID numbers are hidden in
+what the bot sends, and tool arguments and results are never sent; the chat
+in Flow keeps the full answer. When the agent is not set up, not available
+to the member's role, or the member sends too many requests, the card says
+so. When the platform refuses to message the account because the app isn't
+available to it (code `230013`), the member's connected-account row shows
+it.
+
+Unlinking the account (or the workspace link it acts through) stops
+everything: later messages get the link card, the cards' pending actions are
+deleted with the account, and a reply that is running stops and says so. The
+conversation state (which chat a message continues, the chosen workspace) is
+kept with the linked account for 30 days.
 
 Mention the bot with `@Flow create issue <title>` or `@Flow 创建事项 <title>`.
 The bot sends a personal confirmation form with the bound team/project,
@@ -390,6 +455,9 @@ Also create an issue with the message shortcut in a bound group and in a
 direct conversation, use the card controls on a group card and on a personal
 notification card, and post an issue link in a bound and an unbound group as
 a member of a private team and as one outside it.
+Then send the bot a direct message with an image, reply to its card,
+approve a held call, reply to a notification card and try each quick
+command; unlink the account and confirm the next message gets the link card.
 
 ### Verify with a test tenant
 

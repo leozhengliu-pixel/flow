@@ -9,6 +9,21 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Chat with the Flow Agent in a direct message with the workspace's Lark or
+  Feishu bot. It runs as the linked member with exactly their Flow
+  permissions, rate limits, tool budget and approvals, on either agent
+  runtime; each conversation is an Agent chat marked **Lark** or **飞书** on
+  the Agent page. The answer streams into one card, replies continue the
+  chat, held calls get an Approve / Reject card, and images and files become
+  attachments. `new issue` / `新建事项`, `my issues` / `我的事项`,
+  `inbox` / `收件箱` and pasted Flow links answer with cards; a reply to a
+  personal notification card comments on its issue. Members linked in
+  several workspaces of the tenant pick one (`switch workspace` /
+  `切换工作区` changes it). Unlinked accounts get a card to link; unlinking
+  stops a running reply. Secrets are hidden in what the bot sends, and
+  workspaces with sensitive data protection send no content. The app needs
+  the `im:message`, `im:message.p2p_msg:readonly` and `im:resource`
+  permissions (see `docs/feishu-lark.md`).
 - Lark and Feishu: the **创建事项** / **Create issue** message shortcut
   creates an issue from any message. A private form card (team, title and
   description prefilled from the message with a link to its chat, assignee,
@@ -25,7 +40,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Clicks run as the clicking member with their permissions and the group
   binding's update option, the card is redrawn in place, and refusals arrive
   privately in Chinese or English with a stable code.
-
 - The MCP attachment tools (`prepare_attachment_upload`,
   `create_attachment_from_upload`, `create_attachment`, `save_attachment`)
   attach files and links to a document as well as an issue: pass exactly one
