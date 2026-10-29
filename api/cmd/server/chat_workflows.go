@@ -68,6 +68,7 @@ type chatWebhookEnvelope struct {
 		Action struct {
 			Value     map[string]json.RawMessage `json:"value"`
 			FormValue map[string]json.RawMessage `json:"form_value"`
+			Option    string                     `json:"option"`
 		} `json:"action"`
 		Context struct {
 			MessageID string `json:"open_message_id"`
@@ -209,6 +210,10 @@ func (s *server) handleChatWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "chat callback tenant mismatch")
 		return
 	}
+	if envelope.Header.EventType == "url.preview.get" {
+		s.writeChatLinkPreview(ctx, w, record, plaintext)
+		return
+	}
 	command, dedup, accepted, err := s.chatCommandForEnvelope(ctx, record, envelope)
 	if err != nil {
 		// Invalid/expired actions do not enter the queue; this response is visible
@@ -225,7 +230,7 @@ func (s *server) handleChatWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if envelope.Header.EventType == "card.action.trigger" {
-		writeJSON(w, http.StatusOK, map[string]any{"toast": map[string]string{"type": "info", "content": "Processing. The result will arrive in your Flow bot conversation."}})
+		writeJSON(w, http.StatusOK, s.chatCallbackToast(ctx, record, command))
 	} else {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	}
@@ -278,13 +283,17 @@ func (s *server) chatCommandForEnvelope(ctx context.Context, record domain.ChatI
 		// Personal forms are single use even when a double click has another
 		// callback ID. Shared buttons may open a fresh private form later.
 		dedup := chatKey(record.ConnectionID, "action", actionID, event.Operator.OpenID)
-		if stored.UserID == "" {
+		if stored.UserID == "" || chatQuickActionKind(action.Kind) {
 			if envelope.Header.EventID == "" {
 				return chatInboundCommand{}, "", false, chatInvalid("missing card callback identity")
 			}
 			dedup = chatKey(dedup, envelope.Header.EventID)
 		}
-		return chatInboundCommand{Kind: "card_action", OpenID: event.Operator.OpenID, ChatID: event.Context.ChatID, MessageID: event.Context.MessageID, ActionID: actionID, Values: event.Action.FormValue}, dedup, true, nil
+		values := event.Action.FormValue
+		if event.Action.Option != "" && len(event.Action.Option) <= 191 {
+			values = map[string]json.RawMessage{"option": json.RawMessage(strconv.Quote(event.Action.Option))}
+		}
+		return chatInboundCommand{Kind: "card_action", OpenID: event.Operator.OpenID, ChatID: event.Context.ChatID, MessageID: event.Context.MessageID, ActionID: actionID, Values: values}, dedup, true, nil
 	}
 	return chatInboundCommand{}, "", false, nil
 }
@@ -387,12 +396,18 @@ func (s *server) processChatJob(ctx context.Context, job domain.ChatJob) error {
 		return err
 	}
 	if errors.Is(err, sql.ErrNoRows) || identity.TenantKey != record.TenantKey {
+		if command.Kind == chatMessageActionKind {
+			return s.chatSendLinkAccountCard(ctx, record, job, command.OpenID)
+		}
 		return s.chatSendBindingLink(ctx, record, job, command.OpenID)
 	}
 	ctx = withChatIdentityAuthentication(ctx, identity)
 	var metadata domain.Bootstrap
 	if err := s.chatAuthorizedMutation(ctx, record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/bootstrap", nil, &metadata); err != nil {
 		return s.chatMutationFailure(ctx, record, job, command.OpenID, err, "Your Flow workspace access has changed. Sign in to Flow and check your access.")
+	}
+	if command.Kind == chatMessageActionKind {
+		return s.chatSendMessageActionForm(ctx, record, identity, metadata, job, command)
 	}
 	if command.Kind == "create_form" {
 		binding, err := s.chatBindingForChat(ctx, record, command.ChatID)
@@ -411,6 +426,9 @@ func (s *server) processChatJob(ctx context.Context, job domain.ChatJob) error {
 	var action chatCardAction
 	if err != nil || time.Now().After(stored.ExpiresAt) || json.Unmarshal(stored.Payload, &action) != nil || !chatActionMatches(stored, action, command.OpenID, command.ChatID, command.MessageID) || stored.UserID != "" && stored.UserID != identity.UserID {
 		return s.chatSendCommandError(ctx, record, job, command.OpenID, "This action has expired. Open a current issue card and try again.")
+	}
+	if handled, err := s.chatRunExtendedAction(ctx, record, identity, metadata, job, command, stored, action); handled {
+		return err
 	}
 	binding, err := s.chatBindingByID(ctx, record, action.BindingID)
 	if err != nil {

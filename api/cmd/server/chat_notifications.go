@@ -156,6 +156,9 @@ func (s *server) processChatNotification(ctx context.Context, record domain.Chat
 	if payload.InitiativeBindingID != "" {
 		return s.chatSendInitiativeBindingUpdate(ctx, record, job, payload)
 	}
+	if payload.Kind == chatMessageResultKind {
+		return s.processChatMessageResult(ctx, record, job, payload)
+	}
 	binding, err := s.chatBindingByID(ctx, record, payload.BindingID)
 	if err != nil {
 		return err

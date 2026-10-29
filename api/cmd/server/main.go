@@ -654,6 +654,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/integrations/{provider}/webhook", supportedIntegrationHandler(s.codeWebhook))
 	s.registerChatIntegrationRoutes(mux)
 	mux.HandleFunc("POST /api/integrations/{provider}/{id}/chat/webhook", s.handleChatWebhook)
+	s.registerChatMessageActionRoutes(mux)
 	mux.HandleFunc("POST /api/integrations/{provider}/test", supportedIntegrationHandler(s.testIntegrationConnection))
 	mux.HandleFunc("POST /api/integrations/{provider}/{id}/test", supportedIntegrationHandler(s.testIntegrationConnection))
 	mux.HandleFunc("POST /api/integrations/gitlab/{id}/token", s.updateGitLabToken)

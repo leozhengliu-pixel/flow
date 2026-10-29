@@ -9,6 +9,23 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Lark and Feishu: the **创建事项** / **Create issue** message shortcut
+  creates an issue from any message. A private form card (team, title and
+  description prefilled from the message with a link to its chat, assignee,
+  priority) creates it as the member's linked Flow account; the issue card is
+  then replied under the message. Bound groups keep their create option and
+  team scope; unlinked members get a card to link their account.
+- Lark and Feishu link previews: Flow issue, project, document and
+  initiative links expand into a preview card for each viewer, filtered by
+  their own Flow access. Private team content expands in a group only when
+  the group is bound to that team; nothing expands with sensitive data
+  protection on.
+- Lark and Feishu issue cards (group and personal notifications) have
+  **Assign to me**, status and priority controls next to **Open in Flow**.
+  Clicks run as the clicking member with their permissions and the group
+  binding's update option, the card is redrawn in place, and refusals arrive
+  privately in Chinese or English with a stable code.
+
 - The MCP attachment tools (`prepare_attachment_upload`,
   `create_attachment_from_upload`, `create_attachment`, `save_attachment`)
   attach files and links to a document as well as an issue: pass exactly one
