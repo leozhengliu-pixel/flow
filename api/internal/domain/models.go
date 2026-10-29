@@ -700,6 +700,17 @@ type Issue struct {
 	// Computed by the list projection only; never persisted on a full record.
 	HasContent     bool           `json:"hasContent,omitempty"`
 	ReactionCounts map[string]int `json:"reactionCounts,omitempty"`
+	// AffectedIssues is set on the response of an issue update only (never
+	// persisted): the other issues the write changed as a side effect and the
+	// version each one now has, so a client can keep editing them without
+	// waiting for the realtime update.
+	AffectedIssues []IssueVersion `json:"affectedIssues,omitempty"`
+}
+
+// IssueVersion is an issue's id with its current version.
+type IssueVersion struct {
+	ID      string `json:"id"`
+	Version int64  `json:"version"`
 }
 
 type Cycle struct {

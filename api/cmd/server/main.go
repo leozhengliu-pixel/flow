@@ -5107,8 +5107,14 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		ctx = store.WithIssueRenumbering(ctx)
 	}
+	var affected []domain.IssueVersion
 	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "issue.batch_updated", idgen.New("issue_batch_"), input, func(data *domain.Bootstrap) error {
 		changed := false
+		updated, affected = nil, nil
+		versionsBefore := make(map[string]int64, len(data.Issues))
+		for _, issue := range data.Issues {
+			versionsBefore[issue.ID] = issue.Version
+		}
 		for _, id := range input.IssueIDs {
 			issue, err := issueByID(data, id)
 			if err != nil {
@@ -5138,6 +5144,18 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 		if !changed {
 			return store.ErrNoMutation
 		}
+		// A later edit of the batch can change an earlier one (an auto-closed
+		// parent) and an edit can change an issue outside the batch.
+		for index := range updated {
+			if current, err := issueByID(data, updated[index].ID); err == nil {
+				updated[index] = *current
+			}
+		}
+		for _, issue := range data.Issues {
+			if !seenIDs[issue.ID] && issue.Version != versionsBefore[issue.ID] {
+				affected = append(affected, domain.IssueVersion{ID: issue.ID, Version: issue.Version})
+			}
+		}
 		return nil
 	})
 	if err == nil {
@@ -5161,6 +5179,11 @@ func (s *server) batchUpdate(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		s.dispatchNotificationEmails(r.Context(), workspaceKey(r))
+		// The response is the list of the batch's issues; the other issues the
+		// batch changed ride on its first one.
+		if len(updated) > 0 {
+			updated[0].AffectedIssues = affected
+		}
 	}
 	respondMutation(w, err, http.StatusOK, updated)
 }

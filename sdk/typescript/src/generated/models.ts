@@ -1281,6 +1281,8 @@ export interface InitiativeWebhookEvent {
 /** Issue follows Flow's public GraphQL entity naming and relationship shape. */
 export interface Issue {
   addedToCycle?: string
+  /** AffectedIssues is set on the response of an issue update only (never persisted): the other issues the write changed as a side effect and the version each one now has, so a client can keep editing them without waiting for the realtime update. */
+  affectedIssues?: IssueVersion[]
   agentSessionId?: string
   /** AgentSessionState is the delegated agent task's status, decorated on read (never persisted): pending, active, awaitingInput, complete, error, canceled, or merged once a pull request linked to the issue merged during the session. */
   agentSessionState?: string
@@ -1476,6 +1478,8 @@ export interface IssueLabelWebhookEvent {
 /** Issue follows Flow's public GraphQL entity naming and relationship shape. In webhook payloads only id is guaranteed. */
 export interface IssuePartial {
   addedToCycle?: string
+  /** AffectedIssues is set on the response of an issue update only (never persisted): the other issues the write changed as a side effect and the version each one now has, so a client can keep editing them without waiting for the realtime update. */
+  affectedIssues?: IssueVersionPartial[]
   agentSessionId?: string
   /** AgentSessionState is the delegated agent task's status, decorated on read (never persisted): pending, active, awaitingInput, complete, error, canceled, or merged once a pull request linked to the issue merged during the session. */
   agentSessionState?: string
@@ -1701,6 +1705,18 @@ export interface IssueUpdateInput {
   /** moves the issue to another team: a new identifier (the old one keeps resolving), the equivalent status; it leaves its cycle and the labels that team cannot use */
   teamId?: string | null
   title?: string | null
+}
+
+/** IssueVersion is an issue's id with its current version. */
+export interface IssueVersion {
+  id: string
+  version: number
+}
+
+/** IssueVersion is an issue's id with its current version. In webhook payloads only id is guaranteed. */
+export interface IssueVersionPartial {
+  id: string
+  version?: number
 }
 
 /** IssueWebhookEvent is sent when an issue is created, updated (including archive) or deleted. */

@@ -356,6 +356,8 @@ export interface Issue {
   needsDetailRefresh?: boolean;
   id: UUID;
   version: number;
+  /** On the response of an issue write: the other issues it changed and the version each now has. */
+  affectedIssues?: Array<{ id: UUID; version: number }>;
   identifier: string;
   /** Identifiers the issue had before it moved to other teams; links to them still open it. */
   previousIdentifiers?: string[];
