@@ -128,6 +128,7 @@ export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeam
   const [allowCreate, setAllowCreate] = useState(binding?.allowCreate ?? true);
   const [allowUpdate, setAllowUpdate] = useState(binding?.allowUpdate ?? true);
   const [requestsEnabled, setRequestsEnabled] = useState(binding?.requests?.enabled ?? false);
+  const [everyMention, setEveryMention] = useState(binding?.requests?.everyMention ?? false);
   const [requestEmoji, setRequestEmoji] = useState(binding?.requests?.emoji ?? "");
   const [requestTemplateId, setRequestTemplateId] = useState(binding?.requests?.templateId ?? "");
   const [requestPriority, setRequestPriority] = useState(binding?.requests?.priority === undefined ? "" : String(binding.requests.priority));
@@ -148,6 +149,7 @@ export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeam
   // Saved when turned on, or to turn off what the binding had.
   const requests: ChatBindingRequests | undefined = requestsEnabled || binding?.requests ? {
     enabled: requestsEnabled,
+    ...(everyMention ? { everyMention: true } : {}),
     ...(requestEmoji ? { emoji: requestEmoji } : {}),
     ...(requestTemplateId ? { templateId: requestTemplateId } : {}),
     ...(requestPriority ? { priority: Number(requestPriority) } : {}),
@@ -197,8 +199,9 @@ export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeam
       </div>
       <h3 className="chat-subheading">{t("Requests")}</h3>
       <div className="feature-card">
-        <FieldRow inline label={t("Take requests")} description={t("Members turn a message into a request in the team's triage: mention the bot, add the reaction below, or use the message shortcut. The request follows its message's thread.")}><SettingsToggle label={t("Take requests")} checked={requestsEnabled} onChange={(value) => { setRequestsEnabled(value); setApproved(false); }} /></FieldRow>
+        <FieldRow inline label={t("Take requests")} description={t("Submit requests with an explicit request phrase, the reaction below, or the message shortcut. Requests follow their message's thread.")}><SettingsToggle label={t("Take requests")} checked={requestsEnabled} onChange={(value) => { setRequestsEnabled(value); setApproved(false); }} /></FieldRow>
         {requestsEnabled && <>
+          <FieldRow inline label={t("Treat every mention as a request")}><SettingsToggle label={t("Treat every mention as a request")} checked={everyMention} onChange={(value) => { setEveryMention(value); setApproved(false); }} /></FieldRow>
           <FieldRow label={t("Request reaction")} description={t("Adding this reaction to a message submits it as a request.")}><SettingsSelect label={t("Request reaction")} options={emojiOptions} value={requestEmoji || NO_EMOJI} onChange={(value) => setRequestEmoji(value === NO_EMOJI ? "" : value)} /></FieldRow>
           <FieldRow label={t("Request template")}><SettingsSelect label={t("Request template")} options={[{ value: NO_SELECTION, label: t("No template") }, ...templates.map((template) => ({ value: template.id, label: template.name, entityName: true }))]} value={requestTemplateId || NO_SELECTION} disabled={!teamId} onChange={(value) => setRequestTemplateId(value === NO_SELECTION ? "" : value)} /></FieldRow>
           <FieldRow label={t("Request priority")}><SettingsSelect label={t("Request priority")} options={[{ value: DEFAULT_PRIORITY, label: t("Team default") }, ...REQUEST_PRIORITIES.map((item) => ({ value: item.value, label: t(item.label) }))]} value={requestPriority || DEFAULT_PRIORITY} onChange={(value) => setRequestPriority(value === DEFAULT_PRIORITY ? "" : value)} /></FieldRow>

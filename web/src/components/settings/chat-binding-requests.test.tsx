@@ -44,12 +44,14 @@ it("turns on requests with a reaction, template and priority", async () => {
   const form = await screen.findByRole("form", { name: "Edit group binding" });
   expect(within(form).queryByRole("combobox", { name: "Request reaction" })).not.toBeInTheDocument();
   await user.click(within(form).getByRole("checkbox", { name: "Take requests" }));
+  expect(within(form).getByRole("checkbox", { name: "Treat every mention as a request" })).not.toBeChecked();
+  await user.click(within(form).getByRole("checkbox", { name: "Treat every mention as a request" }));
   await choose(form, "Request reaction", "✅ Done");
   await choose(form, "Request template", "Bug report");
   await choose(form, "Request priority", "High");
   await user.click(within(form).getByRole("checkbox", { name: /I approve sharing/ }));
   await user.click(within(form).getByRole("button", { name: "Save group binding" }));
-  await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ requests: { enabled: true, emoji: "DONE", templateId: "template-bug", priority: 2 } })));
+  await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ requests: { enabled: true, everyMention: true, emoji: "DONE", templateId: "template-bug", priority: 2 } })));
 });
 
 it("turns requests off and leaves bindings without them untouched", async () => {
@@ -57,6 +59,7 @@ it("turns requests off and leaves bindings without them untouched", async () => 
   const user = userEvent.setup();
   const form = await screen.findByRole("form", { name: "Edit group binding" });
   expect(within(form).getByRole("combobox", { name: "Request reaction" })).toHaveTextContent("👌 OK");
+  expect(within(form).getByRole("checkbox", { name: "Treat every mention as a request" })).not.toBeChecked();
   await user.click(within(form).getByRole("checkbox", { name: "Take requests" }));
   await user.click(within(form).getByRole("checkbox", { name: /I approve sharing/ }));
   await user.click(within(form).getByRole("button", { name: "Save group binding" }));
@@ -78,9 +81,22 @@ it("names the request settings in Chinese and lists them in the row", async () =
   expect(within(form).getByRole("checkbox", { name: "接收需求" })).toBeChecked();
   expect(within(form).getByRole("combobox", { name: "需求表情" })).toHaveTextContent("不使用表情");
   expect(within(form).getByRole("combobox", { name: "需求优先级" })).toHaveTextContent("团队默认");
-  expect(within(form).getByText(/@ 机器人、添加下方的表情回复/)).toBeInTheDocument();
+  expect(within(form).getByRole("checkbox", { name: "将每次 @ 机器人视为需求" })).not.toBeChecked();
+  expect(within(form).getByText(/明确的需求指令/)).toBeInTheDocument();
 
   document.body.innerHTML = "";
   render(<I18nProvider><ChatBindingRow binding={{ ...binding, requests: { enabled: true } }} data={data()} busy="" canEdit onRevoke={vi.fn()} onRemove={vi.fn()} /></I18nProvider>);
   expect(screen.getByText(/需求收集已开启/)).toBeInTheDocument();
+});
+
+it("turns every-mention intake off on an existing binding", async () => {
+  const onSave = editor("en-US", { ...binding, requests: { enabled: true, everyMention: true } });
+  const user = userEvent.setup();
+  const form = await screen.findByRole("form", { name: "Edit group binding" });
+  const toggle = within(form).getByRole("checkbox", { name: "Treat every mention as a request" });
+  expect(toggle).toBeChecked();
+  await user.click(toggle);
+  await user.click(within(form).getByRole("checkbox", { name: /I approve sharing/ }));
+  await user.click(within(form).getByRole("button", { name: "Save group binding" }));
+  await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ requests: { enabled: true } })));
 });

@@ -72,11 +72,13 @@ export interface ChatIdentity {
 }
 
 /**
- * A binding's request intake: a mention of the bot, the reaction or the
+ * A binding's request intake: an explicit request, the reaction or the
  * message shortcut turns a message into a request in the team's triage.
  */
 export interface ChatBindingRequests {
   enabled: boolean;
+  /** Off by default, including bindings saved before this option existed. */
+  everyMention?: boolean;
   /** The reaction (the platform's emoji type, such as "OK") that makes a request; absent leaves reactions alone. */
   emoji?: string;
   templateId?: string;
