@@ -300,6 +300,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Sidebar Try items use the shared navigation row styling through context-menu
+  wrappers, keeping icons, labels and hover dismiss controls aligned in both themes.
 - Close former-member mention gaps in state-only collaborative edits, posts
   and meetings. Decode Yjs server-side before accepting new mentions; imported
   chat replies keep former-member mention labels as plain text. Persist member

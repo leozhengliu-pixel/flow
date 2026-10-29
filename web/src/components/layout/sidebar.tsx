@@ -1831,20 +1831,20 @@ function TryItem({
 }) {
   const content = (
     <>
-      {icon}
-      <span>{label}</span>
+      <span className="nav-icon">{icon}</span>
+      <span className="nav-label">{label}</span>
     </>
   );
   return (
     <div className="try-item">
       {to ? (
         <SidebarItemMenu href={to}>
-          <NavLink to={to} onClick={onClick}>
+          <NavLink className="nav-item" to={to} onClick={onClick}>
             {content}
           </NavLink>
         </SidebarItemMenu>
       ) : (
-        <button type="button" onClick={onClick}>
+        <button className="nav-item" type="button" onClick={onClick}>
           {content}
         </button>
       )}

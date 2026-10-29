@@ -59,6 +59,78 @@ beforeEach(() => {
 })
 afterEach(() => { vi.unstubAllGlobals(); pulseAudio.stop() })
 
+describe('sidebar row layout', () => {
+  it.each(['dark', 'light'])('uses the shared navigation row inside Try menu wrappers in %s theme', theme => {
+    document.documentElement.dataset.theme = theme
+    try {
+      renderSidebar(sidebarData({ viewerRole: 'admin' }))
+      const section = document.querySelector('.sidebar-section-try') as HTMLElement
+      const items = within(section)
+      const invite = items.getByRole('link', { name: 'Invite people' })
+      const cycles = items.getByRole('link', { name: 'Cycles' })
+      const github = items.getByRole('button', { name: 'Connect GitHub' })
+
+      for (const item of [invite, cycles, github]) {
+        expect(item).toHaveClass('nav-item')
+        expect(item.querySelector(':scope > .nav-icon > svg')).not.toBeNull()
+        expect(item.querySelector(':scope > .nav-label')).toHaveTextContent(item.textContent!)
+        const row = item.closest('.try-item')!
+        expect(row.querySelector(':scope > .try-dismiss')).toHaveAccessibleName(`Dismiss ${item.textContent}`)
+        expect(item.querySelector('.try-dismiss')).toBeNull()
+      }
+      for (const item of [invite, cycles]) {
+        expect(item.parentElement).toHaveClass('sidebar-item-menu-trigger')
+        expect(item.parentElement?.parentElement).toHaveClass('try-item')
+      }
+      expect(github.parentElement).toHaveClass('try-item')
+    } finally {
+      delete document.documentElement.dataset.theme
+    }
+  })
+
+  it('keeps workspace and team links styled on the link rather than their menu wrapper', () => {
+    const data = sidebarData({
+      teamMembers: [{ teamId: 'team-1', userId: viewer.id, role: 'member', joinedAt: '' }],
+      cycleSettings: { 'team-1': { enabled: true } as BootstrapData['cycleSettings'][string] },
+      cycles: (['current', 'upcoming'] as const).map((status, index) => ({
+        id: `cycle-${index}`, number: index + 1, name: status, description: '', teamId: 'team-1',
+        startsAt: '2026-10-01T00:00:00Z', endsAt: '2026-11-01T00:00:00Z', status,
+        capacity: 0, favorite: false, resources: [], createdAt: '', updatedAt: '',
+      })),
+    })
+    const { container } = renderSidebar(data)
+    for (const section of ['.sidebar-section-workspace', '.sidebar-team-list']) {
+      const links = container.querySelectorAll(`${section} .sidebar-item-menu-trigger > a:not(.team-sub-link)`)
+      expect(links.length).toBeGreaterThan(0)
+      for (const item of links) {
+        expect(item).toHaveClass('nav-item')
+        expect(item.querySelector(':scope > .nav-icon > svg')).not.toBeNull()
+        expect(item.querySelector(':scope > .nav-label')).not.toBeNull()
+      }
+      for (const label of ['Projects', 'Views']) {
+        expect(within(container.querySelector(section) as HTMLElement).getByRole('link', { name: label })).toHaveClass('nav-item')
+      }
+    }
+    const cycleLinks = container.querySelectorAll('.team-cycle-links > .sidebar-item-menu-trigger > a')
+    expect(cycleLinks).toHaveLength(2)
+    for (const item of cycleLinks) {
+      expect(item).toHaveClass('nav-item', 'team-sub-link')
+      expect(item.querySelector(':scope > .nav-label')).not.toBeNull()
+    }
+  })
+
+  it('preserves Try context menus and dismisses without navigating', async () => {
+    const user = userEvent.setup()
+    renderSidebar(sidebarData({ viewerRole: 'admin' }))
+    const menu = await openMenu(/^Invite people$/)
+    expect(within(menu).getByRole('menuitem', { name: 'Copy link' })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: 'Dismiss Invite people' }))
+    expect(screen.queryByRole('link', { name: 'Invite people' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Connect GitHub' })).toHaveClass('nav-item')
+  })
+})
+
 describe('sidebar item context menu', () => {
   it('offers Visibility, Badge, Customize sidebar and Copy link on Pulse', async () => {
     renderSidebar()
