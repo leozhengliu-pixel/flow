@@ -138,6 +138,12 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 			if actor.Run != nil {
 				// A run token is also offered its acting user's connector tools (agent_runtime_connectors.go).
 				listed = append(listed, s.agentRunListedConnectors(r, actor.Run, readonly)...)
+				// And the tools its session gives it (agent_runtime_session_tools.go).
+				for _, tool := range s.agentRunSessionTools(r.Context(), actor.Run.run) {
+					if actor.Run.allows(s, tool, readonly) {
+						listed = append(listed, map[string]any{"name": tool.Name, "description": tool.Description, "inputSchema": json.RawMessage(tool.InputSchema), "annotations": map[string]any{"readOnlyHint": tool.Access == "read", "destructiveHint": false}})
+					}
+				}
 			}
 			writeJSON(w, http.StatusOK, mcpRPCResponse{JSONRPC: "2.0", ID: request.ID, Result: map[string]any{"tools": listed}})
 		case "tools/call":
@@ -156,6 +162,12 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 			if actor.Run != nil && strings.HasPrefix(params.Name, "external_") {
 				s.callMCPRunConnector(w, r, request.ID, actor.Run, params.Name, params.Arguments, params.Meta, readonly)
 				return
+			}
+			if actor.Run != nil {
+				if tool, ok := s.agentRunSessionTool(r.Context(), actor.Run.run, params.Name); ok {
+					s.callMCPRunTool(w, r, request.ID, actor.Run, tool, params.Arguments, readonly)
+					return
+				}
 			}
 			index := slices.IndexFunc(tools, func(tool flowMCPTool) bool { return tool.Name == params.Name })
 			if index < 0 {

@@ -66,11 +66,17 @@ export function groupOf(tool: string): string | undefined {
   return toolGroups.find(group => group.tools.includes(tool))?.name
 }
 
-/** Whether a Flow tool is offered this turn: core, or in a loaded group, and never hidden. */
+/**
+ * Tools Flow's /mcp lists to a run only while its session gives them (api/cmd/server/agent_runtime_session_tools.go):
+ * the conversation's file tools. Offered whenever listed.
+ */
+export const sessionTools = new Set(['read_file', 'transcribe_media'])
+
+/** Whether a Flow tool is offered this turn: core, a session tool, or in a loaded group, and never hidden. */
 export function toolOffered(tool: string, loadedGroups: readonly string[]): boolean {
   if (hiddenTools.has(tool)) return false
   // Connector (MCP) tools are offered as in chat; the run guard bounds them (run-guard.ts).
-  if (coreTools.includes(tool) || tool.startsWith('external_')) return true
+  if (coreTools.includes(tool) || sessionTools.has(tool) || tool.startsWith('external_')) return true
   const group = groupOf(tool)
   return group !== undefined && loadedGroups.includes(group)
 }

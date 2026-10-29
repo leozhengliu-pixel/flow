@@ -20,14 +20,29 @@ import type { AgentInputItem } from '@openai/agents'
 import type { FlowActivity } from './activities.js'
 import type { PromptMessage } from './runtime-client.js'
 
-/** The run's conversation as SDK input items, and the person's message the reply answers (the last one). */
-export function chatConversation(messages: PromptMessage[]): { history: AgentInputItem[]; request: string } {
+/** A user message as an SDK item: its text, then its images (data URLs), as the in-process reply sends them. */
+function userItem(message: PromptMessage): AgentInputItem {
+  if (!message.images?.length) return { role: 'user', content: message.content } as AgentInputItem
+  return {
+    role: 'user',
+    content: [
+      { type: 'input_text', text: message.content },
+      ...message.images.map(image => ({ type: 'input_image', image: `data:${image.mediaType};base64,${image.data}` })),
+    ],
+  } as AgentInputItem
+}
+
+/**
+ * The run's conversation as SDK input items, and the person's message the reply answers (the last one): its text
+ * (`request`) and, when it carries images, the item to run (`input`).
+ */
+export function chatConversation(messages: PromptMessage[]): { history: AgentInputItem[]; request: string; input?: AgentInputItem[] } {
   const items: AgentInputItem[] = []
   const names = new Map<string, string>()
   for (const message of messages) {
     switch (message.role) {
       case 'user':
-        items.push({ role: 'user', content: message.content } as AgentInputItem)
+        items.push(userItem(message))
         break
       case 'assistant':
         if (message.content.trim()) items.push({ role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: message.content }] } as AgentInputItem)
@@ -46,6 +61,11 @@ export function chatConversation(messages: PromptMessage[]): { history: AgentInp
   if (last?.role === 'user' && typeof last.content === 'string') {
     items.pop()
     return { history: items, request: last.content }
+  }
+  if (last?.role === 'user' && Array.isArray(last.content)) {
+    const item = items.pop()!
+    const request = messages.findLast(message => message.role === 'user')?.content ?? ''
+    return { history: items, request, input: [item] }
   }
   return { history: items, request: '' }
 }
@@ -93,6 +113,8 @@ export class ChatActivityPoster {
   private ended = false
   private settledCalled = false
   private seq = 0
+  /** The arguments of each call, repeated with its result (Flow labels a finished call from them). */
+  private readonly parameters = new Map<string, unknown>()
 
   constructor(
     private readonly post: ChatPost,
@@ -116,11 +138,14 @@ export class ChatActivityPoster {
       case 'connector.elicitation':
         return // Flow holds the question and shows it on the reply itself.
       case 'action':
+        this.parameters.set(activity.activityId, activity.parameter)
         this.send({ type: 'action', activityId: `${activity.activityId}:call`, callId: activity.activityId, content: { action: activity.action, parameter: activity.parameter } })
         return
-      case 'action.result':
-        this.send({ type: 'action.result', activityId: `${activity.activityId}:result`, callId: activity.activityId, content: { action: activity.action, result: activity.result }, isError: activity.isError, ...(activity.change ? { change: activity.change } : {}) })
+      case 'action.result': {
+        const parameter = this.parameters.get(activity.activityId)
+        this.send({ type: 'action.result', activityId: `${activity.activityId}:result`, callId: activity.activityId, content: { action: activity.action, ...(parameter === undefined ? {} : { parameter }), result: activity.result }, isError: activity.isError, ...(activity.change ? { change: activity.change } : {}) })
         return
+      }
       case 'elicitation':
         // The run suspends on it (ask_user's question ends the reply).
         this.ended = true

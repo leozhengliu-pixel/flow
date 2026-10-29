@@ -101,6 +101,8 @@ export type SessionOptions = {
   history?: RepairableSession
   /** Where a suspended run is kept (default: the worker's session store); a chat run keeps it in Flow. */
   suspended?: SuspendedStore
+  /** Tool groups the run starts with besides the ones its request picks (Flow's, from the session's surface). */
+  groups?: string[]
 }
 
 export type ActivitySink = (activity: FlowActivity) => void
@@ -167,11 +169,14 @@ export class FlowAgentSession {
     return this.options.suspended ?? this.worker.store.suspendedFor(this.sessionId)
   }
 
-  /** A new user prompt. */
-  async send(message: string, sink: ActivitySink = () => {}): Promise<TurnOutcome> {
+  /**
+   * A new user prompt. `input` is what runs when the prompt is more than its text (a message with images); the text
+   * still picks the request's tool groups.
+   */
+  async send(message: string, sink: ActivitySink = () => {}, input?: AgentInputItem[]): Promise<TurnOutcome> {
     const history = await this.history().getItems()
-    const context = newRunContext(this.sessionId, message, initialGroups(message, previousTools(history)), this.options.allowlist)
-    return this.execute(message, context, sink)
+    const context = newRunContext(this.sessionId, message, [...new Set([...initialGroups(message, previousTools(history)), ...(this.options.groups ?? [])])], this.options.allowlist)
+    return this.execute(input ?? message, context, sink)
   }
 
   /**
@@ -229,7 +234,7 @@ export class FlowAgentSession {
     if (this.connected) await Promise.all(this.mcp.map(server => server.close().catch(() => {})))
   }
 
-  private async execute(input: string | RunState<FlowRunContext, FlowAgent>, context: FlowRunContext, sink: ActivitySink, retries = 1, previous?: TurnOutcome, previousGuard?: RunGuard): Promise<TurnOutcome> {
+  private async execute(input: string | AgentInputItem[] | RunState<FlowRunContext, FlowAgent>, context: FlowRunContext, sink: ActivitySink, retries = 1, previous?: TurnOutcome, previousGuard?: RunGuard): Promise<TurnOutcome> {
     const session = this.history()
     const maxTurns = this.options.maxTurns ?? this.worker.config.maxTurns
     const outcome: TurnOutcome = { status: 'error', body: '', startedAt: previous?.startedAt ?? Date.now(), endedAt: 0, usage: summarizeUsage([]), modelCalls: [...(previous?.modelCalls ?? [])], toolCalls: [] }
@@ -240,7 +245,7 @@ export class FlowAgentSession {
     this.sink = emit
     // Ack before any network work (AIG: first activity within 10 s; UI shows "Working…"). Not counted as the
     // first model-driven activity in the metrics.
-    if (!previous) sink({ type: 'thought', at: Date.now(), body: typeof input === 'string' ? 'Working…' : 'Continuing…', ephemeral: false })
+    if (!previous) sink({ type: 'thought', at: Date.now(), body: input instanceof RunState ? 'Continuing…' : 'Working…', ephemeral: false })
     let guard = previousGuard
     if (!guard && this.options.guard) {
       guard = new RunGuard(this.options.guard, maxTurns, this.toolErrors)
@@ -311,7 +316,7 @@ export class FlowAgentSession {
     } catch (error) {
       if (controller.signal.aborted) return await this.canceled(outcome, emit, produced)
       const wrote = outcome.toolCalls.some(call => !call.isError && isWriteTool(call.name))
-      if (typeof input === 'string' && retries > 0 && isTransient(error) && !wrote) {
+      if (!(input instanceof RunState) && retries > 0 && isTransient(error) && !wrote) {
         // A dropped stream (the SDK never replays one that already emitted events): nothing was written, so the
         // request runs again from the stored history, which holds only the user's message of this attempt.
         const history = await session.getItems()

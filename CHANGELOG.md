@@ -46,8 +46,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   connector question waiting in it included. The reply keeps the tool budget
   and the check that reported outcomes come from real tool results. A reply
   whose worker stopped responding is restarted when nothing was written, and
-  otherwise shown as interrupted with Retry. Loop builder conversations and
-  chats with sent files still run in the API. The default
+  otherwise shown as interrupted with Retry. Loop builder conversations still
+  run in the API. The default
   (`FLOW_AGENT_RUNTIME=inprocess`) is unchanged.
 - Chat replies on the agent worker no longer wait forever: a reply no worker
   takes within `FLOW_AGENT_WORKER_CLAIM_TIMEOUT` (default 2 minutes) ends with
@@ -55,6 +55,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   is cancelled. Calls waiting for approval are rejected after 30 minutes and
   the reply goes on, as in-process, and the step limit
   (`FLOW_AGENT_MAX_TOOL_TURNS`) counts the whole reply, also after approvals.
+- Chats with sent files run on the agent worker too
+  (`FLOW_AGENT_RUNTIME=worker`): images reach the model as image inputs
+  (read from storage when the run starts, with the same size and type checks),
+  other files as the note the model opens them by, and `read_file` /
+  `transcribe_media` work on the conversation's own files as in-process. The
+  worker also starts with the tool groups of the chat's surface (an issue,
+  project or document chat), as in-process.
 - The workspace Invite dialog (Settings → Administration → Members → Invite)
   has an **Add to team** field for every role. Pick one or more teams (a
   searchable multi-select; optional for Members and Admins, required for
