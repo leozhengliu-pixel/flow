@@ -31,6 +31,18 @@ func TestWorkerRunsUseTheWebAsInProcess(t *testing.T) {
 	if chat := f.payload(t, run).Chat; !chat.HostedWebSearch {
 		t.Fatalf("without a search provider the run is not asked to use hosted search: %+v", chat)
 	}
+	for _, protocol := range []string{"openai-chat", "openai-responses", "anthropic"} {
+		payload := runtimeJSON[struct {
+			Context agentRunPromptContext `json:"context"`
+		}](t, f.handler, runtimeCall{method: http.MethodGet, path: "/internal/agent-runtime/runs/" + run.ID + "/payload?protocol=" + protocol, worker: "w1"}, http.StatusOK)
+		want := agentWebSearchNote
+		if protocol == "openai-chat" {
+			want = agentWebFetchOnlyNote
+		}
+		if !strings.Contains(payload.Context.System, want) {
+			t.Fatalf("worker protocol %s web note mismatch", protocol)
+		}
+	}
 	token := f.token(t, run)
 	tools := listedRunTools(t, f.handler, token)
 	if tools[fetchURLToolName] == nil || tools[webSearchToolName] != nil {

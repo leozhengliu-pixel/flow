@@ -3,6 +3,7 @@ import type { AgentOutputItem, Model, ModelRequest, ModelResponse, ModelSettings
 import { OpenAIChatCompletionsModel, OpenAIResponsesModel, retryPolicies } from '@openai/agents'
 import { aisdk } from '@openai/agents-extensions/ai-sdk'
 import OpenAI from 'openai'
+import { AsyncLocalStorage } from 'node:async_hooks'
 import type { ModelConfig } from './config.js'
 
 /**
@@ -18,6 +19,8 @@ import type { ModelConfig } from './config.js'
 export type ModelFactoryOptions = { fetch?: typeof fetch }
 
 export function createModel(config: ModelConfig, options: ModelFactoryOptions = {}): Model {
+  const fetchModel = options.fetch ?? fetch
+  options = { ...options, fetch: (input, init) => diagnosticResponse(fetchModel, input, init) }
   switch (config.protocol) {
     case 'openai-responses':
       return new OpenAIResponsesModel(openAIClient(config, options), config.model)
@@ -106,14 +109,19 @@ export type ModelObserver = (record: ModelCallRecord) => void
  */
 export class ObservedModel implements Model {
   observer?: ModelObserver
+  beforeModel?: (request: ModelRequest) => Promise<void>
+  afterModel?: (output: ModelResponse['output'], usage: any, diagnostics: ModelDiagnostics) => Promise<ModelResponse['output']>
+  modelError?: (diagnostics: ModelDiagnostics) => Promise<void>
   /** Rewrites a finished model turn's output before the runner acts on it (the run guard's forced decision). */
   rewrite?: <T extends { type?: string }>(output: T[]) => T[]
   constructor(private readonly inner: Model) {}
 
   async getResponse(request: ModelRequest): Promise<ModelResponse> {
     const startedAt = Date.now()
+    await this.beforeModel?.(request)
     try {
       const response = await this.inner.getResponse(request)
+      if (this.afterModel) response.output = await this.afterModel(response.output, response.usage, { startedAt, events: 1, bytes: Buffer.byteLength(JSON.stringify(response)), finished: true, stopReason: '', stopDetail: '', reasoning: '' })
       if (this.rewrite) response.output = this.rewrite(response.output)
       this.emit(startedAt, request, response.output, response.usage, startedAt)
       return response
@@ -125,17 +133,53 @@ export class ObservedModel implements Model {
 
   async *getStreamedResponse(request: ModelRequest): AsyncIterable<StreamEvent> {
     const startedAt = Date.now()
+    await this.beforeModel?.(request)
     let firstEventAt: number | undefined
+    const diagnostics: ModelDiagnostics = { startedAt, events: 0, bytes: 0, finished: false, stopReason: '', stopDetail: '', reasoning: '' }
+    let observed = false
+    const stream = this.inner.getStreamedResponse(request)[Symbol.asyncIterator]()
     try {
-      for await (const event of this.inner.getStreamedResponse(request)) {
+      for (;;) {
+        const next = await modelDiagnostics.run(diagnostics, () => stream.next())
+        if (next.done) break
+        const event = next.value
         firstEventAt ??= Date.now()
+        if (!diagnostics.wire) {
+          diagnostics.events++
+          diagnostics.bytes += Buffer.byteLength(JSON.stringify(event))
+        }
+        if (event.type === 'model') {
+          const raw = event.event as any
+          const stop = raw?.choices?.[0]?.finish_reason ?? raw?.delta?.stop_reason ?? raw?.finishReason ?? raw?.response?.status
+          if (typeof stop === 'string') diagnostics.stopReason = stop
+          else if (stop && typeof stop === 'object') diagnostics.stopReason = stop.raw ?? stop.unified ?? diagnostics.stopReason
+          diagnostics.stopDetail = raw?.response?.incomplete_details?.reason ?? diagnostics.stopDetail
+          const reasoning = raw?.choices?.[0]?.delta?.reasoning_content ?? raw?.choices?.[0]?.delta?.reasoning ?? (raw?.type === 'reasoning-delta' ? raw.delta : raw?.type === 'response.reasoning_summary_text.delta' ? raw.delta : '')
+          if (typeof reasoning === 'string') diagnostics.reasoning += reasoning
+        }
+        if (event.type === 'response_done') {
+          if (!diagnostics.wire) diagnostics.finished = true
+          observed = true
+          if (this.afterModel) event.response.output = await this.afterModel(event.response.output, event.response.usage, diagnostics) as typeof event.response.output
+        }
         if (event.type === 'response_done' && this.rewrite) event.response.output = this.rewrite(event.response.output)
         if (event.type === 'response_done') this.emit(startedAt, request, event.response.output, event.response.usage, firstEventAt)
         yield event
       }
     } catch (error) {
+      if (!observed && this.afterModel && diagnostics.stopReason === 'length') {
+        // The Chat adapter throws for a token-limited empty turn; Flow still gives it the normal recovery.
+        const usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+        const output = await this.afterModel([], usage, diagnostics)
+        this.emit(startedAt, request, output, usage, firstEventAt ?? startedAt)
+        yield { type: 'response_done', response: { id: `recovery_${startedAt}`, output, usage } } as StreamEvent
+        return
+      }
+      if (!observed) await this.modelError?.(diagnostics)
       this.observer?.({ startedAt, firstEventAt, endedAt: Date.now(), toolsOffered: request.tools.length, inputTokens: 0, cachedTokens: 0, outputTokens: 0, functionCalls: [], error: String(error) })
       throw error
+    } finally {
+      await stream.return?.()
     }
   }
 
@@ -156,6 +200,51 @@ export class ObservedModel implements Model {
       functionCalls,
     })
   }
+}
+
+export type ModelDiagnostics = { startedAt: number; events: number; bytes: number; finished: boolean; stopReason: string; stopDetail: string; reasoning: string; wire?: boolean; unreadable?: number; unknown?: number }
+
+const modelDiagnostics = new AsyncLocalStorage<ModelDiagnostics>()
+
+/** Observe the response without consuming it ahead of the SDK or changing its provider parser. */
+async function diagnosticResponse(fetchModel: typeof fetch, input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) {
+  const response = await fetchModel(input, init)
+  const diagnostics = modelDiagnostics.getStore()
+  if (!diagnostics || !response.body || !response.headers.get('content-type')?.includes('text/event-stream')) return response
+  diagnostics.wire = true
+  const decoder = new TextDecoder()
+  let pending = ''
+  let data: string[] = []
+  const frame = () => {
+    if (!data.length) return
+    const value = data.join('\n')
+    data = []
+    diagnostics.events++
+    if (value === '[DONE]') { diagnostics.finished = true; return }
+    try {
+      const raw = JSON.parse(value)
+      if (!raw?.type && !Array.isArray(raw?.choices)) diagnostics.unknown = (diagnostics.unknown ?? 0) + 1
+      if (raw?.choices?.some((choice: any) => choice.finish_reason) || ['response.completed', 'response.incomplete', 'message_stop'].includes(raw?.type)) diagnostics.finished = true
+    } catch { diagnostics.unreadable = (diagnostics.unreadable ?? 0) + 1 }
+  }
+  const line = (value: string) => {
+    if (value === '') frame()
+    else if (value.startsWith('data:')) data.push(value.slice(5).replace(/^ /, ''))
+  }
+  const body = response.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      diagnostics.bytes += chunk.byteLength
+      pending += decoder.decode(chunk, { stream: true })
+      let end: number
+      while ((end = pending.indexOf('\n')) >= 0) {
+        line(pending.slice(0, end).replace(/\r$/, ''))
+        pending = pending.slice(end + 1)
+      }
+      controller.enqueue(chunk)
+    },
+    flush() { pending += decoder.decode(); if (pending) line(pending.replace(/\r$/, '')); frame() },
+  }))
+  return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers })
 }
 
 function cachedTokens(usage: any): number {

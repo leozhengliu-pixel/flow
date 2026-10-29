@@ -433,8 +433,18 @@ func (s *server) agentRunPayload(w http.ResponseWriter, r *http.Request, _ agent
 			if json.Unmarshal(raw, &prompt) == nil {
 				s.inlineAgentRunImages(r.Context(), &prompt)
 				prompt.System += agentRunConnectorNote(grant, discoveryErr)
-				response["context"] = prompt
+				response["context"] = &prompt
 			}
+		}
+	}
+	if prompt, ok := response["context"].(*agentRunPromptContext); ok && prompt.WebAccess {
+		protocol := r.URL.Query().Get("protocol")
+		if protocol == "openai-chat" || protocol == "openai-responses" || protocol == "anthropic" {
+			note := agentWebFetchOnlyNote
+			if s.webSearchAvailable() || s.agentRunHostedWebSearch(true) && protocol != "openai-chat" {
+				note = agentWebSearchNote
+			}
+			prompt.System = strings.ReplaceAll(strings.ReplaceAll(prompt.System, agentWebSearchNote, ""), agentWebFetchOnlyNote, "") + note
 		}
 	}
 	writeJSON(w, http.StatusOK, response)
@@ -560,6 +570,10 @@ func (s *server) agentRunReferencedIssues(ctx context.Context, actor mcpActor, i
 var agentRunActivityTypes = []string{"thought", "action", "output", "response", "error", "elicitation"}
 
 func (s *server) postAgentRunActivity(w http.ResponseWriter, r *http.Request, _ agentRuntimeCaller, run store.AgentRun) {
+	if info, ok := workerLoopInfo(run); ok {
+		s.postWorkerLoopActivity(w, r, run, info)
+		return
+	}
 	if info, ok := workerChatInfo(run); ok {
 		// A chat run writes its reply in the conversation (agent_worker_chat.go).
 		s.postWorkerChatActivity(w, r, run, info)

@@ -28,6 +28,8 @@ import {
  * worker test drives this loop and checks it sends exactly them).
  */
 export type GuardRequest =
+  | { op: 'input'; contextBytes: number }
+  | { op: 'model'; round: number; modelTurn: { text: string; reasoning: string; calls: { id: string; name: string; arguments: string }[]; stopReason: string; stopDetail: string; usage: { inputTokens: number; outputTokens: number; cachedTokens: number; reasoningTokens: number }; durationMs: number; events: number; bytes: number; finished: boolean; model: string; protocol: string; unreadable?: number; unknown?: number; error?: string } }
   | { op: 'start' }
   | { op: 'turn'; round: number; maxTurns: number; connectors: boolean }
   | { op: 'before'; tool: string; arguments: string }

@@ -45,7 +45,8 @@ type workerThreadRunInfo struct {
 	// Resume is set on a run that continues a suspended run: the person's decision per held call id.
 	Resume *workerChatResume `json:"resume,omitempty"`
 	// HostedWebSearch: the run searches with the model provider's hosted search (workerChatRunInfo.HostedWebSearch).
-	HostedWebSearch bool `json:"hostedWebSearch,omitempty"`
+	HostedWebSearch bool             `json:"hostedWebSearch,omitempty"`
+	HeldCalls       []workerHeldCall `json:"heldCalls,omitempty"`
 }
 
 func workerThreadInfo(run store.AgentRun) (workerThreadRunInfo, bool) {
@@ -108,14 +109,20 @@ func (s *server) deliverBuiltinTaskToWorker(ctx context.Context, task domain.Age
 	if task.PendingTool != nil {
 		// The person answered held calls: the suspended run continues with the decision, when there is one.
 		state, err := s.store.AgentSessionStateFor(ctx, task.WorkspaceKey, task.ID)
-		if err != nil || state.RunID == "" {
-			return false
+		if err != nil && !errors.Is(err, store.ErrAgentRunNotFound) {
+			return true
 		}
 		decisions := map[string]string{}
 		for _, call := range agentApprovalBatchCalls(*task.PendingTool) {
 			decisions[call.ID] = map[bool]string{true: "approved", false: "rejected"}[task.PendingTool.Status == "approved"]
 		}
-		info.Resume = &workerChatResume{Decisions: decisions}
+		if state.RunID != "" {
+			info.Resume = &workerChatResume{Decisions: decisions}
+		} else {
+			for _, call := range agentApprovalBatchCalls(*task.PendingTool) {
+				info.HeldCalls = append(info.HeldCalls, workerHeldCall{ID: call.ID, Name: agentToolBaseName(call.Name), Arguments: string(call.Arguments), Approved: task.PendingTool.Status == "approved"})
+			}
+		}
 	}
 	kind := store.AgentRunKindThread
 	if task.Trigger == "delegation" {

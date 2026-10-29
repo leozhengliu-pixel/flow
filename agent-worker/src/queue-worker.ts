@@ -25,7 +25,7 @@ import { FlowAgentWorker, type FlowAgentSession, type TurnStatus } from './worke
 const config = loadConfig({ flowToken: 'unused: each run mints its own token' })
 const slots = Number(process.env.FLOW_WORKER_SLOTS ?? 8)
 const workerId = process.env.FLOW_WORKER_ID ?? `worker-${process.pid}`
-const client = new FlowRuntimeClient(config.flowUrl, secret('FLOW_WORKER_SECRET'), workerId)
+const client = new FlowRuntimeClient(config.flowUrl, secret('FLOW_WORKER_SECRET'), workerId, config.protocol)
 const worker = new FlowAgentWorker(config)
 const active = new Map<string, Promise<void>>()
 const sessions = new Map<string, FlowAgentSession>()
@@ -88,11 +88,15 @@ async function execute(run: AgentRun) {
         // The session no longer takes the run's activities (stopped, or waiting for the person): the run stops too.
         onRejected: () => session?.stop(),
       })
-      : undefined
+      : loop ? new ChatActivityPoster(activity => client.activity(run.id, activity), { onError }) : undefined
   session = worker.session({
     sessionId: run.sessionId,
     flowToken: token,
-    guard: request => client.guard(run.id, request),
+    heldCalls: chat?.heldCalls ?? thread?.heldCalls,
+    guard: async request => {
+      if (loop && request.op === 'model') await poster?.drain()
+      return client.guard(run.id, request)
+    },
     // Flow shows a chat run's connector questions itself.
     elicitations: chat ? undefined : (after, waitMs, signal) => client.elicitations(run.id, after, waitMs, signal),
     systemPrompt: details?.context?.system ?? payload.systemPrompt ?? flowSystemPrompt({ workspace: run.workspaceKey, userName: 'the requester', today: new Date().toISOString().slice(0, 10) }),

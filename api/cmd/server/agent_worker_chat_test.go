@@ -620,6 +620,68 @@ func TestChatRepliesStayInProcessByDefault(t *testing.T) {
 	}
 }
 
+func TestWorkerChatEmptyAndTextApprovalRetries(t *testing.T) {
+	for _, text := range []string{"", "Allow save_issue?"} {
+		t.Run(text, func(t *testing.T) {
+			f := newWorkerChatFixture(t)
+			events := f.stream("/api/agent/sessions/stream", `{"message":"Create an issue","location":"page"}`)
+			nextEvent(t, events, "session.started")
+			run := f.mustClaim(t)
+			guard := func(op string) workerRunGuardResponse {
+				return runtimeJSON[workerRunGuardResponse](t, f.handler, runtimeCall{method: http.MethodPost, path: "/internal/agent-runtime/runs/" + run.ID + "/guard", worker: "w1", body: map[string]any{"op": op, "phase": "reply", "text": text}}, http.StatusOK)
+			}
+			guard("start")
+			if first := guard("finish"); first.Nudge == "" || first.Error != "" {
+				t.Fatalf("retry = %+v", first)
+			}
+			last := guard("finish")
+			if last.Error == "" || last.Nudge != "" {
+				t.Fatalf("bounded retry = %+v", last)
+			}
+			f.post(t, run, map[string]any{"seq": 1, "type": "error", "body": last.Error})
+			f.complete(t, run, "failed")
+			drain(t, events)
+		})
+	}
+}
+
+func seedWorkerLegacyApproval(t *testing.T, f workerChatFixture, sessionID string) {
+	t.Helper()
+	if err := mutateTestWorkspace(t, f.s.store, func(data *domain.Bootstrap) {
+		for si := range data.AgentSessions {
+			if data.AgentSessions[si].ID != sessionID {
+				continue
+			}
+			messages := data.AgentSessions[si].Messages
+			messages[len(messages)-1].Parts = []domain.AgentMessagePart{{ID: "legacy_question", Type: "question", Status: "completed", Question: &domain.AgentQuestion{Selected: agentApprovalApprove, Approval: &domain.AgentApproval{Kind: "delete", Calls: []domain.AgentToolCall{{ID: "legacy_call", Name: "list_teams", Arguments: json.RawMessage(`{}`)}}}}}}
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWorkerChatSavedApprovalWithoutRunState(t *testing.T) {
+	f := newWorkerChatFixture(t)
+	events := f.stream("/api/agent/sessions/stream", `{"message":"List teams","location":"page"}`)
+	sessionID := nextEvent(t, events, "session.started").Session.ID
+	run := f.mustClaim(t)
+	f.post(t, run, map[string]any{"seq": 1, "type": "response", "body": "Approval requested."})
+	f.complete(t, run, "done")
+	drain(t, events)
+	seedWorkerLegacyApproval(t, f, sessionID)
+	events = f.stream("/api/agent/sessions/"+sessionID+"/messages/stream", `{"message":"Approve"}`)
+	nextEvent(t, events, "session.started")
+	run = f.mustClaim(t)
+	info := f.payload(t, run).Chat
+	if info.Resume != nil || len(info.HeldCalls) != 1 || !info.HeldCalls[0].Approved || info.HeldCalls[0].Name != "list_teams" {
+		t.Fatalf("saved decision = %+v", info)
+	}
+	callRunTool(t, f.handler, f.token(t, run), "list_teams", map[string]any{}, nil)
+	f.post(t, run, map[string]any{"seq": 1, "type": "response", "body": "Teams listed."})
+	f.complete(t, run, "done")
+	drain(t, events)
+}
+
 // heldWorkerChatReply streams a message whose run holds one connector call and suspends on it.
 func (f workerChatFixture) heldWorkerChatReply(t *testing.T, message string) (events <-chan agentStreamEvent, sessionID string, run store.AgentRun, approvalID string) {
 	t.Helper()

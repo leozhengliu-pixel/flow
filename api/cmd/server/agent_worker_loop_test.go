@@ -174,6 +174,106 @@ func startTestRunAgain(t *testing.T, h workerLoopHarness, loop domain.Loop) (dom
 	return loop, run
 }
 
+func TestWorkerLoopRepliesAndOutputActivities(t *testing.T) {
+	h := newWorkerLoopHarness(t)
+	loop, started := startTestRun(t, h.handler, "Replies", "Summarize open issues without changing anything.", nil)
+	run := h.claim(t)
+	h.call(t, run, "/activities", map[string]any{"seq": 1, "type": "text.delta", "body": "Streaming"}, http.StatusOK)
+	h.call(t, run, "/activities", map[string]any{"seq": 1, "type": "text.delta", "body": "Streaming"}, http.StatusOK)
+	if record := h.loopRun(t, loop.ID, started.ID); record.Output != "Streaming" || record.Status != "running" {
+		t.Fatalf("stream = %+v", record)
+	}
+	token := h.call(t, run, "/token", map[string]any{}, http.StatusCreated)["token"].(string)
+	callRunTool(t, h.handler, token, loopFinishToolName, map[string]any{"status": "done", "summary": "Three open issues."}, nil)
+	h.guard(t, run, map[string]any{"op": "finish", "phase": "reply", "text": ""})
+	h.call(t, run, "/complete", map[string]any{"status": "done"}, http.StatusOK)
+	for index, body := range []string{"What is the status of this run?", "Continue the remaining work."} {
+		accepted := requestJSON[domain.LoopRun](t, h.handler, http.MethodPost, "/api/loops/"+loop.ID+"/runs/"+started.ID+"/replies", map[string]any{"body": body, "attachments": []map[string]any{{"name": "notes.txt", "contentType": "text/plain", "size": 4, "content": "memo"}}}, http.StatusAccepted)
+		run = h.claim(t)
+		payload := runtimeJSON[struct {
+			Loop    workerLoopRunInfo     `json:"loop"`
+			Context agentRunPromptContext `json:"context"`
+		}](t, h.handler, runtimeCall{method: http.MethodGet, path: "/internal/agent-runtime/runs/" + run.ID + "/payload", worker: "w1"}, http.StatusOK)
+		if payload.Loop.ReplyID != accepted.Replies[index].ID || !strings.Contains(payload.Context.Messages[len(payload.Context.Messages)-1].Content, "memo") {
+			t.Fatalf("reply payload = %+v", payload)
+		}
+		h.call(t, run, "/activities", map[string]any{"seq": 1, "type": "text.delta", "body": "Answer in progress"}, http.StatusOK)
+		if record := h.loopRun(t, loop.ID, started.ID); record.Replies[index].Output != "Answer in progress" || record.Output != "Three open issues." {
+			t.Fatalf("reply stream = %+v", record)
+		}
+		if index == 0 {
+			if turn := h.guard(t, run, map[string]any{"op": "turn", "round": 0}); !turn.Withhold {
+				t.Fatal("status reply offered tools")
+			}
+			finish := h.guard(t, run, map[string]any{"op": "finish", "phase": "reply", "text": "The run completed."})
+			if finish.Nudge != "" {
+				t.Fatalf("status reply = %+v", finish)
+			}
+		} else {
+			token = h.call(t, run, "/token", map[string]any{}, http.StatusCreated)["token"].(string)
+			callRunTool(t, h.handler, token, loopFinishToolName, map[string]any{"status": "done", "summary": "Nothing remains."}, nil)
+			h.guard(t, run, map[string]any{"op": "finish", "phase": "reply", "text": ""})
+		}
+		h.call(t, run, "/complete", map[string]any{"status": "done"}, http.StatusOK)
+		if record := waitForLoopReply(t, h.handler, loop.ID, started.ID, index+1); record.Replies[index].Status != "completed" {
+			t.Fatalf("reply = %+v", record.Replies[index])
+		}
+	}
+}
+
+func TestWorkerLoopDiagnosticsRecoveryAndContextBudget(t *testing.T) {
+	for _, cause := range []string{"truncated", "reasoning_only", "empty", "tool_call_text"} {
+		t.Run(cause, func(t *testing.T) {
+			h := newWorkerLoopHarness(t)
+			loop, started := startTestRun(t, h.handler, "Recovery", "Summarize issues.", nil)
+			run := h.claim(t)
+			h.guard(t, run, map[string]any{"op": "start"})
+			// Empty turns after a tool call get the bounded retry, unlike an entirely empty run.
+			token := h.call(t, run, "/token", map[string]any{}, http.StatusCreated)["token"].(string)
+			callRunTool(t, h.handler, token, "list_issues", map[string]any{"limit": 1}, nil)
+			turn := map[string]any{"model": "worker-model", "protocol": "openai-chat", "finished": true, "events": 3, "durationMs": 10}
+			switch cause {
+			case "truncated":
+				turn["stopReason"] = "length"
+				turn["text"] = "Partial"
+			case "reasoning_only":
+				turn["reasoning"] = "private thought"
+			case "tool_call_text":
+				turn["text"] = "<tool_call>oops"
+			}
+			first := h.guard(t, run, map[string]any{"op": "model", "round": 0, "modelTurn": turn})
+			if !first.Handled {
+				t.Fatalf("recovery = %+v", first)
+			}
+			if finish := h.guard(t, run, map[string]any{"op": "finish", "phase": "reply", "text": ""}); finish.Nudge == "" {
+				t.Fatalf("missing continuation: %+v", finish)
+			}
+			records := modelTurnRecords(t, h.handler, h.loopRun(t, loop.ID, started.ID))
+			if len(records) != 1 || string(records[0].Outcome) != cause || records[0].Model != "worker-model" || records[0].Continuation != cause {
+				t.Fatalf("diagnostics = %+v", records)
+			}
+			for round := 1; round <= 3; round++ {
+				h.guard(t, run, map[string]any{"op": "model", "round": round, "modelTurn": turn})
+			}
+			if finish := h.guard(t, run, map[string]any{"op": "finish", "phase": "reply", "text": ""}); finish.Error == "" {
+				t.Fatalf("unbounded recovery: %+v", finish)
+			}
+			h.call(t, run, "/complete", map[string]any{"status": "failed"}, http.StatusOK)
+		})
+	}
+	h := newWorkerLoopHarness(t)
+	setLoopLimits(h.s, func(limits *loopRunLimits) { limits.MaxContextBytes = 100 })
+	loop, started := startTestRun(t, h.handler, "Budget", "Summarize issues.", nil)
+	run := h.claim(t)
+	if answer := h.guard(t, run, map[string]any{"op": "input", "contextBytes": 101}); answer.Error == "" {
+		t.Fatal("conversation budget not enforced")
+	}
+	h.call(t, run, "/complete", map[string]any{"status": "failed"}, http.StatusOK)
+	if record := waitForRun(t, h.handler, loop.ID, started.ID); record.FailureReason != "budget_exhausted" {
+		t.Fatalf("budget = %+v", record)
+	}
+}
+
 // A loop run's worker calls reach both API servers, one at a time: the run's tool calls, its step and its report are
 // recorded on the loop run in order whichever server takes them, and the run finishes on the other.
 func TestWorkerLoopRunAcrossAPIServers(t *testing.T) {
@@ -221,5 +321,19 @@ func TestWorkerLoopRunAcrossAPIServers(t *testing.T) {
 	raw, _ := json.Marshal(record.Summary)
 	if json.Unmarshal(raw, &stored) != nil || stored["summary"] != "Two open issues." {
 		t.Fatalf("summary = %s", raw)
+	}
+	originalOutput := record.Output
+	requestJSON[domain.LoopRun](t, a.handler, http.MethodPost, "/api/loops/"+loop.ID+"/runs/"+started.ID+"/replies", map[string]any{"body": "What's the status?"}, http.StatusAccepted)
+	h := workerLoopHarness{s: b.s, handler: b.handler}
+	replyRun := h.claim(t)
+	runtimeJSON[map[string]any](t, a.handler, runtimeCall{method: http.MethodGet, path: "/internal/agent-runtime/runs/" + replyRun.ID + "/payload", worker: "w1"}, http.StatusOK)
+	h.call(t, replyRun, "/activities", map[string]any{"seq": 1, "type": "text.delta", "body": "Peer output"}, http.StatusOK)
+	if record := requestJSON[domain.LoopRun](t, a.handler, http.MethodGet, "/api/loops/"+loop.ID+"/runs/"+started.ID, nil, http.StatusOK); record.Replies[0].Output != "Peer output" {
+		t.Fatal("reply output did not cross API servers")
+	}
+	runtimeJSON[workerRunGuardResponse](t, a.handler, runtimeCall{method: http.MethodPost, path: "/internal/agent-runtime/runs/" + replyRun.ID + "/guard", worker: "w1", body: map[string]any{"op": "finish", "phase": "reply", "text": "The run completed."}}, http.StatusOK)
+	h.call(t, replyRun, "/complete", map[string]any{"status": "done"}, http.StatusOK)
+	if record := waitForLoopReply(t, a.handler, loop.ID, started.ID, 1); record.Replies[0].Output != "The run completed." || record.Output != originalOutput {
+		t.Fatalf("peer reply = %+v", record.Replies[0])
 	}
 }

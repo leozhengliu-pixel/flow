@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -111,13 +112,24 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 	}
 	limits := s.loopLimits()
 	registry := s.loopRunRegistry()
-	if err := registry.reserve(workspace, limits); err != nil {
+	reserve := func() error {
+		if s.loopRunsOnWorker() {
+			return s.reserveWorkerLoopRun(r.Context(), workspace, limits)
+		}
+		return registry.reserve(workspace, limits)
+	}
+	unreserve := func() {
+		if !s.loopRunsOnWorker() {
+			registry.unreserve(workspace)
+		}
+	}
+	if err := reserve(); err != nil {
 		loopGuards.release(guardKey)
 		writeError(w, http.StatusTooManyRequests, err.Error())
 		return
 	}
 	abort := func(status int, message string) {
-		registry.unreserve(workspace)
+		unreserve()
 		loopGuards.release(guardKey)
 		writeError(w, status, message)
 	}
@@ -137,6 +149,11 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 	}
 	// The answer runs under the run's lease, like the run itself.
 	owner := s.loopInstanceID()
+	agentRunID := ""
+	if s.loopRunsOnWorker() {
+		agentRunID = newWorkerChatRunID()
+		owner = workerLoopLeaseOwner(agentRunID)
+	}
 	if err := s.store.ClaimLoopRunLease(r.Context(), workspace, runID, store.LoopRunLease{Owner: owner, ExpiresAt: now.Add(limits.LeaseTTL)}); err != nil {
 		if _, readErr := s.store.LoopRun(r.Context(), workspace, runID); errors.Is(readErr, store.ErrLoopRunNotFound) {
 			abort(http.StatusNotFound, "loop run not found")
@@ -147,7 +164,10 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 	}
 	// Registered before the reply is stored as running: a cancel that reads
 	// the run finds the answer in this process.
-	work := s.registerLoopWork(workspace, runID, limits)
+	var work *loopWork
+	if agentRunID == "" {
+		work = s.registerLoopWork(workspace, runID, limits)
+	}
 	run, err := s.store.UpdateLoopRun(r.Context(), workspace, runID, []store.LoopRunEvent{loopRunEvent("reply_created", map[string]string{"replyId": reply.ID, "userId": userID})}, func(stored *domain.LoopRun) error {
 		if stored.LoopID != id {
 			return store.ErrLoopRunNotFound
@@ -161,7 +181,11 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		_ = s.store.ReleaseLoopRunLease(context.Background(), workspace, runID, owner)
 		// abandon frees the reserved slot, so the reply is refused without abort.
-		work.abandon()
+		if work != nil {
+			work.abandon()
+		} else {
+			unreserve()
+		}
 		loopGuards.release(guardKey)
 		switch {
 		case errors.Is(err, store.ErrLoopRunNotFound):
@@ -186,6 +210,21 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 	intent := loopReplyIntent(body)
 	contextPrompt := loopReplyContextPrompt(run, reply.ID, intent)
 	completedWrites := loopCompletedWrites(run)
+	if agentRunID != "" {
+		unreserve()
+		defer loopGuards.release(guardKey)
+		principal, _ := json.Marshal(agentRunPrincipal{Mode: agentRunModeUser, UserID: loop.OwnerID, Connectors: slices.Clone(loop.ConnectorIDs)})
+		info := workerLoopRunInfo{LoopRunID: run.ID, LoopID: loop.ID, Trigger: trigger, MaxTurns: limits.MaxTurns, TimeoutMS: limits.Timeout.Milliseconds(), Started: now.UnixMilli(), ReplyID: reply.ID, Skills: skills, History: workerRunPromptMessages(history), MaxContextBytes: limits.MaxContextBytes}
+		payload, _ := json.Marshal(map[string]any{"loop": info})
+		if _, _, err := s.store.EnqueueAgentRun(r.Context(), store.AgentRunInput{ID: agentRunID, WorkspaceKey: workspace, SessionID: run.ID, Kind: store.AgentRunKindLoop, IdempotencyKey: "loop-reply:" + reply.ID, Principal: principal, Payload: payload}); err != nil {
+			recorder := &loopRunRecorder{s: s, workspace: workspace, run: run, reply: &reply, leaseOwner: owner}
+			s.finishLoopRunReply(context.Background(), workspace, recorder, &loopRunError{reason: "unavailable", message: "The reply could not be queued for the agent worker.", err: err})
+			writeError(w, http.StatusInternalServerError, "Could not save the reply")
+			return
+		}
+		writeJSON(w, http.StatusAccepted, presentLoopRun(run, userID))
+		return
+	}
 	go func() {
 		defer loopGuards.release(guardKey)
 		answer := reply
@@ -377,7 +416,7 @@ func (s *server) finishLoopRunReply(ctx context.Context, workspace string, rec *
 	if err != nil {
 		log.Printf("Loop reply finish workspace=%s loop=%s run=%s: %v", workspace, rec.run.LoopID, rec.run.ID, err)
 	}
-	if err := s.store.ReleaseLoopRunLease(context.Background(), workspace, rec.run.ID, s.loopInstanceID()); err != nil {
+	if err := s.store.ReleaseLoopRunLease(context.Background(), workspace, rec.run.ID, firstNonEmpty(rec.leaseOwner, s.loopInstanceID())); err != nil {
 		log.Printf("Loop reply lease release workspace=%s run=%s: %v", workspace, rec.run.ID, err)
 	}
 	if err == nil {

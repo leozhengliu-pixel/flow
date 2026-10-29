@@ -57,6 +57,25 @@ func (f workerThreadFixture) activities(t *testing.T, task domain.AgentTask) []d
 	return activities
 }
 
+func TestWorkerThreadSavedApprovalWithoutRunState(t *testing.T) {
+	f := newWorkerThreadFixture(t)
+	issue := requestJSON[domain.Issue](t, f.handler, http.MethodPost, "/api/issues", map[string]any{"title": "Saved approval", "teamId": f.data.Teams[0].ID}, http.StatusCreated)
+	_, task := mentionAgentInComment(t, f.s, f.handler, f.data, f.app, issue.ID)
+	f.deliver(t, task)
+	run := f.claimThread(t)
+	runtimeJSON[map[string]any](t, f.handler, runtimeCall{method: http.MethodPost, path: "/internal/agent-runtime/runs/" + run.ID + "/activities", worker: "w1", body: map[string]any{"activityId": "held", "type": "elicitation", "elicitation": map[string]any{"kind": "approval", "calls": []map[string]any{{"callId": "saved", "name": "list_teams", "arguments": "{}"}}}}}, http.StatusOK)
+	f.complete(t, run, "awaiting")
+	task, _ = f.s.store.AgentTask(t.Context(), task.WorkspaceKey, task.ID)
+	task = requestJSON[domain.AgentTask](t, f.handler, http.MethodPost, "/api/agent-tasks/"+task.ID+"/activities", map[string]any{"expectedVersion": task.Version, "type": "prompt", "body": "Approve", "approve": true}, http.StatusOK)
+	f.deliver(t, task)
+	run = f.claimThread(t)
+	payload := runtimeJSON[workerThreadPayload](t, f.handler, runtimeCall{method: http.MethodGet, path: "/internal/agent-runtime/runs/" + run.ID + "/payload", worker: "w1"}, http.StatusOK)
+	if payload.Thread.Resume != nil || len(payload.Thread.HeldCalls) != 1 || !payload.Thread.HeldCalls[0].Approved {
+		t.Fatalf("saved decision = %+v", payload.Thread)
+	}
+	f.complete(t, run, "done")
+}
+
 type workerThreadPayload struct {
 	Thread  *workerThreadRunInfo  `json:"thread"`
 	Context agentRunPromptContext `json:"context"`
