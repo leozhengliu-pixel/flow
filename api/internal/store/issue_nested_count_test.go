@@ -109,6 +109,17 @@ func nestedCountIssues(rng *rand.Rand, base domain.Issue, prefix string, n int) 
 			tops = append(tops, i)
 		}
 		item.State = state
+		item.Creator.ID = shape.users[i%len(shape.users)]
+		item.CycleID, item.SubscriberIDs, item.Estimate = nil, nil, nil
+		if i%3 != 0 {
+			cycle := fmt.Sprintf("%scycle-%d", prefix, i%12)
+			item.CycleID = &cycle
+		}
+		if i%4 != 0 {
+			item.SubscriberIDs = []string{shape.users[i%len(shape.users)]}
+			estimate := float64(i % 8)
+			item.Estimate = &estimate
+		}
 		if rng.Intn(100) < 10 {
 			archived := item.CreatedAt
 			item.ArchivedAt = &archived
@@ -173,6 +184,19 @@ func testNestedCountParity(t *testing.T, repository *SQLiteStore, workspace, wor
 		{Value: "labelled or mine", Filter: IssueFilter{Or: []IssueFilter{{Field: "labels", Operator: "isNotEmpty"}, {Field: "assignee", Values: []string{shape.users[1]}}}}},
 	}
 	scopes := []IssueRecordQuery{
+		{TeamIDs: []string{shape.teams[0].ID}, Text: "Issue 1"},
+		{TeamIDs: []string{shape.teams[0].ID}, SearchText: "Issue 1"},
+		{TeamIDs: []string{shape.teams[0].ID}, SearchText: "Issue"},
+		{TeamIDs: []string{shape.teams[0].ID}, Text: "NC-ncp-1"},
+		{Filter: IssueFilter{Field: "project", Operator: "isNotEmpty"}},
+		{Filter: IssueFilter{Field: "creator", Values: []string{shape.users[0]}}},
+		{Filter: IssueFilter{Field: "cycle", Operator: "notIn", Values: []string{"ncp-cycle-1", ""}}},
+		{Filter: IssueFilter{Field: "title", Operator: "contains", Values: []string{"Issue 1"}}},
+		{Filter: IssueFilter{Or: []IssueFilter{{Field: "subscribers", Operator: "includesAll", Values: []string{shape.users[1]}}, {Field: "estimate", Operator: "gte", Values: []string{"3"}}}}},
+		{Filter: IssueFilter{Field: "subscribers", Operator: "notIn", Values: []string{"", shape.users[0]}}},
+		{Filter: IssueFilter{Field: "subscribers", Operator: "excludesAll", Values: []string{"", shape.users[0]}}},
+		{Filter: IssueFilter{Field: "estimate", Operator: "notIn", Values: []string{"", "3"}}},
+		{Filter: IssueFilter{Field: "estimate", Operator: "isEmpty"}},
 		// Terms the in-memory count combines: OR and NOT of status, label,
 		// assignee and priority terms, labels without a label, and status ids.
 		{TeamIDs: []string{shape.teams[0].ID}, Filter: IssueFilter{Or: []IssueFilter{{Field: "status", Values: []string{"started"}}, {Not: &IssueFilter{Field: "labels", Values: []string{shape.labels[0], ""}}}}}},
@@ -189,7 +213,16 @@ func testNestedCountParity(t *testing.T, repository *SQLiteStore, workspace, wor
 		{Filter: IssueFilter{Field: "labels", Operator: "notIn", Values: []string{shape.labels[0]}}},
 		{Filter: IssueFilter{Or: []IssueFilter{{Field: "priority", Values: []string{"1", "2"}}, {Field: "labels", Values: []string{shape.labels[1]}}}}},
 	}
-	groupings := []string{"status", "priority", "assignee", "team", "project", "label", "estimate", "customer", "cases", "none"}
+	groupings := []string{"status", "priority", "assignee", "team", "project", "creator", "cycle", "label", "estimate", "customer", "cases", "none"}
+	for _, scope := range scopes {
+		for _, group := range []string{"project", "creator", "cycle", "customer"} {
+			query := scope
+			query.Workspace, query.GroupBy, query.Nested = workspace, group, true
+			if _, ok := repository.issueForestPlan(query); !ok {
+				t.Fatalf("forest declined %s: %+v", group, scope)
+			}
+		}
+	}
 	moved, forestCounts, memberCounts := 0, 0, 0
 	compare := func(step string, groupings []string, scopes []IssueRecordQuery) {
 		t.Helper()

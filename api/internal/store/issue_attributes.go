@@ -204,6 +204,26 @@ func (s *SQLiteStore) migrateIssueAttributes(ctx context.Context) error {
 }
 
 func compileIssueAttribute(node IssueFilter) (string, []any, error) {
+	clause, values, missing, negate, err := issueAttributeValueClause(node)
+	if err != nil {
+		return "", nil, err
+	}
+	prefix := `SELECT 1 FROM issue_attribute_records a WHERE a.workspace_key=i.workspace_key AND a.issue_id=i.id AND a.field=?`
+	args := append([]any{indexKey(node.Field)}, values...)
+	condition := "EXISTS (" + prefix + " AND " + clause + ")"
+	if missing {
+		condition = "(" + condition + " OR NOT EXISTS (" + prefix + "))"
+		args = append(args, indexKey(node.Field))
+	}
+	if negate {
+		condition = "NOT (" + condition + ")"
+	}
+	return condition, args, nil
+}
+
+// issueAttributeValueClause is the comparison on a sparse attribute's value,
+// with its missing-value and negation rules shared by SQL and forest counts.
+func issueAttributeValueClause(node IssueFilter) (clause string, args []any, missing, negate bool, err error) {
 	op := strings.ToLower(node.Operator)
 	if op == "" {
 		op = "is"
@@ -219,7 +239,7 @@ func compileIssueAttribute(node IssueFilter) (string, []any, error) {
 				date, err = time.Parse("2006-01-02", value)
 			}
 			if err != nil {
-				return "", nil, ErrIssueQuery
+				return "", nil, false, false, ErrIssueQuery
 			}
 			values[i] = date.UTC().Format(issueRecordTimestamp)
 			if node.Field == "dueDate" {
@@ -231,50 +251,30 @@ func compileIssueAttribute(node IssueFilter) (string, []any, error) {
 		// equality filter on an over-long id matches the stored digest.
 		values[i] = indexKey(value)
 	}
-	field := indexKey(node.Field)
-	prefix := `SELECT 1 FROM issue_attribute_records a WHERE a.workspace_key=i.workspace_key AND a.issue_id=i.id AND a.field=?`
-	args := []any{field}
-	var condition string
 	switch op {
 	case "isempty", "isnotempty":
-		condition = "NOT EXISTS (" + prefix + ")"
-		if op == "isnotempty" {
-			condition = "EXISTS (" + prefix + ")"
-		}
+		return "1=1", nil, false, op == "isempty", nil
 	case "is", "in", "isnot", "notin":
-		clause, bound := bindList("a.value", values)
-		condition = "EXISTS (" + prefix + " AND " + clause + ")"
-		args = append(args, bound...)
-		for _, value := range values {
-			if value == "" {
-				condition = "(" + condition + " OR NOT EXISTS (" + prefix + "))"
-				args = append(args, field)
-				break
-			}
-		}
-		if op == "isnot" || op == "notin" {
-			condition = "NOT (" + condition + ")"
-		}
+		clause, args = bindList("a.value", values)
+		return clause, args, slices.Contains(values, ""), op == "isnot" || op == "notin", nil
 	case "before", "after", "gt", "gte", "lt", "lte":
 		if len(values) != 1 || values[0] == "" {
-			return "", nil, ErrIssueQuery
+			return "", nil, false, false, ErrIssueQuery
 		}
 		column := "a.value"
 		var value any = values[0]
 		if node.Field == "estimate" {
 			number, err := strconv.ParseFloat(values[0], 64)
 			if err != nil {
-				return "", nil, ErrIssueQuery
+				return "", nil, false, false, ErrIssueQuery
 			}
 			column, value = "CAST(a.value AS DECIMAL(20,6))", number
 		}
 		operator := map[string]string{"before": "<", "after": ">", "gt": ">", "gte": ">=", "lt": "<", "lte": "<="}[op]
-		condition = "EXISTS (" + prefix + " AND " + column + operator + "?)"
-		args = append(args, value)
+		return column + operator + "?", []any{value}, false, false, nil
 	default:
-		return "", nil, fmt.Errorf("%w: unsupported attribute operator", ErrIssueQuery)
+		return "", nil, false, false, fmt.Errorf("%w: unsupported attribute operator", ErrIssueQuery)
 	}
-	return condition, args, nil
 }
 
 // RecurrenceInstanceKey is the indexed recurrenceInstance attribute of a

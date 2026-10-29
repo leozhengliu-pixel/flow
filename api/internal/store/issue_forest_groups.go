@@ -59,12 +59,13 @@ func (s *SQLiteStore) issueTeamTreeIndexed(alias string) string {
 const maxIssueForestBits = 62
 
 type issueForestRow struct {
-	parent string
-	key    string
-	state  string
-	bits   uint64
-	labels uint64
-	flags  uint8
+	parent    string
+	key       string
+	customers []string
+	state     string
+	bits      uint64
+	labels    uint64
+	flags     uint8
 }
 
 const (
@@ -80,7 +81,8 @@ type issueForestTerm struct {
 }
 
 type issueForestPlan struct {
-	query IssueRecordQuery
+	query   IssueRecordQuery
+	dialect string
 	// rowTerms are evaluated on the scope's index entries, stateTerms (MySQL)
 	// per status on the workspace counters; each sets its bit of a row.
 	rowTerms, stateTerms []issueForestTerm
@@ -100,6 +102,9 @@ type issueForestPlan struct {
 	keyColumn   string
 	stateStream bool
 	attribute   string
+	columnGroup string
+	selections  []issueForestSelection
+	search      int
 }
 
 // issueFilterOnStatusAndPriority reports a filter made only of AND-ed status,
@@ -124,7 +129,7 @@ func issueFilterOnStatusAndPriority(filter IssueFilter) bool {
 // preferIssueForest reports a query that the counters and the tree index
 // read do not serve, which the in-memory count serves faster than SQL.
 func preferIssueForest(query IssueRecordQuery) bool {
-	simple := (query.GroupBy == "status" || query.GroupBy == "priority" || query.GroupBy == "none") && issueFilterOnStatusAndPriority(query.Filter) && len(query.StateIDs) == 0 && query.AllowedTeamIDs == nil
+	simple := (query.GroupBy == "status" || query.GroupBy == "priority" || query.GroupBy == "none") && issueFilterOnStatusAndPriority(query.Filter) && len(query.StateIDs) == 0 && query.AllowedTeamIDs == nil && len(query.ProjectIDs) == 0 && query.Text == "" && query.SearchText == ""
 	return !simple
 }
 
@@ -132,7 +137,7 @@ func preferIssueForest(query IssueRecordQuery) bool {
 // a term or grouping the index reads do not carry.
 func (s *SQLiteStore) issueForestPlan(query IssueRecordQuery) (*issueForestPlan, bool) {
 	query = query.withoutGroupValue()
-	if query.Workspace == "" || query.Text != "" || query.SearchText != "" || len(query.ProjectIDs) > 0 || len(query.IssueIDs) > 0 || query.RestrictToIssueIDs || len(query.ReleaseIDs) > 0 {
+	if query.Workspace == "" || len(query.ReleaseIDs) > 0 {
 		return nil, false
 	}
 	// Invalid filters and cases are reported by the SQL count.
@@ -140,7 +145,7 @@ func (s *SQLiteStore) issueForestPlan(query IssueRecordQuery) (*issueForestPlan,
 		return nil, false
 	}
 	mysql := s.dialect == "mysql"
-	p := &issueForestPlan{query: query, access: -1}
+	p := &issueForestPlan{query: query, dialect: s.dialect, access: -1, search: -1}
 	switch query.GroupBy {
 	case "status":
 		if mysql {
@@ -154,7 +159,9 @@ func (s *SQLiteStore) issueForestPlan(query IssueRecordQuery) (*issueForestPlan,
 		p.keyColumn = "i.assignee_id"
 	case "team":
 		p.keyColumn = "i.team_id"
-	case "none", "cases":
+	case "project", "creator", "cycle":
+		p.columnGroup = query.GroupBy
+	case "none", "cases", "customer":
 	default:
 		if p.attribute = issueGroupAttribute(query.GroupBy); p.attribute == "" {
 			return nil, false
@@ -162,6 +169,9 @@ func (s *SQLiteStore) issueForestPlan(query IssueRecordQuery) (*issueForestPlan,
 	}
 	var ok bool
 	if p.filter, ok = p.compile(query.Filter, mysql); !ok {
+		return nil, false
+	}
+	if !s.compileIssueForestScope(p) {
 		return nil, false
 	}
 	if len(query.StateIDs) > 0 {
@@ -276,10 +286,25 @@ func (p *issueForestPlan) compileTerm(node IssueFilter, mysql bool) (func(*issue
 	switch node.Field {
 	case "labels":
 		return p.labelTerm(node)
+	case "subscribers", "myActivity":
+		return p.relationTerm(node)
+	case "project", "creator", "cycle", "title":
+		budget := 1
+		clause, args, err := compileIssueFilter(node, 0, &budget)
+		if err != nil {
+			return nil, false
+		}
+		if node.Field == "title" {
+			return p.textSelection(clause, args), true
+		}
+		return p.selection("SELECT i.id FROM "+p.columnTable(node.Field)+" WHERE i.workspace_key=? AND "+clause, append([]any{p.query.Workspace}, args...)), true
 	case "status", "statusType":
 		onState = mysql
 	case "priority", "assignee", "team", "parent", "id":
 	default:
+		if isIssueAttributeField(node.Field) {
+			return p.attributeTerm(node)
+		}
 		return nil, false
 	}
 	budget := 1
@@ -425,7 +450,16 @@ func (s *SQLiteStore) issueForestGroups(ctx context.Context, query IssueRecordQu
 				continue
 			}
 		}
-		counts[rows[top].key]++
+		if p.query.GroupBy == "customer" {
+			if len(rows[top].customers) == 0 {
+				counts[""]++
+			}
+			for _, customer := range rows[top].customers {
+				counts[customer]++
+			}
+		} else {
+			counts[rows[top].key]++
+		}
 	}
 	groups, err := s.orderedIssueGroups(ctx, p, counts)
 	return groups, true, err
@@ -436,6 +470,31 @@ func (s *SQLiteStore) issueForestGroups(ctx context.Context, query IssueRecordQu
 // status is missing or not one the counters describe unambiguously.
 func (s *SQLiteStore) readIssueForest(ctx context.Context, p *issueForestPlan) ([]issueForestRow, map[string]int32, bool, error) {
 	q := p.query
+	var searchIDs map[string]bool
+	if p.search >= 0 {
+		selection := p.selections[p.search]
+		result, err := s.db.QueryContext(ctx, selection.statement, selection.args...)
+		if err != nil {
+			return nil, nil, false, err
+		}
+		searchIDs = map[string]bool{}
+		for result.Next() {
+			var id string
+			if err := result.Scan(&id); err != nil {
+				result.Close()
+				return nil, nil, false, err
+			}
+			searchIDs[id] = true
+		}
+		err = result.Err()
+		result.Close()
+		if err != nil {
+			return nil, nil, false, err
+		}
+		if len(searchIDs) == 0 {
+			return []issueForestRow{}, map[string]int32{}, true, nil
+		}
+	}
 	where := []string{"i.workspace_key=?"}
 	whereArgs := []any{q.Workspace}
 	if len(q.TeamIDs) > 0 {
@@ -488,7 +547,13 @@ func (s *SQLiteStore) readIssueForest(ctx context.Context, p *issueForestPlan) (
 			result.Close()
 			return nil, nil, false, err
 		}
+		if searchIDs != nil && !searchIDs[id] {
+			continue
+		}
 		row.key, row.bits = shared(row.key), uint64(mask)
+		if p.search >= 0 {
+			row.bits |= p.selections[p.search].mask
+		}
 		index[id] = int32(len(rows))
 		rows = append(rows, row)
 	}
@@ -590,6 +655,9 @@ func (s *SQLiteStore) readIssueForest(ctx context.Context, p *issueForestPlan) (
 			return nil, nil, false, err
 		}
 	}
+	if err := s.readIssueForestSelections(ctx, p, each, shared); err != nil {
+		return nil, nil, false, err
+	}
 	return rows, index, true, nil
 }
 
@@ -657,6 +725,8 @@ func (s *SQLiteStore) orderedIssueGroups(ctx context.Context, p *issueForestPlan
 			}
 		}
 		return groups, nil
+	case "customer":
+		return s.orderedIssueForestCustomers(ctx, q.Workspace, counts)
 	}
 	values := make([]string, 0, len(counts))
 	for value, count := range counts {
@@ -704,6 +774,11 @@ func (s *SQLiteStore) orderedIssueGroups(ctx context.Context, p *issueForestPlan
 		clause, values := bindList("g.value", values)
 		statement = "SELECT g.value FROM issue_attribute_records g WHERE g.workspace_key=? AND g.field=? AND " + clause + " GROUP BY g.workspace_key,g.field,g.value ORDER BY g.value"
 		args = append(append(args, p.attribute), values...)
+	case p.columnGroup != "":
+		column, _ := issueGroupColumn(p.columnGroup)
+		clause, values := bindList("i."+column, values)
+		statement = "SELECT i." + column + " FROM issue_records i WHERE i.workspace_key=? AND " + clause + " GROUP BY i.workspace_key,i." + column + " ORDER BY i." + column
+		args = append(args, values...)
 	default:
 		column := strings.TrimPrefix(p.keyColumn, "i.")
 		clause, values := bindList("i."+column, values)

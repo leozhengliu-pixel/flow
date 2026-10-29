@@ -236,6 +236,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Nested issue counts use existing indexes for project, creator, cycle and
+  customer groups, and project, subscriber and sparse-attribute filters.
+  Search matches are read once; substring filters scan their team scope once.
+
 - PostgreSQL change-log numbering assigns a committed batch, advances its
   cursor and retires the queue in one statement after acquiring the numbering
   lock. Multi-event writers also enqueue their events in bounded batches.

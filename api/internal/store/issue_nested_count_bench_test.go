@@ -71,6 +71,24 @@ func TestNestedIssueCountTimings(t *testing.T) {
 	started := time.Now()
 	if !reused {
 		importNestedCountIssues(t, repository, workspace, issues)
+		tx, err := repository.db.BeginTx(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback()
+		for i := 0; i < n; i += 7 {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO customer_request_filter_records(workspace_key,request_id,issue_id,customer_id,important,project_id) VALUES(?,?,?,?,0,'')`, workspace, fmt.Sprintf("nct-request-%d", i), issues[i].ID, fmt.Sprintf("nct-customer-%d", i%10)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for i := 0; i < 9; i++ {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO customer_filter_records(workspace_key,customer_id,owner_id,status_value,tier_value,revenue,customer_size) VALUES(?,?,'','','',0,0)`, workspace, fmt.Sprintf("nct-customer-%d", i)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
 	}
 	nested := 0
 	for _, issue := range issues {
@@ -101,10 +119,54 @@ func TestNestedIssueCountTimings(t *testing.T) {
 		{"team, member, assignee", IssueRecordQuery{Access: member, TeamIDs: []string{team}, GroupBy: "assignee"}},
 		{"team, member, label", IssueRecordQuery{Access: member, TeamIDs: []string{team}, GroupBy: "label"}},
 		{"team, member, none", IssueRecordQuery{Access: member, TeamIDs: []string{team}, GroupBy: "none"}},
+		{"team, member, project", IssueRecordQuery{Access: member, TeamIDs: []string{team}, GroupBy: "project"}},
+		{"team, member, creator", IssueRecordQuery{Access: member, TeamIDs: []string{team}, GroupBy: "creator"}},
+		{"team, member, cycle", IssueRecordQuery{Access: member, TeamIDs: []string{team}, GroupBy: "cycle"}},
+		{"team, member, customer", IssueRecordQuery{Access: member, TeamIDs: []string{team}, GroupBy: "customer"}},
+		{"team, project filter", IssueRecordQuery{Access: member, TeamIDs: []string{team}, Filter: IssueFilter{Field: "project", Operator: "isNotEmpty"}, GroupBy: "status"}},
+		{"team, text filter", IssueRecordQuery{Access: member, TeamIDs: []string{team}, Text: "Issue 1", GroupBy: "status"}},
+		{"team, search filter", IssueRecordQuery{Access: member, TeamIDs: []string{team}, SearchText: "Issue", GroupBy: "status"}},
+		{"team, subscriber filter", IssueRecordQuery{Access: member, TeamIDs: []string{team}, Filter: IssueFilter{Field: "subscribers", Operator: "isNotEmpty"}, GroupBy: "status"}},
+		{"team, attribute filter", IssueRecordQuery{Access: member, TeamIDs: []string{team}, Filter: IssueFilter{Field: "estimate", Operator: "gte", Values: []string{"3"}}, GroupBy: "status"}},
 		{"project, member, status", IssueRecordQuery{Access: member, ProjectIDs: []string{shape.projects[0]}, GroupBy: "status"}},
 		{"my issues, member, status", IssueRecordQuery{Access: member, Filter: IssueFilter{Field: "assignee", Values: []string{shape.users[0]}}, GroupBy: "status"}},
 		{"team, label or priority filter", IssueRecordQuery{Access: member, TeamIDs: []string{team}, Filter: IssueFilter{Or: []IssueFilter{{Field: "priority", Values: []string{"1", "2"}}, {Field: "labels", Values: []string{shape.labels[1]}}}}, GroupBy: "status"}},
 		{"team, focus cases", IssueRecordQuery{Access: member, TeamIDs: []string{team}, GroupBy: "cases", GroupCases: []IssueGroupCase{{Value: "urgent", Filter: IssueFilter{Field: "priority", Values: []string{"1"}}}, {Value: "started", Filter: IssueFilter{Field: "statusType", Values: []string{"started"}}}}}},
+	}
+	if os.Getenv("FLOW_NESTED_COUNT_COMPARE") != "" {
+		lines := []string{fmt.Sprintf("%s, %d issues, 5 paired uncached samples:", driver, n), "| view | before p50/p95 ms | after p50/p95 ms |", "|---|---:|---:|"}
+		for _, view := range views {
+			if !slices.Contains([]string{"team, member, project", "team, member, creator", "team, member, cycle", "team, member, customer", "team, project filter", "team, text filter", "team, search filter", "team, subscriber filter", "team, attribute filter"}, view.name) {
+				continue
+			}
+			q := view.query
+			q.Workspace, q.Archived, q.Nested = workspace, "false", true
+			q = withoutRedundantIssueAccess(q)
+			samples := [2][]time.Duration{}
+			for range 5 {
+				var reference []IssueRecordGroup
+				for mode, run := range []func(context.Context, IssueRecordQuery) ([]IssueRecordGroup, error){repository.nestedIssueGroupsBeforeSelections, repository.nestedIssueGroups} {
+					start := time.Now()
+					groups, err := run(ctx, q)
+					samples[mode] = append(samples[mode], time.Since(start))
+					if err != nil {
+						t.Fatal(err)
+					}
+					if mode == 0 {
+						reference = groups
+					} else if !slices.Equal(groups, reference) {
+						t.Fatalf("%s counts differ: %v != %v", view.name, groups, reference)
+					}
+				}
+			}
+			percentiles := func(values []time.Duration) string {
+				slices.Sort(values)
+				return fmt.Sprintf("%.1f / %.1f", float64(values[len(values)/2].Microseconds())/1000, float64(values[len(values)-1].Microseconds())/1000)
+			}
+			lines = append(lines, fmt.Sprintf("| %s | %s | %s |", view.name, percentiles(samples[0]), percentiles(samples[1])))
+		}
+		t.Log(strings.Join(lines, "\n"))
+		return
 	}
 	explainPlan := func(statement string, args []any) string {
 		explain := map[string]string{"sqlite": "EXPLAIN QUERY PLAN ", "mysql": "EXPLAIN ANALYZE ", "postgres": "EXPLAIN (ANALYZE, BUFFERS) "}[driver]
@@ -254,4 +316,25 @@ func TestNestedIssueCountTimings(t *testing.T) {
 		rows.Close()
 	}
 	measure("after ANALYZE")
+}
+
+// The selected benchmark views could use neither the counters nor the old
+// forest plan: they counted in SQL and then walked the matching subtrees.
+func (s *SQLiteStore) nestedIssueGroupsBeforeSelections(ctx context.Context, query IssueRecordQuery) ([]IssueRecordGroup, error) {
+	groups, err := s.flatIssueGroupsBySQL(ctx, query)
+	if err != nil || len(groups) == 0 {
+		return groups, err
+	}
+	moves, err := s.nestedIssueMoves(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	result := []IssueRecordGroup{}
+	for _, group := range groups {
+		group.Count += moves[group.Value]
+		if group.Count > 0 {
+			result = append(result, group)
+		}
+	}
+	return result, nil
 }
