@@ -735,92 +735,13 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 	limits := s.loopLimits()
 	started := time.Now()
 	defer func() { rec.timing.TotalMs = time.Since(started).Milliseconds() }()
-	directory, ok := s.store.WorkspaceMetadataFields(workspace, "users")
-	if !ok {
-		return errNotFound
-	}
-	owner := userByID(&directory, loop.OwnerID)
-	if owner == nil {
-		return &loopRunError{reason: "unavailable", message: "the loop owner is no longer in this workspace"}
-	}
-	// The run reads workspace metadata only; issues and discussions are read
-	// through the paged tool queries, never loaded whole.
-	var data domain.Bootstrap
-	if s.authDisabled {
-		data, ok = s.store.WorkspaceMetadata(workspace)
-		if !ok {
-			return errNotFound
-		}
-		data.Viewer, data.ViewerRole = *owner, "admin"
-	} else {
-		var err error
-		if data, err = s.store.PagedWorkspaceMetadata(ctx, workspace, owner.ID); err != nil {
-			return &loopRunError{reason: "unavailable", message: "the loop owner cannot access this workspace"}
-		}
-	}
-	if err := agentWorkspacePolicy(data.WorkspaceSettings, data.ViewerRole); err != nil {
-		return &loopRunError{reason: "unavailable", message: err.Error(), err: err}
-	}
-	request, err := s.loopRunRequest(ctx, workspace, *owner)
+	lc, err := s.prepareLoopRun(ctx, workspace, loop, trigger, rec, s.inProcessLoopConnectors(ctx, workspace, loop, rec))
 	if err != nil {
 		return err
 	}
-	scope := s.newLoopScope(data, loop, trigger)
-	rec.timing.LoadMs = time.Since(started).Milliseconds()
-	discoveryStarted := time.Now()
-	// Only the loop's selected connectors, as the owner, are contacted: a loop
-	// that selects none makes no external request.
-	selection := connectorSelection{IDs: loop.ConnectorIDs, Partial: loopConnectorPolicy() != "required", Budget: loopConnectorDiscoveryBudget}
-	connectorCtx, _, problems, discoverErr := s.withSelectedConnectorTools(request.Context(), data, connectorRequestContext{Workspace: workspace, UserID: owner.ID}, selection)
-	rec.timing.DiscoveryMs = time.Since(discoveryStarted).Milliseconds()
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	if discoverErr != nil {
-		return &loopRunError{reason: "unavailable", message: "A selected connector is unavailable: " + discoverErr.Error(), err: discoverErr}
-	}
-	for _, problem := range problems {
-		rec.addNotice(fmt.Sprintf("%s %s", loopConnectorSkippedNotice, problem.Err.Error()))
-	}
-	request = request.WithContext(connectorCtx)
-	request = request.WithContext(context.WithValue(request.Context(), agentToolFilterKey{}, scope.offers))
-	// "Team access" covers what the run can read, not only what it may change:
-	// its tools run with a key restricted to the loop's teams, so lists,
-	// searches and reads outside them come back empty or not found.
-	request = request.WithContext(context.WithValue(request.Context(), apiKeyContextKey{}, scope.toolKey()))
-	request = request.WithContext(context.WithValue(request.Context(), agentExtraToolsKey{}, append([]agentProviderTool{loopFinishToolDefinition}, loopGrantedTools()...)))
-	request = request.WithContext(withAgentGrantedTools(request.Context(), loopGrantedToolNames))
-	request = request.WithContext(withCodingLoopRun(request.Context(), loop, rec.run.ID, trigger, scope.codeAccess)) // coding sessions (track L)
-	if loop.WebSearch && s.webSearchAvailable() {
-		request = request.WithContext(withAgentWebTools(request.Context()))
-	}
-	toolNames, readOnly := s.loopRunTools(request.Context())
-	// The run works to the loop's output contract, read once per text; a
-	// reply on the run keeps the contract its run used.
-	contract := rec.run.OutputContract
-	if contract == nil {
-		contractStarted := time.Now()
-		documents := []domain.Document{}
-		if stored, ok := s.store.WorkspaceMetadataFields(workspace, "documents"); ok {
-			documents = stored.Documents
-		}
-		contract = resolveLoopContract(data, documents, loop, s.loopContractFor(ctx, workspace, loop), trigger, time.Now())
-		rec.timing.LoadMs += time.Since(contractStarted).Milliseconds()
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if rec.reply == nil {
-			rec.setContract(contract)
-		}
-	}
-	plan := loopRunPlan{Tools: toolNames, Limits: limits, Contract: contract}
-	if loopModelFilledTitles(contract, "document") || loopModelFilledTitles(contract, "issue") {
-		request = request.WithContext(context.WithValue(request.Context(), agentToolRewriteKey{}, loopTitleFieldsTools(contract)))
-	}
-
-	entity := s.loopEntityContext(ctx, workspace, data, trigger)
+	request := lc.request
 	messages := []agentProviderMessage{
-		{Role: "system", Content: loopSystemPrompt(data, loop, trigger, entity, scope, s.webSearchAvailable(), s.loopInstructionReferences(ctx, workspace, data, loop), plan) + loopReplySkillsPrompt(rec.skills) + rec.contextPrompt},
+		{Role: "system", Content: lc.systemPrompt(ctx)},
 		{Role: "user", Content: "Run this loop now and follow its instructions."},
 	}
 	messages = append(messages, history...)
@@ -976,104 +897,12 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 				rec.setOutputNow(strings.TrimSpace(output))
 				return loopBudgetError("The run made more than %d tool calls, its budget. Narrow the instructions or raise FLOW_LOOP_MAX_TOOL_CALLS.", limits.MaxToolCalls)
 			}
-			index := rec.startTool(request.Context(), call)
-			status := "completed"
-			var result []byte
-			toolStarted := time.Now()
-			callErr := scope.check(ctx, call)
-			if callErr == nil && !readOnly[strings.TrimPrefix(call.Name, "mcp__flow.")] {
-				if label, done := rec.completedWrites[loopWriteFingerprint(call.Name, loopToolArgs(call))]; done {
-					callErr = fmt.Errorf("This change already succeeded earlier in this run (%s); it was not repeated. Continue with the steps that are not done yet", label)
-				}
-			}
-			// The loop's own work follows its output contract; a person
-			// replying on the run page may still ask for anything.
-			name := strings.TrimPrefix(call.Name, "mcp__flow.")
-			external := strings.HasPrefix(name, "external_")
-			var output *loopOutputCall
-			switch {
-			case callErr != nil || rec.answering || contract == nil || readOnly[name]:
-			case contract.ReadOnly && external:
-				// A read-only loop's refusal covers connector tools, which can change data outside Flow.
-				callErr = loopConnectorWriteRefusal(request.Context(), call)
-			case contract.ReadOnly && loopWriteToolName(name):
-				// "只回复总结文本即可，不要…写入内容": no change of any kind.
-				callErr = fmt.Errorf("%s change anything in Flow; reply with the summary only. The call was not made", loopProhibitedCallPrefix)
-			case !external:
-				output, callErr = s.loopContractCallRefusal(ctx, rec, data, contract, call)
-				if callErr == nil && output != nil && output.arguments != nil {
-					// A new issue's title, team and project from the contract;
-					// the team must still be one the loop can use.
-					call.Arguments = output.arguments
-					callErr = scope.check(ctx, call)
-				}
-			}
-			var document *loopDocumentWrite
-			if callErr == nil && name == "save_document" {
-				document, callErr = s.prepareLoopDocumentWrite(rec, data, contract, call)
-				if callErr == nil && document.arguments != nil {
-					// The contract's title for this run and its team; the
-					// team must still be one the loop can use.
-					call.Arguments = document.arguments
-					callErr = scope.check(ctx, call)
-				}
-			}
-			if callErr == nil {
-				// titleFields is the loop's own argument: the tools do not take it.
-				call.Arguments = loopWithoutTitleFields(call.Arguments)
-			}
-			if callErr != nil {
-				status = "blocked"
-			} else if document != nil && document.applied != "" {
-				result = document.appliedResult()
-			} else {
-				execute := func() error {
-					result, callErr = s.executeAgentTool(request, data, call)
-					return callErr
-				}
-				if readOnly[strings.TrimPrefix(call.Name, "mcp__flow.")] {
-					// Reads are safe to repeat; changes are never retried.
-					retries, _ := loopRetry(ctx, limits, execute)
-					rec.addRetries(retries)
-				} else {
-					execute()
-				}
-				if callErr != nil {
-					status = "error"
-				} else if document != nil {
-					s.verifyLoopDocumentWrite(workspace, document, result)
-				} else if output != nil && output.record.ID == "" {
-					output.record.ID = loopOutputResultID(result)
-				}
-				if document != nil {
-					s.settleLoopDocumentClaim(workspace, document, callErr)
-				}
-			}
-			rec.timing.ToolMs += time.Since(toolStarted).Milliseconds()
-			write := !readOnly[strings.TrimPrefix(call.Name, "mcp__flow.")] && !strings.HasPrefix(call.Name, "external_")
-			var record *domain.LoopRunDocumentWrite
-			if document != nil {
-				record = document.record
-				// A write that was not repeated changes nothing now.
-				write = write && (document.applied == "" || record.Changed)
-			}
-			callErr = publicToolError(ctx, call.Name, callErr)
-			var written *domain.LoopRunOutputWrite
-			if output != nil {
-				written = output.record
-			}
-			rec.finishTool(index, status, callErr, write, loopToolArgs(call), record, written)
-			if fingerprint := loopWriteFingerprint(call.Name, loopToolArgs(call)); write && status == "completed" && rec.completedWrites != nil && fingerprint != "" {
-				rec.completedWrites[fingerprint] = loopToolLabel(call.Name, loopToolArgs(call))
-			}
+			// The loop's gates, the call and its record (loop_run_steps.go).
+			content, failed := lc.runToolCall(ctx, call)
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			content := string(result)
-			if callErr != nil {
-				content = agentToolFailureText(result, callErr)
-			}
-			reply(truncateLoopToolOutput(content, limits.MaxToolOutputBytes), callErr != nil)
+			reply(content, failed)
 		}
 		if finished != nil {
 			output = strings.TrimSpace(output + "\n\n" + renderLoopSummary(finished))
