@@ -19,6 +19,8 @@ export type FlowRunContext = {
   alwaysAskTools?: string[]
   /** ask_user answers by call id, filled in by the host before it approves the held call. */
   answers: Record<string, string>
+  /** Every tool Flow lists is offered (a loop run: Flow lists exactly the loop's tools). */
+  allTools?: boolean
 }
 
 export function newRunContext(sessionId: string, request: string, loadedGroups: string[], allowlist?: string[]): FlowRunContext {

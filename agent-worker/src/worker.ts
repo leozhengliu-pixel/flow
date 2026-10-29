@@ -103,6 +103,10 @@ export type SessionOptions = {
   suspended?: SuspendedStore
   /** Tool groups the run starts with besides the ones its request picks (Flow's, from the session's surface). */
   groups?: string[]
+  /** Offer every tool Flow lists, run the calls one at a time, and end the run after these tools (a loop run). */
+  allTools?: boolean
+  serialCalls?: boolean
+  stopAtTools?: string[]
 }
 
 export type ActivitySink = (activity: FlowActivity) => void
@@ -145,15 +149,17 @@ export class FlowAgentSession {
       this.elicitations = new ConnectorElicitationWatcher(options.elicitations, elicitation => this.sink?.({ type: 'connector.elicitation', at: Date.now(), elicitation }))
     }
     const watcher = this.elicitations
-    this.mcp = options.mcpServers ?? [flowMcpServer(config.flowUrl, options.flowToken ?? config.flowToken, { toolErrors: this.toolErrors, onConnectorCall: watcher ? () => watcher.begin() : undefined })]
+    this.mcp = options.mcpServers ?? [flowMcpServer(config.flowUrl, options.flowToken ?? config.flowToken, { toolErrors: this.toolErrors, onConnectorCall: watcher ? () => watcher.begin() : undefined, serial: options.serialCalls })]
     this.agent = new FlowAgent({
       name: 'Flow Agent',
       instructions: options.systemPrompt,
       model: this.model,
       modelSettings: modelSettings(config, options.sessionId),
-      tools: [askUserTool, loadToolsTool, ...(options.tools ?? [])],
+      // A loop run has only the tools Flow lists for it (no question to ask, no groups to load).
+      tools: [...(options.allTools ? [] : [askUserTool, loadToolsTool]), ...(options.tools ?? [])],
       mcpServers: this.mcp,
       mcpConfig: { convertSchemasToStrict: false },
+      ...(options.stopAtTools?.length ? { toolUseBehavior: { stopAtToolNames: options.stopAtTools } } : {}),
     })
   }
 
@@ -176,6 +182,7 @@ export class FlowAgentSession {
   async send(message: string, sink: ActivitySink = () => {}, input?: AgentInputItem[]): Promise<TurnOutcome> {
     const history = await this.history().getItems()
     const context = newRunContext(this.sessionId, message, [...new Set([...initialGroups(message, previousTools(history)), ...(this.options.groups ?? [])])], this.options.allowlist)
+    if (this.options.allTools) context.allTools = true
     return this.execute(input ?? message, context, sink)
   }
 
@@ -249,6 +256,8 @@ export class FlowAgentSession {
     let guard = previousGuard
     if (!guard && this.options.guard) {
       guard = new RunGuard(this.options.guard, maxTurns, this.toolErrors)
+      // A loop's completion check may send the reply back more than once (Flow bounds it).
+      guard.repeatNudges = Boolean(this.options.allTools)
       await guard.start(context)
     }
     this.model.observer = record => {

@@ -91,6 +91,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   budgets, connector budget and checks of what the answer reports. A run no
   worker takes within `FLOW_AGENT_WORKER_CLAIM_TIMEOUT` ends the session with
   "No agent worker is available".
+- Loop runs execute on the agent worker too (`FLOW_AGENT_RUNTIME=worker`).
+  The run page is unchanged: steps, tool calls, the output contract and its
+  refusals, document writes, `finish_run` reports and the acceptance check are
+  recorded as before, every tool call goes through the same scope and
+  contract checks, and the turn, tool-call and time budgets, Cancel and the
+  per-workspace limit apply across API servers. Replies on a run's page still
+  run in the API.
 - The workspace Invite dialog (Settings → Administration → Members → Invite)
   has an **Add to team** field for every role. Pick one or more teams (a
   searchable multi-select; optional for Members and Admins, required for

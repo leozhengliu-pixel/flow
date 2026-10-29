@@ -108,6 +108,13 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 			}
 			return
 		}
+		if actor.Run != nil && (request.Method == "tools/list" || request.Method == "tools/call") {
+			if info, loop := workerLoopInfo(actor.Run.run); loop {
+				// A loop run on the agent worker: the loop's tools, through its gates (agent_worker_loop.go).
+				s.serveMCPLoopRun(w, r, request, actor.Run, info)
+				return
+			}
+		}
 		switch request.Method {
 		case "initialize":
 			var params struct {

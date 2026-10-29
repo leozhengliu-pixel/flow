@@ -341,7 +341,19 @@ func (s *server) startLoopRun(workspace, loopID string, trigger loopTrigger, act
 	}
 	limits := s.loopLimits()
 	registry := s.loopRunRegistry()
-	budgetErr := registry.reserve(workspace, limits)
+	onWorker := s.loopRunsOnWorker()
+	var budgetErr error
+	if onWorker {
+		// FLOW_AGENT_RUNTIME=worker (agent_worker_loop.go): the budget counts the running loop runs of every server, and
+		// a run of this loop on this entity still running on another server holds it as here.
+		if s.workerLoopRunInFlight(context.Background(), workspace, loopID, trigger.EntityID) {
+			loopGuards.release(guardKey)
+			return domain.LoopRun{}, errConflict
+		}
+		budgetErr = s.reserveWorkerLoopRun(context.Background(), workspace, limits)
+	} else {
+		budgetErr = registry.reserve(workspace, limits)
+	}
 	// Stamping the loop touches only the loop catalog and its versions.
 	stampCtx := store.WithMetadataFields(context.Background(), "loops", "loopVersions")
 	err := s.store.MutateWorkspace(stampCtx, workspace, "loop.run_started", loopID, map[string]any{"runId": run.ID, "trigger": trigger.Kind}, func(data *domain.Bootstrap) error {
@@ -355,7 +367,7 @@ func (s *server) startLoopRun(workspace, loopID string, trigger loopTrigger, act
 		return nil
 	})
 	if err != nil {
-		if budgetErr == nil {
+		if budgetErr == nil && !onWorker {
 			registry.unreserve(workspace)
 		}
 		loopGuards.release(guardKey)
@@ -369,6 +381,11 @@ func (s *server) startLoopRun(workspace, loopID string, trigger loopTrigger, act
 		}
 		s.publishLoopRunEvent(workspace, "loop_run.finished", run)
 		return run, nil
+	}
+	if onWorker {
+		// The run executes on the agent worker; the guard keeps only its retrigger cooldown here.
+		defer loopGuards.release(guardKey)
+		return s.queueLoopRunOnWorker(workspace, *loop, trigger, run, limits)
 	}
 	run.HeartbeatAt = &now
 	// Registered before it is stored as running: a cancel that reads the run
@@ -422,6 +439,8 @@ type loopRunRecorder struct {
 	// completedWrites are the writes that already succeeded on the run and
 	// its replies, by loopWriteFingerprint; a continuation never repeats them.
 	completedWrites map[string]string
+	// leaseOwner holds the run's lease when it is not this process (a run on the agent worker, agent_worker_loop.go).
+	leaseOwner string
 	// timing splits the work's wall time into setup, model wait and tools.
 	timing      loopRunTiming
 	order       int
@@ -656,7 +675,7 @@ func (s *server) finishLoopRun(ctx context.Context, workspace string, loop domai
 	if err != nil {
 		log.Printf("Loop run finish workspace=%s run=%s: %v", workspace, run.ID, err)
 	}
-	if err := s.store.ReleaseLoopRunLease(context.Background(), workspace, run.ID, s.loopInstanceID()); err != nil {
+	if err := s.store.ReleaseLoopRunLease(context.Background(), workspace, run.ID, firstNonEmpty(rec.leaseOwner, s.loopInstanceID())); err != nil {
 		log.Printf("Loop run lease release workspace=%s run=%s: %v", workspace, run.ID, err)
 	}
 	if run.Status != "completed" {

@@ -64,7 +64,14 @@ async function execute(run: AgentRun) {
   }
   // A built-in session run (thread-run.ts): Flow renders the thread and queued the run when it delivered the session.
   const thread = run.kind === 'thread' || run.kind === 'delegation' ? details?.thread : undefined
-  const flowRun = chat ?? thread
+  // A loop run (api/cmd/server/agent_worker_loop.go): Flow lists the loop's tools, runs each call through its gates
+  // and records the run; the worker runs the model loop.
+  const loop = run.kind === 'loop' ? details?.loop : undefined
+  if (loop && details?.failure) {
+    await client.complete(run.id, 'failed', { error: details.failure.slice(0, 2000) }).catch(() => {})
+    return
+  }
+  const flowRun = chat ?? thread ?? loop
   const conversation = flowRun ? chatConversation(details?.context?.messages ?? []) : undefined
   let session: FlowAgentSession | undefined
   const onError = (error: unknown) => log(`${run.id} activity failed: ${(error as Error).message}`)
@@ -97,6 +104,8 @@ async function execute(run: AgentRun) {
       history: new MemorySession(run.sessionId, conversation?.history ?? []),
       suspended: flowSuspendedStore(run.id),
     } : {}),
+    // A loop run's calls run one at a time, as in-process, and finish_run ends it.
+    ...(loop ? { allTools: true, serialCalls: true, stopAtTools: ['finish_run'], elicitations: undefined } : {}),
   })
   sessions.set(run.id, session)
   cancels.started()
@@ -111,8 +120,11 @@ async function execute(run: AgentRun) {
     }
   }, 15_000)
   const t0 = Date.now()
+  // A loop run has its wall-clock limit (FLOW_LOOP_RUN_TIMEOUT).
+  let timedOut = false
+  const timeout = loop?.timeoutMs ? setTimeout(() => { timedOut = true; log(`${run.id} timed out`); session.stop() }, Math.max(loop.timeoutMs - (Date.now() - loop.started), 0)) : undefined
   try {
-    log(`${run.id} start (attempt ${run.attempts}, session ${run.sessionId}${chat ? `, chat reply ${chat.messageId}` : thread ? `, ${run.kind}` : ''}${flowRun?.resume ? ' resumed' : ''})`)
+    log(`${run.id} start (attempt ${run.attempts}, session ${run.sessionId}${chat ? `, chat reply ${chat.messageId}` : thread || loop ? `, ${run.kind}` : ''}${flowRun?.resume ? ' resumed' : ''})`)
     const sink = (activity: FlowActivity) => {
       poster?.push(activity)
       if (activity.type !== 'text.delta' && !(activity.type === 'thought' && activity.ephemeral)) log(`${run.id} ${formatActivity(activity, t0).trim()}`)
@@ -120,6 +132,7 @@ async function execute(run: AgentRun) {
     const outcome = flowRun?.resume ? await session.resumeWith(flowRun.resume.decisions, sink) : await session.send(conversation ? conversation.request : payload.prompt ?? '', sink, conversation?.input)
     await poster?.drain()
     let status = statusOf[outcome.status]
+    if (timedOut && status === 'canceled') status = 'failed'
     if (flowRun && outcome.status === 'awaiting' && outcome.elicitation?.kind === 'select') {
       // ask_user ends a chat reply (or a thread run) with its question; the answer is the person's next message (a new
       // run).
@@ -134,6 +147,7 @@ async function execute(run: AgentRun) {
     await client.complete(run.id, 'failed', { error: String(error).slice(0, 2000) }).catch(() => {})
   } finally {
     clearInterval(heartbeat)
+    if (timeout) clearTimeout(timeout)
     sessions.delete(run.id)
     cancels.finished(run.id)
     await session.close()
@@ -149,7 +163,7 @@ async function loop() {
     }
     let runs: AgentRun[] = []
     try {
-      runs = (await client.claim({ chat: free, thread: free }, 5_000, free)).runs
+      runs = (await client.claim({ chat: free, thread: free, loop: free }, 5_000, free)).runs
     } catch (error) {
       log(`claim failed: ${(error as Error).message}`)
       await new Promise(resolve => setTimeout(resolve, 1_000))

@@ -164,6 +164,10 @@ func (s *server) workerRunGuardOp(r *http.Request, run store.AgentRun, input wor
 		// A chat reply's guard: its tool budget and outcome check (agent_worker_chat.go).
 		return s.workerChatGuardOp(ctx, run, info, input)
 	}
+	if info, loop := workerLoopInfo(run); loop {
+		// A loop run's guard: the in-process model loop's turn rules (agent_worker_loop.go).
+		return s.workerLoopGuardOp(ctx, run, info, input)
+	}
 	switch input.Op {
 	case "start":
 		task, err := s.store.AgentTask(ctx, run.WorkspaceKey, run.SessionID)

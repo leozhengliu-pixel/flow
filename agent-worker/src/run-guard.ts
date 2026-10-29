@@ -178,8 +178,15 @@ export class RunGuard {
   decisionCut = false
   /** Set once Flow sent the model back with the outcome nudge (it is sent at most once per run). */
   outcomeNudged = false
-  /** The nudges Flow sent the model back with (each at most once per run: outcome, empty reply, text approval). */
-  private readonly nudges = new Set<string>()
+  /**
+   * The nudges Flow sent the model back with instead of taking its last word. Each nudge is followed once (the
+   * outcome, empty-reply and text-approval nudges), unless the run repeats nudges (a loop's completion nudges, which
+   * Flow bounds itself), up to `maxNudges` in all as a safety bound.
+   */
+  private readonly nudges: string[] = []
+  static readonly maxNudges = 6
+  /** Follow a nudge Flow sends again (a loop run). */
+  repeatNudges = false
   private view: GuardResponse = { enabled: false, codingDue: false, decisionRound: -1 }
   private queue: Promise<unknown> = Promise.resolve()
   private turnAsked = -1
@@ -280,8 +287,8 @@ export class RunGuard {
     const answer = await this.call({ op: 'finish', phase, text }).catch(() => undefined)
     if (!answer) return { reply: text, transferred: false }
     if (answer.error) return { reply: '', error: answer.error, transferred: false }
-    if (phase === 'reply' && answer.nudge && !answer.reply && !this.nudges.has(answer.nudge)) {
-      this.nudges.add(answer.nudge)
+    if (phase === 'reply' && answer.nudge && !answer.reply && this.nudges.length < RunGuard.maxNudges && (this.repeatNudges || !this.nudges.includes(answer.nudge))) {
+      this.nudges.push(answer.nudge)
       this.outcomeNudged = true
       return { reply: '', transferred: false, nudge: answer.nudge }
     }
