@@ -70,6 +70,9 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 		if !ok {
 			return
 		}
+		// MCP bypasses session middleware but must also see preceding writes
+		// on another server before running a tool.
+		s.ensureCurrentWorkspace(r.Context(), actor.WorkspaceKey)
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", "POST")
 			writeOAuthError(w, http.StatusMethodNotAllowed, "method_not_allowed", "MCP uses Streamable HTTP POST requests")

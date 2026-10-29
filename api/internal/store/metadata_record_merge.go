@@ -1175,6 +1175,10 @@ func (s *SQLiteStore) refreshMetadataRecords(ctx context.Context, workspace stri
 		rows  map[string][]byte
 		keys  []string
 	}
+	// Read under writeMu (see ReloadWorkspace): a write here cannot install a
+	// newer record between the read and the install.
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	loaded := []storedRecords{}
 	for name, ids := range byField {
 		field, ok := metadataFieldByName(name)
@@ -1209,8 +1213,6 @@ func (s *SQLiteStore) refreshMetadataRecords(ctx context.Context, workspace stri
 		}
 		loaded = append(loaded, storedRecords{field, rows, ids})
 	}
-	s.writeMu.Lock()
-	defer s.writeMu.Unlock()
 	stored, ok := s.storedWorkspace(workspace)
 	if !ok {
 		return nil

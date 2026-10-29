@@ -24,6 +24,13 @@ import (
 // newWorkerChatPeers is newWorkerChatFixture on two API servers sharing one database and Redis.
 func newWorkerChatPeers(t *testing.T) [2]workerChatFixture {
 	t.Helper()
+	fixtures, _ := newWorkerChatPeerServers(t)
+	return fixtures
+}
+
+// newWorkerChatPeerServers is newWorkerChatPeers with the servers (to stop one's peer events).
+func newWorkerChatPeerServers(t *testing.T) ([2]workerChatFixture, peerServers) {
+	t.Helper()
 	peers := newPeerServers(t)
 	var fixtures [2]workerChatFixture
 	for index, api := range []*httptest.Server{peers.first, peers.second} {
@@ -38,7 +45,7 @@ func newWorkerChatPeers(t *testing.T) [2]workerChatFixture {
 		peers.first.CloseClientConnections()
 		peers.second.CloseClientConnections()
 	})
-	return fixtures
+	return fixtures, peers
 }
 
 // peerRuntimeCall is runtimeDo for goroutines (no t).
@@ -343,6 +350,38 @@ func TestWorkerChatReplyIsTheSameWhicheverServersTakeThePosts(t *testing.T) {
 	}
 	if reloaded := a.reply(t, shared); normalizedWorkerReply(reloaded) != normalizedWorkerReply(want) {
 		t.Fatalf("the reply on the first server: %+v", reloaded)
+	}
+}
+
+// A worker's calls can reach a server before it applied the peer event of the change they follow (a slow or lost
+// event): the reply its run writes, started on the other server a moment ago, or a project its tools read. The
+// server serves the committed workspace, not its old copy: the posts are applied, not answered as if the reply had
+// ended, and the tool finds the project.
+func TestWorkerCallsOnAServerBehindThePeerEvents(t *testing.T) {
+	peers, servers := newWorkerChatPeerServers(t)
+	a, b := peers[0], peers[1]
+	servers.stopListening(1)
+
+	shared, run := startPeerReply(t, a, "How many issues are in the backlog?")
+	for seq := 1; seq <= 4; seq++ {
+		if answer := b.post(t, run, workerChatScriptPost(seq)); answer["settled"] != false {
+			t.Fatalf("post %d on the server behind = %v", seq, answer)
+		}
+	}
+	if live := a.reply(t, shared); live.WorkerCursor == nil || live.WorkerCursor.Seq != 4 || toolPart(live.Parts, "c1") == nil {
+		t.Fatalf("reply after posts on the server behind = cursor %+v parts %+v", live.WorkerCursor, live.Parts)
+	}
+
+}
+
+func TestWorkerToolReadsOnAServerBehindThePeerEvents(t *testing.T) {
+	peers, servers := newWorkerChatPeerServers(t)
+	a, b := peers[0], peers[1]
+	servers.stopListening(1)
+	project := requestJSON[domain.Project](t, a.handler, http.MethodPost, "/api/projects", map[string]any{"name": "Peer project", "teamIds": []string{a.data.Teams[0].ID}}, http.StatusCreated)
+	_, token := startWorkerTestRun(t, a.s, a.handler, store.AgentRunInput{WorkspaceKey: "test-workspace", SessionID: "agent_session_peer_behind", Kind: store.AgentRunKindThread}, agentRunPrincipal{Mode: agentRunModeUser, UserID: a.data.Viewer.ID})
+	if result, err := peerTool(b.handler, token, "get_project", map[string]any{"query": project.ID}, ""); err != nil || result["isError"] == true {
+		t.Fatalf("get_project on the server behind = %v %v", result, err)
 	}
 }
 
