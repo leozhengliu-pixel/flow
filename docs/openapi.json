@@ -12534,6 +12534,133 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/integrations/{provider}/{id}/chat/message-action": {
+      "get": {
+        "operationId": "get_integrations_provider_id_chat_message_action",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "GET /api/integrations/{provider}/{id}/chat/message-action",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_message_actions.go"
+      },
+      "post": {
+        "operationId": "post_integrations_provider_id_chat_message_action",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "POST /api/integrations/{provider}/{id}/chat/message-action",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_message_actions.go"
+      }
+    },
+    "/api/integrations/{provider}/{id}/chat/message-action/config": {
+      "get": {
+        "operationId": "get_integrations_provider_id_chat_message_action_config",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "GET /api/integrations/{provider}/{id}/chat/message-action/config",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_message_actions.go"
+      }
+    },
     "/api/integrations/{provider}/{id}/chat/webhook": {
       "post": {
         "operationId": "post_integrations_provider_id_chat_webhook",
