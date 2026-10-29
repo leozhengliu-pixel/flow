@@ -469,14 +469,14 @@ func (s *server) mcpWorkspaceData(ctx context.Context, actor mcpActor) (domain.B
 		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, allowed)
 	})
 	data.TeamMembers = slices.DeleteFunc(data.TeamMembers, func(item domain.TeamMember) bool { return !allowed(item.TeamID) })
+	// An initiative reaches teams through its lead, contributing teams and
+	// linked projects (the projects left above), see initiativeInTeams.
+	visibleProjects := make(map[string]bool, len(data.Projects))
+	for _, project := range data.Projects {
+		visibleProjects[project.ID] = true
+	}
 	data.Initiatives = slices.DeleteFunc(data.Initiatives, func(item domain.Initiative) bool {
-		if item.LeadTeamID != "" && !allowed(item.LeadTeamID) {
-			return true
-		}
-		if item.LeadTeamID != "" && allowed(item.LeadTeamID) {
-			return false
-		}
-		return !slices.ContainsFunc(item.ContributingTeamIDs, allowed)
+		return !initiativeInTeams(item, data.ViewerRole, allowed, func(id string) bool { return visibleProjects[id] })
 	})
 	visibleInitiatives := map[string]bool{}
 	for _, item := range data.Initiatives {

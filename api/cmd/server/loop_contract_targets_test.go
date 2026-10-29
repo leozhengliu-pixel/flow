@@ -197,9 +197,9 @@ func TestLoopStatusUpdateOnNamedProjectAndInitiative(t *testing.T) {
 	if call := loopRunCall(run, "save_status_update", 0); call.Status != "blocked" || !strings.Contains(call.Error, `the initiative "Growth push"`) {
 		t.Fatalf("project update in an initiative loop = %s %q", call.Status, call.Error)
 	}
-	// The contract lets the update on the initiative through (whether the
-	// run's tools then find the initiative is their own visibility).
-	if call := loopRunCall(run, "save_status_update", 1); call.Status == "blocked" || strings.HasPrefix(call.Error, loopContractRefusalPrefix) {
+	// The contract lets the update on the initiative through, and so do the
+	// run's tools: the initiative is linked to a project in the loop's team.
+	if call := loopRunCall(run, "save_status_update", 1); call.Status != "completed" || call.Error != "" {
 		t.Fatalf("update on the initiative = %s %q", call.Status, call.Error)
 	}
 	target := run.OutputContract.Outputs[0].Target
