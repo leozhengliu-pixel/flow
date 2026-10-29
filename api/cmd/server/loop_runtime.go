@@ -1370,6 +1370,9 @@ func (scope *loopScope) check(ctx context.Context, call domain.AgentToolCall) er
 			return fmt.Errorf("This loop cannot access that document: it belongs to a team outside the loop's team access")
 		}
 	}
+	if ref := loopInitiativeRef(name, args); ref != "" && scope.initiativeOutsideTeams(ref) {
+		return fmt.Errorf("This loop cannot access that initiative: it belongs to a team outside the loop's team access")
+	}
 	target := loopStringArg(args, "issueId", "issue", "id")
 	if slices.Contains([]string{"save_issue", "save_comment", "create_attachment", "delete_attachment", "delete_comment", "triage_issue"}, name) && target != "" {
 		issue, err := scope.s.store.IssueRecord(ctx, scope.workspace, target)
