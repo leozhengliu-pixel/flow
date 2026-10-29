@@ -549,6 +549,10 @@ func (s *server) deliverApplicationTask(ctx context.Context, task domain.AgentTa
 		return
 	}
 	if app.Builtin {
+		if s.agentTaskOnWorker(task) && s.deliverBuiltinTaskToWorker(ctx, task, data) {
+			// FLOW_AGENT_RUNTIME=worker: the run executes on the agent worker (agent_worker_thread.go).
+			return
+		}
 		if task.Status == "active" {
 			_, _ = s.store.AppendAgentActivity(ctx, task.WorkspaceKey, task.ID, task.Version, domain.AgentActivity{ActorID: task.AppUserID, Type: "error", Body: "Execution was interrupted. Inspect previous tool results before retrying."})
 			return

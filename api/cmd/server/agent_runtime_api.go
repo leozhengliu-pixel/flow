@@ -45,8 +45,8 @@ const (
 )
 
 // agentRuntimeWorker reports whether built-in agent runs are meant to execute on the worker runtime
-// (FLOW_AGENT_RUNTIME=worker). Chat replies are queued for it (agent_worker_chat.go); threads, delegation and loops
-// still run in-process.
+// (FLOW_AGENT_RUNTIME=worker). Chat replies (agent_worker_chat.go) and comment-thread sessions
+// (agent_worker_thread.go) are queued for it; delegation and loops still run in-process.
 func (s *server) agentRuntimeWorker() bool {
 	return s.agent.Runtime == appconfig.AgentRuntimeWorker
 }
@@ -156,6 +156,8 @@ func (s *server) claimAgentRuns(w http.ResponseWriter, r *http.Request) {
 		Free map[string]int `json:"free"`
 		// WaitMS holds the request up to this long (at most 20 s) until a run is claimable.
 		WaitMS int `json:"waitMs"`
+		// Max caps the runs taken over all kinds (the worker's free slots); 0: the sum of free.
+		Max int `json:"max"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if !decodeJSON(w, r, &input) {
@@ -180,7 +182,7 @@ func (s *server) claimAgentRuns(w http.ResponseWriter, r *http.Request) {
 	for {
 		// Taken before the claim, so a run enqueued between the claim and the wait still wakes this request.
 		wake := s.store.AgentRunWake()
-		runs, err := s.store.ClaimAgentRuns(r.Context(), store.AgentRunClaim{Owner: caller.worker, Free: free, MaxPerWorkspace: perWorkspace, Lease: agentRuntimeLease, Now: time.Now()})
+		runs, err := s.store.ClaimAgentRuns(r.Context(), store.AgentRunClaim{Owner: caller.worker, Free: free, MaxPerWorkspace: perWorkspace, Max: max(input.Max, 0), Lease: agentRuntimeLease, Now: time.Now()})
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "agent runs could not be claimed")
 			return
@@ -399,6 +401,10 @@ func (s *server) agentRunPayload(w http.ResponseWriter, r *http.Request, _ agent
 		// A connector discovery failure is told to the model as the in-process agent tells it.
 		prompt.System += agentRunConnectorNote(grant, discoveryErr)
 		response["context"] = prompt
+		if info, ok := workerThreadInfo(run); ok {
+			// A built-in session run queued by Flow (agent_worker_thread.go): its budgets and, on a resume, the decisions.
+			response["thread"] = info
+		}
 	} else if !store.IsAgentTaskMissing(err) {
 		writeError(w, http.StatusInternalServerError, "the run's session could not be read")
 		return
@@ -557,10 +563,21 @@ func (s *server) postAgentRunActivity(w http.ResponseWriter, r *http.Request, _ 
 			Parameter string `json:"parameter"`
 			Result    string `json:"result"`
 		} `json:"content"`
+		// Elicitation is what the run stopped for (ask_user's question or held calls); Flow writes the session's
+		// elicitation from it as the in-process run does (workerThreadElicitation). Body is the turn's text before it.
+		Elicitation *workerChatElicitation `json:"elicitation"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
 	if !decodeJSON(w, r, &input) {
 		return
+	}
+	if input.Type == "elicitation" && input.Elicitation != nil {
+		built, err := s.workerThreadElicitation(r.Context(), run, input.Body, input.Elicitation)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "an elicitation is a select with options or an approval of held calls")
+			return
+		}
+		input.Body, input.Signal, input.SignalMetadata, input.ToolCall = built.Body, built.Signal, built.SignalMetadata, built.ToolCall
 	}
 	if len(input.ActivityID) > 128 {
 		writeError(w, http.StatusBadRequest, "activityId is too long")

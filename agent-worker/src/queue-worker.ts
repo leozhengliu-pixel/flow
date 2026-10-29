@@ -14,6 +14,8 @@
  */
 import { formatActivity, type FlowActivity } from './activities.js'
 import { ChatActivityPoster, chatConversation } from './chat-run.js'
+import { ThreadActivityPoster } from './thread-run.js'
+import { toolGroups } from './tool-groups.js'
 import { loadConfig, secret } from './config.js'
 import { flowSystemPrompt } from './prompt.js'
 import { CancelWatcher, FlowRuntimeClient, type AgentRun, type RunStatus } from './runtime-client.js'
@@ -60,15 +62,26 @@ async function execute(run: AgentRun) {
     await client.complete(run.id, 'failed', { error: 'The chat run payload could not be read.' }).catch(() => {})
     return
   }
-  const conversation = chat ? chatConversation(details?.context?.messages ?? []) : undefined
+  // A built-in session run (thread-run.ts): Flow renders the thread and queued the run when it delivered the session.
+  const thread = run.kind === 'thread' || run.kind === 'delegation' ? details?.thread : undefined
+  const flowRun = chat ?? thread
+  const conversation = flowRun ? chatConversation(details?.context?.messages ?? []) : undefined
   let session: FlowAgentSession | undefined
-  const poster = chat
+  const onError = (error: unknown) => log(`${run.id} activity failed: ${(error as Error).message}`)
+  const poster: { push(activity: FlowActivity): void; drain(): Promise<void> } | undefined = chat
     ? new ChatActivityPoster(activity => client.activity(run.id, activity), {
-      onError: error => log(`${run.id} activity failed: ${(error as Error).message}`),
+      onError,
       // The reply was settled on Flow (stopped, edited away): the run stops too.
       onSettled: () => session?.stop(),
     })
-    : undefined
+    : thread
+      ? new ThreadActivityPoster(activity => client.activity(run.id, activity), {
+        attempt: run.attempts,
+        onError,
+        // The session no longer takes the run's activities (stopped, or waiting for the person): the run stops too.
+        onRejected: () => session?.stop(),
+      })
+      : undefined
   session = worker.session({
     sessionId: run.sessionId,
     flowToken: token,
@@ -76,10 +89,11 @@ async function execute(run: AgentRun) {
     // Flow shows a chat run's connector questions itself.
     elicitations: chat ? undefined : (after, waitMs, signal) => client.elicitations(run.id, after, waitMs, signal),
     systemPrompt: details?.context?.system ?? payload.systemPrompt ?? flowSystemPrompt({ workspace: run.workspaceKey, userName: 'the requester', today: new Date().toISOString().slice(0, 10) }),
-    ...(chat ? {
-      // The reply's tool turns, plus the turn that gives its last word once the budget is spent.
-      maxTurns: Math.max(chat.maxTurns, 1) + 2,
-      groups: chat.groups,
+    ...(flowRun ? {
+      // The run's tool turns, plus the turn that gives its last word once the budget is spent.
+      maxTurns: Math.max(flowRun.maxTurns, 1) + 2,
+      // A built-in session run is offered every Flow tool, as executeBuiltinApplication offers them (no chat subset).
+      groups: chat ? chat.groups : toolGroups.map(group => group.name),
       history: new MemorySession(run.sessionId, conversation?.history ?? []),
       suspended: flowSuspendedStore(run.id),
     } : {}),
@@ -98,16 +112,17 @@ async function execute(run: AgentRun) {
   }, 15_000)
   const t0 = Date.now()
   try {
-    log(`${run.id} start (attempt ${run.attempts}, session ${run.sessionId}${chat ? `, chat reply ${chat.messageId}${chat.resume ? ' resumed' : ''}` : ''})`)
+    log(`${run.id} start (attempt ${run.attempts}, session ${run.sessionId}${chat ? `, chat reply ${chat.messageId}` : thread ? `, ${run.kind}` : ''}${flowRun?.resume ? ' resumed' : ''})`)
     const sink = (activity: FlowActivity) => {
       poster?.push(activity)
       if (activity.type !== 'text.delta' && !(activity.type === 'thought' && activity.ephemeral)) log(`${run.id} ${formatActivity(activity, t0).trim()}`)
     }
-    const outcome = chat?.resume ? await session.resumeWith(chat.resume.decisions, sink) : await session.send(conversation ? conversation.request : payload.prompt ?? '', sink, conversation?.input)
+    const outcome = flowRun?.resume ? await session.resumeWith(flowRun.resume.decisions, sink) : await session.send(conversation ? conversation.request : payload.prompt ?? '', sink, conversation?.input)
     await poster?.drain()
     let status = statusOf[outcome.status]
-    if (chat && outcome.status === 'awaiting' && outcome.elicitation?.kind === 'select') {
-      // ask_user ends a chat reply with its question; the answer is the person's next message (a new run).
+    if (flowRun && outcome.status === 'awaiting' && outcome.elicitation?.kind === 'select') {
+      // ask_user ends a chat reply (or a thread run) with its question; the answer is the person's next message (a new
+      // run).
       await flowSuspendedStore(run.id).clear()
       status = 'done'
     }
@@ -134,7 +149,7 @@ async function loop() {
     }
     let runs: AgentRun[] = []
     try {
-      runs = (await client.claim({ chat: free }, 5_000)).runs
+      runs = (await client.claim({ chat: free, thread: free }, 5_000, free)).runs
     } catch (error) {
       log(`claim failed: ${(error as Error).message}`)
       await new Promise(resolve => setTimeout(resolve, 1_000))

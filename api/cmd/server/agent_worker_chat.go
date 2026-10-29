@@ -1869,10 +1869,11 @@ type workerChatBudgetState struct {
 	Turns int `json:"turns,omitempty"`
 }
 
-// workerChatBudgetMax is a chat run's call budget: its payload's, else Flow's.
+// workerChatBudgetMax is a worker run's call budget (a chat reply's or a built-in session run's): its payload's,
+// else Flow's.
 func (s *server) workerChatBudgetMax(run store.AgentRun) int {
-	if info, ok := workerChatInfo(run); ok && info.MaxCalls > 0 {
-		return info.MaxCalls
+	if maxCalls, ok := s.workerRunBudgetMax(run); ok && maxCalls > 0 {
+		return maxCalls
 	}
 	return s.agentMaxToolCalls()
 }
@@ -1921,15 +1922,22 @@ func (s *server) updateWorkerChatBudget(ctx context.Context, run store.AgentRun,
 	}
 }
 
-// workerChatToolBefore applies a chat run's tool budget to a /mcp call, as the in-process reply does before each
-// call: ok is false when the call is not run, content its result (an error).
+// workerChatToolBefore applies a worker run's tool budget to a /mcp call, as the in-process run does before each
+// call: ok is false when the call is not run, content its result (an error). A built-in session run's connector
+// calls are only counted (the run guard answers their repeats), as executeBuiltinApplication counts them.
 func (s *server) workerChatToolBefore(ctx context.Context, run store.AgentRun, name string, args map[string]any) (content string, ok bool) {
-	if _, chat := workerChatInfo(run); !chat {
+	if _, budgeted := s.workerRunBudgetMax(run); !budgeted {
 		return "", true
 	}
+	_, thread := workerThreadInfo(run)
+	counted := thread && strings.HasPrefix(name, "external_")
 	arguments, _ := json.Marshal(args)
 	ok = true
 	s.updateWorkerChatBudget(ctx, run, func(budget *agentToolBudget, _ *workerChatBudgetState) {
+		if counted {
+			content, ok = budget.count()
+			return
+		}
 		content, ok = budget.before(domain.AgentToolCall{Name: name, Arguments: arguments})
 	})
 	return content, ok
@@ -1937,7 +1945,10 @@ func (s *server) workerChatToolBefore(ctx context.Context, run store.AgentRun, n
 
 // workerChatToolAfter records a chat run's /mcp call outcome in its tool budget.
 func (s *server) workerChatToolAfter(ctx context.Context, run store.AgentRun, name string, args map[string]any, content string, failed bool) {
-	if _, chat := workerChatInfo(run); !chat {
+	if _, budgeted := s.workerRunBudgetMax(run); !budgeted {
+		return
+	}
+	if _, thread := workerThreadInfo(run); thread && strings.HasPrefix(name, "external_") {
 		return
 	}
 	arguments, _ := json.Marshal(args)

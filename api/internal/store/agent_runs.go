@@ -139,8 +139,11 @@ type AgentRunClaim struct {
 	// MaxPerWorkspace caps the runs one workspace holds at a time (leased or
 	// running, across all workers); zero means no cap.
 	MaxPerWorkspace int
-	Lease           time.Duration
-	Now             time.Time
+	// Max caps the runs this claim takes over all lanes (the worker's free slots when it asks for several lanes);
+	// zero means the lanes' sum.
+	Max   int
+	Lease time.Duration
+	Now   time.Time
 }
 
 // AgentRunResult ends a run.
@@ -457,7 +460,7 @@ func (s *SQLiteStore) ClaimAgentRuns(ctx context.Context, claim AgentRunClaim) (
 	claimed := []any{}
 	taken := map[string]bool{}
 	for lane := 0; lane <= 3; lane++ {
-		for free[lane] > 0 {
+		for free[lane] > 0 && (claim.Max <= 0 || len(claimed) < claim.Max) {
 			// The least busy workspace's oldest run in this lane.
 			best := -1
 			for index, candidate := range candidates {

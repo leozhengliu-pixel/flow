@@ -178,6 +178,8 @@ export class RunGuard {
   decisionCut = false
   /** Set once Flow sent the model back with the outcome nudge (it is sent at most once per run). */
   outcomeNudged = false
+  /** The nudges Flow sent the model back with (each at most once per run: outcome, empty reply, text approval). */
+  private readonly nudges = new Set<string>()
   private view: GuardResponse = { enabled: false, codingDue: false, decisionRound: -1 }
   private queue: Promise<unknown> = Promise.resolve()
   private turnAsked = -1
@@ -278,7 +280,8 @@ export class RunGuard {
     const answer = await this.call({ op: 'finish', phase, text }).catch(() => undefined)
     if (!answer) return { reply: text, transferred: false }
     if (answer.error) return { reply: '', error: answer.error, transferred: false }
-    if (phase === 'reply' && answer.nudge && !answer.reply && !this.outcomeNudged) {
+    if (phase === 'reply' && answer.nudge && !answer.reply && !this.nudges.has(answer.nudge)) {
+      this.nudges.add(answer.nudge)
       this.outcomeNudged = true
       return { reply: '', transferred: false, nudge: answer.nudge }
     }

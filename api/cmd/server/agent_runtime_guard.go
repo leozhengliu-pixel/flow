@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
@@ -48,6 +49,10 @@ type workerRunGuardState struct {
 	// OutcomeNudged is set once a last word that reported change outcomes no write produced was answered with the
 	// nudge (agent_run_outcomes.go).
 	OutcomeNudged bool `json:"outcomeNudged,omitempty"`
+	// EmptyNudged and TextApprovalNudged are set once a built-in session run's empty reply, or a reply that asked
+	// for approval in text, was sent back (as executeBuiltinApplication retries each once).
+	EmptyNudged        bool `json:"emptyNudged,omitempty"`
+	TextApprovalNudged bool `json:"textApprovalNudged,omitempty"`
 }
 
 // workerRunCodingStart is a stored codingStartOutcome.
@@ -209,6 +214,16 @@ func (s *server) workerRunGuardOp(r *http.Request, run store.AgentRun, input wor
 		}
 	}
 	call := domain.AgentToolCall{Name: input.Tool, Arguments: json.RawMessage(input.Arguments)}
+	// A built-in session run queued by Flow has the in-process run's turn budget and tool budget too: its turn cap is
+	// Flow's, and a spent budget withholds the tools for the run's last word (agent_worker_thread.go).
+	thread, isThread := workerThreadInfo(run)
+	withhold, budgetNudge := false, ""
+	if input.Op == "turn" && isThread {
+		if thread.MaxTurns > 0 {
+			input.MaxTurns = thread.MaxTurns
+		}
+		withhold, budgetNudge = s.workerThreadBudgetTurn(ctx, run, thread, input.Round)
+	}
 	for attempt := range agentRunStateAttempts {
 		raw, version, found, err := s.agentRunStateOf(ctx, run.ID, workerRunGuardKey)
 		if err != nil {
@@ -265,6 +280,9 @@ func (s *server) workerRunGuardOp(r *http.Request, run store.AgentRun, input wor
 			}
 		}
 		response.CodingDue, response.DecisionRound = g.codingDue(), state.DecisionRound
+		if input.Op == "turn" {
+			response.Withhold, response.Nudge = withhold, response.Nudge+budgetNudge
+		}
 		return response, nil
 	}
 	return disabled, errAgentRunStateBusy
@@ -290,10 +308,17 @@ func (s *server) workerRunGuardFinishOp(r *http.Request, run store.AgentRun, inp
 	if err != nil {
 		return disabled, err
 	}
-	if reply == agentUngroundedOutcomeNudge {
+	switch reply {
+	case agentUngroundedOutcomeNudge:
 		// Not the last word yet: the model is told once that nothing ran.
 		response.Nudge, state.OutcomeNudged = reply, true
-	} else {
+	case agentEmptyTurnNudge:
+		// An empty reply is asked for again once.
+		response.Nudge, state.EmptyNudged = reply, true
+	case agentTextApprovalNudge:
+		// A reply that asked for approval in text is told once to call the tool instead.
+		response.Nudge, state.TextApprovalNudged = reply, true
+	default:
 		response.Reply, response.Transferred, response.Error = reply, transferred, failure
 		state.Finished = true
 	}
@@ -324,6 +349,8 @@ func (s *server) workerRunGuardFinishOp(r *http.Request, run store.AgentRun, inp
 		}
 		latest.Finished = latest.Finished || outcome.Finished
 		latest.OutcomeNudged = latest.OutcomeNudged || outcome.OutcomeNudged
+		latest.EmptyNudged = latest.EmptyNudged || outcome.EmptyNudged
+		latest.TextApprovalNudged = latest.TextApprovalNudged || outcome.TextApprovalNudged
 		latest.Decided = latest.Decided || outcome.Decided
 		if outcome.Started != nil {
 			latest.Started = outcome.Started
@@ -367,12 +394,49 @@ func (s *server) workerRunFinish(r *http.Request, run store.AgentRun, state *wor
 		}
 		return rebase(s.builtinReplyWithCoding(ctx, task, g, text, coding)), true
 	}
+	// A built-in session run queued by Flow (agent_worker_thread.go) ends as executeBuiltinApplication ends a run:
+	// an empty reply and a reply asking for approval in text are each sent back once and then fail the run, and once
+	// the tool budget is spent the last word is the reply (or Flow's summary) without the outcome check.
+	thread, isThread := workerThreadInfo(run)
+	stopped := ""
+	if isThread {
+		stopped = s.workerChatBudget(ctx, run).stop
+	}
+	lastWord := func(text string) string {
+		if g.started != nil && g.started.delivery != codingNotStarted {
+			// Coding was requested: the thread reports the session's state.
+			return codingDeliveryReply(g.started.delivery, g.started.blocker, g.coding)
+		}
+		reply := workerThreadLastWord(firstNonEmpty(stopped, agentBudgetTurns), text, thread.MaxTurns, thread.MaxCalls, g.coding.Chinese)
+		return rebase(s.agentRunLedger(ctx, run).report(s.builtinFinalReply(ctx, task, g, reply), g.coding.Chinese))
+	}
 	switch input.Phase {
 	case "reply":
+		if isThread && stopped == "" {
+			if strings.TrimSpace(input.Text) == "" {
+				switch {
+				case !state.EmptyNudged:
+					return agentEmptyTurnNudge, false, "", nil
+				case g.codingDue():
+					reply, transferred = transfer("the agent replied without starting Coding", "")
+					return reply, transferred, "", nil
+				}
+				return "", false, agentEmptyTurnError(""), nil
+			}
+			if s.workerRunTextApproval(ctx, run, input.Text) {
+				if !state.TextApprovalNudged {
+					return agentTextApprovalNudge, false, "", nil
+				}
+				return "", false, agentTextApprovalError, nil
+			}
+		}
 		if g.codingDue() {
 			// A plan or a "done" claim instead of Coding: Flow starts it and reports its real state.
 			reply, transferred = transfer("the agent replied without starting Coding", input.Text)
 			return reply, transferred, "", nil
+		}
+		if isThread && stopped != "" {
+			return lastWord(input.Text), false, "", nil
 		}
 		// Outcomes are reported from the run's tool results (agent_run_outcomes.go): an answer that reports
 		// outcomes no write produced is sent back once (the nudge), then replaced by Flow's statement.
@@ -399,6 +463,10 @@ func (s *server) workerRunFinish(r *http.Request, run store.AgentRun, state *wor
 		if g.started != nil && g.started.delivery != codingNotStarted {
 			// Coding was requested: the thread reports the session's state rather than a failed run.
 			return codingDeliveryReply(g.started.delivery, g.started.blocker, g.coding), false, "", nil
+		}
+		if isThread {
+			// Past the turn budget without a last word: Flow's summary, as in-process.
+			return lastWord(""), false, "", nil
 		}
 		return "", false, "Agent reached its tool execution limit without starting Coding or reporting a blocker.", nil
 	}

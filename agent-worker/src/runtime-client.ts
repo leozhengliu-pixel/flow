@@ -44,11 +44,20 @@ export type ChatRunInfo = {
   groups?: string[]
 }
 
+/** What a built-in session run's payload says (api/cmd/server/agent_worker_thread.go workerThreadRunInfo). */
+export type ThreadRunInfo = {
+  taskVersion: number
+  maxTurns: number
+  maxCalls: number
+  resume?: { decisions: Record<string, string> }
+}
+
 export type RunPayload = {
   run: AgentRun
   principal: { mode: string; userId: string; tools?: string[] }
   context?: { system: string; latestPrompt: string; messages?: PromptMessage[] }
   chat?: ChatRunInfo
+  thread?: ThreadRunInfo
   notices?: string[]
 }
 
@@ -68,8 +77,8 @@ export class FlowRuntimeClient {
   }
 
   /** Long-polls for up to `waitMs` (≤ 20 s) until runs are claimable for the free slots. */
-  claim(free: Partial<Record<'chat' | 'thread' | 'loop' | 'background', number>>, waitMs = 0) {
-    return this.call<{ runs: AgentRun[]; leaseMs: number; heartbeatMs: number }>('POST', '/claim', { free, waitMs })
+  claim(free: Partial<Record<'chat' | 'thread' | 'loop' | 'background', number>>, waitMs = 0, max = 0) {
+    return this.call<{ runs: AgentRun[]; leaseMs: number; heartbeatMs: number }>('POST', '/claim', { free, waitMs, ...(max > 0 ? { max } : {}) })
   }
 
   /**
