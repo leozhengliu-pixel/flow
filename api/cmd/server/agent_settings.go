@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // workspaceAgentSystemPrompt is the built-in agent's prompt for comment threads and delegated work. teamIDs adds
@@ -169,11 +170,12 @@ func (s *server) updateWorkspaceAgentGuidance(w http.ResponseWriter, r *http.Req
 	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "workspace.agent_guidance_updated", "workspace", nil, func(data *domain.Bootstrap) error {
 		next := strings.TrimSpace(input.Instructions)
-		if next != data.WorkspaceSettings.AgentInstructions {
-			// "Last edit by …" under the guidance field.
-			editedAt := time.Now().UTC()
-			data.WorkspaceSettings.AgentInstructionsEditedByID, data.WorkspaceSettings.AgentInstructionsEditedAt = data.Viewer.ID, &editedAt
+		if next == data.WorkspaceSettings.AgentInstructions {
+			return store.ErrNoMutation
 		}
+		// "Last edit by …" under the guidance field.
+		editedAt := time.Now().UTC()
+		data.WorkspaceSettings.AgentInstructionsEditedByID, data.WorkspaceSettings.AgentInstructionsEditedAt = data.Viewer.ID, &editedAt
 		data.WorkspaceSettings.AgentInstructions = next
 		return nil
 	})

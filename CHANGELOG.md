@@ -197,6 +197,22 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Every other stored `PATCH` and `PUT` now also writes nothing when it only
+  repeats the current values (no `version` or `updatedAt` change, event,
+  realtime update, webhook or notification): releases, release pipelines and
+  notes, templates, webhooks, OAuth applications and their manifests, API
+  keys, integrations and GitLab connections, settings (workspace, account,
+  team, cycle, SLA, notifications, coding agents), favorites, subscriptions and
+  thread subscriptions, permissions, members, project and initiative updates,
+  resources and relations, dashboards, posts, meetings, customer requests and
+  upserts, notifications, link attachments, git automations, target branches,
+  reviews and deploy previews among them. Favoriting a favorite, archiving an
+  archived release or post and publishing a published release note keep the
+  original date. `PATCH /api/issues/{id}` now honours `expectedVersion` when
+  it is sent (409 on a stale version), as `/api/issue-records/{id}` does; a
+  patch without it still applies its fields to the current issue. Uploads,
+  connecting integrations, reinstalling applications and similar actions still
+  always run; see [Updates that change nothing](docs/api.md#updates-that-change-nothing).
 - With several API servers, metadata writes no longer silently undo each
   other. Comments, reactions and edits on one project or initiative update
   made on two servers are all kept (updates merge one by one, reactions key

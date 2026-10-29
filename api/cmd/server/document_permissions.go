@@ -52,6 +52,7 @@ func (s *server) replaceDocumentPermissions(w http.ResponseWriter, r *http.Reque
 	id := r.PathValue("id")
 	viewerData := s.workspaceData(r)
 	var updated []domain.DocumentPermission
+	changed := false
 	directory := s.documentMemberDirectory(r)
 	accessWorkspace, accessDocumentID := workspaceKey(r), id
 	err := s.store.MutateWorkspace(documentMutationScope(r.Context(), id), workspaceKey(r), "document.permissions_updated", id, input, func(data *domain.Bootstrap) error {
@@ -88,12 +89,27 @@ func (s *server) replaceDocumentPermissions(w http.ResponseWriter, r *http.Reque
 		}) {
 			permissions = append(permissions, domain.DocumentPermission{ID: "document_permission_" + document.Creator.ID, DocumentID: document.ID, SubjectType: "user", SubjectID: document.Creator.ID, Role: "owner", CreatedAt: now, UpdatedAt: now})
 		}
+		// A grant that stays keeps its dates; one whose role changes keeps
+		// its creation date.
+		for index := range permissions {
+			if existing := slices.IndexFunc(before.Permissions, func(item domain.DocumentPermission) bool { return item.ID == permissions[index].ID }); existing >= 0 {
+				current := before.Permissions[existing]
+				permissions[index].CreatedAt = current.CreatedAt
+				if unchangedEdit(current, permissions[index]) {
+					permissions[index].UpdatedAt = current.UpdatedAt
+				}
+			}
+		}
+		updated = slices.Clone(permissions)
+		if unchangedEdit(before.Permissions, permissions) {
+			return store.ErrNoMutation
+		}
 		document.Permissions = permissions
 		document.UpdatedAt = now
-		updated = slices.Clone(permissions)
+		changed = true
 		return nil
 	})
-	if err == nil {
+	if err == nil && changed {
 		s.realtime.invalidateDocumentAccess(accessWorkspace, accessDocumentID)
 	}
 	respondMutation(w, err, http.StatusOK, updated)
@@ -110,6 +126,7 @@ func (s *server) updateDocumentPermission(w http.ResponseWriter, r *http.Request
 	role := strings.ToLower(strings.TrimSpace(*input.Role))
 	id, permissionID := r.PathValue("id"), r.PathValue("permissionId")
 	var updated domain.DocumentPermission
+	changed := false
 	directory := s.documentMemberDirectory(r)
 	accessWorkspace, accessDocumentID := workspaceKey(r), id
 	err := s.store.MutateWorkspace(documentMutationScope(r.Context(), id), workspaceKey(r), "document.permission_updated", id, input, func(data *domain.Bootstrap) error {
@@ -131,13 +148,18 @@ func (s *server) updateDocumentPermission(w http.ResponseWriter, r *http.Request
 		if role == "owner" && document.Permissions[index].SubjectType != "user" {
 			return errInvalid
 		}
+		if document.Permissions[index].Role == role {
+			updated = document.Permissions[index]
+			return store.ErrNoMutation
+		}
 		document.Permissions[index].Role = role
 		document.Permissions[index].UpdatedAt = time.Now().UTC()
 		document.UpdatedAt = document.Permissions[index].UpdatedAt
 		updated = document.Permissions[index]
+		changed = true
 		return nil
 	})
-	if err == nil {
+	if err == nil && changed {
 		s.realtime.invalidateDocumentAccess(accessWorkspace, accessDocumentID)
 	}
 	respondMutation(w, err, http.StatusOK, updated)

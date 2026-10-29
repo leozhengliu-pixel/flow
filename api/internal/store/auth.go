@@ -469,7 +469,12 @@ func (s *SQLiteStore) UpdateProfile(ctx context.Context, userID, displayName, us
 		return domain.User{}, err
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := s.db.ExecContext(ctx, `UPDATE auth_users SET name=?,display_name=?,avatar_url=?,updated_at=? WHERE id=?`, username, displayName, strings.TrimSpace(avatarURL), now, userID); err != nil {
+	avatarURL = strings.TrimSpace(avatarURL)
+	// The current values again leave the row (and its updated_at) as it is.
+	if current, err := s.authUserByID(ctx, userID); err == nil && current.Name == username && current.DisplayName == displayName && current.AvatarURL == avatarURL {
+		return current, nil
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE auth_users SET name=?,display_name=?,avatar_url=?,updated_at=? WHERE id=?`, username, displayName, avatarURL, now, userID); err != nil {
 		return domain.User{}, err
 	}
 	return s.authUserByID(ctx, userID)
@@ -792,6 +797,11 @@ func (s *SQLiteStore) SetLastWorkspace(ctx context.Context, userID, workspaceKey
 	_, status, err := s.WorkspaceRole(ctx, data.Workspace.ID, userID)
 	if err != nil || status != "active" {
 		return ErrAuthForbidden
+	}
+	// The current workspace again leaves the account state as it is.
+	var current string
+	if s.db.QueryRowContext(ctx, `SELECT last_workspace_key FROM auth_account_state WHERE user_id=?`, userID).Scan(&current) == nil && current == workspaceKey {
+		return nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err = s.db.ExecContext(ctx, `INSERT INTO auth_account_state(user_id,last_workspace_key,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,updated_at=excluded.updated_at`, userID, workspaceKey, now)

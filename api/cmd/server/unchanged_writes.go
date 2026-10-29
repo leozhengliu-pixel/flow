@@ -42,6 +42,24 @@ func unchangedEdit[T any](before, after T, ignore ...string) bool {
 	return true
 }
 
+// jsonSnapshot captures a value as JSON, so a record that an edit changes in
+// place (a settings map, a shared slice) can still be compared with what it
+// was: unchangedJSON(snapshot, after).
+func jsonSnapshot(value any) []byte {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil
+	}
+	return raw
+}
+
+// unchangedJSON reports whether after marshals to the same JSON as the
+// snapshot. A value that cannot be marshalled is always a change.
+func unchangedJSON(snapshot []byte, after any) bool {
+	raw := jsonSnapshot(after)
+	return snapshot != nil && raw != nil && sameRawJSON(snapshot, raw)
+}
+
 // projectRelationsOf lists a project's relations by ID: a dependency edit
 // rewrites them in a new order even when the set stays the same.
 func projectRelationsOf(data *domain.Bootstrap, projectID string) []domain.ProjectRelation {

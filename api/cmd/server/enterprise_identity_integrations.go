@@ -164,10 +164,14 @@ func (s *server) updateIdentityProvider(w http.ResponseWriter, r *http.Request) 
 			}
 			current.DefaultRole = role
 		}
-		current.UpdatedAt = time.Now().UTC()
 		if validateIdentityProvider(current) != nil {
 			return errInvalid
 		}
+		if unchangedEdit(data.IdentityProviders[i], current) {
+			result = data.IdentityProviders[i]
+			return store.ErrNoMutation
+		}
+		current.UpdatedAt = time.Now().UTC()
 		data.IdentityProviders[i] = current
 		result = current
 		return nil
@@ -560,13 +564,18 @@ func (s *server) upsertGitAutomation(w http.ResponseWriter, r *http.Request) {
 		}
 		now := time.Now().UTC()
 		i := slices.IndexFunc(data.GitAutomationStates, func(v domain.GitAutomationState) bool { return v.ID == input.ID && input.ID != "" })
-		if i < 0 {
+		created := i < 0
+		if created {
 			input.ID = idgen.New("git_automation_")
 			input.CreatedAt = now
 			data.GitAutomationStates = append(data.GitAutomationStates, input)
 			i = len(data.GitAutomationStates) - 1
 		}
 		input.CreatedAt = data.GitAutomationStates[i].CreatedAt
+		if !created && unchangedEdit(data.GitAutomationStates[i], input) {
+			result = data.GitAutomationStates[i]
+			return store.ErrNoMutation
+		}
 		input.UpdatedAt = now
 		data.GitAutomationStates[i] = input
 		result = input
@@ -616,6 +625,7 @@ func (s *server) upsertTargetBranch(w http.ResponseWriter, r *http.Request) {
 			return errInvalid
 		}
 		now := time.Now().UTC()
+		before := jsonSnapshot(data.TargetBranches)
 		if input.Default {
 			for i := range data.TargetBranches {
 				if data.TargetBranches[i].TeamID == input.TeamID && data.TargetBranches[i].Repository == input.Repository {
@@ -624,13 +634,24 @@ func (s *server) upsertTargetBranch(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		i := slices.IndexFunc(data.TargetBranches, func(v domain.TargetBranch) bool { return v.ID == input.ID && input.ID != "" })
-		if i < 0 {
+		created := i < 0
+		if created {
 			input.ID = idgen.New("target_branch_")
 			input.CreatedAt = now
 			data.TargetBranches = append(data.TargetBranches, input)
 			i = len(data.TargetBranches) - 1
 		}
 		input.CreatedAt = data.TargetBranches[i].CreatedAt
+		if !created {
+			// The same branch settings again, with no other default to clear,
+			// write nothing.
+			input.UpdatedAt = data.TargetBranches[i].UpdatedAt
+			data.TargetBranches[i] = input
+			if unchangedJSON(before, data.TargetBranches) {
+				result = input
+				return store.ErrNoMutation
+			}
+		}
 		input.UpdatedAt = now
 		data.TargetBranches[i] = input
 		result = input

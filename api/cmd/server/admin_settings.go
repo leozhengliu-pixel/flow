@@ -262,7 +262,8 @@ func (s *server) updateWebhook(w http.ResponseWriter, r *http.Request) {
 		if input.TeamIDs != nil && !webhookTeamsManageable(data, actor.ID, *input.TeamIDs) {
 			return store.ErrAuthForbidden
 		}
-		wasEnabled := data.Webhooks[index].Enabled
+		before := data.Webhooks[index]
+		wasEnabled := before.Enabled
 		if err := applyWebhookInput(data, &data.Webhooks[index], input); err != nil {
 			return err
 		}
@@ -270,6 +271,10 @@ func (s *server) updateWebhook(w http.ResponseWriter, r *http.Request) {
 		if item.Enabled && !wasEnabled {
 			// Re-enabling starts a fresh failure window.
 			item.DisabledReason, item.DisabledAt, item.FailingSince = "", nil, nil
+		}
+		if unchangedEdit(before, *item) {
+			updated = before
+			return store.ErrNoMutation
 		}
 		item.UpdatedAt = time.Now().UTC()
 		updated = *item

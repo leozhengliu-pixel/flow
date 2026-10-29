@@ -475,6 +475,10 @@ func (s *server) setDocumentThreadSubscription(w http.ResponseWriter, r *http.Re
 		}
 		now := time.Now().UTC()
 		if index := slices.IndexFunc(data.ThreadSubscriptions, mine); index >= 0 {
+			if data.ThreadSubscriptions[index].State == input.State {
+				saved = data.ThreadSubscriptions[index]
+				return store.ErrNoMutation
+			}
 			data.ThreadSubscriptions[index].State, data.ThreadSubscriptions[index].UpdatedAt = input.State, now
 			saved = data.ThreadSubscriptions[index]
 			return nil

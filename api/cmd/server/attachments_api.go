@@ -203,7 +203,13 @@ func (s *server) updateLinkAttachment(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		now := time.Now().UTC()
+		// Metadata maps are edited in place, so compare against a snapshot.
+		before := jsonSnapshot(target.Attachments[index])
 		applyLinkAttachmentInput(&target.Attachments[index], input)
+		saved = target.Attachments[index]
+		if unchangedJSON(before, saved) {
+			return store.ErrNoMutation
+		}
 		target.Attachments[index].UpdatedAt = &now
 		saved = target.Attachments[index]
 		return nil

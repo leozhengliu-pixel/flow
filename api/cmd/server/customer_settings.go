@@ -371,6 +371,10 @@ func (s *server) updateCustomerTaxonomy(w http.ResponseWriter, r *http.Request) 
 				}
 			}
 		}
+		if unchangedEdit(previous, item) {
+			result = customerTaxonomyResult{CustomerStatus: previous}
+			return store.ErrNoMutation
+		}
 		item.UpdatedAt = now
 		items[index] = item
 		taxonomy.store(data, items)

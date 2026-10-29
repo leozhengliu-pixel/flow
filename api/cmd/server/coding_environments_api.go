@@ -622,6 +622,11 @@ func (s *server) updateCodingEnvironment(w http.ResponseWriter, r *http.Request)
 		writeCodingEnvironmentError(w, err)
 		return
 	}
+	if updated.Version == version {
+		// The current values again: the store wrote nothing.
+		writeJSON(w, http.StatusOK, updated)
+		return
+	}
 	s.auditCodingEnvironment(r, request.workspace, "coding_environment.updated", updated.ID, map[string]any{"version": updated.Version})
 	if s.codingSnapshotHash(r.Context(), updated) != before {
 		s.requestCodingSnapshot(r.Context(), updated, request.user.ID)

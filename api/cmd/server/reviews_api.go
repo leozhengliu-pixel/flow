@@ -9,6 +9,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/store"
 )
 
 type reviewInput struct {
@@ -104,6 +105,7 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		review := data.Reviews[index]
+		before, favoritesBefore := jsonSnapshot(review), jsonSnapshot(data.Favorites)
 		previousIssueIDs := slices.Clone(review.IssueIDs)
 		mergedNow, mergedWorkspace = input.Status != nil && *input.Status == "merged" && review.Status != "merged", data.Workspace.URLKey
 		if input.Title != nil {
@@ -121,13 +123,16 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 				// Merged / closed / reopened on the code host as this identity.
 				review.Events = append(review.Events, domain.ReviewEvent{ID: idgen.New("review_event_"), Type: map[string]string{"merged": "merged", "closed": "closed", "open": "reopened"}[*input.Status], Actor: statusActor, PostedAs: statusPostedAs, CreatedAt: now})
 			}
-			review.Status = *input.Status
-			if review.Status == "merged" {
-				review.MergedAt, review.ClosedAt = &now, nil
-			} else if review.Status == "closed" {
-				review.ClosedAt, review.MergedAt = &now, nil
-			} else {
-				review.MergedAt, review.ClosedAt = nil, nil
+			// The current status again keeps its merged or closed date.
+			if review.Status != *input.Status {
+				review.Status = *input.Status
+				if review.Status == "merged" {
+					review.MergedAt, review.ClosedAt = &now, nil
+				} else if review.Status == "closed" {
+					review.ClosedAt, review.MergedAt = &now, nil
+				} else {
+					review.MergedAt, review.ClosedAt = nil, nil
+				}
 			}
 		}
 		if input.ReviewerIDs != nil {
@@ -169,6 +174,10 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 				return errInvalid
 			}
 			review.BranchState = *input.BranchState
+		}
+		if unchangedJSON(before, review) && unchangedJSON(favoritesBefore, data.Favorites) {
+			updated = data.Reviews[index]
+			return store.ErrNoMutation
 		}
 		review.UpdatedAt = time.Now().UTC()
 		data.Reviews[index], updated = review, review
@@ -388,10 +397,17 @@ func (s *server) resolveReviewThread(w http.ResponseWriter, r *http.Request) {
 		}
 		rootID = review.Events[root].ID
 		review.Events = slices.Clone(review.Events)
+		changed := false
 		for i := range review.Events {
-			if review.Events[i].ID == rootID || review.Events[i].ParentID == rootID {
-				review.Events[i].Resolved = *input.Resolved
+			if (review.Events[i].ID == rootID || review.Events[i].ParentID == rootID) && review.Events[i].Resolved != *input.Resolved {
+				review.Events[i].Resolved, changed = *input.Resolved, true
 			}
+		}
+		if sync := review.Events[root].Sync; !changed && (sync == nil || sync.State != "failed") {
+			// A resolved thread resolved again (or an open one reopened)
+			// writes nothing; a failed sync is still retried.
+			updated = data.Reviews[index]
+			return store.ErrNoMutation
 		}
 		now := time.Now().UTC()
 		rootEvent := &review.Events[root]

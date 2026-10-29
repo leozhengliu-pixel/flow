@@ -197,14 +197,32 @@ errors (`error`, `error_description`) and MCP keeps JSON-RPC errors.
 A `PATCH` (or `PUT`) whose values all equal the resource's current values is
 accepted and writes nothing: the response is `200` with the resource as it is,
 its `version` and `updatedAt` stay the same, and no history entry, domain
-event, realtime update, webhook delivery or notification is produced. This
-covers issues, documents, comments (issue, document, project and initiative),
-projects, project milestones, initiatives, labels and label groups, teams,
-workflow statuses, cycles, views, customers and document drafts, so retrying a
-write or syncing the same state again is safe.
+event, realtime update, webhook delivery or notification is produced. Retrying
+a write or syncing the same state again is therefore safe. This holds for every
+stored resource, among them issues, documents, comments, projects and their
+milestones, resources, relations and updates, initiatives, labels, teams and
+team settings, workflow and project statuses, cycles (settings and capacity),
+views, customers (including `PUT /api/customers` on a match), customer
+requests, releases, release pipelines and release notes, templates, webhooks,
+OAuth applications (and their webhook and manifest), API keys, SLA rules,
+favorites, subscriptions, notifications and notification preferences, account
+and workspace settings, members and team memberships, and link attachments.
+Setting a state that is already set (favoriting a favorite, muting a muted
+thread, archiving an archived release or post, publishing a published release
+note) keeps the original date.
+
+A few writes are actions rather than edits and always run: file uploads,
+connecting an integration or a chat application (each runs the provider's
+credential check), reinstalling an application (which issues a new webhook
+secret), saving a connector's encrypted headers, and editing an agent chat
+message (which runs the reply again). SCIM provisioning writes no events and
+audits only attributes that changed.
 
 Optimistic locking is checked first: a stale `expectedVersion` is refused with
 `409 VERSION_CONFLICT` (and the current resource) even when the values match.
+This applies to `PATCH /api/issues/{id}` as well: without `expectedVersion`
+the given fields are applied to the current issue, with a stale one the write
+is refused.
 
 ## People who left the workspace
 

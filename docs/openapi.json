@@ -5620,6 +5620,7 @@
         "x-flow-source": "main.go"
       },
       "patch": {
+        "description": "A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.",
         "operationId": "patch_customer_requests_id",
         "parameters": [
           {
@@ -6280,7 +6281,7 @@
         "x-flow-source": "main.go"
       },
       "put": {
-        "description": "Matches an existing customer by id, then external id(s), then domain; merges domains and external ids. Creates the customer (201) when nothing matches; name is then required.",
+        "description": "Matches an existing customer by id, then external id(s), then domain; merges domains and external ids. Creates the customer (201) when nothing matches; name is then required. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.",
         "operationId": "put_customers",
         "requestBody": {
           "content": {
@@ -11976,7 +11977,7 @@
         "x-flow-source": "main.go"
       },
       "patch": {
-        "description": "The author or a workspace administrator. Same body as a project update edit; health is onTrack, atRisk or offTrack.",
+        "description": "The author or a workspace administrator. Same body as a project update edit; health is onTrack, atRisk or offTrack. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.",
         "operationId": "patch_initiatives_id_updates_updateId",
         "parameters": [
           {
@@ -16289,7 +16290,7 @@
         "x-flow-source": "main.go"
       },
       "patch": {
-        "description": "The path takes the issue's id, identifier, or an identifier it had before it moved to another team. Fields not listed in the request schema are rejected with 400. teamId moves the issue to another team; the caller needs access to that team (guests cannot move issues). The issue gets the target team's key and a new number (previousIdentifiers keeps the old identifiers, which still resolve), the target team's status of the same name and type (else the first of that type, else its default), leaves its cycle, replaces team-scoped labels by the target team's labels of the same name (dropping the others), and loses its estimate when the target team does not use estimates. Sub-issues stay in their teams. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification. Naming someone who was removed from or suspended in the workspace as a new assignee, delegate, subscriber, lead, member or owner is refused with 400 (\"This person is no longer a member of the workspace\"); such people the resource already names stay as they are, and they get no new notifications.",
+        "description": "The path takes the issue's id, identifier, or an identifier it had before it moved to another team. Fields not listed in the request schema are rejected with 400. teamId moves the issue to another team; the caller needs access to that team (guests cannot move issues). The issue gets the target team's key and a new number (previousIdentifiers keeps the old identifiers, which still resolve), the target team's status of the same name and type (else the first of that type, else its default), leaves its cycle, replaces team-scoped labels by the target team's labels of the same name (dropping the others), and loses its estimate when the target team does not use estimates. Sub-issues stay in their teams. Send expectedVersion to detect a concurrent change: the write is then refused with 409 and the current issue; without it the given fields are applied to the current issue. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification. A stale expectedVersion is still refused with 409, even when the values match. Naming someone who was removed from or suspended in the workspace as a new assignee, delegate, subscriber, lead, member or owner is refused with 400 (\"This person is no longer a member of the workspace\"); such people the resource already names stay as they are, and they get no new notifications.",
         "operationId": "patch_issues_id",
         "parameters": [
           {
@@ -16510,6 +16511,7 @@
         "x-flow-source": "main.go"
       },
       "patch": {
+        "description": "A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.",
         "operationId": "patch_issues_id_attachments_attachmentId",
         "parameters": [
           {
@@ -20051,7 +20053,7 @@
         "x-flow-source": "oauth_platform.go"
       },
       "patch": {
-        "description": "Only the given fields change. Client ID and secret are kept.",
+        "description": "Only the given fields change. Client ID and secret are kept. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.",
         "operationId": "patch_oauth_applications_id",
         "parameters": [
           {
@@ -20690,7 +20692,7 @@
         "x-flow-source": "oauth_platform.go"
       },
       "put": {
-        "description": "Omitted optional blocks (display, webhook, agent, github) are cleared; client ID and secret are kept. webhookSecret is returned the first time the webhook is enabled. 400 with issues when the manifest is invalid.",
+        "description": "Omitted optional blocks (display, webhook, agent, github) are cleared; client ID and secret are kept. webhookSecret is returned the first time the webhook is enabled. 400 with issues when the manifest is invalid. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.",
         "operationId": "put_oauth_applications_id_manifest",
         "parameters": [
           {
@@ -21031,7 +21033,7 @@
         "x-flow-source": "main.go"
       },
       "put": {
-        "description": "Enabling the webhook for the first time creates the application's signing secret, returned once.",
+        "description": "Enabling the webhook for the first time creates the application's signing secret, returned once. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.",
         "operationId": "put_oauth_applications_id_webhook",
         "parameters": [
           {
@@ -24306,7 +24308,7 @@
         "x-flow-source": "main.go"
       },
       "patch": {
-        "description": "The author or a workspace administrator.",
+        "description": "The author or a workspace administrator. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.",
         "operationId": "patch_projects_id_updates_updateId",
         "parameters": [
           {
@@ -28207,7 +28209,7 @@
         "x-flow-source": "team_member_api.go"
       },
       "put": {
-        "description": "Adds the user (role member or owner) or changes the role of an existing member. origin (manual, api or sync) is stored on the membership; without it, API keys and OAuth applications add members with origin api. Giving an origin for an existing member replaces it (audited as origin_changed). SCIM-managed memberships cannot be changed (409).",
+        "description": "Adds the user (role member or owner) or changes the role of an existing member. origin (manual, api or sync) is stored on the membership; without it, API keys and OAuth applications add members with origin api. Giving an origin for an existing member replaces it (audited as origin_changed). SCIM-managed memberships cannot be changed (409). Repeating the current role and origin changes nothing.",
         "operationId": "put_teams_id_members_userId",
         "parameters": [
           {
@@ -30383,7 +30385,7 @@
         "x-flow-source": "main.go"
       },
       "patch": {
-        "description": "Re-enabling a webhook resets its failure window; disabling it cancels its queued retries. Webhooks managed by an application accept only `enabled`.",
+        "description": "Re-enabling a webhook resets its failure window; disabling it cancels its queued retries. Webhooks managed by an application accept only `enabled`. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.",
         "operationId": "patch_webhooks_id",
         "parameters": [
           {

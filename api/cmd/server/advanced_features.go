@@ -1182,6 +1182,7 @@ func (s *server) updateCustomerRequest(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		item := &data.CustomerRequests[index]
+		before, customersBefore := *item, len(data.Customers)
 		now := time.Now().UTC()
 		if input.CustomerID != nil || customerName != "" {
 			customerID := trimmedValue(input.CustomerID)
@@ -1239,6 +1240,10 @@ func (s *server) updateCustomerRequest(w http.ResponseWriter, r *http.Request) {
 		}
 		if item.CustomerID == "" && item.Body == "" && item.SourceURL == "" && len(item.Attachments) == 0 {
 			return fmt.Errorf("%w: select a customer, provide a request, or specify a source", errInvalid)
+		}
+		if unchangedEdit(before, *item) && len(data.Customers) == customersBefore {
+			updated = before
+			return store.ErrNoMutation
 		}
 		item.UpdatedAt = now
 		updated = *item
@@ -1493,7 +1498,8 @@ func applyReleaseInput(data *domain.Bootstrap, release *domain.Release, input re
 	if release.StageFrozenAt != nil && (release.PipelineID == "" || release.Stage == "") {
 		return errInvalid
 	}
-	if input.Archived != nil {
+	// Archiving an archived release keeps its original date.
+	if input.Archived != nil && *input.Archived != (release.ArchivedAt != nil) {
 		now := time.Now().UTC()
 		if *input.Archived {
 			release.ArchivedAt = &now
@@ -1557,6 +1563,7 @@ func (s *server) updateRelease(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
+		before := data.Releases[index]
 		previousPipelineID := data.Releases[index].PipelineID
 		targetPosition := data.Releases[index].Position
 		if input.PipelineID != nil && stringValue(input.PipelineID) != previousPipelineID {
@@ -1567,6 +1574,10 @@ func (s *server) updateRelease(w http.ResponseWriter, r *http.Request) {
 		}
 		if data.Releases[index].PipelineID != previousPipelineID {
 			data.Releases[index].Position = targetPosition
+		}
+		if unchangedEdit(before, data.Releases[index]) {
+			updated = before
+			return store.ErrNoMutation
 		}
 		now := time.Now().UTC()
 		data.Releases[index].UpdatedAt = now
@@ -1676,8 +1687,13 @@ func (s *server) updateAsk(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
+		before := data.Asks[index]
 		if err := applyAskInput(data, &data.Asks[index], input); err != nil {
 			return err
+		}
+		if unchangedEdit(before, data.Asks[index]) {
+			updated = before
+			return store.ErrNoMutation
 		}
 		data.Asks[index].UpdatedAt = time.Now().UTC()
 		updated = data.Asks[index]
@@ -1995,8 +2011,13 @@ func (s *server) updateProjectTemplate(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
+		before := data.ProjectTemplates[index]
 		if err := applyProjectTemplateInput(data, &data.ProjectTemplates[index], input); err != nil {
 			return err
+		}
+		if unchangedEdit(before, data.ProjectTemplates[index]) {
+			updated = before
+			return store.ErrNoMutation
 		}
 		data.ProjectTemplates[index].UpdatedAt = time.Now().UTC()
 		updated = data.ProjectTemplates[index]
@@ -2090,8 +2111,13 @@ func (s *server) updateSLARule(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
+		before := data.SLARules[index]
 		if err := applySLARuleInput(data, &data.SLARules[index], input); err != nil {
 			return err
+		}
+		if unchangedEdit(before, data.SLARules[index]) {
+			updated = before
+			return store.ErrNoMutation
 		}
 		data.SLARules[index].UpdatedAt = time.Now().UTC()
 		updated = data.SLARules[index]
@@ -2229,11 +2255,15 @@ func (s *server) updateProjectUpdateSettings(w http.ResponseWriter, r *http.Requ
 		if current == nil {
 			current = map[string]any{}
 		}
+		before := jsonSnapshot(current)
 		for key, value := range input {
 			current[key] = value
 		}
-		data.Settings["projectUpdates"] = current
 		result = current
+		if _, stored := data.Settings["projectUpdates"]; stored && unchangedJSON(before, current) {
+			return store.ErrNoMutation
+		}
+		data.Settings["projectUpdates"] = current
 		appendAudit(data, "updated", "project_update_settings", "workspace", input)
 		return nil
 	})
@@ -2264,6 +2294,9 @@ func (s *server) updateSLASettings(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.WorkWeek != nil {
 			result["workWeek"] = *input.WorkWeek
+		}
+		if stored, ok := data.Settings["sla"]; ok && unchangedJSON(jsonSnapshot(stored), result) {
+			return store.ErrNoMutation
 		}
 		data.Settings["sla"] = result
 		appendAudit(data, "updated", "sla_settings", "workspace", result)
@@ -2323,6 +2356,10 @@ func (s *server) updateDraft(w http.ResponseWriter, r *http.Request) {
 		applyDraftInput(&candidate, input)
 		if err := validate(data, candidate); err != nil {
 			return err
+		}
+		if unchangedEdit(data.Drafts[index], candidate) {
+			updated = data.Drafts[index]
+			return store.ErrNoMutation
 		}
 		candidate.UpdatedAt = time.Now().UTC()
 		data.Drafts[index], updated = candidate, candidate
@@ -2506,6 +2543,34 @@ func resourceExists(data *domain.Bootstrap, kind, id string) bool {
 	return false
 }
 
+// resourceFavoriteFlag reads the flag setResourceFavoriteFlag writes; a kind
+// without one always reads as set.
+func resourceFavoriteFlag(data *domain.Bootstrap, kind, id string) bool {
+	switch kind {
+	case "review":
+		if index := reviewIndex(*data, id); index >= 0 {
+			return data.Reviews[index].Favorite
+		}
+	case "document":
+		if index := slices.IndexFunc(data.Documents, func(item domain.Document) bool { return item.ID == id }); index >= 0 {
+			return data.Documents[index].Favorite
+		}
+	case "cycle":
+		if index := slices.IndexFunc(data.Cycles, func(item domain.Cycle) bool { return item.ID == id }); index >= 0 {
+			return data.Cycles[index].Favorite
+		}
+	case "initiative":
+		if index := slices.IndexFunc(data.Initiatives, func(item domain.Initiative) bool { return item.ID == id }); index >= 0 {
+			return data.Initiatives[index].Favorite
+		}
+	case "view":
+		if index := slices.IndexFunc(data.SavedViews, func(item domain.SavedView) bool { return item.ID == id }); index >= 0 {
+			return data.SavedViews[index].Favorite
+		}
+	}
+	return true
+}
+
 func setResourceFavoriteFlag(data *domain.Bootstrap, kind, id string, favorite bool) {
 	switch kind {
 	case "review":
@@ -2622,12 +2687,17 @@ func (s *server) addFavorite(w http.ResponseWriter, r *http.Request) {
 				return store.ErrAuthForbidden
 			}
 		}
+		flagged := tab != "" || resourceFavoriteFlag(data, kind, id)
 		if tab == "" {
 			setResourceFavoriteFlag(data, kind, id, true)
 		}
 		matches := isViewerFavorite(data, kind, id, tab)
 		if index := slices.IndexFunc(data.Favorites, matches); index >= 0 {
 			created = data.Favorites[index]
+			if flagged {
+				// Favoriting a favorite writes nothing.
+				return store.ErrNoMutation
+			}
 			return nil
 		}
 		setFavoriteTabRecord(data, kind, id, tab, true)
@@ -2705,6 +2775,7 @@ func (s *server) updateFavorite(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
+		before := data.Favorites[index]
 		if input.FolderID != nil {
 			folderID := strings.TrimSpace(*input.FolderID)
 			if folderID != "" && !slices.ContainsFunc(data.FavoriteFolders, func(folder domain.FavoriteFolder) bool {
@@ -2718,6 +2789,9 @@ func (s *server) updateFavorite(w http.ResponseWriter, r *http.Request) {
 			data.Favorites[index].Position = *input.Position
 		}
 		updated = data.Favorites[index]
+		if unchangedEdit(before, updated) {
+			return store.ErrNoMutation
+		}
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
@@ -2770,6 +2844,7 @@ func (s *server) updateFavoriteFolder(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
+		before := data.FavoriteFolders[index]
 		if input.Name != nil {
 			name := strings.TrimSpace(*input.Name)
 			if name == "" || len([]rune(name)) > 80 {
@@ -2779,6 +2854,10 @@ func (s *server) updateFavoriteFolder(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Position != nil {
 			data.FavoriteFolders[index].Position = *input.Position
+		}
+		if unchangedEdit(before, data.FavoriteFolders[index]) {
+			updated = before
+			return store.ErrNoMutation
 		}
 		data.FavoriteFolders[index].UpdatedAt = time.Now().UTC()
 		updated = data.FavoriteFolders[index]
@@ -2834,11 +2913,19 @@ func (s *server) addSubscription(w http.ResponseWriter, r *http.Request) {
 				return store.ErrAuthForbidden
 			}
 		}
+		documentSubscribers := func() int {
+			if document, err := documentByID(data, id); kind == "document" && err == nil {
+				return len(document.SubscriberIDs)
+			}
+			return 0
+		}
+		subscribersBefore := documentSubscribers()
 		setDocumentSubscription(data, kind, id, data.Viewer.ID, true)
 		index := slices.IndexFunc(data.Subscriptions, func(item domain.Subscription) bool {
 			return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
 		})
 		if index >= 0 {
+			before := data.Subscriptions[index]
 			if input.Events == nil && len(data.Subscriptions[index].Events) == 0 {
 				// A subscribe without events on a record that only held opt-outs
 				// (a Pulse unsubscribe) subscribes to everything again; left as
@@ -2856,6 +2943,10 @@ func (s *server) addSubscription(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			created = data.Subscriptions[index]
+			if unchangedEdit(before, created) && documentSubscribers() == subscribersBefore {
+				// Subscribing a subscriber with the same events writes nothing.
+				return store.ErrNoMutation
+			}
 			return nil
 		}
 		now := time.Now().UTC()

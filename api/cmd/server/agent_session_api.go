@@ -132,6 +132,10 @@ func (s *server) updateApplicationAgentTask(w http.ResponseWriter, r *http.Reque
 			invalid = err
 			return err
 		}
+		if unchangedEdit(current.ExternalURLs, urls) && (input.Plan == nil || unchangedEdit(current.Plan, *input.Plan)) {
+			// The current links and plan again: nothing is written or published.
+			return store.ErrNoMutation
+		}
 		touchedURLs := input.ExternalURLs != nil || len(input.AddedExternalURLs) > 0 || len(input.RemovedExternalURLs) > 0
 		current.ExternalURLs = urls
 		if input.Plan != nil {
@@ -146,6 +150,9 @@ func (s *server) updateApplicationAgentTask(w http.ResponseWriter, r *http.Reque
 	if invalid != nil {
 		writeError(w, http.StatusBadRequest, invalid.Error())
 		return
+	}
+	if errors.Is(err, store.ErrNoMutation) {
+		err = nil
 	}
 	if errors.Is(err, store.ErrAgentTaskArchived) {
 		writeError(w, http.StatusConflict, "This agent session was archived")

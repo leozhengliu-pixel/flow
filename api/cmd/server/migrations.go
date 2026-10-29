@@ -11,6 +11,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/store"
 )
 
 func migrationByID(data *domain.Bootstrap, id string) (*domain.MigrationJob, error) {
@@ -185,6 +186,8 @@ func (s *server) updateMigrationMappings(w http.ResponseWriter, r *http.Request)
 		if job.Status != "mapping" && job.Status != "failed" {
 			return errInvalid
 		}
+		// Mappings are edited in place, so compare against a snapshot.
+		before := jsonSnapshot(job)
 		for _, patch := range input.Mappings {
 			index := slices.IndexFunc(job.Mappings, func(item domain.MigrationEntityMapping) bool {
 				return item.EntityType == patch.EntityType && item.SourceID == patch.SourceID
@@ -220,6 +223,10 @@ func (s *server) updateMigrationMappings(w http.ResponseWriter, r *http.Request)
 		}
 		if input.TargetTeamID != "" {
 			job.TargetTeamID = input.TargetTeamID
+		}
+		if unchangedJSON(before, job) {
+			updated = *job
+			return store.ErrNoMutation
 		}
 		job.UpdatedAt = time.Now().UTC()
 		updated = *job

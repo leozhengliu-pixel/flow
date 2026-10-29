@@ -390,11 +390,8 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 	if !decodeStrictJSON(w, r, &input) {
 		return
 	}
-	if legacy, _ := r.Context().Value(legacyIssueWriteContext{}).(bool); legacy {
-		// Legacy clients merge scalar patches by field. Keep that contract while
-		// still enforcing the document snapshot version below.
-		input.ExpectedVersion = nil
-	}
+	// The legacy /api/issues route shares this contract: a patch without
+	// expectedVersion merges by field, one with a stale version is a 409.
 	if len(input.DocumentUpdateIDs) > 10_000 || slices.ContainsFunc(input.DocumentUpdateIDs, func(id string) bool { return len(id) > 191 }) {
 		writeError(w, http.StatusBadRequest, "Too many document updates")
 		return

@@ -782,9 +782,12 @@ func TestSearchHistoryRecentResourcesAndConcurrentIssuePatches(t *testing.T) {
 	if updated.Version != issue.Version+1 {
 		t.Fatalf("issue version = %d, want %d", updated.Version, issue.Version+1)
 	}
-	merged := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{"title": "Stale writer", "expectedVersion": issue.Version}, http.StatusOK)
+	// A stale expectedVersion is a 409 on the legacy route too; a patch
+	// without one merges by field.
+	requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{"title": "Stale writer", "expectedVersion": issue.Version}, http.StatusConflict)
+	merged := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{"title": "Stale writer"}, http.StatusOK)
 	if merged.Title != "Stale writer" || merged.Priority != 1 || merged.Version != issue.Version+2 {
-		t.Fatalf("concurrent issue patch did not merge by field: %#v", merged)
+		t.Fatalf("an unversioned issue patch did not merge by field: %#v", merged)
 	}
 
 	comment := requestJSON[domain.Comment](t, handler, http.MethodPost, "/api/issues/"+issue.ID+"/comments", map[string]string{"body": "Versioned"}, http.StatusCreated)
@@ -1614,7 +1617,8 @@ func TestIssueBoardOrderAndSavedViewLifecycle(t *testing.T) {
 		t.Fatalf("deleted view subscription remains = %#v", bootstrap.Subscriptions)
 	}
 	events := requestJSON[[]domain.DomainEvent](t, handler, http.MethodGet, "/api/events?aggregateId="+created.ID, nil, http.StatusOK)
-	if len(events) != 5 || events[0].Type != "view.created" || events[1].Type != "view.updated" || events[2].Type != "favorite.added" || events[3].Type != "subscription.added" || events[4].Type != "view.deleted" {
+	// The update already favorited the view, so favoriting it again writes nothing.
+	if len(events) != 4 || events[0].Type != "view.created" || events[1].Type != "view.updated" || events[2].Type != "subscription.added" || events[3].Type != "view.deleted" {
 		t.Fatalf("saved view events = %#v", events)
 	}
 }

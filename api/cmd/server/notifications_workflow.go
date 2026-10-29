@@ -67,11 +67,17 @@ func (s *server) updateNotificationPreferences(w http.ResponseWriter, r *http.Re
 		if !ok {
 			current = defaultPreferences(viewerID)
 		}
+		// The merge edits nested maps in place, so compare against a snapshot.
+		before := jsonSnapshot(current)
 		mergeNotificationPreferences(&current, input)
 		if !slices.Contains([]string{"immediate", "digest"}, current.EmailFormat) {
 			return errInvalid
 		}
 		current.UserID = viewerID
+		if ok && unchangedJSON(before, current) {
+			updated = current
+			return store.ErrNoMutation
+		}
 		current.UpdatedAt = time.Now().UTC()
 		if data.NotificationPreferences == nil {
 			data.NotificationPreferences = map[string]domain.NotificationPreferences{}
@@ -541,6 +547,12 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 		if !teamExists(data, teamID) {
 			return errNotFound
 		}
+		// Settings edits reach sub-teams, the team record, its statuses,
+		// cycles and members; a patch that changes none of them writes nothing.
+		touched := func() any {
+			return []any{data.TeamSettings, data.Teams, data.States, data.Cycles, data.TeamMembers}
+		}
+		before := jsonSnapshot(touched())
 		settings := teamSettings(data, teamID)
 		previousParentTeamID := settings.ParentTeamID
 		if input.Description != nil {
@@ -966,6 +978,10 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 		if input.ParentTeamID != nil && s.authDisabled {
 			domain.SyncTeamAncestorMembers(data)
 		}
+		if unchangedJSON(before, touched()) {
+			updated = settings
+			return store.ErrNoMutation
+		}
 		for index := range data.Teams {
 			if data.Teams[index].ID == teamID {
 				now := time.Now().UTC()
@@ -1044,8 +1060,13 @@ func (s *server) updateIssueTemplate(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
+		before := data.IssueTemplates[index]
 		if err := applyIssueTemplate(data, &data.IssueTemplates[index], input); err != nil {
 			return err
+		}
+		if unchangedEdit(before, data.IssueTemplates[index]) {
+			updated = before
+			return store.ErrNoMutation
 		}
 		data.IssueTemplates[index].UpdatedAt = time.Now().UTC()
 		updated = data.IssueTemplates[index]
