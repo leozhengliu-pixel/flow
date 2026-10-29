@@ -1,0 +1,48 @@
+name: Refresh Go test timings
+
+on:
+  schedule:
+    - cron: '23 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: refresh-go-test-timings
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Refresh timings from successful main runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci/update-go-test-timings.sh
+
+      - name: Open or update timings pull request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ github.token }}
+          branch: ci/go-test-timings
+          base: main
+          add-paths: scripts/ci/go-test-timings.json
+          commit-message: |
+            ci: refresh Go test timings
+
+            Co-Authored-By: Codex <noreply@openai.com>
+          title: 'ci: refresh Go test timings'
+          body: |
+            Refresh the shard weights with the median of the latest three successful main CI timing artifacts.
+
+            Uses only GITHUB_TOKEN. Repository Actions settings must allow GitHub Actions to create pull requests.
+            Token-created pull requests do not trigger CI automatically; a maintainer must trigger CI before merging.

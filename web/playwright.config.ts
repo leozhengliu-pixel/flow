@@ -26,7 +26,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: "sh -c 'rm -f /tmp/flow-e2e.db && cd ../api && FLOW_AUTH_DISABLED=true FLOW_DATABASE_PATH=/tmp/flow-e2e.db FLOW_HTTP_ADDR=127.0.0.1:4180 FLOW_AGENT_ENABLED=true FLOW_AGENT_PROTOCOL=openai-responses FLOW_AGENT_BASE_URL=http://127.0.0.1:4190 FLOW_AGENT_MODEL=e2e-model FLOW_AGENT_TOOLS_ENABLED=true go run ./cmd/server >> \"${FLOW_E2E_API_LOG:-/dev/stderr}\" 2>&1'",
+      command: "sh -c 'rm -f /tmp/flow-e2e.db && cd ../api && FLOW_AUTH_DISABLED=true FLOW_DATABASE_PATH=/tmp/flow-e2e.db FLOW_HTTP_ADDR=127.0.0.1:4180 FLOW_AGENT_ENABLED=true FLOW_AGENT_PROTOCOL=openai-responses FLOW_AGENT_BASE_URL=http://127.0.0.1:4190 FLOW_AGENT_MODEL=e2e-model FLOW_AGENT_TOOLS_ENABLED=true ${FLOW_E2E_API_BIN:-go run ./cmd/server} >> \"${FLOW_E2E_API_LOG:-/dev/stderr}\" 2>&1'",
       url: 'http://127.0.0.1:4180/api/health',
       timeout: 120_000,
       reuseExistingServer: !process.env.CI,

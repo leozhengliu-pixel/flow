@@ -13,7 +13,7 @@
 # shard packing is based on. A test missing from some runs uses the runs it is in.
 # Packages that are not in the artifacts keep their old entries.
 #
-# The file is only written. Committing it is a manual step:
+# The scheduled go-test-timings.yml workflow opens a pull request. To refresh manually:
 #
 #   scripts/ci/update-go-test-timings.sh
 #   git diff --stat scripts/ci/go-test-timings.json
@@ -22,13 +22,17 @@
 # go-test-shard.sh packs the tests onto shards by these numbers, so a refresh
 # moves tests between shards; the "API vet and shard check" job re-verifies that
 # every test still runs exactly once. Refresh every few weeks, or when the shard
-# times drift apart. Needs gh (logged in), jq and the repository's origin remote.
+# times drift apart. Needs gh (logged in or GH_TOKEN), jq and the repository's origin remote.
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
 target=$root/scripts/ci/go-test-timings.json
 artifact=go-test-timings
 wanted=${TIMING_RUNS:-3}
+if ! [[ $wanted =~ ^[1-9][0-9]*$ ]]; then
+  echo 'TIMING_RUNS must be a positive integer' >&2
+  exit 2
+fi
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -40,7 +44,7 @@ download() {
   rm -rf "$work/download/$run"
   gh run download "$run" --name "$artifact" --dir "$work/download/$run" > /dev/null 2>&1 || return 1
   [ -s "$work/download/$run/go-test-timings.json" ] || return 1
-  jq -e 'type == "object" and length > 0 and all(.[]; type == "object")' \
+  jq -e 'type == "object" and length > 0 and all(.[]; type == "object" and length > 0 and all(.[]; type == "number" and . >= 0))' \
     "$work/download/$run/go-test-timings.json" > /dev/null || return 1
   mv "$work/download/$run/go-test-timings.json" "$work/runs/$run.json"
 }
