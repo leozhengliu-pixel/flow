@@ -184,6 +184,11 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 					s.callMCPRunTool(w, r, request.ID, actor.Run, tool, params.Arguments, readonly)
 					return
 				}
+				if _, known := agentRunSessionToolDefinitions()[params.Name]; known {
+					// A session tool the run no longer has (the files are gone, web access was turned off).
+					s.writeMCPToolResult(w, r, request.ID, nil, fmt.Errorf("%s is not available to this agent run", params.Name))
+					return
+				}
 			}
 			index := slices.IndexFunc(tools, func(tool flowMCPTool) bool { return tool.Name == params.Name })
 			if index < 0 {

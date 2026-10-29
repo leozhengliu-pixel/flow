@@ -98,6 +98,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   contract checks, and the turn, tool-call and time budgets, Cancel and the
   per-workspace limit apply across API servers. Replies on a run's page still
   run in the API.
+- Flow Agent on the agent worker uses the web as in-process: chats and
+  comment threads get `fetch_url`, and `web_search` when a search provider is
+  configured, while the workspace allows web access (turning it off takes
+  effect mid-run); without a search provider the worker uses the model
+  provider's hosted search on OpenAI Responses and Anthropic Messages
+  (`FLOW_AGENT_NATIVE_WEB_SEARCH`), shown as a web search step, and drops it
+  when the provider refuses it.
 - The workspace Invite dialog (Settings → Administration → Members → Invite)
   has an **Add to team** field for every role. Pick one or more teams (a
   searchable multi-select; optional for Members and Admins, required for

@@ -25,13 +25,15 @@ import (
 //     only the files sent with the conversation's messages.
 //   - ask_question, while a loop builder conversation holds a draft and the person follows the reply (loop_builder.go):
 //     the call shows the chip question on the reply and waits for the answer (or a Stop), outside the tool budget.
+//   - fetch_url, and web_search with a configured search provider, for a chat or a comment-thread run while the
+//     workspace lets Flow Agent use the web (loop_web.go; a loop run has them as its loop's tools).
 //
 // The worker offers whatever /mcp lists of these, so Flow alone decides when a run has them.
 
 // agentRunSessionToolDefinitions are the session tools as /mcp publishes them, schemas resolved for checking.
 var agentRunSessionToolDefinitions = sync.OnceValue(func() map[string]flowMCPTool {
 	tools := map[string]flowMCPTool{}
-	for _, definition := range []agentProviderTool{agentFileToolDefinitions[readFileTool], agentFileToolDefinitions[transcribeMediaTool], loopQuestionToolDefinition} {
+	for _, definition := range append([]agentProviderTool{agentFileToolDefinitions[readFileTool], agentFileToolDefinitions[transcribeMediaTool], loopQuestionToolDefinition}, webToolDefinitions...) {
 		var schema jsonschema.Schema
 		if err := json.Unmarshal(definition.Parameters, &schema); err != nil {
 			panic(fmt.Sprintf("session tool %s: %v", definition.Name, err))
@@ -45,12 +47,35 @@ var agentRunSessionToolDefinitions = sync.OnceValue(func() map[string]flowMCPToo
 	return tools
 })
 
-// agentRunSessionToolContext is ctx with what the run's session gives its session tools (the conversation's files).
+// agentRunSessionToolContext is ctx with what the run's session gives its session tools (the conversation's files,
+// the web).
 func (s *server) agentRunSessionToolContext(ctx context.Context, run store.AgentRun) context.Context {
 	if session, ok := s.workerChatSession(run); ok {
 		ctx = withAgentSessionFiles(ctx, session)
 	}
+	if s.agentRunWebAccess(run) {
+		ctx = withAgentWebTools(ctx)
+	}
 	return ctx
+}
+
+// agentRunWebAccess reports whether a chat or built-in session run may use the web now: the workspace lets Flow
+// Agent use it (checked at every call, as an admin may turn it off).
+func (s *server) agentRunWebAccess(run store.AgentRun) bool {
+	_, chat := workerChatInfo(run)
+	_, thread := workerThreadInfo(run)
+	if !chat && !thread {
+		return false
+	}
+	metadata, ok := s.store.WorkspaceSettingsMetadata(run.WorkspaceKey)
+	return ok && agentWebAccess(metadata.WorkspaceSettings)
+}
+
+// agentRunHostedWebSearch reports whether a run should search with its model provider's hosted search, as an
+// in-process turn does without a configured search provider (FLOW_AGENT_NATIVE_WEB_SEARCH); the worker adds the
+// hosted tool when its protocol has one (OpenAI Responses, Anthropic Messages).
+func (s *server) agentRunHostedWebSearch(webAccess bool) bool {
+	return webAccess && s.agent.NativeWebSearch && !s.webSearchAvailable() && !s.agentNativeWebSearchOff.Load()
 }
 
 // agentRunSessionTools are the session tools the run has now, by name.
@@ -65,6 +90,11 @@ func (s *server) agentRunSessionTools(ctx context.Context, run store.AgentRun) [
 	}
 	if s.workerChatAsksLoopQuestions(run) {
 		tools = append(tools, definitions[loopQuestionTool])
+	}
+	if agentWebToolsEnabled(ctx) {
+		for _, tool := range s.agentWebToolList() {
+			tools = append(tools, definitions[tool.Name])
+		}
 	}
 	return tools
 }

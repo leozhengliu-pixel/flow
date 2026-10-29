@@ -25,6 +25,7 @@ import { FileSessionStore, type RepairableSession, type SuspendedStore } from '.
 import { QuestionStreamer } from './question-stream.js'
 import { outputText, RunGuard, ToolErrorFlags, type GuardApi } from './run-guard.js'
 import { initialGroups } from './tool-groups.js'
+import { hostedSearchQuery, hostedSearchRefused, hostedWebSearchTool } from './hosted-search.js'
 
 // Traces would go to api.openai.com with the provider key; the worker exports its own OTel spans instead.
 setTracingDisabled(true)
@@ -107,6 +108,8 @@ export type SessionOptions = {
   allTools?: boolean
   serialCalls?: boolean
   stopAtTools?: string[]
+  /** Search the web with the provider's hosted search (hosted-search.ts), when the protocol has one. */
+  hostedWebSearch?: boolean
 }
 
 export type ActivitySink = (activity: FlowActivity) => void
@@ -140,6 +143,8 @@ export class FlowAgentSession {
   private controller?: AbortController
   /** The sink of the turn in progress (connector questions arrive while a tool call runs). */
   private sink?: ActivitySink
+  /** The provider's hosted search tool the agent offers, until the provider refuses it. */
+  private hostedSearch?: Tool<FlowRunContext>
 
   constructor(private readonly worker: FlowAgentWorker, readonly options: SessionOptions, baseModel: Model) {
     const config = worker.config
@@ -150,13 +155,14 @@ export class FlowAgentSession {
     }
     const watcher = this.elicitations
     this.mcp = options.mcpServers ?? [flowMcpServer(config.flowUrl, options.flowToken ?? config.flowToken, { toolErrors: this.toolErrors, onConnectorCall: watcher ? () => watcher.begin() : undefined, serial: options.serialCalls })]
+    if (options.hostedWebSearch) this.hostedSearch = hostedWebSearchTool(config.protocol)
     this.agent = new FlowAgent({
       name: 'Flow Agent',
       instructions: options.systemPrompt,
       model: this.model,
       modelSettings: modelSettings(config, options.sessionId),
       // A loop run has only the tools Flow lists for it (no question to ask, no groups to load).
-      tools: [...(options.allTools ? [] : [askUserTool, loadToolsTool]), ...(options.tools ?? [])],
+      tools: this.hostTools(),
       mcpServers: this.mcp,
       mcpConfig: { convertSchemasToStrict: false },
       ...(options.stopAtTools?.length ? { toolUseBehavior: { stopAtToolNames: options.stopAtTools } } : {}),
@@ -165,6 +171,11 @@ export class FlowAgentSession {
 
   get sessionId() {
     return this.options.sessionId
+  }
+
+  /** The tools the agent offers besides /mcp's, the hosted search included while the provider takes it. */
+  private hostTools(): Tool<FlowRunContext>[] {
+    return [...(this.options.allTools ? [] : [askUserTool, loadToolsTool]), ...(this.options.tools ?? []), ...(this.hostedSearch ? [this.hostedSearch] : [])]
   }
 
   private history(): RepairableSession {
@@ -330,6 +341,17 @@ export class FlowAgentSession {
     } catch (error) {
       if (controller.signal.aborted) return await this.canceled(outcome, emit, produced)
       const wrote = outcome.toolCalls.some(call => !call.isError && isWriteTool(call.name))
+      if (this.hostedSearch && !wrote && !(input instanceof RunState) && hostedSearchRefused(error)) {
+        // As in-process: a provider that refuses the hosted search tool is asked again without it.
+        this.hostedSearch = undefined
+        this.agent.tools = this.hostTools()
+        const history = await session.getItems()
+        const last = history.at(-1) as any
+        if (last?.type === 'message' && last.role === 'user') await session.popItem()
+        context.turns = []
+        if (guard) guard.round = 0
+        return this.execute(input, context, sink, retries, outcome, guard)
+      }
       if (!(input instanceof RunState) && retries > 0 && isTransient(error) && !wrote) {
         // A dropped stream (the SDK never replays one that already emitted events): nothing was written, so the
         // request runs again from the stored history, which holds only the user's message of this attempt.
@@ -411,6 +433,14 @@ function toActivities(event: RunStreamEvent, context: FlowRunContext, outcome: T
   switch (event.name) {
     case 'tool_called': {
       const raw = item.rawItem
+      if (raw?.type === 'hosted_tool_call') {
+        // The provider's hosted search runs on its side: a step of the work, as in-process (never a call to run).
+        const callId = `hosted_${raw.id ?? raw.callId ?? Math.random().toString(36).slice(2)}`
+        return [
+          { type: 'action', at, activityId: callId, action: 'web_search', parameter: { query: hostedSearchQuery(raw) } },
+          { type: 'action.result', at, activityId: callId, action: 'web_search', result: '', isError: raw.status === 'failed' },
+        ]
+      }
       if (raw?.type !== 'function_call') return []
       outcome.toolCalls.push({ callId: raw.callId, name: raw.name, isError: false })
       return [{ type: 'action', at, activityId: raw.callId, action: raw.name, parameter: safeJson(raw.arguments) }]

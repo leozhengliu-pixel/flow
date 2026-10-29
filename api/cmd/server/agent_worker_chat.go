@@ -103,6 +103,9 @@ type workerChatRunInfo struct {
 	// the person may while the conversation holds a draft.
 	LoopBuilder   bool `json:"loopBuilder,omitempty"`
 	LoopQuestions bool `json:"loopQuestions,omitempty"`
+	// HostedWebSearch: the reply searches the web with the model provider's hosted search tool (no search provider is
+	// configured), as an in-process reply does; the worker adds it when its protocol has one.
+	HostedWebSearch bool `json:"hostedWebSearch,omitempty"`
 }
 
 type workerChatResume struct {
@@ -184,7 +187,7 @@ func (s *server) runAgentSessionOnWorker(r *http.Request, data domain.Bootstrap,
 	latest := agentLatestUserMessage(*session)
 	runID := newWorkerChatRunID()
 	started := time.Now().UTC()
-	info := workerChatRunInfo{MessageID: "agent_message_" + runID, LinkBase: agentLinkBaseURL(r), MaxTurns: s.agentMaxToolTurns(), MaxCalls: s.agentMaxToolCalls(), Request: latest, Chinese: containsHan(latest), Started: started.UnixMilli(), Groups: newAgentChatToolset(*session).names(), LoopBuilder: len(session.LoopIDs) > 0, LoopQuestions: writer != nil && sessionHasDraftLoop(data, *session)}
+	info := workerChatRunInfo{MessageID: "agent_message_" + runID, LinkBase: agentLinkBaseURL(r), MaxTurns: s.agentMaxToolTurns(), MaxCalls: s.agentMaxToolCalls(), Request: latest, Chinese: containsHan(latest), Started: started.UnixMilli(), Groups: newAgentChatToolset(*session).names(), LoopBuilder: len(session.LoopIDs) > 0, LoopQuestions: writer != nil && sessionHasDraftLoop(data, *session), HostedWebSearch: s.agentRunHostedWebSearch(prompt.web)}
 	promptContext := agentRunPromptContext{System: prompt.system, Messages: workerRunPromptMessages(prompt.messages), LatestPrompt: latest, WebAccess: prompt.web}
 	snapshot := s.withAgentBodies(r, *session)
 	// The reply exists before the run is queued, so a reloaded page or another tab sees it working at once.
