@@ -414,6 +414,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 			return s.createChatThreadSchema(ctx)
 		}},
 		{version: 22, name: "chat intake requests", apply: s.createChatIntakeRequestSchema},
+		{version: 23, name: "chat reply thread leases", apply: s.createChatReplyLeaseSchema},
 		// Versions from 1000 up are data migrations (runDataMigrations),
 		// which run after the workspaces are loaded.
 	}

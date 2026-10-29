@@ -176,6 +176,9 @@ func (s *SQLiteStore) DeleteChatIntegration(ctx context.Context, workspace, id s
 	if _, err = tx.ExecContext(ctx, `DELETE FROM connector_secrets WHERE id IN (SELECT id FROM chat_actions WHERE workspace_key=? AND connection_id=? AND id LIKE 'chat_oauth_%')`, workspace, id); err != nil {
 		return err
 	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM chat_reply_leases WHERE workspace_key=? AND job_id IN (SELECT id FROM chat_jobs WHERE workspace_key=? AND connection_id=?)`, workspace, workspace, id); err != nil {
+		return err
+	}
 	for _, table := range []string{"chat_bindings", "chat_initiative_bindings", "chat_thread_items", "chat_threads", "chat_intake_requests", "chat_identities", "chat_actions", "chat_messages", "chat_jobs", "chat_integrations"} {
 		if _, err = tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE workspace_key=? AND connection_id=?`, workspace, id); err != nil {
 			return err
@@ -497,10 +500,10 @@ func (s *SQLiteStore) EnqueueChatJob(ctx context.Context, item domain.ChatJob) (
 
 func (s *SQLiteStore) ClaimChatJobs(ctx context.Context, workspace, kind string, limit int, now time.Time) ([]domain.ChatJob, error) {
 	limit = max(1, min(limit, 100))
-	if _, err := s.db.ExecContext(ctx, `UPDATE chat_jobs SET status='failed',last_error='Attempt limit reached after expired worker lease',lease_until=0,run_at=? WHERE workspace_key=? AND kind=? AND status='processing' AND attempts>=8 AND lease_until<=?`, now.UnixMilli(), workspace, kind, now.UnixMilli()); err != nil {
+	if _, err := s.db.ExecContext(ctx, `UPDATE chat_jobs SET status='failed',last_error='Attempt limit reached after expired worker lease',lease_until=0,run_at=? WHERE workspace_key=? AND kind=? AND kind<>'dm_reply' AND status='processing' AND attempts>=8 AND lease_until<=?`, now.UnixMilli(), workspace, kind, now.UnixMilli()); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id,connection_id,dedup_key,payload,status,attempts,run_at,lease_until,last_error FROM chat_jobs WHERE workspace_key=? AND kind=? AND attempts<8 AND run_at<=? AND (status='pending' OR (status='processing' AND lease_until<=?)) ORDER BY run_at,id LIMIT ?`, workspace, kind, now.UnixMilli(), now.UnixMilli(), limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,connection_id,dedup_key,payload,status,attempts,run_at,lease_until,last_error FROM chat_jobs WHERE workspace_key=? AND kind=? AND (attempts<8 OR kind='dm_reply') AND run_at<=? AND (status='pending' OR (status='processing' AND lease_until<=?)) ORDER BY run_at,id LIMIT ?`, workspace, kind, now.UnixMilli(), now.UnixMilli(), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -543,7 +546,7 @@ func (s *SQLiteStore) FinishChatJob(ctx context.Context, item domain.ChatJob, st
 	if status != "pending" && status != "completed" && status != "failed" {
 		return ErrIssueQuery
 	}
-	if item.Attempts >= 8 && status == "pending" {
+	if item.Attempts >= 8 && status == "pending" && item.Kind != "dm_reply" {
 		status = "failed"
 	}
 	if status != "pending" {
@@ -575,6 +578,7 @@ func (s *SQLiteStore) PurgeChatHistory(ctx context.Context, now time.Time) error
 		before                int64
 	}{
 		{"chat_actions", "id", "expires_at<=?", now.UnixMilli()},
+		{"chat_reply_leases", "thread_key", "lease_until<=? AND NOT EXISTS(SELECT 1 FROM chat_jobs WHERE id=chat_reply_leases.job_id AND status IN ('pending','processing'))", now.UnixMilli()},
 		{"chat_jobs", "id", "status IN ('completed','failed') AND run_at<?", now.Add(-30 * 24 * time.Hour).UnixMilli()},
 		{"chat_messages", "id", "created_at<?", now.Add(-30 * 24 * time.Hour).UnixMilli()},
 		{"chat_request_limits", "scope_key", "next_at<?", now.Add(-24 * time.Hour).UnixMilli()},

@@ -296,6 +296,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Starting a cycle today no longer generates an extra upcoming cycle, even
   after refreshing. Automatic maintenance replenishes the configured upcoming
   count at scheduled cycle boundaries; cycle settings still apply their count.
+- Lark and Feishu DM agent replies survive API server loss: leased reply jobs
+  let another server finish delivery, resume an existing worker reply, or mark
+  an in-process reply interrupted with **Retry** / **重试**. Thread leases
+  prevent two servers from answering the same conversation at once; retries
+  and card delivery are deduplicated across takeovers.
 - Every other stored `PATCH` and `PUT` now also writes nothing when it only
   repeats the current values (no `version` or `updatedAt` change, event,
   realtime update, webhook or notification): releases, release pipelines and

@@ -390,7 +390,7 @@ func (s *server) processChatJobs(ctx context.Context, workspace string) error {
 			}
 		}
 	}
-	return nil
+	return s.startChatDMReplyJobs(ctx, workspace)
 }
 
 func (s *server) processChatJob(ctx context.Context, job domain.ChatJob) error {

@@ -18,6 +18,7 @@ var chatWorkspaceTables = []string{
 	"chat_integrations", "chat_bindings", "chat_identities", "chat_actions",
 	"chat_messages", "chat_jobs", "chat_domain_cursors", "chat_mutation_receipts",
 	"chat_initiative_bindings", "chat_threads", "chat_thread_items", "chat_intake_requests",
+	"chat_reply_leases",
 }
 
 func revokeChatWorkspaceOAuth(ctx context.Context, tx *sqlTx, workspace string) error {
@@ -125,7 +126,7 @@ func renameChatWorkspace(ctx context.Context, tx *sqlTx, oldKey, newKey string) 
 			return err
 		}
 	}
-	for _, table := range []string{"chat_bindings", "chat_identities", "chat_jobs", "chat_domain_cursors", "chat_mutation_receipts", "chat_initiative_bindings", "chat_threads", "chat_thread_items", "chat_intake_requests"} {
+	for _, table := range []string{"chat_bindings", "chat_identities", "chat_jobs", "chat_domain_cursors", "chat_mutation_receipts", "chat_initiative_bindings", "chat_threads", "chat_thread_items", "chat_intake_requests", "chat_reply_leases"} {
 		if _, err := tx.ExecContext(ctx, `UPDATE `+table+` SET workspace_key=? WHERE workspace_key=?`, newKey, oldKey); err != nil {
 			return err
 		}

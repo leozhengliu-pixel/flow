@@ -294,7 +294,12 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	// Like the reference app, a reply keeps going when the page that asked goes away
 	// (navigating, reloading, closing the tab) and is saved when it finishes;
 	// only an explicit stop (POST …/stop) ends it early.
-	runCtx, cancelRun := context.WithCancel(context.WithoutCancel(r.Context()))
+	parent := context.WithoutCancel(r.Context())
+	if chatDMSessionOrigin(r.Context()) != "" {
+		// Unlike a browser stream, a DM is owned by a renewable queue lease.
+		parent = r.Context()
+	}
+	runCtx, cancelRun := context.WithCancel(parent)
 	defer cancelRun()
 	release := s.registerAgentRun(workspaceKey(r), session.ID, cancelRun)
 	defer release()
