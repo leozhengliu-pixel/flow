@@ -61,6 +61,20 @@ describe('assignee picker agents', () => {
     expect(invite.querySelector('kbd')).toBeNull()
   })
 
+  it.each(['en-US', 'zh-CN'])('sorts Team members by display name in %s, with the viewer only in the numbered section', async locale => {
+    localStorage.setItem('flow:locale', locale)
+    const user = userEvent.setup()
+    const members = (locale === 'zh-CN' ? ['张三', '李四', '王五'] : ['Zoë', 'Áda', 'Bo']).map((displayName, index) => ({ ...teammate, id: `member-${index}`, displayName, name: String(index) }))
+    const users = [members[0], viewer, members[1], flow, teammate, members[2]]
+    render(<I18nProvider><PeopleProvider users={users} viewerId={viewer.id}><AssigneePicker value={teammate} users={users} teamId="team-1" onChange={vi.fn()} onDelegate={vi.fn()}/></PeopleProvider></I18nProvider>)
+    await user.click(screen.getByRole('combobox'))
+    const labels = Array.from(document.querySelectorAll('.property-command-label')).map(label => label.textContent)
+    expect(labels.slice(1, 4)).toEqual([teammate.displayName, viewer.displayName, 'Flow'])
+    expect(labels.slice(4, 7)).toEqual(locale === 'zh-CN' ? ['李四', '王五', '张三'] : ['Áda', 'Bo', 'Zoë'])
+    expect(labels.filter(label => label === viewer.displayName)).toHaveLength(1)
+    expect(screen.getAllByRole('option').slice(4, 7).map(row => row.querySelector('kbd')?.textContent ?? '')).toEqual(['', '', ''])
+  })
+
   it('delegates on select and keeps the human assignee', async () => {
     const user = userEvent.setup()
     const { onChange, onDelegate } = mount()

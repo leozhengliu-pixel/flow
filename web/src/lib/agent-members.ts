@@ -49,7 +49,7 @@ export interface AssigneeMenuLayout<T> {
   delegateAnchorId?: string
   /** "Other agents": the agents left once the built-in one is on top; empty while the issue is delegated. */
   otherAgents: T[]
-  /** "Team members": everyone else. */
+  /** "Team members": remaining humans, alphabetically by display name (stable for equal names). */
   members: T[]
   /** Agents found only by searching (a delegated issue changes its agent from the delegate's submenu). */
   searchOnly: T[]
@@ -61,18 +61,19 @@ export interface AssigneeMenuLayout<T> {
  * leave the list for the delegate's own row, which hangs under the assignee (or the viewer when nobody is
  * assigned) and opens a submenu of agents.
  */
-export function assigneeMenuLayout<T extends { id: string; app?: boolean; builtinAgent?: boolean }>(people: T[], { assigneeId, delegateId, viewerId }: { assigneeId?: string; delegateId?: string; viewerId?: string }): AssigneeMenuLayout<T> {
+export function assigneeMenuLayout<T extends { id: string; displayName?: string; name?: string; app?: boolean; builtinAgent?: boolean }>(people: T[], { assigneeId, delegateId, viewerId, locale = 'en-US' }: { assigneeId?: string; delegateId?: string; viewerId?: string; locale?: string }): AssigneeMenuLayout<T> {
   const humans = people.filter(person => !person.app)
   const agents = people.filter(person => person.app && person.id !== delegateId)
   const topHumans = [...new Set([assigneeId, viewerId])].flatMap(id => humans.filter(person => id && person.id === id))
   const builtin = delegateId ? undefined : agents.find(person => person.builtinAgent)
   const top = builtin ? [...topHumans, builtin] : topHumans
   const onTop = new Set(top.map(person => person.id))
+  const collator = new Intl.Collator(locale, { sensitivity: 'base', collation: locale.startsWith('zh') ? 'pinyin' : undefined })
   return {
     top,
     delegateAnchorId: delegateId ? topHumans[0]?.id : undefined,
     otherAgents: delegateId ? [] : agents.filter(person => !onTop.has(person.id)),
-    members: humans.filter(person => !onTop.has(person.id)),
+    members: humans.filter(person => !onTop.has(person.id)).sort((left, right) => collator.compare(left.displayName || left.name || '', right.displayName || right.name || '')),
     searchOnly: delegateId ? agents : [],
   }
 }

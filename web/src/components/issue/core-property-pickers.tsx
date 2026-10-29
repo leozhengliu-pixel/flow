@@ -257,12 +257,12 @@ export function IssueAssigneeMenu({ people, assignee, delegate, viewerId, trigge
   onUnassignAll?: () => void | Promise<void>
   onInvite?: () => void
 }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   useUserPreferences()
   const directory = usePeopleDirectory()
   // A delegate the list no longer offers (e.g. lost team access) keeps its row so it can be removed.
   const listed = delegate && !people.some(user => user.id === delegate.id) ? [...people, { ...delegate, app: true }] : people
-  const layout = assigneeMenuLayout(listed, { assigneeId: assignee?.id, delegateId: delegate?.id, viewerId: viewerId ?? directory.viewerId })
+  const layout = assigneeMenuLayout(listed, { assigneeId: assignee?.id, delegateId: delegate?.id, viewerId: viewerId ?? directory.viewerId, locale })
   const agentIds = new Set(listed.filter(user => user.app).map(user => user.id))
   const personRow = (user: User, extra: Partial<PropertyOption> = {}): PropertyOption => {
     const display = personDisplayName({ ...user, label: user.displayName })
