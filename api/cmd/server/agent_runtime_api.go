@@ -45,8 +45,8 @@ const (
 )
 
 // agentRuntimeWorker reports whether built-in agent runs are meant to execute on the worker runtime
-// (FLOW_AGENT_RUNTIME=worker). Chat replies (agent_worker_chat.go) and comment-thread sessions
-// (agent_worker_thread.go) are queued for it; delegation and loops still run in-process.
+// (FLOW_AGENT_RUNTIME=worker). Chat replies (agent_worker_chat.go) and built-in sessions — comment threads
+// and delegation (agent_worker_thread.go) — are queued for it; loops still run in-process.
 func (s *server) agentRuntimeWorker() bool {
 	return s.agent.Runtime == appconfig.AgentRuntimeWorker
 }
