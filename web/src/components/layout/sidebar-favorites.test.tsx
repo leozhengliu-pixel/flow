@@ -22,6 +22,7 @@ it('renders every core favorite type and manages favorite folders', async () => 
     { id: 'favorite-view', userId: data.viewer.id, resourceType: 'view', resourceId: 'view-1', position: 1, createdAt: '2026-09-01T00:00:01Z' },
     { id: 'favorite-team', userId: data.viewer.id, resourceType: 'team', resourceId: data.teams[0].id, position: 2, createdAt: '2026-09-01T00:00:02Z' },
     { id: 'favorite-document', userId: data.viewer.id, resourceType: 'document', resourceId: 'document-1', folderId: 'folder-1', position: 0, createdAt: '2026-09-01T00:00:03Z' },
+    { id: 'favorite-project', userId: data.viewer.id, resourceType: 'project', resourceId: data.projects[0].id, position: 3, createdAt: '2026-09-01T00:00:04Z' },
   ]
   const folders: FavoriteFolder[] = [{ id: 'folder-1', userId: data.viewer.id, name: 'Planning', position: 0, createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z' }]
   const onCreateFolder = vi.fn().mockResolvedValue(undefined)
@@ -51,6 +52,13 @@ it('renders every core favorite type and manages favorite folders', async () => 
   expect(screen.getByRole('link', { name: /Priority work/ })).toHaveAttribute('href', '/workspace/view/priority-work')
   expect(screen.getByRole('link', { name: /Test team/ })).toHaveAttribute('href', '/workspace/team/TST/overview')
   expect(screen.getByRole('link', { name: /Release notes/ })).toHaveAttribute('href', '/workspace/document/release-notes')
+
+  for (const item of screen.getAllByRole('link')) {
+    expect(item).toHaveClass('sidebar-favorite-link')
+    expect(item).toHaveAttribute('data-state', 'closed')
+    expect(item.querySelector(':scope > .sidebar-favorite-icon > svg')).not.toBeNull()
+    expect(item.querySelector(':scope > .sidebar-favorite-title')).not.toBeNull()
+  }
 
   await user.click(screen.getByRole('button', { name: 'Create new folder for favorites' }))
   await user.type(screen.getByRole('textbox', { name: 'Folder name…' }), 'Roadmap{Enter}')
