@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 func issuePermissionRank(role string) int {
@@ -142,6 +143,7 @@ func (s *server) replaceIssuePermissions(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var updated []domain.IssuePermission
+	changed := false
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.permissions_updated", issue.ID, input, func(next *domain.Bootstrap) error {
 		index := slices.IndexFunc(next.Issues, func(item domain.Issue) bool { return item.ID == issue.ID })
 		if index < 0 {
@@ -162,13 +164,26 @@ func (s *server) replaceIssuePermissions(w http.ResponseWriter, r *http.Request)
 			seen[key] = true
 			permission.ID = "issue_permission_" + strings.ReplaceAll(key, ":", "_")
 			permission.CreatedAt, permission.UpdatedAt = now, now
+			// A grant that stays keeps its dates; one whose role changes keeps
+			// its creation date.
+			if existing := slices.IndexFunc(next.Issues[index].Permissions, func(item domain.IssuePermission) bool { return item.ID == permission.ID }); existing >= 0 {
+				current := next.Issues[index].Permissions[existing]
+				permission.CreatedAt = current.CreatedAt
+				if unchangedEdit(current, permission) {
+					permission.UpdatedAt = current.UpdatedAt
+				}
+			}
 			permissions = append(permissions, permission)
 		}
-		next.Issues[index].Permissions = permissions
 		updated = slices.Clone(permissions)
+		if unchangedEdit(next.Issues[index].Permissions, permissions) {
+			return store.ErrNoMutation
+		}
+		next.Issues[index].Permissions = permissions
+		changed = true
 		return nil
 	})
-	if err == nil {
+	if err == nil && changed {
 		// In force before the response, like document permission changes.
 		s.applyIssueAccessChange(workspaceKey(r))
 	}
@@ -192,6 +207,7 @@ func (s *server) updateIssuePermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var updated domain.IssuePermission
+	changed := false
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.permission_updated", issue.ID, input, func(next *domain.Bootstrap) error {
 		index := slices.IndexFunc(next.Issues, func(item domain.Issue) bool { return item.ID == issue.ID })
 		if index < 0 {
@@ -201,12 +217,17 @@ func (s *server) updateIssuePermission(w http.ResponseWriter, r *http.Request) {
 		if permissionIndex < 0 || !slices.Contains([]string{"viewer", "commenter", "editor"}, strings.ToLower(strings.TrimSpace(input.Role))) {
 			return errInvalid
 		}
+		updated = next.Issues[index].Permissions[permissionIndex]
+		if updated.Role == strings.ToLower(strings.TrimSpace(input.Role)) {
+			return store.ErrNoMutation
+		}
 		next.Issues[index].Permissions[permissionIndex].Role = strings.ToLower(strings.TrimSpace(input.Role))
 		next.Issues[index].Permissions[permissionIndex].UpdatedAt = time.Now().UTC()
 		updated = next.Issues[index].Permissions[permissionIndex]
+		changed = true
 		return nil
 	})
-	if err == nil {
+	if err == nil && changed {
 		// In force before the response, like document permission changes.
 		s.applyIssueAccessChange(workspaceKey(r))
 	}

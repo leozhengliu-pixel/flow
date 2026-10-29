@@ -10,6 +10,7 @@ import (
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
 	"flow/api/internal/publicapi"
+	"flow/api/internal/store"
 )
 
 // Customer identity for integrations (the reference app's managing-customers guide):
@@ -125,6 +126,7 @@ func (s *server) upsertCustomer(w http.ResponseWriter, r *http.Request) {
 			created = true
 		}
 		customer := &data.Customers[index]
+		before := *customer
 		update := input.CustomerInput
 		update.Domains, update.ExternalIDs = nil, nil
 		applyCustomerInput(customer, update)
@@ -147,6 +149,10 @@ func (s *server) upsertCustomer(w http.ResponseWriter, r *http.Request) {
 		}
 		if strings.TrimSpace(customer.Name) == "" {
 			return "", fmt.Errorf("%w: name is required", errInvalid)
+		}
+		if !created && unchangedEdit(before, *customer) {
+			saved = before
+			return customer.ID, store.ErrNoMutation
 		}
 		customer.UpdatedAt = now
 		saved = *customer

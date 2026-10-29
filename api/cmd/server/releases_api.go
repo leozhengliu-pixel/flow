@@ -92,6 +92,10 @@ func (s *server) setIssueReleases(w http.ResponseWriter, r *http.Request) {
 				removed = append(removed, nameFor(id))
 			}
 		}
+		if len(added) == 0 && len(removed) == 0 {
+			// The issue's current releases again: nothing is written.
+			return store.ErrNoMutation
+		}
 		appendActivity(data, issueID, "issue.releases_updated", data.Viewer, map[string]string{"releaseIds": strings.Join(ids, ","), "added": strings.Join(added, ", "), "removed": strings.Join(removed, ", ")})
 		return nil
 	})

@@ -107,6 +107,7 @@ func (s *server) updateTriageResponsibility(w http.ResponseWriter, r *http.Reque
 			return err
 		}
 		item := &data.TriageResponsibilities[index]
+		before := *item
 		item.Name, item.Mode, item.UserIDs, item.UpdatedAt = strings.TrimSpace(input.Name), input.Mode, slices.Clone(input.UserIDs), time.Now().UTC()
 		if input.Enabled != nil {
 			item.Enabled = *input.Enabled
@@ -115,6 +116,10 @@ func (s *server) updateTriageResponsibility(w http.ResponseWriter, r *http.Reque
 			item.Cursor = 0
 		}
 		updated = *item
+		if unchangedEdit(before, updated) {
+			updated = before
+			return store.ErrNoMutation
+		}
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
@@ -212,6 +217,7 @@ func (s *server) updateTriageRule(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		item := &data.TriageRoutingRules[index]
+		before := *item
 		item.Name, item.Conditions, item.ResponsibilityID, item.Priority, item.LabelIDs, item.UpdatedAt = strings.TrimSpace(input.Name), input.Conditions, input.ResponsibilityID, input.Priority, slices.Clone(input.LabelIDs), time.Now().UTC()
 		if input.Enabled != nil {
 			item.Enabled = *input.Enabled
@@ -220,6 +226,10 @@ func (s *server) updateTriageRule(w http.ResponseWriter, r *http.Request) {
 			item.Position = *input.Position
 		}
 		updated = *item
+		if unchangedEdit(before, updated) {
+			updated = before
+			return store.ErrNoMutation
+		}
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
@@ -469,6 +479,7 @@ func (s *server) updateWorkflowDefinition(w http.ResponseWriter, r *http.Request
 			return errNotFound
 		}
 		item := &data.WorkflowDefinitions[index]
+		before := *item
 		item.Name, item.Description, item.TeamID, item.Trigger, item.Schedule, item.Conditions, item.Actions, item.MaxAttempts, item.NextRunAt, item.UpdatedAt = strings.TrimSpace(input.Name), strings.TrimSpace(input.Description), input.TeamID, input.Trigger, strings.TrimSpace(input.Schedule), input.Conditions, input.Actions, max(1, input.MaxAttempts), next, time.Now().UTC()
 		if input.Enabled != nil {
 			item.Enabled = *input.Enabled
@@ -490,6 +501,12 @@ func (s *server) updateWorkflowDefinition(w http.ResponseWriter, r *http.Request
 			item.TrustedSourceKeys = slices.Clone(*input.TrustedSourceKeys)
 		}
 		updated = *item
+		// The next run is recomputed from the schedule on every save; with the
+		// schedule unchanged the stored one stands.
+		if unchangedEdit(before, updated, "NextRunAt") {
+			updated = before
+			return store.ErrNoMutation
+		}
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)

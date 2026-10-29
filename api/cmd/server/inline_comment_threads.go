@@ -140,6 +140,10 @@ func (s *server) setInitiativeThreadSubscription(w http.ResponseWriter, r *http.
 			return item.UserID == data.Viewer.ID && initiativeThreadSubscription(item, initiative.ID, rootID)
 		})
 		if index >= 0 {
+			if data.ThreadSubscriptions[index].State == input.State {
+				saved = data.ThreadSubscriptions[index]
+				return store.ErrNoMutation
+			}
 			data.ThreadSubscriptions[index].State, data.ThreadSubscriptions[index].UpdatedAt = input.State, now
 			saved = data.ThreadSubscriptions[index]
 			return nil

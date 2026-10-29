@@ -1194,6 +1194,11 @@ func (s *server) updateReviewImport(w http.ResponseWriter, r *http.Request) {
 		changed = changed || *input.Enabled != config.Enabled
 		config.Enabled = *input.Enabled
 	}
+	if !changed {
+		// The current settings again: nothing is saved and nothing becomes due.
+		s.getReviewImport(w, r)
+		return
+	}
 	now := time.Now().UTC()
 	config.UpdatedBy, config.UpdatedAt = authUser(r).ID, &now
 	raw, _ := json.Marshal(config)

@@ -1591,6 +1591,9 @@ func (s *server) updateWorkspaceSettings(w http.ResponseWriter, r *http.Request)
 		input["pulseDeliveryCursors"] = data.Settings["pulseDeliveryCursors"]
 		input["providerJobs"] = data.Settings["providerJobs"]
 		input["calendarAvailability"] = data.Settings["calendarAvailability"]
+		if unchangedJSON(jsonSnapshot(data.Settings), input) {
+			return store.ErrNoMutation
+		}
 		data.Settings = input
 		return nil
 	})
@@ -2437,6 +2440,10 @@ func (s *server) updateProjectDisplayDefault(w http.ResponseWriter, r *http.Requ
 
 	var updated json.RawMessage
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project_display_default.updated", "workspace", object, func(data *domain.Bootstrap) error {
+		if len(data.ProjectDisplayDefault) > 0 && sameRawJSON(data.ProjectDisplayDefault, input.Display) {
+			updated = append(json.RawMessage(nil), data.ProjectDisplayDefault...)
+			return store.ErrNoMutation
+		}
 		data.ProjectDisplayDefault = append(json.RawMessage(nil), input.Display...)
 		updated = append(json.RawMessage(nil), data.ProjectDisplayDefault...)
 		return nil
@@ -2748,6 +2755,10 @@ func (s *server) updateCycleSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		if settings.DurationWeeks < 1 || settings.DurationWeeks > 8 || settings.CooldownWeeks < 0 || settings.CooldownWeeks > 8 || settings.StartsOn < 0 || settings.StartsOn > 6 || settings.UpcomingCount < 1 || settings.UpcomingCount > 15 || settings.Capacity < 0 || settings.Capacity > 10000 {
 			return errInvalid
+		}
+		if stored, ok := data.CycleSettings[teamID]; ok && unchangedEdit(stored, settings) {
+			updated = stored
+			return store.ErrNoMutation
 		}
 		if data.CycleSettings == nil {
 			data.CycleSettings = map[string]domain.CycleSettings{}
@@ -3711,6 +3722,7 @@ func (s *server) updateInitiativeResource(w http.ResponseWriter, r *http.Request
 			return errNotFound
 		}
 		resource := &initiative.Resources[index]
+		before := *resource
 		if input.Type != nil {
 			if !slices.Contains([]string{"link", "document"}, *input.Type) {
 				return errInvalid
@@ -3738,8 +3750,11 @@ func (s *server) updateInitiativeResource(w http.ResponseWriter, r *http.Request
 				resource.Title = documentDisplayTitle(document.Title)
 			}
 		}
-		initiative.UpdatedAt = time.Now().UTC()
 		updated = *resource
+		if unchangedEdit(before, updated) {
+			return store.ErrNoMutation
+		}
+		initiative.UpdatedAt = time.Now().UTC()
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
@@ -3996,6 +4011,7 @@ func (s *server) updateInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 		if !canEditPulseUpdate(data, updates[index].User) {
 			return store.ErrAuthForbidden
 		}
+		before, healthBefore := updates[index], initiative.Health
 		if input.Body != nil {
 			if strings.TrimSpace(*input.Body) == "" {
 				return errInvalid
@@ -4013,6 +4029,10 @@ func (s *server) updateInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 			if index == 0 {
 				initiative.Health = *input.Health
 			}
+		}
+		if unchangedEdit(before, updates[index]) && initiative.Health == healthBefore {
+			updated = before
+			return store.ErrNoMutation
 		}
 		now := time.Now().UTC()
 		updates[index].EditedAt = &now
@@ -4196,6 +4216,7 @@ func (s *server) updateProjectResource(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		resource := &project.Resources[index]
+		before := *resource
 		if input.Type != nil {
 			if !slices.Contains([]string{"link", "document"}, *input.Type) {
 				return errInvalid
@@ -4220,8 +4241,11 @@ func (s *server) updateProjectResource(w http.ResponseWriter, r *http.Request) {
 			}
 			resource.PinnedTeamIDs = teamIDs
 		}
-		project.UpdatedAt = time.Now().UTC()
 		updated = *resource
+		if unchangedEdit(before, updated) {
+			return store.ErrNoMutation
+		}
+		project.UpdatedAt = time.Now().UTC()
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
@@ -4734,6 +4758,7 @@ func (s *server) updateProjectUpdate(w http.ResponseWriter, r *http.Request) {
 		if !canEditPulseUpdate(data, updates[index].User) {
 			return store.ErrAuthForbidden
 		}
+		before, healthBefore := updates[index], project.Health
 		if input.Body != nil {
 			updates[index].Body = strings.TrimSpace(*input.Body)
 		}
@@ -4745,6 +4770,10 @@ func (s *server) updateProjectUpdate(w http.ResponseWriter, r *http.Request) {
 			if index == 0 {
 				project.Health = *input.Health
 			}
+		}
+		if unchangedEdit(before, updates[index]) && project.Health == healthBefore {
+			updated = before
+			return store.ErrNoMutation
 		}
 		now := time.Now().UTC()
 		updates[index].EditedAt = &now

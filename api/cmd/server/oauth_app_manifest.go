@@ -445,25 +445,37 @@ func (s *server) updateOAuthApplicationFromManifest(w http.ResponseWriter, r *ht
 	}
 	id := r.PathValue("id")
 	var updated domain.OAuthApplication
+	changed := false
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "oauth_application.updated", id, map[string]string{"source": "manifest"}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == id })
 		if index < 0 {
 			return errNotFound
 		}
+		// Manifest lists are applied in place, so compare against a snapshot.
+		original := data.OAuthApplications[index]
+		before := jsonSnapshot(original)
 		applyOAuthAppManifest(manifest, &data.OAuthApplications[index], scopes, resourceTypes)
 		if err := checkGitHubUsernameAvailable(data, id, data.OAuthApplications[index].GitHubUsername); err != nil {
 			return err
 		}
 		data.OAuthApplications[index].CredentialsAuthorizedBy = requestActor(s, r).ID
 		updated = data.OAuthApplications[index]
+		unstamped := updated
+		unstamped.UpdatedAt = original.UpdatedAt
+		changed = !unchangedJSON(before, unstamped)
 		updated.ClientSecret = ""
+		if !changed {
+			return store.ErrNoMutation
+		}
 		return nil
 	})
 	if err != nil {
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}
-	s.syncApplicationIdentity(r.Context(), updated.ClientID)
+	if changed {
+		s.syncApplicationIdentity(r.Context(), updated.ClientID)
+	}
 	s.respondManifestApplication(w, r, http.StatusOK, updated, manifestWebhookSecret(manifest))
 }
 

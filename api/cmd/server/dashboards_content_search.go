@@ -387,11 +387,16 @@ func (s *server) updateDashboard(w http.ResponseWriter, r *http.Request) {
 		if items[index].OwnerID != viewer && !workspaceAdminRole(next.ViewerRole) {
 			return errNotFound
 		}
+		before := jsonSnapshot(items[index])
 		applyDashboardInput(&items[index], input)
-		items[index].UpdatedAt = time.Now().UTC()
 		if err := validateDashboard(*next, &items[index]); err != nil {
 			return err
 		}
+		if unchangedJSON(before, items[index]) {
+			updated = items[index]
+			return store.ErrNoMutation
+		}
+		items[index].UpdatedAt = time.Now().UTC()
 		updated = items[index]
 		saveSettingCollection(next, dashboardsSettingsKey, items)
 		return nil
@@ -436,7 +441,12 @@ func (s *server) subscribeDashboard(w http.ResponseWriter, r *http.Request) {
 		if index < 0 || !dashboardVisible(*next, viewer, items[index]) {
 			return errNotFound
 		}
-		if r.Method == http.MethodPut && !slices.Contains(items[index].SubscriberIDs, viewer) {
+		if subscribed := slices.Contains(items[index].SubscriberIDs, viewer); subscribed == (r.Method == http.MethodPut) {
+			// Subscribing a subscriber (or unsubscribing a non-subscriber) writes nothing.
+			updated = items[index]
+			return store.ErrNoMutation
+		}
+		if r.Method == http.MethodPut {
 			items[index].SubscriberIDs = append(items[index].SubscriberIDs, viewer)
 		}
 		if r.Method == http.MethodDelete {
@@ -945,7 +955,8 @@ func applyPostInput(item *domain.Post, input postInput) {
 	if input.SubscriberIDs != nil {
 		item.SubscriberIDs = normalizedStrings(*input.SubscriberIDs)
 	}
-	if input.Archived != nil {
+	// Archiving an archived post keeps its original date.
+	if input.Archived != nil && *input.Archived != (item.ArchivedAt != nil) {
 		if *input.Archived {
 			now := time.Now().UTC()
 			item.ArchivedAt = &now
@@ -1013,11 +1024,16 @@ func (s *server) updatePost(w http.ResponseWriter, r *http.Request) {
 		if items[i].CreatorID != viewer && !workspaceAdminRole(next.ViewerRole) {
 			return errNotFound
 		}
+		before := jsonSnapshot(items[i])
 		applyPostInput(&items[i], input)
-		items[i].UpdatedAt = time.Now().UTC()
 		if err := validatePost(*next, &items[i]); err != nil {
 			return err
 		}
+		if unchangedJSON(before, items[i]) {
+			updated = items[i]
+			return store.ErrNoMutation
+		}
+		items[i].UpdatedAt = time.Now().UTC()
 		updated = items[i]
 		saveSettingCollection(next, postsSettingsKey, items)
 		return nil
@@ -1162,11 +1178,16 @@ func (s *server) updateMeeting(w http.ResponseWriter, r *http.Request) {
 		if items[i].OrganizerID != viewer && !workspaceAdminRole(next.ViewerRole) {
 			return errNotFound
 		}
+		before := jsonSnapshot(items[i])
 		applyMeetingInput(&items[i], input)
-		items[i].UpdatedAt = time.Now().UTC()
 		if err := validateMeeting(*next, &items[i]); err != nil {
 			return err
 		}
+		if unchangedJSON(before, items[i]) {
+			updated = items[i]
+			return store.ErrNoMutation
+		}
+		items[i].UpdatedAt = time.Now().UTC()
 		updated = items[i]
 		saveSettingCollection(next, meetingsSettingsKey, items)
 		return nil

@@ -7,6 +7,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/store"
 )
 
 // Comment thread subscriptions (the reference app "Subscribe to thread"). A thread is a
@@ -80,6 +81,10 @@ func (s *server) setThreadSubscription(w http.ResponseWriter, r *http.Request) {
 			return item.UserID == data.Viewer.ID && item.IssueID == issueID && item.CommentID == rootID
 		})
 		if index >= 0 {
+			if data.ThreadSubscriptions[index].State == input.State {
+				saved = data.ThreadSubscriptions[index]
+				return store.ErrNoMutation
+			}
 			data.ThreadSubscriptions[index].State, data.ThreadSubscriptions[index].UpdatedAt = input.State, now
 			saved = data.ThreadSubscriptions[index]
 			return nil

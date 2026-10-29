@@ -11,6 +11,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/store"
 )
 
 // Deploy previews: preview environments deployed from a pull request's head
@@ -198,9 +199,20 @@ func (s *server) putReviewPreview(w http.ResponseWriter, r *http.Request) {
 		}
 		now := time.Now().UTC()
 		review := &data.Reviews[index]
+		previews := slices.Clone(review.Previews)
 		ready, err := upsertDeployPreview(review, domain.DeployPreview{Provider: firstNonEmpty(input.Provider, "api"), Environment: input.Environment, URL: strings.TrimSpace(input.URL), LogURL: strings.TrimSpace(input.LogURL), State: input.State, CommitSHA: input.CommitSHA}, now)
 		if err != nil {
 			return fmt.Errorf("%w: %v", errInvalid, err)
+		}
+		// The same preview reported again (each element's updatedAt aside)
+		// writes nothing.
+		if len(previews) == len(review.Previews) && !slices.ContainsFunc(review.Previews, func(item domain.DeployPreview) bool {
+			previous := slices.IndexFunc(previews, func(old domain.DeployPreview) bool { return old.ID == item.ID })
+			return previous < 0 || !unchangedEdit(previews[previous], item)
+		}) {
+			review.Previews = previews
+			updated = *review
+			return store.ErrNoMutation
 		}
 		review.UpdatedAt = now
 		if ready {

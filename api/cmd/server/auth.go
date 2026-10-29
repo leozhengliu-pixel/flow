@@ -2274,7 +2274,10 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 			if workspace.UserSettings == nil {
 				workspace.UserSettings = map[string]domain.UserSettings{}
 			}
-			settings := workspace.UserSettings[userID]
+			settings, known := workspace.UserSettings[userID]
+			if known && settings.Username == username {
+				return store.ErrNoMutation
+			}
 			settings.UserID, settings.Username, settings.UpdatedAt = userID, username, time.Now().UTC()
 			workspace.UserSettings[userID] = settings
 			return nil
@@ -2309,6 +2312,7 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 				return errNotFound
 			}
 			member := &workspace.Members[index]
+			before, cascaded := *member, false
 			if input.Role != "" {
 				if !validMemberRole(input.Role) || workspaceAdminRole(member.Role) && !workspaceAdminRole(input.Role) && activeAdminCount(workspace) <= 1 {
 					return errInvalid
@@ -2332,9 +2336,12 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 					return errInvalid
 				}
 				member.User = user
-				cascadeUserIdentity(workspace, user)
+				cascaded = cascadeUserIdentity(workspace, user)
 			}
 			updated = *member
+			if unchangedEdit(before, *member) && !cascaded {
+				return store.ErrNoMutation
+			}
 			return nil
 		})
 		if username != "" {
@@ -2367,15 +2374,23 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 		if email == "" {
 			email = current.Email
 		}
-		if _, err := s.store.UpdateMemberIdentity(r.Context(), userID, displayName, username, email); err != nil {
-			respondMutation(w, err, http.StatusOK, nil)
-			return
+		// The current identity again leaves the account as it is.
+		if strings.TrimSpace(displayName) != current.DisplayName || strings.TrimSpace(username) != current.Name || !strings.EqualFold(strings.TrimSpace(email), current.Email) {
+			if _, err := s.store.UpdateMemberIdentity(r.Context(), userID, displayName, username, email); err != nil {
+				respondMutation(w, err, http.StatusOK, nil)
+				return
+			}
 		}
 	}
 	members, _ := s.store.ListMembers(r.Context(), data.Workspace.ID)
 	for _, member := range members {
 		if member.User.ID == userID {
-			_ = s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.identity_cascaded", userID, nil, func(workspace *domain.Bootstrap) error { cascadeUserIdentity(workspace, member.User); return nil })
+			_ = s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.identity_cascaded", userID, nil, func(workspace *domain.Bootstrap) error {
+				if !cascadeUserIdentity(workspace, member.User) {
+					return store.ErrNoMutation
+				}
+				return nil
+			})
 			if username != "" {
 				member.User.Username = username
 			}
@@ -2439,67 +2454,56 @@ func activeAdminCount(data *domain.Bootstrap) int {
 	return count
 }
 
-func cascadeUserIdentity(data *domain.Bootstrap, user domain.User) {
-	if index := slices.IndexFunc(data.Users, func(item domain.User) bool { return item.ID == user.ID }); index >= 0 {
-		data.Users[index] = user
-	}
-	if data.Viewer.ID == user.ID {
-		data.Viewer = user
-	}
-	for index := range data.Members {
-		if data.Members[index].User.ID == user.ID {
-			data.Members[index].User = user
+// cascadeUserIdentity copies a member's identity onto every record that
+// embeds it and reports whether any record changed.
+func cascadeUserIdentity(data *domain.Bootstrap, user domain.User) bool {
+	changed := false
+	set := func(target *domain.User) {
+		if target.ID == user.ID && !unchangedEdit(*target, user) {
+			*target, changed = user, true
 		}
+	}
+	setPointer := func(target **domain.User) {
+		if *target != nil && (*target).ID == user.ID && !unchangedEdit(**target, user) {
+			copy := user
+			*target, changed = &copy, true
+		}
+	}
+	for index := range data.Users {
+		set(&data.Users[index])
+	}
+	set(&data.Viewer)
+	for index := range data.Members {
+		set(&data.Members[index].User)
 	}
 	for index := range data.Issues {
-		if data.Issues[index].Creator.ID == user.ID {
-			data.Issues[index].Creator = user
-		}
-		if data.Issues[index].Assignee != nil && data.Issues[index].Assignee.ID == user.ID {
-			copy := user
-			data.Issues[index].Assignee = &copy
-		}
-		if data.Issues[index].Delegate != nil && data.Issues[index].Delegate.ID == user.ID {
-			copy := user
-			data.Issues[index].Delegate = &copy
-		}
+		set(&data.Issues[index].Creator)
+		setPointer(&data.Issues[index].Assignee)
+		setPointer(&data.Issues[index].Delegate)
 	}
 	for index := range data.Projects {
-		if data.Projects[index].Lead != nil && data.Projects[index].Lead.ID == user.ID {
-			copy := user
-			data.Projects[index].Lead = &copy
-		}
+		setPointer(&data.Projects[index].Lead)
 	}
 	for index := range data.Initiatives {
-		if data.Initiatives[index].Creator.ID == user.ID {
-			data.Initiatives[index].Creator = user
-		}
-		if data.Initiatives[index].Owner != nil && data.Initiatives[index].Owner.ID == user.ID {
-			copy := user
-			data.Initiatives[index].Owner = &copy
-		}
+		set(&data.Initiatives[index].Creator)
+		setPointer(&data.Initiatives[index].Owner)
 	}
 	for issueID := range data.Comments {
 		for index := range data.Comments[issueID] {
-			if data.Comments[issueID][index].User.ID == user.ID {
-				data.Comments[issueID][index].User = user
-			}
+			set(&data.Comments[issueID][index].User)
 		}
 	}
 	for projectID := range data.ProjectUpdates {
 		for index := range data.ProjectUpdates[projectID] {
-			if data.ProjectUpdates[projectID][index].User.ID == user.ID {
-				data.ProjectUpdates[projectID][index].User = user
-			}
+			set(&data.ProjectUpdates[projectID][index].User)
 		}
 	}
 	for initiativeID := range data.InitiativeUpdates {
 		for index := range data.InitiativeUpdates[initiativeID] {
-			if data.InitiativeUpdates[initiativeID][index].User.ID == user.ID {
-				data.InitiativeUpdates[initiativeID][index].User = user
-			}
+			set(&data.InitiativeUpdates[initiativeID][index].User)
 		}
 	}
+	return changed
 }
 
 func (s *server) suspendMember(w http.ResponseWriter, r *http.Request) {
@@ -2712,6 +2716,9 @@ func (s *server) updateTeamMember(w http.ResponseWriter, r *http.Request) {
 				workspace.TeamMembers = slices.Delete(workspace.TeamMembers, index, index+1)
 			}
 			domain.SyncTeamAncestorMembers(workspace)
+			if unchangedEdit(before, workspace.TeamMembers) {
+				return store.ErrNoMutation
+			}
 			developmentTeamMemberAudit(workspace, r, "", teamMemberDiff(before, workspace.TeamMembers, userID, teamID), nil)
 			return nil
 		})

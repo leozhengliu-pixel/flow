@@ -43,6 +43,10 @@ func (s *server) setProjectThreadSubscription(w http.ResponseWriter, r *http.Req
 		}
 		now := time.Now().UTC()
 		if index := projectThreadSubscriptionIndex(data, data.Viewer.ID, projectID, rootID); index >= 0 {
+			if data.ThreadSubscriptions[index].State == input.State {
+				saved = data.ThreadSubscriptions[index]
+				return store.ErrNoMutation
+			}
 			data.ThreadSubscriptions[index].State, data.ThreadSubscriptions[index].UpdatedAt = input.State, now
 			saved = data.ThreadSubscriptions[index]
 			return nil

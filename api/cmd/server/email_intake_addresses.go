@@ -13,6 +13,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/store"
 )
 
 // emailIntakeInput creates an intake address. Without a local part and domain
@@ -240,6 +241,7 @@ func (s *server) updateEmailIntakeAddress(w http.ResponseWriter, r *http.Request
 			return errNotFound
 		}
 		item := &data.EmailIntakeAddresses[index]
+		before := *item
 		if input.TeamID != nil && *input.TeamID != item.TeamID {
 			if !teamExists(data, *input.TeamID) {
 				return errInvalid
@@ -276,6 +278,10 @@ func (s *server) updateEmailIntakeAddress(w http.ResponseWriter, r *http.Request
 		}
 		if input.Enabled != nil {
 			item.Enabled = *input.Enabled
+		}
+		if unchangedEdit(before, *item) {
+			updated = before
+			return store.ErrNoMutation
 		}
 		item.UpdatedAt = time.Now().UTC()
 		updated = *item

@@ -1336,6 +1336,7 @@ export class FlowApi {
   /**
    * `PATCH /api/customer-requests/{id}`
    * Update a customer request
+   * A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.
    */
   patchCustomerRequestsId(request: PatchCustomerRequestsIdRequest, options?: RequestOptions): Promise<CustomerRequest> {
     return this.transport.request({ method: "PATCH", path: "/api/customer-requests/{id}", pathParams: request.path, body: request.body, ...options })
@@ -1360,7 +1361,7 @@ export class FlowApi {
   /**
    * `PUT /api/customers`
    * Upsert a customer
-   * Matches an existing customer by id, then external id(s), then domain; merges domains and external ids. Creates the customer (201) when nothing matches; name is then required.
+   * Matches an existing customer by id, then external id(s), then domain; merges domains and external ids. Creates the customer (201) when nothing matches; name is then required. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.
    */
   putCustomers(request: PutCustomersRequest, options?: RequestOptions): Promise<Customer> {
     return this.transport.request({ method: "PUT", path: "/api/customers", body: request.body, ...options })
@@ -1567,7 +1568,7 @@ export class FlowApi {
   /**
    * `PATCH /api/initiatives/{id}/updates/{updateId}`
    * Edit an initiative update
-   * The author or a workspace administrator. Same body as a project update edit; health is onTrack, atRisk or offTrack.
+   * The author or a workspace administrator. Same body as a project update edit; health is onTrack, atRisk or offTrack. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.
    */
   patchInitiativesIdUpdatesUpdateId(request: PatchInitiativesIdUpdatesUpdateIdRequest, options?: RequestOptions): Promise<InitiativeUpdate> {
     return this.transport.request({ method: "PATCH", path: "/api/initiatives/{id}/updates/{updateId}", pathParams: request.path, body: request.body, ...options })
@@ -1637,7 +1638,7 @@ export class FlowApi {
   /**
    * `PATCH /api/issues/{id}`
    * Update an issue
-   * The path takes the issue's id, identifier, or an identifier it had before it moved to another team. Fields not listed in the request schema are rejected with 400. teamId moves the issue to another team; the caller needs access to that team (guests cannot move issues). The issue gets the target team's key and a new number (previousIdentifiers keeps the old identifiers, which still resolve), the target team's status of the same name and type (else the first of that type, else its default), leaves its cycle, replaces team-scoped labels by the target team's labels of the same name (dropping the others), and loses its estimate when the target team does not use estimates. Sub-issues stay in their teams. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification. Naming someone who was removed from or suspended in the workspace as a new assignee, delegate, subscriber, lead, member or owner is refused with 400 ("This person is no longer a member of the workspace"); such people the resource already names stay as they are, and they get no new notifications.
+   * The path takes the issue's id, identifier, or an identifier it had before it moved to another team. Fields not listed in the request schema are rejected with 400. teamId moves the issue to another team; the caller needs access to that team (guests cannot move issues). The issue gets the target team's key and a new number (previousIdentifiers keeps the old identifiers, which still resolve), the target team's status of the same name and type (else the first of that type, else its default), leaves its cycle, replaces team-scoped labels by the target team's labels of the same name (dropping the others), and loses its estimate when the target team does not use estimates. Sub-issues stay in their teams. Send expectedVersion to detect a concurrent change: the write is then refused with 409 and the current issue; without it the given fields are applied to the current issue. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification. A stale expectedVersion is still refused with 409, even when the values match. Naming someone who was removed from or suspended in the workspace as a new assignee, delegate, subscriber, lead, member or owner is refused with 400 ("This person is no longer a member of the workspace"); such people the resource already names stay as they are, and they get no new notifications.
    */
   patchIssuesId(request: PatchIssuesIdRequest, options?: RequestOptions): Promise<Issue> {
     return this.transport.request({ method: "PATCH", path: "/api/issues/{id}", pathParams: request.path, body: request.body, ...options })
@@ -1654,6 +1655,7 @@ export class FlowApi {
   /**
    * `PATCH /api/issues/{id}/attachments/{attachmentId}`
    * Update an attachment's title, subtitle, icon or metadata
+   * A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.
    */
   patchIssuesIdAttachmentsAttachmentId(request: PatchIssuesIdAttachmentsAttachmentIdRequest, options?: RequestOptions): Promise<Attachment> {
     return this.transport.request({ method: "PATCH", path: "/api/issues/{id}/attachments/{attachmentId}", pathParams: request.path, body: request.body, ...options })
@@ -1731,7 +1733,7 @@ export class FlowApi {
   /**
    * `PATCH /api/oauth-applications/{id}`
    * Update an OAuth application
-   * Only the given fields change. Client ID and secret are kept.
+   * Only the given fields change. Client ID and secret are kept. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.
    */
   patchOauthApplicationsId(request: PatchOauthApplicationsIdRequest, options?: RequestOptions): Promise<OAuthApplication> {
     return this.transport.request({ method: "PATCH", path: "/api/oauth-applications/{id}", pathParams: request.path, body: request.body, ...options })
@@ -1802,7 +1804,7 @@ export class FlowApi {
   /**
    * `PUT /api/oauth-applications/{id}/manifest`
    * Replace an application's configuration from a manifest
-   * Omitted optional blocks (display, webhook, agent, github) are cleared; client ID and secret are kept. webhookSecret is returned the first time the webhook is enabled. 400 with issues when the manifest is invalid.
+   * Omitted optional blocks (display, webhook, agent, github) are cleared; client ID and secret are kept. webhookSecret is returned the first time the webhook is enabled. 400 with issues when the manifest is invalid. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.
    */
   putOauthApplicationsIdManifest(request: PutOauthApplicationsIdManifestRequest, options?: RequestOptions): Promise<ManifestApplication> {
     return this.transport.request({ method: "PUT", path: "/api/oauth-applications/{id}/manifest", pathParams: request.path, body: request.body, ...options })
@@ -1828,7 +1830,7 @@ export class FlowApi {
   /**
    * `PUT /api/oauth-applications/{id}/webhook`
    * Configure the webhook of an OAuth application
-   * Enabling the webhook for the first time creates the application's signing secret, returned once.
+   * Enabling the webhook for the first time creates the application's signing secret, returned once. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.
    */
   putOauthApplicationsIdWebhook(request: PutOauthApplicationsIdWebhookRequest, options?: RequestOptions): Promise<ApplicationWebhookSettings> {
     return this.transport.request({ method: "PUT", path: "/api/oauth-applications/{id}/webhook", pathParams: request.path, body: request.body, ...options })
@@ -2005,7 +2007,7 @@ export class FlowApi {
   /**
    * `PATCH /api/projects/{id}/updates/{updateId}`
    * Edit a project update
-   * The author or a workspace administrator.
+   * The author or a workspace administrator. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.
    */
   patchProjectsIdUpdatesUpdateId(request: PatchProjectsIdUpdatesUpdateIdRequest, options?: RequestOptions): Promise<ProjectUpdate> {
     return this.transport.request({ method: "PATCH", path: "/api/projects/{id}/updates/{updateId}", pathParams: request.path, body: request.body, ...options })
@@ -2069,7 +2071,7 @@ export class FlowApi {
   /**
    * `PUT /api/teams/{id}/members/{userId}`
    * Add a team member or change their role
-   * Adds the user (role member or owner) or changes the role of an existing member. origin (manual, api or sync) is stored on the membership; without it, API keys and OAuth applications add members with origin api. Giving an origin for an existing member replaces it (audited as origin_changed). SCIM-managed memberships cannot be changed (409).
+   * Adds the user (role member or owner) or changes the role of an existing member. origin (manual, api or sync) is stored on the membership; without it, API keys and OAuth applications add members with origin api. Giving an origin for an existing member replaces it (audited as origin_changed). SCIM-managed memberships cannot be changed (409). Repeating the current role and origin changes nothing.
    */
   putTeamsIdMembersUserId(request: PutTeamsIdMembersUserIdRequest, options?: RequestOptions): Promise<TeamMember> {
     return this.transport.request({ method: "PUT", path: "/api/teams/{id}/members/{userId}", pathParams: request.path, body: request.body, ...options })
@@ -2159,7 +2161,7 @@ export class FlowApi {
   /**
    * `PATCH /api/webhooks/{id}`
    * Update a webhook
-   * Re-enabling a webhook resets its failure window; disabling it cancels its queued retries. Webhooks managed by an application accept only `enabled`.
+   * Re-enabling a webhook resets its failure window; disabling it cancels its queued retries. Webhooks managed by an application accept only `enabled`. A request that only repeats the current values changes nothing: it returns 200 with the resource as it is (same version and updatedAt) and records no history, event, webhook or notification.
    */
   patchWebhooksId(request: PatchWebhooksIdRequest, options?: RequestOptions): Promise<Webhook> {
     return this.transport.request({ method: "PATCH", path: "/api/webhooks/{id}", pathParams: request.path, body: request.body, ...options })

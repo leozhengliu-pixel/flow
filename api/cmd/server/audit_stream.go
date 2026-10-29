@@ -148,6 +148,7 @@ func (s *server) updateAuditStream(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		item := &data.Webhooks[index]
+		before := *item
 		if input.URL != nil {
 			target, err := validAuditStreamURL(*input.URL)
 			if err != nil {
@@ -160,6 +161,10 @@ func (s *server) updateAuditStream(w http.ResponseWriter, r *http.Request) {
 			if item.Enabled {
 				item.DisabledReason, item.FailingSince, item.NextAttemptAt, item.DeliveryAttempts = "", nil, nil, 0
 			}
+		}
+		if unchangedEdit(before, *item) {
+			updated = before
+			return store.ErrNoMutation
 		}
 		item.UpdatedAt = time.Now().UTC()
 		updated = *item

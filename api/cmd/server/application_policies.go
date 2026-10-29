@@ -223,6 +223,10 @@ func (s *server) saveApplicationPolicy(w http.ResponseWriter, r *http.Request) {
 		if !slices.Contains([]string{"approved", "rejected", "pending"}, input.Status) {
 			input.Status = "pending"
 		}
+		if index >= 0 && unchangedEdit(items[index], input) {
+			input = items[index]
+			return store.ErrNoMutation
+		}
 		input.UpdatedAt = time.Now().UTC()
 		if index >= 0 {
 			items[index] = input

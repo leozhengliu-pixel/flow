@@ -603,6 +603,7 @@ func (s *server) updateAgentSession(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
+		before := *session
 		if input.Title != nil {
 			title := strings.TrimSpace(*input.Title)
 			if title == "" || len(title) > 120 {
@@ -616,6 +617,10 @@ func (s *server) updateAgentSession(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Location != nil {
 			session.Location = *input.Location
+		}
+		if unchangedEdit(before, *session) {
+			updated = before
+			return store.ErrNoMutation
 		}
 		// The owner's own rename, favorite or move never makes the chat unread.
 		wasRead := agentSessionRead(*session)
@@ -715,12 +720,19 @@ func (s *server) updateAgentMessageFeedback(w http.ResponseWriter, r *http.Reque
 			if input.Comment != nil {
 				next.Comment = strings.TrimSpace(*input.Comment)
 			}
+			previous := message.Feedback
 			if next.Rating == "" && next.Comment == "" {
 				message.Feedback = nil
 			} else {
 				message.Feedback = &next
 			}
 			updated = *session
+			if previous == nil && message.Feedback == nil || previous != nil && message.Feedback != nil && previous.Rating == next.Rating && previous.Comment == next.Comment {
+				// The same rating and comment again write nothing.
+				message.Feedback = previous
+				updated = *session
+				return store.ErrNoMutation
+			}
 			return nil
 		}
 		return errNotFound
@@ -888,6 +900,10 @@ func (s *server) updateAgentSkill(w http.ResponseWriter, r *http.Request) {
 		for index := range data.AgentSkills {
 			skill := &data.AgentSkills[index]
 			if skill.ID == r.PathValue("id") && skill.UserID == data.Viewer.ID {
+				if skill.Name == strings.TrimSpace(input.Name) && skill.Instructions == strings.TrimSpace(input.Instructions) {
+					updated = *skill
+					return store.ErrNoMutation
+				}
 				skill.Name = strings.TrimSpace(input.Name)
 				skill.Instructions = strings.TrimSpace(input.Instructions)
 				skill.UpdatedAt = time.Now().UTC()

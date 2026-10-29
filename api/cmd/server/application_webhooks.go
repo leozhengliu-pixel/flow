@@ -100,6 +100,7 @@ func (s *server) updateApplicationWebhook(w http.ResponseWriter, r *http.Request
 			return errNotFound
 		}
 		app := &data.OAuthApplications[index]
+		before := *app
 		if input.URL != nil {
 			app.WebhookURL = strings.TrimSpace(*input.URL)
 		}
@@ -111,6 +112,10 @@ func (s *server) updateApplicationWebhook(w http.ResponseWriter, r *http.Request
 		}
 		if app.WebhookEnabled && app.WebhookURL == "" {
 			return fmt.Errorf("%w: a webhook URL is required", errInvalid)
+		}
+		if unchangedEdit(before, *app) {
+			updated = before
+			return store.ErrNoMutation
 		}
 		app.UpdatedAt = time.Now().UTC()
 		appendAudit(data, "webhook_updated", "oauth_application", app.ID, map[string]any{"url": app.WebhookURL, "enabled": app.WebhookEnabled})

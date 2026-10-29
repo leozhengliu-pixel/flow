@@ -77,6 +77,10 @@ func (s *server) updateUserSettings(w http.ResponseWriter, r *http.Request) {
 		if err := validateCodingToolSettings(&input); err != nil {
 			return err
 		}
+		if stored, ok := data.UserSettings[actor.ID]; ok && unchangedEdit(stored, input) {
+			updated = stored
+			return store.ErrNoMutation
+		}
 		data.UserSettings[actor.ID] = input
 		updated = input
 		return nil
@@ -119,6 +123,10 @@ func (s *server) updateAccountProfile(w http.ResponseWriter, r *http.Request) {
 		user.DisplayName, user.AvatarURL = input.DisplayName, input.AvatarURL
 	}
 	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "account.profile_updated", actor.ID, input, func(data *domain.Bootstrap) error {
+		// The member list is rebuilt from the accounts, so the identity
+		// changed when the account did; the handle and job title live in the
+		// account settings compared below.
+		changed := user.Name != actor.Name || user.DisplayName != actor.DisplayName || user.AvatarURL != actor.AvatarURL
 		if index := slices.IndexFunc(data.Users, func(item domain.User) bool { return item.ID == actor.ID }); index >= 0 {
 			data.Users[index] = user
 		}
@@ -128,8 +136,13 @@ func (s *server) updateAccountProfile(w http.ResponseWriter, r *http.Request) {
 		if usernameTaken(*data, actor.ID, input.Username) {
 			return errUsernameTaken
 		}
-		settings := data.UserSettings[actor.ID]
-		settings.UserID, settings.JobTitle, settings.Username, settings.UpdatedAt = actor.ID, strings.TrimSpace(input.JobTitle), input.Username, time.Now().UTC()
+		stored, known := data.UserSettings[actor.ID]
+		settings := stored
+		settings.UserID, settings.JobTitle, settings.Username = actor.ID, strings.TrimSpace(input.JobTitle), input.Username
+		if !changed && known && unchangedEdit(stored, settings) {
+			return store.ErrNoMutation
+		}
+		settings.UpdatedAt = time.Now().UTC()
 		data.UserSettings[actor.ID] = settings
 		return nil
 	})
@@ -392,6 +405,10 @@ func (s *server) updateWorkspacePreferences(w http.ResponseWriter, r *http.Reque
 		ensureAllowedAuthServices(&input, data.WorkspaceSettings, patch)
 		reconcileAgentWebAccess(&input, data.WorkspaceSettings, patch)
 		reconcileMCPConnectors(&input, data.WorkspaceSettings, patch)
+		if unchangedEdit(data.WorkspaceSettings, input) {
+			updated = data.WorkspaceSettings
+			return store.ErrNoMutation
+		}
 		input.UpdatedAt = time.Now().UTC()
 		data.WorkspaceSettings = input
 		updated = input
@@ -969,6 +986,7 @@ func (s *server) updateProjectStatus(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
+		before := data.ProjectStatuses[index]
 		if input.Name != nil {
 			data.ProjectStatuses[index].Name = strings.TrimSpace(*input.Name)
 		}
@@ -985,10 +1003,15 @@ func (s *server) updateProjectStatus(w http.ResponseWriter, r *http.Request) {
 			data.ProjectStatuses[index].Type = *input.Type
 		}
 		updated = data.ProjectStatuses[index]
+		changed := !unchangedEdit(before, updated)
 		for projectIndex := range data.Projects {
 			if data.Projects[projectIndex].Status.ID == id {
+				changed = changed || !unchangedEdit(data.Projects[projectIndex].Status, updated)
 				data.Projects[projectIndex].Status = updated
 			}
+		}
+		if !changed {
+			return store.ErrNoMutation
 		}
 		return nil
 	})
@@ -1134,8 +1157,13 @@ func (s *server) updateWorkspaceIssueTemplate(w http.ResponseWriter, r *http.Req
 		if index < 0 {
 			return errNotFound
 		}
+		before := data.IssueTemplates[index]
 		if err := applyIssueTemplate(data, &data.IssueTemplates[index], input); err != nil {
 			return err
+		}
+		if unchangedEdit(before, data.IssueTemplates[index]) {
+			updated = before
+			return store.ErrNoMutation
 		}
 		data.IssueTemplates[index].UpdatedAt = time.Now().UTC()
 		updated = data.IssueTemplates[index]
@@ -1476,6 +1504,7 @@ func (s *server) updateAPIKey(w http.ResponseWriter, r *http.Request) {
 			return "", errNotFound
 		}
 		current := &data.APIKeys[index]
+		before := *current
 		if input.Name != nil {
 			for _, existing := range data.APIKeys {
 				if existing.ID != id && existing.RevokedAt == nil && existing.CreatorID == current.CreatorID && strings.EqualFold(strings.TrimSpace(existing.Name), name) {
@@ -1526,6 +1555,9 @@ func (s *server) updateAPIKey(w http.ResponseWriter, r *http.Request) {
 			current.ExpiresAt = expiresAt
 		}
 		updated = publicAPIKey(*current)
+		if unchangedEdit(before, *current) {
+			return id, store.ErrNoMutation
+		}
 		return id, nil
 	})
 	if err != nil {
@@ -1688,11 +1720,13 @@ func (s *server) updateOAuthApplication(w http.ResponseWriter, r *http.Request) 
 	}
 	id := r.PathValue("id")
 	var updated domain.OAuthApplication
+	changed := false
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "oauth_application.updated", id, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == id })
 		if index < 0 {
 			return errNotFound
 		}
+		before := data.OAuthApplications[index]
 		applyOAuthInput(&data.OAuthApplications[index], input)
 		if err := checkGitHubUsernameAvailable(data, id, data.OAuthApplications[index].GitHubUsername); err != nil {
 			return err
@@ -1701,10 +1735,16 @@ func (s *server) updateOAuthApplication(w http.ResponseWriter, r *http.Request) 
 			data.OAuthApplications[index].CredentialsAuthorizedBy = requestActor(s, r).ID
 		}
 		updated = data.OAuthApplications[index]
+		if unchangedEdit(before, data.OAuthApplications[index]) {
+			updated = before
+			updated.ClientSecret = ""
+			return store.ErrNoMutation
+		}
 		updated.ClientSecret = ""
+		changed = true
 		return nil
 	})
-	if err == nil {
+	if err == nil && changed {
 		s.syncApplicationIdentity(r.Context(), updated.ClientID)
 		// Keep each workspace's managed app webhook in step, as manifest saves do.
 		go s.reconcileAllApplicationWebhooks(context.Background())
@@ -2319,6 +2359,8 @@ func (s *server) updateIntegration(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		updated = data.IntegrationConnections[index]
+		// The config map is edited in place, so compare against a snapshot.
+		before := jsonSnapshot(updated)
 		if updated.Config == nil {
 			updated.Config = map[string]string{}
 		}
@@ -2341,6 +2383,9 @@ func (s *server) updateIntegration(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.LinkbackEnabled != nil {
 			updated.LinkbackEnabled = *input.LinkbackEnabled
+		}
+		if unchangedJSON(before, updated) {
+			return store.ErrNoMutation
 		}
 		updated.UpdatedAt = time.Now().UTC()
 		data.IntegrationConnections[index] = updated
@@ -2485,10 +2530,15 @@ func (s *server) updateDocumentTemplate(w http.ResponseWriter, r *http.Request) 
 		if index < 0 {
 			return errNotFound
 		}
+		before := data.DocumentTemplates[index]
 		if err := applyDocumentTemplateInput(data, &data.DocumentTemplates[index], input); err != nil {
 			return err
 		}
 		updated = data.DocumentTemplates[index]
+		if unchangedEdit(before, updated) {
+			updated = before
+			return store.ErrNoMutation
+		}
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)

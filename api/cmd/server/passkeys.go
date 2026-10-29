@@ -11,6 +11,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/store"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 )
@@ -236,6 +237,10 @@ func (s *server) updatePasskey(w http.ResponseWriter, r *http.Request) {
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "passkey.updated", r.PathValue("id"), input, func(data *domain.Bootstrap) error {
 		for index := range data.Passkeys {
 			if data.Passkeys[index].ID == r.PathValue("id") && data.Passkeys[index].UserID == actor.ID {
+				if data.Passkeys[index].Name == name {
+					updated = data.Passkeys[index]
+					return store.ErrNoMutation
+				}
 				data.Passkeys[index].Name = name
 				updated = data.Passkeys[index]
 				return nil

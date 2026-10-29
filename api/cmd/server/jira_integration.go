@@ -9,6 +9,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/store"
 )
 
 type jiraRemoteProject struct {
@@ -136,6 +137,10 @@ func (s *server) updateJiraLink(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.StatusMap != nil {
 			link.StatusMap = input.StatusMap
+		}
+		if unchangedEdit(data.JiraLinks[index], link) {
+			updated = data.JiraLinks[index]
+			return store.ErrNoMutation
 		}
 		link.UpdatedAt = time.Now().UTC()
 		data.JiraLinks[index] = link

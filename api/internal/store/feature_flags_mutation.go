@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -138,6 +139,9 @@ func (s *SQLiteStore) mutateFeatureFlags(ctx context.Context, workspace string, 
 		err = s.coordinator.WithWorkspaceLock(ctx, workspace, apply)
 	} else {
 		err = apply()
+	}
+	if errors.Is(err, ErrNoMutation) {
+		return nil
 	}
 	if err != nil {
 		return err

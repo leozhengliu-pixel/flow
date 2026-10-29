@@ -20,6 +20,7 @@ package store
 // CAS updates, as agent_runs does, and lease_until doubles as the next due time.
 
 import (
+	"bytes"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -171,6 +172,21 @@ func scanCodingEnvironment(row codingRowScanner) (domain.CodingEnvironment, erro
 func encodeCodingEnvironment(environment domain.CodingEnvironment) ([]byte, error) {
 	environment.Secrets, environment.LatestSnapshot, environment.ArchivedAt = nil, nil, nil
 	return json.Marshal(environment)
+}
+
+// sameCodingEnvironment reports whether an edit leaves the stored
+// environment as it is (version and updatedAt aside).
+func sameCodingEnvironment(current, next domain.CodingEnvironment) (bool, error) {
+	next.Version, next.UpdatedAt = current.Version, current.UpdatedAt
+	before, err := encodeCodingEnvironment(current)
+	if err != nil {
+		return false, err
+	}
+	after, err := encodeCodingEnvironment(next)
+	if err != nil {
+		return false, err
+	}
+	return bytes.Equal(before, after), nil
 }
 
 func activeRepoKeyValue(environment domain.CodingEnvironment) any {
@@ -328,6 +344,13 @@ func (s *SQLiteStore) UpdateCodingEnvironment(ctx context.Context, workspaceKey,
 		next.ID, next.WorkspaceKey, next.CreatedAt, next.CreatedBy, next.ArchivedAt = current.ID, current.WorkspaceKey, current.CreatedAt, current.CreatedBy, current.ArchivedAt
 		if err := codingenv.NormalizeEnvironment(&next); err != nil {
 			return domain.CodingEnvironment{}, err
+		}
+		// The current values again: the environment keeps its version and
+		// nothing is written.
+		if same, err := sameCodingEnvironment(current, next); err != nil {
+			return domain.CodingEnvironment{}, err
+		} else if same {
+			return current, nil
 		}
 		next.Version = current.Version + 1
 		next.UpdatedAt = time.Now().UTC()

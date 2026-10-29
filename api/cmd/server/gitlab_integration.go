@@ -490,11 +490,17 @@ func (s *server) saveGitLabConnection(ctx context.Context, workspaceKey, id, eve
 			return errNotFound
 		}
 		connection := &data.IntegrationConnections[index]
+		// The config map is edited in place, so compare against a snapshot.
+		before := jsonSnapshot(*connection)
 		if connection.Config == nil {
 			connection.Config = map[string]string{}
 		}
 		now := time.Now().UTC()
 		mutate(connection, now)
+		if unchangedJSON(before, *connection) {
+			updated = *connection
+			return store.ErrNoMutation
+		}
 		connection.UpdatedAt = now
 		updated = *connection
 		return nil

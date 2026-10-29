@@ -250,10 +250,19 @@ func (s *server) updateReleasePipeline(w http.ResponseWriter, r *http.Request) {
 		if !releasePipelineChangeAllowed(data, data.ReleasePipelines[index], nextTeamIDs, teamRoles, role) {
 			return store.ErrAuthForbidden
 		}
+		// Stage maps are edited in place, so compare against a snapshot.
+		original := data.ReleasePipelines[index]
+		before := jsonSnapshot(original)
 		if err := applyReleasePipelineInput(data, &data.ReleasePipelines[index], input); err != nil {
 			return err
 		}
 		updated = data.ReleasePipelines[index]
+		unstamped := updated
+		unstamped.UpdatedAt = original.UpdatedAt
+		if unchangedJSON(before, unstamped) {
+			updated = unstamped
+			return store.ErrNoMutation
+		}
 		return nil
 	})
 	if err == nil {
@@ -331,10 +340,15 @@ func (s *server) updateCustomEmoji(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
+		before := data.CustomEmojis[index]
 		if err := applyCustomEmojiInput(&data.CustomEmojis[index], input); err != nil {
 			return err
 		}
 		updated = data.CustomEmojis[index]
+		if unchangedEdit(before, updated) {
+			updated = before
+			return store.ErrNoMutation
+		}
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)

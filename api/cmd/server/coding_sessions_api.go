@@ -276,6 +276,7 @@ func (s *server) updateCodingSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	var updated domain.WorkspaceSettings
 	err := s.store.MutateWorkspace(r.Context(), viewer.workspace, "workspace_preferences.updated", "workspace", patch, func(data *domain.Bootstrap) error {
+		before := jsonSnapshot(data.WorkspaceSettings)
 		settings := data.WorkspaceSettings.CodingAgentSettings
 		set := func(target *string, value *string) {
 			if value != nil {
@@ -307,6 +308,10 @@ func (s *server) updateCodingSettings(w http.ResponseWriter, r *http.Request) {
 			}
 			flags[coding.FeatureFlag] = *patch.Enabled
 			data.WorkspaceSettings.FeatureFlags = flags
+		}
+		if unchangedJSON(before, data.WorkspaceSettings) {
+			updated = data.WorkspaceSettings
+			return store.ErrNoMutation
 		}
 		data.WorkspaceSettings.UpdatedAt = time.Now().UTC()
 		updated = data.WorkspaceSettings

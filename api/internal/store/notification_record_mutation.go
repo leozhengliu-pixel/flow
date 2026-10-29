@@ -1,9 +1,11 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"flow/api/internal/domain"
@@ -60,7 +62,20 @@ func (s *SQLiteStore) UpdateNotificationRecord(ctx context.Context, workspace, u
 		if result.RecipientID != userID {
 			return sql.ErrNoRows
 		}
+		previous, err := json.Marshal(result)
+		if err != nil {
+			return err
+		}
+		stamped := result.UpdatedAt
 		mutate(&result)
+		unstamped := result
+		unstamped.UpdatedAt = stamped
+		if next, err := json.Marshal(unstamped); err == nil && bytes.Equal(previous, next) {
+			// An update to the current values (its updatedAt aside) writes
+			// nothing and keeps the stored record.
+			result = unstamped
+			return ErrNoMutation
+		}
 		if err := writeContentRecord(ctx, tx, workspace, "notification", resource, result); err != nil {
 			return err
 		}
@@ -75,6 +90,9 @@ func (s *SQLiteStore) UpdateNotificationRecord(ctx context.Context, workspace, u
 		realtime = enrichRealtimePayload(payload, result, eventType)
 		return tx.Commit()
 	}()
+	if errors.Is(err, ErrNoMutation) {
+		return result, nil
+	}
 	if err != nil {
 		return result, err
 	}

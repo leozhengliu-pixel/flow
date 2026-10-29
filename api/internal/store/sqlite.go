@@ -2020,7 +2020,11 @@ func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region 
 
 func (s *SQLiteStore) UpdateWorkspace(ctx context.Context, workspaceKey string, workspace domain.Workspace) (domain.Bootstrap, error) {
 	if s.coordinator == nil {
-		return s.updateWorkspace(ctx, workspaceKey, workspace)
+		updated, err := s.updateWorkspace(ctx, workspaceKey, workspace)
+		if errors.Is(err, ErrNoMutation) {
+			return updated, nil
+		}
+		return updated, err
 	}
 	var updated domain.Bootstrap
 	err := s.coordinator.WithWorkspaceLock(ctx, "__workspace_catalog__", func() error {
@@ -2031,6 +2035,9 @@ func (s *SQLiteStore) UpdateWorkspace(ctx context.Context, workspaceKey string, 
 		updated, err = s.updateWorkspace(ctx, workspaceKey, workspace)
 		return err
 	})
+	if errors.Is(err, ErrNoMutation) {
+		return updated, nil
+	}
 	if err == nil {
 		s.publishWorkspaceEvent(ctx, updated.Workspace.URLKey, "workspace.updated", updated.Workspace.ID, map[string]string{"previousUrlKey": workspaceKey, "urlKey": updated.Workspace.URLKey})
 	}
@@ -2054,6 +2061,10 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 	}
 	workspace.ID = data.Workspace.ID
 	workspace.CreatedAt = data.Workspace.CreatedAt
+	if current := data.Workspace; workspace.Name == current.Name && workspace.URLKey == current.URLKey && workspace.Icon == current.Icon && workspace.LogoURL == current.LogoURL && workspace.Color == current.Color && workspace.Region == current.Region {
+		// The current values again: nothing is written or published.
+		return data, ErrNoMutation
+	}
 	data.Workspace = workspace
 	for index := range data.Teams {
 		if len(data.Teams) == 1 && strings.EqualFold(data.Teams[index].Name, s.workspaces[workspaceKey].Workspace.Name) {

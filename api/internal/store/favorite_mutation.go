@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"slices"
 	"time"
@@ -176,6 +177,9 @@ func (s *SQLiteStore) mutateStandaloneFavorite(ctx context.Context, workspace, e
 		err = s.coordinator.WithWorkspaceLock(ctx, workspace, apply)
 	} else {
 		err = apply()
+	}
+	if errors.Is(err, ErrNoMutation) {
+		return nil
 	}
 	if err != nil {
 		return err

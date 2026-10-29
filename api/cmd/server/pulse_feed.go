@@ -663,12 +663,14 @@ func (s *server) setPulseSubscription(subscribe bool) http.HandlerFunc {
 			index := slices.IndexFunc(data.Subscriptions, func(item domain.Subscription) bool {
 				return item.UserID == viewer.ID && item.ResourceType == kind && item.ResourceID == id
 			})
-			if index < 0 {
+			created := index < 0
+			if created {
 				now := time.Now().UTC()
 				data.Subscriptions = append(data.Subscriptions, domain.Subscription{ID: idgen.New("subscription_"), UserID: viewer.ID, ResourceType: kind, ResourceID: id, CreatedAt: now})
 				index = len(data.Subscriptions) - 1
 			}
 			item := &data.Subscriptions[index]
+			before := *item
 			item.Events = slices.DeleteFunc(slices.Clone(item.Events), func(event string) bool { return event == pulseSubscriptionEvent })
 			item.OptOutEvents = slices.DeleteFunc(slices.Clone(item.OptOutEvents), func(event string) bool { return event == pulseSubscriptionEvent })
 			if subscribe {
@@ -678,6 +680,10 @@ func (s *server) setPulseSubscription(subscribe bool) http.HandlerFunc {
 			}
 			if len(item.OptOutEvents) == 0 {
 				item.OptOutEvents = nil
+			}
+			if !created && unchangedEdit(before, *item) {
+				// The pulse choice already made: nothing is written.
+				return store.ErrNoMutation
 			}
 			return nil
 		})

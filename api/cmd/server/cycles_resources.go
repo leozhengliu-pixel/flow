@@ -10,6 +10,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/store"
 )
 
 var cycleCapacityWeekdays = []string{"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
@@ -92,6 +93,7 @@ func (s *server) updateCycleCapacity(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
+		before := *cycle
 		if input.Capacity.Set {
 			if err := setCycleCapacityOverride(cycle, input.Capacity.Value); err != nil {
 				return err
@@ -118,6 +120,10 @@ func (s *server) updateCycleCapacity(w http.ResponseWriter, r *http.Request) {
 					cycle.CapacityByMember[userID][strings.ToLower(day)] = value
 				}
 			}
+		}
+		if unchangedEdit(before, *cycle) {
+			updated = before
+			return store.ErrNoMutation
 		}
 		cycle.UpdatedAt = time.Now().UTC()
 		updated = *cycle

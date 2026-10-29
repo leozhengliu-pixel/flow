@@ -102,6 +102,10 @@ func (s *server) updateProjectRelation(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
+		if data.ProjectRelations[index].Type == input.Type {
+			updated = data.ProjectRelations[index]
+			return store.ErrNoMutation
+		}
 		data.ProjectRelations[index].Type = input.Type
 		data.ProjectRelations[index].UpdatedAt = time.Now().UTC()
 		updated = data.ProjectRelations[index]
@@ -197,6 +201,7 @@ func (s *server) updateInitiativeRelation(w http.ResponseWriter, r *http.Request
 		if index < 0 {
 			return errNotFound
 		}
+		before := data.InitiativeRelations[index]
 		if input.Type != nil {
 			if !slices.Contains([]string{"related", "parent", "blocks", "blocked_by"}, *input.Type) {
 				return errInvalid
@@ -211,6 +216,10 @@ func (s *server) updateInitiativeRelation(w http.ResponseWriter, r *http.Request
 		}
 		if input.SortOrder != nil {
 			data.InitiativeRelations[index].SortOrder = *input.SortOrder
+		}
+		if unchangedEdit(before, data.InitiativeRelations[index]) {
+			updated = before
+			return store.ErrNoMutation
 		}
 		data.InitiativeRelations[index].UpdatedAt = time.Now().UTC()
 		updated = data.InitiativeRelations[index]
@@ -516,6 +525,7 @@ func (s *server) updateReleaseNote(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		item := &data.ReleaseNotes[index]
+		before := *item
 		if input.Title != nil {
 			item.Title = *input.Title
 		}
@@ -526,12 +536,17 @@ func (s *server) updateReleaseNote(w http.ResponseWriter, r *http.Request) {
 			item.BodyData = input.BodyData
 		}
 		now := time.Now().UTC()
-		if input.Published != nil {
+		// Publishing a published note keeps its original date.
+		if input.Published != nil && *input.Published != (item.PublishedAt != nil) {
 			if *input.Published {
 				item.PublishedAt = &now
 			} else {
 				item.PublishedAt = nil
 			}
+		}
+		if unchangedEdit(before, *item) {
+			result = before
+			return store.ErrNoMutation
 		}
 		item.UpdatedAt = now
 		result = *item
@@ -626,6 +641,7 @@ func (s *server) updateTeamResourceSection(w http.ResponseWriter, r *http.Reques
 			return errNotFound
 		}
 		current := &data.TeamResourceSections[index]
+		before := *current
 		if input.Name != nil {
 			name := strings.TrimSpace(*input.Name)
 			if name == "" {
@@ -635,6 +651,10 @@ func (s *server) updateTeamResourceSection(w http.ResponseWriter, r *http.Reques
 		}
 		if input.Position != nil {
 			current.Position = *input.Position
+		}
+		if unchangedEdit(before, *current) {
+			item = before
+			return store.ErrNoMutation
 		}
 		current.UpdatedAt = time.Now().UTC()
 		item = *current
@@ -743,6 +763,7 @@ func (s *server) updateTeamResource(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		current := &data.TeamPinnedResources[index]
+		before := *current
 		if input.Title != nil {
 			current.Title = *input.Title
 		}
@@ -757,6 +778,10 @@ func (s *server) updateTeamResource(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Position != nil {
 			current.Position = *input.Position
+		}
+		if unchangedEdit(before, *current) {
+			item = before
+			return store.ErrNoMutation
 		}
 		current.UpdatedAt = time.Now().UTC()
 		item = *current
@@ -827,6 +852,7 @@ func (s *server) updateAgentActivity(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		current := &data.AgentActivities[index]
+		before := *current
 		if input.Status != nil {
 			current.Status = *input.Status
 		}
@@ -835,6 +861,10 @@ func (s *server) updateAgentActivity(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Metadata != nil {
 			current.Metadata = input.Metadata
+		}
+		if unchangedEdit(before, *current) {
+			item = before
+			return store.ErrNoMutation
 		}
 		current.UpdatedAt = time.Now().UTC()
 		item = *current
@@ -884,6 +914,7 @@ func (s *server) updateAIConversation(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		current := &data.AIConversations[index]
+		before := *current
 		if input.Title != nil {
 			current.Title = *input.Title
 		}
@@ -892,6 +923,10 @@ func (s *server) updateAIConversation(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.Context != nil {
 			current.Context = input.Context
+		}
+		if unchangedEdit(before, *current) {
+			item = before
+			return store.ErrNoMutation
 		}
 		current.UpdatedAt = time.Now().UTC()
 		item = *current
