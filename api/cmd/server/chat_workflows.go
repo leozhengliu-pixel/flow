@@ -75,6 +75,16 @@ type chatWebhookEnvelope struct {
 			MessageID string `json:"open_message_id"`
 			ChatID    string `json:"open_chat_id"`
 		} `json:"context"`
+		// A reaction added to a message (im.message.reaction.created_v1,
+		// chat_requests.go).
+		MessageID    string `json:"message_id"`
+		OperatorType string `json:"operator_type"`
+		ReactionType struct {
+			EmojiType string `json:"emoji_type"`
+		} `json:"reaction_type"`
+		UserID struct {
+			OpenID string `json:"open_id"`
+		} `json:"user_id"`
 	} `json:"event"`
 }
 
@@ -247,30 +257,40 @@ func (s *server) chatCommandForEnvelope(ctx context.Context, record domain.ChatI
 		if command, dedup, ok := s.chatThreadReplyCommand(ctx, record, envelope); ok {
 			return command, dedup, true, nil
 		}
-		if event.Sender.SenderType != "user" || event.Sender.TenantKey != record.TenantKey || event.Sender.SenderID.OpenID == "" || event.Sender.SenderID.OpenID == record.BotOpenID || event.Message.MessageID == "" || event.Message.ChatID == "" || event.Message.ChatType != "group" || event.Message.MessageType != "text" {
+		if event.Sender.SenderType != "user" || event.Sender.TenantKey != record.TenantKey || event.Sender.SenderID.OpenID == "" || event.Sender.SenderID.OpenID == record.BotOpenID || !chatValidPlatformID(event.Message.MessageID, "om_") || event.Message.ChatID == "" || event.Message.ChatType != "group" {
 			return chatInboundCommand{}, "", false, nil
 		}
-		var content struct {
-			Text string `json:"text"`
-		}
-		if json.Unmarshal([]byte(event.Message.Content), &content) != nil {
-			return chatInboundCommand{}, "", false, nil
-		}
-		mentioned := false
-		for _, mention := range event.Message.Mentions {
-			if mention.ID.OpenID == record.BotOpenID && record.BotOpenID != "" {
-				mentioned = true
-				content.Text = strings.ReplaceAll(content.Text, mention.Key, "")
+		if event.Message.MessageType == "text" {
+			var content struct {
+				Text string `json:"text"`
+			}
+			if json.Unmarshal([]byte(event.Message.Content), &content) != nil {
+				return chatInboundCommand{}, "", false, nil
+			}
+			mentioned := false
+			for _, mention := range event.Message.Mentions {
+				if mention.ID.OpenID == record.BotOpenID && record.BotOpenID != "" {
+					mentioned = true
+					content.Text = strings.ReplaceAll(content.Text, mention.Key, "")
+				}
+			}
+			if !mentioned {
+				return chatInboundCommand{}, "", false, nil
+			}
+			if title, matched := chatCreateTitle(content.Text); matched {
+				return chatInboundCommand{Kind: "create_form", OpenID: event.Sender.SenderID.OpenID, ChatID: event.Message.ChatID, MessageID: event.Message.MessageID, Title: title}, chatKey(record.ConnectionID, "message", event.Message.MessageID), true, nil
 			}
 		}
-		if !mentioned {
+		// Any other mention of the bot may be a request (chat_requests.go).
+		text, mentioned, ok := chatThreadReplyText(record, envelope)
+		if !ok || !mentioned {
 			return chatInboundCommand{}, "", false, nil
 		}
-		title, matched := chatCreateTitle(content.Text)
-		if !matched {
-			return chatInboundCommand{}, "", false, nil
-		}
-		return chatInboundCommand{Kind: "create_form", OpenID: event.Sender.SenderID.OpenID, ChatID: event.Message.ChatID, MessageID: event.Message.MessageID, Title: title}, chatKey(record.ConnectionID, "message", event.Message.MessageID), true, nil
+		command, dedup, ok := s.chatRequestMentionCommand(ctx, record, envelope, text)
+		return command, dedup, ok, nil
+	case "im.message.reaction.created_v1":
+		command, dedup, ok := s.chatRequestReactionCommand(ctx, record, envelope)
+		return command, dedup, ok, nil
 	case "card.action.trigger":
 		if event.Operator.TenantKey != record.TenantKey || event.Operator.OpenID == "" || event.Context.MessageID == "" || event.Context.ChatID == "" {
 			return chatInboundCommand{}, "", false, chatInvalid("invalid card operator")
@@ -394,6 +414,9 @@ func (s *server) processChatJob(ctx context.Context, job domain.ChatJob) error {
 	}
 	if command.Kind == chatThreadReplyKind {
 		return s.processChatThreadReply(ctx, record, job, command)
+	}
+	if command.Kind == chatRequestKind {
+		return s.processChatRequest(ctx, record, job, command)
 	}
 	// Direct messages with the bot and their cards (chat_dm_agent.go).
 	if handled, err := s.processChatDirectMessage(ctx, record, job, command); handled {

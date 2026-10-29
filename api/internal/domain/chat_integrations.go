@@ -95,13 +95,16 @@ type ChatBinding struct {
 	ProjectID string `json:"projectId,omitempty"`
 	// ProjectIDs limits the binding to these projects of the team; empty
 	// covers all of the team's issues and projects.
-	ProjectIDs  []string  `json:"projectIds,omitempty"`
-	TemplateID  string    `json:"templateId,omitempty"`
-	Events      []string  `json:"events"`
-	Enabled     bool      `json:"enabled"`
-	AllowCreate bool      `json:"allowCreate"`
-	AllowUpdate bool      `json:"allowUpdate"`
-	CreatedAt   time.Time `json:"createdAt"`
+	ProjectIDs  []string `json:"projectIds,omitempty"`
+	TemplateID  string   `json:"templateId,omitempty"`
+	Events      []string `json:"events"`
+	Enabled     bool     `json:"enabled"`
+	AllowCreate bool     `json:"allowCreate"`
+	AllowUpdate bool     `json:"allowUpdate"`
+	// Requests lets the group's members turn messages into requests in the
+	// team's triage; absent or disabled turns request intake off.
+	Requests  *ChatBindingRequests `json:"requests,omitempty"`
+	CreatedAt time.Time            `json:"createdAt"`
 	// Authorization is recorded by the server whenever the binding is
 	// created or its scope changes.
 	Authorization *ChatBindingAuthorization `json:"authorization,omitempty"`

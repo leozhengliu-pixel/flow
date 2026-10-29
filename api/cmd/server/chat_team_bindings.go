@@ -80,21 +80,33 @@ func chatBindingScopePermitted(data domain.Bootstrap, binding domain.ChatBinding
 	if !chatBindingProjectsPermitted(data, binding) {
 		return false
 	}
-	if binding.TemplateID != "" {
-		found := false
-		for _, template := range data.IssueTemplates {
-			if template.ID == binding.TemplateID {
-				if template.TemplateType == "form" || len(template.FormFields) > 0 || (template.TeamID != "" && template.TeamID != binding.TeamID) || (template.VisibilityTeamID != "" && template.VisibilityTeamID != binding.TeamID) || (template.ProjectID != "" && !chatBindingLimitedToProject(binding, template.ProjectID)) {
-					return false
-				}
-				found = true
+	return binding.TemplateID == "" || chatBindingTemplatePermitted(data, binding, binding.TemplateID)
+}
+
+// chatBindingTemplatePermitted: a plain issue template of the binding's team
+// (or of every team) that fits the binding's projects.
+func chatBindingTemplatePermitted(data domain.Bootstrap, binding domain.ChatBinding, templateID string) bool {
+	found := false
+	for _, template := range data.IssueTemplates {
+		if template.ID == templateID {
+			if template.TemplateType == "form" || len(template.FormFields) > 0 || (template.TeamID != "" && template.TeamID != binding.TeamID) || (template.VisibilityTeamID != "" && template.VisibilityTeamID != binding.TeamID) || (template.ProjectID != "" && !chatBindingLimitedToProject(binding, template.ProjectID)) {
+				return false
 			}
-		}
-		if !found {
-			return false
+			found = true
 		}
 	}
-	return true
+	return found
+}
+
+// chatValidRequestSettings checks a binding's request settings as saved:
+// the reaction's emoji type, a priority from 0 to 4, and a template the
+// binding may use.
+func chatValidRequestSettings(data domain.Bootstrap, binding domain.ChatBinding) bool {
+	requests := binding.Requests
+	if requests == nil {
+		return true
+	}
+	return (requests.Emoji == "" || chatRequestEmoji.MatchString(requests.Emoji)) && (requests.Priority == nil || *requests.Priority >= 0 && *requests.Priority <= 4) && (requests.TemplateID == "" || chatBindingTemplatePermitted(data, binding, requests.TemplateID))
 }
 
 // chatBindingAuthorizerValid keeps a private team binding tied to the person
@@ -337,6 +349,15 @@ func (s *server) saveChatBinding(w http.ResponseWriter, r *http.Request) {
 		writeChatError(w, 403, chatTeamBindingPermissionMessage)
 		return
 	}
+	if requests := binding.Requests; requests != nil {
+		if templates, ok := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "issueTemplates", "projects"); !ok || !chatValidRequestSettings(templates, binding) {
+			writeChatError(w, 400, "Choose a supported reaction, a priority and a template of the binding's team for requests")
+			return
+		}
+		if !requests.Enabled && requests.Emoji == "" && requests.TemplateID == "" && requests.Priority == nil {
+			binding.Requests = nil
+		}
+	}
 	binding.ConnectionID = record.ConnectionID
 	binding.CreatedAt = time.Now().UTC()
 	binding.RevokedAt, binding.RevokedBy = nil, ""
@@ -482,6 +503,13 @@ func (s *server) auditChatBinding(r *http.Request, record domain.ChatIntegration
 	}
 	if len(binding.ProjectIDs) > 0 {
 		metadata["projectIds"] = binding.ProjectIDs
+	}
+	if requests := binding.Requests; requests != nil {
+		settings := map[string]any{"enabled": requests.Enabled, "emoji": requests.Emoji, "templateId": requests.TemplateID}
+		if requests.Priority != nil {
+			settings["priority"] = *requests.Priority
+		}
+		metadata["requests"] = settings
 	}
 	if binding.Authorization != nil {
 		metadata["authorizedBy"] = binding.Authorization.UserID

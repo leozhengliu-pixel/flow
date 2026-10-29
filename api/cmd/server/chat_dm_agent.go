@@ -1001,15 +1001,21 @@ func (r *chatDMReply) follow(ctx context.Context, done chan struct{}) {
 			}
 		}
 		raw, _ := json.Marshal(chatDMReplyCard(view, zh))
-		if !bytes.Equal(raw, last) {
+		shown := bytes.Equal(raw, last)
+		if !shown {
 			if err := r.s.chatDMUpdate(persist, record, r.cardID, chatDMReplyCard(view, zh)); err != nil {
 				log.Printf("Chat direct message workspace=%s: %v", record.WorkspaceKey, err)
 			} else {
-				last = raw
+				last, shown = raw, true
 			}
 			lastAt = time.Now()
 		}
 		if finished {
+			// The member wrote and read this exchange in the chat: it is not
+			// unread on their Agent page.
+			if shown && sessionID != "" {
+				r.s.chatDMMarkSessionRead(persist, r.dm.target.Workspace, r.dm.identity.UserID, sessionID)
+			}
 			return
 		}
 	}
@@ -1075,5 +1081,36 @@ func (r *chatDMReply) stopForUnlink(ctx context.Context) {
 	view := chatDMReplyView{Status: "stopped", Failure: chatDMText(r.dm.zh, "Stopped: this chat account is no longer linked to Flow.", "已停止：这个聊天账号已不再关联 Flow。")}
 	if err := r.s.chatDMUpdate(ctx, r.dm.record, r.cardID, chatDMReplyCard(view, r.dm.zh)); err != nil {
 		log.Printf("Chat direct message workspace=%s: %v", r.dm.record.WorkspaceKey, err)
+	}
+}
+
+// chatDMMarkSessionRead marks the member's Agent chat read up to its latest
+// change, as opening it in Flow does: the member sent the message and saw
+// the reply in the chat.
+func (s *server) chatDMMarkSessionRead(ctx context.Context, workspace, userID, sessionID string) {
+	user, err := s.store.UserByID(ctx, userID)
+	if err != nil {
+		return
+	}
+	err = s.store.MutateWorkspace(store.ContextWithActor(ctx, user), workspace, "agent.session_read", sessionID, nil, func(data *domain.Bootstrap) error {
+		index := slices.IndexFunc(data.AgentSessions, func(session domain.AgentSession) bool {
+			return session.ID == sessionID && session.UserID == userID && session.DeletedAt == nil
+		})
+		if index < 0 {
+			return errNotFound
+		}
+		session := &data.AgentSessions[index]
+		if agentSessionRead(*session) {
+			return store.ErrNoMutation
+		}
+		readAt := time.Now().UTC()
+		if session.UpdatedAt.After(readAt) {
+			readAt = session.UpdatedAt
+		}
+		session.LastReadAt = agentReadStamp(readAt)
+		return nil
+	})
+	if err != nil && !errors.Is(err, store.ErrNoMutation) && !errors.Is(err, errNotFound) {
+		log.Printf("Chat direct message workspace=%s: mark read: %v", workspace, err)
 	}
 }

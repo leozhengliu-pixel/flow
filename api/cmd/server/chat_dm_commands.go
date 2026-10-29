@@ -249,6 +249,11 @@ func (s *server) chatDMFlowLink(text string) (chatDMLink, bool) {
 
 // chatDMLinkPreview shows what a pasted link is, when the member can open it.
 func (s *server) chatDMLinkPreview(ctx context.Context, dm chatDMRequest, link chatDMLink) error {
+	// With the app's link preview configured, the platform already shows a
+	// preview of the link (chat_unfurl.go); a second card would repeat it.
+	if s.chatLinkPreviewConfigured(ctx, dm.record) {
+		return nil
+	}
 	noAccess := chatDMText(dm.zh, "You can't open this link in Flow, or it no longer exists.", "你无法在 Flow 中打开这个链接，或它已不存在。")
 	if link.Workspace != dm.target.Workspace {
 		targets, err := s.chatDMTargets(ctx, dm.record, dm.identity)

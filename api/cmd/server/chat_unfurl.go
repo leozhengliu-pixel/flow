@@ -39,8 +39,41 @@ type chatPreviewCallback struct {
 	} `json:"event"`
 }
 
+// chatLinkPreviewMarker names the record that the platform asked this
+// connection for link previews in the month of at.
+func chatLinkPreviewMarker(record domain.ChatIntegrationRecord, at time.Time) string {
+	return "chat_link_preview_" + chatKey(record.ConnectionID, at.UTC().Format("2006-01"))
+}
+
+// chatNoteLinkPreview records that the app's link preview is configured: the
+// platform asks for previews only then. It lasts about a month after the
+// latest request.
+func (s *server) chatNoteLinkPreview(ctx context.Context, record domain.ChatIntegrationRecord) {
+	now := time.Now().UTC()
+	id := chatLinkPreviewMarker(record, now)
+	if _, err := s.store.GetChatAction(ctx, record.WorkspaceKey, record.ConnectionID, id); err == nil {
+		return
+	}
+	_ = s.store.PutChatAction(ctx, domain.ChatAction{ID: id, WorkspaceKey: record.WorkspaceKey, ConnectionID: record.ConnectionID, Payload: json.RawMessage(`{"kind":"link_preview"}`), ExpiresAt: now.Add(31*24*time.Hour - time.Minute)})
+}
+
+// chatLinkPreviewConfigured reports whether the platform asked for link
+// previews this month or the last: a pasted link then already shows the
+// platform's preview.
+func (s *server) chatLinkPreviewConfigured(ctx context.Context, record domain.ChatIntegrationRecord) bool {
+	now := time.Now().UTC()
+	lastMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).Add(-time.Hour)
+	for _, at := range []time.Time{now, lastMonth} {
+		if _, err := s.store.GetChatAction(ctx, record.WorkspaceKey, record.ConnectionID, chatLinkPreviewMarker(record, at)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 // writeChatLinkPreview answers an authenticated url.preview.get callback.
 func (s *server) writeChatLinkPreview(ctx context.Context, w http.ResponseWriter, record domain.ChatIntegrationRecord, plaintext []byte) {
+	s.chatNoteLinkPreview(ctx, record)
 	var callback chatPreviewCallback
 	if json.Unmarshal(plaintext, &callback) != nil {
 		writeJSON(w, http.StatusOK, map[string]any{})
