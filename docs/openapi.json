@@ -7732,6 +7732,14 @@
             }
           },
           {
+            "description": "Indexed title and content keyword search for connections (up to 500 candidates), with searchSnippet and matchedTerms on each match.",
+            "in": "query",
+            "name": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "description": "Text search over title and content.",
             "in": "query",
             "name": "q",
@@ -40375,6 +40383,12 @@
             "description": "IssueTeamID is the team of the issue the document is attached to. Read-only.",
             "type": "string"
           },
+          "matchedTerms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "permissions": {
             "items": {
               "$ref": "#/components/schemas/DocumentPermission"
@@ -40399,6 +40413,9 @@
               "$ref": "#/components/schemas/DocumentRevision"
             },
             "type": "array"
+          },
+          "searchSnippet": {
+            "type": "string"
           },
           "slugId": {
             "type": "string"
@@ -40721,6 +40738,12 @@
             "description": "IssueTeamID is the team of the issue the document is attached to. Read-only.",
             "type": "string"
           },
+          "matchedTerms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "permissions": {
             "items": {
               "$ref": "#/components/schemas/DocumentPermissionPartial"
@@ -40745,6 +40768,9 @@
               "$ref": "#/components/schemas/DocumentRevisionPartial"
             },
             "type": "array"
+          },
+          "searchSnippet": {
+            "type": "string"
           },
           "slugId": {
             "type": "string"

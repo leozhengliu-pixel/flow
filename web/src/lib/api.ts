@@ -1669,7 +1669,7 @@ export function listDocuments(
 /** One page of a document search: matching active documents, most recently updated first. */
 export type DocumentSearchPage = { nodes: FlowDocument[]; pageInfo: { hasNextPage: boolean; endCursor?: string | null } };
 /**
- * Documents by title through the paginated `/api/documents` connection (recent first), optionally in one team:
+ * Documents by indexed title and content through the paginated connection, optionally in one team:
  * pickers search the whole workspace instead of the documents the client has loaded.
  */
 export function searchDocuments(
@@ -1680,7 +1680,7 @@ export function searchDocuments(
   if (options.after) query.set("after", options.after);
   if (options.teamId) query.set("teamId", options.teamId);
   const q = options.q?.trim();
-  if (q) query.set("filter", JSON.stringify({ title: { containsIgnoreCase: q } }));
+  if (q) query.set("query", q);
   return request(`/api/documents?${query}`, { signal });
 }
 export function listDocumentPermissions(

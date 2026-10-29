@@ -438,7 +438,8 @@ type loopRunRecorder struct {
 	noTools bool
 	// completedWrites are the writes that already succeeded on the run and
 	// its replies, by loopWriteFingerprint; a continuation never repeats them.
-	completedWrites map[string]string
+	completedWrites  map[string]string
+	issueMatchChecks int
 	// leaseOwner holds the run's lease when it is not this process (a run on the agent worker, agent_worker_loop.go).
 	leaseOwner string
 	// timing splits the work's wall time into setup, model wait and tools.
@@ -1220,6 +1221,13 @@ func (scope *loopScope) check(ctx context.Context, call domain.AgentToolCall) er
 	}
 	if ref := loopInitiativeRef(name, args); ref != "" && scope.initiativeOutsideTeams(ref) {
 		return fmt.Errorf("This loop cannot access that initiative: it belongs to a team outside the loop's team access")
+	}
+	if name == "save_status_update" && loopStringArg(args, "type") == "project" {
+		if data, ok := scope.s.store.WorkspaceMetadataFields(scope.workspace, "projects"); ok {
+			if project, err := mcpFindProject(data, loopStringArg(args, "project")); err == nil && len(project.TeamIDs) > 0 && !slices.ContainsFunc(project.TeamIDs, func(id string) bool { return scope.teams[id] }) {
+				return fmt.Errorf("This loop cannot access that project: it belongs to a team outside the loop's team access")
+			}
+		}
 	}
 	target := loopStringArg(args, "issueId", "issue", "id")
 	if slices.Contains([]string{"save_issue", "save_comment", "create_attachment", "delete_attachment", "delete_comment", "triage_issue"}, name) && target != "" {

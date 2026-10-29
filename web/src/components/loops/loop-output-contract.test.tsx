@@ -101,7 +101,7 @@ describe('LoopOutputContractPanel', () => {
     const person: Loop = { ...loop, outputContract: { ...sent, stale: true } }
     renderPanel(person)
     expect(screen.getAllByText('Set by a person')[0]).toBeVisible()
-    expect(screen.getByText('The instructions changed after these outputs were set. Check that they still fit.')).toBeVisible()
+    expect(screen.getByText('Instructions changed — review suggested outputs')).toBeVisible()
     await userEvent.click(screen.getByRole('button', { name: 'Use automatic outputs' }))
     await waitFor(() => expect(api.updateLoop).toHaveBeenLastCalledWith('loop-1', { outputContract: null }))
     await waitFor(() => expect(api.analyzeLoopOutputs).toHaveBeenCalled())
@@ -121,6 +121,35 @@ describe('LoopOutputContractPanel', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save outputs' }))
     await waitFor(() => expect(api.updateLoop).toHaveBeenCalled())
     expect((api.updateLoop.mock.calls[0][1].outputContract as LoopOutputContract).outputs[0].target).toMatchObject({ documentId: document.id, title: document.title, mode: 'existing' })
+  })
+
+  it('reads changed instructions without replacing person outputs and reviews each field independently', async () => {
+    const current: LoopOutputContract = { source: 'person', stale: true, readOnly: false, outputs: [{ kind: 'issue', operation: 'update', required: false, target: { mode: 'matching', match: 'customer bugs' }, cardinality: 'any' }] }
+    const suggested: LoopOutputContract = { source: 'model', instructionsHash: 'new-text', readOnly: false, outputs: [{ kind: 'issue', operation: 'update', required: true, target: { mode: 'matching', match: 'customer bugs without repro steps' }, cardinality: 'any' }] }
+    api.analyzeLoopOutputs.mockResolvedValue({ ...loop, outputContract: current, suggestedOutputContract: suggested })
+    const { onLoopChange, view, data } = renderPanel({ ...loop, outputContract: current })
+    expect(screen.getByText('Set by a person')).toBeVisible()
+    await waitFor(() => expect(onLoopChange).toHaveBeenCalledWith(expect.objectContaining({ outputContract: current, suggestedOutputContract: suggested })))
+    view.rerender(<I18nProvider><LoopOutputContractPanel data={data} loop={{ ...loop, outputContract: current, suggestedOutputContract: suggested }} unsaved={false} onLoopChange={onLoopChange} readDelayMs={0}/></I18nProvider>)
+    await userEvent.click(screen.getByRole('button', { name: 'Review suggested outputs' }))
+    const required = screen.getByRole('group', { name: 'Output 1 · Must produce' })
+    const target = screen.getByRole('group', { name: 'Output 1 · Which issues' })
+    await userEvent.click(within(required).getByRole('button', { name: 'Accept suggestion' }))
+    await userEvent.click(within(target).getByRole('button', { name: 'Accept suggestion' }))
+    await userEvent.click(within(required).getByRole('button', { name: 'Keep mine' }))
+    expect(api.updateLoop).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Save review' }))
+    await waitFor(() => expect(api.updateLoop).toHaveBeenCalledTimes(1))
+    expect(api.updateLoop.mock.calls[0][1].outputContract.outputs[0]).toMatchObject({ required: false, target: { match: 'customer bugs without repro steps' } })
+  })
+
+  it('keeps a person contract without accepting any suggested fields', async () => {
+    const current: LoopOutputContract = { source: 'person', stale: true, readOnly: true, outputs: [] }
+    renderPanel({ ...loop, outputContract: current, suggestedOutputContract: modelContract })
+    await userEvent.click(screen.getByRole('button', { name: 'Keep my outputs' }))
+    await waitFor(() => expect(api.updateLoop).toHaveBeenCalledTimes(1))
+    expect(api.updateLoop.mock.calls[0][1].outputContract).toMatchObject({ readOnly: true, outputs: [] })
+    expect(api.analyzeLoopOutputs).not.toHaveBeenCalled()
   })
 
   it('warns about a document the instructions do not name and saves the one picked', async () => {
@@ -210,6 +239,20 @@ describe('LoopDocumentPicker', () => {
     await userEvent.click(screen.getByRole('option', { name: /Doc q/ }))
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'q' }))
   })
+
+  it('finds a document by content and highlights safe text snippets', async () => {
+    api.searchDocuments.mockImplementation(async ({ q }: { q?: string }) => ({ nodes: q ? [{ id: 'doc-content', title: 'Operations notes', teamIds: [], searchSnippet: 'The canary <script> deployment checklist.', matchedTerms: ['canary', '<script>'] }] : [], pageInfo: { hasNextPage: false } }))
+    const onSelect = vi.fn()
+    const { container } = render(<I18nProvider><LoopDocumentPicker data={makeBootstrap()} open onOpenChange={vi.fn()} onSelect={onSelect}/></I18nProvider>)
+    await userEvent.type(screen.getByPlaceholderText('Search documents…'), 'canary')
+    const item = await screen.findByRole('option', { name: /Operations notes/ })
+    expect(item).toHaveTextContent('The canary <script> deployment checklist.')
+    expect(item.querySelector('mark')).toHaveTextContent('canary')
+    expect(item.querySelector('script')).toBeNull()
+    expect(container.querySelector('script')).toBeNull()
+    await userEvent.click(item)
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'doc-content' }))
+  })
 })
 
 describe('LoopContractSummary', () => {
@@ -256,7 +299,7 @@ describe('contract helpers', () => {
   it('has Chinese copy for every panel string', () => {
     for (const key of ['What this loop will produce', 'Outputs this run worked to', CONTRACT_FALLBACK_NOTICE, 'Must produce', 'Edit outputs', 'Save outputs', 'Use automatic outputs', 'Reply only: the run changes nothing', 'Title template', 'titled {title}', 'One per run', 'Create or update', 'Read only', 'Status update', 'Other change',
       'Target', 'Anywhere', 'The triggering item', 'Issues matching a description', 'A project', 'An initiative', 'Which issues', 'Project', 'Initiative', 'What fills {name}', 'Filled by the run from…', 'document not chosen yet', 'issues matching {match}', 'on {project}', 'in {project}', 'on {initiative}', '{name} filled by the run from {source}',
-      'Choose document…', 'Search documents…', 'Recent documents', 'Create a new document', 'Create a new document “{title}”', 'Load more', 'All teams', 'Could not load documents', "The instructions don't say which document. Choose it, or create a new one.", "The instructions don't say which document to write to. Until you choose it, runs write to no existing document and need review.", 'Choose the document for each output that writes to an existing one.', "The loop's target document is not chosen"]) {
+      'Choose document…', 'Search documents…', 'Recent documents', 'Create a new document', 'Create a new document “{title}”', 'Load more', 'All teams', 'Could not load documents', "The instructions don't say which document. Choose it, or create a new one.", "The instructions don't say which document to write to. Until you choose it, runs write to no existing document and need review.", 'Choose the document for each output that writes to an existing one.', "The loop's target document is not chosen", 'Instructions changed — review suggested outputs', 'Review suggested outputs', 'Keep my outputs', 'Keep mine', 'Accept suggestion', 'Your output', 'Suggested output', 'Save review', 'No output changes suggested', 'Output {number}', 'New output', 'Skip conditions', 'Conditions', 'Alternative group', 'Title placeholders', 'Document title', 'Document not chosen', 'Team name', 'Project name', 'Initiative name', 'Target description', 'Not set']) {
       expect(zhCN[key], key).toBeTruthy()
     }
   })

@@ -386,8 +386,15 @@ func (s *server) storeLoopContract(workspace, loopID, hash string, contract *dom
 		if loop == nil {
 			return errNotFound
 		}
-		if loopContractHashOf(*loop) == hash && (loop.OutputContract == nil || loop.OutputContract.Source != loopContractPerson) {
-			loop.OutputContract = contract
+		if loopContractHashOf(*loop) == hash {
+			if loop.OutputContract != nil && loop.OutputContract.Source == loopContractPerson {
+				if loopContractStale(*loop) {
+					loop.SuggestedOutputContract = contract
+				}
+			} else {
+				loop.OutputContract = contract
+				loop.SuggestedOutputContract = nil
+			}
 		}
 		if contract.Source == loopContractModel {
 			for index := range data.LoopVersions {
@@ -410,7 +417,7 @@ func (s *server) extractLoopContractAsync(workspace string, loop domain.Loop) {
 	if !s.agent.Enabled || strings.TrimSpace(loop.Instructions) == "" {
 		return
 	}
-	if _, ok := loopStoredContract(loop); ok {
+	if _, ok := loopStoredContract(loopContractReviewCopy(loop)); ok {
 		return
 	}
 	go func() {
@@ -425,8 +432,16 @@ func (s *server) extractLoopContractAsync(workspace string, loop domain.Loop) {
 		if current == nil || loopContractHashOf(*current) != loopContractHashOf(loop) {
 			return
 		}
-		s.loopContractFor(s.store.WorkerContext(), data.Workspace.URLKey, *current)
+		s.loopContractFor(s.store.WorkerContext(), data.Workspace.URLKey, loopContractReviewCopy(*current))
 	}()
+}
+
+// A review reads the new text without replacing the contract runs still use.
+func loopContractReviewCopy(loop domain.Loop) domain.Loop {
+	if loop.OutputContract != nil && loop.OutputContract.Source == loopContractPerson && loopContractStale(loop) {
+		loop.OutputContract, loop.ExpectedOutputs = loop.SuggestedOutputContract, nil
+	}
+	return loop
 }
 
 // analyzeLoopOutputs reads a loop's output contract now (the editor's "What
@@ -454,7 +469,7 @@ func (s *server) analyzeLoopOutputs(w http.ResponseWriter, r *http.Request) {
 		respondLoopMutation(w, err, http.StatusOK, nil)
 		return
 	}
-	current := *loop
+	current := loopContractReviewCopy(*loop)
 	if input.Force && (current.OutputContract == nil || current.OutputContract.Source != loopContractPerson) {
 		hash := loopContractHashOf(current)
 		contract, err := s.requestLoopContract(r.Context(), current, data.Teams)

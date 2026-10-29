@@ -7,6 +7,7 @@ import { analyzeLoopOutputs, updateLoop } from "@/lib/api";
 import { useI18n } from "@/i18n/i18n";
 import { activeTeams } from "./loop-data";
 import { LoopDocumentPicker } from "./loop-document-picker";
+import { LoopContractReview } from "./loop-contract-review";
 import {
   CARDINALITY_LABELS,
   CONTRACT_FALLBACK_NOTICE,
@@ -258,9 +259,11 @@ export function LoopOutputContractPanel({
   const [analyzing, setAnalyzing] = useState(false);
   const [editing, setEditing] = useState<LoopOutputContract | undefined>(undefined);
   const [saving, setSaving] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const requested = useRef("");
   const hasInstructions = Boolean(loop.instructions.trim());
-  const needsRead = hasInstructions && !unsaved && contract?.source !== "person" && (!contract || contract.stale);
+  const suggestion = loop.suggestedOutputContract;
+  const needsRead = hasInstructions && !unsaved && (!contract || contract.stale && (contract.source !== "person" || !suggestion));
 
   useEffect(() => {
     // One read per saved text (the server caches it by instructions hash), once the text has settled: a draft
@@ -290,6 +293,7 @@ export function LoopOutputContractPanel({
       const saved = await updateLoop(loop.id, { outputContract: next ? personContract(next) : null });
       onLoopChange(saved);
       setEditing(undefined);
+      setReviewing(false);
       if (!next) {
         setAnalyzing(true);
         onLoopChange(await analyzeLoopOutputs(loop.id).finally(() => setAnalyzing(false)));
@@ -317,7 +321,7 @@ export function LoopOutputContractPanel({
     <section className="loops-section" aria-label={t("What this loop will produce")}>
       <div className="loops-section-heading">
         <h3 className="loops-section-title">{t("What this loop will produce")}</h3>
-        {!editing && hasInstructions && (
+        {!editing && !reviewing && hasInstructions && (
           <div className="loops-contract-actions">
             {contract?.source === "person" ? (
               <button className="loops-ghost-button is-small" type="button" disabled={saving} onClick={() => void save(null)}>
@@ -344,9 +348,14 @@ export function LoopOutputContractPanel({
             <span>{t(CONTRACT_FALLBACK_NOTICE)}</span>
           </p>
         )}
-        {contract?.source === "person" && contract.stale && !editing && <p className="loops-contract-hint">{t("The instructions changed after these outputs were set. Check that they still fit.")}</p>}
+        {contract?.source === "person" && contract.stale && !editing && <div className="loops-contract-stale" role="status">
+          <strong>{t("Instructions changed — review suggested outputs")}</strong>
+          {suggestion?.source === "model" && !reviewing && <button type="button" className="loops-ghost-button is-small" onClick={() => setReviewing(true)}>{t("Review suggested outputs")}</button>}
+          {suggestion?.source === "fallback" && <p className="loops-contract-hint">{t(CONTRACT_FALLBACK_NOTICE)}</p>}
+          {!reviewing && <button type="button" className="loops-ghost-button is-small" disabled={saving} onClick={() => void save(contract)}>{t("Keep my outputs")}</button>}
+        </div>}
         {unsaved && contract?.source !== "person" && <p className="loops-contract-hint">{t("Save the loop to read its outputs from the new instructions.")}</p>}
-        {editing ? (
+        {reviewing && contract && suggestion ? <LoopContractReview key={suggestion.instructionsHash} current={contract} suggested={suggestion} saving={saving} onSave={(next) => void save(next)} onCancel={() => setReviewing(false)} /> : editing ? (
           <div className="loops-contract-editor">
             <div className="loops-permission-row">
               <span>
@@ -383,7 +392,7 @@ export function LoopOutputContractPanel({
               </span>
             </div>
           </div>
-        ) : analyzing || (needsRead && !contract) ? (
+        ) : (analyzing && contract?.source !== "person") || (needsRead && !contract) ? (
           <p className="loops-contract-reading" role="status">{t("Reading the instructions…")}</p>
         ) : contract && !fallback ? (
           <>

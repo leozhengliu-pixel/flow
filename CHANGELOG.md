@@ -9,6 +9,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Loops verify described issue targets before writing, cache semantic checks,
+  and enforce team and named-target scope on status updates. Changed
+  instructions suggest a fresh output contract for per-field review while
+  runs keep the person's outputs. The document picker searches indexed titles
+  and content and highlights matching snippets.
+
 - CI uses three store test shards, refreshes timing weights in a weekly pull
   request, and builds the browser-test API before the server readiness timeout.
 - Security browser coverage for server-fetched X/Figma and GitHub/GitLab cards,

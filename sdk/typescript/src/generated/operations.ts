@@ -282,6 +282,8 @@ export interface GetDocumentsQuery {
   filter?: Record<string, unknown>
   /** Only resources of these teams (comma-separated ids). */
   teamId?: string
+  /** Indexed title and content keyword search for connections (up to 500 candidates), with searchSnippet and matchedTerms on each match. */
+  query?: string
 }
 
 /** Arguments of `getDocuments`. */
@@ -297,6 +299,8 @@ export interface GetDocumentsLegacyQuery {
   filter?: Record<string, unknown>
   /** Only resources of these teams (comma-separated ids). */
   teamId?: string
+  /** Indexed title and content keyword search for connections (up to 500 candidates), with searchSnippet and matchedTerms on each match. */
+  query?: string
   /** Text search over title and content. */
   q?: string
   /** false (default) returns active documents, true only archived ones, all both. */
