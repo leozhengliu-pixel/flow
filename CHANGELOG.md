@@ -24,6 +24,26 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   workspaces with sensitive data protection send no content. The app needs
   the `im:message`, `im:message.p2p_msg:readonly` and `im:resource`
   permissions (see `docs/feishu-lark.md`).
+- Lark and Feishu issue threads: everything a group hears about one issue
+  goes into one message thread (its first card, or the member's create
+  command, is the root; a deleted root starts a new thread). Flow comments
+  are posted into the thread and their edits and deletions reflected there;
+  a reply in the thread becomes a Flow comment written as the member's
+  linked account, with their own permissions and only when the binding
+  allows updating issues. Unlinked members get one card to link their
+  account; imported replies are never posted back. The resource-to-thread
+  mapping is stored (`chat_threads`, `chat_thread_items`).
+- Lark and Feishu team bindings cover all of the team's projects, one
+  project or a chosen set of projects (**Projects**, a multi-select in the
+  binding editor; `projectIds` in the API). Every project must belong to the
+  team and disclose no private team; deliveries and group actions stay in
+  the set. Existing single-project bindings become one-project sets.
+- Initiatives connect directly to a Lark or Feishu group from their
+  notifications and actions menus, whether or not a team leads them. The
+  initiative's owner or a workspace administrator authorizes it, with the
+  team bindings' group checks, an authorization record and audit entries;
+  the group gets the initiative's update cards and never a private team's
+  content.
 - Lark and Feishu: the **创建事项** / **Create issue** message shortcut
   creates an issue from any message. A private form card (team, title and
   description prefilled from the message with a link to its chat, assignee,
