@@ -9,10 +9,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"math/rand/v2"
 	"reflect"
 	"slices"
 	"sort"
+	"strconv"
 	"time"
 
 	"flow/api/internal/domain"
@@ -36,9 +38,9 @@ import (
 // top of theirs; an entry both changed merges key by key). The copy's record
 // becomes the row as stored, and the written record the merged one, so the
 // rest of the write (and the snapshot installed afterwards) carries both
-// changes. updatedAt takes the later time. A value both writes changed
-// differently where they cannot be combined (a string, a number both moved,
-// say a round-robin cursor both advanced from the same value, a list without
+// changes. updatedAt takes the later time; additive counters apply deltas.
+// A value both writes changed differently where they cannot be combined (a
+// string, a round-robin cursor both advanced from the same value, a list without
 // ids) is a conflict: the write fails with ErrConcurrentWrite, and every
 // writer reruns on fresh records (concurrentWriteAttempts, with jittered
 // backoff) before it reports the 409. No writer keeps its own value over
@@ -131,7 +133,7 @@ func mergeMetadataRecord(base, ours, theirs, loaded []byte) ([]byte, bool, error
 				continue
 			}
 		}
-		value, ok := mergeMetadataValues(baseValue, ourValue, theirValue)
+		value, ok := mergeMetadataMember(name, baseValue, ourValue, theirValue)
 		if !ok {
 			conflict = true
 			value = ourValue
@@ -140,6 +142,38 @@ func mergeMetadataRecord(base, ours, theirs, loaded []byte) ([]byte, bool, error
 	}
 	encoded, err := json.Marshal(merged)
 	return encoded, conflict, err
+}
+
+// Only additive counters use deltas. Positions, priorities, derived totals
+// and round-robin cursors (which also choose an assignee) remain scalar CAS.
+func mergeMetadataMember(name string, base, ours, theirs json.RawMessage) (json.RawMessage, bool) {
+	switch name {
+	case "updatedAt":
+		var mine, their time.Time
+		if json.Unmarshal(ours, &mine) == nil && json.Unmarshal(theirs, &their) == nil {
+			if mine.After(their) {
+				return ours, true
+			}
+			return theirs, true
+		}
+	case "imported", "retryCount", "occurrenceCount", "version", "personalSettingsVersion":
+		count := func(raw json.RawMessage) (int64, error) {
+			if emptyMember(raw) {
+				return 0, nil
+			}
+			return strconv.ParseInt(string(raw), 10, 64)
+		}
+		before, baseErr := count(base)
+		mine, ourErr := count(ours)
+		their, theirErr := count(theirs)
+		if baseErr == nil && ourErr == nil && theirErr == nil && before >= 0 && mine >= before && their >= before {
+			delta := mine - before
+			if their <= math.MaxInt64-delta {
+				return json.RawMessage(strconv.FormatInt(their+delta, 10)), true
+			}
+		}
+	}
+	return mergeMetadataValues(base, ours, theirs)
 }
 
 // mergeMetadataValues merges a value both sides changed from base: objects
@@ -153,17 +187,17 @@ func mergeMetadataValues(base, ours, theirs json.RawMessage) (json.RawMessage, b
 	if jsonEqual(theirs, base) {
 		return ours, true
 	}
-	if jsonEqual(theirs, ours) {
-		if number := bytes.TrimSpace(ours); len(number) > 0 && (number[0] == '-' || number[0] >= '0' && number[0] <= '9') {
-			return nil, false
-		}
-		return ours, true
-	}
 	switch jsonKind(ours) | jsonKind(theirs) | jsonKind(base) {
 	case jsonObject, jsonObject | jsonAbsent:
 		return mergeMetadataObjects(base, ours, theirs)
 	case jsonArray, jsonArray | jsonAbsent:
 		return mergeMetadataLists(base, ours, theirs)
+	}
+	if jsonEqual(theirs, ours) {
+		if number := bytes.TrimSpace(ours); len(number) > 0 && (number[0] == '-' || number[0] >= '0' && number[0] <= '9') {
+			return nil, false
+		}
+		return ours, true
 	}
 	return nil, false
 }
@@ -223,20 +257,36 @@ func mergeMetadataObjects(base, ours, theirs json.RawMessage) (json.RawMessage, 
 		_, inOurs := ourKeys[key]
 		_, inTheirs := theirKeys[key]
 		switch {
-		case inBase && inOurs && bytes.Equal(bytes.TrimSpace(baseValue), bytes.TrimSpace(ourValue)):
+		case inBase && jsonEqual(baseValue, ourValue):
 			continue
 		case inBase && !inOurs:
-			// Ours removed the key: theirs must not have changed it.
+			// An absent membership list is an empty set, not a scalar
+			// deletion: removing its last member keeps a peer's additions.
+			if jsonKind(baseValue) == jsonArray && jsonKind(theirValue) == jsonArray {
+				value, ok := mergeMetadataLists(baseValue, nil, theirValue)
+				if !ok {
+					return nil, false
+				}
+				merged[key] = value
+				continue
+			}
 			if inTheirs && !bytes.Equal(bytes.TrimSpace(theirValue), bytes.TrimSpace(baseValue)) {
 				return nil, false
 			}
 			delete(merged, key)
 			continue
 		case inBase && !inTheirs:
-			// Theirs removed a key ours changed.
+			if jsonKind(baseValue) == jsonArray && jsonKind(ourValue) == jsonArray {
+				value, ok := mergeMetadataLists(baseValue, ourValue, nil)
+				if !ok {
+					return nil, false
+				}
+				merged[key] = value
+				continue
+			}
 			return nil, false
 		}
-		value, ok := mergeMetadataValues(baseValue, ourValue, theirValue)
+		value, ok := mergeMetadataMember(key, baseValue, ourValue, theirValue)
 		if !ok {
 			return nil, false
 		}
@@ -364,7 +414,7 @@ func mergeMetadataLists(base, ours, theirs json.RawMessage) (json.RawMessage, bo
 				return nil, false
 			}
 			continue
-		case inOurs && inBase && !jsonEqual(ourItem, baseItem) && !jsonEqual(theirItem, ourItem):
+		case inOurs && inBase && !jsonEqual(ourItem, baseItem):
 			if jsonEqual(theirItem, baseItem) {
 				theirItem = ourItem
 				break
@@ -1035,9 +1085,9 @@ func rebaseMetadataRecordWrite(ctx context.Context, tx *sqlTx, workspace string,
 }
 
 // setMetadataRecords installs records (JSON as stored) into data's
-// collections in place, replacing the records with the same keys and adding
-// the others. Writers use it to keep the copy they install equal to what a
-// merge wrote.
+// collections in place, replacing the records with the same keys, adding
+// the others and dropping deleted records (nil). Writers use it to keep the
+// copy they install equal to what a merge wrote.
 func setMetadataRecords(data *domain.Bootstrap, records map[metadataRecordKey][]byte) error {
 	root := reflect.ValueOf(data).Elem()
 	for key, raw := range records {
@@ -1050,6 +1100,10 @@ func setMetadataRecords(data *domain.Bootstrap, records map[metadataRecordKey][]
 			value.Set(reflect.MakeMap(value.Type()))
 		}
 		collection := newMetadataCollection(field, value)
+		if raw == nil {
+			value.Set(collection.remove(key.key))
+			continue
+		}
 		old, _ := collection.record(key.key)
 		record, err := decodeMetadataRecord(kind, raw, old)
 		if err != nil {
