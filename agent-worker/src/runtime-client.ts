@@ -52,12 +52,25 @@ export type ThreadRunInfo = {
   resume?: { decisions: Record<string, string> }
 }
 
+/** What a loop run's payload says (api/cmd/server/agent_worker_loop.go workerLoopRunInfo). */
+export type LoopRunInfo = {
+  loopRunId: string
+  loopId: string
+  maxTurns: number
+  timeoutMs: number
+  started: number
+  resume?: undefined
+}
+
 export type RunPayload = {
   run: AgentRun
   principal: { mode: string; userId: string; tools?: string[] }
   context?: { system: string; latestPrompt: string; messages?: PromptMessage[] }
   chat?: ChatRunInfo
   thread?: ThreadRunInfo
+  loop?: LoopRunInfo
+  /** Why a loop run cannot run (its setup failed); the run ends with it. */
+  failure?: string
   notices?: string[]
 }
 

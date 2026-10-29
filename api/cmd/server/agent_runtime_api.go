@@ -46,7 +46,7 @@ const (
 
 // agentRuntimeWorker reports whether built-in agent runs are meant to execute on the worker runtime
 // (FLOW_AGENT_RUNTIME=worker). Chat replies (agent_worker_chat.go) and built-in sessions — comment threads
-// and delegation (agent_worker_thread.go) — are queued for it; loops still run in-process.
+// and delegation (agent_worker_thread.go) — and loop runs (agent_worker_loop.go) are queued for it.
 func (s *server) agentRuntimeWorker() bool {
 	return s.agent.Runtime == appconfig.AgentRuntimeWorker
 }
@@ -268,6 +268,10 @@ func (s *server) heartbeatAgentRun(w http.ResponseWriter, r *http.Request, calle
 		return
 	}
 	cancel := run.CancelRequested
+	if info, loop := workerLoopInfo(run); loop && s.workerLoopHeartbeat(r.Context(), run, info) {
+		// The loop run's lease is kept with the run's; a cancel of the loop run (or its lost lease) stops the run.
+		cancel = true
+	}
 	if !cancel {
 		// A person stopped the session (a stop signal in the thread): the run should stop too.
 		if task, err := s.store.AgentTask(r.Context(), run.WorkspaceKey, run.SessionID); err == nil && task.Status == "canceled" {
@@ -291,6 +295,10 @@ func (s *server) completeAgentRun(w http.ResponseWriter, r *http.Request, caller
 	if isChat && slices.Contains([]string{store.AgentRunDone, store.AgentRunFailed, store.AgentRunCanceled, store.AgentRunAwaiting, store.AgentRunInterrupted}, input.Status) {
 		// The reply is saved in its final form before the run ends (a reply the worker did not finish).
 		s.settleWorkerChatRun(r.Context(), run, chat, input.Status, input.Error)
+	}
+	if info, loop := workerLoopInfo(run); loop && slices.Contains([]string{store.AgentRunDone, store.AgentRunFailed, store.AgentRunCanceled, store.AgentRunInterrupted}, input.Status) {
+		// The loop run ends with its run (agent_worker_loop.go).
+		s.finishWorkerLoopRun(r.Context(), run, info, input.Status, input.Error)
 	}
 	run, err := s.store.FinishAgentRun(r.Context(), run.ID, caller.worker, store.AgentRunResult{Status: input.Status, Error: input.Error, Usage: input.Usage}, time.Now())
 	if err == nil {
@@ -408,6 +416,14 @@ func (s *server) agentRunPayload(w http.ResponseWriter, r *http.Request, _ agent
 	} else if !store.IsAgentTaskMissing(err) {
 		writeError(w, http.StatusInternalServerError, "the run's session could not be read")
 		return
+	} else if info, ok := workerLoopInfo(run); ok {
+		// A loop run (agent_worker_loop.go): the in-process run's prompt, or why it cannot run.
+		response["loop"] = info
+		if prompt, failure := s.workerLoopPayload(r.Context(), run, info); prompt != nil {
+			response["context"] = prompt
+		} else {
+			response["failure"] = failure
+		}
 	} else if info, ok := workerChatInfo(run); ok {
 		// A chat reply: the prompt was rendered when the message was sent, in the owner's request
 		// (agent_worker_chat.go); a resume continues from the suspended state instead.
@@ -747,11 +763,13 @@ func (s *server) reconcileAgentRuns(ctx context.Context, now time.Time) (requeue
 		return len(retried), len(stopped)
 	}
 	for _, run := range retried {
-		// A chat reply starts over with the new attempt.
-		s.recoverWorkerChatRun(ctx, run, true)
+		// A chat reply (or a loop run) starts over with the new attempt.
+		if !s.recoverWorkerChatRun(ctx, run, true) {
+			s.recoverWorkerLoopRun(ctx, run, true)
+		}
 	}
 	for _, run := range stopped {
-		if s.recoverWorkerChatRun(ctx, run, false) {
+		if s.recoverWorkerChatRun(ctx, run, false) || s.recoverWorkerLoopRun(ctx, run, false) {
 			continue
 		}
 		task, err := s.store.AgentTask(ctx, run.WorkspaceKey, run.SessionID)

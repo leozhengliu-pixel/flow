@@ -418,7 +418,8 @@ func (s *server) reconcileLoopRuns(ctx context.Context, startup bool) int {
 	registry := s.loopRunRegistry()
 	count := 0
 	for _, item := range running {
-		if registry.get(item.ID) != nil {
+		if registry.get(item.ID) != nil || s.workerLoopRunPending(ctx, item) {
+			// Running here, or held for its run on the agent worker (agent_worker_loop.go).
 			continue
 		}
 		previousProcess := startup && item.LeaseOwner != self && loopInstanceHost(item.LeaseOwner) == loopInstanceHost(self)
@@ -533,6 +534,9 @@ func (s *server) cancelLoopRun(w http.ResponseWriter, r *http.Request) {
 		case <-time.After(10 * time.Second):
 		case <-r.Context().Done():
 		}
+	} else if s.loopRunsOnWorker() && s.cancelWorkerLoopRun(r.Context(), workspace, runID) {
+		// A run on the agent worker stops at once (agent_worker_loop.go).
+		_, _ = s.store.RequestLoopRunCancel(r.Context(), workspace, runID)
 	} else if requested, err := s.store.RequestLoopRunCancel(r.Context(), workspace, runID); err != nil {
 		writeError(w, http.StatusInternalServerError, "Could not cancel the run")
 		return

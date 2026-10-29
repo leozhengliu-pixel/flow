@@ -26,6 +26,8 @@ export type FlowMcpOptions = {
   toolErrors?: ToolErrorFlags
   /** Called when a connector call starts; the returned function is called when it ends. */
   onConnectorCall?: () => () => unknown
+  /** Run the calls one at a time, in the order the model made them (a loop run, as in-process). */
+  serial?: boolean
 }
 
 /** Whether a run-token allowlist admits a tool (connector tools through `external_*` or by name). */
@@ -43,11 +45,20 @@ type CallArgs = Parameters<MCPServerStreamableHttp['callToolResult']>
  * learns when connector calls are in flight (the worker then watches for the connector's questions).
  */
 class FlowMcpServer extends MCPServerStreamableHttp {
-  constructor(options: ConstructorParameters<typeof MCPServerStreamableHttp>[0], private readonly flow: { timeoutMs: number; connectorTimeoutMs: number; toolErrors?: ToolErrorFlags; onConnectorCall?: () => () => unknown }) {
+  private queue: Promise<unknown> = Promise.resolve()
+
+  constructor(options: ConstructorParameters<typeof MCPServerStreamableHttp>[0], private readonly flow: { timeoutMs: number; connectorTimeoutMs: number; toolErrors?: ToolErrorFlags; onConnectorCall?: () => () => unknown; serial?: boolean }) {
     super(options)
   }
 
   override async callToolResult(...args: CallArgs) {
+    if (!this.flow.serial) return this.callOne(...args)
+    const next = this.queue.then(() => this.callOne(...args))
+    this.queue = next.catch(() => undefined)
+    return next
+  }
+
+  private async callOne(...args: CallArgs) {
     const [name, input] = args
     // A chip question waits for the person on Flow (as long as a connector's question).
     if (waitingTools.has(name)) return this.callWithin(this.flow.connectorTimeoutMs, args)
@@ -100,7 +111,7 @@ export function flowMcpServer(flowUrl: string, token: string, options: FlowMcpOp
       context.alwaysAskTools ??= []
       if (!context.alwaysAskTools.includes(tool.name)) context.alwaysAskTools.push(tool.name)
     }
-    return toolOffered(tool.name, context.loadedGroups)
+    return context.allTools === true || toolOffered(tool.name, context.loadedGroups)
   }
   const limits = { timeoutMs: options.timeoutMs ?? flowToolTimeoutMs, connectorTimeoutMs: options.connectorTimeoutMs ?? connectorToolTimeoutMs }
   return new FlowMcpServer({
@@ -122,7 +133,7 @@ export function flowMcpServer(flowUrl: string, token: string, options: FlowMcpOp
       const change = (structuredContent as Record<string, unknown> | undefined)?.change
       return { isError: Boolean(isError), ...(change ? { change } : {}) }
     },
-  }, { ...limits, toolErrors: options.toolErrors, onConnectorCall: options.onConnectorCall })
+  }, { ...limits, toolErrors: options.toolErrors, onConnectorCall: options.onConnectorCall, serial: options.serial })
 }
 
 /**
