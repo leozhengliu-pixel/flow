@@ -327,6 +327,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Group issue cards no longer duplicate status/assignment forms, and
   initiative cards include the specific update's text within existing
   sensitive-data and private-team restrictions.
+- Issue assignee menus sort the remaining team members by display name in the active language
+  (pinyin for Chinese), keeping the viewer and current assignee in the numbered section only.
 - Every other stored `PATCH` and `PUT` now also writes nothing when it only
   repeats the current values (no `version` or `updatedAt` change, event,
   realtime update, webhook or notification): releases, release pipelines and

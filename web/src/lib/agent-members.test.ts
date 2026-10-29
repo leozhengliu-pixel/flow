@@ -47,4 +47,25 @@ describe("assigneeMenuLayout (one issue's assignee menu)", () => {
     expect(assigneeMenuLayout(people, { delegateId: flow.id, viewerId: me.id }).delegateAnchorId).toBe(me.id)
     expect(assigneeMenuLayout(people, { delegateId: flow.id }).delegateAnchorId).toBeUndefined()
   })
+
+  it('sorts remaining members by display name, preserves equal-name order and leaves input and top rows alone', () => {
+    const zoe = { id: 'zoe', displayName: 'Zoë', name: 'A' }
+    const accent = { id: 'accent', displayName: 'Áda' }, ada = { id: 'ada', displayName: 'ada' }
+    const fallback = { id: 'fallback', displayName: '', name: 'Bo' }
+    const candidates = [zoe, me, accent, ann, fallback, ada, flow, coder]
+    const original = [...candidates]
+    for (const delegateId of [undefined, coder.id]) {
+      const layout = assigneeMenuLayout(candidates, { assigneeId: ann.id, viewerId: me.id, delegateId, locale: 'en-US' })
+      expect(ids(layout.members)).toEqual([accent.id, ada.id, fallback.id, zoe.id])
+      expect(ids(layout.top)).toEqual(delegateId ? [ann.id, me.id] : [ann.id, me.id, flow.id])
+    }
+    expect(candidates).toEqual(original)
+  })
+
+  it('orders Chinese display names by pinyin and excludes the viewer and current assignee', () => {
+    const members = [{ id: 'zhang', displayName: '张三' }, { id: 'wang', displayName: '王五' }, { id: 'li', displayName: '李四' }]
+    const layout = assigneeMenuLayout([members[0], me, members[1], ann, members[2]], { assigneeId: ann.id, viewerId: me.id, locale: 'zh-CN' })
+    expect(ids(layout.members)).toEqual(['li', 'wang', 'zhang'])
+    expect(ids(layout.top)).toEqual([ann.id, me.id])
+  })
 })
