@@ -22,6 +22,7 @@ export type ApiOptions = {
   appUrl?: string
   trustProxy?: boolean
   port?: number
+  fixtureOrigin?: string
   env?: Record<string, string>
 }
 
@@ -53,20 +54,22 @@ function required(name: string) {
 export async function startApi(options: ApiOptions = {}): Promise<RunningApi> {
   const port = options.port ?? (await freePort())
   const origin = `http://localhost:${port}`
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'flow-security-'))
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-security-api-'))
   let output = ''
-  const child: ChildProcess = spawn(required('FLOW_SECURITY_API_BIN'), [], {
+  const child: ChildProcess = spawn(required(options.fixtureOrigin ? 'FLOW_SECURITY_FIXTURE_API_BIN' : 'FLOW_SECURITY_API_BIN'), [], {
     env: {
       PATH: process.env.PATH ?? '',
       HOME: directory,
       TMPDIR: directory,
       FLOW_DATABASE_PATH: path.join(directory, 'flow.db'),
+      FLOW_STORAGE_LOCAL_PATH: path.join(directory, 'uploads'),
       FLOW_HTTP_ADDR: `127.0.0.1:${port}`,
       FLOW_APP_URL: options.appUrl ?? origin,
       FLOW_STATIC_PATH: required('FLOW_SECURITY_WEB_DIST'),
       FLOW_DEV_AUTH_TOKENS: 'true',
       FLOW_WORKSPACE_TUTORIAL: 'off',
       FLOW_SECURITY_CSP: options.csp ?? 'enforce',
+      ...(options.fixtureOrigin ? { FLOW_SECURITY_FIXTURE_ORIGIN: options.fixtureOrigin } : {}),
       ...(options.reportUri ? { FLOW_SECURITY_CSP_REPORT_URI: options.reportUri } : {}),
       ...(options.trustProxy ? { FLOW_TRUST_PROXY_HEADERS: 'true' } : {}),
       ...options.env,
@@ -79,7 +82,7 @@ export async function startApi(options: ApiOptions = {}): Promise<RunningApi> {
   const stop = async () => {
     if (child.exitCode === null) child.kill('SIGTERM')
     await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 5000))])
-    if (child.exitCode === null) child.kill('SIGKILL')
+    if (child.exitCode === null) { child.kill('SIGKILL'); await exited }
     fs.rmSync(directory, { recursive: true, force: true })
   }
   const deadline = Date.now() + 60_000
@@ -198,7 +201,7 @@ export async function startStubServer(handler: http.RequestListener): Promise<{ 
  * report tests put an HTTPS gateway in front of Flow.
  */
 function selfSignedCertificate() {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'flow-security-tls-'))
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-security-tls-'))
   const key = path.join(directory, 'key.pem')
   const cert = path.join(directory, 'cert.pem')
   execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', key, '-out', cert, '-days', '1', '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost,DNS:*.localhost,IP:127.0.0.1'], { stdio: 'ignore' })

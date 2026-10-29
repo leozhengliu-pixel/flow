@@ -9,6 +9,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Security browser coverage for server-fetched X/Figma and GitHub/GitLab cards,
+  service worker updates and kill switches, plus opt-in real-provider embeds.
 - Requests from Lark and Feishu group messages: in a group bound to a team
   whose binding takes requests (**Requests** in the binding editor, with the
   reaction, request template and priority), a member turns a message into a
