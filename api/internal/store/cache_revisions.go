@@ -57,6 +57,28 @@ func (tx *sqlTx) queueCacheRevision(workspace, kind string) {
 	tx.cacheRevisions[cacheRevisionKey{workspace, kind}] = true
 }
 
+// Event-driven invalidation must retire the same caches inside the write,
+// including discussion and release changes that write no issue record.
+func (tx *sqlTx) queueEventCacheRevisions(ctx context.Context, row domainEventRow) error {
+	_, issues, projects, metadata := hotCacheTouch(row.Type)
+	if !issues && !projects && !metadata || row.WorkspaceKey == "" && row.WorkspaceID == "" {
+		return nil
+	}
+	workspace := row.WorkspaceKey
+	if workspace == "" {
+		if err := tx.QueryRowContext(ctx, `SELECT workspace_key FROM workspace_states WHERE workspace_id=?`, row.WorkspaceID).Scan(&workspace); err != nil {
+			return err
+		}
+	}
+	if issues {
+		queueIssueCountRevision(ctx, tx, workspace)
+	}
+	if projects || metadata {
+		tx.queueCacheRevision(workspace, cacheKindMetadata)
+	}
+	return nil
+}
+
 // flushCacheRevisions writes the queued revisions, in key order so two
 // writers never take shards in opposite orders. A shard row is updated in
 // place once it exists.

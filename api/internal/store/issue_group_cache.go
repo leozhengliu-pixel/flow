@@ -14,8 +14,9 @@ import (
 // counts in process, keyed by the whole query (the viewer's access included)
 // and the workspace's issue revision: a counter in the database that every
 // transaction writing issue records, their label, attribute and permission
-// indexes, or the customer request index advances (writeIssueStats,
-// writeCustomerFilterRecord), among its last statements (cache_revisions.go).
+// indexes, or customer/release filter indexes advances. Cache-invalidating
+// events also advance it when no issue record changes, among the transaction's
+// last statements (cache_revisions.go).
 // Reading it is one indexed read, and every server sees a write once it
 // commits, so a cached count is never served after the data it counts
 // changed; the TTL only bounds memory. A reader reads the revision before it counts: a write that

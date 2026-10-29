@@ -190,6 +190,11 @@ func (s *SQLiteStore) runAPIKeyUses() {
 }
 
 func (s *SQLiteStore) writeAPIKeyUse(ctx context.Context, use apiKeyUse) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
 	expression := "CAST(json_set(data,'$.lastUsedAt',?) AS BLOB)"
 	if s.dialect == "mysql" {
 		expression = "JSON_SET(CONVERT(data USING utf8mb4),'$.lastUsedAt',?)"
@@ -201,11 +206,15 @@ func (s *SQLiteStore) writeAPIKeyUse(ctx context.Context, use apiKeyUse) error {
 		if record.id == "" {
 			continue
 		}
-		_, err := s.db.ExecContext(ctx, "UPDATE workspace_metadata_records SET data="+expression+" WHERE workspace_key=? AND field=? AND record_key=? AND "+s.jsonText("data", "revokedAt")+" IS NULL AND ("+s.jsonText("data", "lastUsedAt")+" IS NULL OR "+s.jsonText("data", "lastUsedAt")+"<?)", use.at.Format(time.RFC3339Nano), use.workspace, record.field, record.id, use.at.Add(-time.Minute).Format(time.RFC3339Nano))
+		_, err := tx.ExecContext(ctx, "UPDATE workspace_metadata_records SET data="+expression+" WHERE workspace_key=? AND field=? AND record_key=? AND "+s.jsonText("data", "revokedAt")+" IS NULL AND ("+s.jsonText("data", "lastUsedAt")+" IS NULL OR "+s.jsonText("data", "lastUsedAt")+"<?)", use.at.Format(time.RFC3339Nano), use.workspace, record.field, record.id, use.at.Add(-time.Minute).Format(time.RFC3339Nano))
 		if err != nil {
 			return err
 		}
 	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.dropMetadataCache(ctx, use.workspace)
 	s.lockWorkspaceWrites()
 	defer s.unlockWorkspaceWrites()
 	data, ok := s.workspaces[use.workspace]

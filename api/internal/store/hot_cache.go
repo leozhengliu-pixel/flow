@@ -146,8 +146,8 @@ func (s *SQLiteStore) cacheGeneration(ctx context.Context, key string) int64 {
 // generation writers advance after they commit. The revision moves on inside
 // the writing transaction, so a reader that reads it after a write committed
 // never uses an entry made before the write, even in the moment before the
-// writer advances the generation; the generation retires entries for the
-// writes that move no revision on. A reader that misses stores what it then
+// writer advances the generation. Explicit invalidation also retires entries
+// through the generation. A reader that misses stores what it then
 // reads under the key it missed, read before it read the data: if a write
 // commits meanwhile, the result (which may predate it) lands under a key
 // readers after the write no longer use.

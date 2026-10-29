@@ -59,6 +59,7 @@ func writeReleaseIssueRecords(ctx context.Context, tx *sqlTx, workspace, field, 
 	if field != "releases" {
 		return nil
 	}
+	queueIssueCountRevision(ctx, tx, workspace)
 	if raw == nil {
 		_, err := tx.ExecContext(ctx, `DELETE FROM release_issue_filter_records WHERE workspace_key=? AND release_id=?`, workspace, id)
 		return err

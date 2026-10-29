@@ -263,6 +263,12 @@ caches drop immediately; the mutated issue key is deleted so the next detail
 read refills from SQL (a cached issue is served only while its version matches
 the row). Cache failures never fail the request: the store falls back to SQL.
 
+Comment and relation events retire issue query revisions even when they change
+no issue record; release filter-index writes do the same. API-key and OAuth
+authorization usage timestamps advance the metadata revision in their writing
+transaction. Metadata migrations use the same revision-aware record writer,
+so their cache drops also have no post-commit stale-read window.
+
 A replica reloads the latest workspace metadata from Redis (and SQL on miss)
 inside the distributed lock before applying a mutation, preventing one process
 from overwriting another process's update.

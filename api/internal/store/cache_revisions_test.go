@@ -2,6 +2,16 @@ package store
 
 import "testing"
 
+func TestUnscopedEventsDoNotQueueCacheRevisions(t *testing.T) {
+	tx := &sqlTx{}
+	if err := tx.queueEventCacheRevisions(t.Context(), domainEventRow{Type: "issue.updated"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(tx.cacheRevisions) != 0 {
+		t.Fatal("unscoped event advanced a workspace revision")
+	}
+}
+
 // Statements that write the workspace document or its metadata records name
 // the workspace they write; every other statement names none.
 func TestMetadataWriteWorkspace(t *testing.T) {
