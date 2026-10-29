@@ -135,6 +135,9 @@ func (s *server) agentRuntimeRun(allowToken bool, handler func(http.ResponseWrit
 			writeError(w, http.StatusConflict, "This worker does not hold the run")
 			return
 		}
+		// Worker routes bypass session middleware and may beat the peer event
+		// for the reply they write. Apply the same freshness check here.
+		s.ensureCurrentWorkspace(r.Context(), run.WorkspaceKey)
 		handler(w, r, caller, run)
 	}
 }

@@ -539,11 +539,20 @@ func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sq
 		tx.writeErr = fmt.Errorf("%w: maximum %d bytes; split the import into smaller batches", ErrTransactionWriteBudget, tx.maxTransactionBytes)
 		return nil, tx.writeErr
 	}
+	first := tx.writtenBytes == 0
 	tx.writtenBytes += bytes
 	if workspace, ok := metadataWriteWorkspace(query, args); ok {
 		tx.queueCacheRevision(workspace, cacheKindMetadata)
 	}
-	return tx.Tx.ExecContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
+	result, err := tx.Tx.ExecContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
+	if first && tx.dialect == "sqlite" && sqliteBusy(err) {
+		// The transaction read first, and another connection to the file
+		// wrote meanwhile: SQLite cannot upgrade it to a write (it fails at
+		// once, without waiting). It lost a race like any concurrent write,
+		// so writers that rerun on fresh data (mutationAttempts) do.
+		return result, fmt.Errorf("%w: %w", ErrConcurrentWrite, err)
+	}
+	return result, err
 }
 
 func (tx *sqlTx) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {

@@ -31,3 +31,9 @@ func IsDatabaseError(err error) bool {
 	}
 	return false
 }
+
+// sqliteBusy reports SQLite's SQLITE_BUSY (any extended code).
+func sqliteBusy(err error) bool {
+	var sqliteErr *sqlite.Error
+	return errors.As(err, &sqliteErr) && sqliteErr.Code()&0xff == 5
+}

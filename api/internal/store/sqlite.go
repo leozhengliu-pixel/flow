@@ -256,7 +256,15 @@ func (s *SQLiteStore) SetWorkspaceCoordinator(coordinator WorkspaceCoordinator) 
 	}
 }
 
+// ReloadWorkspace replaces this instance's copy of the workspace with the
+// stored one. It reads under writeMu, as a write's own reload does
+// (mutateFull): a write on this instance then cannot install its result
+// between the read and the install, so a reload never puts back a copy older
+// than the one in place (the write's result would be lost here, and the
+// instance, having counted the write as applied, would not reload again).
 func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	data, err := s.loadWorkspaceState(ctx, workspaceKey)
 	if err != nil {
 		return err
@@ -269,13 +277,17 @@ func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) 
 			return err
 		}
 	}
-	s.lockWorkspaceWrites()
+	s.mu.Lock()
 	s.workspaces[workspaceKey] = data
-	s.unlockWorkspaceWrites()
+	s.mu.Unlock()
 	return nil
 }
 
+// ReloadAllWorkspaces replaces every copy with the stored one, reading under
+// writeMu for the reason ReloadWorkspace does.
 func (s *SQLiteStore) ReloadAllWorkspaces(ctx context.Context) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {
 		return err
@@ -315,12 +327,12 @@ func (s *SQLiteStore) ReloadAllWorkspaces(ctx context.Context) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	s.lockWorkspaceWrites()
+	s.mu.Lock()
 	s.workspaces = workspaces
 	if _, ok := workspaces[s.lastWorkspaceKey]; !ok {
 		s.lastWorkspaceKey = firstWorkspaceKey(workspaces)
 	}
-	s.unlockWorkspaceWrites()
+	s.mu.Unlock()
 	return nil
 }
 
