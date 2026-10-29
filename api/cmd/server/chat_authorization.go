@@ -16,6 +16,7 @@ import (
 )
 
 type chatAuthenticationContextKey struct{}
+type chatCommentContextKey struct{}
 
 // This context is set only after a verified platform identity has been resolved
 // to its current Flow binding. It carries the Flow authentication established
@@ -130,6 +131,7 @@ func (s *server) chatAuthorizedMutation(ctx context.Context, workspace, userID, 
 			handler = s.updateIssueRecord
 		}
 	case len(parts) == 4 && parts[0] == "api" && parts[1] == "issue-records" && parts[2] != "" && parts[3] == "comments" && method == http.MethodPost:
+		r = r.WithContext(context.WithValue(r.Context(), chatCommentContextKey{}, true))
 		r.SetPathValue("id", parts[2])
 		handler = s.issueRecordAlias(s.createComment)
 	}

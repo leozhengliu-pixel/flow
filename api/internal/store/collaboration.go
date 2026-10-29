@@ -13,6 +13,25 @@ type DocumentCollaborationUpdate struct {
 	CreatedAt  time.Time `json:"createdAt"`
 }
 
+func collaborationUpdatesLookup(ctx context.Context, q metadataReader, workspace string) func(string) ([][]byte, error) {
+	return func(documentID string) ([][]byte, error) {
+		rows, err := q.QueryContext(ctx, `SELECT update_data FROM document_collaboration_updates WHERE workspace_key=? AND document_id=? ORDER BY created_at,update_id`, workspace, documentID)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		var updates [][]byte
+		for rows.Next() {
+			var update []byte
+			if err := rows.Scan(&update); err != nil {
+				return nil, err
+			}
+			updates = append(updates, update)
+		}
+		return updates, rows.Err()
+	}
+}
+
 // IssueDocumentID checks the active CRDT generation without allocating an issue,
 // its description, attachments or activity for every incoming keystroke.
 func (s *SQLiteStore) IssueDocumentID(ctx context.Context, workspace, issueID string) (string, error) {

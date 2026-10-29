@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"slices"
@@ -12,6 +13,8 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
+
+	"github.com/Deln0r/ygo"
 )
 
 // Signed in, end to end: people removed from or suspended in the workspace
@@ -117,6 +120,21 @@ func mentioningDocument(text string, userIDs ...string) map[string]any {
 	return map[string]any{"type": "doc", "content": []any{map[string]any{"type": "paragraph", "content": content}}}
 }
 
+func mentioningCollaborationState(userIDs ...string) string {
+	doc := ygo.NewDoc()
+	fragment := ygo.NewXmlFragment(doc, "prosemirror")
+	txn := doc.WriteTxn()
+	paragraph := fragment.InsertXmlElement(txn, 0, "paragraph")
+	for index, id := range userIDs {
+		mention := paragraph.InsertXmlElement(txn, uint64(index), "mention")
+		mention.SetAttribute(txn, "id", id)
+		mention.SetAttribute(txn, "mentionType", "user")
+		mention.SetAttribute(txn, "label", id)
+	}
+	txn.Commit()
+	return base64.StdEncoding.EncodeToString(ygo.EncodeStateAsUpdate(doc))
+}
+
 // Signed in, end to end: a mention of someone who was removed from or
 // suspended in the workspace stays in the text it was written in, but new
 // content that mentions them is refused (400), and suspending, removing and
@@ -162,6 +180,15 @@ func testFormerMembersAreNotNewlyMentioned(t *testing.T, repo *store.SQLiteStore
 	written := mentioningDocument("Ping ", gone.ID, paused.ID)
 	comment := authRequest[domain.Comment](t, admin, http.MethodPost, api("/api/issues/"+issue.ID+"/comments"), map[string]any{"body": "Ping", "bodyData": written}, "test-workspace", http.StatusCreated)
 	document := authRequest[domain.Document](t, admin, http.MethodPost, api("/api/documents"), map[string]any{"title": "Mentions " + suffix, "content": "Ping", "contentData": written}, "test-workspace", http.StatusCreated)
+	state := mentioningCollaborationState(gone.ID, paused.ID)
+	collaborative := authRequest[domain.Document](t, admin, http.MethodPost, api("/api/documents"), map[string]any{"title": "Collaborative history", "contentState": state}, "test-workspace", http.StatusCreated)
+	pending := authRequest[domain.Document](t, admin, http.MethodPost, api("/api/documents"), map[string]any{"title": "Uncompacted history"}, "test-workspace", http.StatusCreated)
+	update, _ := base64.StdEncoding.DecodeString(state)
+	if _, err := repo.AppendDocumentCollaborationUpdate(t.Context(), "test-workspace", store.DocumentCollaborationUpdate{ID: "collab_history_" + suffix, DocumentID: pending.ID, ClientID: "history", Data: update, CreatedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	post := authRequest[domain.Post](t, admin, http.MethodPost, api("/api/posts"), map[string]any{"body": "Ping", "bodyData": written}, "test-workspace", http.StatusCreated)
+	meeting := authRequest[domain.Meeting](t, admin, http.MethodPost, api("/api/meetings"), map[string]any{"title": "Mention history", "startsAt": time.Now().UTC(), "notes": "Ping", "notesData": written}, "test-workspace", http.StatusCreated)
 
 	authRequest[map[string]any](t, admin, http.MethodPost, api("/api/workspaces/test-workspace/members/"+paused.ID+"/suspend"), nil, "", http.StatusNoContent)
 	authRequest[map[string]any](t, admin, http.MethodDelete, api("/api/workspaces/test-workspace/members/"+gone.ID), nil, "", http.StatusNoContent)
@@ -179,8 +206,20 @@ func testFormerMembersAreNotNewlyMentioned(t *testing.T, repo *store.SQLiteStore
 	bare := authRequest[domain.Comment](t, admin, http.MethodPost, api("/api/issues/"+issue.ID+"/comments"), map[string]any{"body": "No mentions"}, "test-workspace", http.StatusCreated)
 	plain := authRequest[domain.Document](t, admin, http.MethodPost, api("/api/documents"), map[string]any{"title": "No mentions " + suffix, "content": "Plain"}, "test-workspace", http.StatusCreated)
 	project := authRequest[domain.Project](t, admin, http.MethodPost, api("/api/projects"), map[string]any{"name": "Mentions " + suffix, "teamIds": []string{team.ID}}, "test-workspace", http.StatusCreated)
+	barePost := authRequest[domain.Post](t, admin, http.MethodPost, api("/api/posts"), map[string]any{"body": "No mentions"}, "test-workspace", http.StatusCreated)
 	for _, person := range []domain.User{gone, paused} {
 		mention := mentioningDocument("Hello ", person.ID)
+		stateOnly := mentioningCollaborationState(person.ID)
+		refused(http.MethodPost, "/api/documents", map[string]any{"title": "State-only mention", "contentState": stateOnly})
+		refused(http.MethodPatch, "/api/documents/"+plain.ID, map[string]any{"contentState": stateOnly})
+		refused(http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{"contentState": stateOnly})
+		refused(http.MethodPost, "/api/issues", map[string]any{"title": "State-only mention", "teamId": team.ID, "contentState": stateOnly})
+		refused(http.MethodPost, "/api/posts", map[string]any{"body": "Hello", "bodyData": mention})
+		refused(http.MethodPatch, "/api/posts/"+barePost.ID, map[string]any{"bodyData": mention})
+		refused(http.MethodPost, "/api/meetings", map[string]any{"title": "New mention", "startsAt": time.Now().UTC(), "notesData": mention})
+		refused(http.MethodPatch, "/api/meetings/"+meeting.ID, map[string]any{"descriptionData": mention})
+		draft := authRequest[domain.DocumentContentDraft](t, admin, http.MethodPost, api("/api/documents/"+plain.ID+"/drafts"), map[string]any{"contentState": stateOnly}, "test-workspace", http.StatusCreated)
+		refused(http.MethodPost, "/api/documents/"+plain.ID+"/drafts/"+draft.ID+"/publish", nil)
 		refused(http.MethodPost, "/api/issues/"+issue.ID+"/comments", map[string]any{"body": "Hello", "bodyData": mention})
 		refused(http.MethodPatch, "/api/issues/"+issue.ID+"/comments/"+bare.ID, map[string]any{"body": "Ping", "bodyData": mentioningDocument("Ping ", stays.ID, person.ID)})
 		refused(http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{"description": "Hello", "descriptionData": mention})
@@ -191,6 +230,11 @@ func testFormerMembersAreNotNewlyMentioned(t *testing.T, repo *store.SQLiteStore
 		refused(http.MethodPost, "/api/projects/"+project.ID+"/comments", map[string]any{"body": "Hello", "bodyData": mention})
 		refused(http.MethodPost, "/api/projects/"+project.ID+"/updates", map[string]any{"body": "Hello", "bodyData": mention})
 	}
+	authRequest[domain.Document](t, admin, http.MethodPatch, api("/api/documents/"+collaborative.ID), map[string]any{"contentState": mentioningCollaborationState(gone.ID, paused.ID, stays.ID)}, "test-workspace", http.StatusOK)
+	authRequest[domain.Document](t, admin, http.MethodPatch, api("/api/documents/"+collaborative.ID), map[string]any{"contentData": written}, "test-workspace", http.StatusOK)
+	authRequest[domain.Document](t, admin, http.MethodPatch, api("/api/documents/"+pending.ID), map[string]any{"contentState": state, "documentUpdateIds": []string{"collab_history_" + suffix}}, "test-workspace", http.StatusOK)
+	authRequest[domain.Post](t, admin, http.MethodPatch, api("/api/posts/"+post.ID), map[string]any{"body": "Ping again", "bodyData": written}, "test-workspace", http.StatusOK)
+	authRequest[domain.Meeting](t, admin, http.MethodPatch, api("/api/meetings/"+meeting.ID), map[string]any{"notes": "Ping again", "notesData": written}, "test-workspace", http.StatusOK)
 
 	// Text written while they were members keeps its mentions: edits that
 	// keep them save, a plain-text @name is text, and members can be mentioned.

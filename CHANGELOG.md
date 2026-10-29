@@ -297,6 +297,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Close former-member mention gaps in state-only collaborative edits, posts
+  and meetings. Decode Yjs server-side before accepting new mentions; imported
+  chat replies keep former-member mention labels as plain text. Persist member
+  suspension, removal and resumption domain events for the change log and User
+  webhooks, audit member actions, and include status payloads in development
+  realtime notices as well as authenticated ones.
 - Starting a cycle today no longer generates an extra upcoming cycle, even
   after refreshing. Automatic maintenance replenishes the configured upcoming
   count at scheduled cycle boundaries; cycle settings still apply their count.

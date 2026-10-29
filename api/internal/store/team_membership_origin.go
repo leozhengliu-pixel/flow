@@ -344,14 +344,22 @@ func (s *SQLiteStore) RemoveMemberWithChanges(ctx context.Context, workspaceID, 
 	if err = recordWorkspaceDepartureTx(ctx, tx, workspaceID, userID, time.Now()); err != nil {
 		return nil, err
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID); err != nil {
+	result, err := tx.ExecContext(ctx, `DELETE FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if count, err := result.RowsAffected(); err != nil || count == 0 {
+		return nil, ErrAuthForbidden
+	}
+	event, err := recordMemberStatusTx(ctx, tx, workspaceID, userID, "removed")
+	if err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	s.accountAccessChanged(userID)
-	s.PublishMemberStatus(ctx, workspaceID, userID, "removed")
+	s.publishMemberStatus(ctx, workspaceID, event)
 	return changes, nil
 }
 

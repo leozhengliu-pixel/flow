@@ -73,7 +73,7 @@ func metadataOnlyMutation(event string, payload any) bool {
 	// replace every issue and content record, deleting records another
 	// server committed meanwhile.
 	case "audit.agent_session", "audit.agent_run_mcp", "audit.chat_integration", "audit.code_host_account", "audit.coding_environment",
-		"audit.coding_mcp", "audit.oauth_application_credential", "audit.personal_connection",
+		"audit.coding_mcp", "audit.oauth_application_credential", "audit.personal_connection", "audit.workspace_member",
 		"scim.audited", "scim.token_revoked", "user_settings.scim_profile":
 		return true
 	// Audit log streaming only advances the streaming webhook's cursor.

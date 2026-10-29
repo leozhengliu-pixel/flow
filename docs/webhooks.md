@@ -69,7 +69,7 @@ signing secret, which is never returned again.
 | `cycles` | `Cycle` | A cycle is created, started, completed, updated or deleted |
 | `customers` | `Customer` | A customer is created, updated, merged or deleted |
 | `customer_requests` | `CustomerNeed` | A customer request is created, updated or deleted |
-| `users` | `User` | A workspace member changes |
+| `users` | `User` | A workspace member changes, including suspension, removal and resumption |
 | `releases` | `Release` | A release is created, updated, completed or deleted |
 | `release_notes` | `ReleaseNote` | A release note is created, updated or deleted |
 | `issue_sla` | `IssueSLA` | An SLA is set on an issue (`set`), is close to breaching (`highRisk`), or breached (`breached`) |
@@ -90,6 +90,20 @@ Application webhooks can additionally subscribe to `agent_session_events`
 
 Internal events (collaborative editing sync, drafts, reminders, triage
 suggestions, thread subscriptions) are never sent.
+
+Member status changes are durable domain events, visible in the change log
+and delivered to `users` subscribers (including application webhooks):
+
+| `eventType` | `action` | `data.status` |
+| --- | --- | --- |
+| `workspace_member.suspended` | `update` | `suspended` |
+| `workspace_member.removed` | `remove` | `removed` |
+| `workspace_member.resumed` | `update` | `active` |
+
+Their `data` includes `id`, `userId`, `status` and `active` (`true` only for
+resumption), plus available user identity fields. The same `userId` and
+`status` are sent in realtime payloads with or without authentication enabled.
+SCIM status changes use these events too; member actions are audited.
 
 ## Request headers
 

@@ -2964,6 +2964,9 @@ type Bootstrap struct {
 	// first use. The users collection keeps them, so references stay
 	// readable. Nil outside a write.
 	FormerMembers func() map[string]bool `json:"-"`
+	// CollaborationUpdates reads accepted, uncompacted updates through the
+	// write's reader, so mention checks preserve the live document too.
+	CollaborationUpdates func(documentID string) ([][]byte, error) `json:"-"`
 
 	// TrashRetentionDays is set on bootstrap responses only: how long deleted
 	// items stay restorable (FLOW_TRASH_RETENTION_DAYS).

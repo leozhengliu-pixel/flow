@@ -41,28 +41,31 @@ type dashboardInput struct {
 }
 
 type postInput struct {
-	Title         *string   `json:"title,omitempty"`
-	Body          *string   `json:"body,omitempty"`
-	TeamIDs       *[]string `json:"teamIds,omitempty"`
-	ProjectID     *string   `json:"projectId,omitempty"`
-	InitiativeID  *string   `json:"initiativeId,omitempty"`
-	SubscriberIDs *[]string `json:"subscriberIds,omitempty"`
-	Archived      *bool     `json:"archived,omitempty"`
+	Title         *string        `json:"title,omitempty"`
+	Body          *string        `json:"body,omitempty"`
+	BodyData      map[string]any `json:"bodyData,omitempty"`
+	TeamIDs       *[]string      `json:"teamIds,omitempty"`
+	ProjectID     *string        `json:"projectId,omitempty"`
+	InitiativeID  *string        `json:"initiativeId,omitempty"`
+	SubscriberIDs *[]string      `json:"subscriberIds,omitempty"`
+	Archived      *bool          `json:"archived,omitempty"`
 }
 
 type meetingInput struct {
-	Title         *string    `json:"title,omitempty"`
-	Description   *string    `json:"description,omitempty"`
-	AttendeeIDs   *[]string  `json:"attendeeIds,omitempty"`
-	TeamIDs       *[]string  `json:"teamIds,omitempty"`
-	ProjectIDs    *[]string  `json:"projectIds,omitempty"`
-	IssueIDs      *[]string  `json:"issueIds,omitempty"`
-	StartsAt      *time.Time `json:"startsAt,omitempty"`
-	DurationMins  *int       `json:"durationMinutes,omitempty"`
-	URL           *string    `json:"url,omitempty"`
-	Notes         *string    `json:"notes,omitempty"`
-	Transcript    *string    `json:"transcript,omitempty"`
-	SubscriberIDs *[]string  `json:"subscriberIds,omitempty"`
+	Title           *string        `json:"title,omitempty"`
+	Description     *string        `json:"description,omitempty"`
+	DescriptionData map[string]any `json:"descriptionData,omitempty"`
+	AttendeeIDs     *[]string      `json:"attendeeIds,omitempty"`
+	TeamIDs         *[]string      `json:"teamIds,omitempty"`
+	ProjectIDs      *[]string      `json:"projectIds,omitempty"`
+	IssueIDs        *[]string      `json:"issueIds,omitempty"`
+	StartsAt        *time.Time     `json:"startsAt,omitempty"`
+	DurationMins    *int           `json:"durationMinutes,omitempty"`
+	URL             *string        `json:"url,omitempty"`
+	Notes           *string        `json:"notes,omitempty"`
+	NotesData       map[string]any `json:"notesData,omitempty"`
+	Transcript      *string        `json:"transcript,omitempty"`
+	SubscriberIDs   *[]string      `json:"subscriberIds,omitempty"`
 }
 
 func settingCollection[T any](data domain.Bootstrap, key string) []T {
@@ -941,7 +944,13 @@ func applyPostInput(item *domain.Post, input postInput) {
 		item.Title = *input.Title
 	}
 	if input.Body != nil {
+		if *input.Body != item.Body {
+			item.BodyData = nil
+		}
 		item.Body = *input.Body
+	}
+	if input.BodyData != nil {
+		item.BodyData = input.BodyData
 	}
 	if input.TeamIDs != nil {
 		item.TeamIDs = normalizedStrings(*input.TeamIDs)
@@ -994,6 +1003,9 @@ func (s *server) createPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "post.created", item.ID, input, func(next *domain.Bootstrap) error {
+		if err := refuseNewFormerMemberMentions(next, nil, input.BodyData); err != nil {
+			return err
+		}
 		values := settingCollection[domain.Post](*next, postsSettingsKey)
 		values = append(values, item)
 		saveSettingCollection(next, postsSettingsKey, values)
@@ -1025,6 +1037,9 @@ func (s *server) updatePost(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		before := jsonSnapshot(items[i])
+		if err := refuseNewFormerMemberMentions(next, items[i].BodyData, input.BodyData); err != nil {
+			return err
+		}
 		applyPostInput(&items[i], input)
 		if err := validatePost(*next, &items[i]); err != nil {
 			return err
@@ -1090,7 +1105,13 @@ func applyMeetingInput(item *domain.Meeting, input meetingInput) {
 		item.Title = *input.Title
 	}
 	if input.Description != nil {
+		if strings.TrimSpace(*input.Description) != item.Description {
+			item.DescriptionData = nil
+		}
 		item.Description = strings.TrimSpace(*input.Description)
+	}
+	if input.DescriptionData != nil {
+		item.DescriptionData = input.DescriptionData
 	}
 	if input.AttendeeIDs != nil {
 		item.AttendeeIDs = normalizedStrings(*input.AttendeeIDs)
@@ -1114,7 +1135,13 @@ func applyMeetingInput(item *domain.Meeting, input meetingInput) {
 		item.URL = strings.TrimSpace(*input.URL)
 	}
 	if input.Notes != nil {
+		if *input.Notes != item.Notes {
+			item.NotesData = nil
+		}
 		item.Notes = *input.Notes
+	}
+	if input.NotesData != nil {
+		item.NotesData = input.NotesData
 	}
 	if input.Transcript != nil {
 		item.Transcript = *input.Transcript
@@ -1149,6 +1176,9 @@ func (s *server) createMeeting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "meeting.created", item.ID, input, func(next *domain.Bootstrap) error {
+		if err := refuseNewFormerMemberMentions(next, nil, []any{input.DescriptionData, input.NotesData}); err != nil {
+			return err
+		}
 		values := settingCollection[domain.Meeting](*next, meetingsSettingsKey)
 		values = append(values, item)
 		saveSettingCollection(next, meetingsSettingsKey, values)
@@ -1179,6 +1209,12 @@ func (s *server) updateMeeting(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		before := jsonSnapshot(items[i])
+		if err := refuseNewFormerMemberMentions(next, items[i].DescriptionData, input.DescriptionData); err != nil {
+			return err
+		}
+		if err := refuseNewFormerMemberMentions(next, items[i].NotesData, input.NotesData); err != nil {
+			return err
+		}
 		applyMeetingInput(&items[i], input)
 		if err := validateMeeting(*next, &items[i]); err != nil {
 			return err

@@ -468,6 +468,9 @@ func (s *server) handleCollaborationFrame(r *http.Request, client *realtimeSocke
 	if len(updateID) > 191 || !strings.HasPrefix(updateID, "collab_") {
 		return errors.New("invalid collaboration update id")
 	}
+	if err := s.refuseFormerMemberCollaborationUpdate(r, client, documentID, payload); err != nil {
+		return err
+	}
 	created, err := s.store.AppendDocumentCollaborationUpdate(ctx, client.workspace, store.DocumentCollaborationUpdate{ID: updateID, DocumentID: documentID, ClientID: client.clientID, Data: slices.Clone(payload), CreatedAt: time.Now().UTC()})
 	if err != nil {
 		return fmt.Errorf("persist collaboration update: %w", err)

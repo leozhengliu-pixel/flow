@@ -325,6 +325,7 @@ func TestHighFrequencyEventsAvoidFullWorkspacePath(t *testing.T) {
 		{"team.updated", map[string]any{"name": "x"}}, {"team_member.updated", nil},
 		{"workspace_member.updated", nil}, {"workspace_member.suspended", nil}, {"workspace_member.resumed", nil}, {"workspace_member.removed", nil},
 		{"workspace_member.username_updated", nil}, {"workspace_member.identity_cascaded", nil},
+		{"audit.workspace_member", nil},
 		{"workspace_invitations.created", nil}, {"workspace_invitation.revoked", nil}, {"workspace_invite_link.rotated", nil},
 		{"view.created", nil}, {"view.updated", nil}, {"view.deleted", nil}, {"dashboard.created", nil}, {"dashboard.updated", nil}, {"dashboard.deleted", nil},
 		{"label.created", nil}, {"label.updated", map[string]any{"name": "x"}}, {"issue_label.updated", map[string]any{"color": "#fff"}}, {"label_group.created", nil}, {"label_group.updated", map[string]any{"name": "x"}},

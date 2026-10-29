@@ -250,12 +250,21 @@ with `400` and `This person is no longer a member of the workspace and can't
 be mentioned`. A plain-text `@name` is kept as text; Markdown written through
 MCP does not turn a former member's name into a mention.
 
+The rule also inspects server-decoded Yjs state and websocket updates, even
+without `contentData` or `descriptionData`. Posts accept `bodyData`; meetings
+accept `descriptionData` and `notesData`, with the same rule on create and
+edit. Existing mentions stay; plain-text `@name` is not a mention. Chat
+integration replies retain former-member mention labels as plain text rather
+than rejecting the reply.
+
 Suspending, removing or resuming a member sends a realtime
 `workspace_member.suspended`, `workspace_member.removed` or
 `workspace_member.resumed` event (`aggregateId` and `payload.userId` are the
 member, `payload.status` is `suspended`, `removed` or `active`), including when
 SCIM provisioning makes the change, so open sessions update their people
-pickers without a reload.
+pickers without a reload. These are also persisted domain events exposed by
+the change log and `users` webhooks, and member actions have audit entries.
+Development mode sends the same realtime status payload as authenticated mode.
 
 ## Rate limits
 

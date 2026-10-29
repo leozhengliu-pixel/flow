@@ -1258,28 +1258,43 @@ func (s *SQLiteStore) SuspendMember(ctx context.Context, workspaceID, userID str
 	if err := s.ensureAdminRemains(ctx, workspaceID, userID); err != nil {
 		return err
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE workspace_memberships SET status='suspended' WHERE workspace_id=? AND user_id=?`, workspaceID, userID)
-	if err != nil {
-		return err
-	}
-	if count, _ := result.RowsAffected(); count == 0 {
-		return ErrAuthForbidden
-	}
-	s.accountAccessChanged(userID)
-	s.PublishMemberStatus(ctx, workspaceID, userID, "suspended")
-	return nil
+	return s.changeMemberStatus(ctx, workspaceID, userID, "suspended")
 }
 
 func (s *SQLiteStore) ResumeMember(ctx context.Context, workspaceID, userID string) error {
-	result, err := s.db.ExecContext(ctx, `UPDATE workspace_memberships SET status='active' WHERE workspace_id=? AND user_id=? AND status='suspended'`, workspaceID, userID)
+	return s.changeMemberStatus(ctx, workspaceID, userID, "active")
+}
+
+func (s *SQLiteStore) changeMemberStatus(ctx context.Context, workspaceID, userID, status string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	previous := "active"
+	if status == "active" {
+		previous = "suspended"
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE workspace_memberships SET status=? WHERE workspace_id=? AND user_id=? AND status=?`, status, workspaceID, userID, previous)
 	if err != nil {
 		return err
 	}
 	if count, _ := result.RowsAffected(); count == 0 {
 		return ErrAuthForbidden
 	}
-	s.syncMemberDirectoryByID(ctx, workspaceID, userID)
-	s.PublishMemberStatus(ctx, workspaceID, userID, "active")
+	event, err := recordMemberStatusTx(ctx, tx, workspaceID, userID, status)
+	if err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if status == "active" {
+		s.syncMemberDirectoryByID(ctx, workspaceID, userID)
+	} else {
+		s.accountAccessChanged(userID)
+	}
+	s.publishMemberStatus(ctx, workspaceID, event)
 	return nil
 }
 

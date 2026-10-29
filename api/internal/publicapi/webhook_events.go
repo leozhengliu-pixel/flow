@@ -207,12 +207,19 @@ type CustomerNeedWebhookEvent struct {
 	Data domain.CustomerRequest `json:"data" partial:"true"`
 }
 
-// UserWebhookEvent is sent when a workspace member changes.
+// UserWebhookEvent is sent when a workspace member changes, including
+// workspace_member.suspended, workspace_member.removed and workspace_member.resumed.
 type UserWebhookEvent struct {
 	WebhookEnvelope
 	DataChange
-	Type string      `json:"type" const:"User"`
-	Data domain.User `json:"data" partial:"true"`
+	Type string          `json:"type" const:"User"`
+	Data UserWebhookData `json:"data" partial:"true"`
+}
+
+type UserWebhookData struct {
+	domain.User
+	UserID string `json:"userId,omitempty"`
+	Status string `json:"status,omitempty" enum:"active,suspended,removed"`
 }
 
 // ReleaseWebhookEvent is sent when a release is created, updated, completed or deleted.

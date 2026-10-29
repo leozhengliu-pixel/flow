@@ -156,7 +156,9 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 		}
 		traceMark(ctx, "load")
 		metadata.FormerMembers = s.formerMemberLookup(ctx, tx, &metadata)
+		metadata.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspace)
 		id, err := mutate(&metadata)
+		metadata.CollaborationUpdates = nil
 		metadata.FormerMembers = nil
 		traceMark(ctx, "mutate")
 		if err != nil {
