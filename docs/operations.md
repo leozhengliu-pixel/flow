@@ -202,16 +202,21 @@ p50 / p95 values in milliseconds (five samples):
 | Creator groups | 359.3 / 363.1 | 59.5 / 67.9 |
 | Cycle groups | 361.3 / 367.2 | 46.9 / 49.7 |
 | Customer groups | 33572.7 / 34506.2 | 56.1 / 95.8 |
-| Project filter | 363.7 / 456.6 | 103.4 / 173.4 |
-| Subscriber filter | 293.8 / 432.1 | 56.7 / 126.3 |
-| Estimate filter | 313.5 / 507.2 | 52.6 / 144.6 |
+| Project filter | 316.1 / 331.6 | 55.8 / 105.3 |
+| Substring filter | 261.9 / 270.5 | 127.8 / 132.5 |
+| Broad full-text filter | capped (>5000 ms) | 834.5 / 1010.4 |
+| Subscriber filter | 292.2 / 323.0 | 54.3 / 87.4 |
+| Estimate filter | 319.5 / 360.5 | 59.0 / 135.8 |
 
-These are development measurements, not service-level targets. A later run
-with a broad full-text term timed out in the previous recursive SQL path
-while MySQL reported `FULLTEXT initialization`; no p50/p95 is claimed for
-that comparison. The initial substring comparison was 347.7 / 405.2 ms
-versus 287.6 / 300.8 ms, before further narrowing the substring scan to the
-team/archive scope.
+These are development measurements, not service-level targets. Group and
+filter rows came from separate paired runs on the same generated shape.
+The previous recursive SQL path stalled in `FULLTEXT initialization` for
+the broad term. The comparison now limits old MySQL full-text statements
+to five seconds on the server (client cancellation alone can leave them
+running); its baseline is censored, not a measured p50/p95. The new broad
+search path still costs about a second on this fixture. Set
+`FLOW_NESTED_COUNT_VIEW=filter` to repeat only the filter comparisons, or
+use a substring such as `customer` to select one view.
 
 PostgreSQL numbering now assigns the batch, advances the head and retires
 the queue in one statement after acquiring its advisory lock. In

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -15,6 +16,8 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+
+	"github.com/go-sql-driver/mysql"
 )
 
 // TestNestedIssueCountTimings times nested group counts against the full walk
@@ -134,8 +137,16 @@ func TestNestedIssueCountTimings(t *testing.T) {
 		{"team, focus cases", IssueRecordQuery{Access: member, TeamIDs: []string{team}, GroupBy: "cases", GroupCases: []IssueGroupCase{{Value: "urgent", Filter: IssueFilter{Field: "priority", Values: []string{"1"}}}, {Value: "started", Filter: IssueFilter{Field: "statusType", Values: []string{"started"}}}}}},
 	}
 	if os.Getenv("FLOW_NESTED_COUNT_COMPARE") != "" {
+		// A server-side limit stops a pathological old full-text plan too;
+		// cancelling only its client context can leave MySQL running it.
+		if driver == "mysql" {
+			repository.db.SetMaxOpenConns(1)
+		}
 		lines := []string{fmt.Sprintf("%s, %d issues, 5 paired uncached samples:", driver, n), "| view | before p50/p95 ms | after p50/p95 ms |", "|---|---:|---:|"}
 		for _, view := range views {
+			if selected := os.Getenv("FLOW_NESTED_COUNT_VIEW"); selected != "" && !strings.Contains(view.name, selected) {
+				continue
+			}
 			if !slices.Contains([]string{"team, member, project", "team, member, creator", "team, member, cycle", "team, member, customer", "team, project filter", "team, text filter", "team, search filter", "team, subscriber filter", "team, attribute filter"}, view.name) {
 				continue
 			}
@@ -143,18 +154,26 @@ func TestNestedIssueCountTimings(t *testing.T) {
 			q.Workspace, q.Archived, q.Nested = workspace, "false", true
 			q = withoutRedundantIssueAccess(q)
 			samples := [2][]time.Duration{}
+			capped := false
 			for range 5 {
 				var reference []IssueRecordGroup
+				referenceOK := false
 				for mode, run := range []func(context.Context, IssueRecordQuery) ([]IssueRecordGroup, error){repository.nestedIssueGroupsBeforeSelections, repository.nestedIssueGroups} {
 					start := time.Now()
 					groups, err := run(ctx, q)
 					samples[mode] = append(samples[mode], time.Since(start))
 					if err != nil {
+						var mysqlErr *mysql.MySQLError
+						if mode == 0 && errors.As(err, &mysqlErr) && mysqlErr.Number == 3024 {
+							capped = true
+							continue
+						}
 						t.Fatal(err)
 					}
 					if mode == 0 {
 						reference = groups
-					} else if !slices.Equal(groups, reference) {
+						referenceOK = true
+					} else if referenceOK && !slices.Equal(groups, reference) {
 						t.Fatalf("%s counts differ: %v != %v", view.name, groups, reference)
 					}
 				}
@@ -163,7 +182,11 @@ func TestNestedIssueCountTimings(t *testing.T) {
 				slices.Sort(values)
 				return fmt.Sprintf("%.1f / %.1f", float64(values[len(values)/2].Microseconds())/1000, float64(values[len(values)-1].Microseconds())/1000)
 			}
-			lines = append(lines, fmt.Sprintf("| %s | %s | %s |", view.name, percentiles(samples[0]), percentiles(samples[1])))
+			before := percentiles(samples[0])
+			if capped {
+				before = "capped (>5000 ms)"
+			}
+			lines = append(lines, fmt.Sprintf("| %s | %s | %s |", view.name, before, percentiles(samples[1])))
 		}
 		t.Log(strings.Join(lines, "\n"))
 		return
@@ -321,6 +344,12 @@ func TestNestedIssueCountTimings(t *testing.T) {
 // The selected benchmark views could use neither the counters nor the old
 // forest plan: they counted in SQL and then walked the matching subtrees.
 func (s *SQLiteStore) nestedIssueGroupsBeforeSelections(ctx context.Context, query IssueRecordQuery) ([]IssueRecordGroup, error) {
+	if s.dialect == "mysql" && query.SearchText != "" {
+		if _, err := s.db.ExecContext(ctx, `SET SESSION max_execution_time=5000`); err != nil {
+			return nil, err
+		}
+		defer s.db.ExecContext(ctx, `SET SESSION max_execution_time=0`)
+	}
 	groups, err := s.flatIssueGroupsBySQL(ctx, query)
 	if err != nil || len(groups) == 0 {
 		return groups, err
