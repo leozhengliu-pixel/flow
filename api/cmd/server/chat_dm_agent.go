@@ -576,10 +576,16 @@ func (s *server) chatDMAnswerApproval(ctx context.Context, dm chatDMRequest, act
 // message of sessionID. The reply runs in the background; its card follows it.
 func (s *server) chatDMStartReply(ctx context.Context, dm chatDMRequest, sessionID, text string, resources []chatDMResource) error {
 	if sessionID != "" {
-		if _, busy := chatDMActive.Load(sessionID); busy {
+		if _, busy := chatDMActive.LoadOrStore(sessionID, struct{}{}); busy {
 			return s.chatDMNotice(ctx, dm, chatDMText(dm.zh, "Flow is still answering your previous message in this conversation. Reply again when it has finished.", "Flow 还在回复这段对话中的上一条消息，请等它完成后再回复。"))
 		}
 	}
+	started := false
+	defer func() {
+		if !started && sessionID != "" {
+			chatDMActive.Delete(sessionID)
+		}
+	}()
 	attachments, problem, err := s.chatDMAttachments(ctx, dm.record, dm.command.MessageID, resources, dm.zh)
 	if err != nil {
 		return err
@@ -604,6 +610,7 @@ func (s *server) chatDMStartReply(ctx context.Context, dm chatDMRequest, session
 	reply := &chatDMReply{s: s, dm: dm, cardID: cardID, sessionID: sessionID, wake: make(chan struct{}, 1), approvalCards: map[string]chatDMApprovalCardState{}, resolved: map[string]string{}}
 	runCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), chatDMRunLimit)
 	chatDMReplies.Add(1)
+	started = true
 	go func() {
 		defer chatDMReplies.Done()
 		defer cancel()
