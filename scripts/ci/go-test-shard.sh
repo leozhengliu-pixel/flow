@@ -27,6 +27,8 @@
 # given by a hash of its name, which depends on that name alone. Without timings
 # for the package every test is placed that way. Refresh the file with
 # update-go-test-timings.sh. Needs jq when a timings file exists.
+# CI currently uses 8 cmd/server shards and 3 internal/store shards; keep the
+# workflow matrix and its partition checks in sync when changing those counts.
 #
 # Only top-level Test*, Fuzz* and Example* functions are assigned; their subtests
 # run with their parent. Benchmarks are not run by `go test` without -bench and are

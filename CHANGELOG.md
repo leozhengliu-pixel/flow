@@ -9,6 +9,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- CI uses three store test shards, refreshes timing weights in a weekly pull
+  request, and builds the browser-test API before the server readiness timeout.
 - Security browser coverage for server-fetched X/Figma and GitHub/GitLab cards,
   service worker updates and kill switches, plus opt-in real-provider embeds.
 - Requests from Lark and Feishu group messages: in a group bound to a team
