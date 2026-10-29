@@ -10,6 +10,7 @@ import { useMentionConversion } from '@/components/editor/mentions/use-mention-c
 import { DescriptionImage } from '@/components/issue/editor/image-extension'
 import { DescriptionFile, DescriptionVideo } from '@/components/issue/editor/file-extension'
 import { structuredBlocks } from '@/components/issue/editor/structured-blocks'
+import { MathBlock } from '@/components/issue/editor/math-extension'
 import '@/components/issue/issue-description-editor.css'
 import { useOptionalTranslate } from '@/i18n/i18n'
 
@@ -20,7 +21,7 @@ export function RichComment({ body, data, version }: { body: string; data?: Reco
   const editor = useEditor({
     immediatelyRender: false,
     editable: false,
-    extensions: [FlowStarterKit.configure({ link: { openOnClick: false, autolink: true, linkOnPaste: true } }), LinkBehavior, ClipboardOrigin, Markdown, MentionChipNode, EmbedNode, DescriptionImage, DescriptionFile.configure({ preview: false }), DescriptionVideo, ...structuredBlocks],
+    extensions: [FlowStarterKit.configure({ link: { openOnClick: false, autolink: true, linkOnPaste: true } }), LinkBehavior, ClipboardOrigin, Markdown, MathBlock, MentionChipNode, EmbedNode, DescriptionImage, DescriptionFile.configure({ preview: false }), DescriptionVideo, ...structuredBlocks],
     content: initial.content,
     contentType: initial.contentType,
     editorProps: { attributes: { role: 'document', 'aria-label': t('Comment') } },

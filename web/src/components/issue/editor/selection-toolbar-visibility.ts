@@ -7,5 +7,5 @@ import type { Editor } from '@tiptap/react'
  * editor goes away would otherwise attach the toolbar to the page again.
  */
 export function showsSelectionToolbar({ from, to, editor }: { from: number; to: number; editor: Editor }) {
-  return !editor.isDestroyed && from !== to && !editor.isActive('codeBlock') && !editor.isActive('embed')
+  return !editor.isDestroyed && from !== to && !editor.isActive('codeBlock') && !editor.isActive('mathBlock') && !editor.isActive('embed')
 }

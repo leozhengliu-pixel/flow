@@ -1,4 +1,4 @@
-import { ChevronsDownUp, Code2, Heading1, Heading2, Heading3, Heading4, Image as ImageIcon, Lightbulb, List, ListOrdered, ListTodo, Minus, Paperclip, Quote, Table2, Workflow } from 'lucide-react'
+import { ChevronsDownUp, Code2, Heading1, Heading2, Heading3, Heading4, Image as ImageIcon, Lightbulb, List, ListOrdered, ListTodo, Minus, Paperclip, Quote, Radical, Table2, Workflow } from 'lucide-react'
 import Placeholder from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCaret from '@tiptap/extension-collaboration-caret'
@@ -32,6 +32,7 @@ import { handleSelectionShortcut } from './editor/selection-shortcuts'
 import { DescriptionImage, type DescriptionImageUpload } from './editor/image-extension'
 import { DescriptionCallout, DescriptionCalloutSchema } from './editor/callout-extension'
 import { DescriptionDiagram } from './editor/diagram-extension'
+import { isMathInput, MathBlock, MathBlockSchema } from './editor/math-extension'
 import { DescriptionFile, DescriptionVideo } from './editor/file-extension'
 import { insertPickedFiles } from './editor/insert-picked-files'
 import { MentionExtension } from './editor/mention-extension'
@@ -217,6 +218,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       DescriptionFile,
       DescriptionCallout,
       DescriptionDiagram,
+      MathBlock,
       EmbedPasteNode,
       MentionChipNode,
       MentionLinksExtension.configure({ getData: getEntityData }),
@@ -244,7 +246,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
         translate: 'no',
       },
       handleKeyDown: (view, event) => {
-        if (handleEditorSubmit(event, submitRef.current)) return true
+        if (!isMathInput(view.state) && handleEditorSubmit(event, submitRef.current)) return true
         if (handleSelectionShortcut(event, view.state.selection, view.state.doc, selectionActionsRef.current, liveEditorRef.current)) return true
         if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.code === 'KeyU') {
           event.preventDefault()
@@ -425,6 +427,11 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
         const { $from } = editor.state.selection
         if ($from.parent.isTextblock && !$from.parent.textContent) editor.chain().focus().setCodeBlock({ language: 'mermaid' }).run()
         else editor.chain().focus().insertContent({ type: 'codeBlock', attrs: { language: 'mermaid' } }).run()
+      }) },
+      { id: 'math', group: 'blocks', label: 'LaTeX math block', keywords: 'latex math equation formula', icon: Radical, run: execute(() => {
+        const { $from } = editor.state.selection
+        if ($from.parent.type.name === 'paragraph' && !$from.parent.content.size) editor.chain().focus().setNode('mathBlock').run()
+        else editor.chain().focus().insertContent({ type: 'mathBlock' }).run()
       }) },
       { id: 'collapse', group: 'blocks', label: 'Collapsible section', keywords: 'details toggle fold', shortcut: '⌘⇧6', icon: ChevronsDownUp, run: execute(() => editor.chain().focus().setDetails().run()) },
       { id: 'quote', group: 'blocks', label: 'Blockquote', keywords: 'blockquote citation', shortcut: '⌥⇧.', icon: Quote, run: execute(() => editor.chain().focus().toggleBlockquote().run()) },
@@ -668,6 +675,7 @@ function schemaExtensions() {
     DescriptionFile,
     DescriptionCalloutSchema,
     DescriptionDiagram,
+    MathBlockSchema,
     MentionExtension,
     EmbedSchema,
     InlineCommentMark,
@@ -726,7 +734,7 @@ function collaborationColor(value: string) {
 }
 
 function getMentionState(state: EditorState): MentionState {
-  if (!state.selection.empty) return closedMention
+  if (!state.selection.empty || state.selection.$from.parent.type.spec.code) return closedMention
   const { $from } = state.selection
   const text = $from.parent.textContent.slice(0, $from.pos - $from.start($from.depth))
   const match = text.match(/(?:^|\s)@([^\s@]*)$/)

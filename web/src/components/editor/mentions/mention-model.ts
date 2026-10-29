@@ -252,7 +252,7 @@ export function convertMentionLinks(content: JSONContent, data: BootstrapData | 
   if (!data) return { content, changed: false, unresolved }
   const needsFetch = (target: AgentEntityTarget) => (target.kind === 'issue' || target.kind === 'project') && !resolveMentionEntity(data, target)
   const convertChildren = (children: JSONContent[], parent: JSONContent): JSONContent[] | undefined => {
-    if (parent.type === 'codeBlock' || parent.type === 'diagram') return undefined
+    if (parent.type === 'codeBlock' || parent.type === 'mathBlock' || parent.type === 'diagram') return undefined
     let changed = false
     const output: JSONContent[] = []
     const runs: Run[] = []

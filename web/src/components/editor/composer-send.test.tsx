@@ -27,6 +27,35 @@ const renderComposer = (props: Parameters<typeof Composer>[0]) => render(<I18nPr
 const box = () => screen.findByRole('textbox', { name: 'Leave a comment…' })
 
 describe('sending a comment', () => {
+  it('keeps typed inline dollar math as literal paragraph text', async () => {
+    const submit = vi.fn().mockResolvedValue(undefined)
+    const { container } = renderComposer({ onSubmit: submit })
+    await userEvent.type(await box(), '$x^2$')
+    expect(container.querySelector('.math-block-container')).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Submit comment' }))
+    expect(submit).toHaveBeenCalledWith('$x^2$', expect.objectContaining({ content: [{ type: 'paragraph', content: [{ type: 'text', text: '$x^2$' }] }] }))
+  })
+
+  it('edits a $$ math block without submitting on Enter and posts its Markdown source', async () => {
+    const user = userEvent.setup()
+    const submit = vi.fn().mockResolvedValue(undefined)
+    const { container } = renderComposer({ onSubmit: submit })
+    await user.type(await box(), '$$')
+    await user.keyboard('{Enter}x^2{Enter}+ y')
+    expect(submit).not.toHaveBeenCalled()
+    expect(container.querySelector('.math-block-container')).toHaveAttribute('data-editing')
+    await user.click(screen.getByRole('button', { name: 'Submit comment' }))
+    expect(submit).toHaveBeenCalledWith('$$\nx^2\n+ y\n$$', expect.objectContaining({ type: 'doc', content: expect.arrayContaining([expect.objectContaining({ type: 'mathBlock' })]) }))
+  })
+
+  it('opens a Markdown-only formula for comment editing without flattening it', async () => {
+    const submit = vi.fn().mockResolvedValue(undefined)
+    const { container } = renderComposer({ initialValue: '$$\nx^2\n$$', onSubmit: submit })
+    await waitFor(() => expect(container.querySelector('.katex')).not.toBeNull())
+    await userEvent.click(screen.getByRole('button', { name: 'Submit comment' }))
+    expect(submit).toHaveBeenCalledWith('$$\nx^2\n$$', expect.anything())
+  })
+
   it('clears the composer the moment it is sent, while the request is still pending', async () => {
     const user = userEvent.setup()
     let finish: () => void = () => undefined

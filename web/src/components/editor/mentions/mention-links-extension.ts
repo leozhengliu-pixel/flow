@@ -102,7 +102,7 @@ export const MentionLinksExtension = Extension.create<MentionLinksOptions>({
         if (!data || !mention || !this.editor.isEditable) return null
         const target = typedIdentifierTarget(data, match[1])
         if (!target) return null
-        if (state.doc.resolve(range.from).parent.type.name === 'codeBlock') return null
+        if (state.doc.resolve(range.from).parent.type.spec.code) return null
         const held = resolveMentionEntity(data, target)
         if (!held) {
           const view = this.editor.view
@@ -116,4 +116,3 @@ export const MentionLinksExtension = Extension.create<MentionLinksOptions>({
     })]
   },
 })
-

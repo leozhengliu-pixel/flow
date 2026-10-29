@@ -82,7 +82,7 @@ describe('slash menu', () => {
     act(() => { editor.chain().focus().insertContent('/').run() })
     const menu = await screen.findByRole('listbox', { name: 'Insert block' })
     const labels = within(menu).getAllByRole('option').map(option => option.querySelector('.description-command-copy')?.textContent)
-    expect(labels).toEqual(['Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Bulleted list', 'Numbered list', 'Checklist', 'Insert media…', 'Attach files…', 'Code block', 'Diagram', 'Collapsible section', 'Blockquote', 'Callout'])
+    expect(labels).toEqual(['Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Bulleted list', 'Numbered list', 'Checklist', 'Insert media…', 'Attach files…', 'Code block', 'Diagram', 'LaTeX math block', 'Collapsible section', 'Blockquote', 'Callout'])
     expect(within(menu).getAllByRole('separator')).toHaveLength(3)
     expect(within(menu).queryByText('Text')).not.toBeInTheDocument()
     expect(within(menu).queryByRole('option', { name: /^Table/ })).not.toBeInTheDocument()

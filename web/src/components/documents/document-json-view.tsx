@@ -8,6 +8,7 @@ import { DIFF_ADDED_MARK, DIFF_REMOVED_MARK, nodeText, type PMMark, type PMNode 
 import { embedLayoutFor } from '@/components/editor/embeds/embed-providers'
 import { ReadOnlyEmbed } from '@/components/editor/embeds/embed-node-view'
 import { isEmptyDocument } from './document-json-doc'
+import { MathRender } from '@/components/issue/editor/math-render'
 import './document-json-view.css'
 
 const SAFE_URL = /^(https?:|mailto:|tel:|\/|#)/i
@@ -92,6 +93,12 @@ function renderBlock(node: PMNode, key: string): ReactNode {
     case 'codeBlock': {
       const language = typeof node.attrs?.language === 'string' ? node.attrs.language : ''
       return <pre data-language={language || undefined} key={key} {...diff}><code>{renderInline(children, key)}</code></pre>
+    }
+    case 'mathBlock': {
+      if (children?.some(child => child.marks?.some(mark => mark.type === DIFF_ADDED_MARK || mark.type === DIFF_REMOVED_MARK))) {
+        return <pre key={key} {...diff}><code>{renderInline(children, key)}</code></pre>
+      }
+      return <div key={key} {...diff} className={`math-block-container${diff.className ? ` ${diff.className}` : ''}`}><MathRender source={nodeText(node)}/></div>
     }
     case 'table':
       return <div className="history-table-wrap" key={key} {...diff}><table><tbody>{renderBlocks(children, key)}</tbody></table></div>
