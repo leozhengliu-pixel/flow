@@ -599,14 +599,15 @@
   {
     "name": "mcp__flow.prepare_attachment_upload",
     "access": "write",
-    "description": "Prepare a direct Flow file upload for an existing issue. After PUT and create_attachment_from_upload, the file is inserted into the issue description as an inline image, video, or file card — not only listed under resources.",
+    "description": "Prepare a direct Flow file upload for an existing issue or document: pass exactly one of `issue` or `document` (a document you can edit). Returns `uploadUrl` (send the bytes there with one PUT and the returned `headers`, within 15 minutes) and `assetUrl`, the file's stable URL (`url` is its /uploads/… path, the form the editor stores). Then call create_attachment_from_upload with the same target. assetUrl serves the file only after that call, to people who can see the issue or document. Issue files are inserted into the description as an inline image, video, or file card; document files are only recorded unless create_attachment_from_upload asks for `insert`: \"append\".",
     "input_schema": {
       "type": "object",
-      "required": ["contentType", "filename", "issue", "size"],
+      "required": ["contentType", "filename", "size"],
       "properties": {
         "contentType": { "type": "string", "maxLength": 255, "description": "MIME type, e.g. image/png or application/pdf" },
+        "document": { "type": "string", "description": "Document ID or slug to attach the file to (instead of `issue`)" },
         "filename": { "type": "string", "description": "Filename for the upload, e.g. screenshot.png" },
-        "issue": { "type": "string", "description": "Issue ID or identifier (e.g., LIN-123)" },
+        "issue": { "type": "string", "description": "Issue ID or identifier (e.g., ENG-123) to attach the file to (instead of `document`)" },
         "size": { "type": "integer", "minimum": 0, "maximum": 20971520, "description": "Exact file size in bytes. Must be at most 20 MiB." },
         "subtitle": { "type": "string", "maxLength": 512, "description": "Suggested attachment subtitle for the finalize step" },
         "title": { "type": "string", "maxLength": 512, "description": "Suggested attachment title for the finalize step" }
@@ -660,15 +661,17 @@
   {
     "name": "mcp__flow.create_attachment",
     "access": "write",
-    "description": "Deprecated fallback for tiny files only. Accepts base64 file content, verifies SHA-256 checksum, and uploads it through the MCP worker. The file is inserted into the issue description as an inline image, video, or file card. Prefer `prepare_attachment_upload` plus direct PUT plus `create_attachment_from_upload`.",
+    "description": "Deprecated fallback for tiny files only. Accepts base64 file content, verifies SHA-256 checksum, and uploads it through the MCP worker to an issue or a document (exactly one of `issue` or `document`). Issue files are inserted into the description as an inline image, video, or file card unless `insert` is \"none\"; document files are only recorded unless `insert` is \"append\". Returns the attachment `id`, its `url`, `assetUrl` and a ready `markdown` snippet. Prefer `prepare_attachment_upload` plus direct PUT plus `create_attachment_from_upload`.",
     "input_schema": {
       "type": "object",
-      "required": ["base64Content", "contentType", "filename", "issue", "sha256"],
+      "required": ["base64Content", "contentType", "filename", "sha256"],
       "properties": {
         "base64Content": { "type": "string", "description": "Deprecated base64-encoded file content to upload" },
         "contentType": { "type": "string", "description": "MIME type for the upload (e.g., 'image/png', 'application/pdf')" },
+        "document": { "type": "string", "description": "Document ID or slug to attach the file to (instead of `issue`)" },
         "filename": { "type": "string", "description": "Filename for the upload (e.g., 'screenshot.png')" },
-        "issue": { "type": "string", "description": "Issue ID or identifier (e.g., LIN-123)" },
+        "insert": { "type": "string", "enum": ["none", "append"], "description": "Where the file goes in the body: \"append\" adds an image, video or file card at the end; \"none\" only records the attachment. Default: \"append\" for issues, \"none\" for documents." },
+        "issue": { "type": "string", "description": "Issue ID or identifier (e.g., ENG-123) to attach the file to (instead of `document`)" },
         "sha256": { "type": "string", "description": "Expected SHA-256 hex digest of the decoded file bytes." },
         "size": { "type": "integer", "minimum": 0, "maximum": 20971520, "description": "Optional expected decoded file size in bytes. Rejects the upload if it does not match." },
         "subtitle": { "type": "string", "description": "Optional subtitle for the attachment" },
@@ -730,13 +733,15 @@
   {
     "name": "mcp__flow.create_attachment_from_upload",
     "access": "write",
-    "description": "Link an already-uploaded Flow assetUrl to an existing issue. Inserts the file into the issue description as an inline image, video, or file card rather than only listing it under resources.",
+    "description": "Attach a file uploaded with prepare_attachment_upload (and its PUT) to the issue or document it was prepared for (pass the same `issue` or `document`). Issue files are inserted into the description as an inline image, video, or file card unless `insert` is \"none\". Document files are recorded on the document and the body is left alone unless `insert` is \"append\"; to place the file yourself, put the returned `markdown` (![title](url) for images, [title](url) otherwise) in the document with save_document. Returns the attachment `id`, `url`, `assetUrl`, `markdown` and `inserted`.",
     "input_schema": {
       "type": "object",
-      "required": ["assetUrl", "issue"],
+      "required": ["assetUrl"],
       "properties": {
-        "assetUrl": { "type": "string", "description": "Flow upload assetUrl returned by prepare_attachment_upload" },
-        "issue": { "type": "string", "description": "Issue ID or identifier (e.g., LIN-123)" },
+        "assetUrl": { "type": "string", "description": "The assetUrl (or uploadUrl) returned by prepare_attachment_upload" },
+        "document": { "type": "string", "description": "Document ID or slug the upload was prepared for (instead of `issue`)" },
+        "insert": { "type": "string", "enum": ["none", "append"], "description": "Where the file goes in the body: \"append\" adds an image, video or file card at the end; \"none\" only records the attachment. Default: \"append\" for issues, \"none\" for documents." },
+        "issue": { "type": "string", "description": "Issue ID or identifier (e.g., ENG-123) the upload was prepared for (instead of `document`)" },
         "subtitle": { "type": "string", "description": "Optional attachment subtitle" },
         "title": { "type": "string", "description": "Attachment title. Defaults to filename or asset URL" }
       }
@@ -875,19 +880,20 @@
   {
     "name": "mcp__flow.delete_attachment",
     "access": "write",
-    "description": "Delete an attachment by ID",
+    "description": "Delete an attachment of an issue or of a document you can edit, by ID. An uploaded file stops being served.",
     "input_schema": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "description": "Attachment ID" } } }
   },
   {
     "name": "mcp__flow.save_attachment",
     "access": "write",
-    "description": "Create or update a link attachment on an issue: an external URL with a title, optional subtitle, icon URL and key/value metadata (for example a support ticket, pull request or dashboard). Saving the same URL on the same issue again updates that attachment instead of duplicating it.",
+    "description": "Create or update a link attachment on an issue or a document you can edit (exactly one of `issue` or `document`): an external URL with a title, optional subtitle, icon URL and key/value metadata (for example a support ticket, pull request or dashboard). Saving the same URL on the same issue or document again updates that attachment instead of duplicating it. The result includes a `markdown` link to place in a body.",
     "input_schema": {
       "type": "object",
-      "required": ["issue", "url"],
+      "required": ["url"],
       "properties": {
-        "issue": { "type": "string", "description": "Issue ID or identifier (e.g., ENG-123)" },
-        "url": { "type": "string", "description": "http or https URL of the linked resource; the attachment's identity on this issue" },
+        "document": { "type": "string", "description": "Document ID or slug (instead of `issue`)" },
+        "issue": { "type": "string", "description": "Issue ID or identifier (e.g., ENG-123) (instead of `document`)" },
+        "url": { "type": "string", "description": "http or https URL of the linked resource; the attachment's identity on this issue or document" },
         "title": { "type": "string", "maxLength": 255, "description": "Attachment title. Defaults to the URL host for new attachments" },
         "subtitle": { "type": "string", "maxLength": 255, "description": "Optional secondary line, e.g. status or owner" },
         "iconUrl": { "type": "string", "description": "Optional http(s) icon URL shown next to the link" },
@@ -1291,7 +1297,7 @@
   {
     "name": "mcp__flow.save_document",
     "access": "write",
-    "description": "Create or edit a Flow document. Without `id`, `title` is required. `content` is Markdown and replaces the body; to change part of it pass `patch` instead. Documents can belong to a project, a team, and/or an issue (Flow documents do not attach to initiatives). `template` starts a new document from a document template.",
+    "description": "Create or edit a Flow document. Without `id`, `title` is required. `content` is Markdown and replaces the body; to change part of it pass `patch` instead. Documents can belong to a project, a team, and/or an issue (Flow documents do not attach to initiatives). `template` starts a new document from a document template. To include files (screenshots, logs, reports), upload them with prepare_attachment_upload and create_attachment_from_upload with `document`, then put the returned `markdown` in the content: a line holding only ![title](url) shows the image, and [title](url) links the file.",
     "input_schema": {
       "type": "object",
       "required": [],

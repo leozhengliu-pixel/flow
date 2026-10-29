@@ -166,7 +166,18 @@ func contractCases(tool flowMCPTool) []contractCase {
 		args[key] = value
 		return args
 	}
+	// The attachment tools take exactly one of `issue` or `document` (checked by the handler, the same refusal on
+	// both paths).
+	attachmentTool := slices.Contains([]string{"prepare_attachment_upload", "create_attachment", "create_attachment_from_upload", "save_attachment"}, tool.Name)
+	if attachmentTool {
+		valid["issue"] = "x"
+	}
 	cases := []contractCase{{name: "required arguments", args: valid, accept: true}, {name: "unknown argument", args: with("notAnArgument", "x")}}
+	if attachmentTool {
+		noTarget := maps.Clone(valid)
+		delete(noTarget, "issue")
+		cases = append(cases, contractCase{name: "no issue or document", args: noTarget}, contractCase{name: "both issue and document", args: with("document", "x")})
+	}
 	required, _ := schema["required"].([]any)
 	if len(required) > 0 {
 		args := maps.Clone(valid)
