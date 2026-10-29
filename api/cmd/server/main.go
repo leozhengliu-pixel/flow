@@ -926,7 +926,6 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/cycles/{id}/graph", s.getCycleGraph)
 	mux.HandleFunc("PUT /api/cycles/{id}/capacity", s.updateCycleCapacity)
 	mux.HandleFunc("POST /api/cycles/{id}/start", s.startCycle)
-	mux.HandleFunc("POST /api/cycles/{id}/complete", s.completeCycle)
 	mux.HandleFunc("POST /api/cycles/{id}/resources", s.createCycleResource)
 	mux.HandleFunc("DELETE /api/cycles/{id}/resources/{resourceId}", s.deleteCycleResource)
 	mux.HandleFunc("POST /api/cycles/{id}/calendar-token", s.cycleCalendarToken)
@@ -2775,9 +2774,8 @@ func (s *server) updateCycleSettings(w http.ResponseWriter, r *http.Request) {
 				}
 			} else {
 				first := appendFutureCycle(data, teamID, nil)
-				if err := transitionToCycle(data, first, time.Now().UTC()); err != nil {
-					return err
-				}
+				startCycleOn(first, time.Now().UTC())
+				ensureUpcomingCycles(data, teamID)
 			}
 		}
 		syncInheritedCycles(data, teamID)
@@ -2864,6 +2862,9 @@ func (s *server) updateCycle(w http.ResponseWriter, r *http.Request) {
 			if !slices.Contains([]string{"upcoming", "current", "completed"}, *input.Status) {
 				return errInvalid
 			}
+			if current := currentCycle(data, cycle.TeamID); *input.Status == "current" && current != nil && current.ID != cycle.ID {
+				return errInvalid
+			}
 			cycle.Status = *input.Status
 		}
 		if input.Insight != nil {
@@ -2887,52 +2888,24 @@ func (s *server) updateCycle(w http.ResponseWriter, r *http.Request) {
 func (s *server) startCycle(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var started domain.Cycle
-	err := s.store.MutateWorkspace(cycleIssueScope(r.Context(), false, cycleTeam(id)), workspaceKey(r), "cycle.started", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
+	ctx := store.WithMutationScope(r.Context(), store.MutationScope{})
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "cycle.started", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
 		cycle, err := cycleByID(data, id)
 		if err != nil {
 			return err
 		}
-		if cycle.Status != "upcoming" {
+		if cycle.Status != "upcoming" || currentCycle(data, cycle.TeamID) != nil || earliestUpcomingCycle(data, cycle.TeamID).ID != id {
 			return errInvalid
 		}
-		if err := transitionToCycle(data, cycle, time.Now().UTC()); err != nil {
+		now := time.Now().UTC()
+		if err := moveCycleStart(data, cycle, cycleDay(now), false, now); err != nil {
 			return err
 		}
+		startCycleOn(cycle, now)
 		started = *cycle
 		return nil
 	})
 	s.respondCycle(w, r, err, started)
-}
-
-// completeCycle is API only: the app ends a cycle by moving its end date (cycle_dates.go), and
-// offers "Start cycle today…" only while no cycle is current.
-func (s *server) completeCycle(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	var completed domain.Cycle
-	err := s.store.MutateWorkspace(cycleIssueScope(r.Context(), false, cycleTeam(id)), workspaceKey(r), "cycle.completed", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
-		cycle, err := cycleByID(data, id)
-		if err != nil {
-			return err
-		}
-		if cycle.Status != "current" {
-			return errInvalid
-		}
-		teamID := cycle.TeamID
-		next := earliestUpcomingCycle(data, teamID)
-		if next == nil {
-			next = appendFutureCycle(data, teamID, cycle)
-		}
-		if err := transitionToCycle(data, next, time.Now().UTC()); err != nil {
-			return err
-		}
-		// Generating cycles can move the slice, so the completed cycle is read again.
-		if cycle, err = cycleByID(data, id); err != nil {
-			return err
-		}
-		completed = *cycle
-		return nil
-	})
-	s.respondCycle(w, r, err, completed)
 }
 
 // cycleDay is the calendar day (UTC midnight) of a time; cycle dates are whole days.
@@ -2946,28 +2919,11 @@ func cycleEnded(cycle *domain.Cycle, now time.Time) bool {
 	return !now.Before(cycleDay(cycle.EndsAt).AddDate(0, 0, 1))
 }
 
-// transitionToCycle completes the team's current cycle and starts target today.
-func transitionToCycle(data *domain.Bootstrap, target *domain.Cycle, now time.Time) error {
-	if previous := currentCycle(data, target.TeamID); previous != nil && previous.ID != target.ID {
-		completeCurrentCycle(data, previous, target, now)
-	}
-	startCycleOn(target, now)
-	ensureUpcomingCycles(data, target.TeamID)
-	return nil
-}
-
-// completeCurrentCycle marks a current cycle completed, ending it today when it is completed
-// before its last day (the next cycle starts today, so they do not overlap), and moves its
-// open issues to next when the team migrates them.
+// completeCurrentCycle marks an ended cycle completed and moves its open issues to next
+// when the team migrates them.
 func completeCurrentCycle(data *domain.Bootstrap, previous, next *domain.Cycle, now time.Time) {
 	previous.Status = "completed"
 	previous.UpdatedAt = now
-	if today := cycleDay(now); previous.EndsAt.After(today) {
-		previous.EndsAt = today
-		if previous.EndsAt.Before(previous.StartsAt) {
-			previous.EndsAt = previous.StartsAt
-		}
-	}
 	if next == nil || !data.CycleSettings[previous.TeamID].AutoMigrate {
 		return
 	}

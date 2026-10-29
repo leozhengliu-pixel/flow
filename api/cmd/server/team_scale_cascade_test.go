@@ -67,7 +67,10 @@ func runIssueCascadeScaleRoutes(t *testing.T, srv *server, repository *store.SQL
 	for i := 0; i < repeat; i++ {
 		timed("cycle settings", http.MethodPatch, "/api/teams/"+team+"/cycle-settings", map[string]any{"capacity": 5 + i})
 		if current, _ := cycles(); current != "" {
-			timed("cycle complete", http.MethodPost, "/api/cycles/"+current+"/complete", nil)
+			expireCurrentCycle(t, repository, "test-workspace", team)
+			begin := time.Now()
+			srv.maintainCycleSchedule(context.Background(), "test-workspace")
+			timedSample("cycle maintenance", time.Since(begin))
 		}
 		if _, upcoming := cycles(); upcoming != "" {
 			timed("cycle start", http.MethodPost, "/api/cycles/"+upcoming+"/start", nil)

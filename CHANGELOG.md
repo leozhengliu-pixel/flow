@@ -293,6 +293,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Starting a cycle today no longer generates an extra upcoming cycle, even
+  after refreshing. Automatic maintenance replenishes the configured upcoming
+  count at scheduled cycle boundaries; cycle settings still apply their count.
 - Every other stored `PATCH` and `PUT` now also writes nothing when it only
   repeats the current values (no `version` or `updatedAt` change, event,
   realtime update, webhook or notification): releases, release pipelines and
@@ -631,6 +634,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Removed
 
+- `POST /api/cycles/{id}/complete` and starting a cycle while another cycle is
+  current. Move a cycle's end date instead; scheduled maintenance completes it
+  after its last day. Starting today is limited to the next upcoming cycle
+  while the team has no current cycle.
 - Coding sandboxes no longer set the older duplicate sandbox and snapshot
   variables. Setup and prepare scripts detect the sandbox with
   `FLOW_SANDBOX=1` and a snapshot build with `FLOW_SNAPSHOT=1`.
