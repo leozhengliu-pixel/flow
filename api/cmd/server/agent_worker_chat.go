@@ -105,7 +105,15 @@ type workerChatRunInfo struct {
 	LoopQuestions bool `json:"loopQuestions,omitempty"`
 	// HostedWebSearch: the reply searches the web with the model provider's hosted search tool (no search provider is
 	// configured), as an in-process reply does; the worker adds it when its protocol has one.
-	HostedWebSearch bool `json:"hostedWebSearch,omitempty"`
+	HostedWebSearch bool             `json:"hostedWebSearch,omitempty"`
+	HeldCalls       []workerHeldCall `json:"heldCalls,omitempty"`
+}
+
+type workerHeldCall struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+	Approved  bool   `json:"approved"`
 }
 
 type workerChatResume struct {
@@ -127,14 +135,12 @@ func workerChatInfo(run store.AgentRun) (workerChatRunInfo, bool) {
 
 func workerChatMessage(id string) bool { return strings.HasPrefix(id, workerChatMessagePrefix) }
 
-// agentChatOnWorker reports whether a chat reply runs on the agent worker. Approvals saved by earlier versions stay
-// in-process.
-func (s *server) agentChatOnWorker(session domain.AgentSession) bool {
+// agentChatOnWorker reports whether a chat reply runs on the agent worker.
+func (s *server) agentChatOnWorker(_ domain.AgentSession) bool {
 	if !s.agentRuntimeWorker() || !s.agentRuntimeEnabled() {
 		return false
 	}
-	_, _, _, _, legacy := pendingAgentApproval(&session)
-	return !legacy
+	return true
 }
 
 func newWorkerChatRunID() string {
@@ -188,6 +194,12 @@ func (s *server) runAgentSessionOnWorker(r *http.Request, data domain.Bootstrap,
 	runID := newWorkerChatRunID()
 	started := time.Now().UTC()
 	info := workerChatRunInfo{MessageID: "agent_message_" + runID, LinkBase: agentLinkBaseURL(r), MaxTurns: s.agentMaxToolTurns(), MaxCalls: s.agentMaxToolCalls(), Request: latest, Chinese: containsHan(latest), Started: started.UnixMilli(), Groups: newAgentChatToolset(*session).names(), LoopBuilder: len(session.LoopIDs) > 0, LoopQuestions: writer != nil && sessionHasDraftLoop(data, *session), HostedWebSearch: s.agentRunHostedWebSearch(prompt.web)}
+	heldMessage, heldPart, approval, decision, hasHeld := pendingAgentApproval(session)
+	if hasHeld {
+		for _, call := range approval.Calls {
+			info.HeldCalls = append(info.HeldCalls, workerHeldCall{ID: "approved_" + call.ID, Name: agentToolBaseName(call.Name), Arguments: string(call.Arguments), Approved: decision == agentApprovalApprove})
+		}
+	}
 	promptContext := agentRunPromptContext{System: prompt.system, Messages: workerRunPromptMessages(prompt.messages), LatestPrompt: latest, WebAccess: prompt.web}
 	snapshot := s.withAgentBodies(r, *session)
 	// The reply exists before the run is queued, so a reloaded page or another tab sees it working at once.
@@ -195,6 +207,25 @@ func (s *server) runAgentSessionOnWorker(r *http.Request, data domain.Bootstrap,
 		current, err := ownedAgentSession(next, session.ID)
 		if err != nil {
 			return err
+		}
+		if hasHeld {
+			for mi := range current.Messages {
+				if current.Messages[mi].ID != heldMessage {
+					continue
+				}
+				for pi := range current.Messages[mi].Parts {
+					part := &current.Messages[mi].Parts[pi]
+					if part.ID != heldPart || part.Question == nil || part.Question.Approval == nil {
+						continue
+					}
+					if part.Question.Approval.Decision != "" {
+						return fmt.Errorf("%w: this approval was already handled", errInvalid)
+					}
+					question, resolved := *part.Question, *part.Question.Approval
+					resolved.Decision = map[bool]string{true: "approved", false: "rejected"}[decision == agentApprovalApprove]
+					question.Approval, part.Question = &resolved, &question
+				}
+			}
 		}
 		stamp := started
 		current.Messages = append(current.Messages, domain.AgentMessage{ID: info.MessageID, Role: "assistant", Parts: []domain.AgentMessagePart{}, Status: agentMessageStreaming, CreatedAt: started, UpdatedAt: &stamp})
@@ -2025,6 +2056,16 @@ func (s *server) workerChatGuardOp(ctx context.Context, run store.AgentRun, info
 		switch input.Phase {
 		case "reply":
 			switch {
+			case stopped == "" && strings.TrimSpace(input.Text) == "" && !state.EmptyNudged:
+				response.Nudge, state.EmptyNudged = agentEmptyTurnNudge, true
+				return json.Marshal(state)
+			case stopped == "" && strings.TrimSpace(input.Text) == "":
+				response.Error = agentEmptyTurnError("")
+			case stopped == "" && s.workerRunTextApproval(ctx, run, input.Text) && !state.TextApprovalNudged:
+				response.Nudge, state.TextApprovalNudged = agentTextApprovalNudge, true
+				return json.Marshal(state)
+			case stopped == "" && s.workerRunTextApproval(ctx, run, input.Text):
+				response.Error = agentTextApprovalError
 			case ungrounded && !state.OutcomeNudged:
 				// Not the last word yet: the model is told once that nothing ran.
 				response.Nudge, state.OutcomeNudged = agentUngroundedOutcomeNudge, true

@@ -305,6 +305,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   an in-process reply interrupted with **Retry** / **重试**. Thread leases
   prevent two servers from answering the same conversation at once; retries
   and card delivery are deduplicated across takeovers.
+- Worker agent runtime now handles loop-run replies and continuations, streams
+  loop output, and applies the loop diagnostic, recovery and conversation budgets.
+  Chat retries empty and text-approval replies; saved approval decisions without
+  a harness state also execute on the worker. Web prompts use the worker's protocol.
+
 - Every other stored `PATCH` and `PUT` now also writes nothing when it only
   repeats the current values (no `version` or `updatedAt` change, event,
   realtime update, webhook or notification): releases, release pipelines and

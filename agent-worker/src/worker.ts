@@ -26,6 +26,7 @@ import { QuestionStreamer } from './question-stream.js'
 import { outputText, RunGuard, ToolErrorFlags, type GuardApi } from './run-guard.js'
 import { initialGroups } from './tool-groups.js'
 import { hostedSearchQuery, hostedSearchRefused, hostedWebSearchTool } from './hosted-search.js'
+import type { HeldCall } from './runtime-client.js'
 
 // Traces would go to api.openai.com with the provider key; the worker exports its own OTel spans instead.
 setTracingDisabled(true)
@@ -71,6 +72,7 @@ export type TurnOutcome = {
 }
 
 export type SessionOptions = {
+  heldCalls?: HeldCall[]
   sessionId: string
   systemPrompt: string
   /** Run token for /mcp (defaults to the worker's configured token). */
@@ -145,6 +147,7 @@ export class FlowAgentSession {
   private sink?: ActivitySink
   /** The provider's hosted search tool the agent offers, until the provider refuses it. */
   private hostedSearch?: Tool<FlowRunContext>
+  private heldCallsDone = false
 
   constructor(private readonly worker: FlowAgentWorker, readonly options: SessionOptions, baseModel: Model) {
     const config = worker.config
@@ -192,9 +195,39 @@ export class FlowAgentSession {
    */
   async send(message: string, sink: ActivitySink = () => {}, input?: AgentInputItem[]): Promise<TurnOutcome> {
     const history = await this.history().getItems()
-    const context = newRunContext(this.sessionId, message, [...new Set([...initialGroups(message, previousTools(history)), ...(this.options.groups ?? [])])], this.options.allowlist)
+    const context = newRunContext(this.sessionId, message, [...new Set([...initialGroups(message, [...previousTools(history), ...(this.options.heldCalls ?? []).map(call => call.name)]), ...(this.options.groups ?? [])])], this.options.allowlist)
     if (this.options.allTools) context.allTools = true
     return this.execute(input ?? message, context, sink)
+  }
+
+  private async replayHeldCalls(outcome: TurnOutcome, sink: ActivitySink, signal: AbortSignal) {
+    if (!this.heldCallsDone && this.options.heldCalls?.length) {
+      this.heldCallsDone = true
+      for (const call of this.options.heldCalls) {
+        signal.throwIfAborted()
+        let text = 'The user rejected this action; nothing was changed. Do not retry it unless the user asks again.'
+        let isError = !call.approved
+        let change: unknown
+        if (call.approved) {
+          const args = JSON.parse(call.arguments || '{}')
+          sink({ type: 'action', at: Date.now(), activityId: call.id, action: call.name, parameter: args })
+          outcome.toolCalls.push({ callId: call.id, name: call.name, isError: false })
+          try {
+            const server = this.mcp[0]
+            const result = server.callToolResult ? await server.callToolResult(call.name, args, { 'flow/approved': true }, { signal }) : { content: await server.callTool(call.name, args, { 'flow/approved': true }, { signal }) }
+            text = result.content.flatMap(part => part.type === 'text' ? [part.text] : []).join('\n')
+            isError = Boolean(result.isError)
+            change = (result.structuredContent as Record<string, unknown> | undefined)?.change
+          } catch (error) { text = String(error); isError = true }
+          outcome.toolCalls[outcome.toolCalls.length - 1]!.isError = isError
+          sink({ type: 'action.result', at: Date.now(), activityId: call.id, action: call.name, result: text, isError, ...(change ? { change } : {}) })
+        }
+        await this.history().addItems([
+          { type: 'function_call', callId: call.id, name: call.name, arguments: call.arguments || '{}', status: 'completed' } as AgentInputItem,
+          { type: 'function_call_result', callId: call.id, name: call.name, output: { type: 'text', text }, status: 'completed' } as AgentInputItem,
+        ])
+      }
+    }
   }
 
   /**
@@ -255,7 +288,7 @@ export class FlowAgentSession {
   private async execute(input: string | AgentInputItem[] | RunState<FlowRunContext, FlowAgent>, context: FlowRunContext, sink: ActivitySink, retries = 1, previous?: TurnOutcome, previousGuard?: RunGuard): Promise<TurnOutcome> {
     const session = this.history()
     const maxTurns = this.options.maxTurns ?? this.worker.config.maxTurns
-    const outcome: TurnOutcome = { status: 'error', body: '', startedAt: previous?.startedAt ?? Date.now(), endedAt: 0, usage: summarizeUsage([]), modelCalls: [...(previous?.modelCalls ?? [])], toolCalls: [] }
+    const outcome: TurnOutcome = { status: 'error', body: '', startedAt: previous?.startedAt ?? Date.now(), endedAt: 0, usage: summarizeUsage([]), modelCalls: [...(previous?.modelCalls ?? [])], toolCalls: [...(previous?.toolCalls ?? [])] }
     const emit = (activity: FlowActivity) => {
       outcome.firstActivityAt ??= activity.at
       sink(activity)
@@ -278,6 +311,35 @@ export class FlowAgentSession {
     }
     this.model.rewrite = guard?.enabled ? <T extends { type?: string }>(items: T[]) => guard.output(items) : undefined
     this.agent.guard = guard?.enabled ? guard : undefined
+    if (this.options.allTools && this.options.guard) {
+      const call = this.options.guard
+      this.model.beforeModel = async request => {
+        const answer = await call({ op: 'input', contextBytes: Buffer.byteLength(JSON.stringify(request.input)) + Buffer.byteLength(this.options.systemPrompt) })
+        if (answer.error) throw new Error(answer.error)
+      }
+      this.model.afterModel = async (output, usage, diagnostics) => {
+        const text = output.flatMap(item => item.type === 'message' && Array.isArray(item.content) ? item.content.flatMap(part => part.type === 'output_text' ? [part.text] : []) : []).join('')
+        const calls = output.flatMap(item => item.type === 'function_call' ? [{ id: item.callId, name: item.name, arguments: item.arguments }] : [])
+        const answer = await call({ op: 'model', round: guard?.round ?? 0, modelTurn: {
+          text, reasoning: diagnostics.reasoning, calls, stopReason: diagnostics.stopReason, stopDetail: diagnostics.stopDetail,
+          usage: { inputTokens: usage.inputTokens ?? 0, outputTokens: usage.outputTokens ?? 0, cachedTokens: usage.inputTokensDetails?.cached_tokens ?? 0, reasoningTokens: usage.outputTokensDetails?.reasoning_tokens ?? 0 },
+          durationMs: Date.now()-diagnostics.startedAt, events: diagnostics.events, bytes: diagnostics.bytes, finished: diagnostics.finished,
+          unreadable: diagnostics.unreadable, unknown: diagnostics.unknown,
+          model: this.worker.config.model, protocol: this.worker.config.protocol,
+        } })
+        if (answer.error) throw new Error(answer.error)
+        return answer.handled ? [{ type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: '' }] }] : output
+      }
+      this.model.modelError = async diagnostics => {
+        await call({ op: 'model', round: guard?.round ?? 0, modelTurn: {
+          text: '', reasoning: diagnostics.reasoning, calls: [], stopReason: diagnostics.stopReason, stopDetail: diagnostics.stopDetail,
+          usage: { inputTokens: 0, outputTokens: 0, cachedTokens: 0, reasoningTokens: 0 },
+          durationMs: Date.now()-diagnostics.startedAt, events: diagnostics.events, bytes: diagnostics.bytes, finished: false,
+          unreadable: diagnostics.unreadable, unknown: diagnostics.unknown,
+          model: this.worker.config.model, protocol: this.worker.config.protocol, error: 'provider_error',
+        } })
+      }
+    }
     const controller = new AbortController()
     this.controller = controller
     let text = ''
@@ -286,6 +348,8 @@ export class FlowAgentSession {
     const questions = new QuestionStreamer()
     try {
       await this.connect()
+      await this.replayHeldCalls(outcome, emit, controller.signal)
+      controller.signal.throwIfAborted()
       const result = await run(this.agent, input, {
         stream: true,
         context,
@@ -293,7 +357,7 @@ export class FlowAgentSession {
         signal: controller.signal,
         maxTurns,
         callModelInputFilter: ({ modelData }) => {
-          const input = compactHistory(modelData.input, defaultCompaction(this.worker.config.contextWindow)).input
+          const input = this.options.allTools ? modelData.input : compactHistory(modelData.input, defaultCompaction(this.worker.config.contextWindow)).input
           return { ...modelData, input: guard?.enabled ? guard.input(input) : input }
         },
       })
@@ -385,6 +449,9 @@ export class FlowAgentSession {
     } finally {
       this.model.observer = undefined
       this.model.rewrite = undefined
+      this.model.beforeModel = undefined
+      this.model.afterModel = undefined
+      this.model.modelError = undefined
       this.agent.guard = undefined
       if (this.controller === controller) this.controller = undefined
       if (this.sink === emit) this.sink = undefined

@@ -97,8 +97,10 @@ type workerRunGuardRequest struct {
 	Content string `json:"content"`
 	Failed  bool   `json:"failed"`
 	// finish: reply (the model replied), decision (the forced-decision turn did not start Coding) or turnLimit
-	Phase string `json:"phase"`
-	Text  string `json:"text"`
+	Phase        string               `json:"phase"`
+	Text         string               `json:"text"`
+	ContextBytes int                  `json:"contextBytes"`
+	ModelTurn    *workerLoopModelTurn `json:"modelTurn,omitempty"`
 }
 
 // workerRunGuardResponse is Flow's answer; the fields beyond the run's guard view are set by their operation.

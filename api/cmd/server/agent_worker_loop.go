@@ -44,7 +44,11 @@ type workerLoopRunInfo struct {
 	// TimeoutMS is the run's wall-clock limit (FLOW_LOOP_RUN_TIMEOUT).
 	TimeoutMS int64 `json:"timeoutMs"`
 	// Started is when the loop run started (unix ms).
-	Started int64 `json:"started"`
+	Started         int64                       `json:"started"`
+	ReplyID         string                      `json:"replyId,omitempty"`
+	Skills          []domain.PersonalAgentSkill `json:"skills,omitempty"`
+	History         []agentRunPromptMessage     `json:"history,omitempty"`
+	MaxContextBytes int                         `json:"maxContextBytes"`
 }
 
 func workerLoopInfo(run store.AgentRun) (workerLoopRunInfo, bool) {
@@ -73,12 +77,21 @@ const workerLoopStateKey = "loop:state"
 
 // workerLoopState is a loop run's model-loop state between the worker's calls.
 type workerLoopState struct {
-	ToolCalls   int    `json:"toolCalls"`
-	Corrections int    `json:"corrections"`
-	Output      string `json:"output,omitempty"`
-	Final       bool   `json:"final,omitempty"`
-	Nudged      bool   `json:"nudged,omitempty"`
-	Finished    bool   `json:"finished,omitempty"`
+	Sequence      int                     `json:"sequence,omitempty"`
+	OutputSavedAt int64                   `json:"outputSavedAt,omitempty"`
+	Draft         string                  `json:"draft,omitempty"`
+	Summary       *domain.LoopRunSummary  `json:"summary,omitempty"`
+	RecoverySeen  map[loopTurnOutcome]int `json:"recoverySeen,omitempty"`
+	RecoveryUsed  map[loopTurnOutcome]int `json:"recoveryUsed,omitempty"`
+	RecoveryTotal int                     `json:"recoveryTotal,omitempty"`
+	RecoveryWait  time.Duration           `json:"recoveryWait,omitempty"`
+	RecoveryNudge string                  `json:"recoveryNudge,omitempty"`
+	ToolCalls     int                     `json:"toolCalls"`
+	Corrections   int                     `json:"corrections"`
+	Output        string                  `json:"output,omitempty"`
+	Final         bool                    `json:"final,omitempty"`
+	Nudged        bool                    `json:"nudged,omitempty"`
+	Finished      bool                    `json:"finished,omitempty"`
 	// Ending is how the agent stopped without finishing (loopRunEnding).
 	EndReason  string `json:"endReason,omitempty"`
 	EndMessage string `json:"endMessage,omitempty"`
@@ -159,7 +172,7 @@ func (s *server) queueLoopRunOnWorker(workspace string, loop domain.Loop, trigge
 		return domain.LoopRun{}, err
 	}
 	principal, _ := json.Marshal(agentRunPrincipal{Mode: agentRunModeUser, UserID: loop.OwnerID, Connectors: slices.Clone(loop.ConnectorIDs)})
-	payload, _ := json.Marshal(map[string]any{"loop": workerLoopRunInfo{LoopRunID: run.ID, LoopID: loop.ID, Trigger: trigger, MaxTurns: limits.MaxTurns, TimeoutMS: limits.Timeout.Milliseconds(), Started: now.UnixMilli()}})
+	payload, _ := json.Marshal(map[string]any{"loop": workerLoopRunInfo{LoopRunID: run.ID, LoopID: loop.ID, Trigger: trigger, MaxTurns: limits.MaxTurns, TimeoutMS: limits.Timeout.Milliseconds(), Started: now.UnixMilli(), MaxContextBytes: limits.MaxContextBytes}})
 	if _, _, err := s.store.EnqueueAgentRun(ctx, store.AgentRunInput{ID: agentRunID, WorkspaceKey: workspace, SessionID: run.ID, Kind: store.AgentRunKindLoop, IdempotencyKey: "loop-run:" + run.ID, Principal: principal, Payload: payload}); err != nil {
 		rec := &loopRunRecorder{s: s, workspace: workspace, run: run, leaseOwner: workerLoopLeaseOwner(agentRunID)}
 		s.finishLoopRun(ctx, workspace, loop, rec, &loopRunError{reason: "unavailable", message: "The run could not be queued for the agent worker", err: err})
@@ -177,13 +190,26 @@ func (s *server) workerLoopRecorder(ctx context.Context, run store.AgentRun, inf
 		return nil, err
 	}
 	rec := &loopRunRecorder{s: s, workspace: run.WorkspaceKey, run: record, leaseOwner: workerLoopLeaseOwner(run.ID)}
-	for _, step := range record.Steps {
+	if info.ReplyID != "" {
+		reply := loopRunReplyByID(&rec.run, info.ReplyID)
+		if reply == nil {
+			return nil, errNotFound
+		}
+		rec.reply = reply
+		intent := loopReplyIntent(reply.Body)
+		rec.answering, rec.noTools = intent != loopReplyContinue, intent == loopReplyStatus
+		rec.skills, rec.contextPrompt = info.Skills, loopReplyContextPrompt(record, reply.ID, intent)
+		rec.completedWrites = loopCompletedWrites(record)
+	}
+	steps, calls, _ := rec.parts()
+	for _, step := range *steps {
 		rec.order = max(rec.order, step.Order)
 	}
-	for _, call := range record.ToolCalls {
+	for _, call := range *calls {
 		rec.order = max(rec.order, call.Order)
 	}
 	state := s.workerLoopStateOf(ctx, run.ID)
+	rec.replySummary = state.Summary
 	if state.EndReason != "" {
 		rec.ending = &loopRunEnding{reason: state.EndReason, message: state.EndMessage}
 	}
@@ -196,7 +222,7 @@ func (s *server) workerLoopContext(ctx context.Context, run store.AgentRun, info
 	if err != nil {
 		return nil, err
 	}
-	if rec.run.Status != "running" {
+	if !workerLoopRecorderRunning(rec) {
 		return nil, &loopRunError{reason: "unavailable", message: "The loop run is no longer running"}
 	}
 	data, ok := s.store.WorkspaceMetadataFields(run.WorkspaceKey, "loops")
@@ -238,7 +264,8 @@ func (s *server) workerLoopPayload(ctx context.Context, run store.AgentRun, info
 		s.updateWorkerLoopState(ctx, run, func(state *workerLoopState) { state.FailReason, state.FailMessage = reason, message })
 		return nil, message
 	}
-	return &agentRunPromptContext{System: lc.systemPrompt(ctx), Messages: []agentRunPromptMessage{{Role: "user", Content: "Run this loop now and follow its instructions."}}, WebAccess: lc.loop.WebSearch}, ""
+	messages := append([]agentRunPromptMessage{{Role: "user", Content: "Run this loop now and follow its instructions."}}, info.History...)
+	return &agentRunPromptContext{System: lc.systemPrompt(ctx), Messages: messages, WebAccess: lc.loop.WebSearch}, ""
 }
 
 // serveMCPLoopRun answers a loop run token's tools/list and tools/call: the loop's tools, through its gates.
@@ -254,6 +281,9 @@ func (s *server) serveMCPLoopRun(w http.ResponseWriter, r *http.Request, request
 		return
 	}
 	definitions := s.agentTurnTools(lc.request.Context())
+	if lc.rec.noTools {
+		definitions = nil
+	}
 	if request.Method == "tools/list" {
 		listed := make([]map[string]any, 0, len(definitions))
 		for _, tool := range definitions {
@@ -311,6 +341,9 @@ func (s *server) serveMCPLoopRun(w http.ResponseWriter, r *http.Request, request
 			return
 		}
 		lc.rec.setSummary(summary)
+		if info.ReplyID != "" {
+			s.updateWorkerLoopState(ctx, grant.run, func(state *workerLoopState) { state.Summary = summary })
+		}
 		lc.rec.save(true)
 		result(`{"ok":true}`, false)
 		return
@@ -341,9 +374,14 @@ func (s *server) workerLoopGuardOp(ctx context.Context, run store.AgentRun, info
 		maxTurns = s.loopLimits().MaxTurns
 	}
 	switch input.Op {
+	case "input", "model":
+		return s.workerLoopModelGuard(ctx, run, info, input)
 	case "start", "before", "after", "coding":
 		return response, nil
 	case "turn":
+		if rec, err := s.workerLoopRecorder(ctx, run, info); err == nil && rec.noTools {
+			response.Withhold = true
+		}
 		if input.Round < maxTurns {
 			return response, nil
 		}
@@ -365,6 +403,15 @@ func (s *server) workerLoopGuardOp(ctx context.Context, run store.AgentRun, info
 		return response, err
 	}
 	state := s.workerLoopStateOf(ctx, run.ID)
+	if state.FailReason != "" {
+		response.Error = state.FailMessage
+		return response, nil
+	}
+	if state.RecoveryNudge != "" {
+		response.Nudge = state.RecoveryNudge
+		s.updateWorkerLoopState(ctx, run, func(state *workerLoopState) { state.RecoveryNudge = "" })
+		return response, nil
+	}
 	final := state.Final || input.Phase == "turnLimit"
 	text := strings.TrimSpace(input.Text)
 	nudge := ""
@@ -423,7 +470,7 @@ func (s *server) workerLoopGuardOp(ctx context.Context, run store.AgentRun, info
 func (s *server) finishWorkerLoopRun(ctx context.Context, run store.AgentRun, info workerLoopRunInfo, status, failure string) {
 	ctx = context.WithoutCancel(ctx)
 	rec, err := s.workerLoopRecorder(ctx, run, info)
-	if err != nil || rec.run.Status != "running" {
+	if err != nil || !workerLoopRecorderRunning(rec) {
 		return
 	}
 	data, ok := s.store.WorkspaceMetadataFields(run.WorkspaceKey, "loops")
@@ -457,7 +504,18 @@ func (s *server) finishWorkerLoopRun(ctx context.Context, run store.AgentRun, in
 		// The worker ended without the run's last word: what it had is kept and the run is incomplete.
 		rec.endUnfinished("incomplete", loopStoppedMessage, state.Output)
 	}
-	s.finishLoopRun(runCtx, run.WorkspaceKey, *loop, rec, runErr)
+	if rec.reply != nil {
+		s.finishLoopRunReply(runCtx, run.WorkspaceKey, rec, runErr)
+	} else {
+		s.finishLoopRun(runCtx, run.WorkspaceKey, *loop, rec, runErr)
+	}
+}
+
+func workerLoopRecorderRunning(rec *loopRunRecorder) bool {
+	if rec.reply != nil {
+		return rec.reply.Status == "running"
+	}
+	return rec.run.Status == "running"
 }
 
 // workerLoopHeartbeat keeps a worker loop run's lease; cancel is true when the run should stop (a person cancelled
@@ -551,6 +609,15 @@ func (s *server) recoverWorkerLoopRun(ctx context.Context, run store.AgentRun, r
 	s.resetAgentRunState(ctx, run, workerLoopStateKey)
 	now := time.Now().UTC()
 	_, err := s.store.UpdateLoopRun(ctx, run.WorkspaceKey, info.LoopRunID, []store.LoopRunEvent{loopRunEvent("restarted", map[string]any{"attempt": run.Attempts})}, func(record *domain.LoopRun) error {
+		if info.ReplyID != "" {
+			reply := loopRunReplyByID(record, info.ReplyID)
+			if reply == nil || reply.Status != "running" {
+				return store.ErrNoMutation
+			}
+			reply.Steps, reply.ToolCalls, reply.Output = nil, nil, ""
+			record.HeartbeatAt = &now
+			return nil
+		}
 		if record.Status != "running" {
 			return store.ErrNoMutation
 		}

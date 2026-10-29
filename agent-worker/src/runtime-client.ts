@@ -35,6 +35,7 @@ export type PromptMessage = {
 
 /** What a chat run's payload says about its reply (api/cmd/server/agent_worker_chat.go workerChatRunInfo). */
 export type ChatRunInfo = {
+  heldCalls?: HeldCall[]
   messageId: string
   maxTurns: number
   maxCalls: number
@@ -48,12 +49,15 @@ export type ChatRunInfo = {
 
 /** What a built-in session run's payload says (api/cmd/server/agent_worker_thread.go workerThreadRunInfo). */
 export type ThreadRunInfo = {
+  heldCalls?: HeldCall[]
   taskVersion: number
   maxTurns: number
   maxCalls: number
   resume?: { decisions: Record<string, string> }
   hostedWebSearch?: boolean
 }
+
+export type HeldCall = { id: string; name: string; arguments: string; approved: boolean }
 
 /** What a loop run's payload says (api/cmd/server/agent_worker_loop.go workerLoopRunInfo). */
 export type LoopRunInfo = {
@@ -78,7 +82,7 @@ export type RunPayload = {
 }
 
 export class FlowRuntimeClient {
-  constructor(private readonly baseUrl: string, private readonly secret: string, readonly workerId: string) {}
+  constructor(private readonly baseUrl: string, private readonly secret: string, readonly workerId: string, private readonly protocol?: string) {}
 
   private async call<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
     const response = await fetch(`${this.baseUrl.replace(/\/$/, '')}/internal/agent-runtime${path}`, {
@@ -119,7 +123,7 @@ export class FlowRuntimeClient {
    * selected connector that was skipped), as an in-process loop run records them.
    */
   payload(runId: string) {
-    return this.call<RunPayload>('GET', `/runs/${encodeURIComponent(runId)}/payload`)
+    return this.call<RunPayload>('GET', `/runs/${encodeURIComponent(runId)}/payload${this.protocol ? `?protocol=${encodeURIComponent(this.protocol)}` : ''}`)
   }
 
   /** Posts one activity of the run (a chat run's reply part: chat-run.ts). */

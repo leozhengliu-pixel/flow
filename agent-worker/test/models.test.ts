@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import { Agent, RunState, run, setTracingDisabled, tool } from '@openai/agents'
 import { z } from 'zod'
 import type { ModelConfig } from '../src/config.js'
-import { createModel, modelSettings } from '../src/models.js'
+import { createModel, modelSettings, ObservedModel, type ModelDiagnostics } from '../src/models.js'
 
 setTracingDisabled(true)
 
@@ -61,7 +61,10 @@ test('anthropic: parallel tool_use arguments survive streaming; approval interru
   const captured: Captured[] = []
   const fetch = mockFetch([parallelToolUse, finalText], captured)
   const calls: { name: string; id: string }[] = []
-  const agent = new Agent({ name: 'Flow Agent', instructions: 'Be brief.', model: createModel(anthropic, { fetch }), modelSettings: modelSettings(anthropic, 'session-1'), tools: tools(calls) })
+  const diagnostics: ModelDiagnostics[] = []
+  const model = new ObservedModel(createModel(anthropic, { fetch }))
+  model.afterModel = async (output, _usage, stats) => { diagnostics.push({ ...stats }); return output }
+  const agent = new Agent({ name: 'Flow Agent', instructions: 'Be brief.', model, modelSettings: modelSettings(anthropic, 'session-1'), tools: tools(calls) })
 
   const first = await run(agent, 'Read DEV-1 and delete DEV-2', { stream: true })
   for await (const _ of first) { /* drain */ }
@@ -70,6 +73,9 @@ test('anthropic: parallel tool_use arguments survive streaming; approval interru
   assert.deepEqual(calls, [{ name: 'get_issue', id: 'DEV-1' }])
   assert.equal(first.interruptions.length, 1)
   assert.equal(first.interruptions[0].name, 'delete_issue')
+  assert.equal(diagnostics[0]?.bytes, Buffer.byteLength(parallelToolUse))
+  assert.equal(diagnostics[0]?.finished, true)
+  assert.ok((diagnostics[0]?.events ?? 0) > 0)
   assert.deepEqual(JSON.parse(first.interruptions[0].arguments ?? '{}'), { id: 'DEV-2' })
 
   // Request 1: Messages API with tools, adaptive thinking, effort, cache control, parallel tool use allowed.
@@ -110,12 +116,18 @@ test('openai-chat: OpenAI-compatible base URL, parallel tool calls, prompt cache
   const done = chunk({ role: 'assistant', content: 'Both read.' }) + chunk({}, 'stop') + 'data: [DONE]\n\n'
   const config: ModelConfig = { protocol: 'openai-chat', model: 'deepseek-chat', apiKey: 'test-key', baseURL: 'https://compatible.test/v1', reasoningEffort: 'low', contextWindow: 128_000 }
   const calls: { name: string; id: string }[] = []
-  const agent = new Agent({ name: 'Flow Agent', instructions: 'Be brief.', model: createModel(config, { fetch: mockFetch([stream, done], captured) }), modelSettings: modelSettings(config, 'session-7'), tools: tools(calls) })
+  const diagnostics: ModelDiagnostics[] = []
+  const model = new ObservedModel(createModel(config, { fetch: mockFetch([stream, done], captured) }))
+  model.afterModel = async (output, _usage, stats) => { diagnostics.push({ ...stats }); return output }
+  const agent = new Agent({ name: 'Flow Agent', instructions: 'Be brief.', model, modelSettings: modelSettings(config, 'session-7'), tools: tools(calls) })
   const result = await run(agent, 'Read DEV-1 and DEV-3', { stream: true })
   for await (const _ of result) { /* drain */ }
   await result.completed
   assert.deepEqual(calls.map(c => c.id).sort(), ['DEV-1', 'DEV-3'])
   assert.equal(result.finalOutput, 'Both read.')
+  assert.equal(diagnostics[0]?.bytes, Buffer.byteLength(stream))
+  assert.equal(diagnostics[0]?.stopReason, 'tool_calls')
+  assert.equal(diagnostics[1]?.stopReason, 'stop')
   assert.equal(captured[0].url, 'https://compatible.test/v1/chat/completions')
   assert.equal(captured[0].body.parallel_tool_calls, true)
   assert.equal(captured[0].body.prompt_cache_key, 'session-7')
