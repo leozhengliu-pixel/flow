@@ -10,31 +10,24 @@ export interface SplitIssueViewProps {
   preview?: ReactNode
   /** Explicit sidebar override; defaults to IssueDetailsPaneSidebar for `issue`. */
   sidebar?: ReactNode
-  /** LS-0252 EntityAgentPanel slot — render when Wave 3 agent panel is available. */
-  agentPanel?: ReactNode
   originLink?: SplitViewOriginLink
   onClose?: () => void
 }
 
 /**
  * LS-0559 — SplitIssueView.
- * Selected-issue chrome inside split: main preview + details sidebar; agent slot ready.
+ * Selected-issue chrome inside split: main preview + details sidebar.
  */
 export function SplitIssueView({
   issue,
   preview,
   sidebar,
-  agentPanel,
   originLink,
   onClose,
 }: SplitIssueViewProps) {
   const resolvedSidebar =
     sidebar ??
-    (issue ? (
-      <IssueDetailsPaneSidebar issue={issue} agentPanel={agentPanel} />
-    ) : agentPanel ? (
-      <IssueDetailsPaneSidebar agentPanel={agentPanel} />
-    ) : null)
+    (issue ? <IssueDetailsPaneSidebar issue={issue} /> : null)
 
   return (
     <div className={styles.splitIssue} data-split-issue-view="" aria-label={issue ? `Issue ${issue.identifier}` : 'Issue preview'}>

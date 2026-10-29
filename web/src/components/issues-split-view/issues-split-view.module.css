@@ -356,11 +356,6 @@
   font-size: 12px;
 }
 
-.agentSlot {
-  min-height: 0;
-  margin-top: 8px;
-}
-
 .adornments {
   display: inline-flex;
   align-items: center;

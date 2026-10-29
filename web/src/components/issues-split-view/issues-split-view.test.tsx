@@ -116,19 +116,25 @@ describe('IssueViewSplitPage / SplitViewIssueView', () => {
 })
 
 describe('SplitIssueView + IssueDetailsPaneSidebar', () => {
-  it('renders preview, properties and agent slot (no customers section)', () => {
+  it('renders preview and properties (no customers section)', () => {
     renderWithI18n(
       <SplitIssueView
         issue={sampleIssue}
-        agentPanel={<div>Entity agent</div>}
         onClose={vi.fn()}
       />,
     )
     expect(screen.getByText('FLOW-1')).toBeInTheDocument()
     expect(screen.getByText('Wire IssuesSplitViewPage')).toBeInTheDocument()
     expect(screen.getByLabelText('Issue details sidebar')).toBeInTheDocument()
-    expect(screen.getByText('Entity agent')).toBeInTheDocument()
+    expect(screen.getByText('Properties')).toBeInTheDocument()
     expect(screen.queryByLabelText('Customer needs')).toBeNull()
+  })
+
+  it('keeps preview-only hosts without a default sidebar and still accepts an explicit sidebar', () => {
+    const { rerender } = renderWithI18n(<SplitIssueView preview={<div>Issue detail</div>} />)
+    expect(screen.queryByLabelText('Issue details sidebar')).toBeNull()
+    rerender(<I18nProvider><SplitIssueView preview={<div>Issue detail</div>} sidebar={<div>Custom properties</div>} /></I18nProvider>)
+    expect(screen.getByLabelText('Issue details sidebar')).toHaveTextContent('Custom properties')
   })
 })
 
