@@ -359,6 +359,9 @@ function App() {
   sessionViewerRef.current=session?.user.id;
   const dataRef=useRef(data);
   dataRef.current=data;
+  // Issue edits still waiting for an answer, by issue (see updateIssueById).
+  const issueEditBursts=useRef(new Map<string,{pending:number;latest:Issue;settled:Issue}>());
+  const reportedIssueErrors=useRef(new WeakSet<ApiError>());
   // Pickers deep in the tree hide "Invite and assign…" when the viewer cannot invite.
   if (data) setViewerCanInvite(canInviteMembers(data));
   const acceptBootstrap = useCallback((next:BootstrapData)=>{
@@ -1901,22 +1904,56 @@ function App() {
     await refreshActivity();
   };
   const updateIssueById = async (issue: Issue, input: IssueUpdateInput) => {
-    const current = data?.issues.find((item) => item.id === issue.id) ?? issue;
+    // Edits of one issue are sent one after another (see
+    // issue-mutation-queue). While a burst of them is pending, each builds on
+    // the optimistic issue of the one before, and only the last answer
+    // replaces the issue, so an earlier answer cannot undo a later edit on
+    // screen.
+    const stored =
+      dataRef.current?.issues.find((item) => item.id === issue.id) ??
+      data?.issues.find((item) => item.id === issue.id) ??
+      issue;
+    const pending = issueEditBursts.current.get(issue.id);
+    const current =
+      pending && (pending.latest.version ?? 0) >= (stored.version ?? 0)
+        ? pending.latest
+        : stored;
     const optimistic = applyOptimisticIssue(current, input, data);
+    const burst = pending ?? { pending: 0, latest: optimistic, settled: current };
+    burst.pending += 1;
+    burst.latest = optimistic;
+    issueEditBursts.current.set(issue.id, burst);
+    const finish = () => {
+      burst.pending -= 1;
+      if (burst.pending > 0) return false;
+      if (issueEditBursts.current.get(issue.id) === burst)
+        issueEditBursts.current.delete(issue.id);
+      return true;
+    };
     replaceIssue(optimistic);
     try {
       const updated = await updateIssue(issue.id, {
         ...input,
         expectedVersion: current.version,
       });
-      replaceIssue(updated);
+      burst.settled = updated;
+      if (finish()) replaceIssue(updated);
       return updated;
     } catch (error) {
       const conflict =
         error instanceof ApiError && error.code === "VERSION_CONFLICT"
           ? (error.current as Issue | undefined)
           : undefined;
-      replaceIssue(conflict ?? current);
+      if (conflict) {
+        // Another session changed the issue: show its state now; edits queued
+        // behind this one share the conflict.
+        burst.settled = conflict;
+        burst.latest = conflict;
+      }
+      if (finish() || conflict) replaceIssue(burst.settled);
+      // Edits queued behind a conflicting one reject with the same error: say it once.
+      if (error instanceof ApiError && reportedIssueErrors.current.has(error)) throw error;
+      if (error instanceof ApiError) reportedIssueErrors.current.add(error);
       if (!(conflict && input.expectedDocumentVersion !== undefined)) {
         toast.error(
           conflict
