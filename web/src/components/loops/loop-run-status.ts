@@ -25,6 +25,7 @@ export const REASON_LABELS: Record<LoopRunFailureReason, string> = {
   budget_exhausted: "Run budget exceeded",
   no_output: "No output produced",
   incomplete: "The agent reported unfinished work",
+  needs_target: "The loop's target document is not chosen",
   unavailable: "The loop could not run",
   error: "Error",
 };
