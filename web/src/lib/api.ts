@@ -116,6 +116,7 @@ import { rememberTrashRetention } from "@/lib/trash-retention";
 import { rememberChatPlatform } from "@/lib/chat-platform";
 import { markSuspendedMembersInactive } from "@/lib/people";
 import { apiFetch, ApiError as PulseApiError, jsonRequest, request } from "@/lib/api-client";
+import { queueIssuesWrite, queueIssueUpdate, queueIssueWrite } from "@/lib/issue-mutation-queue";
 
 export { ApiError, realtimeClientId } from "@/lib/api-client";
 import type {
@@ -507,7 +508,8 @@ export function fetchProjectIssueSummary(projectId: string, signal?: AbortSignal
 }
 
 export function updateIssueRecord(id: string, input: IssueUpdateInput): Promise<Issue> {
-  return request(`/api/issue-records/${encodeURIComponent(id)}`, jsonRequest('PATCH', input))
+  const path = `/api/issue-records/${encodeURIComponent(id)}`
+  return queueIssueUpdate(id, path, input, body => request(path, jsonRequest('PATCH', body)))
 }
 
 export function fetchIssueRecordContext(id: string, signal?: AbortSignal, cursors?: { commentsCursor?: string; activitiesCursor?: string }): Promise<{ issue: Issue; relatedIssues: Issue[]; comments: Comment[]; activities: BootstrapData['activities'][string]; commentsCursor?: string; activitiesCursor?: string }> {
@@ -2794,11 +2796,10 @@ export function updateIssue(
   issueId: string,
   input: IssueUpdateInput,
 ): Promise<Issue> {
-  return request(`${import.meta.env.VITE_PAGED_ISSUES === 'true' ? '/api/issue-records' : '/api/issues'}/${issueId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
+  const path = `${import.meta.env.VITE_PAGED_ISSUES === 'true' ? '/api/issue-records' : '/api/issues'}/${issueId}`;
+  // Writes of one issue run in order, each sending the version the one
+  // before it returned (see issue-mutation-queue).
+  return queueIssueUpdate(issueId, path, input, (body) => request(path, jsonRequest("PATCH", body)));
 }
 export function shareIssue(issueId: string): Promise<{ issue: Issue; token: string; url: string }> {
   return request(`/api/issues/${issueId}/share`, jsonRequest("POST", {}));
@@ -2922,11 +2923,7 @@ export function toggleIssueReaction(
   issueId: string,
   emoji: string,
 ): Promise<Issue> {
-  return request(`/api/issues/${issueId}/reactions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ emoji }),
-  });
+  return queueIssueWrite(issueId, () => request(`/api/issues/${issueId}/reactions`, jsonRequest("POST", { emoji })));
 }
 export function createIssueLink(
   issueId: string,
@@ -3087,11 +3084,7 @@ export function batchUpdateIssues(
   issueIds: string[],
   update: IssueUpdateInput,
 ): Promise<Issue[]> {
-  return request("/api/issues/batch", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ issueIds, update }),
-  });
+  return queueIssuesWrite(issueIds, () => request("/api/issues/batch", jsonRequest("POST", { issueIds, update })));
 }
 
 export async function createComment(
