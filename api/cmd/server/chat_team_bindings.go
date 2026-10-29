@@ -354,7 +354,7 @@ func (s *server) saveChatBinding(w http.ResponseWriter, r *http.Request) {
 			writeChatError(w, 400, "Choose a supported reaction, a priority and a template of the binding's team for requests")
 			return
 		}
-		if !requests.Enabled && requests.Emoji == "" && requests.TemplateID == "" && requests.Priority == nil {
+		if !requests.Enabled && !requests.EveryMention && requests.Emoji == "" && requests.TemplateID == "" && requests.Priority == nil {
 			binding.Requests = nil
 		}
 	}
@@ -505,7 +505,7 @@ func (s *server) auditChatBinding(r *http.Request, record domain.ChatIntegration
 		metadata["projectIds"] = binding.ProjectIDs
 	}
 	if requests := binding.Requests; requests != nil {
-		settings := map[string]any{"enabled": requests.Enabled, "emoji": requests.Emoji, "templateId": requests.TemplateID}
+		settings := map[string]any{"enabled": requests.Enabled, "everyMention": requests.EveryMention, "emoji": requests.Emoji, "templateId": requests.TemplateID}
 		if requests.Priority != nil {
 			settings["priority"] = *requests.Priority
 		}

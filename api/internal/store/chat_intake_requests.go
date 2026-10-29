@@ -10,9 +10,9 @@ import (
 	"flow/api/internal/domain"
 )
 
-// Chat intake requests: the request made from a chat message, one per
-// message of a connection (UNIQUE(connection_id,message_id)), so the same
-// message never creates two requests whichever way and however often members
+// Chat intake requests: the request or shortcut issue made from a chat
+// message, one per connection (UNIQUE(connection_id,message_id)), so the same
+// message never creates two items whichever way and however often members
 // ask. The record also routes the request's issue back to the message's
 // thread (by issue).
 
@@ -30,7 +30,8 @@ func ChatIntakeRequestID(connectionID, messageID string) string {
 }
 
 func validChatIntakeRequest(workspace string, item domain.ChatIntakeRequest) bool {
-	return validChatKey(workspace, item.ConnectionID, item.ChatID, item.MessageID, item.BindingID, item.IssueID, item.RequesterID, item.RequesterOpenID) && len(item.AskID) <= 191 &&
+	return validChatKey(workspace, item.ConnectionID, item.MessageID, item.IssueID, item.RequesterID, item.RequesterOpenID) && len(item.AskID) <= 191 &&
+		(item.Kind == "" && validChatKey(item.ChatID, item.BindingID) || item.Kind == "issue" && len(item.ChatID) <= 191 && len(item.BindingID) <= 191) &&
 		(item.Source == domain.ChatRequestSourceMention || item.Source == domain.ChatRequestSourceReaction || item.Source == domain.ChatRequestSourceShortcut) &&
 		(item.Status == domain.ChatRequestPending || item.Status == domain.ChatRequestCreated)
 }
@@ -106,7 +107,9 @@ func (s *SQLiteStore) ChatIntakeRequestsForIssue(ctx context.Context, workspace,
 		if err = json.Unmarshal(raw, &item); err != nil {
 			return nil, err
 		}
-		items = append(items, item)
+		if item.Kind != "issue" {
+			items = append(items, item)
+		}
 	}
 	return items, rows.Err()
 }

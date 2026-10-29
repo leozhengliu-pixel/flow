@@ -45,6 +45,18 @@ func exerciseChatIntakeRequestStore(t *testing.T, repo *SQLiteStore) {
 	if err != nil || ok || existing.RequesterID != "user_1" || existing.IssueID != "issue_chat_1" {
 		t.Fatalf("second reservation: %+v %v %v", existing, ok, err)
 	}
+	other.Kind, other.Source = "issue", domain.ChatRequestSourceShortcut
+	if existing, ok, err := repo.ReserveChatIntakeRequest(ctx, workspace, other); err != nil || ok || existing.Kind != "" {
+		t.Fatalf("issue shortcut bypassed the message reservation: %+v %v %v", existing, ok, err)
+	}
+	issueOnly := other
+	issueOnly.MessageID, issueOnly.BindingID, issueOnly.ChatID = "om_issue_only", "", ""
+	if _, ok, err := repo.ReserveChatIntakeRequest(ctx, workspace, issueOnly); err != nil || !ok {
+		t.Fatalf("unbound issue reservation: %v %v", ok, err)
+	}
+	if requests, err := repo.ChatIntakeRequestsForIssue(ctx, workspace, connection, issueOnly.IssueID); err != nil || len(requests) != 0 {
+		t.Fatalf("ordinary issue became a request: %+v %v", requests, err)
+	}
 	if _, _, err := repo.ReserveChatIntakeRequest(ctx, workspace, domain.ChatIntakeRequest{ConnectionID: connection, ChatID: "oc_requests", MessageID: "om_bad", BindingID: "b", IssueID: "i", RequesterID: "u", RequesterOpenID: "o", Source: "email", Status: domain.ChatRequestPending}); err == nil {
 		t.Fatal("request with an unknown source stored")
 	}

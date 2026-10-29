@@ -21,9 +21,8 @@ import (
 
 // Requests from group messages. In a group bound to a team whose binding
 // takes requests, a member turns a message into a request in the team's
-// triage: by mentioning the bot ("@Flow 提需求 …", or any mention of the bot
-// that is not another command), by adding the binding's reaction to a
-// message, or with the message shortcut's Submit as request. The request is
+// triage: by explicitly asking the bot ("@Flow 提需求 …"), by adding the
+// binding's reaction, or with the message shortcut's Submit as request. The request is
 // the same record as Flow's other requests (an Ask, source feishu or lark)
 // and its issue, created as the requester's linked Flow account with their
 // permissions, from the binding's request template and priority. Unlinked
@@ -82,12 +81,14 @@ func (s *server) chatRequestBindings(ctx context.Context, record domain.ChatInte
 
 // chatRequestMentionCommand turns a group message that mentions the bot into
 // a request command: with a request prefix anywhere the bot is, and without
-// one only in a group that takes requests. A bare mention replying to a
+// one only when the binding opts in. A bare mention replying to a
 // message makes the request from that message.
 func (s *server) chatRequestMentionCommand(ctx context.Context, record domain.ChatIntegrationRecord, envelope chatWebhookEnvelope, text string) (chatInboundCommand, string, bool) {
 	message := envelope.Event.Message
 	body, explicit := chatRequestText(text)
-	if !explicit && !slices.ContainsFunc(s.chatRequestBindings(ctx, record), func(binding domain.ChatBinding) bool { return binding.ChatID == message.ChatID }) {
+	if !explicit && !slices.ContainsFunc(s.chatRequestBindings(ctx, record), func(binding domain.ChatBinding) bool {
+		return binding.ChatID == message.ChatID && binding.Requests.EveryMention
+	}) {
 		return chatInboundCommand{}, "", false
 	}
 	values := map[string]json.RawMessage{"source": json.RawMessage(strconv.Quote(domain.ChatRequestSourceMention))}
@@ -134,7 +135,8 @@ type chatRequestDraft struct {
 	Text, Title, Description  string
 	Source                    string
 	// Personal: the requester used a private form and hears back there.
-	Personal bool
+	Personal      bool
+	FormMessageID string
 }
 
 // chatReadMessage reads a message with the bot's access: its group, thread
@@ -194,6 +196,9 @@ func (s *server) processChatRequest(ctx context.Context, record domain.ChatInteg
 		}
 		return nil
 	}
+	if source == domain.ChatRequestSourceMention && !explicit && !binding.Requests.EveryMention {
+		return s.chatSendGroupHelp(ctx, record, job, command)
+	}
 	identity, err := s.store.ChatIdentityForOpenID(ctx, record.WorkspaceKey, record.ConnectionID, command.OpenID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
@@ -226,6 +231,9 @@ func (s *server) chatRequestFromForm(ctx context.Context, record domain.ChatInte
 	if stored.UserID == "" || stored.UserID != identity.UserID || !action.Verified || action.BindingID == "" {
 		return fail("chat_action_expired")
 	}
+	if handled, err := s.chatMessageIntakeResult(ctx, record, identity, metadata, job, action); handled {
+		return err
+	}
 	binding, err := s.chatBindingByID(ctx, record, action.BindingID)
 	if err != nil {
 		var permanent chatPermanentError
@@ -249,7 +257,7 @@ func (s *server) chatRequestFromForm(ctx context.Context, record domain.ChatInte
 	if len(title) > 2048 || utf8.RuneCountInString(title) > 1000 || utf8.RuneCountInString(description) > 10000 {
 		return fail("chat_form_invalid")
 	}
-	draft := chatRequestDraft{MessageID: action.SourceMessageID, ChatID: action.SourceChatID, RootID: action.SourceRootID, Title: title, Description: description, Source: domain.ChatRequestSourceShortcut, Personal: true}
+	draft := chatRequestDraft{MessageID: action.SourceMessageID, ChatID: action.SourceChatID, RootID: action.SourceRootID, Title: title, Description: description, Source: domain.ChatRequestSourceShortcut, Personal: true, FormMessageID: action.PersonalMessage}
 	if title == "" {
 		draft.Text = description
 	}
@@ -343,6 +351,8 @@ func (s *server) chatCreateRequest(ctx context.Context, record domain.ChatIntegr
 		switch {
 		case request.Status == domain.ChatRequestCreated:
 			return s.chatRequestExists(ctx, record, identity, metadata, job, request, draft)
+		case request.Kind == "issue":
+			return errors.New("message conversion in progress")
 		case request.RequesterID == identity.UserID:
 			// This requester's earlier attempt stopped: resume it.
 		case time.Since(request.UpdatedAt) > chatRequestReservationTimeout:
@@ -358,6 +368,9 @@ func (s *server) chatCreateRequest(ctx context.Context, record domain.ChatIntegr
 		}
 	}
 	release := func() error {
+		if _, err := s.store.IssueRecord(ctx, record.WorkspaceKey, request.IssueID); !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
 		return s.store.DeleteChatIntakeRequest(ctx, record.WorkspaceKey, record.ConnectionID, request.ID)
 	}
 	if !slices.ContainsFunc(chatCreatableTeams(metadata), func(team domain.Team) bool { return team.ID == binding.TeamID }) {
@@ -415,17 +428,20 @@ func (s *server) chatCreateRequest(ctx context.Context, record domain.ChatIntegr
 			sourceMessage = ""
 		}
 	}
-	request.IssueID, request.AskID, request.Status = issue.ID, askID, domain.ChatRequestCreated
-	if err := s.store.UpdateChatIntakeRequest(ctx, record.WorkspaceKey, request); err != nil {
-		return err
-	}
 	result := chatNotificationJob{BindingID: binding.ID, BindingScope: chatBindingFingerprint(binding), IssueID: issue.ID, SourceMessageID: sourceMessage, Kind: chatRequestResultKind}
 	if draft.Personal {
 		result.PersonalOpenID = identity.OpenID
 	}
 	payload, _ := json.Marshal(result)
 	_, err = s.store.EnqueueChatJob(ctx, domain.ChatJob{ID: "chat_result_" + job.DedupKey, WorkspaceKey: record.WorkspaceKey, ConnectionID: record.ConnectionID, Kind: "card", DedupKey: chatKey(job.DedupKey, "result"), Payload: payload, RunAt: time.Now().UTC()})
-	return err
+	if err != nil {
+		return err
+	}
+	request.IssueID, request.AskID, request.Status = issue.ID, askID, domain.ChatRequestCreated
+	if err := s.store.UpdateChatIntakeRequest(ctx, record.WorkspaceKey, request); err != nil {
+		return err
+	}
+	return s.chatUpdateMessageFormResult(ctx, record, draft.FormMessageID, issue, false)
 }
 
 // chatRequestExists answers a member asking again for a message that is
@@ -434,19 +450,7 @@ func (s *server) chatRequestExists(ctx context.Context, record domain.ChatIntegr
 	if draft.Source == domain.ChatRequestSourceReaction {
 		return nil
 	}
-	var issue domain.Issue
-	text := "This message is already a request in Flow."
-	zh := chatLanguage(metadata, identity.UserID, record.Provider) == "zh"
-	if zh {
-		text = "这条消息已经提交为 Flow 需求。"
-	}
-	if err := s.chatAuthorizedMutation(ctx, record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/"+url.PathEscape(request.IssueID), nil, &issue); err == nil {
-		text = "This message is already a request: " + issue.Identifier + " " + chatRequestIssueURL(s, record, issue)
-		if zh {
-			text = "这条消息已经提交为需求：" + issue.Identifier + " " + chatRequestIssueURL(s, record, issue)
-		}
-	}
-	return s.chatSendPersonalText(ctx, record, identity.OpenID, text, chatKey(job.DedupKey, "exists"))
+	return s.chatMessageIntakeExists(ctx, record, identity, metadata, job, request, draft.FormMessageID)
 }
 
 // chatClaimMessageThread records the message's thread as the issue's thread
@@ -542,16 +546,34 @@ func (s *server) chatSendRequestStatus(ctx context.Context, record domain.ChatIn
 	if err != nil || !found {
 		return err
 	}
-	closed := chatRequestClosed(issue.State.Type)
-	if closed && request.Outcome == issue.State.Type {
+	outcome, reason := issue.State.Type, ""
+	if data, ok := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "asks"); ok {
+		if index := slices.IndexFunc(data.Asks, func(ask domain.Ask) bool { return ask.ID == request.AskID }); index >= 0 && data.Asks[index].Status == "rejected" {
+			outcome = "rejected"
+			for _, approval := range slices.Backward(data.Asks[index].Approvals) {
+				if approval.Decision == "rejected" {
+					reason = strings.TrimSpace(approval.Note)
+					break
+				}
+			}
+		}
+	}
+	closed := chatRequestClosed(outcome) || outcome == "rejected"
+	if closed && request.Outcome == outcome {
 		return nil
 	}
 	label := issue.Identifier + " " + issue.Title
 	var en, zh string
 	switch {
-	case issue.State.Type == "completed":
+	case outcome == "rejected":
+		en, zh = "Request rejected: "+label, "需求已拒绝："+label
+		if reason != "" {
+			reason = chatTruncateText(reason, 2000)
+			en, zh = en+"\nReason: "+reason, zh+"\n原因："+reason
+		}
+	case outcome == "completed":
 		en, zh = "Request completed: "+label, "需求已完成："+label
-	case issue.State.Type == "canceled":
+	case outcome == "canceled":
 		en, zh = "Request closed ("+issue.State.Name+"): "+label, "需求已关闭（"+issue.State.Name+"）："+label
 	case request.Outcome != "":
 		en, zh = "Request reopened: "+issue.State.Name, "需求已重新打开："+issue.State.Name
@@ -576,7 +598,7 @@ func (s *server) chatSendRequestStatus(ctx context.Context, record domain.ChatIn
 	}
 	request.Outcome = ""
 	if closed {
-		request.Outcome = issue.State.Type
+		request.Outcome = outcome
 	}
 	return s.store.UpdateChatIntakeRequest(ctx, record.WorkspaceKey, request)
 }

@@ -385,6 +385,14 @@ func TestChatPrivateUpdateFormPreservesConcurrentWebChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Already-sent state form buttons remain supported, but new cards omit them.
+	var legacy chatCardAction
+	_ = json.Unmarshal(actions[0].Payload, &legacy)
+	legacy.Kind = "open_state"
+	actions[0].Payload, _ = json.Marshal(legacy)
+	if err := f.s.store.UpdateChatAction(t.Context(), actions[0]); err != nil {
+		t.Fatal(err)
+	}
 	command := chatInboundCommand{Kind: "card_action", OpenID: f.identity.OpenID, ChatID: f.binding.ChatID, MessageID: "om_shared", ActionID: actions[0].ID}
 	job := domain.ChatJob{ID: "open_state_job", WorkspaceKey: f.record.WorkspaceKey, ConnectionID: f.record.ConnectionID, Kind: "inbound", DedupKey: "open_state"}
 	job.Payload, _ = json.Marshal(command)

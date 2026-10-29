@@ -16,8 +16,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Requests from Lark and Feishu group messages: in a group bound to a team
   whose binding takes requests (**Requests** in the binding editor, with the
   reaction, request template and priority), a member turns a message into a
-  request by mentioning the bot (`@Flow 提需求 …`, or any other mention
-  there), adding the binding's reaction, or **Submit as request** in the
+  request by explicitly asking the bot (`@Flow 提需求 …`), adding the
+  binding's reaction, or **Submit as request** in the
   message shortcut's form. The request is an Ask (source `feishu` or
   `lark`) with its issue in the team's triage, created as the member's
   linked Flow account with their permissions; unlinked members get the link
@@ -318,6 +318,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   changes and id-based appends as operations. Writers immediately discard a
   peer-deleted record instead of retaining it in their installed snapshot;
   team writer bases deep-copy nested slices and maps.
+- Lark and Feishu group intake now requires an explicit request phrase,
+  configured reaction, or shortcut by default; **Treat every mention as a
+  request** is an opt-in binding setting (also off for existing bindings).
+  Other mentions get private group help. Shortcut issue/request choices are
+  exclusive per message and the form shows the result. Ask rejections reply
+  in the request's thread with the optional reason, and reopening is noted.
+  Group issue cards no longer duplicate status/assignment forms, and
+  initiative cards include the specific update's text within existing
+  sensitive-data and private-team restrictions.
 - Every other stored `PATCH` and `PUT` now also writes nothing when it only
   repeats the current values (no `version` or `updatedAt` change, event,
   realtime update, webhook or notification): releases, release pipelines and

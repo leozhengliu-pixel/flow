@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -625,6 +626,9 @@ func (s *server) chatCreateFromMessage(ctx context.Context, record domain.ChatIn
 	if stored.UserID == "" || stored.UserID != identity.UserID {
 		return fail("chat_action_expired")
 	}
+	if handled, err := s.chatMessageIntakeResult(ctx, record, identity, metadata, job, action); handled {
+		return err
+	}
 	var binding *domain.ChatBinding
 	if action.BindingID != "" {
 		current, err := s.chatBindingByID(ctx, record, action.BindingID)
@@ -687,12 +691,30 @@ func (s *server) chatCreateFromMessage(ctx context.Context, record domain.ChatIn
 		}
 		input.Priority = &priority
 	}
+	intake := domain.ChatIntakeRequest{Kind: "issue", ConnectionID: record.ConnectionID, ChatID: action.SourceChatID, MessageID: action.SourceMessageID, BindingID: action.BindingID, IssueID: "issue_chat_" + chatKey(record.ConnectionID, command.ActionID), RequesterID: identity.UserID, RequesterOpenID: identity.OpenID, Source: domain.ChatRequestSourceShortcut, Status: domain.ChatRequestPending}
+	intake, reserved, err := s.store.ReserveChatIntakeRequest(ctx, record.WorkspaceKey, intake)
+	if err != nil {
+		return err
+	}
+	if !reserved {
+		if intake.Status == domain.ChatRequestCreated {
+			return s.chatMessageIntakeExists(ctx, record, identity, metadata, job, intake, action.PersonalMessage)
+		}
+		if intake.Kind != "issue" || intake.RequesterID != identity.UserID {
+			return errors.New("message conversion in progress")
+		}
+	}
 	var issue domain.Issue
-	createCtx := store.WithIssueCreationKey(ctx, "issue_chat_"+chatKey(record.ConnectionID, command.ActionID))
+	createCtx := store.WithIssueCreationKey(ctx, intake.IssueID)
 	if err := s.chatAuthorizedMutation(createCtx, record.WorkspaceKey, identity.UserID, http.MethodPost, "/api/issue-records", input, &issue); err != nil {
 		code, err := chatMutationCode(err, "chat_action_failed")
 		if err != nil {
 			return err
+		}
+		if _, readErr := s.store.IssueRecord(ctx, record.WorkspaceKey, intake.IssueID); errors.Is(readErr, sql.ErrNoRows) {
+			if err := s.store.DeleteChatIntakeRequest(ctx, record.WorkspaceKey, record.ConnectionID, intake.ID); err != nil {
+				return err
+			}
 		}
 		return fail(code)
 	}
@@ -712,8 +734,15 @@ func (s *server) chatCreateFromMessage(ctx context.Context, record domain.ChatIn
 		result = chatNotificationJob{BindingID: binding.ID, BindingScope: chatBindingFingerprint(*binding), IssueID: issue.ID, SourceMessageID: action.SourceMessageID, Kind: "result", Operation: "create", PersonalOpenID: identity.OpenID}
 	}
 	payload, _ := json.Marshal(result)
-	_, err := s.store.EnqueueChatJob(ctx, domain.ChatJob{ID: "chat_result_" + job.DedupKey, WorkspaceKey: record.WorkspaceKey, ConnectionID: record.ConnectionID, Kind: "card", DedupKey: chatKey(job.DedupKey, "result"), Payload: payload, RunAt: time.Now().UTC()})
-	return err
+	_, err = s.store.EnqueueChatJob(ctx, domain.ChatJob{ID: "chat_result_" + job.DedupKey, WorkspaceKey: record.WorkspaceKey, ConnectionID: record.ConnectionID, Kind: "card", DedupKey: chatKey(job.DedupKey, "result"), Payload: payload, RunAt: time.Now().UTC()})
+	if err != nil {
+		return err
+	}
+	intake.IssueID, intake.Status = issue.ID, domain.ChatRequestCreated
+	if err := s.store.UpdateChatIntakeRequest(ctx, record.WorkspaceKey, intake); err != nil {
+		return err
+	}
+	return s.chatUpdateMessageFormResult(ctx, record, action.PersonalMessage, issue, true)
 }
 
 // processChatMessageResult reports an issue created from a message outside a
