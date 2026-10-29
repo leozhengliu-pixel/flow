@@ -253,7 +253,9 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		refreshIssueReferences(&data)
 		traceMark(ctx, "load")
 		data.FormerMembers = s.formerMemberLookup(ctx, tx, &data)
+		data.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspace)
 		aggregate, err := mutate(&data)
+		data.CollaborationUpdates = nil
 		data.FormerMembers = nil
 		traceMark(ctx, "mutate")
 		data.Members, data.TeamMembers = storedMembers, storedTeamMembers

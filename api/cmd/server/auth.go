@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"slices"
@@ -2525,7 +2526,7 @@ func (s *server) suspendMember(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.authDisabled {
 		userID := r.PathValue("userId")
-		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.suspended", userID, nil, func(workspace *domain.Bootstrap) error {
+		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.suspended", userID, map[string]string{"userId": userID, "status": "suspended"}, func(workspace *domain.Bootstrap) error {
 			materializeDevelopmentMembers(workspace)
 			index := slices.IndexFunc(workspace.Members, func(member domain.WorkspaceMember) bool { return member.User.ID == userID })
 			if index < 0 {
@@ -2535,6 +2536,7 @@ func (s *server) suspendMember(w http.ResponseWriter, r *http.Request) {
 				return errInvalid
 			}
 			workspace.Members[index].Status = "suspended"
+			appendAudit(workspace, "suspended", "workspace_member", userID, nil)
 			return nil
 		})
 		if err != nil {
@@ -2547,6 +2549,7 @@ func (s *server) suspendMember(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.store.SuspendMember(r.Context(), data.Workspace.ID, r.PathValue("userId"))
 	if err == nil {
+		s.recordMemberStatusAudit(r, "suspended")
 		s.pruneSuggestedAssignee(r, r.PathValue("workspaceKey"), r.PathValue("userId"))
 	}
 	respondMutation(w, err, http.StatusNoContent, nil)
@@ -2563,13 +2566,14 @@ func (s *server) resumeMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.authDisabled {
-		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.resumed", userID, nil, func(workspace *domain.Bootstrap) error {
+		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.resumed", userID, map[string]string{"userId": userID, "status": "active"}, func(workspace *domain.Bootstrap) error {
 			materializeDevelopmentMembers(workspace)
 			index := slices.IndexFunc(workspace.Members, func(member domain.WorkspaceMember) bool { return member.User.ID == userID })
 			if index < 0 || workspace.Members[index].Status != "suspended" {
 				return errNotFound
 			}
 			workspace.Members[index].Status = "active"
+			appendAudit(workspace, "resumed", "workspace_member", userID, nil)
 			return nil
 		})
 		if err != nil {
@@ -2580,6 +2584,9 @@ func (s *server) resumeMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := s.store.ResumeMember(r.Context(), data.Workspace.ID, userID)
+	if err == nil {
+		s.recordMemberStatusAudit(r, "resumed")
+	}
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
 
@@ -2602,7 +2609,7 @@ func (s *server) removeMember(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.authDisabled {
 		userID := r.PathValue("userId")
-		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.removed", userID, nil, func(workspace *domain.Bootstrap) error {
+		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.removed", userID, map[string]string{"userId": userID, "status": "removed"}, func(workspace *domain.Bootstrap) error {
 			materializeDevelopmentMembers(workspace)
 			index := slices.IndexFunc(workspace.Members, func(member domain.WorkspaceMember) bool { return member.User.ID == userID })
 			if index < 0 {
@@ -2612,6 +2619,7 @@ func (s *server) removeMember(w http.ResponseWriter, r *http.Request) {
 				return errInvalid
 			}
 			workspace.Members = slices.Delete(workspace.Members, index, index+1)
+			appendAudit(workspace, "removed", "workspace_member", userID, nil)
 			before := slices.Clone(workspace.TeamMembers)
 			workspace.TeamMembers = slices.DeleteFunc(workspace.TeamMembers, func(member domain.TeamMember) bool { return member.UserID == userID })
 			developmentTeamMemberAudit(workspace, r, teamMemberReasonWorkspaceMemberRemoved, teamMemberDiff(before, workspace.TeamMembers, userID, ""), nil)
@@ -2627,10 +2635,21 @@ func (s *server) removeMember(w http.ResponseWriter, r *http.Request) {
 	}
 	removed, err := s.store.RemoveMemberWithChanges(r.Context(), data.Workspace.ID, r.PathValue("userId"))
 	if err == nil {
+		s.recordMemberStatusAudit(r, "removed")
 		s.recordTeamMemberAudit(r.Context(), r.PathValue("workspaceKey"), requestTeamMemberActor(r, ""), teamMemberReasonWorkspaceMemberRemoved, removed, nil)
 		s.pruneSuggestedAssignee(r, r.PathValue("workspaceKey"), r.PathValue("userId"))
 	}
 	respondMutation(w, err, http.StatusNoContent, nil)
+}
+
+func (s *server) recordMemberStatusAudit(r *http.Request, action string) {
+	err := s.store.MutateWorkspace(store.WithMetadataFields(r.Context(), "auditLog"), r.PathValue("workspaceKey"), "audit.workspace_member", r.PathValue("userId"), nil, func(data *domain.Bootstrap) error {
+		appendAudit(data, action, "workspace_member", r.PathValue("userId"), nil)
+		return nil
+	})
+	if err != nil {
+		log.Printf("member status audit: %v", err)
+	}
 }
 
 func (s *server) updateTeamMember(w http.ResponseWriter, r *http.Request) {

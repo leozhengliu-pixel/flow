@@ -37573,7 +37573,7 @@
     },
     "User": {
       "post": {
-        "description": "UserWebhookEvent is sent when a workspace member changes. Subscribe with resourceTypes \"users\" (or the payload type name). Answer with a 2xx status within 5 seconds.",
+        "description": "UserWebhookEvent is sent when a workspace member changes, including workspace_member.suspended, workspace_member.removed and workspace_member.resumed. Subscribe with resourceTypes \"users\" (or the payload type name). Answer with a 2xx status within 5 seconds.",
         "operationId": "webhook_User",
         "parameters": [
           {
@@ -48801,8 +48801,86 @@
         ],
         "type": "object"
       },
+      "UserWebhookDataPartial": {
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "app": {
+            "type": "boolean"
+          },
+          "appAllPublicTeams": {
+            "type": "boolean"
+          },
+          "appScopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "appTeamIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "avatarUrl": {
+            "type": "string"
+          },
+          "builtinAgent": {
+            "type": "boolean"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "emailVerified": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "jobTitle": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "oauthClientId": {
+            "type": "string"
+          },
+          "outOfOfficeUntil": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "enum": [
+              "active",
+              "suspended",
+              "removed"
+            ],
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "username": {
+            "description": "Username is the workspace-unique handle (shown as \"username\"), derived per request from account settings or the email local part.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
       "UserWebhookEvent": {
-        "description": "UserWebhookEvent is sent when a workspace member changes.",
+        "description": "UserWebhookEvent is sent when a workspace member changes, including workspace_member.suspended, workspace_member.removed and workspace_member.resumed.",
         "properties": {
           "action": {
             "enum": [
@@ -48829,7 +48907,7 @@
             "type": "string"
           },
           "data": {
-            "$ref": "#/components/schemas/UserPartial"
+            "$ref": "#/components/schemas/UserWebhookDataPartial"
           },
           "eventId": {
             "description": "EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate.",

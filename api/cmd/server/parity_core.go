@@ -386,8 +386,11 @@ func (s *server) publishDocumentDraft(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		draft := data.DocumentContentDrafts[index]
+		if err := refuseFormerMemberStateMentions(data, document.ContentData, document.ContentState, draft.ContentState, firstNonEmpty(document.CollaborationID, document.ID)); err != nil {
+			return err
+		}
 		// A draft written while the person was a member publishes no new mention of them.
-		if err := refuseNewFormerMemberMentions(data, document.ContentData, draft.ContentData); err != nil {
+		if err := refuseFormerMemberRichMentions(data, document.ContentData, document.ContentState, draft.ContentData, firstNonEmpty(document.CollaborationID, document.ID)); err != nil {
 			return err
 		}
 		now := time.Now().UTC()

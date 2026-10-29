@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
+	"strings"
 
 	"flow/api/internal/domain"
 )
@@ -74,18 +76,90 @@ func refuseNewFormerMemberMentions(data *domain.Bootstrap, before, after any) er
 	return nil
 }
 
+// Imported replies must survive a former person's mention. Keep their label,
+// but not the identity that would create a new mention or notification.
+func formerMemberMentionsAsText(data *domain.Bootstrap, document map[string]any) map[string]any {
+	var walk func(any) any
+	walk = func(value any) any {
+		switch node := value.(type) {
+		case map[string]any:
+			ids := []string{}
+			copy := map[string]any{}
+			for key, child := range node {
+				if key != "content" {
+					copy[key] = child
+				}
+			}
+			collectMentionIDs(copy, &ids)
+			if slices.ContainsFunc(ids, func(id string) bool { return formerMember(data, id) }) {
+				attrs, _ := node["attrs"].(map[string]any)
+				label, _ := attrs["label"].(string)
+				if label == "" {
+					label = ids[0]
+				}
+				text := map[string]any{"type": "text", "text": "@" + strings.TrimPrefix(label, "@")}
+				if marks, ok := node["marks"]; ok {
+					text["marks"] = marks
+				}
+				return text
+			}
+			for key, child := range node {
+				copy[key] = walk(child)
+			}
+			return copy
+		case []any:
+			children := make([]any, len(node))
+			for index, child := range node {
+				children[index] = walk(child)
+			}
+			return children
+		}
+		return value
+	}
+	if document == nil {
+		return nil
+	}
+	return walk(document).(map[string]any)
+}
+
 // refuseNewFormerMemberDescriptionMentions applies the mention rule to an
 // issue write that replaces the description. Only request writes check it:
 // templates, recurring issues and automations copy stored content as it is.
 func refuseNewFormerMemberDescriptionMentions(data *domain.Bootstrap, issue *domain.Issue, input domain.IssueUpdateInput) error {
-	if input.DescriptionData == nil {
+	if input.DescriptionData == nil && input.DescriptionState == nil && input.ContentState == nil {
 		return nil
 	}
-	var previous map[string]any
+	var previous any
+	state := ""
+	documentID := ""
+	if issue != nil {
+		documentID = "document_content_" + issue.ID
+	}
 	if issue != nil && issue.DocumentContent != nil {
 		previous = issue.DocumentContent.ContentData
+		state = issue.DocumentContent.ContentState
+		documentID = firstNonEmpty(issue.DocumentContent.ID, documentID)
 	}
-	return refuseNewFormerMemberMentions(data, previous, input.DescriptionData)
+	if issue != nil {
+		var document any
+		if json.Unmarshal([]byte(issue.DescriptionState), &document) == nil {
+			previous = []any{previous, document}
+		}
+	}
+	if input.ContentState != nil {
+		if err := refuseFormerMemberStateMentions(data, previous, state, *input.ContentState, documentID); err != nil {
+			return err
+		}
+	}
+	if input.DescriptionState != nil {
+		var document any
+		if json.Unmarshal([]byte(*input.DescriptionState), &document) == nil {
+			if err := refuseFormerMemberRichMentions(data, previous, state, document, documentID); err != nil {
+				return err
+			}
+		}
+	}
+	return refuseFormerMemberRichMentions(data, previous, state, input.DescriptionData, documentID)
 }
 
 // refuseNewFormerMembers refuses ids that name a former member, except the

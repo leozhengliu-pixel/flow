@@ -260,7 +260,9 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			return err
 		}
 		metadata.FormerMembers = s.formerMemberLookup(ctx, tx, &metadata)
+		metadata.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspace)
 		err = mutate(&metadata, target)
+		metadata.CollaborationUpdates = nil
 		metadata.FormerMembers = nil
 		if err != nil {
 			if errors.Is(err, ErrNoMutation) {

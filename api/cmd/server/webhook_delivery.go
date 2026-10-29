@@ -210,6 +210,11 @@ func classifyWebhookEvent(eventType string) (string, string) {
 		}
 	}
 	switch prefix {
+	case "workspace_member":
+		if verb == "suspended" || verb == "resumed" || verb == "removed" {
+			return "users", normal(verb)
+		}
+		return "", ""
 	case "issue":
 		switch verb {
 		case "relation_added":
@@ -628,6 +633,19 @@ func (s *server) describeWebhookEvent(ctx context.Context, workspace string, eve
 		}
 	}
 	switch {
+	case strings.HasPrefix(event.Type, "workspace_member.") && resource == "users":
+		member := map[string]any{"id": event.AggregateID}
+		for _, user := range metadata.Users {
+			if user.ID == event.AggregateID {
+				raw, _ := json.Marshal(user)
+				_ = json.Unmarshal(raw, &member)
+				break
+			}
+		}
+		member["userId"], member["status"] = event.AggregateID, input["status"]
+		member["active"] = input["status"] == "active"
+		setData(member)
+		result.url = webhookEntityURL(root, resource, member)
 	case resource == "reactions":
 		emoji, _ := input["emoji"].(string)
 		data := map[string]any{"emoji": emoji, "userId": event.ActorID}

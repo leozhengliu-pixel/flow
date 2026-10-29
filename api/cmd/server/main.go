@@ -5153,7 +5153,7 @@ func (s *server) createComment(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var comment domain.Comment
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "comment.created", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "comment.created", id, &input, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, id)
 		if err != nil {
 			return err
@@ -5170,6 +5170,9 @@ func (s *server) createComment(w http.ResponseWriter, r *http.Request) {
 			if slices.IndexFunc(data.Comments[id], func(comment domain.Comment) bool { return comment.ID == *input.ParentID }) < 0 {
 				return errNotFound
 			}
+		}
+		if chatReply, _ := r.Context().Value(chatCommentContextKey{}).(bool); chatReply {
+			input.BodyData = formerMemberMentionsAsText(data, input.BodyData)
 		}
 		if err := refuseNewFormerMemberMentions(data, nil, input.BodyData); err != nil {
 			return err
@@ -5910,7 +5913,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 	if input.DescriptionState != nil {
 		issue.DescriptionState = *input.DescriptionState
 	}
-	if input.Description != nil || input.DescriptionData != nil || input.DescriptionState != nil {
+	if input.Description != nil || input.DescriptionData != nil || input.DescriptionState != nil || input.ContentState != nil {
 		content := issue.Description
 		if input.Description != nil {
 			content = *input.Description

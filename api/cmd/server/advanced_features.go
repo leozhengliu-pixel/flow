@@ -521,6 +521,9 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 			created.Content = *input.Content
 		}
 		if input.ContentState != nil {
+			if err := refuseFormerMemberStateMentions(data, nil, "", *input.ContentState, ""); err != nil {
+				return "", err
+			}
 			created.ContentState = *input.ContentState
 		}
 		if input.ContentData != nil {
@@ -604,6 +607,9 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 			// first compaction happened.
 			accepted := input.ExpectedContentVersion == nil && document.ContentVersion == 0 || input.ExpectedContentVersion != nil && *input.ExpectedContentVersion == document.ContentVersion
 			if accepted && *input.ContentState != document.ContentState {
+				if err := refuseFormerMemberStateMentions(data, before.ContentData, before.ContentState, *input.ContentState, firstNonEmpty(before.CollaborationID, before.ID)); err != nil {
+					return err
+				}
 				document.ContentState = *input.ContentState
 				document.ContentVersion++
 			}
@@ -615,7 +621,7 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if input.ContentData != nil {
-			if err := refuseNewFormerMemberMentions(data, before.ContentData, input.ContentData); err != nil {
+			if err := refuseFormerMemberRichMentions(data, before.ContentData, before.ContentState, input.ContentData, firstNonEmpty(before.CollaborationID, before.ID)); err != nil {
 				return err
 			}
 			document.ContentData = input.ContentData

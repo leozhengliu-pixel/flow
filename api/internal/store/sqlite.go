@@ -1518,7 +1518,9 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 			}
 		}
 		next.FormerMembers = s.formerMemberLookup(ctx, s.db, &next)
+		next.CollaborationUpdates = collaborationUpdatesLookup(ctx, s.db, workspaceKey)
 		aggregateID, err := mutate(&next)
+		next.CollaborationUpdates = nil
 		next.ViewerRole, next.ViewerTeamIDs, next.FormerMembers = originalViewerRole, nil, nil
 		traceMark(ctx, "mutate")
 		if err != nil {

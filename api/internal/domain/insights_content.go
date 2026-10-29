@@ -41,17 +41,18 @@ type DashboardWidgetResult struct {
 }
 
 type Post struct {
-	ID            string     `json:"id"`
-	Title         string     `json:"title,omitempty"`
-	Body          string     `json:"body"`
-	CreatorID     string     `json:"creatorId"`
-	TeamIDs       []string   `json:"teamIds"`
-	ProjectID     string     `json:"projectId,omitempty"`
-	InitiativeID  string     `json:"initiativeId,omitempty"`
-	SubscriberIDs []string   `json:"subscriberIds"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	UpdatedAt     time.Time  `json:"updatedAt"`
-	ArchivedAt    *time.Time `json:"archivedAt,omitempty"`
+	ID            string         `json:"id"`
+	Title         string         `json:"title,omitempty"`
+	Body          string         `json:"body"`
+	BodyData      map[string]any `json:"bodyData,omitempty"`
+	CreatorID     string         `json:"creatorId"`
+	TeamIDs       []string       `json:"teamIds"`
+	ProjectID     string         `json:"projectId,omitempty"`
+	InitiativeID  string         `json:"initiativeId,omitempty"`
+	SubscriberIDs []string       `json:"subscriberIds"`
+	CreatedAt     time.Time      `json:"createdAt"`
+	UpdatedAt     time.Time      `json:"updatedAt"`
+	ArchivedAt    *time.Time     `json:"archivedAt,omitempty"`
 }
 
 type FeedItem struct {
@@ -68,22 +69,24 @@ type FeedItem struct {
 }
 
 type Meeting struct {
-	ID            string    `json:"id"`
-	Title         string    `json:"title"`
-	Description   string    `json:"description,omitempty"`
-	OrganizerID   string    `json:"organizerId"`
-	AttendeeIDs   []string  `json:"attendeeIds"`
-	TeamIDs       []string  `json:"teamIds"`
-	ProjectIDs    []string  `json:"projectIds"`
-	IssueIDs      []string  `json:"issueIds"`
-	StartsAt      time.Time `json:"startsAt"`
-	DurationMins  int       `json:"durationMinutes"`
-	URL           string    `json:"url,omitempty"`
-	Notes         string    `json:"notes,omitempty"`
-	Transcript    string    `json:"transcript,omitempty"`
-	SubscriberIDs []string  `json:"subscriberIds"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	ID              string         `json:"id"`
+	Title           string         `json:"title"`
+	Description     string         `json:"description,omitempty"`
+	DescriptionData map[string]any `json:"descriptionData,omitempty"`
+	OrganizerID     string         `json:"organizerId"`
+	AttendeeIDs     []string       `json:"attendeeIds"`
+	TeamIDs         []string       `json:"teamIds"`
+	ProjectIDs      []string       `json:"projectIds"`
+	IssueIDs        []string       `json:"issueIds"`
+	StartsAt        time.Time      `json:"startsAt"`
+	DurationMins    int            `json:"durationMinutes"`
+	URL             string         `json:"url,omitempty"`
+	Notes           string         `json:"notes,omitempty"`
+	NotesData       map[string]any `json:"notesData,omitempty"`
+	Transcript      string         `json:"transcript,omitempty"`
+	SubscriberIDs   []string       `json:"subscriberIds"`
+	CreatedAt       time.Time      `json:"createdAt"`
+	UpdatedAt       time.Time      `json:"updatedAt"`
 }
 
 type SemanticSearchFacet struct {

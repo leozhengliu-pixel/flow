@@ -3022,14 +3022,36 @@ export interface UserPartial {
   username?: string
 }
 
-/** UserWebhookEvent is sent when a workspace member changes. */
+export interface UserWebhookDataPartial {
+  active?: boolean
+  app?: boolean
+  appAllPublicTeams?: boolean
+  appScopes?: string[]
+  appTeamIds?: string[]
+  avatarUrl?: string
+  builtinAgent?: boolean
+  displayName?: string
+  email?: string
+  emailVerified?: boolean
+  id: string
+  jobTitle?: string
+  name?: string
+  oauthClientId?: string
+  outOfOfficeUntil?: string | null
+  status?: "active" | "suspended" | "removed"
+  userId?: string
+  /** Username is the workspace-unique handle (shown as "username"), derived per request from account settings or the email local part. */
+  username?: string
+}
+
+/** UserWebhookEvent is sent when a workspace member changes, including workspace_member.suspended, workspace_member.removed and workspace_member.resumed. */
 export interface UserWebhookEvent {
   action: "create" | "update" | "remove"
   /** Actor is who made the change; null for system changes. */
   actor?: WebhookActor | null
   /** CreatedAt is when the change happened (ISO 8601). */
   createdAt: string
-  data: UserPartial
+  data: UserWebhookDataPartial
   /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
   eventId?: string
   /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
