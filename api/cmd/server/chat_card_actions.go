@@ -49,7 +49,9 @@ type chatExtendedAction struct {
 	// Message shortcut forms.
 	TeamIDs      []string `json:"teamIds,omitempty"`
 	SourceChatID string   `json:"sourceChatId,omitempty"`
-	Verified     bool     `json:"verified,omitempty"`
+	// SourceRootID is the root of the thread the message is in, if any.
+	SourceRootID string `json:"sourceRootId,omitempty"`
+	Verified     bool   `json:"verified,omitempty"`
 }
 
 // chatRunExtendedAction handles the actions this file and the message
@@ -60,6 +62,8 @@ func (s *server) chatRunExtendedAction(ctx context.Context, record domain.ChatIn
 		return true, s.chatRunQuickAction(ctx, record, identity, metadata, job, command, stored)
 	case action.Kind == chatMessageCreateKind:
 		return true, s.chatCreateFromMessage(ctx, record, identity, metadata, job, command, stored)
+	case action.Kind == chatMessageRequestKind:
+		return true, s.chatRequestFromForm(ctx, record, identity, metadata, job, command, stored)
 	}
 	return false, nil
 }
@@ -83,6 +87,9 @@ var chatActionErrors = map[string][2]string{
 	"chat_form_invalid":             {"The form has invalid fields. Start again from the message.", "表单内容无效，请从消息重新开始。"},
 	"chat_team_unavailable":         {"You can't create issues in any team from here.", "你无法在此创建任何团队的事项。"},
 	"chat_message_unavailable":      {"Flow could not read this message. Try again from the message.", "Flow 无法读取此消息，请从消息重新操作。"},
+	"chat_requests_disabled":        {"This group does not take requests. A team owner can turn them on in the group's Flow binding.", "此群未开启需求收集。团队管理员可以在此群的 Flow 绑定中开启。"},
+	"chat_request_forbidden":        {"Your Flow account can't submit requests to this team.", "你的 Flow 账号无权向此团队提交需求。"},
+	"chat_request_empty":            {"Write the request after the mention, or reply to the message you want to submit.", "请在 @ 机器人后写下需求，或回复要提交的消息。"},
 }
 
 // chatLanguage is the member's Flow interface language for chat replies:

@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-// The chat thread, initiative binding and project set storage on PostgreSQL
-// and MySQL, opened twice so the migrations run on a database that already
+// The chat thread, initiative binding, project set and intake request
+// storage on PostgreSQL and MySQL, opened twice so the migrations run on a database that already
 // has them.
 func TestExternalDatabaseChatThreadsAndProjectSets(t *testing.T) {
 	driver, url := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL")
@@ -21,6 +21,7 @@ func TestExternalDatabaseChatThreadsAndProjectSets(t *testing.T) {
 			t.Fatalf("startup %d: %v", attempt, err)
 		}
 		exerciseChatThreadStore(t, repo)
+		exerciseChatIntakeRequestStore(t, repo)
 		if err = repo.Close(); err != nil {
 			t.Fatal(err)
 		}

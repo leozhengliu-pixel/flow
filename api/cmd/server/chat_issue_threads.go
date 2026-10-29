@@ -326,6 +326,10 @@ func (s *server) chatThreadReplyCommand(ctx context.Context, record domain.ChatI
 	if _, create := chatCreateTitle(text); create && mentionedBot {
 		return chatInboundCommand{}, "", false
 	}
+	// So does a request ("@Flow 提需求 …", chat_requests.go).
+	if _, request := chatRequestText(text); request && mentionedBot {
+		return chatInboundCommand{}, "", false
+	}
 	thread, err := s.store.ChatThreadForRoot(ctx, record.WorkspaceKey, record.ConnectionID, message.RootID)
 	if err != nil || thread.ChatID != message.ChatID || thread.ResourceType != domain.ChatThreadResourceIssue {
 		return chatInboundCommand{}, "", false

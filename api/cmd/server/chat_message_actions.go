@@ -406,7 +406,9 @@ type chatPlatformMessage struct {
 			MessageID string `json:"message_id"`
 			ChatID    string `json:"chat_id"`
 			MsgType   string `json:"msg_type"`
-			Body      struct {
+			// RootID is the root of the thread the message is in.
+			RootID string `json:"root_id"`
+			Body   struct {
 				Content string `json:"content"`
 			} `json:"body"`
 		} `json:"items"`
@@ -414,7 +416,8 @@ type chatPlatformMessage struct {
 }
 
 // chatMessageActionBinding finds the claimed chat's binding that allows
-// creating issues. found reports whether the chat is bound at all.
+// creating issues or takes requests. found reports whether the chat is bound
+// at all.
 func (s *server) chatMessageActionBinding(ctx context.Context, record domain.ChatIntegrationRecord, chatID string) (domain.ChatBinding, bool, error) {
 	if chatID == "" {
 		return domain.ChatBinding{}, false, nil
@@ -429,7 +432,7 @@ func (s *server) chatMessageActionBinding(ctx context.Context, record domain.Cha
 			continue
 		}
 		found = true
-		if binding.AllowCreate {
+		if binding.AllowCreate || binding.RequestsEnabled() {
 			return binding, true, nil
 		}
 	}
@@ -439,7 +442,7 @@ func (s *server) chatMessageActionBinding(ctx context.Context, record domain.Cha
 func (s *server) chatSendMessageActionForm(ctx context.Context, record domain.ChatIntegrationRecord, identity domain.ChatIdentity, metadata domain.Bootstrap, job domain.ChatJob, command chatInboundCommand) error {
 	fail := func(code string) error { return s.chatSendActionError(ctx, record, metadata, identity, job, code) }
 	language := chatLanguage(metadata, identity.UserID, record.Provider)
-	chatID, text, verified := command.ChatID, chatString(command.Values, "text"), false
+	chatID, text, verified, rootID := command.ChatID, chatString(command.Values, "text"), false, ""
 	var message chatPlatformMessage
 	err := s.chatPlatformRequest(ctx, record, http.MethodGet, "/open-apis/im/v1/messages/"+url.PathEscape(command.MessageID), nil, &message)
 	var platform *chatPlatformError
@@ -447,6 +450,9 @@ func (s *server) chatSendMessageActionForm(ctx context.Context, record domain.Ch
 	case err == nil && len(message.Data.Items) > 0 && message.Data.Items[0].MessageID == command.MessageID && message.Data.Items[0].ChatID != "":
 		item := message.Data.Items[0]
 		chatID, verified = item.ChatID, true
+		if item.RootID != "" && item.RootID != command.MessageID {
+			rootID = item.RootID
+		}
 		if value := chatMessageText(item.MsgType, item.Body.Content); value != "" {
 			text = value
 		}
@@ -462,7 +468,14 @@ func (s *server) chatSendMessageActionForm(ctx context.Context, record domain.Ch
 	if bound && binding.ID == "" {
 		return fail("chat_binding_create_disabled")
 	}
-	action := chatExtendedAction{chatCardAction: chatCardAction{Kind: chatMessageCreateKind, OpenID: identity.OpenID, SourceMessageID: command.MessageID}, SourceChatID: chatID, Verified: verified}
+	// A bound group that takes requests offers Submit as request, for a
+	// message the bot read in that group (its thread carries the request).
+	create := !bound || binding.AllowCreate
+	request := bound && binding.RequestsEnabled() && verified && chatID == binding.ChatID
+	if !create && !request {
+		return fail("chat_message_unavailable")
+	}
+	action := chatExtendedAction{chatCardAction: chatCardAction{Kind: chatMessageCreateKind, OpenID: identity.OpenID, SourceMessageID: command.MessageID}, SourceChatID: chatID, SourceRootID: rootID, Verified: verified}
 	var teams []domain.Team
 	defaultTeam := ""
 	if bound {
@@ -473,8 +486,10 @@ func (s *server) chatSendMessageActionForm(ctx context.Context, record domain.Ch
 			}
 			return err
 		}
-		if _, err := chatCreateDefaults(metadata, binding, "Issue"); err != nil {
-			return fail("chat_team_unavailable")
+		if create {
+			if _, err := chatCreateDefaults(metadata, binding, "Issue"); err != nil {
+				return fail("chat_team_unavailable")
+			}
 		}
 		action.BindingID, action.BindingScope, action.ChatID = binding.ID, chatBindingFingerprint(binding), binding.ChatID
 		for _, team := range metadata.Teams {
@@ -517,35 +532,68 @@ func (s *server) chatSendMessageActionForm(ctx context.Context, record domain.Ch
 	if room := 1000 - utf8.RuneCountInString(link); len(description) > room {
 		description = append(description[:max(room-1, 0)], '…')
 	}
-	assignees, assigneeIDs := chatAssigneeOptions(metadata, identity.UserID)
-	action.AssigneeIDs = assigneeIDs
-	priority := teamSettings(&metadata, defaultTeam).DefaultPriority
 	descriptionInput := map[string]any{"tag": "input", "name": "description", "input_type": "multiline_text", "rows": 4, "placeholder": chatI18nPlain("Description", "描述"), "default_value": strings.TrimSpace(string(description) + link), "required": false, "max_length": 1000}
 	actionID := "chat_action_" + chatKey(record.ConnectionID, job.DedupKey, chatMessageCreateKind)
-	submit := chatSubmit(actionID, "Create issue")
-	submit["text"] = chatI18nPlain("Create issue", "创建事项")
-	fields := []map[string]any{chatSelect("teamId", "Team", defaultTeam, teamOptions), chatInput("title", "Issue title", action.Title, 1000), descriptionInput}
-	// A bound group with several projects asks which one the issue belongs to.
-	if bound {
-		if projectSelect, offered := chatCreateProjectSelect(metadata, binding, ""); projectSelect != nil {
-			action.ProjectIDs = offered
-			fields = append(fields, projectSelect)
+	forms := []chatStoredForm{}
+	fields := []map[string]any{}
+	if create {
+		assignees, assigneeIDs := chatAssigneeOptions(metadata, identity.UserID)
+		action.AssigneeIDs = assigneeIDs
+		priority := teamSettings(&metadata, defaultTeam).DefaultPriority
+		submit := chatSubmit(actionID, "Create issue")
+		submit["text"] = chatI18nPlain("Create issue", "创建事项")
+		fields = append(fields, chatSelect("teamId", "Team", defaultTeam, teamOptions), chatInput("title", "Issue title", action.Title, 1000), descriptionInput)
+		// A bound group with several projects asks which one the issue belongs to.
+		if bound {
+			if projectSelect, offered := chatCreateProjectSelect(metadata, binding, ""); projectSelect != nil {
+				action.ProjectIDs = offered
+				fields = append(fields, projectSelect)
+			}
+		}
+		fields = append(fields, chatSelect("assigneeId", "Assignee", "__unassigned", assignees), chatSelect("priority", "Priority", strconv.Itoa(min(max(priority, 0), 4)), chatPriorityOptions()), submit)
+		forms = append(forms, chatStoredForm{ID: actionID, Action: action})
+	} else {
+		fields = append(fields, chatInput("title", "Request title", action.Title, 1000), descriptionInput)
+	}
+	intro := chatCardI18nText("From a chat message. The issue is created with your Flow account.", "来自聊天消息，将以你的 Flow 账号创建事项。")
+	heading, headingZh := "Create Flow issue", "创建 Flow 事项"
+	if request {
+		requestID := "chat_action_" + chatKey(record.ConnectionID, job.DedupKey, chatMessageRequestKind)
+		requestAction := action
+		requestAction.Kind, requestAction.AssigneeIDs, requestAction.ProjectIDs, requestAction.TeamIDs = chatMessageRequestKind, nil, nil, []string{binding.TeamID}
+		submit := chatSubmit(requestID, "Submit as request")
+		submit["name"], submit["text"] = "submit_request", chatI18nPlain("Submit as request", "提交为需求")
+		if create {
+			submit["type"] = "default"
+		}
+		fields = append(fields, submit)
+		forms = append(forms, chatStoredForm{ID: requestID, Action: requestAction})
+		intro = chatCardI18nText("From a chat message, with your Flow account. Submit as request sends it to the team's triage with this group's request settings and follows it in the message's thread.", "来自聊天消息，将以你的 Flow 账号提交。「提交为需求」会按此群的需求设置进入团队的分诊，并在消息的话题中跟进。")
+		if !create {
+			heading, headingZh = "Submit a Flow request", "提交 Flow 需求"
 		}
 	}
-	fields = append(fields, chatSelect("assigneeId", "Assignee", "__unassigned", assignees), chatSelect("priority", "Priority", strconv.Itoa(min(max(priority, 0), 4)), chatPriorityOptions()), submit)
-	card := chatCardI18n("Create Flow issue", "创建 Flow 事项",
-		chatCardI18nText("From a chat message. The issue is created with your Flow account.", "来自聊天消息，将以你的 Flow 账号创建事项。"),
-		chatForm(fields...))
-	return s.chatSendExtendedForm(ctx, record, identity, job, actionID, action, card)
+	card := chatCardI18n(heading, headingZh, intro, chatForm(fields...))
+	return s.chatSendExtendedForm(ctx, record, identity, job, card, forms...)
 }
 
-// chatSendExtendedForm sends a private form card whose stored action keeps
-// the extended fields (see chatSendPersonalForm).
-func (s *server) chatSendExtendedForm(ctx context.Context, record domain.ChatIntegrationRecord, identity domain.ChatIdentity, job domain.ChatJob, actionID string, action chatExtendedAction, card map[string]any) error {
-	payload, _ := json.Marshal(action)
-	stored := domain.ChatAction{ID: actionID, WorkspaceKey: record.WorkspaceKey, ConnectionID: record.ConnectionID, UserID: identity.UserID, Payload: payload, ExpiresAt: time.Now().UTC().Add(15 * time.Minute)}
-	if err := s.store.PutChatAction(ctx, stored); err != nil {
-		return err
+// chatStoredForm is one submit button's stored action of a private form.
+type chatStoredForm struct {
+	ID     string
+	Action chatExtendedAction
+}
+
+// chatSendExtendedForm sends a private form card whose stored actions (one
+// per submit button) keep the extended fields (see chatSendPersonalForm).
+func (s *server) chatSendExtendedForm(ctx context.Context, record domain.ChatIntegrationRecord, identity domain.ChatIdentity, job domain.ChatJob, card map[string]any, forms ...chatStoredForm) error {
+	stored := make([]domain.ChatAction, 0, len(forms))
+	for _, form := range forms {
+		payload, _ := json.Marshal(form.Action)
+		item := domain.ChatAction{ID: form.ID, WorkspaceKey: record.WorkspaceKey, ConnectionID: record.ConnectionID, UserID: identity.UserID, Payload: payload, ExpiresAt: time.Now().UTC().Add(15 * time.Minute)}
+		if err := s.store.PutChatAction(ctx, item); err != nil {
+			return err
+		}
+		stored = append(stored, item)
 	}
 	content, _ := json.Marshal(card)
 	if len(content) > 28<<10 {
@@ -558,9 +606,14 @@ func (s *server) chatSendExtendedForm(ctx context.Context, record domain.ChatInt
 	if result.Data.MessageID == "" || result.Data.ChatID == "" {
 		return errorsChatResponse()
 	}
-	action.PersonalChatID, action.PersonalMessage = result.Data.ChatID, result.Data.MessageID
-	stored.Payload, _ = json.Marshal(action)
-	return s.store.UpdateChatAction(ctx, stored)
+	for index, form := range forms {
+		form.Action.PersonalChatID, form.Action.PersonalMessage = result.Data.ChatID, result.Data.MessageID
+		stored[index].Payload, _ = json.Marshal(form.Action)
+		if err := s.store.UpdateChatAction(ctx, stored[index]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *server) chatCreateFromMessage(ctx context.Context, record domain.ChatIntegrationRecord, identity domain.ChatIdentity, metadata domain.Bootstrap, job domain.ChatJob, command chatInboundCommand, stored domain.ChatAction) error {
@@ -650,6 +703,12 @@ func (s *server) chatCreateFromMessage(ctx context.Context, record domain.ChatIn
 		result.SourceMessageID = action.SourceMessageID
 	}
 	if binding != nil && action.Verified && action.SourceChatID == binding.ChatID {
+		// The message's thread becomes the issue's thread in the group
+		// before any card about the issue is posted, so the creation reply
+		// and later notifications all continue it.
+		if _, err := s.chatClaimMessageThread(ctx, record, *binding, issue.ID, firstNonEmpty(action.SourceRootID, action.SourceMessageID), "message"); err != nil {
+			return err
+		}
 		result = chatNotificationJob{BindingID: binding.ID, BindingScope: chatBindingFingerprint(*binding), IssueID: issue.ID, SourceMessageID: action.SourceMessageID, Kind: "result", Operation: "create", PersonalOpenID: identity.OpenID}
 	}
 	payload, _ := json.Marshal(result)

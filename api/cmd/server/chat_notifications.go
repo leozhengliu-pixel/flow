@@ -32,6 +32,10 @@ type chatNotificationJob struct {
 	// (chat_issue_threads.go).
 	Event   string    `json:"event,omitempty"`
 	EventAt time.Time `json:"eventAt,omitzero"`
+	// Request: the issue is a request made in the binding's group
+	// (chat_requests.go), whose thread hears comments whatever the
+	// binding's notifications.
+	Request bool `json:"request,omitempty"`
 }
 
 func chatEventKinds(event domain.DomainEvent) []string {
@@ -107,6 +111,13 @@ func (s *server) queueChatDomainEvent(ctx context.Context, workspace string, eve
 			}
 			resourceLoaded = true
 		}
+		// Requests made in the connection's groups (chat_requests.go).
+		var requests []domain.ChatIntakeRequest
+		if issue != nil {
+			if requests, err = s.store.ChatIntakeRequestsForIssue(ctx, workspace, record.ConnectionID, issue.ID); err != nil {
+				return err
+			}
+		}
 		for _, binding := range bindings {
 			if !binding.Enabled || !binding.CreatedAt.IsZero() && event.CreatedAt.Before(binding.CreatedAt) || !chatBindingScopePermitted(projectMetadata, binding) || !s.chatBindingAuthorizerValid(ctx, workspace, binding) {
 				continue
@@ -114,6 +125,9 @@ func (s *server) queueChatDomainEvent(ctx context.Context, workspace string, eve
 			if issue != nil && !chatIssueMatchesBinding(*issue, binding) {
 				continue
 			}
+			requested := slices.ContainsFunc(requests, func(request domain.ChatIntakeRequest) bool {
+				return request.ChatID == binding.ChatID && request.Status == domain.ChatRequestCreated
+			})
 			if event.Type == "project.update_created" && !chatProjectMatchesBinding(projectMetadata, binding, event.AggregateID) {
 				continue
 			}
@@ -121,13 +135,22 @@ func (s *server) queueChatDomainEvent(ctx context.Context, workspace string, eve
 				continue
 			}
 			for _, kind := range kinds {
-				if kind != "refresh" && !slices.Contains(binding.Events, kind) {
+				// A request's thread hears its comments and status changes
+				// (as a short note) whatever the binding's notifications; its
+				// confirmation card is the request's own reply.
+				switch {
+				case requested && kind == "issue.created":
+					continue
+				case requested && kind == "issue.status_changed":
+					kind = chatRequestStatusKind
+				case requested && kind == "comment.created":
+				case kind != "refresh" && !slices.Contains(binding.Events, kind):
 					continue
 				}
 				if kind == "refresh" && !binding.AllowUpdate {
 					continue
 				}
-				payload := chatNotificationJob{BindingID: binding.ID, BindingScope: chatBindingFingerprint(binding), IssueID: event.AggregateID, Kind: kind}
+				payload := chatNotificationJob{BindingID: binding.ID, BindingScope: chatBindingFingerprint(binding), IssueID: event.AggregateID, Kind: kind, Request: requested}
 				if kind == "comment.created" {
 					payload.Event, payload.EventAt = event.Type, event.CreatedAt
 				}
@@ -166,7 +189,8 @@ func (s *server) processChatNotification(ctx context.Context, record domain.Chat
 	if payload.BindingScope != chatBindingFingerprint(binding) {
 		return nil
 	}
-	if payload.Kind != "result" && payload.Kind != "refresh" && !slices.Contains(binding.Events, payload.Kind) {
+	requestKind := payload.Kind == chatRequestResultKind || payload.Kind == chatRequestStatusKind || payload.Request && payload.Kind == "comment.created"
+	if payload.Kind != "result" && payload.Kind != "refresh" && !requestKind && !slices.Contains(binding.Events, payload.Kind) {
 		return nil
 	}
 	if payload.Kind == "project.update_created" {
@@ -185,7 +209,20 @@ func (s *server) processChatNotification(ctx context.Context, record domain.Chat
 	if payload.Kind == "comment.created" {
 		return s.chatSyncIssueComments(ctx, record, binding, issue, job, payload)
 	}
+	switch payload.Kind {
+	case chatRequestResultKind:
+		return s.chatSendRequestResult(ctx, record, binding, issue, job, payload)
+	case chatRequestStatusKind:
+		return s.chatSendRequestStatus(ctx, record, binding, issue, job)
+	}
 	if payload.Kind == "issue.created" {
+		// An issue made from a member's message (the message shortcut or a
+		// request) answers in that message's thread itself.
+		if thread, err := s.store.ChatThread(ctx, record.WorkspaceKey, record.ConnectionID, binding.ChatID, domain.ChatThreadResourceIssue, issue.ID); err == nil && thread.Origin != "" {
+			return nil
+		} else if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
 		messages, err := s.store.ChatMessagesForIssue(ctx, record.WorkspaceKey, record.ConnectionID, issue.ID)
 		if err != nil {
 			return err
@@ -317,6 +354,10 @@ func chatNotificationLabel(kind string) string {
 		return "Assignee changed"
 	case "comment.created":
 		return "New comment"
+	case chatRequestResultKind:
+		return "Request received"
+	case chatRequestStatusKind:
+		return "Request"
 	default:
 		return "Saved in Flow"
 	}
@@ -334,7 +375,14 @@ func (s *server) chatSendIssueCardFrom(ctx context.Context, record domain.ChatIn
 		return err
 	}
 	elements := card["elements"].([]map[string]any)
-	card["elements"] = append([]map[string]any{chatCardText(chatNotificationLabel(kind))}, elements...)
+	label := chatCardText(chatNotificationLabel(kind))
+	switch kind {
+	case chatRequestResultKind:
+		label = chatCardI18nText("Request received. Replies in this thread go to the request.", "已收到需求，在此话题中的回复会同步到需求。")
+	case chatRequestStatusKind:
+		label = chatCardI18nText("Request", "需求")
+	}
+	card["elements"] = append([]map[string]any{label}, elements...)
 	messageID, err := s.chatSendInIssueThread(ctx, record, binding, issue.ID, key, sourceMessage, chatInteractive(card), syncFrom)
 	if err != nil {
 		return err

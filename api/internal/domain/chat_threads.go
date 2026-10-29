@@ -93,6 +93,10 @@ type ChatThread struct {
 	PlatformThreadID string `json:"platformThreadId,omitempty"`
 	// BindingID is the group binding the thread was started under.
 	BindingID string `json:"bindingId,omitempty"`
+	// Origin is set when a member's message is the root: "message" (an
+	// issue created from it with the message shortcut) or "request" (a
+	// request made from it). Its first card is the creation's own reply.
+	Origin string `json:"origin,omitempty" enum:"message,request"`
 	// SyncFrom: items (such as comments) created before it are not mirrored
 	// into the thread.
 	SyncFrom  time.Time `json:"syncFrom"`

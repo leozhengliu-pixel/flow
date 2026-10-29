@@ -176,7 +176,7 @@ func (s *SQLiteStore) DeleteChatIntegration(ctx context.Context, workspace, id s
 	if _, err = tx.ExecContext(ctx, `DELETE FROM connector_secrets WHERE id IN (SELECT id FROM chat_actions WHERE workspace_key=? AND connection_id=? AND id LIKE 'chat_oauth_%')`, workspace, id); err != nil {
 		return err
 	}
-	for _, table := range []string{"chat_bindings", "chat_initiative_bindings", "chat_thread_items", "chat_threads", "chat_identities", "chat_actions", "chat_messages", "chat_jobs", "chat_integrations"} {
+	for _, table := range []string{"chat_bindings", "chat_initiative_bindings", "chat_thread_items", "chat_threads", "chat_intake_requests", "chat_identities", "chat_actions", "chat_messages", "chat_jobs", "chat_integrations"} {
 		if _, err = tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE workspace_key=? AND connection_id=?`, workspace, id); err != nil {
 			return err
 		}
