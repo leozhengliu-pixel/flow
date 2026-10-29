@@ -131,6 +131,8 @@ export const FAILURE_MESSAGES = [
   "Model turns that wrote a tool call as text, which Flow cannot run: {count}.",
   "The model provider withheld the output (stop reason {reason}).",
   "The model stream could not be parsed: {detail}",
+  // A document output whose existing document is not chosen (loopChooseTargetNotice in loop_contract_targets.go).
+  'Choose the target document: the instructions name an existing document without saying which one, so the run wrote to no existing document. Pick it under "What this loop will produce".',
 ];
 
 /** What the run page shows under a run's failure reason: a translated message, model-written items, the raw detail. */

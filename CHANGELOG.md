@@ -124,6 +124,19 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   sandbox image), using the OpenAI-compatible upstream with its own model list
   `FLOW_CODING_MODELS_PI` (Helm `coding.llm.models.pi`, empty by default) and
   `contextWindow` from `FLOW_CODING_MODEL_INFO`.
+- Loop outputs say where comments, status updates and issues go: the
+  triggering item, issues matching a description, a named project or
+  initiative, a team. A run's writes elsewhere are refused with a tool error,
+  and only writes on target count as the loop's output. Title templates of
+  new documents and issues may hold placeholders the run fills (`{topic}`,
+  declared with what fills it) next to `{date}`, `{week}`, `{month}`,
+  `{year}`, `{team}` and `{project}`; the run passes them as `titleFields`
+  and a title that does not fit the template is refused. An existing
+  document the instructions do not name ("the team doc") must be chosen in
+  "What this loop will produce" (or created there); until then runs may read
+  but write to no existing document and need review with
+  `failureReason: needs_target`. The editor's document picker searches the
+  workspace's documents on the server.
 
 ### Changed
 

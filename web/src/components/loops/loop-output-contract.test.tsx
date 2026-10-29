@@ -7,11 +7,18 @@ import { zhCN } from '@/i18n/translations'
 import { makeBootstrap, viewer } from '@/test/fixtures'
 import type { FlowDocument, Loop, LoopOutputContract } from '@/types/flow'
 
-const api = vi.hoisted(() => ({ analyzeLoopOutputs: vi.fn(), updateLoop: vi.fn() }))
+const api = vi.hoisted(() => ({ analyzeLoopOutputs: vi.fn(), updateLoop: vi.fn(), searchDocuments: vi.fn(), createDocument: vi.fn() }))
 vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/api')>()), ...api }))
 
 import { LoopContractSummary, LoopOutputContractPanel } from './loop-output-contract'
+import { LoopDocumentPicker } from './loop-document-picker'
 import { CONTRACT_FALLBACK_NOTICE, contractTargetText, personContract } from './loop-output-contract-model'
+
+beforeEach(() => {
+  // The document picker is a cmdk list.
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+  Element.prototype.scrollIntoView ??= () => undefined
+})
 
 const instructions = "在目标团队下创建一个新的 Document，标题格式为'每日总结-YYYY-MM-DD'，将完整的总结内容写入该 Document。每次运行都要创建一个单独的 Document，不要复用已有 Document。"
 
@@ -101,16 +108,107 @@ describe('LoopOutputContractPanel', () => {
     expect(data.teams.length).toBeGreaterThan(0)
   })
 
-  it('picks an existing document for an append and a team for a new document', async () => {
-    const document = { id: 'doc-1', title: 'Release log', content: '' } as unknown as FlowDocument
-    const data = makeBootstrap({ documents: [document] })
+  it('picks an existing document for an append from the server search', async () => {
+    const document = { id: 'doc-1', title: 'Release log', content: '', teamIds: ['team-1'] } as unknown as FlowDocument
+    api.searchDocuments.mockResolvedValue({ nodes: [document], pageInfo: { hasNextPage: false } })
+    // The bootstrap does not hold the document: the picker reads it from the server.
+    const data = makeBootstrap({ documents: [] })
     render(<I18nProvider><LoopOutputContractPanel data={data} loop={{ ...loop, outputContract: { source: 'model', readOnly: false, outputs: [{ kind: 'document', operation: 'append', required: true, target: { mode: 'existing', title: 'Team log' } }] } }} unsaved={false} onLoopChange={vi.fn()} readDelayMs={0}/></I18nProvider>)
     await userEvent.click(screen.getByRole('button', { name: 'Edit outputs' }))
-    await userEvent.click(screen.getByRole('combobox', { name: 'Document' }))
-    await userEvent.click(await screen.findByRole('option', { name: document.title }))
+    await userEvent.click(screen.getByRole('button', { name: 'Document' }))
+    await userEvent.click(await screen.findByRole('option', { name: /Release log/ }))
+    expect(api.searchDocuments).toHaveBeenCalledWith({ q: '', teamId: 'team-1' }, expect.anything())
     await userEvent.click(screen.getByRole('button', { name: 'Save outputs' }))
     await waitFor(() => expect(api.updateLoop).toHaveBeenCalled())
     expect((api.updateLoop.mock.calls[0][1].outputContract as LoopOutputContract).outputs[0].target).toMatchObject({ documentId: document.id, title: document.title, mode: 'existing' })
+  })
+
+  it('warns about a document the instructions do not name and saves the one picked', async () => {
+    const document = { id: 'doc-7', title: 'Team digest', content: '', teamIds: [] } as unknown as FlowDocument
+    api.searchDocuments.mockResolvedValue({ nodes: [document], pageInfo: { hasNextPage: false } })
+    const vague: LoopOutputContract = { source: 'model', readOnly: false, outputs: [{ kind: 'document', operation: 'append', required: true, target: { mode: 'existing', ambiguous: true, description: 'the team document' }, evidence: '追加到团队文档' }] }
+    renderPanel({ ...loop, outputContract: vague })
+    expect(screen.getAllByRole('alert')[0]).toHaveTextContent("The instructions don't say which document to write to.")
+    expect(screen.getByRole('listitem')).toHaveTextContent('document not chosen yet')
+    await userEvent.click(screen.getByRole('button', { name: 'Document' }))
+    await userEvent.click(await screen.findByRole('option', { name: /Team digest/ }))
+    await waitFor(() => expect(api.updateLoop).toHaveBeenCalledTimes(1))
+    const sent = api.updateLoop.mock.calls[0][1].outputContract as LoopOutputContract
+    expect(sent.source).toBe('person')
+    expect(sent.outputs[0].target).toMatchObject({ documentId: 'doc-7', title: 'Team digest', ambiguous: false })
+  })
+
+  it('keeps an unnamed document unsaved until it is chosen, or a new one is created', async () => {
+    api.searchDocuments.mockResolvedValue({ nodes: [], pageInfo: { hasNextPage: false } })
+    api.createDocument.mockResolvedValue({ id: 'doc-new', title: 'Weekly notes', teamIds: ['team-1'] })
+    renderPanel({ ...loop, outputContract: { source: 'model', readOnly: false, outputs: [{ kind: 'document', operation: 'update', required: true, target: { mode: 'existing', ambiguous: true, description: 'the team doc' } }] } })
+    await userEvent.click(screen.getByRole('button', { name: 'Edit outputs' }))
+    expect(screen.getByRole('button', { name: 'Save outputs' })).toBeDisabled()
+    expect(screen.getByText('Choose the document for each output that writes to an existing one.')).toBeVisible()
+    const row = screen.getByRole('list', { name: 'Outputs' })
+    await userEvent.click(within(row).getByRole('button', { name: 'Document' }))
+    await userEvent.type(await screen.findByPlaceholderText('Search documents…'), 'Weekly notes')
+    await userEvent.click(await screen.findByRole('option', { name: /Create a new document “Weekly notes”/ }))
+    await waitFor(() => expect(api.createDocument).toHaveBeenCalledWith({ title: 'Weekly notes', teamIds: ['team-1'] }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save outputs' })).toBeEnabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Save outputs' }))
+    await waitFor(() => expect(api.updateLoop).toHaveBeenCalled())
+    expect((api.updateLoop.mock.calls[0][1].outputContract as LoopOutputContract).outputs[0].target).toMatchObject({ documentId: 'doc-new', ambiguous: false })
+  })
+
+  it('sets where comments, status updates and new issues go, and what fills a title placeholder', async () => {
+    const initiative = { id: 'init-1', name: 'Growth push' }
+    const data = makeBootstrap({ initiatives: [initiative] } as never)
+    const project = data.projects[0]
+    render(<I18nProvider><LoopOutputContractPanel data={data} loop={{ ...loop, outputContract: { source: 'model', readOnly: false, outputs: [
+      { kind: 'comment', operation: 'create', required: true, target: { mode: 'any' } },
+      { kind: 'statusUpdate', operation: 'create', required: true, target: { mode: 'any' } },
+      { kind: 'issue', operation: 'create', required: false, target: { mode: 'new' } },
+    ] } }} unsaved={false} onLoopChange={vi.fn()} readDelayMs={0}/></I18nProvider>)
+    await userEvent.click(screen.getByRole('button', { name: 'Edit outputs' }))
+    const rows = within(screen.getByRole('list', { name: 'Outputs' })).getAllByRole('listitem')
+    await userEvent.click(within(rows[0]).getByRole('combobox', { name: 'Target' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'The triggering item' }))
+    await userEvent.click(within(rows[1]).getByRole('combobox', { name: 'Target' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'An initiative' }))
+    await userEvent.click(within(rows[1]).getByRole('combobox', { name: 'Initiative' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Growth push' }))
+    expect(within(rows[2]).queryByRole('combobox', { name: 'Target' })).toBeNull()
+    await userEvent.click(within(rows[2]).getByRole('combobox', { name: 'Project' }))
+    await userEvent.click(await screen.findByRole('option', { name: project.name }))
+    await userEvent.type(within(rows[2]).getByRole('textbox', { name: 'Title template' }), 'Error: {{message} {{date}')
+    await userEvent.type(within(rows[2]).getByRole('textbox', { name: 'What fills {message}' }), "the error's message")
+    expect(within(rows[2]).queryByRole('textbox', { name: 'What fills {date}' })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Save outputs' }))
+    await waitFor(() => expect(api.updateLoop).toHaveBeenCalled())
+    const outputs = (api.updateLoop.mock.calls[0][1].outputContract as LoopOutputContract).outputs
+    expect(outputs[0].target).toMatchObject({ mode: 'triggering' })
+    expect(outputs[1].target).toMatchObject({ mode: 'existing', initiativeId: 'init-1', initiative: 'Growth push' })
+    expect(outputs[2].target).toMatchObject({ projectId: project.id, titleTemplate: 'Error: {message} {date}', placeholders: [{ name: 'message', source: "the error's message" }] })
+  })
+})
+
+describe('LoopDocumentPicker', () => {
+  beforeEach(() => {
+    for (const mock of Object.values(api)) mock.mockReset()
+  })
+
+  it('searches on the server by title and team, pages, and keeps recent first', async () => {
+    const page = (ids: string[], more: boolean) => ({ nodes: ids.map(id => ({ id, title: `Doc ${id}`, teamIds: ['team-1'] })), pageInfo: { hasNextPage: more, endCursor: more ? `cursor-${ids.at(-1)}` : null } })
+    api.searchDocuments.mockImplementation(async (options: { q?: string; after?: string }) => options.after ? page(['c'], false) : options.q ? page(['q'], false) : page(['a', 'b'], true))
+    const onSelect = vi.fn()
+    const data = makeBootstrap()
+    render(<I18nProvider><LoopDocumentPicker data={data} open teamId="team-1" onOpenChange={vi.fn()} onSelect={onSelect}/></I18nProvider>)
+    expect(await screen.findByRole('option', { name: /Doc a/ })).toBeVisible()
+    expect(screen.getByText('Recent documents')).toBeVisible()
+    await userEvent.click(screen.getByRole('option', { name: 'Load more' }))
+    expect(await screen.findByRole('option', { name: /Doc c/ })).toBeVisible()
+    expect(api.searchDocuments).toHaveBeenLastCalledWith({ q: '', teamId: 'team-1', after: 'cursor-b' })
+    await userEvent.type(screen.getByPlaceholderText('Search documents…'), 'roadmap')
+    expect(await screen.findByRole('option', { name: /Doc q/ })).toBeVisible()
+    expect(api.searchDocuments).toHaveBeenLastCalledWith({ q: 'roadmap', teamId: 'team-1' }, expect.anything())
+    await userEvent.click(screen.getByRole('option', { name: /Doc q/ }))
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'q' }))
   })
 })
 
@@ -143,8 +241,22 @@ describe('contract helpers', () => {
     expect('stale' in saved).toBe(false)
   })
 
+  it('describe issue, comment and status update targets and declare title placeholders', () => {
+    const data = makeBootstrap()
+    const t = (source: string) => source
+    const project = data.projects[0]
+    expect(contractTargetText({ kind: 'comment', operation: 'create', required: true, target: { mode: 'triggering' } }, data, t)).toBe('The triggering item')
+    expect(contractTargetText({ kind: 'comment', operation: 'create', required: false, target: { mode: 'matching', match: 'open bugs', projectId: project.id } }, data, t)).toBe(`issues matching open bugs · in ${project.name}`)
+    expect(contractTargetText({ kind: 'statusUpdate', operation: 'create', required: true, target: { mode: 'existing', project: 'Mobile App' } }, data, t)).toBe('on Mobile App')
+    expect(contractTargetText({ kind: 'issue', operation: 'create', required: false, target: { mode: 'new', titleTemplate: 'Bug: {topic}', placeholders: [{ name: 'topic', source: 'the subject' }] } }, data, t)).toBe('titled Bug: {topic} · {topic} filled by the run from the subject')
+    const saved = personContract({ source: 'model', readOnly: false, outputs: [{ kind: 'issue', operation: 'create', required: true, target: { titleTemplate: 'Bug: {topic} {date} {area}', placeholders: [{ name: 'topic', source: 'x' }] } }] })
+    expect(saved.outputs[0].target.placeholders).toEqual([{ name: 'topic', source: 'x' }, { name: 'area' }])
+  })
+
   it('has Chinese copy for every panel string', () => {
-    for (const key of ['What this loop will produce', 'Outputs this run worked to', CONTRACT_FALLBACK_NOTICE, 'Must produce', 'Edit outputs', 'Save outputs', 'Use automatic outputs', 'Reply only: the run changes nothing', 'Title template', 'titled {title}', 'One per run', 'Create or update', 'Read only', 'Status update', 'Other change']) {
+    for (const key of ['What this loop will produce', 'Outputs this run worked to', CONTRACT_FALLBACK_NOTICE, 'Must produce', 'Edit outputs', 'Save outputs', 'Use automatic outputs', 'Reply only: the run changes nothing', 'Title template', 'titled {title}', 'One per run', 'Create or update', 'Read only', 'Status update', 'Other change',
+      'Target', 'Anywhere', 'The triggering item', 'Issues matching a description', 'A project', 'An initiative', 'Which issues', 'Project', 'Initiative', 'What fills {name}', 'Filled by the run from…', 'document not chosen yet', 'issues matching {match}', 'on {project}', 'in {project}', 'on {initiative}', '{name} filled by the run from {source}',
+      'Choose document…', 'Search documents…', 'Recent documents', 'Create a new document', 'Create a new document “{title}”', 'Load more', 'All teams', 'Could not load documents', "The instructions don't say which document. Choose it, or create a new one.", "The instructions don't say which document to write to. Until you choose it, runs write to no existing document and need review.", 'Choose the document for each output that writes to an existing one.', "The loop's target document is not chosen"]) {
       expect(zhCN[key], key).toBeTruthy()
     }
   })

@@ -6,11 +6,29 @@ import { Toggle } from "@/components/ui/toggle";
 import { analyzeLoopOutputs, updateLoop } from "@/lib/api";
 import { useI18n } from "@/i18n/i18n";
 import { activeTeams } from "./loop-data";
-import { CARDINALITY_LABELS, CONTRACT_FALLBACK_NOTICE, CONTRACT_KIND_LABELS, CONTRACT_OPERATION_LABELS, blankOutput, contractTargetText, operationsFor, personContract } from "./loop-output-contract-model";
+import { LoopDocumentPicker } from "./loop-document-picker";
+import {
+  CARDINALITY_LABELS,
+  CONTRACT_FALLBACK_NOTICE,
+  CONTRACT_KIND_LABELS,
+  CONTRACT_OPERATION_LABELS,
+  blankOutput,
+  contractReady,
+  contractTargetText,
+  createsOutput,
+  operationsFor,
+  personContract,
+  syncPlaceholders,
+  targetChoice,
+  targetChoicesFor,
+  unchosenDocument,
+  withTargetChoice,
+  type ContractTargetChoice,
+} from "./loop-output-contract-model";
 import type { BootstrapData, Loop, LoopContractOutput, LoopOutputContract, LoopOutputKind, LoopOutputOperation } from "@/types/flow";
 
 /** The contract's outputs, read-only: what each run makes, reads and must not touch, with the instruction text behind it. */
-export function LoopContractSummary({ contract, data, showEvidence = true }: { contract: LoopOutputContract; data: Pick<BootstrapData, "teams" | "documents">; showEvidence?: boolean }) {
+export function LoopContractSummary({ contract, data, showEvidence = true }: { contract: LoopOutputContract; data: Pick<BootstrapData, "teams" | "documents"> & Partial<Pick<BootstrapData, "projects" | "initiatives">>; showEvidence?: boolean }) {
   const { t } = useI18n();
   const outputs = contract.readOnly ? contract.outputs.filter((output) => output.operation === "forbidden" || output.operation === "read") : contract.outputs;
   return (
@@ -50,14 +68,47 @@ export function LoopContractSummary({ contract, data, showEvidence = true }: { c
   );
 }
 
+const TARGET_CHOICE_LABELS: Record<ContractTargetChoice, string> = {
+  any: "Anywhere",
+  triggering: "The triggering item",
+  matching: "Issues matching a description",
+  project: "A project",
+  initiative: "An initiative",
+};
+
+/** "Choose document…" button over the server-backed document picker. */
+function ContractDocumentButton({ output, data, loop, onPick }: { output: LoopContractOutput; data: BootstrapData; loop: Loop; onPick: (document: { id: string; title: string }) => void }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const target = output.target ?? {};
+  const chosen = target.documentId ? (data.documents?.find((document) => document.id === target.documentId)?.title ?? target.title) : undefined;
+  return (
+    <>
+      <button type="button" className={`select-control loops-contract-document${unchosenDocument(output) ? " is-unchosen" : ""}`} aria-label={t("Document")} onClick={() => setOpen(true)}>
+        <span data-i18n-ignore={chosen ? true : undefined}>{chosen || (target.title && !target.ambiguous ? t("Find by title: {title}").replace("{title}", () => target.title!) : t("Choose document…"))}</span>
+      </button>
+      <LoopDocumentPicker data={data} open={open} teamId={target.teamId ?? loop.teamId} newTitle={target.description || loop.name} onOpenChange={setOpen} onSelect={(document) => onPick({ id: document.id, title: document.title })} />
+    </>
+  );
+}
+
 /** Editable row of one output. */
-function ContractOutputEditor({ output, data, onChange, onRemove }: { output: LoopContractOutput; data: BootstrapData; onChange: (next: LoopContractOutput) => void; onRemove: () => void }) {
+function ContractOutputEditor({ output, data, loop, onChange, onRemove }: { output: LoopContractOutput; data: BootstrapData; loop: Loop; onChange: (next: LoopContractOutput) => void; onRemove: () => void }) {
   const { t } = useI18n();
   const target = output.target ?? {};
   const setTarget = (patch: Partial<LoopContractOutput["target"]>) => onChange({ ...output, target: { ...target, ...patch } });
   const writes = output.operation === "create" || output.operation === "update" || output.operation === "append" || output.operation === "write";
   const isDocument = output.kind === "document";
-  const documents = (data.documents ?? []).filter((document) => !document.archivedAt);
+  const creates = createsOutput(output);
+  const choices = targetChoicesFor(output);
+  // "A project" or "An initiative" is chosen before the project or initiative is.
+  const [chosen, setChosen] = useState<ContractTargetChoice>();
+  const stored = targetChoice(output);
+  const choice = chosen && stored === "any" && (chosen === "project" || chosen === "initiative") && choices.includes(chosen) ? chosen : stored;
+  const scoped = output.kind === "issue" || choice === "matching";
+  const placeholders = creates ? syncPlaceholders(target.titleTemplate, target.placeholders) : [];
+  const projects = (data.projects ?? []).filter((project) => !project.archivedAt);
+  const initiatives = data.initiatives ?? [];
   return (
     <li className="loops-contract-edit-row">
       <div className="loops-contract-edit-line">
@@ -92,32 +143,62 @@ function ContractOutputEditor({ output, data, onChange, onRemove }: { output: Lo
       </div>
       {writes && (
         <div className="loops-contract-edit-line">
-          {isDocument && (output.operation === "create" || output.operation === "write") && (
+          {creates && (
             <input
               className="loops-contract-input"
               aria-label={t("Title template")}
-              placeholder={t("Title, e.g. Daily summary-{date}")}
+              placeholder={isDocument ? t("Title, e.g. Daily summary-{date}") : t("Title, e.g. Error: {message}")}
               value={target.titleTemplate ?? ""}
-              onChange={(event) => setTarget({ titleTemplate: event.target.value })}
+              onChange={(event) => setTarget({ titleTemplate: event.target.value, placeholders: syncPlaceholders(event.target.value, target.placeholders) })}
             />
           )}
           {isDocument && (output.operation === "update" || output.operation === "append") && (
+            <ContractDocumentButton output={output} data={data} loop={loop} onPick={(document) => setTarget({ documentId: document.id, title: document.title, mode: "existing", ambiguous: false })} />
+          )}
+          {choices.length > 0 && (
             <SelectControl
-              label={t("Document")}
-              value={target.documentId ?? ""}
+              label={t("Target")}
+              value={choice}
               onChange={(value) => {
-                const document = documents.find((item) => item.id === value);
-                setTarget({ documentId: value || undefined, title: document?.title ?? target.title, mode: "existing" });
+                setChosen(value as ContractTargetChoice);
+                onChange({ ...output, target: withTargetChoice(output, value as ContractTargetChoice) });
               }}
-              options={[{ value: "", label: target.title ? t("Find by title: {title}").replace("{title}", () => target.title!) : t("Any existing document") }, ...documents.map((document) => ({ value: document.id, label: document.title || t("Untitled"), entityName: true }))]}
+              options={choices.map((value) => ({ value, label: t(TARGET_CHOICE_LABELS[value]) }))}
             />
           )}
-          <SelectControl
-            label={t("Team")}
-            value={target.teamId ?? ""}
-            onChange={(value) => setTarget({ teamId: value || undefined, team: value ? data.teams.find((team) => team.id === value)?.name : undefined })}
-            options={[{ value: "", label: target.team ? target.team : t("The loop's team") }, ...activeTeams(data.teams).map((team) => ({ value: team.id, label: team.name, entityName: true }))]}
-          />
+          {choice === "matching" && (
+            <input
+              className="loops-contract-input"
+              aria-label={t("Which issues")}
+              placeholder={t("e.g. open bugs without repro steps")}
+              value={target.match ?? ""}
+              onChange={(event) => setTarget({ match: event.target.value })}
+            />
+          )}
+          {(choice === "project" || scoped) && output.kind !== "change" && !isDocument && (
+            <SelectControl
+              label={t("Project")}
+              value={target.projectId ?? ""}
+              onChange={(value) => setTarget({ projectId: value || undefined, project: value ? projects.find((project) => project.id === value)?.name : undefined })}
+              options={[{ value: "", label: target.project && !target.projectId ? target.project : choice === "project" ? t("Choose project…") : t("Any project") }, ...projects.map((project) => ({ value: project.id, label: project.name, entityName: true }))]}
+            />
+          )}
+          {choice === "initiative" && (
+            <SelectControl
+              label={t("Initiative")}
+              value={target.initiativeId ?? ""}
+              onChange={(value) => setTarget({ initiativeId: value || undefined, initiative: value ? initiatives.find((initiative) => initiative.id === value)?.name : undefined })}
+              options={[{ value: "", label: target.initiative && !target.initiativeId ? target.initiative : t("Choose initiative…") }, ...initiatives.map((initiative) => ({ value: initiative.id, label: initiative.name, entityName: true }))]}
+            />
+          )}
+          {(isDocument || scoped) && (
+            <SelectControl
+              label={t("Team")}
+              value={target.teamId ?? ""}
+              onChange={(value) => setTarget({ teamId: value || undefined, team: value ? data.teams.find((team) => team.id === value)?.name : undefined })}
+              options={[{ value: "", label: target.team ? target.team : isDocument ? t("The loop's team") : t("Any team") }, ...activeTeams(data.teams).map((team) => ({ value: team.id, label: team.name, entityName: true }))]}
+            />
+          )}
           <SelectControl
             label={t("How many")}
             value={output.cardinality ?? "any"}
@@ -125,6 +206,28 @@ function ContractOutputEditor({ output, data, onChange, onRemove }: { output: Lo
             options={Object.entries(CARDINALITY_LABELS).map(([value, label]) => ({ value, label: t(label) }))}
           />
         </div>
+      )}
+      {writes && placeholders.length > 0 && (
+        <div className="loops-contract-edit-line loops-contract-placeholders">
+          {placeholders.map((placeholder) => (
+            <label key={placeholder.name} className="loops-contract-placeholder">
+              <code data-i18n-ignore>{`{${placeholder.name}}`}</code>
+              <input
+                className="loops-contract-input"
+                aria-label={t("What fills {name}").replace("{name}", () => `{${placeholder.name}}`)}
+                placeholder={t("Filled by the run from…")}
+                value={placeholder.source ?? ""}
+                onChange={(event) => setTarget({ placeholders: placeholders.map((item) => (item.name === placeholder.name ? { ...item, source: event.target.value } : item)) })}
+              />
+            </label>
+          ))}
+        </div>
+      )}
+      {writes && unchosenDocument(output) && (
+        <p className="loops-contract-warning" role="alert">
+          <AlertTriangle size={14} />
+          <span>{t("The instructions don't say which document. Choose it, or create a new one.")}</span>
+        </p>
       )}
       {output.evidence && <q className="loops-contract-evidence" data-i18n-ignore>{output.evidence}</q>}
     </li>
@@ -258,6 +361,7 @@ export function LoopOutputContractPanel({
                   key={index}
                   output={output}
                   data={data}
+                  loop={loop}
                   onChange={(next) => setEditing({ ...editing, outputs: editing.outputs.map((item, position) => (position === index ? next : item)) })}
                   onRemove={() => setEditing({ ...editing, outputs: editing.outputs.filter((_, position) => position !== index) })}
                 />
@@ -269,10 +373,11 @@ export function LoopOutputContractPanel({
                 {t("Add output")}
               </button>
               <span className="loops-contract-edit-buttons">
+                {!contractReady(editing) && <small className="loops-contract-hint">{t("Choose the document for each output that writes to an existing one.")}</small>}
                 <button className="loops-ghost-button" type="button" onClick={() => setEditing(undefined)}>
                   {t("Cancel")}
                 </button>
-                <button className="loops-primary-button" type="button" disabled={saving} onClick={() => void save(editing)}>
+                <button className="loops-primary-button" type="button" disabled={saving || !contractReady(editing)} onClick={() => void save(editing)}>
                   {saving ? t("Saving…") : t("Save outputs")}
                 </button>
               </span>
@@ -282,6 +387,26 @@ export function LoopOutputContractPanel({
           <p className="loops-contract-reading" role="status">{t("Reading the instructions…")}</p>
         ) : contract && !fallback ? (
           <>
+            {!contract.readOnly &&
+              contract.outputs.map((output, index) =>
+                unchosenDocument(output) ? (
+                  <div className="loops-contract-warning" role="alert" key={`unchosen-${index}`}>
+                    <AlertTriangle size={14} />
+                    <span>
+                      {t("The instructions don't say which document to write to. Until you choose it, runs write to no existing document and need review.")}
+                      {output.target.description && <q className="loops-contract-evidence" data-i18n-ignore>{output.target.description}</q>}
+                    </span>
+                    <ContractDocumentButton
+                      output={output}
+                      data={data}
+                      loop={loop}
+                      onPick={(document) =>
+                        void save({ ...contract, outputs: contract.outputs.map((item, position) => (position === index ? { ...item, target: { ...item.target, documentId: document.id, title: document.title, mode: "existing", ambiguous: false } } : item)) })
+                      }
+                    />
+                  </div>
+                ) : null,
+              )}
             <LoopContractSummary contract={contract} data={data} />
             {contract.source === "person" && <p className="loops-contract-source">{t("Set by a person")}</p>}
           </>

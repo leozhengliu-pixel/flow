@@ -1664,6 +1664,23 @@ export function listDocuments(
   if (filters.archived) query.set("archived", filters.archived);
   return request(`/api/documents${query.size ? `?${query}` : ""}`);
 }
+/** One page of a document search: matching active documents, most recently updated first. */
+export type DocumentSearchPage = { nodes: FlowDocument[]; pageInfo: { hasNextPage: boolean; endCursor?: string | null } };
+/**
+ * Documents by title through the paginated `/api/documents` connection (recent first), optionally in one team:
+ * pickers search the whole workspace instead of the documents the client has loaded.
+ */
+export function searchDocuments(
+  options: { q?: string; teamId?: string; after?: string; first?: number } = {},
+  signal?: AbortSignal,
+): Promise<DocumentSearchPage> {
+  const query = new URLSearchParams({ first: String(options.first ?? 20), orderBy: "updatedAt" });
+  if (options.after) query.set("after", options.after);
+  if (options.teamId) query.set("teamId", options.teamId);
+  const q = options.q?.trim();
+  if (q) query.set("filter", JSON.stringify({ title: { containsIgnoreCase: q } }));
+  return request(`/api/documents?${query}`, { signal });
+}
 export function listDocumentPermissions(
   documentId: string,
 ): Promise<DocumentPermission[]> {

@@ -1075,14 +1075,26 @@ export interface LoopContractOutput {
   operation: LoopOutputOperation;
   required: boolean;
   target: {
-    mode?: "new" | "existing" | "triggering" | "any";
-    /** A new document's title with {date}, {week}, {month} or {year}. */
+    /** matching: issues in a set the instructions describe (`match`). */
+    mode?: "new" | "existing" | "triggering" | "matching" | "any";
+    /** A new document's or issue's title with {date}, {week}, {month}, {year}, {team}, {project} and the run's placeholders. */
     titleTemplate?: string;
+    /** The title template's placeholders the run fills, with what fills them. */
+    placeholders?: LoopContractPlaceholder[];
     /** An existing document's title and id. */
     title?: string;
     documentId?: string;
+    /** The instructions refer to an existing document without naming it; runs write to none until one is picked. */
+    ambiguous?: boolean;
     team?: string;
     teamId?: UUID;
+    /** The project or initiative a comment or status update is on, or a new issue is in. */
+    project?: string;
+    projectId?: UUID;
+    initiative?: string;
+    initiativeId?: UUID;
+    /** The set of issues a matching target covers. */
+    match?: string;
     description?: string;
     /** The title template for a run's period (on a run's contract). */
     renderedTitle?: string;
@@ -1092,6 +1104,11 @@ export interface LoopContractOutput {
   group?: string;
   evidence?: string;
   reasoning?: string;
+}
+/** A title placeholder the run fills ("{topic}"), and what it is filled from. */
+export interface LoopContractPlaceholder {
+  name: string;
+  source?: string;
 }
 export interface LoopOutputContract {
   /** model: read from the instructions; person: set in the editor; fallback: could not be read (report only). */
@@ -1233,6 +1250,7 @@ export type LoopRunFailureReason =
   | "budget_exhausted"
   | "no_output"
   | "incomplete"
+  | "needs_target"
   | "unavailable"
   | "error";
 export interface LoopRun {
