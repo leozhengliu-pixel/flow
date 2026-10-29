@@ -138,8 +138,19 @@ func (s *server) agentTurnTools(ctx context.Context) []agentProviderTool {
 	if allow, ok := ctx.Value(agentToolFilterKey{}).(func(agentProviderTool) bool); ok {
 		tools = slices.DeleteFunc(tools, func(tool agentProviderTool) bool { return !allow(tool) })
 	}
+	// A loop run's contract may add arguments to its write tools (titleFields).
+	if rewrite, ok := ctx.Value(agentToolRewriteKey{}).(func(agentProviderTool) agentProviderTool); ok {
+		tools = slices.Clone(tools)
+		for index := range tools {
+			tools[index] = rewrite(tools[index])
+		}
+	}
 	return tools
 }
+
+// agentToolRewriteKey carries a function that rewrites the definitions a
+// turn is offered.
+type agentToolRewriteKey struct{}
 
 // agentPromptCacheKey names the prompt cache a Responses request should use (see requestOpenAIResponses).
 type agentPromptCacheKey struct{}

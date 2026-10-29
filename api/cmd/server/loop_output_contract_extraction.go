@@ -25,7 +25,7 @@ import (
 
 // loopContractPromptVersion is part of the instructions hash: changing the
 // extraction prompt reads every loop's contract again.
-const loopContractPromptVersion = "contract-v1"
+const loopContractPromptVersion = "contract-v2"
 
 const loopContractToolName = "record_output_contract"
 
@@ -42,12 +42,17 @@ const loopContractSchema = `{"type":"object","additionalProperties":false,
   "kind":{"type":"string","enum":["document","issue","comment","statusUpdate","change"]},
   "operation":{"type":"string","enum":["create","update","append","read","forbidden"]},
   "required":{"type":"boolean","description":"true when every run must produce it (create, update or append only)."},
-  "target":{"type":"object","additionalProperties":false,"required":["mode","titleTemplate","title","team","description"],
+  "target":{"type":"object","additionalProperties":false,"required":["mode","titleTemplate","placeholders","title","ambiguous","team","project","initiative","match","description"],
    "properties":{
-    "mode":{"type":"string","enum":["new","existing","triggering","any"]},
-    "titleTemplate":{"type":"string","description":"A new document's title with {date}, {week}, {month} or {year} for the run's period; else empty."},
+    "mode":{"type":"string","enum":["new","existing","triggering","matching","any"],"description":"new: made each run; existing: a named document, project or initiative; triggering: the item that triggered the run; matching: issues in a set the instructions describe (match); any: anywhere."},
+    "titleTemplate":{"type":"string","description":"A new document's or issue's title: {date}, {week}, {month}, {year} for the run's period, {team} and {project} for their names, and {name} for any other part the run fills (declare it in placeholders); else empty."},
+    "placeholders":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["name","source"],"properties":{"name":{"type":"string","description":"The placeholder without braces, e.g. topic."},"source":{"type":"string","description":"What the run fills it from, in a few words."}}},"description":"Every {name} in titleTemplate other than date, week, month, year, team and project; else empty."},
     "title":{"type":"string","description":"An existing document's title as the instructions give it; else empty."},
+    "ambiguous":{"type":"boolean","description":"true when an existing document is referred to only by description (the team doc, 团队文档), without its title."},
     "team":{"type":"string","description":"A specific team the instructions name for the output; empty when they name none or only 'the team'."},
+    "project":{"type":"string","description":"A specific project the instructions name (the comment or status update is on it, the new issue goes in it); else empty."},
+    "initiative":{"type":"string","description":"A specific initiative the instructions name for a status update or comment; else empty."},
+    "match":{"type":"string","description":"For mode matching: the set of issues, as the instructions describe it; else empty."},
     "description":{"type":"string","description":"The target in a few words."}}},
   "cardinality":{"type":"string","enum":["onePerRun","perItem","any"]},
   "conditions":{"type":"array","items":{"type":"string"},"description":"Conditions quoted from the instructions under which it is made."},
@@ -92,9 +97,11 @@ Rules:
 5. An exception keeps its output: "除追加团队文档外，不要…" means append to the team document is an output and the refused kinds are forbidden. "只追加到团队文档" (only append to it) is an append output.
 6. Do not add a forbidden entry for a kind that also has a create, update or append output; "不要复用已有 Document" / "do not reuse an existing document" is expressed by target.mode new on the create output.
 7. required is true when every run must make the output. It is false when the output is only made if a condition holds ("如果发现阻塞，创建事项", "comment on bugs that lack repro steps", "for every new error"): put the condition in conditions. Outputs on the triggering issue of an event loop ("Comment on new bugs") are required.
-8. target.mode: new for a document or issue the run makes; existing for a document that already exists (give its title in target.title when the instructions name it, as written, without quotes; a document named only by description, such as "已有团队文档" or "the team doc", has an empty title and a description); triggering for the issue, project or document that triggered the run; any otherwise.
-9. target.titleTemplate: the new document's title with the run's period as {date} (YYYY-MM-DD), {week} (ISO week), {month} (YYYY-MM) or {year}: "标题格式为'每日总结-YYYY-MM-DD'" gives "每日总结-{date}"; "weekly notes titled Week N" gives "Week {week}". Keep the rest of the title exactly. Empty when no title is given.
-10. target.team: only a specific team named for the output ("在设计团队下", "in the Mobile team"); "目标团队", "本团队", "the team", "our team" are the loop's own team: leave team empty and say so in description.
+8. target.mode: new for a document or issue the run makes; existing for a document that already exists, or for a project or initiative the instructions name (its name goes in target.project or target.initiative); triggering for the issue, project or initiative that triggered the run ("comment on it", "the new bug", "该事项", "触发的事项"); matching for issues in a set the instructions describe without naming them ("open bugs without repro steps", "issues labeled customer", "本周逾期的事项"), with the description in target.match; any otherwise ("each project", "any issue").
+9. Existing documents: give the title in target.title when the instructions name it, as written, without quotes ("Release log"). A document named only by description ("已有团队文档", "团队文档", "the team doc", "our wiki page") has an empty title, ambiguous true and a description: the loop's owner then picks it. ambiguous is false whenever a title is given, and for every output that is not an existing document.
+9a. Where comments, status updates and issues go: a comment on the triggering issue → mode triggering; comments on a described set of issues → mode matching with match; a comment or status update on a named project → mode existing with project; on a named initiative → mode existing with initiative; a status update on each project → mode any, cardinality perItem. Issue updates: the triggering issue → triggering; a described set → matching (with team or project when named). New issues: mode new, with team and project when named.
+9b. target.titleTemplate: the new document's or issue's title with the run's period as {date} (YYYY-MM-DD), {week} (ISO week), {month} (YYYY-MM) or {year}, and {team} / {project} for those names: "标题格式为'每日总结-YYYY-MM-DD'" gives "每日总结-{date}"; "weekly notes titled Week N" gives "Week {week}". Keep the rest of the title exactly. Any other part the run fills in ("<error message>", "{topic}", "{客户名}", "[summary]") is a placeholder {name} in braces, declared in target.placeholders with what fills it: "titled Error: <message>" gives "Error: {message}" with placeholders [{"name":"message","source":"the error's message"}]. placeholders is empty when the title has no such part; titleTemplate is empty when no title is given.
+10. target.team: only a specific team named for the output ("在设计团队下", "in the Mobile team"); "目标团队", "本团队", "the team", "our team" are the loop's own team: leave team empty and say so in description. target.project and target.initiative likewise hold only a specific project or initiative ("on the Mobile App project", "在「增长计划」项目上"); "each project" or "the project" names none.
 11. cardinality: onePerRun when each run makes exactly one ("每次运行都要创建一个单独的", "one document per run", a daily document); perItem when one is made for each item ("为每个项目", "for each failing check"); any otherwise.
 12. always is true when the outputs are due even if nothing changed ("即使没有变动也要写", "如果没有变动也要写日报", "even if nothing changed"). skipConditions are conditions that skip the whole run ("节假日跳过", "skip on weekends and public holidays", "If nothing changed, don't post"); skipping single items ("skip issues that already have a comment") is not one.
 13. group: give outputs the same group when the instructions offer them as alternatives ("as a document or a project update").
@@ -103,23 +110,23 @@ Rules:
 Examples (instructions → contract, analysis omitted):
 
 1. "在目标团队下创建一个新的 Document，标题格式为'每日总结-YYYY-MM-DD'，将完整的总结内容写入该 Document。每次运行都要创建一个单独的 Document，不要复用已有 Document。"
-→ {"readOnly":false,"readOnlyEvidence":"","outputs":[{"kind":"document","operation":"create","required":true,"target":{"mode":"new","titleTemplate":"每日总结-{date}","title":"","team":"","description":"a new document in the loop's team (目标团队) each run"},"cardinality":"onePerRun","conditions":[],"group":"","evidence":"在目标团队下创建一个新的 Document，标题格式为'每日总结-YYYY-MM-DD'","reasoning":"Each run creates its own new document; reusing an existing one is excluded by mode new."}],"always":false,"alwaysEvidence":"","skipConditions":[]}
+→ {"readOnly":false,"readOnlyEvidence":"","outputs":[{"kind":"document","operation":"create","required":true,"target":{"mode":"new","titleTemplate":"每日总结-{date}","placeholders":[],"title":"","ambiguous":false,"team":"","project":"","initiative":"","match":"","description":"a new document in the loop's team (目标团队) each run"},"cardinality":"onePerRun","conditions":[],"group":"","evidence":"在目标团队下创建一个新的 Document，标题格式为'每日总结-YYYY-MM-DD'","reasoning":"Each run creates its own new document; reusing an existing one is excluded by mode new."}],"always":false,"alwaysEvidence":"","skipConditions":[]}
 
 2. "请总结团队今天的工作。\n1. 今日完成事项：列出已完成的事项。\n2. 今日新增事项：简要列出今天新创建的事项及创建者。\n将总结结果追加到已有团队文档中，不要在任何事项、项目或其他资源上发布评论。"
-→ {"readOnly":false,"readOnlyEvidence":"","outputs":[{"kind":"document","operation":"append","required":true,"target":{"mode":"existing","titleTemplate":"","title":"","team":"","description":"the team's existing document"},"cardinality":"onePerRun","conditions":[],"group":"","evidence":"将总结结果追加到已有团队文档中","reasoning":"The summary is appended to an existing team document."},{"kind":"issue","operation":"read","required":false,"target":{"mode":"any","titleTemplate":"","title":"","team":"","description":"issues created or completed today"},"cardinality":"any","conditions":[],"group":"","evidence":"今日新增事项：简要列出今天新创建的事项及创建者","reasoning":"A report section that lists issues; nothing is created."},{"kind":"comment","operation":"forbidden","required":false,"target":{"mode":"any","titleTemplate":"","title":"","team":"","description":"comments anywhere"},"cardinality":"any","conditions":[],"group":"","evidence":"不要在任何事项、项目或其他资源上发布评论","reasoning":"Comments are refused; the issues and projects are only places."}],"always":false,"alwaysEvidence":"","skipConditions":[]}
+→ {"readOnly":false,"readOnlyEvidence":"","outputs":[{"kind":"document","operation":"append","required":true,"target":{"mode":"existing","titleTemplate":"","placeholders":[],"title":"","ambiguous":true,"team":"","project":"","initiative":"","match":"","description":"the team's existing document"},"cardinality":"onePerRun","conditions":[],"group":"","evidence":"将总结结果追加到已有团队文档中","reasoning":"The summary is appended to an existing team document."},{"kind":"issue","operation":"read","required":false,"target":{"mode":"any","titleTemplate":"","placeholders":[],"title":"","ambiguous":false,"team":"","project":"","initiative":"","match":"","description":"issues created or completed today"},"cardinality":"any","conditions":[],"group":"","evidence":"今日新增事项：简要列出今天新创建的事项及创建者","reasoning":"A report section that lists issues; nothing is created."},{"kind":"comment","operation":"forbidden","required":false,"target":{"mode":"any","titleTemplate":"","placeholders":[],"title":"","ambiguous":false,"team":"","project":"","initiative":"","match":"","description":"comments anywhere"},"cardinality":"any","conditions":[],"group":"","evidence":"不要在任何事项、项目或其他资源上发布评论","reasoning":"Comments are refused; the issues and projects are only places."}],"always":false,"alwaysEvidence":"","skipConditions":[]}
 
 3. "请总结团队今天的工作。只回复总结文本即可，不要在任何事项、项目、文档或其他资源上发布评论或写入内容。"
-→ {"readOnly":true,"readOnlyEvidence":"只回复总结文本即可，不要在任何事项、项目、文档或其他资源上发布评论或写入内容","outputs":[{"kind":"comment","operation":"forbidden","required":false,"target":{"mode":"any","titleTemplate":"","title":"","team":"","description":"comments anywhere"},"cardinality":"any","conditions":[],"group":"","evidence":"不要在任何事项、项目、文档或其他资源上发布评论","reasoning":"Comments are refused."},{"kind":"document","operation":"forbidden","required":false,"target":{"mode":"any","titleTemplate":"","title":"","team":"","description":"any document"},"cardinality":"any","conditions":[],"group":"","evidence":"或写入内容","reasoning":"Writing content anywhere is refused."}],"always":false,"alwaysEvidence":"","skipConditions":[]}
+→ {"readOnly":true,"readOnlyEvidence":"只回复总结文本即可，不要在任何事项、项目、文档或其他资源上发布评论或写入内容","outputs":[{"kind":"comment","operation":"forbidden","required":false,"target":{"mode":"any","titleTemplate":"","placeholders":[],"title":"","ambiguous":false,"team":"","project":"","initiative":"","match":"","description":"comments anywhere"},"cardinality":"any","conditions":[],"group":"","evidence":"不要在任何事项、项目、文档或其他资源上发布评论","reasoning":"Comments are refused."},{"kind":"document","operation":"forbidden","required":false,"target":{"mode":"any","titleTemplate":"","placeholders":[],"title":"","ambiguous":false,"team":"","project":"","initiative":"","match":"","description":"any document"},"cardinality":"any","conditions":[],"group":"","evidence":"或写入内容","reasoning":"Writing content anywhere is refused."}],"always":false,"alwaysEvidence":"","skipConditions":[]}
 
-4. "每周五写周报，汇总本周完成的事项。" → {"readOnly":true,"readOnlyEvidence":"每周五写周报，汇总本周完成的事项","outputs":[{"kind":"issue","operation":"read","required":false,"target":{"mode":"any","titleTemplate":"","title":"","team":"","description":"issues completed this week"},"cardinality":"any","conditions":[],"group":"","evidence":"汇总本周完成的事项","reasoning":"The weekly report is the reply; issues are only summarized."}],"always":false,"alwaysEvidence":"","skipConditions":[]}
+4. "每周五写周报，汇总本周完成的事项。" → {"readOnly":true,"readOnlyEvidence":"每周五写周报，汇总本周完成的事项","outputs":[{"kind":"issue","operation":"read","required":false,"target":{"mode":"any","titleTemplate":"","placeholders":[],"title":"","ambiguous":false,"team":"","project":"","initiative":"","match":"","description":"issues completed this week"},"cardinality":"any","conditions":[],"group":"","evidence":"汇总本周完成的事项","reasoning":"The weekly report is the reply; issues are only summarized."}],"always":false,"alwaysEvidence":"","skipConditions":[]}
 
-5. "每周五把周报发布为项目更新。" → {"readOnly":false,"readOnlyEvidence":"","outputs":[{"kind":"statusUpdate","operation":"create","required":true,"target":{"mode":"any","titleTemplate":"","title":"","team":"","description":"a project status update"},"cardinality":"any","conditions":[],"group":"","evidence":"把周报发布为项目更新","reasoning":"The report is posted as a project update."}],"always":false,"alwaysEvidence":"","skipConditions":[]}
+5. "每周五把周报发布为项目更新。" → {"readOnly":false,"readOnlyEvidence":"","outputs":[{"kind":"statusUpdate","operation":"create","required":true,"target":{"mode":"any","titleTemplate":"","placeholders":[],"title":"","ambiguous":false,"team":"","project":"","initiative":"","match":"","description":"a project status update"},"cardinality":"any","conditions":[],"group":"","evidence":"把周报发布为项目更新","reasoning":"The report is posted as a project update."}],"always":false,"alwaysEvidence":"","skipConditions":[]}
 
 6. "汇总今日工作，无需在事项、项目上发布评论或创建事项。" → {"readOnly":true,"readOnlyEvidence":"汇总今日工作","outputs":[{"kind":"comment","operation":"forbidden",...,"evidence":"无需在事项、项目上发布评论"},{"kind":"issue","operation":"forbidden",...,"evidence":"或创建事项"}],...}
 
-7. "汇总今日工作并追加到团队文档。如果没有变动也要写日报。节假日跳过。" → {"readOnly":false,"outputs":[{"kind":"document","operation":"append","required":true,"target":{"mode":"existing","title":"","description":"the team document",...},"cardinality":"onePerRun","evidence":"汇总今日工作并追加到团队文档",...}],"always":true,"alwaysEvidence":"如果没有变动也要写日报","skipConditions":[{"condition":"public holidays","evidence":"节假日跳过"}]}
+7. "汇总今日工作并追加到团队文档。如果没有变动也要写日报。节假日跳过。" → {"readOnly":false,"outputs":[{"kind":"document","operation":"append","required":true,"target":{"mode":"existing","title":"","ambiguous":true,"description":"the team document",...},"cardinality":"onePerRun","evidence":"汇总今日工作并追加到团队文档",...}],"always":true,"alwaysEvidence":"如果没有变动也要写日报","skipConditions":[{"condition":"public holidays","evidence":"节假日跳过"}]}
 
-8. "除追加团队文档外，不要发布评论或创建事项。" → outputs: document append required (existing, "the team document"), comment forbidden, issue forbidden; readOnly false.
+8. "除追加团队文档外，不要发布评论或创建事项。" → outputs: document append required (existing, ambiguous true, "the team document"), comment forbidden, issue forbidden; readOnly false.
 
 9. "Review the error log and open a new issue for every new error. If you find a blocker, assign it to the on-call engineer." → outputs: issue create, required false, target mode new, cardinality perItem, conditions ["for every new error"]; issue update, required false, conditions ["if you find a blocker"]; readOnly false.
 
@@ -133,9 +140,27 @@ Examples (instructions → contract, analysis omitted):
 
 14. "Comment on new bugs with a checklist of missing details." (an event loop) → outputs: comment create required, target triggering, cardinality onePerRun.
 
-15. "Read the team doc and update it with this week's decisions; create a new doc only if a decision needs its own page." → outputs: document update required (existing, description "the team doc"); document create required false, conditions ["only if a decision needs its own page"], target new.
+15. "Read the team doc and update it with this week's decisions; create a new doc only if a decision needs its own page." → outputs: document update required (existing, ambiguous true, description "the team doc"); document create required false, conditions ["only if a decision needs its own page"], target new.
 
-16. "Post a weekly update on each project. If nothing changed, don't post." → outputs: statusUpdate create required, cardinality perItem; skipConditions [{"condition":"nothing changed","evidence":"If nothing changed, don't post"}].`
+16. "Post a weekly update on each project. If nothing changed, don't post." → outputs: statusUpdate create required, cardinality perItem; skipConditions [{"condition":"nothing changed","evidence":"If nothing changed, don't post"}].
+
+17. "Every Friday post a status update on the Mobile App project." → outputs: statusUpdate create required, target mode existing, project "Mobile App", cardinality onePerRun.
+
+18. "每周五在「增长计划」举措上发布进展更新。" → outputs: statusUpdate create required, target mode existing, initiative "增长计划".
+
+19. "When a bug is reported, comment on it asking for repro steps." (an event loop) → outputs: comment create required, target mode triggering, cardinality onePerRun.
+
+20. "Comment on every open bug that has no repro steps, asking for them." → outputs: comment create, required false, target mode matching, match "open bugs without repro steps", cardinality perItem, conditions ["open bugs without repro steps"].
+
+21. "Set the priority of issues labeled customer in the Support team." → outputs: issue update required, target mode matching, match "issues labeled customer", team "Support".
+
+22. "For each new error, open an issue in the Platform team's Reliability project titled "Error: <error message>"." → outputs: issue create, required false, target mode new, team "Platform", project "Reliability", titleTemplate "Error: {message}", placeholders [{"name":"message","source":"the error's message"}], cardinality perItem, conditions ["for each new error"].
+
+23. "为每条新的客户反馈创建一篇文档，标题为'反馈-{客户名}-YYYY-MM-DD'。" → outputs: document create, required false, target mode new, titleTemplate "反馈-{客户名}-{date}", placeholders [{"name":"客户名","source":"反馈的客户名称"}], cardinality perItem.
+
+24. "每周一在设计团队新建一个事项，标题为'设计评审-YYYY-MM-DD'。" → outputs: issue create required, target mode new, team "设计团队", titleTemplate "设计评审-{date}", placeholders [], cardinality onePerRun.
+
+25. "把本周总结追加到团队文档。" → outputs: document append required, target mode existing, title "", ambiguous true, description "the team document".`
 
 // loopContractInput is the extraction's user message.
 func loopContractInput(loop domain.Loop, teams []domain.Team) string {
@@ -202,7 +227,14 @@ func parseLoopContractArguments(raw string) (*domain.LoopOutputContract, error) 
 	// Only the model's fields: the runtime sets these.
 	contract.Source, contract.InstructionsHash, contract.Model, contract.ExtractedAt, contract.Error, contract.UpdatedBy = "", "", "", nil, "", ""
 	for index := range contract.Outputs {
-		contract.Outputs[index].Target.DocumentID, contract.Outputs[index].Target.TeamID, contract.Outputs[index].Target.RenderedTitle = "", "", ""
+		output := &contract.Outputs[index]
+		target := &output.Target
+		target.DocumentID, target.TeamID, target.ProjectID, target.InitiativeID, target.RenderedTitle = "", "", "", "", ""
+		if output.Kind == "document" && (output.Operation == loopOpUpdate || output.Operation == loopOpAppend) && strings.TrimSpace(target.Title) == "" {
+			// An existing document the instructions do not name is the
+			// owner's to pick, never any document.
+			target.Ambiguous, target.Mode = true, "existing"
+		}
 	}
 	if err := normalizeLoopContract(&contract); err != nil {
 		return nil, err
