@@ -85,8 +85,11 @@ const unchangedWrite = "A request that only repeats the current values changes n
 // unchangedVersionedWrite adds the optimistic-locking rule for versioned resources.
 const unchangedVersionedWrite = unchangedWrite + " A stale expectedVersion is still refused with 409, even when the values match."
 
+// formerMemberMentions describes rich text that mentions people who left.
+const formerMemberMentions = "Rich text (bodyData, contentData or descriptionData) that adds a mention of someone removed from or suspended in the workspace is refused with 400 (\"This person is no longer a member of the workspace and can't be mentioned\"); mentions the text already has stay, and a plain-text @name is kept as text."
+
 // formerMembers describes writes that name people who left the workspace.
-const formerMembers = "Naming someone who was removed from or suspended in the workspace as a new assignee, delegate, subscriber, lead, member or owner is refused with 400 (\"This person is no longer a member of the workspace\"); such people the resource already names stay as they are, and they get no new notifications."
+const formerMembers = "Naming someone who was removed from or suspended in the workspace as a new assignee, delegate, subscriber, lead, member or owner is refused with 400 (\"This person is no longer a member of the workspace\"); such people the resource already names stay as they are, and they get no new notifications. " + formerMemberMentions
 
 // Operations is the documented public REST surface. Routes not listed here
 // still appear in the OpenAPI inventory with the generic error envelope.
@@ -114,8 +117,8 @@ var Operations = []Operation{
 	{Method: "PATCH", Path: "/api/customer-requests/{id}", Tag: "customers", Summary: "Update a customer request", Description: unchangedWrite, Request: CustomerRequestInput{}, Response: domain.CustomerRequest{}, Scopes: []string{"write", "customer:write"}},
 
 	withOrderings(Operation{Method: "GET", Path: "/api/comments", Tag: "comments", Summary: "List comments of one parent", Description: "Provide exactly one of issueId, documentId, projectId or initiativeId. Issue and document comments are ordered by createdAt and do not accept filter.", Response: domain.Comment{}, Connection: true, Filter: []string{"id", "body", "user", "parent", "resolved", "createdAt", "updatedAt"}, Params: []Param{{Name: "issueId", Description: "Issue id or identifier (ENG-123)."}, {Name: "documentId"}, {Name: "projectId"}, {Name: "initiativeId"}}, Scopes: readScopes}),
-	{Method: "POST", Path: "/api/issues/{id}/comments", Tag: "comments", Summary: "Create a comment", Request: domain.CommentCreateInput{}, Response: domain.Comment{}, Status: 201, Scopes: []string{"write", "create_comments", "comments:create"}},
-	{Method: "PATCH", Path: "/api/issues/{id}/comments/{commentId}", Tag: "comments", Summary: "Update a comment", Description: unchangedVersionedWrite, Request: domain.CommentUpdateInput{}, Response: domain.Comment{}, Scopes: writeScopes},
+	{Method: "POST", Path: "/api/issues/{id}/comments", Tag: "comments", Summary: "Create a comment", Description: formerMemberMentions, Request: domain.CommentCreateInput{}, Response: domain.Comment{}, Status: 201, Scopes: []string{"write", "create_comments", "comments:create"}},
+	{Method: "PATCH", Path: "/api/issues/{id}/comments/{commentId}", Tag: "comments", Summary: "Update a comment", Description: unchangedVersionedWrite + " " + formerMemberMentions, Request: domain.CommentUpdateInput{}, Response: domain.Comment{}, Scopes: writeScopes},
 
 	{Method: "GET", Path: "/api/attachments", Tag: "attachments", Summary: "List attachments by issue or URL", Description: "Provide issueId and/or url.", Response: domain.Attachment{}, Connection: true, Filter: []string{"id", "title", "subtitle", "url", "contentType", "sourceType", "issue", "creator", "createdAt", "updatedAt"}, Params: []Param{{Name: "issueId"}, {Name: "url"}}, Scopes: readScopes},
 	{Method: "GET", Path: "/api/attachments/{id}", Tag: "attachments", Summary: "Get an attachment", Response: domain.Attachment{}, Scopes: readScopes},
@@ -170,7 +173,7 @@ var Operations = []Operation{
 	{Method: "DELETE", Path: "/api/issues/{id}/comments/{commentId}", Tag: "comments", Summary: "Delete a comment", Scopes: writeScopes},
 
 	// Documents.
-	{Method: "POST", Path: "/api/documents", Tag: "documents", Summary: "Create a document", Description: "Content is Markdown. An actor=app token may name the external author with createAsUser.", Request: DocumentCreateInput{}, Response: domain.Document{}, Status: 201, Scopes: writeScopes},
+	{Method: "POST", Path: "/api/documents", Tag: "documents", Summary: "Create a document", Description: "Content is Markdown. An actor=app token may name the external author with createAsUser. " + formerMemberMentions, Request: DocumentCreateInput{}, Response: domain.Document{}, Status: 201, Scopes: writeScopes},
 	{Method: "PATCH", Path: "/api/documents/{id}", Tag: "documents", Summary: "Update a document", Description: "Send expectedVersion to detect a concurrent change: the write is then refused with 409 and the current document. " + unchangedVersionedWrite + " " + formerMembers, Request: DocumentUpdateInput{}, Response: domain.Document{}, Scopes: writeScopes},
 
 	// Project milestones.

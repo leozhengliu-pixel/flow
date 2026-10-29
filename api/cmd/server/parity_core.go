@@ -386,6 +386,10 @@ func (s *server) publishDocumentDraft(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		draft := data.DocumentContentDrafts[index]
+		// A draft written while the person was a member publishes no new mention of them.
+		if err := refuseNewFormerMemberMentions(data, document.ContentData, draft.ContentData); err != nil {
+			return err
+		}
 		now := time.Now().UTC()
 		workspace = data.Workspace.URLKey
 		keepDocumentBaseline(document, *document)
@@ -533,6 +537,9 @@ func (s *server) updateReleaseNote(w http.ResponseWriter, r *http.Request) {
 			item.Body = *input.Body
 		}
 		if input.BodyData != nil {
+			if err := refuseNewFormerMemberMentions(data, before.BodyData, input.BodyData); err != nil {
+				return err
+			}
 			item.BodyData = input.BodyData
 		}
 		now := time.Now().UTC()

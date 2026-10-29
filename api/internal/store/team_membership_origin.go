@@ -351,6 +351,7 @@ func (s *SQLiteStore) RemoveMemberWithChanges(ctx context.Context, workspaceID, 
 		return nil, err
 	}
 	s.accountAccessChanged(userID)
+	s.PublishMemberStatus(ctx, workspaceID, userID, "removed")
 	return changes, nil
 }
 

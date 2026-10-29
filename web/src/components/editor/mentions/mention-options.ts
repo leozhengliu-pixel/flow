@@ -75,7 +75,8 @@ export function mentionOptions(data: BootstrapData | undefined, query: string, p
     if (!needle && !['user', 'issue', 'project', 'document'].includes(kind)) continue
     switch (kind) {
       case 'user':
-        sections.push(top(pools.users, user => personMatchesQuery(user, needle) ? rank(needle, user.displayName, user.name, user.username) + 1 + (user.app ? 0.5 : 0) : 0, limit).map(user => option(data, group, { kind: 'user', user })))
+        // Removed and suspended people stay on what they wrote but are not mentioned anew (the server refuses it).
+        sections.push(top(pools.users.filter(user => user.active !== false), user => personMatchesQuery(user, needle) ? rank(needle, user.displayName, user.name, user.username) + 1 + (user.app ? 0.5 : 0) : 0, limit).map(user => option(data, group, { kind: 'user', user })))
         break
       case 'issue':
         sections.push(top(pools.issues.filter(issue => !issue.archivedAt), issue => rank(needle, issue.identifier, issue.title), limit).map(issue => option(data, group, { kind: 'issue', issue }, issue.title)))

@@ -1266,6 +1266,7 @@ func (s *SQLiteStore) SuspendMember(ctx context.Context, workspaceID, userID str
 		return ErrAuthForbidden
 	}
 	s.accountAccessChanged(userID)
+	s.PublishMemberStatus(ctx, workspaceID, userID, "suspended")
 	return nil
 }
 
@@ -1278,6 +1279,7 @@ func (s *SQLiteStore) ResumeMember(ctx context.Context, workspaceID, userID stri
 		return ErrAuthForbidden
 	}
 	s.syncMemberDirectoryByID(ctx, workspaceID, userID)
+	s.PublishMemberStatus(ctx, workspaceID, userID, "active")
 	return nil
 }
 

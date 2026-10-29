@@ -531,6 +531,9 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		} else {
 			previousDocumentID = "document_content_" + issue.ID
 		}
+		if err := refuseNewFormerMemberDescriptionMentions(data, issue, input); err != nil {
+			return err
+		}
 		changes, err := applyUpdate(data, issue, input)
 		if err != nil {
 			return err
