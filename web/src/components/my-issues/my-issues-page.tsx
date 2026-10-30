@@ -71,6 +71,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const hierarchyIssues = useMemo(() => data.issueCollectionPaged ? sourceIssues : issuesWithHierarchyContext(sourceIssues, data.issues), [data.issueCollectionPaged, data.issues, sourceIssues])
   const initialGroups = useMemo(() => groupIssues(hierarchyIssues, workspaceSlug, data, sourceIssueIds), [data, hierarchyIssues, sourceIssueIds, workspaceSlug])
   const issuesById = useMemo(() => new Map([...data.issues, ...pagedIssues].map(issue => [issue.id, issue])), [data.issues, pagedIssues])
+  const hasSharedIssues = useMemo(() => data.issues.some(issue => isSharedWithViewer(issue, data)), [data])
   const rowOptions = useMemo(() => explorerPropertyOptions(data, sourceIssues), [data, sourceIssues])
 
   const groupingContext = useMemo(() => ({ data }), [data])
@@ -226,6 +227,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
       filters={controller.filters}
       filterOptions={field => explorerFilterOptions(field, rowOptions)}
       viewCounts={data.issueCollectionPaged ? undefined : controller.counts}
+      hasSharedIssues={hasSharedIssues}
       viewHref={controller.viewHref}
       onDetailsOpenChange={open=>{controller.setDetailsOpen(open);if(open)setInsightsOpen(false);else setPreviewIssueId(undefined)}}
       onInsightsOpenChange={open=>{setInsightsOpen(open);if(open){controller.setDetailsOpen(false);setInsightsConfig(readInsights(`${workspaceSlug}:my-issues:${controller.view}:insights`))}}}
