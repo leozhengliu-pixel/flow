@@ -281,13 +281,15 @@ function ActorVisual({ notification }: { notification: InboxNotificationRowData 
   }
   return (
     <div className="flow-inbox-row__actor">
-      {notification.actorAvatarUrl ? (
-        <AvatarImage className="flow-inbox-row__avatar" src={notification.actorAvatarUrl} alt="" aria-label={notification.actor} />
-      ) : (
-        <span className="flow-inbox-row__avatar flow-inbox-row__initials" aria-label={notification.actor} style={{ '--flow-inbox-avatar': actorColor(notification.actorId ?? notification.actor) } as CSSProperties}>
-          {notification.actorInitials ?? initials(notification.actor)}
-        </span>
-      )}
+      <span className="flow-inbox-row__avatar-frame">
+        {notification.actorAvatarUrl ? (
+          <AvatarImage className="flow-inbox-row__avatar" src={notification.actorAvatarUrl} alt="" aria-label={notification.actor} />
+        ) : (
+          <span className="flow-inbox-row__avatar flow-inbox-row__initials" aria-label={notification.actor} style={{ '--flow-inbox-avatar': actorColor(notification.actorId ?? notification.actor) } as CSSProperties}>
+            {notification.actorInitials ?? initials(notification.actor)}
+          </span>
+        )}
+      </span>
       <span className="flow-inbox-row__kind" aria-hidden="true">
         <span className="flow-inbox-row__kind-bg"><KindIcon kind={notification.kind} state={notification.issueState} /></span>
       </span>

@@ -98,7 +98,7 @@
   font-size: 13px;
   font-weight: 500;
   line-height: 16px;
-}.flow-inbox__header-spacer { flex: 1; }.flow-inbox__icon-button {
+}.flow-inbox__header-spacer { flex: 1; }.flow-inbox__header-toolbar-group { display: flex; }.flow-inbox__icon-button {
   position: relative;
   display: inline-flex;
   width: 28px;
@@ -201,6 +201,11 @@
   height: 44px;
   flex: 0 0 32px;
   padding-top: 12px;
+}.flow-inbox-row__avatar-frame {
+  display: block;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
 }.flow-inbox-row__avatar {
   display: grid;
   width: 32px;
@@ -789,3 +794,129 @@
 .flow-inbox-ordering-select::after, .flow-inbox-grouping-select::after { content: ""; position: absolute; inset: 0; border-radius: 8px; pointer-events: none; box-shadow: var(--inbox-select-ring); }
 /* Keyboard-opened menus highlight the row, without a focus box. */
 .flow-inbox-menu__check-item:focus-visible { outline: none; }
+
+/* Phone inbox list: the reference app's 44px bar, 55px rows and 13/12px text. */
+@media (max-width: 767px) {
+  html:root body .app .flow-inbox__header {
+    gap: 12px;
+    padding: 0;
+    background: var(--bg-panel);
+    border: 0;
+  }
+  html:root[data-sidebar-mode] body .app .flow-inbox__header:has(> [data-sidebar-trigger]) {
+    padding-left: 0;
+  }
+  html:root body .app .flow-inbox__header .flow-inbox__mobile-menu {
+    margin-left: 8px;
+    margin-right: 0;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+    padding: 0 2px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+  }
+  html:root body .app .flow-inbox__header h2 {
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: normal;
+    border-style: none;
+  }
+  html:root body .app .flow-inbox__header .flow-inbox__icon-button {
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+    padding: 0 2px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+  }
+  html:root body .app .flow-inbox__header-toolbar-group {
+    gap: 4px;
+    margin-right: 8px;
+    border-style: none;
+  }
+  html:root body .app .flow-inbox__header-controls {
+    gap: 6px;
+    border-style: none;
+  }
+  html:root body .app .flow-inbox__list {
+    background: var(--bg-panel);
+    border-style: none;
+  }
+  html:root body .app .flow-inbox-row {
+    z-index: 0;
+  }
+  html:root body .app .flow-inbox-row__inner {
+    padding: 0 8px;
+  }
+  html:root body .app .flow-inbox-row__avatar-frame {
+    color: var(--bright);
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 0;
+    border-style: none;
+    border-radius: 0;
+  }
+  html:root body .app .flow-inbox-row__content {
+    gap: 3.5px;
+  }
+  html:root body .app .flow-inbox-row__unread-dot {
+    margin-top: 2px;
+    border-style: none;
+  }
+  html:root body .app .flow-inbox-row__identifier,
+  html:root body .app .flow-inbox-row__title,
+  html:root body .app .flow-inbox-row__body,
+  html:root body .app .flow-inbox-row__summary time,
+  html:root body .app .flow-inbox-row__issue-state,
+  html:root body .app .flow-inbox-row__issue-state svg {
+    border-style: none;
+  }
+  html:root body .app .flow-inbox-row__identifier {
+    font-weight: 450;
+    line-height: normal;
+    letter-spacing: -0.26px;
+    color: var(--issue-muted);
+  }
+  html:root body .app .flow-inbox-row[data-read="false"] .flow-inbox-row__identifier {
+    font-weight: 500;
+    color: var(--text);
+  }
+  html:root body .app .flow-inbox-row__title {
+    font-weight: 500;
+    line-height: normal;
+    color: var(--issue-muted);
+  }
+  html:root body .app .flow-inbox-row[data-read="false"] .flow-inbox-row__title {
+    color: var(--text);
+  }
+  html:root body .app .flow-inbox-row__summary {
+    height: auto;
+  }
+  html:root body .app .flow-inbox-row__body,
+  html:root body .app .flow-inbox-row__summary time {
+    font-weight: 450;
+    line-height: normal;
+    color: var(--issue-muted);
+  }
+  html:root body .app .flow-inbox-row[data-read="false"] .flow-inbox-row__body,
+  html:root body .app .flow-inbox-row[data-read="false"] .flow-inbox-row__summary time,
+  html:root body .app .flow-inbox-row[data-active="true"] .flow-inbox-row__body,
+  html:root body .app .flow-inbox-row[data-active="true"] .flow-inbox-row__summary time {
+    color: var(--issue-muted);
+  }
+  html:root body .app .flow-inbox-row__summary time {
+    width: 16px;
+    flex: 0 0 16px;
+    text-align: right;
+  }
+  html:root body .app .flow-inbox-row__issue-state {
+    width: 14px;
+    flex-basis: 14px;
+    justify-content: flex-end;
+    margin-left: 8px;
+  }
+}

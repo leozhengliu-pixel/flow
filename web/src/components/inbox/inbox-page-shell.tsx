@@ -243,24 +243,26 @@ export function InboxHeader({
         />
       </div>
       <div className="flow-inbox__header-spacer" />
-      <div className="flow-inbox__header-controls">
-        <FlowTooltip label="Show unreads only">
-          <button
-            aria-label="Show unreads only"
-            aria-pressed={!displayOptions.showRead}
-            className="flow-inbox__icon-button"
-            data-active={!displayOptions.showRead || undefined}
-            onClick={() => onDisplayOptionsChange({ ...displayOptions, showRead: !displayOptions.showRead })}
-            type="button"
-          ><UnreadFilterIcon /></button>
-        </FlowTooltip>
-        <InboxFilterBuilder
-          trigger={<IconButton label="Add filter" tooltip="Add Filter" shortcut="F" count={filters?.length ?? 0}><FilterIcon /></IconButton>}
-          filters={filters ?? []}
-          options={filterOptions}
-          onFiltersChange={nextFilters => onFiltersChange?.(nextFilters)}
-        />
-        <DisplayOptionsMenu value={displayOptions} onChange={onDisplayOptionsChange} />
+      <div className="flow-inbox__header-toolbar-group">
+        <div className="flow-inbox__header-controls">
+          <FlowTooltip label="Show unreads only">
+            <button
+              aria-label="Show unreads only"
+              aria-pressed={!displayOptions.showRead}
+              className="flow-inbox__icon-button"
+              data-active={!displayOptions.showRead || undefined}
+              onClick={() => onDisplayOptionsChange({ ...displayOptions, showRead: !displayOptions.showRead })}
+              type="button"
+            ><UnreadFilterIcon /></button>
+          </FlowTooltip>
+          <InboxFilterBuilder
+            trigger={<IconButton label="Add filter" tooltip="Add Filter" shortcut="F" count={filters?.length ?? 0}><FilterIcon /></IconButton>}
+            filters={filters ?? []}
+            options={filterOptions}
+            onFiltersChange={nextFilters => onFiltersChange?.(nextFilters)}
+          />
+          <DisplayOptionsMenu value={displayOptions} onChange={onDisplayOptionsChange} />
+        </div>
       </div>
     </header>
   )
