@@ -339,6 +339,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- MCP issue saves retain inherited team workflows; issue counts use the team
+  counter only for team and archive arguments, leaving all other filters on
+  the general query path.
+
 - Sidebar Try items use the shared navigation row styling through context-menu
   wrappers, keeping icons, labels and hover dismiss controls aligned in both themes.
 - Close former-member mention gaps in state-only collaborative edits, posts
