@@ -126,13 +126,23 @@ export function contractTargetText(output: LoopContractOutput, data: Pick<Bootst
   const documentTitle = target.documentId ? (data.documents?.find((document) => document.id === target.documentId)?.title ?? target.title) : target.title;
   if (output.kind === "document" && documentTitle && output.operation !== "create") parts.push(t("the document {title}").replace("{title}", () => documentTitle));
   if (unchosenDocument(output)) parts.push(t("document not chosen yet"));
-  if (target.mode === "matching") parts.push(t("issues matching {match}").replace("{match}", () => target.match || target.description || ""));
+  if (target.mode === "matching") {
+    const match = target.match || target.description;
+    parts.push(match ? t("issues matching {match}").replace("{match}", () => match) : t("Issues matching a description"));
+  }
   const project = target.projectId ? (data.projects?.find((item) => item.id === target.projectId)?.name ?? target.project) : target.project;
   const initiative = target.initiativeId ? (data.initiatives?.find((item) => item.id === target.initiativeId)?.name ?? target.initiative) : target.initiative;
   const scoped = output.kind === "issue" || target.mode === "matching";
   if (project) parts.push((scoped ? t("in {project}") : t("on {project}")).replace("{project}", () => project));
   if (initiative && output.kind !== "issue") parts.push(t("on {initiative}").replace("{initiative}", () => initiative));
-  if (!title && !documentTitle && !unchosenDocument(output) && !project && !initiative && target.mode && target.mode !== "any" && target.mode !== "matching") parts.push(t(TARGET_MODE_LABELS[target.mode] ?? target.mode));
+  if (!title && !documentTitle && !unchosenDocument(output) && !project && !initiative && target.mode && target.mode !== "matching") {
+    if (target.mode === "any") {
+      const anyLabel = output.kind === "issue" ? "Any issue" : output.kind === "statusUpdate" ? "Any project" : output.kind === "comment" ? "Any issue" : "Anywhere";
+      parts.push(t(anyLabel));
+    } else {
+      parts.push(t(TARGET_MODE_LABELS[target.mode] ?? "Anywhere"));
+    }
+  }
   if (!documentTitle && target.description && !title && target.mode !== "matching") parts.push(target.description);
   const team = target.teamId ? (data.teams.find((item) => item.id === target.teamId)?.name ?? target.team) : target.team;
   if (team) parts.push(t("in {team}").replace("{team}", () => team));
@@ -142,6 +152,14 @@ export function contractTargetText(output: LoopContractOutput, data: Pick<Bootst
   if (output.cardinality && output.cardinality !== "any") parts.push(t(CARDINALITY_LABELS[output.cardinality]));
   if (output.conditions?.length) parts.push(t("when {condition}").replace("{condition}", () => output.conditions!.join("; ")));
   return parts.join(" · ");
+}
+
+/** The compact, human-readable line shared by the contract panel and stale review. */
+export function contractOutputSummary(output: LoopContractOutput, data: Pick<BootstrapData, "teams" | "documents"> & Partial<Pick<BootstrapData, "projects" | "initiatives">>, t: Translate) {
+  const operation = t(CONTRACT_OPERATION_LABELS[output.operation] ?? "Other change");
+  const kind = t(CONTRACT_KIND_LABELS[output.kind] ?? "Other change");
+  const target = contractTargetText(output, data, t);
+  return [operation, kind, target].filter(Boolean).join(" · ");
 }
 
 export function blankOutput(): LoopContractOutput {

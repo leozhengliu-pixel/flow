@@ -81,7 +81,7 @@ export function LoopCommandPicker({
                   value={`${item.id} ${item.label} ${item.detail ?? ""} ${item.keywords ?? ""}`}
                   keywords={item.entity ? undefined : translatedKeywords([item.label], t)}
                   onSelect={() => !item.disabled && onSelect(item)}
-                  className={item.disabled ? "loops-picker-item is-disabled" : "loops-picker-item"}
+                  className={`loops-picker-item${item.disabled ? " is-disabled" : ""}${item.preview ? " is-preview" : ""}`}
                 >
                   {item.icon && <span className="command-item-icon">{item.icon}</span>}
                   <span className={item.preview ? "loops-picker-content" : "loops-picker-copy"}>

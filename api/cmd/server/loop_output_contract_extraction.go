@@ -389,7 +389,7 @@ func (s *server) storeLoopContract(workspace, loopID, hash string, contract *dom
 		if loopContractHashOf(*loop) == hash {
 			if loop.OutputContract != nil && loop.OutputContract.Source == loopContractPerson {
 				if loopContractStale(*loop) {
-					loop.SuggestedOutputContract = contract
+					loop.SuggestedOutputContract = mergeLoopPersonChoices(loop.OutputContract, contract)
 				}
 			} else {
 				loop.OutputContract = contract
@@ -408,6 +408,105 @@ func (s *server) storeLoopContract(workspace, loopID, hash string, contract *dom
 	})
 	if err != nil && !errors.Is(err, errNotFound) {
 		log.Printf("Loop output contract store workspace=%s loop=%s: %v", workspace, loopID, err)
+	}
+}
+
+// mergeLoopPersonChoices keeps choices made in the editor when a fresh model
+// read describes the same output. The model still owns fields that the new
+// instructions clearly changed; only picked entities and edited title
+// templates are carried across the review boundary.
+func mergeLoopPersonChoices(person, suggested *domain.LoopOutputContract) *domain.LoopOutputContract {
+	if person == nil || suggested == nil {
+		return suggested
+	}
+	merged := *suggested
+	merged.Outputs = make([]domain.LoopContractOutput, len(suggested.Outputs))
+	copy(merged.Outputs, suggested.Outputs)
+	used := make(map[int]bool, len(person.Outputs))
+	for index := range merged.Outputs {
+		merged.Outputs[index].Target.Placeholders = append([]domain.LoopContractPlaceholder(nil), suggested.Outputs[index].Target.Placeholders...)
+	}
+	for _, previous := range person.Outputs {
+		match := -1
+		for index, candidate := range merged.Outputs {
+			if used[index] || (candidate.Kind != previous.Kind || candidate.Operation != previous.Operation) {
+				continue
+			}
+			match = index
+			break
+		}
+		if match < 0 && strings.TrimSpace(previous.Evidence) != "" {
+			for index, candidate := range merged.Outputs {
+				if !used[index] && strings.TrimSpace(candidate.Evidence) == strings.TrimSpace(previous.Evidence) {
+					match = index
+					break
+				}
+			}
+		}
+		if match < 0 {
+			continue
+		}
+		used[match] = true
+		if !loopTargetClearlyChanged(previous.Target, merged.Outputs[match].Target) {
+			carryLoopPersonTarget(&merged.Outputs[match].Target, previous.Target)
+		}
+	}
+	return &merged
+}
+
+func loopTargetClearlyChanged(previous, next domain.LoopContractTarget) bool {
+	if previous.Mode != "" && next.Mode != "" && previous.Mode != next.Mode {
+		return true
+	}
+	if previous.DocumentID != "" && next.DocumentID != "" && previous.DocumentID != next.DocumentID {
+		return true
+	}
+	if previous.DocumentID != "" && next.Title != "" && previous.Title != "" && !strings.EqualFold(previous.Title, next.Title) {
+		return true
+	}
+	if previous.ProjectID != "" && next.ProjectID != "" && previous.ProjectID != next.ProjectID {
+		return true
+	}
+	if previous.ProjectID != "" && next.Project != "" && previous.Project != "" && !strings.EqualFold(previous.Project, next.Project) {
+		return true
+	}
+	if previous.InitiativeID != "" && next.InitiativeID != "" && previous.InitiativeID != next.InitiativeID {
+		return true
+	}
+	if previous.InitiativeID != "" && next.Initiative != "" && previous.Initiative != "" && !strings.EqualFold(previous.Initiative, next.Initiative) {
+		return true
+	}
+	if previous.TeamID != "" && next.TeamID != "" && previous.TeamID != next.TeamID {
+		return true
+	}
+	if previous.TeamID != "" && next.Team != "" && previous.Team != "" && !strings.EqualFold(previous.Team, next.Team) {
+		return true
+	}
+	if previous.Match != "" && next.Match != "" && !strings.EqualFold(previous.Match, next.Match) {
+		return true
+	}
+	if previous.TitleTemplate != "" && next.TitleTemplate != "" && previous.TitleTemplate != next.TitleTemplate {
+		return true
+	}
+	return false
+}
+
+func carryLoopPersonTarget(next *domain.LoopContractTarget, previous domain.LoopContractTarget) {
+	if previous.DocumentID != "" {
+		next.DocumentID, next.Title, next.Ambiguous, next.Mode = previous.DocumentID, previous.Title, false, previous.Mode
+	}
+	if previous.ProjectID != "" {
+		next.ProjectID, next.Project = previous.ProjectID, previous.Project
+	}
+	if previous.InitiativeID != "" {
+		next.InitiativeID, next.Initiative = previous.InitiativeID, previous.Initiative
+	}
+	if previous.TeamID != "" {
+		next.TeamID, next.Team = previous.TeamID, previous.Team
+	}
+	if previous.TitleTemplate != "" {
+		next.TitleTemplate = previous.TitleTemplate
+		next.Placeholders = append([]domain.LoopContractPlaceholder(nil), previous.Placeholders...)
 	}
 }
 
