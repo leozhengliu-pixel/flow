@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
+import { Command } from 'cmdk';
+import { PhoneCommandMenu } from '@/components/ui/phone-menu';
+import { usePhoneLayout } from '@/hooks/use-phone-layout';
+import { useOptionalTranslate } from '@/i18n/i18n';
 import type { AccountBootstrap, BootstrapData, Workspace } from "@/types/flow";
 import {
   DropdownMenu,
@@ -29,6 +33,9 @@ export function WorkspaceMenu({
   onLogout: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
+  const phone = usePhoneLayout();
+  const t = useOptionalTranslate();
+  const [switching, setSwitching] = useState(false);
   const sequence = useRef<{ key: string; at: number }>({ key: "", at: 0 });
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
@@ -68,6 +75,31 @@ export function WorkspaceMenu({
     return () => removeEventListener("keydown", listener);
   }, [onSettings]);
   const workspace = data.workspace;
+  const choose = (run: () => void) => { setOpen(false); run() };
+  if (phone) return <>
+    <button className="workspace-menu-trigger" aria-label={`${workspace.name} ${t('Workspace Menu')}`} onClick={() => { setSwitching(false); setOpen(true) }}>
+      <WorkspaceAvatar workspace={workspace}/><strong>{workspace.name}</strong><WorkspaceChevronIcon/>
+    </button>
+    <PhoneCommandMenu className="workspace-phone-menu" placeholder="Filter..." open={open} onOpenChange={setOpen} label={t(switching ? 'Switch workspace' : 'Workspace Menu')}>
+      {switching ? <>
+        <Command.Group heading={account.viewer.email}>
+          {account.workspaces.map(({ workspace: item }) => <Command.Item key={item.id} value={item.id} keywords={[item.name]} onSelect={() => choose(() => onSwitch(item))}>
+            <WorkspaceAvatar workspace={item}/><span data-i18n-ignore>{item.name}</span>{item.id === workspace.id && <Check className="phone-menu-current"/>}
+          </Command.Item>)}
+        </Command.Group>
+        <Command.Separator/>
+        <Command.Item onSelect={() => choose(onCreate)}>{t('Create or join a workspace…')}</Command.Item>
+      </> : <>
+        <Command.Item onSelect={() => choose(() => onSettings('workspace'))}>{t('Settings')}</Command.Item>
+        {(data.viewerRole === 'admin' || data.viewerRole === 'owner') && <Command.Item onSelect={() => choose(() => onSettings('members'))}>{t('Invite and manage members')}</Command.Item>}
+        <Command.Item onSelect={() => choose(() => { window.open('https://flow.app/download', '_blank') })}>{t('Download desktop app')}</Command.Item>
+        <Command.Separator/>
+        <Command.Item onSelect={() => setSwitching(true)}>{t('Switch workspace')}</Command.Item>
+        <Command.Separator/>
+        <Command.Item onSelect={() => choose(() => { void onLogout() })}>{t('Log out')}</Command.Item>
+      </>}
+    </PhoneCommandMenu>
+  </>;
   return (
     <>
       <DropdownMenu open={open} onOpenChange={setOpen}>
