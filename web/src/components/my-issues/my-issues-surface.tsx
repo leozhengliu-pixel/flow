@@ -1,8 +1,7 @@
 import { forwardRef, useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import * as Popover from '@radix-ui/react-popover'
-import { ChevronDown } from 'lucide-react'
 import { FlowTooltip } from '@/components/ui/tooltip'
-import { DetailsIcon, FilterIcon } from './my-issues-icons'
+import { DetailsIcon, FilterIcon, TabsOverflowIcon } from './my-issues-icons'
 import { InsightsIcon } from '@/components/ui/view-action-icons'
 import { defaultMyIssuesDisplayOptions } from './my-issues-display-defaults'
 import { useIssueSurfaceControls } from './use-issue-surface-controls'
@@ -185,7 +184,7 @@ export function MyIssuesSurface({
           {showOverflow && <Popover.Root open={overflowOpen} onOpenChange={setOverflowOpen}>
             <Popover.Trigger asChild>
               <button ref={triggerRef} type="button" className={`${styles.tab} ${styles.tabsOverflow} ${activeHidden ? styles.tabsOverflowActive : styles.tabsOverflowCount} ui-pill`} data-active={activeHidden || undefined} aria-label={overflowLabel} aria-haspopup="menu" aria-expanded={overflowOpen}>
-                <span>{overflowVisibleLabel}</span><ChevronDown aria-hidden="true"/>
+                <span>{overflowVisibleLabel}</span><TabsOverflowIcon aria-hidden="true"/>
               </button>
             </Popover.Trigger>
             <Popover.Portal>
@@ -207,7 +206,7 @@ export function MyIssuesSurface({
           </Popover.Root>}
           <div ref={measureRef} className={styles.tabMeasure} aria-hidden="true">
             {views.map(view => <span key={view.id} data-tab-measure className={`${styles.tab} ui-pill`}>{view.label}</span>)}
-            <span data-tab-measure-active className={`${styles.tab} ${styles.tabsOverflow} ${styles.tabsOverflowActive} ui-pill`} data-active="true"><span>{views[activeIndex].label}</span><ChevronDown/></span>
+            <span data-tab-measure-active className={`${styles.tab} ${styles.tabsOverflow} ${styles.tabsOverflowActive} ui-pill`} data-active="true"><span>{views[activeIndex].label}</span><TabsOverflowIcon/></span>
           </div>
         </nav>
       }
