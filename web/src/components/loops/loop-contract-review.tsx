@@ -13,6 +13,8 @@ type ReviewItem = {
   added?: boolean;
 };
 
+type ReviewResult = { items: ReviewItem[]; unchanged: ReviewItem[] };
+
 function outputKey(output: LoopContractOutput) {
   return `${output.kind}:${output.operation}`;
 }
@@ -22,15 +24,15 @@ function comparableOutput(output: LoopContractOutput) {
     kind: output.kind,
     operation: output.operation,
     required: output.required,
-    target: output.target,
     cardinality: output.cardinality,
     conditions: output.conditions,
     group: output.group,
   };
 }
 
-function reviewItems(current: LoopOutputContract, suggested: LoopOutputContract): ReviewItem[] {
+function reviewItems(current: LoopOutputContract, suggested: LoopOutputContract, data: BootstrapData, t: (source: string) => string): ReviewResult {
   const items: ReviewItem[] = [];
+  const unchanged: ReviewItem[] = [];
   const used = new Set<number>();
   current.outputs.forEach((output, index) => {
     let position = suggested.outputs.findIndex((candidate, candidateIndex) => !used.has(candidateIndex) && outputKey(candidate) === outputKey(output));
@@ -43,12 +45,15 @@ function reviewItems(current: LoopOutputContract, suggested: LoopOutputContract)
     }
     used.add(position);
     const candidate = suggested.outputs[position];
-    if (JSON.stringify(comparableOutput(output)) !== JSON.stringify(comparableOutput(candidate))) items.push({ id: `output-${index}`, index, current: output, suggested: candidate });
+    const item = { id: `output-${index}`, index, current: output, suggested: candidate };
+    const sameTarget = reviewTargetText(output, data, t) === reviewTargetText(candidate, data, t);
+    if (JSON.stringify(comparableOutput(output)) !== JSON.stringify(comparableOutput(candidate)) || !sameTarget) items.push(item);
+    else unchanged.push(item);
   });
   suggested.outputs.forEach((output, index) => {
     if (!used.has(index)) items.push({ id: `added-${index}`, suggested: output, added: true });
   });
-  return items;
+  return { items, unchanged };
 }
 
 function changedDetails(current: LoopContractOutput | undefined, suggested: LoopContractOutput | undefined, data: BootstrapData, t: (source: string) => string) {
@@ -80,7 +85,7 @@ function ReviewOutputLine({ output, data, t }: { output?: LoopContractOutput; da
 
 export function LoopContractReview({ current, suggested, data, saving, onSave, onCancel }: { current: LoopOutputContract; suggested: LoopOutputContract; data: BootstrapData; saving: boolean; onSave: (contract: LoopOutputContract) => void; onCancel: () => void }) {
   const { t } = useI18n();
-  const items = reviewItems(current, suggested);
+  const { items, unchanged } = reviewItems(current, suggested, data, t);
   const [accepted, setAccepted] = useState<Set<string>>(new Set());
   const choose = (id: string, accept: boolean) => setAccepted((previous) => {
     const next = new Set(previous);
@@ -106,7 +111,13 @@ export function LoopContractReview({ current, suggested, data, saving, onSave, o
       <p className="loops-contract-hint">{t("Compare each output with the suggested contract, then choose what to keep.")}</p>
       {items.length > 0 && <button type="button" className="loops-ghost-button is-small" onClick={acceptAll}><Check size={12} />{t("Accept all")}</button>}
     </div>
-    {items.length === 0 && <p className="loops-contract-hint">{t("No output changes suggested")}</p>}
+    {items.length === 0 && unchanged.length === 0 && <p className="loops-contract-hint">{t("No output changes suggested")}</p>}
+    {unchanged.length > 0 && <details className="loops-contract-review-unchanged">
+      <summary>{unchanged.length === 1 ? t("1 output unchanged") : t("{count} outputs unchanged").replace("{count}", String(unchanged.length))}</summary>
+      <ul>
+        {unchanged.map(item => <li key={item.id}><ReviewOutputLine output={item.current} data={data} t={t} /></li>)}
+      </ul>
+    </details>}
     {items.map((item, position) => {
       const title = item.removed ? t("Removed output") : item.added ? t("New output") : t("Output {number}").replace("{number}", String((item.index ?? position) + 1));
       const details = changedDetails(item.current, item.suggested, data, t);

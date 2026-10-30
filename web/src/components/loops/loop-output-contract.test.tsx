@@ -134,8 +134,8 @@ describe('LoopOutputContractPanel', () => {
     view.rerender(<I18nProvider><LoopOutputContractPanel data={data} loop={{ ...loop, outputContract: current, suggestedOutputContract: suggested }} unsaved={false} onLoopChange={onLoopChange} readDelayMs={0}/></I18nProvider>)
     await userEvent.click(screen.getByRole('button', { name: 'Review suggested outputs' }))
     const output = screen.getByRole('group', { name: 'Output 1' })
-    expect(output).toHaveTextContent('Update · Issue · issues matching customer bugs')
-    expect(output).toHaveTextContent('Update · Issue · issues matching customer bugs without repro steps')
+    expect(output).toHaveTextContent('Update · Issue · Issues matching customer bugs')
+    expect(output).toHaveTextContent('Update · Issue · Issues matching customer bugs without repro steps')
     await userEvent.click(within(output).getByRole('button', { name: 'Accept suggestion' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save review' }))
     await waitFor(() => expect(api.updateLoop).toHaveBeenCalledTimes(1))
@@ -302,7 +302,7 @@ describe('contract helpers', () => {
     const t = (source: string) => source
     const project = data.projects[0]
     expect(contractTargetText({ kind: 'comment', operation: 'create', required: true, target: { mode: 'triggering' } }, data, t)).toBe('The triggering item')
-    expect(contractTargetText({ kind: 'comment', operation: 'create', required: false, target: { mode: 'matching', match: 'open bugs', projectId: project.id } }, data, t)).toBe(`issues matching open bugs · in ${project.name}`)
+    expect(contractTargetText({ kind: 'comment', operation: 'create', required: false, target: { mode: 'matching', match: 'open bugs', projectId: project.id } }, data, t)).toBe(`Comment on each issue matching open bugs · in ${project.name}`)
     expect(contractTargetText({ kind: 'statusUpdate', operation: 'create', required: true, target: { mode: 'existing', project: 'Mobile App' } }, data, t)).toBe('on Mobile App')
     expect(contractTargetText({ kind: 'issue', operation: 'create', required: false, target: { mode: 'new', titleTemplate: 'Bug: {topic}', placeholders: [{ name: 'topic', source: 'the subject' }] } }, data, t)).toBe('titled Bug: {topic} · {topic} filled by the run from the subject')
     const saved = personContract({ source: 'model', readOnly: false, outputs: [{ kind: 'issue', operation: 'create', required: true, target: { titleTemplate: 'Bug: {topic} {date} {area}', placeholders: [{ name: 'topic', source: 'x' }] } }] })
@@ -310,9 +310,36 @@ describe('contract helpers', () => {
     expect(contractOutputSummary({ kind: 'document', operation: 'append', required: true, target: { mode: 'existing', title: '团队日报汇总' }, cardinality: 'onePerRun' }, data, t)).toBe('Append · Document · the document 团队日报汇总 · One per run')
   })
 
+  it('does not repeat an issue noun already present in a matching description', () => {
+    const data = makeBootstrap()
+    const t = (source: string) => source
+    expect(contractTargetText({ kind: 'issue', operation: 'update', required: true, target: { mode: 'matching', match: 'issues completed today' } }, data, t)).toBe('Issues completed today')
+    expect(contractTargetText({ kind: 'comment', operation: 'create', required: true, target: { mode: 'matching', match: 'issues completed today' } }, data, t)).toBe('Comment on each issue completed today')
+    expect(contractTargetText({ kind: 'issue', operation: 'update', required: true, target: { mode: 'matching', match: '今天完成的事项' } }, data, t)).toBe('今天完成的事项')
+    expect(contractTargetText({ kind: 'comment', operation: 'create', required: true, target: { mode: 'matching', match: '今天完成的事项' } }, data, t)).toBe('Comment on each 今天完成的事项')
+    const zh = (source: string) => zhCN[source] ?? source
+    expect(contractTargetText({ kind: 'issue', operation: 'update', required: true, target: { mode: 'matching', match: 'issues completed today' } }, data, zh)).toBe('符合以下条件的事项：completed today')
+    expect(contractTargetText({ kind: 'comment', operation: 'create', required: true, target: { mode: 'matching', match: 'issues completed today' } }, data, zh)).toBe('在符合以下条件的每个事项上发表评论：completed today')
+  })
+
+  it('collapses outputs that have no actionable differences', async () => {
+    const data = makeBootstrap()
+    const current: LoopOutputContract = { source: 'person', readOnly: false, outputs: [{ kind: 'document', operation: 'append', required: true, target: { mode: 'existing', title: '团队日报汇总' }, cardinality: 'onePerRun' }] }
+    const suggested: LoopOutputContract = { source: 'model', readOnly: false, outputs: [{ kind: 'document', operation: 'append', required: true, target: { mode: 'existing', title: '团队日报汇总' }, cardinality: 'onePerRun', evidence: 'same words' }] }
+    const { container } = render(<I18nProvider><LoopContractReview data={data} current={current} suggested={suggested} saving={false} onSave={vi.fn()} onCancel={vi.fn()} /></I18nProvider>)
+    expect(container).toHaveTextContent('1 output unchanged')
+    expect(container.querySelector('.loops-contract-review-output')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Keep mine' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Accept suggestion' })).toBeNull()
+    const unchanged = container.querySelector('details')!
+    expect(unchanged).not.toHaveAttribute('open')
+    await userEvent.click(within(unchanged).getByText('1 output unchanged'))
+    expect(unchanged).toHaveAttribute('open')
+  })
+
   it('has Chinese copy for every panel string', () => {
     for (const key of ['What this loop will produce', 'Outputs this run worked to', CONTRACT_FALLBACK_NOTICE, 'Must produce', 'Edit outputs', 'Save outputs', 'Use automatic outputs', 'Reply only: the run changes nothing', 'Title template', 'titled {title}', 'One per run', 'Create or update', 'Read only', 'Status update', 'Other change',
-      'Target', 'Anywhere', 'The triggering item', 'Issues matching a description', 'A project', 'An initiative', 'Which issues', 'Project', 'Initiative', 'What fills {name}', 'Filled by the run from…', 'document not chosen yet', 'issues matching {match}', 'on {project}', 'in {project}', 'on {initiative}', '{name} filled by the run from {source}',
+      'Target', 'Anywhere', 'The triggering item', 'Issues matching a description', 'A project', 'An initiative', 'Which issues', 'Project', 'Initiative', 'What fills {name}', 'Filled by the run from…', 'document not chosen yet', 'issues matching {match}', 'Issues matching {match}', 'Issues {description}', 'Comment on each issue matching {match}', 'Comment on each issue {description}', 'Comment on each {description}', '1 output unchanged', '{count} outputs unchanged', 'on {project}', 'in {project}', 'on {initiative}', '{name} filled by the run from {source}',
       'Choose document…', 'Search documents…', 'Recent documents', 'Create a new document', 'Create a new document “{title}”', 'Load more', 'All teams', 'Could not load documents', "The instructions don't say which document. Choose it, or create a new one.", "The instructions don't say which document to write to. Until you choose it, runs write to no existing document and need review.", 'Choose the document for each output that writes to an existing one.', "The loop's target document is not chosen", 'Instructions changed — review suggested outputs', 'Review suggested outputs', 'Keep my outputs', 'Keep mine', 'Accept suggestion', 'Your output', 'Suggested output', 'Save review', 'No output changes suggested', 'Compare each output with the suggested contract, then choose what to keep.', 'Accept all', 'What changed', 'Choose an existing document', 'Output {number}', 'New output', 'Removed output', 'Skip conditions', 'Conditions', 'Alternative group', 'Alternative outputs changed', 'Title placeholders', 'Document title', 'Document not chosen', 'Team name', 'Project name', 'Initiative name', 'Target description', 'Not set']) {
       expect(zhCN[key], key).toBeTruthy()
     }
