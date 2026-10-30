@@ -125,13 +125,18 @@ func TestMCPIssueRelationshipsHidePrivateChildren(t *testing.T) {
 	}
 	args := map[string]any{"fields": []string{"id", "subIssueCount", "hasChildren"}, "limit": 250}
 	result := mcpSuccess(t, f.call(t, "list_issues", args)).(map[string]any)
+	found := false
 	for _, raw := range result["items"].([]any) {
 		item := raw.(map[string]any)
 		if item["id"] == parent.ID {
+			found = true
 			if item["subIssueCount"].(float64) != 0 || item["hasChildren"] != false {
 				t.Fatalf("private child leaked through relationship fields: %v", item)
 			}
 		}
+	}
+	if !found {
+		t.Fatalf("visible parent missing from relationship projection: %v", result)
 	}
 	filtered := mcpSuccess(t, f.call(t, "list_issues", map[string]any{"hasSubIssues": true, "fields": []string{"id"}, "limit": 250})).(map[string]any)
 	for _, raw := range filtered["items"].([]any) {
