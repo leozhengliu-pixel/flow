@@ -68,6 +68,15 @@ func TestActivityCycleBackfillIndexesExistingRows(t *testing.T) {
 	if _, err := repository.db.ExecContext(ctx, `UPDATE issue_activity_cycles_migrations SET complete=0 WHERE workspace_key=?`, key); err != nil {
 		t.Fatal(err)
 	}
+	// Before the backfill reaches the workspace the read falls back to the
+	// activity JSON and still answers.
+	fallback, err := repository.CycleHistoryIssueIDs(ctx, key, "cycle_initial")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fallback) != 1 || fallback[0] != "issue_perf_002" {
+		t.Fatalf("fallback ids: %#v", fallback)
+	}
 	if err := repository.migrateContentActivityCycles(ctx); err != nil {
 		t.Fatal(err)
 	}
