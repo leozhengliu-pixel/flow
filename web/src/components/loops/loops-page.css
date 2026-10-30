@@ -558,6 +558,7 @@ html:root body .command-dialog.loops-picker-dialog [cmdk-item].is-preview:not(#_
 .loops-permission-row .select-control { min-width: 132px; height: 28px; }
 .loops-permissions .automation-trusted-editor { margin: 10px 0 0; padding-top: 10px; border-top: 0.5px solid var(--theme-border); }
 .loops-editor-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 32px 0 24px; }
+.loops-draft-save-status { align-self: center; margin-right: auto; color: var(--theme-text-tertiary); font-size: 12px; }
 .loops-editor-footer.is-published { justify-content: space-between; align-items: center; padding-inline: 1px; }
 .loops-versions-button { height: 28px; margin-left: -10px; padding: 0 10px; border: 0.5px solid transparent; border-radius: 8px; background: transparent; color: var(--theme-text-primary); font: 500 12px var(--font); cursor: pointer; }
 .loops-versions-button:hover { background: var(--bg-hover); }
@@ -773,6 +774,7 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 .loops-run-list-toolbar .loops-icon-button[data-state='open'] { background: var(--theme-surface-hover); }
 .loops-run-list ol { min-height: 0; flex: 1; margin: 0; padding: 0 0 8px; overflow: auto; list-style: none; }
 .loops-run-list-empty { margin: 20px 16px; color: var(--theme-text-secondary); font-size: 13px; }
+.loops-run-list-loading { display: flex; align-items: center; gap: 8px; margin: 20px 16px; color: var(--theme-text-secondary); font-size: 13px; }
 .loops-run-list-notice { margin: 8px 16px; color: var(--theme-text-secondary); font-size: 12px; }
 .loops-run-row {
   position: relative;
@@ -1034,6 +1036,7 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 .loops-contract-target { color: var(--theme-text-secondary); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
 .loops-contract-evidence { display: block; color: var(--theme-text-tertiary); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
 .loops-contract-readonly, .loops-contract-note, .loops-contract-empty, .loops-contract-reading, .loops-contract-hint, .loops-contract-source { margin: 0; color: var(--theme-text-secondary); font-size: 12px; line-height: 18px; }
+.loops-contract-analysis-status { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; color: var(--theme-text-tertiary); font-size: 12px; }
 .loops-contract-readonly strong { display: block; color: var(--theme-text-primary); font-size: 13px; font-weight: 500; }
 .loops-contract-warning { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; color: var(--semantic-warning-text); font-size: 12px; line-height: 18px; }
 .loops-contract-hint { margin-bottom: 8px; }
