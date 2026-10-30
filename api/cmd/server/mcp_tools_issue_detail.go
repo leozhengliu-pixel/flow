@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -59,6 +61,9 @@ func (s *server) getMCPIssue(ctx context.Context, actor mcpActor, data domain.Bo
 		}
 		issue, err = s.store.AuthorizedIssueRecord(ctx, q, stringArg(args, "id"))
 		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, fmt.Errorf("issue %q not found; use an issue ID or identifier", stringArg(args, "id"))
+			}
 			return nil, err
 		}
 	}

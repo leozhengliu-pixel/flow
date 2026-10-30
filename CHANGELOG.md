@@ -9,6 +9,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- MCP rejects unknown cycle references, reports missing issues as caller errors, and keeps malformed JSON-RPC params distinct from recoverable tool argument errors. Internal-error logs retain diagnostic details without exposing them in responses.
+- Production builds keep small math fonts as same-origin files for strict CSP; filter dialogs have accessible names, and streaming assertions wait for frame-batched rich text.
 - Estimate icons now use the same filled-left triangle for every value and
   property button, with a separate broken outline for "No estimate" menu options.
 - On phones, issue details wrap their properties, expose due dates and related-issue navigation, keep the copy controls visible, and use touch-sized issue action menus without repeating the desktop properties rail.

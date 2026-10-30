@@ -36,6 +36,7 @@ test.describe('mobile issue lists and views', () => {
     await page.goto(`/${workspaceKey}/my-issues/assigned`)
     await page.getByRole('button', { name: 'Add filter', exact: true }).click()
     await expect(page.getByRole('dialog', { name: 'Add Filter…' })).toBeVisible()
+    if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/filter-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
     await page.keyboard.press('Escape')
     await page.getByRole('button', { name: 'Display options', exact: true }).click()
     await expect(page.getByRole('dialog', { name: 'Display options' })).toBeVisible()
@@ -43,16 +44,14 @@ test.describe('mobile issue lists and views', () => {
 
     await page.goto(`/${workspaceKey}/issues/all`)
     const display = page.getByRole('button', { name: 'Display options' }).first()
-    if (await display.isVisible()) {
-      await display.click()
-      const boardTab = page.getByRole('tab', { name: 'Board', exact: true })
-      if (await boardTab.isVisible() && await boardTab.isEnabled()) {
-        await boardTab.click()
-        const board = page.getByRole('list', { name: 'Issue board' })
-        if (await board.count()) {
-          await expect(board).toHaveCSS('overflow-x', 'auto')
-        }
-      }
-    }
+    await expect(display).toBeVisible()
+    await display.click()
+    const boardTab = page.getByRole('tab', { name: 'Board', exact: true })
+    await expect(boardTab).toBeEnabled()
+    await boardTab.click()
+    await page.keyboard.press('Escape')
+    const board = page.getByRole('list', { name: 'Issue board' })
+    await expect(board).toBeVisible()
+    await expect(board).toHaveCSS('overflow-x', 'auto')
   })
 })

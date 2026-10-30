@@ -68,7 +68,11 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
     expect(values['.issue-mobile-properties'].gap).toBe('6px')
     expect(values['.issue-mobile-properties'].height).toBe(viewport.width===390?62:28)
     expect(values['.issue-mobile-properties'].y).toBeCloseTo(145.75, 0)
-    expect((await page.locator('.issue-mobile-properties .core-property-trigger').first().boundingBox())?.width).toBeCloseTo(61.6875, 0)
+    const status = page.locator('.issue-mobile-properties .core-property-trigger').first()
+    await expect(status).toHaveCSS('height', '28px')
+    await expect(status).toHaveCSS('padding', '0px 8.5px 0px 6.5px')
+    // Text metrics vary across browser platforms; the chip must size to its contents without clipping.
+    expect(await status.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
     expect(values['.issue-description-root .description-editor'].y).toBeCloseTo(viewport.width===390?229.75:195.75, 0)
     expect(values['.issue-description-root .description-editor'].padding).toBe('10px 14px 16px')
     expect(values['.detail-sub-issue-row'].height).toBe(36)

@@ -177,6 +177,25 @@ func TestMCPSaveCycleEditsNameDescriptionAndLinksOnly(t *testing.T) {
 	}
 }
 
+func TestMCPFindCycleRejectsUnknownRelativeNames(t *testing.T) {
+	cycles := []domain.Cycle{{ID: "past", Number: 1}, {ID: "active", Number: 2, Status: "active"}, {ID: "future", Number: 3}}
+	data := domain.Bootstrap{Teams: []domain.Team{{ID: "team", Key: "TST"}}}
+	for i := range cycles {
+		cycles[i].TeamID = "team"
+	}
+	data.Cycles = cycles
+	for query, want := range map[string]string{"previous": "past", "current": "active", "next": "future", "当前": "active", "missing": ""} {
+		cycle, err := mcpFindCycle(data, query, "TST")
+		if want == "" {
+			if err == nil || !strings.Contains(err.Error(), "not found") {
+				t.Fatalf("%s resolved to %s: %v", query, cycle.ID, err)
+			}
+		} else if err != nil || cycle.ID != want {
+			t.Fatalf("%s resolved to %s, want %s: %v", query, cycle.ID, want, err)
+		}
+	}
+}
+
 func mustFlowMCPTools(t *testing.T) []flowMCPTool {
 	t.Helper()
 	var tools []flowMCPTool

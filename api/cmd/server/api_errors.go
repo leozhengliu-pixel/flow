@@ -260,7 +260,7 @@ func normalizeAPIErrorBody(status int, header http.Header, raw []byte, r *http.R
 		// A 500 is never a message written for the client: whatever the
 		// handler put in the body is logged and replaced, extra fields too.
 		if message != internalErrorMessage {
-			slog.ErrorContext(r.Context(), "internal error response", "request_id", requestID, "method", r.Method, "path", r.URL.Path, "error", message)
+			slog.ErrorContext(r.Context(), "internal error response", "request_id", requestID, "method", r.Method, "path", r.URL.Path, "error", message, "details", fields["details"])
 		}
 		code, _ := fields["code"].(string)
 		fields = map[string]any{}

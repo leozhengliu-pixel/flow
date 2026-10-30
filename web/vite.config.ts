@@ -45,6 +45,8 @@ export default defineConfig({
   plugins: [react(), tailwindcss(), inlineIconSprites(), chunkSizeBudget(), tourMedia(), releaseManifest()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
   build: {
+    // Small KaTeX fonts must stay same-origin files under font-src 'self', not data URLs.
+    assetsInlineLimit: file => /\.(?:woff2?|ttf|otf|eot)$/i.test(file) ? false : undefined,
     chunkSizeWarningLimit: 1500,
     rolldownOptions: {
       output: {

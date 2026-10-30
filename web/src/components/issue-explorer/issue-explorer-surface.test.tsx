@@ -32,7 +32,7 @@ it.each(['mouse', 'keyboard'])('applies a filter from its portaled submenu using
   } else {
     trigger.focus()
     await user.keyboard('{Enter}')
-    await user.type(await screen.findByLabelText('Add Filter…'), 'Priority')
+    await user.type(await screen.findByRole('combobox', { name: 'Add Filter…' }), 'Priority')
     // The first match is active; the search always ends with `AI filter "<query>"`.
     expect(screen.getByRole('option', { name: /AI filter/ })).toBeInTheDocument()
     await user.keyboard('{Enter}')
