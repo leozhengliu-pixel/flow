@@ -119,6 +119,7 @@
   .priorityTrigger{justify-self:end;margin-right:-3px;margin-left:0;border-style:none}
   .priorityTrigger svg{color:var(--bright);border-style:none}
   .title{line-height:normal;color:var(--bright);border-style:none}
+  .estimateChip:global(.estimate-chip){margin-right:2px}
   .titleProperties{padding-right:18px}
   .groupHeader{padding-left:0;border-style:none}
   .groupState{display:none}

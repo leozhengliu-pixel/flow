@@ -235,3 +235,27 @@ test.describe('mobile Activity tab', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   })
 })
+
+test.describe('desktop my issues tab strip', () => {
+  test.use({ viewport: { width: 1440, height: 900 }, isMobile: false, hasTouch: false })
+
+  test('shows only the five tab links without the off-screen measurement row', async ({ page, request }, testInfo) => {
+    const workspaceKey = `desktop-issues-${testInfo.project.name}-${testInfo.retry}`
+    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
+      data: { name: 'Desktop issue parity', urlKey: workspaceKey, region: 'us' },
+    })
+    expect(response.status()).toBe(201)
+    await page.goto(`/${workspaceKey}/my-issues/assigned`)
+    const nav = page.getByRole('navigation', { name: 'My issues views' })
+    await expect(nav).toBeVisible()
+    await expect(nav.getByRole('link')).toHaveCount(5)
+    await expect(page.locator('[data-tab-measure]')).toHaveCount(0)
+    await expect(page.locator('[class*="tabMeasure"]')).toHaveCount(0)
+    const labels = await nav.getByRole('link').evaluateAll(nodes => nodes.map(node => (node.textContent ?? '').trim()))
+    expect(labels).toEqual(['Assigned', 'Created', 'Subscribed', 'Activity', 'Shared with me'])
+    const visibleText = await nav.evaluate(node => (node as HTMLElement).innerText.replace(/\s+/g, ' ').trim())
+    expect(visibleText).toBe('Assigned Created Subscribed Activity Shared with me')
+    const names = await nav.getByRole('link').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label') ?? (node.textContent ?? '').trim()))
+    expect(new Set(names).size).toBe(5)
+  })
+})

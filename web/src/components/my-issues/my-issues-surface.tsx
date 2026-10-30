@@ -204,10 +204,10 @@ export function MyIssuesSurface({
               </Popover.Content>
             </Popover.Portal>
           </Popover.Root>}
-          <div ref={measureRef} className={styles.tabMeasure} aria-hidden="true">
+          {phone && <div ref={measureRef} className={styles.tabMeasure} aria-hidden="true">
             {views.map(view => <span key={view.id} data-tab-measure className={`${styles.tab} ui-pill`}>{view.label}</span>)}
             <span data-tab-measure-active className={`${styles.tab} ${styles.tabsOverflow} ${styles.tabsOverflowActive} ui-pill`} data-active="true"><span>{views[activeIndex].label}</span><TabsOverflowIcon/></span>
-          </div>
+          </div>}
         </nav>
       }
       end={
