@@ -94,7 +94,7 @@ test.describe('mobile Created tab', () => {
     })
     expect(response.status()).toBe(201)
     const headers = { 'X-Workspace-Key': workspaceKey }
-    const bootstrap = await (await request.get('http://127.0.0.1:4180/api/bootstrap', { headers })).json() as { teams: Array<{ id: string }>; states: Array<{ id: string; type: string }> }
+    const bootstrap = await (await request.get('http://127.0.0.1:4180/api/bootstrap', { headers })).json() as { viewer: { id: string }; teams: Array<{ id: string }>; states: Array<{ id: string; type: string }> }
     const teamId = bootstrap.teams[0].id
     const stateId = bootstrap.states.find(state => state.type === 'unstarted')!.id
     const create = async (title: string, extra = {}) => {
@@ -104,18 +104,26 @@ test.describe('mobile Created tab', () => {
     }
     const parent = await create('[mobile] Parent issue')
     await create('[mobile] Second issue')
-    const child = await create('[mobile] Child #1', { parentId: parent.id })
+    const child = await create('[mobile] Child #1', { parentId: parent.id, assigneeId: bootstrap.viewer.id })
     const reordered = await request.patch(`http://127.0.0.1:4180/api/issues/${child.id}`, { headers, data: { sortOrder: 0 } })
     expect(reordered.ok()).toBe(true)
 
     await page.goto(`/${workspaceKey}/my-issues/created`)
     await expect(page.locator('main').first()).toBeVisible()
+    await page.getByRole('button', { name: 'Display options', exact: true }).click()
+    await page.waitForTimeout(200)
+    await page.locator('[role="dialog"][aria-label="Display options"] button[aria-label="Grouping"]').click()
+    await page.waitForTimeout(200)
+    await page.getByRole('option', { name: 'No grouping', exact: true }).click()
+    await page.waitForTimeout(300)
+    await page.keyboard.press('Escape')
     await expect(page.locator('[data-my-issues-surface] [class*="groupHeader"]').first()).toBeHidden()
     const row = page.locator('[data-my-issues-surface] a[data-issue-row-id]').first()
     expect((await row.boundingBox())?.y).toBeCloseTo(87.5, 0)
     expect((await row.boundingBox())?.height).toBe(44)
     await expect(row).toContainText('[mobile] Child #1')
     await expect(row.locator('[class*="parentTrail"]')).toContainText('[mobile] Parent issue')
+    await expect(row.locator('[data-row-avatar]')).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   })
 })

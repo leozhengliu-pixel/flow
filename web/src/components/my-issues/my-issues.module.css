@@ -62,10 +62,3 @@
 }
 
 @media(max-width:767px){.viewsSubheader.viewsSubheader{gap:6px;border-style:none}}
-
-/* The phone Created tab is a flat list: the reference app has no "All issues"
-   group strip, so the first row starts directly under the tab bar. */
-@media(max-width:767px){
-  [data-my-issues-surface][data-my-issues-view="created"][data-my-issues-grouping="none"] [class*="groupHeader"]{display:none}
-  [data-my-issues-surface][data-my-issues-view="created"][data-my-issues-grouping="none"] [class*="groupHeader"]+div{padding-top:0}
-}

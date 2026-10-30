@@ -48,7 +48,7 @@ export function IssueAssigneeSlot({ issue, options, onChange, triggerClassName, 
     {delegate && <UserAvatar avatarUrl={delegate.avatarUrl} className={`${avatarClassName} issue-assignee-cluster__agent`} color={delegate.color ?? avatarColor(delegate.id)} name={delegate.name}/>}
     {assignee
       ? <span className="issue-assignee-cluster__member" data-row-avatar><UserAvatar avatarUrl={assignee.avatarUrl} className={avatarClassName} color={assignee.color ?? 'var(--avatar-fallback)'} name={assignee.name}/></span>
-      : <span className={`${emptyClassName ?? ''} issue-assignee-cluster__empty`} data-row-avatar><NoAssigneeIcon size={18}/></span>}
+      : <span className={`${emptyClassName ?? ''} issue-assignee-cluster__empty`}><NoAssigneeIcon size={18}/></span>}
   </span>
   const baseTriggerClassName = triggerClassName ?? styles.propertyTrigger
   const trigger = sessionLabel
