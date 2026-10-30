@@ -18,6 +18,7 @@
 @media(max-width:760px){.team-documents-toolbar{padding-right:6px}}
 
 /* Team overview, measured from the reference app at a 1470 x 702 viewport. */
+.team-home-band { display: contents; }
 .team-home-topbar {
   box-sizing: border-box;
   height: 44px;
@@ -1212,4 +1213,66 @@
 :root[data-theme="light"] [role="menuitemcheckbox"][data-state="checked"] .team-resource-checkbox,
 :root[data-theme="light"] .team-resource-checkbox svg {
   color: var(--on-accent);
+}
+
+/* Phone: the reference app's team header band, from the documents-list measurements. */
+@media (max-width: 767px) {
+  .app:has(.team-home-page) { background: var(--bg-panel); border: 0; }
+  .team-home-band {
+    box-sizing: border-box;
+    display: flex;
+    height: 43.5px;
+    flex: 0 0 43.5px;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    border: 0;
+    background: transparent;
+  }
+  .team-home-topbar { gap: 6px; padding: 0 8px; border-top: 0; border-bottom: .5px solid transparent; background: transparent; }
+  html:root[data-sidebar-mode] body .app .team-home-mobile[data-sidebar-trigger] {
+    display: grid;
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    place-items: center;
+    margin-right: 0;
+    padding: 0 2px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+    background: transparent;
+    color: var(--text);
+    font: 500 12px/normal var(--font);
+  }
+  html:root[data-sidebar-mode] body .app .team-home-mobile[data-sidebar-trigger] > svg { display: block; width: 14px; height: 14px; border: 0; }
+  .app .team-home-mobile[data-sidebar-trigger]::before,
+  .app .team-home-mobile[data-sidebar-trigger]::after { content: none; }
+  .team-home-top-icon { margin-left: 6px; color: var(--bright); }
+  .team-home-topbar h2 { font: 500 13px/normal var(--font); }
+  .team-home-top-actions { gap: 2px; }
+  .team-home-top-actions > button,
+  .team-home-top-actions [data-radix-collection-item],
+  .team-home-copy-url {
+    width: 32px;
+    height: 32px;
+    padding: 0 2px;
+    border-width: .5px;
+    color: var(--text);
+    font: 500 12px/normal var(--font);
+  }
+  .team-home-top-actions svg,
+  .team-home-copy-url svg { width: 14px; height: 14px; }
+  .team-home-tabs {
+    height: 43.5px;
+    flex: 0 1 auto;
+    max-width: calc(100% - 114px);
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    overflow: hidden;
+  }
+  .team-home-tabs a { height: 32px; padding: 0 10.5px; border: 0; }
+  .team-home-tab-label { display: block; line-height: normal; border: 0; }
 }

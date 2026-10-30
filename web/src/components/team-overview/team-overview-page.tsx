@@ -11,7 +11,6 @@ import {
   Check,
   FileText,
   Link2,
-  Menu,
   Plus,
   Pin,
   Pencil,
@@ -222,7 +221,7 @@ export function TeamOverviewPage({
   );
   // Pinned resources and sections come from the team resources endpoint.
   const reloadResources = load;
-  const newDocument = async () => {
+  const newDocument = async (projectId?: string) => {
     if (creatingDocument.current) return;
     creatingDocument.current = true;
     setDocumentCreating(true);
@@ -231,6 +230,7 @@ export function TeamOverviewPage({
       const document = await createDocument({
         title: "",
         teamIds: [team.id],
+        ...(projectId ? { projectIds: [projectId] } : {}),
       });
       await onReload();
       onNavigate(documentPath(data.workspace.urlKey, document));
@@ -285,50 +285,52 @@ export function TeamOverviewPage({
     await onReload();
   };
   const teamTabs = (
-    <nav className="team-home-tabs" aria-label={t("Team views")}>
-      <a
-        aria-current={view === "overview" ? "page" : undefined}
-        href={teamHomePath(data.workspace.urlKey, team.key)}
-        onClick={(event) => {
-          event.preventDefault();
-          onNavigate(teamHomePath(data.workspace.urlKey, team.key));
-        }}
-      >
-        {t("Overview")}
-      </a>
-      <a
-        aria-current={view === "documents" ? "page" : undefined}
-        href={teamDocumentsPath(data.workspace.urlKey, team.key)}
-        onClick={(event) => {
-          event.preventDefault();
-          onNavigate(teamDocumentsPath(data.workspace.urlKey, team.key));
-        }}
-      >
-        {t("Documents")}
-      </a>
-      {loopsEnabled && (
+    <div className="team-home-band">
+      <nav className="team-home-tabs" aria-label={t("Team views")}>
         <a
-          aria-current={view === "loops" ? "page" : undefined}
-          href={teamLoopsPath(data.workspace.urlKey, team.key)}
+          aria-current={view === "overview" ? "page" : undefined}
+          href={teamHomePath(data.workspace.urlKey, team.key)}
           onClick={(event) => {
             event.preventDefault();
-            onNavigate(teamLoopsPath(data.workspace.urlKey, team.key));
+            onNavigate(teamHomePath(data.workspace.urlKey, team.key));
           }}
         >
-          {t("Loops")}
+          <span className="team-home-tab-label">{t("Overview")}</span>
         </a>
-      )}
-      <a
-        aria-current={view === "members" ? "page" : undefined}
-        href={teamMembersPath(data.workspace.urlKey, team.key)}
-        onClick={(event) => {
-          event.preventDefault();
-          onNavigate(teamMembersPath(data.workspace.urlKey, team.key));
-        }}
-      >
-        {t("Members")}
-      </a>
-    </nav>
+        <a
+          aria-current={view === "documents" ? "page" : undefined}
+          href={teamDocumentsPath(data.workspace.urlKey, team.key)}
+          onClick={(event) => {
+            event.preventDefault();
+            onNavigate(teamDocumentsPath(data.workspace.urlKey, team.key));
+          }}
+        >
+          <span className="team-home-tab-label">{t("Documents")}</span>
+        </a>
+        {loopsEnabled && (
+          <a
+            aria-current={view === "loops" ? "page" : undefined}
+            href={teamLoopsPath(data.workspace.urlKey, team.key)}
+            onClick={(event) => {
+              event.preventDefault();
+              onNavigate(teamLoopsPath(data.workspace.urlKey, team.key));
+            }}
+          >
+            <span className="team-home-tab-label">{t("Loops")}</span>
+          </a>
+        )}
+        <a
+          aria-current={view === "members" ? "page" : undefined}
+          href={teamMembersPath(data.workspace.urlKey, team.key)}
+          onClick={(event) => {
+            event.preventDefault();
+            onNavigate(teamMembersPath(data.workspace.urlKey, team.key));
+          }}
+        >
+          <span className="team-home-tab-label">{t("Members")}</span>
+        </a>
+      </nav>
+    </div>
   );
   return (
     <main className="main-panel team-home-page">
@@ -338,7 +340,10 @@ export function TeamOverviewPage({
           aria-label="Open sidebar"
           data-sidebar-trigger onClick={onOpenSidebar}
         >
-          <Menu />
+          <svg aria-hidden="true" fill="currentColor" focusable="false" height={14} viewBox="0 0 16 16" width={14}>
+            <path fillRule="evenodd" clipRule="evenodd" d="M4.25 2C2.45508 2 1 3.45508 1 5.25V10.75C1 12.5449 2.45508 14 4.25 14H11.75C13.5449 14 15 12.5449 15 10.75V5.25C15 3.45508 13.5449 2 11.75 2H4.25ZM2.5 5.5C2.5 4.39543 3.39543 3.5 4.5 3.5H11.5C12.6046 3.5 13.5 4.39543 13.5 5.5V10.5C13.5 11.6046 12.6046 12.5 11.5 12.5H4.5C3.39543 12.5 2.5 11.6046 2.5 10.5V5.5Z"/>
+            <rect height="6" rx="0.75" width="1.5" x="4" y="5"/>
+          </svg>
         </button>
         <ViewGlyph
           className="team-home-top-icon"
@@ -625,6 +630,7 @@ export function TeamOverviewPage({
           documents={documents}
           onNavigate={onNavigate}
           onNew={() => void newDocument()}
+          onNewInGroup={(projectId) => void newDocument(projectId)}
           onReload={onReload}
           onReloadResources={load}
           resources={resources}

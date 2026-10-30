@@ -60,7 +60,7 @@ export function AdvancedFilterChip({ defaultOpen = false, filter, filterOptions,
           </> : <span className={styles.muted}>{t('Advanced filter')}</span>}
         </button>
       </Popover.Trigger>
-      <button type="button" className={styles.chipRemove} aria-label={t('Remove advanced filter')} onClick={onRemove}><X size={13}/></button>
+      <button type="button" className={styles.chipRemove} aria-label={t('Remove advanced filter')} onClick={onRemove}><svg aria-hidden="true" fill="currentColor" focusable="false" height={16} viewBox="0 0 16 16" width={16}><path d="M2.96967 2.96967C3.26256 2.67678 3.73744 2.67678 4.03033 2.96967L8 6.939L11.9697 2.96967C12.2626 2.67678 12.7374 2.67678 13.0303 2.96967C13.3232 3.26256 13.3232 3.73744 13.0303 4.03033L9.061 8L13.0303 11.9697C13.2966 12.2359 13.3208 12.6526 13.1029 12.9462L13.0303 13.0303C12.7374 13.3232 12.2626 13.3232 11.9697 13.0303L8 9.061L4.03033 13.0303C3.73744 13.3232 3.26256 13.3232 2.96967 13.0303C2.67678 12.7374 2.67678 12.2626 2.96967 11.9697L6.939 8L2.96967 4.03033C2.7034 3.76406 2.6792 3.3474 2.89705 3.05379L2.96967 2.96967Z"/></svg></button>
     </div>
     <Popover.Portal>
       <Popover.Content data-flow-motion="floating" className={styles.editor} align="start" side="bottom" sideOffset={4} collisionPadding={8} aria-label={t('Advanced filter')} onOpenAutoFocus={event => event.preventDefault()}>
