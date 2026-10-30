@@ -12,7 +12,7 @@ import (
 // Recurring issue lookups (the scheduler's due scan and the team's Recurring
 // issues list) read the sparse nextOccurrenceAt attribute through its index,
 // never issue payloads, and need no sort; archived issues are skipped through
-// a primary key lookup of their record.
+// an index lookup of their record.
 func TestRecurringIssueIDsUseTheAttributeIndex(t *testing.T) {
 	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "recurring.db"))
 	if err != nil {
@@ -39,8 +39,13 @@ func TestRecurringIssueIDsUseTheAttributeIndex(t *testing.T) {
 			plan += detail + "\n"
 		}
 		rows.Close()
+		// The archived check runs on the primary key or on the covering label
+		// index that also carries archived; either keeps the lookup off the
+		// issue payload.
+		archivedLookup := strings.Contains(plan, "sqlite_autoindex_issue_records_1 (workspace_key=? AND id=?)") ||
+			strings.Contains(plan, "issue_records_label_cover_idx (workspace_key=? AND id=? AND archived=?)")
 		if !strings.Contains(plan, "COVERING INDEX issue_attributes_value_idx") || strings.Contains(plan, "TEMP B-TREE") || strings.Contains(plan, "SCAN") ||
-			strings.Count(plan, "issue_records") != 1 || !strings.Contains(plan, "sqlite_autoindex_issue_records_1 (workspace_key=? AND id=?)") {
+			strings.Count(plan, "issue_records") != 1 || !archivedLookup {
 			t.Fatalf("recurring lookup plan (dueBy=%v): %s", dueBy, plan)
 		}
 	}
