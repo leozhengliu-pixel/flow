@@ -42,6 +42,7 @@ import { toast } from "@/lib/toast";
 import { useI18n } from "@/i18n/i18n";
 import { useChatPlatform } from "@/lib/chat-platform";
 import { usePhoneLayout } from "@/hooks/use-phone-layout";
+import { KeyboardShortcutsDialog } from "@/components/layout/keyboard-shortcuts-dialog";
 
 import {
   DropdownMenu,
@@ -478,6 +479,7 @@ export function SettingsPage(props: SettingsPageProps) {
   const phoneLayout = usePhoneLayout();
   const [query, setQuery] = useState("");
   const [mobileNav, setMobileNav] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [sidebarCustomizationOpen, setSidebarCustomizationOpen] =
     useState(false);
   const mainRef = useRef<HTMLElement | null>(null);
@@ -770,7 +772,7 @@ export function SettingsPage(props: SettingsPageProps) {
           <footer className="settings-sidebar-footer">
             <HelpMenu
               onSettings={() => { props.onNavigate("preferences"); setMobileNav(false); }}
-              onShortcuts={() => undefined}
+              onShortcuts={() => setShortcutsOpen(true)}
             />
             <button
               type="button"
@@ -832,6 +834,7 @@ export function SettingsPage(props: SettingsPageProps) {
           )}
         </div>
       )}
+      <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <SidebarCustomization
         open={sidebarCustomizationOpen}
         onOpenChange={setSidebarCustomizationOpen}
