@@ -560,6 +560,7 @@ function ReviewDetail({
 
   return (
     <>
+      <div className="review-detail-chrome">
       <PullRequestHeader
         data={data}
         review={review}
@@ -579,7 +580,9 @@ function ReviewDetail({
               shown={agentShown}
               onToggle={() => onNavigate(agentPath(agentSessionId, { tab, showAgent: !agentShown }))}
             />
-          ) : undefined
+          ) : (
+            <ReviewCodingSessionActions review={review} data={data} compact />
+          )
         }
         menu={
           <PullRequestActionsMenu
@@ -612,6 +615,7 @@ function ReviewDetail({
           </>
         }
       />
+      </div>
       <div className={agentShown ? "review-agent-layout" : "review-agent-layout is-agent-hidden"}>
       <div className="review-detail-body review-agent-layout-main">
         {review.syncError && (

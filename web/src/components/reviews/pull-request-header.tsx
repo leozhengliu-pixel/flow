@@ -6,6 +6,8 @@
  */
 import type { ReactNode } from "react";
 import { Expand, FileDiff, Link2, PanelLeft, Shrink, Star } from "lucide-react";
+import { SidebarLeftIcon } from "@/components/ui/view-action-icons";
+import { usePhoneLayout } from "@/hooks/use-phone-layout";
 
 import { useI18n } from "@/i18n/i18n";
 import { issuePath, reviewPath, reviewsPath, type ReviewRouteTab } from "@/lib/app-routes";
@@ -16,7 +18,9 @@ import type { BootstrapData, CodeReview, Issue } from "@/types/flow";
 import { reviewDocsOnly, reviewHeaderStat } from "./pull-request-review-model";
 import { CodeHostIcon } from "./review-provider";
 import { reviewProviderIdentifier } from "./review-provider-model";
+import { ReviewPhoneStateIcon } from "./review-row-icons";
 import { ReviewStateIcon, ReviewTitle } from "./review-state-icon";
+import { StatusIcon } from "@/components/issue/issue-icons";
 
 const REVIEW_TABS: { id: ReviewRouteTab; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -62,6 +66,7 @@ export function PullRequestHeader({
   tabActions?: ReactNode;
 }) {
   const { t } = useI18n();
+  const phone = usePhoneLayout();
   const access = resolveCodeReviewAccess(data);
   const workspace = data.workspace.urlKey;
   const stat = reviewHeaderStat(review);
@@ -88,12 +93,17 @@ export function PullRequestHeader({
           onClick={() => (fullWindow ? onToggleFull(false) : onOpenSidebar ? onOpenSidebar() : onNavigate(returnPath ?? reviewsPath(workspace)))}
           type="button"
         >
-          <PanelLeft />
+          {phone ? <SidebarLeftIcon /> : <PanelLeft />}
         </button>
         <nav className="review-breadcrumb" aria-label={t("Breadcrumb")}>
           {issues[0] ? (
-            <a className="review-breadcrumb-issue" href={issuePath(workspace, issues[0])} onClick={go(issuePath(workspace, issues[0]))} data-i18n-ignore>
-              {issues[0].identifier}
+            <a className="review-breadcrumb-issue" href={issuePath(workspace, issues[0])} onClick={go(issuePath(workspace, issues[0]))}>
+              <span className="review-breadcrumb-issue-icon" aria-hidden="true">
+                <StatusIcon state={issues[0].state} size={14} />
+              </span>
+              <span className="review-breadcrumb-issue-label" data-i18n-ignore>
+                {issues[0].identifier}
+              </span>
             </a>
           ) : (
             <button className="review-breadcrumb-issue" type="button" onClick={() => onOpenPicker("issues")}>
@@ -103,7 +113,8 @@ export function PullRequestHeader({
           <span className="review-breadcrumb-separator" aria-hidden="true">
             ›
           </span>
-          <ReviewStateIcon review={review} className="review-breadcrumb-state" />
+          <ReviewStateIcon review={review} className="review-breadcrumb-state review-breadcrumb-state--desktop" />
+          <ReviewPhoneStateIcon review={review} className="review-breadcrumb-state review-breadcrumb-state--phone" />
           <a className="review-breadcrumb-title" href={reviewPath(workspace, review)} onClick={go(reviewPath(workspace, review))}>
             <h2 data-i18n-ignore>
               <ReviewTitle title={review.title} />
@@ -126,7 +137,7 @@ export function PullRequestHeader({
             )}
           </button>
           <button
-            className="review-ghost-button"
+            className="review-ghost-button review-favorite-button"
             aria-label={t(review.favorite ? "Remove from favorites" : "Add to favorites")}
             aria-pressed={review.favorite}
             onClick={() => void onMutate({ favorite: !review.favorite })}
@@ -134,6 +145,9 @@ export function PullRequestHeader({
           >
             <Star fill={review.favorite ? "currentColor" : "none"} />
           </button>
+          <a className="review-phone-pr-number" href={review.url} target="_blank" rel="noreferrer" aria-label={`${review.repositoryName} #${review.number}, ${t("pull request actions")}`}>
+            <span data-i18n-ignore>#{review.number}</span>
+          </a>
           {menu}
         </nav>
         <div className="review-detail-top-actions">
@@ -167,10 +181,11 @@ export function PullRequestHeader({
               aria-current={tab === item.id ? "page" : undefined}
               title={`${t(item.id === "overview" ? "View overview" : item.id === "review" ? "View guide" : "View diff")}  ${index + 1}`}
               key={item.id}
+              data-review-tab={item.id}
               href={reviewPath(workspace, review, item.id) + tabSearch}
               onClick={go(reviewPath(workspace, review, item.id) + tabSearch)}
             >
-              {t(item.label)}
+              <span className="review-tab-label">{t(item.label)}</span>
             </a>
           ))}
         </nav>

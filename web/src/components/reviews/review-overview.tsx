@@ -3,6 +3,12 @@ import { ArrowUp, ChevronDown, CircleCheck, CircleDashed, CircleX, CornerDownRig
 import { useState, type ReactNode } from "react";
 
 import { MentionBody } from "@/components/editor/mentions/mention-body";
+import { EmojiPicker } from "@/components/reactions/emoji-picker";
+import { AddReactionIcon, AttachmentIcon, StatusIcon } from "@/components/issue/issue-icons";
+import { FlowBranchIcon, FlowOptionsIcon, FlowPreviousIcon } from "@/components/issue/flow-header-icons";
+import { PlusIcon } from "@/components/ui/view-action-icons";
+import { ReviewPhoneStateIcon } from "./review-row-icons";
+import { usePhoneLayout } from "@/hooks/use-phone-layout";
 import { PersonHover } from "@/components/property/person-info";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useI18n } from "@/i18n/i18n";
@@ -46,6 +52,8 @@ export function ReviewOverview({
   onReload: () => Promise<void>;
 }) {
   const { t } = useI18n();
+  const phone = usePhoneLayout();
+  const [comment, setComment] = useState("");
   const author = review.author.displayName || review.author.name;
   return (
     <div className="review-overview">
@@ -63,22 +71,37 @@ export function ReviewOverview({
           <span className="review-byline-dot" aria-hidden="true">
             ⋅
           </span>
-          <span className="review-byline-branch" data-i18n-ignore>
-            {review.baseBranch}
-          </span>
-          <span className="review-byline-arrow" aria-label={t("from")}>
-            ←
-          </span>
-          <span className="review-byline-branch" data-i18n-ignore title={review.headBranch}>
-            {review.headBranch}
+          <span className="review-byline-branches">
+            <span className="review-byline-branch" data-i18n-ignore>
+              {review.baseBranch}
+            </span>
+            <span className="review-byline-arrow" aria-label={t("from")}>
+              ←
+            </span>
+            <span className="review-byline-branch" data-i18n-ignore title={review.headBranch}>
+              {review.headBranch}
+            </span>
           </span>
         </div>
+        {phone && (
+          <ReviewMobileProperties
+            data={data}
+            review={review}
+            issues={issues}
+            reviewers={reviewers}
+            busy={busy}
+            onMutate={onMutate}
+            onNavigate={onNavigate}
+            onOpenPicker={onOpenPicker}
+          />
+        )}
         <section className="review-description">
           <h3>{t("Description")}</h3>
           {review.description.trim() ? <MentionBody body={review.description} /> : <p className="review-muted">{t("No description provided.")}</p>}
         </section>
-        <ReviewActivity data={data} review={review} onNavigate={onNavigate} onReload={onReload} />
-        <ReviewCommentComposer data={data} review={review} onReload={onReload} />
+        {phone && <ReviewDocumentActions onReact={(emoji) => setComment((current) => current + emoji)} />}
+        <ReviewActivity data={data} review={review} onNavigate={onNavigate} onReload={onReload} phone={phone} />
+        <ReviewCommentComposer data={data} review={review} onReload={onReload} value={comment} onValueChange={setComment} phone={phone} />
       </div>
       <aside aria-label={t("Review details")} className="review-overview-sidebar">
         <SidebarSection label={t("Status")}>
@@ -131,6 +154,104 @@ export function ReviewOverview({
   );
 }
 
+/** Phone-only property rows: the reference app folds the properties sidebar into the document, label left, value right. */
+function ReviewMobileProperties({
+  data,
+  review,
+  issues,
+  reviewers,
+  busy,
+  onMutate,
+  onNavigate,
+  onOpenPicker,
+}: {
+  data: BootstrapData;
+  review: CodeReview;
+  issues: Issue[];
+  reviewers: User[];
+  busy: boolean;
+  onMutate: (input: Mutation) => Promise<void>;
+  onNavigate: (path: string) => void;
+  onOpenPicker: (value: "reviewers" | "issues") => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="review-mobile-properties">
+      <div className="review-mobile-row" data-mobile-property="status">
+        <span className="review-mobile-label">{t("Status")}</span>
+        <ReviewStatusMenu review={review} busy={busy} onMutate={onMutate} phone />
+      </div>
+      <div className="review-mobile-row" data-mobile-property="reviewers">
+        <span className="review-mobile-label">{t("Reviewers")}</span>
+        {reviewers.map((user) => (
+          <button type="button" key={user.id} className="review-sidebar-button" onClick={() => onOpenPicker("reviewers")}>
+            <UserAvatar className="avatar review-sidebar-avatar" name={user.displayName} avatarUrl={user.avatarUrl} />
+            <span data-i18n-ignore>{user.displayName}</span>
+          </button>
+        ))}
+        {review.teamReviewers.map((team) => (
+          <span key={team} className="review-sidebar-text" data-i18n-ignore>
+            {team}
+          </span>
+        ))}
+        <button type="button" className="review-sidebar-button is-muted" onClick={() => onOpenPicker("reviewers")}>
+          <PlusIcon />
+          <span>{t("Add reviewers")}</span>
+        </button>
+      </div>
+      <div className="review-mobile-row" data-mobile-property="branch">
+        <span className="review-mobile-label">{t("Branch")}</span>
+        <ReviewBranchState review={review} busy={busy} onMutate={onMutate} phone />
+      </div>
+      <div className="review-mobile-resolves" data-mobile-property="resolves">
+        <div className="review-mobile-resolves-head">
+          <span className="review-mobile-label">{t("Resolves")}</span>
+          <button type="button" className="review-mobile-icon-button" aria-label={t("Link issue")} onClick={() => onOpenPicker("issues")}>
+            <PlusIcon />
+          </button>
+        </div>
+        {issues.map((issue) => (
+          <div className="review-mobile-issue" key={issue.id}>
+            <a
+              className="review-mobile-issue-link"
+              href={issuePath(data.workspace.urlKey, issue)}
+              onClick={(event) => {
+                event.preventDefault();
+                onNavigate(issuePath(data.workspace.urlKey, issue));
+              }}
+            >
+              <StatusIcon state={issue.state} size={14} />
+              <span className="review-mobile-issue-title" data-i18n-ignore>
+                {issue.title}
+              </span>
+            </a>
+            <button type="button" className="review-mobile-icon-button" aria-label={t("Issue actions")}>
+              <FlowOptionsIcon />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** The description's reaction/attachment row: the reference app keeps it under the overview text. */
+function ReviewDocumentActions({ onReact }: { onReact: (emoji: string) => void }) {
+  const { t } = useI18n();
+  return (
+    <div className="review-document-actions">
+      <EmojiPicker onSelect={onReact}>
+        <button type="button" aria-label={t("Add reaction")}>
+          <AddReactionIcon size={14} />
+        </button>
+      </EmojiPicker>
+      <button type="button" aria-label={t("Attach images, files, or videos")}>
+        <AttachmentIcon size={14} />
+      </button>
+    </div>
+  );
+}
+
 function SidebarSection({ label, children }: { label: string; children: ReactNode }) {
   return (
     <section className="review-sidebar-section">
@@ -140,7 +261,7 @@ function SidebarSection({ label, children }: { label: string; children: ReactNod
   );
 }
 
-function ReviewStatusMenu({ review, busy, onMutate }: { review: CodeReview; busy: boolean; onMutate: (input: Mutation) => Promise<void> }) {
+function ReviewStatusMenu({ review, busy, onMutate, phone = false }: { review: CodeReview; busy: boolean; onMutate: (input: Mutation) => Promise<void>; phone?: boolean }) {
   const { t } = useI18n();
   const closed = review.status === "merged" || review.status === "closed";
   const noun = reviewProviderNoun(review.provider);
@@ -148,8 +269,8 @@ function ReviewStatusMenu({ review, busy, onMutate }: { review: CodeReview; busy
     <RadixMenu.Root>
       <RadixMenu.Trigger asChild>
         <button type="button" className="review-sidebar-button is-strong" disabled={busy}>
-          <ReviewStateIcon review={review} />
-          <span>{t(reviewStatusLabels[reviewStatus(review)])}</span>
+          {phone ? <ReviewPhoneStateIcon review={review} /> : <ReviewStateIcon review={review} />}
+          <span className="review-status-value">{t(reviewStatusLabels[reviewStatus(review)])}</span>
         </button>
       </RadixMenu.Trigger>
       <RadixMenu.Portal>
@@ -204,12 +325,12 @@ function ReviewChecks({ checks }: { checks: CodeReview["checks"] }) {
   );
 }
 
-function ReviewBranchState({ review, busy, onMutate }: { review: CodeReview; busy: boolean; onMutate: (input: Mutation) => Promise<void> }) {
+function ReviewBranchState({ review, busy, onMutate, phone = false }: { review: CodeReview; busy: boolean; onMutate: (input: Mutation) => Promise<void>; phone?: boolean }) {
   const { t } = useI18n();
   const label = review.branchState === "upToDate" ? "Up to date with main" : review.branchState === "conflicted" ? "Conflicts with main" : "Behind main";
   return (
     <div className="review-sidebar-text is-strong" data-branch-state={review.branchState}>
-      <GitBranch className="review-branch-icon" />
+      {phone ? <FlowBranchIcon className="review-branch-icon" /> : <GitBranch className="review-branch-icon" />}
       <span>{t(label)}</span>
       {review.branchState === "behind" && !["merged", "closed"].includes(review.status) && (
         <button type="button" className="review-pill-button is-small" disabled={busy} onClick={() => void onMutate({ branchState: "upToDate" })}>
@@ -322,7 +443,7 @@ export function DiffCounts({ additions, deletions }: { additions: number; deleti
   );
 }
 
-function ReviewActivity({ data, review, onNavigate, onReload }: { data: BootstrapData; review: CodeReview; onNavigate: (path: string) => void; onReload: () => Promise<void> }) {
+function ReviewActivity({ data, review, onNavigate, onReload, phone }: { data: BootstrapData; review: CodeReview; onNavigate: (path: string) => void; onReload: () => Promise<void>; phone: boolean }) {
   const { t } = useI18n();
   // Code comments live on the Diff tab; the activity shows events, conversation
   // comments and reviews (with a resolved-threads summary on the latest review).
@@ -346,7 +467,7 @@ function ReviewActivity({ data, review, onNavigate, onReload }: { data: Bootstra
               onReload={onReload}
             />
           ) : (
-            <ReviewActivityItem key={event.id} data={data} review={review} event={event} />
+            <ReviewActivityItem key={event.id} data={data} review={review} event={event} phone={phone} />
           ),
         )}
       </ol>
@@ -465,7 +586,7 @@ function ReviewActivityCard({
   );
 }
 
-function ReviewActivityItem({ data, review, event }: { data: BootstrapData; review: CodeReview; event: CodeReview["events"][number] }) {
+function ReviewActivityItem({ data, review, event, phone }: { data: BootstrapData; review: CodeReview; event: CodeReview["events"][number]; phone: boolean }) {
   const { t } = useI18n();
   const timeAgo = useTimeAgo();
   const actor = event.actor.displayName || event.actor.name;
@@ -503,7 +624,7 @@ function ReviewActivityItem({ data, review, event }: { data: BootstrapData; revi
   return (
     <li className={`review-activity-event is-${event.type}`}>
       <span className="review-activity-icon">
-        <ActivityIcon review={review} type={event.type} />
+        <ActivityIcon review={review} type={event.type} phone={phone} />
       </span>
       <p>
         {content}
@@ -524,12 +645,12 @@ function ReviewActivityItem({ data, review, event }: { data: BootstrapData; revi
   );
 }
 
-function ActivityIcon({ review, type }: { review: CodeReview; type: string }) {
+function ActivityIcon({ review, type, phone }: { review: CodeReview; type: string; phone: boolean }) {
   if (type === "approved") return <CircleCheck className="review-icon-success" />;
   if (type === "changes_requested") return <CircleX className="review-icon-danger" />;
-  if (type === "merged") return <ReviewStateIcon review={{ ...review, status: "merged" }} />;
-  if (type === "closed") return <ReviewStateIcon review={{ ...review, status: "closed" }} />;
-  if (type === "opened") return <ReviewStateIcon review={{ ...review, status: "open", draft: false }} />;
+  if (type === "merged") return phone ? <ReviewPhoneStateIcon className="review-activity-state-phone" review={{ ...review, status: "merged" }} /> : <ReviewStateIcon review={{ ...review, status: "merged" }} />;
+  if (type === "closed") return phone ? <ReviewPhoneStateIcon className="review-activity-state-phone" review={{ ...review, status: "closed" }} /> : <ReviewStateIcon review={{ ...review, status: "closed" }} />;
+  if (type === "opened") return phone ? <ReviewPhoneStateIcon className="review-activity-state-phone" review={{ ...review, status: "open", draft: false }} /> : <ReviewStateIcon review={{ ...review, status: "open", draft: false }} />;
   return <CircleDashed />;
 }
 
@@ -545,9 +666,10 @@ function activityText(type: string, noun: string) {
           : "updated the review";
 }
 
-function ReviewCommentComposer({ data, review, onReload }: { data: BootstrapData; review: CodeReview; onReload: () => Promise<void> }) {
+function ReviewCommentComposer({ data, review, onReload, value, onValueChange, phone }: { data: BootstrapData; review: CodeReview; onReload: () => Promise<void>; value: string; onValueChange: (value: string) => void; phone: boolean }) {
   const { t } = useI18n();
-  const [comment, setComment] = useState("");
+  const comment = value;
+  const setComment = onValueChange;
   const [busy, setBusy] = useState(false);
   const sendComments = data.userSettings[data.viewer.id]?.sendComments ?? "Enter";
   const submit = async () => {
@@ -580,8 +702,11 @@ function ReviewCommentComposer({ data, review, onReload }: { data: BootstrapData
           void submit();
         }}
       />
+      <button type="button" className="review-comment-attach" aria-label={t("Attach images, files, or videos")}>
+        <AttachmentIcon size={14} />
+      </button>
       <button type="button" className="review-round-button" aria-label={t("Submit comment")} disabled={busy || !comment.trim()} onClick={() => void submit()}>
-        <ArrowUp />
+        {phone ? <FlowPreviousIcon /> : <ArrowUp />}
       </button>
     </div>
   );

@@ -3,6 +3,7 @@ import { CircleCheck, CircleX, GitMerge, MessageSquare, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useI18n } from "@/i18n/i18n";
+import { usePhoneLayout } from "@/hooks/use-phone-layout";
 import type { CodeReview } from "@/types/flow";
 
 import type { MergeMethod } from "./pull-request-merge-method";
@@ -33,6 +34,7 @@ export function PullRequestReviewActions({
   onSubmit: (decision: ReviewDecision, body: string) => Promise<boolean>;
 }) {
   const { t } = useI18n();
+  const phone = usePhoneLayout();
   const action = reviewPrimaryAction(review, viewerId);
   return (
     <>
@@ -49,7 +51,11 @@ export function PullRequestReviewActions({
       )}
       {action.kind === "readyForReview" || action.kind === "markReady" ? (
         <button type="button" className="review-pill-button is-primary" disabled={busy} onClick={() => void onMutate({ draft: false })}>
-          {t(action.kind === "readyForReview" ? "Ready for review" : "Mark as ready")}
+          {action.kind === "readyForReview" && phone ? (
+            <span className="review-ready-label--phone">{t("Mark as ready")}</span>
+          ) : (
+            t(action.kind === "readyForReview" ? "Ready for review" : "Mark as ready")
+          )}
         </button>
       ) : action.kind === "requestReview" ? (
         <button type="button" className="review-pill-button" disabled={busy} onClick={() => onOpenPicker("reviewers")}>

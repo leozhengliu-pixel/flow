@@ -663,3 +663,117 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   .reviews-empty-illustration svg { border-style: none; width: 130px; height: 131px; }
   .reviews-empty-text { border-style: none; color: var(--review-fg-muted); font: 500 13px/normal var(--font); }
 }
+
+/* ---- Phone review page ---- */
+@media (max-width: 767px){html:root body .app:has(.reviews-workspace) .bottom-agent{display:none}}
+/* The reference app's review page folds the properties sidebar into the document and merges the top bar with the tabs. */
+.review-detail-chrome{display:contents}
+.review-breadcrumb-issue-icon,.review-breadcrumb-state--phone,.review-phone-pr-number,.review-phone-agent,.review-ready-label--phone,.review-menu-glyph--phone,.review-actions-glyph--phone,.review-comment-attach{display:none}
+.review-byline-branches{display:contents}
+.review-tab-label{display:inline}
+@media (max-width: 767px){
+  html:root body .app .review-detail-chrome{box-sizing:border-box;height:87.5px;flex:0 0 87.5px;display:flex;flex-direction:column;gap:12px;background:var(--bg-panel);color:var(--review-fg)}
+  html:root body .app .review-detail-top{box-sizing:border-box;height:44px;flex:0 0 44px;display:flex;align-items:center;gap:0;padding:0 14px 0 8px;border-style:none}
+  html:root body .app .review-detail-top .review-menu-button::before,html:root body .app .review-detail-top .review-menu-button::after{content:none}
+  html:root body .app .review-detail-top .review-menu-button{display:grid!important;width:32px;height:32px;flex:0 0 32px;margin:0;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--text);font:500 12px/normal var(--font)}
+  html:root body .app .review-detail-top .review-menu-button svg{display:block;width:14px;height:14px;color:var(--issue-muted);opacity:1}
+  html:root body .app .review-detail-top .review-menu-button svg.review-menu-glyph--desktop,html:root body .app .review-actions-glyph--desktop{display:none}
+  html:root body .app .review-detail-top .review-menu-button svg.review-menu-glyph--phone,html:root body .app .review-actions-glyph--phone{display:block}
+  html:root body .app .review-breadcrumb{min-width:0;flex:1;display:flex;align-items:center;margin-left:-1px;overflow:visible}
+  html:root body .app .review-breadcrumb-issue{box-sizing:border-box;height:24px;flex:none;display:flex;align-items:center;margin:0 -5px;padding:0 5px;border-radius:8px;background:transparent;color:var(--bright);font:400 16px/24px var(--font);text-decoration:none;overflow:visible}
+  html:root body .app .review-breadcrumb-issue-label{display:none}
+  html:root body .app .review-breadcrumb-issue-icon{display:grid;place-items:center;width:14px;height:14px;flex:none}
+  html:root body .app .review-breadcrumb-issue-icon svg{width:14px;height:14px;border-style:none}
+  html:root body .app .review-breadcrumb-separator{flex:none;margin:0 5.4px 0 3.4px;color:var(--issue-muted);font:500 13px/normal var(--font)}
+  html:root body .app .review-breadcrumb-state{width:16px;height:16px;flex:none}
+  html:root body .app .review-breadcrumb-state--desktop{display:none}
+  html:root body .app .review-breadcrumb-state--phone{display:block;width:16px;height:16px;color:var(--bright)}
+  html:root body .app .review-breadcrumb-state--phone path{fill:var(--issue-muted)}
+  html:root body .app .review-breadcrumb-title{min-width:0;flex:1 1 auto;margin-left:2px;padding:2px 4px;border-radius:6px;color:var(--text);text-decoration:none}
+  html:root body .app .review-breadcrumb-title h2{font:500 13px/normal var(--font);color:var(--text)}
+  html:root body .app .review-diff-stat,html:root body .app .review-favorite-button,html:root body .app .review-detail-top-actions{display:none}
+  html:root body .app .review-phone-pr-number{box-sizing:border-box;height:24px;flex:none;display:flex;align-items:center;padding:0 4px;border-radius:8px;color:var(--issue-muted);font:500 13px/normal var(--font);text-decoration:none}
+  html:root body .app .review-phone-pr-number span{padding:0;border-style:none;color:var(--issue-muted);font:500 13px/normal var(--font)}
+  html:root body .app .review-breadcrumb .review-actions-trigger{width:32px;height:32px;flex:0 0 32px;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--text);font:500 12px/normal var(--font)}
+  html:root body .app .review-breadcrumb .review-actions-trigger svg{width:14px;height:14px;color:var(--issue-muted)}
+  html:root body .app .review-detail-tabs{box-sizing:border-box;height:43.5px;flex:0 0 43.5px;display:flex;align-items:center;gap:6px;margin-top:-12px;padding:0 8px 0 14px;border-style:none}
+  html:root body .app .review-detail-tabs nav{display:flex;align-items:center;gap:6px;margin-right:auto}
+  html:root body .app .review-detail-tabs nav a{box-sizing:border-box;height:32px;display:flex;align-items:center;padding:0 10px;border:.5px solid transparent;border-radius:9999px;font:500 12px/normal var(--font);text-decoration:none}
+  html:root body .app .review-detail-tabs nav a[data-review-tab=review]{display:none}
+  html:root body .app .review-tab-label{margin-right:-1px}
+  html:root body .app .review-detail-tab-actions{display:flex;align-items:center;gap:6px;margin-left:0}
+  html:root body .app .review-detail-tab-actions>.review-pill-button{height:32px;padding:0 10px;border:.5px solid transparent}
+  html:root body .app .review-ready-label--desktop{display:none}
+  html:root body .app .review-ready-label--phone{display:inline;margin-right:-1px}
+  html:root body .app .review-phone-agent{display:grid;place-items:center;box-sizing:border-box;width:32px;height:32px;flex:0 0 32px;padding:0 2px;border:.5px solid transparent;border-radius:50%;background:var(--review-phone-agent-bg);color:var(--issue-muted);font:500 12px/normal var(--font)}
+  html:root body .app .review-phone-agent svg{width:14px;height:14px}
+
+  /* The document: 16px gutters, 10px above the title, the properties folded in label/value rows. */
+  html:root body .app .review-overview{display:block;box-sizing:border-box;padding:10px 16px 64px;overflow-y:auto}
+  html:root body .app .review-overview-main{max-width:none}
+  html:root body .app .review-overview-title{margin:0;color:var(--bright);font:600 24px/32px var(--font);letter-spacing:-.16px}
+  html:root body .app .review-byline{height:auto;min-height:0;margin-top:6px;padding-top:7px;flex-wrap:wrap;align-items:center;row-gap:2.5px;column-gap:4px;white-space:nowrap}
+  html:root body .app .review-byline-avatar{width:18px;height:18px;flex:0 0 18px;margin:0 2px 0 0;border-radius:50%;background:var(--review-phone-avatar-bg);box-shadow:none;color:var(--review-phone-avatar-fg);font:400 9px/0 var(--font)}
+  html:root body .app .review-byline-author{color:var(--bright);font:450 12px/normal var(--font)}
+  html:root body .app .review-byline-dot{color:var(--review-fg-muted);font:450 12px/normal var(--font)}
+  html:root body .app .review-byline-branches{display:flex;flex:1 0 100%;align-items:center;gap:0;min-width:0}
+  html:root body .app .review-byline-branch{flex:none;max-width:40%;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--issue-muted);font:450 12px/normal var(--font)}
+  html:root body .app .review-byline-branch:first-child{flex:none;min-width:30.8px}
+  html:root body .app .review-byline-branch:last-child{flex:0 1 auto;max-width:none;color:var(--issue-muted)}
+  html:root body .app .review-byline-arrow{width:16px;flex:none;margin-left:0;color:var(--review-fg-faint);font:450 12px/normal var(--font);text-align:center}
+
+  /* Folded properties. */
+  html:root body .app .review-overview-sidebar{display:none}
+  html:root body .app .review-mobile-properties{margin:0;padding-top:16px}
+  html:root body .app .review-mobile-row{display:flex;align-items:center;min-height:28px;margin:0 0 8px}
+  html:root body .app .review-mobile-label{width:60px;flex:0 0 60px;margin-right:8px;color:var(--issue-muted);font:450 12px/20px var(--font)}
+  html:root body .app .review-mobile-row[data-mobile-property=reviewers] .review-mobile-label{align-self:flex-start;line-height:24px}
+  html:root body .app .review-mobile-row[data-mobile-property=branch]{min-height:25.5px}
+  html:root body .app .review-mobile-row[data-mobile-property=branch] .review-mobile-label{line-height:20px}
+  html:root body .app .review-mobile-row .review-sidebar-button{height:28px;margin:0;padding:0 8px 0 4px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--text);font:500 12px/normal var(--font);gap:0}
+  html:root body .app .review-mobile-row .review-sidebar-button svg{width:14px;height:14px;flex:none;margin:0 8px 0 2.5px}
+  html:root body .app .review-mobile-row .review-sidebar-button.is-strong{height:28px;padding:0 8px 0 4px}
+  html:root body .app .review-mobile-row .review-sidebar-button.is-muted{color:var(--text);padding:0 8px 0 6px}
+  html:root body .app .review-mobile-row .review-sidebar-button.is-muted svg{margin:0 4.5px 0 .5px;color:var(--issue-muted)}
+  html:root body .app .review-mobile-row .review-sidebar-button>span{font:450 12px/normal var(--font);color:var(--text)}
+  html:root body .app .review-mobile-row .review-sidebar-button.is-strong>span{font-weight:500}
+  html:root body .app .review-mobile-row .review-sidebar-button.is-strong svg{color:var(--issue-muted)}
+  html:root body .app .review-mobile-row .review-sidebar-button.is-strong svg path{fill:var(--issue-muted)}
+  html:root body .app .review-mobile-row .review-sidebar-text{min-height:24px;margin:0;padding:0 6px 0 4px;border:0;border-radius:9999px;background:transparent;color:var(--text);font:500 12px/normal var(--font);gap:0}
+  html:root body .app .review-mobile-row .review-sidebar-text svg{width:14px;height:14px;flex:none;margin:0 8px 0 2px;color:var(--review-phone-branch-fg)}
+  html:root body .app .review-mobile-row .review-sidebar-text>span{font:500 12px/normal var(--font);color:var(--text)}
+  html:root body .app .review-mobile-resolves{padding:0}
+  html:root body .app .review-mobile-resolves-head{display:flex;align-items:center;justify-content:space-between;height:28px;margin:0 0 0}
+  html:root body .app .review-mobile-resolves-head .review-mobile-label{line-height:normal}
+  html:root body .app .review-mobile-icon-button{width:28px;height:28px;flex:0 0 28px;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--text);font:500 12px/normal var(--font)}
+  html:root body .app .review-mobile-icon-button svg{width:14px;height:14px;color:var(--issue-muted)}
+  html:root body .app .review-mobile-issue{display:flex;align-items:center;height:28px;margin:0}
+  html:root body .app .review-mobile-issue-link{box-sizing:border-box;min-width:0;flex:1;display:flex;align-items:center;gap:6px;height:28px;margin-left:-8px;padding:4px 8px;border-radius:9999px;color:var(--text);text-decoration:none;font:450 13px/normal var(--font)}
+  html:root body .app .review-mobile-issue-link>svg{width:14px;height:14px;flex:none}
+  html:root body .app .review-mobile-issue-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font:450 13px/normal var(--font)}
+
+  /* Description and its action row. */
+  html:root body .app .review-description{margin:0;padding-top:18px}
+  html:root body .app .review-description h3{padding:6px 0;color:var(--issue-muted);font:450 12px/normal var(--font)}
+  html:root body .app .review-description [data-mention-body]{margin-top:7.5px;color:var(--text);font:450 15px/24px var(--font);letter-spacing:-.1px}
+  html:root body .app .review-description [data-mention-body] p{margin:0 0 16px}
+  html:root body .app .review-description [data-mention-body] p:last-child{margin-bottom:0}
+  html:root body .app .review-document-actions{display:flex;align-items:flex-start;gap:0;box-sizing:border-box;height:46px;margin:0 -4px;padding:12px 0 2px}
+  html:root body .app .review-document-actions button{box-sizing:border-box;width:32px;height:32px;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--text);font:500 12px/normal var(--font)}
+  html:root body .app .review-document-actions button svg{width:14px;height:14px;color:var(--issue-muted)}
+
+  /* Activity and composer. */
+  html:root body .app .review-activity{margin-top:4px}
+  html:root body .app .review-activity h3{padding:16px 0 4px;color:var(--issue-muted);font:450 12px/normal var(--font)}
+  html:root body .app .review-activity ol{margin:0}
+  html:root body .app .review-activity-event{min-height:47px;padding:16px 0 0 4px}
+  html:root body .app .review-activity-event p{padding:4px;color:var(--issue-muted);font:450 12px/16.8px var(--font)}
+  html:root body .app .review-activity-state-phone{color:var(--review-state-open)}
+  html:root body .app .review-activity-state-phone path{fill:currentColor}
+  html:root body .app .review-comment{margin:0 -4px;padding:8px;border-radius:8px;background:var(--review-card-bg);box-shadow:0 0 0 1px var(--review-card-border-faint),var(--ui-pill-shadow)}
+  html:root body .app .review-comment-avatar{width:18px;height:18px;flex:0 0 18px;margin-top:5px;border-radius:50%;background:var(--review-phone-avatar-bg);box-shadow:none;color:var(--review-phone-avatar-fg);font-size:9px;line-height:normal}
+  html:root body .app .review-comment textarea{font:450 15px/24px var(--font);color:var(--review-fg);height:24px;min-height:24px}
+  html:root body .app .review-comment-attach{box-sizing:border-box;width:28px;height:28px;flex:0 0 28px;display:grid;place-items:center;padding:0;border:0;background:transparent;color:var(--review-fg-muted)}
+  html:root body .app .review-comment-attach svg{width:14px;height:14px}
+  html:root body .app .review-comment textarea::placeholder{color:var(--review-fg-faint)}
+}
