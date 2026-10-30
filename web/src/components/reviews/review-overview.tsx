@@ -1,6 +1,6 @@
 import * as RadixMenu from "@radix-ui/react-dropdown-menu";
 import { ArrowUp, ChevronDown, CircleCheck, CircleDashed, CircleX, CornerDownRight, FileCode2, GitBranch, MessageSquare, Plus } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { MentionBody } from "@/components/editor/mentions/mention-body";
 import { EmojiPicker } from "@/components/reactions/emoji-picker";
@@ -9,6 +9,7 @@ import { FlowBranchIcon, FlowOptionsIcon, FlowPreviousIcon } from "@/components/
 import { PlusIcon } from "@/components/ui/view-action-icons";
 import { ReviewPhoneStateIcon } from "./review-row-icons";
 import { usePhoneLayout } from "@/hooks/use-phone-layout";
+import { middleTruncate } from "@/lib/middle-truncate";
 import { PersonHover } from "@/components/property/person-info";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useI18n } from "@/i18n/i18n";
@@ -78,9 +79,15 @@ export function ReviewOverview({
             <span className="review-byline-arrow" aria-label={t("from")}>
               ←
             </span>
-            <span className="review-byline-branch" data-i18n-ignore title={review.headBranch}>
-              {review.headBranch}
-            </span>
+            {phone ? (
+              <span className="review-byline-head">
+                <MiddleTruncatedBranch text={review.headBranch} />
+              </span>
+            ) : (
+              <span className="review-byline-branch" data-i18n-ignore title={review.headBranch}>
+                {review.headBranch}
+              </span>
+            )}
           </span>
         </div>
         {phone && (
@@ -151,6 +158,33 @@ export function ReviewOverview({
         <ReviewSidebarFiles data={data} review={review} onNavigate={onNavigate} />
       </aside>
     </div>
+  );
+}
+
+/** A long branch name keeps its start and end; the reference app trims the middle in the phone byline. */
+function MiddleTruncatedBranch({ text }: { text: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [value, setValue] = useState(text);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const fit = () => {
+      const style = getComputedStyle(element);
+      const context = document.createElement("canvas").getContext("2d");
+      if (!context) return setValue(text);
+      context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      const width = element.clientWidth;
+      setValue(middleTruncate(text, (candidate) => context.measureText(candidate).width <= width));
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [text]);
+  return (
+    <span ref={ref} className="review-byline-branch review-byline-branch--head" data-i18n-ignore title={text}>
+      {value}
+    </span>
   );
 }
 

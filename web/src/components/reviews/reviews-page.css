@@ -717,10 +717,12 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-byline-author{color:var(--bright);font:450 12px/normal var(--font)}
   html:root body .app .review-byline-dot{color:var(--review-fg-muted);font:450 12px/normal var(--font)}
   html:root body .app .review-byline-branches{display:flex;flex:1 0 100%;align-items:center;gap:0;min-width:0}
-  html:root body .app .review-byline-branch{flex:none;max-width:40%;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--issue-muted);font:450 12px/normal var(--font)}
+  html:root body .app .review-byline-branch{flex:none;max-width:40%;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--issue-muted);font:450 12px/14.5px var(--font-monospace)}
+  html:root body .app .review-byline-head{display:flex;flex:1 1 0;min-width:0;align-items:center}
   html:root body .app .review-byline-branch:first-child{flex:none;min-width:30.8px}
   html:root body .app .review-byline-branch:last-child{flex:0 1 auto;max-width:none;color:var(--issue-muted)}
-  html:root body .app .review-byline-arrow{width:16px;flex:none;margin-left:0;color:var(--review-fg-faint);font:450 12px/normal var(--font);text-align:center}
+  html:root body .app .review-byline-branch--head{display:block;flex:1 1 0;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  html:root body .app .review-byline-arrow{width:16px;flex:none;margin-left:0;color:var(--review-fg-faint);font:450 12px/14.5px var(--font-monospace);text-align:center}
 
   /* Folded properties. */
   html:root body .app .review-overview-sidebar{display:none}
@@ -734,6 +736,7 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-mobile-row .review-sidebar-button svg{width:14px;height:14px;flex:none;margin:0 8px 0 2.5px}
   html:root body .app .review-mobile-row .review-sidebar-button.is-strong{height:28px;padding:0 8px 0 4px}
   html:root body .app .review-mobile-row .review-sidebar-button.is-muted{color:var(--text);padding:0 8px 0 6px}
+  html:root body .app .review-mobile-row .review-sidebar-button.is-muted>span{color:var(--issue-muted)}
   html:root body .app .review-mobile-row .review-sidebar-button.is-muted svg{margin:0 4.5px 0 .5px;color:var(--issue-muted)}
   html:root body .app .review-mobile-row .review-sidebar-button>span{font:450 12px/normal var(--font);color:var(--text)}
   html:root body .app .review-mobile-row .review-sidebar-button.is-strong>span{font-weight:500}
