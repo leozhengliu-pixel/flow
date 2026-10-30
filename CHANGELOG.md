@@ -11,6 +11,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Estimate icons now use the same filled-left triangle for every value and
   property button, with a separate broken outline for "No estimate" menu options.
+- On phones, issue details wrap their properties, expose due dates and related-issue navigation, keep the copy controls visible, and use touch-sized issue action menus without repeating the desktop properties rail.
 
 ### Security
 

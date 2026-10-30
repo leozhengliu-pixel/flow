@@ -45,3 +45,60 @@
 .issue-options-remove-text>.issue-options-label{flex:0 1 auto}
 .issue-options-remove-title{min-width:0;flex:1 1 auto;margin-left:4px;overflow:hidden;color:var(--pk-faint);text-overflow:ellipsis;white-space:nowrap}
 .issue-options-then{color:var(--pk-muted);font:450 11px/23px var(--font)}
+.issue-options-mobile-back { display: none; }
+.issue-options-mobile-overlay { position: fixed; inset: 0; z-index: 599; background: var(--theme-overlay); }
+@media (max-width: 767px) {
+  [data-radix-popper-content-wrapper]:has(> :is(.issue-options-popover,.issue-options-submenu,.issue-options-due-date)) {
+    top: 13.0332dvh !important;
+    left: 16px !important;
+    transform: none !important;
+    width: calc(100vw - 32px);
+  }
+  .issue-options-popover.issue-options-popover,.issue-options-submenu.issue-options-submenu,.issue-options-due-date.issue-options-due-date {
+    width: calc(100vw - 32px) !important;
+    min-width: 0 !important;
+    max-width: none;
+    height: min(450px,80dvh);
+    max-height: min(450px,80dvh);
+    border-radius: 12px;
+    background: var(--work-menu-bg) !important;
+    border: 0 !important;
+    outline: .5px solid var(--work-menu-border);
+    box-shadow: var(--shadow-dialog);
+    overflow: hidden;
+  }
+  .issue-options-popover[data-nested=true] { visibility: hidden; }
+  .issue-options-popover > [cmdk-root],.issue-options-submenu > [cmdk-root] { height: 100%; max-height: 100%; }
+  .issue-options-popover :is(.issue-options-filter,.issue-options-submenu-search),.issue-options-submenu :is(.issue-options-filter,.issue-options-submenu-search) {
+    position: static;
+    opacity: 1;
+    flex: 0 0 46px;
+    width: calc(100% - 12px);
+    height: 46px;
+    margin: 0 6px;
+    padding: 17px 12px 11px;
+    border: 0;
+    background: transparent;
+    color: var(--work-menu-text);
+    outline: 0;
+    font: 13px var(--font);
+  }
+  .issue-options-popover [cmdk-list],.issue-options-submenu [cmdk-list] { flex: 1; padding: 6px; }
+  .issue-options-item { height: 46px; padding: 0 12px; font-size: 15px !important; line-height: 22.5px; }
+  .issue-options-item::before { inset: 0; }
+  .issue-options-shortcut { display: none; }
+  .issue-options-submenu { display: flex; flex-direction: column; }
+  .issue-options-submenu > [cmdk-root] { min-height: 0; flex: 1; }
+  .issue-options-mobile-back { height: 34px; flex: 0 0 34px; display: flex; align-items: center; gap: 8px; width: 100%; padding: 0 12px; border: 0; border-bottom: .5px solid var(--work-menu-border); background: transparent; color: var(--work-menu-muted); font: 13px var(--font); }
+  .issue-options-due-date .due-date-command { width: 100%; border: 0; border-radius: 0; box-shadow: none; }
+  .issue-options-due-date .due-date-options button { height: 46px; }
+  .issue-options-due-date.issue-options-due-date { height: auto; }
+  .issue-options-due-date .issue-options-mobile-back { display: none; }
+  html:root body .issue-options-due-date .due-date-command { width: 100%; min-width: 0; max-width: none; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+  html:root body .issue-options-due-date .due-date-head { height: 40px; padding: 6px 18px 0; border: 0; }
+  html:root body .issue-options-due-date .due-date-options { padding: 6px; }
+  html:root body .issue-options-due-date .due-date-options button { height: 46px; padding: 0 12px; font-size: 15px; }
+  .issue-options-due-date .due-date-shortcut { display: none; }
+  .issue-options-submenu[data-menu="Remove"] { max-width: none; }
+  .issue-options-mobile-overlay { background: transparent; pointer-events: auto; }
+}

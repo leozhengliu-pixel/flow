@@ -26,10 +26,11 @@ import { FlowTooltip } from '@/components/ui/tooltip'
 import './issue-project-picker.css'
 import { projectTemplateChoices } from '@/lib/project-template-choice'
 
-export function IssueProjectPicker({ data, issue, grouped = false, presence = [], onUpdate, onCreateProject, onCreateMilestone }: {
+export function IssueProjectPicker({ data, issue, grouped = false, presence = [], onUpdate, onCreateProject, onCreateMilestone, emptyTriggerLabel = 'Add to project' }: {
   data: BootstrapData
   issue: Issue
   grouped?: boolean
+  emptyTriggerLabel?: string
   presence?: Presence[]
   onUpdate: (input: IssueUpdateInput) => Promise<void>
   onCreateProject?: (draft: NewProjectDraft) => Promise<Project>
@@ -88,7 +89,7 @@ export function IssueProjectPicker({ data, issue, grouped = false, presence = []
     searchShortcut="Shift P"
     ariaLabel={project ? `${t('Change project')}. ${project.name}` : t('Add to project')}
     triggerClassName="label-project-trigger issue-project-trigger"
-    trigger={<><ProjectIcon size={16} style={{ color: project?.color }}/><span data-i18n-ignore={project ? true : undefined}>{project?.name ?? t('Add to project')}</span></>}
+    trigger={<><ProjectIcon size={16} style={{ color: project?.color }}/><span data-i18n-ignore={project ? true : undefined}>{project?.name ?? t(emptyTriggerLabel)}</span></>}
     hoverContent={<PropertyShortcutTooltip label={project ? t('Change project') : t('Add to project')} shortcut="⇧ P"/>}
     onChange={projectId => onUpdate({ projectId, projectMilestoneId: '' })}
     onCreate={() => setCreateOpen(true)}

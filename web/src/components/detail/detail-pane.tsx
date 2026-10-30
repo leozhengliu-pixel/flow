@@ -68,6 +68,8 @@ import { TriageIntelligenceSuggestions } from '@/components/issue/triage-intelli
 import './issue-code-reviews.css'
 import './issue-history-state.css'
 import './issue-properties-rail.css'
+import './issue-mobile.css'
+import { IssueMobileRelations } from './issue-mobile-properties'
 import { useIssuesById } from '@/components/issue/use-issues-by-id'
 import { IssueRelationSections } from '@/components/issue/issue-relation-sections'
 import { useRegisterCommandContext } from '@/components/command/command-context'
@@ -138,8 +140,18 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
         {parentIssue&&<IssueParentContext parent={parentIssue} issues={data.issues} workspaceKey={data.workspace.urlKey} onOpen={()=>openIssue(parentIssue)}/>}
         {embedded&&triageActions&&<div className="issue-triage-embedded-actions"><span>{t('Triage')}</span>{triageActions}</div>}
         {!triageView&&<TriageIntelligenceSuggestions issue={issue} data={data} inTriage={inTriage} onIssueUpdated={onIssueUpdated}/>}
-        <div className="issue-mobile-properties" aria-label="Issue properties">
-          <StatusPicker value={issue.state} states={availableStates} triage={inTriage} onChange={stateId=>onUpdate({stateId})}/><PriorityPicker value={issue.priority} onChange={priority=>onUpdate({priority})}/>{estimateType!=='notUsed'&&<EstimatePicker value={issue.estimate} settings={resolvedTeamSettings(data.teamSettings,issue.team.id)} onChange={estimate=>onUpdate({estimate})}/>}<AssigneePicker value={issue.assignee} delegate={issue.delegate} allowAgents={agentsAvailable(data)} users={data.users} teamId={issue.team.id} hoverContext={{ member: issue.assignee ? data.members.find(item=>item.user.id===issue.assignee?.id) : undefined, online: Boolean(issue.assignee && (issue.assignee.id===data.viewer.id || peoplePresence.some(item=>item.user.id===issue.assignee?.id))), workspaceName: issue.team.name }} onChange={assigneeId=>onUpdate({assigneeId})} onDelegate={delegateId=>onUpdate({delegateId})}/>{data.cycleSettings[issue.team.id]?.enabled === true && <CyclePicker valueId={issue.cycleId} cycles={data.cycles} issues={data.issues} teamId={issue.team.id} onChange={cycleId=>onUpdate({cycleId})}/>}<DetailLabelControl changeLabelAction="changeLabelAction" host="issue" isArchived={Boolean(issue.archivedAt)} isReadOnly={Boolean(issue.archivedAt)}><LabelPicker emptyLabel="Start typing to create a new label" value={issue.labels} labels={availableLabels} labelGroups={data.labelGroups} onToggle={toggleLabel} onCreate={createLabel}/></DetailLabelControl><IssueProjectPicker data={data} issue={issue} presence={peoplePresence} onCreateMilestone={onCreateProjectMilestone} onCreateProject={onCreateProject} onUpdate={onUpdate}/>{releasesEnabled&&<IssueReleasePicker data={data} issue={issue}/>}
+        <div className="issue-mobile-properties" aria-label={t('Issue properties')}>
+          <StatusPicker value={issue.state} states={availableStates} triage={inTriage} onChange={stateId=>onUpdate({stateId})}/>
+          <div className="issue-mobile-priority" data-empty={issue.priority===0}><PriorityPicker value={issue.priority} emptyTriggerLabel={t('Priority')} onChange={priority=>onUpdate({priority})}/></div>
+          <div className="issue-mobile-assignee" data-empty={!issue.assignee&&!issue.delegate}><AssigneePicker value={issue.assignee} delegate={issue.delegate} emptyTriggerLabel="Assignee" allowAgents={agentsAvailable(data)} users={data.users} teamId={issue.team.id} hoverContext={{ member: issue.assignee ? data.members.find(item=>item.user.id===issue.assignee?.id) : undefined, online: Boolean(issue.assignee && (issue.assignee.id===data.viewer.id || peoplePresence.some(item=>item.user.id===issue.assignee?.id))), workspaceName: issue.team.name }} onChange={assigneeId=>onUpdate({assigneeId})} onDelegate={delegateId=>onUpdate({delegateId})}/></div>
+          <IssueProjectPicker data={data} issue={issue} emptyTriggerLabel="Project" presence={peoplePresence} onCreateMilestone={onCreateProjectMilestone} onCreateProject={onCreateProject} onUpdate={onUpdate}/>
+          {estimateType!=='notUsed'&&<EstimatePicker value={issue.estimate} settings={resolvedTeamSettings(data.teamSettings,issue.team.id)} onChange={estimate=>onUpdate({estimate})}/>}
+          <DetailLabelControl changeLabelAction="changeLabelAction" host="issue" isArchived={Boolean(issue.archivedAt)} isReadOnly={Boolean(issue.archivedAt)}><LabelPicker summary emptyLabel="Start typing to create a new label" value={issue.labels} labels={availableLabels} labelGroups={data.labelGroups} onToggle={toggleLabel} onCreate={createLabel}/></DetailLabelControl>
+          {data.cycleSettings[issue.team.id]?.enabled === true && <CyclePicker valueId={issue.cycleId} cycles={data.cycles} issues={data.issues} teamId={issue.team.id} onChange={cycleId=>onUpdate({cycleId})}/>}
+          <IssueDueDate issue={issue} onUpdate={onUpdate}/>
+          <IssueRecurrenceProperty issue={issue} timeZone={data.teamSettings?.[issue.team.id]?.timezone} onUpdate={onUpdate}/>
+          <IssueMobileRelations issue={issue} data={data} activities={activities} onOpenIssue={openIssue}/>
+          {releasesEnabled&&data.releases.some(release=>release.issueIds.includes(issue.id))&&<IssueReleasePicker data={data} issue={issue}/>}
         </div>
         {triageView&&<TriageIntelligenceSuggestions issue={issue} data={data} inTriage={inTriage} onIssueUpdated={onIssueUpdated}/>}
         <IssueDescriptionEditor

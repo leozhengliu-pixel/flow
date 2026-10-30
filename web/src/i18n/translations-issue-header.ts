@@ -3,6 +3,13 @@
  * controls and the presence avatars. Merged into zhCN by translations.ts (fills gaps only).
  */
 export const issueHeaderZhCN: Record<string, string> = {
+  "Open related issue": "打开关联事项",
+  "{count} related": "{count} 个关联事项",
+  "Related issues": "关联事项",
+  "Search related issues": "搜索关联事项",
+  "Open related issue…": "打开关联事项…",
+  "Blocks": "阻塞",
+  "Change labels": "更改标签",
   "Choose coding tool": "选择编码工具",
   "Navigate up": "向上导航",
   "Navigate down": "向下导航",

@@ -7,12 +7,14 @@ import { CycleIcon, LabelIcon, NoProjectIcon, ProjectIcon } from '@/components/i
 import { PropertyMenu } from '@/components/property/property-menu'
 import { LabelHoverPreview } from '@/components/property/label-hover-preview'
 import { PropertyShortcutTooltip } from '@/components/property/issue-property-hover'
+import { useI18n } from '@/i18n/i18n'
 
-export function LabelPicker({ value, labels, labelGroups = [], emptyLabel, onToggle, onCreate, inline = false, searchShortcut, showGroupHeadings, surfaceClassName }: { value: IssueLabel[]; labels: IssueLabel[]; labelGroups?: LabelGroup[]; emptyLabel?: string; onToggle: (id: string) => void | Promise<void>; onCreate?: (name: string, groupId?: string) => void | Promise<void>; inline?: boolean; searchShortcut?: string; showGroupHeadings?: boolean; surfaceClassName?: string }) {
+export function LabelPicker({ value, labels, labelGroups = [], emptyLabel, onToggle, onCreate, inline = false, searchShortcut, showGroupHeadings, surfaceClassName, summary = false }: { value: IssueLabel[]; labels: IssueLabel[]; labelGroups?: LabelGroup[]; emptyLabel?: string; onToggle: (id: string) => void | Promise<void>; onCreate?: (name: string, groupId?: string) => void | Promise<void>; inline?: boolean; searchShortcut?: string; showGroupHeadings?: boolean; surfaceClassName?: string; summary?: boolean }) {
+  const { t } = useI18n()
   const groupNames = new Map(labelGroups.map(group => [group.id, group.name]))
   const groupColors = new Map(labelGroups.map(group => [group.id, group.color]))
   const options = labels.map(label => { const groupLabel = label.groupId ? groupNames.get(label.groupId) : undefined; return { id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, resourceType: label.resourceType, groupId: label.groupId, groupLabel, groupColor: label.groupId ? groupColors.get(label.groupId) : undefined, keywords: groupLabel } })
-  return <div className={`label-project-picker labels-picker${inline?' labels-picker--inline':''}`}>
+  return <div className={`label-project-picker labels-picker${inline?' labels-picker--inline':''}`} data-empty={value.length===0}>
     <PropertyMenu
       label="Labels"
       value={value.length ? `${value.length} labels` : 'Add label'}
@@ -26,7 +28,7 @@ export function LabelPicker({ value, labels, labelGroups = [], emptyLabel, onTog
       showGroupHeadings={showGroupHeadings}
       surfaceClassName={surfaceClassName}
       ariaLabel="Add labels"
-      customTrigger={({open,activeTrigger,openMenu})=><div className="labels-picker-trigger" aria-label="Change or add labels">
+      customTrigger={({open,activeTrigger,openMenu})=>summary?<button type="button" className="label-project-trigger" aria-label={t('Change labels')} aria-haspopup="dialog" aria-expanded={open} onClick={()=>openMenu('add')}><LabelIcon size={16}/><span>{value.length ? value.length : t('Labels')}</span></button>:<div className="labels-picker-trigger" aria-label="Change or add labels">
         <div className="issue-label-chips" aria-label="Selected labels">{value.map(label => <LabelHoverPreview label={label} key={label.id}><button type="button" className="issue-label-chip" aria-label={`Change or add labels. ${label.name} selected`} aria-haspopup="dialog" aria-expanded={open&&activeTrigger===`label:${label.id}`} onClick={()=>openMenu(`label:${label.id}`)}><i style={{ background: label.color }}/><span data-i18n-ignore>{label.name}</span></button></LabelHoverPreview>)}</div>
         <button type="button" className="label-project-trigger" aria-label="Add label" aria-haspopup="dialog" aria-expanded={open&&activeTrigger==='add'} onClick={()=>openMenu('add')}>{inline&&value.length?<Plus size={15}/>:<><LabelIcon size={15}/><span>Add label</span></>}</button>
       </div>}

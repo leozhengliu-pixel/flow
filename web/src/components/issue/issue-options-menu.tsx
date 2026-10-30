@@ -1,10 +1,12 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Popover from '@radix-ui/react-popover'
+import { createPortal } from 'react-dom'
 import { Command } from 'cmdk'
 import { parseDate } from 'chrono-node'
 import { addMonths } from 'date-fns'
 import {
   Bell,
+  ChevronLeft,
   Copy,
   FilePlus2,
   GitPullRequest,
@@ -122,7 +124,16 @@ export function IssueOptionsMenu({
   const [focusNested, setFocusNested] = useState(false)
   const [highlight, setHighlight] = useState(false)
   const [rootQuery, setRootQuery] = useState('')
+  const [mobile, setMobile] = useState(() => window.matchMedia?.('(max-width: 767px)').matches ?? false)
+  useEffect(() => {
+    const media = window.matchMedia?.('(max-width: 767px)')
+    if (!media) return
+    const update = () => setMobile(media.matches)
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
   const openNested = (name: Submenu | 'due', focus = false) => {
+    if (mobile && !focus) return
     setFocusNested(focus)
     setDatePickerOpen(name === 'due')
     setSubmenu(name === 'due' ? null : name)
@@ -256,7 +267,7 @@ export function IssueOptionsMenu({
   const issuePrompt = `# ${issue.identifier}: ${issue.title}\n\n${issue.description || 'No description provided.'}\n\nIssue URL: ${url}`
 
   return <>
-    <Popover.Root open={open} onOpenChange={value => {
+    <Popover.Root modal={mobile} open={open} onOpenChange={value => {
       setOpen(value)
       setHighlight(false)
       setRootQuery('')
@@ -268,8 +279,9 @@ export function IssueOptionsMenu({
       <Popover.Trigger asChild>
         {trigger ?? <button className="issue-header-icon" type="button" aria-label="Issue options"><FlowOptionsIcon/></button>}
       </Popover.Trigger>
+      {mobile&&open&&createPortal(<div className="issue-options-mobile-overlay" onPointerDown={closeMenu}/>,document.body)}
       <Popover.Portal>
-        <Popover.Content ref={parentMenuRef} data-flow-motion="floating" className="issue-options-popover" data-highlight={highlight} side="bottom" align="start" sideOffset={3.75} collisionPadding={16} role="dialog" aria-label={t('Issue options')} onOpenAutoFocus={event => { event.preventDefault(); requestAnimationFrame(() => parentFilterRef.current?.focus()) }} onEscapeKeyDown={closeMenu} onPointerMoveCapture={event => {
+        <Popover.Content ref={parentMenuRef} data-flow-motion="floating" className="issue-options-popover" data-nested={Boolean(submenu||datePickerOpen)} data-highlight={highlight} side="bottom" align="start" sideOffset={3.75} collisionPadding={16} role="dialog" aria-label={t('Issue options')} onOpenAutoFocus={event => { event.preventDefault(); requestAnimationFrame(() => parentFilterRef.current?.focus()) }} onEscapeKeyDown={closeMenu} onPointerMoveCapture={event => {
           if (!event.currentTarget.contains(event.target as Node)) return
           setHighlight(true)
           const row = (event.target as Element).closest('[cmdk-item]')
@@ -455,7 +467,7 @@ function SubmenuSurface({ label, anchor, children, searchable = false, bare = fa
     if (event.key === 'ArrowLeft') { event.preventDefault(); event.stopPropagation(); onReturn() }
     if (event.key === 'ArrowRight') { const selected = ref.current?.querySelector<HTMLElement>('[cmdk-item][data-selected=true][data-submenu]'); if (selected) { event.preventDefault(); selected.click() } }
     if (event.key.startsWith('Arrow')) setHighlight(true)
-  }}>{bare ? children : <Command loop value={value} onValueChange={setValue}><Command.Input className={searchable || query ? 'issue-options-submenu-search' : 'issue-options-filter'} placeholder={t(searchable && label === 'Remind me' ? 'Try: 4 pm, 2 days, in 5 weeks…' : 'Filter…')} aria-label={`${t('Filter')} ${t(label)}`} value={query} onValueChange={setQuery}/><Command.List><Command.Empty className="issue-options-empty">{t('No results')}</Command.Empty>{children}</Command.List></Command>}</Popover.Content></Popover.Portal></Popover.Root>
+  }}><button type="button" className="issue-options-mobile-back" aria-label={t('Back')} onClick={onReturn}><ChevronLeft size={16}/><span>{t(label)}</span></button>{bare ? children : <Command loop value={value} onValueChange={setValue}><Command.Input className={searchable || query ? 'issue-options-submenu-search' : 'issue-options-filter'} placeholder={t(searchable && label === 'Remind me' ? 'Try: 4 pm, 2 days, in 5 weeks…' : 'Filter…')} aria-label={`${t('Filter')} ${t(label)}`} value={query} onValueChange={setQuery}/><Command.List><Command.Empty className="issue-options-empty">{t('No results')}</Command.Empty>{children}</Command.List></Command>}</Popover.Content></Popover.Portal></Popover.Root>
 }
 
 function ActionDialog({ open, title, onOpenChange, children }: { open: boolean; title: string; onOpenChange: (open: boolean) => void; children: ReactNode }) {
