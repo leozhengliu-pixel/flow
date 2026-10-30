@@ -920,3 +920,150 @@
     margin-left: 8px;
   }
 }
+
+/* Phone issue opened from an inbox notification: the inbox bar with the issue's copy strip and full document. */
+.flow-inbox-detail__menu, .flow-inbox-detail__command-strip { display: none; }
+@media (max-width: 767px) {
+  html:root body .app .flow-inbox-detail__header {
+    position: relative;
+    gap: 2px;
+    padding: 0 8px;
+  }
+  html:root body .app .flow-inbox-detail__back { display: none; }
+  html:root body .app .flow-inbox-detail__menu {
+    display: flex;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 2px;
+    color: var(--text);
+    background: transparent;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+    box-shadow: none;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+    font-family: inherit;
+  }
+  html:root body .app .flow-inbox-detail__menu svg { width: 14px; height: 14px; }
+  html:root body .app .flow-inbox-detail__source {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: normal;
+    font-family: inherit;
+  }
+  html:root body .app .flow-inbox-detail__actions { gap: 6px; }
+  html:root body .app .flow-inbox-detail__icon-button {
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+    font-family: inherit;
+  }
+  html:root body .app .flow-inbox-detail__icon-button[data-detail-action="subscription"] { margin-left: 12px; background: transparent; }
+  html:root body .app .flow-inbox-detail__command-strip {
+    display: flex;
+    top: 43.5px;
+    right: 0;
+  }
+  html:root body .app .flow-inbox-detail__command-strip .issue-command-buttons { height: 32px; gap: 6px; }
+  html:root body .app .flow-inbox-detail__command-strip .issue-command-button {
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    padding: 0 2px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+    font-family: inherit;
+    box-shadow: none;
+  }
+  html:root body .app .flow-inbox-detail__command-strip .issue-command-button > svg { width: 16px; height: 16px; }
+  html:root body .app .flow-inbox-detail__body--full-bleed .issue-layout {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding-top: 0;
+    display: block;
+  }
+  html:root body .app .flow-inbox-detail__body--full-bleed .issue-document { padding: 21.75px 14px 60px; }
+  html:root body .app .flow-inbox-detail__body--full-bleed .title-editor p { border: 0; letter-spacing: -0.16px; }
+  html:root body .app .flow-inbox-detail__body--full-bleed .issue-mobile-properties {
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    min-height: 28px;
+    overflow: visible;
+  }
+  html:root body .app .flow-inbox-detail__body--full-bleed .issue-mobile-properties > .core-property-picker,
+  html:root body .app .flow-inbox-detail__body--full-bleed .issue-mobile-properties > .label-project-picker {
+    min-height: 0;
+    padding: 0;
+    flex: 0 1 auto;
+    max-width: 100%;
+  }
+  html:root body .app .flow-inbox-detail__body--full-bleed .issue-mobile-properties :is(.core-property-trigger,.label-project-trigger) {
+    height: 28px;
+    min-height: 28px;
+    max-width: 100%;
+    margin: 0;
+    padding: 0 7.5px 0 5.5px;
+    gap: 4px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+    background: var(--issue-command-bg);
+    box-shadow: none;
+    color: var(--ui-pill-fg);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 12px;
+    font-family: inherit;
+  }
+  html:root body .app .flow-inbox-detail__body--full-bleed .issue-mobile-properties :is(.core-property-trigger,.label-project-trigger) > svg { width: 14px; height: 14px; flex: 0 0 14px; }
+  html:root body .app .flow-inbox-detail__body--full-bleed .issue-mobile-properties :is(.core-property-trigger,.label-project-trigger) > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 450;
+    line-height: normal;
+  }
+  html:root body .app .flow-inbox-detail__body--full-bleed .issue-mobile-properties > .core-property-picker:first-child .core-property-trigger > span { color: var(--ui-pill-hover-fg); }
+  html:root body .app .flow-inbox-detail__body--full-bleed .issue-description-root { margin-top: 22px; }
+  html:root body .app .flow-inbox-detail__body--full-bleed .description-editor { margin-top: 0; border-style: none; }
+  html:root body .app .flow-inbox-detail__body--full-bleed .description-editor p:first-of-type { border-style: none; }
+  html:root body .app .flow-inbox-detail__body--full-bleed .document-actions { height: 32px; margin-top: 10px; gap: 0; }
+  html:root body .app .flow-inbox-detail__body--full-bleed .document-actions .issue-document-action {
+    width: 32px;
+    height: 32px;
+    padding: 0 2px;
+    border: .5px solid transparent;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+    font-family: inherit;
+    box-shadow: none;
+  }
+  html:root body .app .flow-inbox-detail__body--full-bleed .document-actions .issue-document-action svg { width: 16px; height: 16px; }
+  html:root body .app .flow-inbox-detail__body--full-bleed .issue-empty-sub-issue-row { margin-top: 5px; }
+  html:root body .app .flow-inbox-detail__body--full-bleed .issue-empty-sub-issue-action {
+    gap: 0;
+    border: .5px solid transparent;
+    color: var(--text);
+    box-shadow: none;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+    font-family: inherit;
+  }
+  html:root body .app .flow-inbox-detail__body--full-bleed .issue-empty-sub-issue-row + .activity-heading { margin-top: 44.5px; }
+  html:root body .app .flow-inbox-detail__body--full-bleed .activity-heading { border: 0; }
+  html:root body .app .flow-inbox-detail__body--full-bleed .activity-heading > span { border-style: none; }
+}

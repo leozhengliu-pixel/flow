@@ -7,6 +7,9 @@ import { MentionBody } from '@/components/editor/mentions/mention-body'
 import { IssueOptionsMenu } from '@/components/issue/issue-options-menu'
 import { RelationPicker } from '@/components/issue/relation-picker'
 import { PulseIcon } from '@/components/pulse/pulse-icon'
+import { FlowBranchIcon, FlowIssueIdIcon, FlowUrlIcon } from '@/components/issue/flow-header-icons'
+import { SidebarIcon } from '@/components/ui/view-action-icons'
+import { configuredIssueBranch } from '@/lib/issue-work-actions'
 import type { Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 
 import { InboxCustomSnoozeForm, type InboxNotificationRowData, type InboxSnoozePreset } from './notification-row'
@@ -76,6 +79,9 @@ export function InboxDetailPreview(props: InboxDetailPreviewProps) {
   return (
     <article className="flow-inbox-detail" aria-label={identifier ? `${identifier} ${title}` : title} aria-busy={props.pending || undefined}>
       {props.chromeless ? null : <header className="flow-inbox-detail__header">
+        <button className="flow-inbox-detail__icon-button flow-inbox-detail__menu" type="button" aria-label="Open sidebar" onClick={() => window.dispatchEvent(new Event('flow:open-sidebar'))}>
+          <SidebarIcon />
+        </button>
         <button className="flow-inbox-detail__back" type="button" aria-label="Back to Inbox" onClick={props.onBack}>
           <BackIcon />
           <span>Inbox</span><i>›</i>
@@ -96,6 +102,7 @@ export function InboxDetailPreview(props: InboxDetailPreviewProps) {
           <DetailSnoozeMenu notification={notification} onSnooze={props.onSnooze} pending={props.pending} open={snoozeOpen} onOpenChange={setSnoozeOpen} />
           <DetailIconButton data-detail-action="delete" disabled={props.pending} label="Delete notification" onClick={() => props.onDelete(notification)}><DeleteDetailIcon /></DetailIconButton>
         </div>
+        {props.issue ? <IssueDetailCopyStrip issue={props.issue} /> : null}
       </header>}
       <div className={`flow-inbox-detail__body ${props.fullBleed ? 'flow-inbox-detail__body--full-bleed' : ''}`}>
         {props.fullBleed ? props.children : <div className="flow-inbox-detail__scroll">{props.children}</div>}
@@ -105,6 +112,16 @@ export function InboxDetailPreview(props: InboxDetailPreviewProps) {
       <InboxDescriptionHistoryDialog issue={props.issue} open={historyOpen} onOpenChange={setHistoryOpen}/>
     </article>
   )
+}
+
+/** The reference app's floating copy strip above an issue opened from a notification. */
+function IssueDetailCopyStrip({ issue }: { issue: Issue }) {
+  const copy = (text: string) => { void navigator.clipboard.writeText(text).catch(() => undefined) }
+  return <div className="issue-command-strip flow-inbox-detail__command-strip"><div className="issue-command-buttons">
+    <button className="issue-command-button" type="button" aria-label="Copy issue URL" onClick={() => copy(window.location.href)}><FlowUrlIcon /></button>
+    <button className="issue-command-button" type="button" aria-label="Copy issue ID" onClick={() => copy(issue.identifier)}><FlowIssueIdIcon /></button>
+    <button className="issue-command-button" type="button" aria-label="Copy branch name" onClick={() => copy(configuredIssueBranch(issue))}><FlowBranchIcon /></button>
+  </div></div>
 }
 
 function DetailOptionsFallback(props: InboxDetailPreviewProps) {
