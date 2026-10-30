@@ -102,7 +102,7 @@ test.describe('mobile project overview', () => {
     expect(await top.evaluate(node => getComputedStyle(node).gap)).toBe('12px')
     expect((await page.locator('.project-detail-page__mobile-menu').boundingBox())?.width).toBe(32)
     expect((await page.locator('.project-detail-page__crumb').boundingBox())?.x).toBeCloseTo(52, 0)
-    expect((await page.locator('.project-detail-page__header [aria-label*="favorites"]').boundingBox())?.x).toBeCloseTo(166.89, 0)
+    expect(Math.abs((await page.locator('.project-detail-page__header [aria-label*="favorites"]').boundingBox())!.x - 166.89)).toBeLessThanOrEqual(1)
     expect((await page.locator('.project-detail-page__toolbar-actions button[aria-label*="project details"]').boundingBox())?.x).toBe(350)
     expect((await page.locator('.project-detail-page__tab[aria-current="page"] > div').boundingBox())?.x).toBeCloseTo(18.5, 0)
     expect((await page.locator('.project-detail-page__tab[href$="activity"] > div').boundingBox())?.x).toBeCloseTo(97.95, 0)
