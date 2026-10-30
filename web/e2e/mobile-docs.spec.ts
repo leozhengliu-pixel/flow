@@ -155,6 +155,19 @@ test.describe('mobile documents filter menu', () => {
       expect((await rows.nth(index).boundingBox())?.height).toBe(46)
     }
     expect((await rows.first().locator('span').nth(1).boundingBox())?.x).toBe(58.5)
+
+    const separators = menu.locator('[cmdk-separator]')
+    expect(await separators.count()).toBe(2)
+    for (let index = 0; index < 2; index++) {
+      expect((await separators.nth(index).boundingBox())?.x).toBe(16.5)
+      expect((await separators.nth(index).boundingBox())?.width).toBe(358)
+    }
+
+    const trigger = page.locator('.team-documents-toolbar button[aria-label="Add filter"]')
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    await expect(trigger).toHaveCSS('background-color', 'lch(18.634 1.075 272)')
+    await expect(trigger.locator('svg')).toHaveCSS('color', 'lch(100 0 272)')
+
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/documents-filter-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
