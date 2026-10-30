@@ -269,8 +269,16 @@ func (world *seedWorld) issueAt(i int, base time.Time) domain.Issue {
 	priority := []int{0, 1, 2, 3, 4}[i%5]
 	labels := make([]domain.IssueLabel, 0, 4)
 	for n := 0; n < 1+i%4; n++ {
-		label := world.labels[(i+(n*5))%len(world.labels)]
+		label := world.labels[(i+(n*5))%(len(world.labels)-2)]
 		labels = append(labels, label)
+	}
+	// One label on half the issues and one on a hundredth exercise the broad
+	// (scope-index) and selective (label-index) query plans.
+	if i%2 == 0 {
+		labels[0] = world.labels[len(world.labels)-2]
+	}
+	if i%997 == 0 {
+		labels[0] = world.labels[len(world.labels)-1]
 	}
 	subscribers := []string{creator.ID}
 	if assignee != nil {
@@ -455,7 +463,7 @@ func makeTeams(count int) []domain.Team {
 }
 
 func makeLabels(workspace string) []domain.IssueLabel {
-	names := []string{"Bug", "Feature", "Improvement", "Customer", "Internal", "Regression", "Docs", "Performance", "Accessibility", "Design", "Backend", "Frontend", "Database", "Billing", "Search", "Mobile", "API", "Security", "Urgent", "Triage", "Blocked", "Waiting", "Ready", "Research", "Spike", "Tech debt", "Reliability", "Observability", "Localization", "Onboarding"}
+	names := []string{"Bug", "Feature", "Improvement", "Customer", "Internal", "Regression", "Docs", "Performance", "Accessibility", "Design", "Backend", "Frontend", "Database", "Billing", "Search", "Mobile", "API", "Security", "Urgent", "Triage", "Blocked", "Waiting", "Ready", "Research", "Spike", "Tech debt", "Reliability", "Observability", "Localization", "Onboarding", "Broad", "Selective"}
 	now := time.Now().UTC()
 	labels := make([]domain.IssueLabel, 0, len(names))
 	for i, name := range names {
