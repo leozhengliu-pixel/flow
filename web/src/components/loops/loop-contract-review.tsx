@@ -1,97 +1,125 @@
+import { FileText, Check, X } from "lucide-react";
 import { useState } from "react";
-import { Check, X } from "lucide-react";
 import { useI18n } from "@/i18n/i18n";
-import type { LoopContractOutput, LoopOutputContract } from "@/types/flow";
-import { CONTRACT_KIND_LABELS, CONTRACT_OPERATION_LABELS } from "./loop-output-contract-model";
+import type { BootstrapData, LoopContractOutput, LoopOutputContract } from "@/types/flow";
+import { CARDINALITY_LABELS, contractOutputSummary, contractTargetText } from "./loop-output-contract-model";
 
-type ReviewField = {
+type ReviewItem = {
   id: string;
-  label: string;
-  before: unknown;
-  after: unknown;
-  apply: (contract: LoopOutputContract) => void;
+  index?: number;
+  current?: LoopContractOutput;
+  suggested?: LoopContractOutput;
+  removed?: boolean;
+  added?: boolean;
 };
 
-const outputFields = {
-  kind: "Output kind", operation: "Operation", required: "Must produce", cardinality: "How many", conditions: "Conditions", group: "Alternative group",
-} as const;
-const targetFields = {
-  mode: "Target", titleTemplate: "Title template", placeholders: "Title placeholders", title: "Document title", documentId: "Document", ambiguous: "Document not chosen",
-  team: "Team name", teamId: "Team", project: "Project name", projectId: "Project", initiative: "Initiative name", initiativeId: "Initiative", match: "Which issues", description: "Target description",
-} as const;
+function outputKey(output: LoopContractOutput) {
+  return `${output.kind}:${output.operation}`;
+}
 
-function reviewFields(current: LoopOutputContract, suggested: LoopOutputContract): ReviewField[] {
-  const fields: ReviewField[] = [];
-  const add = (field: ReviewField) => {
-    if (JSON.stringify(field.before ?? null) !== JSON.stringify(field.after ?? null)) fields.push(field);
+function comparableOutput(output: LoopContractOutput) {
+  return {
+    kind: output.kind,
+    operation: output.operation,
+    required: output.required,
+    target: output.target,
+    cardinality: output.cardinality,
+    conditions: output.conditions,
+    group: output.group,
   };
-  for (const [key, label] of Object.entries({ readOnly: "Reply only", always: "Required even when nothing changed", skipConditions: "Skip conditions" }) as ["readOnly" | "always" | "skipConditions", string][]) {
-    add({ id: key, label, before: current[key], after: suggested[key], apply: (next) => Object.assign(next, { [key]: suggested[key] }) });
-  }
+}
+
+function reviewItems(current: LoopOutputContract, suggested: LoopOutputContract): ReviewItem[] {
+  const items: ReviewItem[] = [];
   const used = new Set<number>();
   current.outputs.forEach((output, index) => {
-    let position = suggested.outputs.findIndex((item, at) => !used.has(at) && item.kind === output.kind && item.operation === output.operation);
-    if (position < 0) position = suggested.outputs.findIndex((item, at) => !used.has(at) && item.kind === output.kind);
-    // Reordering should not suggest changing unrelated outputs into one another.
-    const other = position < 0 ? undefined : suggested.outputs[position];
-    if (!other) {
-      add({ id: `${index}.remove`, label: "Output {number}", before: output, after: undefined, apply: (next) => { delete next.outputs[index]; } });
+    let position = suggested.outputs.findIndex((candidate, candidateIndex) => !used.has(candidateIndex) && outputKey(candidate) === outputKey(output));
+    if (position < 0 && output.evidence) {
+      position = suggested.outputs.findIndex((candidate, candidateIndex) => !used.has(candidateIndex) && candidate.evidence && candidate.evidence === output.evidence);
+    }
+    if (position < 0) {
+      items.push({ id: `removed-${index}`, index, current: output, removed: true });
       return;
     }
     used.add(position);
-    for (const [key, label] of Object.entries(outputFields) as [keyof typeof outputFields, string][]) {
-      add({ id: `${index}.${key}`, label: `Output {number}|${label}`, before: output[key], after: other[key], apply: (next) => Object.assign(next.outputs[index], { [key]: other[key] }) });
-    }
-    for (const [key, label] of Object.entries(targetFields) as [keyof typeof targetFields, string][]) {
-      add({ id: `${index}.target.${key}`, label: `Output {number}|${label}`, before: output.target[key], after: other.target[key], apply: (next) => Object.assign(next.outputs[index].target, { [key]: other.target[key] }) });
-    }
+    const candidate = suggested.outputs[position];
+    if (JSON.stringify(comparableOutput(output)) !== JSON.stringify(comparableOutput(candidate))) items.push({ id: `output-${index}`, index, current: output, suggested: candidate });
   });
   suggested.outputs.forEach((output, index) => {
-    if (!used.has(index)) add({ id: `add-${index}`, label: "New output", before: undefined, after: output, apply: (next) => { next.outputs.push(output); } });
+    if (!used.has(index)) items.push({ id: `added-${index}`, suggested: output, added: true });
   });
-  return fields;
+  return items;
 }
 
-export function LoopContractReview({ current, suggested, saving, onSave, onCancel }: { current: LoopOutputContract; suggested: LoopOutputContract; saving: boolean; onSave: (contract: LoopOutputContract) => void; onCancel: () => void }) {
+function changedDetails(current: LoopContractOutput | undefined, suggested: LoopContractOutput | undefined, data: BootstrapData, t: (source: string) => string) {
+  if (!current || !suggested) return [];
+  const details: string[] = [];
+  if (current.required !== suggested.required) details.push(`${t("Must produce")}: ${t(current.required ? "Yes" : "No")} → ${t(suggested.required ? "Yes" : "No")}`);
+  const currentTarget = reviewTargetText(current, data, t);
+  const suggestedTarget = reviewTargetText(suggested, data, t);
+  if (currentTarget !== suggestedTarget) details.push(`${t("Target")}: ${currentTarget || t("Not set")} → ${suggestedTarget || t("Not set")}`);
+  if (current.cardinality !== suggested.cardinality) details.push(`${t("How many")}: ${t(CARDINALITY_LABELS[current.cardinality] ?? "Any number")} → ${t(CARDINALITY_LABELS[suggested.cardinality] ?? "Any number")}`);
+  if (JSON.stringify(current.conditions ?? []) !== JSON.stringify(suggested.conditions ?? [])) details.push(`${t("Conditions")}: ${current.conditions?.join("; ") || t("Not set")} → ${suggested.conditions?.join("; ") || t("Not set")}`);
+  if (current.group !== suggested.group) details.push(t("Alternative outputs changed"));
+  return details;
+}
+
+function reviewTargetText(output: LoopContractOutput, data: BootstrapData, t: (source: string) => string) {
+  return contractTargetText(output, data, t).replace(t("document not chosen yet"), t("Choose an existing document"));
+}
+
+function ReviewOutputLine({ output, data, t }: { output?: LoopContractOutput; data: BootstrapData; t: (source: string) => string }) {
+  if (!output) return null;
+  return (
+    <span className="loops-contract-review-summary">
+      {output.kind === "document" && <FileText size={13} aria-hidden="true" />}
+      {contractOutputSummary(output, data, t)}
+    </span>
+  );
+}
+
+export function LoopContractReview({ current, suggested, data, saving, onSave, onCancel }: { current: LoopOutputContract; suggested: LoopOutputContract; data: BootstrapData; saving: boolean; onSave: (contract: LoopOutputContract) => void; onCancel: () => void }) {
   const { t } = useI18n();
-  const fields = reviewFields(current, suggested);
+  const items = reviewItems(current, suggested);
   const [accepted, setAccepted] = useState<Set<string>>(new Set());
-  const format = (value: unknown): string => {
-    if (value == null || value === "" || Array.isArray(value) && value.length === 0) return t("Not set");
-    if (typeof value === "boolean") return t(value ? "Yes" : "No");
-    if (Array.isArray(value)) return value.map(format).join(", ");
-    if (typeof value === "object") {
-      const output = value as LoopContractOutput;
-      if (output.kind && output.operation) return `${t(CONTRACT_OPERATION_LABELS[output.operation])} ${t(CONTRACT_KIND_LABELS[output.kind])}: ${format(output.target)}`;
-      return Object.values(value).map(format).join(" · ");
-    }
-    return String(value);
-  };
+  const choose = (id: string, accept: boolean) => setAccepted((previous) => {
+    const next = new Set(previous);
+    if (accept) next.add(id); else next.delete(id);
+    return next;
+  });
   const save = () => {
     const next: LoopOutputContract = { ...current, outputs: current.outputs.map((output) => ({ ...output, target: { ...output.target } })) };
-    for (const field of fields) if (accepted.has(field.id)) field.apply(next);
-    next.outputs = next.outputs.filter(Boolean);
+    const replacements = new Map<number, LoopContractOutput>();
+    const removals = new Set<number>();
+    for (const item of items) {
+      if (!accepted.has(item.id)) continue;
+      if (item.index != null && item.suggested) replacements.set(item.index, item.suggested);
+      if (item.index != null && item.removed) removals.add(item.index);
+      if (item.added && item.suggested) next.outputs.push(item.suggested);
+    }
+    next.outputs = next.outputs.map((output, index) => replacements.get(index) ?? output).filter((_, index) => !removals.has(index));
     onSave(next);
   };
+  const acceptAll = () => setAccepted(new Set(items.map((item) => item.id)));
   return <div className="loops-contract-review" aria-label={t("Review suggested outputs")}>
-    {fields.length === 0 && <p className="loops-contract-hint">{t("No output changes suggested")}</p>}
-    {fields.map((field) => {
-      const index = Number.parseInt(field.id, 10);
-      const label = field.label.split("|").map((part) => t(part).replace("{number}", String(index + 1))).join(" · ");
-      const choose = (accept: boolean) => setAccepted((previous) => {
-        const next = new Set(previous);
-        if (accept) next.add(field.id); else next.delete(field.id);
-        return next;
-      });
-      return <fieldset key={field.id} className="loops-contract-review-field">
-        <legend>{label}</legend>
+    <div className="loops-contract-review-toolbar">
+      <p className="loops-contract-hint">{t("Compare each output with the suggested contract, then choose what to keep.")}</p>
+      {items.length > 0 && <button type="button" className="loops-ghost-button is-small" onClick={acceptAll}><Check size={12} />{t("Accept all")}</button>}
+    </div>
+    {items.length === 0 && <p className="loops-contract-hint">{t("No output changes suggested")}</p>}
+    {items.map((item, position) => {
+      const title = item.removed ? t("Removed output") : item.added ? t("New output") : t("Output {number}").replace("{number}", String((item.index ?? position) + 1));
+      const details = changedDetails(item.current, item.suggested, data, t);
+      return <fieldset key={item.id} className="loops-contract-review-output">
+        <legend>{title}</legend>
         <div className="loops-contract-review-values">
-          <div><small>{t("Your output")}</small><span data-i18n-ignore>{format(field.before)}</span></div>
-          <div><small>{t("Suggested output")}</small><span data-i18n-ignore>{format(field.after)}</span></div>
+          <div><small>{t("Your output")}</small><ReviewOutputLine output={item.current} data={data} t={t} /></div>
+          <div><small>{t("Suggested output")}</small><ReviewOutputLine output={item.suggested} data={data} t={t} /></div>
         </div>
+        {details.length > 0 && <p className="loops-contract-review-detail"><small>{t("What changed")}</small>{details.join(" · ")}</p>}
         <div className="loops-contract-actions">
-          <button type="button" className="loops-ghost-button is-small" aria-pressed={!accepted.has(field.id)} onClick={() => choose(false)}><X size={12} />{t("Keep mine")}</button>
-          <button type="button" className="loops-ghost-button is-small" aria-pressed={accepted.has(field.id)} onClick={() => choose(true)}><Check size={12} />{t("Accept suggestion")}</button>
+          <button type="button" className="loops-ghost-button is-small" aria-pressed={!accepted.has(item.id)} onClick={() => choose(item.id, false)}><X size={12} />{t("Keep mine")}</button>
+          <button type="button" className="loops-ghost-button is-small" aria-pressed={accepted.has(item.id)} onClick={() => choose(item.id, true)}><Check size={12} />{t("Accept suggestion")}</button>
         </div>
       </fieldset>;
     })}

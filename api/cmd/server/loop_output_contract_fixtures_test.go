@@ -4,9 +4,33 @@ import (
 	"encoding/json"
 	"strings"
 	"sync"
+	"testing"
 
 	"flow/api/internal/domain"
 )
+
+func TestMergeLoopPersonChoicesIntoSuggestedOutputs(t *testing.T) {
+	person := &domain.LoopOutputContract{Source: loopContractPerson, Outputs: []domain.LoopContractOutput{
+		{Kind: "document", Operation: loopOpAppend, Target: domain.LoopContractTarget{Mode: "existing", DocumentID: "doc-7", Title: "团队日报汇总"}},
+		{Kind: "issue", Operation: loopOpCreate, Target: domain.LoopContractTarget{Mode: "new", TitleTemplate: "Bug: {topic}", Placeholders: []domain.LoopContractPlaceholder{{Name: "topic", Source: "the subject"}}}},
+		{Kind: "statusUpdate", Operation: loopOpCreate, Target: domain.LoopContractTarget{Mode: "existing", ProjectID: "project-2", Project: "Roadmap", TeamID: "team-2", Team: "Product"}},
+	}}
+	suggested := &domain.LoopOutputContract{Source: loopContractModel, Outputs: []domain.LoopContractOutput{
+		{Kind: "document", Operation: loopOpAppend, Target: domain.LoopContractTarget{Mode: "existing", Ambiguous: true, Description: "the team document"}},
+		{Kind: "issue", Operation: loopOpCreate, Target: domain.LoopContractTarget{Mode: "new"}},
+		{Kind: "statusUpdate", Operation: loopOpCreate, Target: domain.LoopContractTarget{Mode: "existing"}},
+	}}
+	merged := mergeLoopPersonChoices(person, suggested)
+	if got := merged.Outputs[0].Target; got.DocumentID != "doc-7" || got.Title != "团队日报汇总" || got.Ambiguous {
+		t.Fatalf("picked document was not carried over: %+v", got)
+	}
+	if got := merged.Outputs[1].Target; got.TitleTemplate != "Bug: {topic}" || len(got.Placeholders) != 1 || got.Placeholders[0].Source != "the subject" {
+		t.Fatalf("edited title template was not carried over: %+v", got)
+	}
+	if got := merged.Outputs[2].Target; got.ProjectID != "project-2" || got.Project != "Roadmap" || got.TeamID != "team-2" || got.Team != "Product" {
+		t.Fatalf("picked project/team were not carried over: %+v", got)
+	}
+}
 
 // Contract fixtures: the output contracts the extractor produces for the
 // instructions the package's tests run, read instead of a model call (see

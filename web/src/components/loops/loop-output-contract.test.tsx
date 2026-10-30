@@ -11,8 +11,9 @@ const api = vi.hoisted(() => ({ analyzeLoopOutputs: vi.fn(), updateLoop: vi.fn()
 vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/api')>()), ...api }))
 
 import { LoopContractSummary, LoopOutputContractPanel } from './loop-output-contract'
+import { LoopContractReview } from './loop-contract-review'
 import { LoopDocumentPicker } from './loop-document-picker'
-import { CONTRACT_FALLBACK_NOTICE, contractTargetText, personContract } from './loop-output-contract-model'
+import { CONTRACT_FALLBACK_NOTICE, contractOutputSummary, contractTargetText, personContract } from './loop-output-contract-model'
 
 beforeEach(() => {
   // The document picker is a cmdk list.
@@ -123,7 +124,7 @@ describe('LoopOutputContractPanel', () => {
     expect((api.updateLoop.mock.calls[0][1].outputContract as LoopOutputContract).outputs[0].target).toMatchObject({ documentId: document.id, title: document.title, mode: 'existing' })
   })
 
-  it('reads changed instructions without replacing person outputs and reviews each field independently', async () => {
+  it('reads changed instructions without replacing person outputs and reviews each output', async () => {
     const current: LoopOutputContract = { source: 'person', stale: true, readOnly: false, outputs: [{ kind: 'issue', operation: 'update', required: false, target: { mode: 'matching', match: 'customer bugs' }, cardinality: 'any' }] }
     const suggested: LoopOutputContract = { source: 'model', instructionsHash: 'new-text', readOnly: false, outputs: [{ kind: 'issue', operation: 'update', required: true, target: { mode: 'matching', match: 'customer bugs without repro steps' }, cardinality: 'any' }] }
     api.analyzeLoopOutputs.mockResolvedValue({ ...loop, outputContract: current, suggestedOutputContract: suggested })
@@ -132,15 +133,13 @@ describe('LoopOutputContractPanel', () => {
     await waitFor(() => expect(onLoopChange).toHaveBeenCalledWith(expect.objectContaining({ outputContract: current, suggestedOutputContract: suggested })))
     view.rerender(<I18nProvider><LoopOutputContractPanel data={data} loop={{ ...loop, outputContract: current, suggestedOutputContract: suggested }} unsaved={false} onLoopChange={onLoopChange} readDelayMs={0}/></I18nProvider>)
     await userEvent.click(screen.getByRole('button', { name: 'Review suggested outputs' }))
-    const required = screen.getByRole('group', { name: 'Output 1 · Must produce' })
-    const target = screen.getByRole('group', { name: 'Output 1 · Which issues' })
-    await userEvent.click(within(required).getByRole('button', { name: 'Accept suggestion' }))
-    await userEvent.click(within(target).getByRole('button', { name: 'Accept suggestion' }))
-    await userEvent.click(within(required).getByRole('button', { name: 'Keep mine' }))
-    expect(api.updateLoop).not.toHaveBeenCalled()
+    const output = screen.getByRole('group', { name: 'Output 1' })
+    expect(output).toHaveTextContent('Update · Issue · issues matching customer bugs')
+    expect(output).toHaveTextContent('Update · Issue · issues matching customer bugs without repro steps')
+    await userEvent.click(within(output).getByRole('button', { name: 'Accept suggestion' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save review' }))
     await waitFor(() => expect(api.updateLoop).toHaveBeenCalledTimes(1))
-    expect(api.updateLoop.mock.calls[0][1].outputContract.outputs[0]).toMatchObject({ required: false, target: { match: 'customer bugs without repro steps' } })
+    expect(api.updateLoop.mock.calls[0][1].outputContract.outputs[0]).toMatchObject({ required: true, target: { match: 'customer bugs without repro steps' } })
   })
 
   it('keeps a person contract without accepting any suggested fields', async () => {
@@ -152,12 +151,26 @@ describe('LoopOutputContractPanel', () => {
     expect(api.analyzeLoopOutputs).not.toHaveBeenCalled()
   })
 
+  it('renders stale review values as human-readable targets, not ids or enum keys', () => {
+    const documentId = 'document_1793_internal'
+    const data = makeBootstrap({ documents: [{ id: documentId, title: '团队日报汇总', content: '', teamIds: [] }] as never })
+    const current: LoopOutputContract = { source: 'person', readOnly: false, outputs: [{ kind: 'document', operation: 'append', required: true, target: { mode: 'existing', documentId, title: '团队日报汇总' }, cardinality: 'onePerRun' }] }
+    const suggested: LoopOutputContract = { source: 'model', readOnly: false, outputs: [{ kind: 'document', operation: 'append', required: true, target: { mode: 'existing', ambiguous: true, description: 'the team document' }, cardinality: 'onePerRun' }] }
+    const { container } = render(<I18nProvider><LoopContractReview data={data} current={current} suggested={suggested} saving={false} onSave={vi.fn()} onCancel={vi.fn()} /></I18nProvider>)
+    expect(container).toHaveTextContent('团队日报汇总')
+    expect(container).toHaveTextContent('Choose an existing document')
+    expect(container).not.toHaveTextContent(documentId)
+    expect(container).not.toHaveTextContent('Document not chosen')
+  })
+
   it('warns about a document the instructions do not name and saves the one picked', async () => {
     const document = { id: 'doc-7', title: 'Team digest', content: '', teamIds: [] } as unknown as FlowDocument
     api.searchDocuments.mockResolvedValue({ nodes: [document], pageInfo: { hasNextPage: false } })
     const vague: LoopOutputContract = { source: 'model', readOnly: false, outputs: [{ kind: 'document', operation: 'append', required: true, target: { mode: 'existing', ambiguous: true, description: 'the team document' }, evidence: '追加到团队文档' }] }
     renderPanel({ ...loop, outputContract: vague })
-    expect(screen.getAllByRole('alert')[0]).toHaveTextContent("The instructions don't say which document to write to.")
+    const warning = screen.getAllByRole('alert')[0]
+    expect(warning).toHaveTextContent("The instructions don't say which document to write to.")
+    expect(within(warning).getByRole('button', { name: 'Document' })).toHaveClass('loops-contract-document')
     expect(screen.getByRole('listitem')).toHaveTextContent('document not chosen yet')
     await userEvent.click(screen.getByRole('button', { name: 'Document' }))
     await userEvent.click(await screen.findByRole('option', { name: /Team digest/ }))
@@ -294,12 +307,13 @@ describe('contract helpers', () => {
     expect(contractTargetText({ kind: 'issue', operation: 'create', required: false, target: { mode: 'new', titleTemplate: 'Bug: {topic}', placeholders: [{ name: 'topic', source: 'the subject' }] } }, data, t)).toBe('titled Bug: {topic} · {topic} filled by the run from the subject')
     const saved = personContract({ source: 'model', readOnly: false, outputs: [{ kind: 'issue', operation: 'create', required: true, target: { titleTemplate: 'Bug: {topic} {date} {area}', placeholders: [{ name: 'topic', source: 'x' }] } }] })
     expect(saved.outputs[0].target.placeholders).toEqual([{ name: 'topic', source: 'x' }, { name: 'area' }])
+    expect(contractOutputSummary({ kind: 'document', operation: 'append', required: true, target: { mode: 'existing', title: '团队日报汇总' }, cardinality: 'onePerRun' }, data, t)).toBe('Append · Document · the document 团队日报汇总 · One per run')
   })
 
   it('has Chinese copy for every panel string', () => {
     for (const key of ['What this loop will produce', 'Outputs this run worked to', CONTRACT_FALLBACK_NOTICE, 'Must produce', 'Edit outputs', 'Save outputs', 'Use automatic outputs', 'Reply only: the run changes nothing', 'Title template', 'titled {title}', 'One per run', 'Create or update', 'Read only', 'Status update', 'Other change',
       'Target', 'Anywhere', 'The triggering item', 'Issues matching a description', 'A project', 'An initiative', 'Which issues', 'Project', 'Initiative', 'What fills {name}', 'Filled by the run from…', 'document not chosen yet', 'issues matching {match}', 'on {project}', 'in {project}', 'on {initiative}', '{name} filled by the run from {source}',
-      'Choose document…', 'Search documents…', 'Recent documents', 'Create a new document', 'Create a new document “{title}”', 'Load more', 'All teams', 'Could not load documents', "The instructions don't say which document. Choose it, or create a new one.", "The instructions don't say which document to write to. Until you choose it, runs write to no existing document and need review.", 'Choose the document for each output that writes to an existing one.', "The loop's target document is not chosen", 'Instructions changed — review suggested outputs', 'Review suggested outputs', 'Keep my outputs', 'Keep mine', 'Accept suggestion', 'Your output', 'Suggested output', 'Save review', 'No output changes suggested', 'Output {number}', 'New output', 'Skip conditions', 'Conditions', 'Alternative group', 'Title placeholders', 'Document title', 'Document not chosen', 'Team name', 'Project name', 'Initiative name', 'Target description', 'Not set']) {
+      'Choose document…', 'Search documents…', 'Recent documents', 'Create a new document', 'Create a new document “{title}”', 'Load more', 'All teams', 'Could not load documents', "The instructions don't say which document. Choose it, or create a new one.", "The instructions don't say which document to write to. Until you choose it, runs write to no existing document and need review.", 'Choose the document for each output that writes to an existing one.', "The loop's target document is not chosen", 'Instructions changed — review suggested outputs', 'Review suggested outputs', 'Keep my outputs', 'Keep mine', 'Accept suggestion', 'Your output', 'Suggested output', 'Save review', 'No output changes suggested', 'Compare each output with the suggested contract, then choose what to keep.', 'Accept all', 'What changed', 'Choose an existing document', 'Output {number}', 'New output', 'Removed output', 'Skip conditions', 'Conditions', 'Alternative group', 'Alternative outputs changed', 'Title placeholders', 'Document title', 'Document not chosen', 'Team name', 'Project name', 'Initiative name', 'Target description', 'Not set']) {
       expect(zhCN[key], key).toBeTruthy()
     }
   })

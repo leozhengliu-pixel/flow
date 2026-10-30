@@ -348,14 +348,25 @@ export function LoopOutputContractPanel({
             <span>{t(CONTRACT_FALLBACK_NOTICE)}</span>
           </p>
         )}
-        {contract?.source === "person" && contract.stale && !editing && <div className="loops-contract-stale" role="status">
+        {contract?.source === "person" && contract.stale && !editing && <div
+          className="loops-contract-stale is-neutral"
+          role="status"
+          tabIndex={suggestion?.source === "model" ? 0 : undefined}
+          onClick={() => suggestion?.source === "model" && setReviewing(true)}
+          onKeyDown={(event) => {
+            if (suggestion?.source === "model" && (event.key === "Enter" || event.key === " ")) {
+              event.preventDefault();
+              setReviewing(true);
+            }
+          }}
+        >
           <strong>{t("Instructions changed — review suggested outputs")}</strong>
-          {suggestion?.source === "model" && !reviewing && <button type="button" className="loops-ghost-button is-small" onClick={() => setReviewing(true)}>{t("Review suggested outputs")}</button>}
+          {suggestion?.source === "model" && !reviewing && <button type="button" className="loops-ghost-button is-small" onClick={(event) => { event.stopPropagation(); setReviewing(true); }}>{t("Review suggested outputs")}</button>}
           {suggestion?.source === "fallback" && <p className="loops-contract-hint">{t(CONTRACT_FALLBACK_NOTICE)}</p>}
-          {!reviewing && <button type="button" className="loops-ghost-button is-small" disabled={saving} onClick={() => void save(contract)}>{t("Keep my outputs")}</button>}
+          {!reviewing && <button type="button" className="loops-ghost-button is-small" disabled={saving} onClick={(event) => { event.stopPropagation(); void save(contract); }}>{t("Keep my outputs")}</button>}
         </div>}
         {unsaved && contract?.source !== "person" && <p className="loops-contract-hint">{t("Save the loop to read its outputs from the new instructions.")}</p>}
-        {reviewing && contract && suggestion ? <LoopContractReview key={suggestion.instructionsHash} current={contract} suggested={suggestion} saving={saving} onSave={(next) => void save(next)} onCancel={() => setReviewing(false)} /> : editing ? (
+        {reviewing && contract && suggestion ? <LoopContractReview key={suggestion.instructionsHash} data={data} current={contract} suggested={suggestion} saving={saving} onSave={(next) => void save(next)} onCancel={() => setReviewing(false)} /> : editing ? (
           <div className="loops-contract-editor">
             <div className="loops-permission-row">
               <span>
