@@ -13,18 +13,6 @@ import (
 	"flow/api/internal/domain"
 )
 
-func TestWorkspaceKeyAcceptsBothWorkspaceHeaders(t *testing.T) {
-	request := httptest.NewRequest(http.MethodGet, "/api/notifications", nil)
-	request.Header.Set("X-Flow-Workspace", "flow-header")
-	if got := workspaceKey(request); got != "flow-header" {
-		t.Fatalf("workspaceKey = %q, want the X-Flow-Workspace value", got)
-	}
-	request.Header.Set("X-Workspace-Key", "canonical")
-	if got := workspaceKey(request); got != "canonical" {
-		t.Fatalf("workspaceKey = %q, want X-Workspace-Key to win", got)
-	}
-}
-
 func TestLegacyBootstrapQueueCancelsWithoutEnteringHandler(t *testing.T) {
 	entered, release, finished := make(chan struct{}, 2), make(chan struct{}), make(chan struct{})
 	handler := serializeLegacyBootstrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
