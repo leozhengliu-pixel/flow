@@ -805,3 +805,154 @@ html:root .settings-app .settings-main .settings-workspace-members .settings-mem
 }
 html:root .settings-app .settings-main .settings-workspace-members .settings-members-clear-filter:hover { background: var(--bg-hover); }
 html:root body .settings-member-dialog .settings-member-dialog-note { margin: 8px 0 0; color: var(--theme-text-secondary); font-size: 12px; }
+
+/*
+ * Settings › phone drawer. The reference app shows the settings navigation as a
+ * 330px drawer over the current page: a back link, search, a scrolling list and
+ * a pinned footer with help and plan buttons. Desktop keeps the 244px column.
+ */
+html:root .settings-app .settings-sidebar-footer { display: none; }
+@media (max-width: 760px) {
+  html:root .settings-app .settings-sidebar {
+    position: absolute;
+    z-index: 96;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 330px;
+    height: auto;
+    padding: 0;
+    border-radius: 0 12px 12px 0;
+    background: var(--set-panel-bg);
+    border-style: none;
+    transform: translateX(-100%);
+    transition: none;
+    overflow: hidden;
+  }
+  html:root .settings-app .settings-sidebar.open { transform: translateX(0); }
+  html:root .settings-app .settings-back {
+    height: 32px;
+    min-height: 32px;
+    margin: 14.25px 0 10.25px 16px;
+    line-height: normal;
+    color: lch(61.803% 1.2 272);
+  }
+  html:root .settings-app .settings-back > svg { width: 14px; height: 14px; flex: none; }
+  /* Touch devices keep the last tap target hovered; the reference drawer leaves
+     the back link unhighlighted, so only the colour feedback stays on desktop. */
+  html:root .settings-app .settings-back:hover {
+    background: transparent;
+    color: lch(61.803% 1.2 272);
+  }
+  html:root .settings-app .settings-search { flex: 0 0 28px; margin: 0 12px; }
+  html:root .settings-app .settings-search > svg { left: 10px; width: 16px; height: 16px; }
+  html:root .settings-app .settings-search input {
+    background: lch(11.033% 1.3 272);
+    border-color: lch(22.193% 1.93 272);
+    color: var(--set-text);
+  }
+  html:root .settings-app .settings-sidebar nav {
+    margin: 0;
+    padding: 29px 12px 4px;
+    scrollbar-gutter: auto;
+  }
+  html:root .settings-app .settings-sidebar nav h2 {
+    height: 15.5px;
+    margin: 0 0 6px;
+    padding: 0 10px;
+    line-height: 15.5px;
+    color: lch(61.803% 1.2 272);
+  }
+  html:root .settings-app .settings-sidebar nav h2 > span { border-style: none; line-height: normal; }
+  html:root .settings-app .settings-sidebar nav button {
+    margin-bottom: 1px;
+    padding: 0 0 0 10px;
+    color: lch(61.803% 1.2 272);
+  }
+  html:root .settings-app .settings-sidebar nav button > span { border-style: none; }
+  html:root .settings-app .settings-sidebar nav button.active {
+    background: lch(16.77% 1.3 272);
+    color: var(--set-nav-active);
+  }
+  html:root .settings-app .settings-sidebar-scrim.open {
+    position: fixed;
+    z-index: 95;
+    inset: 0;
+    display: block;
+    border: 0;
+    background: lch(0 0 0 / 0.4);
+  }
+  html:root .settings-app .settings-sidebar-footer {
+    position: absolute;
+    z-index: 10;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 52px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px;
+    border-style: none;
+    background: transparent;
+  }
+  html:root .settings-app .settings-sidebar-footer .sidebar-help {
+    position: relative;
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    padding: 0 2px;
+    border: .5px solid transparent;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text);
+    font: 500 12px var(--font);
+  }
+  /* The reference app backs each footer button with an opaque 32px pill so the
+     scrolling list does not show through it. */
+  html:root .settings-app .settings-sidebar-footer .sidebar-help::before,
+  html:root .settings-app .settings-plan-button::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    background: var(--set-panel-bg);
+    box-shadow: lch(16.32% 1.48 272) 0 0 0 1px, lch(0 0 0 / .3) 0 .5px 1px 1px;
+  }
+  html:root .settings-app .settings-sidebar-footer .sidebar-help > svg,
+  html:root .settings-app .settings-plan-button > svg { position: relative; }
+  html:root .settings-app .settings-sidebar-footer .sidebar-help > svg { width: 14px; height: 14px; }
+  html:root .settings-app .settings-plan-button {
+    position: absolute;
+    top: 10px;
+    left: 50px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 6px;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    box-shadow: none;
+    color: #fff;
+    font-family: var(--font);
+    font-size: 13.3333px;
+    font-weight: 400;
+    line-height: normal;
+    white-space: nowrap;
+  }
+  html:root .settings-app .settings-plan-button > svg { width: 16px; height: 16px; flex: none; }
+  html:root .settings-app .settings-plan-button > span {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    height: 13px;
+    margin-right: 4px;
+    font-family: var(--font);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: normal;
+  }
+}

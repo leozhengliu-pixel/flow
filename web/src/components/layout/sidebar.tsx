@@ -2310,7 +2310,7 @@ function SidebarDragHandleIcon() {
   );
 }
 
-function HelpMenu({
+export function HelpMenu({
   onSettings,
   onShortcuts,
 }: {
