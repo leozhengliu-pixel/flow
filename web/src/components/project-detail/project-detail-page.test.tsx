@@ -98,6 +98,11 @@ describe('project detail header and tabs', () => {
     expect(screen.getByRole('button', { name: 'Setup project notifications' }).querySelector('path')?.getAttribute('d')).toContain('13.8076')
   })
 
+  it('uses the panel-right glyph for the phone details toggle', () => {
+    const { container } = renderPage()
+    expect(container.querySelector('.project-overview__mobile-icon rect')?.getAttribute('x')).toBe('10')
+  })
+
   it('shows shortcut tooltips on the project tabs', async () => {
     const user = userEvent.setup(); renderPage()
     await user.hover(screen.getByRole('link', { name: 'Activity' }))

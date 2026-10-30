@@ -42,7 +42,7 @@ import {
   AddViewIcon,
   InsightsIcon,
   SidebarIcon,
-  SidebarLeftIcon,
+  SidebarRightIcon,
 } from "@/components/ui/view-action-icons";
 import {
   confirmAction,
@@ -713,7 +713,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
               type="button"
             >
               <SidebarIcon className="project-overview__desktop-icon" />
-              <SidebarLeftIcon className="project-overview__mobile-icon" />
+              <SidebarRightIcon className="project-overview__mobile-icon" />
             </button>
           </FlowTooltip>
         </div>
