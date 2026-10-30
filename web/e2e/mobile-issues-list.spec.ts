@@ -55,7 +55,11 @@ test.describe('mobile issue lists and views', () => {
     const row = page.locator('[data-my-issues-surface] a[data-issue-row-id]').first()
     expect((await row.boundingBox())?.height).toBe(44)
     await overflow.click()
-    await expect(page.getByRole('menuitem', { name: 'Subscribed', exact: true })).toBeVisible()
+    const moreViewsMenu = page.getByRole('menu', { name: 'More views' })
+    await expect(moreViewsMenu).toBeVisible()
+    await expect(moreViewsMenu.getByRole('menuitem')).toHaveCount(2)
+    await expect(moreViewsMenu.getByRole('menuitem', { name: 'Subscribed', exact: true })).toBeVisible()
+    await expect(moreViewsMenu.getByRole('menuitem', { name: 'Activity', exact: true })).toBeVisible()
     await page.keyboard.press('Escape')
 
     // The selected view moves into the active overflow pill when it does not fit.
