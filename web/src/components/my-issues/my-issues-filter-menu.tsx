@@ -9,6 +9,7 @@ import type { MyIssuesFilterKey, MyIssuesFilterOption } from './my-issues-surfac
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { matchesSearch, translatedKeywords } from '@/lib/search-match'
 import { useI18n } from '@/i18n/i18n'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { AgentBadge } from '@/components/agent/agent-badge'
 import styles from './my-issues-filter-menu.module.css'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
@@ -88,6 +89,7 @@ const DOCUMENT_SEARCH_MINIMUM = 4
 
 export function MyIssuesFilterMenu({ align = 'center', availableFields, layout = 'issues', filters = [], onAddGroup, onAdvanced, onOpenChange, onToggle, open, options, scope = 'issues', trigger, variant = 'root' }: MyIssuesFilterMenuProps) {
   const { t } = useI18n()
+  const phone = usePhoneLayout()
   const [activeField, setActiveField] = useState<MyIssuesFilterKey>()
   const [query, setQuery] = useState('')
   const [aiPending, setAiPending] = useState(false)
@@ -159,8 +161,8 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
   return <><Popover.Root open={open} onOpenChange={close}>
     <Popover.Trigger asChild>{isValidElement(trigger) ? cloneElement(trigger, { 'aria-expanded': open } as object) : trigger}</Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content aria-label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} data-flow-motion="floating" className={`${styles.rootMenu} ${variant === 'advanced' ? styles.advancedMenu : ''}`} data-variant={variant} style={{ zIndex: rootLayer }} side="bottom" align={flushEnd ? 'end' : align} alignOffset={flushEnd ? -4000 : align === 'center' ? -15 : 0} sideOffset={3} collisionPadding={11} onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => { if (keepFocus.current) { keepFocus.current = false; event.preventDefault() } }} onEscapeKeyDown={() => close(false)} onKeyDownCapture={event=>{if(event.key==='Escape'&&!activeField){event.preventDefault();close(false)}}}>
-        <Command label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} className={styles.rootCommand} loop filter={(value, search, keywords) => value.startsWith('__ai__') ? 0.0001 : defaultFilter(value, search, keywords)}>
+      <Popover.Content aria-label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} data-flow-motion="floating" className={`${styles.rootMenu} ${variant === 'advanced' ? styles.advancedMenu : ''}`} data-layout={layout} data-variant={variant} style={{ zIndex: rootLayer }} side="bottom" align={flushEnd ? 'end' : align} alignOffset={flushEnd ? -4000 : align === 'center' ? -15 : 0} sideOffset={3} collisionPadding={11} onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => { if (keepFocus.current) { keepFocus.current = false; event.preventDefault() } }} onEscapeKeyDown={() => close(false)} onKeyDownCapture={event=>{if(event.key==='Escape'&&!activeField){event.preventDefault();close(false)}}}>
+        <Command label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} className={styles.rootCommand} defaultValue={phone && layout === 'documents' ? '__none__' : undefined} loop filter={(value, search, keywords) => value.startsWith('__ai__') ? 0.0001 : defaultFilter(value, search, keywords)}>
           <div className={styles.rootSearch}>
             <Command.Input aria-label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} placeholder={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} autoFocus value={query} onValueChange={setQuery}/>
             {variant === 'root' && <kbd aria-hidden="true">F</kbd>}
