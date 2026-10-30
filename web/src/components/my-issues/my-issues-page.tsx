@@ -17,6 +17,7 @@ import { assigneeUpdate } from '@/lib/agent-members'
 import { workflowStatusOptions } from '@/lib/team-workflow'
 import { applyExplorerFilters, executeExplorerBulkAction, explorerBoardGroupUpdate, explorerEstimateBulkOptions, explorerFilterOptions, explorerPropertyOptions, issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import { useI18n } from '@/i18n/i18n'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { InsightHiddenNotice, SavedViewInsightsPanel, type SavedViewInsightsConfig } from '@/components/issue-explorer/saved-view-panels'
 import { IssueBoard } from '@/components/issue-explorer/issue-board'
 import type { SavedView } from '@/types/flow'
@@ -52,6 +53,12 @@ const FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = { ai:'AI filte
 
 export function MyIssuesPage({ data, initialView = 'assigned', loading = false, error, workspaceSlug = data.workspace.urlKey, onClearError, onCreateIssue, onDeleteIssues, onNavigateView, onOpenIssue, onOpenSidebar, renderIssuePreview, onPersistDisplay, onPersistFilters, onUpdateIssue, onUpdateIssues }: MyIssuesPageProps) {
   const { t } = useI18n()
+  const phone = usePhoneLayout()
+  // The phone Created tab is the reference app's flat, ungrouped list; the
+  // desktop view keeps its saved grouping.
+  const initialDisplay = useMemo(() => phone && initialView === 'created'
+    ? { ...defaultMyIssuesDisplayOptions, grouping: 'none' as const }
+    : defaultMyIssuesDisplayOptions, [phone, initialView])
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [projectedView, setProjectedView] = useState(initialView)
   const [pagedIssues, setPagedIssues] = useState<Issue[]>([])
@@ -97,7 +104,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
     workspaceSlug,
     initialView,
     initialGroups,
-    initialDisplay: defaultMyIssuesDisplayOptions,
+    initialDisplay,
     groupingContext,
     adapter: {
       navigate: href => onNavigateView?.(viewFromHref(href), href),

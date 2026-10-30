@@ -129,4 +129,10 @@
   :global(:root[data-theme="dark"]) .groupName{color:var(--phone-group-title)}
   :global(:root[data-theme="dark"]) .groupCount{color:var(--phone-group-count)}
   :global(:root[data-theme="dark"]) .createButton{color:var(--phone-group-title);background:transparent}
+  /* A sub-issue row puts the parent title flush after the issue title, like the reference app. */
+  .titleProperties:has(.parentTrail){gap:0}
+  .parentTrail{line-height:normal;border-style:none}
+  .parentTrail b{border-style:none}
+  /* The unassigned avatar keeps the muted glyph but matches the reference avatar metrics. */
+  .noAssignee svg{font-size:16px;font-weight:400;line-height:24px;color:var(--bright);border-style:none;fill:var(--issue-muted)}
 }

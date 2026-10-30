@@ -71,3 +71,39 @@ test.describe('mobile issue lists and views', () => {
     await expect(board).toHaveCSS('overflow-x', 'auto')
   })
 })
+
+test.describe('mobile Created tab', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  test('phone Created tab is a flat list with the sub-issue parent trail', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-created-${testInfo.project.name}-${testInfo.retry}`
+    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
+      data: { name: '[mobile] Created', urlKey: workspaceKey, region: 'us', tutorial: false },
+    })
+    expect(response.status()).toBe(201)
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const bootstrap = await (await request.get('http://127.0.0.1:4180/api/bootstrap', { headers })).json() as { teams: Array<{ id: string }>; states: Array<{ id: string; type: string }> }
+    const teamId = bootstrap.teams[0].id
+    const stateId = bootstrap.states.find(state => state.type === 'unstarted')!.id
+    const create = async (title: string, extra = {}) => {
+      const created = await request.post('http://127.0.0.1:4180/api/issues', { headers, data: { title, description: '', teamId, stateId, ...extra } })
+      expect(created.status()).toBe(201)
+      return created.json() as Promise<{ id: string }>
+    }
+    const parent = await create('[mobile] Parent issue')
+    await create('[mobile] Second issue')
+    const child = await create('[mobile] Child #1', { parentId: parent.id })
+    const reordered = await request.patch(`http://127.0.0.1:4180/api/issues/${child.id}`, { headers, data: { sortOrder: 0 } })
+    expect(reordered.ok()).toBe(true)
+
+    await page.goto(`/${workspaceKey}/my-issues/created`)
+    await expect(page.locator('main').first()).toBeVisible()
+    await expect(page.locator('[data-my-issues-surface] [class*="groupHeader"]').first()).toBeHidden()
+    const row = page.locator('[data-my-issues-surface] a[data-issue-row-id]').first()
+    expect((await row.boundingBox())?.y).toBeCloseTo(87.5, 0)
+    expect((await row.boundingBox())?.height).toBe(44)
+    await expect(row).toContainText('[mobile] Child #1')
+    await expect(row.locator('[class*="parentTrail"]')).toContainText('[mobile] Parent issue')
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  })
+})
