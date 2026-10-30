@@ -20,6 +20,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Common MCP and agent issue tools use bounded catalog projections and indexed issue point reads; team counts use maintained counters instead of scanning the full issue table.
+
 - Agent issue and cycle listing now supports an explicit `all` cycle filter, compact relationship counts and relationship-presence filters, avoiding per-issue detail fan-out; the tool harness uses a valid page location.
 
 - The `hasSubIssues` issue-list filter now checks the indexed child parent IDs directly, so it stays current through issue mutations without a workspace-wide attribute re-index.

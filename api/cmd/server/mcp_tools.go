@@ -68,7 +68,7 @@ func mcpArgumentSummary(args map[string]any) string {
 }
 
 func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, args map[string]any) (any, error) {
-	data, err := s.mcpWorkspaceData(ctx, actor)
+	data, err := s.mcpWorkspaceDataForTool(ctx, actor, name, args)
 	if err != nil {
 		return nil, err
 	}
@@ -422,6 +422,105 @@ func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, a
 	default:
 		return s.callFlowWriteTool(ctx, actor, data, name, args)
 	}
+}
+
+// mcpWorkspaceDataForTool keeps the high-volume agent paths on the bounded
+// metadata projection. The compatibility bootstrap is still used by tools
+// that genuinely operate on a whole workspace, but issue and directory tools
+// only need the small catalogs below plus point reads from issue_records.
+func (s *server) mcpWorkspaceDataForTool(ctx context.Context, actor mcpActor, name string, args map[string]any) (domain.Bootstrap, error) {
+	common := map[string]bool{
+		"get_issue": true, "list_issues": true, "count_issues": true, "search_issues": true,
+		"list_cycles": true, "list_projects": true, "get_team": true, "list_users": true,
+		"save_issue": true, "save_comment": true,
+	}
+	if !common[name] {
+		return s.mcpWorkspaceData(ctx, actor)
+	}
+	userID := actor.User.ID
+	if actor.AuthorizationUserID != "" {
+		userID = actor.AuthorizationUserID
+	}
+	data, access, err := s.store.IssueQueryAccess(ctx, actor.WorkspaceKey, userID)
+	if err != nil {
+		return domain.Bootstrap{}, fmt.Errorf("workspace access denied")
+	}
+	fields := []string{"users", "members", "states", "labels", "cycles", "cycleSettings", "projects", "releases", "issueSuggestions"}
+	if name == "get_team" {
+		fields = nil
+	}
+	if name == "list_users" {
+		fields = []string{"users", "members"}
+	}
+	if name == "list_cycles" {
+		fields = []string{"users", "members", "cycles", "cycleSettings"}
+	}
+	if name == "list_projects" {
+		fields = []string{"users", "members", "projects"}
+	}
+	if len(fields) > 0 {
+		catalog, ok := s.store.WorkspaceMetadataFields(actor.WorkspaceKey, fields...)
+		if !ok {
+			return domain.Bootstrap{}, fmt.Errorf("workspace access denied")
+		}
+		data.Users, data.Members = catalog.Users, catalog.Members
+		data.States, data.Labels = catalog.States, catalog.Labels
+		data.Cycles, data.CycleSettings = catalog.Cycles, catalog.CycleSettings
+		data.Projects, data.Releases = catalog.Projects, catalog.Releases
+		data.IssueSuggestions = catalog.IssueSuggestions
+	}
+	data.Viewer, data.ViewerRole = actor.User, accessRole(data, userID)
+	if actor.AuthorizationUserID != "" {
+		data.ViewerRole = "app"
+	}
+	data.Issues = []domain.Issue{}
+	data.Comments = map[string][]domain.Comment{}
+	allowed := map[string]bool{}
+	for _, id := range access.VisibleTeamIDs {
+		allowed[id] = true
+	}
+	data.Teams = slices.DeleteFunc(data.Teams, func(item domain.Team) bool { return !allowed[item.ID] })
+	data.States = slices.DeleteFunc(data.States, func(item domain.WorkflowState) bool { return item.TeamID != "" && !allowed[item.TeamID] })
+	data.TeamMembers = slices.DeleteFunc(data.TeamMembers, func(item domain.TeamMember) bool { return !allowed[item.TeamID] })
+	data.Cycles = slices.DeleteFunc(data.Cycles, func(item domain.Cycle) bool { return !allowed[item.TeamID] })
+	data.Projects = slices.DeleteFunc(data.Projects, func(item domain.Project) bool {
+		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, func(id string) bool { return allowed[id] })
+	})
+	data.Labels = slices.DeleteFunc(data.Labels, func(item domain.IssueLabel) bool { return !labelScopeIsWorkspace(item.Scope) && !allowed[item.Scope] })
+	if data.ViewerRole == "guest" {
+		visibleUsers := map[string]bool{actor.User.ID: true}
+		for _, member := range data.TeamMembers {
+			visibleUsers[member.UserID] = true
+		}
+		data.Users = slices.DeleteFunc(data.Users, func(item domain.User) bool { return !visibleUsers[item.ID] })
+		data.Members = slices.DeleteFunc(data.Members, func(item domain.WorkspaceMember) bool { return !visibleUsers[item.User.ID] })
+	}
+	if apiKeyTeamRestrictionSelected(actor.APIKey) {
+		keyAllowed := func(id string) bool { return slices.Contains(actor.APIKey.TeamIDs, id) }
+		data.Teams = slices.DeleteFunc(data.Teams, func(item domain.Team) bool { return !keyAllowed(item.ID) })
+		data.States = slices.DeleteFunc(data.States, func(item domain.WorkflowState) bool { return item.TeamID != "" && !keyAllowed(item.TeamID) })
+		data.TeamMembers = slices.DeleteFunc(data.TeamMembers, func(item domain.TeamMember) bool { return !keyAllowed(item.TeamID) })
+		data.Cycles = slices.DeleteFunc(data.Cycles, func(item domain.Cycle) bool { return !keyAllowed(item.TeamID) })
+		data.Projects = slices.DeleteFunc(data.Projects, func(item domain.Project) bool {
+			return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, keyAllowed)
+		})
+		data.Labels = slices.DeleteFunc(data.Labels, func(item domain.IssueLabel) bool {
+			return !labelScopeIsWorkspace(item.Scope) && !keyAllowed(item.Scope)
+		})
+	}
+	return data, nil
+}
+
+func accessRole(data domain.Bootstrap, userID string) string {
+	if data.ViewerRole != "" {
+		return data.ViewerRole
+	}
+	for _, member := range data.Members {
+		if member.User.ID == userID {
+			return member.Role
+		}
+	}
+	return "member"
 }
 
 func (s *server) mcpWorkspaceData(ctx context.Context, actor mcpActor) (domain.Bootstrap, error) {
@@ -877,6 +976,20 @@ func (s *server) countMCPIssues(ctx context.Context, actor mcpActor, data domain
 	if err != nil {
 		return nil, err
 	}
+	// The common count_issues(team=...) shape is covered by the maintained
+	// per-team counters. Avoid a 75k-row COUNT(*) while retaining the general
+	// query path for richer predicates.
+	if teamValue := stringArg(args, "team"); teamValue != "" && simpleMCPTeamCount(args) {
+		team, findErr := mcpFindTeam(data, teamValue)
+		if findErr != nil {
+			return nil, findErr
+		}
+		count, countErr := s.store.IssueCountByTeam(ctx, q.Workspace, team.ID, boolArg(args, "includeArchived"))
+		if countErr != nil {
+			return nil, countErr
+		}
+		return map[string]any{"count": count}, nil
+	}
 	if err := s.applyMCPIssueFilters(ctx, &q, data, args, time.Now().UTC()); err != nil {
 		return nil, err
 	}
@@ -889,6 +1002,15 @@ func (s *server) countMCPIssues(ctx context.Context, actor mcpActor, data domain
 		return nil, fmt.Errorf("issues could not be counted")
 	}
 	return map[string]any{"count": page.Total}, nil
+}
+
+func simpleMCPTeamCount(args map[string]any) bool {
+	for _, key := range []string{"query", "state", "assignee", "delegate", "project", "parentId", "label", "cycle", "release", "hasAttachments", "hasSubIssues", "hasCustomerRequests", "priority", "createdAt", "updatedAt"} {
+		if _, ok := args[key]; ok {
+			return false
+		}
+	}
+	return true
 }
 
 func activeIssueSuggestions(data *domain.Bootstrap, issueID string) []domain.IssueSuggestion {
