@@ -241,3 +241,52 @@ test.describe('mobile project activity', () => {
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/project-activity-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
 })
+
+test.describe('mobile project update composer', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  test('phone project updates show the changed properties and post-update footer', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-projects-updates-${testInfo.project.name}-${testInfo.retry}`
+    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
+      data: { name: 'Mobile project updates parity', urlKey: workspaceKey, region: 'us', tutorial: false },
+    })
+    expect(response.status()).toBe(201)
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const created = await request.post('http://127.0.0.1:4180/api/projects', {
+      headers,
+      data: { name: 'Compare Test', summary: 'Update composer parity fixture' },
+    })
+    expect(created.status()).toBe(201)
+    const project = await created.json() as { id: string; slugId: string }
+    expect((await request.patch(`http://127.0.0.1:4180/api/projects/${project.id}`, { headers, data: { priority: 2 } })).ok()).toBe(true)
+    expect((await request.patch(`http://127.0.0.1:4180/api/projects/${project.id}`, { headers, data: { startDate: '2026-09-28' } })).ok()).toBe(true)
+    expect((await request.post(`http://127.0.0.1:4180/api/projects/${project.id}/comments`, { headers, data: { body: 'Comparison comment for layout checks.' } })).status()).toBe(201)
+
+    await page.goto(`/${workspaceKey}/project/${project.slugId}/activity`)
+    await page.locator('.project-detail-page__toolbar-actions button[aria-label="Close project details"]').click()
+    await page.locator('.project-activity__composer div[role=tablist] button:nth-child(2)').click()
+
+    const near = (actual: number | undefined, expected: number) => actual !== undefined && Math.abs(actual - expected) <= 1
+    const composer = page.locator('.project-activity__composer')
+    expect((await composer.boundingBox())?.height).toBe(257)
+    expect((await composer.getAttribute('data-mode'))).toBe('update')
+    expect(await page.locator('.project-activity__health').textContent()).toContain('On track')
+    expect((await page.locator('.project-activity__health').boundingBox())?.height).toBe(28)
+    expect(near((await page.locator('.project-activity__health > span').boundingBox())?.x, 193.27)).toBe(true)
+    expect((await composer.locator('button.project-activity__agent').count())).toBe(0)
+    expect(near((await page.locator('.project-activity__diff-label').first().boundingBox())?.y, 262.75)).toBe(true)
+    expect(near((await page.locator('.project-activity__diff-label').nth(1).boundingBox())?.y, 290)).toBe(true)
+    expect(await page.locator('.project-activity__diff-row[data-field=priority]').textContent()).toContain('No priority')
+    expect(await page.locator('.project-activity__diff-row[data-field=priority]').textContent()).toContain('High')
+    expect(await page.locator('.project-activity__diff-row[data-field=startDate]').textContent()).toContain('Sep 28th')
+    expect((await page.locator('.project-activity__attach').boundingBox())?.width).toBe(32)
+    expect(near((await page.locator('.project-activity__attach').boundingBox())?.x, 229.99)).toBe(true)
+    expect(near((await page.locator('.project-activity__attach').boundingBox())?.y, 338)).toBe(true)
+    expect(near((await page.locator('.project-activity__composer button.is-submit').boundingBox())?.x, 273.99)).toBe(true)
+    expect(near((await page.locator('.project-activity__composer button.is-submit').boundingBox())?.y, 340)).toBe(true)
+    expect(near((await page.locator('.project-activity__month > span').boundingBox())?.y, 507.5)).toBe(true)
+    expect(near((await page.locator('.project-activity__comment-card').boundingBox())?.y, 555.5)).toBe(true)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/project-updates-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
+  })
+})

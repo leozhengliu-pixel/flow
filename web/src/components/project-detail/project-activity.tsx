@@ -25,7 +25,7 @@ import { Composer } from '@/components/editor/composer'
 import type { ActorBot, AuditLogEntry, Comment, Project, ProjectUpdate, ThreadSubscription, ThreadSubscriptionState, User } from '@/types/flow'
 import type { ProjectDetailProps } from './project-detail-types'
 import { projectUpdateChanges, type ProjectPropertyChange } from './project-update-changes'
-import { PROJECT_HEALTHS } from './project-detail-types'
+import { PRIORITY_LABELS, PROJECT_HEALTHS } from './project-detail-types'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
 import { MentionTextField } from '@/components/editor/mention-text-field'
 import { RichComment } from '@/components/activity/rich-comment'
@@ -38,6 +38,8 @@ import { partitionAnchoredComments } from '@/components/documents/inline-comment
 import { useComposerSelectionActions } from '@/components/editor/selection-issue'
 import { IssueAgentTasks } from '@/components/agent/issue-agent-tasks'
 import { hasAgentThread, useAgentCommentThreadIds, useAgentThreadMessageCount, type AgentThreadControls } from '@/components/agent/issue-agent-task-context'
+import { formatProjectPropertyDate } from './project-detail-helpers'
+import { ProjectStartArrowIcon } from './project-overview-icons'
 import { getMostRecent, reconcileSelection, selectionFromRoute } from '@/components/activity/entity-activity-update-helper'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
@@ -79,7 +81,7 @@ export function ProjectActivity({ activities, drafts = [], issueData, project, p
   ].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)), [commentThreads, projectUpdates])
   // Projects created before the creator was recorded keep the lead/viewer fallback.
   const creator = project.creator ?? project.lead ?? viewer
-  const { t, locale } = useI18n()
+  const { t, locale, formatDate } = useI18n()
   const phone = usePhoneLayout()
   const [editorKey, setEditorKey] = useState(0)
   const [agentOpen, setAgentOpen] = useState(false)
@@ -91,6 +93,32 @@ export function ProjectActivity({ activities, drafts = [], issueData, project, p
     return () => { active = false }
   }, [historyVersion, project.id])
   const updateChanges = useMemo(() => projectUpdateChanges(projectUpdates, history, project.createdAt), [history, project.createdAt, projectUpdates])
+  // The phone update composer previews the property changes the next update would carry: everything the
+  // project history recorded after its latest update (or after creation when it has none yet).
+  const pendingChanges = useMemo(() => {
+    const since = projectUpdates.reduce((latest, update) => Math.max(latest, Date.parse(update.createdAt) || 0), Date.parse(project.createdAt) || 0)
+    const merged = new Map<string, ProjectPropertyChange>()
+    for (const entry of history.filter(item => item.action === 'updated').sort((left, right) => +new Date(left.createdAt) - +new Date(right.createdAt))) {
+      if ((Date.parse(entry.createdAt) || 0) <= since) continue
+      const changes = entry.metadata?.changes
+      if (!Array.isArray(changes)) continue
+      for (const change of changes) {
+        if (!change || typeof change !== 'object' || typeof (change as ProjectPropertyChange).field !== 'string') continue
+        const item = change as ProjectPropertyChange
+        const previous = merged.get(item.field)
+        merged.set(item.field, { field: item.field, from: previous ? previous.from : String(item.from ?? ''), to: String(item.to ?? '') })
+      }
+    }
+    return [...merged.values()].filter(change => change.from !== change.to)
+  }, [history, project.createdAt, projectUpdates])
+  const diffValue = (field: string, value: string) => {
+    if (field === 'priority') {
+      const index = PRIORITY_LABELS.findIndex(label => label.toLowerCase() === value.toLowerCase())
+      return <><PriorityIcon priority={index < 0 ? 0 : index} size={16}/><span>{t(value || 'No priority')}</span></>
+    }
+    if (field === 'startDate' || field === 'targetDate') return formatProjectPropertyDate(value, undefined, '', locale, formatDate)
+    return value
+  }
   const hasContent = Boolean(body.trim()) || files.length > 0
   const composerEditorRef = useRef<Editor | null>(null)
   const setComposerEditor = useCallback((editor: Editor | null) => { composerEditorRef.current = editor }, [])
@@ -195,8 +223,18 @@ export function ProjectActivity({ activities, drafts = [], issueData, project, p
   return <ActivityPage entityId={project.id} entityType="project" hideHeader initialUpdateId={initialUpdateId}>
     <div className="project-activity">
     <section className="project-activity__composer" data-mode={composerMode}>
-      <header><div aria-label="Post type" role="tablist"><button aria-selected={composerMode === 'comment'} onClick={() => switchComposerMode('comment')} role="tab" type="button">Comment</button><button aria-selected={composerMode === 'update'} onClick={() => switchComposerMode('update')} role="tab" type="button">Update</button></div>{composerMode === 'update' && <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={`project-activity__health is-${health}`} type="button"><HealthGlyph health={health}/>{healthLabel(health)}</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className="project-detail-page__menu project-activity__health-menu" sideOffset={4}>{PROJECT_HEALTHS.slice(0, 3).map(option => <DropdownMenu.Item aria-checked={health === option.id} key={option.id} onSelect={() => setHealth(option.id)}><span className={`project-activity__health-glyph is-${option.id}`}><HealthGlyph health={option.id}/></span><span>{option.label}</span></DropdownMenu.Item>)}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>}</header>
+      <header><div aria-label="Post type" role="tablist"><button aria-selected={composerMode === 'comment'} onClick={() => switchComposerMode('comment')} role="tab" type="button">Comment</button><button aria-selected={composerMode === 'update'} onClick={() => switchComposerMode('update')} role="tab" type="button">Update</button></div>{composerMode === 'update' && <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={`project-activity__health is-${health}`} type="button"><HealthGlyph health={health}/><span>{healthLabel(health)}</span></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className="project-detail-page__menu project-activity__health-menu" sideOffset={4}>{PROJECT_HEALTHS.slice(0, 3).map(option => <DropdownMenu.Item aria-checked={health === option.id} key={option.id} onSelect={() => setHealth(option.id)}><span className={`project-activity__health-glyph is-${option.id}`}><HealthGlyph health={option.id}/></span><span>{option.label}</span></DropdownMenu.Item>)}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>}</header>
       <IssueDescriptionEditor className="project-activity__editor" key={`${composerMode}:${editorKey}`} users={users} ariaLabel={composerMode === 'comment' ? 'Project comment' : 'Project update'} value={body} state={composerMode === 'comment' && commentData ? JSON.stringify(commentData) : undefined} placeholder={composerMode === 'comment' ? 'Leave a comment…' : 'Write a project update…'} editorRef={setComposerEditor} selectionActions={composerSelectionActions} onInsertImage={uploadInlineMedia} onSubmit={() => void submit()} onChange={snapshot=>{setBody(snapshot.markdown);if(composerMode==='comment')setCommentData(snapshot.document as Record<string,unknown>)}}/>
+      {phone && composerMode === 'update' && pendingChanges.length > 0 && <div aria-label={t('Changes since last update')} className="project-activity__diff">
+        {pendingChanges.map(change => <div className="project-activity__diff-row" data-field={change.field} key={change.field}>
+          <span className="project-activity__diff-label">{t(PROPERTY_LABELS[change.field] ?? change.field)}</span>
+          <span className="project-activity__diff-value">
+            {change.from || change.field === 'priority'
+              ? <><span className="project-activity__diff-from">{diffValue(change.field, change.from)}</span><ProjectStartArrowIcon className="project-activity__diff-arrow"/><span className="project-activity__diff-to">{diffValue(change.field, change.to)}</span></>
+              : <span className="project-activity__diff-to"><span className="project-activity__diff-prefix">{t('set to')}</span>{diffValue(change.field, change.to)}</span>}
+          </span>
+        </div>)}
+      </div>}
       {files.length>0&&<div className="project-activity__files">{files.map((file,index)=><span key={`${file.name}-${index}`}><Paperclip size={12}/>{file.name}<button aria-label={`Remove ${file.name}`} onClick={()=>setFiles(current=>current.filter((_,item)=>item!==index))}><X size={11}/></button></span>)}</div>}
       <footer>{composerMode === 'update' ? <button className="project-activity__agent" onClick={() => setAgentOpen(true)} type="button"><AgentWriteIcon size={14}/>Write with Agent</button> : <span/>}<div><button aria-label="Attach images, files, or videos" className="project-activity__attach" onClick={()=>fileRef.current?.click()} type="button">{phone ? <FlowGlyph name="attach" size={14}/> : <Paperclip size={14}/>}</button><input ref={fileRef} hidden multiple type="file" onChange={event=>{const picked=Array.from(event.target.files??[]);if(composerMode==='comment')insertComposerFiles(picked);else setFiles(current=>[...current,...picked]);event.target.value=''}}/>{hasContent && <button className="project-activity__cancel" disabled={saving} onClick={cancel} type="button">Cancel</button>}<button className={hasContent ? 'is-submit is-primary' : 'is-submit'} disabled={!body.trim() || saving || pendingUploads > 0} onClick={() => void submit()} type="button">{saving ? 'Posting…' : composerMode === 'update' ? 'Post update' : 'Comment'}</button></div></footer>
     </section>
