@@ -74,6 +74,9 @@ func TestRepeatedPatchWritesNothing(t *testing.T) {
 	defer repository.Close()
 	s := &server{store: repository, authDisabled: true, uploadPath: t.TempDir()}
 	handler := newHandler(s)
+	// The delivery scheduler is a background writer; pause it so this test
+	// only counts the events its own requests produce.
+	defer s.stopDeliveryScheduler(context.Background())
 	var mu sync.Mutex
 	pushed := 0
 	repository.SetRealtimeSink(func(workspace string, event domain.RealtimeEvent) {
