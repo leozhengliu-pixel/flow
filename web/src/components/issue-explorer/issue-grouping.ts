@@ -270,14 +270,17 @@ function slaDescriptor(row: MyIssuesRowData, now: number): GroupDescriptor {
 }
 
 function activityDescriptor(value: string, now: number): GroupDescriptor {
-  const date = Date.parse(value)
+  const date = new Date(value)
   const start = new Date(now); start.setHours(0, 0, 0, 0)
-  const today = start.getTime()
-  if (date >= today) return { id: 'activity-today', label: 'Today', rank: 0 }
-  if (date >= today - DAY) return { id: 'activity-yesterday', label: 'Yesterday', rank: 1 }
-  if (date >= today - 7 * DAY) return { id: 'activity-week', label: 'Past week', rank: 2 }
-  if (date >= today - 30 * DAY) return { id: 'activity-month', label: 'Past month', rank: 3 }
-  return { id: 'activity-older', label: 'Older', rank: 4 }
+  const day = new Date(date); day.setHours(0, 0, 0, 0)
+  const offset = Math.round((start.getTime() - day.getTime()) / DAY)
+  if (offset <= 0) return { id: 'activity-today', label: 'Today', rank: 0 }
+  if (offset === 1) return { id: 'activity-yesterday', label: 'Yesterday', rank: 1 }
+  if (offset < 30) {
+    const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
+    return { id: `activity-day-${key}`, label: `${offset} days ago`, rank: offset }
+  }
+  return { id: 'activity-older', label: 'Older', rank: 30 }
 }
 
 /** Issue comparator honoring the reference app ordering fields and direction. "No priority" always sorts last. */

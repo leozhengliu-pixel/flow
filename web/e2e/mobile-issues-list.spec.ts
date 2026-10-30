@@ -190,3 +190,48 @@ test.describe('mobile Subscribed tab', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   })
 })
+
+test.describe('mobile Activity tab', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  test('phone Activity tab groups issues by relative activity day', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-activity-${testInfo.project.name}-${testInfo.retry}`
+    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
+      data: { name: '[mobile] Activity', urlKey: workspaceKey, region: 'us', tutorial: false },
+    })
+    expect(response.status()).toBe(201)
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const bootstrap = await (await request.get('http://127.0.0.1:4180/api/bootstrap', { headers })).json() as { viewer: { id: string }; teams: Array<{ id: string }>; states: Array<{ id: string; type: string }> }
+    const teamId = bootstrap.teams[0].id
+    const stateId = bootstrap.states.find(state => state.type === 'unstarted')!.id
+    const create = async (title: string) => {
+      const created = await request.post('http://127.0.0.1:4180/api/issues', { headers, data: { title, description: '', teamId, stateId, assigneeId: bootstrap.viewer.id } })
+      expect(created.status()).toBe(201)
+      return created.json() as Promise<{ id: string }>
+    }
+    await create('[mobile] Activity issue one')
+    await create('[mobile] Activity issue two')
+
+    await page.goto(`/${workspaceKey}/my-issues/activity`)
+    await expect(page.locator('main').first()).toBeVisible()
+    await page.getByRole('button', { name: 'Display options', exact: true }).click()
+    await page.waitForTimeout(200)
+    await page.locator('[role="dialog"][aria-label="Display options"] button[aria-label="Grouping"]').click()
+    await page.waitForTimeout(200)
+    await page.getByRole('option', { name: 'Activity date', exact: true }).click()
+    await page.waitForTimeout(300)
+    await page.keyboard.press('Escape')
+    const surface = page.locator('[data-my-issues-surface]')
+    const header = surface.locator('[class*="groupHeader"]').first()
+    await expect(header).toBeVisible()
+    await expect(header.locator('[class*="groupName"]')).toHaveText('Today')
+    await expect(header.locator('[class*="groupCount"]')).toHaveText('2')
+    await expect(header.getByRole('button', { name: 'Create new issue' })).toHaveCount(0)
+    expect((await header.boundingBox())?.height).toBe(36)
+    const row = surface.locator('a[data-issue-row-id]').first()
+    expect((await row.boundingBox())?.y).toBeCloseTo(125.5, 0)
+    expect((await row.boundingBox())?.height).toBe(44)
+    await expect(row).toContainText('[mobile] Activity issue')
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  })
+})
