@@ -28,7 +28,7 @@ const DONE: Record<ReviewCodingSessionKind, string> = {
  * Reviews: "Fix with agent" (failing checks and unresolved threads) plus the quick actions rebase, lint, test and a
  * free follow-up prompt (§15, `POST /api/reviews/{id}/coding-session`, track L). The started session opens in a dialog.
  */
-export function ReviewCodingSessionActions({ review, data }: { review: Pick<CodeReview, 'id' | 'status' | 'headBranch' | 'provider'>; data: BootstrapData }) {
+export function ReviewCodingSessionActions({ review, data, compact = false }: { review: Pick<CodeReview, 'id' | 'status' | 'headBranch' | 'provider'>; data: BootstrapData; compact?: boolean }) {
   const { t } = useI18n()
   const available = useCodingAvailability(data)
   const [busy, setBusy] = useState(false)
@@ -36,7 +36,7 @@ export function ReviewCodingSessionActions({ review, data }: { review: Pick<Code
   const [session, setSession] = useState<CodingSession>()
   const [prompting, setPrompting] = useState(false)
   const [confirmRebase, setConfirmRebase] = useState(false)
-  if (!available || review.status === 'merged' || review.status === 'closed') return null
+  if (review.status === 'merged' || review.status === 'closed') return null
   const start = async (kind: ReviewCodingSessionKind, prompt?: string) => {
     if (busyRef.current) return
     busyRef.current = true; setBusy(true)
@@ -49,6 +49,11 @@ export function ReviewCodingSessionActions({ review, data }: { review: Pick<Code
     } catch (error) { toastCodingStartError(error, data.workspace.urlKey, t) }
     finally { busyRef.current = false; setBusy(false) }
   }
+  if (compact) return <>
+    <button type="button" className="review-phone-agent" aria-label={t('Show agent')} title={t('Show agent')} disabled={busy} onClick={() => available ? void start('fix') : toast.error(t('The coding agent is unavailable'))}><AgentCursorGlyph size={14}/></button>
+    {session && <CodingSessionDialog sessionId={session.id} initial={session} data={data} open onOpenChange={open => { if (!open) setSession(undefined) }}/>}
+  </>
+  if (!available) return null
   const rebase = () => review.headBranch?.startsWith(BRANCH_PREFIX) ? void start('rebase') : setConfirmRebase(true)
   return <>
     <div className="coding-review-actions" role="group" aria-label={t('Coding agent')}>

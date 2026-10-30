@@ -1,5 +1,6 @@
 import * as RadixMenu from "@radix-ui/react-dropdown-menu";
 import { CheckCircle2, Copy, ExternalLink, GitBranch, GitMerge, Link2, MoreHorizontal, RefreshCw, RotateCcw, Star, Users, X } from "lucide-react";
+import { FlowOptionsIcon } from "@/components/issue/flow-header-icons";
 import { useState, type ReactNode } from "react";
 
 import { useI18n } from "@/i18n/i18n";
@@ -59,8 +60,9 @@ export function PullRequestActionsMenu({
   return (
     <RadixMenu.Root>
       <RadixMenu.Trigger asChild>
-        <button className="review-ghost-button" type="button" aria-label={t(`${noun} actions`)}>
-          <MoreHorizontal />
+        <button className="review-ghost-button review-actions-trigger" type="button" aria-label={t(`${noun} actions`)}>
+          <MoreHorizontal className="review-actions-glyph--desktop" />
+          <FlowOptionsIcon className="review-actions-glyph--phone" />
         </button>
       </RadixMenu.Trigger>
       <RadixMenu.Portal>

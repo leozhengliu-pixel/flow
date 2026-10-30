@@ -528,4 +528,89 @@ test.describe('mobile inbox list', () => {
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/reviews-created-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
 
+  test('shows the phone review page with folded properties and description', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-inbox-review-detail-${testInfo.project.name}-${testInfo.retry}`
+    const workspaceResponse = await request.post('http://127.0.0.1:4180/api/workspaces', {
+      data: { name: '[mobile] Review detail', urlKey: workspaceKey, region: 'us', tutorial: false },
+    })
+    expect(workspaceResponse.status()).toBe(201)
+    const workspace = await workspaceResponse.json() as { teams?: Array<{ id: string }> }
+    const teamId = workspace.teams?.[0]?.id
+    expect(teamId).toBeTruthy()
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const issue = await request.post('http://127.0.0.1:4180/api/issues', {
+      headers,
+      data: { title: '[mobile] QA session question: shout(name) punctuation', description: '[mobile] Question', teamId, stateId: 'state_progress' },
+    })
+    expect(issue.status()).toBe(201)
+    const createdIssue = await issue.json() as { id: string }
+    const secret = `mobile-review-detail-${workspaceKey}`
+    // A non-matching organization keeps the fake workspace offline, so the page never shows a sync error.
+    const integration = await request.put('http://127.0.0.1:4180/api/integrations/github', {
+      headers,
+      data: { name: '[mobile] GitHub', config: { organization: 'mobile-other', webhookSecret: secret, codeAccess: 'true' }, scopes: ['repo'] },
+    })
+    expect(integration.status()).toBe(200)
+    const pullRequest = { number: 6, id: 9506, title: '[mobile] Add shout(name) with exclamation mark', body: 'Adds exported `shout(name)` in `src/greet.js`, returning the uppercase name followed by `!`, as confirmed.\n\nVerified `node -e "require(\'./src/greet.js\')"`, `git log --oneline -5`, and `git diff --check` completed successfully. No tests added or run, as requested.', html_url: 'https://github.com/mobile-e2e/repo/pull/6', state: 'open', draft: true, user: { login: 'flowuser' }, base: { ref: 'main' }, head: { ref: 'mobile/review-6', sha: 'abc' }, additions: 12, deletions: 3, commits: 1 }
+    const body = JSON.stringify({ action: 'opened', number: 6, pull_request: pullRequest, repository: { full_name: 'mobile-e2e/repo' }, sender: { login: 'flowuser' } })
+    const signature = 'sha256=' + createHmac('sha256', secret).update(body).digest('hex')
+    const webhook = await request.post('http://127.0.0.1:4180/api/integrations/github/webhook', {
+      headers: { ...headers, 'Content-Type': 'application/json', 'X-GitHub-Event': 'pull_request', 'X-GitHub-Delivery': `${workspaceKey}-open-6`, 'X-Hub-Signature-256': signature },
+      data: body,
+    })
+    expect(webhook.status()).toBe(202)
+    const reviewId = (await webhook.json() as { reviewId: string }).reviewId
+    const patched = await request.patch(`http://127.0.0.1:4180/api/reviews/${reviewId}`, { headers, data: { draft: true, issueIds: [createdIssue.id] } })
+    expect(patched.status()).toBe(200)
+    expect((await patched.json() as { issueIds: string[] }).issueIds).toEqual([createdIssue.id])
+
+    await page.goto(`/${workspaceKey}/review/github-6`)
+    const near = (actual: number | undefined, expected: number) => expect(Math.abs((actual ?? Number.NaN) - expected)).toBeLessThanOrEqual(1)
+    const chrome = page.locator('.review-detail-chrome')
+    await expect(chrome).toBeVisible()
+    near((await chrome.boundingBox())?.height, 87.5)
+    const menu = page.locator('.review-detail-top .review-menu-button')
+    near((await menu.boundingBox())?.x, 8)
+    expect((await menu.boundingBox())?.width).toBe(32)
+    near((await page.locator('.review-breadcrumb-issue').boundingBox())?.x, 34)
+    await expect(page.locator('.review-breadcrumb-issue-label')).toBeHidden()
+    near((await page.locator('.review-breadcrumb-state--phone').boundingBox())?.x, 67)
+    near((await page.locator('.review-phone-pr-number span').boundingBox())?.x, 323.27)
+    const tabs = page.locator('.review-detail-tabs')
+    await expect(tabs.locator('[data-review-tab="overview"]')).toBeVisible()
+    await expect(tabs.locator('[data-review-tab="changes"]')).toBeVisible()
+    await expect(tabs.locator('[data-review-tab="review"]')).toBeHidden()
+    near((await tabs.locator('[data-review-tab="changes"]').boundingBox())?.x, 95.45)
+    await expect(tabs.locator('[data-review-tab="overview"]')).toHaveCSS('background-color', 'lch(16.706 0.979 272)')
+    const ready = page.locator('.review-detail-tab-actions .review-pill-button.is-primary')
+    await expect(ready).toHaveText('Mark as ready')
+    near((await ready.boundingBox())?.x, 241.23)
+    expect((await ready.boundingBox())?.height).toBe(32)
+    const agent = page.locator('.review-phone-agent')
+    await expect(agent).toBeVisible()
+    near((await agent.boundingBox())?.x, 350)
+    expect((await agent.boundingBox())?.width).toBe(32)
+    near((await page.locator('.review-overview-title').boundingBox())?.y, 97.5)
+    near((await page.locator('.review-byline-avatar').boundingBox())?.x, 16)
+    near((await page.locator('.review-byline-author').boundingBox())?.x, 40)
+    near((await page.locator('.review-byline-branches .review-byline-branch:last-child').boundingBox())?.x, 62.8)
+    const statusLabel = page.locator('[data-mobile-property="status"] .review-mobile-label')
+    near((await statusLabel.boundingBox())?.x, 16)
+    near((await statusLabel.boundingBox())?.y, 230)
+    await expect(page.locator('[data-mobile-property="status"] .review-status-value')).toHaveCSS('font-weight', '500')
+    near((await page.locator('[data-mobile-property="reviewers"] .review-sidebar-button.is-muted').boundingBox())?.x, 84)
+    near((await page.locator('[data-mobile-property="branch"] .review-mobile-label').boundingBox())?.y, 300.75)
+    near((await page.locator('[data-mobile-property="resolves"] .review-mobile-issue-title').boundingBox())?.x, 36)
+    near((await page.locator('.review-description > h3').boundingBox())?.y, 405.5)
+    near((await page.locator('.review-description [data-mention-body] p:first-of-type').boundingBox())?.y, 439.5)
+    await expect(page.locator('.review-document-actions button[aria-label="Add reaction"]')).toBeVisible()
+    near((await page.locator('.review-document-actions button[aria-label="Add reaction"]').boundingBox())?.y, 635.5)
+    await expect(page.locator('.review-overview-sidebar')).toBeHidden()
+
+    const geometry = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }))
+    expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.width)
+
+    if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/review-detail-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
+  })
+
 })

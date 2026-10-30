@@ -159,4 +159,5 @@ export const reviewsZhCN: Record<string, string> = {
   "Synced with GitLab": "已与 GitLab 同步",
   "Could not sync with GitHub": "无法与 GitHub 同步",
   "Could not sync with GitLab": "无法与 GitLab 同步",
+  "The coding agent is unavailable": "编码代理不可用",
 };
