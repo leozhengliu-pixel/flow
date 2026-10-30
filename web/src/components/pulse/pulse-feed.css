@@ -245,6 +245,11 @@
     font-weight: 500;
     line-height: normal;
   }
+  html:root body .app .pulse-page .pulse-header [data-sidebar-trigger]::before,
+  html:root body .app .pulse-page .pulse-header [data-sidebar-trigger]::after,
+  html:root body .app .pulse-page .pulse-mobile-menu::before,
+  html:root body .app .pulse-page .pulse-mobile-menu::after { background: var(--phone-icon-fg); }
+  html:root body .app .pulse-page .pulse-mobile-menu > svg { color: var(--phone-icon-fg); }
   html:root body .app .pulse-page .pulse-header h2 {
     margin: 0 0 0 12px;
     color: var(--text);
@@ -265,6 +270,7 @@
     font-weight: 500;
     line-height: normal;
   }
+  html:root body .app .pulse-page .pulse-header .pulse-icon-button svg { color: var(--phone-icon-fg); }
   html:root body .app .pulse-page .pulse-toolbar {
     gap: 6px;
     padding: 0 8px;
@@ -295,6 +301,7 @@
     font-weight: 500;
     line-height: normal;
   }
+  html:root body .app .pulse-page .pulse-add-view svg { color: var(--phone-icon-dim); }
   html:root body .app .pulse-page .pulse-feed {
     width: calc(100% - 16px);
     gap: 48px;
@@ -400,6 +407,7 @@
     line-height: normal;
     box-shadow: none;
   }
+  html:root body .app .pulse-page .pulse-post-reactions > .pulse-footer-button svg { color: var(--phone-icon-fg); }
   html:root body .app .pulse-page .pulse-post-menu-button {
     width: 28px;
     flex: 0 0 28px;
