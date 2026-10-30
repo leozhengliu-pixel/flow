@@ -86,7 +86,7 @@ function ContractDocumentButton({ output, data, loop, onPick }: { output: LoopCo
   return (
     <>
       <button type="button" className={`select-control loops-contract-document${unchosenDocument(output) ? " is-unchosen" : ""}`} aria-label={t("Document")} onClick={() => setOpen(true)}>
-        <span data-i18n-ignore={chosen ? true : undefined}>{chosen || (target.title && !target.ambiguous ? t("Find by title: {title}").replace("{title}", () => target.title!) : t("Choose document…"))}</span>
+        <span className="loops-contract-document-label" data-i18n-ignore={chosen ? true : undefined}>{chosen || (target.title && !target.ambiguous ? t("Find by title: {title}").replace("{title}", () => target.title!) : t("Choose document…"))}</span>
       </button>
       <LoopDocumentPicker data={data} open={open} teamId={target.teamId ?? loop.teamId} newTitle={target.description || loop.name} onOpenChange={setOpen} onSelect={(document) => onPick({ id: document.id, title: document.title })} />
     </>

@@ -128,7 +128,7 @@ export function contractTargetText(output: LoopContractOutput, data: Pick<Bootst
   if (unchosenDocument(output)) parts.push(t("document not chosen yet"));
   if (target.mode === "matching") {
     const match = target.match || target.description;
-    parts.push(match ? t("issues matching {match}").replace("{match}", () => match) : t("Issues matching a description"));
+    parts.push(match ? matchingTargetText(output, match, t) : t("Issues matching a description"));
   }
   const project = target.projectId ? (data.projects?.find((item) => item.id === target.projectId)?.name ?? target.project) : target.project;
   const initiative = target.initiativeId ? (data.initiatives?.find((item) => item.id === target.initiativeId)?.name ?? target.initiative) : target.initiative;
@@ -137,13 +137,16 @@ export function contractTargetText(output: LoopContractOutput, data: Pick<Bootst
   if (initiative && output.kind !== "issue") parts.push(t("on {initiative}").replace("{initiative}", () => initiative));
   if (!title && !documentTitle && !unchosenDocument(output) && !project && !initiative && target.mode && target.mode !== "matching") {
     if (target.mode === "any") {
-      const anyLabel = output.kind === "issue" ? "Any issue" : output.kind === "statusUpdate" ? "Any project" : output.kind === "comment" ? "Any issue" : "Anywhere";
-      parts.push(t(anyLabel));
+      if (target.description) parts.push(descriptionTargetText(output, target.description, t));
+      else {
+        const anyLabel = output.kind === "issue" ? "Any issue" : output.kind === "statusUpdate" ? "Any project" : output.kind === "comment" ? "Any issue" : "Anywhere";
+        parts.push(t(anyLabel));
+      }
     } else {
       parts.push(t(TARGET_MODE_LABELS[target.mode] ?? "Anywhere"));
     }
   }
-  if (!documentTitle && target.description && !title && target.mode !== "matching") parts.push(target.description);
+  if (!documentTitle && target.description && !title && target.mode !== "matching" && target.mode !== "any") parts.push(descriptionTargetText(output, target.description, t));
   const team = target.teamId ? (data.teams.find((item) => item.id === target.teamId)?.name ?? target.team) : target.team;
   if (team) parts.push(t("in {team}").replace("{team}", () => team));
   for (const placeholder of createsOutput(output) ? (target.placeholders ?? []) : []) {
@@ -152,6 +155,45 @@ export function contractTargetText(output: LoopContractOutput, data: Pick<Bootst
   if (output.cardinality && output.cardinality !== "any") parts.push(t(CARDINALITY_LABELS[output.cardinality]));
   if (output.conditions?.length) parts.push(t("when {condition}").replace("{condition}", () => output.conditions!.join("; ")));
   return parts.join(" · ");
+}
+
+function startsWithIssueNoun(value: string) {
+  return /^(?:issues?|items?|tickets?|tasks?|bugs?)\b/i.test(value.trim());
+}
+
+function startsOrEndsWithChineseIssueNoun(value: string) {
+  return /^(?:事项|工单|任务|问题)|(?:事项|工单|任务|问题)$/.test(value.trim());
+}
+
+function capitalized(value: string) {
+  return value ? value[0].toUpperCase() + value.slice(1) : value;
+}
+
+/** Keep model-provided descriptions readable when they already include their resource noun. */
+function matchingTargetText(output: LoopContractOutput, match: string, t: Translate) {
+  const value = match.trim();
+  if (startsWithIssueNoun(value)) {
+    const description = value.replace(/^(?:issues?|items?|tickets?|tasks?|bugs?)\s*/i, "");
+    if (output.kind === "comment") return t("Comment on each issue {description}").replace("{description}", () => description);
+    if (output.kind === "issue") return t("Issues {description}").replace("{description}", () => description);
+  }
+  if (startsOrEndsWithChineseIssueNoun(value)) {
+    if (output.kind === "comment") return t("Comment on each {description}").replace("{description}", () => value);
+    if (output.kind === "issue") return value;
+  }
+  if (output.kind === "comment") return t("Comment on each issue matching {match}").replace("{match}", () => value);
+  return t("Issues matching {match}").replace("{match}", () => value);
+}
+
+function descriptionTargetText(output: LoopContractOutput, description: string, t: Translate) {
+  const value = description.trim();
+  if (startsWithIssueNoun(value) || startsOrEndsWithChineseIssueNoun(value)) {
+    if (output.kind === "issue") return startsWithIssueNoun(value) ? capitalized(value) : value;
+    if (output.kind === "comment" && startsWithIssueNoun(value)) {
+      return t("Comment on each issue {description}").replace("{description}", () => value.replace(/^(?:issues?|items?|tickets?|tasks?|bugs?)\s*/i, ""));
+    }
+  }
+  return capitalized(value);
 }
 
 /** The compact, human-readable line shared by the contract panel and stale review. */
