@@ -179,3 +179,63 @@ test.describe('mobile project properties panel', () => {
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/project-properties-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
 })
+
+test.describe('mobile project activity', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  test('phone project activity shows the comment composer, a month heading and the framed comment card', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-projects-activity-${testInfo.project.name}-${testInfo.retry}`
+    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
+      data: { name: 'Mobile project activity parity', urlKey: workspaceKey, region: 'us', tutorial: false },
+    })
+    expect(response.status()).toBe(201)
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const created = await request.post('http://127.0.0.1:4180/api/projects', {
+      headers,
+      data: { name: 'Compare Test', summary: 'Activity parity fixture', statusId: 'ps_progress' },
+    })
+    expect(created.status()).toBe(201)
+    const project = await created.json() as { id: string; slugId: string }
+    const initiative = await request.post('http://127.0.0.1:4180/api/initiatives', {
+      headers,
+      data: { name: '[mobile] test123', summary: 'Activity parity initiative', status: 'active' },
+    })
+    expect(initiative.status()).toBe(201)
+    const initiativeId = (await initiative.json() as { id: string }).id
+    expect((await request.patch(`http://127.0.0.1:4180/api/projects/${project.id}`, { headers, data: { initiatives: [initiativeId] } })).ok()).toBe(true)
+    expect((await request.post(`http://127.0.0.1:4180/api/projects/${project.id}/comments`, { headers, data: { body: 'Comparison comment for layout checks.' } })).status()).toBe(201)
+    expect((await request.post(`http://127.0.0.1:4180/api/projects/${project.id}/milestones`, { headers, data: { name: '[mobile] Alpha' } })).status()).toBe(201)
+
+    await page.goto(`/${workspaceKey}/project/${project.slugId}/activity`)
+    await page.locator('.project-detail-page__toolbar-actions button[aria-label="Close project details"]').click()
+
+    const near = (actual: number | undefined, expected: number) => actual !== undefined && Math.abs(actual - expected) <= 1
+    const composer = page.locator('.project-activity__composer')
+    expect((await composer.boundingBox())?.x).toBe(16)
+    expect(near((await composer.boundingBox())?.y, 125.5)).toBe(true)
+    expect((await composer.boundingBox())?.width).toBe(358)
+    expect((await composer.boundingBox())?.height).toBe(176)
+    expect(near((await page.locator('.project-activity__composer [role=tab][aria-selected="true"]').boundingBox())?.x, 29)).toBe(true)
+    expect(near((await page.locator('.project-activity__composer [role=tab][aria-selected="true"]').boundingBox())?.y, 138.5)).toBe(true)
+    expect(near((await page.locator('.project-activity__editor p').boundingBox())?.x, 32.5)).toBe(true)
+    expect(near((await page.locator('.project-activity__editor p').boundingBox())?.y, 183)).toBe(true)
+    expect((await page.locator('.project-activity__attach').boundingBox())?.width).toBe(32)
+    expect(Math.abs((await page.locator('.project-activity__composer button.is-submit').boundingBox())!.x - 286.78)).toBeLessThanOrEqual(1)
+    expect(near((await page.locator('.project-activity__composer button.is-submit').boundingBox())?.width, 72.72)).toBe(true)
+
+    expect((await page.locator('.project-activity__event').first().boundingBox())?.y).toBe(313.5)
+    expect(near((await page.locator('.project-activity__event strong').first().boundingBox())?.x, 44)).toBe(true)
+    expect(near((await page.locator('.project-activity__month > span').boundingBox())?.y, 426.5)).toBe(true)
+    const card = page.locator('.project-activity__comment-card')
+    expect((await card.boundingBox())?.x).toBe(12)
+    expect(near((await card.boundingBox())?.y, 474.5)).toBe(true)
+    expect((await card.boundingBox())?.width).toBe(366)
+    expect((await card.locator('.avatar').boundingBox())?.width).toBe(18)
+    expect(near((await card.locator('.project-activity__comment-body p').boundingBox())?.y, 515)).toBe(true)
+    expect((await card.locator('button[aria-label="Add reaction"]').boundingBox())?.width).toBe(32)
+    expect((await card.locator('button[aria-label="Comment options"]').boundingBox())?.width).toBe(32)
+    expect((await card.locator('.project-activity__thread-toggle').boundingBox())?.height).toBe(28)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/project-activity-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
+  })
+})

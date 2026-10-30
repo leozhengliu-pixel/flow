@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Flag, MessageCircle, MoreHorizontal, Paperclip, SmilePlus, Trash2, X } from 'lucide-react'
@@ -39,6 +39,8 @@ import { useComposerSelectionActions } from '@/components/editor/selection-issue
 import { IssueAgentTasks } from '@/components/agent/issue-agent-tasks'
 import { hasAgentThread, useAgentCommentThreadIds, useAgentThreadMessageCount, type AgentThreadControls } from '@/components/agent/issue-agent-task-context'
 import { getMostRecent, reconcileSelection, selectionFromRoute } from '@/components/activity/entity-activity-update-helper'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 
 export function ProjectActivity({ activities, drafts = [], issueData, project, projectUpdates, viewer, viewerRole, users, threadSubscriptions, onCommentProject, onUpdateProjectComment, onDeleteProjectComment, onReactProjectComment, onResolveProjectComment, onProjectCommentThreadSubscription, onCreateIssue, onCommentProjectUpdate, onCreateUpdate, onDeleteUpdate, onReactProjectUpdate, onUpdateProjectUpdate, onUploadProjectUpdateAttachment, onDeleteProjectUpdateAttachment }: ProjectDetailProps) {
   const parentDrafts = useMemo(() => ({
@@ -78,6 +80,7 @@ export function ProjectActivity({ activities, drafts = [], issueData, project, p
   // Projects created before the creator was recorded keep the lead/viewer fallback.
   const creator = project.creator ?? project.lead ?? viewer
   const { t, locale } = useI18n()
+  const phone = usePhoneLayout()
   const [editorKey, setEditorKey] = useState(0)
   const [agentOpen, setAgentOpen] = useState(false)
   const [history, setHistory] = useState<AuditLogEntry[]>([])
@@ -195,12 +198,19 @@ export function ProjectActivity({ activities, drafts = [], issueData, project, p
       <header><div aria-label="Post type" role="tablist"><button aria-selected={composerMode === 'comment'} onClick={() => switchComposerMode('comment')} role="tab" type="button">Comment</button><button aria-selected={composerMode === 'update'} onClick={() => switchComposerMode('update')} role="tab" type="button">Update</button></div>{composerMode === 'update' && <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={`project-activity__health is-${health}`} type="button"><HealthGlyph health={health}/>{healthLabel(health)}</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className="project-detail-page__menu project-activity__health-menu" sideOffset={4}>{PROJECT_HEALTHS.slice(0, 3).map(option => <DropdownMenu.Item aria-checked={health === option.id} key={option.id} onSelect={() => setHealth(option.id)}><span className={`project-activity__health-glyph is-${option.id}`}><HealthGlyph health={option.id}/></span><span>{option.label}</span></DropdownMenu.Item>)}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>}</header>
       <IssueDescriptionEditor className="project-activity__editor" key={`${composerMode}:${editorKey}`} users={users} ariaLabel={composerMode === 'comment' ? 'Project comment' : 'Project update'} value={body} state={composerMode === 'comment' && commentData ? JSON.stringify(commentData) : undefined} placeholder={composerMode === 'comment' ? 'Leave a comment…' : 'Write a project update…'} editorRef={setComposerEditor} selectionActions={composerSelectionActions} onInsertImage={uploadInlineMedia} onSubmit={() => void submit()} onChange={snapshot=>{setBody(snapshot.markdown);if(composerMode==='comment')setCommentData(snapshot.document as Record<string,unknown>)}}/>
       {files.length>0&&<div className="project-activity__files">{files.map((file,index)=><span key={`${file.name}-${index}`}><Paperclip size={12}/>{file.name}<button aria-label={`Remove ${file.name}`} onClick={()=>setFiles(current=>current.filter((_,item)=>item!==index))}><X size={11}/></button></span>)}</div>}
-      <footer>{composerMode === 'update' ? <button className="project-activity__agent" onClick={() => setAgentOpen(true)} type="button"><AgentWriteIcon size={14}/>Write with Agent</button> : <span/>}<div><button aria-label="Attach images, files, or videos" className="project-activity__attach" onClick={()=>fileRef.current?.click()} type="button"><Paperclip size={14}/></button><input ref={fileRef} hidden multiple type="file" onChange={event=>{const picked=Array.from(event.target.files??[]);if(composerMode==='comment')insertComposerFiles(picked);else setFiles(current=>[...current,...picked]);event.target.value=''}}/>{hasContent && <button className="project-activity__cancel" disabled={saving} onClick={cancel} type="button">Cancel</button>}<button className={hasContent ? 'is-submit is-primary' : 'is-submit'} disabled={!body.trim() || saving || pendingUploads > 0} onClick={() => void submit()} type="button">{saving ? 'Posting…' : composerMode === 'update' ? 'Post update' : 'Comment'}</button></div></footer>
+      <footer>{composerMode === 'update' ? <button className="project-activity__agent" onClick={() => setAgentOpen(true)} type="button"><AgentWriteIcon size={14}/>Write with Agent</button> : <span/>}<div><button aria-label="Attach images, files, or videos" className="project-activity__attach" onClick={()=>fileRef.current?.click()} type="button">{phone ? <FlowGlyph name="attach" size={14}/> : <Paperclip size={14}/>}</button><input ref={fileRef} hidden multiple type="file" onChange={event=>{const picked=Array.from(event.target.files??[]);if(composerMode==='comment')insertComposerFiles(picked);else setFiles(current=>[...current,...picked]);event.target.value=''}}/>{hasContent && <button className="project-activity__cancel" disabled={saving} onClick={cancel} type="button">Cancel</button>}<button className={hasContent ? 'is-submit is-primary' : 'is-submit'} disabled={!body.trim() || saving || pendingUploads > 0} onClick={() => void submit()} type="button">{saving ? 'Posting…' : composerMode === 'update' ? 'Post update' : 'Comment'}</button></div></footer>
     </section>
     {agentOpen && <Suspense fallback={null}><AgentChatPanel autoSubmit draftFence="update" draftCard={{ context: project.name, icon: <span className="project-activity__draft-health" style={{ color: healthColor(health) }}><HealthGlyph health={health}/></span>, title: 'Update draft', current: body }} initialPrompt={`${t('Help me write an update for this project:')} ${project.name}`} issues={[]} open onClose={() => setAgentOpen(false)} onDraft={draft => { setComposerMode('update'); setBody(draft); setCommentData(undefined); setEditorKey(key => key + 1) }} pageContext={{ type: 'project', id: project.id, label: project.name }}/></Suspense>}
 
     <div className="project-activity__feed">
-      {feed.map(item => item.type === 'update' ? <UpdateEntry key={item.update.id} renderAgentThread={renderAgentThread} onComment={(body, bodyData) => onCommentProjectUpdate(project.id, item.update.id, body, bodyData)} onDelete={() => setDeleteTarget(item.update)} onDeleteAttachment={attachmentId=>onDeleteProjectUpdateAttachment(project.id,item.update.id,attachmentId)} onEdit={() => setEditing(item.update)} onReact={emoji => onReactProjectUpdate(project.id, item.update.id, emoji)} update={item.update} changes={updateChanges.get(item.update.id) ?? []} viewerId={viewer.id}/> : <ProjectCommentCard canModerate={viewerRole === 'admin' || viewerRole === 'owner'} comment={item.comment} key={item.comment.id} renderAgentThread={renderAgentThread} replies={commentThreads.replies.get(item.comment.id) ?? []} threadState={threadSubscriptions?.find(entry => entry.projectId === project.id && entry.commentId === item.comment.id && entry.userId === viewer.id)?.state ?? null} users={users} viewerId={viewer.id} onNewIssue={comment => onCreateIssue(project.id, undefined, { description: comment.body })} onResolve={(commentId, resolved) => onResolveProjectComment(project.id, commentId, resolved)} onThreadSubscription={(commentId, state) => onProjectCommentThreadSubscription(project.id, commentId, state)} onDelete={commentId => onDeleteProjectComment(project.id, commentId)} onEdit={(commentId, body, bodyData) => onUpdateProjectComment(project.id, commentId, body, bodyData)} onReact={(commentId, emoji) => onReactProjectComment(project.id, commentId, emoji)} onReply={(body, bodyData) => onCommentProject(project.id, body, bodyData, item.comment.id)} onUpload={uploadInlineMedia}/>)}
+      {feed.map((item, index) => {
+        const month = monthKey(item.createdAt)
+        const previousMonth = index > 0 ? monthKey(feed[index - 1].createdAt) : ''
+        return <Fragment key={item.type === 'update' ? item.update.id : item.comment.id}>
+          {month && month !== previousMonth && <div className="project-activity__month"><span>{monthLabel(item.createdAt, locale)}</span></div>}
+          {item.type === 'update' ? <UpdateEntry renderAgentThread={renderAgentThread} onComment={(body, bodyData) => onCommentProjectUpdate(project.id, item.update.id, body, bodyData)} onDelete={() => setDeleteTarget(item.update)} onDeleteAttachment={attachmentId=>onDeleteProjectUpdateAttachment(project.id,item.update.id,attachmentId)} onEdit={() => setEditing(item.update)} onReact={emoji => onReactProjectUpdate(project.id, item.update.id, emoji)} update={item.update} changes={updateChanges.get(item.update.id) ?? []} viewerId={viewer.id}/> : <ProjectCommentCard canModerate={viewerRole === 'admin' || viewerRole === 'owner'} comment={item.comment} renderAgentThread={renderAgentThread} replies={commentThreads.replies.get(item.comment.id) ?? []} threadState={threadSubscriptions?.find(entry => entry.projectId === project.id && entry.commentId === item.comment.id && entry.userId === viewer.id)?.state ?? null} users={users} viewerId={viewer.id} onNewIssue={comment => onCreateIssue(project.id, undefined, { description: comment.body })} onResolve={(commentId, resolved) => onResolveProjectComment(project.id, commentId, resolved)} onThreadSubscription={(commentId, state) => onProjectCommentThreadSubscription(project.id, commentId, state)} onDelete={commentId => onDeleteProjectComment(project.id, commentId)} onEdit={(commentId, body, bodyData) => onUpdateProjectComment(project.id, commentId, body, bodyData)} onReact={(commentId, emoji) => onReactProjectComment(project.id, commentId, emoji)} onReply={(body, bodyData) => onCommentProject(project.id, body, bodyData, item.comment.id)} onUpload={uploadInlineMedia}/>}
+        </Fragment>
+      })}
       <ActivityPropertyTimeline events={propertyEvents}/>
     </div>
 
@@ -226,6 +236,17 @@ function UpdateEntry({ changes, onComment, onDelete, onDeleteAttachment, onEdit,
     <footer><button aria-label={`${commentCount} comments`} onClick={() => setCommentsOpen(value => !value)} type="button"><MessageCircle size={13}/>{commentCount || null}</button><EmojiPicker onSelect={async emoji => { await onReact(emoji) }}><button aria-label="Add reaction" type="button"><SmilePlus size={13}/></button></EmojiPicker></footer>
     {commentsOpen && <div className="project-activity__comments">{(update.comments ?? []).map(item => <CommentEntry comment={item} key={item.id}/>)}{agentThread && renderAgentThread ? renderAgentThread(threadIds) : <div className="project-activity__comment-box"><Avatar name="You"/><MentionTextField ariaLabel="Add comment" selectionActions={composerSelectionActions} onChange={(markdown, snapshot) => { setComment(markdown); setCommentData(snapshot.document as Record<string, unknown> | undefined) }} onSubmit={postComment} placeholder="Leave a comment…" value={comment}/><button disabled={!comment.trim()} onClick={postComment} type="button">Comment</button></div>}</div>}
   </article>
+}
+
+/** Month bucket for the phone activity feed's group headings. */
+function monthKey(value: string) {
+  const at = new Date(value)
+  return Number.isNaN(+at) ? '' : `${at.getFullYear()}-${at.getMonth()}`
+}
+
+function monthLabel(value: string, locale: string) {
+  const at = new Date(value)
+  return Number.isNaN(+at) ? '' : new Intl.DateTimeFormat(locale, { month: 'long' }).format(at)
 }
 
 /** The reference app's compact comment timestamp: "just now", "8min ago", "2h ago", "3d ago", then a date. */
@@ -289,6 +310,7 @@ function ProjectCommentCard({ comment, replies, users, viewerId, canModerate, th
   const [busy, setBusy] = useState(false)
   const [resolving, setResolving] = useState(false)
   const { locale, t } = useI18n()
+  const phone = usePhoneLayout()
   // The reference app: the author and repliers follow a thread implicitly; "muted" opts
   // a participant out and "subscribed" opts anyone else in.
   const participating = comment.user.id === viewerId || replies.some(reply => reply.user.id === viewerId)
@@ -301,7 +323,7 @@ function ProjectCommentCard({ comment, replies, users, viewerId, canModerate, th
     setResolving(true)
     try { await onResolve(comment.id, resolved) } catch { /* the caller reports the failure */ } finally { setResolving(false) }
   }
-  const menu = (item: Comment, iconSize?: number) => <ProjectCommentMenu body={item.body} canDelete={item.user.id === viewerId || canModerate} canEdit={item.user.id === viewerId} commentId={item.id} iconSize={iconSize} resolved={Boolean(comment.resolved)} thread={item.id === comment.id ? { following, onToggle: toggleThread } : undefined} triggerClassName="project-activity__comment-action" onDelete={() => setDeleting(item)} onEdit={() => setEditing(item.id)} onNewIssue={() => onNewIssue(item)} onResolve={item.id === comment.id ? () => void resolve(!comment.resolved) : undefined}/>
+  const menu = (item: Comment, iconSize?: number) => <ProjectCommentMenu body={item.body} canDelete={item.user.id === viewerId || canModerate} canEdit={item.user.id === viewerId} commentId={item.id} iconSize={iconSize} resolved={Boolean(comment.resolved)} phone={phone} thread={item.id === comment.id ? { following, onToggle: toggleThread } : undefined} triggerClassName="project-activity__comment-action" onDelete={() => setDeleting(item)} onEdit={() => setEditing(item.id)} onNewIssue={() => onNewIssue(item)} onResolve={item.id === comment.id ? () => void resolve(!comment.resolved) : undefined}/>
   const react = (commentId: string, emoji: string) => onReact(commentId, emoji).then(() => undefined, () => undefined)
   const agentThreads = useAgentCommentThreadIds()
   const threadIds = [comment.id, ...replies.map(reply => reply.id)]
@@ -324,7 +346,7 @@ function ProjectCommentCard({ comment, replies, users, viewerId, canModerate, th
       <time data-i18n-ignore dateTime={comment.createdAt} title={format(new Date(comment.createdAt), 'PPpp')}>{commentTimeLabel(comment.createdAt, locale)}</time>
       {comment.editedAt && <span className="project-activity__comment-edited">edited</span>}
       <div className="project-activity__comment-actions">
-        <EmojiPicker align="end" onSelect={emoji => react(comment.id, emoji)}><button aria-label="Add reaction" className="project-activity__comment-action" type="button"><SmilePlus size={16}/></button></EmojiPicker>
+        <EmojiPicker align="end" onSelect={emoji => react(comment.id, emoji)}><button aria-label="Add reaction" className="project-activity__comment-action" type="button">{phone ? <FlowGlyph name="reactionAdd" size={14}/> : <SmilePlus size={16}/>}</button></EmojiPicker>
         {menu(comment, 16)}
       </div>
     </header>
@@ -335,7 +357,7 @@ function ProjectCommentCard({ comment, replies, users, viewerId, canModerate, th
     </footer>
     {threadOpen && <div className="project-activity__thread">
       {replies.map(reply => <div className="project-activity__reply" data-activity-anchor={`comment-${reply.id}`} id={`comment-${reply.id}`} key={reply.id}>
-        <header><Avatar name={attributedActorName(reply.user, reply.botActor)} avatarUrl={attributedActorAvatar(reply.user, reply.botActor)}/><strong data-i18n-ignore>{attributedActorName(reply.user, reply.botActor)}</strong><ViaApp user={reply.user} botActor={reply.botActor}/><time data-i18n-ignore dateTime={reply.createdAt} title={format(new Date(reply.createdAt), 'PPpp')}>{commentTimeLabel(reply.createdAt, locale)}</time>{reply.editedAt && <span className="project-activity__comment-edited">edited</span>}<div className="project-activity__comment-actions"><EmojiPicker align="end" onSelect={emoji => react(reply.id, emoji)}><button aria-label="Add reaction" className="project-activity__comment-action" type="button"><SmilePlus size={14}/></button></EmojiPicker>{menu(reply, 14)}</div></header>
+        <header><Avatar name={attributedActorName(reply.user, reply.botActor)} avatarUrl={attributedActorAvatar(reply.user, reply.botActor)}/><strong data-i18n-ignore>{attributedActorName(reply.user, reply.botActor)}</strong><ViaApp user={reply.user} botActor={reply.botActor}/><time data-i18n-ignore dateTime={reply.createdAt} title={format(new Date(reply.createdAt), 'PPpp')}>{commentTimeLabel(reply.createdAt, locale)}</time>{reply.editedAt && <span className="project-activity__comment-edited">edited</span>}<div className="project-activity__comment-actions"><EmojiPicker align="end" onSelect={emoji => react(reply.id, emoji)}><button aria-label="Add reaction" className="project-activity__comment-action" type="button">{phone ? <FlowGlyph name="reactionAdd" size={14}/> : <SmilePlus size={14}/>}</button></EmojiPicker>{menu(reply, 14)}</div></header>
         {body(reply, 'project-activity__reply-body')}
         <ReactionPills reactions={reply.reactions} viewerId={viewerId} onToggle={emoji => react(reply.id, emoji)}/>
       </div>)}
@@ -352,19 +374,19 @@ function ProjectCommentCard({ comment, replies, users, viewerId, canModerate, th
 }
 
 function CommentEntry({ comment }: { comment: Comment }) { return <article className="project-activity__comment"><Avatar name={attributedActorName(comment.user, comment.botActor)} avatarUrl={attributedActorAvatar(comment.user, comment.botActor)}/><div><header><strong>{attributedActorName(comment.user, comment.botActor)}</strong><ViaApp user={comment.user} botActor={comment.botActor}/><time>{formatDistanceToNowStrict(new Date(comment.createdAt), { addSuffix: true })}</time></header><div className="project-activity__rich"><RichComment body={comment.body} data={comment.bodyData} version={comment.version}/></div></div></article> }
-function PropertyEvent({ actor, icon, reference, text, time }: { actor?: ActivityActor; icon?: ReactNode; reference?: ActivityRef; text: string; time: string }) {
+function PropertyEvent({ actor, created, icon, reference, text, time }: { actor?: ActivityActor; created?: boolean; icon?: ReactNode; reference?: ActivityRef; text: string; time: string }) {
   const { t } = useI18n()
   const chip = reference && <> <MentionReference id={reference.id} label={reference.label || t(REFERENCE_TYPE_LABEL[reference.type])} type={reference.type}/></>
   // Flow's agent rows show the agent's avatar where a property icon would be.
   const marker = icon ?? (actor?.onBehalfOf ? <span className="project-activity__event-avatar"><Avatar name={actor.name} avatarUrl={actor.avatarUrl}/></span> : <span className="project-activity__event-dot"/>)
   // The reference app bolds the actor and runs the date straight after the sentence.
-  return <div className="project-activity__event">{marker}<span>{actor ? <AttributedAction actor={actor}>{text}{chip}</AttributedAction> : <>{text}{chip}</>}<time> · {format(new Date(time), 'MMM d')}</time></span></div>
+  return <div className={created ? 'project-activity__event is-project-created' : 'project-activity__event'}>{marker}<span>{actor ? <AttributedAction actor={actor}>{text}{chip}</AttributedAction> : <>{text}{chip}</>}<time> · {format(new Date(time), 'MMM d')}</time></span></div>
 }
 
 type ProjectPropertyEvent = { id: string; icon?: ReactNode; actor?: ActivityActor; reference?: ActivityRef; text: string; time: string }
-// The reference app's project Activity tab lists events without month group headings.
+// Property events render as plain rows; the phone layout groups comments under month headings.
 function ActivityPropertyTimeline({ events }: { events: ProjectPropertyEvent[] }) {
-  return <>{events.map(event => <PropertyEvent actor={event.actor} icon={event.icon} key={event.id} reference={event.reference} text={event.text} time={event.time}/>)}</>
+  return <>{events.map(event => <PropertyEvent actor={event.actor} created={event.id === 'project-created'} icon={event.icon} key={event.id} reference={event.reference} text={event.text} time={event.time}/>)}</>
 }
 
 const PROPERTY_LABELS: Record<string, string> = { name: 'Name', status: 'Status', priority: 'Priority', lead: 'Lead', startDate: 'Start date', targetDate: 'Target date' }
