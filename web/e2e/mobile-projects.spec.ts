@@ -205,11 +205,13 @@ test.describe('mobile project activity', () => {
     expect((await request.patch(`http://127.0.0.1:4180/api/projects/${project.id}`, { headers, data: { initiatives: [initiativeId] } })).ok()).toBe(true)
     expect((await request.post(`http://127.0.0.1:4180/api/projects/${project.id}/comments`, { headers, data: { body: 'Comparison comment for layout checks.' } })).status()).toBe(201)
     expect((await request.post(`http://127.0.0.1:4180/api/projects/${project.id}/milestones`, { headers, data: { name: '[mobile] Alpha' } })).status()).toBe(201)
+    expect((await request.put(`http://127.0.0.1:4180/api/subscriptions/project/${project.id}`, { headers, data: { events: ['projectChanges'] } })).ok()).toBe(true)
 
     await page.goto(`/${workspaceKey}/project/${project.slugId}/activity`)
     await page.locator('.project-detail-page__toolbar-actions button[aria-label="Close project details"]').click()
 
     const near = (actual: number | undefined, expected: number) => actual !== undefined && Math.abs(actual - expected) <= 1
+    expect(await page.locator('.project-detail-page__header button[aria-label="Setup project notifications"] path').getAttribute('d')).toContain('13.8076')
     const composer = page.locator('.project-activity__composer')
     expect((await composer.boundingBox())?.x).toBe(16)
     expect(near((await composer.boundingBox())?.y, 125.5)).toBe(true)

@@ -90,6 +90,14 @@ describe('project detail header and tabs', () => {
     expect(screen.queryByText('insights panel')).not.toBeInTheDocument()
   })
 
+  it('swaps the notification bell for the bell-check glyph when the viewer subscribes', () => {
+    const { unmount } = renderPage()
+    expect(screen.getByRole('button', { name: 'Setup project notifications' }).querySelector('path')?.getAttribute('d')).not.toContain('13.8076')
+    unmount()
+    renderPage({ subscription: { id: 'subscription-1', userId: 'user-1', resourceType: 'project', resourceId: project.id, events: ['projectChanges'], createdAt: '2026-09-27T12:00:00.000Z' } })
+    expect(screen.getByRole('button', { name: 'Setup project notifications' }).querySelector('path')?.getAttribute('d')).toContain('13.8076')
+  })
+
   it('shows shortcut tooltips on the project tabs', async () => {
     const user = userEvent.setup(); renderPage()
     await user.hover(screen.getByRole('link', { name: 'Activity' }))
