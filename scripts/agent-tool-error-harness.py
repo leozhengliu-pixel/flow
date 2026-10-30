@@ -117,7 +117,7 @@ def main():
     endpoint = args.url.rstrip("/") + "/api/agent/sessions/stream?workspace=" + args.workspace
     for index, prompt in enumerate(PROMPTS[: max(1, min(args.limit, len(PROMPTS)))]):
         try:
-            with request(endpoint, {"message": prompt, "location": "harness"}) as response:
+            with request(endpoint, {"message": prompt, "location": "page"}) as response:
                 all_records.extend(parse_stream(response, prompt, index))
         except Exception as exc:  # keep the run useful when one stream/transport fails
             all_records.append({"prompt": prompt, "promptIndex": index, "name": "<transport>", "isError": True, "error": str(exc)})

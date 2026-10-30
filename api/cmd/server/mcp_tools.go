@@ -72,7 +72,9 @@ func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, a
 	if err != nil {
 		return nil, err
 	}
-	if name != "list_issues" && name != "count_issues" && name != "search_issues" && (strings.Contains(name, "issue") || strings.Contains(name, "comment") || strings.Contains(name, "attachment") || name == "save_release" || name == "create_reminder") {
+	// get_issue resolves and authorizes its target from the already scoped workspace data;
+	// hydrating the same id first adds a redundant point query to every detail read.
+	if name != "list_issues" && name != "count_issues" && name != "search_issues" && name != "get_issue" && (strings.Contains(name, "issue") || strings.Contains(name, "comment") || strings.Contains(name, "attachment") || name == "save_release" || name == "create_reminder") {
 		if err := s.hydrateMCPIssueArguments(ctx, actor, &data, args); err != nil {
 			return nil, err
 		}
@@ -647,6 +649,12 @@ func (s *server) pagedMCPIssues(ctx context.Context, actor mcpActor, data domain
 		page.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
 	}
 	if len(fields) > 0 {
+		customerRequestCounts := map[string]int{}
+		for _, request := range data.CustomerRequests {
+			if request.IssueID != "" && request.ArchivedAt == nil {
+				customerRequestCounts[request.IssueID]++
+			}
+		}
 		items := make([]map[string]any, 0, len(page.Items))
 		for _, issue := range page.Items {
 			var raw map[string]any
@@ -664,6 +672,18 @@ func (s *server) pagedMCPIssues(ctx context.Context, actor mcpActor, data domain
 			}
 			if slices.Contains(fields, "triageIntel") {
 				raw["triageIntel"] = activeIssueSuggestions(&data, issue.ID)
+			}
+			if slices.Contains(fields, "attachmentCount") {
+				raw["attachmentCount"] = len(issue.Attachments)
+			}
+			if slices.Contains(fields, "customerRequestCount") {
+				raw["customerRequestCount"] = customerRequestCounts[issue.ID]
+			}
+			if slices.Contains(fields, "subIssueCount") {
+				raw["subIssueCount"] = len(issue.SubIssueIDs)
+			}
+			if slices.Contains(fields, "hasChildren") {
+				raw["hasChildren"] = len(issue.SubIssueIDs) > 0
 			}
 			// Always carry the human identifier (e.g. ENG-12) so agents never cite internal ids.
 			projected := map[string]any{"id": issue.ID, "identifier": issue.Identifier}
@@ -771,6 +791,22 @@ func (s *server) applyMCPIssueFilters(ctx context.Context, q *store.IssueRecordQ
 			}
 		}
 		add("id", ids...)
+	}
+	for _, item := range []struct{ arg, field string }{{"hasAttachments", "hasLinks"}, {"hasSubIssues", "hasChildren"}} {
+		if hasBoolArg(args, item.arg) {
+			op := "isNotEmpty"
+			if !boolArg(args, item.arg) {
+				op = "isEmpty"
+			}
+			q.Filter.And = append(q.Filter.And, store.IssueFilter{Field: item.field, Operator: op})
+		}
+	}
+	if hasBoolArg(args, "hasCustomerRequests") {
+		value := "customer-count:gte:1"
+		if !boolArg(args, "hasCustomerRequests") {
+			value = "customer-count:0"
+		}
+		add("customers", value)
 	}
 	if hasNumberArg(args, "priority") {
 		add("priority", strconv.Itoa(intArg(args, "priority", 0)))

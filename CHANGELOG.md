@@ -15,6 +15,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Agent issue and cycle listing now supports an explicit `all` cycle filter, compact relationship counts and relationship-presence filters, avoiding per-issue detail fan-out; the tool harness uses a valid page location.
+
 - Agent tool calls now share reference, localized status/priority, and relative-date normalization across chat and MCP, with actionable resolution errors; the opt-in streaming regression harness is in `scripts/agent-tool-error-harness.py`.
 
 - Loops verify described issue targets before writing, cache semantic checks,

@@ -386,13 +386,13 @@
   {
     "name": "mcp__flow.list_cycles",
     "access": "read",
-    "description": "Retrieve cycles for a specific Flow team",
+    "description": "Retrieve cycles for a specific Flow team. Omit `type` or pass `all` to return every cycle; use `current`, `previous`, or `next` to narrow the result.",
     "input_schema": {
       "type": "object",
       "required": ["teamId"],
       "properties": {
         "teamId": { "type": "string", "description": "Team ID" },
-        "type": { "type": "string", "description": "Filter: current, previous, next, or all", "enum": ["current", "previous", "next"] }
+        "type": { "type": "string", "description": "Filter: all (default), current, previous, or next", "enum": ["all", "current", "previous", "next"] }
       }
     }
   },
@@ -454,7 +454,7 @@
   {
     "name": "mcp__flow.list_issues",
     "access": "read",
-    "description": "List issues in the user's Flow workspace, including active Triage Intelligence suggestions for issues in triage. For my issues, use \"me\" as the assignee. Use \"null\" for no assignee.",
+    "description": "List issues in the user's Flow workspace, including active Triage Intelligence suggestions for issues in triage. For my issues, use \"me\" as the assignee. Use \"null\" for no assignee. Use `fields` to request a compact projection; `attachmentCount`, `customerRequestCount`, `subIssueCount`, and `hasChildren` avoid fetching each issue individually. Use `hasAttachments`, `hasCustomerRequests`, or `hasSubIssues` to filter by those relationships.",
     "input_schema": {
       "type": "object",
       "required": [],
@@ -464,8 +464,11 @@
         "cursor": { "type": "string", "description": "Next page cursor" },
         "cycle": { "type": "string", "description": "Cycle name, number, or ID" },
         "delegate": { "type": "string", "description": "Agent name or ID. When the user asks to delegate to \"Flow\" or \"the Flow agent\", this refers to the \"Flow\" app user specifically" },
-        "fields": { "type": "array", "description": "Fields to include in each result. `id` and `identifier` are always included, and `priority` also returns `priorityLabel`. Omit or pass an empty array for the default response.", "items": { "type": "string", "enum": ["id", "title", "description", "projectMilestone", "priority", "estimate", "url", "gitBranchName", "createdAt", "updatedAt", "archivedAt", "completedAt", "startedAt", "canceledAt", "dueDate", "slaStartedAt", "slaMediumRiskAt", "slaHighRiskAt", "slaBreachesAt", "slaType", "status", "statusType", "labels", "triageIntel", "createdBy", "createdById", "assignee", "assigneeId", "delegate", "delegateId", "project", "projectId", "parentId", "team", "teamId", "cycleId"] } },
+        "fields": { "type": "array", "description": "Fields to include in each result. `id` and `identifier` are always included, and `priority` also returns `priorityLabel`. Relationship counts are compact: attachmentCount, customerRequestCount, subIssueCount, and hasChildren. Omit or pass an empty array for the default response.", "items": { "type": "string", "enum": ["id", "title", "description", "projectMilestone", "priority", "estimate", "url", "gitBranchName", "createdAt", "updatedAt", "archivedAt", "completedAt", "startedAt", "canceledAt", "dueDate", "slaStartedAt", "slaMediumRiskAt", "slaHighRiskAt", "slaBreachesAt", "slaType", "status", "statusType", "labels", "triageIntel", "createdBy", "createdById", "assignee", "assigneeId", "delegate", "delegateId", "project", "projectId", "parentId", "team", "teamId", "cycleId", "attachmentCount", "customerRequestCount", "subIssueCount", "hasChildren"] } },
         "includeArchived": { "type": "boolean", "description": "Include archived items" },
+        "hasAttachments": { "type": "boolean", "description": "Filter to issues with (true) or without (false) attachments" },
+        "hasCustomerRequests": { "type": "boolean", "description": "Filter to issues with (true) or without (false) customer requests" },
+        "hasSubIssues": { "type": "boolean", "description": "Filter to issues with (true) or without (false) sub-issues" },
         "label": { "type": "string", "description": "Label name or ID" },
         "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
         "orderBy": { "type": "string", "description": "Sort: createdAt | updatedAt", "enum": ["createdAt", "updatedAt"] },
@@ -493,6 +496,9 @@
         "cycle": { "type": "string", "description": "Cycle name, number, or ID" },
         "delegate": { "type": "string", "description": "Agent name or ID. When the user asks to delegate to \"Flow\" or \"the Flow agent\", this refers to the \"Flow\" app user specifically" },
         "includeArchived": { "type": "boolean", "description": "Include archived items" },
+        "hasAttachments": { "type": "boolean", "description": "Filter to issues with (true) or without (false) attachments" },
+        "hasCustomerRequests": { "type": "boolean", "description": "Filter to issues with (true) or without (false) customer requests" },
+        "hasSubIssues": { "type": "boolean", "description": "Filter to issues with (true) or without (false) sub-issues" },
         "label": { "type": "string", "description": "Label name or ID" },
         "parentId": { "type": "string", "description": "Parent issue ID or identifier (e.g., LIN-123)" },
         "priority": { "type": "integer", "minimum": 0, "maximum": 4, "description": "0=None, 1=Urgent, 2=High, 3=Medium, 4=Low" },
