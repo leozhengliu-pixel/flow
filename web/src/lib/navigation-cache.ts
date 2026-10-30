@@ -17,6 +17,23 @@ export interface CachedIssuePreview {
 
 const storagePrefix = 'flow:navigation:'
 const memory = new Map<string, NavigationCacheRecord>()
+// A hydrated snapshot has not been confirmed by a bootstrap yet. It may be used
+// for the first paint, but it must never replace a server snapshot on disk.
+const hydratedSnapshots = new WeakSet<BootstrapData>()
+
+export function markNavigationHydrated<T extends BootstrapData>(data: T): T {
+  hydratedSnapshots.add(data)
+  return data
+}
+
+export function isNavigationHydrated(data: BootstrapData | null | undefined): boolean {
+  return Boolean(data && hydratedSnapshots.has(data))
+}
+
+/** Keep a merged snapshot classified as cached until a real bootstrap replaces it. */
+export function carryNavigationHydration(from: BootstrapData | null | undefined, to: BootstrapData): BootstrapData {
+  return isNavigationHydrated(from) ? markNavigationHydrated(to) : to
+}
 
 function storageKey(viewerId: string, workspaceKey: string) {
   return `${storagePrefix}${viewerId}:${workspaceKey}`
@@ -60,6 +77,9 @@ export function toNavigationSnapshot(data: BootstrapData): BootstrapData {
     aiPromptProgress: [],
     agentActivities: [],
     agentSessions: data.agentSessions?.map(session => ({ ...session, messages: [] })) ?? [],
+    // The inbox is server-owned: a notification deleted elsewhere must not
+    // survive in this device's snapshot and reappear on the next reload.
+    notifications: [],
     notificationDeliveries: [],
     integrationDeliveries: [],
     auditLog: [],
@@ -96,6 +116,10 @@ export function readNavigationCache(viewerId: string, workspaceKey: string): Boo
 
 export function writeNavigationCache(viewerId: string, workspaceKey: string, data: BootstrapData): void {
   if (!viewerId || !workspaceKey || data.viewer.id !== viewerId || data.workspace.urlKey !== workspaceKey) return
+  // A snapshot read from this cache is older than whatever the server holds.
+  // Only a completed bootstrap (which produces a new, unmarked snapshot) may
+  // replace the stored one.
+  if (isNavigationHydrated(data)) return
   const record: NavigationCacheRecord = {
     viewerId,
     workspaceKey,
@@ -115,6 +139,7 @@ const pendingWrites = new Map<string, { data: BootstrapData; cancel: () => void 
 
 /** Same as writeNavigationCache, but the snapshot is serialised when the browser is idle. */
 export function writeNavigationCacheWhenIdle(viewerId: string, workspaceKey: string, data: BootstrapData): void {
+  if (isNavigationHydrated(data)) return
   const key = storageKey(viewerId, workspaceKey)
   pendingWrites.get(key)?.cancel()
   const run = () => {
@@ -199,10 +224,13 @@ export function hydrateWorkspaceNavigation({
 }): BootstrapData | null {
   if (current?.workspace.urlKey === requestedWorkspaceKey) return current
   if (!cached || cached.viewer.id !== viewerId || cached.workspace.urlKey !== requestedWorkspaceKey) return null
+  // Older builds stored notifications here. They may already be deleted on the
+  // server, so the inbox reconciles them from /api/notifications instead.
+  const hydrated = { ...cached, notifications: [] }
   if (preview?.viewerId === viewerId && preview.key.startsWith(`${requestedWorkspaceKey}:`) && !preview.issue.isSummary) {
-    return { ...cached, issues: mergeIssueRecords(cached.issues ?? [], [preview.issue]) }
+    return markNavigationHydrated({ ...hydrated, issues: mergeIssueRecords(hydrated.issues ?? [], [preview.issue]) })
   }
-  return cached
+  return markNavigationHydrated(hydrated)
 }
 
 /** Cache hydration can make the workspace look loaded; keep sharing the in-flight bootstrap. */

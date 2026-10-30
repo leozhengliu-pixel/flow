@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { makeBootstrap, makeIssue, viewer } from '@/test/fixtures'
 import { mergeWorkspaceDirectory } from '@/lib/issue-detail-cache'
 import {
+  carryNavigationHydration,
   clearNavigationCache,
   hydrateWorkspaceNavigation,
+  isNavigationHydrated,
+  markNavigationHydrated,
   readNavigationCache,
   toNavigationSnapshot,
   workspaceBootstrapPhase,
@@ -109,5 +112,35 @@ describe('navigation cache', () => {
     expect(merged.issues[0]).toMatchObject({ id: 'issue-1', description: 'Loaded body', isSummary: false, version: 4 })
     expect(readNavigationCache(viewer.id, 'workspace')?.issues[0]).toMatchObject({ id: 'issue-1', isSummary: true })
     expect(readNavigationCache(viewer.id, 'workspace')?.issues[0]?.description).toBeUndefined()
+  })
+
+  it('never stores inbox rows that the server may have deleted', () => {
+    const notification = { id: 'notification-1', recipientId: viewer.id, type: 'issueReminder' }
+    const data = makeBootstrap({ notifications: [notification] as never })
+    writeNavigationCache(viewer.id, 'workspace', data)
+    expect(toNavigationSnapshot(data).notifications).toEqual([])
+    expect(readNavigationCache(viewer.id, 'workspace')?.notifications).toEqual([])
+  })
+
+  it('drops notifications written by older builds when hydrating', () => {
+    const cached = makeBootstrap({ notifications: [{ id: 'notification-old', recipientId: viewer.id }] as never })
+    const hydrated = hydrateWorkspaceNavigation({ current: null, cached, requestedWorkspaceKey: 'workspace', viewerId: viewer.id })
+    expect(hydrated?.notifications).toEqual([])
+    expect(isNavigationHydrated(hydrated)).toBe(true)
+  })
+
+  it('does not persist a snapshot read from the cache over a server snapshot', () => {
+    const hydrated = markNavigationHydrated(makeBootstrap())
+    expect(isNavigationHydrated(hydrated)).toBe(true)
+    writeNavigationCache(viewer.id, 'workspace', hydrated)
+    expect(readNavigationCache(viewer.id, 'workspace')).toBeUndefined()
+
+    const merged = carryNavigationHydration(hydrated, makeBootstrap({ workspace: { ...hydrated.workspace, name: 'Renamed' } }))
+    expect(isNavigationHydrated(merged)).toBe(true)
+    writeNavigationCache(viewer.id, 'workspace', merged)
+    expect(readNavigationCache(viewer.id, 'workspace')).toBeUndefined()
+
+    writeNavigationCache(viewer.id, 'workspace', makeBootstrap({ workspace: { ...hydrated.workspace, name: 'Server' } }))
+    expect(readNavigationCache(viewer.id, 'workspace')?.workspace.name).toBe('Server')
   })
 })
