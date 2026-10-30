@@ -87,6 +87,7 @@
   .issue-options-item { height: 46px; padding: 0 12px; font-size: 15px !important; line-height: 22.5px; }
   .issue-options-item::before { inset: 0; }
   .issue-options-shortcut { display: none; }
+  .issue-options-chevron { display: none; }
   .issue-options-submenu { display: flex; flex-direction: column; }
   .issue-options-submenu > [cmdk-root] { min-height: 0; flex: 1; }
   .issue-options-mobile-back { height: 34px; flex: 0 0 34px; display: flex; align-items: center; gap: 8px; width: 100%; padding: 0 12px; border: 0; border-bottom: .5px solid var(--work-menu-border); background: transparent; color: var(--work-menu-muted); font: 13px var(--font); }
