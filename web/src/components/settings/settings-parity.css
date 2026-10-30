@@ -846,6 +846,7 @@ html:root .settings-app .settings-sidebar-footer { display: none; }
   }
   html:root .settings-app .settings-search { flex: 0 0 28px; margin: 0 12px; }
   html:root .settings-app .settings-search > svg { left: 10px; width: 16px; height: 16px; }
+  html:root .settings-app .settings-search > svg { color: var(--phone-icon-fg); }
   html:root .settings-app .settings-search input {
     background: var(--set-drawer-search-bg);
     border-color: var(--set-drawer-search-border);
@@ -923,6 +924,7 @@ html:root .settings-app .settings-sidebar-footer { display: none; }
   html:root .settings-app .settings-sidebar-footer .sidebar-help > svg,
   html:root .settings-app .settings-plan-button > svg { position: relative; }
   html:root .settings-app .settings-sidebar-footer .sidebar-help > svg { width: 14px; height: 14px; }
+  html:root .settings-app .settings-sidebar-footer .sidebar-help > svg { color: var(--phone-icon-fg); }
   html:root .settings-app .settings-plan-button {
     position: absolute;
     top: 10px;
@@ -944,6 +946,7 @@ html:root .settings-app .settings-sidebar-footer { display: none; }
     white-space: nowrap;
   }
   html:root .settings-app .settings-plan-button > svg { width: 16px; height: 16px; flex: none; }
+  html:root .settings-app .settings-plan-button > svg { color: var(--phone-icon-fg); }
   html:root .settings-app .settings-plan-button > span {
     position: relative;
     display: inline-flex;
