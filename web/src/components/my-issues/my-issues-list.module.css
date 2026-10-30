@@ -121,6 +121,8 @@
   .priorityTrigger svg{color:var(--bright);border-style:none;opacity:.5}
   .row[data-context="true"] .priorityTrigger svg{opacity:.3}
   .row[data-context="true"] .title{opacity:.6}
+  .row[data-context="true"] .estimateChip{opacity:.6}
+  .row[data-context="true"] .subIssueProgress{opacity:.6}
   .title{line-height:normal;color:var(--bright);border-style:none}
   .titleProperties{padding-right:18px}
   .groupHeader{padding-left:0;border-style:none}

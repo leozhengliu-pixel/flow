@@ -50,6 +50,9 @@
   .issue-view .issue-mobile-properties .issue-project-property { display: flex; flex-wrap: wrap; gap: 6px; }
   .issue-view .issue-mobile-properties :is(.issue-project-row,.issue-milestone-row) { margin: 0; padding: 0; min-height: 0; }
   .issue-view .issue-mobile-properties .issue-project-open { display: none; }
+  .issue-view .issue-empty-sub-issue-action { color: var(--issue-muted); }
+  .issue-view .issue-empty-sub-issue-action > svg { color: var(--text); }
+  .issue-view .issue-mobile-relations-trigger > span { color: var(--text); }
   .issue-view .issue-mobile-properties .issue-due-date-row { margin: 0; }
   .issue-view .issue-description-root { margin-top: 22px; }
   .issue-view .issue-description-root .description-editor { margin-top: 0; }

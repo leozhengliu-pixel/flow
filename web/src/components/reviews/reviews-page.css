@@ -737,7 +737,7 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-mobile-row .review-sidebar-button.is-strong{height:28px;padding:0 8px 0 4px}
   html:root body .app .review-mobile-row .review-sidebar-button.is-muted{color:var(--text);padding:0 8px 0 6px}
   html:root body .app .review-mobile-row .review-sidebar-button.is-muted>span{color:var(--issue-muted)}
-  html:root body .app .review-mobile-row .review-sidebar-button.is-muted svg{margin:0 4.5px 0 .5px;color:var(--issue-muted)}
+  html:root body .app .review-mobile-row .review-sidebar-button.is-muted svg{margin:0 4.5px 0 .5px;color:var(--text)}
   html:root body .app .review-mobile-row .review-sidebar-button>span{font:450 12px/normal var(--font);color:var(--text)}
   html:root body .app .review-mobile-row .review-sidebar-button.is-strong>span{font-weight:500}
   html:root body .app .review-mobile-row .review-sidebar-button.is-strong svg{color:var(--issue-muted)}

@@ -1166,13 +1166,14 @@
   html:root body .app .flow-inbox-detail__body--full-bleed .issue-empty-sub-issue-action {
     gap: 0;
     border: .5px solid transparent;
-    color: var(--text);
+    color: var(--issue-muted);
     box-shadow: none;
     font-size: 12px;
     font-weight: 500;
     line-height: normal;
     font-family: inherit;
   }
+  html:root body .app .flow-inbox-detail__body--full-bleed .issue-empty-sub-issue-action svg { color: var(--text); }
   html:root body .app .flow-inbox-detail__body--full-bleed .issue-empty-sub-issue-row + .activity-heading { margin-top: 44.5px; }
   html:root body .app .flow-inbox-detail__body--full-bleed .activity-heading { border: 0; }
   html:root body .app .flow-inbox-detail__body--full-bleed .activity-heading > span { border-style: none; }
