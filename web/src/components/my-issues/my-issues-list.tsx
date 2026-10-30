@@ -1,4 +1,5 @@
 import { memo, useContext, useEffect, useInsertionEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { useI18n } from '@/i18n/i18n'
 import { Virtuoso, type Components } from 'react-virtuoso'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -329,7 +330,8 @@ function useSelectHoveredRowWithX(entries: MyIssuesListEntry[], selectedIds: Rea
 
 /** The reference phone "No priority" glyph: three short bars (the sprite glyph is used at other widths). */
 function PhoneNoPriorityIcon() {
-  return <svg className="priority priority-0" width={16} height={16} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+  const { t } = useI18n()
+  return <svg className="priority priority-0" width={16} height={16} viewBox="0 0 16 16" fill="currentColor" role="img" aria-label={t('No Priority')}>
     <rect x="1.5" y="7.25" width="3" height="1.5" rx="0.5" opacity="0.9"/>
     <rect x="6.5" y="7.25" width="3" height="1.5" rx="0.5" opacity="0.9"/>
     <rect x="11.5" y="7.25" width="3" height="1.5" rx="0.5" opacity="0.9"/>
