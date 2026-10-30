@@ -42,7 +42,7 @@ export function StatusPicker({ value, states, onChange, hoverHistory, triage = f
   /></div>
 }
 
-export function PriorityPicker({ value, onChange }: { value: number; onChange: (value: number) => void | Promise<void> }) {
+export function PriorityPicker({ value, onChange, emptyTriggerLabel = 'Set priority' }: { value: number; onChange: (value: number) => void | Promise<void>; emptyTriggerLabel?: string }) {
   const labels = ['No priority', 'Urgent', 'High', 'Medium', 'Low']
   const options = labels.map((label, priority) => ({ id: String(priority), label, icon: <PriorityIcon priority={priority} size={16}/>, shortcut: String(priority) }))
   return <div className="core-property-picker"><PropertyMenu
@@ -54,7 +54,7 @@ export function PriorityPicker({ value, onChange }: { value: number; onChange: (
     searchShortcut="P"
     ariaLabel={`Change priority. ${value ? `${labels[value]} is selected` : 'No priority is selected'}`}
     triggerClassName={`core-property-trigger${value === 0 ? ' muted' : ''}`}
-    trigger={<><PriorityIcon priority={value}/><span>{value ? labels[value] : 'Set priority'}</span></>}
+    trigger={<><PriorityIcon priority={value}/><span>{value ? labels[value] : emptyTriggerLabel}</span></>}
     hoverContent={<PropertyShortcutTooltip label="Change priority" shortcut="P"/>}
     onChange={id => onChange(Number(id))}
   /></div>
@@ -345,7 +345,7 @@ export function IssueAssigneeMenu({ people, assignee, delegate, viewerId, trigge
  * NestingLine, so this trigger shows only the human ("Assign" when none). Compact surfaces (mobile chips, peek)
  * stack the delegate's avatar after the assignee's in the trigger. Both open `IssueAssigneeMenu`.
  */
-export function AssigneePicker({ value, delegate, users, onChange, onDelegate, onRemoveAgent, onInvite = openMemberInvite, teamId, hoverContext, allowAgents = true, delegateRow = false, delegateSessionActive = false }: { value?: User; delegate?: User; users: User[]; onChange: (id: string) => void | Promise<void>; onDelegate?: (id: string) => void | Promise<void>; onRemoveAgent?: () => void | Promise<void>; onInvite?: () => void; teamId?: string; hoverContext?: { member?: WorkspaceMember; online?: boolean; workspaceName: string; project?: ProjectSummary }; allowAgents?: boolean; delegateRow?: boolean; delegateSessionActive?: boolean }) {
+export function AssigneePicker({ value, delegate, users, onChange, onDelegate, onRemoveAgent, onInvite = openMemberInvite, teamId, hoverContext, allowAgents = true, delegateRow = false, delegateSessionActive = false, emptyTriggerLabel = 'Assign' }: { value?: User; delegate?: User; users: User[]; onChange: (id: string) => void | Promise<void>; onDelegate?: (id: string) => void | Promise<void>; onRemoveAgent?: () => void | Promise<void>; onInvite?: () => void; teamId?: string; hoverContext?: { member?: WorkspaceMember; online?: boolean; workspaceName: string; project?: ProjectSummary }; allowAgents?: boolean; delegateRow?: boolean; delegateSessionActive?: boolean; emptyTriggerLabel?: string }) {
   const { t } = useI18n()
   useUserPreferences()
   const candidates = assigneeCandidates(users, teamId, { agents: allowAgents })
@@ -356,7 +356,7 @@ export function AssigneePicker({ value, delegate, users, onChange, onDelegate, o
   const stacked = Boolean(delegate && !delegateRow)
   const trigger = stacked && delegate
     ? <><span className="core-assignee-stack">{value && avatar(value)}{avatar(delegate)}</span><span data-i18n-ignore>{delegate.displayName}</span></>
-    : value ? <>{avatar(value)}<span data-i18n-ignore>{assigneeName}</span></> : <><NoAssigneeIcon size={15}/><span>{t('Assign')}</span></>
+    : value ? <>{avatar(value)}<span data-i18n-ignore>{assigneeName}</span></> : <><NoAssigneeIcon size={15}/><span>{t(emptyTriggerLabel)}</span></>
   return <div className="core-property-picker"><IssueAssigneeMenu
     ariaLabel={t(label)}
     assignee={value}
