@@ -96,4 +96,5 @@
 /* Estimate chip on rows ("△ 5", 12px 450 in the muted colour) and the group total ("Todo 2 △ 8", 13px 450). */
 .estimateChip{box-sizing:border-box;height:24px;padding:0 8px;border:.5px solid var(--theme-border-strong);border-radius:48px;background:var(--theme-surface-1);color:var(--issue-muted)}
 .groupEstimate:global(.estimate-chip){gap:4px;color:var(--estimate-group-total);font-size:13px;font-weight:450}
-.submenuItem>:global(.estimate-icon){flex:0 0 16px}
+.submenuItem>:global(.estimate-icon){flex:0 0 16px;color:var(--pk-muted)}
+.submenuItem[data-highlighted]>:global(.estimate-icon){color:var(--pk-text-strong)}

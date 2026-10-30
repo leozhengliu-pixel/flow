@@ -330,7 +330,7 @@ function issueCommands({ context, data, page, query, handlers, close, t, refs, i
     }
     if (page.id === 'estimate') {
       const current = same(issue => issue.estimate ?? -1)
-      return estimatePickerOptions(teamSettings).map(option => ({ id: option.id, label: option.label, icon: <EstimateValueIcon value={option.value} settings={teamSettings}/>, current: current === option.value, select: choose(() => apply({ estimate: option.value })) }))
+      return estimatePickerOptions(teamSettings).map(option => ({ id: option.id, label: option.label, icon: <EstimateValueIcon value={option.value}/>, current: current === option.value, select: choose(() => apply({ estimate: option.value })) }))
     }
     if (page.id === 'team') {
       return data.teams.filter(team => !team.archivedAt).map(team => ({ id: team.id, label: team.name, entity: true, keywords: team.key, icon: <TeamIcon team={team}/>, current: oneTeam === team.id, select: choose(() => apply({ teamId: team.id })) }))
@@ -419,4 +419,3 @@ function addDays(date: Date, days: number) { const next = new Date(date); next.s
 function endOfWorkWeek(date: Date) { return addDays(date, (5 - date.getDay() + 7) % 7) }
 function isoDate(date: Date) { const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000); return local.toISOString().slice(0, 10) }
 function formatShortDate(value: string) { const [year, month, day] = value.split('-').map(Number); return new Date(year, month - 1, day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }
-

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { estimateBulkValues, estimateIconLevel, estimateLabel, estimateOnTeamScale, estimatePickerOptions, estimatePoints, estimateScaleDetails, estimateShortLabel, estimateValues, formatEstimatePoints, sumEstimatePoints, teamUsesEstimates, unestimatedValue } from './estimates'
+import { estimateBulkValues, estimateLabel, estimateOnTeamScale, estimatePickerOptions, estimatePoints, estimateScaleDetails, estimateShortLabel, estimateValues, formatEstimatePoints, sumEstimatePoints, teamUsesEstimates, unestimatedValue } from './estimates'
 
 describe('estimates', () => {
   it('builds each scale with optional zero and extended values', () => {
@@ -35,12 +35,6 @@ describe('estimates', () => {
     expect(sumEstimatePoints([{ teamId: 'off', estimate: 8 }], id => settings[id as keyof typeof settings])).toBeUndefined()
     expect(teamUsesEstimates({ estimateType: 'notUsed' })).toBe(false)
     expect(formatEstimatePoints(2.25)).toBe('2.3')
-  })
-
-  it('fills the estimate icon in thirds of the scale', () => {
-    const fibonacci = { estimateType: 'fibonacci' as const }
-    expect([undefined, 0, 1, 2, 3, 5, 8].map(value => estimateIconLevel(value, fibonacci))).toEqual([0, 0, 1, 2, 2, 3, 3])
-    expect(estimateIconLevel(16, { estimateType: 'exponential' })).toBe(3)
   })
 
   it('offers a distinct "No estimate" option and counts unestimated as 1 by default', () => {

@@ -55,7 +55,7 @@ export function IssueRowEstimateItem({ row }: { row: MyIssuesRowData }) {
   const update = (estimate: number) => void context.onUpdateIssue(row.id, { estimate }).catch(() => toast.error('Could not update issue'))
   return <Sub label="Estimate" shortcut="⇧ E">
     <Item label="No estimate" icon={<EstimateIcon none/>} checked={current === undefined || current === null || current < 0} onSelect={() => update(-1)}/>
-    {values.map(value => <Item key={value} label={estimateLabel(value, type)} icon={<EstimateValueIcon value={value} settings={settings}/>} checked={current === value} onSelect={() => update(value)}/>)}
+    {values.map(value => <Item key={value} label={estimateLabel(value, type)} icon={<EstimateValueIcon value={value}/>} checked={current === value} onSelect={() => update(value)}/>)}
   </Sub>
 }
 
