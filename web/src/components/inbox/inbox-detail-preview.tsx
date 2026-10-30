@@ -7,9 +7,10 @@ import { MentionBody } from '@/components/editor/mentions/mention-body'
 import { IssueOptionsMenu } from '@/components/issue/issue-options-menu'
 import { RelationPicker } from '@/components/issue/relation-picker'
 import { PulseIcon } from '@/components/pulse/pulse-icon'
-import { FlowBranchIcon, FlowIssueIdIcon, FlowUrlIcon } from '@/components/issue/flow-header-icons'
-import { SidebarIcon } from '@/components/ui/view-action-icons'
+import { FlowBellCheckIcon, FlowBellIcon, FlowBranchIcon, FlowFavoriteFilledIcon, FlowFavoriteIcon, FlowIssueIdIcon, FlowOptionsIcon, FlowUrlIcon } from '@/components/issue/flow-header-icons'
 import { configuredIssueBranch } from '@/lib/issue-work-actions'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
+import { DeleteInboxIcon } from './inbox-page-shell'
 import type { Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 
 import { InboxCustomSnoozeForm, type InboxNotificationRowData, type InboxSnoozePreset } from './notification-row'
@@ -46,6 +47,7 @@ export interface InboxDetailPreviewProps {
 
 export function InboxDetailPreview(props: InboxDetailPreviewProps) {
   const { notification } = props
+  const phone = usePhoneLayout()
   const pulse = notification.kind === 'pulse'
   const identifier = notification.identifier?.trim() || (pulse ? '' : 'Issue')
   const title = notification.title?.trim() || 'Untitled issue'
@@ -72,7 +74,7 @@ export function InboxDetailPreview(props: InboxDetailPreviewProps) {
       onFavoriteChange={() => props.onFavoriteChange(notification, !notification.favorite)}
       onRemind={() => setSnoozeOpen(true)}
       onShowDescriptionHistory={() => setHistoryOpen(true)}
-      trigger={<DetailIconButton data-detail-action="issue-options" disabled={props.pending} label="Issue options"><MoreDetailIcon /></DetailIconButton>}
+      trigger={<DetailIconButton data-detail-action="issue-options" disabled={props.pending} label="Issue options"><FlowOptionsIcon /></DetailIconButton>}
     />
   ) : <DetailOptionsFallback {...props} />
 
@@ -80,7 +82,7 @@ export function InboxDetailPreview(props: InboxDetailPreviewProps) {
     <article className="flow-inbox-detail" aria-label={identifier ? `${identifier} ${title}` : title} aria-busy={props.pending || undefined}>
       {props.chromeless ? null : <header className="flow-inbox-detail__header">
         <button className="flow-inbox-detail__icon-button flow-inbox-detail__menu" type="button" aria-label="Open sidebar" onClick={() => window.dispatchEvent(new Event('flow:open-sidebar'))}>
-          <SidebarIcon />
+          <SidebarNavigationIcon />
         </button>
         <button className="flow-inbox-detail__back" type="button" aria-label="Back to Inbox" onClick={props.onBack}>
           <BackIcon />
@@ -96,11 +98,11 @@ export function InboxDetailPreview(props: InboxDetailPreviewProps) {
           </button>
         )}
         <div className="flow-inbox-detail__actions">
-          <DetailIconButton data-detail-action="favorite" disabled={props.pending} label={notification.favorite ? 'Remove from favorites' : 'Add to favorites'} pressed={notification.favorite} onClick={() => props.onFavoriteChange(notification, !notification.favorite)}><StarIcon /></DetailIconButton>
+          <DetailIconButton data-detail-action="favorite" disabled={props.pending} label={notification.favorite ? 'Remove from favorites' : 'Add to favorites'} pressed={notification.favorite} onClick={() => props.onFavoriteChange(notification, !notification.favorite)}>{phone ? (notification.favorite ? <FlowFavoriteFilledIcon /> : <FlowFavoriteIcon />) : <StarIcon />}</DetailIconButton>
           {issueOptions}
-          {props.onSubscribeChange && !pulse ? <DetailIconButton data-detail-action="subscription" disabled={props.pending} label={props.subscribed ? 'Unsubscribe from issue' : 'Subscribe to issue'} pressed={props.subscribed} onClick={() => props.onSubscribeChange?.(notification, !props.subscribed)}><BellIcon /></DetailIconButton> : null}
-          <DetailSnoozeMenu notification={notification} onSnooze={props.onSnooze} pending={props.pending} open={snoozeOpen} onOpenChange={setSnoozeOpen} />
-          <DetailIconButton data-detail-action="delete" disabled={props.pending} label="Delete notification" onClick={() => props.onDelete(notification)}><DeleteDetailIcon /></DetailIconButton>
+          {props.onSubscribeChange && !pulse ? <DetailIconButton data-detail-action="subscription" disabled={props.pending} label={props.subscribed ? 'Unsubscribe from issue' : 'Subscribe to issue'} pressed={props.subscribed} onClick={() => props.onSubscribeChange?.(notification, !props.subscribed)}>{phone ? <span className="flow-inbox-detail__bell"><span className="flow-inbox-detail__bell-plain"><FlowBellIcon /></span><span className="flow-inbox-detail__bell-check"><FlowBellCheckIcon /></span></span> : <BellIcon />}</DetailIconButton> : null}
+          <DetailSnoozeMenu notification={notification} onSnooze={props.onSnooze} pending={props.pending} open={snoozeOpen} onOpenChange={setSnoozeOpen} phone={phone} />
+          <DetailIconButton data-detail-action="delete" disabled={props.pending} label="Delete notification" onClick={() => props.onDelete(notification)}>{phone ? <DeleteInboxIcon /> : <DeleteDetailIcon />}</DetailIconButton>
         </div>
         {props.issue ? <IssueDetailCopyStrip issue={props.issue} /> : null}
       </header>}
@@ -127,7 +129,7 @@ function IssueDetailCopyStrip({ issue }: { issue: Issue }) {
 function DetailOptionsFallback(props: InboxDetailPreviewProps) {
   const { notification } = props
   const pulse = notification.kind === 'pulse'
-  return <DropdownMenu.Root modal={false}><DropdownMenu.Trigger asChild><DetailIconButton data-detail-action="issue-options" disabled={props.pending} label={pulse ? 'Notification options' : 'Issue options'}><MoreDetailIcon /></DetailIconButton></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className={`flow-inbox-menu flow-inbox-detail-menu${pulse ? ' flow-inbox-detail-menu--pulse' : ''}`} align="end" sideOffset={4}>
+  return <DropdownMenu.Root modal={false}><DropdownMenu.Trigger asChild><DetailIconButton data-detail-action="issue-options" disabled={props.pending} label={pulse ? 'Notification options' : 'Issue options'}><FlowOptionsIcon /></DetailIconButton></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className={`flow-inbox-menu flow-inbox-detail-menu${pulse ? ' flow-inbox-detail-menu--pulse' : ''}`} align="end" sideOffset={4}>
     <DetailMenuItem shortcut="U" onSelect={() => props.onReadChange(notification, !notification.read)}>{notification.read ? 'Mark as unread' : 'Mark as read'}</DetailMenuItem>
     {pulse && props.onPulseFrequencyChange ? <PulseFrequencyDropdownSubmenu value={props.pulseFrequency ?? 'daily'} disabled={props.pending} onChange={frequency => void props.onPulseFrequencyChange?.(frequency)} /> : null}
     {props.onCopyLink && !pulse ? <DetailMenuItem onSelect={() => props.onCopyLink?.(notification)}>Copy issue URL</DetailMenuItem> : null}
@@ -135,7 +137,7 @@ function DetailOptionsFallback(props: InboxDetailPreviewProps) {
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 
-function DetailSnoozeMenu({ notification, onSnooze, pending, open, onOpenChange }: Pick<InboxDetailPreviewProps, 'notification' | 'onSnooze' | 'pending'> & { open: boolean; onOpenChange: (open: boolean) => void }) {
+function DetailSnoozeMenu({ notification, onSnooze, pending, open, onOpenChange, phone }: Pick<InboxDetailPreviewProps, 'notification' | 'onSnooze' | 'pending'> & { open: boolean; onOpenChange: (open: boolean) => void; phone: boolean }) {
   const [custom, setCustom] = useState(false)
   const items: Array<[Exclude<InboxSnoozePreset, { kind: 'custom' }>, string]> = [['hour','An hour from now'],['tomorrow','Tomorrow'],['nextWeek','Next week'],['month','A month from now']]
   const close = () => {
@@ -147,7 +149,7 @@ function DetailSnoozeMenu({ notification, onSnooze, pending, open, onOpenChange 
     setShownId(notification.id)
     setCustom(false)
   }
-  return <DropdownMenu.Root modal={false} open={open} onOpenChange={(nextOpen) => { onOpenChange(nextOpen); if (!nextOpen) setCustom(false) }}><DropdownMenu.Trigger asChild><DetailIconButton data-detail-action="snooze" disabled={pending} label="Snooze notification"><ClockIcon /></DetailIconButton></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="flow-inbox-menu flow-inbox-detail-snooze" align="end" sideOffset={4}>
+  return <DropdownMenu.Root modal={false} open={open} onOpenChange={(nextOpen) => { onOpenChange(nextOpen); if (!nextOpen) setCustom(false) }}><DropdownMenu.Trigger asChild><DetailIconButton data-detail-action="snooze" disabled={pending} label="Snooze notification">{phone ? <SnoozeClockIcon /> : <ClockIcon />}</DetailIconButton></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="flow-inbox-menu flow-inbox-detail-snooze" align="end" sideOffset={4}>
     {custom ? <InboxCustomSnoozeForm disabled={pending} onCancel={() => setCustom(false)} onConfirm={(preset) => { onSnooze(notification, preset); close() }} /> : <>
       <div className="flow-inbox-menu__search-wrap flow-inbox-menu__search-wrap--passive"><span>Try: 4 pm, 2 days, in 5 weeks…</span></div>
       <div className="flow-inbox-menu__separator" />
@@ -202,7 +204,9 @@ export function InboxDetailError({ onRetry }: { onRetry: () => void }) {
 
 function BackIcon(){return <svg viewBox="0 0 16 16"><path d="m10 3-5 5 5 5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
 function StarIcon(){return <svg viewBox="0 0 16 16"><path d="m8 2 1.8 3.6 4 .6-2.9 2.8.7 4L8 11.1 4.4 13l.7-4-2.9-2.8 4-.6L8 2Z" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>}
-function MoreDetailIcon(){return <svg viewBox="0 0 16 16"><path d="M3 6.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z" /></svg>}
 function BellIcon(){return <svg viewBox="0 0 16 16"><path d="M3.5 11h9l-1-1.7V6a3.5 3.5 0 1 0-7 0v3.3L3.5 11Zm3 2h3" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>}
 function ClockIcon(){return <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M8 4.8v3.4l2.2 1.3" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>}
 function DeleteDetailIcon(){return <svg viewBox="0 0 16 16"><path d="M3 4.5h10M6 2.5h4m-6 2 .6 9h6.8l.6-9M6.5 7v4m3-4v4" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>}
+/** The reference sidebar toggle: a rounded frame with the 1.5px navigation bar inside. */
+function SidebarNavigationIcon(){return <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" clipRule="evenodd" d="M4.25 2C2.45508 2 1 3.45508 1 5.25V10.75C1 12.5449 2.45508 14 4.25 14H11.75C13.5449 14 15 12.5449 15 10.75V5.25C15 3.45508 13.5449 2 11.75 2H4.25ZM2.5 5.5C2.5 4.39543 3.39543 3.5 4.5 3.5H11.5C12.6046 3.5 13.5 4.39543 13.5 5.5V10.5C13.5 11.6046 12.6046 12.5 11.5 12.5H4.5C3.39543 12.5 2.5 11.6046 2.5 10.5V5.5Z" /><rect x="4" y="5" width="1.5" height="6" rx=".75" /></svg>}
+function SnoozeClockIcon(){return <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M8 4.6V8h3" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>}

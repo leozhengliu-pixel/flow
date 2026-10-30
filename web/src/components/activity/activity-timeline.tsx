@@ -17,7 +17,9 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n/i18n'
 import { useCurrentTimeMs } from '@/hooks/use-current-time'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { CalendarIcon, CycleIcon, LabelIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
+import { issuePath } from '@/lib/app-routes'
 import { activityTimeLabel, coalesceIssueEvents, describeIssueActivityParts, withoutSessionDelegations, issueEventFieldCount, type ActivityContext, type ActivityPart } from './issue-activity-model'
 import { MentionReference } from '@/components/editor/mentions/mention-reference'
 import { IntegrationBrandIcon } from '@/components/settings/integration-brand-icon'
@@ -358,7 +360,12 @@ const ACTORLESS_ACTIVITY = new Set(['issue.coding_session_archived'])
 
 function ActivityRow({ event, description, context, now }: { event: ActivityEvent; description: ActivityPart[]; context?: ActivityContext; now: number }) {
   const { locale } = useI18n()
-  const sentence = description.map((part, index) => typeof part === 'string' ? part : <MentionReference key={`${index}-${part.type}-${part.id}`} id={part.id} label={part.label} type={part.type}/>)
+  const phone = usePhoneLayout()
+  const relationType = event.type === 'issue.relation_added' ? event.metadata?.type : undefined
+  const inlineRelation = phone && event.type === 'issue.relation_added' && (!relationType || relationType === 'related')
+  const sentence = description.map((part, index) => typeof part === 'string' ? part : inlineRelation && part.type === 'issue' && context?.workspace
+    ? (() => { const target = context.issues.find(issue => issue.id === part.id); return target ? <a key={`${index}-${part.type}-${part.id}`} className="activity-relation-link" href={issuePath(context.workspace.urlKey, target)}><b>{target.identifier}</b> {target.title}</a> : part.label })()
+    : <MentionReference key={`${index}-${part.type}-${part.id}`} id={part.id} label={part.label} type={part.type}/>)
   return (
     <p className="activity-row" data-i18n-ignore>
       {ACTORLESS_ACTIVITY.has(event.type) && !event.metadata?.archivedBy ? sentence : <AttributedAction actor={activityActor(event.actor, event.botActor, context?.users)}>{sentence}</AttributedAction>}
@@ -373,6 +380,7 @@ function ActivityRow({ event, description, context, now }: { event: ActivityEven
 }
 
 function ActivityEventIcon({ event, context }: { event: ActivityEvent; context?: ActivityContext }) {
+  const phone = usePhoneLayout()
   const m = event.metadata ?? {}
   // Like the reference app, a row that changed several fields shows who did it rather than one field's icon.
   if (event.type === 'issue.updated' && issueEventFieldCount(event) < 2) {
@@ -401,9 +409,22 @@ function ActivityEventIcon({ event, context }: { event: ActivityEvent; context?:
   // A code host's own change (a closed pull request unassigned the agent): the host's mark.
   if (event.botActor?.type === 'integration') return <IntegrationBrandIcon provider={event.botActor.id === 'gitlab' ? 'gitlab' : 'github'} size={14}/>
   if (event.type.startsWith('attachment.')) return <Paperclip size={14} />
-  if (event.type.includes('relation') || event.type.includes('review')) return <Link2 size={14} />
+  if (event.type.includes('relation')) {
+    const type = event.metadata?.type
+    return phone && (!type || type === 'related') ? <RelatedIssueIcon /> : <Link2 size={14} />
+  }
+  if (event.type.includes('review')) return <Link2 size={14} />
   const actor = activityActor(event.actor, event.botActor, context?.users)
   return <Avatar name={actor.name} avatarUrl={actor.avatarUrl} />
+}
+
+/** The reference relation glyph: a rounded issue frame with a flag. */
+function RelatedIssueIcon() {
+  return <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M9 2.5H5.25A2.75 2.75 0 0 0 2.5 5.25v5.5a2.75 2.75 0 0 0 2.75 2.75H8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    <path d="M9 2.5h1.75A2.75 2.75 0 0 1 13.5 5.25v1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    <path d="M8.5 6.9H13.9V12H12L11.4 10.9 10.8 12H8.5V13.5Z" fill="currentColor"/>
+  </svg>
 }
 
 export function CommentMenu({

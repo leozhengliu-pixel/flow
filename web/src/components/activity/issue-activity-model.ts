@@ -1,7 +1,7 @@
 import type { ActivityEvent, BootstrapData } from '@/types/flow'
 import { isAgentBot, sameActivityActor } from '@/lib/actor-attribution'
 
-export type ActivityContext = Pick<BootstrapData, 'users' | 'projects' | 'labels' | 'cycles' | 'issues' | 'states'> & Partial<Pick<BootstrapData, 'releases' | 'reviews'>>
+export type ActivityContext = Pick<BootstrapData, 'users' | 'projects' | 'labels' | 'cycles' | 'issues' | 'states' | 'workspace'> & Partial<Pick<BootstrapData, 'releases' | 'reviews'>>
 type Translate = (text: string) => string
 
 /** A resource an event names: rendered as the same chip as a mention (hover card, navigation, fetch-by-id for issues / projects the client does not hold). */
@@ -126,7 +126,7 @@ export function describeIssueActivityParts(event: ActivityEvent, context?: Activ
   if (event.type === 'issue.coding_session_archived') return text(activityPartsText(phrase(m.archivedBy ? 'archived the session with {name}' : 'Session with {name} archived', { name: (m.agentId && person(m.agentId)) || 'Flow' })))
   if (event.type === 'issue.preview_ready') return text(activityPartsText(phrase('deployed preview {environment}', { environment: m.environment || 'Preview' })))
   if (event.type === 'issue.relation_added') {
-    const relation = ({ blocks: 'marked this as blocking {issue}', blocked_by: 'marked this as blocked by {issue}', duplicate: 'marked this as a duplicate of {issue}', parent_of: 'marked this as parent of {issue}', sub_issue_of: 'marked this as a sub-issue of {issue}' } as Record<string, string>)[m.type] ?? 'related this to {issue}'
+    const relation = ({ blocks: 'marked this as blocking {issue}', blocked_by: 'marked this as blocked by {issue}', duplicate: 'marked this as a duplicate of {issue}', parent_of: 'marked this as parent of {issue}', sub_issue_of: 'marked this as a sub-issue of {issue}' } as Record<string, string>)[m.type] ?? 'added related issue {issue}'
     return mergeText(phrase(relation, { issue: m.relatedIssueId ? issueRef(m.relatedIssueId) : t('another issue') }))
   }
   if (event.type === 'issue.relation_removed') return text(t('removed an issue relation'))

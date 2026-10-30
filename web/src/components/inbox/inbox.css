@@ -923,6 +923,12 @@
 
 /* Phone issue opened from an inbox notification: the inbox bar with the issue's copy strip and full document. */
 .flow-inbox-detail__menu, .flow-inbox-detail__command-strip { display: none; }
+.flow-inbox-detail__bell { position: relative; display: block; width: 14px; height: 14px; }
+.flow-inbox-detail__bell > span { position: absolute; inset: 0; display: grid; place-items: center; transition: opacity .15s ease-in-out, transform .15s ease-in-out; }
+.flow-inbox-detail__bell-plain { opacity: 1; transform: scale(.95); }
+.flow-inbox-detail__bell-check { opacity: 0; transform: scale(.9); }
+.flow-inbox-detail__icon-button[aria-pressed="true"] .flow-inbox-detail__bell-plain { opacity: 0; }
+.flow-inbox-detail__icon-button[aria-pressed="true"] .flow-inbox-detail__bell-check { opacity: 1; transform: none; }
 @media (max-width: 767px) {
   html:root body .app .flow-inbox-detail__header {
     position: relative;
@@ -984,7 +990,7 @@
     font-family: inherit;
     box-shadow: none;
   }
-  html:root body .app .flow-inbox-detail__command-strip .issue-command-button > svg { width: 16px; height: 16px; }
+  html:root body .app .flow-inbox-detail__command-strip .issue-command-button > svg { width: 14px; height: 14px; }
   html:root body .app .flow-inbox-detail__body--full-bleed .issue-layout {
     width: 100%;
     max-width: none;
@@ -1053,6 +1059,8 @@
   }
   html:root body .app .flow-inbox-detail__body--full-bleed .document-actions .issue-document-action svg { width: 16px; height: 16px; }
   html:root body .app .flow-inbox-detail__body--full-bleed .issue-empty-sub-issue-row { margin-top: 5px; }
+  html:root body .app .flow-inbox-detail__divider { height: .5px; margin: 26px 0 18px; background: var(--border); }
+  html:root body .app .issue-empty-sub-issue-row + .flow-inbox-detail__divider + .activity-heading { margin-top: 0; }
   html:root body .app .flow-inbox-detail__body--full-bleed .issue-empty-sub-issue-action {
     gap: 0;
     border: .5px solid transparent;

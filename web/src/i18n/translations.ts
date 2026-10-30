@@ -2916,6 +2916,7 @@ export const zhCN: Record<string, string> = {
   "marked this as parent of {issue}": "标记为 {issue} 的父事项",
   "marked this as a sub-issue of {issue}": "标记为 {issue} 的子事项",
   "related this to {issue}": "关联了 {issue}",
+  "added related issue {issue}": "添加了相关事项 {issue}",
   "another issue": "另一事项",
   "removed an issue relation": "移除了事项关联",
   "attached {name}": "添加了附件 {name}",
