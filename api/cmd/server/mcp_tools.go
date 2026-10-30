@@ -446,6 +446,10 @@ func (s *server) mcpWorkspaceDataForTool(ctx context.Context, actor mcpActor, na
 		return domain.Bootstrap{}, fmt.Errorf("workspace access denied")
 	}
 	fields := []string{"users", "members", "states", "labels", "cycles", "cycleSettings", "projects", "releases", "issueSuggestions"}
+	if name == "save_issue" {
+		// State resolution needs workflow inheritance, not just access policy.
+		fields = append(fields, "teamSettings")
+	}
 	if name == "get_team" {
 		fields = nil
 	}
@@ -465,6 +469,9 @@ func (s *server) mcpWorkspaceDataForTool(ctx context.Context, actor mcpActor, na
 		}
 		data.Users, data.Members = catalog.Users, catalog.Members
 		data.States, data.Labels = catalog.States, catalog.Labels
+		if name == "save_issue" {
+			data.TeamSettings = catalog.TeamSettings
+		}
 		data.Cycles, data.CycleSettings = catalog.Cycles, catalog.CycleSettings
 		data.Projects, data.Releases = catalog.Projects, catalog.Releases
 		data.IssueSuggestions = catalog.IssueSuggestions
@@ -1005,8 +1012,11 @@ func (s *server) countMCPIssues(ctx context.Context, actor mcpActor, data domain
 }
 
 func simpleMCPTeamCount(args map[string]any) bool {
-	for _, key := range []string{"query", "state", "assignee", "delegate", "project", "parentId", "label", "cycle", "release", "hasAttachments", "hasSubIssues", "hasCustomerRequests", "priority", "createdAt", "updatedAt"} {
-		if _, ok := args[key]; ok {
+	// Keep this an allow-list: count_issues deliberately shares its filter
+	// surface with list_issues, so a newly added predicate must not be silently
+	// ignored by the counter fast path.
+	for key := range args {
+		if key != "team" && key != "includeArchived" {
 			return false
 		}
 	}
