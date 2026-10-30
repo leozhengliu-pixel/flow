@@ -330,6 +330,8 @@
   }
   .team-documents-toolbar svg,
   .team-documents-icon-button svg { width: 14px; height: 14px; color: var(--phone-icon-fg); }
+  .team-documents-toolbar button:is([aria-expanded=true],[data-state=open]) { background: var(--inbox-toolbar-open-bg); color: var(--bright); }
+  .team-documents-toolbar button:is([aria-expanded=true],[data-state=open]) svg { color: var(--bright); }
   .team-documents-toolbar > .team-documents-new { display: grid; width: 32px; place-items: center; padding: 0 2px; font-size: 12px; gap: 0; }
   .team-documents-toolbar > .team-documents-new svg { width: 14px; height: 14px; }
   .team-documents-new-label { display: none; }

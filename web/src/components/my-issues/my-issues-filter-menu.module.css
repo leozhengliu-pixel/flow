@@ -76,6 +76,7 @@
   .rootMenu[data-layout=documents] .rootList{margin:0 4.5px 0 5.5px;padding:6px 0 4px}
   .rootMenu[data-layout=documents] .rootItem{height:46px;padding:0 12px;font-size:13px;font-weight:450;line-height:15.6px}
   .rootMenu[data-layout=documents] .rootChevron{display:none}
+  .rootMenu[data-layout=documents] .rootSeparator{margin:0 -6px}
 }
 
 /* Text-condition dialog ("Milestone name contains…", custom dates). */
