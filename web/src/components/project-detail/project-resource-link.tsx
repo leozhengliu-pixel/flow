@@ -1,12 +1,13 @@
 import { Link } from 'lucide-react'
 import { IntegrationBrandIcon } from '@/components/settings/integration-brand-icon'
+import { FlowUrlIcon } from '@/components/issue/flow-header-icons'
 import { hostOf, providerFor } from './project-resource-link-name'
 
 /** Brand icon for known services, otherwise the reference app's chain-link glyph. */
 export function ResourceLinkIcon({ url }: { url: string }) {
   const provider = providerFor(hostOf(url))
   if (provider) return <span className="project-resource-link-icon"><IntegrationBrandIcon provider={provider} size={16}/></span>
-  return <span className="project-resource-link-icon"><Link size={16} strokeWidth={1.75}/></span>
+  return <span className="project-resource-link-icon"><Link className="project-overview__desktop-icon" size={16} strokeWidth={1.75}/><FlowUrlIcon className="project-overview__mobile-icon"/></span>
 }
 
 /** The reference app's small ↗ shown after every link resource. */
