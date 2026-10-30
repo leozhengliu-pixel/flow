@@ -65,6 +65,38 @@ test.describe('mobile documents list', () => {
   })
 })
 
+test.describe('mobile documents selection', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  test('selecting a document shows the floating bulk action pill', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-docs-selected-${testInfo.project.name}-${testInfo.retry}`
+    const team = await seedTeamDocuments(request, workspaceKey, '[mobile] Docs selected')
+
+    await page.goto(`/${workspaceKey}/team/${team.key}/documents?doc-filter=${advancedFilterParam()}`)
+    const row = page.locator('.team-docs-row').nth(1)
+    await row.locator('input[aria-label="Select document"]').check()
+    await expect(row).toHaveAttribute('data-selected', 'true')
+    await expect(row.locator('.team-docs-check span')).toHaveCSS('width', '14px')
+
+    const bar = page.locator('.team-docs-selection-bar')
+    await expect(bar).toHaveCSS('height', '48px')
+    const pill = page.locator('.team-docs-selection')
+    expect((await pill.boundingBox())?.height).toBe(48)
+    await expect(pill.locator('> span')).toHaveText('1 selected')
+    const actions = page.locator('.team-docs-selection-actions')
+    expect((await actions.boundingBox())?.height).toBe(32)
+    await expect(actions).toContainText('Actions')
+    await expect(page.locator('.team-docs-selection-agent')).toBeHidden()
+    expect((await page.locator('.team-docs-selection-clear').boundingBox())?.width).toBe(32)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/documents-selected-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
+
+    await page.locator('.team-docs-selection-clear').click()
+    await expect(page.locator('.team-docs-selection')).toHaveCount(0)
+    await expect(row).toHaveAttribute('data-selected', 'false')
+  })
+})
+
 test.describe('mobile documents tab menu', () => {
   test.use({ viewport: { width: 375, height: 667 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
