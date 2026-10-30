@@ -3,10 +3,11 @@ import { AlertCircle, Box, X } from 'lucide-react'
 import { PriorityIcon } from '@/components/issue/issue-icons'
 import type { MyIssuesRowData } from './my-issues-list'
 import styles from './my-issues-details-pane.module.css'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 
-export type MyIssuesSummaryTab = 'labels' | 'priority' | 'projects'
+export type MyIssuesSummaryTab = 'labels' | 'priority' | 'projects' | 'teams'
 export interface MyIssuesSummaryItem { id: string; label: string; count: number; color?: string }
-export interface MyIssuesDetailsSummary { labels: MyIssuesSummaryItem[]; priority: MyIssuesSummaryItem[]; projects: MyIssuesSummaryItem[] }
+export interface MyIssuesDetailsSummary { labels: MyIssuesSummaryItem[]; priority: MyIssuesSummaryItem[]; projects: MyIssuesSummaryItem[]; teams?: MyIssuesSummaryItem[] }
 
 export interface MyIssuesDetailsPaneProps {
   open: boolean
@@ -23,10 +24,12 @@ export interface MyIssuesDetailsPaneProps {
 }
 
 const summaryTabs: { id: MyIssuesSummaryTab; label: string }[] = [{ id: 'labels', label: 'Labels' }, { id: 'priority', label: 'Priority' }, { id: 'projects', label: 'Projects' }]
+const phoneSummaryTabs: { id: MyIssuesSummaryTab; label: string }[] = [...summaryTabs, { id: 'teams', label: 'Teams' }]
 const MIN_DETAILS_WIDTH = 280
 const MAX_DETAILS_WIDTH = 620
 
 export function MyIssuesDetailsPane({ open, selectedIssue, summary, loading = false, error, width = 350, previewContent, onClose, onRetry, onSummaryItemSelect, onWidthChange }: MyIssuesDetailsPaneProps) {
+  const phone = usePhoneLayout()
   const [activeTab, setActiveTab] = useState<MyIssuesSummaryTab>('labels')
   const [dragging, setDragging] = useState(false)
   const pointerStart = useRef({ x: 0, width })
@@ -59,7 +62,7 @@ export function MyIssuesDetailsPane({ open, selectedIssue, summary, loading = fa
     onWidthChange?.(clamp(next, MIN_DETAILS_WIDTH, MAX_DETAILS_WIDTH))
   }
 
-  return <aside data-flow-motion="panel" data-state={open ? 'open' : 'closed'} inert={!open || undefined} aria-hidden={!open || undefined} className={styles.pane} data-dragging={dragging} style={{ '--details-width': `${width}px` } as CSSProperties} aria-label={selectedIssue ? `Issue preview ${selectedIssue.identifier}` : 'Issue view details'}>
+  return <><div className={styles.scrim} data-testid="my-issues-details-scrim" aria-hidden="true" onClick={onClose}/><aside data-flow-motion="panel" data-testid="my-issues-details-drawer" data-state={open ? 'open' : 'closed'} inert={!open || undefined} aria-hidden={!open || undefined} className={styles.pane} data-dragging={dragging} style={{ '--details-width': `${width}px` } as CSSProperties} aria-label={selectedIssue ? `Issue preview ${selectedIssue.identifier}` : 'Issue view details'}>
     <button className={styles.resizer} role="separator" aria-label="Resize details" aria-orientation="vertical" aria-valuemin={MIN_DETAILS_WIDTH} aria-valuemax={MAX_DETAILS_WIDTH} aria-valuenow={Math.round(width)} onKeyDown={resizeWithKeyboard} onPointerDown={startResize} onPointerMove={resize} onPointerUp={stopResize} onPointerCancel={stopResize}/>
     {selectedIssue && !previewContent && <IssuePreviewHeader issue={selectedIssue} onClose={onClose}/>}
     <div className={previewContent ? styles.fullPreview : styles.scroller}>
@@ -69,28 +72,28 @@ export function MyIssuesDetailsPane({ open, selectedIssue, summary, loading = fa
           ? <DetailsError message={error} onRetry={onRetry}/>
           : selectedIssue
             ? previewContent ?? <IssuePreview issue={selectedIssue}/>
-            : <SummaryView activeTab={activeTab} items={summary[activeTab]} onTabChange={setActiveTab} onItem={item => onSummaryItemSelect?.(activeTab, item)}/>}
+            : <SummaryView tabs={phone ? phoneSummaryTabs : summaryTabs} activeTab={activeTab} items={summary[activeTab] ?? []} onTabChange={setActiveTab} onItem={item => onSummaryItemSelect?.(activeTab, item)}/>}
     </div>
-  </aside>
+  </aside></>
 }
 
-function SummaryView({ activeTab, items, onTabChange, onItem }: { activeTab: MyIssuesSummaryTab; items: MyIssuesSummaryItem[]; onTabChange: (tab: MyIssuesSummaryTab) => void; onItem: (item: MyIssuesSummaryItem) => void }) {
-  const tabRefs = useRef<Record<MyIssuesSummaryTab, HTMLButtonElement | null>>({ labels: null, priority: null, projects: null })
+function SummaryView({ tabs, activeTab, items, onTabChange, onItem }: { tabs: { id: MyIssuesSummaryTab; label: string }[]; activeTab: MyIssuesSummaryTab; items: MyIssuesSummaryItem[]; onTabChange: (tab: MyIssuesSummaryTab) => void; onItem: (item: MyIssuesSummaryItem) => void }) {
+  const tabRefs = useRef<Partial<Record<MyIssuesSummaryTab, HTMLButtonElement | null>>>({})
   const changeTabFromKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     let nextIndex: number | undefined
-    if (event.key === 'ArrowRight') nextIndex = (index + 1) % summaryTabs.length
-    if (event.key === 'ArrowLeft') nextIndex = (index - 1 + summaryTabs.length) % summaryTabs.length
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length
+    if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length
     if (event.key === 'Home') nextIndex = 0
-    if (event.key === 'End') nextIndex = summaryTabs.length - 1
+    if (event.key === 'End') nextIndex = tabs.length - 1
     if (nextIndex === undefined) return
     event.preventDefault()
-    const next = summaryTabs[nextIndex]
+    const next = tabs[nextIndex]
     onTabChange(next.id)
     tabRefs.current[next.id]?.focus()
   }
-  return <div className={styles.summary}>
-    <div className={styles.summaryTabs} role="tablist" aria-label="Issue view summary">{summaryTabs.map((tab, index) => <button key={tab.id} ref={node => { tabRefs.current[tab.id] = node }} role="tab" type="button" aria-selected={activeTab === tab.id} tabIndex={activeTab === tab.id ? 0 : -1} onKeyDown={event => changeTabFromKey(event, index)} onClick={() => onTabChange(tab.id)}>{tab.label}</button>)}</div>
-    <div className={styles.summaryList} role="tabpanel" aria-label={`${summaryTabs.find(tab => tab.id === activeTab)?.label} summary`}>{items.length ? items.map(item => <button key={item.id} type="button" className={styles.summaryItem} aria-label={`${item.label} ${summaryItemKind(activeTab)} ${item.count}`} onClick={() => onItem(item)}><span className={styles.summaryLabel}><SummaryItemIcon tab={activeTab} item={item}/><span>{item.label}</span><span className={styles.seeIssues}>See issues</span></span><span className={styles.summaryCount}>{item.count}</span></button>) : <div className={styles.detailsEmpty}>{emptySummaryLabel(activeTab)}</div>}</div>
+  return <div className={styles.summary} data-testid="my-issues-details-panel">
+    <div className={styles.summaryTabs} role="tablist" aria-label="Issue view summary">{tabs.map((tab, index) => <button key={tab.id} ref={node => { tabRefs.current[tab.id] = node }} role="tab" type="button" aria-selected={activeTab === tab.id} tabIndex={activeTab === tab.id ? 0 : -1} onKeyDown={event => changeTabFromKey(event, index)} onClick={() => onTabChange(tab.id)}><span>{tab.label}</span></button>)}</div>
+    <div className={styles.summaryList} role="tabpanel" aria-label={`${tabs.find(tab => tab.id === activeTab)?.label} summary`}>{items.length ? items.map(item => <button key={item.id} type="button" className={styles.summaryItem} aria-label={`${item.label} ${summaryItemKind(activeTab)} ${item.count}`} onClick={() => onItem(item)}><span className={styles.summaryLabel}><SummaryItemIcon tab={activeTab} item={item}/><span>{item.label}</span><span className={styles.seeIssues}>See issues</span></span><span className={styles.summaryCount}>{item.count}</span></button>) : <div className={styles.detailsEmpty}><span>{emptySummaryLabel(activeTab)}</span></div>}</div>
   </div>
 }
 
@@ -100,8 +103,8 @@ function SummaryItemIcon({ tab, item }: { tab: MyIssuesSummaryTab; item: MyIssue
   return <Box className={styles.summaryIcon} size={16}/>
 }
 
-function summaryItemKind(tab: MyIssuesSummaryTab) { return tab === 'labels' ? 'label' : tab === 'priority' ? 'priority' : 'project' }
-function emptySummaryLabel(tab: MyIssuesSummaryTab) { return tab === 'labels' ? 'No labels used' : tab === 'priority' ? 'No priorities used' : 'No projects used' }
+function summaryItemKind(tab: MyIssuesSummaryTab) { return tab === 'labels' ? 'label' : tab === 'priority' ? 'priority' : tab === 'projects' ? 'project' : 'team' }
+function emptySummaryLabel(tab: MyIssuesSummaryTab) { return tab === 'labels' ? 'No labels used' : tab === 'priority' ? 'No priorities used' : tab === 'projects' ? 'No projects used' : 'No teams used' }
 
 function IssuePreviewHeader({ issue, onClose }: { issue: MyIssuesRowData; onClose: () => void }) {
   return <header className={styles.previewHeader}><span>{issue.identifier}</span><button aria-label="Close issue preview" onClick={onClose}><X size={15}/></button></header>

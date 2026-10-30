@@ -94,7 +94,7 @@ function SplitSummaryChrome({
   onSummaryItemSelect?: (tab: MyIssuesSummaryTab, item: MyIssuesSummaryItem) => void
 }) {
   const [activeTab, setActiveTab] = useState<MyIssuesSummaryTab>('labels')
-  const items = summary[activeTab]
+  const items = summary[activeTab] ?? []
   return (
     <div className={styles.summary} data-issue-view-split-summary="" aria-label="Issue view details">
       <header className={styles.summaryHeader}>

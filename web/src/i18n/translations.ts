@@ -3428,6 +3428,7 @@ export const zhCN: Record<string, string> = {
   "No labels used": "未使用标签",
   "No priorities used": "未设置优先级",
   "No projects used": "未关联项目",
+  "No teams used": "未使用团队",
   "Change or add labels…": "更改或添加标签…",
   "Frequently used": "常用",
   "Smileys & People": "笑脸与人物",
