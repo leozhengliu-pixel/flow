@@ -63,7 +63,9 @@ function changedDetails(current: LoopContractOutput | undefined, suggested: Loop
   const currentTarget = reviewTargetText(current, data, t);
   const suggestedTarget = reviewTargetText(suggested, data, t);
   if (currentTarget !== suggestedTarget) details.push(`${t("Target")}: ${currentTarget || t("Not set")} → ${suggestedTarget || t("Not set")}`);
-  if (current.cardinality !== suggested.cardinality) details.push(`${t("How many")}: ${t(CARDINALITY_LABELS[current.cardinality] ?? "Any number")} → ${t(CARDINALITY_LABELS[suggested.cardinality] ?? "Any number")}`);
+  const currentCardinality = current.cardinality ?? "any";
+  const suggestedCardinality = suggested.cardinality ?? "any";
+  if (currentCardinality !== suggestedCardinality) details.push(`${t("How many")}: ${t(CARDINALITY_LABELS[currentCardinality])} → ${t(CARDINALITY_LABELS[suggestedCardinality])}`);
   if (JSON.stringify(current.conditions ?? []) !== JSON.stringify(suggested.conditions ?? [])) details.push(`${t("Conditions")}: ${current.conditions?.join("; ") || t("Not set")} → ${suggested.conditions?.join("; ") || t("Not set")}`);
   if (current.group !== suggested.group) details.push(t("Alternative outputs changed"));
   return details;
