@@ -100,4 +100,6 @@
   .workspace-search-tool { width: 32px; height: 32px; }
   .workspace-search-empty-illustration { width: 180px; height: 120px; }
   :root[data-theme="light"] .workspace-search-empty-illustration { filter: invert(1); }
+  /* A value submenu wider than the space beside its parent menu would open off-screen; shift it back to the 8px edge. */
+  [data-radix-popper-content-wrapper]:has(> .workspace-search-value-menu) { translate: max(0px, calc(280px - var(--radix-popper-available-width) + 8px)) 0; }
 }
